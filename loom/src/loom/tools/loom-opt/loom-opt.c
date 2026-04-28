@@ -10,18 +10,12 @@
 #include <stdio.h>
 
 #include "iree/base/api.h"
-#include "iree/base/internal/arena.h"
 #include "iree/base/tooling/flags.h"
-#include "iree/io/file_contents.h"
-#include "loom/codegen/low/allocation_pass.h"
-#include "loom/codegen/low/dce_pass.h"
-#include "loom/codegen/low/lower_pass.h"
+#include "loom/codegen/low/pass_environment.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/error/diagnostic.h"
-#include "loom/format/text/parser.h"
 #include "loom/format/text/printer.h"
-#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
 #include "loom/pass/builtin_registry.h"
@@ -30,6 +24,8 @@
 #include "loom/pass/report.h"
 #include "loom/pass/tooling.h"
 #include "loom/target/all/low_registry.h"
+#include "loom/tooling/execution/session.h"
+#include "loom/tooling/io/file.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
@@ -55,15 +51,6 @@ typedef enum loom_opt_pass_report_mode_e {
   LOOM_OPT_PASS_REPORT_NONE = 0,
   LOOM_OPT_PASS_REPORT_JSON = 1,
 } loom_opt_pass_report_mode_t;
-
-typedef struct loom_opt_pass_pipeline_config_t {
-  // Low DCE pass configuration borrowed by matching pipeline entries.
-  loom_low_dce_pass_config_t* low_dce_config;
-  // Low allocation pass configuration borrowed by matching pipeline entries.
-  loom_low_materialize_allocation_pass_config_t* low_allocation_config;
-  // Source-to-low pass configuration borrowed by matching pipeline entries.
-  loom_low_source_to_low_pass_config_t* low_source_to_low_config;
-} loom_opt_pass_pipeline_config_t;
 
 typedef struct loom_opt_diagnostic_emitter_t {
   // Module containing the op referenced by emitted diagnostics.
@@ -102,64 +89,16 @@ static iree_status_t loom_opt_parse_pass_report_mode(
                           (int)value.size, value.data);
 }
 
-static iree_status_t loom_opt_read_input(
-    iree_string_view_t path, iree_allocator_t allocator,
-    iree_io_file_contents_t** out_contents) {
-  bool is_stdin = iree_string_view_is_empty(path) ||
-                  iree_string_view_equal(path, iree_make_cstring_view("-"));
-  if (is_stdin) {
-    return iree_io_file_contents_read_stdin(allocator, out_contents);
-  }
-  return iree_io_file_contents_read(path, allocator, out_contents);
+static iree_status_t loom_opt_register_context(void* user_data,
+                                               loom_context_t* context) {
+  (void)user_data;
+  return loom_op_registry_register_all_dialects(context);
 }
 
-static iree_string_view_t loom_opt_file_contents_string_view(
-    const iree_io_file_contents_t* contents) {
-  return iree_make_string_view((const char*)contents->const_buffer.data,
-                               contents->const_buffer.data_length);
-}
-
-static iree_status_t loom_opt_write_output(iree_string_view_t path,
-                                           iree_string_view_t output,
-                                           iree_allocator_t allocator) {
-  bool is_stdout = iree_string_view_is_empty(path) ||
-                   iree_string_view_equal(path, iree_make_cstring_view("-"));
-  iree_const_byte_span_t bytes =
-      iree_make_const_byte_span(output.data, output.size);
-  if (!is_stdout) {
-    return iree_io_file_contents_write(path, bytes, allocator);
-  }
-
-  if (bytes.data_length > 0) {
-    size_t write_count = fwrite(bytes.data, bytes.data_length, 1, stdout);
-    if (write_count != 1) {
-      return iree_make_status(IREE_STATUS_DATA_LOSS,
-                              "failed to write %" PRIhsz " bytes to stdout",
-                              bytes.data_length);
-    }
-  }
-  if (fflush(stdout) != 0) {
-    return iree_make_status(IREE_STATUS_DATA_LOSS, "failed to flush stdout");
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_opt_source_resolver_for_input(
-    loom_context_t* context, iree_string_view_t filename,
-    iree_string_view_t source, loom_source_entry_t* out_source_entry,
-    loom_source_table_resolver_t* out_source_resolver) {
-  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_context_register_source(context, filename, &source_id));
-  *out_source_entry = (loom_source_entry_t){
-      .source_id = source_id,
-      .source = source,
-      .filename = filename,
-  };
-  *out_source_resolver = (loom_source_table_resolver_t){
-      .entries = out_source_entry,
-      .count = 1,
-  };
+static iree_status_t loom_opt_initialize_low_descriptor_registry(
+    void* user_data, loom_target_low_descriptor_registry_t* out_registry) {
+  (void)user_data;
+  loom_all_low_descriptor_registry_initialize(out_registry);
   return iree_ok_status();
 }
 
@@ -250,19 +189,16 @@ static iree_status_t loom_opt_diagnostic_emitter_emit(
 }
 
 static iree_status_t loom_opt_verify_module(
-    iree_string_view_t filename, iree_string_view_t source,
     const loom_target_low_descriptor_registry_t* low_registry,
-    loom_module_t* module) {
-  loom_source_entry_t source_entry = {0};
-  loom_source_table_resolver_t source_resolver = {0};
-  IREE_RETURN_IF_ERROR(loom_opt_source_resolver_for_input(
-      module->context, filename, source, &source_entry, &source_resolver));
+    loom_run_module_t* run_module) {
+  loom_module_t* module = run_module->module;
+  loom_source_resolver_t source_resolver =
+      loom_run_module_source_resolver(run_module);
 
   loom_verify_options_t verify_options = {
       .sink = {.fn = loom_diagnostic_stderr_sink},
       .max_errors = 100,
-      .source_resolver = {.fn = loom_source_table_resolve,
-                          .user_data = &source_resolver},
+      .source_resolver = source_resolver,
   };
   loom_verify_result_t verify_result = {0};
   IREE_RETURN_IF_ERROR(
@@ -276,8 +212,7 @@ static iree_status_t loom_opt_verify_module(
 
   loom_opt_diagnostic_emitter_t low_emitter = {
       .module = module,
-      .source_resolver = {.fn = loom_source_table_resolve,
-                          .user_data = &source_resolver},
+      .source_resolver = source_resolver,
       .emitter = LOOM_EMITTER_VERIFIER,
   };
   loom_low_verify_options_t low_verify_options = {
@@ -297,45 +232,6 @@ static iree_status_t loom_opt_verify_module(
                             low_verify_result.error_count == 1 ? "" : "s");
   }
   return iree_ok_status();
-}
-
-static iree_status_t loom_opt_configure_pass_instruction(
-    void* user_data, const loom_pass_program_instruction_t* instruction,
-    void** out_pass_user_data) {
-  IREE_ASSERT_ARGUMENT(user_data);
-  IREE_ASSERT_ARGUMENT(instruction);
-  IREE_ASSERT_ARGUMENT(out_pass_user_data);
-
-  loom_opt_pass_pipeline_config_t* config =
-      (loom_opt_pass_pipeline_config_t*)user_data;
-  *out_pass_user_data = NULL;
-  if (instruction->kind == LOOM_PASS_PROGRAM_INSTRUCTION_INVOKE &&
-      iree_string_view_equal(instruction->invoke.descriptor->key,
-                             IREE_SV("low-dce"))) {
-    *out_pass_user_data = config->low_dce_config;
-  } else if (instruction->kind == LOOM_PASS_PROGRAM_INSTRUCTION_INVOKE &&
-             iree_string_view_equal(instruction->invoke.descriptor->key,
-                                    IREE_SV("low-materialize-allocation"))) {
-    *out_pass_user_data = config->low_allocation_config;
-  } else if (instruction->kind == LOOM_PASS_PROGRAM_INSTRUCTION_INVOKE &&
-             iree_string_view_equal(instruction->invoke.descriptor->key,
-                                    IREE_SV("source-to-low"))) {
-    *out_pass_user_data = config->low_source_to_low_config;
-  }
-  return iree_ok_status();
-}
-
-static bool loom_opt_pass_requirement_is_satisfied(
-    void* user_data, iree_string_view_t requirement) {
-  loom_opt_pass_pipeline_config_t* config =
-      (loom_opt_pass_pipeline_config_t*)user_data;
-  return config &&
-         (loom_low_dce_pass_config_satisfies_requirement(config->low_dce_config,
-                                                         requirement) ||
-          loom_low_materialize_allocation_pass_config_satisfies_requirement(
-              config->low_allocation_config, requirement) ||
-          loom_low_source_to_low_pass_config_satisfies_requirement(
-              config->low_source_to_low_config, requirement));
 }
 
 static iree_status_t loom_opt_join_pass_list(iree_flag_string_list_t passes,
@@ -703,8 +599,8 @@ static iree_status_t loom_opt_write_pass_reproducer(
     status = iree_string_builder_append_cstring(&builder, "\n");
   }
   if (iree_status_is_ok(status)) {
-    status = loom_opt_write_output(path, iree_string_builder_view(&builder),
-                                   allocator);
+    status = loom_tooling_write_output_file(
+        path, iree_string_builder_view(&builder), allocator);
   }
   iree_string_builder_deinitialize(&synthetic_pipeline_builder);
   iree_string_builder_deinitialize(&builder);
@@ -724,11 +620,11 @@ static iree_status_t loom_opt_write_pass_reproducer(
 }
 
 static iree_status_t loom_opt_run_passes(
-    iree_string_view_t filename, iree_string_view_t source,
     const loom_target_low_descriptor_registry_t* low_registry,
-    iree_arena_block_pool_t* block_pool, loom_module_t* module,
+    iree_arena_block_pool_t* block_pool, loom_run_module_t* run_module,
     loom_pass_report_t* report, bool* out_execution_started,
     iree_allocator_t allocator) {
+  loom_module_t* module = run_module->module;
   *out_execution_started = false;
   iree_flag_string_list_t passes = FLAG_pass_list();
   iree_string_view_t pipeline_symbol =
@@ -743,50 +639,26 @@ static iree_status_t loom_opt_run_passes(
     return iree_ok_status();
   }
 
-  loom_source_entry_t source_entry = {0};
-  loom_source_table_resolver_t source_resolver = {0};
-  IREE_RETURN_IF_ERROR(loom_opt_source_resolver_for_input(
-      module->context, filename, source, &source_entry, &source_resolver));
+  loom_source_resolver_t source_resolver =
+      loom_run_module_source_resolver(run_module);
   loom_opt_diagnostic_emitter_t pass_emitter = {
       .module = module,
-      .source_resolver = {.fn = loom_source_table_resolve,
-                          .user_data = &source_resolver},
+      .source_resolver = source_resolver,
       .emitter = LOOM_EMITTER_PASS,
   };
 
-  loom_low_dce_pass_config_t low_dce_config = {
-      .descriptor_registry = &low_registry->registry,
-  };
-  loom_low_materialize_allocation_pass_config_t low_allocation_config = {
-      .descriptor_registry = &low_registry->registry,
-  };
   loom_low_lower_policy_registry_t low_lower_policy_registry = {0};
   loom_all_low_lower_policy_registry_initialize(&low_lower_policy_registry);
-  loom_low_source_to_low_pass_config_t low_source_to_low_config = {
-      .descriptor_registry = &low_registry->registry,
-      .policy_registry = &low_lower_policy_registry,
-  };
-  loom_opt_pass_pipeline_config_t pipeline_config = {
-      .low_dce_config = &low_dce_config,
-      .low_allocation_config = &low_allocation_config,
-      .low_source_to_low_config = &low_source_to_low_config,
-  };
+  loom_low_pass_environment_storage_t low_pass_environment_storage;
   loom_pass_tool_run_options_t run_options = {
       .registry = loom_pass_builtin_registry(),
-      .requirement_provider =
-          {
-              .callback = loom_opt_pass_requirement_is_satisfied,
-              .user_data = &pipeline_config,
-          },
+      .environment = loom_low_pass_environment_storage_initialize(
+          &low_registry->registry, &low_lower_policy_registry, NULL,
+          &low_pass_environment_storage),
       .block_pool = block_pool,
       .diagnostic_emitter = {.fn = loom_opt_diagnostic_emitter_emit,
                              .user_data = &pass_emitter},
       .report = report,
-      .configure =
-          {
-              .fn = loom_opt_configure_pass_instruction,
-              .user_data = &pipeline_config,
-          },
   };
 
   if (has_pipeline_symbol) {
@@ -847,7 +719,7 @@ static iree_status_t loom_opt_print_module(
     status = iree_string_builder_append_string(&builder, IREE_SV("\n"));
   }
   if (iree_status_is_ok(status)) {
-    status = loom_opt_write_output(
+    status = loom_tooling_write_output_file(
         output_path, iree_string_builder_view(&builder), allocator);
   }
   iree_string_builder_deinitialize(&builder);
@@ -942,26 +814,6 @@ static iree_status_t loom_opt_print_pass_help(
                                                 "failed to flush stdout");
 }
 
-static iree_status_t loom_opt_parse_module(
-    iree_string_view_t filename, iree_string_view_t source,
-    const loom_target_low_descriptor_registry_t* low_registry,
-    loom_context_t* context, iree_arena_block_pool_t* block_pool,
-    loom_module_t** out_module) {
-  loom_text_parse_options_t parse_options = {
-      .diagnostic_sink = {.fn = loom_diagnostic_stderr_sink},
-      .max_errors = 20,
-  };
-  loom_low_descriptor_text_asm_environment_initialize(
-      &low_registry->registry, &parse_options.low_asm_environment);
-  IREE_RETURN_IF_ERROR(loom_text_parse(source, filename, context, block_pool,
-                                       &parse_options, out_module));
-  if (!*out_module) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "input module has parse errors");
-  }
-  return iree_ok_status();
-}
-
 int main(int argc, char** argv) {
   iree_flags_set_usage(
       "loom-opt",
@@ -986,14 +838,10 @@ int main(int argc, char** argv) {
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();
-  iree_arena_block_pool_t block_pool;
-  iree_arena_block_pool_initialize(32 * 1024, allocator, &block_pool);
 
-  loom_context_t context = {0};
-  bool context_initialized = false;
   iree_io_file_contents_t* contents = NULL;
-  loom_module_t* module = NULL;
-  loom_target_low_descriptor_registry_t low_registry = {0};
+  loom_run_session_t run_session = {0};
+  loom_run_module_t run_module = {0};
   const loom_pass_registry_t* pass_registry = loom_pass_builtin_registry();
   iree_string_view_t source = iree_string_view_empty();
   loom_opt_pass_report_mode_t pass_report_mode = LOOM_OPT_PASS_REPORT_NONE;
@@ -1024,9 +872,17 @@ int main(int argc, char** argv) {
   }
 
   if (iree_status_is_ok(status) && !metadata_only) {
-    loom_all_low_descriptor_registry_initialize(&low_registry);
-    status = loom_op_registry_initialize_context(allocator, &context);
-    context_initialized = iree_status_is_ok(status);
+    loom_run_session_options_t session_options = {0};
+    loom_run_session_options_initialize(&session_options);
+    session_options.host_allocator = allocator;
+    session_options.register_context = (loom_run_register_context_callback_t){
+        .fn = loom_opt_register_context,
+    };
+    session_options.initialize_low_descriptor_registry =
+        (loom_run_initialize_low_descriptor_registry_callback_t){
+            .fn = loom_opt_initialize_low_descriptor_registry,
+        };
+    status = loom_run_session_initialize(&session_options, &run_session);
   }
   if (iree_status_is_ok(status) && !metadata_only &&
       pass_report_mode != LOOM_OPT_PASS_REPORT_NONE) {
@@ -1043,21 +899,26 @@ int main(int argc, char** argv) {
           : input_path;
 
   if (iree_status_is_ok(status) && !metadata_only) {
-    status = loom_opt_read_input(input_path, allocator, &contents);
+    status = loom_tooling_read_input_file(input_path, allocator, &contents);
     if (iree_status_is_ok(status)) {
-      source = loom_opt_file_contents_string_view(contents);
+      source = loom_tooling_file_contents_string_view(contents);
     }
   }
   if (iree_status_is_ok(status) && !metadata_only) {
-    status = loom_opt_parse_module(filename, source, &low_registry, &context,
-                                   &block_pool, &module);
+    loom_run_module_parse_options_t parse_options = {0};
+    loom_run_module_parse_options_initialize(&parse_options);
+    parse_options.filename = filename;
+    parse_options.source = source;
+    status = loom_run_module_parse(&run_session, &parse_options, &run_module);
   }
   if (iree_status_is_ok(status) && !metadata_only && FLAG_verify) {
-    status = loom_opt_verify_module(filename, source, &low_registry, module);
+    status = loom_opt_verify_module(
+        loom_run_session_low_descriptor_registry(&run_session), &run_module);
   }
   if (iree_status_is_ok(status) && !metadata_only) {
     pass_pipeline_status = loom_opt_run_passes(
-        filename, source, &low_registry, &block_pool, module,
+        loom_run_session_low_descriptor_registry(&run_session),
+        loom_run_session_block_pool(&run_session), &run_module,
         pass_report_initialized ? &pass_report : NULL, &pass_execution_started,
         allocator);
     status = pass_pipeline_status;
@@ -1076,7 +937,8 @@ int main(int argc, char** argv) {
     status = iree_status_join(status, report_status);
   }
   if (iree_status_is_ok(status) && !metadata_only && FLAG_verify) {
-    status = loom_opt_verify_module(filename, source, &low_registry, module);
+    status = loom_opt_verify_module(
+        loom_run_session_low_descriptor_registry(&run_session), &run_module);
     if (!iree_status_is_ok(status) && pass_execution_started &&
         iree_status_is_ok(pass_pipeline_status)) {
       status = iree_status_join(
@@ -1087,8 +949,10 @@ int main(int argc, char** argv) {
     }
   }
   if (iree_status_is_ok(status) && !metadata_only) {
-    status = loom_opt_print_module(iree_make_cstring_view(FLAG_output),
-                                   &low_registry, module, allocator);
+    status = loom_opt_print_module(
+        iree_make_cstring_view(FLAG_output),
+        loom_run_session_low_descriptor_registry(&run_session),
+        run_module.module, allocator);
   }
 
   bool had_error = !iree_status_is_ok(status);
@@ -1100,11 +964,8 @@ int main(int argc, char** argv) {
   if (pass_report_initialized) {
     loom_pass_report_deinitialize(&pass_report);
   }
-  loom_module_free(module);
+  loom_run_module_deinitialize(&run_module);
   iree_io_file_contents_free(contents);
-  if (context_initialized) {
-    loom_context_deinitialize(&context);
-  }
-  iree_arena_block_pool_deinitialize(&block_pool);
+  loom_run_session_deinitialize(&run_session);
   return had_error ? 1 : 0;
 }

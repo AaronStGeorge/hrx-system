@@ -4,9 +4,10 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/codegen/low/dce_pass.h"
+#include "loom/codegen/low/passes/dce.h"
 
 #include "loom/codegen/low/function.h"
+#include "loom/codegen/low/pass_environment.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
@@ -27,16 +28,6 @@ static const loom_pass_info_t loom_low_dce_pass_info_storage = {
 
 const loom_pass_info_t* loom_low_dce_pass_info(void) {
   return &loom_low_dce_pass_info_storage;
-}
-
-bool loom_low_dce_pass_config_satisfies_requirement(
-    const loom_low_dce_pass_config_t* config, iree_string_view_t requirement) {
-  if (iree_string_view_equal(
-          requirement,
-          IREE_SV(LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY))) {
-    return config && config->descriptor_registry;
-  }
-  return false;
 }
 
 typedef struct loom_low_dce_deadness_context_t {
@@ -110,15 +101,16 @@ iree_status_t loom_low_dce_run(loom_pass_t* pass, loom_module_t* module,
       !loom_func_like_isa(function)) {
     return iree_ok_status();
   }
-  const loom_low_dce_pass_config_t* config =
-      (const loom_low_dce_pass_config_t*)pass->user_data;
-  if (!config || !config->descriptor_registry) {
+  const loom_low_pass_capability_t* low_capability =
+      loom_low_pass_capability_from_pass(pass);
+  const loom_low_descriptor_registry_t* descriptor_registry =
+      loom_low_pass_capability_descriptor_registry(low_capability);
+  if (!descriptor_registry) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "pass 'low-dce' requires an injected low descriptor registry");
+        "pass 'low-dce' requires a pass environment low descriptor registry");
   }
 
-  return loom_low_dce_function(pass, module, function,
-                               config->descriptor_registry,
+  return loom_low_dce_function(pass, module, function, descriptor_registry,
                                pass->diagnostic_emitter);
 }

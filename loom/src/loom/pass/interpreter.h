@@ -17,6 +17,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/ir/ir.h"
+#include "loom/pass/environment.h"
 #include "loom/pass/program.h"
 
 #ifdef __cplusplus
@@ -45,6 +46,8 @@ typedef struct loom_pass_interpreter_options_t {
   loom_pass_predicate_provider_t predicate_provider;
   // Optional structured diagnostic emitter copied into every pass instance.
   iree_diagnostic_emitter_t diagnostic_emitter;
+  // Caller-owned execution environment capabilities.
+  loom_pass_environment_t environment;
   // Optional user-data callback for pass instances.
   loom_pass_interpreter_configure_callback_t configure;
   // Optional caller-owned execution report appended as passes run.

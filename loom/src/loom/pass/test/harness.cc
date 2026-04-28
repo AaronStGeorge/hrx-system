@@ -50,6 +50,23 @@ static iree_status_t EvaluateTargetPredicate(
   return iree_ok_status();
 }
 
+static bool SatisfyTargetProfileRequirement(
+    const loom_pass_environment_capability_t* capability,
+    iree_string_view_t requirement) {
+  (void)capability;
+  return iree_string_view_equal(requirement, IREE_SV("target.profile"));
+}
+
+static const loom_pass_environment_capability_type_t
+    kTargetProfileCapabilityType = {
+        .name = IREE_SVL("test.target-profile"),
+        .satisfies_requirement = SatisfyTargetProfileRequirement,
+};
+
+static const loom_pass_environment_capability_t kTargetProfileCapability = {
+    .type = &kTargetProfileCapabilityType,
+};
+
 }  // namespace
 
 PassProgramStorage::~PassProgramStorage() {
@@ -71,6 +88,13 @@ loom_pass_predicate_provider_t PassTestTargetPredicateProvider(
       .evaluate = EvaluateTargetPredicate,
       .user_data = capture,
   };
+}
+
+loom_pass_environment_t PassTestTargetProfileEnvironment() {
+  static const loom_pass_environment_capability_t* const capabilities[] = {
+      &kTargetProfileCapability,
+  };
+  return loom_pass_environment_make(capabilities, IREE_ARRAYSIZE(capabilities));
 }
 
 void ExpectTraceEvent(const loom_test_pass_trace_t& trace,
@@ -192,23 +216,21 @@ loom_func_like_t PassTestHarness::Function(loom_module_t* module,
 }
 
 iree_status_t PassTestHarness::Verify(
-    iree_string_view_t source,
-    loom_pass_requirement_provider_t requirement_provider,
+    iree_string_view_t source, loom_pass_environment_t environment,
     loom_pass_predicate_provider_t predicate_provider) {
   loom_module_t* module = Parse(source);
   if (!module) {
     return iree_make_status(IREE_STATUS_INTERNAL, "parse failed");
   }
-  return VerifyModule(module, requirement_provider, predicate_provider);
+  return VerifyModule(module, environment, predicate_provider);
 }
 
 iree_status_t PassTestHarness::VerifyModule(
-    const loom_module_t* module,
-    loom_pass_requirement_provider_t requirement_provider,
+    const loom_module_t* module, loom_pass_environment_t environment,
     loom_pass_predicate_provider_t predicate_provider) {
   loom_pass_verify_options_t options = {
       .registry = loom_test_pass_registry(),
-      .requirement_provider = requirement_provider,
+      .environment = environment,
       .predicate_provider = predicate_provider,
   };
   return loom_pass_verify_module(module, &options, &scratch_arena_);
@@ -216,10 +238,10 @@ iree_status_t PassTestHarness::VerifyModule(
 
 void PassTestHarness::ExpectVerifyStatus(
     iree_status_code_t expected_code, iree_string_view_t source,
-    loom_pass_requirement_provider_t requirement_provider,
+    loom_pass_environment_t environment,
     loom_pass_predicate_provider_t predicate_provider) {
-  IREE_EXPECT_STATUS_IS(
-      expected_code, Verify(source, requirement_provider, predicate_provider));
+  IREE_EXPECT_STATUS_IS(expected_code,
+                        Verify(source, environment, predicate_provider));
 }
 
 iree_status_t PassTestHarness::Compile(
@@ -231,12 +253,11 @@ iree_status_t PassTestHarness::Compile(
 
 iree_status_t PassTestHarness::Compile(
     loom_module_t* module, const loom_op_t* pipeline_op,
-    loom_pass_program_t* out_program,
-    loom_pass_requirement_provider_t requirement_provider,
+    loom_pass_program_t* out_program, loom_pass_environment_t environment,
     loom_pass_predicate_provider_t predicate_provider) {
   loom_pass_program_compile_options_t options = {
       .registry = loom_test_pass_registry(),
-      .requirement_provider = requirement_provider,
+      .environment = environment,
       .predicate_provider = predicate_provider,
   };
   return loom_pass_program_compile_pipeline(module, pipeline_op, &options,
@@ -271,10 +292,10 @@ loom_pass_interpreter_options_t PassTestHarness::InterpreterOptions(
 loom_pass_tool_run_options_t PassTestHarness::ToolOptions(
     loom_test_pass_trace_t* trace,
     loom_pass_predicate_provider_t predicate_provider,
-    loom_pass_requirement_provider_t requirement_provider) {
+    loom_pass_environment_t environment) {
   return (loom_pass_tool_run_options_t){
       .registry = loom_test_pass_registry(),
-      .requirement_provider = requirement_provider,
+      .environment = environment,
       .predicate_provider = predicate_provider,
       .block_pool = &block_pool_,
       .configure =

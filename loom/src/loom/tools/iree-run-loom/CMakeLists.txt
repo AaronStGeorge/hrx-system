@@ -29,6 +29,7 @@ loom_cc_library(
     loom::src::loom::tooling::execution::execution_backend
     loom::src::loom::tooling::execution::one_shot
     loom::src::loom::tooling::execution::session
+    loom::src::loom::tooling::io::file
   PUBLIC
 )
 

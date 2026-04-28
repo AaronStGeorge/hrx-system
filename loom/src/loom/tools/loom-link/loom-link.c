@@ -12,7 +12,6 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "iree/base/tooling/flags.h"
-#include "iree/io/file_contents.h"
 #include "loom/error/diagnostic.h"
 #include "loom/format/text/parser.h"
 #include "loom/format/text/printer.h"
@@ -20,6 +19,7 @@
 #include "loom/ir/module.h"
 #include "loom/link/linker.h"
 #include "loom/ops/op_registry.h"
+#include "loom/tooling/io/file.h"
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
 
@@ -40,23 +40,6 @@ typedef struct loom_link_input_t {
   loom_source_entry_t source_entry;
 } loom_link_input_t;
 
-static iree_status_t loom_link_read_input(
-    iree_string_view_t path, iree_allocator_t allocator,
-    iree_io_file_contents_t** out_contents) {
-  bool is_stdin = iree_string_view_is_empty(path) ||
-                  iree_string_view_equal(path, iree_make_cstring_view("-"));
-  if (is_stdin) {
-    return iree_io_file_contents_read_stdin(allocator, out_contents);
-  }
-  return iree_io_file_contents_read(path, allocator, out_contents);
-}
-
-static iree_string_view_t loom_link_file_contents_string_view(
-    const iree_io_file_contents_t* contents) {
-  return iree_make_string_view((const char*)contents->const_buffer.data,
-                               contents->const_buffer.data_length);
-}
-
 static iree_status_t loom_link_parse_input(iree_string_view_t path,
                                            iree_string_view_t filename,
                                            loom_context_t* context,
@@ -64,9 +47,9 @@ static iree_status_t loom_link_parse_input(iree_string_view_t path,
                                            iree_allocator_t allocator,
                                            loom_link_input_t* out_input) {
   IREE_RETURN_IF_ERROR(
-      loom_link_read_input(path, allocator, &out_input->contents));
+      loom_tooling_read_input_file(path, allocator, &out_input->contents));
   iree_string_view_t source =
-      loom_link_file_contents_string_view(out_input->contents);
+      loom_tooling_file_contents_string_view(out_input->contents);
 
   loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
@@ -213,10 +196,7 @@ int main(int argc, char** argv) {
       break;
     }
     iree_string_view_t filename =
-        iree_string_view_is_empty(path) ||
-                iree_string_view_equal(path, iree_make_cstring_view("-"))
-            ? iree_make_cstring_view("<stdin>")
-            : path;
+        loom_tooling_file_path_is_stdio(path) ? IREE_SV("<stdin>") : path;
     status = loom_link_parse_input(path, filename, &context, &block_pool,
                                    allocator, &inputs[i]);
     if (iree_status_is_ok(status)) {

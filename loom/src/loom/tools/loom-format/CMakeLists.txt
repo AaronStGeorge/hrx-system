@@ -44,6 +44,7 @@ loom_cc_binary(
     iree::io::file_handle
     loom::src::loom::error::diagnostic
     loom::src::loom::ops::op_registry
+    loom::src::loom::tooling::io::file
     loom::src::loom::util::stream
 )
 

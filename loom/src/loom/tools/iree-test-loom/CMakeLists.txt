@@ -23,6 +23,7 @@ loom_cc_library(
     iree::io::file_handle
     loom::src::loom::ops::op_registry
     loom::src::loom::tooling::execution::session
+    loom::src::loom::tooling::io::file
     loom::src::loom::tooling::testbench::executor
     loom::src::loom::util::stream
   PUBLIC

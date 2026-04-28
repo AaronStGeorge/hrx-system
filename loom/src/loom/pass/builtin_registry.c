@@ -8,9 +8,10 @@
 
 #include <stdint.h>
 
-#include "loom/codegen/low/allocation_pass.h"
-#include "loom/codegen/low/dce_pass.h"
-#include "loom/codegen/low/lower_pass.h"
+#include "loom/codegen/low/pass_requirements.h"
+#include "loom/codegen/low/passes/allocation.h"
+#include "loom/codegen/low/passes/dce.h"
+#include "loom/codegen/low/passes/source_to_low.h"
 #include "loom/passes/branch_fusion.h"
 #include "loom/passes/branch_sink.h"
 #include "loom/passes/canonicalize.h"
@@ -64,7 +65,7 @@ static const loom_pass_requirement_def_t
             .key = IREE_SVL(
                 LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY),
             .description =
-                IREE_SVL("Requires an injected target-low descriptor "
+                IREE_SVL("Requires a pass environment target-low descriptor "
                          "registry."),
         },
 };
@@ -74,7 +75,8 @@ static const loom_pass_requirement_def_t kLowDceRequirements[] = {
         .key =
             IREE_SVL(LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY),
         .description =
-            IREE_SVL("Requires an injected target-low descriptor registry."),
+            IREE_SVL("Requires a pass environment target-low descriptor "
+                     "registry."),
     },
 };
 
@@ -92,14 +94,15 @@ static const loom_pass_requirement_def_t kLowSourceToLowRequirements[] = {
         .key =
             IREE_SVL(LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY),
         .description =
-            IREE_SVL("Requires an injected target-low descriptor registry."),
+            IREE_SVL("Requires a pass environment target-low descriptor "
+                     "registry."),
     },
     {
         .key = IREE_SVL(
             LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_LOWER_POLICY_REGISTRY),
         .description =
-            IREE_SVL("Requires an injected source-to-target-low lowering "
-                     "policy registry."),
+            IREE_SVL("Requires a pass environment source-to-target-low "
+                     "lowering policy registry."),
     },
 };
 

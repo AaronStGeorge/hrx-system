@@ -4,13 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/codegen/low/allocation_pass.h"
+#include "loom/codegen/low/passes/allocation.h"
 
 #include <string.h>
 
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_materialization.h"
 #include "loom/codegen/low/function.h"
+#include "loom/codegen/low/pass_environment.h"
 #include "loom/ops/low/ops.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
@@ -67,17 +68,6 @@ static const loom_pass_info_t
 
 const loom_pass_info_t* loom_low_materialize_allocation_pass_info(void) {
   return &loom_low_materialize_allocation_pass_info_storage;
-}
-
-bool loom_low_materialize_allocation_pass_config_satisfies_requirement(
-    const loom_low_materialize_allocation_pass_config_t* config,
-    iree_string_view_t requirement) {
-  if (iree_string_view_equal(
-          requirement,
-          IREE_SV(LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY))) {
-    return config && config->descriptor_registry;
-  }
-  return false;
 }
 
 static iree_status_t loom_low_materialize_allocation_count_budgets(
@@ -270,16 +260,18 @@ iree_status_t loom_low_materialize_allocation_run(loom_pass_t* pass,
 
   loom_low_materialize_allocation_pass_state_t* state =
       (loom_low_materialize_allocation_pass_state_t*)pass->state;
-  const loom_low_materialize_allocation_pass_config_t* config =
-      (const loom_low_materialize_allocation_pass_config_t*)pass->user_data;
-  if (!config || !config->descriptor_registry) {
+  const loom_low_pass_capability_t* low_capability =
+      loom_low_pass_capability_from_pass(pass);
+  const loom_low_descriptor_registry_t* descriptor_registry =
+      loom_low_pass_capability_descriptor_registry(low_capability);
+  if (!descriptor_registry) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "pass 'low-materialize-allocation' requires an injected low "
+        "pass 'low-materialize-allocation' requires a pass environment low "
         "descriptor registry");
   }
   loom_low_allocation_options_t allocation_options = {
-      .descriptor_registry = config->descriptor_registry,
+      .descriptor_registry = descriptor_registry,
       .budgets = state ? state->budgets : NULL,
       .budget_count = state ? state->budget_count : 0,
       .emitter = pass->diagnostic_emitter,

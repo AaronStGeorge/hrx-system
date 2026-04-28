@@ -157,6 +157,7 @@ static iree_status_t loom_pass_interpreter_make_pass(
       .arena = instance_arena,
       .decoded_options = invoke->decoded_options,
       .diagnostic_emitter = diagnostic_emitter,
+      .environment = &state->options->environment,
       .user_data = pass_user_data,
   };
   if (invoke->info->statistic_count == 0) {
@@ -802,7 +803,7 @@ static iree_status_t loom_pass_interpreter_options_verify(
                             "pass interpreter options with block pool are "
                             "required");
   }
-  return iree_ok_status();
+  return loom_pass_environment_verify(&options->environment);
 }
 
 iree_status_t loom_pass_interpreter_run_module(

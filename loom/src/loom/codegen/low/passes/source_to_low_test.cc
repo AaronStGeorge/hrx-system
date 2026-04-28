@@ -4,13 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/codegen/low/lower_pass.h"
+#include "loom/codegen/low/passes/source_to_low.h"
 
 #include <vector>
 
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/pass_environment.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -118,7 +119,7 @@ class LowLowerPassTest : public ::testing::Test {
         .max_errors = 20,
     };
     loom_module_t* module = nullptr;
-    IREE_CHECK_OK(loom_text_parse(source, IREE_SV("lower_pass_test.loom"),
+    IREE_CHECK_OK(loom_text_parse(source, IREE_SV("source_to_low_test.loom"),
                                   &context_, &block_pool_, &parse_options,
                                   &module));
     IREE_ASSERT(module != nullptr);
@@ -142,17 +143,18 @@ TEST_F(LowLowerPassTest, VerifiesLoweredModuleBeforeReturningSuccess) {
   iree_arena_initialize(&block_pool_, &instance_arena);
   const loom_pass_info_t* pass_info = loom_low_source_to_low_pass_info();
   std::vector<int64_t> statistics(pass_info->statistic_count, 0);
-  loom_low_source_to_low_pass_config_t config = {
-      .descriptor_registry = &registry_.registry,
-      .policy_registry = &invalid_preamble_policy_registry_,
-  };
+  loom_low_pass_environment_storage_t low_pass_environment_storage;
+  loom_pass_environment_t environment =
+      loom_low_pass_environment_storage_initialize(
+          &registry_.registry, &invalid_preamble_policy_registry_, nullptr,
+          &low_pass_environment_storage);
   loom_pass_t pass = {
       .info = pass_info,
       .module_run = loom_low_source_to_low_run,
       .instance_arena = &instance_arena,
       .arena = &instance_arena,
       .statistics = statistics.data(),
-      .user_data = &config,
+      .environment = &environment,
   };
 
   IREE_ASSERT_OK(

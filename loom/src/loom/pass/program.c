@@ -528,7 +528,7 @@ iree_status_t loom_pass_program_compile_pipeline(
   iree_arena_initialize(block_pool, &verify_arena);
   loom_pass_verify_options_t verify_options = {
       .registry = options->registry,
-      .requirement_provider = options->requirement_provider,
+      .environment = options->environment,
       .predicate_provider = options->predicate_provider,
   };
   iree_status_t status = loom_pass_verify_pipeline_op(

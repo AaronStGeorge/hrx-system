@@ -10,6 +10,7 @@
 #include <stdlib.h>
 
 #include "iree/io/file_contents.h"
+#include "loom/tooling/io/file.h"
 #include "loom/tools/loom-check/check.h"
 #include "loom/tools/loom-check/json_output.h"
 #include "loom/tools/loom-check/output.h"
@@ -20,11 +21,7 @@
 static iree_status_t loom_check_write_source(iree_string_view_t path,
                                              iree_string_view_t source,
                                              iree_allocator_t allocator) {
-  const iree_const_byte_span_t contents = {
-      .data = (const uint8_t*)source.data,
-      .data_length = source.size,
-  };
-  return iree_io_file_contents_write(path, contents, allocator);
+  return loom_tooling_write_output_file(path, source, allocator);
 }
 
 static iree_status_t loom_check_write_updates(
@@ -49,14 +46,6 @@ static iree_status_t loom_check_write_updates(
 
   iree_string_builder_deinitialize(&new_source);
   return status;
-}
-
-static iree_string_view_t loom_check_file_contents_view(
-    const iree_io_file_contents_t* contents) {
-  return (iree_string_view_t){
-      .data = (const char*)contents->const_buffer.data,
-      .size = contents->const_buffer.data_length,
-  };
 }
 
 static iree_status_t loom_check_process_file(
@@ -87,7 +76,7 @@ static iree_status_t loom_check_process_file(
       if (iree_status_is_ok(status)) {
         status = loom_check_template_sync_build_source(
             source, &file, filename,
-            loom_check_file_contents_view(template_contents),
+            loom_tooling_file_contents_string_view(template_contents),
             file.template_path, context, block_pool, &arena, allocator,
             &template_synced_source, &template_sync_changed);
       }
@@ -244,22 +233,16 @@ iree_status_t loom_check_read_and_process(
     iree_host_size_t* pass_count, iree_host_size_t* fail_count,
     iree_host_size_t* skip_count) {
   IREE_ASSERT_ARGUMENT(options);
-  const bool is_stdin =
-      iree_string_view_is_empty(path) ||
-      iree_string_view_equal(path, iree_make_cstring_view("-"));
+  const bool is_stdin = loom_tooling_file_path_is_stdio(path);
 
   iree_io_file_contents_t* contents = NULL;
-  iree_status_t status = iree_ok_status();
-  if (is_stdin) {
-    status = iree_io_file_contents_read_stdin(host_allocator, &contents);
-  } else {
-    status = iree_io_file_contents_read(path, host_allocator, &contents);
-  }
+  iree_status_t status =
+      loom_tooling_read_input_file(path, host_allocator, &contents);
 
   if (iree_status_is_ok(status)) {
-    iree_string_view_t source = loom_check_file_contents_view(contents);
-    iree_string_view_t filename =
-        is_stdin ? iree_make_cstring_view("<stdin>") : path;
+    iree_string_view_t source =
+        loom_tooling_file_contents_string_view(contents);
+    iree_string_view_t filename = is_stdin ? IREE_SV("<stdin>") : path;
     status = loom_check_process_file(
         filename, source, is_stdin, options, environment, context, block_pool,
         host_allocator, pass_count, fail_count, skip_count);

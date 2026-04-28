@@ -11,9 +11,9 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "iree/base/tooling/flags.h"
-#include "iree/io/file_contents.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ops/op_registry.h"
+#include "loom/tooling/io/file.h"
 #include "loom/tools/loom-format/convert.h"
 #include "loom/util/stream.h"
 
@@ -30,40 +30,12 @@ static iree_status_t loom_format_stderr_diagnostic_sink(
   return loom_diagnostic_format(diagnostic, &stream);
 }
 
-static iree_status_t loom_format_read_input(
-    iree_string_view_t path, iree_allocator_t allocator,
-    iree_io_file_contents_t** out_contents) {
-  bool is_stdin = iree_string_view_is_empty(path) ||
-                  iree_string_view_equal(path, iree_make_cstring_view("-"));
-  if (is_stdin) {
-    return iree_io_file_contents_read_stdin(allocator, out_contents);
-  }
-  return iree_io_file_contents_read(path, allocator, out_contents);
-}
-
 static iree_status_t loom_format_write_output(
     iree_string_view_t path, const loom_format_output_t* output,
     iree_allocator_t allocator) {
-  bool is_stdout = iree_string_view_is_empty(path) ||
-                   iree_string_view_equal(path, iree_make_cstring_view("-"));
-  iree_const_byte_span_t bytes =
-      iree_make_const_byte_span(output->data, output->length);
-  if (!is_stdout) {
-    return iree_io_file_contents_write(path, bytes, allocator);
-  }
-
-  if (bytes.data_length > 0) {
-    size_t write_count = fwrite(bytes.data, bytes.data_length, 1, stdout);
-    if (write_count != 1) {
-      return iree_make_status(IREE_STATUS_DATA_LOSS,
-                              "failed to write %" PRIhsz " bytes to stdout",
-                              bytes.data_length);
-    }
-  }
-  if (fflush(stdout) != 0) {
-    return iree_make_status(IREE_STATUS_DATA_LOSS, "failed to flush stdout");
-  }
-  return iree_ok_status();
+  return loom_tooling_write_output_file(
+      path, iree_make_string_view((const char*)output->data, output->length),
+      allocator);
 }
 
 int main(int argc, char** argv) {
@@ -116,13 +88,12 @@ int main(int argc, char** argv) {
   iree_string_view_t input_path =
       argc < 2 ? iree_string_view_empty() : iree_make_cstring_view(argv[1]);
   iree_string_view_t filename =
-      (argc < 2 ||
-       iree_string_view_equal(input_path, iree_make_cstring_view("-")))
+      (argc < 2 || loom_tooling_file_path_is_stdio(input_path))
           ? iree_make_cstring_view("<stdin>")
           : input_path;
 
   if (iree_status_is_ok(status)) {
-    status = loom_format_read_input(input_path, allocator, &contents);
+    status = loom_tooling_read_input_file(input_path, allocator, &contents);
   }
   if (iree_status_is_ok(status)) {
     loom_format_convert_options_t convert_options = {

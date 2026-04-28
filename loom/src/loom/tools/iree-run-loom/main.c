@@ -12,7 +12,6 @@
 
 #include "iree/base/api.h"
 #include "iree/base/tooling/flags.h"
-#include "iree/io/file_contents.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
@@ -20,6 +19,7 @@
 #include "loom/tooling/execution/execution_backend.h"
 #include "loom/tooling/execution/one_shot.h"
 #include "loom/tooling/execution/session.h"
+#include "loom/tooling/io/file.h"
 
 IREE_FLAG(string, loom_entry, "",
           "Optional function symbol to compile, such as '@main'. When omitted "
@@ -152,23 +152,6 @@ IREE_FLAG_CALLBACK(iree_run_loom_parse_expected_binding_flag,
                    "present, one expected binding must be provided for every "
                    "binding.");
 
-static iree_status_t iree_run_loom_read_input(
-    iree_string_view_t path, iree_allocator_t allocator,
-    iree_io_file_contents_t** out_contents) {
-  const bool is_stdin = iree_string_view_is_empty(path) ||
-                        iree_string_view_equal(path, IREE_SV("-"));
-  if (is_stdin) {
-    return iree_io_file_contents_read_stdin(allocator, out_contents);
-  }
-  return iree_io_file_contents_read(path, allocator, out_contents);
-}
-
-static iree_string_view_t iree_run_loom_file_contents_string_view(
-    const iree_io_file_contents_t* contents) {
-  return iree_make_string_view((const char*)contents->const_buffer.data,
-                               contents->const_buffer.data_length);
-}
-
 static iree_status_t iree_run_loom_register_context(void* user_data,
                                                     loom_context_t* context) {
   (void)user_data;
@@ -191,18 +174,6 @@ static iree_status_t iree_run_loom_parse_workgroup_count(
         IREE_STATUS_INVALID_ARGUMENT,
         "invalid --workgroup_count='%.*s'; expected `x,y,z`", (int)value.size,
         value.data);
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t iree_run_loom_write_stdout(iree_string_view_t output) {
-  if (iree_string_view_is_empty(output)) {
-    return iree_ok_status();
-  }
-  if (fwrite(output.data, 1, output.size, stdout) != output.size ||
-      fflush(stdout) != 0) {
-    return iree_make_status(IREE_STATUS_DATA_LOSS,
-                            "failed to write invocation output");
   }
   return iree_ok_status();
 }
@@ -356,7 +327,7 @@ int iree_run_loom_main(int argc, char** argv,
       probe_status = backend->probe(backend, &probe_request);
     }
     if (iree_status_is_ok(probe_status)) {
-      probe_status = iree_run_loom_write_stdout(
+      probe_status = loom_tooling_write_stdout(
           iree_string_builder_view(&probe_result.output));
     }
     int probe_exit_code = 0;
@@ -412,9 +383,9 @@ int iree_run_loom_main(int argc, char** argv,
           : input_path;
   iree_string_view_t source = iree_string_view_empty();
   if (iree_status_is_ok(status)) {
-    status = iree_run_loom_read_input(input_path, allocator, &contents);
+    status = loom_tooling_read_input_file(input_path, allocator, &contents);
     if (iree_status_is_ok(status)) {
-      source = iree_run_loom_file_contents_string_view(contents);
+      source = loom_tooling_file_contents_string_view(contents);
     }
   }
   loom_run_candidate_compile_options_t compile_options = {0};
@@ -462,8 +433,8 @@ int iree_run_loom_main(int argc, char** argv,
     status = backend->run_one_shot(backend, &run_request);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_run_loom_write_stdout(
-        iree_string_builder_view(&run_result.output));
+    status =
+        loom_tooling_write_stdout(iree_string_builder_view(&run_result.output));
   }
   if (iree_status_is_ok(status)) {
     exit_code = run_result.exit_code;

@@ -13,6 +13,15 @@ package(
 )
 
 loom_cc_library(
+    name = "environment",
+    srcs = ["environment.c"],
+    hdrs = ["environment.h"],
+    deps = [
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "types",
     hdrs = ["types.h"],
     deps = [
@@ -81,6 +90,7 @@ loom_cc_library(
     srcs = ["verify.c"],
     hdrs = ["verify.h"],
     deps = [
+        ":environment",
         ":invocation",
         ":predicate",
         ":registry",
@@ -96,6 +106,7 @@ loom_cc_library(
     srcs = ["program.c"],
     hdrs = ["program.h"],
     deps = [
+        ":environment",
         ":invocation",
         ":registry",
         ":verify",
@@ -125,6 +136,7 @@ loom_cc_library(
     srcs = ["interpreter.c"],
     hdrs = ["interpreter.h"],
     deps = [
+        ":environment",
         ":predicate",
         ":program",
         ":report",
@@ -142,6 +154,7 @@ loom_cc_library(
     srcs = ["tooling.c"],
     hdrs = ["tooling.h"],
     deps = [
+        ":environment",
         ":interpreter",
         ":pipeline",
         ":program",
@@ -160,9 +173,10 @@ loom_cc_library(
     hdrs = ["builtin_registry.h"],
     deps = [
         ":registry",
-        "//loom/src/loom/codegen/low:allocation_pass",
-        "//loom/src/loom/codegen/low:dce_pass",
-        "//loom/src/loom/codegen/low:lower_pass",
+        "//loom/src/loom/codegen/low:pass_requirements",
+        "//loom/src/loom/codegen/low/passes:allocation",
+        "//loom/src/loom/codegen/low/passes:dce",
+        "//loom/src/loom/codegen/low/passes:source_to_low",
         "//loom/src/loom/passes:branch_fusion",
         "//loom/src/loom/passes:branch_sink",
         "//loom/src/loom/passes:canonicalize",

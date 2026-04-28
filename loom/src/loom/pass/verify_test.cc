@@ -16,13 +16,6 @@
 namespace loom {
 namespace {
 
-static bool allow_one_requirement(void* user_data,
-                                  iree_string_view_t requirement) {
-  const iree_string_view_t* allowed =
-      static_cast<const iree_string_view_t*>(user_data);
-  return iree_string_view_equal(*allowed, requirement);
-}
-
 class PassVerifyTest : public PassTestHarness {};
 
 TEST_F(PassVerifyTest, VerifiesModuleAndFuncPipelines) {
@@ -66,15 +59,10 @@ TEST_F(PassVerifyTest, RejectsNullPipelineOp) {
 }
 
 TEST_F(PassVerifyTest, VerifiesSatisfiedDescriptorRequirement) {
-  iree_string_view_t allowed_requirement = IREE_SV("target.profile");
-  loom_pass_requirement_provider_t provider = {
-      .callback = allow_one_requirement,
-      .user_data = &allowed_requirement,
-  };
   IREE_ASSERT_OK(Verify(IREE_SV("pass.pipeline<func> @pipeline pipeline {\n"
                                 "  test.requires-target\n"
                                 "}\n"),
-                        provider));
+                        PassTestTargetProfileEnvironment()));
 }
 
 TEST_F(PassVerifyTest, RejectsUnknownPassKey) {
@@ -119,24 +107,11 @@ TEST_F(PassVerifyTest, RejectsMissingRequiredOptions) {
                              "}\n"));
 }
 
-TEST_F(PassVerifyTest, RejectsMissingDescriptorRequirementProvider) {
+TEST_F(PassVerifyTest, RejectsUnsatisfiedDescriptorRequirement) {
   ExpectVerifyStatus(IREE_STATUS_FAILED_PRECONDITION,
                      IREE_SV("pass.pipeline<func> @pipeline pipeline {\n"
                              "  test.requires-target\n"
                              "}\n"));
-}
-
-TEST_F(PassVerifyTest, RejectsUnsatisfiedDescriptorRequirement) {
-  iree_string_view_t allowed_requirement = IREE_SV("not-target.profile");
-  loom_pass_requirement_provider_t provider = {
-      .callback = allow_one_requirement,
-      .user_data = &allowed_requirement,
-  };
-  ExpectVerifyStatus(IREE_STATUS_FAILED_PRECONDITION,
-                     IREE_SV("pass.pipeline<func> @pipeline pipeline {\n"
-                             "  test.requires-target\n"
-                             "}\n"),
-                     provider);
 }
 
 TEST_F(PassVerifyTest, RejectsNestedSameAnchorFor) {
@@ -228,7 +203,7 @@ TEST_F(PassVerifyTest, VerifiesProviderWherePredicate) {
                                 "    test.noop\n"
                                 "  }\n"
                                 "}\n"),
-                        {}, provider));
+                        loom_pass_environment_empty(), provider));
   EXPECT_EQ(predicate_capture.verify_count, 1);
 }
 

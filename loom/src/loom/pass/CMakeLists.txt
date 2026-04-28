@@ -12,6 +12,18 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    environment
+  HDRS
+    "environment.h"
+  SRCS
+    "environment.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     types
   HDRS
     "types.h"
@@ -97,6 +109,7 @@ loom_cc_library(
   SRCS
     "verify.c"
   DEPS
+    ::environment
     ::invocation
     ::predicate
     ::registry
@@ -115,6 +128,7 @@ loom_cc_library(
   SRCS
     "program.c"
   DEPS
+    ::environment
     ::invocation
     ::registry
     ::verify
@@ -150,6 +164,7 @@ loom_cc_library(
   SRCS
     "interpreter.c"
   DEPS
+    ::environment
     ::predicate
     ::program
     ::report
@@ -170,6 +185,7 @@ loom_cc_library(
   SRCS
     "tooling.c"
   DEPS
+    ::environment
     ::interpreter
     ::pipeline
     ::program
@@ -191,9 +207,10 @@ loom_cc_library(
     "builtin_registry.c"
   DEPS
     ::registry
-    loom::src::loom::codegen::low::allocation_pass
-    loom::src::loom::codegen::low::dce_pass
-    loom::src::loom::codegen::low::lower_pass
+    loom::src::loom::codegen::low::pass_requirements
+    loom::src::loom::codegen::low::passes::allocation
+    loom::src::loom::codegen::low::passes::dce
+    loom::src::loom::codegen::low::passes::source_to_low
     loom::src::loom::passes::branch_fusion
     loom::src::loom::passes::branch_sink
     loom::src::loom::passes::canonicalize

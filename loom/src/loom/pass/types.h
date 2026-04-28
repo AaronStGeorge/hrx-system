@@ -24,6 +24,7 @@ extern "C" {
 #endif
 
 typedef struct loom_module_t loom_module_t;
+typedef struct loom_pass_environment_t loom_pass_environment_t;
 typedef struct loom_pass_decoded_options_t loom_pass_decoded_options_t;
 typedef struct loom_pass_t loom_pass_t;
 
@@ -101,6 +102,8 @@ struct loom_pass_t {
   const loom_pass_decoded_options_t* decoded_options;
   // Optional structured diagnostic emitter for pass-specific failures.
   iree_diagnostic_emitter_t diagnostic_emitter;
+  // Caller-owned execution environment capabilities.
+  const loom_pass_environment_t* environment;
   // Opaque caller data borrowed for this invocation.
   void* user_data;
 };

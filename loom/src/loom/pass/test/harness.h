@@ -22,6 +22,7 @@
 #include "loom/error/emitter.h"
 #include "loom/ir/context.h"
 #include "loom/ir/ir.h"
+#include "loom/pass/environment.h"
 #include "loom/pass/interpreter.h"
 #include "loom/pass/program.h"
 #include "loom/pass/report.h"
@@ -63,6 +64,10 @@ struct PassTestPredicateCapture {
 loom_pass_predicate_provider_t PassTestTargetPredicateProvider(
     PassTestPredicateCapture* capture);
 
+// Returns a pass environment satisfying the synthetic `target.profile`
+// descriptor requirement.
+loom_pass_environment_t PassTestTargetProfileEnvironment();
+
 // Asserts one chronological synthetic pass trace event.
 void ExpectTraceEvent(const loom_test_pass_trace_t& trace,
                       iree_host_size_t event_index,
@@ -87,17 +92,15 @@ class PassTestHarness : public ::testing::Test {
                                   iree_host_size_t op_index);
   loom_func_like_t Function(loom_module_t* module, iree_host_size_t index);
 
-  iree_status_t Verify(
-      iree_string_view_t source,
-      loom_pass_requirement_provider_t requirement_provider = {},
-      loom_pass_predicate_provider_t predicate_provider = {});
+  iree_status_t Verify(iree_string_view_t source,
+                       loom_pass_environment_t environment = {},
+                       loom_pass_predicate_provider_t predicate_provider = {});
   iree_status_t VerifyModule(
-      const loom_module_t* module,
-      loom_pass_requirement_provider_t requirement_provider = {},
+      const loom_module_t* module, loom_pass_environment_t environment = {},
       loom_pass_predicate_provider_t predicate_provider = {});
   void ExpectVerifyStatus(
       iree_status_code_t expected_code, iree_string_view_t source,
-      loom_pass_requirement_provider_t requirement_provider = {},
+      loom_pass_environment_t environment = {},
       loom_pass_predicate_provider_t predicate_provider = {});
 
   iree_status_t Compile(loom_module_t* module, const loom_op_t* pipeline_op,
@@ -105,7 +108,7 @@ class PassTestHarness : public ::testing::Test {
                         loom_pass_predicate_provider_t predicate_provider = {});
   iree_status_t Compile(loom_module_t* module, const loom_op_t* pipeline_op,
                         loom_pass_program_t* out_program,
-                        loom_pass_requirement_provider_t requirement_provider,
+                        loom_pass_environment_t environment,
                         loom_pass_predicate_provider_t predicate_provider);
 
   loom_pass_interpreter_options_t InterpreterOptions(
@@ -117,7 +120,7 @@ class PassTestHarness : public ::testing::Test {
   loom_pass_tool_run_options_t ToolOptions(
       loom_test_pass_trace_t* trace,
       loom_pass_predicate_provider_t predicate_provider = {},
-      loom_pass_requirement_provider_t requirement_provider = {});
+      loom_pass_environment_t environment = {});
 
   iree_status_t RunModulePipeline(
       loom_module_t* module, iree_host_size_t pipeline_index,

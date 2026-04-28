@@ -52,14 +52,12 @@ loom_cc_library(
     loom::src::loom::analysis::liveness_json
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::allocation_json
-    loom::src::loom::codegen::low::allocation_pass
-    loom::src::loom::codegen::low::dce_pass
     loom::src::loom::codegen::low::descriptors_manifest
     loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::lower
-    loom::src::loom::codegen::low::lower_pass
     loom::src::loom::codegen::low::packet_json
     loom::src::loom::codegen::low::packetization
+    loom::src::loom::codegen::low::pass_environment
     loom::src::loom::codegen::low::schedule
     loom::src::loom::codegen::low::schedule_json
     loom::src::loom::codegen::low::source_selection
@@ -274,6 +272,7 @@ loom_cc_library(
     iree::base::internal::arena
     iree::io::file_handle
     loom::src::loom::ir
+    loom::src::loom::tooling::io::file
     loom::src::loom::util::stream
   PUBLIC
 )

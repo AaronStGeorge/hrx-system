@@ -18,6 +18,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/ir/ir.h"
+#include "loom/pass/environment.h"
 #include "loom/pass/predicate.h"
 #include "loom/pass/registry.h"
 
@@ -25,24 +26,11 @@
 extern "C" {
 #endif
 
-// Returns true when |requirement| is satisfied in the current pipeline
-// environment. Requirement keys are descriptor-owned stable strings.
-typedef bool (*loom_pass_requirement_provider_callback_t)(
-    void* user_data, iree_string_view_t requirement);
-
-typedef struct loom_pass_requirement_provider_t {
-  // Optional callback used to satisfy descriptor-declared requirements.
-  loom_pass_requirement_provider_callback_t callback;
-  // Opaque caller data passed to |callback|.
-  void* user_data;
-} loom_pass_requirement_provider_t;
-
 typedef struct loom_pass_verify_options_t {
   // Registry used to resolve pass.run keys. Required.
   const loom_pass_registry_t* registry;
-  // Optional descriptor requirement provider. Required only when a resolved
-  // pass descriptor declares requirements.
-  loom_pass_requirement_provider_t requirement_provider;
+  // Typed execution environment capabilities.
+  loom_pass_environment_t environment;
   // Optional provider for pass.where predicates outside the core built-ins.
   loom_pass_predicate_provider_t predicate_provider;
 } loom_pass_verify_options_t;

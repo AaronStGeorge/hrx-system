@@ -4,11 +4,12 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/codegen/low/lower_pass.h"
+#include "loom/codegen/low/passes/source_to_low.h"
 
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/codegen/low/pass_environment.h"
 #include "loom/codegen/low/requirements.h"
 #include "loom/codegen/low/source_selection.h"
 #include "loom/pass/pipeline.h"
@@ -75,23 +76,6 @@ static iree_status_t loom_low_source_to_low_verify_module(
         verify_result.error_count, verify_result.error_count == 1 ? "" : "s");
   }
   return iree_ok_status();
-}
-
-bool loom_low_source_to_low_pass_config_satisfies_requirement(
-    const loom_low_source_to_low_pass_config_t* config,
-    iree_string_view_t requirement) {
-  if (iree_string_view_equal(
-          requirement,
-          IREE_SV(LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY))) {
-    return config && config->descriptor_registry;
-  }
-  if (iree_string_view_equal(
-          requirement,
-          IREE_SV(
-              LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_LOWER_POLICY_REGISTRY))) {
-    return config && config->policy_registry;
-  }
-  return false;
 }
 
 static iree_status_t loom_low_source_to_low_parse_max_errors(
@@ -167,23 +151,26 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
                                          loom_module_t* module) {
   const loom_low_source_to_low_pass_state_t* state =
       (const loom_low_source_to_low_pass_state_t*)pass->state;
-  const loom_low_source_to_low_pass_config_t* config =
-      (const loom_low_source_to_low_pass_config_t*)pass->user_data;
-  if (!config || !config->descriptor_registry || !config->policy_registry) {
+  const loom_low_pass_capability_t* low_capability =
+      loom_low_pass_capability_from_pass(pass);
+  const loom_low_descriptor_registry_t* descriptor_registry =
+      loom_low_pass_capability_descriptor_registry(low_capability);
+  const loom_low_lower_policy_registry_t* policy_registry =
+      loom_low_pass_capability_lower_policy_registry(low_capability);
+  if (!descriptor_registry || !policy_registry) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "pass 'source-to-low' requires injected low descriptor and lowering "
-        "policy registries");
+        "pass 'source-to-low' requires pass environment low descriptor and "
+        "lowering policy registries");
   }
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_policy_registry_verify(config->policy_registry));
+  IREE_RETURN_IF_ERROR(loom_low_lower_policy_registry_verify(policy_registry));
 
   iree_arena_allocator_t selection_arena;
   iree_arena_initialize(module->arena.block_pool, &selection_arena);
   loom_low_source_selection_list_t selection_list = {0};
   const loom_low_source_selection_options_t selection_options = {
-      .descriptor_registry = config->descriptor_registry,
-      .policy_registry = config->policy_registry,
+      .descriptor_registry = descriptor_registry,
+      .policy_registry = policy_registry,
       .lowering_kind = IREE_SV("source-to-low"),
   };
   iree_status_t status = loom_low_select_source_funcs(
@@ -192,13 +179,18 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
   for (iree_host_size_t i = 0;
        i < selection_list.count && iree_status_is_ok(status); ++i) {
     const loom_low_source_selection_t* selection = &selection_list.values[i];
+    const loom_target_low_legality_provider_list_t* legality_provider_list =
+        loom_low_pass_capability_legality_provider_list(low_capability);
     const loom_low_lower_options_t lower_options = {
         .target_ref = selection->target_ref,
         .bundle = selection->target_bundle,
-        .descriptor_registry = config->descriptor_registry,
+        .descriptor_registry = descriptor_registry,
         .descriptor_requirements =
             LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-        .legality_provider_list = config->legality_provider_list,
+        .legality_provider_list =
+            legality_provider_list
+                ? *legality_provider_list
+                : loom_target_low_legality_provider_list_empty(),
         .policy = selection->policy,
         .emitter = pass->diagnostic_emitter,
         .max_errors = state ? state->max_errors : 20,

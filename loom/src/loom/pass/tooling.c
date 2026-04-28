@@ -23,6 +23,7 @@ static iree_status_t loom_pass_tool_verify_options(
         IREE_STATUS_INVALID_ARGUMENT,
         "pass tool options with registry and block pool are required");
   }
+  IREE_RETURN_IF_ERROR(loom_pass_environment_verify(&options->environment));
   return loom_pass_registry_verify(options->registry);
 }
 
@@ -33,6 +34,7 @@ static iree_status_t loom_pass_tool_run_program(
       .block_pool = options->block_pool,
       .predicate_provider = options->predicate_provider,
       .diagnostic_emitter = options->diagnostic_emitter,
+      .environment = options->environment,
       .configure = options->configure,
       .report = options->report,
   };
@@ -102,7 +104,7 @@ iree_status_t loom_pass_tool_run_pipeline_op(
 
   loom_pass_program_compile_options_t compile_options = {
       .registry = options->registry,
-      .requirement_provider = options->requirement_provider,
+      .environment = options->environment,
       .predicate_provider = options->predicate_provider,
   };
   loom_pass_program_t program = {0};
@@ -477,7 +479,7 @@ iree_status_t loom_pass_tool_run_flat_pipeline(
   if (iree_status_is_ok(status)) {
     loom_pass_program_compile_options_t compile_options = {
         .registry = options->registry,
-        .requirement_provider = options->requirement_provider,
+        .environment = options->environment,
         .predicate_provider = options->predicate_provider,
     };
     loom_pass_program_t program = {0};

@@ -1,0 +1,122 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_assert_no_dependencies",
+    "loom_cc_library",
+    "loom_cc_test",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+loom_assert_no_dependencies(
+    name = "low_passes_no_target_implementation_deps",
+    dependencies = [
+        "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+        "//loom/src/loom/target/arch/wasm:descriptors",
+        "//loom/src/loom/target/arch/x86:packed_dot_contract",
+        "//loom/src/loom/target/emit/ireevm:descriptors",
+        "//loom/src/loom/target/emit/llvmir:llvmir",
+        "//loom/src/loom/target/test:low_registry",
+    ],
+    targets = [
+        ":allocation",
+        ":dce",
+        ":source_to_low",
+    ],
+)
+
+loom_assert_no_dependencies(
+    name = "low_pass_fast_paths_no_descriptor_registry_dep",
+    dependencies = ["//loom/src/loom/target:low_descriptor_registry"],
+    targets = [
+        ":allocation",
+        ":dce",
+    ],
+)
+
+loom_cc_library(
+    name = "allocation",
+    srcs = ["allocation.c"],
+    hdrs = ["allocation.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:allocation",
+        "//loom/src/loom/codegen/low:allocation_materialization",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:function",
+        "//loom/src/loom/codegen/low:pass_environment",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/pass:pipeline",
+        "//loom/src/loom/pass:registry",
+        "//loom/src/loom/pass:types",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "dce",
+    srcs = ["dce.c"],
+    hdrs = ["dce.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:function",
+        "//loom/src/loom/codegen/low:pass_environment",
+        "//loom/src/loom/codegen/low:target_binding",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/pass:types",
+        "//loom/src/loom/passes:dce",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "source_to_low",
+    srcs = ["source_to_low.c"],
+    hdrs = ["source_to_low.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/codegen/low:pass_environment",
+        "//loom/src/loom/codegen/low:requirements",
+        "//loom/src/loom/codegen/low:source_selection",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/pass:pipeline",
+        "//loom/src/loom/pass:registry",
+        "//loom/src/loom/pass:types",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "source_to_low_test",
+    srcs = ["source_to_low_test.cc"],
+    deps = [
+        ":source_to_low",
+        "//loom/src/loom/codegen/low:pass_environment",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/target/test:low_registry",
+        "//loom/src/loom/target/test:lower",
+        "//loom/src/loom/testing:module_ptr",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)

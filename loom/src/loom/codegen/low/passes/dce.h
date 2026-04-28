@@ -11,12 +11,10 @@
 // elimination remains the normal cse pass; this pass only owns the low-specific
 // deadness query needed to interpret descriptor-backed packets.
 
-#ifndef LOOM_CODEGEN_LOW_DCE_PASS_H_
-#define LOOM_CODEGEN_LOW_DCE_PASS_H_
+#ifndef LOOM_CODEGEN_LOW_PASSES_DCE_H_
+#define LOOM_CODEGEN_LOW_PASSES_DCE_H_
 
 #include "iree/base/api.h"
-#include "loom/codegen/low/descriptors.h"
-#include "loom/codegen/low/pass_requirements.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
 #include "loom/pass/types.h"
@@ -28,16 +26,6 @@ extern "C" {
 // Static pass metadata for the low-dce function pass.
 const loom_pass_info_t* loom_low_dce_pass_info(void);
 
-// Per-pipeline configuration required by the low-dce pass.
-typedef struct loom_low_dce_pass_config_t {
-  // Selected target-low descriptor registry used to interpret low packets.
-  const loom_low_descriptor_registry_t* descriptor_registry;
-} loom_low_dce_pass_config_t;
-
-// Returns true if |config| satisfies a low-dce descriptor requirement.
-bool loom_low_dce_pass_config_satisfies_requirement(
-    const loom_low_dce_pass_config_t* config, iree_string_view_t requirement);
-
 // Runs low-dce as a function pass.
 iree_status_t loom_low_dce_run(loom_pass_t* pass, loom_module_t* module,
                                loom_func_like_t function);
@@ -46,4 +34,4 @@ iree_status_t loom_low_dce_run(loom_pass_t* pass, loom_module_t* module,
 }  // extern "C"
 #endif
 
-#endif  // LOOM_CODEGEN_LOW_DCE_PASS_H_
+#endif  // LOOM_CODEGEN_LOW_PASSES_DCE_H_

@@ -286,24 +286,18 @@ static iree_status_t loom_pass_verify_requirements(
   for (uint16_t i = 0; i < descriptor->requirement_count; ++i) {
     const loom_pass_requirement_def_t* requirement =
         &descriptor->requirement_defs[i];
-    if (!state->options->requirement_provider.callback) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "pass '%.*s' requires '%.*s' (%.*s), but no requirement provider "
-          "was supplied",
-          (int)descriptor->key.size, descriptor->key.data,
-          (int)requirement->key.size, requirement->key.data,
-          (int)requirement->description.size, requirement->description.data);
+    bool satisfied = loom_pass_environment_satisfies_requirement(
+        &state->options->environment, requirement->key);
+    if (satisfied) {
+      continue;
     }
-    if (!state->options->requirement_provider.callback(
-            state->options->requirement_provider.user_data, requirement->key)) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "pass '%.*s' requirement '%.*s' is not satisfied: %.*s",
-          (int)descriptor->key.size, descriptor->key.data,
-          (int)requirement->key.size, requirement->key.data,
-          (int)requirement->description.size, requirement->description.data);
-    }
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "pass '%.*s' requirement '%.*s' is not satisfied by the pass "
+        "environment: %.*s",
+        (int)descriptor->key.size, descriptor->key.data,
+        (int)requirement->key.size, requirement->key.data,
+        (int)requirement->description.size, requirement->description.data);
   }
   return iree_ok_status();
 }
@@ -632,6 +626,7 @@ static iree_status_t loom_pass_verify_state_initialize(
                             "module, pass registry, scratch arena, and output "
                             "state are required");
   }
+  IREE_RETURN_IF_ERROR(loom_pass_environment_verify(&options->environment));
   IREE_RETURN_IF_ERROR(loom_pass_registry_verify(options->registry));
   *out_state = (loom_pass_verify_state_t){
       .module = module,

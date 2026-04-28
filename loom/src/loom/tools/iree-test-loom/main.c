@@ -13,8 +13,8 @@
 
 #include "iree/base/api.h"
 #include "iree/base/tooling/flags.h"
-#include "iree/io/file_contents.h"
 #include "loom/ops/op_registry.h"
+#include "loom/tooling/io/file.h"
 #include "loom/tooling/testbench/executor.h"
 #include "loom/util/stream.h"
 
@@ -28,39 +28,10 @@ IREE_FLAG(int32_t, max_samples_per_case,
           LOOM_TESTBENCH_DEFAULT_MAX_SAMPLES_PER_CASE,
           "Maximum number of samples planned per check.case.");
 
-static iree_status_t iree_test_loom_read_input(
-    iree_string_view_t path, iree_allocator_t allocator,
-    iree_io_file_contents_t** out_contents) {
-  const bool is_stdin = iree_string_view_is_empty(path) ||
-                        iree_string_view_equal(path, IREE_SV("-"));
-  if (is_stdin) {
-    return iree_io_file_contents_read_stdin(allocator, out_contents);
-  }
-  return iree_io_file_contents_read(path, allocator, out_contents);
-}
-
-static iree_string_view_t iree_test_loom_file_contents_string_view(
-    const iree_io_file_contents_t* contents) {
-  return iree_make_string_view((const char*)contents->const_buffer.data,
-                               contents->const_buffer.data_length);
-}
-
 static iree_status_t iree_test_loom_register_context(void* user_data,
                                                      loom_context_t* context) {
   (void)user_data;
   return loom_op_registry_register_all_dialects(context);
-}
-
-static iree_status_t iree_test_loom_write_stdout(iree_string_view_t output) {
-  if (iree_string_view_is_empty(output)) {
-    return iree_ok_status();
-  }
-  if (fwrite(output.data, 1, output.size, stdout) != output.size ||
-      fflush(stdout) != 0) {
-    return iree_make_status(IREE_STATUS_DATA_LOSS,
-                            "failed to write testbench output");
-  }
-  return iree_ok_status();
 }
 
 static iree_string_view_t iree_test_loom_normalize_case_name(
@@ -257,9 +228,9 @@ int iree_test_loom_main(int argc, char** argv,
           : input_path;
   iree_string_view_t source = iree_string_view_empty();
   if (iree_status_is_ok(status)) {
-    status = iree_test_loom_read_input(input_path, allocator, &contents);
+    status = loom_tooling_read_input_file(input_path, allocator, &contents);
     if (iree_status_is_ok(status)) {
-      source = iree_test_loom_file_contents_string_view(contents);
+      source = loom_tooling_file_contents_string_view(contents);
     }
   }
   if (iree_status_is_ok(status)) {
@@ -317,7 +288,7 @@ int iree_test_loom_main(int argc, char** argv,
     }
     if (iree_status_is_ok(status)) {
       status =
-          iree_test_loom_write_stdout(iree_string_builder_view(&report_output));
+          loom_tooling_write_stdout(iree_string_builder_view(&report_output));
     }
     if (iree_status_is_ok(status) && failed_sample_count != 0) {
       exit_code = 1;
