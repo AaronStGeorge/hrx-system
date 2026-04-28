@@ -361,7 +361,7 @@ static iree_status_t loom_amdgpu_assignment_field_value(
     return iree_ok_status();
   }
   if (assignment->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_VGPR) {
-    if (last_register > 255) {
+    if (last_register >= state->encoding_table->vector_source_vgpr_count) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "AMDGPU native encoding VGPR range v[%" PRIu32
                               ":%" PRIu64 "] is out of range",

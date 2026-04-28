@@ -211,7 +211,7 @@ static bool loom_amdgpu_encoding_sisrc_inline_u32(
     const loom_amdgpu_encoding_table_t* table, uint32_t value,
     uint16_t* out_sisrc) {
   IREE_ASSERT_ARGUMENT(out_sisrc);
-  if (value <= 64) {
+  if (value < table->scalar_inline_u32_count) {
     *out_sisrc = (uint16_t)(table->scalar_inline_u32_zero + value);
     return true;
   }

@@ -36,6 +36,7 @@ from loom.target.arch.amdgpu.isa_xml import (  # noqa: E402
     AmdgpuIsaBitRange,
     AmdgpuIsaEncoding,
     AmdgpuIsaEncodingField,
+    AmdgpuIsaFactSource,
     AmdgpuIsaInstruction,
     AmdgpuIsaOperandType,
     compose_amdgpu_isa_partitioned_field,
@@ -292,6 +293,43 @@ def _instruction_opcode(
     raise ValueError(f"AMDGPU instruction '{instruction_name}' is missing")
 
 
+def _derive_predefined_linear_range(
+    spec: AmdgpuIsaFactSource,
+    *,
+    operand_type_name: str,
+    base_name: str,
+    name_pattern: re.Pattern[str],
+    description: str,
+) -> tuple[int, int]:
+    operand_type = spec.operand_type_map().get(operand_type_name)
+    if operand_type is None:
+        raise ValueError(f"{spec.source_name}: unknown AMDGPU ISA operand type '{operand_type_name}'")
+    base_value = spec.operand_predefined_value(operand_type_name, base_name)
+    indexed_values: dict[int, int] = {}
+    for predefined_value in operand_type.predefined_values:
+        match = name_pattern.fullmatch(predefined_value.name)
+        if match is None:
+            continue
+        index = int(match.group(1))
+        if index in indexed_values:
+            raise ValueError(f"{spec.source_name}: duplicate {description} predefined value index {index}")
+        indexed_values[index] = predefined_value.value
+    count = 0
+    while count in indexed_values:
+        actual_value = indexed_values[count]
+        expected_value = base_value + count
+        if actual_value != expected_value:
+            raise ValueError(f"{spec.source_name}: {description} {count} has value {actual_value}, expected {expected_value}")
+        count += 1
+    if count == 0:
+        raise ValueError(f"{spec.source_name}: no {description} predefined values")
+    extra_indices = [index for index in indexed_values if index >= count]
+    if extra_indices:
+        extra_text = ", ".join(str(index) for index in sorted(extra_indices))
+        raise ValueError(f"{spec.source_name}: non-contiguous {description} predefined value indices after {count - 1}: {extra_text}")
+    return base_value, count
+
+
 def _emit_word_array(words: tuple[int, ...]) -> str:
     padded_words = words + (0,) * (4 - len(words))
     return "{" + ", ".join(f"UINT32_C(0x{word:08x})" for word in padded_words) + "}"
@@ -308,7 +346,9 @@ def _emit_source(
     operand_types: tuple[AmdgpuIsaOperandType, ...],
     source_literal: int,
     scalar_inline_u32_zero: int,
+    scalar_inline_u32_count: int,
     vector_source_vgpr0: int,
+    vector_source_vgpr_count: int,
     source_path: Path,
     format_output: bool,
 ) -> str:
@@ -408,7 +448,9 @@ def _emit_source(
             f"    .v_mov_b32_opcode = {v_mov_b32_opcode},",
             f"    .source_literal = {source_literal},",
             f"    .scalar_inline_u32_zero = {scalar_inline_u32_zero},",
+            f"    .scalar_inline_u32_count = {scalar_inline_u32_count},",
             f"    .vector_source_vgpr0 = {vector_source_vgpr0},",
+            f"    .vector_source_vgpr_count = {vector_source_vgpr_count},",
             f"    .formats = k{table_prefix}Formats,",
             f"    .format_count = IREE_ARRAYSIZE(k{table_prefix}Formats),",
             f"    .fields = k{table_prefix}Fields,",
@@ -451,18 +493,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     scalar_source_literal = spec.operand_predefined_value("OPR_SSRC", "SRC_LITERAL")
     if scalar_source_literal != source_literal:
         raise ValueError(f"{spec.source_name}: OPR_SRC and OPR_SSRC disagree on SRC_LITERAL")
-    scalar_inline_u32_zero = spec.operand_predefined_value("OPR_SSRC", "0")
-    for inline_value in range(65):
-        actual_value = spec.operand_predefined_value("OPR_SSRC", str(inline_value))
-        expected_value = scalar_inline_u32_zero + inline_value
-        if actual_value != expected_value:
-            raise ValueError(f"{spec.source_name}: OPR_SSRC inline integer {inline_value} has value {actual_value}, expected {expected_value}")
-    vector_source_vgpr0 = spec.operand_predefined_value("OPR_SRC", "v0")
-    for register_index in range(256):
-        actual_value = spec.operand_predefined_value("OPR_SRC", f"v{register_index}")
-        expected_value = vector_source_vgpr0 + register_index
-        if actual_value != expected_value:
-            raise ValueError(f"{spec.source_name}: OPR_SRC VGPR {register_index} has value {actual_value}, expected {expected_value}")
+    scalar_inline_u32_zero, scalar_inline_u32_count = _derive_predefined_linear_range(
+        spec,
+        operand_type_name="OPR_SSRC",
+        base_name="0",
+        name_pattern=re.compile(r"([0-9]+)"),
+        description="OPR_SSRC inline integer",
+    )
+    vector_source_vgpr0, vector_source_vgpr_count = _derive_predefined_linear_range(
+        spec,
+        operand_type_name="OPR_SRC",
+        base_name="v0",
+        name_pattern=re.compile(r"v([0-9]+)"),
+        description="OPR_SRC VGPR",
+    )
     table_prefix = "Amdgpu" + "".join(part.title() for part in args.target.split("_"))
     table_function = f"loom_amdgpu_{args.target}_encoding_table"
     header_guard = f"LOOM_TARGET_ARCH_AMDGPU_{args.target.upper()}_ENCODING_TABLES_H_"
@@ -488,7 +532,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             operand_types=spec.operand_types,
             source_literal=source_literal,
             scalar_inline_u32_zero=scalar_inline_u32_zero,
+            scalar_inline_u32_count=scalar_inline_u32_count,
             vector_source_vgpr0=vector_source_vgpr0,
+            vector_source_vgpr_count=vector_source_vgpr_count,
             source_path=args.source,
             format_output=args.format,
         ),

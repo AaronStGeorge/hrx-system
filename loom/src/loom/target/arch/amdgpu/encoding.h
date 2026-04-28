@@ -132,8 +132,12 @@ typedef struct loom_amdgpu_encoding_table_t {
   uint16_t source_literal;
   // Scalar source field value selecting unsigned inline integer zero.
   uint16_t scalar_inline_u32_zero;
+  // Number of contiguous unsigned inline integer scalar source values.
+  uint16_t scalar_inline_u32_count;
   // Unified source field value selecting VGPR zero.
   uint16_t vector_source_vgpr0;
+  // Number of contiguous VGPR unified-source values.
+  uint16_t vector_source_vgpr_count;
   // Sorted format-layout rows.
   const loom_amdgpu_encoding_format_layout_t* formats;
   // Number of format-layout rows.
