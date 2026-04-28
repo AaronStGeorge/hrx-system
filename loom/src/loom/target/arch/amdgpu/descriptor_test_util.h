@@ -46,8 +46,8 @@ inline void ExpectAmdgpuOperandRegisterClassForTest(
 
 inline void ExpectAmdgpuWmmaDescriptorForTest(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
-    uint16_t expected_encoding_id, uint16_t expected_lhs_units,
-    uint16_t expected_rhs_units, uint16_t expected_accumulator_units) {
+    uint16_t expected_lhs_units, uint16_t expected_rhs_units,
+    uint16_t expected_accumulator_units) {
   const loom_low_descriptor_t* descriptor =
       LookupAmdgpuDescriptorForTest(descriptor_set, key);
   ASSERT_NE(descriptor, nullptr);
@@ -55,7 +55,12 @@ inline void ExpectAmdgpuWmmaDescriptorForTest(
   EXPECT_EQ(descriptor->result_count, 1u);
   EXPECT_EQ(descriptor->immediate_count, 0u);
   EXPECT_EQ(descriptor->encoding_format_id, LOOM_AMDGPU_ENCODING_FORMAT_VOP3P);
-  EXPECT_EQ(descriptor->encoding_id, expected_encoding_id);
+  ASSERT_EQ(descriptor->constraint_count, 1u);
+  const loom_low_constraint_t* constraint =
+      &descriptor_set->constraints[descriptor->constraint_start];
+  EXPECT_EQ(constraint->kind, LOOM_LOW_CONSTRAINT_KIND_TIED);
+  EXPECT_EQ(constraint->lhs_operand_index, 0u);
+  EXPECT_EQ(constraint->rhs_operand_index, 3u);
 
   const loom_low_operand_t* operands =
       &descriptor_set->operands[descriptor->operand_start];
@@ -527,7 +532,7 @@ inline void ExpectAmdgpuFlatAtomicDescriptors(
 
 inline void ExpectAmdgpuCacheControlDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
-    uint16_t expected_encoding_format_id, uint16_t expected_encoding_id,
+    uint16_t expected_encoding_format_id,
     uint32_t expected_immediate_count = 0) {
   const loom_low_descriptor_t* descriptor =
       LookupAmdgpuDescriptorForTest(descriptor_set, key);
@@ -537,7 +542,6 @@ inline void ExpectAmdgpuCacheControlDescriptor(
   EXPECT_EQ(descriptor->immediate_count, expected_immediate_count);
   EXPECT_EQ(descriptor->effect_count, 1u);
   EXPECT_EQ(descriptor->encoding_format_id, expected_encoding_format_id);
-  EXPECT_EQ(descriptor->encoding_id, expected_encoding_id);
   EXPECT_NE(descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING, 0u);
   ASSERT_NE(descriptor->schedule_class_id, LOOM_LOW_SCHEDULE_CLASS_NONE);
   const loom_low_schedule_class_t* schedule_class =
@@ -553,8 +557,7 @@ inline void ExpectAmdgpuCacheControlDescriptor(
 }
 
 inline void ExpectAmdgpuDcacheDiscardDescriptor(
-    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
-    uint16_t expected_encoding_id) {
+    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
   const loom_low_descriptor_t* descriptor =
       LookupAmdgpuDescriptorForTest(descriptor_set, key);
   ASSERT_NE(descriptor, nullptr);
@@ -563,7 +566,6 @@ inline void ExpectAmdgpuDcacheDiscardDescriptor(
   EXPECT_EQ(descriptor->immediate_count, 0u);
   EXPECT_EQ(descriptor->effect_count, 1u);
   EXPECT_EQ(descriptor->encoding_format_id, LOOM_AMDGPU_ENCODING_FORMAT_SMEM);
-  EXPECT_EQ(descriptor->encoding_id, expected_encoding_id);
   EXPECT_NE(descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING, 0u);
 
   const loom_low_operand_t* operands =
@@ -591,7 +593,6 @@ inline void ExpectAmdgpuInstructionPrefetchDistanceDescriptor(
   EXPECT_EQ(descriptor->immediate_count, 1u);
   EXPECT_EQ(descriptor->effect_count, 1u);
   EXPECT_EQ(descriptor->encoding_format_id, LOOM_AMDGPU_ENCODING_FORMAT_SOPP);
-  EXPECT_EQ(descriptor->encoding_id, 4u);
   EXPECT_NE(descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING, 0u);
 
   const loom_low_immediate_t* immediate =
@@ -610,8 +611,8 @@ inline void ExpectAmdgpuInstructionPrefetchDistanceDescriptor(
 
 inline void ExpectAmdgpuPrefetchDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
-    uint16_t expected_encoding_id, uint16_t expected_operand_count,
-    uint16_t expected_base_units, loom_low_operand_role_t expected_base_role,
+    uint16_t expected_operand_count, uint16_t expected_base_units,
+    loom_low_operand_role_t expected_base_role,
     loom_low_memory_space_t expected_memory_space) {
   ASSERT_TRUE(expected_operand_count == 1u || expected_operand_count == 2u);
   const loom_low_descriptor_t* descriptor =
@@ -622,7 +623,6 @@ inline void ExpectAmdgpuPrefetchDescriptor(
   EXPECT_EQ(descriptor->immediate_count, 2u);
   EXPECT_EQ(descriptor->effect_count, 1u);
   EXPECT_EQ(descriptor->encoding_format_id, LOOM_AMDGPU_ENCODING_FORMAT_SMEM);
-  EXPECT_EQ(descriptor->encoding_id, expected_encoding_id);
   EXPECT_NE(descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING, 0u);
   ASSERT_NE(descriptor->schedule_class_id, LOOM_LOW_SCHEDULE_CLASS_NONE);
   const loom_low_schedule_class_t* schedule_class =

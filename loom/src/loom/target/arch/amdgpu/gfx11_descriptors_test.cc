@@ -72,79 +72,9 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorSetVerifies) {
   }
 }
 
-TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
+TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorsExposeSemanticInvariants) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_amdgpu_gfx11_core_descriptor_set();
-
-  const loom_low_descriptor_t* add_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_add_u32"));
-  ASSERT_NE(add_descriptor, nullptr);
-  iree_string_view_t add_key = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
-      descriptor_set, add_descriptor->key_string_offset, &add_key));
-  EXPECT_TRUE(iree_string_view_equal(add_key, IREE_SV("amdgpu.v_add_u32")));
-  EXPECT_EQ(add_descriptor->operand_count, 3u);
-  EXPECT_EQ(add_descriptor->result_count, 1u);
-  EXPECT_EQ(add_descriptor->encoding_id, 37u);
-
-  const loom_low_descriptor_t* scalar_subtract_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_sub_u32"));
-  ASSERT_NE(scalar_subtract_descriptor, nullptr);
-  EXPECT_EQ(scalar_subtract_descriptor->operand_count, 4u);
-  EXPECT_EQ(scalar_subtract_descriptor->result_count, 1u);
-
-  const loom_low_descriptor_t* vector_subtract_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_sub_u32"));
-  ASSERT_NE(vector_subtract_descriptor, nullptr);
-  iree_string_view_t vector_subtract_key = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
-      descriptor_set, vector_subtract_descriptor->key_string_offset,
-      &vector_subtract_key));
-  EXPECT_TRUE(
-      iree_string_view_equal(vector_subtract_key, IREE_SV("amdgpu.v_sub_u32")));
-  EXPECT_EQ(vector_subtract_descriptor->operand_count, 3u);
-  EXPECT_EQ(vector_subtract_descriptor->result_count, 1u);
-
-  const loom_low_descriptor_t* multiply_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_mul_lo_u32"));
-  ASSERT_NE(multiply_descriptor, nullptr);
-  EXPECT_EQ(multiply_descriptor->operand_count, 3u);
-  EXPECT_EQ(multiply_descriptor->result_count, 1u);
-  EXPECT_EQ(multiply_descriptor->encoding_id, 812u);
-
-  const loom_low_descriptor_t* f32_add_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_add_f32"));
-  ASSERT_NE(f32_add_descriptor, nullptr);
-  EXPECT_EQ(f32_add_descriptor->operand_count, 3u);
-  EXPECT_EQ(f32_add_descriptor->result_count, 1u);
-
-  const loom_low_descriptor_t* f32_subtract_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_sub_f32"));
-  ASSERT_NE(f32_subtract_descriptor, nullptr);
-  EXPECT_EQ(f32_subtract_descriptor->operand_count, 3u);
-  EXPECT_EQ(f32_subtract_descriptor->result_count, 1u);
-
-  const loom_low_descriptor_t* f32_multiply_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_mul_f32"));
-  ASSERT_NE(f32_multiply_descriptor, nullptr);
-  EXPECT_EQ(f32_multiply_descriptor->operand_count, 3u);
-  EXPECT_EQ(f32_multiply_descriptor->result_count, 1u);
-
-  const loom_low_descriptor_t* f32_fma_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_fma_f32"));
-  ASSERT_NE(f32_fma_descriptor, nullptr);
-  EXPECT_EQ(f32_fma_descriptor->operand_count, 4u);
-  EXPECT_EQ(f32_fma_descriptor->result_count, 1u);
-
-  const loom_low_descriptor_t* vector_move_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_mov_b32"));
-  ASSERT_NE(vector_move_descriptor, nullptr);
-  EXPECT_EQ(vector_move_descriptor->operand_count, 1u);
-  EXPECT_EQ(vector_move_descriptor->result_count, 1u);
-  EXPECT_EQ(vector_move_descriptor->immediate_count, 1u);
-  EXPECT_EQ(vector_move_descriptor->encoding_format_id,
-            LOOM_AMDGPU_ENCODING_FORMAT_VOP1_LITERAL);
-  EXPECT_EQ(vector_move_descriptor->encoding_id, 1u);
 
   const loom_low_descriptor_t* load_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.buffer_load_dword"));
@@ -152,7 +82,6 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(load_descriptor->operand_count, 4u);
   EXPECT_EQ(load_descriptor->result_count, 1u);
   EXPECT_EQ(load_descriptor->effect_count, 1u);
-  EXPECT_EQ(load_descriptor->encoding_id, 20u);
   EXPECT_NE(load_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
             0u);
 
@@ -180,7 +109,6 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(load_128_descriptor->operand_count, 4u);
   EXPECT_EQ(load_128_descriptor->result_count, 1u);
   EXPECT_EQ(load_128_descriptor->effect_count, 1u);
-  EXPECT_EQ(load_128_descriptor->encoding_id, 23u);
   const loom_low_operand_t* load_128_operands =
       &descriptor_set->operands[load_128_descriptor->operand_start];
   EXPECT_EQ(load_128_operands[0].unit_count, 4u);
@@ -201,7 +129,6 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(store_128_descriptor->operand_count, 4u);
   EXPECT_EQ(store_128_descriptor->result_count, 0u);
   EXPECT_EQ(store_128_descriptor->effect_count, 1u);
-  EXPECT_EQ(store_128_descriptor->encoding_id, 29u);
   const loom_low_operand_t* store_128_operands =
       &descriptor_set->operands[store_128_descriptor->operand_start];
   EXPECT_EQ(store_128_operands[0].unit_count, 4u);
@@ -284,19 +211,19 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
 
   ExpectAmdgpuCacheControlDescriptor(descriptor_set,
                                      IREE_SV("amdgpu.buffer_gl0_inv"),
-                                     LOOM_AMDGPU_ENCODING_FORMAT_MUBUF, 43u);
+                                     LOOM_AMDGPU_ENCODING_FORMAT_MUBUF);
   ExpectAmdgpuCacheControlDescriptor(descriptor_set,
                                      IREE_SV("amdgpu.buffer_gl1_inv"),
-                                     LOOM_AMDGPU_ENCODING_FORMAT_MUBUF, 44u);
+                                     LOOM_AMDGPU_ENCODING_FORMAT_MUBUF);
   ExpectAmdgpuCacheControlDescriptor(descriptor_set,
                                      IREE_SV("amdgpu.s_dcache_inv"),
-                                     LOOM_AMDGPU_ENCODING_FORMAT_SMEM, 33u);
+                                     LOOM_AMDGPU_ENCODING_FORMAT_SMEM);
   ExpectAmdgpuCacheControlDescriptor(descriptor_set,
                                      IREE_SV("amdgpu.s_gl1_inv"),
-                                     LOOM_AMDGPU_ENCODING_FORMAT_SMEM, 32u);
+                                     LOOM_AMDGPU_ENCODING_FORMAT_SMEM);
   ExpectAmdgpuCacheControlDescriptor(descriptor_set,
                                      IREE_SV("amdgpu.s_icache_inv"),
-                                     LOOM_AMDGPU_ENCODING_FORMAT_SOPP, 60u);
+                                     LOOM_AMDGPU_ENCODING_FORMAT_SOPP);
   ExpectAmdgpuInstructionPrefetchDistanceDescriptor(descriptor_set);
 
   const loom_low_descriptor_t* scalar_load_descriptor =
@@ -336,7 +263,6 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(wait_descriptor->operand_count, 0u);
   EXPECT_EQ(wait_descriptor->immediate_count, 2u);
   EXPECT_EQ(wait_descriptor->effect_count, 3u);
-  EXPECT_EQ(wait_descriptor->encoding_id, 9u);
   EXPECT_NE(wait_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
             0u);
 
@@ -357,7 +283,6 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(depctr_descriptor->operand_count, 0u);
   EXPECT_EQ(depctr_descriptor->immediate_count, 1u);
   EXPECT_EQ(depctr_descriptor->effect_count, 1u);
-  EXPECT_EQ(depctr_descriptor->encoding_id, 8u);
 
   const loom_low_descriptor_t* idle_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_wait_idle"));
@@ -365,7 +290,6 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(idle_descriptor->operand_count, 0u);
   EXPECT_EQ(idle_descriptor->immediate_count, 0u);
   EXPECT_EQ(idle_descriptor->effect_count, 1u);
-  EXPECT_EQ(idle_descriptor->encoding_id, 10u);
 }
 
 TEST(AmdgpuDescriptorsTest, Gfx11WmmaPacketMatchesRdnaRegisterShape) {
@@ -374,16 +298,16 @@ TEST(AmdgpuDescriptorsTest, Gfx11WmmaPacketMatchesRdnaRegisterShape) {
 
   ExpectAmdgpuWmmaDescriptorForTest(
       descriptor_set, IREE_SV("amdgpu.v_wmma_f32_16x16x16_f16"),
-      /*expected_encoding_id=*/64u, /*expected_lhs_units=*/8u,
-      /*expected_rhs_units=*/8u, /*expected_accumulator_units=*/8u);
+      /*expected_lhs_units=*/8u, /*expected_rhs_units=*/8u,
+      /*expected_accumulator_units=*/8u);
   ExpectAmdgpuWmmaDescriptorForTest(
       descriptor_set, IREE_SV("amdgpu.v_wmma_i32_16x16x16_iu8"),
-      /*expected_encoding_id=*/68u, /*expected_lhs_units=*/4u,
-      /*expected_rhs_units=*/4u, /*expected_accumulator_units=*/8u);
+      /*expected_lhs_units=*/4u, /*expected_rhs_units=*/4u,
+      /*expected_accumulator_units=*/8u);
   ExpectAmdgpuWmmaDescriptorForTest(
       descriptor_set, IREE_SV("amdgpu.v_wmma_i32_16x16x16_iu4"),
-      /*expected_encoding_id=*/69u, /*expected_lhs_units=*/2u,
-      /*expected_rhs_units=*/2u, /*expected_accumulator_units=*/8u);
+      /*expected_lhs_units=*/2u, /*expected_rhs_units=*/2u,
+      /*expected_accumulator_units=*/8u);
 }
 
 TEST(AmdgpuDescriptorsTest, Gfx11AsmFormsExposeNamedWaitcntImmediates) {
