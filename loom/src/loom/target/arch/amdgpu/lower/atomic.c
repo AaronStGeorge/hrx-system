@@ -1190,7 +1190,8 @@ iree_status_t loom_amdgpu_lower_view_atomic(
   }
   loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
   if (iree_any_bit_set(plan->flags, LOOM_AMDGPU_ATOMIC_PLAN_REQUIRES_M0)) {
-    IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_m0_live_in(context, &low_m0));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_m0_u32(
+        context, source_op, plan->descriptor_id, 0, &low_m0));
   }
   const loom_value_id_t low_packet_resource =
       loom_amdgpu_atomic_packet_resource_operand(plan, low_saddr, low_m0);

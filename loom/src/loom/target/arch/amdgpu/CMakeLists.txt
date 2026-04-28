@@ -97,6 +97,17 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    register_class
+  HDRS
+    "register_class.h"
+  DEPS
+    ::gfx950_descriptors_ids
+    loom::src::loom::codegen::low::descriptors
+  PUBLIC
+)
+
 loom_target_table_cc_library(
   NAME
     descriptor_ids
@@ -627,6 +638,7 @@ iree_c_embed_data(
     amdgpu_hal_testdata
   SRCS
     "execution/testdata/b128_vector_add.loom"
+    "execution/testdata/divergent_lds_producer.loom"
     "execution/testdata/divergent_then_store.loom"
     "execution/testdata/dot2f_f16_buffer.loom"
     "execution/testdata/dot2f_f16_gemm4x8x4.loom"

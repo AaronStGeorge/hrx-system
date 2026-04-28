@@ -16,7 +16,6 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/encoding.h"
-#include "loom/target/arch/amdgpu/gfx11_descriptors.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/slot_layout.h"
 #include "loom/target/emit/native/fragment.h"
@@ -156,8 +155,7 @@ static iree_status_t loom_amdgpu_assignment_sgpr(
   IREE_ASSERT_ARGUMENT(out_register);
   *out_register = 0;
   (void)allocation;
-  if (assignment->descriptor_reg_class_id !=
-      AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR) {
+  if (assignment->descriptor_reg_class_id != LOOM_AMDGPU_REG_CLASS_ID_SGPR) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU native encoding value %" PRIu32
                             " must be an SGPR",
@@ -187,8 +185,7 @@ static iree_status_t loom_amdgpu_assignment_vgpr(
   IREE_ASSERT_ARGUMENT(out_register);
   *out_register = 0;
   (void)allocation;
-  if (assignment->descriptor_reg_class_id !=
-      AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR) {
+  if (assignment->descriptor_reg_class_id != LOOM_AMDGPU_REG_CLASS_ID_VGPR) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU native encoding value %" PRIu32
                             " must be a VGPR",
@@ -235,8 +232,7 @@ static iree_status_t loom_amdgpu_move_location_sgpr(
   IREE_ASSERT_ARGUMENT(out_register);
   *out_register = 0;
   (void)allocation;
-  if (location->descriptor_reg_class_id !=
-      AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR) {
+  if (location->descriptor_reg_class_id != LOOM_AMDGPU_REG_CLASS_ID_SGPR) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU native encoding move location must be an "
                             "SGPR");
@@ -257,8 +253,7 @@ static iree_status_t loom_amdgpu_move_location_vgpr(
   IREE_ASSERT_ARGUMENT(out_register);
   *out_register = 0;
   (void)allocation;
-  if (location->descriptor_reg_class_id !=
-      AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR) {
+  if (location->descriptor_reg_class_id != LOOM_AMDGPU_REG_CLASS_ID_VGPR) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU native encoding move location must be a "
                             "VGPR");
@@ -373,8 +368,7 @@ static iree_status_t loom_amdgpu_assignment_field_value(
   }
   const uint64_t last_register =
       (uint64_t)assignment->location_base + assignment->location_count - 1u;
-  if (assignment->descriptor_reg_class_id ==
-      AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR) {
+  if (assignment->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_SGPR) {
     if (last_register > 127) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "AMDGPU native encoding SGPR range s[%" PRIu32
@@ -384,8 +378,7 @@ static iree_status_t loom_amdgpu_assignment_field_value(
     *out_value = assignment->location_base;
     return iree_ok_status();
   }
-  if (assignment->descriptor_reg_class_id ==
-      AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR) {
+  if (assignment->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_VGPR) {
     if (last_register > 255) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "AMDGPU native encoding VGPR range v[%" PRIu32
@@ -740,8 +733,7 @@ static iree_status_t loom_amdgpu_encode_move(
         "%" PRIu16 " and %" PRIu16 " is unsupported",
         destination->descriptor_reg_class_id, source->descriptor_reg_class_id);
   }
-  if (destination->descriptor_reg_class_id ==
-      AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR) {
+  if (destination->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_VGPR) {
     uint16_t vdst = 0;
     uint16_t src0 = 0;
     IREE_RETURN_IF_ERROR(
@@ -750,8 +742,7 @@ static iree_status_t loom_amdgpu_encode_move(
         loom_amdgpu_move_location_vgpr(state->allocation, source, &src0));
     return loom_amdgpu_encode_v_mov_b32_register(state, vdst, src0);
   }
-  if (destination->descriptor_reg_class_id !=
-      AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR) {
+  if (destination->descriptor_reg_class_id != LOOM_AMDGPU_REG_CLASS_ID_SGPR) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
         "AMDGPU native encoding move for descriptor register class ID %" PRIu16

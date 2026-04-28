@@ -252,7 +252,8 @@ iree_status_t loom_amdgpu_lower_vector_load(
   if (access->source.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
     if (access->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID) {
       loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
-      IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_m0_live_in(context, &low_m0));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_m0_u32(
+          context, source_op, access->descriptor_id, 0, &low_m0));
       loom_value_id_t operands[] = {low_m0};
       loom_op_t* low_op = NULL;
       IREE_RETURN_IF_ERROR(
@@ -352,7 +353,8 @@ iree_status_t loom_amdgpu_lower_vector_store(
   if (access->source.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
     if (access->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID) {
       loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
-      IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_m0_live_in(context, &low_m0));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_m0_u32(
+          context, source_op, access->descriptor_id, 0, &low_m0));
       loom_value_id_t operands[] = {
           low_value,
           low_m0,

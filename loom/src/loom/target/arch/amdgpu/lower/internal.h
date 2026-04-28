@@ -465,9 +465,12 @@ iree_status_t loom_amdgpu_emit_low_slice(loom_low_lower_context_t* context,
                                          loom_type_t result_type,
                                          loom_value_id_t* out_value);
 
-// Finds the M0 live-in value emitted for special-register memory packets.
-iree_status_t loom_amdgpu_lookup_m0_live_in(loom_low_lower_context_t* context,
-                                            loom_value_id_t* out_value_id);
+// Emits a value into M0 for special-register packet operands.
+iree_status_t loom_amdgpu_emit_m0_u32(loom_low_lower_context_t* context,
+                                      const loom_op_t* source_op,
+                                      uint64_t consumer_descriptor_id,
+                                      uint32_t value,
+                                      loom_value_id_t* out_value_id);
 
 // Returns true when the target bundle belongs to an AMDGPU contract set.
 bool loom_amdgpu_low_legality_bundle_is_amdgpu(

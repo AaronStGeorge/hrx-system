@@ -64,6 +64,7 @@ loom_assert_no_dependencies(
         ":matrix_facts",
         ":occupancy",
         ":packet_diagnostics",
+        ":register_class",
         ":target_info",
         ":wait_packets",
         ":wait_plan",
@@ -307,6 +308,15 @@ loom_cc_library(
 loom_cc_library(
     name = "lower_kinds",
     hdrs = ["lower/kinds.h"],
+)
+
+loom_cc_library(
+    name = "register_class",
+    hdrs = ["register_class.h"],
+    deps = [
+        ":gfx950_descriptors_ids",
+        "//loom/src/loom/codegen/low:descriptors",
+    ],
 )
 
 loom_target_table_cc_library(
@@ -740,6 +750,7 @@ iree_c_embed_data(
     testonly = True,
     srcs = [
         "execution/testdata/b128_vector_add.loom",
+        "execution/testdata/divergent_lds_producer.loom",
         "execution/testdata/divergent_then_store.loom",
         "execution/testdata/dot2f_f16_buffer.loom",
         "execution/testdata/dot2f_f16_gemm4x8x4.loom",

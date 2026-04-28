@@ -13,7 +13,7 @@
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
-#include "loom/target/arch/amdgpu/gfx950_descriptors.h"
+#include "loom/target/arch/amdgpu/register_class.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/slot_layout.h"
 #include "loom/target/emit/native/fragment.h"
@@ -300,8 +300,9 @@ static iree_status_t loom_amdgpu_kernel_record_collect_register_usage(
           &out_usage->next_free_vgpr));
       continue;
     }
-    if (assignment->descriptor_reg_class_id ==
-        AMDGPU_GFX950_CORE_REG_CLASS_ID_AMDGPU_AGPR) {
+    if (loom_amdgpu_register_class_is_agpr(
+            allocation->target.descriptor_set,
+            assignment->descriptor_reg_class_id)) {
       return iree_make_status(
           IREE_STATUS_UNIMPLEMENTED,
           "AMDGPU kernel emission register class 'amdgpu.agpr' requires "

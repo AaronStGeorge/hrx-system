@@ -13,8 +13,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/encoding.h"
-#include "loom/target/arch/amdgpu/gfx11_descriptors.h"
-#include "loom/target/arch/amdgpu/gfx950_descriptors.h"
+#include "loom/target/arch/amdgpu/register_class.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/assembly.h"
 
@@ -86,16 +85,15 @@ static iree_status_t loom_amdgpu_append_register_range(
 static iree_status_t loom_amdgpu_append_assignment(
     const loom_native_assembly_packet_context_t* context,
     const loom_low_allocation_assignment_t* assignment) {
-  if (assignment->descriptor_reg_class_id ==
-      AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR) {
+  if (assignment->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_SGPR) {
     return loom_amdgpu_append_register_range(context, "s", assignment);
   }
-  if (assignment->descriptor_reg_class_id ==
-      AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR) {
+  if (assignment->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_VGPR) {
     return loom_amdgpu_append_register_range(context, "v", assignment);
   }
-  if (assignment->descriptor_reg_class_id ==
-      AMDGPU_GFX950_CORE_REG_CLASS_ID_AMDGPU_AGPR) {
+  if (loom_amdgpu_register_class_is_agpr(
+          context->allocation->target.descriptor_set,
+          assignment->descriptor_reg_class_id)) {
     return loom_amdgpu_append_register_range(context, "acc", assignment);
   }
   iree_string_view_t register_class = iree_string_view_empty();
@@ -110,18 +108,17 @@ static iree_status_t loom_amdgpu_append_assignment(
 static iree_status_t loom_amdgpu_append_move_location(
     const loom_native_assembly_packet_context_t* context,
     const loom_low_move_location_t* location) {
-  if (location->descriptor_reg_class_id ==
-      AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR) {
+  if (location->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_SGPR) {
     return iree_string_builder_append_format(context->builder, "s%" PRIu32,
                                              location->location);
   }
-  if (location->descriptor_reg_class_id ==
-      AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR) {
+  if (location->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_VGPR) {
     return iree_string_builder_append_format(context->builder, "v%" PRIu32,
                                              location->location);
   }
-  if (location->descriptor_reg_class_id ==
-      AMDGPU_GFX950_CORE_REG_CLASS_ID_AMDGPU_AGPR) {
+  if (loom_amdgpu_register_class_is_agpr(
+          context->allocation->target.descriptor_set,
+          location->descriptor_reg_class_id)) {
     return iree_string_builder_append_format(context->builder, "acc%" PRIu32,
                                              location->location);
   }
@@ -942,11 +939,11 @@ static iree_status_t loom_amdgpu_append_wait_packets_before_packet(
 
 static iree_status_t loom_amdgpu_copy_mnemonic(
     uint16_t descriptor_reg_class_id, iree_string_view_t* out_mnemonic) {
-  if (descriptor_reg_class_id == AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR) {
+  if (descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_SGPR) {
     *out_mnemonic = IREE_SV("s_mov_b32");
     return iree_ok_status();
   }
-  if (descriptor_reg_class_id == AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR) {
+  if (descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_VGPR) {
     *out_mnemonic = IREE_SV("v_mov_b32");
     return iree_ok_status();
   }
