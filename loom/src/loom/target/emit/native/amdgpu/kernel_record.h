@@ -24,6 +24,8 @@
 extern "C" {
 #endif
 
+typedef struct loom_amdgpu_native_preflight_t loom_amdgpu_native_preflight_t;
+
 typedef struct loom_amdgpu_kernel_record_t {
   // Exported kernel entry symbol.
   iree_string_view_t symbol;
@@ -46,6 +48,8 @@ typedef struct loom_amdgpu_kernel_record_t {
 typedef struct loom_amdgpu_kernel_record_options_t {
   // Optional ABI layout captured before target resource materialization.
   const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout;
+  // Optional preflight result captured before kernel record construction.
+  const loom_amdgpu_native_preflight_t* preflight;
 } loom_amdgpu_kernel_record_options_t;
 
 // Builds the shared emission record for one scheduled and allocated target-low

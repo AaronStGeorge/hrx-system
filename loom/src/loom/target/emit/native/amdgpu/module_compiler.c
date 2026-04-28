@@ -29,6 +29,7 @@
 #include "loom/target/arch/amdgpu/wait_plan.h"
 #include "loom/target/compile_report_low.h"
 #include "loom/target/emit/native/amdgpu/kernel_hsaco.h"
+#include "loom/target/emit/native/amdgpu/preflight.h"
 #include "loom/target/launch.h"
 #include "loom/target/module_compiler.h"
 
@@ -177,6 +178,7 @@ static iree_status_t loom_amdgpu_module_compile_read_stream_contents(
 static iree_status_t loom_amdgpu_module_compile_build_hsaco_contribution(
     const loom_low_packetization_t* packetization,
     const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout,
+    const loom_amdgpu_native_preflight_t* preflight,
     loom_amdgpu_kernel_hsaco_contribution_t* out_contribution,
     iree_arena_allocator_t* sidecar_arena) {
   loom_amdgpu_wait_plan_t wait_plan = {0};
@@ -188,6 +190,7 @@ static iree_status_t loom_amdgpu_module_compile_build_hsaco_contribution(
 
   const loom_amdgpu_kernel_hsaco_options_t hsaco_options = {
       .abi_layout = abi_layout,
+      .preflight = preflight,
       .wait_packets = &wait_packets,
   };
   return loom_amdgpu_build_kernel_hsaco_contribution(
@@ -386,9 +389,13 @@ static iree_status_t loom_amdgpu_module_compile_build_kernel_contribution(
     loom_target_compile_report_record_low_packetization(report, &packetization);
   }
 
+  loom_amdgpu_native_preflight_t preflight = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_native_preflight_analyze(
+      &packetization.schedule, &packetization.allocation, &preflight));
+
   IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_build_hsaco_contribution(
-      &packetization, &plan->materialization.abi_layout, out_contribution,
-      sidecar_arena));
+      &packetization, &plan->materialization.abi_layout, &preflight,
+      out_contribution, sidecar_arena));
   if (report != NULL) {
     loom_target_compile_report_record_emission(
         report, out_contribution->summary.instruction_count,

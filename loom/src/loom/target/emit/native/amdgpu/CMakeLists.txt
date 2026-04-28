@@ -154,6 +154,7 @@ loom_cc_library(
   DEPS
     ::descriptor
     ::metadata
+    ::preflight
     ::slot_layout
     iree::base
     iree::base::internal::arena
@@ -163,12 +164,26 @@ loom_cc_library(
     loom::src::loom::codegen::low::schedule
     loom::src::loom::ir
     loom::src::loom::ops::low
-    loom::src::loom::target::arch::amdgpu::descriptor_ids
     loom::src::loom::target::arch::amdgpu::hal_kernel_abi
-    loom::src::loom::target::arch::amdgpu::register_class
     loom::src::loom::target::arch::amdgpu::target_info
-    loom::src::loom::target::emit::native::fragment
     loom::src::loom::target::launch
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    preflight
+  HDRS
+    "preflight.h"
+  SRCS
+    "preflight.c"
+  DEPS
+    iree::base
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::schedule
+    loom::src::loom::target::arch::amdgpu::descriptor_ids
+    loom::src::loom::target::arch::amdgpu::register_class
+    loom::src::loom::target::emit::native::fragment
   PUBLIC
 )
 
@@ -256,6 +271,7 @@ loom_cc_library(
   DEPS
     ::hal_executable
     ::kernel_hsaco
+    ::preflight
     iree::base
     iree::base::internal::arena
     iree::io::stream

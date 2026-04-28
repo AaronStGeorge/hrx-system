@@ -12,21 +12,12 @@
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/amdgpu/descriptor_ids.h"
-#include "loom/target/arch/amdgpu/register_class.h"
 #include "loom/target/arch/amdgpu/target_info.h"
+#include "loom/target/emit/native/amdgpu/preflight.h"
 #include "loom/target/emit/native/amdgpu/slot_layout.h"
-#include "loom/target/emit/native/fragment.h"
 #include "loom/target/launch.h"
 
 #define LOOM_AMDGPU_KERNEL_RECORD_KERNARG_USER_SGPR_COUNT 2u
-
-typedef struct loom_amdgpu_kernel_record_register_usage_t {
-  // Highest SGPR index used by the function body plus one.
-  uint32_t next_free_sgpr;
-  // Highest VGPR index used by the function body plus one.
-  uint32_t next_free_vgpr;
-} loom_amdgpu_kernel_record_register_usage_t;
 
 typedef struct loom_amdgpu_kernel_record_workitem_id_t {
   // Predicate identifying the ABI live-in value.
@@ -239,88 +230,6 @@ static iree_status_t loom_amdgpu_kernel_record_validate_function_shape(
         IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU kernel emission requires ABI-lowered kernels with no low "
         "function arguments or results");
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_amdgpu_kernel_record_update_high_water(
-    uint32_t location_base, uint32_t location_count, uint32_t* inout_value) {
-  IREE_ASSERT_ARGUMENT(inout_value);
-  uint64_t next_free = (uint64_t)location_base + location_count;
-  if (next_free > UINT32_MAX) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU kernel emission register high-water mark overflows");
-  }
-  if ((uint32_t)next_free > *inout_value) {
-    *inout_value = (uint32_t)next_free;
-  }
-  return iree_ok_status();
-}
-
-// AMDGPU unspillable physical classes model singleton architectural state such
-// as SCC, EXEC, and M0. They constrain scheduling/allocation but do not
-// contribute SGPR/VGPR high-water metadata.
-static bool loom_amdgpu_kernel_record_is_metadata_free_register_class(
-    const loom_low_descriptor_set_t* descriptor_set, uint16_t reg_class_id) {
-  if (reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
-      reg_class_id >= descriptor_set->reg_class_count) {
-    return false;
-  }
-  const loom_low_reg_class_t* reg_class =
-      &descriptor_set->reg_classes[reg_class_id];
-  return iree_all_bits_set(reg_class->flags,
-                           LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE);
-}
-
-static iree_status_t loom_amdgpu_kernel_record_collect_register_usage(
-    const loom_low_allocation_sidecar_t* allocation,
-    loom_amdgpu_kernel_record_register_usage_t* out_usage) {
-  IREE_ASSERT_ARGUMENT(out_usage);
-  *out_usage = (loom_amdgpu_kernel_record_register_usage_t){0};
-  for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
-    const loom_low_allocation_assignment_t* assignment =
-        &allocation->assignments[i];
-    if (assignment->value_class.type_kind != LOOM_TYPE_REGISTER) {
-      continue;
-    }
-    if (assignment->location_kind !=
-        LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
-      continue;
-    }
-    if (assignment->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_SGPR) {
-      IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_update_high_water(
-          assignment->location_base, assignment->location_count,
-          &out_usage->next_free_sgpr));
-      continue;
-    }
-    if (assignment->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_VGPR) {
-      IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_update_high_water(
-          assignment->location_base, assignment->location_count,
-          &out_usage->next_free_vgpr));
-      continue;
-    }
-    if (loom_amdgpu_register_class_is_agpr(
-            allocation->target.descriptor_set,
-            assignment->descriptor_reg_class_id)) {
-      return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "AMDGPU kernel emission register class 'amdgpu.agpr' requires "
-          "additional kernel descriptor metadata");
-    }
-    if (loom_amdgpu_kernel_record_is_metadata_free_register_class(
-            allocation->target.descriptor_set,
-            assignment->descriptor_reg_class_id)) {
-      continue;
-    }
-    iree_string_view_t register_class = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
-        allocation, assignment, &register_class));
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU kernel emission register class '%.*s' requires additional "
-        "kernel descriptor metadata",
-        (int)register_class.size, register_class.data);
   }
   return iree_ok_status();
 }
@@ -631,8 +540,22 @@ iree_status_t loom_amdgpu_kernel_record_build(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU kernel emission scratch arena is required");
   }
-  IREE_RETURN_IF_ERROR(
-      loom_native_fragment_validate_emission_inputs(schedule, allocation));
+  loom_amdgpu_native_preflight_t derived_preflight = {0};
+  const loom_amdgpu_native_preflight_t* preflight =
+      options ? options->preflight : NULL;
+  if (preflight != NULL) {
+    if (preflight->schedule != schedule ||
+        preflight->allocation != allocation) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU kernel record preflight does not match the scheduled "
+          "function");
+    }
+  } else {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_native_preflight_analyze(
+        schedule, allocation, &derived_preflight));
+    preflight = &derived_preflight;
+  }
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_kernel_record_validate_target(&schedule->target));
   IREE_RETURN_IF_ERROR(
@@ -660,9 +583,6 @@ iree_status_t loom_amdgpu_kernel_record_build(
     abi_layout = &derived_abi_layout;
   }
 
-  loom_amdgpu_kernel_record_register_usage_t register_usage = {0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_collect_register_usage(
-      allocation, &register_usage));
   loom_amdgpu_slot_layout_segment_sizes_t segment_usage = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_collect_segment_usage(
       schedule->module, schedule->function_op, &segment_usage));
@@ -691,10 +611,9 @@ iree_status_t loom_amdgpu_kernel_record_build(
       loom_amdgpu_kernel_descriptor_workitem_id_mode_from_flags(
           descriptor_flags, &system_vgpr_workitem_id));
 
-  const uint32_t next_free_sgpr =
-      register_usage.next_free_sgpr > user_sgpr_count
-          ? register_usage.next_free_sgpr
-          : user_sgpr_count;
+  const uint32_t next_free_sgpr = preflight->next_free_sgpr > user_sgpr_count
+                                      ? preflight->next_free_sgpr
+                                      : user_sgpr_count;
 
   iree_string_view_t target_id = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_concat3(
@@ -734,7 +653,7 @@ iree_status_t loom_amdgpu_kernel_record_build(
               .private_segment_fixed_size =
                   (uint32_t)segment_usage.private_segment_fixed_size,
               .sgpr_count = next_free_sgpr,
-              .vgpr_count = register_usage.next_free_vgpr,
+              .vgpr_count = preflight->next_free_vgpr,
               .max_flat_workgroup_size = max_flat_workgroup_size,
               .required_workgroup_size = hal_kernel->required_workgroup_size,
               .has_required_workgroup_size = has_required_workgroup_size,

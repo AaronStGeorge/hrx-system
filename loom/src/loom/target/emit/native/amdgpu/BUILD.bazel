@@ -46,6 +46,7 @@ loom_assert_no_dependencies(
         ":loom_check",
         ":metadata",
         ":module_compiler",
+        ":preflight",
     ],
 )
 
@@ -63,6 +64,7 @@ loom_assert_no_dependencies(
         ":kernel_record",
         ":loom_check",
         ":metadata",
+        ":preflight",
     ],
 )
 
@@ -81,6 +83,7 @@ loom_assert_no_dependencies(
         ":loom_check",
         ":metadata",
         ":module_compiler",
+        ":preflight",
     ],
 )
 
@@ -203,6 +206,7 @@ loom_cc_library(
     deps = [
         ":descriptor",
         ":metadata",
+        ":preflight",
         ":slot_layout",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:function",
@@ -211,13 +215,24 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:launch",
-        "//loom/src/loom/target/arch/amdgpu:descriptor_ids",
         "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
-        "//loom/src/loom/target/arch/amdgpu:register_class",
         "//loom/src/loom/target/arch/amdgpu:target_info",
-        "//loom/src/loom/target/emit/native:fragment",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "preflight",
+    srcs = ["preflight.c"],
+    hdrs = ["preflight.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:allocation",
+        "//loom/src/loom/codegen/low:schedule",
+        "//loom/src/loom/target/arch/amdgpu:descriptor_ids",
+        "//loom/src/loom/target/arch/amdgpu:register_class",
+        "//loom/src/loom/target/emit/native:fragment",
+        "//runtime/src/iree/base",
     ],
 )
 
@@ -290,6 +305,7 @@ loom_cc_library(
     deps = [
         ":hal_executable",
         ":kernel_hsaco",
+        ":preflight",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/codegen/low:packetization",
         "//loom/src/loom/codegen/low:preparation",

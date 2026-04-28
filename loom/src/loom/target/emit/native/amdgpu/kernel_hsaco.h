@@ -26,6 +26,8 @@
 extern "C" {
 #endif
 
+typedef struct loom_amdgpu_native_preflight_t loom_amdgpu_native_preflight_t;
+
 typedef struct loom_amdgpu_kernel_hsaco_summary_t {
   // Number of native instructions emitted into the kernel text stream.
   uint64_t instruction_count;
@@ -42,6 +44,8 @@ typedef struct loom_amdgpu_kernel_hsaco_summary_t {
 typedef struct loom_amdgpu_kernel_hsaco_options_t {
   // Optional ABI layout captured before target resource materialization.
   const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout;
+  // Optional preflight result captured before HSACO contribution construction.
+  const loom_amdgpu_native_preflight_t* preflight;
   // Planned wait packets inserted into the native text stream.
   const loom_amdgpu_wait_packet_plan_t* wait_packets;
   // Optional target-owned emission summary populated after successful emission.
