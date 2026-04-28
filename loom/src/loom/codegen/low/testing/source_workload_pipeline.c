@@ -93,10 +93,9 @@ iree_status_t loom_low_source_workload_run_pipeline(
     iree_arena_block_pool_t* block_pool,
     loom_low_source_workload_pipeline_counters_t* out_counters) {
   IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(options->pass_registry);
-  IREE_ASSERT_ARGUMENT(options->descriptor_registry);
-  IREE_ASSERT_ARGUMENT(options->policy_registry);
+  IREE_ASSERT_ARGUMENT(options && options->pass_registry &&
+                       options->descriptor_registry &&
+                       options->policy_registry);
   IREE_ASSERT_ARGUMENT(block_pool);
   IREE_ASSERT_ARGUMENT(out_counters);
   memset(out_counters, 0, sizeof(*out_counters));

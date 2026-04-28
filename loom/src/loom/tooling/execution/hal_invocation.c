@@ -581,9 +581,7 @@ iree_status_t loom_run_hal_invocation_run_plan(
 iree_status_t loom_run_hal_invocation_run(
     const loom_run_hal_invocation_request_t* request,
     iree_allocator_t allocator, loom_run_hal_invocation_result_t* result) {
-  IREE_ASSERT_ARGUMENT(request);
-  IREE_ASSERT_ARGUMENT(request->runtime);
-  IREE_ASSERT_ARGUMENT(request->executable);
+  IREE_ASSERT_ARGUMENT(request && request->runtime && request->executable);
   IREE_ASSERT_ARGUMENT(result);
   iree_string_builder_reset(&result->output);
   result->exit_code = 0;

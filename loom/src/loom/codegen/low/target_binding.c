@@ -257,11 +257,10 @@ iree_status_t loom_low_resolve_function_target(
     const loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_descriptor_registry_t* registry,
     iree_diagnostic_emitter_t emitter, loom_low_resolved_target_t* out_target) {
-  if (!module || !low_func_op || !out_target) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "module, low function op, and output target are required");
-  }
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(low_func_op);
+  IREE_ASSERT_ARGUMENT(registry);
+  IREE_ASSERT_ARGUMENT(out_target);
   *out_target = (loom_low_resolved_target_t){0};
   loom_symbol_ref_t target_ref = loom_symbol_ref_null();
   uint16_t target_attr_index = 0;
@@ -296,8 +295,7 @@ iree_status_t loom_low_resolve_descriptor_packet(
     const loom_module_t* module, const loom_low_resolved_target_t* target,
     const loom_op_t* op, loom_low_resolved_descriptor_packet_t* out_packet) {
   IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(target);
-  IREE_ASSERT_ARGUMENT(target->descriptor_set);
+  IREE_ASSERT_ARGUMENT(target && target->descriptor_set);
   IREE_ASSERT_ARGUMENT(op);
   IREE_ASSERT_ARGUMENT(out_packet);
   *out_packet = (loom_low_resolved_descriptor_packet_t){

@@ -188,11 +188,9 @@ iree_status_t loom_scc_compute(const loom_scc_graph_t* graph,
                                const loom_scc_options_t* options,
                                iree_arena_allocator_t* arena,
                                loom_scc_list_t* out_sccs) {
-  if (!graph || !arena || !out_sccs) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "SCC computation requires graph, arena, and output");
-  }
+  IREE_ASSERT_ARGUMENT(graph);
+  IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(out_sccs);
   *out_sccs = (loom_scc_list_t){0};
   if (graph->node_count > 0 && !graph->visit_successors.fn) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

@@ -410,10 +410,8 @@ iree_status_t loom_condition_facts_query(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     loom_value_id_t condition_value, bool assumed_truth,
     loom_condition_fact_set_t* out_facts) {
-  if (!out_facts) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "output condition fact set is required");
-  }
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(out_facts);
   return loom_condition_facts_query_impl(module, fact_table, condition_value,
                                          assumed_truth, out_facts,
                                          /*recursion_depth=*/0);

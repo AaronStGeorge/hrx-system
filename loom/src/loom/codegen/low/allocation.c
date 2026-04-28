@@ -3045,7 +3045,7 @@ iree_status_t loom_low_allocation_assignment_register_class_name(
     const loom_low_allocation_assignment_t* assignment,
     iree_string_view_t* out_register_class_name) {
   IREE_ASSERT_ARGUMENT(sidecar);
-  IREE_ASSERT_ARGUMENT(sidecar->target.descriptor_set);
+  IREE_ASSERT_ARGUMENT(sidecar && sidecar->target.descriptor_set);
   IREE_ASSERT_ARGUMENT(assignment);
   IREE_ASSERT_ARGUMENT(out_register_class_name);
   *out_register_class_name = iree_string_view_empty();
@@ -3174,8 +3174,7 @@ iree_status_t loom_low_allocate_function(
     loom_low_allocation_sidecar_t* out_sidecar) {
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(low_func_op);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(options->descriptor_registry);
+  IREE_ASSERT_ARGUMENT(options && options->descriptor_registry);
   IREE_ASSERT_ARGUMENT(arena);
   IREE_ASSERT_ARGUMENT(out_sidecar);
   if (!loom_low_function_def_isa(low_func_op)) {

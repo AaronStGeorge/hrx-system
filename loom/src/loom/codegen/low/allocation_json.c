@@ -304,10 +304,8 @@ static iree_status_t loom_low_allocation_json_write_copy_decision(
 iree_status_t loom_low_allocation_format_json(
     const loom_low_allocation_sidecar_t* sidecar,
     iree_string_builder_t* builder) {
-  if (!sidecar || !builder) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "sidecar and builder are required");
-  }
+  IREE_ASSERT_ARGUMENT(sidecar);
+  IREE_ASSERT_ARGUMENT(builder);
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));

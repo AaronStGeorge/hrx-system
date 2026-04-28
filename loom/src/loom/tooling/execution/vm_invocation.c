@@ -155,8 +155,7 @@ static iree_string_view_list_t loom_run_vm_value_specs_list(
 iree_status_t loom_run_vm_invocation_plan_prepare_from_specs(
     const loom_run_vm_invocation_plan_prepare_request_t* request,
     iree_allocator_t allocator, loom_run_vm_invocation_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(request);
-  IREE_ASSERT_ARGUMENT(request->options);
+  IREE_ASSERT_ARGUMENT(request && request->options);
   IREE_ASSERT_ARGUMENT(out_plan);
   loom_run_vm_invocation_plan_initialize(out_plan);
   IREE_RETURN_IF_ERROR(loom_run_vm_value_specs_validate(
@@ -598,9 +597,7 @@ iree_status_t loom_run_vm_invocation_run_prepared(
 iree_status_t loom_run_vm_invocation_run(
     const loom_run_vm_invocation_request_t* request, iree_allocator_t allocator,
     loom_run_vm_invocation_result_t* result) {
-  IREE_ASSERT_ARGUMENT(request);
-  IREE_ASSERT_ARGUMENT(request->runtime);
-  IREE_ASSERT_ARGUMENT(request->archive);
+  IREE_ASSERT_ARGUMENT(request && request->runtime && request->archive);
   IREE_ASSERT_ARGUMENT(result);
   iree_string_builder_reset(&result->output);
   result->exit_code = 0;

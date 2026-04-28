@@ -204,7 +204,7 @@ iree_status_t loom_testbench_run_case_invocations(
     loom_testbench_value_table_t* table) {
   IREE_ASSERT_ARGUMENT(executor);
   IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(executor->schedule);
+  IREE_ASSERT_ARGUMENT(executor && executor->schedule);
 
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t invocation_index = 0;

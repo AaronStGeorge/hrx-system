@@ -69,11 +69,10 @@ static iree_status_t loom_low_dce_function(
     loom_pass_t* pass, loom_module_t* module, loom_func_like_t function,
     const loom_low_descriptor_registry_t* descriptor_registry,
     iree_diagnostic_emitter_t emitter) {
-  IREE_ASSERT_ARGUMENT(pass);
+  IREE_ASSERT_ARGUMENT(pass && pass->arena);
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(function.op);
   IREE_ASSERT_ARGUMENT(descriptor_registry);
-  IREE_ASSERT_ARGUMENT(pass->arena);
 
   loom_op_t* low_func_op = function.op;
   loom_low_resolved_target_t target = {0};

@@ -60,9 +60,8 @@ iree_status_t loom_testbench_case_executor_initialize(
     const loom_testbench_prepared_case_t* prepared_case,
     const loom_testbench_case_execution_options_t* options,
     loom_testbench_case_executor_t* out_executor) {
-  IREE_ASSERT_ARGUMENT(prepared_case);
-  IREE_ASSERT_ARGUMENT(prepared_case->module);
-  IREE_ASSERT_ARGUMENT(prepared_case->case_plan);
+  IREE_ASSERT_ARGUMENT(prepared_case && prepared_case->module &&
+                       prepared_case->case_plan);
   IREE_ASSERT_ARGUMENT(options);
   IREE_ASSERT_ARGUMENT(out_executor);
   memset(out_executor, 0, sizeof(*out_executor));
@@ -108,8 +107,7 @@ void loom_testbench_case_executor_deinitialize(
 iree_status_t loom_testbench_run_case_sample(
     loom_testbench_case_executor_t* executor, iree_host_size_t sample_ordinal,
     loom_testbench_case_sample_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(executor);
-  IREE_ASSERT_ARGUMENT(executor->prepared_case);
+  IREE_ASSERT_ARGUMENT(executor && executor->prepared_case);
   IREE_ASSERT_ARGUMENT(out_result);
   memset(out_result, 0, sizeof(*out_result));
 
@@ -142,9 +140,8 @@ iree_status_t loom_testbench_run_case_sample(
 iree_status_t loom_testbench_case_sample_result_write_json(
     const loom_testbench_case_sample_result_t* result,
     loom_output_stream_t* stream) {
-  IREE_ASSERT_ARGUMENT(result);
-  IREE_ASSERT_ARGUMENT(result->case_plan);
-  IREE_ASSERT_ARGUMENT(result->expectation_report);
+  IREE_ASSERT_ARGUMENT(result && result->case_plan &&
+                       result->expectation_report);
   IREE_ASSERT_ARGUMENT(stream);
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\"case\":"));

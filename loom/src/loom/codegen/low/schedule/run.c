@@ -1340,13 +1340,11 @@ iree_status_t loom_low_schedule_function(
     const loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_schedule_options_t* options, iree_arena_allocator_t* arena,
     loom_low_schedule_sidecar_t* out_sidecar) {
-  if (!module || !low_func_op || !options || !options->descriptor_registry ||
-      !arena || !out_sidecar) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "module, low function op, options with descriptor registry, arena, and "
-        "output sidecar are required");
-  }
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(low_func_op);
+  IREE_ASSERT_ARGUMENT(options && options->descriptor_registry);
+  IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(out_sidecar);
   if (!loom_low_function_def_isa(low_func_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected low.func.def or low.kernel.def");

@@ -12,10 +12,8 @@
 iree_status_t loom_low_packet_validate_sidecars(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation) {
-  if (!schedule || !allocation) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "schedule and allocation sidecars are required");
-  }
+  IREE_ASSERT_ARGUMENT(schedule);
+  IREE_ASSERT_ARGUMENT(allocation);
   if (schedule->module == NULL || schedule->function_op == NULL ||
       allocation->module == NULL || allocation->function_op == NULL) {
     return iree_make_status(
@@ -64,11 +62,8 @@ static iree_status_t loom_low_packet_validate_asm_form_ordinal(
 iree_status_t loom_low_packet_validate_asm_form_sidecar(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_packet_asm_form_sidecar_t* asm_forms) {
-  if (schedule == NULL || asm_forms == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "schedule and selected asm-form sidecar are required");
-  }
+  IREE_ASSERT_ARGUMENT(schedule);
+  IREE_ASSERT_ARGUMENT(asm_forms);
   if (schedule->module != asm_forms->module ||
       schedule->function_op != asm_forms->function_op) {
     return iree_make_status(
@@ -132,10 +127,8 @@ iree_host_size_t loom_low_packet_count(
 iree_status_t loom_low_packet_node_index_at(
     const loom_low_schedule_sidecar_t* schedule, iree_host_size_t packet_index,
     uint32_t* out_node_index) {
-  if (!schedule || !out_node_index) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "schedule and out_node_index are required");
-  }
+  IREE_ASSERT_ARGUMENT(schedule);
+  IREE_ASSERT_ARGUMENT(out_node_index);
   *out_node_index = LOOM_LOW_SCHEDULE_NODE_NONE;
   if (packet_index >= schedule->scheduled_node_count) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -155,10 +148,7 @@ iree_status_t loom_low_packet_view_at(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
     iree_host_size_t packet_index, loom_low_packet_view_t* out_packet) {
-  if (!out_packet) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "out_packet is required");
-  }
+  IREE_ASSERT_ARGUMENT(out_packet);
   memset(out_packet, 0, sizeof(*out_packet));
   IREE_RETURN_IF_ERROR(loom_low_packet_validate_sidecars(schedule, allocation));
 
@@ -202,15 +192,10 @@ iree_status_t loom_low_packet_lookup_asm_form(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_packet_asm_form_sidecar_t* asm_forms,
     const loom_low_packet_view_t* packet, uint32_t* out_asm_form_ordinal) {
-  if (out_asm_form_ordinal == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "packet asm-form output is required");
-  }
+  IREE_ASSERT_ARGUMENT(out_asm_form_ordinal);
   *out_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
-  if (schedule == NULL || packet == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "schedule and packet are required");
-  }
+  IREE_ASSERT_ARGUMENT(schedule);
+  IREE_ASSERT_ARGUMENT(packet);
   if (packet->node == NULL || packet->descriptor == NULL ||
       packet->node->descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

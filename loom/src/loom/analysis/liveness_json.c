@@ -220,15 +220,8 @@ static iree_status_t loom_liveness_json_write_pressure_summary(
 
 iree_status_t loom_liveness_format_json(
     const loom_liveness_analysis_t* analysis, iree_string_builder_t* builder) {
-  if (!analysis || !builder) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "liveness analysis and output builder are "
-                            "required");
-  }
-  if (!analysis->module) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "liveness analysis module is required");
-  }
+  IREE_ASSERT_ARGUMENT(analysis && analysis->module);
+  IREE_ASSERT_ARGUMENT(builder);
 
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);

@@ -538,12 +538,9 @@ iree_status_t loom_amdgpu_occupancy_build(
     const loom_amdgpu_occupancy_options_t* options,
     iree_arena_allocator_t* arena,
     loom_amdgpu_occupancy_sidecar_t* out_sidecar) {
+  IREE_ASSERT_ARGUMENT(allocation);
+  IREE_ASSERT_ARGUMENT(arena);
   IREE_ASSERT_ARGUMENT(out_sidecar);
-  if (!allocation || !arena) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "allocation sidecar and arena are required for AMDGPU occupancy");
-  }
   *out_sidecar = (loom_amdgpu_occupancy_sidecar_t){0};
 
   const loom_amdgpu_occupancy_model_t* model = NULL;
@@ -647,11 +644,8 @@ static iree_status_t loom_amdgpu_occupancy_write_register_class(
 iree_status_t loom_amdgpu_occupancy_format_json(
     const loom_amdgpu_occupancy_sidecar_t* sidecar,
     iree_string_builder_t* builder) {
+  IREE_ASSERT_ARGUMENT(sidecar && sidecar->allocation);
   IREE_ASSERT_ARGUMENT(builder);
-  if (!sidecar || !sidecar->allocation) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU occupancy sidecar is required");
-  }
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));

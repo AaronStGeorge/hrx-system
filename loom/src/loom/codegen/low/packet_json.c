@@ -752,10 +752,9 @@ iree_status_t loom_low_packet_format_json(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
     iree_string_builder_t* builder) {
-  if (!schedule || !allocation || !builder) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "schedule, allocation, and builder are required");
-  }
+  IREE_ASSERT_ARGUMENT(schedule);
+  IREE_ASSERT_ARGUMENT(allocation);
+  IREE_ASSERT_ARGUMENT(builder);
   IREE_RETURN_IF_ERROR(loom_low_packet_validate_sidecars(schedule, allocation));
 
   loom_output_stream_t stream;

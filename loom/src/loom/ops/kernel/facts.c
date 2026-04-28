@@ -88,8 +88,7 @@ static const loom_target_bundle_t* loom_kernel_target_bundle(
   if (!bundle) {
     return NULL;
   }
-  IREE_ASSERT_ARGUMENT(bundle->snapshot);
-  IREE_ASSERT_ARGUMENT(bundle->export_plan);
+  IREE_ASSERT_ARGUMENT(bundle && bundle->snapshot && bundle->export_plan);
   return bundle;
 }
 

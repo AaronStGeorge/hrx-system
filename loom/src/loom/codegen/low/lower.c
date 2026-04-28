@@ -184,12 +184,10 @@ static iree_status_t loom_low_lower_validate_options(
     loom_module_t* module, loom_func_like_t source_function,
     const loom_low_lower_options_t* options,
     loom_low_lower_result_t* out_result) {
-  if (!module || !loom_func_like_isa(source_function) || !options ||
-      !out_result) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "module, source function, options, and result are required");
-  }
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(loom_func_like_isa(source_function));
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(out_result);
   if (source_function.op->kind != LOOM_OP_FUNC_DEF &&
       source_function.op->kind != LOOM_OP_KERNEL_DEF) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1075,13 +1073,11 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
                                       loom_func_like_t source_function,
                                       const loom_low_lower_options_t* options,
                                       loom_low_lower_result_t* out_result) {
-  if (out_result) {
-    *out_result = (loom_low_lower_result_t){
-        .low_func_ref = loom_symbol_ref_null(),
-    };
-  }
   IREE_RETURN_IF_ERROR(loom_low_lower_validate_options(module, source_function,
                                                        options, out_result));
+  *out_result = (loom_low_lower_result_t){
+      .low_func_ref = loom_symbol_ref_null(),
+  };
 
   loom_region_t* source_body = loom_func_like_body(source_function);
   if (!source_body) {

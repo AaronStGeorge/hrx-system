@@ -251,7 +251,7 @@ static iree_status_t loom_low_lower_rule_mapped_value(
     loom_low_lower_rule_mapped_value_t* out_mapped_value) {
   IREE_ASSERT_ARGUMENT(out_mapped_value);
   *out_mapped_value = loom_low_lower_rule_mapped_value_none();
-  IREE_ASSERT_ARGUMENT(match_context->map_value.fn);
+  IREE_ASSERT_ARGUMENT(match_context && match_context->map_value.fn);
   loom_value_id_t source_value_id =
       loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
   return match_context->map_value.fn(match_context->map_value.user_data,
@@ -510,9 +510,8 @@ iree_status_t loom_low_lower_rule_set_select_with_match_context(
     const loom_low_lower_rule_match_context_t* match_context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     loom_low_lower_rule_selection_t* out_selection) {
-  IREE_ASSERT_ARGUMENT(match_context);
-  IREE_ASSERT_ARGUMENT(match_context->module);
-  IREE_ASSERT_ARGUMENT(match_context->descriptor_set);
+  IREE_ASSERT_ARGUMENT(match_context && match_context->module &&
+                       match_context->descriptor_set);
   IREE_ASSERT_ARGUMENT(rule_set);
   IREE_ASSERT_ARGUMENT(source_op);
   IREE_ASSERT_ARGUMENT(out_selection);

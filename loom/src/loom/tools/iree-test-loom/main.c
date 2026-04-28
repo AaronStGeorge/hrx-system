@@ -165,8 +165,7 @@ static iree_status_t iree_test_loom_write_report(
 
 int iree_test_loom_main(int argc, char** argv,
                         const iree_test_loom_configuration_t* configuration) {
-  IREE_ASSERT_ARGUMENT(configuration);
-  IREE_ASSERT_ARGUMENT(configuration->tool_name);
+  IREE_ASSERT_ARGUMENT(configuration && configuration->tool_name);
   IREE_TRACE_APP_ENTER();
   IREE_TRACE_ZONE_BEGIN(z0);
 

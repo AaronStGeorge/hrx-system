@@ -1592,10 +1592,9 @@ static iree_status_t loom_low_verify_function(loom_low_verify_state_t* state,
 iree_status_t loom_low_verify_module(const loom_module_t* module,
                                      const loom_low_verify_options_t* options,
                                      loom_low_verify_result_t* out_result) {
-  if (!module || !options || !out_result) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "module, options, and out_result are required");
-  }
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(out_result);
   if (options->descriptor_registry == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor registry is required");

@@ -24,8 +24,7 @@ iree_status_t loom_run_hal_candidate_compile(
     iree_allocator_t allocator, loom_run_hal_candidate_t* out_candidate) {
   IREE_ASSERT_ARGUMENT(backend);
   IREE_ASSERT_ARGUMENT(runtime);
-  IREE_ASSERT_ARGUMENT(run_module);
-  IREE_ASSERT_ARGUMENT(run_module->module);
+  IREE_ASSERT_ARGUMENT(run_module && run_module->module);
   IREE_ASSERT_ARGUMENT(options);
   IREE_ASSERT_ARGUMENT(out_candidate);
   *out_candidate = (loom_run_hal_candidate_t){

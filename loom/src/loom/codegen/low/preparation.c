@@ -109,9 +109,8 @@ iree_status_t loom_low_prepare_functions_for_packetization(
     const loom_low_preparation_options_t* options,
     iree_arena_block_pool_t* block_pool) {
   IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(options->pass_registry);
-  IREE_ASSERT_ARGUMENT(options->descriptor_registry);
+  IREE_ASSERT_ARGUMENT(options && options->pass_registry &&
+                       options->descriptor_registry);
   IREE_ASSERT_ARGUMENT(block_pool);
   if (low_func_count == 0) {
     return iree_ok_status();

@@ -52,7 +52,7 @@ void loom_symbol_fact_table_reset(loom_symbol_fact_table_t* table) {
 
 static iree_status_t loom_symbol_fact_table_ensure_capacity(
     loom_symbol_fact_table_t* table, iree_host_size_t minimum_count) {
-  IREE_ASSERT_ARGUMENT(table->arena);
+  IREE_ASSERT_ARGUMENT(table && table->arena);
   if (minimum_count <= table->capacity) {
     if (minimum_count > table->count) table->count = minimum_count;
     return iree_ok_status();

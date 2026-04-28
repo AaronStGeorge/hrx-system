@@ -78,7 +78,8 @@ void loom_condition_fact_set_reset(loom_condition_fact_set_t* facts);
 
 // Derives facts implied by assuming |condition_value| evaluates to
 // |assumed_truth|. Unknown condition producers are valid and simply produce an
-// empty fact set.
+// empty fact set. |fact_table| may be NULL to query without ambient value
+// facts.
 iree_status_t loom_condition_facts_query(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     loom_value_id_t condition_value, bool assumed_truth,

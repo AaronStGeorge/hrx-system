@@ -15,11 +15,9 @@ static iree_status_t loom_ireevm_execution_backend_run_one_shot(
     const loom_run_execution_backend_t* backend,
     const loom_run_one_shot_request_t* request) {
   IREE_ASSERT_ARGUMENT(backend);
-  IREE_ASSERT_ARGUMENT(request);
-  IREE_ASSERT_ARGUMENT(request->run_module);
-  IREE_ASSERT_ARGUMENT(request->compile_options);
-  IREE_ASSERT_ARGUMENT(request->options);
-  IREE_ASSERT_ARGUMENT(request->result);
+  IREE_ASSERT_ARGUMENT(request && request->run_module &&
+                       request->compile_options && request->options &&
+                       request->result);
 
   loom_ireevm_run_candidate_t candidate = {0};
   loom_run_vm_runtime_t runtime = {0};

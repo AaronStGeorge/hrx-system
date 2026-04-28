@@ -1392,11 +1392,10 @@ static iree_status_t loom_amdgpu_resolve_immediate_name_ids(
     const loom_string_id_t** out_immediate_name_ids,
     iree_host_size_t* out_immediate_name_id_count,
     iree_arena_allocator_t* arena) {
-  IREE_ASSERT_ARGUMENT(schedule);
+  IREE_ASSERT_ARGUMENT(schedule && schedule->module);
   IREE_ASSERT_ARGUMENT(out_immediate_name_ids);
   IREE_ASSERT_ARGUMENT(out_immediate_name_id_count);
   IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(schedule->module);
   *out_immediate_name_ids = NULL;
   *out_immediate_name_id_count = 0;
   const loom_low_descriptor_set_t* descriptor_set =

@@ -735,11 +735,9 @@ static iree_status_t loom_amdgpu_wait_plan_build_actions(
 iree_status_t loom_amdgpu_wait_plan_build(
     const loom_low_schedule_sidecar_t* schedule, iree_arena_allocator_t* arena,
     loom_amdgpu_wait_plan_t* out_plan) {
+  IREE_ASSERT_ARGUMENT(schedule);
+  IREE_ASSERT_ARGUMENT(arena);
   IREE_ASSERT_ARGUMENT(out_plan);
-  if (!schedule || !arena) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "schedule and arena are required");
-  }
   *out_plan = (loom_amdgpu_wait_plan_t){0};
   loom_amdgpu_wait_plan_builder_t builder = {
       .schedule = schedule,
@@ -780,11 +778,8 @@ static iree_string_view_t loom_amdgpu_wait_plan_json_function_name(
 
 iree_status_t loom_amdgpu_wait_plan_format_json(
     const loom_amdgpu_wait_plan_t* plan, iree_string_builder_t* builder) {
+  IREE_ASSERT_ARGUMENT(plan && plan->schedule);
   IREE_ASSERT_ARGUMENT(builder);
-  if (!plan || !plan->schedule) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "wait plan with schedule is required");
-  }
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
   const loom_low_schedule_sidecar_t* schedule = plan->schedule;

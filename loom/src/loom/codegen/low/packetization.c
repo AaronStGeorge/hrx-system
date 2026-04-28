@@ -118,8 +118,7 @@ iree_status_t loom_low_packetize_function(
     loom_low_packetization_t* out_packetization) {
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(low_func_op);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(options->descriptor_registry);
+  IREE_ASSERT_ARGUMENT(options && options->descriptor_registry);
   IREE_ASSERT_ARGUMENT(arena);
   IREE_ASSERT_ARGUMENT(out_packetization);
   if (options->allocation_budget_count > 0 && !options->allocation_budgets) {

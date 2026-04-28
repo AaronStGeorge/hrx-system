@@ -685,8 +685,7 @@ iree_status_t loom_kernel_async_legality_verify_function(
     const loom_kernel_async_legality_options_t* options,
     loom_kernel_async_legality_result_t* out_result) {
   IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(options->arena);
+  IREE_ASSERT_ARGUMENT(options && options->arena);
   IREE_ASSERT_ARGUMENT(out_result);
   *out_result = (loom_kernel_async_legality_result_t){0};
 
