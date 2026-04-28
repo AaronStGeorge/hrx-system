@@ -51,6 +51,7 @@ from loom.target.low_descriptors import (
     Hazard,
     HazardKind,
     Immediate,
+    ImmediateEncodingSlice,
     ImmediateFlag,
     ImmediateKind,
     IssueUse,
@@ -4199,7 +4200,17 @@ def _ds_write_addtid_b32_overlay(
 
 
 def _ds_crosslane_offset_immediate() -> Immediate:
-    return _offset_immediate(16, encoding_id=_ADDRESS_OFFSET_DS16_ENCODING_ID)
+    return Immediate(
+        "offset",
+        ImmediateKind.UNSIGNED,
+        bit_width=16,
+        encoding_id=_ADDRESS_OFFSET_DS16_ENCODING_ID,
+        encoding_slices=(
+            ImmediateEncodingSlice(amdgpu_encoding_field_id("OFFSET0"), 0, 8),
+            ImmediateEncodingSlice(amdgpu_encoding_field_id("OFFSET1"), 8, 8),
+        ),
+        unsigned_max=(2**16) - 1,
+    )
 
 
 def _ds_swizzle_b32_overlay(

@@ -902,6 +902,30 @@ static iree_status_t loom_amdgpu_encode_sopp_simm16(
   return loom_amdgpu_append_encoding_packet(state, &encoded_packet);
 }
 
+static iree_status_t loom_amdgpu_push_immediate_encoding_field_values(
+    loom_amdgpu_encode_state_t* state, const loom_low_immediate_t* immediate,
+    uint64_t value, loom_amdgpu_encoding_field_value_t* field_values,
+    iree_host_size_t* field_value_count) {
+  if (immediate->encoding_slice_count == 0) {
+    return loom_amdgpu_push_encoding_field_value(
+        field_values, field_value_count, immediate->encoding_field_id, value);
+  }
+
+  const loom_low_descriptor_set_t* descriptor_set =
+      state->schedule->target.descriptor_set;
+  for (uint16_t i = 0; i < immediate->encoding_slice_count; ++i) {
+    const loom_low_immediate_encoding_slice_t* slice =
+        &descriptor_set
+             ->immediate_encoding_slices[immediate->encoding_slice_start + i];
+    const uint64_t field_value = (value >> slice->source_bit_offset) &
+                                 loom_amdgpu_low_bit_mask(slice->bit_count);
+    IREE_RETURN_IF_ERROR(loom_amdgpu_push_encoding_field_value(
+        field_values, field_value_count, slice->encoding_field_id,
+        field_value));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_encode_generic_descriptor_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
   if (state->encoding_table == NULL) {
@@ -952,24 +976,15 @@ static iree_status_t loom_amdgpu_encode_generic_descriptor_packet(
   for (uint16_t i = 0; i < packet->descriptor->immediate_count; ++i) {
     const loom_low_immediate_t* immediate =
         &descriptor_set->immediates[packet->descriptor->immediate_start + i];
-    if (immediate->encoding_id ==
-        LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16) {
-      uint64_t value = 0;
-      IREE_RETURN_IF_ERROR(loom_amdgpu_read_immediate_encoding_field_value(
-          state, packet, i, &value));
-      IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_push_ds16_offset_field_values(
-          field_values, IREE_ARRAYSIZE(field_values), &field_value_count,
-          value));
-      continue;
-    }
-    if (immediate->encoding_field_id == 0) {
+    if (immediate->encoding_field_id == 0 &&
+        immediate->encoding_slice_count == 0) {
       continue;
     }
     uint64_t value = 0;
     IREE_RETURN_IF_ERROR(loom_amdgpu_read_immediate_encoding_field_value(
         state, packet, i, &value));
-    IREE_RETURN_IF_ERROR(loom_amdgpu_push_encoding_field_value(
-        field_values, &field_value_count, immediate->encoding_field_id, value));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_push_immediate_encoding_field_values(
+        state, immediate, value, field_values, &field_value_count));
   }
 
   loom_amdgpu_encoding_packet_t encoded_packet;

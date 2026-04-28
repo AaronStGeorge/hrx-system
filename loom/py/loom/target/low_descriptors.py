@@ -14,7 +14,7 @@ from pathlib import Path
 
 from loom.stable_id import stable_id_from_string
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 16
+LOW_DESCRIPTOR_SET_ABI_VERSION = 17
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 
 
@@ -205,12 +205,20 @@ class Operand:
 
 
 @dataclass(frozen=True, slots=True)
+class ImmediateEncodingSlice:
+    encoding_field_id: int
+    source_bit_offset: int
+    bit_count: int
+
+
+@dataclass(frozen=True, slots=True)
 class Immediate:
     field_name: str
     kind: ImmediateKind
     flags: tuple[ImmediateFlag, ...] = ()
     bit_width: int = 0
     encoding_field_id: int = 0
+    encoding_slices: tuple[ImmediateEncodingSlice, ...] = ()
     enum_domain: str | None = None
     encoding_id: int = 0
     signed_min: int = 0

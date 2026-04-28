@@ -173,14 +173,6 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format);
 // register encoding, where VGPR operands are biased by 0x100.
 bool loom_amdgpu_encoding_field_uses_unified_source(uint16_t field_id);
 
-// Appends OFFSET0/OFFSET1 field values for a 16-bit DS offset immediate.
-// The logical immediate is byte-addressed and split into low/high 8-bit fields
-// by the AMDGPU DS/VDS encoding formats.
-iree_status_t loom_amdgpu_encoding_push_ds16_offset_field_values(
-    loom_amdgpu_encoding_field_value_t* field_values,
-    iree_host_size_t field_value_capacity, iree_host_size_t* field_value_count,
-    uint64_t value);
-
 // Returns the generated encoding table for |descriptor_set_stable_id|, or NULL
 // when this binary was not linked with a matching table.
 const loom_amdgpu_encoding_table_t*

@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 16u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 17u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -384,9 +384,13 @@ typedef struct loom_low_operand_t {
 typedef struct loom_low_immediate_t {
   // String-table offset for the immediate field name.
   loom_bstring_table_offset_t field_name_string_offset;
+  // First encoding-slice row used to derive binary fields from this immediate.
+  uint32_t encoding_slice_start;
   // Target-owned encoding field identifier, or zero when this immediate does
   // not directly populate a binary encoding field.
   uint16_t encoding_field_id;
+  // Number of encoding-slice rows for this immediate.
+  uint16_t encoding_slice_count;
   // Immediate interpretation used by verifier and emitter.
   loom_low_immediate_kind_t kind;
   // Immediate flags such as symbolic or relative.
@@ -404,6 +408,15 @@ typedef struct loom_low_immediate_t {
   // Value used when a packet omits this immediate attribute.
   int64_t default_value;
 } loom_low_immediate_t;
+
+typedef struct loom_low_immediate_encoding_slice_t {
+  // Target-owned encoding field populated by this slice.
+  uint16_t encoding_field_id;
+  // Bit offset in the logical immediate value.
+  uint8_t source_bit_offset;
+  // Number of bits copied from the logical immediate value.
+  uint8_t bit_count;
+} loom_low_immediate_encoding_slice_t;
 
 typedef struct loom_low_encoding_field_value_t {
   // Target-owned encoding field identifier.
@@ -672,6 +685,10 @@ typedef struct loom_low_descriptor_set_t {
   const loom_low_immediate_t* immediates;
   // Number of immediate rows owned by this set.
   uint32_t immediate_count;
+  // Dense immediate encoding-slice rows referenced by immediates.
+  const loom_low_immediate_encoding_slice_t* immediate_encoding_slices;
+  // Number of immediate encoding-slice rows owned by this set.
+  uint32_t immediate_encoding_slice_count;
   // Dense enum-domain rows referenced by ENUM immediates.
   const loom_low_enum_domain_t* enum_domains;
   // Number of enum-domain rows owned by this set.

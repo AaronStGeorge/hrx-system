@@ -48,6 +48,16 @@ static iree_status_t loom_low_verify_known_flags(uint16_t flags,
                           table_name, table_index, (unsigned)unknown_flags);
 }
 
+static uint64_t loom_low_descriptor_bit_mask(uint16_t bit_count) {
+  if (bit_count == 0) {
+    return 0;
+  }
+  if (bit_count >= 64) {
+    return UINT64_MAX;
+  }
+  return (UINT64_C(1) << bit_count) - 1;
+}
+
 static iree_status_t loom_low_descriptor_set_string_impl(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_bstring_table_offset_t string_offset, bool allow_none,
@@ -184,6 +194,10 @@ static iree_status_t loom_low_verify_tables_present(
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->immediates, descriptor_set->immediate_count,
       "immediates"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      descriptor_set->immediate_encoding_slices,
+      descriptor_set->immediate_encoding_slice_count,
+      "immediate_encoding_slices"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->enum_domains, descriptor_set->enum_domain_count,
       "enum_domains"));
@@ -1323,6 +1337,62 @@ static iree_status_t loom_low_verify_immediate(
                             "low immediate %" PRIu32
                             " has unsupported bit width %" PRIu16,
                             immediate_index, immediate->bit_width);
+  }
+  IREE_RETURN_IF_ERROR(loom_low_verify_span(
+      immediate->encoding_slice_start, immediate->encoding_slice_count,
+      descriptor_set->immediate_encoding_slice_count,
+      "immediate_encoding_slices"));
+  if (immediate->encoding_field_id != 0 &&
+      immediate->encoding_slice_count != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low immediate %" PRIu32
+                            " uses both direct and sliced encoding fields",
+                            immediate_index);
+  }
+  if (immediate->encoding_slice_count != 0) {
+    uint64_t covered_bits = 0;
+    for (uint16_t i = 0; i < immediate->encoding_slice_count; ++i) {
+      const uint32_t slice_index = immediate->encoding_slice_start + i;
+      const loom_low_immediate_encoding_slice_t* slice =
+          &descriptor_set->immediate_encoding_slices[slice_index];
+      if (slice->encoding_field_id == 0) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low immediate encoding slice %" PRIu32
+                                " has encoding field id zero",
+                                slice_index);
+      }
+      if (slice->bit_count == 0 || slice->bit_count > 64 ||
+          slice->source_bit_offset > immediate->bit_width ||
+          slice->bit_count > immediate->bit_width - slice->source_bit_offset) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "low immediate encoding slice %" PRIu32
+            " source range [%u, %u) exceeds immediate %" PRIu32
+            " bit width %" PRIu16,
+            slice_index, slice->source_bit_offset,
+            slice->source_bit_offset + slice->bit_count, immediate_index,
+            immediate->bit_width);
+      }
+      const uint64_t slice_bits = loom_low_descriptor_bit_mask(slice->bit_count)
+                                  << slice->source_bit_offset;
+      if (iree_any_bit_set(covered_bits, slice_bits)) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "low immediate encoding slice %" PRIu32
+            " overlaps another slice for immediate %" PRIu32,
+            slice_index, immediate_index);
+      }
+      covered_bits |= slice_bits;
+    }
+    const uint64_t expected_bits =
+        loom_low_descriptor_bit_mask(immediate->bit_width);
+    if (covered_bits != expected_bits) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low immediate %" PRIu32
+                              " encoding slices cover 0x%016" PRIx64
+                              " instead of 0x%016" PRIx64,
+                              immediate_index, covered_bits, expected_bits);
+    }
   }
   if (!iree_any_bit_set(immediate->flags,
                         LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE)) {

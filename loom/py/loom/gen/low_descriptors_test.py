@@ -33,6 +33,8 @@ from loom.target.low_descriptors import (
     EnumValue,
     Hazard,
     HazardKind,
+    Immediate,
+    ImmediateEncodingSlice,
     ImmediateFlag,
     ImmediateKind,
     OperandFlag,
@@ -758,6 +760,75 @@ def test_generator_rejects_operand_fixed_encoding_field_overlap() -> None:
     with pytest.raises(
         ValueError,
         match=("descriptor 'iree.vm.add.i32' operand 'dst' shares fixed encoding field id 7"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_emits_sliced_immediate_encoding_rows() -> None:
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        immediates=(
+            Immediate(
+                "i32_value",
+                ImmediateKind.SIGNED,
+                bit_width=32,
+                encoding_slices=(
+                    ImmediateEncodingSlice(7, 0, 16),
+                    ImmediateEncodingSlice(8, 16, 16),
+                ),
+                signed_min=-(2**31),
+                unsigned_max=(2**31) - 1,
+            ),
+        ),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    generated = generate_descriptor_set(descriptor_set)
+
+    assert "loom_low_immediate_encoding_slice_t" in generated.source
+    assert ".encoding_slice_start = 0," in generated.source
+    assert ".encoding_slice_count = 2," in generated.source
+    assert ".encoding_field_id = 7," in generated.source
+    assert ".source_bit_offset = 16," in generated.source
+
+
+def test_generator_rejects_immediate_with_direct_and_sliced_encoding() -> None:
+    base_descriptor = IREEVM_CORE_DESCRIPTOR_SET.descriptors[0]
+    descriptor = replace(
+        base_descriptor,
+        immediates=(
+            replace(
+                base_descriptor.immediates[0],
+                encoding_field_id=7,
+                encoding_slices=(ImmediateEncodingSlice(8, 0, 32),),
+            ),
+        ),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.const.i32' immediate 'i32_value' uses both direct and sliced encoding fields"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_incomplete_sliced_immediate_encoding() -> None:
+    base_descriptor = IREEVM_CORE_DESCRIPTOR_SET.descriptors[0]
+    descriptor = replace(
+        base_descriptor,
+        immediates=(
+            replace(
+                base_descriptor.immediates[0],
+                encoding_slices=(ImmediateEncodingSlice(7, 0, 16),),
+            ),
+        ),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.const.i32' immediate 'i32_value' encoding slices cover 0xffff instead of 0xffffffff"),
     ):
         generate_descriptor_set(descriptor_set)
 

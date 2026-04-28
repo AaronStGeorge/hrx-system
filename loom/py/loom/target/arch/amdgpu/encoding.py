@@ -298,6 +298,9 @@ AMDGPU_ENCODING_FIELD_NAMES = (
 AMDGPU_ENCODING_FIELD_IDS = {
     name: field_id for field_id, name in enumerate(AMDGPU_ENCODING_FIELD_NAMES, start=1)
 }
+AMDGPU_ENCODING_FIELD_NAMES_BY_ID = {
+    field_id: name for name, field_id in AMDGPU_ENCODING_FIELD_IDS.items()
+}
 
 
 def amdgpu_encoding_format_id(xml_name: str) -> int:
@@ -312,3 +315,10 @@ def amdgpu_encoding_field_id(field_name: str) -> int:
         return AMDGPU_ENCODING_FIELD_IDS[field_name]
     except KeyError as exc:
         raise KeyError(f"unmapped AMDGPU encoding field '{field_name}'") from exc
+
+
+def amdgpu_encoding_field_name(field_id: int) -> str:
+    try:
+        return AMDGPU_ENCODING_FIELD_NAMES_BY_ID[field_id]
+    except KeyError as exc:
+        raise KeyError(f"unmapped AMDGPU encoding field id {field_id}") from exc

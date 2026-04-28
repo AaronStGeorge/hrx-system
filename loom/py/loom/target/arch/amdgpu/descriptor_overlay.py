@@ -19,6 +19,7 @@ from dataclasses import dataclass, replace
 
 from loom.target.arch.amdgpu.encoding import (
     amdgpu_encoding_field_id,
+    amdgpu_encoding_field_name,
     amdgpu_encoding_format_id,
 )
 from loom.target.arch.amdgpu.isa_xml import (
@@ -508,6 +509,32 @@ def _validate_operand_overlay(
                 f"missing immediate encoding field '{immediate_field}' on instruction "
                 f"'{instruction.name}' encoding '{encoding.encoding_name}'"
             )
+    for immediate in overlay.immediates:
+        for encoding_slice in immediate.encoding_slices:
+            try:
+                field_name = amdgpu_encoding_field_name(
+                    encoding_slice.encoding_field_id
+                )
+            except KeyError as exc:
+                raise AmdgpuDescriptorOverlayError(
+                    f"descriptor overlay '{overlay.descriptor_key}' immediate "
+                    f"'{immediate.field_name}' references unmapped sliced "
+                    f"encoding field id {encoding_slice.encoding_field_id}"
+                ) from exc
+            if field_name not in encoding_fields:
+                raise AmdgpuDescriptorOverlayError(
+                    f"descriptor overlay '{overlay.descriptor_key}' immediate "
+                    f"'{immediate.field_name}' references missing sliced "
+                    f"encoding field '{field_name}' on instruction "
+                    f"'{instruction.name}' encoding '{encoding.encoding_name}'"
+                )
+            bit_count = _encoding_field_bit_count(encoding_fields, field_name)
+            if bit_count is not None and encoding_slice.bit_count > bit_count:
+                raise AmdgpuDescriptorOverlayError(
+                    f"descriptor overlay '{overlay.descriptor_key}' immediate "
+                    f"'{immediate.field_name}' slice for field '{field_name}' "
+                    f"copies {encoding_slice.bit_count} bits into {bit_count}-bit field"
+                )
     for field_name, _value in overlay.fixed_encoding_fields:
         xml_operand = xml_operands.get(field_name)
         if field_name not in encoding_fields and xml_operand is None:

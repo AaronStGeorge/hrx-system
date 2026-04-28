@@ -40,6 +40,7 @@ from loom.target.low_descriptors import (
     Hazard,
     HazardReferenceKind,
     Immediate,
+    ImmediateEncodingSlice,
     ImmediateFlag,
     ImmediateKind,
     IssueUse,
@@ -135,6 +136,8 @@ class _CompiledDescriptorSet:
     operands: list[Operand]
     operand_alt_starts: list[int]
     immediates: list[Immediate]
+    immediate_encoding_slices: list[ImmediateEncodingSlice]
+    immediate_encoding_slice_starts: list[int]
     enum_values: list[EnumValue]
     immediate_enum_domain_ids: list[int | None]
     effects: list[Effect]
@@ -290,6 +293,42 @@ def _validate_u16(value: int, description: str) -> None:
 def _validate_u64(value: int, description: str) -> None:
     if value < 0 or value > 0xFFFFFFFFFFFFFFFF:
         raise ValueError(f"{description} does not fit u64")
+
+
+def _bit_mask(bit_count: int) -> int:
+    if bit_count == 0:
+        return 0
+    return (1 << bit_count) - 1
+
+
+def _validate_immediate_encoding(descriptor: Descriptor, immediate: Immediate) -> None:
+    if immediate.encoding_field_id and immediate.encoding_slices:
+        raise ValueError(f"descriptor '{descriptor.key}' immediate '{immediate.field_name}' uses both direct and sliced encoding fields")
+    if not immediate.encoding_slices:
+        return
+    covered_bits = 0
+    for slice_index, encoding_slice in enumerate(immediate.encoding_slices):
+        slice_description = f"descriptor '{descriptor.key}' immediate '{immediate.field_name}' encoding slice {slice_index}"
+        _validate_u16(
+            encoding_slice.encoding_field_id,
+            f"{slice_description} field id",
+        )
+        if encoding_slice.encoding_field_id == 0:
+            raise ValueError(f"{slice_description} has field id zero")
+        if encoding_slice.bit_count <= 0 or encoding_slice.bit_count > 64:
+            raise ValueError(f"{slice_description} has invalid bit count {encoding_slice.bit_count}")
+        if encoding_slice.source_bit_offset < 0 or encoding_slice.source_bit_offset > 255:
+            raise ValueError(f"{slice_description} source bit offset does not fit u8")
+        source_end = encoding_slice.source_bit_offset + encoding_slice.bit_count
+        if source_end > immediate.bit_width:
+            raise ValueError(f"{slice_description} source range [{encoding_slice.source_bit_offset}, {source_end}) exceeds {immediate.bit_width} bits")
+        slice_bits = _bit_mask(encoding_slice.bit_count) << encoding_slice.source_bit_offset
+        if covered_bits & slice_bits:
+            raise ValueError(f"{slice_description} overlaps another slice")
+        covered_bits |= slice_bits
+    expected_bits = _bit_mask(immediate.bit_width)
+    if covered_bits != expected_bits:
+        raise ValueError(f"descriptor '{descriptor.key}' immediate '{immediate.field_name}' encoding slices cover 0x{covered_bits:x} instead of 0x{expected_bits:x}")
 
 
 def _hazard_reference_count(hazard: Hazard) -> int:
@@ -655,6 +694,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
                 immediate.encoding_id,
                 f"descriptor '{descriptor.key}' immediate '{immediate.field_name}' encoding id",
             )
+            _validate_immediate_encoding(descriptor, immediate)
             if immediate.kind is ImmediateKind.ENUM:
                 if immediate.enum_domain is None:
                     raise ValueError(f"descriptor '{descriptor.key}' enum immediate '{immediate.field_name}' has no enum domain")
@@ -833,10 +873,13 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
 
     reg_class_alts: list[tuple[int | None, tuple[RegClassAltFlag, ...]]] = []
     reg_alt_group_starts: dict[tuple[tuple[int | None, tuple[RegClassAltFlag, ...]], ...], int] = {}
+    immediate_encoding_slice_group_starts: dict[tuple[ImmediateEncodingSlice, ...], int] = {}
     effect_group_starts: dict[tuple[Effect, ...], int] = {}
     operands: list[Operand] = []
     operand_alt_starts: list[int] = []
     immediates: list[Immediate] = []
+    immediate_encoding_slices: list[ImmediateEncodingSlice] = []
+    immediate_encoding_slice_starts: list[int] = []
     enum_values: list[EnumValue] = []
     immediate_enum_domain_ids: list[int | None] = []
     effects: list[Effect] = []
@@ -897,8 +940,18 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
             operands.append(operand)
             operand_alt_starts.append(alt_start)
         immediate_start = len(immediates)
-        immediates.extend(descriptor.immediates)
-        immediate_enum_domain_ids.extend((None if immediate.enum_domain is None else enum_domain_ids[immediate.enum_domain]) for immediate in descriptor.immediates)
+        for immediate in descriptor.immediates:
+            slice_start = 0
+            if immediate.encoding_slices:
+                group_start = immediate_encoding_slice_group_starts.get(immediate.encoding_slices)
+                if group_start is None:
+                    group_start = len(immediate_encoding_slices)
+                    immediate_encoding_slice_group_starts[immediate.encoding_slices] = group_start
+                    immediate_encoding_slices.extend(immediate.encoding_slices)
+                slice_start = group_start
+            immediate_encoding_slice_starts.append(slice_start)
+            immediates.append(immediate)
+            immediate_enum_domain_ids.append(None if immediate.enum_domain is None else enum_domain_ids[immediate.enum_domain])
         if descriptor.effects:
             effect_start = effect_group_starts.get(descriptor.effects)
             if effect_start is None:
@@ -961,6 +1014,8 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         operands=operands,
         operand_alt_starts=operand_alt_starts,
         immediates=immediates,
+        immediate_encoding_slices=immediate_encoding_slices,
+        immediate_encoding_slice_starts=immediate_encoding_slice_starts,
         enum_values=enum_values,
         immediate_enum_domain_ids=immediate_enum_domain_ids,
         effects=effects,
@@ -1190,10 +1245,12 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         [
             [
                 f".field_name_string_offset = {pool.ref(f'immediate_{immediate.field_name}')},",
+                f".encoding_slice_start = {compiled.immediate_encoding_slice_starts[i]},",
                 f".kind = {immediate.kind.c_name},",
                 f".flags = {_flag_expr(immediate.flags)},",
                 f".bit_width = {immediate.bit_width},",
                 f".encoding_field_id = {immediate.encoding_field_id},",
+                f".encoding_slice_count = {len(immediate.encoding_slices)},",
                 ".enum_domain_id = " + ("LOOM_LOW_ENUM_DOMAIN_NONE" if compiled.immediate_enum_domain_ids[i] is None else str(compiled.immediate_enum_domain_ids[i])) + ",",
                 f".encoding_id = {immediate.encoding_id},",
                 f".signed_min = {_i64_literal(immediate.signed_min)},",
@@ -1201,6 +1258,20 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
                 f".default_value = {_i64_literal(immediate.default_value)},",
             ]
             for i, immediate in enumerate(compiled.immediates)
+        ],
+    )
+    _emit_array(
+        lines,
+        "loom_low_immediate_encoding_slice_t",
+        spec.c_table_prefix,
+        "ImmediateEncodingSlices",
+        [
+            [
+                f".encoding_field_id = {encoding_slice.encoding_field_id},",
+                f".source_bit_offset = {encoding_slice.source_bit_offset},",
+                f".bit_count = {encoding_slice.bit_count},",
+            ]
+            for encoding_slice in compiled.immediate_encoding_slices
         ],
     )
     _emit_array(
@@ -1490,6 +1561,7 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
     table_count_fields = {
         "operands": "operand_count",
         "immediates": "immediate_count",
+        "immediate_encoding_slices": "immediate_encoding_slice_count",
         "enum_domains": "enum_domain_count",
         "enum_values": "enum_value_count",
         "effects": "effect_count",
@@ -1516,6 +1588,7 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
 
     append_optional_table("operands", "Operands")
     append_optional_table("immediates", "Immediates")
+    append_optional_table("immediate_encoding_slices", "ImmediateEncodingSlices")
     append_optional_table("enum_domains", "EnumDomains")
     append_optional_table("enum_values", "EnumValues")
     append_optional_table("effects", "Effects")
@@ -1609,6 +1682,7 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
             "descriptor_id_refs": len(compiled.descriptor_id_refs),
             "operands": len(compiled.operands),
             "immediates": len(compiled.immediates),
+            "immediate_encoding_slices": len(compiled.immediate_encoding_slices),
             "enum_domains": len(compiled.enum_domains),
             "enum_values": len(compiled.enum_values),
             "effects": len(compiled.effects),

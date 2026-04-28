@@ -207,39 +207,6 @@ bool loom_amdgpu_encoding_field_uses_unified_source(uint16_t field_id) {
   }
 }
 
-iree_status_t loom_amdgpu_encoding_push_ds16_offset_field_values(
-    loom_amdgpu_encoding_field_value_t* field_values,
-    iree_host_size_t field_value_capacity, iree_host_size_t* field_value_count,
-    uint64_t value) {
-  IREE_ASSERT_ARGUMENT(field_values);
-  IREE_ASSERT_ARGUMENT(field_value_count);
-  if (value > UINT16_MAX) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU DS16 offset immediate value 0x%" PRIx64
-                            " does not fit 16 bits",
-                            value);
-  }
-  if (*field_value_count > field_value_capacity ||
-      field_value_capacity - *field_value_count < 2) {
-    return iree_make_status(
-        IREE_STATUS_RESOURCE_EXHAUSTED,
-        "AMDGPU DS16 offset encoding requires two field-value entries");
-  }
-  field_values[*field_value_count] = (loom_amdgpu_encoding_field_value_t){
-      .field_id = LOOM_AMDGPU_ENCODING_FIELD_OFFSET0,
-      .reserved = 0,
-      .value = value & UINT64_C(0xFF),
-  };
-  ++*field_value_count;
-  field_values[*field_value_count] = (loom_amdgpu_encoding_field_value_t){
-      .field_id = LOOM_AMDGPU_ENCODING_FIELD_OFFSET1,
-      .reserved = 0,
-      .value = value >> 8,
-  };
-  ++*field_value_count;
-  return iree_ok_status();
-}
-
 static bool loom_amdgpu_encoding_sisrc_inline_u32(
     const loom_amdgpu_encoding_table_t* table, uint32_t value,
     uint16_t* out_sisrc) {

@@ -86,6 +86,7 @@ struct TestTables {
   loom_low_asm_immediate_t asm_immediates[1];
   loom_low_operand_t operands[4];
   loom_low_immediate_t immediates[1];
+  loom_low_immediate_encoding_slice_t immediate_encoding_slices[2];
   loom_low_enum_domain_t enum_domains[1];
   loom_low_enum_value_t enum_values[2];
   loom_low_effect_t effects[1];
@@ -266,6 +267,7 @@ void InitializeTestTables(TestTables* tables) {
   tables->set.operand_count = IREE_ARRAYSIZE(tables->operands);
   tables->set.immediates = tables->immediates;
   tables->set.immediate_count = IREE_ARRAYSIZE(tables->immediates);
+  tables->set.immediate_encoding_slices = tables->immediate_encoding_slices;
   tables->set.enum_domains = tables->enum_domains;
   tables->set.enum_values = tables->enum_values;
   tables->set.effects = tables->effects;
@@ -972,6 +974,56 @@ TEST(LowDescriptorsTest, RejectsUnknownImmediateFlagBits) {
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, AcceptsSlicedImmediateEncoding) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.immediates[0].encoding_slice_count = 2;
+  tables.immediate_encoding_slices[0] = {
+      .encoding_field_id = 7,
+      .source_bit_offset = 0,
+      .bit_count = 16,
+  };
+  tables.immediate_encoding_slices[1] = {
+      .encoding_field_id = 8,
+      .source_bit_offset = 16,
+      .bit_count = 16,
+  };
+  tables.set.immediate_encoding_slice_count = 2;
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsImmediateWithDirectAndSlicedEncoding) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.immediates[0].encoding_field_id = 7;
+  tables.immediates[0].encoding_slice_count = 1;
+  tables.immediate_encoding_slices[0] = {
+      .encoding_field_id = 8,
+      .source_bit_offset = 0,
+      .bit_count = 32,
+  };
+  tables.set.immediate_encoding_slice_count = 1;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsIncompleteSlicedImmediateEncoding) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.immediates[0].encoding_slice_count = 1;
+  tables.immediate_encoding_slices[0] = {
+      .encoding_field_id = 7,
+      .source_bit_offset = 0,
+      .bit_count = 16,
+  };
+  tables.set.immediate_encoding_slice_count = 1;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_descriptor_set_verify(&tables.set));
 }
 
 TEST(LowDescriptorsTest, AcceptsDefaultedImmediate) {
