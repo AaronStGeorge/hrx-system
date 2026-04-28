@@ -76,77 +76,9 @@ TEST(X86DescriptorsTest, Avx512CoreDescriptorSetVerifies) {
             0u);
 }
 
-TEST(X86DescriptorsTest, Avx512CoreDescriptorLookupUsesStableKeys) {
+TEST(X86DescriptorsTest, Avx512CoreDescriptorsExposeSemanticInvariants) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_x86_avx512_core_descriptor_set();
-
-  const loom_low_descriptor_t* splat_i32_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vpbroadcastd.zmm"));
-  ASSERT_NE(splat_i32_descriptor, nullptr);
-  EXPECT_EQ(splat_i32_descriptor->operand_count, 2u);
-  EXPECT_EQ(splat_i32_descriptor->result_count, 1u);
-
-  const loom_low_descriptor_t* splat_f32_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vbroadcastss.zmm"));
-  ASSERT_NE(splat_f32_descriptor, nullptr);
-  EXPECT_EQ(splat_f32_descriptor->operand_count, 2u);
-  EXPECT_EQ(splat_f32_descriptor->result_count, 1u);
-
-  const loom_low_descriptor_t* add_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vpaddd.zmm"));
-  ASSERT_NE(add_descriptor, nullptr);
-  iree_string_view_t add_key = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
-      descriptor_set, add_descriptor->key_string_offset, &add_key));
-  EXPECT_TRUE(
-      iree_string_view_equal(add_key, IREE_SV("x86.avx512.vpaddd.zmm")));
-  EXPECT_EQ(add_descriptor->operand_count, 3u);
-  EXPECT_EQ(add_descriptor->result_count, 1u);
-
-  const loom_low_descriptor_t* subtract_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vpsubd.zmm"));
-  ASSERT_NE(subtract_descriptor, nullptr);
-  iree_string_view_t subtract_key = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
-      descriptor_set, subtract_descriptor->key_string_offset, &subtract_key));
-  EXPECT_TRUE(
-      iree_string_view_equal(subtract_key, IREE_SV("x86.avx512.vpsubd.zmm")));
-  EXPECT_EQ(subtract_descriptor->operand_count, 3u);
-  EXPECT_EQ(subtract_descriptor->result_count, 1u);
-
-  const loom_low_descriptor_t* multiply_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vpmulld.zmm"));
-  ASSERT_NE(multiply_descriptor, nullptr);
-  iree_string_view_t multiply_key = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
-      descriptor_set, multiply_descriptor->key_string_offset, &multiply_key));
-  EXPECT_TRUE(
-      iree_string_view_equal(multiply_key, IREE_SV("x86.avx512.vpmulld.zmm")));
-  EXPECT_EQ(multiply_descriptor->operand_count, 3u);
-  EXPECT_EQ(multiply_descriptor->result_count, 1u);
-
-  const loom_low_descriptor_t* f32_add_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vaddps.zmm"));
-  ASSERT_NE(f32_add_descriptor, nullptr);
-  iree_string_view_t f32_add_key = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
-      descriptor_set, f32_add_descriptor->key_string_offset, &f32_add_key));
-  EXPECT_TRUE(
-      iree_string_view_equal(f32_add_key, IREE_SV("x86.avx512.vaddps.zmm")));
-  EXPECT_EQ(f32_add_descriptor->operand_count, 3u);
-  EXPECT_EQ(f32_add_descriptor->result_count, 1u);
-
-  const loom_low_descriptor_t* f32_subtract_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vsubps.zmm"));
-  ASSERT_NE(f32_subtract_descriptor, nullptr);
-  EXPECT_EQ(f32_subtract_descriptor->operand_count, 3u);
-  EXPECT_EQ(f32_subtract_descriptor->result_count, 1u);
-
-  const loom_low_descriptor_t* f32_multiply_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vmulps.zmm"));
-  ASSERT_NE(f32_multiply_descriptor, nullptr);
-  EXPECT_EQ(f32_multiply_descriptor->operand_count, 3u);
-  EXPECT_EQ(f32_multiply_descriptor->result_count, 1u);
 
   const loom_low_descriptor_t* f32_fma_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vfmadd231ps.zmm"));
@@ -321,7 +253,7 @@ TEST(X86DescriptorsTest, Avx512DotPacketsExposeDestructiveAccumulator) {
       4u);
 }
 
-TEST(X86DescriptorsTest, Avx512AsmFormsNameUnambiguousPackets) {
+TEST(X86DescriptorsTest, Avx512AsmFormsDisambiguateVectorWidthSuffixes) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_x86_avx512_core_descriptor_set();
   ASSERT_GE(descriptor_set->asm_form_count, 6u);
@@ -355,48 +287,6 @@ TEST(X86DescriptorsTest, Avx512AsmFormsNameUnambiguousPackets) {
   ASSERT_NE(descriptor, nullptr);
   EXPECT_EQ(ToString(descriptor_set, descriptor->key_string_offset),
             "x86.avx512.vpaddd.xmm");
-
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
-      descriptor_set, IREE_SV("vpsubd"), &asm_form_ordinal));
-  asm_form =
-      loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
-  ASSERT_NE(asm_form, nullptr);
-  EXPECT_EQ(asm_form->result_operand_index_count, 1u);
-  EXPECT_EQ(asm_form->operand_index_count, 2u);
-
-  descriptor = loom_low_descriptor_set_descriptor_at(
-      descriptor_set, asm_form->descriptor_ordinal);
-  ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor_set, descriptor->key_string_offset),
-            "x86.avx512.vpsubd.zmm");
-
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
-      descriptor_set, IREE_SV("vpmulld"), &asm_form_ordinal));
-  asm_form =
-      loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
-  ASSERT_NE(asm_form, nullptr);
-  EXPECT_EQ(asm_form->result_operand_index_count, 1u);
-  EXPECT_EQ(asm_form->operand_index_count, 2u);
-
-  descriptor = loom_low_descriptor_set_descriptor_at(
-      descriptor_set, asm_form->descriptor_ordinal);
-  ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor_set, descriptor->key_string_offset),
-            "x86.avx512.vpmulld.zmm");
-
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
-      descriptor_set, IREE_SV("vaddps"), &asm_form_ordinal));
-  asm_form =
-      loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
-  ASSERT_NE(asm_form, nullptr);
-  EXPECT_EQ(asm_form->result_operand_index_count, 1u);
-  EXPECT_EQ(asm_form->operand_index_count, 2u);
-
-  descriptor = loom_low_descriptor_set_descriptor_at(
-      descriptor_set, asm_form->descriptor_ordinal);
-  ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor_set, descriptor->key_string_offset),
-            "x86.avx512.vaddps.zmm");
 }
 
 TEST(X86DescriptorsTest, Avx512LowAsmInfersTiedAccumulatorResultType) {

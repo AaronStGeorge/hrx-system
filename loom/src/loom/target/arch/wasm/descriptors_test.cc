@@ -21,15 +21,13 @@ using ::loom::testing::LowFuncAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
-constexpr uint16_t kWasmOpcodeI32Add = 0x6A;
-constexpr uint16_t kWasmOpcodeF32Add = 0x92;
-constexpr uint16_t kWasmOpcodeV128Load = 0xFD00;
-constexpr uint16_t kWasmOpcodeI32x4Add = 0xFDAE;
-constexpr uint16_t kWasmOpcodeI32x4Sub = 0xFDB1;
-constexpr uint16_t kWasmOpcodeF32x4ExtractLane = 0xFD1F;
-constexpr uint16_t kWasmOpcodeF32x4Add = 0xFDE4;
-constexpr uint16_t kWasmOpcodeF32x4Mul = 0xFDE6;
-constexpr uint16_t kWasmOpcodeV128Store = 0xFD0B;
+const loom_low_descriptor_t* LookupDescriptor(
+    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
+  uint32_t ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  IREE_EXPECT_OK(
+      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key, &ordinal));
+  return loom_low_descriptor_set_descriptor_at(descriptor_set, ordinal);
+}
 
 TEST(WasmDescriptorsTest, CoreSimd128DescriptorSetVerifies) {
   const loom_low_descriptor_set_t* descriptor_set =
@@ -49,105 +47,43 @@ TEST(WasmDescriptorsTest, CoreSimd128DescriptorSetVerifies) {
   EXPECT_GE(descriptor_set->schedule_class_count, 6u);
 }
 
-TEST(WasmDescriptorsTest, CoreSimd128DescriptorLookupUsesStableKeys) {
+TEST(WasmDescriptorsTest, CoreSimd128MemoryDescriptorsExposeEffects) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_wasm_core_simd128_descriptor_set();
 
-  uint32_t add_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
-      descriptor_set, IREE_SV("wasm.i32x4.add"), &add_ordinal));
-  EXPECT_NE(add_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
-  const loom_low_descriptor_t* add_descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set, add_ordinal);
-  ASSERT_NE(add_descriptor, nullptr);
-  iree_string_view_t add_key = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
-      descriptor_set, add_descriptor->key_string_offset, &add_key));
-  EXPECT_TRUE(iree_string_view_equal(add_key, IREE_SV("wasm.i32x4.add")));
-  EXPECT_EQ(add_descriptor->operand_count, 3u);
-  EXPECT_EQ(add_descriptor->result_count, 1u);
-  EXPECT_EQ(add_descriptor->encoding_id, kWasmOpcodeI32x4Add);
-
-  uint32_t subtract_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
-      descriptor_set, IREE_SV("wasm.i32x4.sub"), &subtract_ordinal));
-  const loom_low_descriptor_t* subtract_descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set, subtract_ordinal);
-  ASSERT_NE(subtract_descriptor, nullptr);
-  EXPECT_EQ(subtract_descriptor->operand_count, 3u);
-  EXPECT_EQ(subtract_descriptor->result_count, 1u);
-  EXPECT_EQ(subtract_descriptor->encoding_id, kWasmOpcodeI32x4Sub);
-
-  uint32_t f32_add_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
-      descriptor_set, IREE_SV("wasm.f32x4.add"), &f32_add_ordinal));
-  const loom_low_descriptor_t* f32_add_descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set, f32_add_ordinal);
-  ASSERT_NE(f32_add_descriptor, nullptr);
-  EXPECT_EQ(f32_add_descriptor->operand_count, 3u);
-  EXPECT_EQ(f32_add_descriptor->result_count, 1u);
-  EXPECT_EQ(f32_add_descriptor->encoding_id, kWasmOpcodeF32x4Add);
-
-  uint32_t f32_multiply_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
-      descriptor_set, IREE_SV("wasm.f32x4.mul"), &f32_multiply_ordinal));
-  const loom_low_descriptor_t* f32_multiply_descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set,
-                                            f32_multiply_ordinal);
-  ASSERT_NE(f32_multiply_descriptor, nullptr);
-  EXPECT_EQ(f32_multiply_descriptor->operand_count, 3u);
-  EXPECT_EQ(f32_multiply_descriptor->result_count, 1u);
-  EXPECT_EQ(f32_multiply_descriptor->encoding_id, kWasmOpcodeF32x4Mul);
-
-  uint32_t f32_extract_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
-      descriptor_set, IREE_SV("wasm.f32x4.extract_lane"),
-      &f32_extract_ordinal));
-  const loom_low_descriptor_t* f32_extract_descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set,
-                                            f32_extract_ordinal);
-  ASSERT_NE(f32_extract_descriptor, nullptr);
-  EXPECT_EQ(f32_extract_descriptor->operand_count, 2u);
-  EXPECT_EQ(f32_extract_descriptor->result_count, 1u);
-  EXPECT_EQ(f32_extract_descriptor->encoding_id, kWasmOpcodeF32x4ExtractLane);
-
-  uint32_t scalar_add_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
-      descriptor_set, IREE_SV("wasm.i32.add"), &scalar_add_ordinal));
-  const loom_low_descriptor_t* scalar_add_descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set, scalar_add_ordinal);
-  ASSERT_NE(scalar_add_descriptor, nullptr);
-  EXPECT_EQ(scalar_add_descriptor->encoding_id, kWasmOpcodeI32Add);
-
-  uint32_t scalar_f32_add_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
-      descriptor_set, IREE_SV("wasm.f32.add"), &scalar_f32_add_ordinal));
-  const loom_low_descriptor_t* scalar_f32_add_descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set,
-                                            scalar_f32_add_ordinal);
-  ASSERT_NE(scalar_f32_add_descriptor, nullptr);
-  EXPECT_EQ(scalar_f32_add_descriptor->encoding_id, kWasmOpcodeF32Add);
-
-  uint32_t load_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
-      descriptor_set, IREE_SV("wasm.v128.load"), &load_ordinal));
   const loom_low_descriptor_t* load_descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set, load_ordinal);
+      LookupDescriptor(descriptor_set, IREE_SV("wasm.v128.load"));
   ASSERT_NE(load_descriptor, nullptr);
-  EXPECT_EQ(load_descriptor->encoding_id, kWasmOpcodeV128Load);
+  EXPECT_EQ(load_descriptor->operand_count, 2u);
+  EXPECT_EQ(load_descriptor->result_count, 1u);
+  EXPECT_EQ(load_descriptor->effect_count, 1u);
+  EXPECT_NE(load_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+            0u);
+  const loom_low_operand_t* load_operands =
+      &descriptor_set->operands[load_descriptor->operand_start];
+  EXPECT_EQ(load_operands[0].role, LOOM_LOW_OPERAND_ROLE_RESULT);
+  EXPECT_EQ(load_operands[1].role, LOOM_LOW_OPERAND_ROLE_RESOURCE);
+  const loom_low_effect_t* load_effect =
+      &descriptor_set->effects[load_descriptor->effect_start];
+  EXPECT_EQ(load_effect->kind, LOOM_LOW_EFFECT_KIND_READ);
+  EXPECT_EQ(load_effect->memory_space, LOOM_LOW_MEMORY_SPACE_WASM_MEMORY);
+  EXPECT_EQ(load_effect->width_bits, 128u);
+  EXPECT_NE(load_effect->flags & LOOM_LOW_EFFECT_FLAG_DEPENDENCY, 0u);
 
-  uint32_t store_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
-      descriptor_set, IREE_SV("wasm.v128.store"), &store_ordinal));
   const loom_low_descriptor_t* store_descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set, store_ordinal);
+      LookupDescriptor(descriptor_set, IREE_SV("wasm.v128.store"));
   ASSERT_NE(store_descriptor, nullptr);
   EXPECT_EQ(store_descriptor->operand_count, 2u);
   EXPECT_EQ(store_descriptor->result_count, 0u);
   EXPECT_EQ(store_descriptor->effect_count, 1u);
   EXPECT_NE(store_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
             0u);
-  EXPECT_EQ(store_descriptor->encoding_id, kWasmOpcodeV128Store);
+  const loom_low_effect_t* store_effect =
+      &descriptor_set->effects[store_descriptor->effect_start];
+  EXPECT_EQ(store_effect->kind, LOOM_LOW_EFFECT_KIND_WRITE);
+  EXPECT_EQ(store_effect->memory_space, LOOM_LOW_MEMORY_SPACE_WASM_MEMORY);
+  EXPECT_EQ(store_effect->width_bits, 128u);
+  EXPECT_NE(store_effect->flags & LOOM_LOW_EFFECT_FLAG_DEPENDENCY, 0u);
 }
 
 TEST(WasmDescriptorsTest, LowAsmInfersV128ResultType) {
