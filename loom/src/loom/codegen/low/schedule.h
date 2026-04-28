@@ -9,10 +9,10 @@
 // This layer consumes ordinary Loom IR plus descriptor tables and produces a
 // deterministic schedule sidecar. The default scheduler is intentionally
 // conservative: it builds the dependency graph and records a source-priority
-// topological order without mutating IR. Optional strategies can score the same
-// dependency-ready sets for register pressure while still keeping target hazard
-// insertion, allocation, and diagnostics on this sidecar instead of creating a
-// second low-level IR container.
+// topological order without mutating IR. Optional strategies can score bounded
+// windows of dependency-ready nodes for register pressure and target resources
+// while still keeping target hazard insertion, allocation, and diagnostics on
+// this sidecar instead of creating a second low-level IR container.
 
 #ifndef LOOM_CODEGEN_LOW_SCHEDULE_H_
 #define LOOM_CODEGEN_LOW_SCHEDULE_H_
