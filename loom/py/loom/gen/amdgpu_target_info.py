@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -24,6 +25,10 @@ def _ensure_runtime_py_on_path() -> None:
 _ensure_runtime_py_on_path()
 
 from loom.gen.generated_file import line_comment_header  # noqa: E402
+from loom.target.arch.amdgpu.isa_xml import (  # noqa: E402
+    AmdgpuIsaFactSource,
+    parse_amdgpu_isa_xml_path,
+)
 from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_AMDHSA_TARGET_TRIPLE,
     AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE,
@@ -48,6 +53,14 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     sorted_processor_infos,
 )
 from loom.target.low_descriptors import descriptor_stable_id  # noqa: E402
+
+
+@dataclass(frozen=True, slots=True)
+class _AmdgpuDescriptorSetRow:
+    info: AmdgpuDescriptorSetInfo
+    s_endpgm_opcode: int
+    s_branch_opcode: int
+    s_cbranch_scc1_opcode: int
 
 
 def _c_string_literal(value: str) -> str:
@@ -118,6 +131,54 @@ def _vector_memory_cache_policy_encoding_expr(kind: str) -> str:
     raise ValueError(f"unknown AMDGPU vector-memory cache-policy encoding '{kind}'")
 
 
+def _parse_isa_xml_argument(value: str) -> tuple[str, Path]:
+    key, separator, path = value.partition(":")
+    if not separator or not key or not path:
+        raise ValueError("AMDGPU target-info --isa-xml entries must be key:path pairs")
+    return key, Path(path)
+
+
+def _parse_isa_xml_arguments(
+    values: Sequence[str],
+) -> dict[str, AmdgpuIsaFactSource]:
+    specs: dict[str, AmdgpuIsaFactSource] = {}
+    for value in values:
+        key, path = _parse_isa_xml_argument(value)
+        if key in specs:
+            raise ValueError(f"AMDGPU target-info ISA XML key '{key}' is duplicate")
+        specs[key] = parse_amdgpu_isa_xml_path(path)
+    return specs
+
+
+def _sopp_opcode(spec: AmdgpuIsaFactSource, instruction_name: str) -> int:
+    summaries = tuple(
+        summary for summary in spec.instruction_encoding_summaries((instruction_name,), include_aliases=False) if summary.encoding_name == "ENC_SOPP" and summary.condition_name == "default"
+    )
+    if len(summaries) != 1:
+        raise ValueError(f"{spec.source_name}: expected one default ENC_SOPP encoding for {instruction_name}, found {len(summaries)}")
+    return summaries[0].opcode
+
+
+def _materialize_descriptor_set_rows(
+    descriptor_sets: Sequence[AmdgpuDescriptorSetInfo],
+    isa_specs: Mapping[str, AmdgpuIsaFactSource],
+) -> tuple[_AmdgpuDescriptorSetRow, ...]:
+    rows: list[_AmdgpuDescriptorSetRow] = []
+    for info in descriptor_sets:
+        spec = isa_specs.get(info.isa_xml_key)
+        if spec is None:
+            raise ValueError(f"AMDGPU descriptor set {info.key} references missing ISA XML key '{info.isa_xml_key}'")
+        rows.append(
+            _AmdgpuDescriptorSetRow(
+                info=info,
+                s_endpgm_opcode=_sopp_opcode(spec, "S_ENDPGM"),
+                s_branch_opcode=_sopp_opcode(spec, "S_BRANCH"),
+                s_cbranch_scc1_opcode=_sopp_opcode(spec, "S_CBRANCH_SCC1"),
+            )
+        )
+    return tuple(rows)
+
+
 def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]) -> None:
     keys = [info.key for info in descriptor_sets]
     if keys != sorted(keys):
@@ -132,14 +193,20 @@ def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
             raise ValueError("AMDGPU descriptor-set key is required")
         if not info.low_preset_key:
             raise ValueError(f"AMDGPU low preset key is required for {info.key}")
-        if info.s_endpgm_opcode < 0 or info.s_endpgm_opcode > 0xFFFF:
-            raise ValueError(f"AMDGPU s_endpgm opcode for {info.key} must fit u16")
-        if info.s_branch_opcode < 0 or info.s_branch_opcode > 0xFFFF:
-            raise ValueError(f"AMDGPU s_branch opcode for {info.key} must fit u16")
-        if info.s_cbranch_scc1_opcode < 0 or info.s_cbranch_scc1_opcode > 0xFFFF:
-            raise ValueError(f"AMDGPU s_cbranch_scc1 opcode for {info.key} must fit u16")
+        if not info.isa_xml_key:
+            raise ValueError(f"AMDGPU ISA XML key is required for {info.key}")
         _buffer_resource_cache_swizzle_expr(info.buffer_resource_cache_swizzle)
         _vector_memory_cache_policy_encoding_expr(info.vector_memory_cache_policy_encoding)
+
+
+def _validate_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> None:
+    for row in rows:
+        if row.s_endpgm_opcode < 0 or row.s_endpgm_opcode > 0xFFFF:
+            raise ValueError(f"AMDGPU s_endpgm opcode for {row.info.key} must fit u16")
+        if row.s_branch_opcode < 0 or row.s_branch_opcode > 0xFFFF:
+            raise ValueError(f"AMDGPU s_branch opcode for {row.info.key} must fit u16")
+        if row.s_cbranch_scc1_opcode < 0 or row.s_cbranch_scc1_opcode > 0xFFFF:
+            raise ValueError(f"AMDGPU s_cbranch_scc1 opcode for {row.info.key} must fit u16")
 
 
 def _validate_processors(
@@ -196,9 +263,9 @@ def _emit_header() -> str:
     return "\n".join(lines) + "\n"
 
 
-def _emit_descriptor_set_rows(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]) -> list[str]:
-    key_width = max(len(_c_string_arg(info.key)) for info in descriptor_sets)
-    preset_width = max(len(_c_string_arg(info.low_preset_key)) for info in descriptor_sets)
+def _emit_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> list[str]:
+    key_width = max(len(_c_string_arg(row.info.key)) for row in rows)
+    preset_width = max(len(_c_string_arg(row.info.low_preset_key)) for row in rows)
     opcode_width = len("0x000")
     packet_encoding_width = len("packet_encoding")
     cache_swizzle_width = len("LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT")
@@ -225,15 +292,16 @@ def _emit_descriptor_set_rows(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
             f"{_padded_arg(_u64_expr(descriptor_stable_id(info.key)), len('UINT64_C(0xffffffffffffffff)'))}"
             f"{_padded_arg(_c_string_arg(info.key), key_width)}"
             f"{_padded_arg(_c_string_arg(info.low_preset_key), preset_width)}"
-            f"{_padded_arg(f'0x{info.s_endpgm_opcode:03x}', opcode_width)}"
-            f"{_padded_arg(f'0x{info.s_branch_opcode:03x}', opcode_width)}"
-            f"{_padded_arg(f'0x{info.s_cbranch_scc1_opcode:03x}', opcode_width)}"
+            f"{_padded_arg(f'0x{row.s_endpgm_opcode:03x}', opcode_width)}"
+            f"{_padded_arg(f'0x{row.s_branch_opcode:03x}', opcode_width)}"
+            f"{_padded_arg(f'0x{row.s_cbranch_scc1_opcode:03x}', opcode_width)}"
             f"{_padded_arg(_bool_literal(info.supports_descriptor_packet_encoding), packet_encoding_width)}"
             f"{_padded_arg(_buffer_resource_cache_swizzle_expr(info.buffer_resource_cache_swizzle), cache_swizzle_width)}"
             f"{_vector_memory_cache_policy_encoding_expr(info.vector_memory_cache_policy_encoding)}"
             "),"
         )
-        for info in descriptor_sets
+        for row in rows
+        for info in (row.info,)
     )
     lines.extend(["};", "", "#undef LOOM_AMDGPU_DESCRIPTOR_SET_INFO", ""])
     return lines
@@ -300,7 +368,7 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
 
 def _emit_source(
     processors: Sequence[AmdgpuProcessorInfo],
-    descriptor_sets: Sequence[AmdgpuDescriptorSetInfo],
+    descriptor_set_rows: Sequence[_AmdgpuDescriptorSetRow],
 ) -> str:
     lines = [
         "// Copyright 2026 The IREE Authors",
@@ -320,7 +388,7 @@ def _emit_source(
         "",
         "// clang-format off",
     ]
-    lines.extend(_emit_descriptor_set_rows(descriptor_sets))
+    lines.extend(_emit_descriptor_set_rows(descriptor_set_rows))
     lines.extend(_emit_processor_rows(processors))
     lines.append("// clang-format on")
     lines.append("")
@@ -409,10 +477,10 @@ def _emit_source(
             "  switch (descriptor_set_stable_id) {",
         ]
     )
-    for index, info in enumerate(descriptor_sets):
+    for index, row in enumerate(descriptor_set_rows):
         lines.extend(
             [
-                f"    case {_u64_expr(descriptor_stable_id(info.key))}:",
+                f"    case {_u64_expr(descriptor_stable_id(row.info.key))}:",
                 f"      return &kAmdgpuDescriptorSetInfos[{index}];",
             ]
         )
@@ -507,13 +575,20 @@ def _emit_source(
     return "\n".join(lines) + "\n"
 
 
-def write_target_info_to_paths(header_path: Path, source_path: Path) -> None:
+def write_target_info_to_paths(
+    header_path: Path,
+    source_path: Path,
+    isa_xml_arguments: Sequence[str],
+) -> None:
     descriptor_sets = sorted_descriptor_set_infos()
     processors = sorted_processor_infos()
+    isa_specs = _parse_isa_xml_arguments(isa_xml_arguments)
+    descriptor_set_rows = _materialize_descriptor_set_rows(descriptor_sets, isa_specs)
     _validate_descriptor_sets(descriptor_sets)
+    _validate_descriptor_set_rows(descriptor_set_rows)
     _validate_processors(processors, descriptor_sets)
     header = _emit_header()
-    source = _emit_source(processors, descriptor_sets)
+    source = _emit_source(processors, descriptor_set_rows)
     header_path.parent.mkdir(parents=True, exist_ok=True)
     source_path.parent.mkdir(parents=True, exist_ok=True)
     header_path.write_text(header, encoding="utf-8")
@@ -534,9 +609,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=Path,
         help="Generated target-info source path.",
     )
+    parser.add_argument(
+        "--isa-xml",
+        action="append",
+        default=[],
+        help="ISA XML fact source as key:path.",
+    )
     args = parser.parse_args(argv)
 
-    write_target_info_to_paths(header_path=args.header, source_path=args.source)
+    write_target_info_to_paths(
+        header_path=args.header,
+        source_path=args.source,
+        isa_xml_arguments=args.isa_xml,
+    )
     return 0
 
 

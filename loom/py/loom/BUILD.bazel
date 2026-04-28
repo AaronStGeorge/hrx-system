@@ -126,6 +126,7 @@ py_binary(
         "gen/amdgpu_target_info.py",
         "target/arch/__init__.py",
         "target/arch/amdgpu/__init__.py",
+        "target/arch/amdgpu/isa_xml.py",
         "target/arch/amdgpu/target_info.py",
     ],
     main = "gen/amdgpu_target_info.py",
