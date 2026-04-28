@@ -61,6 +61,10 @@ typedef struct loom_low_schedule_build_state_t {
   loom_low_schedule_hazard_gap_t* hazard_gaps;
   // Schedule-class model quality summaries in schedule-class order.
   loom_low_schedule_model_summary_t* model_summaries;
+  // Per-resource next issue cycle available to descriptor-resource scoring.
+  uint32_t* resource_ready_issue_cycles;
+  // Earliest issue cycle at which each node's SSA inputs are ready.
+  uint32_t* node_ready_issue_cycles;
   // Most recent producer state for each minimum-distance hazard key.
   struct loom_low_schedule_hazard_state_t* hazard_states;
   // Descriptor register-class state read/write bits, dense by register class.
@@ -120,6 +124,10 @@ typedef struct loom_low_schedule_build_state_t {
   iree_host_size_t hazard_gap_capacity;
   // Allocated hazard-state record capacity.
   iree_host_size_t hazard_state_capacity;
+  // Current block being scheduled.
+  uint32_t current_block_index;
+  // Current issue cycle within the block being scheduled.
+  uint32_t current_issue_cycle;
 } loom_low_schedule_build_state_t;
 
 enum loom_low_schedule_state_access_bits_e {
@@ -142,6 +150,8 @@ typedef struct loom_low_schedule_hazard_state_t {
   uint32_t node_index;
   // Scheduled ordinal of the most recent producer.
   uint32_t scheduled_ordinal;
+  // Abstract issue cycle of the most recent producer.
+  uint32_t issue_cycle;
   // Hazard row ordinal within the producer node's schedule class.
   uint16_t hazard_ordinal;
   // Required minimum distance published by the producer row.
@@ -186,9 +196,36 @@ typedef struct loom_low_schedule_candidate_score_t {
   uint16_t dependency_latency_cycles;
   // Descriptor latency for the candidate itself.
   uint16_t latency_cycles;
+  // Cycles until all same-block SSA producers are ready.
+  uint32_t data_ready_stall_cycles;
+  // Cycles until descriptor resources can accept this candidate.
+  uint32_t resource_stall_cycles;
+  // Cycles until target hazard distance rows are satisfied.
+  uint32_t hazard_stall_cycles;
+  // Maximum stall across data, resources, and target hazards.
+  uint32_t effective_stall_cycles;
+  // Resource causing resource_stall_cycles, or LOOM_LOW_RESOURCE_NONE.
+  uint16_t bottleneck_resource_id;
   // Source-order tie breaker.
   uint32_t source_ordinal;
 } loom_low_schedule_candidate_score_t;
+
+static uint32_t loom_low_schedule_saturating_add_u32(uint32_t lhs,
+                                                     uint32_t rhs) {
+  if (lhs > UINT32_MAX - rhs) {
+    return UINT32_MAX;
+  }
+  return lhs + rhs;
+}
+
+static uint32_t loom_low_schedule_positive_delta_u32(uint32_t lhs,
+                                                     uint32_t rhs) {
+  return lhs > rhs ? lhs - rhs : 0;
+}
+
+static uint32_t loom_low_schedule_max_u32(uint32_t lhs, uint32_t rhs) {
+  return lhs > rhs ? lhs : rhs;
+}
 
 static iree_status_t loom_low_schedule_emit(
     loom_low_schedule_build_state_t* state, const loom_op_t* op,
@@ -937,19 +974,29 @@ static iree_status_t loom_low_schedule_initialize_storage(
         state->arena, node_count, sizeof(*state->scheduled_node_indices),
         (void**)&state->scheduled_node_indices));
     if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE ||
-        state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING) {
+        state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING ||
+        state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL) {
       IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
           state->arena, node_count, sizeof(*state->pressure_steps),
           (void**)&state->pressure_steps));
     }
     if ((state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE ||
          state->options->strategy ==
-             LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING) &&
+             LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING ||
+         state->options->strategy ==
+             LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL) &&
         iree_any_bit_set(state->options->diagnostic_flags,
                          LOOM_LOW_SCHEDULE_DIAGNOSTIC_CANDIDATE_DECISIONS)) {
       IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
           state->arena, node_count, sizeof(*state->candidate_decisions),
           (void**)&state->candidate_decisions));
+    }
+    if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL) {
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+          state->arena, node_count, sizeof(*state->node_ready_issue_cycles),
+          (void**)&state->node_ready_issue_cycles));
+      memset(state->node_ready_issue_cycles, 0,
+             node_count * sizeof(*state->node_ready_issue_cycles));
     }
   }
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -969,6 +1016,7 @@ static iree_status_t loom_low_schedule_initialize_descriptor_sidecars(
   const loom_low_descriptor_set_t* descriptor_set =
       state->target.descriptor_set;
   const iree_host_size_t reg_class_count = descriptor_set->reg_class_count;
+  const iree_host_size_t resource_count = descriptor_set->resource_count;
   if (reg_class_count != 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         state->arena, reg_class_count, sizeof(*state->reg_class_state_flags),
@@ -1048,7 +1096,6 @@ static iree_status_t loom_low_schedule_initialize_descriptor_sidecars(
         state->arena, resource_use_capacity, sizeof(*state->resource_uses),
         (void**)&state->resource_uses));
     state->resource_use_capacity = resource_use_capacity;
-    const iree_host_size_t resource_count = descriptor_set->resource_count;
     if (resource_count > UINT16_MAX) {
       return iree_make_status(
           IREE_STATUS_FAILED_PRECONDITION,
@@ -1078,6 +1125,15 @@ static iree_status_t loom_low_schedule_initialize_descriptor_sidecars(
           .contention_group_id = resource->contention_group_id,
       };
     }
+  }
+  if (resource_count != 0 &&
+      state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(state->arena, resource_count,
+                                  sizeof(*state->resource_ready_issue_cycles),
+                                  (void**)&state->resource_ready_issue_cycles));
+    memset(state->resource_ready_issue_cycles, 0,
+           resource_count * sizeof(*state->resource_ready_issue_cycles));
   }
   if (effect_use_capacity != 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -1561,7 +1617,9 @@ static iree_status_t loom_low_schedule_build_dependencies(
 static bool loom_low_schedule_uses_pressure_strategy(
     const loom_low_schedule_build_state_t* state) {
   return state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE ||
-         state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING;
+         state->options->strategy ==
+             LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING ||
+         state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL;
 }
 
 static bool loom_low_schedule_strategy_is_valid(
@@ -1570,6 +1628,7 @@ static bool loom_low_schedule_strategy_is_valid(
     case LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY:
     case LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE:
     case LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING:
+    case LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL:
       return true;
     default:
       return false;
@@ -1687,6 +1746,122 @@ static iree_status_t loom_low_schedule_initialize_block_pressure(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_schedule_score_candidate_resources(
+    const loom_low_schedule_build_state_t* state,
+    const loom_low_schedule_node_t* node,
+    loom_low_schedule_candidate_score_t* score) {
+  score->resource_stall_cycles = 0;
+  score->bottleneck_resource_id = LOOM_LOW_RESOURCE_NONE;
+  if (state->options->strategy != LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL ||
+      state->resource_ready_issue_cycles == NULL ||
+      node->schedule_class_id == LOOM_LOW_SCHEDULE_CLASS_NONE) {
+    return iree_ok_status();
+  }
+  if (node->schedule_class_id >=
+      state->target.descriptor_set->schedule_class_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "low schedule node references invalid schedule class %" PRIu16,
+        node->schedule_class_id);
+  }
+
+  const loom_low_schedule_class_t* schedule_class =
+      &state->target.descriptor_set->schedule_classes[node->schedule_class_id];
+  for (uint16_t i = 0; i < schedule_class->issue_use_count; ++i) {
+    const loom_low_issue_use_t* issue_use =
+        &state->target.descriptor_set
+             ->issue_uses[schedule_class->issue_use_start + i];
+    if (issue_use->resource_id >=
+        state->target.descriptor_set->resource_count) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low schedule issue-use references invalid resource %" PRIu16,
+          issue_use->resource_id);
+    }
+    const loom_low_resource_t* resource =
+        &state->target.descriptor_set->resources[issue_use->resource_id];
+    if (resource->capacity_per_cycle == 0 ||
+        issue_use->units > resource->capacity_per_cycle) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low schedule issue-use exceeds descriptor resource capacity");
+    }
+    const uint32_t use_start = loom_low_schedule_saturating_add_u32(
+        state->current_issue_cycle, issue_use->stage);
+    const uint32_t stall_cycles = loom_low_schedule_positive_delta_u32(
+        state->resource_ready_issue_cycles[issue_use->resource_id], use_start);
+    if (stall_cycles > score->resource_stall_cycles) {
+      score->resource_stall_cycles = stall_cycles;
+      score->bottleneck_resource_id = issue_use->resource_id;
+    }
+  }
+  return iree_ok_status();
+}
+
+static uint32_t loom_low_schedule_min_distance_hazard_stall(
+    const loom_low_schedule_build_state_t* state,
+    const loom_low_hazard_t* hazard) {
+  uint32_t stall_cycles = 0;
+  for (iree_host_size_t i = 0; i < state->hazard_state_count; ++i) {
+    const loom_low_schedule_hazard_state_t* hazard_state =
+        &state->hazard_states[i];
+    if (hazard_state->kind != hazard->kind ||
+        hazard_state->reference_kind != hazard->reference_kind ||
+        hazard_state->reference_id != hazard->reference_id ||
+        hazard_state->block_index != state->current_block_index ||
+        hazard_state->producer_stage != hazard->consumer_stage) {
+      continue;
+    }
+    const uint16_t required_distance = hazard_state->distance > hazard->distance
+                                           ? hazard_state->distance
+                                           : hazard->distance;
+    const uint32_t actual_distance =
+        state->current_issue_cycle >= hazard_state->issue_cycle
+            ? state->current_issue_cycle - hazard_state->issue_cycle
+            : 0;
+    if (actual_distance < required_distance) {
+      const uint32_t required_stall = required_distance - actual_distance;
+      if (required_stall > stall_cycles) {
+        stall_cycles = required_stall;
+      }
+    }
+  }
+  return stall_cycles;
+}
+
+static iree_status_t loom_low_schedule_score_candidate_hazards(
+    const loom_low_schedule_build_state_t* state,
+    const loom_low_schedule_node_t* node,
+    loom_low_schedule_candidate_score_t* score) {
+  score->hazard_stall_cycles = 0;
+  if (state->options->strategy != LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL ||
+      node->schedule_class_id == LOOM_LOW_SCHEDULE_CLASS_NONE) {
+    return iree_ok_status();
+  }
+  if (node->schedule_class_id >=
+      state->target.descriptor_set->schedule_class_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "low schedule node references invalid schedule class %" PRIu16,
+        node->schedule_class_id);
+  }
+
+  const loom_low_schedule_class_t* schedule_class =
+      &state->target.descriptor_set->schedule_classes[node->schedule_class_id];
+  for (uint16_t i = 0; i < schedule_class->hazard_count; ++i) {
+    const loom_low_hazard_t* hazard =
+        &state->target.descriptor_set
+             ->hazards[schedule_class->hazard_start + i];
+    if (hazard->kind != LOOM_LOW_HAZARD_KIND_MIN_DISTANCE) {
+      continue;
+    }
+    score->hazard_stall_cycles = loom_low_schedule_max_u32(
+        score->hazard_stall_cycles,
+        loom_low_schedule_min_distance_hazard_stall(state, hazard));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_schedule_score_candidate(
     const loom_low_schedule_build_state_t* state,
     const loom_liveness_analysis_t* liveness,
@@ -1762,14 +1937,30 @@ static iree_status_t loom_low_schedule_score_candidate(
       dependency_latency_cycles = producer_latency;
     }
   }
+  uint32_t data_ready_stall_cycles = 0;
+  if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL &&
+      state->node_ready_issue_cycles != NULL) {
+    data_ready_stall_cycles = loom_low_schedule_positive_delta_u32(
+        state->node_ready_issue_cycles[node_index], state->current_issue_cycle);
+  }
   *out_score = (loom_low_schedule_candidate_score_t){
       .projected_live_units = projected_live_units,
       .killed_live_units = killed_live_units,
       .produced_live_units = produced_live_units,
       .dependency_latency_cycles = dependency_latency_cycles,
       .latency_cycles = node->latency_cycles,
+      .data_ready_stall_cycles = data_ready_stall_cycles,
+      .bottleneck_resource_id = LOOM_LOW_RESOURCE_NONE,
       .source_ordinal = node->source_ordinal,
   };
+  IREE_RETURN_IF_ERROR(
+      loom_low_schedule_score_candidate_resources(state, node, out_score));
+  IREE_RETURN_IF_ERROR(
+      loom_low_schedule_score_candidate_hazards(state, node, out_score));
+  out_score->effective_stall_cycles = loom_low_schedule_max_u32(
+      out_score->data_ready_stall_cycles,
+      loom_low_schedule_max_u32(out_score->resource_stall_cycles,
+                                out_score->hazard_stall_cycles));
   return iree_ok_status();
 }
 
@@ -1777,6 +1968,23 @@ static bool loom_low_schedule_candidate_score_less(
     const loom_low_schedule_build_state_t* state,
     loom_low_schedule_candidate_score_t lhs,
     loom_low_schedule_candidate_score_t rhs) {
+  if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL) {
+    if (lhs.effective_stall_cycles != rhs.effective_stall_cycles) {
+      return lhs.effective_stall_cycles < rhs.effective_stall_cycles;
+    }
+    if (lhs.hazard_stall_cycles != rhs.hazard_stall_cycles) {
+      return lhs.hazard_stall_cycles < rhs.hazard_stall_cycles;
+    }
+    if (lhs.resource_stall_cycles != rhs.resource_stall_cycles) {
+      return lhs.resource_stall_cycles < rhs.resource_stall_cycles;
+    }
+    if (lhs.data_ready_stall_cycles != rhs.data_ready_stall_cycles) {
+      return lhs.data_ready_stall_cycles < rhs.data_ready_stall_cycles;
+    }
+    if (lhs.latency_cycles != rhs.latency_cycles) {
+      return lhs.latency_cycles > rhs.latency_cycles;
+    }
+  }
   if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING) {
     if (lhs.dependency_latency_cycles != rhs.dependency_latency_cycles) {
       return lhs.dependency_latency_cycles < rhs.dependency_latency_cycles;
@@ -1828,6 +2036,21 @@ static void loom_low_schedule_record_candidate_decision(
           .rejected_projected_live_units = rejected_score.projected_live_units,
           .rejected_killed_live_units = rejected_score.killed_live_units,
           .rejected_produced_live_units = rejected_score.produced_live_units,
+          .chosen_data_ready_stall_cycles =
+              chosen_score.data_ready_stall_cycles,
+          .chosen_resource_stall_cycles = chosen_score.resource_stall_cycles,
+          .chosen_hazard_stall_cycles = chosen_score.hazard_stall_cycles,
+          .chosen_effective_stall_cycles = chosen_score.effective_stall_cycles,
+          .chosen_bottleneck_resource_id = chosen_score.bottleneck_resource_id,
+          .rejected_data_ready_stall_cycles =
+              rejected_score.data_ready_stall_cycles,
+          .rejected_resource_stall_cycles =
+              rejected_score.resource_stall_cycles,
+          .rejected_hazard_stall_cycles = rejected_score.hazard_stall_cycles,
+          .rejected_effective_stall_cycles =
+              rejected_score.effective_stall_cycles,
+          .rejected_bottleneck_resource_id =
+              rejected_score.bottleneck_resource_id,
       };
 }
 
@@ -1937,6 +2160,16 @@ static iree_status_t loom_low_schedule_append_resource_use(
   if (resource_use.units > summary->peak_units_per_cycle) {
     summary->peak_units_per_cycle = resource_use.units;
   }
+  if (state->resource_ready_issue_cycles != NULL) {
+    const uint32_t use_start = loom_low_schedule_saturating_add_u32(
+        state->current_issue_cycle, resource_use.stage);
+    const uint32_t use_end =
+        loom_low_schedule_saturating_add_u32(use_start, resource_use.cycles);
+    if (use_end >
+        state->resource_ready_issue_cycles[resource_use.resource_id]) {
+      state->resource_ready_issue_cycles[resource_use.resource_id] = use_end;
+    }
+  }
   state->resource_uses[state->resource_use_count++] = resource_use;
   return iree_ok_status();
 }
@@ -2002,6 +2235,7 @@ static iree_status_t loom_low_schedule_update_hazard_state(
     }
     hazard_state->node_index = hazard_use->node_index;
     hazard_state->scheduled_ordinal = hazard_use->scheduled_ordinal;
+    hazard_state->issue_cycle = state->current_issue_cycle;
     hazard_state->hazard_ordinal = hazard_use->hazard_ordinal;
     hazard_state->distance = hazard_use->distance;
     hazard_state->hazard_flags = hazard_use->hazard_flags;
@@ -2027,6 +2261,7 @@ static iree_status_t loom_low_schedule_update_hazard_state(
           .block_index = hazard_use->block_index,
           .node_index = hazard_use->node_index,
           .scheduled_ordinal = hazard_use->scheduled_ordinal,
+          .issue_cycle = state->current_issue_cycle,
           .hazard_ordinal = hazard_use->hazard_ordinal,
           .distance = hazard_use->distance,
           .hazard_flags = hazard_use->hazard_flags,
@@ -2294,12 +2529,20 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
     const loom_low_schedule_block_t* block_record = &state->blocks[block_index];
     const uint32_t block_node_end =
         block_record->node_start + block_record->node_count;
+    state->current_block_index = block_index;
+    state->current_issue_cycle = 0;
+    if (state->resource_ready_issue_cycles != NULL) {
+      memset(state->resource_ready_issue_cycles, 0,
+             state->target.descriptor_set->resource_count *
+                 sizeof(*state->resource_ready_issue_cycles));
+    }
     if (loom_low_schedule_uses_pressure_strategy(state)) {
       IREE_RETURN_IF_ERROR(loom_low_schedule_initialize_block_pressure(
           state, liveness, block_record, &pressure_state));
     }
     uint32_t scheduled_in_block = 0;
     while (scheduled_in_block < block_record->node_count) {
+      state->current_issue_cycle = scheduled_in_block;
       uint32_t chosen_node = LOOM_LOW_SCHEDULE_NODE_NONE;
       loom_low_schedule_candidate_score_t chosen_score = {0};
       uint32_t rejected_node = LOOM_LOW_SCHEDULE_NODE_NONE;
@@ -2342,6 +2585,7 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
 
       scheduled[chosen_node] = true;
       state->nodes[chosen_node].scheduled_ordinal = scheduled_in_block++;
+      state->current_issue_cycle = state->nodes[chosen_node].scheduled_ordinal;
       state->scheduled_node_indices[state->scheduled_node_count++] =
           chosen_node;
       if (loom_low_schedule_uses_pressure_strategy(state)) {
@@ -2364,6 +2608,17 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
         }
         if (dependency->consumer_node < node_count) {
           --indegrees[dependency->consumer_node];
+          if (state->node_ready_issue_cycles != NULL &&
+              dependency->kind == LOOM_LOW_SCHEDULE_DEPENDENCY_SSA) {
+            const uint32_t ready_cycle = loom_low_schedule_saturating_add_u32(
+                state->current_issue_cycle,
+                state->nodes[chosen_node].latency_cycles);
+            if (ready_cycle >
+                state->node_ready_issue_cycles[dependency->consumer_node]) {
+              state->node_ready_issue_cycles[dependency->consumer_node] =
+                  ready_cycle;
+            }
+          }
         }
       }
     }

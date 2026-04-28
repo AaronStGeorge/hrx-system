@@ -78,6 +78,8 @@ typedef enum loom_low_schedule_strategy_e {
   LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE = 1,
   // Chooses ready nodes using latency hiding before register-pressure ties.
   LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING = 2,
+  // Chooses ready nodes using descriptor resource/hazard stall estimates.
+  LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL = 3,
 } loom_low_schedule_strategy_t;
 
 #define LOOM_LOW_SCHEDULE_MEMORY_ACCESS_RECORD_NONE UINT32_MAX
@@ -189,6 +191,28 @@ typedef struct loom_low_schedule_candidate_decision_t {
   uint64_t rejected_killed_live_units;
   // Best rejected live register units produced by scheduling the node.
   uint64_t rejected_produced_live_units;
+  // Chosen cycles until all SSA inputs are ready.
+  uint32_t chosen_data_ready_stall_cycles;
+  // Chosen cycles blocked by descriptor resource occupancy.
+  uint32_t chosen_resource_stall_cycles;
+  // Chosen cycles blocked by target hazard distance rows.
+  uint32_t chosen_hazard_stall_cycles;
+  // Chosen maximum stall across data, resources, and hazards.
+  uint32_t chosen_effective_stall_cycles;
+  // Target resource table identifier causing the chosen resource stall, or
+  // LOOM_LOW_RESOURCE_NONE.
+  uint16_t chosen_bottleneck_resource_id;
+  // Best rejected cycles until all SSA inputs are ready.
+  uint32_t rejected_data_ready_stall_cycles;
+  // Best rejected cycles blocked by descriptor resource occupancy.
+  uint32_t rejected_resource_stall_cycles;
+  // Best rejected cycles blocked by target hazard distance rows.
+  uint32_t rejected_hazard_stall_cycles;
+  // Best rejected maximum stall across data, resources, and hazards.
+  uint32_t rejected_effective_stall_cycles;
+  // Target resource table identifier causing the rejected resource stall, or
+  // LOOM_LOW_RESOURCE_NONE.
+  uint16_t rejected_bottleneck_resource_id;
 } loom_low_schedule_candidate_decision_t;
 
 // Descriptor resource use recorded in scheduled order. This is an issue-model

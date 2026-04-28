@@ -285,14 +285,31 @@ iree_status_t loom_low_schedule_format_json(
           ",\"chosen_latency_cycles\":%" PRIu16
           ",\"chosen_projected_live_units\":%" PRIu64
           ",\"chosen_killed_live_units\":%" PRIu64
-          ",\"chosen_produced_live_units\":%" PRIu64 ",\"rejected_node\":",
+          ",\"chosen_produced_live_units\":%" PRIu64
+          ",\"chosen_data_ready_stall_cycles\":%" PRIu32
+          ",\"chosen_resource_stall_cycles\":%" PRIu32
+          ",\"chosen_hazard_stall_cycles\":%" PRIu32
+          ",\"chosen_effective_stall_cycles\":%" PRIu32
+          ",\"chosen_bottleneck_resource_id\":",
           decision->block_index, decision->scheduled_ordinal,
           decision->ready_candidate_count, decision->chosen_node,
           decision->chosen_dependency_latency_cycles,
           decision->chosen_latency_cycles,
           decision->chosen_projected_live_units,
           decision->chosen_killed_live_units,
-          decision->chosen_produced_live_units));
+          decision->chosen_produced_live_units,
+          decision->chosen_data_ready_stall_cycles,
+          decision->chosen_resource_stall_cycles,
+          decision->chosen_hazard_stall_cycles,
+          decision->chosen_effective_stall_cycles));
+      if (decision->chosen_bottleneck_resource_id == LOOM_LOW_RESOURCE_NONE) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "null"));
+      } else {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+            &stream, "%" PRIu16, decision->chosen_bottleneck_resource_id));
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(&stream, ",\"rejected_node\":"));
       if (decision->rejected_node == LOOM_LOW_SCHEDULE_NODE_NONE) {
         IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
             &stream,
@@ -300,7 +317,12 @@ iree_status_t loom_low_schedule_format_json(
             ",\"rejected_latency_cycles\":null"
             ",\"rejected_projected_live_units\":null"
             ",\"rejected_killed_live_units\":null"
-            ",\"rejected_produced_live_units\":null}"));
+            ",\"rejected_produced_live_units\":null"
+            ",\"rejected_data_ready_stall_cycles\":null"
+            ",\"rejected_resource_stall_cycles\":null"
+            ",\"rejected_hazard_stall_cycles\":null"
+            ",\"rejected_effective_stall_cycles\":null"
+            ",\"rejected_bottleneck_resource_id\":null}"));
       } else {
         IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
             &stream,
@@ -308,13 +330,31 @@ iree_status_t loom_low_schedule_format_json(
             ",\"rejected_latency_cycles\":%" PRIu16
             ",\"rejected_projected_live_units\":%" PRIu64
             ",\"rejected_killed_live_units\":%" PRIu64
-            ",\"rejected_produced_live_units\":%" PRIu64 "}",
+            ",\"rejected_produced_live_units\":%" PRIu64
+            ",\"rejected_data_ready_stall_cycles\":%" PRIu32
+            ",\"rejected_resource_stall_cycles\":%" PRIu32
+            ",\"rejected_hazard_stall_cycles\":%" PRIu32
+            ",\"rejected_effective_stall_cycles\":%" PRIu32
+            ",\"rejected_bottleneck_resource_id\":",
             decision->rejected_node,
             decision->rejected_dependency_latency_cycles,
             decision->rejected_latency_cycles,
             decision->rejected_projected_live_units,
             decision->rejected_killed_live_units,
-            decision->rejected_produced_live_units));
+            decision->rejected_produced_live_units,
+            decision->rejected_data_ready_stall_cycles,
+            decision->rejected_resource_stall_cycles,
+            decision->rejected_hazard_stall_cycles,
+            decision->rejected_effective_stall_cycles));
+        if (decision->rejected_bottleneck_resource_id ==
+            LOOM_LOW_RESOURCE_NONE) {
+          IREE_RETURN_IF_ERROR(
+              loom_output_stream_write_cstring(&stream, "null}"));
+        } else {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+              &stream, "%" PRIu16 "}",
+              decision->rejected_bottleneck_resource_id));
+        }
       }
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
