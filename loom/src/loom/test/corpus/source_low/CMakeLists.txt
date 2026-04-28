@@ -287,6 +287,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "packed_dot_float8"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/packed_dot_float8.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "packed_dot_i4_mixed"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/packed_dot_i4_mixed.loom-test"

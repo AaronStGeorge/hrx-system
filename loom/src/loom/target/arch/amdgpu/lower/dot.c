@@ -141,8 +141,8 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_dot(
         context, provider, op, IREE_SV("op"),
         loom_op_name(loom_target_low_legality_module(context), op),
         IREE_SV("AMDGPU source-to-low supports vector.dotf, vector.dot2f, "
-                "vector.dot4i, and vector.dot8i4 forms; other vector dot "
-                "families require "
+                "vector.dot4i, vector.dot8i4, and vector.dot4f8 forms; "
+                "other vector dot families require "
                 "additional target contracts"));
   }
 

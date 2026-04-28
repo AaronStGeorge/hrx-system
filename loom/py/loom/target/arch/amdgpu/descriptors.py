@@ -4854,6 +4854,28 @@ def _v_dot4_u32_u8_overlay(
     )
 
 
+def _v_dot4_f32_packed8_overlay(
+    *, lhs_type: str, rhs_type: str
+) -> AmdgpuDescriptorOverlay:
+    lhs_type_upper = lhs_type.upper()
+    rhs_type_upper = rhs_type.upper()
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"amdgpu.v_dot4_f32_{lhs_type}_{rhs_type}",
+        instruction_name=f"V_DOT4_F32_{lhs_type_upper}_{rhs_type_upper}",
+        mnemonic=f"v_dot4_f32_{lhs_type}_{rhs_type}",
+        encoding_name="ENC_VOP3P",
+        semantic_tag=f"dot.{lhs_type}{rhs_type}.f32x1",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC1", _vgpr_operand("rhs")),
+            AmdgpuOperandOverlay("SRC2", _vgpr_const_operand("acc")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_dot8_i32_i4_overlay(
     *, op_sel_hi_field: str = "OP_SEL_HI", signedness_modifiers: bool
 ) -> AmdgpuDescriptorOverlay:
@@ -5881,6 +5903,10 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             op_sel_hi_field="OPSEL_HI", lhs_signed=False, rhs_signed=True
         ),
         _v_dot8_u32_u4_overlay(op_sel_hi_field="OPSEL_HI"),
+        _v_dot4_f32_packed8_overlay(lhs_type="fp8", rhs_type="bf8"),
+        _v_dot4_f32_packed8_overlay(lhs_type="bf8", rhs_type="fp8"),
+        _v_dot4_f32_packed8_overlay(lhs_type="fp8", rhs_type="fp8"),
+        _v_dot4_f32_packed8_overlay(lhs_type="bf8", rhs_type="bf8"),
         _v_wmma_f32_16x16x16_f16_overlay(),
         _v_wmma_f32_16x16x16_bf16_overlay(),
         _v_wmma_f16_16x16x16_f16_overlay(),
@@ -6073,6 +6099,10 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             op_sel_hi_field="OPSEL_HI", lhs_signed=False, rhs_signed=True
         ),
         _v_dot8_u32_u4_overlay(op_sel_hi_field="OPSEL_HI"),
+        _v_dot4_f32_packed8_overlay(lhs_type="fp8", rhs_type="bf8"),
+        _v_dot4_f32_packed8_overlay(lhs_type="bf8", rhs_type="fp8"),
+        _v_dot4_f32_packed8_overlay(lhs_type="fp8", rhs_type="fp8"),
+        _v_dot4_f32_packed8_overlay(lhs_type="bf8", rhs_type="bf8"),
         _v_wmma_f32_16x16x16_f16_overlay(),
         _v_wmma_f32_16x16x16_bf16_overlay(),
         _v_wmma_f16_16x16x16_f16_overlay(),

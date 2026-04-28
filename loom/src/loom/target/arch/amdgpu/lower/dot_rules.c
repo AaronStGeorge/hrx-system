@@ -149,6 +149,11 @@ enum loom_amdgpu_dot_diagnostic_e {
   LOOM_AMDGPU_DOT_DIAGNOSTIC_ACC_F32 = 21,
   LOOM_AMDGPU_DOT_DIAGNOSTIC_RESULT_F32 = 22,
   LOOM_AMDGPU_DOT_DIAGNOSTIC_DOT2_DESCRIPTOR = 23,
+  LOOM_AMDGPU_DOT_DIAGNOSTIC_LHS_F8PACK = 24,
+  LOOM_AMDGPU_DOT_DIAGNOSTIC_RHS_F8PACK = 25,
+  LOOM_AMDGPU_DOT_DIAGNOSTIC_DOT4F8_ACC_F32 = 26,
+  LOOM_AMDGPU_DOT_DIAGNOSTIC_DOT4F8_RESULT_F32 = 27,
+  LOOM_AMDGPU_DOT_DIAGNOSTIC_DOT4F8_DESCRIPTOR = 28,
 };
 
 static const loom_low_lower_diagnostic_t kAmdgpuDotDiagnostics[] = {
@@ -335,6 +340,45 @@ static const loom_low_lower_diagnostic_t kAmdgpuDotDiagnostics[] = {
             .reason = IREE_SVL("the selected AMDGPU descriptor set does not "
                                "contain the required f16/bf16 dot2 packet"),
         },
+    [LOOM_AMDGPU_DOT_DIAGNOSTIC_LHS_F8PACK] =
+        {
+            .subject_kind = IREE_SVL("type"),
+            .subject_name = IREE_SVL("lhs"),
+            .reason = IREE_SVL("AMDGPU vector.dot4f8 lowering requires a "
+                               "static rank-1 i32 lhs vector with 1 to 4 "
+                               "packed FP8/BF8 lanes"),
+        },
+    [LOOM_AMDGPU_DOT_DIAGNOSTIC_RHS_F8PACK] =
+        {
+            .subject_kind = IREE_SVL("type"),
+            .subject_name = IREE_SVL("rhs"),
+            .reason = IREE_SVL("AMDGPU vector.dot4f8 lowering requires a "
+                               "static rank-1 i32 rhs vector matching the lhs "
+                               "shape"),
+        },
+    [LOOM_AMDGPU_DOT_DIAGNOSTIC_DOT4F8_ACC_F32] =
+        {
+            .subject_kind = IREE_SVL("type"),
+            .subject_name = IREE_SVL("accumulator"),
+            .reason = IREE_SVL("AMDGPU vector.dot4f8 lowering requires a "
+                               "static rank-1 f32 accumulator vector matching "
+                               "the packed source register count"),
+        },
+    [LOOM_AMDGPU_DOT_DIAGNOSTIC_DOT4F8_RESULT_F32] =
+        {
+            .subject_kind = IREE_SVL("type"),
+            .subject_name = IREE_SVL("result"),
+            .reason = IREE_SVL("AMDGPU vector.dot4f8 lowering requires a "
+                               "static rank-1 f32 result vector matching the "
+                               "packed source register count"),
+        },
+    [LOOM_AMDGPU_DOT_DIAGNOSTIC_DOT4F8_DESCRIPTOR] =
+        {
+            .subject_kind = IREE_SVL("descriptor"),
+            .subject_name = IREE_SVL("amdgpu.v_dot4_f32"),
+            .reason = IREE_SVL("the selected AMDGPU descriptor set does not "
+                               "contain the required FP8/BF8 dot4 packet"),
+        },
 };
 
 #define LOOM_AMDGPU_DOT_GUARD_VALUE(value_ref, type_pattern, diagnostic) \
@@ -396,7 +440,11 @@ enum loom_amdgpu_dot_rule_e {
   LOOM_AMDGPU_DOT_RULE_DOT8I4_S4U4 = 8,
   LOOM_AMDGPU_DOT_RULE_DOT8I4_U4S4 = 9,
   LOOM_AMDGPU_DOT_RULE_DOT8I4_U4U4 = 10,
-  LOOM_AMDGPU_DOT_RULE_COUNT_ = 11,
+  LOOM_AMDGPU_DOT_RULE_DOT4F8_FP8BF8 = 11,
+  LOOM_AMDGPU_DOT_RULE_DOT4F8_BF8FP8 = 12,
+  LOOM_AMDGPU_DOT_RULE_DOT4F8_FP8FP8 = 13,
+  LOOM_AMDGPU_DOT_RULE_DOT4F8_BF8BF8 = 14,
+  LOOM_AMDGPU_DOT_RULE_COUNT_ = 15,
 };
 
 enum loom_amdgpu_dot_guard_range_e {
@@ -425,8 +473,17 @@ enum loom_amdgpu_dot_guard_range_e {
       LOOM_AMDGPU_DOT_GUARDS_DOT8I4_S4U4 + LOOM_AMDGPU_DOT_GUARD_COUNT_DOT8I4,
   LOOM_AMDGPU_DOT_GUARDS_DOT8I4_U4U4 =
       LOOM_AMDGPU_DOT_GUARDS_DOT8I4_U4S4 + LOOM_AMDGPU_DOT_GUARD_COUNT_DOT8I4,
-  LOOM_AMDGPU_DOT_GUARD_COUNT_ =
+  LOOM_AMDGPU_DOT_GUARDS_DOT4F8_FP8BF8 =
       LOOM_AMDGPU_DOT_GUARDS_DOT8I4_U4U4 + LOOM_AMDGPU_DOT_GUARD_COUNT_DOT8I4,
+  LOOM_AMDGPU_DOT_GUARD_COUNT_DOT4F8 = 13,
+  LOOM_AMDGPU_DOT_GUARDS_DOT4F8_BF8FP8 =
+      LOOM_AMDGPU_DOT_GUARDS_DOT4F8_FP8BF8 + LOOM_AMDGPU_DOT_GUARD_COUNT_DOT4F8,
+  LOOM_AMDGPU_DOT_GUARDS_DOT4F8_FP8FP8 =
+      LOOM_AMDGPU_DOT_GUARDS_DOT4F8_BF8FP8 + LOOM_AMDGPU_DOT_GUARD_COUNT_DOT4F8,
+  LOOM_AMDGPU_DOT_GUARDS_DOT4F8_BF8BF8 =
+      LOOM_AMDGPU_DOT_GUARDS_DOT4F8_FP8FP8 + LOOM_AMDGPU_DOT_GUARD_COUNT_DOT4F8,
+  LOOM_AMDGPU_DOT_GUARD_COUNT_ =
+      LOOM_AMDGPU_DOT_GUARDS_DOT4F8_BF8BF8 + LOOM_AMDGPU_DOT_GUARD_COUNT_DOT4F8,
 };
 
 #define LOOM_AMDGPU_DOT4I_GUARDS(kind_value, descriptor)                      \
@@ -536,6 +593,40 @@ enum loom_amdgpu_dot_guard_range_e {
       LOOM_AMDGPU_DOT_GUARD_DESCRIPTOR(                                    \
           descriptor, LOOM_AMDGPU_DOT_DIAGNOSTIC_PACKED_DESCRIPTOR)
 
+#define LOOM_AMDGPU_DOT4F8_GUARDS(kind_value, descriptor)                     \
+  LOOM_AMDGPU_DOT_GUARD_KIND(kind_value),                                     \
+      LOOM_AMDGPU_DOT_GUARD_VALUE(LOOM_AMDGPU_DOT_LHS,                        \
+                                  LOOM_AMDGPU_DOT_TYPE_VI32_PACKED,           \
+                                  LOOM_AMDGPU_DOT_DIAGNOSTIC_LHS_F8PACK),     \
+      LOOM_AMDGPU_DOT_GUARD_VALUE(LOOM_AMDGPU_DOT_RHS,                        \
+                                  LOOM_AMDGPU_DOT_TYPE_VI32_PACKED,           \
+                                  LOOM_AMDGPU_DOT_DIAGNOSTIC_RHS_F8PACK),     \
+      LOOM_AMDGPU_DOT_GUARD_LOW_UNIT_COUNT_EQ(                                \
+          LOOM_AMDGPU_DOT_LHS, LOOM_AMDGPU_DOT_RHS,                           \
+          LOOM_AMDGPU_DOT_DIAGNOSTIC_RHS_F8PACK),                             \
+      LOOM_AMDGPU_DOT_GUARD_VALUE(LOOM_AMDGPU_DOT_INIT,                       \
+                                  LOOM_AMDGPU_DOT_TYPE_VF32,                  \
+                                  LOOM_AMDGPU_DOT_DIAGNOSTIC_DOT4F8_ACC_F32), \
+      LOOM_AMDGPU_DOT_GUARD_LOW_UNIT_COUNT_EQ(                                \
+          LOOM_AMDGPU_DOT_LHS, LOOM_AMDGPU_DOT_INIT,                          \
+          LOOM_AMDGPU_DOT_DIAGNOSTIC_DOT4F8_ACC_F32),                         \
+      LOOM_AMDGPU_DOT_GUARD_VALUE(                                            \
+          LOOM_AMDGPU_DOT_RESULT, LOOM_AMDGPU_DOT_TYPE_VF32,                  \
+          LOOM_AMDGPU_DOT_DIAGNOSTIC_DOT4F8_RESULT_F32),                      \
+      LOOM_AMDGPU_DOT_GUARD_LOW_UNIT_COUNT_EQ(                                \
+          LOOM_AMDGPU_DOT_LHS, LOOM_AMDGPU_DOT_RESULT,                        \
+          LOOM_AMDGPU_DOT_DIAGNOSTIC_DOT4F8_RESULT_F32),                      \
+      LOOM_AMDGPU_DOT_GUARD_LOW_REG_CLASS(                                    \
+          LOOM_AMDGPU_DOT_LHS, LOOM_AMDGPU_DOT_DIAGNOSTIC_LHS_VGPR),          \
+      LOOM_AMDGPU_DOT_GUARD_LOW_REG_CLASS(                                    \
+          LOOM_AMDGPU_DOT_RHS, LOOM_AMDGPU_DOT_DIAGNOSTIC_RHS_VGPR),          \
+      LOOM_AMDGPU_DOT_GUARD_LOW_REG_CLASS(                                    \
+          LOOM_AMDGPU_DOT_INIT, LOOM_AMDGPU_DOT_DIAGNOSTIC_ACC_VGPR),         \
+      LOOM_AMDGPU_DOT_GUARD_LOW_REG_CLASS(                                    \
+          LOOM_AMDGPU_DOT_RESULT, LOOM_AMDGPU_DOT_DIAGNOSTIC_RESULT_VGPR),    \
+      LOOM_AMDGPU_DOT_GUARD_DESCRIPTOR(                                       \
+          descriptor, LOOM_AMDGPU_DOT_DIAGNOSTIC_DOT4F8_DESCRIPTOR)
+
 static const loom_low_lower_guard_t kAmdgpuDotGuards[] = {
     [LOOM_AMDGPU_DOT_GUARDS_DOTF] = LOOM_AMDGPU_DOT_GUARD_VALUE(
         LOOM_AMDGPU_DOT_LHS, LOOM_AMDGPU_DOT_TYPE_VF32,
@@ -584,6 +675,18 @@ static const loom_low_lower_guard_t kAmdgpuDotGuards[] = {
         LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_I32_IU4_U4S4),
     [LOOM_AMDGPU_DOT_GUARDS_DOT8I4_U4U4] = LOOM_AMDGPU_DOT8I4_GUARDS(
         LOOM_VECTOR_DOT8I4_KIND_U4U4, LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_U32_U4),
+    [LOOM_AMDGPU_DOT_GUARDS_DOT4F8_FP8BF8] =
+        LOOM_AMDGPU_DOT4F8_GUARDS(LOOM_VECTOR_DOT4F8_KIND_FP8BF8,
+                                  LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_F32_FP8_BF8),
+    [LOOM_AMDGPU_DOT_GUARDS_DOT4F8_BF8FP8] =
+        LOOM_AMDGPU_DOT4F8_GUARDS(LOOM_VECTOR_DOT4F8_KIND_BF8FP8,
+                                  LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_F32_BF8_FP8),
+    [LOOM_AMDGPU_DOT_GUARDS_DOT4F8_FP8FP8] =
+        LOOM_AMDGPU_DOT4F8_GUARDS(LOOM_VECTOR_DOT4F8_KIND_FP8FP8,
+                                  LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_F32_FP8_FP8),
+    [LOOM_AMDGPU_DOT_GUARDS_DOT4F8_BF8BF8] =
+        LOOM_AMDGPU_DOT4F8_GUARDS(LOOM_VECTOR_DOT4F8_KIND_BF8BF8,
+                                  LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_F32_BF8_BF8),
 };
 
 static_assert(IREE_ARRAYSIZE(kAmdgpuDotGuards) == LOOM_AMDGPU_DOT_GUARD_COUNT_,
@@ -596,6 +699,7 @@ static_assert(IREE_ARRAYSIZE(kAmdgpuDotGuards) == LOOM_AMDGPU_DOT_GUARD_COUNT_,
 #undef LOOM_AMDGPU_DOT_GUARD_KIND
 #undef LOOM_AMDGPU_DOT_GUARD_VALUE
 #undef LOOM_AMDGPU_DOT8I4_GUARDS
+#undef LOOM_AMDGPU_DOT4F8_GUARDS
 #undef LOOM_AMDGPU_DOT2F_GUARDS
 #undef LOOM_AMDGPU_DOT4I_GUARDS
 
@@ -640,6 +744,14 @@ static const loom_low_lower_emit_t kAmdgpuDotEmits[] = {
         LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_I32_IU4_U4S4),
     [LOOM_AMDGPU_DOT_RULE_DOT8I4_U4U4] =
         LOOM_AMDGPU_PACKED_DOT_EMIT(LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_U32_U4),
+    [LOOM_AMDGPU_DOT_RULE_DOT4F8_FP8BF8] = LOOM_AMDGPU_PACKED_DOT_EMIT(
+        LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_F32_FP8_BF8),
+    [LOOM_AMDGPU_DOT_RULE_DOT4F8_BF8FP8] = LOOM_AMDGPU_PACKED_DOT_EMIT(
+        LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_F32_BF8_FP8),
+    [LOOM_AMDGPU_DOT_RULE_DOT4F8_FP8FP8] = LOOM_AMDGPU_PACKED_DOT_EMIT(
+        LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_F32_FP8_FP8),
+    [LOOM_AMDGPU_DOT_RULE_DOT4F8_BF8BF8] = LOOM_AMDGPU_PACKED_DOT_EMIT(
+        LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_F32_BF8_BF8),
 };
 
 static_assert(IREE_ARRAYSIZE(kAmdgpuDotEmits) == LOOM_AMDGPU_DOT_RULE_COUNT_,
@@ -691,6 +803,18 @@ static const loom_low_lower_rule_t kAmdgpuDotRules[] = {
     [LOOM_AMDGPU_DOT_RULE_DOT8I4_U4U4] = LOOM_AMDGPU_DOT_RULE(
         LOOM_OP_VECTOR_DOT8I4, LOOM_AMDGPU_DOT_GUARDS_DOT8I4_U4U4,
         LOOM_AMDGPU_DOT_GUARD_COUNT_DOT8I4, LOOM_AMDGPU_DOT_RULE_DOT8I4_U4U4),
+    [LOOM_AMDGPU_DOT_RULE_DOT4F8_FP8BF8] = LOOM_AMDGPU_DOT_RULE(
+        LOOM_OP_VECTOR_DOT4F8, LOOM_AMDGPU_DOT_GUARDS_DOT4F8_FP8BF8,
+        LOOM_AMDGPU_DOT_GUARD_COUNT_DOT4F8, LOOM_AMDGPU_DOT_RULE_DOT4F8_FP8BF8),
+    [LOOM_AMDGPU_DOT_RULE_DOT4F8_BF8FP8] = LOOM_AMDGPU_DOT_RULE(
+        LOOM_OP_VECTOR_DOT4F8, LOOM_AMDGPU_DOT_GUARDS_DOT4F8_BF8FP8,
+        LOOM_AMDGPU_DOT_GUARD_COUNT_DOT4F8, LOOM_AMDGPU_DOT_RULE_DOT4F8_BF8FP8),
+    [LOOM_AMDGPU_DOT_RULE_DOT4F8_FP8FP8] = LOOM_AMDGPU_DOT_RULE(
+        LOOM_OP_VECTOR_DOT4F8, LOOM_AMDGPU_DOT_GUARDS_DOT4F8_FP8FP8,
+        LOOM_AMDGPU_DOT_GUARD_COUNT_DOT4F8, LOOM_AMDGPU_DOT_RULE_DOT4F8_FP8FP8),
+    [LOOM_AMDGPU_DOT_RULE_DOT4F8_BF8BF8] = LOOM_AMDGPU_DOT_RULE(
+        LOOM_OP_VECTOR_DOT4F8, LOOM_AMDGPU_DOT_GUARDS_DOT4F8_BF8BF8,
+        LOOM_AMDGPU_DOT_GUARD_COUNT_DOT4F8, LOOM_AMDGPU_DOT_RULE_DOT4F8_BF8BF8),
 };
 
 static_assert(IREE_ARRAYSIZE(kAmdgpuDotRules) == LOOM_AMDGPU_DOT_RULE_COUNT_,
@@ -717,6 +841,11 @@ static const loom_low_lower_rule_span_t kAmdgpuDotRuleSpans[] = {
     {
         .source_op_kind = LOOM_OP_VECTOR_DOT8I4,
         .rule_start = LOOM_AMDGPU_DOT_RULE_DOT8I4_S4S4,
+        .rule_count = 4,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_DOT4F8,
+        .rule_start = LOOM_AMDGPU_DOT_RULE_DOT4F8_FP8BF8,
         .rule_count = 4,
     },
 };

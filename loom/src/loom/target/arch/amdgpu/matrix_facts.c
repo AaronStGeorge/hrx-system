@@ -35,7 +35,7 @@ static bool loom_amdgpu_matrix_numeric_type_from_fact(
 bool loom_amdgpu_matrix_format_selector_from_storage_schema(
     loom_value_fact_storage_schema_t schema,
     loom_amdgpu_matrix_format_selector_t* out_selector) {
-  if (!out_selector) return false;
+  IREE_ASSERT_ARGUMENT(out_selector);
   switch (schema.matrix.format) {
     case LOOM_VALUE_FACT_MATRIX_FORMAT_FP8:
       *out_selector = LOOM_AMDGPU_MATRIX_FORMAT_SELECTOR_FP8;
@@ -61,7 +61,7 @@ bool loom_amdgpu_matrix_format_selector_from_storage_schema(
 bool loom_amdgpu_matrix_payload_from_storage_schema(
     loom_value_fact_storage_schema_t schema,
     loom_amdgpu_matrix_payload_shape_t* out_payload) {
-  if (!out_payload) return false;
+  IREE_ASSERT_ARGUMENT(out_payload);
   *out_payload = (loom_amdgpu_matrix_payload_shape_t){0};
   loom_amdgpu_matrix_numeric_type_t numeric_type =
       LOOM_AMDGPU_MATRIX_NUMERIC_UNKNOWN;
@@ -78,7 +78,7 @@ bool loom_amdgpu_matrix_payload_from_storage_schema(
 bool loom_amdgpu_matrix_scale_kind_from_storage_schema(
     loom_value_fact_storage_schema_t schema,
     loom_amdgpu_matrix_scale_kind_t* out_scale_kind) {
-  if (!out_scale_kind) return false;
+  IREE_ASSERT_ARGUMENT(out_scale_kind);
   switch (schema.matrix.scale_kind) {
     case LOOM_VALUE_FACT_MATRIX_SCALE_NONE:
       *out_scale_kind = LOOM_AMDGPU_MATRIX_SCALE_NONE;
