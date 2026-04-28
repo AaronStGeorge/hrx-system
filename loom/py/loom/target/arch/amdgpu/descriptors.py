@@ -221,6 +221,11 @@ _ADDRESS_OFFSET_IMMEDIATE_ENCODING_IDS = frozenset(
 _ADDRESS_OFFSET_IMMEDIATE_FIELD_NAMES = frozenset(("offset", "offset0", "offset1"))
 _GLOBAL_SADDR_OFF = _predefined("NULL")
 _GLOBAL_GFX950_SADDR_OFF = AmdgpuEncodingFieldAllOnes()
+_MUBUF_VADDR_OFFSET_ONLY_SIZE_REASON = "idxen-disabled-mubuf-vaddr-uses-one-offset-vgpr"
+_GLOBAL_SADDR_OFFSET_ONLY_SIZE_REASON = (
+    "saddr-enabled-global-address-uses-one-offset-vgpr"
+)
+_D16_PARTIAL_REGISTER_SIZE_REASON = "d16-instruction-uses-half-vgpr-lane"
 
 _SGPR_ALT = (RegClassAlt(_REG_SGPR),)
 _VGPR_ALT = (RegClassAlt(_REG_VGPR),)
@@ -567,6 +572,26 @@ def _vgpr_operand(
         _VGPR_ALT,
         unit_count=units,
         register_part=register_part,
+    )
+
+
+def _mubuf_vaddr_operand(field_name: str = "vaddr") -> AmdgpuOperandOverlay:
+    return AmdgpuOperandOverlay(
+        "VADDR",
+        _vgpr_operand(field_name),
+        size_exception_reason=_MUBUF_VADDR_OFFSET_ONLY_SIZE_REASON,
+    )
+
+
+def _global_addr_operand(
+    xml_field_name: str, *, units: int, has_saddr: bool
+) -> AmdgpuOperandOverlay:
+    return AmdgpuOperandOverlay(
+        xml_field_name,
+        _vgpr_operand("addr", units=units),
+        size_exception_reason=(
+            _GLOBAL_SADDR_OFFSET_ONLY_SIZE_REASON if has_saddr and units == 1 else None
+        ),
     )
 
 
@@ -2124,7 +2149,7 @@ def _buffer_load_dword_overlay(
             AmdgpuOperandOverlay(
                 resource_field_name, _sgpr_resource("resource", units=4)
             ),
-            AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
+            _mubuf_vaddr_operand(),
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
         implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
@@ -2133,7 +2158,7 @@ def _buffer_load_dword_overlay(
             _offset_immediate(offset_bit_width),
             *_cache_immediates(cache_fields),
         ),
-        fixed_encoding_fields=(("OFFEN", 1),),
+        fixed_encoding_fields=(("IDXEN", 0), ("OFFEN", 1)),
         effects=(_GLOBAL_LOAD_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
@@ -2169,6 +2194,7 @@ def _buffer_load_dword_off_zero_overlay(
         fixed_encoding_fields=(
             ("VADDR", _predefined("v0")),
             ("SOFFSET", _MUBUF_SOFFSET_INLINE_ZERO),
+            ("IDXEN", 0),
             ("OFFEN", 0),
         ),
         effects=(_GLOBAL_LOAD_EFFECT,),
@@ -2200,7 +2226,7 @@ def _buffer_load_64_overlay(
             AmdgpuOperandOverlay(
                 resource_field_name, _sgpr_resource("resource", units=4)
             ),
-            AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
+            _mubuf_vaddr_operand(),
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
         implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY_B64,),
@@ -2209,7 +2235,7 @@ def _buffer_load_64_overlay(
             _offset_immediate(offset_bit_width),
             *_cache_immediates(cache_fields),
         ),
-        fixed_encoding_fields=(("OFFEN", 1),),
+        fixed_encoding_fields=(("IDXEN", 0), ("OFFEN", 1)),
         effects=(_GLOBAL_LOAD_B64_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
@@ -2238,7 +2264,7 @@ def _buffer_load_128_overlay(
             AmdgpuOperandOverlay(
                 resource_field_name, _sgpr_resource("resource", units=4)
             ),
-            AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
+            _mubuf_vaddr_operand(),
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
         implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY_B128,),
@@ -2247,7 +2273,7 @@ def _buffer_load_128_overlay(
             _offset_immediate(offset_bit_width),
             *_cache_immediates(cache_fields),
         ),
-        fixed_encoding_fields=(("OFFEN", 1),),
+        fixed_encoding_fields=(("IDXEN", 0), ("OFFEN", 1)),
         effects=(_GLOBAL_LOAD_B128_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
@@ -2273,7 +2299,7 @@ def _buffer_store_dword_overlay(
             AmdgpuOperandOverlay(
                 resource_field_name, _sgpr_resource("resource", units=4)
             ),
-            AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
+            _mubuf_vaddr_operand(),
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
         implicit_operands=(_IGNORE_GLOBAL_WRITE_MEMORY,),
@@ -2282,7 +2308,7 @@ def _buffer_store_dword_overlay(
             _offset_immediate(offset_bit_width),
             *_cache_immediates(cache_fields),
         ),
-        fixed_encoding_fields=(("OFFEN", 1),),
+        fixed_encoding_fields=(("IDXEN", 0), ("OFFEN", 1)),
         effects=(_GLOBAL_STORE_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
@@ -2318,6 +2344,7 @@ def _buffer_store_dword_off_zero_overlay(
         fixed_encoding_fields=(
             ("VADDR", _predefined("v0")),
             ("SOFFSET", _MUBUF_SOFFSET_INLINE_ZERO),
+            ("IDXEN", 0),
             ("OFFEN", 0),
         ),
         effects=(_GLOBAL_STORE_EFFECT,),
@@ -2349,7 +2376,7 @@ def _buffer_store_64_overlay(
             AmdgpuOperandOverlay(
                 resource_field_name, _sgpr_resource("resource", units=4)
             ),
-            AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
+            _mubuf_vaddr_operand(),
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
         implicit_operands=(_IGNORE_GLOBAL_WRITE_MEMORY_B64,),
@@ -2358,7 +2385,7 @@ def _buffer_store_64_overlay(
             _offset_immediate(offset_bit_width),
             *_cache_immediates(cache_fields),
         ),
-        fixed_encoding_fields=(("OFFEN", 1),),
+        fixed_encoding_fields=(("IDXEN", 0), ("OFFEN", 1)),
         effects=(_GLOBAL_STORE_B64_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
@@ -2387,7 +2414,7 @@ def _buffer_store_128_overlay(
             AmdgpuOperandOverlay(
                 resource_field_name, _sgpr_resource("resource", units=4)
             ),
-            AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
+            _mubuf_vaddr_operand(),
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
         implicit_operands=(_IGNORE_GLOBAL_WRITE_MEMORY_B128,),
@@ -2396,7 +2423,7 @@ def _buffer_store_128_overlay(
             _offset_immediate(offset_bit_width),
             *_cache_immediates(cache_fields),
         ),
-        fixed_encoding_fields=(("OFFEN", 1),),
+        fixed_encoding_fields=(("IDXEN", 0), ("OFFEN", 1)),
         effects=(_GLOBAL_STORE_B128_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
@@ -2426,8 +2453,8 @@ def _global_load_overlay(
         implicit_operands += (_implicit_m0_input(),)
     operands: tuple[AmdgpuOperandOverlay, ...] = (
         AmdgpuOperandOverlay(data_field_name, _vgpr_result(units=units)),
-        AmdgpuOperandOverlay(
-            address_field_name, _vgpr_operand("addr", units=address_units)
+        _global_addr_operand(
+            address_field_name, units=address_units, has_saddr=saddr_off is None
         ),
     )
     fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = ()
@@ -2479,8 +2506,8 @@ def _global_store_overlay(
     if implicit_m0:
         implicit_operands += (_implicit_m0_input(),)
     operands: tuple[AmdgpuOperandOverlay, ...] = (
-        AmdgpuOperandOverlay(
-            address_field_name, _vgpr_operand("addr", units=address_units)
+        _global_addr_operand(
+            address_field_name, units=address_units, has_saddr=saddr_off is None
         ),
         AmdgpuOperandOverlay(data_field_name, _vgpr_operand("value", units=units)),
     )
@@ -2523,7 +2550,7 @@ def _global_load_lds_overlay(
     cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     operands: tuple[AmdgpuOperandOverlay, ...] = (
-        AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr", units=address_units)),
+        _global_addr_operand("ADDR", units=address_units, has_saddr=saddr_off is None),
     )
     fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = ()
     if saddr_off is None:
@@ -2683,15 +2710,15 @@ def _global_atomic_overlay(
     if returns_old_value:
         operands: tuple[AmdgpuOperandOverlay, ...] = (
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
-            AmdgpuOperandOverlay(
-                address_field_name, _vgpr_operand("addr", units=address_units)
+            _global_addr_operand(
+                address_field_name, units=address_units, has_saddr=saddr_off is None
             ),
             AmdgpuOperandOverlay(data_field_name, _vgpr_operand("value")),
         )
     else:
         operands = (
-            AmdgpuOperandOverlay(
-                address_field_name, _vgpr_operand("addr", units=address_units)
+            _global_addr_operand(
+                address_field_name, units=address_units, has_saddr=saddr_off is None
             ),
             AmdgpuOperandOverlay(data_field_name, _vgpr_operand("value")),
         )
@@ -2790,8 +2817,8 @@ def _global_atomic_cmpswap_overlay(
     )
     operands: tuple[AmdgpuOperandOverlay, ...] = (
         AmdgpuOperandOverlay("VDST", _vgpr_result()),
-        AmdgpuOperandOverlay(
-            address_field_name, _vgpr_operand("addr", units=address_units)
+        _global_addr_operand(
+            address_field_name, units=address_units, has_saddr=saddr_off is None
         ),
         AmdgpuOperandOverlay(data_field_name, _vgpr_operand("value", units=2)),
     )
@@ -3407,7 +3434,7 @@ def _buffer_atomic_overlay(
 
     operands += (
         AmdgpuOperandOverlay(resource_field_name, _sgpr_resource("resource", units=4)),
-        AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
+        _mubuf_vaddr_operand(),
         AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
     )
     cache_immediate_fields = tuple(
@@ -3454,7 +3481,7 @@ def _buffer_atomic_overlay(
                 cache_immediate_fields, cache_immediate_defaults
             ),
         ),
-        fixed_encoding_fields=(("OFFEN", 1), *fixed_encoding_fields),
+        fixed_encoding_fields=(("IDXEN", 0), ("OFFEN", 1), *fixed_encoding_fields),
         effects=_global_atomic_effects(32, counter_id=counter_id),
         constraints=constraints,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -3504,7 +3531,7 @@ def _buffer_atomic_cmpswap_overlay(
             AmdgpuOperandOverlay(
                 resource_field_name, _sgpr_resource("resource", units=4)
             ),
-            AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
+            _mubuf_vaddr_operand(),
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
         implicit_operands=(
@@ -3523,7 +3550,7 @@ def _buffer_atomic_cmpswap_overlay(
                 cache_immediate_fields, cache_immediate_defaults
             ),
         ),
-        fixed_encoding_fields=(("OFFEN", 1), *fixed_encoding_fields),
+        fixed_encoding_fields=(("IDXEN", 0), ("OFFEN", 1), *fixed_encoding_fields),
         effects=_global_atomic_effects(32, counter_id=_COUNTER_VMEM_LOAD),
         constraints=_DESTRUCTIVE_BUFFER_ATOMIC_CONSTRAINTS,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -3696,6 +3723,7 @@ def _ds_load_u16_d16_overlays(
                 AmdgpuOperandOverlay(
                     "VDST",
                     _vgpr_result(register_part=_REG_PART_VGPR_LOW16),
+                    size_exception_reason=_D16_PARTIAL_REGISTER_SIZE_REASON,
                 ),
                 AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
             ),
@@ -3723,6 +3751,7 @@ def _ds_load_u16_d16_overlays(
                 AmdgpuOperandOverlay(
                     "VDST",
                     _vgpr_result(register_part=_REG_PART_VGPR_HIGH16),
+                    size_exception_reason=_D16_PARTIAL_REGISTER_SIZE_REASON,
                 ),
                 AmdgpuOperandOverlay(
                     "VDST",
@@ -3737,6 +3766,7 @@ def _ds_load_u16_d16_overlays(
                         "the encoded destination register is also the tied "
                         "source value carrying the low 16 bits"
                     ),
+                    size_exception_reason=_D16_PARTIAL_REGISTER_SIZE_REASON,
                 ),
                 AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
             ),

@@ -157,7 +157,7 @@ def _operand(field_name: str, reg_alts: tuple[RegClassAlt, ...]) -> Operand:
 
 
 def _resource(field_name: str, reg_alts: tuple[RegClassAlt, ...]) -> Operand:
-    return Operand(field_name, OperandRole.RESOURCE, reg_alts)
+    return Operand(field_name, OperandRole.RESOURCE, reg_alts, unit_count=4)
 
 
 def _s_add_u32_operands() -> tuple[AmdgpuOperandOverlay, ...]:
@@ -536,6 +536,71 @@ def test_materialize_rejects_operand_role_mismatch() -> None:
     with pytest.raises(
         AmdgpuDescriptorOverlayError,
         match="maps XML field 'SDST' to low operand 'dst' as input",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+
+def test_materialize_rejects_operand_width_mismatch() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    overlay = _s_add_u32_overlay(
+        "amdgpu.bad_width",
+        operands=(
+            AmdgpuOperandOverlay(
+                "SDST",
+                Operand("dst", OperandRole.RESULT, _SGPR_ALT, unit_count=2),
+            ),
+            AmdgpuOperandOverlay("SSRC0", _operand("lhs", _SGPR_ALT)),
+            AmdgpuOperandOverlay("SSRC1", _operand("rhs", _SGPR_ALT)),
+        ),
+    )
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="low operand 'dst' with 64-bit low width, but XML operand size is 32",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+
+def test_materialize_accepts_named_operand_width_exception() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    descriptor = materialize_amdgpu_descriptor_overlay(
+        spec,
+        _s_add_u32_overlay(
+            "amdgpu.narrowed_width",
+            implicit_operands=(_IGNORE_SCC_OUTPUT,),
+            operands=(
+                AmdgpuOperandOverlay(
+                    "SDST",
+                    Operand("dst", OperandRole.RESULT, _SGPR_ALT, unit_count=2),
+                    size_exception_reason="sample-width-exception",
+                ),
+                AmdgpuOperandOverlay("SSRC0", _operand("lhs", _SGPR_ALT)),
+                AmdgpuOperandOverlay("SSRC1", _operand("rhs", _SGPR_ALT)),
+            ),
+        ),
+    )
+
+    assert descriptor.operands[0].unit_count == 2
+
+
+def test_materialize_rejects_unnecessary_operand_width_exception() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    overlay = _s_add_u32_overlay(
+        "amdgpu.unnecessary_width_exception",
+        operands=(
+            AmdgpuOperandOverlay(
+                "SDST",
+                _result("dst", _SGPR_ALT),
+                size_exception_reason="sample-width-exception",
+            ),
+            AmdgpuOperandOverlay("SSRC0", _operand("lhs", _SGPR_ALT)),
+            AmdgpuOperandOverlay("SSRC1", _operand("rhs", _SGPR_ALT)),
+        ),
+    )
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="with an unnecessary size exception",
     ):
         materialize_amdgpu_descriptor_overlay(spec, overlay)
 

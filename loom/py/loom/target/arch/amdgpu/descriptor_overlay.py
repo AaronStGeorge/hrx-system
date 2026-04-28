@@ -51,11 +51,27 @@ class AmdgpuDescriptorOverlayError(ValueError):
     """Raised when a Loom overlay does not match parsed AMDGPU ISA facts."""
 
 
+_REGISTER_WIDTH_BITS = {
+    "amdgpu.sgpr": 32,
+    "amdgpu.vgpr": 32,
+    "amdgpu.agpr": 32,
+    "amdgpu.m0": 32,
+    "amdgpu.scc": 1,
+    "amdgpu.exec": 64,
+}
+
+_REGISTER_PART_WIDTH_BITS = {
+    "amdgpu.vgpr.low16": 16,
+    "amdgpu.vgpr.high16": 16,
+}
+
+
 @dataclass(frozen=True, slots=True)
 class AmdgpuOperandOverlay:
     xml_field_name: str
     descriptor_operand: Operand
     role_exception_reason: str | None = None
+    size_exception_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -465,6 +481,7 @@ def _validate_operand_overlay(
                 f"'{encoding.encoding_name}'"
             )
         _validate_operand_role(overlay, operand_overlay, xml_operand)
+        _validate_operand_width(overlay, operand_overlay, xml_operand)
         covered_fields.add(operand_overlay.xml_field_name)
 
     for ignored_operand in overlay.ignored_operands:
@@ -876,6 +893,59 @@ def _validate_operand_role(
                     overlay, operand_overlay, xml_operand, "input/output"
                 )
             _reject_unnecessary_role_exception(overlay, operand_overlay)
+
+
+def _validate_operand_width(
+    overlay: AmdgpuDescriptorOverlay,
+    operand_overlay: AmdgpuOperandOverlay,
+    xml_operand: AmdgpuIsaOperand,
+) -> None:
+    size_exception_reason = operand_overlay.size_exception_reason
+    low_width_bits = _operand_low_width_bits(operand_overlay.descriptor_operand)
+    if low_width_bits is None:
+        if size_exception_reason is not None:
+            raise AmdgpuDescriptorOverlayError(
+                f"descriptor overlay '{overlay.descriptor_key}' maps XML field "
+                f"'{operand_overlay.xml_field_name}' to low operand "
+                f"'{operand_overlay.descriptor_operand.field_name}' with a size "
+                "exception, but the low operand width is unknown"
+            )
+        return
+    if low_width_bits == xml_operand.size_bits:
+        if size_exception_reason is not None:
+            raise AmdgpuDescriptorOverlayError(
+                f"descriptor overlay '{overlay.descriptor_key}' maps XML field "
+                f"'{operand_overlay.xml_field_name}' to low operand "
+                f"'{operand_overlay.descriptor_operand.field_name}' with an "
+                "unnecessary size exception"
+            )
+        return
+    if size_exception_reason is not None and size_exception_reason.strip():
+        return
+    raise AmdgpuDescriptorOverlayError(
+        f"descriptor overlay '{overlay.descriptor_key}' maps XML field "
+        f"'{operand_overlay.xml_field_name}' to low operand "
+        f"'{operand_overlay.descriptor_operand.field_name}' with "
+        f"{low_width_bits}-bit low width, but XML operand size is "
+        f"{xml_operand.size_bits} bits"
+    )
+
+
+def _operand_low_width_bits(operand: Operand) -> int | None:
+    if operand.register_part is not None:
+        register_part_width = _REGISTER_PART_WIDTH_BITS.get(operand.register_part)
+        if register_part_width is None:
+            return None
+        return register_part_width * operand.unit_count
+
+    alt_widths = {
+        _REGISTER_WIDTH_BITS[reg_alt.reg_class]
+        for reg_alt in operand.reg_alts
+        if reg_alt.reg_class in _REGISTER_WIDTH_BITS
+    }
+    if len(alt_widths) != 1:
+        return None
+    return next(iter(alt_widths)) * operand.unit_count
 
 
 def _operand_role_mismatch_is_explicitly_allowed(
