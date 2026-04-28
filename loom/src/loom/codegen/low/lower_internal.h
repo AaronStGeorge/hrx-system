@@ -66,6 +66,8 @@ struct loom_low_lower_context_t {
   loom_value_id_t* value_map;
   // Source block ordinal to emitted low block pointer map.
   loom_block_t** block_map;
+  // Source block ordinal to redirected low branch destination, or NULL.
+  loom_block_t** branch_dest_overrides;
   // Source function argument ABI mappings.
   loom_low_lower_abi_argument_t* argument_map;
   // Number of entries in |argument_map|.

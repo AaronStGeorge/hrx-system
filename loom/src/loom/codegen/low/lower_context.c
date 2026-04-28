@@ -9,6 +9,8 @@
 #include "loom/codegen/low/lower_internal.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
+#include "loom/ops/cfg/ops.h"
+#include "loom/ops/low/ops.h"
 
 static iree_string_view_t loom_low_lower_nonempty(
     iree_string_view_t value, iree_string_view_t placeholder) {
@@ -181,6 +183,50 @@ iree_status_t loom_low_lower_allocate_plan_data(
   *out_data = NULL;
   return loom_low_lower_allocate_scratch_array(context, 1, data_length,
                                                out_data);
+}
+
+static loom_region_t* loom_low_lower_context_low_body(
+    const loom_low_lower_context_t* context) {
+  if (loom_low_func_def_isa(context->low_func_op)) {
+    return loom_low_func_def_body(context->low_func_op);
+  }
+  if (loom_low_kernel_def_isa(context->low_func_op)) {
+    return loom_low_kernel_def_body(context->low_func_op);
+  }
+  return NULL;
+}
+
+iree_status_t loom_low_lower_append_low_block(loom_low_lower_context_t* context,
+                                              loom_block_t** out_block) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(out_block);
+  *out_block = NULL;
+  loom_region_t* low_body = loom_low_lower_context_low_body(context);
+  IREE_ASSERT(low_body != NULL);
+  return loom_region_append_block(context->module, low_body, out_block);
+}
+
+iree_status_t loom_low_lower_redirect_empty_branch_dest(
+    loom_low_lower_context_t* context, const loom_op_t* source_branch_op,
+    loom_block_t* low_dest) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(source_branch_op);
+  IREE_ASSERT_ARGUMENT(low_dest);
+  IREE_ASSERT(loom_cfg_br_isa(source_branch_op));
+  IREE_ASSERT(loom_cfg_br_args(source_branch_op).count == 0);
+  IREE_ASSERT(low_dest->arg_count == 0);
+
+  loom_region_t* source_body = loom_func_like_body(context->source_function);
+  uint16_t source_index = 0;
+  IREE_ASSERT(source_body != NULL);
+  const bool found_source_index = loom_region_try_block_index(
+      source_body, source_branch_op->parent_block, &source_index);
+  IREE_ASSERT(found_source_index);
+  (void)found_source_index;
+  IREE_ASSERT(context->branch_dest_overrides[source_index] == NULL ||
+              context->branch_dest_overrides[source_index] == low_dest);
+  context->branch_dest_overrides[source_index] = low_dest;
+  return iree_ok_status();
 }
 
 iree_status_t loom_low_lower_lookup_block(loom_low_lower_context_t* context,

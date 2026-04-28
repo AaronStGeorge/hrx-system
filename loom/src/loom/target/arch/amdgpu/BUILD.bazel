@@ -750,6 +750,7 @@ iree_c_embed_data(
     testonly = True,
     srcs = [
         "execution/testdata/b128_vector_add.loom",
+        "execution/testdata/divergent_if_else_store.loom",
         "execution/testdata/divergent_lds_producer.loom",
         "execution/testdata/divergent_then_store.loom",
         "execution/testdata/dot2f_f16_buffer.loom",

@@ -456,6 +456,23 @@ iree_status_t loom_low_lower_allocate_plan_data(
     loom_low_lower_context_t* context, iree_host_size_t data_length,
     void** out_data);
 
+// Appends a low-only block to the low function being emitted.
+//
+// This is for target control packets that need a dispatch/restore block with no
+// corresponding source block. Source block remapping remains fixed.
+iree_status_t loom_low_lower_append_low_block(loom_low_lower_context_t* context,
+                                              loom_block_t** out_block);
+
+// Redirects an empty source cfg.br terminator to a low-only destination block.
+//
+// Targets use this when source control-flow has to be expanded into extra low
+// structural blocks. The redirected source branch and the low destination must
+// both have no edge arguments; value-carrying control requires an explicit
+// lowering pass before source-to-low.
+iree_status_t loom_low_lower_redirect_empty_branch_dest(
+    loom_low_lower_context_t* context, const loom_op_t* source_branch_op,
+    loom_block_t* low_dest);
+
 // Creates a module-local symbol derived from the emitted low function symbol.
 // The result is suitable for target-owned function records such as low.slot
 // declarations. |suffix| is appended to the low function name; |index| is then

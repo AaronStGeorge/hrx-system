@@ -736,9 +736,16 @@ static iree_status_t loom_low_lower_map_blocks(
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       &context->arena, source_body->block_count, sizeof(*context->block_map),
       (void**)&context->block_map));
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(&context->arena, source_body->block_count,
+                                sizeof(*context->branch_dest_overrides),
+                                (void**)&context->branch_dest_overrides));
   memset(
       context->block_map, 0,
       (iree_host_size_t)source_body->block_count * sizeof(*context->block_map));
+  memset(context->branch_dest_overrides, 0,
+         (iree_host_size_t)source_body->block_count *
+             sizeof(*context->branch_dest_overrides));
 
   for (uint16_t i = 0; i < source_body->block_count; ++i) {
     loom_block_t* source_block = loom_region_block(source_body, i);
@@ -917,6 +924,15 @@ static iree_status_t loom_low_lower_structural_op(
       loom_block_t* low_dest = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_lookup_block(
           context, loom_cfg_br_dest(source_op), &low_dest));
+      loom_region_t* source_body =
+          loom_func_like_body(context->source_function);
+      uint16_t source_index = 0;
+      if (source_body &&
+          loom_region_try_block_index(source_body, source_op->parent_block,
+                                      &source_index) &&
+          context->branch_dest_overrides[source_index] != NULL) {
+        low_dest = context->branch_dest_overrides[source_index];
+      }
       loom_value_slice_t args = loom_cfg_br_args(source_op);
       loom_value_id_t* low_args = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_remap_values(context, args.values,

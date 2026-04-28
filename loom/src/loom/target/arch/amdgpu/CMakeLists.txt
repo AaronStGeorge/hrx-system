@@ -638,6 +638,7 @@ iree_c_embed_data(
     amdgpu_hal_testdata
   SRCS
     "execution/testdata/b128_vector_add.loom"
+    "execution/testdata/divergent_if_else_store.loom"
     "execution/testdata/divergent_lds_producer.loom"
     "execution/testdata/divergent_then_store.loom"
     "execution/testdata/dot2f_f16_buffer.loom"

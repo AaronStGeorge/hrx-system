@@ -20,6 +20,7 @@ from loom.target.arch.amdgpu.descriptor_overlay import (
 )
 from loom.target.arch.amdgpu.encoding import (
     AMDGPU_ENCODING_FORMAT_SOP1,
+    AMDGPU_ENCODING_FORMAT_SOP2,
     amdgpu_encoding_field_id,
 )
 from loom.target.arch.amdgpu.isa_xml import (
@@ -593,7 +594,7 @@ def _manual_scalar_move_descriptors() -> tuple[Descriptor, ...]:
                 ),
             ),
             encoding_field_values=(
-                EncodingFieldValue(amdgpu_encoding_field_id("SDST"), 124),
+                EncodingFieldValue(amdgpu_encoding_field_id("SDST"), 125),
             ),
             asm_forms=_asm(
                 mnemonic="s_mov_b32_m0", results=("dst",), operands=("src",)
@@ -624,6 +625,35 @@ def _manual_scalar_move_descriptors() -> tuple[Descriptor, ...]:
             schedule_class=_SCHEDULE_SALU,
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
             encoding_id=1,
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
+        ),
+        Descriptor(
+            key="amdgpu.s_xor_b64_exec",
+            mnemonic="s_xor_b64",
+            semantic_tag="control.exec.xor",
+            operands=(
+                _scc_result("active"),
+                Operand(
+                    "src",
+                    OperandRole.OPERAND,
+                    _SGPR_ALT,
+                    encoding_field_id=amdgpu_encoding_field_id("SSRC0"),
+                    unit_count=2,
+                ),
+                _exec_clobber("exec_out"),
+                _exec_state_read(),
+            ),
+            encoding_field_values=(
+                EncodingFieldValue(amdgpu_encoding_field_id("SDST"), 126),
+                EncodingFieldValue(amdgpu_encoding_field_id("SSRC1"), 126),
+            ),
+            asm_forms=_asm(
+                mnemonic="s_xor_b64_exec", results=("active",), operands=("src",)
+            ),
+            effects=(_CONVERGENT_EFFECT,),
+            schedule_class=_SCHEDULE_SALU,
+            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP2,
+            encoding_id=27,
             flags=(DescriptorFlag.SIDE_EFFECTING,),
         ),
     )
