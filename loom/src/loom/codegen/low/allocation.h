@@ -255,6 +255,8 @@ typedef struct loom_low_allocation_edge_copy_group_t {
 
 // Options controlling allocation sidecar construction.
 typedef struct loom_low_allocation_options_t {
+  // Optional operation order used for live intervals.
+  loom_liveness_order_t liveness_order;
   // Descriptor registry available to the allocator.
   const loom_low_descriptor_registry_t* descriptor_registry;
   // Explicit per-class register budgets.

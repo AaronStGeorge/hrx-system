@@ -1546,6 +1546,39 @@ static iree_status_t loom_low_allocation_op_program_point_in_liveness(
 static iree_status_t loom_low_allocation_op_program_point(
     const loom_low_allocation_build_state_t* state, const loom_op_t* op,
     uint32_t* out_program_point) {
+  if (!loom_liveness_order_is_empty(state->options->liveness_order)) {
+    uint16_t block_index = 0;
+    if (!loom_region_try_block_index(state->body, op->parent_block,
+                                     &block_index) ||
+        block_index >= state->options->liveness_order.block_count) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low allocation cannot find ordered block for low.br");
+    }
+    const loom_liveness_block_info_t* block_info =
+        loom_liveness_block_info_for_block(&state->liveness, op->parent_block);
+    if (!block_info) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low allocation cannot find ordered liveness block for low.br");
+    }
+    const loom_liveness_block_order_t* block_order =
+        &state->options->liveness_order.blocks[block_index];
+    for (iree_host_size_t i = 0; i < block_order->op_count; ++i) {
+      if (block_order->ops[i] != op) {
+        continue;
+      }
+      if (i > UINT32_MAX - block_info->start_point) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "ordered low.br program point exceeds uint32_t");
+      }
+      *out_program_point = block_info->start_point + (uint32_t)i;
+      return iree_ok_status();
+    }
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "ordered low.br has no operation order entry");
+  }
   return loom_low_allocation_op_program_point_in_liveness(&state->liveness, op,
                                                           out_program_point);
 }
@@ -2781,10 +2814,7 @@ static iree_status_t loom_low_allocation_verify_edge_copy_temporary(
 
 iree_status_t loom_low_allocation_verify_sidecar(
     const loom_low_allocation_sidecar_t* sidecar) {
-  if (!sidecar) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation sidecar is required");
-  }
+  IREE_ASSERT_ARGUMENT(sidecar);
   if (!sidecar->module) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "allocation sidecar module is required");
@@ -3142,13 +3172,12 @@ iree_status_t loom_low_allocate_function(
     const loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_allocation_options_t* options, iree_arena_allocator_t* arena,
     loom_low_allocation_sidecar_t* out_sidecar) {
-  if (!module || !low_func_op || !options || !options->descriptor_registry ||
-      !arena || !out_sidecar) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "module, low function op, options with descriptor registry, arena, and "
-        "output sidecar are required");
-  }
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(low_func_op);
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(options->descriptor_registry);
+  IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(out_sidecar);
   if (!loom_low_function_def_isa(low_func_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected low.func.def or low.kernel.def");
@@ -3185,8 +3214,8 @@ iree_status_t loom_low_allocate_function(
   IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_budgets(&state));
   IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_reserved_ranges(&state));
 
-  IREE_RETURN_IF_ERROR(
-      loom_liveness_analyze_region(module, state.body, arena, &state.liveness));
+  IREE_RETURN_IF_ERROR(loom_liveness_analyze_region_with_order(
+      module, state.body, options->liveness_order, arena, &state.liveness));
   IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_fixed_values(&state));
   IREE_RETURN_IF_ERROR(loom_low_allocation_assign_intervals(&state));
   IREE_RETURN_IF_ERROR(loom_low_allocation_record_copy_decisions(&state));

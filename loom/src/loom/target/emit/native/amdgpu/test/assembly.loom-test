@@ -19,6 +19,43 @@ low.func.def target(@gfx11_target) @gfx11_constants(%resource: reg<amdgpu.sgpr x
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_scheduled_liveness_resource
+target.profile @gfx11_target preset("amdgpu-gfx11")
+
+low.func.def target(@gfx11_target) @gfx11_scheduled_liveness_resource(%kernarg: reg<amdgpu.sgpr x2>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+  %ptr = s_load_dwordx2 %kernarg, %soffset {offset = 0}
+  %ptr_lo = slice %ptr[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %ptr_hi = slice %ptr[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %mask = s_mov_b32 65535
+  %masked_hi = s_and_b32 %ptr_hi, %mask
+  %base = concat(%ptr_lo, %masked_hi) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %range = s_mov_b32 256
+  %flags = s_mov_b32 822243328
+  %resource = concat(%base, %range, %flags) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
+  %value = v_mov_b32 1
+  buffer_store_dword %value, %resource, %vaddr, %soffset {offset = 0}
+  return
+}
+
+// ----
+.Lbb0:
+  s_load_dwordx2 s[0:1], s[0:1], s2 offset:0
+  s_mov_b32 s3, 65535
+  s_mov_b32 s4, 256
+  s_mov_b32 s5, 822243328
+  v_mov_b32 v1, 1
+  s_waitcnt vmcnt(63) lgkmcnt(0)
+  s_and_b32 s1, s1, s3
+  s_mov_b32 s6, s4
+  s_mov_b32 s4, s0
+  s_mov_b32 s7, s5
+  s_mov_b32 s5, s1
+  buffer_store_dword v1, v0, s[4:7], s2 offen offset:0
+  s_waitcnt_vscnt vscnt(0)
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_branch waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
@@ -346,19 +383,19 @@ low.func.def target(@gfx11_target) @gfx11_stress_fragment(%s0: reg<amdgpu.sgpr>,
 
 // ----
 .Lbb0:
-  v_wmma_f32_16x16x16_f16 v[8:15], v[16:23], v[24:31], v[8:15]
-  buffer_load_dword v1, v2, s[4:7], s8 offen offset:4
-  buffer_load_b128 v[4:7], v2, s[4:7], s8 offen offset:16
-  s_load_dwordx2 s[2:3], s[2:3], s8 offset:16
-  s_buffer_load_dword s1, s[4:7], s8 offset:0
-  s_add_u32 s0, s0, s1
-  v_add_u32 v0, v0, v1
-  s_add_u32 s0, s0, s1
-  v_add_u32 v0, v0, v1
-  buffer_store_dword v0, v2, s[4:7], s0 offen offset:8
-  buffer_store_b128 v[4:7], v2, s[4:7], s2 offen offset:32
-  v_wmma_f32_16x16x16_f16 v[8:15], v[16:23], v[24:31], v[8:15]
-  buffer_store_b128 v[8:11], v2, s[4:7], s8 offen offset:48
+  v_wmma_f32_16x16x16_f16 v[0:7], v[16:23], v[24:31], v[0:7]
+  buffer_load_dword v11, v10, s[4:7], s8 offen offset:4
+  buffer_load_b128 v[12:15], v10, s[4:7], s8 offen offset:16
+  s_load_dwordx2 s[0:1], s[0:1], s8 offset:16
+  s_buffer_load_dword s9, s[4:7], s8 offset:0
+  s_add_u32 s2, s2, s3
+  v_add_u32 v8, v8, v9
+  s_add_u32 s2, s2, s9
+  v_add_u32 v8, v8, v11
+  buffer_store_dword v8, v10, s[4:7], s2 offen offset:8
+  buffer_store_b128 v[12:15], v10, s[4:7], s0 offen offset:32
+  v_wmma_f32_16x16x16_f16 v[0:7], v[16:23], v[24:31], v[0:7]
+  buffer_store_b128 v[0:3], v10, s[4:7], s8 offen offset:48
   s_waitcnt vmcnt(0) lgkmcnt(0)
   s_waitcnt_depctr depctr(0)
   s_wait_idle

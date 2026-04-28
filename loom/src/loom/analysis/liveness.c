@@ -39,6 +39,7 @@ typedef struct loom_liveness_pressure_state_t {
 typedef struct loom_liveness_build_state_t {
   const loom_module_t* module;
   const loom_region_t* region;
+  loom_liveness_order_t order;
   iree_arena_allocator_t* arena;
   iree_host_size_t value_count;
   iree_host_size_t word_count;
@@ -680,6 +681,30 @@ static iree_status_t loom_liveness_finalize_intervals(
         state, block_state->live_out, block_info->end_point));
 
     uint32_t point = block_info->start_point;
+    if (!loom_liveness_order_is_empty(state->order)) {
+      const loom_liveness_block_order_t* block_order =
+          &state->order.blocks[block_index];
+      for (iree_host_size_t ordered_index = 0;
+           ordered_index < block_order->op_count; ++ordered_index) {
+        const loom_op_t* op = block_order->ops[ordered_index];
+        loom_liveness_point_use_state_t use_state = {
+            .build_state = state,
+            .point = point,
+        };
+        IREE_RETURN_IF_ERROR(loom_liveness_for_each_op_use(
+            state->module, op,
+            loom_liveness_value_callback_make(loom_liveness_note_use_at_point,
+                                              &use_state)));
+        const loom_value_id_t* results = loom_op_const_results(op);
+        for (uint16_t result_index = 0; result_index < op->result_count;
+             ++result_index) {
+          IREE_RETURN_IF_ERROR(loom_liveness_note_definition(
+              state, results[result_index], point + 1u));
+        }
+        ++point;
+      }
+      continue;
+    }
     const loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
       loom_liveness_point_use_state_t use_state = {
@@ -864,8 +889,35 @@ static iree_status_t loom_liveness_compute_pressure(
     IREE_RETURN_IF_ERROR(loom_liveness_record_pressure_snapshot(
         &snapshot, live, block, NULL, block_info->end_point));
 
-    const loom_op_t* op = block->last_op;
     uint32_t point = block_info->end_point;
+    if (!loom_liveness_order_is_empty(state->order)) {
+      const loom_liveness_block_order_t* block_order =
+          &state->order.blocks[block_index];
+      for (iree_host_size_t reverse_index = block_order->op_count;
+           reverse_index > 0; --reverse_index) {
+        const loom_op_t* op = block_order->ops[reverse_index - 1u];
+        const loom_value_id_t* results = loom_op_const_results(op);
+        for (uint16_t result_index = 0; result_index < op->result_count;
+             ++result_index) {
+          loom_liveness_bitset_reset(live, results[result_index]);
+        }
+        loom_liveness_add_to_bitset_state_t add_state = {
+            .build_state = state,
+            .bitset = &live,
+        };
+        IREE_RETURN_IF_ERROR(loom_liveness_for_each_op_use(
+            state->module, op,
+            loom_liveness_value_callback_make(loom_liveness_add_use_to_bitset,
+                                              &add_state)));
+        --point;
+        IREE_RETURN_IF_ERROR(loom_liveness_record_pressure_snapshot(
+            &snapshot, live, block, op, point));
+      }
+      IREE_RETURN_IF_ERROR(loom_liveness_record_pressure_snapshot(
+          &snapshot, live, block, NULL, block_info->start_point));
+      continue;
+    }
+    const loom_op_t* op = block->last_op;
     while (op) {
       const loom_value_id_t* results = loom_op_const_results(op);
       for (uint16_t result_index = 0; result_index < op->result_count;
@@ -954,19 +1006,74 @@ static iree_status_t loom_liveness_finalize_interval_array(
 // Public API
 //===----------------------------------------------------------------------===//
 
+static iree_status_t loom_liveness_validate_order(const loom_region_t* region,
+                                                  loom_liveness_order_t order) {
+  if (loom_liveness_order_is_empty(order)) {
+    return iree_ok_status();
+  }
+  if (order.block_count != region->block_count || order.blocks == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "liveness order must provide one entry per region block");
+  }
+  for (iree_host_size_t block_index = 0; block_index < region->block_count;
+       ++block_index) {
+    const loom_block_t* block =
+        loom_region_const_block(region, (uint16_t)block_index);
+    const loom_liveness_block_order_t* block_order = &order.blocks[block_index];
+    if (block_order->block != block) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "liveness order block %zu does not match region block order",
+          block_index);
+    }
+    if (block_order->op_count != block->op_count) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "liveness order block %zu has %zu op(s) for a block with %u op(s)",
+          block_index, block_order->op_count, block->op_count);
+    }
+    if (block_order->op_count != 0 && block_order->ops == NULL) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "liveness order block %zu has no operation order",
+                              block_index);
+    }
+    for (iree_host_size_t op_index = 0; op_index < block_order->op_count;
+         ++op_index) {
+      const loom_op_t* op = block_order->ops[op_index];
+      if (op == NULL || op->parent_block != block) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "liveness order block %zu entry %zu is not owned by the block",
+            block_index, op_index);
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_liveness_analyze_region(
     const loom_module_t* module, const loom_region_t* region,
     iree_arena_allocator_t* arena, loom_liveness_analysis_t* out_analysis) {
-  if (!module || !region || !arena || !out_analysis) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "module, region, arena, and output analysis are "
-                            "required for liveness analysis");
-  }
+  return loom_liveness_analyze_region_with_order(
+      module, region, loom_liveness_order_empty(), arena, out_analysis);
+}
+
+iree_status_t loom_liveness_analyze_region_with_order(
+    const loom_module_t* module, const loom_region_t* region,
+    loom_liveness_order_t order, iree_arena_allocator_t* arena,
+    loom_liveness_analysis_t* out_analysis) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(region);
+  IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(out_analysis);
   memset(out_analysis, 0, sizeof(*out_analysis));
+  IREE_RETURN_IF_ERROR(loom_liveness_validate_order(region, order));
 
   loom_liveness_build_state_t state = {
       .module = module,
       .region = region,
+      .order = order,
       .arena = arena,
       .value_count = module->values.count,
       .word_count = loom_liveness_word_count(module->values.count),
@@ -1094,11 +1201,10 @@ iree_status_t loom_liveness_collect_pressure_budget_violations(
     iree_host_size_t budget_count, iree_arena_allocator_t* arena,
     const loom_liveness_pressure_budget_violation_t** out_violations,
     iree_host_size_t* out_violation_count) {
-  if (!analysis || !arena || !out_violations || !out_violation_count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "analysis, arena, and output violation storage "
-                            "are required");
-  }
+  IREE_ASSERT_ARGUMENT(analysis);
+  IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(out_violations);
+  IREE_ASSERT_ARGUMENT(out_violation_count);
   *out_violations = NULL;
   *out_violation_count = 0;
   if (budget_count == 0) return iree_ok_status();

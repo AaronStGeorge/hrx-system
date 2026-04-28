@@ -113,6 +113,36 @@ typedef struct loom_liveness_pressure_budget_t {
   uint32_t max_live_values;
 } loom_liveness_pressure_budget_t;
 
+// Explicit operation order for one block.
+//
+// The order must be a permutation of operations in |block|. Analyses use this
+// order only for intra-block program points; CFG live-in/live-out dataflow
+// still follows the region's block successor structure.
+typedef struct loom_liveness_block_order_t {
+  // Block whose operation order is overridden.
+  const loom_block_t* block;
+  // Ordered operation pointers for |block|.
+  const loom_op_t* const* ops;
+  // Number of entries in |ops|.
+  iree_host_size_t op_count;
+} loom_liveness_block_order_t;
+
+// Optional operation order for all blocks in a region.
+typedef struct loom_liveness_order_t {
+  // Per-block operation orders in region block order.
+  const loom_liveness_block_order_t* blocks;
+  // Number of entries in |blocks|.
+  iree_host_size_t block_count;
+} loom_liveness_order_t;
+
+static inline loom_liveness_order_t loom_liveness_order_empty(void) {
+  return (loom_liveness_order_t){0};
+}
+
+static inline bool loom_liveness_order_is_empty(loom_liveness_order_t order) {
+  return order.block_count == 0;
+}
+
 enum loom_liveness_pressure_budget_violation_bits_e {
   // Peak live units exceeded the budget.
   LOOM_LIVENESS_PRESSURE_BUDGET_VIOLATION_LIVE_UNITS = 1u << 0,
@@ -172,6 +202,16 @@ typedef struct loom_liveness_analysis_t {
 iree_status_t loom_liveness_analyze_region(
     const loom_module_t* module, const loom_region_t* region,
     iree_arena_allocator_t* arena, loom_liveness_analysis_t* out_analysis);
+
+// Computes liveness using an explicit per-block operation order.
+//
+// This is used by target-low packetization after scheduling: allocation must
+// see intervals over the scheduled packet stream, not the source operation
+// order. Pass an empty order to use ordinary source order.
+iree_status_t loom_liveness_analyze_region_with_order(
+    const loom_module_t* module, const loom_region_t* region,
+    loom_liveness_order_t order, iree_arena_allocator_t* arena,
+    loom_liveness_analysis_t* out_analysis);
 
 // Returns the interval for |value_id|, or NULL when the value is not touched by
 // the analyzed region.
