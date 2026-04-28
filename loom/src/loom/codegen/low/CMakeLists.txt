@@ -387,17 +387,17 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    cleanup
+    dce_pass
   HDRS
-    "cleanup.h"
+    "dce_pass.h"
   SRCS
-    "cleanup.c"
+    "dce_pass.c"
   DEPS
     ::descriptors
     ::function
+    ::pass_requirements
     ::target_binding
     iree::base
-    iree::base::internal::arena
     loom::src::loom::error::emitter
     loom::src::loom::ir
     loom::src::loom::ops::low
@@ -416,7 +416,6 @@ loom_cc_library(
     "packetization.c"
   DEPS
     ::allocation
-    ::cleanup
     ::function
     ::packet
     ::schedule

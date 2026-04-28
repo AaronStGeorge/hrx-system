@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include "loom/codegen/low/allocation_pass.h"
+#include "loom/codegen/low/dce_pass.h"
 #include "loom/codegen/low/lower_pass.h"
 #include "loom/passes/branch_fusion.h"
 #include "loom/passes/branch_sink.h"
@@ -66,6 +67,15 @@ static const loom_pass_requirement_def_t
                 IREE_SVL("Requires an injected target-low descriptor "
                          "registry."),
         },
+};
+
+static const loom_pass_requirement_def_t kLowDceRequirements[] = {
+    {
+        .key =
+            IREE_SVL(LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY),
+        .description =
+            IREE_SVL("Requires an injected target-low descriptor registry."),
+    },
 };
 
 static const loom_pass_option_schema_t kLowSourceToLowOptionSchema[] = {
@@ -150,6 +160,13 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .key = IREE_SVL("loop-fusion"),
         .info = loom_loop_fusion_pass_info,
         .function_run = loom_loop_fusion_run,
+    },
+    {
+        .key = IREE_SVL("low-dce"),
+        .info = loom_low_dce_pass_info,
+        .function_run = loom_low_dce_run,
+        .requirement_defs = kLowDceRequirements,
+        .requirement_count = IREE_ARRAYSIZE(kLowDceRequirements),
     },
     {
         .key = IREE_SVL("low-materialize-allocation"),

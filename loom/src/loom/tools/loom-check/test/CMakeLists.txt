@@ -78,6 +78,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "low_dce"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/low_dce.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "low_packet"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/low_packet.loom-test"

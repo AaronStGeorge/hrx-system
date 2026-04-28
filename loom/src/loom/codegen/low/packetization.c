@@ -6,7 +6,6 @@
 
 #include "loom/codegen/low/packetization.h"
 
-#include "loom/codegen/low/cleanup.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
@@ -47,8 +46,6 @@ iree_status_t loom_low_packetize_function(
   }
 
   *out_packetization = (loom_low_packetization_t){0};
-  IREE_RETURN_IF_ERROR(loom_low_cleanup_function(
-      module, low_func_op, options->descriptor_registry, options->emitter));
 
   loom_low_schedule_options_t schedule_options = {
       .descriptor_registry = options->descriptor_registry,

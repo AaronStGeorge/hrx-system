@@ -1,0 +1,18 @@
+// RUN: pass low-dce
+
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @drops_dead_low_packets(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) asm<test.low.core> {
+  %dead_const = test.const.i32 7
+  %dead_sum = test.add.i32 %lhs, %dead_const
+  %out = test.add.i32 %lhs, %rhs
+  return %out
+}
+
+// ----
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @drops_dead_low_packets(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
+  %out = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.return %out : reg<test.i32>
+}

@@ -8,7 +8,6 @@
 #include "loom/analysis/liveness_json.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_json.h"
-#include "loom/codegen/low/cleanup.h"
 #include "loom/codegen/low/descriptors_manifest.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/packet_json.h"
@@ -857,8 +856,6 @@ static iree_status_t loom_check_emit_write_low_schedule_json(
   loom_op_t* low_function = NULL;
   IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
       module, symbol_name, &low_function));
-  IREE_RETURN_IF_ERROR(loom_low_cleanup_function(module, low_function,
-                                                 descriptor_registry, emitter));
   loom_low_schedule_options_t options = {
       .descriptor_registry = descriptor_registry,
       .emitter = emitter,
@@ -883,8 +880,6 @@ static iree_status_t loom_check_emit_write_low_allocation_json(
   loom_op_t* low_function = NULL;
   IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
       module, symbol_name, &low_function));
-  IREE_RETURN_IF_ERROR(loom_low_cleanup_function(module, low_function,
-                                                 descriptor_registry, emitter));
   const loom_low_allocation_fixed_value_t* fixed_values = NULL;
   iree_host_size_t fixed_value_count = 0;
   IREE_RETURN_IF_ERROR(loom_check_low_emit_resolve_fixed_value_specs(

@@ -36,7 +36,7 @@ loom_assert_no_dependencies(
         ":allocation",
         ":allocation_materialization",
         ":allocation_pass",
-        ":cleanup",
+        ":dce_pass",
         ":descriptors",
         ":descriptor_traits",
         ":descriptors_manifest",
@@ -64,7 +64,7 @@ loom_assert_no_dependencies(
         ":allocation",
         ":allocation_materialization",
         ":allocation_pass",
-        ":cleanup",
+        ":dce_pass",
         ":descriptor_traits",
         ":diagnostics",
         ":function",
@@ -399,12 +399,13 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "cleanup",
-    srcs = ["cleanup.c"],
-    hdrs = ["cleanup.h"],
+    name = "dce_pass",
+    srcs = ["dce_pass.c"],
+    hdrs = ["dce_pass.h"],
     deps = [
         ":descriptors",
         ":function",
+        ":pass_requirements",
         ":target_binding",
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/ir",
@@ -413,7 +414,6 @@ loom_cc_library(
         "//loom/src/loom/pass:types",
         "//loom/src/loom/passes:dce",
         "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
     ],
 )
 
@@ -423,7 +423,6 @@ loom_cc_library(
     hdrs = ["packetization.h"],
     deps = [
         ":allocation",
-        ":cleanup",
         ":function",
         ":packet",
         ":schedule",

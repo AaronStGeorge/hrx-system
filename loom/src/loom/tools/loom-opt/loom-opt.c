@@ -14,6 +14,7 @@
 #include "iree/base/tooling/flags.h"
 #include "iree/io/file_contents.h"
 #include "loom/codegen/low/allocation_pass.h"
+#include "loom/codegen/low/dce_pass.h"
 #include "loom/codegen/low/lower_pass.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
@@ -56,6 +57,8 @@ typedef enum loom_opt_pass_report_mode_e {
 } loom_opt_pass_report_mode_t;
 
 typedef struct loom_opt_pass_pipeline_config_t {
+  // Low DCE pass configuration borrowed by matching pipeline entries.
+  loom_low_dce_pass_config_t* low_dce_config;
   // Low allocation pass configuration borrowed by matching pipeline entries.
   loom_low_materialize_allocation_pass_config_t* low_allocation_config;
   // Source-to-low pass configuration borrowed by matching pipeline entries.
@@ -308,7 +311,11 @@ static iree_status_t loom_opt_configure_pass_instruction(
   *out_pass_user_data = NULL;
   if (instruction->kind == LOOM_PASS_PROGRAM_INSTRUCTION_INVOKE &&
       iree_string_view_equal(instruction->invoke.descriptor->key,
-                             IREE_SV("low-materialize-allocation"))) {
+                             IREE_SV("low-dce"))) {
+    *out_pass_user_data = config->low_dce_config;
+  } else if (instruction->kind == LOOM_PASS_PROGRAM_INSTRUCTION_INVOKE &&
+             iree_string_view_equal(instruction->invoke.descriptor->key,
+                                    IREE_SV("low-materialize-allocation"))) {
     *out_pass_user_data = config->low_allocation_config;
   } else if (instruction->kind == LOOM_PASS_PROGRAM_INSTRUCTION_INVOKE &&
              iree_string_view_equal(instruction->invoke.descriptor->key,
@@ -323,7 +330,9 @@ static bool loom_opt_pass_requirement_is_satisfied(
   loom_opt_pass_pipeline_config_t* config =
       (loom_opt_pass_pipeline_config_t*)user_data;
   return config &&
-         (loom_low_materialize_allocation_pass_config_satisfies_requirement(
+         (loom_low_dce_pass_config_satisfies_requirement(config->low_dce_config,
+                                                         requirement) ||
+          loom_low_materialize_allocation_pass_config_satisfies_requirement(
               config->low_allocation_config, requirement) ||
           loom_low_source_to_low_pass_config_satisfies_requirement(
               config->low_source_to_low_config, requirement));
@@ -745,6 +754,9 @@ static iree_status_t loom_opt_run_passes(
       .emitter = LOOM_EMITTER_PASS,
   };
 
+  loom_low_dce_pass_config_t low_dce_config = {
+      .descriptor_registry = &low_registry->registry,
+  };
   loom_low_materialize_allocation_pass_config_t low_allocation_config = {
       .descriptor_registry = &low_registry->registry,
   };
@@ -755,6 +767,7 @@ static iree_status_t loom_opt_run_passes(
       .policy_registry = &low_lower_policy_registry,
   };
   loom_opt_pass_pipeline_config_t pipeline_config = {
+      .low_dce_config = &low_dce_config,
       .low_allocation_config = &low_allocation_config,
       .low_source_to_low_config = &low_source_to_low_config,
   };

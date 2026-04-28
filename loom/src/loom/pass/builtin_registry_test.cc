@@ -22,6 +22,7 @@ static const iree_string_view_t kExpectedBuiltinPassKeys[] = {
     IREE_SVL("kernel-async-legality"),
     IREE_SVL("licm"),
     IREE_SVL("loop-fusion"),
+    IREE_SVL("low-dce"),
     IREE_SVL("low-materialize-allocation"),
     IREE_SVL("normalize-kernel-resources"),
     IREE_SVL("refine-boundaries"),
@@ -101,6 +102,13 @@ TEST(PassBuiltinRegistryTest, ValidatesBuiltinOptionSchemas) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_pass_descriptor_validate_options(
                             allocation, IREE_SV("diagnostics=verbose")));
+
+  const loom_pass_descriptor_t* low_dce = LookupBuiltinPass(IREE_SV("low-dce"));
+  ASSERT_NE(low_dce, nullptr);
+  ASSERT_EQ(low_dce->requirement_count, 1u);
+  EXPECT_TRUE(
+      iree_string_view_equal(low_dce->requirement_defs[0].key,
+                             IREE_SV("target.low-descriptor-registry")));
 
   const loom_pass_descriptor_t* source_to_low =
       LookupBuiltinPass(IREE_SV("source-to-low"));

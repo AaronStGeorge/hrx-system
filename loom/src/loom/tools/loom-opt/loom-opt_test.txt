@@ -8,6 +8,7 @@
 // LIST-DAG: kernel-async-legality{{[[:space:]]+}}func
 // LIST-DAG: licm{{[[:space:]]+}}func
 // LIST-DAG: loop-fusion{{[[:space:]]+}}func
+// LIST-DAG: low-dce{{[[:space:]]+}}func
 // LIST-DAG: low-materialize-allocation{{[[:space:]]+}}func
 // LIST-DAG: normalize-kernel-resources{{[[:space:]]+}}func
 // LIST-DAG: refine-boundaries{{[[:space:]]+}}module
@@ -37,6 +38,7 @@
 // RUN:       --pass=kernel-async-legality \
 // RUN:       --pass=licm \
 // RUN:       --pass=loop-fusion \
+// RUN:       --pass=low-dce \
 // RUN:       --pass=low-materialize-allocation \
 // RUN:       --pass=normalize-kernel-resources \
 // RUN:       --pass=refine-boundaries \

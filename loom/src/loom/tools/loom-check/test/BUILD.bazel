@@ -27,6 +27,7 @@ loom_check_test_suite(
     srcs = [
         "low_allocation.loom-test",
         "low_allocation_materialization.loom-test",
+        "low_dce.loom-test",
         "low_packet.loom-test",
         "low_schedule.loom-test",
         "low_verify.loom-test",
