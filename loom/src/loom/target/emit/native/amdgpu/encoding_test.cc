@@ -799,7 +799,7 @@ TEST_F(AmdgpuEncodingTest, EncodesScalarMoveToM0AndReturn) {
   ASSERT_GE(text.data_length, 8u);
   const uint32_t move_word = ReadU32LE(text.data);
   EXPECT_TRUE(IsSop1SMovB32(move_word));
-  EXPECT_EQ((move_word >> 16) & UINT32_C(0x7F), UINT32_C(124));
+  EXPECT_EQ((move_word >> 16) & UINT32_C(0x7F), UINT32_C(125));
   EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
   iree_arena_deinitialize(&arena);
 }

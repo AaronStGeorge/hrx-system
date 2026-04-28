@@ -132,6 +132,23 @@ def _predefined(
     return AmdgpuOperandPredefinedValueRef(value_name, operand_type)
 
 
+def _instruction_encoding_opcode(
+    spec: AmdgpuIsaFactSource, instruction_name: str, encoding_name: str
+) -> int:
+    opcodes = set()
+    for summary in spec.instruction_encoding_summaries(
+        (instruction_name,), include_aliases=False
+    ):
+        if summary.encoding_name == encoding_name:
+            opcodes.add(summary.opcode)
+    if len(opcodes) != 1:
+        raise ValueError(
+            f"{spec.source_name}: expected one {encoding_name} opcode for "
+            f"{instruction_name}, found {len(opcodes)}"
+        )
+    return next(iter(opcodes))
+
+
 _MUBUF_SOFFSET_INLINE_ZERO = _predefined("0")
 
 _VMEM_LOAD_COUNTER_HAZARD = Hazard(
@@ -589,6 +606,9 @@ _MANUAL_SCALAR_MOVE_DESCRIPTOR_KEYS = (
 def _manual_scalar_move_descriptors(
     spec: AmdgpuIsaFactSource,
 ) -> tuple[Descriptor, ...]:
+    s_mov_b32_opcode = _instruction_encoding_opcode(spec, "S_MOV_B32", "ENC_SOP1")
+    s_mov_b64_opcode = _instruction_encoding_opcode(spec, "S_MOV_B64", "ENC_SOP1")
+    s_xor_b64_opcode = _instruction_encoding_opcode(spec, "S_XOR_B64", "ENC_SOP2")
     return (
         Descriptor(
             key="amdgpu.s_mov_b32",
@@ -599,6 +619,7 @@ def _manual_scalar_move_descriptors(
             asm_forms=_asm(results=("dst",), immediates=("imm32",)),
             schedule_class=_SCHEDULE_SALU,
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
+            encoding_id=s_mov_b32_opcode,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
@@ -625,6 +646,7 @@ def _manual_scalar_move_descriptors(
             ),
             schedule_class=_SCHEDULE_SALU,
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
+            encoding_id=s_mov_b32_opcode,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
@@ -651,7 +673,7 @@ def _manual_scalar_move_descriptors(
             effects=(_CONVERGENT_EFFECT,),
             schedule_class=_SCHEDULE_SALU,
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
-            encoding_id=1,
+            encoding_id=s_mov_b64_opcode,
             flags=(DescriptorFlag.SIDE_EFFECTING,),
         ),
         Descriptor(
@@ -686,7 +708,7 @@ def _manual_scalar_move_descriptors(
             effects=(_CONVERGENT_EFFECT,),
             schedule_class=_SCHEDULE_SALU,
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP2,
-            encoding_id=27,
+            encoding_id=s_xor_b64_opcode,
             flags=(DescriptorFlag.SIDE_EFFECTING,),
         ),
     )

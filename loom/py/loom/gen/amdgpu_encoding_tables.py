@@ -202,15 +202,20 @@ def _instruction_opcode(
     *,
     instruction_name: str,
     encoding_name: str,
-    condition_name: str,
+    condition_name: str | None,
 ) -> int:
     for instruction in instructions:
         if instruction.name != instruction_name:
             continue
+        opcodes = {encoding.opcode for encoding in instruction.encodings if encoding.encoding_name == encoding_name and (condition_name is None or encoding.condition_name == condition_name)}
+        if len(opcodes) == 1:
+            return next(iter(opcodes))
+        if opcodes:
+            raise ValueError(f"AMDGPU instruction '{instruction_name}' has ambiguous {encoding_name}/{condition_name or '*'} opcodes")
         for encoding in instruction.encodings:
-            if encoding.encoding_name == encoding_name and encoding.condition_name == condition_name:
-                return encoding.opcode
-        raise ValueError(f"AMDGPU instruction '{instruction_name}' has no {encoding_name}/{condition_name} encoding")
+            if encoding.encoding_name == encoding_name:
+                raise ValueError(f"AMDGPU instruction '{instruction_name}' has no {encoding_name}/{condition_name or '*'} encoding")
+        raise ValueError(f"AMDGPU instruction '{instruction_name}' has no {encoding_name} encoding")
     raise ValueError(f"AMDGPU instruction '{instruction_name}' is missing")
 
 
@@ -227,6 +232,9 @@ def _emit_source(
     table_function: str,
     encodings: tuple[AmdgpuIsaEncoding, ...],
     instructions: tuple[AmdgpuIsaInstruction, ...],
+    source_literal: int,
+    scalar_inline_u32_zero: int,
+    vector_source_vgpr0: int,
     source_path: Path,
     format_output: bool,
 ) -> str:
@@ -236,6 +244,12 @@ def _emit_source(
         instruction_name="V_MOV_B32",
         encoding_name="ENC_VOP1",
         condition_name="default",
+    )
+    s_mov_b32_opcode = _instruction_opcode(
+        instructions,
+        instruction_name="S_MOV_B32",
+        encoding_name="ENC_SOP1",
+        condition_name=None,
     )
     lines = [
         "// Copyright 2026 The IREE Authors",
@@ -313,7 +327,11 @@ def _emit_source(
             f"static const loom_amdgpu_encoding_table_t k{table_prefix}Table = {{",
             f"    .descriptor_set_stable_id = UINT64_C(0x{descriptor_stable_id(descriptor_set_key):016x}),",
             f'    .descriptor_set_key = IREE_SVL("{descriptor_set_key}"),',
+            f"    .s_mov_b32_opcode = {s_mov_b32_opcode},",
             f"    .v_mov_b32_opcode = {v_mov_b32_opcode},",
+            f"    .source_literal = {source_literal},",
+            f"    .scalar_inline_u32_zero = {scalar_inline_u32_zero},",
+            f"    .vector_source_vgpr0 = {vector_source_vgpr0},",
             f"    .formats = k{table_prefix}Formats,",
             f"    .format_count = IREE_ARRAYSIZE(k{table_prefix}Formats),",
             f"    .fields = k{table_prefix}Fields,",
@@ -348,6 +366,22 @@ def _parse_arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_arguments(argv)
     spec = parse_amdgpu_isa_xml_path(args.xml)
+    source_literal = spec.operand_predefined_value("OPR_SRC", "SRC_LITERAL")
+    scalar_source_literal = spec.operand_predefined_value("OPR_SSRC", "SRC_LITERAL")
+    if scalar_source_literal != source_literal:
+        raise ValueError(f"{spec.source_name}: OPR_SRC and OPR_SSRC disagree on SRC_LITERAL")
+    scalar_inline_u32_zero = spec.operand_predefined_value("OPR_SSRC", "0")
+    for inline_value in range(65):
+        actual_value = spec.operand_predefined_value("OPR_SSRC", str(inline_value))
+        expected_value = scalar_inline_u32_zero + inline_value
+        if actual_value != expected_value:
+            raise ValueError(f"{spec.source_name}: OPR_SSRC inline integer {inline_value} has value {actual_value}, expected {expected_value}")
+    vector_source_vgpr0 = spec.operand_predefined_value("OPR_SRC", "v0")
+    for register_index in range(256):
+        actual_value = spec.operand_predefined_value("OPR_SRC", f"v{register_index}")
+        expected_value = vector_source_vgpr0 + register_index
+        if actual_value != expected_value:
+            raise ValueError(f"{spec.source_name}: OPR_SRC VGPR {register_index} has value {actual_value}, expected {expected_value}")
     table_prefix = "Amdgpu" + "".join(part.title() for part in args.target.split("_"))
     table_function = f"loom_amdgpu_{args.target}_encoding_table"
     header_guard = f"LOOM_TARGET_ARCH_AMDGPU_{args.target.upper()}_ENCODING_TABLES_H_"
@@ -370,6 +404,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             table_function=table_function,
             encodings=spec.encodings,
             instructions=spec.instructions,
+            source_literal=source_literal,
+            scalar_inline_u32_zero=scalar_inline_u32_zero,
+            vector_source_vgpr0=vector_source_vgpr0,
             source_path=args.source,
             format_output=args.format,
         ),

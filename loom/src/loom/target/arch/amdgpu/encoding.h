@@ -30,6 +30,8 @@ typedef enum loom_amdgpu_encoding_format_e {
   LOOM_AMDGPU_ENCODING_FORMAT_NONE = 0,
   // Scalar one-source instruction format.
   LOOM_AMDGPU_ENCODING_FORMAT_SOP1 = 1,
+  // Scalar one-source instruction format with mandatory literal.
+  LOOM_AMDGPU_ENCODING_FORMAT_SOP1_LITERAL = 38,
   // Scalar two-source instruction format.
   LOOM_AMDGPU_ENCODING_FORMAT_SOP2 = 2,
   // Scalar program-flow or wait instruction format.
@@ -122,8 +124,16 @@ typedef struct loom_amdgpu_encoding_table_t {
   uint64_t descriptor_set_stable_id;
   // Descriptor-set key this table can encode.
   iree_string_view_t descriptor_set_key;
+  // SOP1 opcode used for target-inserted s_mov_b32 register/literal moves.
+  uint16_t s_mov_b32_opcode;
   // VOP1 opcode used for target-inserted v_mov_b32 register moves.
   uint16_t v_mov_b32_opcode;
+  // Unified source field value selecting the literal word after a packet.
+  uint16_t source_literal;
+  // Scalar source field value selecting unsigned inline integer zero.
+  uint16_t scalar_inline_u32_zero;
+  // Unified source field value selecting VGPR zero.
+  uint16_t vector_source_vgpr0;
   // Sorted format-layout rows.
   const loom_amdgpu_encoding_format_layout_t* formats;
   // Number of format-layout rows.
@@ -186,6 +196,23 @@ iree_status_t loom_amdgpu_encoding_pack(
     const loom_amdgpu_encoding_table_t* table, uint16_t encoding_format,
     uint16_t opcode, const loom_amdgpu_encoding_field_value_t* field_values,
     iree_host_size_t field_value_count,
+    loom_amdgpu_encoding_packet_t* out_packet);
+
+// Packs a SOPP packet with its 16-bit immediate field.
+iree_status_t loom_amdgpu_encoding_pack_sopp_simm16(
+    const loom_amdgpu_encoding_table_t* table, uint16_t opcode,
+    uint16_t immediate, loom_amdgpu_encoding_packet_t* out_packet);
+
+// Packs a 32-bit SGPR-to-SGPR s_mov_b32 packet using the target table's SOP1
+// layout.
+iree_status_t loom_amdgpu_encoding_pack_s_mov_b32_sgpr(
+    const loom_amdgpu_encoding_table_t* table, uint16_t sdst, uint16_t ssrc0,
+    loom_amdgpu_encoding_packet_t* out_packet);
+
+// Packs a 32-bit immediate-to-SGPR s_mov_b32 packet using an inline scalar
+// source when possible and a literal SOP1 form otherwise.
+iree_status_t loom_amdgpu_encoding_pack_s_mov_b32_u32(
+    const loom_amdgpu_encoding_table_t* table, uint16_t sdst, uint32_t imm32,
     loom_amdgpu_encoding_packet_t* out_packet);
 
 // Packs a 32-bit VGPR-to-VGPR v_mov_b32 packet using the target table's VOP1
