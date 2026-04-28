@@ -346,18 +346,18 @@ low.func.def target(@gfx11_target) @gfx11_stress_fragment(%s0: reg<amdgpu.sgpr>,
 
 // ----
 .Lbb0:
-  s_add_u32 s0, s0, s1
-  v_add_u32 v0, v0, v1
-  s_buffer_load_dword s1, s[4:7], s8 offset:0
-  s_load_dwordx2 s[2:3], s[2:3], s8 offset:16
+  v_wmma_f32_16x16x16_f16 v[8:15], v[16:23], v[24:31], v[8:15]
   buffer_load_dword v1, v2, s[4:7], s8 offen offset:4
   buffer_load_b128 v[4:7], v2, s[4:7], s8 offen offset:16
+  s_load_dwordx2 s[2:3], s[2:3], s8 offset:16
+  s_buffer_load_dword s1, s[4:7], s8 offset:0
   s_add_u32 s0, s0, s1
   v_add_u32 v0, v0, v1
-  v_wmma_f32_16x16x16_f16 v[8:15], v[16:23], v[24:31], v[8:15]
-  v_wmma_f32_16x16x16_f16 v[8:15], v[16:23], v[24:31], v[8:15]
+  s_add_u32 s0, s0, s1
+  v_add_u32 v0, v0, v1
   buffer_store_dword v0, v2, s[4:7], s0 offen offset:8
   buffer_store_b128 v[4:7], v2, s[4:7], s2 offen offset:32
+  v_wmma_f32_16x16x16_f16 v[8:15], v[16:23], v[24:31], v[8:15]
   buffer_store_b128 v[8:11], v2, s[4:7], s8 offen offset:48
   s_waitcnt vmcnt(0) lgkmcnt(0)
   s_waitcnt_depctr depctr(0)
@@ -461,7 +461,6 @@ low.func.def target(@gfx11_target) @gfx11_materialized_copy(%s0: reg<amdgpu.sgpr
 .Lbb0:
   s_mov_b32 s2, s1
   s_add_u32 s0, s2, s0
-  s_add_u32 s0, s1, s0
   v_mov_b32 v32, v8
   v_mov_b32 v33, v9
   v_mov_b32 v34, v10
@@ -471,6 +470,7 @@ low.func.def target(@gfx11_target) @gfx11_materialized_copy(%s0: reg<amdgpu.sgpr
   v_mov_b32 v38, v14
   v_mov_b32 v39, v15
   v_wmma_f32_16x16x16_f16 v[0:7], v[32:39], v[16:23], v[0:7]
+  s_add_u32 s0, s1, s0
   v_wmma_f32_16x16x16_f16 v[0:7], v[8:15], v[16:23], v[0:7]
   buffer_store_b128 v[0:3], v24, s[4:7], s0 offen offset:0
   s_endpgm
