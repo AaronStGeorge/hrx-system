@@ -641,6 +641,8 @@ iree_c_embed_data(
     "execution/testdata/divergent_if_else_store.loom"
     "execution/testdata/divergent_lds_producer.loom"
     "execution/testdata/divergent_then_store.loom"
+    "execution/testdata/dot2f_bf16_buffer.loom"
+    "execution/testdata/dot2f_bf16_gemm4x8x4.loom"
     "execution/testdata/dot2f_f16_buffer.loom"
     "execution/testdata/dot2f_f16_gemm4x8x4.loom"
     "execution/testdata/dot2f_f16_lds_coop_gemm4x4x8.loom"
