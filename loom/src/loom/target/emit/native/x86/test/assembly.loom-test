@@ -36,12 +36,12 @@ low.func.def target(@x86_target) @x86_fragment(%input: reg<x86.gpr64>, %output: 
 
 target.profile @x86_target preset("x86-avx512")
 
-low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>, %base: reg<x86.gpr64>) {
-  %copy = low.copy %lhs : reg<x86.zmm> -> reg<x86.zmm>
-  %sum = low.op<x86.avx512.vpaddd.zmm>(%copy, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
-  %second = low.op<x86.avx512.vpaddd.zmm>(%lhs, %sum) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
-  low.op<x86.avx512.vmovdqu32.store.zmm>(%second, %base) {disp32 = 128} : (reg<x86.zmm>, reg<x86.gpr64>)
-  low.return
+low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>, %base: reg<x86.gpr64>) asm<x86.avx512.core> {
+  %copy = copy %lhs : reg<x86.zmm> -> reg<x86.zmm>
+  %sum = vpaddd %copy, %rhs
+  %second = vpaddd %lhs, %sum
+  vmovdqu32.store %second, %base {disp32 = 128}
+  return
 }
 
 // ----
@@ -56,10 +56,10 @@ low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86
 
 target.profile @x86_target preset("x86-avx512")
 
-low.func.def target(@x86_target) @x86_fragment(%value: reg<x86.zmm>) {
-  %addr = low.const<x86.avx512.movimm.gpr64> {imm64 = 1024} : reg<x86.gpr64>
-  low.op<x86.avx512.vmovdqu32.store.zmm>(%value, %addr) {disp32 = -16} : (reg<x86.zmm>, reg<x86.gpr64>)
-  low.return
+low.func.def target(@x86_target) @x86_fragment(%value: reg<x86.zmm>) asm<x86.avx512.core> {
+  %addr = mov.imm64 1024
+  vmovdqu32.store %value, %addr {disp32 = -16}
+  return
 }
 
 // ----
@@ -168,19 +168,19 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 
 target.profile @x86_target preset("x86-avx512")
 
-low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) {
-  %greater = low.op<x86.avx512.vpcmpd.sgt.zmm>(%lhs, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.k>
-  %less = low.op<x86.avx512.vpcmpd.slt.zmm>(%lhs, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.k>
-  %either = low.op<x86.avx512.korq>(%greater, %less) : (reg<x86.k>, reg<x86.k>) -> reg<x86.k>
-  %greater_again = low.op<x86.avx512.kandq>(%either, %greater) : (reg<x86.k>, reg<x86.k>) -> reg<x86.k>
-  %condition = low.op<x86.avx512.kxorq>(%greater_again, %less) : (reg<x86.k>, reg<x86.k>) -> reg<x86.k>
+low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) asm<x86.avx512.core> {
+  %greater = vpcmpd.sgt %lhs, %rhs
+  %less = vpcmpd.slt %lhs, %rhs
+  %either = korq %greater, %less
+  %greater_again = kandq %either, %greater
+  %condition = kxorq %greater_again, %less
   low.cond_br %condition, ^then, ^else : reg<x86.k>
 ^then:
-  low.op<x86.avx512.vmovdqu32.store.zmm>(%lhs, %base) {disp32 = 0} : (reg<x86.zmm>, reg<x86.gpr64>)
-  low.return
+  vmovdqu32.store %lhs, %base {disp32 = 0}
+  return
 ^else:
-  low.op<x86.avx512.vmovdqu32.store.zmm>(%rhs, %base) {disp32 = 64} : (reg<x86.zmm>, reg<x86.gpr64>)
-  low.return
+  vmovdqu32.store %rhs, %base {disp32 = 64}
+  return
 }
 
 // ----
@@ -204,12 +204,12 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 
 target.profile @x86_target preset("x86-avx512")
 
-low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<x86.zmm>) {
+low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<x86.zmm>) asm<x86.avx512.core> {
   low.br ^join(%lhs: reg<x86.zmm>)
 ^join(%incoming: reg<x86.zmm>):
-  %sum = low.op<x86.avx512.vpaddd.zmm>(%incoming, %lhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
-  low.op<x86.avx512.vmovdqu32.store.zmm>(%sum, %base) {disp32 = 256} : (reg<x86.zmm>, reg<x86.gpr64>)
-  low.return
+  %sum = vpaddd %incoming, %lhs
+  vmovdqu32.store %sum, %base {disp32 = 256}
+  return
 }
 
 // ----
@@ -225,12 +225,12 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 
 target.profile @x86_target preset("x86-avx512")
 
-low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) {
+low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) asm<x86.avx512.core> {
   low.br ^join(%rhs: reg<x86.zmm>, %lhs: reg<x86.zmm>)
 ^join(%a: reg<x86.zmm>, %b: reg<x86.zmm>):
-  %sum = low.op<x86.avx512.vpaddd.zmm>(%a, %b) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
-  low.op<x86.avx512.vmovdqu32.store.zmm>(%sum, %base) {disp32 = 512} : (reg<x86.zmm>, reg<x86.gpr64>)
-  low.return
+  %sum = vpaddd %a, %b
+  vmovdqu32.store %sum, %base {disp32 = 512}
+  return
 }
 
 // ----
@@ -248,7 +248,7 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 
 target.profile @x86_target preset("x86-avx512")
 
-low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) {
+low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) asm<x86.avx512.core> {
   low.br ^loop(%rhs: reg<x86.zmm>, %lhs: reg<x86.zmm>)
 ^loop(%a: reg<x86.zmm>, %b: reg<x86.zmm>):
   low.br ^loop(%b: reg<x86.zmm>, %a: reg<x86.zmm>)
