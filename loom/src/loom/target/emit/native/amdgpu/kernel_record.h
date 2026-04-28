@@ -15,7 +15,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/allocation.h"
-#include "loom/codegen/low/schedule.h"
+#include "loom/codegen/low/schedule/types.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/emit/native/amdgpu/descriptor.h"
 #include "loom/target/emit/native/amdgpu/metadata.h"

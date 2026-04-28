@@ -60,7 +60,6 @@ loom_cc_library(
     loom::src::loom::codegen::low::pass_environment
     loom::src::loom::codegen::low::register_class_map
     loom::src::loom::codegen::low::schedule
-    loom::src::loom::codegen::low::schedule_json
     loom::src::loom::codegen::low::source_selection
     loom::src::loom::codegen::low::target_binding
     loom::src::loom::codegen::low::text_asm

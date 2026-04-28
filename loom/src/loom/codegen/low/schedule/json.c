@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/codegen/low/schedule_json.h"
+#include "loom/codegen/low/schedule/json.h"
 
 #include <inttypes.h>
 

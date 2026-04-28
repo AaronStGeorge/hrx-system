@@ -12,7 +12,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/allocation.h"
-#include "loom/codegen/low/schedule.h"
+#include "loom/codegen/low/schedule/types.h"
 #include "loom/target/arch/amdgpu/wait_packets.h"
 
 #ifdef __cplusplus

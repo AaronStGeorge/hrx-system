@@ -15,7 +15,7 @@
 #include "iree/vm/api.h"
 #include "iree/vm/bytecode/module.h"
 #include "loom/codegen/low/packetization.h"
-#include "loom/codegen/low/schedule.h"
+#include "loom/codegen/low/schedule/types.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"

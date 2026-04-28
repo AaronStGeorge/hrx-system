@@ -291,53 +291,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    schedule
-  HDRS
-    "schedule.h"
-  SRCS
-    "schedule.c"
-  DEPS
-    ::descriptors
-    ::diagnostics
-    ::function
-    ::memory_access
-    ::register_class_map
-    ::requirements
-    ::target_binding
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::analysis::liveness
-    loom::src::loom::error::emitter
-    loom::src::loom::error::error_defs
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::op_defs
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    schedule_json
-  HDRS
-    "schedule_json.h"
-  SRCS
-    "schedule_json.c"
-  DEPS
-    ::descriptors
-    ::function
-    ::schedule
-    iree::base
-    loom::src::loom::analysis::liveness_json
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::op_defs
-    loom::src::loom::util::json
-    loom::src::loom::util::stream
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     packet
   HDRS
     "packet.h"
@@ -346,8 +299,8 @@ loom_cc_library(
   DEPS
     ::allocation
     ::descriptors
-    ::schedule
     iree::base
+    loom::src::loom::codegen::low::schedule
     loom::src::loom::ir
   PUBLIC
 )
@@ -363,8 +316,8 @@ loom_cc_library(
     ::allocation
     ::descriptors
     ::packet
-    ::schedule
     iree::base
+    loom::src::loom::codegen::low::schedule
     loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::ops::low
@@ -384,9 +337,9 @@ loom_cc_library(
     ::function
     ::memory_access
     ::packet
-    ::schedule
     iree::base
     iree::base::internal::arena
+    loom::src::loom::codegen::low::schedule
     loom::src::loom::error::emitter
     loom::src::loom::ir
     loom::src::loom::ops::low
@@ -429,8 +382,8 @@ loom_cc_library(
     ::descriptors
     ::function
     ::packet
-    ::schedule
     iree::base
+    loom::src::loom::codegen::low::schedule
     loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::ops::low

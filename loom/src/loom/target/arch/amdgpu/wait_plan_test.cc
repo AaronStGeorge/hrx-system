@@ -10,7 +10,8 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/codegen/low/schedule.h"
+#include "loom/codegen/low/schedule/run.h"
+#include "loom/codegen/low/schedule/types.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"

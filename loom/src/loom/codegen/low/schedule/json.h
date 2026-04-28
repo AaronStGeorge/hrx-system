@@ -10,7 +10,7 @@
 #define LOOM_CODEGEN_LOW_SCHEDULE_JSON_H_
 
 #include "iree/base/api.h"
-#include "loom/codegen/low/schedule.h"
+#include "loom/codegen/low/schedule/types.h"
 
 #ifdef __cplusplus
 extern "C" {

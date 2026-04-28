@@ -8,6 +8,7 @@
 
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packet.h"
+#include "loom/codegen/low/schedule/run.h"
 #include "loom/ops/low/ops.h"
 
 iree_status_t loom_low_packetize_function(

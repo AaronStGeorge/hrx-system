@@ -21,7 +21,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/memory_access.h"
-#include "loom/codegen/low/schedule.h"
+#include "loom/codegen/low/schedule/types.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
 

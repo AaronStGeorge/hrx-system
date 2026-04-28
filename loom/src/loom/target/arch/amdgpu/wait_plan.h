@@ -18,7 +18,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
-#include "loom/codegen/low/schedule.h"
+#include "loom/codegen/low/schedule/types.h"
 
 #ifdef __cplusplus
 extern "C" {

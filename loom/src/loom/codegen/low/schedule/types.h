@@ -14,8 +14,8 @@
 // while still keeping target hazard insertion, allocation, and diagnostics on
 // this sidecar instead of creating a second low-level IR container.
 
-#ifndef LOOM_CODEGEN_LOW_SCHEDULE_H_
-#define LOOM_CODEGEN_LOW_SCHEDULE_H_
+#ifndef LOOM_CODEGEN_LOW_SCHEDULE_TYPES_H_
+#define LOOM_CODEGEN_LOW_SCHEDULE_TYPES_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
@@ -554,18 +554,8 @@ typedef struct loom_low_schedule_sidecar_t {
   iree_host_size_t resource_summary_count;
 } loom_low_schedule_sidecar_t;
 
-// Schedules one target-low function body and writes an arena-owned sidecar. The
-// caller must keep |module| immutable and |arena| alive for as long as
-// |out_sidecar| is used. This function performs descriptor target resolution
-// and liveness analysis; malformed user IR is reported through
-// |options->emitter| when provided and otherwise fails loud with status.
-iree_status_t loom_low_schedule_function(
-    const loom_module_t* module, const loom_op_t* low_func_op,
-    const loom_low_schedule_options_t* options, iree_arena_allocator_t* arena,
-    loom_low_schedule_sidecar_t* out_sidecar);
-
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-#endif  // LOOM_CODEGEN_LOW_SCHEDULE_H_
+#endif  // LOOM_CODEGEN_LOW_SCHEDULE_TYPES_H_

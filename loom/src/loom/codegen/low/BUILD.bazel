@@ -314,54 +314,13 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "schedule",
-    srcs = ["schedule.c"],
-    hdrs = ["schedule.h"],
-    deps = [
-        ":descriptors",
-        ":diagnostics",
-        ":function",
-        ":memory_access",
-        ":register_class_map",
-        ":requirements",
-        ":target_binding",
-        "//loom/src/loom/analysis:liveness",
-        "//loom/src/loom/error:emitter",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/low",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_library(
-    name = "schedule_json",
-    srcs = ["schedule_json.c"],
-    hdrs = ["schedule_json.h"],
-    deps = [
-        ":descriptors",
-        ":function",
-        ":schedule",
-        "//loom/src/loom/analysis:liveness_json",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/util:json",
-        "//loom/src/loom/util:stream",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "packet",
     srcs = ["packet.c"],
     hdrs = ["packet.h"],
     deps = [
         ":allocation",
         ":descriptors",
-        ":schedule",
+        "//loom/src/loom/codegen/low/schedule",
         "//loom/src/loom/ir",
         "//runtime/src/iree/base",
     ],
@@ -375,7 +334,7 @@ loom_cc_library(
         ":allocation",
         ":descriptors",
         ":packet",
-        ":schedule",
+        "//loom/src/loom/codegen/low/schedule",
         "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
@@ -393,7 +352,7 @@ loom_cc_library(
         ":function",
         ":memory_access",
         ":packet",
-        ":schedule",
+        "//loom/src/loom/codegen/low/schedule",
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
@@ -432,7 +391,7 @@ loom_cc_library(
         ":descriptors",
         ":function",
         ":packet",
-        ":schedule",
+        "//loom/src/loom/codegen/low/schedule",
         "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
