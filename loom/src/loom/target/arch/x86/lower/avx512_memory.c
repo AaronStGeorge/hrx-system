@@ -236,6 +236,8 @@ static iree_status_t loom_x86_lower_vector_load(
       context, descriptor_id, operands, operand_count,
       loom_make_named_attr_slice(attrs, attr_count), &result_type, 1, NULL, 0,
       source_op->location, &load_op));
+  IREE_RETURN_IF_ERROR(loom_low_lower_record_source_memory_access(
+      context, load_op, &plan->source));
   return loom_low_lower_bind_value(
       context, loom_vector_load_result(source_op),
       loom_value_slice_get(loom_low_op_results(load_op), 0));
@@ -279,10 +281,12 @@ static iree_status_t loom_x86_lower_vector_store(
     attr_count = 2;
   }
   loom_op_t* store_op = NULL;
-  return loom_low_lower_emit_descriptor_op(
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
       context, descriptor_id, operands, operand_count,
       loom_make_named_attr_slice(attrs, attr_count), NULL, 0, NULL, 0,
-      source_op->location, &store_op);
+      source_op->location, &store_op));
+  return loom_low_lower_record_source_memory_access(context, store_op,
+                                                    &plan->source);
 }
 
 iree_status_t loom_x86_emit_avx512_op(void* user_data,

@@ -146,6 +146,7 @@ static iree_status_t loom_ireevm_module_compile_lower_function(
       .max_errors = max_errors,
       .report_enabled = report != NULL,
       .report_storage = report_storage,
+      .sidecar_arena = sidecar_arena,
   };
   IREE_RETURN_IF_ERROR(loom_low_lower_function(module, source_function,
                                                &lower_options, out_result));
@@ -283,6 +284,7 @@ iree_status_t loom_ireevm_compile_module_archive(
   if (iree_status_is_ok(status)) {
     const loom_low_packetization_options_t packetization_options = {
         .descriptor_registry = &low_registry.registry,
+        .memory_access_table = lower_result.memory_access_table,
         .emitter = loom_target_module_compile_emitter(&diagnostic_emitter),
     };
     status = loom_low_packetize_function(module, lower_result.low_func_op,

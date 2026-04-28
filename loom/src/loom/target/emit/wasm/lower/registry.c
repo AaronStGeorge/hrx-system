@@ -1421,6 +1421,8 @@ static iree_status_t loom_wasm_lower_vector_load(
       context, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_V128_LOAD, &address, 1,
       loom_named_attr_slice_empty(), &result_type, 1, NULL, 0,
       source_op->location, &load_op));
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_record_source_memory_access(context, load_op, plan));
   return loom_low_lower_bind_value(
       context, loom_vector_load_result(source_op),
       loom_value_slice_get(loom_low_op_results(load_op), 0));
@@ -1437,10 +1439,11 @@ static iree_status_t loom_wasm_lower_vector_store(
       context, loom_vector_store_value(source_op), &value));
   loom_value_id_t operands[] = {address, value};
   loom_op_t* store_op = NULL;
-  return loom_low_lower_emit_descriptor_op(
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
       context, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_V128_STORE, operands,
       IREE_ARRAYSIZE(operands), loom_named_attr_slice_empty(), NULL, 0, NULL, 0,
-      source_op->location, &store_op);
+      source_op->location, &store_op));
+  return loom_low_lower_record_source_memory_access(context, store_op, plan);
 }
 
 static iree_status_t loom_wasm_lower_vector_extract(

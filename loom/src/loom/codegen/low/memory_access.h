@@ -23,6 +23,8 @@
 extern "C" {
 #endif
 
+typedef struct loom_op_t loom_op_t;
+
 // Sentinel for absent analysis-owned symbolic memory expressions.
 #define LOOM_LOW_MEMORY_EXPR_ID_NONE UINT32_MAX
 
@@ -85,6 +87,38 @@ typedef struct loom_low_memory_access_summary_t {
   // Optional conservative byte interval touched by this access.
   const loom_low_byte_interval_t* byte_interval;
 } loom_low_memory_access_summary_t;
+
+typedef struct loom_low_memory_access_record_t {
+  // Low operation whose descriptor memory effect is refined by |summary|.
+  const loom_op_t* op;
+  // Source-derived memory access summary for |op|.
+  loom_low_memory_access_summary_t summary;
+  // Inline interval storage borrowed by |summary| when interval precision is
+  // available.
+  loom_low_byte_interval_t byte_interval;
+} loom_low_memory_access_record_t;
+
+typedef struct loom_low_memory_access_table_t {
+  // Low function that owns the recorded low operations.
+  const loom_op_t* function_op;
+  // Source/emission-order memory access records, or NULL when empty. Records
+  // stay valid while recorded ops survive and keep their relative order.
+  const loom_low_memory_access_record_t* values;
+  // Number of rows in |values|.
+  iree_host_size_t count;
+} loom_low_memory_access_table_t;
+
+// Returns an empty low memory access table.
+static inline loom_low_memory_access_table_t loom_low_memory_access_table_empty(
+    void) {
+  return (loom_low_memory_access_table_t){0};
+}
+
+// Returns true when |table| carries no memory access records.
+static inline bool loom_low_memory_access_table_is_empty(
+    loom_low_memory_access_table_t table) {
+  return table.count == 0;
+}
 
 // Returns the canonical dependency memory-space bucket for |memory_space|.
 loom_low_memory_space_t loom_low_memory_access_normalize_space(

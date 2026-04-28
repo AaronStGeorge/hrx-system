@@ -73,6 +73,8 @@ typedef struct loom_low_schedule_build_state_t {
   uint32_t* effect_read_nodes;
   // Scratch effect-frontier read summaries, parallel to effect_read_nodes.
   loom_low_memory_access_summary_t* effect_read_summaries;
+  // Optional source-derived memory access records for the function.
+  const loom_low_memory_access_record_t* memory_access_records;
   // Per-resource aggregate resource pressure, dense by descriptor resource id
   // until compacted after scheduling.
   loom_low_schedule_resource_summary_t* resource_summaries;
@@ -104,6 +106,10 @@ typedef struct loom_low_schedule_build_state_t {
   iree_host_size_t resource_summary_count;
   // Allocated effect-frontier read scratch capacity.
   iree_host_size_t effect_read_capacity;
+  // Number of rows in |memory_access_records|.
+  iree_host_size_t memory_access_record_count;
+  // Next memory access record expected by dependency construction.
+  iree_host_size_t memory_access_record_cursor;
   // Allocated resource-use record capacity.
   iree_host_size_t resource_use_capacity;
   // Allocated effect-use record capacity.
@@ -1324,6 +1330,55 @@ static bool loom_low_schedule_effect_is_ordered(
   }
 }
 
+static uint16_t loom_low_schedule_descriptor_dependency_memory_effect_count(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  uint16_t count = 0;
+  for (uint16_t i = 0; i < descriptor->effect_count; ++i) {
+    const loom_low_effect_t* effect =
+        &descriptor_set->effects[descriptor->effect_start + i];
+    if (!iree_any_bit_set(effect->flags, LOOM_LOW_EFFECT_FLAG_DEPENDENCY)) {
+      continue;
+    }
+    if (effect->kind == LOOM_LOW_EFFECT_KIND_READ ||
+        effect->kind == LOOM_LOW_EFFECT_KIND_WRITE) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+static const loom_low_memory_access_summary_t*
+loom_low_schedule_take_memory_access_summary(
+    loom_low_schedule_build_state_t* state, uint32_t node_index,
+    const loom_low_descriptor_t* descriptor) {
+  while (state->memory_access_record_cursor <
+         state->memory_access_record_count) {
+    const loom_low_memory_access_record_t* record =
+        &state->memory_access_records[state->memory_access_record_cursor];
+    if (!iree_any_bit_set(record->op->flags, LOOM_OP_FLAG_DEAD)) {
+      break;
+    }
+    ++state->memory_access_record_cursor;
+  }
+  if (state->memory_access_record_cursor >= state->memory_access_record_count) {
+    return NULL;
+  }
+
+  const loom_low_schedule_node_t* node = &state->nodes[node_index];
+  const loom_low_memory_access_record_t* record =
+      &state->memory_access_records[state->memory_access_record_cursor];
+  if (record->op != node->op) {
+    return NULL;
+  }
+  ++state->memory_access_record_cursor;
+  if (loom_low_schedule_descriptor_dependency_memory_effect_count(
+          state->target.descriptor_set, descriptor) != 1) {
+    return NULL;
+  }
+  return &record->summary;
+}
+
 static iree_status_t loom_low_schedule_note_descriptor_effects(
     loom_low_schedule_build_state_t* state,
     loom_low_schedule_effect_frontier_t* frontier, uint32_t node_index,
@@ -1336,6 +1391,9 @@ static iree_status_t loom_low_schedule_note_descriptor_effects(
                                 state, frontier, node_index)
                           : iree_ok_status();
   }
+  const loom_low_memory_access_summary_t* source_summary =
+      loom_low_schedule_take_memory_access_summary(state, node_index,
+                                                   descriptor);
   const loom_low_descriptor_set_t* descriptor_set =
       state->target.descriptor_set;
   for (uint16_t i = 0; i < descriptor->effect_count; ++i) {
@@ -1356,6 +1414,9 @@ static iree_status_t loom_low_schedule_note_descriptor_effects(
       case LOOM_LOW_EFFECT_KIND_READ: {
         loom_low_memory_access_summary_t summary =
             loom_low_memory_access_summary_from_effect(effect);
+        if (source_summary != NULL) {
+          summary = *source_summary;
+        }
         IREE_RETURN_IF_ERROR(loom_low_schedule_effect_frontier_note_read(
             state, frontier, node_index, &summary));
         break;
@@ -1363,6 +1424,9 @@ static iree_status_t loom_low_schedule_note_descriptor_effects(
       case LOOM_LOW_EFFECT_KIND_WRITE: {
         loom_low_memory_access_summary_t summary =
             loom_low_memory_access_summary_from_effect(effect);
+        if (source_summary != NULL) {
+          summary = *source_summary;
+        }
         IREE_RETURN_IF_ERROR(loom_low_schedule_effect_frontier_note_write(
             state, frontier, node_index, &summary));
         break;
@@ -2323,6 +2387,13 @@ iree_status_t loom_low_schedule_function(
                             "unknown low schedule strategy %d",
                             (int)options->strategy);
   }
+  if (options->memory_access_table.count != 0 &&
+      (!options->memory_access_table.values ||
+       options->memory_access_table.function_op != low_func_op)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low schedule memory access table must match the scheduled function");
+  }
   *out_sidecar = (loom_low_schedule_sidecar_t){0};
 
   loom_low_schedule_build_state_t state = {
@@ -2332,6 +2403,10 @@ iree_status_t loom_low_schedule_function(
       .function_op = low_func_op,
       .body = loom_low_function_body((loom_op_t*)low_func_op),
   };
+  if (options->memory_access_table.function_op == low_func_op) {
+    state.memory_access_records = options->memory_access_table.values;
+    state.memory_access_record_count = options->memory_access_table.count;
+  }
   if (!state.body) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low function body is required");

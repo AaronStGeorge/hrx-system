@@ -1661,6 +1661,8 @@ static iree_status_t loom_test_low_emit_vector_load(
       context, plan->descriptor_id, operands, operand_count,
       loom_named_attr_slice_empty(), &result_type, 1, NULL, 0,
       source_op->location, &low_op));
+  IREE_RETURN_IF_ERROR(loom_low_lower_record_source_memory_access(
+      context, low_op, &plan->access));
   return loom_low_lower_bind_value(
       context, loom_vector_load_result(source_op),
       loom_value_slice_get(loom_low_op_results(low_op), 0));
@@ -1689,10 +1691,12 @@ static iree_status_t loom_test_low_emit_vector_store(
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
       context, loom_vector_store_value(source_op), &operands[operand_count++]));
   loom_op_t* low_op = NULL;
-  return loom_low_lower_emit_descriptor_op(
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
       context, plan->descriptor_id, operands, operand_count,
       loom_named_attr_slice_empty(), /*result_types=*/NULL,
-      /*result_count=*/0, NULL, 0, source_op->location, &low_op);
+      /*result_count=*/0, NULL, 0, source_op->location, &low_op));
+  return loom_low_lower_record_source_memory_access(context, low_op,
+                                                    &plan->access);
 }
 
 static iree_status_t loom_test_low_emit_op(void* user_data,

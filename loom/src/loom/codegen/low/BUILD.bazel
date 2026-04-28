@@ -391,6 +391,7 @@ loom_cc_library(
     deps = [
         ":allocation",
         ":function",
+        ":memory_access",
         ":packet",
         ":schedule",
         "//loom/src/loom/error:emitter",
@@ -458,7 +459,9 @@ loom_cc_library(
     deps = [
         ":builder",
         ":descriptors",
+        ":memory_access",
         ":requirements",
+        ":source_memory_plan",
         "//loom/src/loom/analysis:kernel_async_legality",
         "//loom/src/loom/analysis:vector_memory_footprint",
         "//loom/src/loom/error:emitter",
@@ -642,6 +645,7 @@ loom_cc_test(
     srcs = ["source_lowering_function_test.cc"],
     deps = [
         ":lower",
+        ":packetization",
         ":source_selection",
         ":verify",
         "//loom/src/loom/codegen/low/testing:ir_match_test_util",
@@ -649,7 +653,9 @@ loom_cc_test(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/buffer",
         "//loom/src/loom/ops/cfg",
+        "//loom/src/loom/ops/encoding",
         "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/target",

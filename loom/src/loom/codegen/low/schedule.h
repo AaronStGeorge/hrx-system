@@ -21,6 +21,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/analysis/liveness.h"
 #include "loom/codegen/low/descriptors.h"
+#include "loom/codegen/low/memory_access.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
@@ -386,6 +387,9 @@ typedef struct loom_low_schedule_block_t {
 typedef struct loom_low_schedule_options_t {
   // Descriptor registry available to the scheduler.
   const loom_low_descriptor_registry_t* descriptor_registry;
+  // Optional source-derived memory summaries for |low_func_op|. Empty uses
+  // conservative descriptor effect summaries.
+  loom_low_memory_access_table_t memory_access_table;
   // Structured diagnostic emitter for user IR failures.
   iree_diagnostic_emitter_t emitter;
   // Optional backend feedback diagnostics to emit after scheduling analysis.

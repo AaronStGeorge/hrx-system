@@ -20,6 +20,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/allocation.h"
+#include "loom/codegen/low/memory_access.h"
 #include "loom/codegen/low/schedule.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
@@ -32,6 +33,8 @@ extern "C" {
 typedef struct loom_low_packetization_options_t {
   // Descriptor registry available to scheduling and allocation.
   const loom_low_descriptor_registry_t* descriptor_registry;
+  // Optional source-derived memory summaries for the scheduled low function.
+  loom_low_memory_access_table_t memory_access_table;
   // Candidate selection strategy used by the scheduler.
   loom_low_schedule_strategy_t schedule_strategy;
   // Optional structured scheduler feedback to emit.

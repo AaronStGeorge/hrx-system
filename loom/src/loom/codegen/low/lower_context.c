@@ -7,6 +7,7 @@
 #include <inttypes.h>
 
 #include "loom/codegen/low/lower_internal.h"
+#include "loom/codegen/low/source_memory_plan.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/cfg/ops.h"
@@ -360,6 +361,46 @@ iree_status_t loom_low_lower_emit_resolved_descriptor_const(
   return loom_low_build_resolved_descriptor_const(
       &context->builder, context->descriptor_set, descriptor->descriptor,
       descriptor->opcode_id, attrs, result_type, location, out_op);
+}
+
+iree_status_t loom_low_lower_record_memory_access_summary(
+    loom_low_lower_context_t* context, const loom_op_t* low_op,
+    const loom_low_memory_access_summary_t* summary) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(low_op);
+  IREE_ASSERT_ARGUMENT(summary);
+  if (context->options->sidecar_arena == NULL) {
+    return iree_ok_status();
+  }
+  if (context->memory_access_record_count >=
+      context->memory_access_record_capacity) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "source-to-low memory access sidecar exceeded planned capacity");
+  }
+
+  loom_low_memory_access_record_t* record =
+      &context->memory_access_records[context->memory_access_record_count++];
+  *record = (loom_low_memory_access_record_t){
+      .op = low_op,
+      .summary = *summary,
+  };
+  if (summary->byte_interval != NULL) {
+    record->byte_interval = *summary->byte_interval;
+    record->summary.byte_interval = &record->byte_interval;
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_lower_record_source_memory_access(
+    loom_low_lower_context_t* context, const loom_op_t* low_op,
+    const loom_low_source_memory_access_plan_t* source_plan) {
+  IREE_ASSERT_ARGUMENT(source_plan);
+  loom_low_byte_interval_t byte_interval = {0};
+  loom_low_memory_access_summary_t summary = {0};
+  loom_low_source_memory_access_plan_make_summary(source_plan, &byte_interval,
+                                                  &summary);
+  return loom_low_lower_record_memory_access_summary(context, low_op, &summary);
 }
 
 iree_status_t loom_low_lower_map_type(loom_low_lower_context_t* context,

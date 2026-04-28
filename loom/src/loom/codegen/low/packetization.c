@@ -49,6 +49,7 @@ iree_status_t loom_low_packetize_function(
 
   loom_low_schedule_options_t schedule_options = {
       .descriptor_registry = options->descriptor_registry,
+      .memory_access_table = options->memory_access_table,
       .emitter = options->emitter,
       .diagnostic_flags = options->schedule_diagnostic_flags,
       .strategy = options->schedule_strategy,

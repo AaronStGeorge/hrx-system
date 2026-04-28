@@ -59,6 +59,9 @@ typedef struct loom_amdgpu_module_compile_kernel_plan_t {
   const loom_target_module_compile_entry_t* entry;
   // Selected or lowered low.kernel.def op for packetization.
   loom_op_t* low_function_op;
+  // Source-derived memory summaries for low_function_op, when this plan lowered
+  // from source IR in this compile.
+  loom_low_memory_access_table_t memory_access_table;
   // ABI/resource materialization result captured before packetization.
   loom_amdgpu_hal_resource_materialization_result_t materialization;
   // Fixed allocator values derived from the HAL ABI live-ins.
@@ -257,6 +260,7 @@ static iree_status_t loom_amdgpu_module_compile_lower_function(
       .max_errors = max_errors,
       .report_enabled = report != NULL,
       .report_storage = report_storage,
+      .sidecar_arena = sidecar_arena,
   };
   IREE_RETURN_IF_ERROR(loom_low_lower_function(module, source_function,
                                                &lower_options, out_result));
@@ -279,9 +283,12 @@ static iree_status_t loom_amdgpu_module_compile_select_low_function(
     loom_func_like_t source_function,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     uint32_t max_errors, iree_arena_allocator_t* sidecar_arena,
-    loom_target_compile_report_t* report, loom_op_t** out_low_function_op) {
+    loom_target_compile_report_t* report, loom_op_t** out_low_function_op,
+    loom_low_memory_access_table_t* out_memory_access_table) {
   IREE_ASSERT_ARGUMENT(out_low_function_op);
+  IREE_ASSERT_ARGUMENT(out_memory_access_table);
   *out_low_function_op = NULL;
+  *out_memory_access_table = loom_low_memory_access_table_empty();
 
   if (loom_low_kernel_def_isa(source_function.op)) {
     *out_low_function_op = source_function.op;
@@ -300,6 +307,7 @@ static iree_status_t loom_amdgpu_module_compile_select_low_function(
       max_errors, sidecar_arena, report, &lower_result));
 
   *out_low_function_op = lower_result.low_func_op;
+  *out_memory_access_table = lower_result.memory_access_table;
   return iree_ok_status();
 }
 
@@ -319,7 +327,7 @@ static iree_status_t loom_amdgpu_module_compile_prepare_kernel_plan(
   loom_op_t* low_function_op = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_select_low_function(
       module, low_registry, entry, entry->func, diagnostic_emitter, max_errors,
-      sidecar_arena, report, &low_function_op));
+      sidecar_arena, report, &low_function_op, &out_plan->memory_access_table));
   out_plan->low_function_op = low_function_op;
   if (report != NULL) {
     loom_symbol_ref_t lowered_ref = entry->func_ref;
@@ -379,6 +387,7 @@ static iree_status_t loom_amdgpu_module_compile_build_kernel_contribution(
   const loom_low_packetization_options_t packetization_options = {
       .descriptor_registry = &low_registry->registry,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING,
+      .memory_access_table = plan->memory_access_table,
       .allocation_fixed_values = plan->fixed_values,
       .allocation_fixed_value_count = plan->fixed_value_count,
       .emitter = loom_target_module_compile_emitter(diagnostic_emitter),

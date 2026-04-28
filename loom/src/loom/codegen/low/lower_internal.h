@@ -13,6 +13,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/builder.h"
 #include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/memory_access.h"
 #include "loom/util/fact_table.h"
 
 #ifdef __cplusplus
@@ -80,6 +81,12 @@ struct loom_low_lower_context_t {
   iree_host_size_t selected_plan_capacity;
   // Next selected plan consumed by the emission walk.
   iree_host_size_t selected_plan_emit_index;
+  // Source-derived memory access rows copied into options.sidecar_arena.
+  loom_low_memory_access_record_t* memory_access_records;
+  // Number of memory access rows recorded during emission.
+  iree_host_size_t memory_access_record_count;
+  // Capacity of |memory_access_records|.
+  iree_host_size_t memory_access_record_capacity;
 };
 
 // Returns the source function name used in source-to-low diagnostics/reports.

@@ -18,6 +18,7 @@
 
 #include "iree/base/api.h"
 #include "loom/codegen/low/descriptors.h"
+#include "loom/codegen/low/memory_access.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/low/ops.h"
@@ -32,6 +33,8 @@ extern "C" {
 
 typedef struct loom_low_lower_context_t loom_low_lower_context_t;
 typedef struct loom_low_lower_rule_set_t loom_low_lower_rule_set_t;
+typedef struct loom_low_source_memory_access_plan_t
+    loom_low_source_memory_access_plan_t;
 
 typedef struct loom_low_lower_rule_set_list_t {
   // Total number of rule sets in the list.
@@ -351,6 +354,9 @@ typedef struct loom_low_lower_options_t {
   iree_diagnostic_emitter_t emitter;
   // Maximum number of errors to emit before aborting. Zero means no limit.
   uint32_t max_errors;
+  // Optional arena receiving production sidecars that must outlive lowering,
+  // such as source-derived memory access summaries consumed by packetization.
+  iree_arena_allocator_t* sidecar_arena;
   // Enables production source-to-low report counters and optional rows.
   bool report_enabled;
   // Optional caller-owned storage for production source-low report rows.
@@ -380,6 +386,8 @@ typedef struct loom_low_lower_result_t {
   iree_host_size_t report_row_count;
   // Total number of available report rows before capacity truncation.
   iree_host_size_t report_row_total_count;
+  // Source-derived memory access summaries for emitted low memory packets.
+  loom_low_memory_access_table_t memory_access_table;
 } loom_low_lower_result_t;
 
 typedef struct loom_low_lower_resolved_descriptor_t {
@@ -577,6 +585,20 @@ iree_status_t loom_low_lower_emit_resolved_descriptor_const(
     const loom_low_lower_resolved_descriptor_t* descriptor,
     loom_named_attr_slice_t attrs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
+
+// Records a source-derived memory summary for an emitted low memory packet.
+//
+// The row is copied into options.sidecar_arena when provided. Calls are ignored
+// when the current lowering run has no sidecar arena, preserving conservative
+// descriptor-only scheduling for callers that do not need source precision.
+iree_status_t loom_low_lower_record_memory_access_summary(
+    loom_low_lower_context_t* context, const loom_op_t* low_op,
+    const loom_low_memory_access_summary_t* summary);
+
+// Records a source memory access plan for an emitted low memory packet.
+iree_status_t loom_low_lower_record_source_memory_access(
+    loom_low_lower_context_t* context, const loom_op_t* low_op,
+    const loom_low_source_memory_access_plan_t* source_plan);
 
 // Emits ERR_BACKEND_001 for an unsupported source-to-low lowering subject.
 iree_status_t loom_low_lower_emit_reject(loom_low_lower_context_t* context,

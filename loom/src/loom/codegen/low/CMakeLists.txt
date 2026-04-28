@@ -382,6 +382,7 @@ loom_cc_library(
   DEPS
     ::allocation
     ::function
+    ::memory_access
     ::packet
     ::schedule
     iree::base
@@ -454,7 +455,9 @@ loom_cc_library(
   DEPS
     ::builder
     ::descriptors
+    ::memory_access
     ::requirements
+    ::source_memory_plan
     iree::base
     iree::base::internal::arena
     loom::src::loom::analysis::kernel_async_legality
@@ -655,6 +658,7 @@ loom_cc_test(
     "source_lowering_function_test.cc"
   DEPS
     ::lower
+    ::packetization
     ::source_selection
     ::verify
     iree::base::internal::arena
@@ -663,7 +667,9 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::buffer
     loom::src::loom::ops::cfg
+    loom::src::loom::ops::encoding
     loom::src::loom::ops::func
+    loom::src::loom::ops::index
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
     loom::src::loom::ops::target

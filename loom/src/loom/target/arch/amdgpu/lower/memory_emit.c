@@ -109,6 +109,21 @@ static iree_status_t loom_amdgpu_emit_memory_soffset(
       access->scalar_byte_offset, out_low_soffset);
 }
 
+static iree_status_t loom_amdgpu_emit_memory_packet(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_memory_access_plan_t* access,
+    const loom_value_id_t* operands, iree_host_size_t operand_count,
+    loom_named_attr_slice_t attrs, const loom_type_t* result_types,
+    iree_host_size_t result_count, loom_op_t** out_op) {
+  IREE_ASSERT_ARGUMENT(out_op);
+  *out_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
+      context, source_op, access->descriptor_id, operands, operand_count, attrs,
+      result_types, result_count, out_op));
+  return loom_low_lower_record_source_memory_access(context, *out_op,
+                                                    &access->source);
+}
+
 iree_status_t loom_amdgpu_emit_memory_saddr(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op,
                                             loom_value_id_t low_resource,
@@ -256,21 +271,20 @@ iree_status_t loom_amdgpu_lower_vector_load(
           context, source_op, access->descriptor_id, 0, &low_m0));
       loom_value_id_t operands[] = {low_m0};
       loom_op_t* low_op = NULL;
-      IREE_RETURN_IF_ERROR(
-          loom_amdgpu_emit_low_op(context, source_op, access->descriptor_id,
-                                  operands, IREE_ARRAYSIZE(operands),
-                                  loom_make_named_attr_slice(attrs, attr_count),
-                                  &result_type, 1, &low_op));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_packet(
+          context, source_op, access, operands, IREE_ARRAYSIZE(operands),
+          loom_make_named_attr_slice(attrs, attr_count), &result_type, 1,
+          &low_op));
       return loom_low_lower_bind_value(
           context, loom_vector_load_result(source_op),
           loom_value_slice_get(loom_low_op_results(low_op), 0));
     }
     loom_value_id_t operands[] = {low_vaddr};
     loom_op_t* low_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-        context, source_op, access->descriptor_id, operands,
-        IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(attrs, attr_count),
-        &result_type, 1, &low_op));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_packet(
+        context, source_op, access, operands, IREE_ARRAYSIZE(operands),
+        loom_make_named_attr_slice(attrs, attr_count), &result_type, 1,
+        &low_op));
     return loom_low_lower_bind_value(
         context, loom_vector_load_result(source_op),
         loom_value_slice_get(loom_low_op_results(low_op), 0));
@@ -285,10 +299,10 @@ iree_status_t loom_amdgpu_lower_vector_load(
         low_saddr,
     };
     loom_op_t* low_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-        context, source_op, access->descriptor_id, operands,
-        IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(attrs, attr_count),
-        &result_type, 1, &low_op));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_packet(
+        context, source_op, access, operands, IREE_ARRAYSIZE(operands),
+        loom_make_named_attr_slice(attrs, attr_count), &result_type, 1,
+        &low_op));
     return loom_low_lower_bind_value(
         context, loom_vector_load_result(source_op),
         loom_value_slice_get(loom_low_op_results(low_op), 0));
@@ -297,10 +311,10 @@ iree_status_t loom_amdgpu_lower_vector_load(
   if (access->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO) {
     loom_value_id_t operands[] = {low_resource};
     loom_op_t* low_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-        context, source_op, access->descriptor_id, operands,
-        IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(attrs, attr_count),
-        &result_type, 1, &low_op));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_packet(
+        context, source_op, access, operands, IREE_ARRAYSIZE(operands),
+        loom_make_named_attr_slice(attrs, attr_count), &result_type, 1,
+        &low_op));
     return loom_low_lower_bind_value(
         context, loom_vector_load_result(source_op),
         loom_value_slice_get(loom_low_op_results(low_op), 0));
@@ -315,10 +329,9 @@ iree_status_t loom_amdgpu_lower_vector_load(
       low_soffset,
   };
   loom_op_t* low_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-      context, source_op, access->descriptor_id, operands,
-      IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(attrs, attr_count),
-      &result_type, 1, &low_op));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_packet(
+      context, source_op, access, operands, IREE_ARRAYSIZE(operands),
+      loom_make_named_attr_slice(attrs, attr_count), &result_type, 1, &low_op));
   return loom_low_lower_bind_value(
       context, loom_vector_load_result(source_op),
       loom_value_slice_get(loom_low_op_results(low_op), 0));
@@ -360,11 +373,10 @@ iree_status_t loom_amdgpu_lower_vector_store(
           low_m0,
       };
       loom_op_t* low_op = NULL;
-      return loom_amdgpu_emit_low_op(
-          context, source_op, access->descriptor_id, operands,
-          IREE_ARRAYSIZE(operands),
-          loom_make_named_attr_slice(attrs, attr_count),
-          /*result_types=*/NULL, /*result_count=*/0, &low_op);
+      return loom_amdgpu_emit_memory_packet(
+          context, source_op, access, operands, IREE_ARRAYSIZE(operands),
+          loom_make_named_attr_slice(attrs, attr_count), /*result_types=*/NULL,
+          /*result_count=*/0, &low_op);
     }
     if (access->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR) {
       loom_type_t lane_type = loom_type_none();
@@ -381,21 +393,20 @@ iree_status_t loom_amdgpu_lower_vector_store(
           low_value1,
       };
       loom_op_t* low_op = NULL;
-      return loom_amdgpu_emit_low_op(
-          context, source_op, access->descriptor_id, operands,
-          IREE_ARRAYSIZE(operands),
-          loom_make_named_attr_slice(attrs, attr_count),
-          /*result_types=*/NULL, /*result_count=*/0, &low_op);
+      return loom_amdgpu_emit_memory_packet(
+          context, source_op, access, operands, IREE_ARRAYSIZE(operands),
+          loom_make_named_attr_slice(attrs, attr_count), /*result_types=*/NULL,
+          /*result_count=*/0, &low_op);
     }
     loom_value_id_t operands[] = {
         low_vaddr,
         low_value,
     };
     loom_op_t* low_op = NULL;
-    return loom_amdgpu_emit_low_op(
-        context, source_op, access->descriptor_id, operands,
-        IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(attrs, attr_count),
-        /*result_types=*/NULL, /*result_count=*/0, &low_op);
+    return loom_amdgpu_emit_memory_packet(
+        context, source_op, access, operands, IREE_ARRAYSIZE(operands),
+        loom_make_named_attr_slice(attrs, attr_count), /*result_types=*/NULL,
+        /*result_count=*/0, &low_op);
   }
 
   if (access->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO) {
@@ -404,10 +415,10 @@ iree_status_t loom_amdgpu_lower_vector_store(
         low_resource,
     };
     loom_op_t* low_op = NULL;
-    return loom_amdgpu_emit_low_op(
-        context, source_op, access->descriptor_id, operands,
-        IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(attrs, attr_count),
-        /*result_types=*/NULL, /*result_count=*/0, &low_op);
+    return loom_amdgpu_emit_memory_packet(
+        context, source_op, access, operands, IREE_ARRAYSIZE(operands),
+        loom_make_named_attr_slice(attrs, attr_count), /*result_types=*/NULL,
+        /*result_count=*/0, &low_op);
   }
 
   if (access->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR) {
@@ -420,10 +431,10 @@ iree_status_t loom_amdgpu_lower_vector_store(
         low_saddr,
     };
     loom_op_t* low_op = NULL;
-    return loom_amdgpu_emit_low_op(
-        context, source_op, access->descriptor_id, operands,
-        IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(attrs, attr_count),
-        /*result_types=*/NULL, /*result_count=*/0, &low_op);
+    return loom_amdgpu_emit_memory_packet(
+        context, source_op, access, operands, IREE_ARRAYSIZE(operands),
+        loom_make_named_attr_slice(attrs, attr_count), /*result_types=*/NULL,
+        /*result_count=*/0, &low_op);
   }
 
   loom_value_id_t low_soffset = LOOM_VALUE_ID_INVALID;
@@ -436,8 +447,8 @@ iree_status_t loom_amdgpu_lower_vector_store(
       low_soffset,
   };
   loom_op_t* low_op = NULL;
-  return loom_amdgpu_emit_low_op(
-      context, source_op, access->descriptor_id, operands,
-      IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(attrs, attr_count),
-      /*result_types=*/NULL, /*result_count=*/0, &low_op);
+  return loom_amdgpu_emit_memory_packet(
+      context, source_op, access, operands, IREE_ARRAYSIZE(operands),
+      loom_make_named_attr_slice(attrs, attr_count), /*result_types=*/NULL,
+      /*result_count=*/0, &low_op);
 }

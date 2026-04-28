@@ -337,9 +337,17 @@ static iree_status_t loom_low_lower_prepare_plan(
   if (plan_capacity == 0) {
     return iree_ok_status();
   }
-  return loom_low_lower_allocate_scratch_array(
+  IREE_RETURN_IF_ERROR(loom_low_lower_allocate_scratch_array(
       context, plan_capacity, sizeof(*context->selected_plans),
-      (void**)&context->selected_plans);
+      (void**)&context->selected_plans));
+  if (context->options->sidecar_arena != NULL) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        context->options->sidecar_arena, plan_capacity,
+        sizeof(*context->memory_access_records),
+        (void**)&context->memory_access_records));
+    context->memory_access_record_capacity = plan_capacity;
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_lower_record_selected_plan(
@@ -1215,6 +1223,14 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
       loom_module_link_symbol_defining_op(
           module, context.low_func_op,
           loom_op_vtable(module, context.low_func_op));
+    }
+    if (iree_status_is_ok(status) && context.result->error_count == 0 &&
+        context.memory_access_record_count != 0) {
+      out_result->memory_access_table = (loom_low_memory_access_table_t){
+          .function_op = context.low_func_op,
+          .values = context.memory_access_records,
+          .count = context.memory_access_record_count,
+      };
     }
   }
 
