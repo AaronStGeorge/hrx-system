@@ -46,6 +46,7 @@ loom_assert_no_dependencies(
         ":packet_asm",
         ":packet_json",
         ":packetization",
+        ":preparation",
         ":pass_environment",
         ":register_class_map",
         ":requirements",
@@ -386,6 +387,27 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "preparation",
+    srcs = ["preparation.c"],
+    hdrs = ["preparation.h"],
+    deps = [
+        ":descriptors",
+        ":function",
+        ":pass_environment",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/pass",
+        "//loom/src/loom/pass:interpreter",
+        "//loom/src/loom/pass:program",
+        "//loom/src/loom/pass:registry",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "packet_json",
     srcs = ["packet_json.c"],
     hdrs = ["packet_json.h"],
@@ -487,6 +509,7 @@ loom_cc_test(
         "//loom/src/loom/codegen/low/testing:source_workload",
         "//loom/src/loom/codegen/low/testing:source_workload_pipeline",
         "//loom/src/loom/ir",
+        "//loom/src/loom/pass:builtin_registry",
         "//loom/src/loom/target/test:low_registry",
         "//loom/src/loom/target/test:lower",
         "//loom/src/loom/testing:module_ptr",
@@ -503,6 +526,7 @@ loom_cc_fuzz(
         "//loom/src/loom/codegen/low/testing:source_workload",
         "//loom/src/loom/codegen/low/testing:source_workload_pipeline",
         "//loom/src/loom/ir",
+        "//loom/src/loom/pass:builtin_registry",
         "//loom/src/loom/target/test:low_registry",
         "//loom/src/loom/target/test:lower",
         "//runtime/src/iree/base",

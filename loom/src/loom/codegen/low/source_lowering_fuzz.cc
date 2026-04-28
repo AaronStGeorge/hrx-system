@@ -21,6 +21,7 @@
 #include "loom/codegen/low/testing/source_workload_pipeline.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/pass/builtin_registry.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/target/test/lower.h"
 
@@ -73,6 +74,7 @@ static iree_status_t fuzz_one_input(const uint8_t* data, size_t size) {
       data, size, &workload_config, &g_context, &block_pool, &module);
   if (iree_status_is_ok(status)) {
     const loom_low_source_workload_pipeline_options_t pipeline_options = {
+        .pass_registry = loom_pass_builtin_registry(),
         .descriptor_registry = &g_descriptor_registry.registry,
         .policy_registry = &g_policy_registry,
         .descriptor_requirements =

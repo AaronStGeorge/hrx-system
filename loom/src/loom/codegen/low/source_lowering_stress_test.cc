@@ -11,6 +11,7 @@
 #include "loom/codegen/low/testing/source_workload_pipeline.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/pass/builtin_registry.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/target/test/lower.h"
 #include "loom/testing/module_ptr.h"
@@ -46,6 +47,7 @@ class SourceLoweringStressTest : public ::testing::Test {
 TEST_F(SourceLoweringStressTest, GeneratedSupportedSourceLowersAndPacketizes) {
   loom_low_source_workload_pipeline_counters_t aggregate = {};
   const loom_low_source_workload_pipeline_options_t pipeline_options = {
+      .pass_registry = loom_pass_builtin_registry(),
       .descriptor_registry = &descriptor_registry_.registry,
       .policy_registry = &policy_registry_,
       .descriptor_requirements =

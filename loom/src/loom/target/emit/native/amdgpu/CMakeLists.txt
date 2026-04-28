@@ -261,12 +261,14 @@ loom_cc_library(
     iree::io::stream
     loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::packetization
+    loom::src::loom::codegen::low::preparation
     loom::src::loom::codegen::low::verify
     loom::src::loom::error::diagnostic
     loom::src::loom::ir
     loom::src::loom::ops::kernel
     loom::src::loom::ops::low
     loom::src::loom::ops::target
+    loom::src::loom::pass::builtin_registry
     loom::src::loom::target::arch::amdgpu::hal_kernel_abi
     loom::src::loom::target::arch::amdgpu::hal_resource_materialization
     loom::src::loom::target::arch::amdgpu::low_registry

@@ -21,12 +21,15 @@
 #include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/testing/source_workload.h"
 #include "loom/ir/ir.h"
+#include "loom/pass/registry.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct loom_low_source_workload_pipeline_options_t {
+  // Pass registry used to resolve production low-prep passes.
+  const loom_pass_registry_t* pass_registry;
   // Low descriptor registry linked into the caller.
   const loom_low_descriptor_registry_t* descriptor_registry;
   // Target lowering policies linked into the caller.

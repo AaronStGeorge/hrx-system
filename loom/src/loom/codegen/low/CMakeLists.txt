@@ -378,6 +378,30 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    preparation
+  HDRS
+    "preparation.h"
+  SRCS
+    "preparation.c"
+  DEPS
+    ::descriptors
+    ::function
+    ::pass_environment
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::error::emitter
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::pass
+    loom::src::loom::pass::interpreter
+    loom::src::loom::pass::program
+    loom::src::loom::pass::registry
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     packet_json
   HDRS
     "packet_json.h"
@@ -487,6 +511,7 @@ loom_cc_test(
     loom::src::loom::codegen::low::testing::source_workload
     loom::src::loom::codegen::low::testing::source_workload_pipeline
     loom::src::loom::ir
+    loom::src::loom::pass::builtin_registry
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
     loom::src::loom::testing::module_ptr
@@ -505,6 +530,7 @@ loom_cc_fuzz(
     loom::src::loom::codegen::low::testing::source_workload
     loom::src::loom::codegen::low::testing::source_workload_pipeline
     loom::src::loom::ir
+    loom::src::loom::pass::builtin_registry
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
 )

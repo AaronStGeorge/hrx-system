@@ -11,6 +11,7 @@
 
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/function.h"
+#include "loom/codegen/low/preparation.h"
 #include "loom/codegen/low/source_selection.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
@@ -93,6 +94,7 @@ iree_status_t loom_low_source_workload_run_pipeline(
     loom_low_source_workload_pipeline_counters_t* out_counters) {
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(options->pass_registry);
   IREE_ASSERT_ARGUMENT(options->descriptor_registry);
   IREE_ASSERT_ARGUMENT(options->policy_registry);
   IREE_ASSERT_ARGUMENT(block_pool);
@@ -164,6 +166,19 @@ iree_status_t loom_low_source_workload_run_pipeline(
     if (iree_status_is_ok(status)) {
       status = loom_low_source_workload_verify_general_module(module,
                                                               IREE_SV("low"));
+    }
+    if (iree_status_is_ok(status)) {
+      const loom_low_preparation_options_t preparation_options = {
+          .pass_registry = options->pass_registry,
+          .descriptor_registry = options->descriptor_registry,
+      };
+      status = loom_low_prepare_functions_for_packetization(
+          module, lowered_funcs, selection_list.count, &preparation_options,
+          block_pool);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_low_source_workload_verify_general_module(
+          module, IREE_SV("prepared low"));
     }
     if (iree_status_is_ok(status)) {
       status = loom_low_source_workload_verify_low_module(module, options);

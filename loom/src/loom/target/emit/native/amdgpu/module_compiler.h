@@ -8,7 +8,8 @@
 //
 // This mutates a parsed module through the current AMDGPU target-low native
 // path: target preset expansion, verification, ABI resource materialization,
-// packetization, native HSACO writing, and IREE HAL executable wrapping.
+// pass-managed low preparation, packetization, native HSACO writing, and IREE
+// HAL executable wrapping.
 
 #ifndef LOOM_TARGET_EMIT_NATIVE_AMDGPU_MODULE_COMPILER_H_
 #define LOOM_TARGET_EMIT_NATIVE_AMDGPU_MODULE_COMPILER_H_

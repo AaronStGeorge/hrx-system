@@ -10,10 +10,12 @@
 
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/preparation.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/pass/builtin_registry.h"
 #include "loom/target/compile_report_low.h"
 #include "loom/target/emit/ireevm/function_bytecode.h"
 #include "loom/target/emit/ireevm/low_registry.h"
@@ -248,6 +250,24 @@ iree_status_t loom_ireevm_compile_module_archive(
   if (iree_status_is_ok(status) && report != NULL) {
     status = loom_ireevm_module_compile_symbol_name(
         module, lower_result.low_func_ref, &report->lowered_symbol);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_target_module_compile_verify_module(
+        module, &target_options, LOOM_IREEVM_MODULE_COMPILE_DEFAULT_MAX_ERRORS);
+  }
+  if (iree_status_is_ok(status)) {
+    loom_op_t* low_functions[] = {
+        lower_result.low_func_op,
+    };
+    const loom_low_preparation_options_t preparation_options = {
+        .pass_registry = loom_pass_builtin_registry(),
+        .descriptor_registry = &low_registry.registry,
+        .diagnostic_emitter =
+            loom_target_module_compile_emitter(&diagnostic_emitter),
+    };
+    status = loom_low_prepare_functions_for_packetization(
+        module, low_functions, IREE_ARRAYSIZE(low_functions),
+        &preparation_options, &block_pool);
   }
   if (iree_status_is_ok(status)) {
     status = loom_target_module_compile_verify_module(

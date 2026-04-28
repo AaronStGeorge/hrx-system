@@ -8,9 +8,10 @@
 //
 // This mutates a parsed module through the current IREE VM target path:
 // target preset expansion, generic verification, source-to-low lowering, low
-// descriptor verification, packetization, VM function-body bytecode emission,
-// and VM bytecode module archive wrapping. The output archive is the same
-// runtime artifact consumed by iree_vm_bytecode_module_create.
+// pass-managed preparation, low descriptor verification, packetization, VM
+// function-body bytecode emission, and VM bytecode module archive wrapping. The
+// output archive is the same runtime artifact consumed by
+// iree_vm_bytecode_module_create.
 
 #ifndef LOOM_TARGET_EMIT_IREEVM_MODULE_COMPILER_H_
 #define LOOM_TARGET_EMIT_IREEVM_MODULE_COMPILER_H_
