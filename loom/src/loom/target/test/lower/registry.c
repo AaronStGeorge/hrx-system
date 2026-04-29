@@ -1517,7 +1517,7 @@ typedef struct loom_test_low_memory_access_plan_t {
   // Target-independent source memory decomposition.
   loom_low_source_memory_access_plan_t access;
   // Test-low memory descriptor selected during source op selection.
-  uint64_t descriptor_id;
+  loom_low_lower_resolved_descriptor_t descriptor;
 } loom_test_low_memory_access_plan_t;
 
 static bool loom_test_low_memory_access_descriptor_id(
@@ -1595,8 +1595,9 @@ static iree_status_t loom_test_low_select_memory_access(
       context, sizeof(*plan_data), (void**)&plan_data));
   *plan_data = (loom_test_low_memory_access_plan_t){
       .access = access,
-      .descriptor_id = descriptor_id,
   };
+  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor(
+      context, descriptor_id, &plan_data->descriptor));
   *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
   return iree_ok_status();
 }
@@ -1657,8 +1658,8 @@ static iree_status_t loom_test_low_emit_vector_load(
   IREE_RETURN_IF_ERROR(loom_low_lower_map_value(
       context, source_op, loom_vector_load_result(source_op), &result_type));
   loom_op_t* low_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
-      context, plan->descriptor_id, operands, operand_count,
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+      context, &plan->descriptor, operands, operand_count,
       loom_named_attr_slice_empty(), &result_type, 1, NULL, 0,
       source_op->location, &low_op));
   IREE_RETURN_IF_ERROR(loom_low_lower_record_source_memory_access(
@@ -1691,8 +1692,8 @@ static iree_status_t loom_test_low_emit_vector_store(
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
       context, loom_vector_store_value(source_op), &operands[operand_count++]));
   loom_op_t* low_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
-      context, plan->descriptor_id, operands, operand_count,
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+      context, &plan->descriptor, operands, operand_count,
       loom_named_attr_slice_empty(), /*result_types=*/NULL,
       /*result_count=*/0, NULL, 0, source_op->location, &low_op));
   return loom_low_lower_record_source_memory_access(context, low_op,

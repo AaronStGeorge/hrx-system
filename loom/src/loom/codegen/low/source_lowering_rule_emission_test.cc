@@ -48,8 +48,8 @@ static const loom_low_lower_rule_set_t* const kTestLowerRuleSets[] = {
 };
 
 struct TestCallbackPlan {
-  // Descriptor emitted by the callback-selected low op.
-  uint64_t descriptor_id;
+  // Descriptor row emitted by the callback-selected low op.
+  loom_low_lower_resolved_descriptor_t descriptor;
 };
 
 static iree_status_t TestSelectCallbackOp(void* user_data,
@@ -73,7 +73,9 @@ static iree_status_t TestSelectCallbackOp(void* user_data,
   TestCallbackPlan* plan_data = nullptr;
   IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
       context, sizeof(*plan_data), (void**)&plan_data));
-  plan_data->descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32;
+  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor(
+      context, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
+      &plan_data->descriptor));
   *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
   return iree_ok_status();
 }
@@ -99,8 +101,8 @@ static iree_status_t TestEmitCallbackOp(void* user_data,
   IREE_RETURN_IF_ERROR(loom_low_lower_map_value(
       context, source_op, loom_scalar_divsi_result(source_op), &result_type));
   loom_op_t* low_op = nullptr;
-  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
-      context, plan_data->descriptor_id, operands, IREE_ARRAYSIZE(operands),
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+      context, &plan_data->descriptor, operands, IREE_ARRAYSIZE(operands),
       loom_make_named_attr_slice(NULL, 0), &result_type, 1, nullptr, 0,
       source_op->location, &low_op));
   return loom_low_lower_bind_value(
