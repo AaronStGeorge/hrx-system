@@ -42,38 +42,234 @@ void loom_testbench_value_materializer_options_initialize(
   out_options->host_allocator = iree_allocator_system();
 }
 
+static iree_status_t loom_testbench_value_table_add_slot_capacity(
+    iree_host_size_t count, iree_host_size_t addend,
+    iree_host_size_t* out_count) {
+  if (!iree_host_size_checked_add(count, addend, out_count)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "testbench value slot count overflow");
+  }
+  return iree_ok_status();
+}
+
+typedef iree_status_t (*loom_testbench_case_value_callback_fn_t)(
+    void* user_data, loom_value_id_t value_id);
+
+typedef struct loom_testbench_case_value_callback_t {
+  // Function invoked for each value ID referenced by a case plan.
+  loom_testbench_case_value_callback_fn_t fn;
+  // Opaque caller-owned context passed to |fn|.
+  void* user_data;
+} loom_testbench_case_value_callback_t;
+
+static iree_status_t loom_testbench_case_value_callback_invoke(
+    loom_testbench_case_value_callback_t callback, loom_value_id_t value_id) {
+  IREE_ASSERT_ARGUMENT(callback.fn);
+  return callback.fn(callback.user_data, value_id);
+}
+
+static iree_status_t loom_testbench_case_plan_walk_type_dynamic_dimensions(
+    loom_type_t type, loom_testbench_case_value_callback_t callback) {
+  if (!loom_type_is_shaped(type)) {
+    return iree_ok_status();
+  }
+  iree_host_size_t rank = loom_type_rank(type);
+  for (iree_host_size_t dim_index = 0; dim_index < rank; ++dim_index) {
+    if (!loom_type_dim_is_dynamic_at(type, dim_index)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_testbench_case_value_callback_invoke(
+        callback, loom_type_dim_value_id_at(type, dim_index)));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_testbench_case_plan_walk_values(
+    const loom_testbench_case_plan_t* case_plan,
+    loom_testbench_case_value_callback_t callback) {
+  for (iree_host_size_t parameter_index = 0;
+       parameter_index < case_plan->parameter_count; ++parameter_index) {
+    IREE_RETURN_IF_ERROR(loom_testbench_case_value_callback_invoke(
+        callback, case_plan->parameters[parameter_index].value_id));
+  }
+  for (iree_host_size_t source_index = 0;
+       source_index < case_plan->value_source_count; ++source_index) {
+    const loom_testbench_value_source_plan_t* source =
+        &case_plan->value_sources[source_index];
+    IREE_RETURN_IF_ERROR(
+        loom_testbench_case_value_callback_invoke(callback, source->value_id));
+    if (source->kind == LOOM_TESTBENCH_VALUE_SOURCE_RANDOM_UNIFORM) {
+      IREE_RETURN_IF_ERROR(loom_testbench_case_value_callback_invoke(
+          callback, source->random_uniform.seed_value_id));
+    }
+    IREE_RETURN_IF_ERROR(loom_testbench_case_plan_walk_type_dynamic_dimensions(
+        source->type, callback));
+  }
+  for (iree_host_size_t file_write_index = 0;
+       file_write_index < case_plan->file_write_count; ++file_write_index) {
+    IREE_RETURN_IF_ERROR(loom_testbench_case_value_callback_invoke(
+        callback, case_plan->file_writes[file_write_index].value_id));
+  }
+  for (iree_host_size_t invocation_index = 0;
+       invocation_index < case_plan->invocation_count; ++invocation_index) {
+    const loom_testbench_invocation_plan_t* invocation =
+        &case_plan->invocations[invocation_index];
+    for (iree_host_size_t input_index = 0;
+         input_index < invocation->input_count; ++input_index) {
+      IREE_RETURN_IF_ERROR(loom_testbench_case_value_callback_invoke(
+          callback, invocation->input_value_ids[input_index]));
+    }
+    for (iree_host_size_t result_index = 0;
+         result_index < invocation->result_count; ++result_index) {
+      IREE_RETURN_IF_ERROR(loom_testbench_case_value_callback_invoke(
+          callback, invocation->result_value_ids[result_index]));
+    }
+  }
+  for (iree_host_size_t expectation_index = 0;
+       expectation_index < case_plan->expectation_count; ++expectation_index) {
+    const loom_testbench_expectation_plan_t* expectation =
+        &case_plan->expectations[expectation_index];
+    IREE_RETURN_IF_ERROR(loom_testbench_case_value_callback_invoke(
+        callback, expectation->actual_value_id));
+    if (expectation->expected_value_id != LOOM_VALUE_ID_INVALID) {
+      IREE_RETURN_IF_ERROR(loom_testbench_case_value_callback_invoke(
+          callback, expectation->expected_value_id));
+    }
+    if (expectation->kind != LOOM_TESTBENCH_EXPECTATION_SHAPE) {
+      continue;
+    }
+    for (iree_host_size_t dim_index = 0;
+         dim_index < expectation->shape.dimension_value_count; ++dim_index) {
+      IREE_RETURN_IF_ERROR(loom_testbench_case_value_callback_invoke(
+          callback, expectation->shape.dimension_value_ids[dim_index]));
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_testbench_value_table_count_slot(
+    void* user_data, loom_value_id_t value_id) {
+  (void)value_id;
+  iree_host_size_t* count = (iree_host_size_t*)user_data;
+  return loom_testbench_value_table_add_slot_capacity(*count, 1, count);
+}
+
+static iree_status_t loom_testbench_value_table_max_slot_count(
+    const loom_testbench_case_plan_t* case_plan,
+    iree_host_size_t* out_max_slot_count) {
+  iree_host_size_t count = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_case_plan_walk_values(
+      case_plan, (loom_testbench_case_value_callback_t){
+                     .fn = loom_testbench_value_table_count_slot,
+                     .user_data = &count,
+                 }));
+  *out_max_slot_count = count;
+  return iree_ok_status();
+}
+
+static iree_host_size_t loom_testbench_value_table_lower_bound(
+    const loom_testbench_value_table_t* table, loom_value_id_t value_id,
+    bool* out_found) {
+  iree_host_size_t lo = 0;
+  iree_host_size_t hi = table->slot_count;
+  while (lo < hi) {
+    iree_host_size_t mid = lo + (hi - lo) / 2;
+    if (table->slots[mid].value_id < value_id) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  *out_found = lo < table->slot_count && table->slots[lo].value_id == value_id;
+  return lo;
+}
+
+static const loom_testbench_value_slot_t*
+loom_testbench_value_table_lookup_slot(
+    const loom_testbench_value_table_t* table, loom_value_id_t value_id) {
+  bool found = false;
+  iree_host_size_t slot_index =
+      loom_testbench_value_table_lower_bound(table, value_id, &found);
+  return found ? &table->slots[slot_index] : NULL;
+}
+
+static loom_testbench_value_slot_t* loom_testbench_value_table_lookup_slot_mut(
+    loom_testbench_value_table_t* table, loom_value_id_t value_id) {
+  bool found = false;
+  iree_host_size_t slot_index =
+      loom_testbench_value_table_lower_bound(table, value_id, &found);
+  return found ? &table->slots[slot_index] : NULL;
+}
+
+static iree_status_t loom_testbench_value_table_include_value_callback(
+    void* user_data, loom_value_id_t value_id) {
+  loom_testbench_value_table_t* table =
+      (loom_testbench_value_table_t*)user_data;
+  if (value_id >= table->module->values.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "value ID %u is outside the module value table",
+                            (unsigned)value_id);
+  }
+  bool found = false;
+  iree_host_size_t slot_index =
+      loom_testbench_value_table_lower_bound(table, value_id, &found);
+  if (found) {
+    return iree_ok_status();
+  }
+  IREE_ASSERT(table->slot_count < table->slot_capacity,
+              "testbench value slot capacity must cover the case plan");
+  memmove(&table->slots[slot_index + 1], &table->slots[slot_index],
+          (table->slot_count - slot_index) * sizeof(*table->slots));
+  table->slots[slot_index] = (loom_testbench_value_slot_t){
+      .value_id = value_id,
+      .flags = 0,
+      .variant = iree_vm_variant_empty(),
+  };
+  ++table->slot_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_testbench_value_table_populate_slots(
+    loom_testbench_value_table_t* table) {
+  return loom_testbench_case_plan_walk_values(
+      table->case_plan,
+      (loom_testbench_case_value_callback_t){
+          .fn = loom_testbench_value_table_include_value_callback,
+          .user_data = table,
+      });
+}
+
 iree_status_t loom_testbench_value_table_initialize(
-    const loom_module_t* module, iree_allocator_t host_allocator,
-    loom_testbench_value_table_t* out_table) {
+    const loom_module_t* module, const loom_testbench_case_plan_t* case_plan,
+    iree_allocator_t host_allocator, loom_testbench_value_table_t* out_table) {
   IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(case_plan);
   IREE_ASSERT_ARGUMENT(out_table);
   memset(out_table, 0, sizeof(*out_table));
   out_table->module = module;
+  out_table->case_plan = case_plan;
   out_table->host_allocator = host_allocator;
-  out_table->value_count = module->values.count;
-  if (out_table->value_count == 0) {
+
+  iree_host_size_t max_slot_count = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_testbench_value_table_max_slot_count(case_plan, &max_slot_count));
+  if (max_slot_count == 0) {
     return iree_ok_status();
   }
 
   iree_status_t status = iree_allocator_malloc(
-      host_allocator, out_table->value_count * sizeof(*out_table->variants),
-      (void**)&out_table->variants);
+      host_allocator, max_slot_count * sizeof(*out_table->slots),
+      (void**)&out_table->slots);
   if (iree_status_is_ok(status)) {
-    status = iree_allocator_malloc(
-        host_allocator, out_table->value_count * sizeof(*out_table->assigned),
-        (void**)&out_table->assigned);
+    out_table->slot_capacity = max_slot_count;
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_testbench_value_table_populate_slots(out_table);
   }
   if (!iree_status_is_ok(status)) {
     loom_testbench_value_table_deinitialize(out_table);
-    return status;
   }
-  for (iree_host_size_t value_index = 0; value_index < out_table->value_count;
-       ++value_index) {
-    out_table->variants[value_index] = iree_vm_variant_empty();
-  }
-  memset(out_table->assigned, 0,
-         out_table->value_count * sizeof(*out_table->assigned));
-  return iree_ok_status();
+  return status;
 }
 
 void loom_testbench_value_table_deinitialize(
@@ -82,32 +278,34 @@ void loom_testbench_value_table_deinitialize(
     return;
   }
   loom_testbench_value_table_reset(table);
-  if (table->variants) {
-    iree_allocator_free(table->host_allocator, table->variants);
-  }
-  if (table->assigned) {
-    iree_allocator_free(table->host_allocator, table->assigned);
-  }
+  iree_allocator_free(table->host_allocator, table->slots);
   memset(table, 0, sizeof(*table));
 }
 
 void loom_testbench_value_table_reset(loom_testbench_value_table_t* table) {
   IREE_ASSERT_ARGUMENT(table);
-  if (table->variants) {
-    for (iree_host_size_t value_index = 0; value_index < table->value_count;
-         ++value_index) {
-      iree_vm_variant_reset(&table->variants[value_index]);
-    }
+  if (!table->slots) {
+    return;
   }
-  if (table->assigned) {
-    memset(table->assigned, 0, table->value_count * sizeof(*table->assigned));
+  for (iree_host_size_t slot_index = 0; slot_index < table->slot_count;
+       ++slot_index) {
+    loom_testbench_value_slot_t* slot = &table->slots[slot_index];
+    if (iree_any_bit_set(slot->flags,
+                         LOOM_TESTBENCH_VALUE_SLOT_FLAG_ASSIGNED)) {
+      iree_vm_variant_reset(&slot->variant);
+      slot->variant = iree_vm_variant_empty();
+      slot->flags &= ~LOOM_TESTBENCH_VALUE_SLOT_FLAG_ASSIGNED;
+    }
   }
 }
 
 bool loom_testbench_value_table_contains(
     const loom_testbench_value_table_t* table, loom_value_id_t value_id) {
   IREE_ASSERT_ARGUMENT(table);
-  return value_id < table->value_count && table->assigned[value_id];
+  const loom_testbench_value_slot_t* slot =
+      loom_testbench_value_table_lookup_slot(table, value_id);
+  return slot &&
+         iree_any_bit_set(slot->flags, LOOM_TESTBENCH_VALUE_SLOT_FLAG_ASSIGNED);
 }
 
 iree_status_t loom_testbench_value_table_assign_move(
@@ -115,16 +313,18 @@ iree_status_t loom_testbench_value_table_assign_move(
     iree_vm_variant_t* variant) {
   IREE_ASSERT_ARGUMENT(table);
   IREE_ASSERT_ARGUMENT(variant);
-  if (value_id >= table->value_count) {
+  loom_testbench_value_slot_t* slot =
+      loom_testbench_value_table_lookup_slot_mut(table, value_id);
+  if (!slot) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "value ID %u is outside the module value table",
+                            "value ID %u is outside the case value table",
                             (unsigned)value_id);
   }
-  if (table->assigned[value_id]) {
-    iree_vm_variant_reset(&table->variants[value_id]);
+  if (iree_any_bit_set(slot->flags, LOOM_TESTBENCH_VALUE_SLOT_FLAG_ASSIGNED)) {
+    iree_vm_variant_reset(&slot->variant);
   }
-  table->variants[value_id] = *variant;
-  table->assigned[value_id] = 1;
+  slot->variant = *variant;
+  slot->flags |= LOOM_TESTBENCH_VALUE_SLOT_FLAG_ASSIGNED;
   *variant = iree_vm_variant_empty();
   return iree_ok_status();
 }
@@ -136,18 +336,34 @@ static iree_status_t loom_testbench_value_table_set_value(
   return loom_testbench_value_table_assign_move(table, value_id, &variant);
 }
 
+iree_status_t loom_testbench_value_table_lookup_borrow(
+    const loom_testbench_value_table_t* table, loom_value_id_t value_id,
+    const iree_vm_variant_t** out_variant) {
+  IREE_ASSERT_ARGUMENT(table);
+  IREE_ASSERT_ARGUMENT(out_variant);
+  *out_variant = NULL;
+  const loom_testbench_value_slot_t* slot =
+      loom_testbench_value_table_lookup_slot(table, value_id);
+  if (!slot ||
+      !iree_any_bit_set(slot->flags, LOOM_TESTBENCH_VALUE_SLOT_FLAG_ASSIGNED)) {
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "value ID %u has not been materialized",
+                            (unsigned)value_id);
+  }
+  *out_variant = &slot->variant;
+  return iree_ok_status();
+}
+
 iree_status_t loom_testbench_value_table_lookup_retain(
     const loom_testbench_value_table_t* table, loom_value_id_t value_id,
     iree_vm_variant_t* out_variant) {
   IREE_ASSERT_ARGUMENT(table);
   IREE_ASSERT_ARGUMENT(out_variant);
   *out_variant = iree_vm_variant_empty();
-  if (value_id >= table->value_count || !table->assigned[value_id]) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "value ID %u has not been materialized",
-                            (unsigned)value_id);
-  }
-  *out_variant = table->variants[value_id];
+  const iree_vm_variant_t* borrowed_variant = NULL;
+  IREE_RETURN_IF_ERROR(loom_testbench_value_table_lookup_borrow(
+      table, value_id, &borrowed_variant));
+  *out_variant = *borrowed_variant;
   if (iree_vm_variant_is_ref(*out_variant)) {
     iree_vm_ref_retain_inplace(&out_variant->ref);
   }
@@ -298,14 +514,11 @@ static iree_status_t loom_testbench_resolve_shape(
   for (iree_host_size_t dim_index = 0; dim_index < rank; ++dim_index) {
     if (loom_type_dim_is_dynamic_at(type, dim_index)) {
       loom_value_id_t dim_value_id = loom_type_dim_value_id_at(type, dim_index);
-      if (!loom_testbench_value_table_contains(table, dim_value_id)) {
-        return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "dynamic dimension value %u has not been materialized",
-            (unsigned)dim_value_id);
-      }
+      const iree_vm_variant_t* dim_variant = NULL;
+      IREE_RETURN_IF_ERROR(loom_testbench_value_table_lookup_borrow(
+          table, dim_value_id, &dim_variant));
       IREE_RETURN_IF_ERROR(loom_testbench_variant_as_nonnegative_dim(
-          table->variants[dim_value_id], &out_shape[dim_index]));
+          *dim_variant, &out_shape[dim_index]));
     } else {
       int64_t static_size = loom_type_dim_static_size_at(type, dim_index);
       if (static_size < 0) {
@@ -371,17 +584,14 @@ static iree_status_t loom_testbench_scalar_type_to_hal_element_type(
 static iree_status_t loom_testbench_get_i64_value(
     const loom_testbench_value_table_t* table, loom_value_id_t value_id,
     int64_t* out_value) {
-  if (!loom_testbench_value_table_contains(table, value_id)) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "value ID %u has not been materialized",
-                            (unsigned)value_id);
-  }
-  iree_vm_variant_t variant = table->variants[value_id];
-  if (!iree_vm_variant_is_value(variant)) {
+  const iree_vm_variant_t* variant = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_testbench_value_table_lookup_borrow(table, value_id, &variant));
+  if (!iree_vm_variant_is_value(*variant)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "value ID %u is not a scalar", (unsigned)value_id);
   }
-  iree_vm_value_t value = iree_vm_variant_value(variant);
+  iree_vm_value_t value = iree_vm_variant_value(*variant);
   switch (value.type) {
     case IREE_VM_VALUE_TYPE_I8:
       *out_value = value.i8;

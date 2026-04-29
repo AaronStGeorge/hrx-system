@@ -123,8 +123,8 @@ check.case @scalar_mismatch {
   EXPECT_EQ(case_plan.expectations[0].kind, LOOM_TESTBENCH_EXPECTATION_EQUAL);
 
   loom_testbench_value_table_t table = {};
-  IREE_ASSERT_OK(
-      loom_testbench_value_table_initialize(module, host_allocator_, &table));
+  IREE_ASSERT_OK(loom_testbench_value_table_initialize(
+      module, &case_plan, host_allocator_, &table));
   loom_testbench_value_materializer_options_t materializer_options =
       MaterializerOptions();
   IREE_ASSERT_OK(loom_testbench_materialize_case_sample(&materializer_options,
@@ -194,8 +194,8 @@ check.case @buffer_expectations {
   EXPECT_EQ(case_plan.expectations[1].kind, LOOM_TESTBENCH_EXPECTATION_CLOSE);
 
   loom_testbench_value_table_t table = {};
-  IREE_ASSERT_OK(
-      loom_testbench_value_table_initialize(module, host_allocator_, &table));
+  IREE_ASSERT_OK(loom_testbench_value_table_initialize(
+      module, &case_plan, host_allocator_, &table));
   loom_testbench_value_materializer_options_t materializer_options =
       MaterializerOptions();
   IREE_ASSERT_OK(loom_testbench_materialize_case_sample(&materializer_options,
@@ -238,8 +238,8 @@ check.case @buffer_mismatch {
   const loom_testbench_case_plan_t& case_plan = plan.cases[0];
 
   loom_testbench_value_table_t table = {};
-  IREE_ASSERT_OK(
-      loom_testbench_value_table_initialize(module, host_allocator_, &table));
+  IREE_ASSERT_OK(loom_testbench_value_table_initialize(
+      module, &case_plan, host_allocator_, &table));
   loom_testbench_value_materializer_options_t materializer_options =
       MaterializerOptions();
   IREE_ASSERT_OK(loom_testbench_materialize_case_sample(&materializer_options,
@@ -297,8 +297,8 @@ check.case @custom {
   const loom_testbench_case_plan_t& case_plan = plan.cases[0];
 
   loom_testbench_value_table_t table = {};
-  IREE_ASSERT_OK(
-      loom_testbench_value_table_initialize(module, host_allocator_, &table));
+  IREE_ASSERT_OK(loom_testbench_value_table_initialize(
+      module, &case_plan, host_allocator_, &table));
   loom_testbench_value_materializer_options_t materializer_options =
       MaterializerOptions();
   IREE_ASSERT_OK(loom_testbench_materialize_case_sample(&materializer_options,

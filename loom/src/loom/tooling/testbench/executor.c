@@ -75,7 +75,8 @@ iree_status_t loom_testbench_case_executor_initialize(
   out_executor->materializer_options.host_allocator = host_allocator;
 
   iree_status_t status = loom_testbench_value_table_initialize(
-      prepared_case->module, host_allocator, &out_executor->value_table);
+      prepared_case->module, prepared_case->case_plan, host_allocator,
+      &out_executor->value_table);
   if (iree_status_is_ok(status)) {
     status = loom_testbench_invocation_executor_initialize(
         &prepared_case->invocation_schedule, host_allocator,

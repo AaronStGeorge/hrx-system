@@ -697,14 +697,10 @@ static iree_status_t loom_testbench_shape_expectation_dimension(
   }
   loom_value_id_t value_id =
       shape_plan->dimension_value_ids[(*inout_dynamic_index)++];
-  if (!loom_testbench_value_table_contains(table, value_id)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "dynamic dimension value %u has not been materialized",
-        (unsigned)value_id);
-  }
-  return loom_testbench_variant_as_nonnegative_dim(table->variants[value_id],
-                                                   out_dim);
+  const iree_vm_variant_t* variant = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_testbench_value_table_lookup_borrow(table, value_id, &variant));
+  return loom_testbench_variant_as_nonnegative_dim(*variant, out_dim);
 }
 
 static iree_status_t loom_testbench_compare_shape(
@@ -762,24 +758,13 @@ static iree_status_t loom_testbench_lookup_expectation_values(
     const iree_vm_variant_t** out_expected) {
   *out_actual = NULL;
   *out_expected = NULL;
-  if (!loom_testbench_value_table_contains(table,
-                                           expectation->actual_value_id)) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "actual value ID %u has not been materialized",
-                            (unsigned)expectation->actual_value_id);
-  }
-  *out_actual = &table->variants[expectation->actual_value_id];
+  IREE_RETURN_IF_ERROR(loom_testbench_value_table_lookup_borrow(
+      table, expectation->actual_value_id, out_actual));
   if (expectation->expected_value_id == LOOM_VALUE_ID_INVALID) {
     return iree_ok_status();
   }
-  if (!loom_testbench_value_table_contains(table,
-                                           expectation->expected_value_id)) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "expected value ID %u has not been materialized",
-                            (unsigned)expectation->expected_value_id);
-  }
-  *out_expected = &table->variants[expectation->expected_value_id];
-  return iree_ok_status();
+  return loom_testbench_value_table_lookup_borrow(
+      table, expectation->expected_value_id, out_expected);
 }
 
 static iree_status_t loom_testbench_evaluate_single_expectation(

@@ -140,7 +140,7 @@ check.case @invoke {
 
   loom_testbench_value_table_t table = {};
   IREE_ASSERT_OK(loom_testbench_value_table_initialize(
-      module, iree_allocator_system(), &table));
+      module, &case_plan, iree_allocator_system(), &table));
   loom_testbench_value_materializer_options_t materializer_options = {};
   loom_testbench_value_materializer_options_initialize(&materializer_options);
   IREE_ASSERT_OK(loom_testbench_materialize_case_sample(

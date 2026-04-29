@@ -24,18 +24,35 @@
 extern "C" {
 #endif
 
-// Table of materialized runtime values indexed by Loom SSA value ID.
+typedef enum loom_testbench_value_slot_flag_bits_e {
+  // Slot currently owns a materialized variant.
+  LOOM_TESTBENCH_VALUE_SLOT_FLAG_ASSIGNED = 1u << 0,
+} loom_testbench_value_slot_flag_bits_t;
+typedef uint8_t loom_testbench_value_slot_flags_t;
+
+typedef struct loom_testbench_value_slot_t {
+  // Source Loom SSA value represented by this slot.
+  loom_value_id_t value_id;
+  // Slot state flags.
+  loom_testbench_value_slot_flags_t flags;
+  // Materialized VM/HAL value owned by this slot when ASSIGNED is set.
+  iree_vm_variant_t variant;
+} loom_testbench_value_slot_t;
+
+// Case-local table of materialized runtime values.
 typedef struct loom_testbench_value_table_t {
-  // Module whose value table defines the index space.
+  // Module that owns the value IDs stored in |slots|.
   const loom_module_t* module;
-  // Host allocator that owns |variants| and |assigned|.
+  // Case plan whose reachable values define |slots|.
+  const loom_testbench_case_plan_t* case_plan;
+  // Host allocator that owns |slots|.
   iree_allocator_t host_allocator;
-  // Variant storage with one entry per module SSA value.
-  iree_vm_variant_t* variants;
-  // One byte per value ID indicating whether |variants[i]| is present.
-  uint8_t* assigned;
-  // Number of entries in |variants| and |assigned|.
-  iree_host_size_t value_count;
+  // Sorted slots keyed by source Loom SSA value ID.
+  loom_testbench_value_slot_t* slots;
+  // Allocated entry count in |slots|.
+  iree_host_size_t slot_capacity;
+  // Number of entries in |slots|.
+  iree_host_size_t slot_count;
 } loom_testbench_value_table_t;
 
 // Opens a stream for a check.file.* path.
@@ -70,10 +87,10 @@ typedef struct loom_testbench_value_materializer_options_t {
 void loom_testbench_value_materializer_options_initialize(
     loom_testbench_value_materializer_options_t* out_options);
 
-// Initializes an empty value table for |module|.
+// Initializes an empty value table for the values reachable from |case_plan|.
 iree_status_t loom_testbench_value_table_initialize(
-    const loom_module_t* module, iree_allocator_t host_allocator,
-    loom_testbench_value_table_t* out_table);
+    const loom_module_t* module, const loom_testbench_case_plan_t* case_plan,
+    iree_allocator_t host_allocator, loom_testbench_value_table_t* out_table);
 
 // Releases all values and storage owned by |table|.
 void loom_testbench_value_table_deinitialize(
@@ -85,6 +102,12 @@ void loom_testbench_value_table_reset(loom_testbench_value_table_t* table);
 // Returns true when |value_id| has a materialized value in |table|.
 bool loom_testbench_value_table_contains(
     const loom_testbench_value_table_t* table, loom_value_id_t value_id);
+
+// Looks up |value_id| and returns a borrowed variant valid until the table is
+// reset or deinitialized.
+iree_status_t loom_testbench_value_table_lookup_borrow(
+    const loom_testbench_value_table_t* table, loom_value_id_t value_id,
+    const iree_vm_variant_t** out_variant);
 
 // Looks up |value_id| and retains any contained ref for the caller. The caller
 // must reset |out_variant| with iree_vm_variant_reset.
