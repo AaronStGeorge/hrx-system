@@ -549,6 +549,15 @@ iree_status_t loom_low_lower_resolve_descriptor(
     loom_low_lower_context_t* context, uint64_t descriptor_id,
     loom_low_lower_resolved_descriptor_t* out_descriptor);
 
+// Resolves a stable descriptor ID when it is present in the selected descriptor
+// set.
+//
+// Missing descriptors are target capability misses and set |out_present| false.
+// Malformed descriptor rows and allocation failures are infrastructure errors.
+iree_status_t loom_low_lower_resolve_descriptor_if_present(
+    loom_low_lower_context_t* context, uint64_t descriptor_id,
+    loom_low_lower_resolved_descriptor_t* out_descriptor, bool* out_present);
+
 // Emits a descriptor-backed low.op selected by stable descriptor ID.
 //
 // The selected descriptor set on |context| is the authority for converting the

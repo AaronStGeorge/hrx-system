@@ -228,15 +228,32 @@ iree_status_t loom_amdgpu_emit_const_u32(loom_low_lower_context_t* context,
   loom_string_id_t value_name_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_intern(context, IREE_SV("imm32"), &value_name_id));
+  loom_low_lower_resolved_descriptor_t descriptor = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_resolve_descriptor(context, descriptor_id, &descriptor));
+  return loom_amdgpu_emit_resolved_const_u32(context, source_op, &descriptor,
+                                             value_name_id, value, result_type,
+                                             out_value_id);
+}
+
+iree_status_t loom_amdgpu_emit_resolved_const_u32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_resolved_descriptor_t* descriptor,
+    loom_string_id_t imm32_attr_name_id, uint32_t value,
+    loom_type_t result_type, loom_value_id_t* out_value_id) {
+  IREE_ASSERT_ARGUMENT(descriptor);
+  IREE_ASSERT(imm32_attr_name_id != LOOM_STRING_ID_INVALID);
+  IREE_ASSERT_ARGUMENT(out_value_id);
+  *out_value_id = LOOM_VALUE_ID_INVALID;
   loom_named_attr_t attrs[] = {
       {
-          .name_id = value_name_id,
+          .name_id = imm32_attr_name_id,
           .value = loom_attr_i64(value),
       },
   };
   loom_op_t* low_const = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_const(
-      context, descriptor_id,
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_const(
+      context, descriptor,
       loom_make_named_attr_slice(attrs, IREE_ARRAYSIZE(attrs)), result_type,
       source_op->location, &low_const));
   *out_value_id = loom_low_const_result(low_const);

@@ -977,17 +977,19 @@ static iree_string_view_t loom_amdgpu_atomic_rejection_detail(
   return IREE_SV("source atomic is not representable");
 }
 
-bool loom_amdgpu_select_view_atomic_plan(loom_low_lower_context_t* context,
-                                         const loom_op_t* source_op,
-                                         loom_amdgpu_atomic_plan_t* out_plan) {
+iree_status_t loom_amdgpu_select_view_atomic_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_atomic_plan_t* out_plan, bool* out_selected) {
+  IREE_ASSERT_ARGUMENT(out_selected);
   loom_low_source_memory_access_diagnostic_t source_diagnostic = {0};
   loom_amdgpu_memory_access_diagnostic_t memory_diagnostic = {0};
   loom_amdgpu_atomic_diagnostic_t diagnostic = {0};
-  return loom_amdgpu_atomic_select(
+  *out_selected = loom_amdgpu_atomic_select(
       loom_low_lower_context_module(context),
       loom_low_lower_context_fact_table(context),
       loom_low_lower_context_descriptor_set(context), source_op, out_plan,
       &source_diagnostic, &memory_diagnostic, &diagnostic);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_lookup_atomic_value_as_vgpr(

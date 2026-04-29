@@ -65,11 +65,13 @@ static bool loom_amdgpu_table_lookup_plan_from_op(
   return true;
 }
 
-bool loom_amdgpu_select_vector_table_lookup_plan(
+iree_status_t loom_amdgpu_select_vector_table_lookup_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_table_lookup_plan_t* out_plan) {
-  return loom_amdgpu_table_lookup_plan_from_op(
+    loom_amdgpu_table_lookup_plan_t* out_plan, bool* out_selected) {
+  IREE_ASSERT_ARGUMENT(out_selected);
+  *out_selected = loom_amdgpu_table_lookup_plan_from_op(
       loom_low_lower_context_module(context), source_op, out_plan);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_table_lookup_slice_if_needed(

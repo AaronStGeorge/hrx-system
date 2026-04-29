@@ -270,10 +270,29 @@ iree_status_t loom_low_lower_resolve_descriptor(
     loom_low_lower_resolved_descriptor_t* out_descriptor) {
   IREE_ASSERT_ARGUMENT(context);
   IREE_ASSERT_ARGUMENT(out_descriptor);
+  bool present = false;
+  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
+      context, descriptor_id, out_descriptor, &present));
+  if (!present) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target-low descriptor ID 0x%016" PRIx64
+                            " is not present in the selected descriptor set",
+                            descriptor_id);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_lower_resolve_descriptor_if_present(
+    loom_low_lower_context_t* context, uint64_t descriptor_id,
+    loom_low_lower_resolved_descriptor_t* out_descriptor, bool* out_present) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(out_descriptor);
+  IREE_ASSERT_ARGUMENT(out_present);
   *out_descriptor = (loom_low_lower_resolved_descriptor_t){
       .descriptor = NULL,
       .opcode_id = LOOM_STRING_ID_INVALID,
   };
+  *out_present = false;
   if (descriptor_id == LOOM_LOW_DESCRIPTOR_ID_NONE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "target-low descriptor ID is required");
@@ -283,10 +302,7 @@ iree_status_t loom_low_lower_resolve_descriptor(
       loom_low_descriptor_set_lookup_descriptor_by_id(context->descriptor_set,
                                                       descriptor_id);
   if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low descriptor ID 0x%016" PRIx64
-                            " is not present in the selected descriptor set",
-                            descriptor_id);
+    return iree_ok_status();
   }
   const loom_low_descriptor_t* descriptor =
       loom_low_descriptor_set_descriptor_at(context->descriptor_set,
@@ -309,6 +325,7 @@ iree_status_t loom_low_lower_resolve_descriptor(
       .descriptor = descriptor,
       .opcode_id = opcode_id,
   };
+  *out_present = true;
   return iree_ok_status();
 }
 

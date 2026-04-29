@@ -15,6 +15,7 @@
 
 #include <stdint.h>
 
+#include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/ir.h"
 #include "loom/target/arch/amdgpu/lower/kinds.h"
@@ -122,8 +123,8 @@ typedef struct loom_amdgpu_table_lookup_plan_t {
 } loom_amdgpu_table_lookup_plan_t;
 
 typedef struct loom_amdgpu_vector_compare_plan_t {
-  // Stable descriptor ID selected for the compare predicate.
-  uint64_t descriptor_id;
+  // Descriptor row selected for the compare predicate.
+  loom_low_lower_resolved_descriptor_t descriptor;
   // Left-hand payload vector value.
   loom_value_id_t lhs;
   // Right-hand payload vector value.

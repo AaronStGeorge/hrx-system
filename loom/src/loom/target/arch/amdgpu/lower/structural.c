@@ -184,11 +184,13 @@ static bool loom_amdgpu_vector_slice_plan_from_op(
   return true;
 }
 
-bool loom_amdgpu_select_vector_bitcast_plan(
+iree_status_t loom_amdgpu_select_vector_bitcast_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_vector_bitcast_plan_t* out_plan) {
-  return loom_amdgpu_vector_bitcast_plan_from_op(
+    loom_amdgpu_vector_bitcast_plan_t* out_plan, bool* out_selected) {
+  IREE_ASSERT_ARGUMENT(out_selected);
+  *out_selected = loom_amdgpu_vector_bitcast_plan_from_op(
       loom_low_lower_context_module(context), source_op, out_plan);
+  return iree_ok_status();
 }
 
 iree_status_t loom_amdgpu_lower_vector_bitcast(
@@ -209,11 +211,13 @@ iree_status_t loom_amdgpu_lower_vector_bitcast(
   return loom_low_lower_bind_value(context, plan->result, low_input);
 }
 
-bool loom_amdgpu_select_vector_slice_plan(
+iree_status_t loom_amdgpu_select_vector_slice_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_vector_slice_plan_t* out_plan) {
-  return loom_amdgpu_vector_slice_plan_from_op(
+    loom_amdgpu_vector_slice_plan_t* out_plan, bool* out_selected) {
+  IREE_ASSERT_ARGUMENT(out_selected);
+  *out_selected = loom_amdgpu_vector_slice_plan_from_op(
       loom_low_lower_context_module(context), source_op, out_plan);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_lower_vector_slice_32bit_lanes(

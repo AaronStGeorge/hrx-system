@@ -65,11 +65,13 @@ static bool loom_amdgpu_bitfield_insert_plan_from_op(
   return true;
 }
 
-bool loom_amdgpu_select_vector_bitfield_extract_plan(
+iree_status_t loom_amdgpu_select_vector_bitfield_extract_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_bitfield_extract_plan_t* out_plan) {
+    loom_amdgpu_bitfield_extract_plan_t* out_plan, bool* out_selected) {
+  IREE_ASSERT_ARGUMENT(out_selected);
+  *out_selected = false;
   if (!loom_amdgpu_bitfield_extract_plan_from_op(source_op, out_plan)) {
-    return false;
+    return iree_ok_status();
   }
 
   const loom_module_t* module = loom_low_lower_context_module(context);
@@ -79,15 +81,19 @@ bool loom_amdgpu_select_vector_bitfield_extract_plan(
       loom_module_value_type(module, out_plan->result);
   const uint32_t source_lane_count =
       loom_amdgpu_vector_i32_lane_count(source_type);
-  return source_lane_count != 0 &&
-         loom_amdgpu_vector_i32_lane_count(result_type) == source_lane_count;
+  *out_selected =
+      source_lane_count != 0 &&
+      loom_amdgpu_vector_i32_lane_count(result_type) == source_lane_count;
+  return iree_ok_status();
 }
 
-bool loom_amdgpu_select_vector_bitfield_insert_plan(
+iree_status_t loom_amdgpu_select_vector_bitfield_insert_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_bitfield_insert_plan_t* out_plan) {
+    loom_amdgpu_bitfield_insert_plan_t* out_plan, bool* out_selected) {
+  IREE_ASSERT_ARGUMENT(out_selected);
+  *out_selected = false;
   if (!loom_amdgpu_bitfield_insert_plan_from_op(source_op, out_plan)) {
-    return false;
+    return iree_ok_status();
   }
 
   const loom_module_t* module = loom_low_lower_context_module(context);
@@ -97,9 +103,11 @@ bool loom_amdgpu_select_vector_bitfield_insert_plan(
   const loom_type_t result_type =
       loom_module_value_type(module, out_plan->result);
   const uint32_t base_lane_count = loom_amdgpu_vector_i32_lane_count(base_type);
-  return base_lane_count != 0 &&
-         loom_amdgpu_vector_i32_lane_count(field_type) == base_lane_count &&
-         loom_amdgpu_vector_i32_lane_count(result_type) == base_lane_count;
+  *out_selected =
+      base_lane_count != 0 &&
+      loom_amdgpu_vector_i32_lane_count(field_type) == base_lane_count &&
+      loom_amdgpu_vector_i32_lane_count(result_type) == base_lane_count;
+  return iree_ok_status();
 }
 
 static uint32_t loom_amdgpu_bitfield_low_mask(uint32_t width) {

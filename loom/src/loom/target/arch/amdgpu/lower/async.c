@@ -333,16 +333,18 @@ static bool loom_amdgpu_async_gather_select(
   return true;
 }
 
-bool loom_amdgpu_select_kernel_async_gather_plan(
+iree_status_t loom_amdgpu_select_kernel_async_gather_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_async_gather_plan_t* out_plan) {
+    loom_amdgpu_async_gather_plan_t* out_plan, bool* out_selected) {
+  IREE_ASSERT_ARGUMENT(out_selected);
   loom_amdgpu_async_gather_diagnostic_t diagnostic = {0};
-  return loom_amdgpu_async_gather_select(
+  *out_selected = loom_amdgpu_async_gather_select(
       loom_low_lower_context_module(context),
       loom_low_lower_context_fact_table(context),
       loom_low_lower_context_descriptor_set(context),
       loom_low_lower_context_source_function(context), source_op, out_plan,
       &diagnostic);
+  return iree_ok_status();
 }
 
 static bool loom_amdgpu_async_group_packet_count(const loom_module_t* module,

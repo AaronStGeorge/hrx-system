@@ -45,19 +45,21 @@ typedef struct loom_amdgpu_lower_dispatch_row_t {
   loom_amdgpu_lower_verify_fn_t verify;
 } loom_amdgpu_lower_dispatch_row_t;
 
-#define LOOM_AMDGPU_DEFINE_DATA_SELECT(name, plan_type, select_fn)       \
-  static iree_status_t name(loom_low_lower_context_t* context,           \
-                            const loom_op_t* source_op,                  \
-                            const loom_amdgpu_lower_dispatch_row_t* row, \
-                            loom_low_lower_plan_t* out_plan) {           \
-    IREE_ASSERT_EQ(row->plan_data_size, sizeof(plan_type));              \
-    plan_type* plan_data = NULL;                                         \
-    IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(              \
-        context, row->plan_data_size, (void**)&plan_data));              \
-    if (select_fn(context, source_op, plan_data)) {                      \
-      *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);  \
-    }                                                                    \
-    return iree_ok_status();                                             \
+#define LOOM_AMDGPU_DEFINE_DATA_SELECT(name, plan_type, select_fn)             \
+  static iree_status_t name(loom_low_lower_context_t* context,                 \
+                            const loom_op_t* source_op,                        \
+                            const loom_amdgpu_lower_dispatch_row_t* row,       \
+                            loom_low_lower_plan_t* out_plan) {                 \
+    IREE_ASSERT_EQ(row->plan_data_size, sizeof(plan_type));                    \
+    plan_type* plan_data = NULL;                                               \
+    IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(                    \
+        context, row->plan_data_size, (void**)&plan_data));                    \
+    bool selected = false;                                                     \
+    IREE_RETURN_IF_ERROR(select_fn(context, source_op, plan_data, &selected)); \
+    if (selected) {                                                            \
+      *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);        \
+    }                                                                          \
+    return iree_ok_status();                                                   \
   }
 
 #define LOOM_AMDGPU_DEFINE_DATA_EMIT(name, plan_type, emit_fn)              \

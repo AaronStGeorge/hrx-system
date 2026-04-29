@@ -1409,24 +1409,30 @@ static bool loom_amdgpu_memory_access_select_from_context(
       out_access);
 }
 
-bool loom_amdgpu_select_vector_load_plan(
+iree_status_t loom_amdgpu_select_vector_load_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_memory_access_plan_t* out_plan) {
+    loom_amdgpu_memory_access_plan_t* out_plan, bool* out_selected) {
+  IREE_ASSERT_ARGUMENT(out_selected);
+  *out_selected = false;
   if (!loom_amdgpu_memory_access_select_from_context(context, source_op,
                                                      out_plan)) {
-    return false;
+    return iree_ok_status();
   }
-  return loom_amdgpu_memory_cache_policy_can_lower(
+  *out_selected = loom_amdgpu_memory_cache_policy_can_lower(
       loom_low_lower_context_descriptor_set(context), out_plan);
+  return iree_ok_status();
 }
 
-bool loom_amdgpu_select_vector_store_plan(
+iree_status_t loom_amdgpu_select_vector_store_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_memory_access_plan_t* out_plan) {
+    loom_amdgpu_memory_access_plan_t* out_plan, bool* out_selected) {
+  IREE_ASSERT_ARGUMENT(out_selected);
+  *out_selected = false;
   if (!loom_amdgpu_memory_access_select_from_context(context, source_op,
                                                      out_plan)) {
-    return false;
+    return iree_ok_status();
   }
-  return loom_amdgpu_memory_cache_policy_can_lower(
+  *out_selected = loom_amdgpu_memory_cache_policy_can_lower(
       loom_low_lower_context_descriptor_set(context), out_plan);
+  return iree_ok_status();
 }
