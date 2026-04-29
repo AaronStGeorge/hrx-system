@@ -4,8 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Per-value fact table: dense array of loom_value_facts_t indexed by
-// value_id. Arena-allocated. A zero-initialized table is valid (empty).
+// Per-value fact table: dense array of loom_value_facts_t over an explicit
+// value domain. Arena-allocated. A zero-initialized table is valid (empty).
 //
 // Lookup always succeeds: returns unknown facts for undefined entries
 // or out-of-range value IDs. Undefined entries are detected by
@@ -88,6 +88,58 @@ loom_value_fact_type_domain_resolver_callback_make(
 // Maximum raw payload bytes a type-owned fact domain may intern. Larger domain
 // payloads degrade to no extension, which is the domain top/unknown value.
 #define LOOM_VALUE_FACT_RAW_PAYLOAD_LENGTH_LIMIT 256
+
+typedef struct loom_value_domain_t {
+  // Value IDs indexed by local ordinal. NULL means direct value-ID indexing.
+  loom_value_id_t* value_ids;
+  // Number of value IDs in value_ids.
+  loom_value_ordinal_t value_count;
+  // Smallest value ID represented by ordinals_by_value_id.
+  loom_value_id_t base_value_id;
+  // Span-indexed map from value ID minus base_value_id to local ordinal.
+  // NULL means direct value-ID indexing.
+  loom_value_ordinal_t* ordinals_by_value_id;
+  // Number of entries in ordinals_by_value_id.
+  iree_host_size_t value_id_span_count;
+} loom_value_domain_t;
+
+// Returns an empty value domain, which means direct value-ID indexing.
+static inline loom_value_domain_t loom_value_domain_empty(void) {
+  return (loom_value_domain_t){0};
+}
+
+// Returns true when |domain| uses direct value-ID indexing.
+static inline bool loom_value_domain_is_empty(loom_value_domain_t domain) {
+  return domain.ordinals_by_value_id == NULL;
+}
+
+// Returns the local ordinal for |value_id|, or LOOM_VALUE_ORDINAL_INVALID when
+// the value is outside |domain|.
+static inline loom_value_ordinal_t loom_value_domain_lookup(
+    loom_value_domain_t domain, loom_value_id_t value_id) {
+  if (loom_value_domain_is_empty(domain)) {
+    return (loom_value_ordinal_t)value_id;
+  }
+  if (value_id < domain.base_value_id) {
+    return LOOM_VALUE_ORDINAL_INVALID;
+  }
+  const iree_host_size_t offset =
+      (iree_host_size_t)(value_id - domain.base_value_id);
+  if (offset >= domain.value_id_span_count) {
+    return LOOM_VALUE_ORDINAL_INVALID;
+  }
+  return domain.ordinals_by_value_id[offset];
+}
+
+// Returns the original value ID for |ordinal|.
+static inline loom_value_id_t loom_value_domain_value_id(
+    loom_value_domain_t domain, loom_value_ordinal_t ordinal) {
+  if (loom_value_domain_is_empty(domain)) {
+    return (loom_value_id_t)ordinal;
+  }
+  IREE_ASSERT_LT(ordinal, domain.value_count);
+  return domain.value_ids[ordinal];
+}
 
 // All lanes of a vector value share the same element facts.
 typedef struct loom_value_fact_uniform_element_t {
@@ -419,14 +471,17 @@ struct loom_value_fact_table_t {
   // Arena for all allocations owned by the table.
   iree_arena_allocator_t* arena;
 
-  // Dense fact entries indexed by value ID.
+  // Dense fact entries indexed by value domain ordinal.
   loom_value_facts_t* entries;
-  // Highest defined value ID plus one.
+  // Highest defined value ID plus one for an empty direct domain, or local
+  // value count for an explicit domain.
   iree_host_size_t count;
   // Allocated entry count.
   iree_host_size_t capacity;
   // Context object passed to op-specific fact inference callbacks.
   loom_fact_context_t context;
+  // Value domain used by entries. Empty means direct value-ID indexing.
+  loom_value_domain_t value_domain;
 
   // Interned fact extension payloads. Extension IDs stored in
   // loom_value_facts_t are one-based indexes into entries and are only valid
@@ -473,14 +528,36 @@ iree_status_t loom_value_fact_table_initialize(
     loom_value_fact_table_t* table, iree_arena_allocator_t* arena,
     iree_host_size_t initial_capacity);
 
+// Initializes |table| with entries indexed by caller-owned |value_domain|.
+// Domain arrays must outlive |table|.
+iree_status_t loom_value_fact_table_initialize_with_domain(
+    loom_value_fact_table_t* table, iree_arena_allocator_t* arena,
+    loom_value_domain_t value_domain);
+
+// Returns the dense fact-entry index for |value_id|, or
+// LOOM_VALUE_ORDINAL_INVALID when the value is outside the table domain.
+static inline loom_value_ordinal_t loom_value_fact_table_entry_index(
+    const loom_value_fact_table_t* table, loom_value_id_t value_id) {
+  return loom_value_domain_lookup(table->value_domain, value_id);
+}
+
+// Returns the original value ID for a dense fact-entry index.
+static inline loom_value_id_t loom_value_fact_table_entry_value_id(
+    const loom_value_fact_table_t* table, loom_value_ordinal_t entry_index) {
+  return loom_value_domain_value_id(table->value_domain, entry_index);
+}
+
 // Looks up facts for a value. Returns unknown facts if the value ID
 // is out of range or the entry is undefined (known_divisor == 0).
 static inline loom_value_facts_t loom_value_fact_table_lookup(
     const loom_value_fact_table_t* table, loom_value_id_t value_id) {
-  if (value_id >= table->count || table->entries[value_id].known_divisor == 0) {
+  const loom_value_ordinal_t entry_index =
+      loom_value_fact_table_entry_index(table, value_id);
+  if (entry_index >= table->count ||
+      table->entries[entry_index].known_divisor == 0) {
     return loom_value_facts_unknown();
   }
-  return table->entries[value_id];
+  return table->entries[entry_index];
 }
 
 // Defines (or updates) facts for a value. Grows the table as needed.

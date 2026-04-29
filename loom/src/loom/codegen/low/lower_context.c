@@ -143,22 +143,22 @@ const loom_low_descriptor_set_t* loom_low_lower_context_descriptor_set(
 
 const loom_value_fact_table_t* loom_low_lower_context_fact_table(
     const loom_low_lower_context_t* context) {
-  return &context->fact_table;
+  return &context->lowering.fact_table;
 }
 
 iree_host_size_t loom_low_lower_context_selected_plan_count(
     const loom_low_lower_context_t* context) {
   IREE_ASSERT_ARGUMENT(context);
-  return context->selected_plan_count;
+  return context->lowering.selected_plan_count;
 }
 
 loom_low_lower_selected_plan_view_t loom_low_lower_context_selected_plan_view(
     const loom_low_lower_context_t* context, iree_host_size_t index) {
   IREE_ASSERT_ARGUMENT(context);
-  IREE_ASSERT_LT(index, context->selected_plan_count);
+  IREE_ASSERT_LT(index, context->lowering.selected_plan_count);
   return (loom_low_lower_selected_plan_view_t){
-      .source_op = context->selected_plans[index].source_op,
-      .plan = context->selected_plans[index].plan,
+      .source_op = context->lowering.selected_plans[index].source_op,
+      .plan = context->lowering.selected_plans[index].plan,
   };
 }
 
@@ -224,9 +224,10 @@ iree_status_t loom_low_lower_redirect_empty_branch_dest(
       source_body, source_branch_op->parent_block, &source_index);
   IREE_ASSERT(found_source_index);
   (void)found_source_index;
-  IREE_ASSERT(context->branch_dest_overrides[source_index] == NULL ||
-              context->branch_dest_overrides[source_index] == low_dest);
-  context->branch_dest_overrides[source_index] = low_dest;
+  IREE_ASSERT(context->lowering.branch_dest_overrides[source_index] == NULL ||
+              context->lowering.branch_dest_overrides[source_index] ==
+                  low_dest);
+  context->lowering.branch_dest_overrides[source_index] = low_dest;
   return iree_ok_status();
 }
 
@@ -243,8 +244,8 @@ iree_status_t loom_low_lower_lookup_block(loom_low_lower_context_t* context,
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "branch target block is outside the source region");
   }
-  IREE_ASSERT(context->block_map[source_index] != NULL);
-  *out_low_block = context->block_map[source_index];
+  IREE_ASSERT(context->lowering.block_map[source_index] != NULL);
+  *out_low_block = context->lowering.block_map[source_index];
   return iree_ok_status();
 }
 
@@ -372,15 +373,16 @@ iree_status_t loom_low_lower_record_memory_access_summary(
   if (context->options->sidecar_arena == NULL) {
     return iree_ok_status();
   }
-  if (context->memory_access_record_count >=
-      context->memory_access_record_capacity) {
+  if (context->lowering.memory_access_record_count >=
+      context->lowering.memory_access_record_capacity) {
     return iree_make_status(
         IREE_STATUS_INTERNAL,
         "source-to-low memory access sidecar exceeded planned capacity");
   }
 
   loom_low_memory_access_record_t* record =
-      &context->memory_access_records[context->memory_access_record_count++];
+      &context->lowering.memory_access_records
+           [context->lowering.memory_access_record_count++];
   *record = (loom_low_memory_access_record_t){
       .op = low_op,
       .summary = *summary,
@@ -440,8 +442,10 @@ iree_status_t loom_low_lower_lookup_value(loom_low_lower_context_t* context,
                                           loom_value_id_t* out_low_value_id) {
   IREE_ASSERT_ARGUMENT(out_low_value_id);
   *out_low_value_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_LT(source_value_id, context->value_map_count);
-  loom_value_id_t low_value_id = context->value_map[source_value_id];
+  const loom_value_ordinal_t source_ordinal =
+      loom_low_lowering_frame_value_ordinal(&context->lowering,
+                                            source_value_id);
+  loom_value_id_t low_value_id = context->lowering.value_map[source_ordinal];
   IREE_ASSERT(low_value_id != LOOM_VALUE_ID_INVALID);
   IREE_ASSERT(low_value_id != LOOM_LOW_LOWER_VALUE_ID_ELIDED);
   *out_low_value_id = low_value_id;
@@ -463,21 +467,25 @@ iree_status_t loom_low_lower_copy_value_name(loom_low_lower_context_t* context,
 iree_status_t loom_low_lower_bind_value(loom_low_lower_context_t* context,
                                         loom_value_id_t source_value_id,
                                         loom_value_id_t low_value_id) {
-  IREE_ASSERT_LT(source_value_id, context->value_map_count);
   IREE_ASSERT_LT(low_value_id, context->module->values.count);
-  loom_value_id_t existing = context->value_map[source_value_id];
+  const loom_value_ordinal_t source_ordinal =
+      loom_low_lowering_frame_value_ordinal(&context->lowering,
+                                            source_value_id);
+  loom_value_id_t existing = context->lowering.value_map[source_ordinal];
   IREE_ASSERT(existing == LOOM_VALUE_ID_INVALID || existing == low_value_id);
-  context->value_map[source_value_id] = low_value_id;
+  context->lowering.value_map[source_ordinal] = low_value_id;
   return loom_low_lower_copy_value_name(context, source_value_id, low_value_id);
 }
 
 iree_status_t loom_low_lower_elide_value(loom_low_lower_context_t* context,
                                          loom_value_id_t source_value_id) {
-  IREE_ASSERT_LT(source_value_id, context->value_map_count);
-  loom_value_id_t existing = context->value_map[source_value_id];
+  const loom_value_ordinal_t source_ordinal =
+      loom_low_lowering_frame_value_ordinal(&context->lowering,
+                                            source_value_id);
+  loom_value_id_t existing = context->lowering.value_map[source_ordinal];
   IREE_ASSERT(existing == LOOM_VALUE_ID_INVALID ||
               existing == LOOM_LOW_LOWER_VALUE_ID_ELIDED);
-  context->value_map[source_value_id] = LOOM_LOW_LOWER_VALUE_ID_ELIDED;
+  context->lowering.value_map[source_ordinal] = LOOM_LOW_LOWER_VALUE_ID_ELIDED;
   return iree_ok_status();
 }
 

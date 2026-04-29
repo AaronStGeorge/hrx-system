@@ -143,6 +143,14 @@ extern "C" {
 typedef uint32_t loom_value_id_t;
 #define LOOM_VALUE_ID_INVALID ((loom_value_id_t)UINT32_MAX)
 
+// Dense local ordinal for a value in an explicit value domain.
+//
+// Unlike loom_value_id_t, ordinals are not module-stable identities. They are
+// valid only against the domain or frame that produced them and are used for
+// direct indexing into compact function-local tables.
+typedef uint32_t loom_value_ordinal_t;
+#define LOOM_VALUE_ORDINAL_INVALID ((loom_value_ordinal_t)UINT32_MAX)
+
 // Index into the module's interned string table.
 // Strings are deduplicated: identical strings share the same ID.
 typedef uint32_t loom_string_id_t;

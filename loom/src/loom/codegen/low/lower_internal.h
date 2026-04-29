@@ -40,6 +40,45 @@ typedef struct loom_low_lower_selected_plan_t {
   loom_low_lower_plan_t plan;
 } loom_low_lower_selected_plan_t;
 
+typedef struct loom_low_lowering_frame_t {
+  // Function-local source value domain.
+  loom_value_domain_t value_domain;
+  // Source value facts computed once before planning.
+  loom_value_fact_table_t fact_table;
+  // Source local value ordinal to emitted low value ID map.
+  loom_value_id_t* value_map;
+  // Source block ordinal to emitted low block pointer map.
+  loom_block_t** block_map;
+  // Source block ordinal to redirected low branch destination, or NULL.
+  loom_block_t** branch_dest_overrides;
+  // Source function argument ABI mappings.
+  loom_low_lower_abi_argument_t* argument_map;
+  // Number of entries in argument_map.
+  uint16_t argument_map_count;
+  // Selected lowering plans for non-structural source ops.
+  loom_low_lower_selected_plan_t* selected_plans;
+  // Number of selected plan slots used during planning.
+  iree_host_size_t selected_plan_count;
+  // Number of selected plan slots allocated for planning.
+  iree_host_size_t selected_plan_capacity;
+  // Next selected plan consumed by the emission walk.
+  iree_host_size_t selected_plan_emit_index;
+  // Source-derived memory access rows copied into options.sidecar_arena.
+  loom_low_memory_access_record_t* memory_access_records;
+  // Number of memory access rows recorded during emission.
+  iree_host_size_t memory_access_record_count;
+  // Capacity of memory_access_records.
+  iree_host_size_t memory_access_record_capacity;
+} loom_low_lowering_frame_t;
+
+static inline loom_value_ordinal_t loom_low_lowering_frame_value_ordinal(
+    const loom_low_lowering_frame_t* frame, loom_value_id_t value_id) {
+  const loom_value_ordinal_t ordinal =
+      loom_value_domain_lookup(frame->value_domain, value_id);
+  IREE_ASSERT_NE(ordinal, LOOM_VALUE_ORDINAL_INVALID);
+  return ordinal;
+}
+
 struct loom_low_lower_context_t {
   // Module being mutated by this lowering run.
   loom_module_t* module;
@@ -55,38 +94,12 @@ struct loom_low_lower_context_t {
   loom_low_lower_result_t* result;
   // Scratch arena for transient maps and remapped operand lists.
   iree_arena_allocator_t arena;
-  // Source value facts computed once before planning.
-  loom_value_fact_table_t fact_table;
+  // Function-local state for this source-to-low lowering run.
+  loom_low_lowering_frame_t lowering;
   // Builder used while emitting the low function.
   loom_builder_t builder;
   // Emitted target-low function operation, or NULL before emission starts.
   loom_op_t* low_func_op;
-  // Number of source values captured by |value_map|.
-  iree_host_size_t value_map_count;
-  // Source value id to emitted low value id map.
-  loom_value_id_t* value_map;
-  // Source block ordinal to emitted low block pointer map.
-  loom_block_t** block_map;
-  // Source block ordinal to redirected low branch destination, or NULL.
-  loom_block_t** branch_dest_overrides;
-  // Source function argument ABI mappings.
-  loom_low_lower_abi_argument_t* argument_map;
-  // Number of entries in |argument_map|.
-  uint16_t argument_map_count;
-  // Selected lowering plans for non-structural source ops.
-  loom_low_lower_selected_plan_t* selected_plans;
-  // Number of selected plan slots used during planning.
-  iree_host_size_t selected_plan_count;
-  // Number of selected plan slots allocated for planning.
-  iree_host_size_t selected_plan_capacity;
-  // Next selected plan consumed by the emission walk.
-  iree_host_size_t selected_plan_emit_index;
-  // Source-derived memory access rows copied into options.sidecar_arena.
-  loom_low_memory_access_record_t* memory_access_records;
-  // Number of memory access rows recorded during emission.
-  iree_host_size_t memory_access_record_count;
-  // Capacity of |memory_access_records|.
-  iree_host_size_t memory_access_record_capacity;
 };
 
 // Returns the source function name used in source-to-low diagnostics/reports.
