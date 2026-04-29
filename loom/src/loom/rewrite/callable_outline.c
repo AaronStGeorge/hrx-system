@@ -7,11 +7,18 @@
 #include <string.h>
 
 #include "loom/ir/context.h"
+#include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
 #include "loom/ops/func/ops.h"
 #include "loom/rewrite/callable.h"
 #include "loom/rewrite/materialize.h"
+
+typedef enum loom_callable_outline_value_mark_e {
+  LOOM_CALLABLE_OUTLINE_VALUE_MARK_UNSEEN = 0,
+  LOOM_CALLABLE_OUTLINE_VALUE_MARK_VISITING = 1,
+  LOOM_CALLABLE_OUTLINE_VALUE_MARK_ADDED = 2,
+} loom_callable_outline_value_mark_t;
 
 typedef struct loom_callable_outline_range_state_t {
   // Module containing both the source range and outlined callable.
@@ -24,6 +31,8 @@ typedef struct loom_callable_outline_range_state_t {
   loom_block_t* block;
   // Scratch arena for transient lists, marks, and remap tables.
   iree_arena_allocator_t* arena;
+  // Local ordinal domain covering the containing region.
+  loom_local_value_domain_t* value_domain;
 } loom_callable_outline_range_state_t;
 
 typedef struct loom_callable_outline_value_list_t {
@@ -33,10 +42,10 @@ typedef struct loom_callable_outline_value_list_t {
   iree_host_size_t count;
   // Allocated value ID slots.
   iree_host_size_t capacity;
-  // Dense source value state: 0 unseen, 1 visiting, 2 added.
+  // Dense local-ordinal mark state.
   uint8_t* marks;
-  // Number of source values covered by marks.
-  iree_host_size_t mark_count;
+  // Allocated local-ordinal mark slots.
+  iree_host_size_t mark_capacity;
 } loom_callable_outline_value_list_t;
 
 static bool loom_callable_outline_root_is_selected(
@@ -119,14 +128,36 @@ static bool loom_callable_outline_value_is_defined_inside_range(
 }
 
 static iree_status_t loom_callable_outline_value_list_initialize(
-    iree_arena_allocator_t* arena, iree_host_size_t mark_count,
+    const loom_callable_outline_range_state_t* state,
     loom_callable_outline_value_list_t* out_list) {
   memset(out_list, 0, sizeof(*out_list));
-  out_list->mark_count = mark_count;
-  if (mark_count == 0) return iree_ok_status();
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, mark_count, sizeof(uint8_t), (void**)&out_list->marks));
-  memset(out_list->marks, 0, mark_count * sizeof(uint8_t));
+  out_list->mark_capacity = state->value_domain->value_count;
+  if (out_list->mark_capacity == 0) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(state->arena, out_list->mark_capacity,
+                                sizeof(uint8_t), (void**)&out_list->marks));
+  memset(out_list->marks, 0, out_list->mark_capacity * sizeof(uint8_t));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_callable_outline_value_list_ensure_mark(
+    const loom_callable_outline_range_state_t* state,
+    loom_callable_outline_value_list_t* list, loom_value_id_t value_id,
+    loom_value_ordinal_t* out_value_ordinal) {
+  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+  IREE_RETURN_IF_ERROR(loom_local_value_domain_register_value(
+      state->value_domain, state->arena, value_id, &value_ordinal));
+  const iree_host_size_t required_capacity =
+      (iree_host_size_t)value_ordinal + 1;
+  if (required_capacity > list->mark_capacity) {
+    const iree_host_size_t old_capacity = list->mark_capacity;
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        state->arena, old_capacity, required_capacity, sizeof(*list->marks),
+        &list->mark_capacity, (void**)&list->marks));
+    memset(list->marks + old_capacity, 0,
+           (list->mark_capacity - old_capacity) * sizeof(*list->marks));
+  }
+  *out_value_ordinal = value_ordinal;
   return iree_ok_status();
 }
 
@@ -179,14 +210,18 @@ static iree_status_t loom_callable_outline_add_capture(
   if (loom_callable_outline_value_is_defined_inside_range(state, value_id)) {
     return iree_ok_status();
   }
-  if ((iree_host_size_t)value_id >= captures->mark_count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "capture value %%%u is outside mark table",
-                            (unsigned)value_id);
+  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+  IREE_RETURN_IF_ERROR(loom_callable_outline_value_list_ensure_mark(
+      state, captures, value_id, &value_ordinal));
+  if (captures->marks[value_ordinal] ==
+      LOOM_CALLABLE_OUTLINE_VALUE_MARK_ADDED) {
+    return iree_ok_status();
   }
-  if (captures->marks[value_id] == 2) return iree_ok_status();
-  if (captures->marks[value_id] == 1) return iree_ok_status();
-  captures->marks[value_id] = 1;
+  if (captures->marks[value_ordinal] ==
+      LOOM_CALLABLE_OUTLINE_VALUE_MARK_VISITING) {
+    return iree_ok_status();
+  }
+  captures->marks[value_ordinal] = LOOM_CALLABLE_OUTLINE_VALUE_MARK_VISITING;
 
   loom_callable_outline_pending_refs_t refs = {
       .arena = state->arena,
@@ -201,7 +236,7 @@ static iree_status_t loom_callable_outline_add_capture(
 
   IREE_RETURN_IF_ERROR(loom_callable_outline_value_list_append(
       state->arena, captures, value_id));
-  captures->marks[value_id] = 2;
+  captures->marks[value_ordinal] = LOOM_CALLABLE_OUTLINE_VALUE_MARK_ADDED;
   return iree_ok_status();
 }
 
@@ -391,14 +426,18 @@ static iree_status_t loom_callable_outline_add_live_out(
   if (!loom_callable_outline_value_is_defined_inside_range(state, value_id)) {
     return loom_callable_outline_add_capture(state, captures, value_id);
   }
-  if ((iree_host_size_t)value_id >= live_outs->mark_count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "live-out value %%%u is outside mark table",
-                            (unsigned)value_id);
+  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+  IREE_RETURN_IF_ERROR(loom_callable_outline_value_list_ensure_mark(
+      state, live_outs, value_id, &value_ordinal));
+  if (live_outs->marks[value_ordinal] ==
+      LOOM_CALLABLE_OUTLINE_VALUE_MARK_ADDED) {
+    return iree_ok_status();
   }
-  if (live_outs->marks[value_id] == 2) return iree_ok_status();
-  if (live_outs->marks[value_id] == 1) return iree_ok_status();
-  live_outs->marks[value_id] = 1;
+  if (live_outs->marks[value_ordinal] ==
+      LOOM_CALLABLE_OUTLINE_VALUE_MARK_VISITING) {
+    return iree_ok_status();
+  }
+  live_outs->marks[value_ordinal] = LOOM_CALLABLE_OUTLINE_VALUE_MARK_VISITING;
 
   loom_callable_outline_pending_refs_t refs = {
       .arena = state->arena,
@@ -419,7 +458,7 @@ static iree_status_t loom_callable_outline_add_live_out(
 
   IREE_RETURN_IF_ERROR(loom_callable_outline_value_list_append(
       state->arena, live_outs, value_id));
-  live_outs->marks[value_id] = 2;
+  live_outs->marks[value_ordinal] = LOOM_CALLABLE_OUTLINE_VALUE_MARK_ADDED;
   return iree_ok_status();
 }
 
@@ -783,10 +822,7 @@ iree_status_t loom_callable_outline_range(
     loom_rewriter_t* rewriter, loom_op_t* first_op, loom_op_t* after_last_op,
     loom_symbol_ref_t outlined_ref,
     loom_callable_outline_result_t* out_result) {
-  if (!out_result) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "outline result output is required");
-  }
+  IREE_ASSERT_ARGUMENT(out_result);
   *out_result = (loom_callable_outline_result_t){0};
 
   loom_callable_outline_range_state_t state = {0};
@@ -800,39 +836,62 @@ iree_status_t loom_callable_outline_range(
   IREE_RETURN_IF_ERROR(
       loom_callable_outline_collect_root_ops(&state, root_count, &roots));
 
+  loom_local_value_domain_t value_domain = {0};
+  IREE_RETURN_IF_ERROR(loom_local_value_domain_acquire_for_region(
+      state.module, state.block->parent_region, state.arena, &value_domain));
+  state.value_domain = &value_domain;
+
+  iree_status_t status = iree_ok_status();
   loom_callable_outline_value_list_t captures = {0};
-  IREE_RETURN_IF_ERROR(loom_callable_outline_value_list_initialize(
-      state.arena, state.module->values.count, &captures));
-  for (iree_host_size_t i = 0; i < root_count; ++i) {
-    IREE_RETURN_IF_ERROR(
-        loom_callable_outline_collect_op_captures(&state, &captures, roots[i]));
+  status = loom_callable_outline_value_list_initialize(&state, &captures);
+  for (iree_host_size_t i = 0; i < root_count && iree_status_is_ok(status);
+       ++i) {
+    status =
+        loom_callable_outline_collect_op_captures(&state, &captures, roots[i]);
   }
 
   loom_callable_outline_value_list_t live_outs = {0};
-  IREE_RETURN_IF_ERROR(loom_callable_outline_value_list_initialize(
-      state.arena, state.module->values.count, &live_outs));
-  IREE_RETURN_IF_ERROR(
-      loom_callable_outline_collect_live_outs(&state, &captures, &live_outs));
+  if (iree_status_is_ok(status)) {
+    status = loom_callable_outline_value_list_initialize(&state, &live_outs);
+  }
+  if (iree_status_is_ok(status)) {
+    status =
+        loom_callable_outline_collect_live_outs(&state, &captures, &live_outs);
+  }
 
   loom_ir_remap_t body_remap = {0};
   loom_func_like_t outlined = {0};
-  IREE_RETURN_IF_ERROR(loom_callable_outline_build_function(
-      rewriter, &state, &captures, &live_outs, outlined_ref, &body_remap,
-      &outlined));
-  IREE_RETURN_IF_ERROR(loom_callable_outline_clone_body(rewriter, &state,
-                                                        outlined, &body_remap));
-  IREE_RETURN_IF_ERROR(loom_callable_outline_build_return(
-      rewriter, &state, outlined, &live_outs, &body_remap));
+  if (iree_status_is_ok(status)) {
+    status = loom_callable_outline_build_function(rewriter, &state, &captures,
+                                                  &live_outs, outlined_ref,
+                                                  &body_remap, &outlined);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_callable_outline_clone_body(rewriter, &state, outlined,
+                                              &body_remap);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_callable_outline_build_return(rewriter, &state, outlined,
+                                                &live_outs, &body_remap);
+  }
 
   loom_op_t* call_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_callable_outline_build_call(
-      rewriter, &state, &captures, &live_outs, outlined_ref, &call_op));
-  IREE_RETURN_IF_ERROR(
-      loom_callable_outline_replace_live_outs(rewriter, &live_outs, call_op));
-  IREE_RETURN_IF_ERROR(
-      loom_callable_outline_erase_roots(rewriter, roots, root_count));
+  if (iree_status_is_ok(status)) {
+    status = loom_callable_outline_build_call(
+        rewriter, &state, &captures, &live_outs, outlined_ref, &call_op);
+  }
+  if (iree_status_is_ok(status)) {
+    status =
+        loom_callable_outline_replace_live_outs(rewriter, &live_outs, call_op);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_callable_outline_erase_roots(rewriter, roots, root_count);
+  }
 
-  out_result->outlined = outlined;
-  out_result->call_op = call_op;
-  return iree_ok_status();
+  if (iree_status_is_ok(status)) {
+    out_result->outlined = outlined;
+    out_result->call_op = call_op;
+  }
+  loom_local_value_domain_release(&value_domain);
+  return status;
 }
