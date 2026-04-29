@@ -298,6 +298,12 @@ typedef struct loom_amdgpu_atomic_plan_t {
 } loom_amdgpu_atomic_plan_t;
 
 typedef struct loom_amdgpu_prefetch_plan_t {
+  // Descriptor row selected for the prefetch packet.
+  loom_low_lower_resolved_descriptor_t descriptor;
+  // Module string ID for the descriptor's offset attribute.
+  loom_string_id_t offset_attr_name_id;
+  // Module string ID for the descriptor's count attribute.
+  loom_string_id_t count_attr_name_id;
   // Target-independent source memory access plan being wrapped.
   loom_low_source_memory_access_plan_t source;
   // Target operand path selected for the source dynamic address term.
@@ -308,8 +314,6 @@ typedef struct loom_amdgpu_prefetch_plan_t {
   uint32_t scalar_byte_offset;
   // Prefetch span count encoded in the descriptor count immediate.
   uint32_t count;
-  // Stable descriptor ID selected for the active descriptor set.
-  uint64_t descriptor_id;
 } loom_amdgpu_prefetch_plan_t;
 
 typedef struct loom_amdgpu_async_gather_plan_t {
