@@ -82,8 +82,6 @@ low.func.def target(@target) abi(hal_kernel) @divergent_then_only(%values: reg<a
   %10, %11 = s_and_saveexec_b64 %cond
   low.cond_br %11, ^then, ^join : reg<amdgpu.scc>
 ^then:
-  %12 = v_mov_b32_copy %limit
-  %biased = v_add_u32 %lane, %12
   low.br ^join
 ^join:
   s_mov_b64_exec %10

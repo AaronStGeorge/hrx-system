@@ -26,9 +26,24 @@ extern "C" {
 typedef struct loom_low_lower_rule_t loom_low_lower_rule_t;
 typedef struct loom_low_lower_resolved_emit_t loom_low_lower_resolved_emit_t;
 
+enum loom_low_lower_value_storage_flag_bits_e {
+  // The source value must be materialized as a low SSA value.
+  LOOM_LOW_LOWER_VALUE_STORAGE_REQUIRED = (uint8_t)1u << 0,
+};
+typedef uint8_t loom_low_lower_value_storage_flags_t;
+
+enum loom_low_lower_selected_plan_flag_bits_e {
+  // The selected source op is intentionally skipped because none of its results
+  // require target-low storage.
+  LOOM_LOW_LOWER_SELECTED_PLAN_ELIDED = (uint8_t)1u << 0,
+};
+typedef uint8_t loom_low_lower_selected_plan_flags_t;
+
 typedef struct loom_low_lower_selected_plan_t {
   // Source op this selected plan lowers.
   const loom_op_t* source_op;
+  // Selection lifecycle flags.
+  loom_low_lower_selected_plan_flags_t flags;
   // Policy rule-set ordinal for table-driven selections.
   uint16_t rule_set_index;
   // Rule set owning |rule|, or NULL for target-owned callbacks.
@@ -46,6 +61,8 @@ typedef struct loom_low_lowering_frame_t {
   loom_local_value_domain_t value_domain;
   // Borrowed source value facts computed before planning.
   loom_value_fact_table_t* fact_table;
+  // Per-source-value storage demand flags indexed by source value ordinal.
+  loom_low_lower_value_storage_flags_t* value_storage_flags;
   // Source local value ordinal to emitted low value ID map.
   loom_value_id_t* value_map;
   // Source block ordinal to emitted low block pointer map.

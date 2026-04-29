@@ -67,18 +67,17 @@ low.kernel.def target(@target) @index_madd_constant_addend_global_b32() asm<amdg
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
   %row_stride = s_mov_b32 4
-  %column = s_mov_b32 1
-  %17 = v_mov_b32 4
-  %18 = v_mul_lo_u32 %x, %17
-  %linear = v_add_u32_lit %18, 1
-  %20 = v_mov_b32 2
-  %21 = v_lshlrev_b32 %20, %linear
-  %22 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b32 %21, %22 {offset = 0}
-  %24 = v_mov_b32 2
-  %25 = v_lshlrev_b32 %24, %linear
-  %26 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %25, %loaded, %26 {offset = 0}
+  %16 = v_mov_b32 4
+  %17 = v_mul_lo_u32 %x, %16
+  %linear = v_add_u32_lit %17, 1
+  %19 = v_mov_b32 2
+  %20 = v_lshlrev_b32 %19, %linear
+  %21 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b32 %20, %21 {offset = 0}
+  %23 = v_mov_b32 2
+  %24 = v_lshlrev_b32 %23, %linear
+  %25 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %24, %loaded, %25 {offset = 0}
   return
 }
 
