@@ -28,6 +28,7 @@ loom_cc_library(
         "tables/compare.c",
         "tables/construction.c",
         "tables/contraction.c",
+        "tables/encoding.c",
         "tables/float_arithmetic.c",
         "tables/integer_arithmetic.c",
         "tables/math.c",

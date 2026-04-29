@@ -25,7 +25,7 @@ from loom.dialect.vector import (
     QuantizeTie,
     vector_ops,
 )
-from loom.dsl import ENCODING_TRANSFORM, FLOAT, I1, INTEGER, SCALAR, VECTOR, EffectKind, Op
+from loom.dsl import ENCODING_SCHEMA, ENCODING_TRANSFORM, FLOAT, I1, INTEGER, SCALAR, VECTOR, EffectKind, Op
 
 _REPO_ROOT = Path(__file__).resolve().parents[5]
 
@@ -610,6 +610,31 @@ def test_vector_transform_is_pure_numeric_transform_boundary() -> None:
     assert "Pure" in trait_names
     assert "Elementwise" not in trait_names
     assert op.effects == ()
+
+
+def test_vector_encode_decode_keep_schema_and_data_separate() -> None:
+    ops = _op_by_name()
+
+    for name, data_operand_name in (
+        ("vector.decode", "payload"),
+        ("vector.encode", "source"),
+    ):
+        op = ops[name]
+        trait_names = {trait.name for trait in op.traits}
+        data_operand = op.operand(data_operand_name)
+        schema_operand = op.operand("schema")
+        auxiliary_operand = op.operand("auxiliary")
+
+        assert data_operand is not None
+        assert data_operand.type_constraint == VECTOR
+        assert schema_operand is not None
+        assert schema_operand.type_constraint == ENCODING_SCHEMA
+        assert auxiliary_operand is not None
+        assert auxiliary_operand.type_constraint == VECTOR
+        assert auxiliary_operand.variadic
+        assert "Pure" in trait_names
+        assert "Elementwise" not in trait_names
+        assert op.effects == ()
 
 
 def test_vector_layout_ops_make_lane_structure_explicit() -> None:

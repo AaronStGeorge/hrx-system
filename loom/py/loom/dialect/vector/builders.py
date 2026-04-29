@@ -1865,3 +1865,31 @@ class VectorBuilders:
         _operands.append(input)
         _operands.append(init)
         return cast(ValueRef, self._b.build("vector.reduce", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def decode(self, *, payload: ValueRef, schema: ValueRef, auxiliary: list[ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Decode physical encoded vector payload lanes into logical numeric lanes using an explicit encoding<schema> witness. The schema value carries compact representation facts such as element format, block extent, packing order, rounding, and sparsity kind. Bulk or runtime-varying interpretation data such as scales, zero-points, codebook rows, sparse metadata, residual streams, signs, and online amax values stay visible as auxiliary SSA operands instead of being hidden inside the encoding value.
+
+        Example::
+            %values = vector.decode %payload using %schema, %scale : vector<4xi32>, encoding<schema>, vector<1xf16> -> vector<32xf32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(payload)
+        _operands.append(schema)
+        _operands.extend(auxiliary)
+        return cast(ValueRef, self._b.build("vector.decode", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def encode(self, *, source: ValueRef, schema: ValueRef, auxiliary: list[ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Encode logical numeric vector lanes into a physical encoded payload using an explicit encoding<schema> witness. This is the inverse boundary to vector.decode for runtime-created encoded data such as KV-cache pages, online quantization records, and target prepack buffers. Rounding, saturation, affine terms, table lookup policy, and sparse/codebook structure are described by schema facts; the actual scale/table/metadata/state values are ordinary auxiliary SSA operands.
+
+        Example::
+            %payload = vector.encode %values using %schema, %scale, %amax : vector<32xf32>, encoding<schema>, vector<1xf16>, vector<1xf32> -> vector<4xi32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(source)
+        _operands.append(schema)
+        _operands.extend(auxiliary)
+        return cast(ValueRef, self._b.build("vector.encode", _operands, results=results, attributes=_attributes, regions=_regions))

@@ -157,7 +157,9 @@ enum {
   LOOM_OP_VECTOR_DOT8I4 = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 133),
   LOOM_OP_VECTOR_DOT4F8 = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 134),
   LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 135),
-  LOOM_OP_VECTOR_COUNT_ = 136,
+  LOOM_OP_VECTOR_DECODE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 136),
+  LOOM_OP_VECTOR_ENCODE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 137),
+  LOOM_OP_VECTOR_COUNT_ = 138,
 };
 
 // Floating-point value-domain assumptions for vector operations.
@@ -2904,6 +2906,40 @@ iree_status_t loom_vector_reduce_facts(
 iree_status_t loom_vector_reduce_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_DECODE: Decode physical encoded vector payload lanes into logical numeric lanes using an explicit encoding<schema> witness. The schema value carries compact representation facts such as element format, block extent, packing order, rounding, and sparsity kind. Bulk or runtime-varying interpretation data such as scales, zero-points, codebook rows, sparse metadata, residual streams, signs, and online amax values stay visible as auxiliary SSA operands instead of being hidden inside the encoding value.
+// %values = vector.decode %payload using %schema, %scale : vector<4xi32>, encoding<schema>, vector<1xf16> -> vector<32xf32>
+LOOM_DEFINE_ISA(loom_vector_decode_isa, LOOM_OP_VECTOR_DECODE)
+LOOM_DEFINE_OPERAND(loom_vector_decode_payload, 0)
+LOOM_DEFINE_OPERAND(loom_vector_decode_schema, 1)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_decode_auxiliary, 2)
+LOOM_DEFINE_RESULT(loom_vector_decode_result, 0)
+iree_status_t loom_vector_decode_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t payload,
+    loom_may_consume loom_value_id_t schema,
+    loom_may_consume const loom_value_id_t* auxiliary,
+    iree_host_size_t auxiliary_count,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_VECTOR_ENCODE: Encode logical numeric vector lanes into a physical encoded payload using an explicit encoding<schema> witness. This is the inverse boundary to vector.decode for runtime-created encoded data such as KV-cache pages, online quantization records, and target prepack buffers. Rounding, saturation, affine terms, table lookup policy, and sparse/codebook structure are described by schema facts; the actual scale/table/metadata/state values are ordinary auxiliary SSA operands.
+// %payload = vector.encode %values using %schema, %scale, %amax : vector<32xf32>, encoding<schema>, vector<1xf16>, vector<1xf32> -> vector<4xi32>
+LOOM_DEFINE_ISA(loom_vector_encode_isa, LOOM_OP_VECTOR_ENCODE)
+LOOM_DEFINE_OPERAND(loom_vector_encode_source, 0)
+LOOM_DEFINE_OPERAND(loom_vector_encode_schema, 1)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_encode_auxiliary, 2)
+LOOM_DEFINE_RESULT(loom_vector_encode_result, 0)
+iree_status_t loom_vector_encode_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    loom_may_consume loom_value_id_t schema,
+    loom_may_consume const loom_value_id_t* auxiliary,
+    iree_host_size_t auxiliary_count,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
 
 // Returns the vtable array for the vector dialect.
 const loom_op_vtable_t* const* loom_vector_dialect_vtables(

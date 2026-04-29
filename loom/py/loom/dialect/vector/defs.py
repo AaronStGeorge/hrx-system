@@ -23,6 +23,7 @@ from loom.assembly import (
     Flags,
     FormatElement,
     IndexList,
+    OptionalGroup,
     Ref,
     Refs,
     ResultType,
@@ -46,6 +47,7 @@ from loom.dsl import (
     COMMUTATIVE,
     CONSTANT_LIKE,
     ELEMENTWISE,
+    ENCODING_SCHEMA,
     ENCODING_TRANSFORM,
     FLOAT_ELEMENT,
     I1_ELEMENT,
@@ -161,6 +163,10 @@ VECTOR_REDUCTION_CATEGORY = OpCategory(
     "reduction",
     doc="Vector horizontal reduction operations.",
 )
+VECTOR_ENCODING_CATEGORY = OpCategory(
+    "encoding",
+    doc="Vector encoded numeric interpretation boundaries.",
+)
 
 VECTOR_OP_CATEGORIES = (
     VECTOR_CONSTRUCTION_CATEGORY,
@@ -176,6 +182,7 @@ VECTOR_OP_CATEGORIES = (
     VECTOR_BITPACK_CATEGORY,
     VECTOR_CONTRACTION_CATEGORY,
     VECTOR_REDUCTION_CATEGORY,
+    VECTOR_ENCODING_CATEGORY,
 )
 
 vector_ops = Dialect(
@@ -1125,6 +1132,86 @@ vector_transform = Op(
     examples=[
         "%r = vector.transform %v, %xf : vector<128xf32>, encoding<transform> -> vector<128xf32>",
         "%sketch = vector.transform %v, %jl : vector<128xf32>, encoding<transform> -> vector<64xf32>",
+    ],
+)
+
+vector_decode = Op(
+    "vector.decode",
+    group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Decode physical encoded vector payload lanes into logical numeric "
+        "lanes using an explicit encoding<schema> witness. The schema value "
+        "carries compact representation facts such as element format, block "
+        "extent, packing order, rounding, and sparsity kind. Bulk or "
+        "runtime-varying interpretation data such as scales, zero-points, "
+        "codebook rows, sparse metadata, residual streams, signs, and online "
+        "amax values stay visible as auxiliary SSA operands instead of being "
+        "hidden inside the encoding value."
+    ),
+    operands=[
+        Operand("payload", VECTOR, doc="Physical encoded payload lanes."),
+        Operand("schema", ENCODING_SCHEMA, doc="Schema witness for interpreting the payload."),
+        Operand("auxiliary", VECTOR, variadic=True, doc="Explicit scale, table, metadata, or online state operands."),
+    ],
+    results=[Result("result", VECTOR, doc="Decoded logical numeric lanes.")],
+    traits=[PURE, REFINABLE_RESULT_TYPE_REFS],
+    format=[
+        Ref("payload"),
+        kw("using"),
+        Ref("schema"),
+        OptionalGroup([COMMA, Refs("auxiliary")], anchor="auxiliary"),
+        COLON,
+        TypeOf("payload"),
+        COMMA,
+        TypeOf("schema"),
+        OptionalGroup([COMMA, TypesOf("auxiliary")], anchor="auxiliary"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%values = vector.decode %payload using %schema, %scale : vector<4xi32>, encoding<schema>, vector<1xf16> -> vector<32xf32>",
+        "%values = vector.decode %payload using %schema : vector<4xi32>, encoding<schema> -> vector<32xf32>",
+    ],
+)
+
+vector_encode = Op(
+    "vector.encode",
+    group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Encode logical numeric vector lanes into a physical encoded payload "
+        "using an explicit encoding<schema> witness. This is the inverse "
+        "boundary to vector.decode for runtime-created encoded data such as "
+        "KV-cache pages, online quantization records, and target prepack "
+        "buffers. Rounding, saturation, affine terms, table lookup policy, "
+        "and sparse/codebook structure are described by schema facts; the "
+        "actual scale/table/metadata/state values are ordinary auxiliary SSA "
+        "operands."
+    ),
+    operands=[
+        Operand("source", VECTOR, doc="Logical numeric lanes to encode."),
+        Operand("schema", ENCODING_SCHEMA, doc="Schema witness for producing the payload."),
+        Operand("auxiliary", VECTOR, variadic=True, doc="Explicit scale, table, metadata, or online state operands."),
+    ],
+    results=[Result("result", VECTOR, doc="Physical encoded payload lanes.")],
+    traits=[PURE, REFINABLE_RESULT_TYPE_REFS],
+    format=[
+        Ref("source"),
+        kw("using"),
+        Ref("schema"),
+        OptionalGroup([COMMA, Refs("auxiliary")], anchor="auxiliary"),
+        COLON,
+        TypeOf("source"),
+        COMMA,
+        TypeOf("schema"),
+        OptionalGroup([COMMA, TypesOf("auxiliary")], anchor="auxiliary"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%payload = vector.encode %values using %schema, %scale, %amax : vector<32xf32>, encoding<schema>, vector<1xf16>, vector<1xf32> -> vector<4xi32>",
+        "%payload = vector.encode %values using %schema : vector<32xf32>, encoding<schema> -> vector<4xi32>",
     ],
 )
 
@@ -3655,6 +3742,11 @@ VECTOR_CONTRACTION_OPS: tuple[Op, ...] = (
 
 VECTOR_REDUCTION_OPS: tuple[Op, ...] = (vector_reduce,)
 
+VECTOR_ENCODING_OPS: tuple[Op, ...] = (
+    vector_decode,
+    vector_encode,
+)
+
 VECTOR_OP_CATEGORY_GROUPS: tuple[tuple[OpCategory, tuple[Op, ...]], ...] = (
     (VECTOR_CONSTRUCTION_CATEGORY, VECTOR_CONSTRUCTION_OPS),
     (VECTOR_AGGREGATE_CATEGORY, VECTOR_AGGREGATE_OPS),
@@ -3669,6 +3761,7 @@ VECTOR_OP_CATEGORY_GROUPS: tuple[tuple[OpCategory, tuple[Op, ...]], ...] = (
     (VECTOR_BITPACK_CATEGORY, VECTOR_BITPACK_OPS),
     (VECTOR_CONTRACTION_CATEGORY, VECTOR_CONTRACTION_OPS),
     (VECTOR_REDUCTION_CATEGORY, VECTOR_REDUCTION_OPS),
+    (VECTOR_ENCODING_CATEGORY, VECTOR_ENCODING_OPS),
 )
 
 ALL_VECTOR_OPS: tuple[Op, ...] = tuple(op for _, category_ops in VECTOR_OP_CATEGORY_GROUPS for op in category_ops)

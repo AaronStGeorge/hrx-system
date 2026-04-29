@@ -819,6 +819,24 @@ func.def @table_quantize_result_capacity(%values: vector<4xf32>, %thresholds: ve
 
 // ====
 
+// Decoding requires a schema witness, not a numeric-transform descriptor.
+func.def @decode_requires_schema_role(%payload: vector<4xi32>, %xf: encoding<transform>) {
+  // ERROR@+1: TYPE/003 "encoding<schema>"
+  %values = vector.decode %payload using %xf : vector<4xi32>, encoding<transform> -> vector<32xf32>
+  func.return
+}
+
+// ====
+
+// Encoding uses the same schema witness boundary as decoding.
+func.def @encode_requires_schema_role(%values: vector<32xf32>, %xf: encoding<transform>) {
+  // ERROR@+1: TYPE/003 "encoding<schema>"
+  %payload = vector.encode %values using %xf : vector<32xf32>, encoding<transform> -> vector<4xi32>
+  func.return
+}
+
+// ====
+
 // Fully static threshold tables must be nondecreasing.
 func.def @table_quantize_unsorted_thresholds(%values: vector<4xf32>) {
   %t0 = scalar.constant 0.0 : f32
