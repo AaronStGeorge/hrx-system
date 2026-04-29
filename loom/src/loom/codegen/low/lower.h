@@ -549,6 +549,15 @@ iree_status_t loom_low_lower_resolve_descriptor(
     loom_low_lower_context_t* context, uint64_t descriptor_id,
     loom_low_lower_resolved_descriptor_t* out_descriptor);
 
+// Resolves a descriptor row from the selected descriptor set.
+//
+// This is for selectors that already walked a descriptor-set table and selected
+// a concrete row. It interns the row's opcode string into the low module
+// without repeating the stable-ID lookup.
+iree_status_t loom_low_lower_resolve_descriptor_row(
+    loom_low_lower_context_t* context, const loom_low_descriptor_t* descriptor,
+    loom_low_lower_resolved_descriptor_t* out_descriptor);
+
 // Resolves a stable descriptor ID when it is present in the selected descriptor
 // set.
 //

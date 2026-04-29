@@ -29,7 +29,7 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_memory(
     return iree_ok_status();
   }
 
-  loom_amdgpu_memory_access_plan_t access = {0};
+  loom_amdgpu_memory_access_t access = {0};
   loom_low_source_memory_access_diagnostic_t source_diagnostic = {0};
   loom_amdgpu_memory_access_diagnostic_t diagnostic = {0};
   if (!loom_amdgpu_memory_access_select(

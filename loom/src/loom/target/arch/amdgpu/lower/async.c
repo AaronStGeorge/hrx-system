@@ -160,7 +160,7 @@ static bool loom_amdgpu_async_gather_select_source(
     return false;
   }
 
-  loom_amdgpu_memory_access_plan_t access = {
+  loom_amdgpu_memory_access_t access = {
       .source = plan->source,
       .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
   };
@@ -314,12 +314,11 @@ static bool loom_amdgpu_async_gather_select(
   }
   out_plan->source_immediate_offset = out_plan->source.static_byte_offset;
 
-  loom_amdgpu_memory_access_plan_t access = {
+  loom_amdgpu_memory_access_t access = {
       .source = out_plan->source,
       .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
       .immediate_offset = out_plan->source_immediate_offset,
       .packet_byte_count = out_plan->packet_byte_count,
-      .descriptor_id = out_plan->descriptor_id,
   };
   for (iree_host_size_t i = 0; i < LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY;
        ++i) {
@@ -543,12 +542,11 @@ iree_status_t loom_amdgpu_lower_kernel_async_gather(
     const loom_amdgpu_async_gather_plan_t* plan) {
   IREE_ASSERT_ARGUMENT(plan);
 
-  loom_amdgpu_memory_access_plan_t access = {
+  loom_amdgpu_memory_access_t access = {
       .source = plan->source,
       .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
       .immediate_offset = plan->source_immediate_offset,
       .packet_byte_count = plan->packet_byte_count,
-      .descriptor_id = plan->descriptor_id,
   };
   for (iree_host_size_t i = 0; i < LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY;
        ++i) {

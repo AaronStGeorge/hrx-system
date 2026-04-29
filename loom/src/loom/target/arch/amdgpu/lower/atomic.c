@@ -922,7 +922,7 @@ static bool loom_amdgpu_atomic_select(
     return false;
   }
 
-  loom_amdgpu_memory_access_plan_t memory_access = {
+  loom_amdgpu_memory_access_t memory_access = {
       .source = out_plan->source,
       .address_form = out_plan->address_form,
   };
@@ -1145,14 +1145,13 @@ iree_status_t loom_amdgpu_lower_view_atomic(
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
       context, plan->source.view_value_id, &low_resource));
 
-  loom_amdgpu_memory_access_plan_t access = {
+  loom_amdgpu_memory_access_t access = {
       .source = plan->source,
       .address_form = plan->address_form,
       .immediate_offset = plan->immediate_offset,
       .scalar_byte_offset = plan->scalar_byte_offset,
       .vgpr_count = 1,
       .packet_byte_count = 4,
-      .descriptor_id = plan->descriptor_id,
   };
   for (iree_host_size_t i = 0; i < LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY;
        ++i) {

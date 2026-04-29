@@ -187,7 +187,7 @@ typedef enum loom_amdgpu_memory_operation_kind_e {
   LOOM_AMDGPU_MEMORY_OPERATION_STORE = 1,
 } loom_amdgpu_memory_operation_kind_t;
 
-typedef struct loom_amdgpu_memory_access_plan_t {
+typedef struct loom_amdgpu_memory_access_t {
   // Target-independent source memory access plan being wrapped.
   loom_low_source_memory_access_plan_t source;
   // Selected target addressing form for the memory packet.
@@ -207,8 +207,15 @@ typedef struct loom_amdgpu_memory_access_plan_t {
   uint32_t vgpr_count;
   // Number of bytes moved by the selected memory packet.
   uint32_t packet_byte_count;
-  // Stable descriptor ID selected for the active descriptor set.
-  uint64_t descriptor_id;
+  // Descriptor row selected for the active descriptor set.
+  const loom_low_descriptor_t* descriptor;
+} loom_amdgpu_memory_access_t;
+
+typedef struct loom_amdgpu_memory_access_plan_t {
+  // Selected access form shared with legality and diagnostic consumers.
+  loom_amdgpu_memory_access_t access;
+  // Module string ID for access.descriptor's opcode spelling.
+  loom_string_id_t opcode_id;
 } loom_amdgpu_memory_access_plan_t;
 
 #define LOOM_AMDGPU_EXPLICIT_PACKET_IMMEDIATE_CAPACITY 4

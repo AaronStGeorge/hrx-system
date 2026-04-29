@@ -161,7 +161,7 @@ static bool loom_amdgpu_memory_cache_policy_bits_contain(uint32_t bits,
 
 bool loom_amdgpu_memory_cache_policy_encode(
     const loom_low_descriptor_set_t* descriptor_set,
-    const loom_amdgpu_memory_access_plan_t* access,
+    const loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_cache_policy_attrs_t* out_attrs) {
   IREE_ASSERT_ARGUMENT(out_attrs);
   *out_attrs = (loom_amdgpu_memory_cache_policy_attrs_t){0};
@@ -215,7 +215,7 @@ bool loom_amdgpu_memory_cache_policy_encode(
 
 bool loom_amdgpu_memory_cache_policy_can_lower(
     const loom_low_descriptor_set_t* descriptor_set,
-    const loom_amdgpu_memory_access_plan_t* access) {
+    const loom_amdgpu_memory_access_t* access) {
   loom_amdgpu_memory_cache_policy_attrs_t attrs;
   return loom_amdgpu_memory_cache_policy_encode(descriptor_set, access, &attrs);
 }
@@ -229,7 +229,7 @@ static iree_status_code_t loom_amdgpu_memory_cache_policy_rejection_code(
 
 iree_status_t loom_amdgpu_memory_cache_policy_format_rejection_detail(
     const loom_low_descriptor_set_t* descriptor_set,
-    const loom_amdgpu_memory_access_plan_t* access,
+    const loom_amdgpu_memory_access_t* access,
     const loom_vector_memory_cache_policy_t* policy,
     iree_string_builder_t* builder) {
   IREE_ASSERT_ARGUMENT(descriptor_set);
@@ -278,7 +278,7 @@ iree_status_t loom_amdgpu_memory_cache_policy_format_rejection_detail(
 
 iree_status_t loom_amdgpu_memory_cache_policy_rejected_status(
     const loom_low_descriptor_set_t* descriptor_set,
-    const loom_amdgpu_memory_access_plan_t* access,
+    const loom_amdgpu_memory_access_t* access,
     const loom_vector_memory_cache_policy_t* policy) {
   IREE_ASSERT_ARGUMENT(descriptor_set);
   IREE_ASSERT_ARGUMENT(access);

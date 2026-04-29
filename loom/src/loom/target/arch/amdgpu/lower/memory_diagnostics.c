@@ -216,7 +216,7 @@ static const loom_amdgpu_memory_access_rejection_detail_t
 
 static loom_amdgpu_memory_access_bank_summary_t
 loom_amdgpu_memory_access_bank_summary(
-    const loom_amdgpu_memory_access_plan_t* access) {
+    const loom_amdgpu_memory_access_t* access) {
   loom_amdgpu_memory_access_bank_summary_t summary = {
       .reason = IREE_SV("bank-pattern-unknown"),
   };
@@ -250,37 +250,23 @@ loom_amdgpu_memory_access_bank_summary(
 
 static iree_status_t loom_amdgpu_memory_access_descriptor_key(
     const loom_low_descriptor_set_t* descriptor_set,
-    const loom_amdgpu_memory_access_plan_t* access,
+    const loom_amdgpu_memory_access_t* access,
     iree_string_view_t* out_packet_key) {
   IREE_ASSERT_ARGUMENT(out_packet_key);
   *out_packet_key = IREE_SV("<missing>");
-  if (access->descriptor_id == LOOM_LOW_DESCRIPTOR_ID_NONE) {
+  if (access->descriptor == NULL) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU memory access has no selected descriptor");
   }
-  const uint32_t descriptor_ordinal =
-      loom_low_descriptor_set_lookup_descriptor_by_id(descriptor_set,
-                                                      access->descriptor_id);
-  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "selected AMDGPU memory descriptor id is not present");
-  }
-  const loom_low_descriptor_t* descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set, descriptor_ordinal);
-  if (descriptor == NULL) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "selected AMDGPU memory descriptor is invalid");
-  }
   return loom_low_descriptor_set_string(
-      descriptor_set, descriptor->key_string_offset, out_packet_key);
+      descriptor_set, access->descriptor->key_string_offset, out_packet_key);
 }
 
 iree_status_t loom_amdgpu_record_memory_access_diagnostic(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     const loom_low_descriptor_set_t* descriptor_set,
-    const loom_amdgpu_memory_access_plan_t* access,
+    const loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_operation_kind_t kind) {
   if (!iree_any_bit_set(loom_target_low_legality_diagnostic_flags(context),
                         LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS) ||
