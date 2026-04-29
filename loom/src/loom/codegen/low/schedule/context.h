@@ -59,7 +59,7 @@ typedef struct loom_low_schedule_pressure_cliff_range_t {
 
 typedef struct loom_low_schedule_build_state_t {
   // Module containing the low function being scheduled.
-  const loom_module_t* module;
+  loom_module_t* module;
   // Scheduler options provided by the caller.
   const loom_low_schedule_options_t* options;
   // Arena owning all table storage produced by this schedule.

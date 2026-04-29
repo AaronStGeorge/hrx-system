@@ -181,11 +181,13 @@ typedef struct loom_liveness_analysis_t {
   const loom_liveness_interval_t* intervals;
   // Number of records in |intervals|.
   iree_host_size_t interval_count;
-  // Dense value-id to interval-index table. Entries without an interval contain
-  // UINT32_MAX. The table has |value_capacity| entries.
+  // Value IDs indexed by region-local value ordinal.
+  const loom_value_id_t* value_ids;
+  // Number of records in |value_ids|.
+  iree_host_size_t value_count;
+  // Dense local-value-ordinal to interval-index table. Entries without an
+  // interval contain UINT32_MAX. The table has |value_count| entries.
   const uint32_t* value_interval_indices;
-  // Number of entries in |value_interval_indices|.
-  iree_host_size_t value_capacity;
   // Peak pressure summaries grouped by value class.
   const loom_liveness_pressure_summary_t* pressure_summaries;
   // Number of records in |pressure_summaries|.
@@ -193,14 +195,15 @@ typedef struct loom_liveness_analysis_t {
 } loom_liveness_analysis_t;
 
 // Computes liveness for |region|. The caller must keep |module| and |region|
-// immutable for as long as |out_analysis| is used and must keep |arena| alive.
+// semantically immutable for as long as |out_analysis| is used and must keep
+// |arena| alive. The analysis uses module-owned ordinal scratch while it runs.
 //
 // CFG regions use explicit successor edges. Structured regions use local block
 // use/def sets only; each block is analyzed independently because structured
 // control-flow semantics are represented by the containing op, not by sibling
 // block successor edges.
 iree_status_t loom_liveness_analyze_region(
-    const loom_module_t* module, const loom_region_t* region,
+    loom_module_t* module, const loom_region_t* region,
     iree_arena_allocator_t* arena, loom_liveness_analysis_t* out_analysis);
 
 // Computes liveness using an explicit per-block operation order.
@@ -209,12 +212,13 @@ iree_status_t loom_liveness_analyze_region(
 // see intervals over the scheduled packet stream, not the source operation
 // order. Pass an empty order to use ordinary source order.
 iree_status_t loom_liveness_analyze_region_with_order(
-    const loom_module_t* module, const loom_region_t* region,
+    loom_module_t* module, const loom_region_t* region,
     loom_liveness_order_t order, iree_arena_allocator_t* arena,
     loom_liveness_analysis_t* out_analysis);
 
 // Returns the interval for |value_id|, or NULL when the value is not touched by
-// the analyzed region.
+// the analyzed region. This convenience helper scans the compact local value
+// list; production hot paths should keep their own frame-local direct lookup.
 const loom_liveness_interval_t* loom_liveness_interval_for_value(
     const loom_liveness_analysis_t* analysis, loom_value_id_t value_id);
 

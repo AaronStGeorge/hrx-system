@@ -138,7 +138,7 @@ class AmdgpuWaitPacketsTest : public ::testing::Test {
   }
 
   iree_status_t BuildWaitPackets(
-      const loom_module_t* module, const loom_op_t* low_function,
+      loom_module_t* module, const loom_op_t* low_function,
       iree_arena_allocator_t* arena, loom_low_schedule_table_t* out_schedule,
       loom_amdgpu_wait_plan_t* out_wait_plan,
       loom_amdgpu_wait_packet_plan_t* out_packet_plan) {

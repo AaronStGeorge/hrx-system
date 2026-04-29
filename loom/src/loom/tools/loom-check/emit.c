@@ -893,7 +893,7 @@ static iree_status_t loom_check_emit_find_func_like(
 }
 
 static iree_status_t loom_check_emit_write_liveness_json(
-    const loom_module_t* module, iree_string_view_t symbol_name,
+    loom_module_t* module, iree_string_view_t symbol_name,
     iree_arena_allocator_t* analysis_arena, loom_check_result_t* result) {
   loom_func_like_t function = {0};
   IREE_RETURN_IF_ERROR(

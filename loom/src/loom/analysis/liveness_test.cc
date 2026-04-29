@@ -69,7 +69,7 @@ class LivenessTest : public ::testing::Test {
                                                  (uint16_t)count));
   }
 
-  loom_func_like_t FindFunction(const loom_module_t* module,
+  loom_func_like_t FindFunction(loom_module_t* module,
                                 iree_string_view_t name) {
     loom_string_id_t name_id = loom_module_lookup_string(module, name);
     IREE_ASSERT(name_id != LOOM_STRING_ID_INVALID);
@@ -81,7 +81,7 @@ class LivenessTest : public ::testing::Test {
     return func;
   }
 
-  loom_liveness_analysis_t AnalyzeBody(const loom_module_t* module,
+  loom_liveness_analysis_t AnalyzeBody(loom_module_t* module,
                                        loom_func_like_t func) {
     loom_liveness_analysis_t analysis;
     IREE_CHECK_OK(loom_liveness_analyze_region(
@@ -154,6 +154,31 @@ func.def @linear(%a: i32, %b: i32) -> (i32) {
   EXPECT_EQ(sum_interval->end_point, 3u);
   EXPECT_EQ(dead_interval->start_point, 2u);
   EXPECT_EQ(dead_interval->end_point, 2u);
+}
+
+TEST_F(LivenessTest, RegionLocalOrdinalsHandleSparseModuleValueIds) {
+  ModulePtr module = ParseModule(R"(
+func.def @padding(%p0: i32, %p1: i32, %p2: i32, %p3: i32) -> (i32) {
+  %r0 = scalar.addi %p0, %p1 : i32
+  %r1 = scalar.addi %p2, %p3 : i32
+  %r2 = scalar.addi %r0, %r1 : i32
+  func.return %r2 : i32
+}
+func.def @sparse(%a: i32, %b: i32) -> (i32) {
+  %sum = scalar.addi %a, %b : i32
+  func.return %sum : i32
+}
+)");
+  loom_func_like_t func = FindFunction(module.get(), IREE_SV("sparse"));
+  uint16_t arg_count = 0;
+  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+  ASSERT_EQ(arg_count, 2u);
+
+  loom_liveness_analysis_t analysis = AnalyzeBody(module.get(), func);
+  EXPECT_LT(analysis.value_count, module.get()->values.count);
+  EXPECT_GE(args[0], analysis.value_count);
+  ASSERT_NE(loom_liveness_interval_for_value(&analysis, args[0]), nullptr);
+  ASSERT_NE(loom_liveness_interval_for_value(&analysis, args[1]), nullptr);
 }
 
 TEST_F(LivenessTest, CfgLiveInOutUsesSuccessorEdgesAndBranchOperands) {

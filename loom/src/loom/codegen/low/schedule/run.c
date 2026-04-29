@@ -1364,7 +1364,7 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
 }
 
 iree_status_t loom_low_schedule_function(
-    const loom_module_t* module, const loom_op_t* low_func_op,
+    loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_schedule_options_t* options, iree_arena_allocator_t* arena,
     loom_low_schedule_table_t* out_table) {
   IREE_ASSERT_ARGUMENT(module);

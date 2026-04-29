@@ -228,9 +228,9 @@ iree_status_t loom_liveness_format_json(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream,
       "{\"format\":\"loom.liveness.v0\",\"is_cfg\":%s,\"block_count\":%zu,"
-      "\"value_capacity\":%zu,\"blocks\":[",
+      "\"value_count\":%zu,\"blocks\":[",
       analysis->is_cfg ? "true" : "false", (size_t)analysis->block_count,
-      (size_t)analysis->value_capacity));
+      (size_t)analysis->value_count));
   for (iree_host_size_t i = 0; i < analysis->block_count; ++i) {
     if (i > 0) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_char(&stream, ','));

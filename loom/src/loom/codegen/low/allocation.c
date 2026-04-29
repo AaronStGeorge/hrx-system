@@ -19,7 +19,7 @@
 
 typedef struct loom_low_allocation_build_state_t {
   // Module containing the allocated low function.
-  const loom_module_t* module;
+  loom_module_t* module;
   // Caller-provided allocation options.
   const loom_low_allocation_options_t* options;
   // Arena owning all table arrays.
@@ -84,6 +84,8 @@ typedef struct loom_low_allocation_build_state_t {
   iree_host_size_t coalesced_copy_count;
   // Number of materialized copy decisions.
   iree_host_size_t materialized_copy_count;
+  // True while interval indices are registered in the module ordinal scratch.
+  bool interval_ordinal_scratch_acquired;
 } loom_low_allocation_build_state_t;
 
 typedef struct loom_low_allocation_resolved_budget_t {
@@ -1094,20 +1096,46 @@ static bool loom_low_allocation_assignment_is_coalescable(
       assignment->location_kind);
 }
 
+static iree_status_t loom_low_allocation_initialize_interval_ordinals(
+    loom_low_allocation_build_state_t* state) {
+  if (state->liveness.interval_count >= LOOM_VALUE_ORDINAL_INVALID) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "allocation liveness interval count exceeds "
+                            "local ordinal range");
+  }
+  loom_module_value_ordinal_scratch_acquire(state->module);
+  state->interval_ordinal_scratch_acquired = true;
+  for (iree_host_size_t i = 0; i < state->liveness.interval_count; ++i) {
+    loom_module_value_ordinal_scratch_set(state->module,
+                                          state->liveness.intervals[i].value_id,
+                                          (loom_value_ordinal_t)i);
+  }
+  return iree_ok_status();
+}
+
+static void loom_low_allocation_deinitialize_interval_ordinals(
+    loom_low_allocation_build_state_t* state) {
+  if (!state->interval_ordinal_scratch_acquired) return;
+  for (iree_host_size_t i = 0; i < state->liveness.interval_count; ++i) {
+    loom_module_value_ordinal_scratch_clear(
+        state->module, state->liveness.intervals[i].value_id);
+  }
+  loom_module_value_ordinal_scratch_release(state->module);
+  state->interval_ordinal_scratch_acquired = false;
+}
+
 static bool loom_low_allocation_interval_index_for_value(
     const loom_low_allocation_build_state_t* state, loom_value_id_t value_id,
     uint32_t* out_interval_index) {
-  if (value_id >= state->liveness.value_capacity ||
-      !state->liveness.value_interval_indices) {
+  const loom_value_ordinal_t interval_ordinal =
+      loom_module_value_ordinal_scratch_lookup(state->module, value_id);
+  if (interval_ordinal == LOOM_VALUE_ORDINAL_INVALID ||
+      interval_ordinal >= state->liveness.interval_count) {
     return false;
   }
-  const uint32_t interval_index =
-      state->liveness.value_interval_indices[value_id];
-  if (interval_index == UINT32_MAX ||
-      interval_index >= state->liveness.interval_count) {
-    return false;
-  }
-  *out_interval_index = interval_index;
+  IREE_ASSERT_EQ(state->liveness.intervals[interval_ordinal].value_id,
+                 value_id);
+  *out_interval_index = interval_ordinal;
   return true;
 }
 
@@ -3224,7 +3252,7 @@ static iree_status_t loom_low_allocation_emit_copy_decisions(
 }
 
 iree_status_t loom_low_allocate_function(
-    const loom_module_t* module, const loom_op_t* low_func_op,
+    loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_allocation_options_t* options, iree_arena_allocator_t* arena,
     loom_low_allocation_table_t* out_table) {
   IREE_ASSERT_ARGUMENT(module);
@@ -3270,49 +3298,67 @@ iree_status_t loom_low_allocate_function(
 
   IREE_RETURN_IF_ERROR(loom_liveness_analyze_region_with_order(
       module, state.body, options->liveness_order, arena, &state.liveness));
-  IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_fixed_values(&state));
-  IREE_RETURN_IF_ERROR(loom_low_allocation_assign_intervals(&state));
-  IREE_RETURN_IF_ERROR(loom_low_allocation_record_copy_decisions(&state));
-  IREE_RETURN_IF_ERROR(loom_low_allocation_record_edge_copy_groups(&state));
-  IREE_RETURN_IF_ERROR(
-      loom_low_allocation_record_edge_copy_temporaries(&state));
+  iree_status_t status =
+      loom_low_allocation_initialize_interval_ordinals(&state);
+  if (iree_status_is_ok(status)) {
+    status = loom_low_allocation_resolve_fixed_values(&state);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_low_allocation_assign_intervals(&state);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_low_allocation_record_copy_decisions(&state);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_low_allocation_record_edge_copy_groups(&state);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_low_allocation_record_edge_copy_temporaries(&state);
+  }
 
-  loom_low_allocation_table_t table = {
-      .module = module,
-      .function_op = low_func_op,
-      .target = state.target,
-      .liveness = state.liveness,
-      .allocation_mode = loom_low_function_allocation(low_func_op),
-      .assignments = state.assignments,
-      .assignment_count = state.assignment_count,
-      .spill_plans = state.spill_plans,
-      .spill_plan_count = state.spill_plan_count,
-      .remarks = state.remarks,
-      .remark_count = state.remark_count,
-      .copy_decisions = state.copy_decisions,
-      .copy_decision_count = state.copy_decision_count,
-      .edge_copies = state.edge_copies,
-      .edge_copy_count = state.edge_copy_count,
-      .edge_copy_groups = state.edge_copy_groups,
-      .edge_copy_group_count = state.edge_copy_group_count,
-      .edge_copy_temporaries = state.edge_copy_temporaries,
-      .edge_copy_temporary_count = state.edge_copy_temporary_count,
-      .spill_count = state.spill_count,
-      .coalesced_copy_count = state.coalesced_copy_count,
-      .materialized_copy_count = state.materialized_copy_count,
-  };
-  loom_target_bundle_storage_rebind(&table.target.bundle_storage);
-  IREE_RETURN_IF_ERROR(loom_low_allocation_verify_table(&table));
-  if (iree_any_bit_set(options->diagnostic_flags,
+  loom_low_allocation_table_t table = {0};
+  if (iree_status_is_ok(status)) {
+    table = (loom_low_allocation_table_t){
+        .module = module,
+        .function_op = low_func_op,
+        .target = state.target,
+        .liveness = state.liveness,
+        .allocation_mode = loom_low_function_allocation(low_func_op),
+        .assignments = state.assignments,
+        .assignment_count = state.assignment_count,
+        .spill_plans = state.spill_plans,
+        .spill_plan_count = state.spill_plan_count,
+        .remarks = state.remarks,
+        .remark_count = state.remark_count,
+        .copy_decisions = state.copy_decisions,
+        .copy_decision_count = state.copy_decision_count,
+        .edge_copies = state.edge_copies,
+        .edge_copy_count = state.edge_copy_count,
+        .edge_copy_groups = state.edge_copy_groups,
+        .edge_copy_group_count = state.edge_copy_group_count,
+        .edge_copy_temporaries = state.edge_copy_temporaries,
+        .edge_copy_temporary_count = state.edge_copy_temporary_count,
+        .spill_count = state.spill_count,
+        .coalesced_copy_count = state.coalesced_copy_count,
+        .materialized_copy_count = state.materialized_copy_count,
+    };
+    loom_target_bundle_storage_rebind(&table.target.bundle_storage);
+    status = loom_low_allocation_verify_table(&table);
+  }
+  if (iree_status_is_ok(status) &&
+      iree_any_bit_set(options->diagnostic_flags,
                        LOOM_LOW_ALLOCATION_DIAGNOSTIC_PREDICTED_SPILLS)) {
-    IREE_RETURN_IF_ERROR(
-        loom_low_allocation_emit_predicted_spills(&table, options->emitter));
+    status =
+        loom_low_allocation_emit_predicted_spills(&table, options->emitter);
   }
-  if (iree_any_bit_set(options->diagnostic_flags,
+  if (iree_status_is_ok(status) &&
+      iree_any_bit_set(options->diagnostic_flags,
                        LOOM_LOW_ALLOCATION_DIAGNOSTIC_COPY_DECISIONS)) {
-    IREE_RETURN_IF_ERROR(
-        loom_low_allocation_emit_copy_decisions(&table, options->emitter));
+    status = loom_low_allocation_emit_copy_decisions(&table, options->emitter);
   }
-  *out_table = table;
-  return iree_ok_status();
+  if (iree_status_is_ok(status)) {
+    *out_table = table;
+  }
+  loom_low_allocation_deinitialize_interval_ordinals(&state);
+  return status;
 }

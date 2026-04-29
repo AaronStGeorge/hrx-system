@@ -333,7 +333,7 @@ typedef struct loom_low_allocation_table_t {
 // uses target physical register counts or explicit budgets as hard limits, and
 // reports spills as table remarks without mutating IR.
 iree_status_t loom_low_allocate_function(
-    const loom_module_t* module, const loom_op_t* low_func_op,
+    loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_allocation_options_t* options, iree_arena_allocator_t* arena,
     loom_low_allocation_table_t* out_table);
 

@@ -192,7 +192,7 @@ class AmdgpuOccupancyTest : public ::testing::Test {
   }
 
   iree_status_t AllocateAndBuildOccupancy(
-      const loom_module_t* module, const loom_op_t* low_function,
+      loom_module_t* module, const loom_op_t* low_function,
       const loom_low_allocation_budget_t* budgets,
       iree_host_size_t budget_count, iree_arena_allocator_t* arena,
       loom_low_allocation_table_t* out_allocation,

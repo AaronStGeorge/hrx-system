@@ -122,7 +122,7 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
     return nullptr;
   }
 
-  iree_status_t BuildWaitPlan(const loom_module_t* module,
+  iree_status_t BuildWaitPlan(loom_module_t* module,
                               const loom_op_t* low_function,
                               iree_arena_allocator_t* arena,
                               loom_low_schedule_table_t* out_schedule,

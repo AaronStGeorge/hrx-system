@@ -48,6 +48,8 @@ typedef struct loom_low_lowering_frame_t {
   loom_value_id_t* value_ids;
   // Number of entries in value_ids.
   loom_value_ordinal_t value_count;
+  // Allocated capacity of value_ids.
+  iree_host_size_t value_capacity;
   // True after this frame acquires module value-ordinal scratch.
   bool value_ordinal_scratch_acquired;
   // Source value facts computed once before planning.
