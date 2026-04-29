@@ -202,6 +202,9 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL = 3,
   // Emits an exact integer source value fact as an i64 packet attribute.
   LOOM_LOW_LOWER_ATTR_COPY_VALUE_EXACT_I64 = 4,
+  // Emits an exact signed i32 source value fact as a zero-extended u32 packet
+  // attribute bit pattern.
+  LOOM_LOW_LOWER_ATTR_COPY_VALUE_I32_AS_U32_BITS = 5,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {
