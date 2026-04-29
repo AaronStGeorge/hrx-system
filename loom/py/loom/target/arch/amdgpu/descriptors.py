@@ -1518,6 +1518,7 @@ def _v_binary_u32_literal_overlay(
         ),
         immediate_fields=("LITERAL",),
         immediates=(_U32_IMMEDIATE,),
+        fixed_encoding_fields=(("SRC0", _predefined("SRC_LITERAL", "OPR_SRC")),),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 

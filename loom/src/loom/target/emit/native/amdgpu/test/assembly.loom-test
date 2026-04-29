@@ -4,7 +4,7 @@ target.profile @gfx11_target preset("amdgpu-gfx11")
 low.func.def target(@gfx11_target) @gfx11_constants(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %s_c0 = s_mov_b32 7
   %v_c0 = v_mov_b32 9
-  %v_sum = v_add_u32 %v_c0, %v_c0
+  %v_sum = v_add_u32_lit %v_c0, 123
   buffer_store_dword %v_sum, %resource, %vaddr, %s_c0 {offset = 12}
   return
 }
@@ -13,7 +13,7 @@ low.func.def target(@gfx11_target) @gfx11_constants(%resource: reg<amdgpu.sgpr x
 .Lbb0:
   s_mov_b32 s4, 7
   v_mov_b32 v1, 9
-  v_add_u32 v1, v1, v1
+  v_add_u32_lit v1, v1, 123
   buffer_store_dword v1, v0, s[0:3], s4 offen offset:12
   s_endpgm
 
