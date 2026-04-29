@@ -1676,8 +1676,26 @@ typedef struct loom_string_table_t {
 typedef struct loom_value_table_t {
   iree_host_size_t count;
   iree_host_size_t capacity;
-  loom_value_t* entries;  // 64-byte aligned.
+  // 64-byte aligned value entries.
+  loom_value_t* entries;
 } loom_value_table_t;
+
+// Compiler scratch mapping module value IDs to a currently-active local value
+// ordinal.
+//
+// The entries mirror the value table capacity and are reused by phase frames
+// that need compact function-local arrays. The table does not describe
+// semantic IR state: value IDs remain the durable identity, while ordinals are
+// transient density assigned by the active frame. Frames must clear only the
+// value IDs they registered before releasing ownership.
+typedef struct loom_value_ordinal_scratch_t {
+  // Dense value_id -> local ordinal entries, or INVALID when unregistered.
+  loom_value_ordinal_t* ordinals_by_value_id;
+  // Number of entries allocated in ordinals_by_value_id.
+  iree_host_size_t capacity;
+  // True while one compiler frame owns the scratch mapping.
+  bool is_active;
+} loom_value_ordinal_scratch_t;
 
 // Symbol table. Flat (no nesting), one per module.
 typedef struct loom_symbol_table_t {
@@ -1847,6 +1865,9 @@ typedef struct loom_module_t {
   // All SSA values (op results and block arguments).
   // 64-byte aligned for cache-line access.
   loom_value_table_t values;
+
+  // Reusable compiler scratch indexed by value ID.
+  loom_value_ordinal_scratch_t value_ordinal_scratch;
 
   // SSA references carried by value types.
   loom_type_use_table_t type_uses;

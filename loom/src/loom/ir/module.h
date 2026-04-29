@@ -122,6 +122,55 @@ static inline loom_type_t loom_block_arg_type(const loom_module_t* module,
 iree_status_t loom_module_define_value(loom_module_t* module, loom_type_t type,
                                        loom_value_id_t* out_value_id);
 
+// Acquires the module value-ordinal scratch table for one compiler frame.
+//
+// Mutable modules are single-owner, so only one active local value mapping is
+// allowed at a time. The scratch entries are initialized to
+// LOOM_VALUE_ORDINAL_INVALID when storage grows. Callers register touched
+// value IDs, use the mapping while their frame is active, clear exactly those
+// touched value IDs, and release the table before the frame ends.
+void loom_module_value_ordinal_scratch_acquire(loom_module_t* module);
+
+// Releases the module value-ordinal scratch table after the owning compiler
+// frame has cleared all value IDs it registered.
+void loom_module_value_ordinal_scratch_release(loom_module_t* module);
+
+// Registers |value_id| with |ordinal| in the active value-ordinal scratch map.
+static inline void loom_module_value_ordinal_scratch_set(
+    loom_module_t* module, loom_value_id_t value_id,
+    loom_value_ordinal_t ordinal) {
+  IREE_ASSERT(module != NULL);
+  IREE_ASSERT(module->value_ordinal_scratch.is_active);
+  IREE_ASSERT(value_id < module->value_ordinal_scratch.capacity);
+  IREE_ASSERT(ordinal != LOOM_VALUE_ORDINAL_INVALID);
+  IREE_ASSERT_EQ(module->value_ordinal_scratch.ordinals_by_value_id[value_id],
+                 LOOM_VALUE_ORDINAL_INVALID);
+  module->value_ordinal_scratch.ordinals_by_value_id[value_id] = ordinal;
+}
+
+// Clears a previously-registered |value_id| from the active value-ordinal
+// scratch map.
+static inline void loom_module_value_ordinal_scratch_clear(
+    loom_module_t* module, loom_value_id_t value_id) {
+  IREE_ASSERT(module != NULL);
+  IREE_ASSERT(module->value_ordinal_scratch.is_active);
+  IREE_ASSERT(value_id < module->value_ordinal_scratch.capacity);
+  module->value_ordinal_scratch.ordinals_by_value_id[value_id] =
+      LOOM_VALUE_ORDINAL_INVALID;
+}
+
+// Returns the active local ordinal for |value_id|, or INVALID when the active
+// frame did not register that value.
+static inline loom_value_ordinal_t loom_module_value_ordinal_scratch_lookup(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  IREE_ASSERT(module != NULL);
+  IREE_ASSERT(module->value_ordinal_scratch.is_active);
+  if (value_id >= module->value_ordinal_scratch.capacity) {
+    return LOOM_VALUE_ORDINAL_INVALID;
+  }
+  return module->value_ordinal_scratch.ordinals_by_value_id[value_id];
+}
+
 // Attaches leading source comments to |op|. Comment payloads are the exact
 // source bytes after each leading // marker and are copied into |module|.
 iree_status_t loom_module_attach_op_comments(loom_module_t* module,

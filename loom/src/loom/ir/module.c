@@ -188,6 +188,28 @@ static iree_status_t loom_value_table_ensure_capacity(
   return iree_ok_status();
 }
 
+static void loom_value_ordinal_scratch_initialize_range(
+    loom_value_ordinal_t* ordinals_by_value_id, iree_host_size_t count) {
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    ordinals_by_value_id[i] = LOOM_VALUE_ORDINAL_INVALID;
+  }
+}
+
+static iree_status_t loom_value_ordinal_scratch_ensure_capacity(
+    iree_arena_allocator_t* arena, loom_value_ordinal_scratch_t* scratch,
+    iree_host_size_t minimum_capacity) {
+  if (scratch->capacity >= minimum_capacity) return iree_ok_status();
+  iree_host_size_t old_capacity = scratch->capacity;
+  IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+      arena, old_capacity, minimum_capacity,
+      sizeof(*scratch->ordinals_by_value_id), &scratch->capacity,
+      (void**)&scratch->ordinals_by_value_id));
+  loom_value_ordinal_scratch_initialize_range(
+      scratch->ordinals_by_value_id + old_capacity,
+      scratch->capacity - old_capacity);
+  return iree_ok_status();
+}
+
 static iree_status_t loom_string_table_ensure_capacity(
     iree_arena_allocator_t* arena, loom_string_table_t* table) {
   if (table->count < table->capacity) return iree_ok_status();
@@ -476,6 +498,10 @@ static iree_status_t loom_module_initialize_tables(
   module->values.capacity = value_capacity;
   memset(module->values.entries, 0, value_capacity * sizeof(loom_value_t));
 
+  // Value-ordinal scratch: dense compiler scratch indexed by value ID.
+  IREE_RETURN_IF_ERROR(loom_value_ordinal_scratch_ensure_capacity(
+      arena, &module->value_ordinal_scratch, value_capacity));
+
   // Type-use heads: dense side metadata indexed by value ID.
   IREE_RETURN_IF_ERROR(loom_type_use_table_ensure_value_capacity(
       arena, &module->type_uses, value_capacity));
@@ -558,6 +584,18 @@ void loom_module_free(loom_module_t* module) {
   iree_arena_deinitialize(&module->arena);
   iree_allocator_free(allocator, module);
   IREE_TRACE_ZONE_END(z0);
+}
+
+void loom_module_value_ordinal_scratch_acquire(loom_module_t* module) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT(!module->value_ordinal_scratch.is_active);
+  module->value_ordinal_scratch.is_active = true;
+}
+
+void loom_module_value_ordinal_scratch_release(loom_module_t* module) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT(module->value_ordinal_scratch.is_active);
+  module->value_ordinal_scratch.is_active = false;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1399,6 +1437,8 @@ iree_status_t loom_module_define_value(loom_module_t* module, loom_type_t type,
 
   IREE_RETURN_IF_ERROR(
       loom_value_table_ensure_capacity(&module->arena, &module->values));
+  IREE_RETURN_IF_ERROR(loom_value_ordinal_scratch_ensure_capacity(
+      &module->arena, &module->value_ordinal_scratch, module->values.capacity));
   IREE_RETURN_IF_ERROR(loom_type_use_table_ensure_value_capacity(
       &module->arena, &module->type_uses, module->values.capacity));
   loom_type_t canonical_type = {0};

@@ -511,6 +511,67 @@ TEST_F(ModuleTest, DefineValueGrowth) {
   loom_module_free(module);
 }
 
+TEST_F(ModuleTest, ValueOrdinalScratchTracksActiveFrameOnly) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t first_id = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t second_id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module, f32, &first_id));
+  IREE_ASSERT_OK(loom_module_define_value(module, f32, &second_id));
+
+  loom_module_value_ordinal_scratch_acquire(module);
+  EXPECT_EQ(loom_module_value_ordinal_scratch_lookup(module, first_id),
+            LOOM_VALUE_ORDINAL_INVALID);
+  EXPECT_EQ(loom_module_value_ordinal_scratch_lookup(module, second_id),
+            LOOM_VALUE_ORDINAL_INVALID);
+
+  loom_module_value_ordinal_scratch_set(module, first_id, 7);
+  EXPECT_EQ(loom_module_value_ordinal_scratch_lookup(module, first_id), 7u);
+  EXPECT_EQ(loom_module_value_ordinal_scratch_lookup(module, second_id),
+            LOOM_VALUE_ORDINAL_INVALID);
+
+  loom_module_value_ordinal_scratch_clear(module, first_id);
+  EXPECT_EQ(loom_module_value_ordinal_scratch_lookup(module, first_id),
+            LOOM_VALUE_ORDINAL_INVALID);
+  loom_module_value_ordinal_scratch_release(module);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, ValueOrdinalScratchGrowsWithValueTable) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  const iree_host_size_t initial_capacity = module->values.capacity;
+  ASSERT_EQ(module->value_ordinal_scratch.capacity, initial_capacity);
+
+  loom_value_id_t first_id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module, f32, &first_id));
+  loom_module_value_ordinal_scratch_acquire(module);
+  loom_module_value_ordinal_scratch_set(module, first_id, 3);
+
+  loom_value_id_t last_id = LOOM_VALUE_ID_INVALID;
+  for (iree_host_size_t i = module->values.count; i <= initial_capacity; ++i) {
+    IREE_ASSERT_OK(loom_module_define_value(module, f32, &last_id));
+  }
+
+  EXPECT_GT(module->values.capacity, initial_capacity);
+  EXPECT_EQ(module->value_ordinal_scratch.capacity, module->values.capacity);
+  EXPECT_EQ(loom_module_value_ordinal_scratch_lookup(module, first_id), 3u);
+  EXPECT_EQ(loom_module_value_ordinal_scratch_lookup(module, last_id),
+            LOOM_VALUE_ORDINAL_INVALID);
+
+  loom_module_value_ordinal_scratch_clear(module, first_id);
+  loom_module_value_ordinal_scratch_release(module);
+
+  loom_module_free(module);
+}
+
 TEST_F(ModuleTest, DefineValueRejectsInvalidSentinelId) {
   loom_module_t* module = NULL;
   IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,

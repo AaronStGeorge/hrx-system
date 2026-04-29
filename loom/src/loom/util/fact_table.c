@@ -1066,44 +1066,12 @@ iree_status_t loom_value_fact_table_initialize(
   return loom_value_fact_table_ensure_capacity(table, initial_capacity);
 }
 
-iree_status_t loom_value_fact_table_initialize_with_domain(
-    loom_value_fact_table_t* table, iree_arena_allocator_t* arena,
-    loom_value_domain_t value_domain) {
-  IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(arena);
-  if (value_domain.value_count > 0) {
-    IREE_ASSERT_ARGUMENT(value_domain.value_ids);
-  }
-  if (value_domain.value_id_span_count > 0) {
-    IREE_ASSERT_ARGUMENT(value_domain.ordinals_by_value_id);
-  }
-  memset(table, 0, sizeof(*table));
-  table->arena = arena;
-  table->context.table = table;
-  table->value_domain = value_domain;
-  if (value_domain.value_count == 0) return iree_ok_status();
-  IREE_RETURN_IF_ERROR(
-      loom_value_fact_table_ensure_capacity(table, value_domain.value_count));
-  table->count = value_domain.value_count;
-  return iree_ok_status();
-}
-
 iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
                                            loom_value_id_t value_id,
                                            loom_value_facts_t facts) {
-  const loom_value_ordinal_t entry_index =
-      loom_value_fact_table_entry_index(table, value_id);
-  if (!loom_value_domain_is_empty(table->value_domain)) {
-    if (entry_index >= table->count) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "value id is outside the fact table domain");
-    }
-    table->entries[entry_index] = facts;
-    return iree_ok_status();
-  }
   IREE_RETURN_IF_ERROR(loom_value_fact_table_ensure_capacity(
       table, (iree_host_size_t)value_id + 1));
-  table->entries[entry_index] = facts;
+  table->entries[value_id] = facts;
   if ((iree_host_size_t)value_id + 1 > table->count) {
     table->count = (iree_host_size_t)value_id + 1;
   }
@@ -1361,18 +1329,17 @@ iree_status_t loom_value_fact_table_clone_defined_facts(
                             "target and source fact tables are required");
   }
   for (iree_host_size_t i = 0; i < source->count; ++i) {
-    const loom_value_ordinal_t entry_index = (loom_value_ordinal_t)i;
-    if (source->entries[entry_index].known_divisor == 0) continue;
-    const loom_value_id_t value_id =
-        loom_value_fact_table_entry_value_id(source, entry_index);
+    if (source->entries[i].known_divisor == 0) continue;
+    IREE_ASSERT_LT(i, (iree_host_size_t)LOOM_VALUE_ID_INVALID);
+    const loom_value_id_t value_id = (loom_value_id_t)i;
     loom_value_facts_t cloned_facts = loom_value_facts_unknown();
     if (module && value_id < module->values.count) {
       IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_fact_for_type(
           target, source, module, loom_module_value_type(module, value_id),
-          source->entries[entry_index], &cloned_facts));
+          source->entries[i], &cloned_facts));
     } else {
       IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_fact(
-          target, source, source->entries[entry_index], &cloned_facts));
+          target, source, source->entries[i], &cloned_facts));
     }
     IREE_RETURN_IF_ERROR(
         loom_value_fact_table_define(target, value_id, cloned_facts));

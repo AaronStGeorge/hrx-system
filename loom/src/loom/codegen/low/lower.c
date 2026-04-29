@@ -317,82 +317,68 @@ static bool loom_low_lower_op_uses_policy(const loom_module_t* module,
          !loom_low_lower_op_is_source_metadata(op->kind);
 }
 
-static void loom_low_lower_domain_count_value(
-    loom_value_id_t value_id, iree_host_size_t* value_count,
-    loom_value_id_t* minimum_value_id, loom_value_id_t* maximum_value_id) {
+static void loom_low_lower_count_value(loom_value_id_t value_id,
+                                       iree_host_size_t* value_count) {
   IREE_ASSERT_NE(value_id, LOOM_VALUE_ID_INVALID);
   ++*value_count;
-  if (value_id < *minimum_value_id) {
-    *minimum_value_id = value_id;
-  }
-  if (value_id > *maximum_value_id) {
-    *maximum_value_id = value_id;
-  }
 }
 
-static void loom_low_lower_domain_count_region_values(
-    loom_region_t* region, iree_host_size_t* value_count,
-    loom_value_id_t* minimum_value_id, loom_value_id_t* maximum_value_id) {
+static void loom_low_lower_count_region_values(loom_region_t* region,
+                                               iree_host_size_t* value_count) {
   loom_block_t* block = NULL;
   loom_region_for_each_block(region, block) {
     for (uint16_t i = 0; i < block->arg_count; ++i) {
-      loom_low_lower_domain_count_value(block->arg_ids[i], value_count,
-                                        minimum_value_id, maximum_value_id);
+      loom_low_lower_count_value(block->arg_ids[i], value_count);
     }
     loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
       const loom_value_id_t* results = loom_op_const_results(op);
       for (uint16_t i = 0; i < op->result_count; ++i) {
-        loom_low_lower_domain_count_value(results[i], value_count,
-                                          minimum_value_id, maximum_value_id);
+        loom_low_lower_count_value(results[i], value_count);
       }
       loom_region_t** regions = loom_op_regions(op);
       for (uint8_t i = 0; i < op->region_count; ++i) {
         if (regions[i] != NULL) {
-          loom_low_lower_domain_count_region_values(
-              regions[i], value_count, minimum_value_id, maximum_value_id);
+          loom_low_lower_count_region_values(regions[i], value_count);
         }
       }
     }
   }
 }
 
-static iree_status_t loom_low_lower_domain_record_value(
-    loom_value_domain_t* domain, loom_value_id_t value_id,
+static iree_status_t loom_low_lower_record_value_ordinal(
+    loom_low_lower_context_t* context, loom_value_id_t value_id,
     loom_value_ordinal_t* inout_ordinal) {
-  const iree_host_size_t offset =
-      (iree_host_size_t)(value_id - domain->base_value_id);
-  IREE_ASSERT_LT(offset, domain->value_id_span_count);
-  IREE_ASSERT_EQ(domain->ordinals_by_value_id[offset],
-                 LOOM_VALUE_ORDINAL_INVALID);
-  IREE_ASSERT_LT(*inout_ordinal, domain->value_count);
-  domain->ordinals_by_value_id[offset] = *inout_ordinal;
-  domain->value_ids[*inout_ordinal] = value_id;
+  IREE_ASSERT_LT(value_id, context->module->values.count);
+  IREE_ASSERT_LT(*inout_ordinal, context->lowering.value_count);
+  loom_module_value_ordinal_scratch_set(context->module, value_id,
+                                        *inout_ordinal);
+  context->lowering.value_ids[*inout_ordinal] = value_id;
   ++*inout_ordinal;
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_lower_domain_record_region_values(
-    loom_value_domain_t* domain, loom_region_t* region,
+static iree_status_t loom_low_lower_record_region_value_ordinals(
+    loom_low_lower_context_t* context, loom_region_t* region,
     loom_value_ordinal_t* inout_ordinal) {
   loom_block_t* block = NULL;
   loom_region_for_each_block(region, block) {
     for (uint16_t i = 0; i < block->arg_count; ++i) {
-      IREE_RETURN_IF_ERROR(loom_low_lower_domain_record_value(
-          domain, block->arg_ids[i], inout_ordinal));
+      IREE_RETURN_IF_ERROR(loom_low_lower_record_value_ordinal(
+          context, block->arg_ids[i], inout_ordinal));
     }
     loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
       const loom_value_id_t* results = loom_op_const_results(op);
       for (uint16_t i = 0; i < op->result_count; ++i) {
-        IREE_RETURN_IF_ERROR(loom_low_lower_domain_record_value(
-            domain, results[i], inout_ordinal));
+        IREE_RETURN_IF_ERROR(loom_low_lower_record_value_ordinal(
+            context, results[i], inout_ordinal));
       }
       loom_region_t** regions = loom_op_regions(op);
       for (uint8_t i = 0; i < op->region_count; ++i) {
         if (regions[i] != NULL) {
-          IREE_RETURN_IF_ERROR(loom_low_lower_domain_record_region_values(
-              domain, regions[i], inout_ordinal));
+          IREE_RETURN_IF_ERROR(loom_low_lower_record_region_value_ordinals(
+              context, regions[i], inout_ordinal));
         }
       }
     }
@@ -400,47 +386,44 @@ static iree_status_t loom_low_lower_domain_record_region_values(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_lowering_frame_initialize_value_domain(
+static iree_status_t loom_low_lowering_frame_initialize_value_ordinals(
     loom_low_lower_context_t* context, loom_region_t* source_body) {
   iree_host_size_t value_count = 0;
-  loom_value_id_t minimum_value_id = LOOM_VALUE_ID_INVALID;
-  loom_value_id_t maximum_value_id = 0;
-  loom_low_lower_domain_count_region_values(
-      source_body, &value_count, &minimum_value_id, &maximum_value_id);
+  loom_low_lower_count_region_values(source_body, &value_count);
   if (value_count == 0) {
-    context->lowering.value_domain = loom_value_domain_empty();
     return iree_ok_status();
   }
   if (value_count >= LOOM_VALUE_ORDINAL_INVALID) {
     return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "source function value domain exceeds 32-bit "
+                            "source function value count exceeds 32-bit "
                             "local ordinal capacity");
   }
-  const iree_host_size_t value_id_span_count =
-      (iree_host_size_t)(maximum_value_id - minimum_value_id) + 1;
-  loom_value_id_t* value_ids = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      &context->arena, value_count, sizeof(*value_ids), (void**)&value_ids));
-  loom_value_ordinal_t* ordinals_by_value_id = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      &context->arena, value_id_span_count, sizeof(*ordinals_by_value_id),
-      (void**)&ordinals_by_value_id));
-  for (iree_host_size_t i = 0; i < value_id_span_count; ++i) {
-    ordinals_by_value_id[i] = LOOM_VALUE_ORDINAL_INVALID;
-  }
-
-  context->lowering.value_domain = (loom_value_domain_t){
-      .value_ids = value_ids,
-      .value_count = (loom_value_ordinal_t)value_count,
-      .base_value_id = minimum_value_id,
-      .ordinals_by_value_id = ordinals_by_value_id,
-      .value_id_span_count = value_id_span_count,
-  };
+      &context->arena, value_count, sizeof(*context->lowering.value_ids),
+      (void**)&context->lowering.value_ids));
+  context->lowering.module = context->module;
+  context->lowering.value_count = (loom_value_ordinal_t)value_count;
+  loom_module_value_ordinal_scratch_acquire(context->module);
+  context->lowering.value_ordinal_scratch_acquired = true;
   loom_value_ordinal_t ordinal = 0;
-  IREE_RETURN_IF_ERROR(loom_low_lower_domain_record_region_values(
-      &context->lowering.value_domain, source_body, &ordinal));
-  IREE_ASSERT_EQ(ordinal, context->lowering.value_domain.value_count);
+  IREE_RETURN_IF_ERROR(loom_low_lower_record_region_value_ordinals(
+      context, source_body, &ordinal));
+  IREE_ASSERT_EQ(ordinal, context->lowering.value_count);
   return iree_ok_status();
+}
+
+static void loom_low_lowering_frame_deinitialize(
+    loom_low_lower_context_t* context) {
+  if (!context->lowering.value_ordinal_scratch_acquired) {
+    return;
+  }
+  for (loom_value_ordinal_t ordinal = 0;
+       ordinal < context->lowering.value_count; ++ordinal) {
+    loom_module_value_ordinal_scratch_clear(
+        context->module, context->lowering.value_ids[ordinal]);
+  }
+  loom_module_value_ordinal_scratch_release(context->module);
+  context->lowering.value_ordinal_scratch_acquired = false;
 }
 
 static iree_status_t loom_low_lower_prepare_plan(
@@ -1239,11 +1222,10 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
   iree_arena_initialize(module->arena.block_pool, &context.arena);
 
   iree_status_t status =
-      loom_low_lowering_frame_initialize_value_domain(&context, source_body);
+      loom_low_lowering_frame_initialize_value_ordinals(&context, source_body);
   if (iree_status_is_ok(status)) {
-    status = loom_value_fact_table_initialize_with_domain(
-        &context.lowering.fact_table, &context.arena,
-        context.lowering.value_domain);
+    status = loom_value_fact_table_initialize(
+        &context.lowering.fact_table, &context.arena, module->values.count);
   }
   context.lowering.fact_table.context.target_bundle = options->bundle;
   loom_type_registry_configure_fact_context(
@@ -1269,6 +1251,7 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
     out_result->error_count += footprint_result.error_count;
   }
   if (iree_status_is_ok(status) && out_result->error_count != 0) {
+    loom_low_lowering_frame_deinitialize(&context);
     iree_arena_deinitialize(&context.arena);
     return iree_ok_status();
   }
@@ -1289,6 +1272,7 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
     out_result->error_count += async_legality_result.error_count;
   }
   if (iree_status_is_ok(status) && out_result->error_count != 0) {
+    loom_low_lowering_frame_deinitialize(&context);
     iree_arena_deinitialize(&context.arena);
     return iree_ok_status();
   }
@@ -1315,20 +1299,19 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
     context.descriptor_set = legality_result.descriptor_set;
   }
   if (iree_status_is_ok(status) && out_result->error_count != 0) {
+    loom_low_lowering_frame_deinitialize(&context);
     iree_arena_deinitialize(&context.arena);
     return iree_ok_status();
   }
 
-  if (iree_status_is_ok(status) &&
-      context.lowering.value_domain.value_count != 0) {
-    status = iree_arena_allocate_array(
-        &context.arena, context.lowering.value_domain.value_count,
-        sizeof(*context.lowering.value_map),
-        (void**)&context.lowering.value_map);
+  if (iree_status_is_ok(status) && context.lowering.value_count != 0) {
+    status =
+        iree_arena_allocate_array(&context.arena, context.lowering.value_count,
+                                  sizeof(*context.lowering.value_map),
+                                  (void**)&context.lowering.value_map);
   }
   if (iree_status_is_ok(status)) {
-    for (loom_value_ordinal_t i = 0;
-         i < context.lowering.value_domain.value_count; ++i) {
+    for (loom_value_ordinal_t i = 0; i < context.lowering.value_count; ++i) {
       context.lowering.value_map[i] = LOOM_VALUE_ID_INVALID;
     }
   }
@@ -1378,6 +1361,7 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
     }
   }
 
+  loom_low_lowering_frame_deinitialize(&context);
   iree_arena_deinitialize(&context.arena);
   return status;
 }
