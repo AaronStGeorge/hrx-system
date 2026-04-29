@@ -61,7 +61,7 @@ enum loom_low_placement_relation_flag_bits_e {
 // Bitset of loom_low_placement_relation_flag_bits_e values.
 typedef uint16_t loom_low_placement_relation_flags_t;
 
-// One directional placement relation keyed by result value ordinal.
+// One directional placement relation keyed by result and source value ordinals.
 typedef struct loom_low_placement_relation_t {
   // Operation that introduced this relation.
   const loom_op_t* op;
@@ -105,8 +105,14 @@ typedef struct loom_low_placement_table_t {
   const loom_low_placement_relation_t* relations;
   // Number of relation records.
   iree_host_size_t relation_count;
-  // Relation ranges indexed by local value ordinal.
+  // Relation ranges into |relations| indexed by result value ordinal.
   const loom_low_placement_relation_range_t* ranges_by_result_ordinal;
+  // Relation indices grouped by source value ordinal. Each entry indexes
+  // |relations|.
+  const uint32_t* relation_indices_by_source_ordinal;
+  // Relation ranges into |relation_indices_by_source_ordinal| indexed by source
+  // value ordinal.
+  const loom_low_placement_relation_range_t* ranges_by_source_ordinal;
 } loom_low_placement_table_t;
 
 // Builds a function-local placement relation table over an acquired value
@@ -123,6 +129,14 @@ loom_low_placement_relation_range_t
 loom_low_placement_relation_range_for_value_ordinal(
     const loom_low_placement_table_t* table,
     loom_value_ordinal_t result_ordinal);
+
+// Returns the relation range for |source_ordinal|. The returned range indexes
+// |relation_indices_by_source_ordinal|, whose records then index |relations|.
+// The ordinal must belong to this placement table.
+loom_low_placement_relation_range_t
+loom_low_placement_relation_range_for_source_value_ordinal(
+    const loom_low_placement_table_t* table,
+    loom_value_ordinal_t source_ordinal);
 
 // Returns the local value ID for |value_ordinal|.
 loom_value_id_t loom_low_placement_value_id(

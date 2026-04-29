@@ -1186,6 +1186,25 @@ static iree_status_t loom_low_allocation_assignment_index_for_value(
                           (unsigned)value_id);
 }
 
+static const loom_low_allocation_assignment_t*
+loom_low_allocation_current_assignment_for_value_ordinal(
+    const loom_low_allocation_build_state_t* state,
+    loom_value_ordinal_t value_ordinal) {
+  IREE_ASSERT_LT(value_ordinal, state->liveness.value_count);
+  IREE_ASSERT(state->assignment_indices_by_value_ordinal != NULL);
+  const uint32_t assignment_index =
+      state->assignment_indices_by_value_ordinal[value_ordinal];
+  if (assignment_index == UINT32_MAX) {
+    return NULL;
+  }
+  IREE_ASSERT_LT(assignment_index, state->assignment_count);
+  const loom_low_allocation_assignment_t* assignment =
+      &state->assignments[assignment_index];
+  IREE_ASSERT_EQ(assignment->value_id,
+                 state->liveness.value_ids[value_ordinal]);
+  return assignment;
+}
+
 static iree_status_t loom_low_allocation_value_ordinal_for_interval(
     const loom_low_allocation_build_state_t* state,
     const loom_liveness_interval_t* interval,
@@ -1598,6 +1617,111 @@ static iree_status_t loom_low_allocation_assign_concat_interval(
       first_assignment->location_kind, result_location_base,
       interval->unit_count, ignored_value_ids, ignored_value_count,
       out_assigned);
+}
+
+static bool loom_low_allocation_relation_source_matches_interval(
+    const loom_low_placement_relation_t* relation,
+    const loom_liveness_interval_t* interval) {
+  if (relation->cause != LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT) {
+    return false;
+  }
+  IREE_ASSERT_EQ(relation->source_unit_offset, 0);
+  IREE_ASSERT_EQ(relation->unit_count, interval->unit_count);
+  return true;
+}
+
+static bool loom_low_allocation_candidate_location_for_concat_source(
+    const loom_low_placement_relation_t* relation,
+    const loom_low_placement_relation_t* sibling_relation,
+    const loom_low_allocation_assignment_t* sibling_assignment,
+    uint32_t* out_location_base) {
+  if (sibling_assignment->location_base >
+      UINT32_MAX - sibling_relation->source_unit_offset) {
+    return false;
+  }
+  const uint32_t sibling_source_location =
+      sibling_assignment->location_base + sibling_relation->source_unit_offset;
+  if (sibling_source_location < sibling_relation->result_unit_offset) {
+    return false;
+  }
+  const uint32_t result_location_base =
+      sibling_source_location - sibling_relation->result_unit_offset;
+  if (result_location_base > UINT32_MAX - relation->result_unit_offset) {
+    return false;
+  }
+  const uint32_t source_location =
+      result_location_base + relation->result_unit_offset;
+  if (source_location < relation->source_unit_offset) {
+    return false;
+  }
+  *out_location_base = source_location - relation->source_unit_offset;
+  return true;
+}
+
+static iree_status_t loom_low_allocation_assign_concat_source_interval(
+    loom_low_allocation_build_state_t* state,
+    const loom_liveness_interval_t* interval, bool* out_assigned) {
+  *out_assigned = false;
+  loom_value_ordinal_t source_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_value_ordinal_for_interval(
+      state, interval, &source_ordinal));
+  const loom_low_placement_relation_range_t source_range =
+      loom_low_placement_relation_range_for_source_value_ordinal(
+          &state->placement, source_ordinal);
+  for (uint32_t source_index = 0; source_index < source_range.count;
+       ++source_index) {
+    const uint32_t relation_index =
+        state->placement.relation_indices_by_source_ordinal[source_range.start +
+                                                            source_index];
+    IREE_ASSERT_LT(relation_index, state->placement.relation_count);
+    const loom_low_placement_relation_t* relation =
+        &state->placement.relations[relation_index];
+    if (!loom_low_allocation_relation_source_matches_interval(relation,
+                                                              interval)) {
+      continue;
+    }
+
+    const loom_low_placement_relation_range_t result_range =
+        loom_low_placement_relation_range_for_value_ordinal(
+            &state->placement, relation->result_ordinal);
+    for (uint32_t result_index = 0; result_index < result_range.count;
+         ++result_index) {
+      const loom_low_placement_relation_t* sibling_relation =
+          &state->placement.relations[result_range.start + result_index];
+      if (sibling_relation == relation ||
+          sibling_relation->cause != LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT ||
+          sibling_relation->source_ordinal == relation->source_ordinal) {
+        continue;
+      }
+      const loom_low_allocation_assignment_t* sibling_assignment =
+          loom_low_allocation_current_assignment_for_value_ordinal(
+              state, sibling_relation->source_ordinal);
+      if (!sibling_assignment ||
+          !loom_low_allocation_assignment_is_coalescable(sibling_assignment) ||
+          !loom_liveness_value_class_equal(sibling_assignment->value_class,
+                                           interval->value_class) ||
+          !loom_low_allocation_assignment_unit_span_fits(
+              sibling_assignment, sibling_relation->source_unit_offset,
+              sibling_relation->unit_count)) {
+        continue;
+      }
+
+      uint32_t location_base = 0;
+      if (!loom_low_allocation_candidate_location_for_concat_source(
+              relation, sibling_relation, sibling_assignment, &location_base)) {
+        continue;
+      }
+      IREE_RETURN_IF_ERROR(loom_low_allocation_append_interval_at_location(
+          state, interval, sibling_assignment->descriptor_reg_class_id,
+          sibling_assignment->location_kind, location_base,
+          interval->unit_count, /*ignored_value_ids=*/NULL,
+          /*ignored_value_count=*/0, out_assigned));
+      if (*out_assigned) {
+        return iree_ok_status();
+      }
+    }
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_allocation_assign_structural_interval(
@@ -2458,6 +2582,13 @@ static iree_status_t loom_low_allocation_assign_intervals(
       continue;
     }
 
+    bool assigned_concat_source_interval = false;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assign_concat_source_interval(
+        state, interval, &assigned_concat_source_interval));
+    if (assigned_concat_source_interval) {
+      continue;
+    }
+
     bool assigned_structural_interval = false;
     IREE_RETURN_IF_ERROR(loom_low_allocation_assign_structural_interval(
         state, interval, &assigned_structural_interval));
@@ -3012,12 +3143,15 @@ static iree_status_t loom_low_allocation_verify_table_contents(
         "allocation table placement analysis must match liveness");
   }
   if (table->placement.value_count > 0 &&
-      !table->placement.ranges_by_result_ordinal) {
+      (!table->placement.ranges_by_result_ordinal ||
+       !table->placement.ranges_by_source_ordinal)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "allocation table placement relation ranges are required");
   }
-  if (table->placement.relation_count > 0 && !table->placement.relations) {
+  if (table->placement.relation_count > 0 &&
+      (!table->placement.relations ||
+       !table->placement.relation_indices_by_source_ordinal)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "allocation table placement relations are required");

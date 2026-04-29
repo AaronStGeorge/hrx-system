@@ -135,6 +135,17 @@ class LowAllocationTest : public ::testing::Test {
     return nullptr;
   }
 
+  loom_value_ordinal_t FindPlacementOrdinalForValue(
+      const loom_low_allocation_table_t& allocation, loom_value_id_t value_id) {
+    for (loom_value_ordinal_t i = 0; i < allocation.placement.value_count;
+         ++i) {
+      if (allocation.placement.value_ids[i] == value_id) {
+        return i;
+      }
+    }
+    return LOOM_VALUE_ORDINAL_INVALID;
+  }
+
   using DialectVtablesFn =
       const loom_op_vtable_t* const* (*)(iree_host_size_t*);
 
@@ -283,6 +294,22 @@ TEST_F(LowAllocationTest, CoalescesSliceAndConcatThroughPlacement) {
   ExpectSameLocation(hi, lane);
   EXPECT_EQ(hi->location_base, pair->location_base + 1);
   ASSERT_EQ(allocation.placement.relation_count, 3u);
+
+  const loom_value_ordinal_t lo_ordinal =
+      FindPlacementOrdinalForValue(allocation, lo->value_id);
+  ASSERT_NE(lo_ordinal, LOOM_VALUE_ORDINAL_INVALID);
+  const loom_low_placement_relation_range_t lo_source_range =
+      loom_low_placement_relation_range_for_source_value_ordinal(
+          &allocation.placement, lo_ordinal);
+  ASSERT_EQ(lo_source_range.count, 1u);
+  const uint32_t lo_relation_index =
+      allocation.placement
+          .relation_indices_by_source_ordinal[lo_source_range.start];
+  ASSERT_LT(lo_relation_index, allocation.placement.relation_count);
+  const loom_low_placement_relation_t& lo_relation =
+      allocation.placement.relations[lo_relation_index];
+  EXPECT_EQ(lo_relation.cause, LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT);
+  EXPECT_EQ(lo_relation.source_ordinal, lo_ordinal);
 }
 
 TEST_F(LowAllocationTest, RecordsBranchEdgeCopyGroups) {
