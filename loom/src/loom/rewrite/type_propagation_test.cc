@@ -97,6 +97,7 @@ class TypePropagationTest : public ::testing::Test {
       status =
           loom_type_propagator_apply_op(propagator, &rewriter, op, out_changed);
     }
+    loom_type_propagator_deinitialize(propagator);
     if (rewriter_initialized) loom_rewriter_deinitialize(&rewriter);
     iree_arena_deinitialize(&pass_arena);
     return status;
@@ -298,6 +299,7 @@ TEST_F(TypePropagationTest, ValueFactsNarrowDynamicDimensions) {
   EXPECT_FALSE(loom_type_dim_is_dynamic_at(refined_vector, 0));
   EXPECT_EQ(loom_type_dim_static_size_at(refined_vector, 0), 16);
 
+  loom_type_propagator_deinitialize(propagator);
   loom_rewriter_deinitialize(&rewriter);
   loom_pass_value_fact_owner_deinitialize(&value_fact_owner);
   iree_arena_deinitialize(&pass_arena);
@@ -354,6 +356,7 @@ TEST_F(TypePropagationTest, TypeUseUsersAreQueuedOnCommit) {
   EXPECT_TRUE(saw_view_provider);
   EXPECT_TRUE(saw_view_user);
 
+  loom_type_propagator_deinitialize(propagator);
   loom_rewriter_deinitialize(&rewriter);
   iree_arena_deinitialize(&pass_arena);
 }

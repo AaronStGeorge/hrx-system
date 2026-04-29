@@ -33,17 +33,21 @@ typedef struct loom_type_propagator_t loom_type_propagator_t;
 // but they cannot commit mutations themselves.
 typedef struct loom_type_transfer_context_t loom_type_transfer_context_t;
 
-// Allocates a type propagator from |arena|. The propagator owns dense scratch
-// indexed by value id and may be reused across many op transactions in the same
-// pass/function run.
+// Allocates a type propagator from |arena|. The propagator owns compact scratch
+// indexed by function-local value ordinals and may be reused across many op
+// transactions in the same pass/function run.
 iree_status_t loom_type_propagator_allocate(
     loom_module_t* module, iree_arena_allocator_t* arena,
     loom_type_propagator_t** out_propagator);
 
+// Releases the propagator's active function-local value domain. The propagator
+// object itself is arena-allocated and has no heap ownership.
+void loom_type_propagator_deinitialize(loom_type_propagator_t* propagator);
+
 // Refreshes function-local block-argument ownership metadata. Call once before
-// processing a function and again if a pass creates new region-owning ops
-// during the same run. Calling more often is safe; metadata is
-// generation-cleared.
+// processing a function. New values created by rewrites are admitted to the
+// same function-local domain on demand; new region-owner ops are recorded when
+// their constraints are processed.
 iree_status_t loom_type_propagator_prepare_function(
     loom_type_propagator_t* propagator, loom_func_like_t function);
 

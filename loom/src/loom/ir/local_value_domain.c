@@ -29,7 +29,7 @@ loom_local_value_domain_value_callback_make(
 
 static iree_status_t loom_local_value_domain_append_value_id(
     loom_local_value_domain_t* domain, iree_arena_allocator_t* arena,
-    loom_value_id_t value_id) {
+    loom_value_id_t value_id, loom_value_ordinal_t* out_ordinal) {
   if (domain->value_count >= LOOM_VALUE_ORDINAL_INVALID) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "local value domain exceeds value ordinal range");
@@ -46,22 +46,31 @@ static iree_status_t loom_local_value_domain_append_value_id(
   domain->value_ids[value_ordinal] = value_id;
   loom_module_value_ordinal_scratch_set(domain->module, value_id,
                                         value_ordinal);
+  *out_ordinal = value_ordinal;
   return iree_ok_status();
 }
 
-static iree_status_t loom_local_value_domain_register_value(
+iree_status_t loom_local_value_domain_register_value(
     loom_local_value_domain_t* domain, iree_arena_allocator_t* arena,
-    loom_value_id_t value_id) {
+    loom_value_id_t value_id, loom_value_ordinal_t* out_ordinal) {
+  IREE_ASSERT_ARGUMENT(domain);
+  IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(out_ordinal);
+  IREE_ASSERT(
+      iree_any_bit_set(domain->flags, LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED));
   if (value_id >= domain->module->values.count) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "local value domain saw out-of-range value id %u",
                             (unsigned)value_id);
   }
-  if (loom_module_value_ordinal_scratch_lookup(domain->module, value_id) !=
-      LOOM_VALUE_ORDINAL_INVALID) {
+  const loom_value_ordinal_t existing_ordinal =
+      loom_module_value_ordinal_scratch_lookup(domain->module, value_id);
+  if (existing_ordinal != LOOM_VALUE_ORDINAL_INVALID) {
+    *out_ordinal = existing_ordinal;
     return iree_ok_status();
   }
-  return loom_local_value_domain_append_value_id(domain, arena, value_id);
+  return loom_local_value_domain_append_value_id(domain, arena, value_id,
+                                                 out_ordinal);
 }
 
 typedef struct loom_local_value_domain_register_state_t {
@@ -75,8 +84,9 @@ static iree_status_t loom_local_value_domain_register_value_callback(
     void* user_data, loom_value_id_t value_id) {
   loom_local_value_domain_register_state_t* state =
       (loom_local_value_domain_register_state_t*)user_data;
+  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
   return loom_local_value_domain_register_value(state->domain, state->arena,
-                                                value_id);
+                                                value_id, &value_ordinal);
 }
 
 static iree_status_t loom_local_value_domain_type_ref_callback(
@@ -255,8 +265,9 @@ static iree_status_t loom_local_value_domain_register_region_values(
   const loom_block_t* block = NULL;
   loom_region_for_each_block(domain->region, block) {
     for (uint16_t i = 0; i < block->arg_count; ++i) {
+      loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
       IREE_RETURN_IF_ERROR(loom_local_value_domain_register_value(
-          domain, arena, loom_block_arg_id(block, i)));
+          domain, arena, loom_block_arg_id(block, i), &value_ordinal));
       IREE_RETURN_IF_ERROR(loom_local_value_domain_for_each_type_ref(
           loom_block_arg_type(domain->module, block, i), visitor));
     }
@@ -264,8 +275,9 @@ static iree_status_t loom_local_value_domain_register_region_values(
     loom_block_for_each_op(block, op) {
       const loom_value_id_t* results = loom_op_const_results(op);
       for (uint16_t i = 0; i < op->result_count; ++i) {
-        IREE_RETURN_IF_ERROR(
-            loom_local_value_domain_register_value(domain, arena, results[i]));
+        loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+        IREE_RETURN_IF_ERROR(loom_local_value_domain_register_value(
+            domain, arena, results[i], &value_ordinal));
       }
       IREE_RETURN_IF_ERROR(
           loom_local_value_domain_for_each_op_use(domain->module, op, visitor));

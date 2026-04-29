@@ -46,15 +46,24 @@ typedef struct loom_local_value_domain_t {
 
 // Acquires a local value domain for |region| in |module|'s ordinal scratch.
 //
-// The module and region must stay semantically immutable until release. The
-// domain registers block arguments, op results, op operands, SSA references
-// carried by value types, and values captured by nested regions.
+// The domain initially registers block arguments, op results, op operands, SSA
+// references carried by value types, and values captured by nested regions.
+// Rewriting frames that create new values while the domain is active must
+// explicitly register those values before indexing ordinal-keyed scratch.
 iree_status_t loom_local_value_domain_acquire_for_region(
     loom_module_t* module, const loom_region_t* region,
     iree_arena_allocator_t* arena, loom_local_value_domain_t* out_domain);
 
 // Clears all acquired value IDs and releases the module ordinal scratch map.
 void loom_local_value_domain_release(loom_local_value_domain_t* domain);
+
+// Registers |value_id| in an acquired domain and returns its local ordinal.
+// Existing registrations return their current ordinal. This keeps rewrite
+// frames compact while allowing new values to join the same ordinal-keyed
+// scratch domain as they are created.
+iree_status_t loom_local_value_domain_register_value(
+    loom_local_value_domain_t* domain, iree_arena_allocator_t* arena,
+    loom_value_id_t value_id, loom_value_ordinal_t* out_ordinal);
 
 // Returns true while the domain owns the module ordinal scratch map.
 static inline bool loom_local_value_domain_is_acquired(

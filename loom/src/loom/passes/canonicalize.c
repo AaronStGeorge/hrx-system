@@ -1313,11 +1313,12 @@ iree_status_t loom_canonicalizer_run_function(
     status = loom_type_propagator_allocate(
         canonicalizer->module, &canonicalizer->scratch_arena, &type_propagator);
   }
+  if (iree_status_is_ok(status)) {
+    status = loom_type_propagator_prepare_function(type_propagator, function);
+  }
 
   for (uint32_t iteration = 0;
        iree_status_is_ok(status) && iteration < max_iterations; ++iteration) {
-    status = loom_type_propagator_prepare_function(type_propagator, function);
-    if (!iree_status_is_ok(status)) break;
     status = loom_rewriter_seed_function(rewriter, function);
     if (!iree_status_is_ok(status)) break;
     bool any_changed = false;
@@ -1462,6 +1463,7 @@ iree_status_t loom_canonicalizer_run_function(
                                          out_result->facts_changed ||
                                          out_result->types_changed;
   }
+  loom_type_propagator_deinitialize(type_propagator);
   if (!iree_status_is_ok(status)) {
     loom_rewriter_deinitialize(rewriter);
     canonicalizer->state->rewriter_initialized = false;

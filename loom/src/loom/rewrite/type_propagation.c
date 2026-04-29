@@ -10,10 +10,11 @@
 
 #include "loom/analysis/type_refinement.h"
 #include "loom/ir/context.h"
+#include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
 #include "loom/ir/type_refinement.h"
 
-#define LOOM_TYPE_PROPAGATION_INITIAL_VALUE_CAPACITY 64
+#define LOOM_TYPE_PROPAGATION_INITIAL_ORDINAL_CAPACITY 64
 #define LOOM_TYPE_PROPAGATION_INITIAL_LIST_CAPACITY 32
 
 typedef struct loom_type_value_span_t {
@@ -29,25 +30,25 @@ typedef struct loom_type_value_span_t {
 } loom_type_value_span_t;
 
 struct loom_type_propagator_t {
-  // Module whose value table is indexed by the dense scratch arrays.
+  // Module whose value table provides canonical value payloads.
   loom_module_t* module;
 
   // Scratch arena owning transaction arrays and temporary overflow dimensions.
   iree_arena_allocator_t* arena;
 
-  // Number of value ids addressable by the dense arrays below.
-  iree_host_size_t value_capacity;
+  // Function-local domain mapping module value IDs to compact ordinals.
+  loom_local_value_domain_t value_domain;
+
+  // Number of local value ordinals addressable by the dense arrays below.
+  iree_host_size_t ordinal_capacity;
 
   // Current transaction generation for candidate and worklist marks.
   uint32_t transaction_generation;
 
-  // Current function-owner generation for block-argument owner marks.
-  uint32_t owner_generation;
-
   // Candidate type for each value touched in the active transaction.
   loom_type_t* candidate_types;
 
-  // Generation mark indicating that candidate_types[value_id] is live.
+  // Generation mark indicating that candidate_types[ordinal] is live.
   uint32_t* candidate_generations;
 
   // Generation mark indicating that a value is already queued.
@@ -56,20 +57,17 @@ struct loom_type_propagator_t {
   // Parent op owning the region that defines each block argument, when known.
   loom_op_t** owner_ops;
 
-  // Generation mark indicating that owner_ops[value_id] is live.
-  uint32_t* owner_generations;
+  // Local value ordinals whose candidate type differs from the module type.
+  loom_value_ordinal_t* touched_ordinals;
 
-  // Values whose candidate type differs from the module type.
-  loom_value_id_t* touched_values;
-
-  // Number of live entries in touched_values.
+  // Number of live entries in touched_ordinals.
   iree_host_size_t touched_count;
 
-  // Allocated entry count for touched_values.
+  // Allocated entry count for touched_ordinals.
   iree_host_size_t touched_capacity;
 
-  // Value worklist used to expand the candidate closure.
-  loom_value_id_t* value_worklist;
+  // Local value ordinal worklist used to expand the candidate closure.
+  loom_value_ordinal_t* value_worklist;
 
   // Number of live entries in value_worklist.
   iree_host_size_t value_worklist_count;
@@ -92,22 +90,24 @@ static bool loom_type_propagator_valid_value_id(
          (iree_host_size_t)value_id < propagator->module->values.count;
 }
 
-static iree_status_t loom_type_propagator_ensure_value_capacity(
-    loom_type_propagator_t* propagator) {
-  iree_host_size_t value_count = propagator->module->values.count;
-  if (value_count <= propagator->value_capacity) return iree_ok_status();
+static iree_status_t loom_type_propagator_ensure_ordinal_capacity(
+    loom_type_propagator_t* propagator, iree_host_size_t minimum_capacity) {
+  if (minimum_capacity <= propagator->ordinal_capacity) {
+    return iree_ok_status();
+  }
 
-  iree_host_size_t old_capacity = propagator->value_capacity;
-  iree_host_size_t new_capacity = value_count + value_count / 2;
-  if (new_capacity < LOOM_TYPE_PROPAGATION_INITIAL_VALUE_CAPACITY) {
-    new_capacity = LOOM_TYPE_PROPAGATION_INITIAL_VALUE_CAPACITY;
+  const iree_host_size_t old_capacity = propagator->ordinal_capacity;
+  iree_host_size_t new_capacity =
+      old_capacity ? old_capacity * 2
+                   : LOOM_TYPE_PROPAGATION_INITIAL_ORDINAL_CAPACITY;
+  if (new_capacity < minimum_capacity) {
+    new_capacity = minimum_capacity;
   }
 
   loom_type_t* candidate_types = NULL;
   uint32_t* candidate_generations = NULL;
   uint32_t* queued_generations = NULL;
   loom_op_t** owner_ops = NULL;
-  uint32_t* owner_generations = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       propagator->arena, new_capacity, sizeof(*candidate_types),
       (void**)&candidate_types));
@@ -119,15 +119,11 @@ static iree_status_t loom_type_propagator_ensure_value_capacity(
       (void**)&queued_generations));
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       propagator->arena, new_capacity, sizeof(*owner_ops), (void**)&owner_ops));
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      propagator->arena, new_capacity, sizeof(*owner_generations),
-      (void**)&owner_generations));
   memset(candidate_types, 0, new_capacity * sizeof(*candidate_types));
   memset(candidate_generations, 0,
          new_capacity * sizeof(*candidate_generations));
   memset(queued_generations, 0, new_capacity * sizeof(*queued_generations));
   memset(owner_ops, 0, new_capacity * sizeof(*owner_ops));
-  memset(owner_generations, 0, new_capacity * sizeof(*owner_generations));
 
   if (old_capacity > 0) {
     memcpy(candidate_types, propagator->candidate_types,
@@ -137,39 +133,53 @@ static iree_status_t loom_type_propagator_ensure_value_capacity(
     memcpy(queued_generations, propagator->queued_generations,
            old_capacity * sizeof(*queued_generations));
     memcpy(owner_ops, propagator->owner_ops, old_capacity * sizeof(*owner_ops));
-    memcpy(owner_generations, propagator->owner_generations,
-           old_capacity * sizeof(*owner_generations));
   }
 
   propagator->candidate_types = candidate_types;
   propagator->candidate_generations = candidate_generations;
   propagator->queued_generations = queued_generations;
   propagator->owner_ops = owner_ops;
-  propagator->owner_generations = owner_generations;
-  propagator->value_capacity = new_capacity;
+  propagator->ordinal_capacity = new_capacity;
   return iree_ok_status();
 }
 
-static iree_status_t loom_type_propagator_grow_value_list(
-    loom_type_propagator_t* propagator, loom_value_id_t** list,
+static iree_status_t loom_type_propagator_grow_ordinal_list(
+    loom_type_propagator_t* propagator, loom_value_ordinal_t** list,
     iree_host_size_t count, iree_host_size_t* capacity) {
   iree_host_size_t minimum_capacity = count + 1;
-  if (minimum_capacity <= *capacity) return iree_ok_status();
+  if (minimum_capacity <= *capacity) {
+    return iree_ok_status();
+  }
   iree_host_size_t new_capacity =
       *capacity ? *capacity * 2 : LOOM_TYPE_PROPAGATION_INITIAL_LIST_CAPACITY;
-  if (new_capacity < minimum_capacity) new_capacity = minimum_capacity;
+  if (new_capacity < minimum_capacity) {
+    new_capacity = minimum_capacity;
+  }
   return iree_arena_grow_array(propagator->arena, count, new_capacity,
                                sizeof(**list), capacity, (void**)list);
+}
+
+static iree_status_t loom_type_propagator_register_value(
+    loom_type_propagator_t* propagator, loom_value_id_t value_id,
+    loom_value_ordinal_t* out_ordinal) {
+  IREE_ASSERT_ARGUMENT(out_ordinal);
+  IREE_ASSERT(loom_local_value_domain_is_acquired(&propagator->value_domain));
+  if (!loom_type_propagator_valid_value_id(propagator, value_id)) {
+    *out_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_local_value_domain_register_value(
+      &propagator->value_domain, propagator->arena, value_id, out_ordinal));
+  return loom_type_propagator_ensure_ordinal_capacity(
+      propagator, (iree_host_size_t)*out_ordinal + 1);
 }
 
 iree_status_t loom_type_propagator_allocate(
     loom_module_t* module, iree_arena_allocator_t* arena,
     loom_type_propagator_t** out_propagator) {
-  if (!module || !arena || !out_propagator) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "type propagator allocation requires module, arena, and output");
-  }
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(out_propagator);
   loom_type_propagator_t* propagator = NULL;
   IREE_RETURN_IF_ERROR(
       iree_arena_allocate(arena, sizeof(*propagator), (void**)&propagator));
@@ -177,10 +187,15 @@ iree_status_t loom_type_propagator_allocate(
   propagator->module = module;
   propagator->arena = arena;
   propagator->transaction_generation = 1;
-  propagator->owner_generation = 1;
-  IREE_RETURN_IF_ERROR(loom_type_propagator_ensure_value_capacity(propagator));
   *out_propagator = propagator;
   return iree_ok_status();
+}
+
+void loom_type_propagator_deinitialize(loom_type_propagator_t* propagator) {
+  if (!propagator) {
+    return;
+  }
+  loom_local_value_domain_release(&propagator->value_domain);
 }
 
 static void loom_type_propagator_next_transaction(
@@ -188,11 +203,11 @@ static void loom_type_propagator_next_transaction(
   ++propagator->transaction_generation;
   if (propagator->transaction_generation == 0) {
     memset(propagator->candidate_generations, 0,
-           propagator->value_capacity *
+           propagator->ordinal_capacity *
                sizeof(*propagator->candidate_generations));
     memset(
         propagator->queued_generations, 0,
-        propagator->value_capacity * sizeof(*propagator->queued_generations));
+        propagator->ordinal_capacity * sizeof(*propagator->queued_generations));
     propagator->transaction_generation = 1;
   }
   propagator->touched_count = 0;
@@ -200,25 +215,16 @@ static void loom_type_propagator_next_transaction(
   propagator->conflict = false;
 }
 
-static void loom_type_propagator_next_owner_generation(
-    loom_type_propagator_t* propagator) {
-  ++propagator->owner_generation;
-  if (propagator->owner_generation == 0) {
-    memset(propagator->owner_generations, 0,
-           propagator->value_capacity * sizeof(*propagator->owner_generations));
-    propagator->owner_generation = 1;
-  }
-}
-
 static iree_status_t loom_type_propagator_note_owner(
     loom_type_propagator_t* propagator, loom_value_id_t value_id,
     loom_op_t* owner_op) {
-  if (!loom_type_propagator_valid_value_id(propagator, value_id)) {
+  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+  IREE_RETURN_IF_ERROR(loom_type_propagator_register_value(propagator, value_id,
+                                                           &value_ordinal));
+  if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(loom_type_propagator_ensure_value_capacity(propagator));
-  propagator->owner_ops[value_id] = owner_op;
-  propagator->owner_generations[value_id] = propagator->owner_generation;
+  propagator->owner_ops[value_ordinal] = owner_op;
   return iree_ok_status();
 }
 
@@ -260,20 +266,38 @@ static iree_status_t loom_type_propagator_record_region_tree_owners(
 
 iree_status_t loom_type_propagator_prepare_function(
     loom_type_propagator_t* propagator, loom_func_like_t function) {
-  if (!propagator || !propagator->module) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "initialized type propagator required");
+  IREE_ASSERT_ARGUMENT(propagator);
+  IREE_ASSERT_ARGUMENT(propagator->module);
+  loom_local_value_domain_release(&propagator->value_domain);
+  loom_region_t* body = loom_func_like_body(function);
+  if (!body) {
+    return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(loom_type_propagator_ensure_value_capacity(propagator));
-  loom_type_propagator_next_owner_generation(propagator);
-  return loom_type_propagator_record_region_tree_owners(
-      propagator, loom_func_like_body(function));
+  iree_status_t status = loom_local_value_domain_acquire_for_region(
+      propagator->module, body, propagator->arena, &propagator->value_domain);
+  if (iree_status_is_ok(status)) {
+    status = loom_type_propagator_ensure_ordinal_capacity(
+        propagator, propagator->value_domain.value_count);
+  }
+  if (iree_status_is_ok(status) && propagator->ordinal_capacity > 0) {
+    memset(propagator->owner_ops, 0,
+           propagator->ordinal_capacity * sizeof(*propagator->owner_ops));
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_type_propagator_record_region_tree_owners(propagator, body);
+  }
+  if (!iree_status_is_ok(status)) {
+    loom_local_value_domain_release(&propagator->value_domain);
+  }
+  return status;
 }
 
 static bool loom_type_propagator_has_candidate(
-    const loom_type_propagator_t* propagator, loom_value_id_t value_id) {
-  return (iree_host_size_t)value_id < propagator->value_capacity &&
-         propagator->candidate_generations[value_id] ==
+    const loom_type_propagator_t* propagator,
+    loom_value_ordinal_t value_ordinal) {
+  return value_ordinal != LOOM_VALUE_ORDINAL_INVALID &&
+         (iree_host_size_t)value_ordinal < propagator->ordinal_capacity &&
+         propagator->candidate_generations[value_ordinal] ==
              propagator->transaction_generation;
 }
 
@@ -282,33 +306,37 @@ static loom_type_t loom_type_propagator_value_type(
   if (!loom_type_propagator_valid_value_id(propagator, value_id)) {
     return loom_type_none();
   }
-  if (loom_type_propagator_has_candidate(propagator, value_id)) {
-    return propagator->candidate_types[value_id];
+  const loom_value_ordinal_t value_ordinal =
+      loom_local_value_domain_try_ordinal(&propagator->value_domain, value_id);
+  if (loom_type_propagator_has_candidate(propagator, value_ordinal)) {
+    return propagator->candidate_types[value_ordinal];
   }
   return loom_module_value_type(propagator->module, value_id);
 }
 
 static iree_status_t loom_type_propagator_enqueue_value(
-    loom_type_propagator_t* propagator, loom_value_id_t value_id) {
-  if (propagator->queued_generations[value_id] ==
+    loom_type_propagator_t* propagator, loom_value_ordinal_t value_ordinal) {
+  if (propagator->queued_generations[value_ordinal] ==
       propagator->transaction_generation) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(loom_type_propagator_grow_value_list(
+  IREE_RETURN_IF_ERROR(loom_type_propagator_grow_ordinal_list(
       propagator, &propagator->value_worklist, propagator->value_worklist_count,
       &propagator->value_worklist_capacity));
-  propagator->queued_generations[value_id] = propagator->transaction_generation;
-  propagator->value_worklist[propagator->value_worklist_count++] = value_id;
+  propagator->queued_generations[value_ordinal] =
+      propagator->transaction_generation;
+  propagator->value_worklist[propagator->value_worklist_count++] =
+      value_ordinal;
   return iree_ok_status();
 }
 
 static iree_status_t loom_type_propagator_mark_touched(
-    loom_type_propagator_t* propagator, loom_value_id_t value_id) {
-  if (!loom_type_propagator_has_candidate(propagator, value_id)) {
-    IREE_RETURN_IF_ERROR(loom_type_propagator_grow_value_list(
-        propagator, &propagator->touched_values, propagator->touched_count,
+    loom_type_propagator_t* propagator, loom_value_ordinal_t value_ordinal) {
+  if (!loom_type_propagator_has_candidate(propagator, value_ordinal)) {
+    IREE_RETURN_IF_ERROR(loom_type_propagator_grow_ordinal_list(
+        propagator, &propagator->touched_ordinals, propagator->touched_count,
         &propagator->touched_capacity));
-    propagator->touched_values[propagator->touched_count++] = value_id;
+    propagator->touched_ordinals[propagator->touched_count++] = value_ordinal;
   }
   return iree_ok_status();
 }
@@ -412,10 +440,12 @@ static iree_status_t loom_type_propagator_seed_candidate(
     loom_type_propagator_t* propagator, loom_value_id_t value_id,
     loom_type_t candidate_type, loom_constraint_property_t property) {
   if (propagator->conflict) return iree_ok_status();
-  if (!loom_type_propagator_valid_value_id(propagator, value_id)) {
+  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+  IREE_RETURN_IF_ERROR(loom_type_propagator_register_value(propagator, value_id,
+                                                           &value_ordinal));
+  if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(loom_type_propagator_ensure_value_capacity(propagator));
 
   loom_type_t current_type =
       loom_type_propagator_value_type(propagator, value_id);
@@ -433,11 +463,12 @@ static iree_status_t loom_type_propagator_seed_candidate(
     return iree_ok_status();
   }
 
-  IREE_RETURN_IF_ERROR(loom_type_propagator_mark_touched(propagator, value_id));
-  propagator->candidate_types[value_id] = refined_type;
-  propagator->candidate_generations[value_id] =
+  IREE_RETURN_IF_ERROR(
+      loom_type_propagator_mark_touched(propagator, value_ordinal));
+  propagator->candidate_types[value_ordinal] = refined_type;
+  propagator->candidate_generations[value_ordinal] =
       propagator->transaction_generation;
-  return loom_type_propagator_enqueue_value(propagator, value_id);
+  return loom_type_propagator_enqueue_value(propagator, value_ordinal);
 }
 
 loom_type_t loom_type_transfer_value_type(
@@ -980,15 +1011,17 @@ static iree_status_t loom_type_propagator_process_value_adjacency(
   if (!loom_type_propagator_valid_value_id(propagator, value_id)) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(loom_type_propagator_ensure_value_capacity(propagator));
 
   loom_value_t* value = loom_module_value(propagator->module, value_id);
   if (loom_value_is_block_arg(value)) {
-    if ((iree_host_size_t)value_id < propagator->value_capacity &&
-        propagator->owner_generations[value_id] ==
-            propagator->owner_generation) {
+    const loom_value_ordinal_t value_ordinal =
+        loom_local_value_domain_try_ordinal(&propagator->value_domain,
+                                            value_id);
+    if (value_ordinal != LOOM_VALUE_ORDINAL_INVALID &&
+        (iree_host_size_t)value_ordinal < propagator->ordinal_capacity &&
+        propagator->owner_ops[value_ordinal]) {
       IREE_RETURN_IF_ERROR(loom_type_propagator_process_op_constraints(
-          propagator, rewriter, propagator->owner_ops[value_id]));
+          propagator, rewriter, propagator->owner_ops[value_ordinal]));
       if (propagator->conflict) return iree_ok_status();
     }
   } else {
@@ -1019,11 +1052,15 @@ static iree_status_t loom_type_propagator_process_value_adjacency(
       loom_value_t* user_value =
           loom_module_value(propagator->module, user_value_id);
       if (loom_value_is_block_arg(user_value)) {
-        if ((iree_host_size_t)user_value_id < propagator->value_capacity &&
-            propagator->owner_generations[user_value_id] ==
-                propagator->owner_generation) {
+        const loom_value_ordinal_t user_value_ordinal =
+            loom_local_value_domain_try_ordinal(&propagator->value_domain,
+                                                user_value_id);
+        if (user_value_ordinal != LOOM_VALUE_ORDINAL_INVALID &&
+            (iree_host_size_t)user_value_ordinal <
+                propagator->ordinal_capacity &&
+            propagator->owner_ops[user_value_ordinal]) {
           IREE_RETURN_IF_ERROR(loom_type_propagator_process_op_constraints(
-              propagator, rewriter, propagator->owner_ops[user_value_id]));
+              propagator, rewriter, propagator->owner_ops[user_value_ordinal]));
         }
       } else {
         IREE_RETURN_IF_ERROR(loom_type_propagator_process_op_constraints(
@@ -1047,10 +1084,12 @@ static iree_status_t loom_type_propagator_commit(
     bool* out_changed) {
   *out_changed = false;
   for (iree_host_size_t i = 0; i < propagator->touched_count; ++i) {
-    loom_value_id_t value_id = propagator->touched_values[i];
+    const loom_value_ordinal_t value_ordinal = propagator->touched_ordinals[i];
+    loom_value_id_t value_id =
+        propagator->value_domain.value_ids[value_ordinal];
     loom_type_t current_type =
         loom_module_value_type(propagator->module, value_id);
-    loom_type_t candidate_type = propagator->candidate_types[value_id];
+    loom_type_t candidate_type = propagator->candidate_types[value_ordinal];
     if (loom_type_equal(current_type, candidate_type)) continue;
 
     loom_type_t committed_type = current_type;
@@ -1077,21 +1116,22 @@ static iree_status_t loom_type_propagator_commit(
 iree_status_t loom_type_propagator_apply_op(loom_type_propagator_t* propagator,
                                             loom_rewriter_t* rewriter,
                                             loom_op_t* op, bool* out_changed) {
-  if (!propagator || !rewriter || !op || !out_changed) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "type propagation requires propagator, rewriter, op, and output");
-  }
+  IREE_ASSERT_ARGUMENT(propagator);
+  IREE_ASSERT_ARGUMENT(rewriter);
+  IREE_ASSERT_ARGUMENT(op);
+  IREE_ASSERT_ARGUMENT(out_changed);
+  IREE_ASSERT(loom_local_value_domain_is_acquired(&propagator->value_domain));
   *out_changed = false;
-  IREE_RETURN_IF_ERROR(loom_type_propagator_ensure_value_capacity(propagator));
   loom_type_propagator_next_transaction(propagator);
   IREE_RETURN_IF_ERROR(
       loom_type_propagator_process_op_constraints(propagator, rewriter, op));
 
   while (!propagator->conflict && propagator->value_worklist_count > 0) {
-    loom_value_id_t value_id =
+    const loom_value_ordinal_t value_ordinal =
         propagator->value_worklist[--propagator->value_worklist_count];
-    propagator->queued_generations[value_id] = 0;
+    propagator->queued_generations[value_ordinal] = 0;
+    const loom_value_id_t value_id =
+        propagator->value_domain.value_ids[value_ordinal];
     IREE_RETURN_IF_ERROR(loom_type_propagator_process_value_adjacency(
         propagator, rewriter, value_id));
   }
