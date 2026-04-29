@@ -115,6 +115,7 @@ loom_cc_library(
         "//loom/src/loom/target/arch/amdgpu:wait_packets",
         "//loom/src/loom/target/emit/native:assembly",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 

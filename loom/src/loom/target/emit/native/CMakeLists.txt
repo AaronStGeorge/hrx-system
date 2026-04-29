@@ -20,6 +20,8 @@ loom_cc_library(
   DEPS
     ::fragment
     iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::move_sequence
     loom::src::loom::codegen::low::packet
     loom::src::loom::ir
     loom::src::loom::ops::low

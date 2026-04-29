@@ -157,8 +157,8 @@ TEST_F(X86AssemblyTest, DisassemblesAvx512ObjectWithLlvmObjdump) {
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
-  IREE_ASSERT_OK(loom_x86_emit_assembly_fragment(&frame.schedule,
-                                                 &frame.allocation, &builder));
+  IREE_ASSERT_OK(loom_x86_emit_assembly_fragment(
+      &frame.schedule, &frame.allocation, &builder, &table_arena));
   std::string assembly =
       ".intel_syntax noprefix\n"
       ".text\n"

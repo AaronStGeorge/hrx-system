@@ -116,9 +116,10 @@ static iree_status_t loom_x86_loom_check_parse_emit_options(
 }
 
 static iree_status_t loom_x86_loom_check_emit_assembly(
-    const loom_low_emission_frame_t* frame, iree_string_builder_t* builder) {
+    const loom_low_emission_frame_t* frame, iree_string_builder_t* builder,
+    iree_arena_allocator_t* arena) {
   return loom_x86_emit_assembly_fragment(&frame->schedule, &frame->allocation,
-                                         builder);
+                                         builder, arena);
 }
 
 static iree_status_t loom_x86_loom_check_emit_provider_execute(
@@ -135,8 +136,8 @@ static iree_status_t loom_x86_loom_check_emit_provider_execute(
       options.allocation_budgets, options.allocation_budget_count,
       options.allocation_fixed_value_specs,
       options.allocation_fixed_value_spec_count, &frame));
-  return loom_x86_loom_check_emit_assembly(&frame,
-                                           &request->result->actual_output);
+  return loom_x86_loom_check_emit_assembly(
+      &frame, &request->result->actual_output, request->case_arena);
 }
 
 static iree_status_t loom_x86_loom_check_emit_provider_append_names(

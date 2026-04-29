@@ -72,6 +72,7 @@ loom_cc_library(
         "//loom/src/loom/target/arch/x86:packed_dot_descriptors_ids",
         "//loom/src/loom/target/emit/native:assembly",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 

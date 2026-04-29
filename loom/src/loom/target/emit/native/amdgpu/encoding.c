@@ -21,8 +21,6 @@
 #include "loom/target/emit/native/fragment.h"
 
 #define LOOM_AMDGPU_MAX_PACKET_FIELD_VALUES 32u
-#define LOOM_AMDGPU_INLINE_MOVE_COUNT 16u
-
 typedef struct loom_amdgpu_encode_state_t {
   // Schedule table being encoded.
   const loom_low_schedule_table_t* schedule;
@@ -44,6 +42,8 @@ typedef struct loom_amdgpu_encode_state_t {
   const loom_amdgpu_wait_packet_plan_t* wait_packets;
   // Arena used for transient encoding scratch and final byte storage.
   iree_arena_allocator_t* arena;
+  // Reusable scratch for structural parallel-copy sequencing.
+  loom_low_move_sequence_scratch_t* move_scratch;
   // Destination byte storage, or NULL during the sizing pass.
   uint8_t* data;
   // Capacity of |data| in bytes, or zero during the sizing pass.
@@ -715,8 +715,7 @@ static iree_status_t loom_amdgpu_encode_move(
 }
 
 static iree_status_t loom_amdgpu_encode_move_sequence(
-    loom_amdgpu_encode_state_t* state, loom_low_move_t* moves,
-    iree_host_size_t move_count,
+    loom_amdgpu_encode_state_t* state, iree_host_size_t move_count,
     const loom_low_move_location_t* temporary_locations,
     iree_host_size_t temporary_location_count) {
   loom_low_move_sequence_options_t options = {
@@ -728,7 +727,7 @@ static iree_status_t loom_amdgpu_encode_move_sequence(
               .user_data = state,
           },
   };
-  return loom_low_move_sequence_emit(moves, move_count, &options);
+  return loom_low_move_sequence_emit(state->move_scratch, move_count, &options);
 }
 
 static iree_status_t loom_amdgpu_encode_edge_copy_group(
@@ -740,24 +739,17 @@ static iree_status_t loom_amdgpu_encode_edge_copy_group(
   if (move_count == 0) {
     return iree_ok_status();
   }
-  loom_low_move_t inline_moves[LOOM_AMDGPU_INLINE_MOVE_COUNT];
-  loom_low_move_t* moves = inline_moves;
-  loom_low_move_location_t inline_temporaries[LOOM_AMDGPU_INLINE_MOVE_COUNT];
-  loom_low_move_location_t* temporaries = inline_temporaries;
-  if (move_count > IREE_ARRAYSIZE(inline_moves)) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        state->arena, move_count, sizeof(*moves), (void**)&moves));
-  }
-  if (group->temporary_count > IREE_ARRAYSIZE(inline_temporaries)) {
-    IREE_RETURN_IF_ERROR(
-        iree_arena_allocate_array(state->arena, group->temporary_count,
-                                  sizeof(*temporaries), (void**)&temporaries));
-  }
+  loom_low_move_t* moves = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_scratch_reserve_moves(
+      state->move_scratch, move_count, &moves));
+  loom_low_move_location_t* temporaries = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_scratch_reserve_temporaries(
+      state->move_scratch, group->temporary_count, &temporaries));
   IREE_RETURN_IF_ERROR(loom_low_move_sequence_populate_edge_copy_units(
       state->allocation, group, moves, move_count));
   IREE_RETURN_IF_ERROR(loom_low_move_sequence_populate_edge_copy_temporaries(
       state->allocation, group, temporaries, group->temporary_count));
-  return loom_amdgpu_encode_move_sequence(state, moves, move_count, temporaries,
+  return loom_amdgpu_encode_move_sequence(state, move_count, temporaries,
                                           group->temporary_count);
 }
 
@@ -774,20 +766,16 @@ static iree_status_t loom_amdgpu_encode_copy_packet(
         "AMDGPU native encoding copy requires matching register ranges");
   }
   const uint32_t register_count = source_assignment->location_count;
-  loom_low_move_t inline_moves[LOOM_AMDGPU_INLINE_MOVE_COUNT];
-  loom_low_move_t* moves = inline_moves;
-  if (register_count > IREE_ARRAYSIZE(inline_moves)) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        state->arena, register_count, sizeof(*moves), (void**)&moves));
-  }
+  loom_low_move_t* moves = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_scratch_reserve_moves(
+      state->move_scratch, register_count, &moves));
   for (uint32_t i = 0; i < register_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_move_location_from_assignment_unit(
         result_assignment, i, &moves[i].destination));
     IREE_RETURN_IF_ERROR(loom_low_move_location_from_assignment_unit(
         source_assignment, i, &moves[i].source));
   }
-  return loom_amdgpu_encode_move_sequence(state, moves, register_count, NULL,
-                                          0);
+  return loom_amdgpu_encode_move_sequence(state, register_count, NULL, 0);
 }
 
 static iree_status_t loom_amdgpu_encode_slice_packet(
@@ -800,15 +788,12 @@ static iree_status_t loom_amdgpu_encode_slice_packet(
     return iree_ok_status();
   }
 
-  loom_low_move_t inline_moves[LOOM_AMDGPU_INLINE_MOVE_COUNT];
-  loom_low_move_t* moves = inline_moves;
-  if (move_count > IREE_ARRAYSIZE(inline_moves)) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        state->arena, move_count, sizeof(*moves), (void**)&moves));
-  }
+  loom_low_move_t* moves = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_scratch_reserve_moves(
+      state->move_scratch, move_count, &moves));
   IREE_RETURN_IF_ERROR(loom_low_move_sequence_populate_slice_units(
       state->allocation, op, moves, move_count));
-  return loom_amdgpu_encode_move_sequence(state, moves, move_count, NULL, 0);
+  return loom_amdgpu_encode_move_sequence(state, move_count, NULL, 0);
 }
 
 static iree_status_t loom_amdgpu_encode_concat_packet(
@@ -821,15 +806,12 @@ static iree_status_t loom_amdgpu_encode_concat_packet(
     return iree_ok_status();
   }
 
-  loom_low_move_t inline_moves[LOOM_AMDGPU_INLINE_MOVE_COUNT];
-  loom_low_move_t* moves = inline_moves;
-  if (move_count > IREE_ARRAYSIZE(inline_moves)) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        state->arena, move_count, sizeof(*moves), (void**)&moves));
-  }
+  loom_low_move_t* moves = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_scratch_reserve_moves(
+      state->move_scratch, move_count, &moves));
   IREE_RETURN_IF_ERROR(loom_low_move_sequence_populate_concat_units(
       state->allocation, op, moves, move_count));
-  return loom_amdgpu_encode_move_sequence(state, moves, move_count, NULL, 0);
+  return loom_amdgpu_encode_move_sequence(state, move_count, NULL, 0);
 }
 
 static iree_status_t loom_amdgpu_encode_sopp_simm16(
@@ -1474,6 +1456,8 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
   loom_low_allocation_value_scratch_t scratch = {0};
   iree_status_t status =
       loom_low_allocation_acquire_value_scratch(allocation, &scratch);
+  loom_low_move_sequence_scratch_t move_scratch = {0};
+  loom_low_move_sequence_scratch_initialize(arena, &move_scratch);
   loom_amdgpu_encode_state_t sizing_state = {
       .schedule = schedule,
       .allocation = allocation,
@@ -1484,6 +1468,7 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
       .immediate_name_id_count = immediate_name_id_count,
       .wait_packets = wait_packets,
       .arena = arena,
+      .move_scratch = &move_scratch,
       .block_offsets = block_offsets,
   };
   if (iree_status_is_ok(status)) {
@@ -1504,6 +1489,7 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
       .immediate_name_id_count = immediate_name_id_count,
       .wait_packets = wait_packets,
       .arena = arena,
+      .move_scratch = &move_scratch,
       .data = data,
       .capacity = sizing_state.length,
       .block_offsets = block_offsets,

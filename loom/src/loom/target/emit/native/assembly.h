@@ -16,7 +16,9 @@
 #define LOOM_TARGET_EMIT_NATIVE_ASSEMBLY_H_
 
 #include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
 #include "iree/base/string_builder.h"
+#include "loom/codegen/low/move_sequence.h"
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/op_defs.h"
 
@@ -33,6 +35,8 @@ typedef struct loom_native_assembly_packet_context_t {
   const loom_low_packet_view_t* packet;
   // Text destination for the fragment.
   iree_string_builder_t* builder;
+  // Reusable scratch for structural parallel-copy sequencing.
+  loom_low_move_sequence_scratch_t* move_scratch;
 } loom_native_assembly_packet_context_t;
 
 typedef iree_status_t (*loom_native_assembly_append_packet_fn_t)(
@@ -75,7 +79,7 @@ iree_status_t loom_native_assembly_format_fragment(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
     const loom_native_assembly_format_options_t* options,
-    iree_string_builder_t* builder);
+    iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena);
 
 // Appends the canonical local block label for |block|, such as ".Lbb0".
 iree_status_t loom_native_assembly_append_block_label(

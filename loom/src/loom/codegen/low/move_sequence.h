@@ -10,6 +10,7 @@
 #define LOOM_CODEGEN_LOW_MOVE_SEQUENCE_H_
 
 #include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
 #include "loom/codegen/low/allocation.h"
 
 #ifdef __cplusplus
@@ -36,6 +37,42 @@ typedef struct loom_low_move_t {
   loom_low_move_location_t source;
 } loom_low_move_t;
 
+typedef struct loom_low_move_sequence_node_t loom_low_move_sequence_node_t;
+typedef struct loom_low_move_sequence_location_entry_t
+    loom_low_move_sequence_location_entry_t;
+
+// Reusable arena-backed scratch for parallel move sequencing.
+//
+// Callers reserve move and temporary rows, populate the returned arrays, and
+// call loom_low_move_sequence_emit. The scratch may grow by allocating larger
+// arrays from |arena|, abandoning earlier scratch arrays to be reclaimed when
+// the arena is reset. No individual allocation survives beyond the arena
+// lifetime.
+typedef struct loom_low_move_sequence_scratch_t {
+  // Arena that owns all scratch arrays.
+  iree_arena_allocator_t* arena;
+  // Caller-populated parallel move rows consumed by emit.
+  loom_low_move_t* moves;
+  // Number of entries available in |moves|.
+  iree_host_size_t move_capacity;
+  // Caller-populated temporary locations used to break cycles.
+  loom_low_move_location_t* temporary_locations;
+  // Number of entries available in |temporary_locations|.
+  iree_host_size_t temporary_location_capacity;
+  // Per-move solver rows indexed by move ordinal.
+  loom_low_move_sequence_node_t* nodes;
+  // Number of entries available in |nodes|.
+  iree_host_size_t node_capacity;
+  // Ready queue storage indexed by queue ordinal.
+  iree_host_size_t* ready_queue;
+  // Number of entries available in |ready_queue|.
+  iree_host_size_t ready_queue_capacity;
+  // Open-addressed location table used for destination and source-use lookup.
+  loom_low_move_sequence_location_entry_t* location_entries;
+  // Power-of-two entry count available in |location_entries|.
+  iree_host_size_t location_entry_capacity;
+} loom_low_move_sequence_scratch_t;
+
 typedef iree_status_t (*loom_low_move_sequence_emit_fn_t)(
     void* user_data, const loom_low_move_location_t* destination,
     const loom_low_move_location_t* source);
@@ -61,6 +98,22 @@ typedef struct loom_low_move_sequence_options_t {
 // Returns true when two move locations name the same target-visible unit.
 bool loom_low_move_locations_equal(const loom_low_move_location_t* lhs,
                                    const loom_low_move_location_t* rhs);
+
+// Initializes reusable move-sequencing scratch backed by |arena|.
+void loom_low_move_sequence_scratch_initialize(
+    iree_arena_allocator_t* arena,
+    loom_low_move_sequence_scratch_t* out_scratch);
+
+// Reserves caller-populated move rows in |scratch|.
+iree_status_t loom_low_move_sequence_scratch_reserve_moves(
+    loom_low_move_sequence_scratch_t* scratch, iree_host_size_t move_count,
+    loom_low_move_t** out_moves);
+
+// Reserves caller-populated temporary rows in |scratch|.
+iree_status_t loom_low_move_sequence_scratch_reserve_temporaries(
+    loom_low_move_sequence_scratch_t* scratch,
+    iree_host_size_t temporary_location_count,
+    loom_low_move_location_t** out_temporary_locations);
 
 // Returns the location for one assignment unit.
 iree_status_t loom_low_move_location_from_assignment_unit(
@@ -119,9 +172,10 @@ iree_status_t loom_low_move_sequence_populate_concat_units(
 // |temporary_locations| and otherwise fail loud with
 // IREE_STATUS_FAILED_PRECONDITION.
 //
-// |moves| is caller-owned scratch storage and is mutated during sequencing.
+// The first |move_count| rows in |scratch->moves| are mutated during
+// sequencing.
 iree_status_t loom_low_move_sequence_emit(
-    loom_low_move_t* moves, iree_host_size_t move_count,
+    loom_low_move_sequence_scratch_t* scratch, iree_host_size_t move_count,
     const loom_low_move_sequence_options_t* options);
 
 #ifdef __cplusplus

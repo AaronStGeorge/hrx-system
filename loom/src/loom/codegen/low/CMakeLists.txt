@@ -261,6 +261,7 @@ loom_cc_library(
   DEPS
     ::allocation
     iree::base
+    iree::base::internal::arena
     loom::src::loom::ops::low
   PUBLIC
 )
@@ -741,6 +742,7 @@ loom_cc_test(
     "move_sequence_test.cc"
   DEPS
     ::move_sequence
+    iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
 )

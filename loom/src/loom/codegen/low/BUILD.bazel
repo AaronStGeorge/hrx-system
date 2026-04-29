@@ -291,6 +291,7 @@ loom_cc_library(
         ":allocation",
         "//loom/src/loom/ops/low",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 
@@ -729,6 +730,7 @@ loom_cc_test(
     srcs = ["move_sequence_test.cc"],
     deps = [
         ":move_sequence",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

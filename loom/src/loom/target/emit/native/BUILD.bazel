@@ -50,11 +50,13 @@ loom_cc_library(
     hdrs = ["assembly.h"],
     deps = [
         ":fragment",
+        "//loom/src/loom/codegen/low:move_sequence",
         "//loom/src/loom/codegen/low:packet",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/low",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 

@@ -929,30 +929,16 @@ static iree_status_t loom_x86_emit_edge_copy_group(
   if (move_count == 0) {
     return iree_ok_status();
   }
-  loom_low_move_t inline_moves[8];
-  loom_low_move_t* moves = inline_moves;
-  loom_low_move_location_t inline_temporaries[8];
-  loom_low_move_location_t* temporaries = inline_temporaries;
-  iree_status_t status = iree_ok_status();
-  if (move_count > IREE_ARRAYSIZE(inline_moves)) {
-    status =
-        iree_allocator_malloc_array(context->builder->allocator, move_count,
-                                    sizeof(*moves), (void**)&moves);
-  }
-  if (iree_status_is_ok(status) &&
-      group->temporary_count > IREE_ARRAYSIZE(inline_temporaries)) {
-    status = iree_allocator_malloc_array(
-        context->builder->allocator, group->temporary_count,
-        sizeof(*temporaries), (void**)&temporaries);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_low_move_sequence_populate_edge_copy_units(
-        context->allocation, group, moves, move_count);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_low_move_sequence_populate_edge_copy_temporaries(
-        context->allocation, group, temporaries, group->temporary_count);
-  }
+  loom_low_move_t* moves = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_scratch_reserve_moves(
+      context->move_scratch, move_count, &moves));
+  loom_low_move_location_t* temporaries = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_scratch_reserve_temporaries(
+      context->move_scratch, group->temporary_count, &temporaries));
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_populate_edge_copy_units(
+      context->allocation, group, moves, move_count));
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_populate_edge_copy_temporaries(
+      context->allocation, group, temporaries, group->temporary_count));
   loom_x86_assembly_move_state_t move_state = {
       .assembly_state = state,
       .context = context,
@@ -966,19 +952,13 @@ static iree_status_t loom_x86_emit_edge_copy_group(
               .user_data = &move_state,
           },
   };
-  if (iree_status_is_ok(status)) {
-    status = loom_low_move_sequence_emit(moves, move_count, &options);
+  IREE_RETURN_IF_ERROR(
+      loom_low_move_sequence_emit(context->move_scratch, move_count, &options));
+  if (move_state.emitted_count != 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "\n  "));
   }
-  if (iree_status_is_ok(status) && move_state.emitted_count != 0) {
-    status = iree_string_builder_append_cstring(context->builder, "\n  ");
-  }
-  if (moves != inline_moves) {
-    iree_allocator_free(context->builder->allocator, moves);
-  }
-  if (temporaries != inline_temporaries) {
-    iree_allocator_free(context->builder->allocator, temporaries);
-  }
-  return status;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_x86_append_descriptor_packet(
@@ -1101,7 +1081,7 @@ static iree_status_t loom_x86_append_cond_branch_packet(
 iree_status_t loom_x86_emit_assembly_fragment(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
-    iree_string_builder_t* builder) {
+    iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
   if (schedule == NULL || schedule->target.descriptor_set == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "x86 assembly schedule target is required");
@@ -1164,5 +1144,5 @@ iree_status_t loom_x86_emit_assembly_fragment(
           IREE_ARRAYSIZE(structural_packet_callbacks),
   };
   return loom_native_assembly_format_fragment(schedule, allocation, &options,
-                                              builder);
+                                              builder, scratch_arena);
 }

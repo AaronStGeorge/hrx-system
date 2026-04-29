@@ -47,8 +47,8 @@ low.func.def target(@gfx11_target) @gfx11_scheduled_liveness_resource(%kernarg: 
   s_waitcnt vmcnt(63) lgkmcnt(0)
   s_and_b32 s1, s1, s3
   s_mov_b32 s6, s4
-  s_mov_b32 s4, s0
   s_mov_b32 s7, s5
+  s_mov_b32 s4, s0
   s_mov_b32 s5, s1
   buffer_store_dword v1, v0, s[4:7], s2 offen offset:0
   s_waitcnt_vscnt vscnt(0)

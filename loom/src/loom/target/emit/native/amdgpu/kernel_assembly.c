@@ -110,10 +110,10 @@ static iree_status_t loom_amdgpu_kernel_assembly_emit(
       options ? options->wait_packets : NULL;
   if (wait_packets != NULL) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_assembly_fragment_with_wait_packets(
-        schedule, allocation, wait_packets, builder));
+        schedule, allocation, wait_packets, builder, scratch_arena));
   } else {
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_emit_assembly_fragment(schedule, allocation, builder));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_assembly_fragment(
+        schedule, allocation, builder, scratch_arena));
   }
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder,

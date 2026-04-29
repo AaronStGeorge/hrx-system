@@ -157,8 +157,8 @@ static iree_status_t loom_amdgpu_loom_check_emit_assembly(
     const loom_amdgpu_loom_check_emit_options_t* options,
     iree_string_builder_t* builder, iree_arena_allocator_t* arena) {
   if (options->wait_mode == LOOM_AMDGPU_LOOM_CHECK_WAIT_MODE_NONE) {
-    return loom_amdgpu_emit_assembly_fragment(&frame->schedule,
-                                              &frame->allocation, builder);
+    return loom_amdgpu_emit_assembly_fragment(
+        &frame->schedule, &frame->allocation, builder, arena);
   }
 
   loom_amdgpu_wait_plan_t wait_plan = {0};
@@ -168,7 +168,7 @@ static iree_status_t loom_amdgpu_loom_check_emit_assembly(
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_wait_packet_plan_build(&wait_plan, arena, &wait_packets));
   return loom_amdgpu_emit_assembly_fragment_with_wait_packets(
-      &frame->schedule, &frame->allocation, &wait_packets, builder);
+      &frame->schedule, &frame->allocation, &wait_packets, builder, arena);
 }
 
 static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(

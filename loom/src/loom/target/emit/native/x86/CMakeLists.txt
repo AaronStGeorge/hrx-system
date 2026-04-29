@@ -19,6 +19,7 @@ loom_cc_library(
     "assembly.c"
   DEPS
     iree::base
+    iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::move_sequence
     loom::src::loom::codegen::low::packet

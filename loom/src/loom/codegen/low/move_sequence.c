@@ -25,6 +25,106 @@ static bool loom_low_move_locations_share_storage_class(
          loom_liveness_value_class_equal(lhs->value_class, rhs->value_class);
 }
 
+#define LOOM_LOW_MOVE_SEQUENCE_INDEX_NONE IREE_HOST_SIZE_MAX
+
+typedef enum loom_low_move_sequence_node_flag_bits_e {
+  LOOM_LOW_MOVE_SEQUENCE_NODE_FLAG_ACTIVE = 1u << 0,
+} loom_low_move_sequence_node_flag_bits_t;
+typedef uint8_t loom_low_move_sequence_node_flags_t;
+
+struct loom_low_move_sequence_node_t {
+  // Active-state flags for the corresponding move row.
+  loom_low_move_sequence_node_flags_t flags;
+};
+
+typedef enum loom_low_move_sequence_location_flag_bits_e {
+  LOOM_LOW_MOVE_SEQUENCE_LOCATION_FLAG_OCCUPIED = 1u << 0,
+  LOOM_LOW_MOVE_SEQUENCE_LOCATION_FLAG_TEMPORARY = 1u << 1,
+} loom_low_move_sequence_location_flag_bits_t;
+typedef uint8_t loom_low_move_sequence_location_flags_t;
+
+struct loom_low_move_sequence_location_entry_t {
+  // Target-visible unit keyed by this hash entry.
+  loom_low_move_location_t location;
+  // Move row that writes |location|, or INDEX_NONE when none does.
+  iree_host_size_t destination_move_index;
+  // Number of active moves that read |location|.
+  iree_host_size_t source_use_count;
+  // Occupancy and temporary-state flags.
+  loom_low_move_sequence_location_flags_t flags;
+};
+
+void loom_low_move_sequence_scratch_initialize(
+    iree_arena_allocator_t* arena,
+    loom_low_move_sequence_scratch_t* out_scratch) {
+  IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(out_scratch);
+  *out_scratch = (loom_low_move_sequence_scratch_t){
+      .arena = arena,
+  };
+}
+
+static iree_status_t loom_low_move_sequence_scratch_reserve_array(
+    loom_low_move_sequence_scratch_t* scratch,
+    iree_host_size_t minimum_capacity, iree_host_size_t element_size,
+    iree_host_size_t* inout_capacity, void** inout_ptr) {
+  IREE_ASSERT_ARGUMENT(scratch);
+  IREE_ASSERT_ARGUMENT(scratch->arena);
+  IREE_ASSERT_ARGUMENT(inout_capacity);
+  IREE_ASSERT_ARGUMENT(inout_ptr);
+  if (*inout_capacity >= minimum_capacity) {
+    return iree_ok_status();
+  }
+  iree_host_size_t new_capacity = *inout_capacity ? *inout_capacity : 16;
+  while (new_capacity < minimum_capacity) {
+    if (new_capacity > IREE_HOST_SIZE_MAX / 2) {
+      new_capacity = minimum_capacity;
+      break;
+    }
+    new_capacity *= 2;
+  }
+  void* new_ptr = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(scratch->arena, new_capacity,
+                                                 element_size, &new_ptr));
+  *inout_capacity = new_capacity;
+  *inout_ptr = new_ptr;
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_move_sequence_scratch_reserve_moves(
+    loom_low_move_sequence_scratch_t* scratch, iree_host_size_t move_count,
+    loom_low_move_t** out_moves) {
+  IREE_ASSERT_ARGUMENT(scratch);
+  IREE_ASSERT_ARGUMENT(out_moves);
+  *out_moves = NULL;
+  if (move_count == 0) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_scratch_reserve_array(
+      scratch, move_count, sizeof(*scratch->moves), &scratch->move_capacity,
+      (void**)&scratch->moves));
+  *out_moves = scratch->moves;
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_move_sequence_scratch_reserve_temporaries(
+    loom_low_move_sequence_scratch_t* scratch,
+    iree_host_size_t temporary_location_count,
+    loom_low_move_location_t** out_temporary_locations) {
+  IREE_ASSERT_ARGUMENT(scratch);
+  IREE_ASSERT_ARGUMENT(out_temporary_locations);
+  *out_temporary_locations = NULL;
+  if (temporary_location_count == 0) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_scratch_reserve_array(
+      scratch, temporary_location_count, sizeof(*scratch->temporary_locations),
+      &scratch->temporary_location_capacity,
+      (void**)&scratch->temporary_locations));
+  *out_temporary_locations = scratch->temporary_locations;
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_move_location_from_assignment_unit(
     const loom_low_allocation_assignment_t* assignment, uint32_t unit_index,
     loom_low_move_location_t* out_location) {
@@ -405,42 +505,187 @@ iree_status_t loom_low_move_sequence_populate_concat_units(
   return iree_ok_status();
 }
 
-static void loom_low_move_sequence_remove_move(loom_low_move_t* moves,
-                                               iree_host_size_t* move_count,
-                                               iree_host_size_t move_index) {
-  if (move_index + 1 < *move_count) {
-    memmove(&moves[move_index], &moves[move_index + 1],
-            (*move_count - move_index - 1) * sizeof(*moves));
-  }
-  --*move_count;
+typedef struct loom_low_move_sequence_state_t {
+  // Scratch storage owned by the caller's arena.
+  loom_low_move_sequence_scratch_t* scratch;
+  // Options controlling temporary selection and move emission.
+  const loom_low_move_sequence_options_t* options;
+  // Number of active, non-identity moves in |scratch->moves|.
+  iree_host_size_t move_count;
+  // Number of moves that have not been emitted yet.
+  iree_host_size_t active_count;
+  // Power-of-two location-table entries used for this move set.
+  iree_host_size_t location_entry_count;
+  // Current read position in |scratch->ready_queue|.
+  iree_host_size_t ready_head;
+  // Current write position in |scratch->ready_queue|.
+  iree_host_size_t ready_tail;
+  // Cursor used to find the next active move when only cycles remain.
+  iree_host_size_t active_cursor;
+} loom_low_move_sequence_state_t;
+
+static uint64_t loom_low_move_sequence_mix64(uint64_t value) {
+  value ^= value >> 33;
+  value *= UINT64_C(0xff51afd7ed558ccd);
+  value ^= value >> 33;
+  value *= UINT64_C(0xc4ceb9fe1a85ec53);
+  value ^= value >> 33;
+  return value;
 }
 
-static bool loom_low_move_sequence_destination_is_source(
-    const loom_low_move_t* moves, iree_host_size_t move_count,
-    iree_host_size_t move_index) {
-  const loom_low_move_location_t* destination = &moves[move_index].destination;
-  for (iree_host_size_t i = 0; i < move_count; ++i) {
-    if (loom_low_move_locations_equal(destination, &moves[i].source)) {
-      return true;
-    }
-  }
-  return false;
+static uint64_t loom_low_move_sequence_location_hash(
+    const loom_low_move_location_t* location) {
+  uint64_t value = (uint64_t)location->location;
+  value ^= (uint64_t)location->location_kind << 32;
+  value ^= (uint64_t)location->descriptor_reg_class_id << 48;
+  return loom_low_move_sequence_mix64(value);
 }
 
-static iree_status_t loom_low_move_sequence_find_move_by_destination(
-    const loom_low_move_t* moves, iree_host_size_t move_count,
-    const loom_low_move_location_t* destination,
-    iree_host_size_t* out_move_index) {
-  IREE_ASSERT_ARGUMENT(out_move_index);
-  *out_move_index = IREE_HOST_SIZE_MAX;
-  for (iree_host_size_t i = 0; i < move_count; ++i) {
-    if (loom_low_move_locations_equal(destination, &moves[i].destination)) {
-      *out_move_index = i;
-      return iree_ok_status();
+static iree_status_t loom_low_move_sequence_next_power_of_two(
+    iree_host_size_t minimum_capacity, iree_host_size_t* out_capacity) {
+  IREE_ASSERT_ARGUMENT(out_capacity);
+  iree_host_size_t capacity = 16;
+  while (capacity < minimum_capacity) {
+    if (capacity > IREE_HOST_SIZE_MAX / 2) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "parallel move location table is too large");
     }
+    capacity *= 2;
   }
-  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                          "parallel move cycle is malformed");
+  *out_capacity = capacity;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_move_sequence_reserve_solver_scratch(
+    loom_low_move_sequence_scratch_t* scratch, iree_host_size_t move_count,
+    iree_host_size_t temporary_location_count,
+    iree_host_size_t* out_location_entry_count) {
+  IREE_ASSERT_ARGUMENT(out_location_entry_count);
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_scratch_reserve_array(
+      scratch, move_count, sizeof(*scratch->nodes), &scratch->node_capacity,
+      (void**)&scratch->nodes));
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_scratch_reserve_array(
+      scratch, move_count, sizeof(*scratch->ready_queue),
+      &scratch->ready_queue_capacity, (void**)&scratch->ready_queue));
+  iree_host_size_t minimum_location_count = 0;
+  if (move_count > (IREE_HOST_SIZE_MAX - temporary_location_count) / 2) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "parallel move location count exceeds host size");
+  }
+  minimum_location_count = move_count * 2 + temporary_location_count;
+  if (minimum_location_count > IREE_HOST_SIZE_MAX / 2) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "parallel move location table exceeds host size");
+  }
+  iree_host_size_t location_entry_capacity = 0;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_next_power_of_two(
+      minimum_location_count * 2, &location_entry_capacity));
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_scratch_reserve_array(
+      scratch, location_entry_capacity, sizeof(*scratch->location_entries),
+      &scratch->location_entry_capacity, (void**)&scratch->location_entries));
+  *out_location_entry_count = location_entry_capacity;
+  return iree_ok_status();
+}
+
+static loom_low_move_sequence_location_entry_t*
+loom_low_move_sequence_lookup_location(
+    loom_low_move_sequence_state_t* state,
+    const loom_low_move_location_t* location) {
+  loom_low_move_sequence_scratch_t* scratch = state->scratch;
+  const iree_host_size_t mask = state->location_entry_count - 1;
+  iree_host_size_t index =
+      (iree_host_size_t)loom_low_move_sequence_location_hash(location) & mask;
+  for (iree_host_size_t probe = 0; probe < state->location_entry_count;
+       ++probe) {
+    loom_low_move_sequence_location_entry_t* entry =
+        &scratch->location_entries[index];
+    if (!iree_any_bit_set(entry->flags,
+                          LOOM_LOW_MOVE_SEQUENCE_LOCATION_FLAG_OCCUPIED)) {
+      return NULL;
+    }
+    if (loom_low_move_locations_equal(&entry->location, location)) {
+      return entry;
+    }
+    index = (index + 1) & mask;
+  }
+  return NULL;
+}
+
+static loom_low_move_sequence_location_entry_t*
+loom_low_move_sequence_insert_location(
+    loom_low_move_sequence_state_t* state,
+    const loom_low_move_location_t* location) {
+  loom_low_move_sequence_scratch_t* scratch = state->scratch;
+  const iree_host_size_t mask = state->location_entry_count - 1;
+  iree_host_size_t index =
+      (iree_host_size_t)loom_low_move_sequence_location_hash(location) & mask;
+  for (iree_host_size_t probe = 0; probe < state->location_entry_count;
+       ++probe) {
+    loom_low_move_sequence_location_entry_t* entry =
+        &scratch->location_entries[index];
+    if (!iree_any_bit_set(entry->flags,
+                          LOOM_LOW_MOVE_SEQUENCE_LOCATION_FLAG_OCCUPIED)) {
+      *entry = (loom_low_move_sequence_location_entry_t){
+          .location = *location,
+          .destination_move_index = LOOM_LOW_MOVE_SEQUENCE_INDEX_NONE,
+          .flags = LOOM_LOW_MOVE_SEQUENCE_LOCATION_FLAG_OCCUPIED,
+      };
+      return entry;
+    }
+    if (loom_low_move_locations_equal(&entry->location, location)) {
+      return entry;
+    }
+    index = (index + 1) & mask;
+  }
+  IREE_ASSERT_UNREACHABLE(
+      "parallel move location table exhausted after reserve");
+  return NULL;
+}
+
+static loom_low_move_sequence_location_entry_t*
+loom_low_move_sequence_require_location(
+    loom_low_move_sequence_state_t* state,
+    const loom_low_move_location_t* location) {
+  loom_low_move_sequence_location_entry_t* entry =
+      loom_low_move_sequence_lookup_location(state, location);
+  IREE_ASSERT(entry != NULL, "parallel move location must be present");
+  return entry;
+}
+
+static void loom_low_move_sequence_enqueue_ready(
+    loom_low_move_sequence_state_t* state, iree_host_size_t move_index) {
+  IREE_ASSERT_LT(state->ready_tail, state->move_count,
+                 "ready queue must have one entry per move");
+  state->scratch->ready_queue[state->ready_tail++] = move_index;
+}
+
+static bool loom_low_move_sequence_node_is_active(
+    const loom_low_move_sequence_state_t* state, iree_host_size_t move_index) {
+  return iree_any_bit_set(state->scratch->nodes[move_index].flags,
+                          LOOM_LOW_MOVE_SEQUENCE_NODE_FLAG_ACTIVE);
+}
+
+static iree_status_t loom_low_move_sequence_deactivate_move(
+    loom_low_move_sequence_state_t* state, iree_host_size_t move_index) {
+  IREE_ASSERT(loom_low_move_sequence_node_is_active(state, move_index),
+              "parallel move row must be active before deactivation");
+  state->scratch->nodes[move_index].flags = 0;
+  --state->active_count;
+  loom_low_move_sequence_location_entry_t* source_entry =
+      loom_low_move_sequence_require_location(
+          state, &state->scratch->moves[move_index].source);
+  IREE_ASSERT_NE(source_entry->source_use_count, 0,
+                 "parallel move source-use count must be positive");
+  --source_entry->source_use_count;
+  if (source_entry->source_use_count == 0 &&
+      source_entry->destination_move_index !=
+          LOOM_LOW_MOVE_SEQUENCE_INDEX_NONE &&
+      loom_low_move_sequence_node_is_active(
+          state, source_entry->destination_move_index)) {
+    loom_low_move_sequence_enqueue_ready(state,
+                                         source_entry->destination_move_index);
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_move_sequence_find_temporary(
@@ -464,54 +709,78 @@ static iree_status_t loom_low_move_sequence_find_temporary(
                           "location");
 }
 
-static iree_status_t loom_low_move_sequence_validate(
-    const loom_low_move_t* moves, iree_host_size_t move_count,
-    const loom_low_move_sequence_options_t* options) {
-  if (move_count != 0 && moves == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "parallel move rows are required");
-  }
-  if (options == NULL || options->emit_move.fn == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "parallel move emitter is required");
-  }
-  if (options->temporary_location_count != 0 &&
-      options->temporary_locations == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "parallel move temporary locations are required");
-  }
-  for (iree_host_size_t i = 0; i < move_count; ++i) {
-    for (iree_host_size_t j = 0; j < options->temporary_location_count; ++j) {
-      const loom_low_move_location_t* temporary =
-          &options->temporary_locations[j];
-      if (loom_low_move_locations_equal(temporary, &moves[i].destination) ||
-          loom_low_move_locations_equal(temporary, &moves[i].source)) {
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "parallel move temporary location aliases move storage");
-      }
+static iree_status_t loom_low_move_sequence_prepare(
+    loom_low_move_sequence_state_t* state) {
+  loom_low_move_sequence_scratch_t* scratch = state->scratch;
+  IREE_ASSERT_GE(scratch->move_capacity, state->move_count,
+                 "move scratch must be reserved before sequencing");
+  iree_host_size_t active_move_count = 0;
+  for (iree_host_size_t i = 0; i < state->move_count; ++i) {
+    const loom_low_move_t move = scratch->moves[i];
+    if (loom_low_move_locations_equal(&move.destination, &move.source)) {
+      continue;
     }
-    for (iree_host_size_t j = i + 1; j < move_count; ++j) {
-      if (!loom_low_move_locations_equal(&moves[i].destination,
-                                         &moves[j].destination)) {
-        continue;
-      }
+    scratch->moves[active_move_count++] = move;
+  }
+  state->move_count = active_move_count;
+  state->active_count = active_move_count;
+  if (active_move_count == 0) {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_reserve_solver_scratch(
+      scratch, active_move_count, state->options->temporary_location_count,
+      &state->location_entry_count));
+  memset(scratch->nodes, 0, active_move_count * sizeof(*scratch->nodes));
+  memset(scratch->location_entries, 0,
+         state->location_entry_count * sizeof(*scratch->location_entries));
+
+  for (iree_host_size_t i = 0; i < active_move_count; ++i) {
+    scratch->nodes[i].flags = LOOM_LOW_MOVE_SEQUENCE_NODE_FLAG_ACTIVE;
+    loom_low_move_sequence_location_entry_t* destination_entry =
+        loom_low_move_sequence_insert_location(state,
+                                               &scratch->moves[i].destination);
+    if (destination_entry->destination_move_index !=
+        LOOM_LOW_MOVE_SEQUENCE_INDEX_NONE) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "parallel move rows contain duplicate destinations");
     }
+    destination_entry->destination_move_index = i;
+    loom_low_move_sequence_location_entry_t* source_entry =
+        loom_low_move_sequence_insert_location(state,
+                                               &scratch->moves[i].source);
+    ++source_entry->source_use_count;
   }
-  for (iree_host_size_t i = 0; i < options->temporary_location_count; ++i) {
-    const loom_low_move_location_t* lhs = &options->temporary_locations[i];
-    for (iree_host_size_t j = i + 1; j < options->temporary_location_count;
-         ++j) {
-      if (!loom_low_move_locations_equal(lhs,
-                                         &options->temporary_locations[j])) {
-        continue;
-      }
+
+  for (iree_host_size_t i = 0; i < state->options->temporary_location_count;
+       ++i) {
+    const loom_low_move_location_t* temporary =
+        &state->options->temporary_locations[i];
+    loom_low_move_sequence_location_entry_t* temporary_entry =
+        loom_low_move_sequence_insert_location(state, temporary);
+    if (iree_any_bit_set(temporary_entry->flags,
+                         LOOM_LOW_MOVE_SEQUENCE_LOCATION_FLAG_TEMPORARY)) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "parallel move temporary locations contain duplicates");
+    }
+    if (temporary_entry->destination_move_index !=
+            LOOM_LOW_MOVE_SEQUENCE_INDEX_NONE ||
+        temporary_entry->source_use_count != 0) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "parallel move temporary location aliases move storage");
+    }
+    temporary_entry->flags |= LOOM_LOW_MOVE_SEQUENCE_LOCATION_FLAG_TEMPORARY;
+  }
+
+  for (iree_host_size_t i = 0; i < active_move_count; ++i) {
+    loom_low_move_sequence_location_entry_t* destination_entry =
+        loom_low_move_sequence_require_location(state,
+                                                &scratch->moves[i].destination);
+    if (destination_entry->source_use_count == 0) {
+      loom_low_move_sequence_enqueue_ready(state, i);
     }
   }
   return iree_ok_status();
@@ -528,76 +797,111 @@ static iree_status_t loom_low_move_sequence_emit_one(
                                source);
 }
 
+static iree_status_t loom_low_move_sequence_emit_ready_move(
+    loom_low_move_sequence_state_t* state, iree_host_size_t move_index) {
+  const loom_low_move_t move = state->scratch->moves[move_index];
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_emit_one(
+      state->options, &move.destination, &move.source));
+  return loom_low_move_sequence_deactivate_move(state, move_index);
+}
+
+static iree_status_t loom_low_move_sequence_next_active_move(
+    loom_low_move_sequence_state_t* state, iree_host_size_t* out_move_index) {
+  IREE_ASSERT_ARGUMENT(out_move_index);
+  while (state->active_cursor < state->move_count) {
+    const iree_host_size_t move_index = state->active_cursor++;
+    if (loom_low_move_sequence_node_is_active(state, move_index)) {
+      *out_move_index = move_index;
+      return iree_ok_status();
+    }
+  }
+  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                          "parallel move active set is inconsistent");
+}
+
 static iree_status_t loom_low_move_sequence_emit_cycle(
-    loom_low_move_t* moves, iree_host_size_t* move_count,
-    const loom_low_move_sequence_options_t* options) {
-  const loom_low_move_location_t saved_location = moves[0].destination;
+    loom_low_move_sequence_state_t* state, iree_host_size_t first_move_index) {
+  loom_low_move_sequence_scratch_t* scratch = state->scratch;
+  const loom_low_move_location_t saved_location =
+      scratch->moves[first_move_index].destination;
   const loom_low_move_location_t* temporary_location = NULL;
   IREE_RETURN_IF_ERROR(loom_low_move_sequence_find_temporary(
-      options, &saved_location, &temporary_location));
+      state->options, &saved_location, &temporary_location));
   IREE_RETURN_IF_ERROR(loom_low_move_sequence_emit_one(
-      options, temporary_location, &saved_location));
+      state->options, temporary_location, &saved_location));
 
-  loom_low_move_location_t destination = moves[0].destination;
-  loom_low_move_location_t source = moves[0].source;
+  loom_low_move_location_t destination =
+      scratch->moves[first_move_index].destination;
+  loom_low_move_location_t source = scratch->moves[first_move_index].source;
   for (;;) {
-    iree_host_size_t move_index = IREE_HOST_SIZE_MAX;
-    IREE_RETURN_IF_ERROR(loom_low_move_sequence_find_move_by_destination(
-        moves, *move_count, &destination, &move_index));
+    loom_low_move_sequence_location_entry_t* destination_entry =
+        loom_low_move_sequence_lookup_location(state, &destination);
+    if (destination_entry == NULL ||
+        destination_entry->destination_move_index ==
+            LOOM_LOW_MOVE_SEQUENCE_INDEX_NONE ||
+        !loom_low_move_sequence_node_is_active(
+            state, destination_entry->destination_move_index)) {
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "parallel move cycle is malformed");
+    }
+    const iree_host_size_t move_index =
+        destination_entry->destination_move_index;
     if (loom_low_move_locations_equal(&source, &saved_location)) {
       IREE_RETURN_IF_ERROR(loom_low_move_sequence_emit_one(
-          options, &destination, temporary_location));
-      loom_low_move_sequence_remove_move(moves, move_count, move_index);
-      return iree_ok_status();
+          state->options, &destination, temporary_location));
+      return loom_low_move_sequence_deactivate_move(state, move_index);
     }
 
     IREE_RETURN_IF_ERROR(
-        loom_low_move_sequence_emit_one(options, &destination, &source));
-    loom_low_move_sequence_remove_move(moves, move_count, move_index);
+        loom_low_move_sequence_emit_one(state->options, &destination, &source));
+    IREE_RETURN_IF_ERROR(
+        loom_low_move_sequence_deactivate_move(state, move_index));
     destination = source;
-    IREE_RETURN_IF_ERROR(loom_low_move_sequence_find_move_by_destination(
-        moves, *move_count, &destination, &move_index));
-    source = moves[move_index].source;
+    destination_entry =
+        loom_low_move_sequence_lookup_location(state, &destination);
+    if (destination_entry == NULL ||
+        destination_entry->destination_move_index ==
+            LOOM_LOW_MOVE_SEQUENCE_INDEX_NONE) {
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "parallel move cycle is malformed");
+    }
+    source = scratch->moves[destination_entry->destination_move_index].source;
   }
 }
 
 iree_status_t loom_low_move_sequence_emit(
-    loom_low_move_t* moves, iree_host_size_t move_count,
+    loom_low_move_sequence_scratch_t* scratch, iree_host_size_t move_count,
     const loom_low_move_sequence_options_t* options) {
-  IREE_RETURN_IF_ERROR(
-      loom_low_move_sequence_validate(moves, move_count, options));
-
-  iree_host_size_t i = 0;
-  while (i < move_count) {
-    if (loom_low_move_locations_equal(&moves[i].destination,
-                                      &moves[i].source)) {
-      loom_low_move_sequence_remove_move(moves, &move_count, i);
-      continue;
-    }
-    ++i;
+  IREE_ASSERT_ARGUMENT(scratch);
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(options->emit_move.fn);
+  if (options->temporary_location_count != 0) {
+    IREE_ASSERT_ARGUMENT(options->temporary_locations);
   }
-
-  while (move_count != 0) {
-    bool emitted_safe_move = false;
-    for (iree_host_size_t move_index = 0; move_index < move_count;
-         ++move_index) {
-      if (loom_low_move_sequence_destination_is_source(moves, move_count,
-                                                       move_index)) {
+  loom_low_move_sequence_state_t state = {
+      .scratch = scratch,
+      .options = options,
+      .move_count = move_count,
+  };
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_prepare(&state));
+  while (state.active_count != 0) {
+    while (state.ready_head != state.ready_tail) {
+      const iree_host_size_t move_index =
+          scratch->ready_queue[state.ready_head++];
+      if (!loom_low_move_sequence_node_is_active(&state, move_index)) {
         continue;
       }
-      const loom_low_move_t move = moves[move_index];
-      IREE_RETURN_IF_ERROR(loom_low_move_sequence_emit_one(
-          options, &move.destination, &move.source));
-      loom_low_move_sequence_remove_move(moves, &move_count, move_index);
-      emitted_safe_move = true;
+      IREE_RETURN_IF_ERROR(
+          loom_low_move_sequence_emit_ready_move(&state, move_index));
+    }
+    if (state.active_count == 0) {
       break;
     }
-    if (emitted_safe_move) {
-      continue;
-    }
+    iree_host_size_t first_move_index = 0;
     IREE_RETURN_IF_ERROR(
-        loom_low_move_sequence_emit_cycle(moves, &move_count, options));
+        loom_low_move_sequence_next_active_move(&state, &first_move_index));
+    IREE_RETURN_IF_ERROR(
+        loom_low_move_sequence_emit_cycle(&state, first_move_index));
   }
-
   return iree_ok_status();
 }

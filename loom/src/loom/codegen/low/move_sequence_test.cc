@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
@@ -55,13 +56,50 @@ iree_status_t RecordMove(void* user_data,
   return iree_ok_status();
 }
 
-std::vector<std::string> EmitMoves(loom_low_move_t* moves,
+class TestArena {
+ public:
+  TestArena() {
+    iree_arena_block_pool_initialize(4096, iree_allocator_system(),
+                                     &block_pool_);
+    iree_arena_initialize(&block_pool_, &arena_);
+  }
+
+  ~TestArena() {
+    iree_arena_deinitialize(&arena_);
+    iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  iree_arena_allocator_t* arena() { return &arena_; }
+
+ private:
+  // Block pool backing |arena_|.
+  iree_arena_block_pool_t block_pool_ = {};
+  // Arena used for one test's move-sequencing scratch.
+  iree_arena_allocator_t arena_ = {};
+};
+
+std::vector<std::string> EmitMoves(const loom_low_move_t* input_moves,
                                    iree_host_size_t move_count,
                                    const loom_low_move_location_t* temporaries,
                                    iree_host_size_t temporary_count) {
+  TestArena arena;
+  loom_low_move_sequence_scratch_t scratch;
+  loom_low_move_sequence_scratch_initialize(arena.arena(), &scratch);
+  loom_low_move_t* moves = nullptr;
+  IREE_EXPECT_OK(loom_low_move_sequence_scratch_reserve_moves(
+      &scratch, move_count, &moves));
+  for (iree_host_size_t i = 0; i < move_count; ++i) {
+    moves[i] = input_moves[i];
+  }
+  loom_low_move_location_t* temporary_storage = nullptr;
+  IREE_EXPECT_OK(loom_low_move_sequence_scratch_reserve_temporaries(
+      &scratch, temporary_count, &temporary_storage));
+  for (iree_host_size_t i = 0; i < temporary_count; ++i) {
+    temporary_storage[i] = temporaries[i];
+  }
   std::vector<std::string> emitted_moves;
   loom_low_move_sequence_options_t options = {
-      .temporary_locations = temporaries,
+      .temporary_locations = temporary_storage,
       .temporary_location_count = temporary_count,
       .emit_move =
           {
@@ -69,7 +107,7 @@ std::vector<std::string> EmitMoves(loom_low_move_t* moves,
               .user_data = &emitted_moves,
           },
   };
-  IREE_EXPECT_OK(loom_low_move_sequence_emit(moves, move_count, &options));
+  IREE_EXPECT_OK(loom_low_move_sequence_emit(&scratch, move_count, &options));
   return emitted_moves;
 }
 
@@ -154,10 +192,19 @@ TEST(LowMoveSequenceTest, RejectsCycleWithoutTemporary) {
               .user_data = &emitted_moves,
           },
   };
+  TestArena arena;
+  loom_low_move_sequence_scratch_t scratch;
+  loom_low_move_sequence_scratch_initialize(arena.arena(), &scratch);
+  loom_low_move_t* scratch_moves = nullptr;
+  IREE_ASSERT_OK(loom_low_move_sequence_scratch_reserve_moves(
+      &scratch, IREE_ARRAYSIZE(moves), &scratch_moves));
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(moves); ++i) {
+    scratch_moves[i] = moves[i];
+  }
 
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_FAILED_PRECONDITION,
-      loom_low_move_sequence_emit(moves, IREE_ARRAYSIZE(moves), &options));
+      loom_low_move_sequence_emit(&scratch, IREE_ARRAYSIZE(moves), &options));
   EXPECT_TRUE(emitted_moves.empty());
 }
 
@@ -174,10 +221,19 @@ TEST(LowMoveSequenceTest, RejectsDuplicateDestinations) {
               .user_data = &emitted_moves,
           },
   };
+  TestArena arena;
+  loom_low_move_sequence_scratch_t scratch;
+  loom_low_move_sequence_scratch_initialize(arena.arena(), &scratch);
+  loom_low_move_t* scratch_moves = nullptr;
+  IREE_ASSERT_OK(loom_low_move_sequence_scratch_reserve_moves(
+      &scratch, IREE_ARRAYSIZE(moves), &scratch_moves));
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(moves); ++i) {
+    scratch_moves[i] = moves[i];
+  }
 
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
-      loom_low_move_sequence_emit(moves, IREE_ARRAYSIZE(moves), &options));
+      loom_low_move_sequence_emit(&scratch, IREE_ARRAYSIZE(moves), &options));
   EXPECT_TRUE(emitted_moves.empty());
 }
 
