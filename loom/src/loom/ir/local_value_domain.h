@@ -63,19 +63,34 @@ static inline bool loom_local_value_domain_is_acquired(
   return iree_any_bit_set(domain->flags, LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED);
 }
 
+// Returns the local ordinal for |value_id|, or INVALID when the value is not
+// covered by the acquired domain.
+static inline loom_value_ordinal_t loom_local_value_domain_try_ordinal(
+    const loom_local_value_domain_t* domain, loom_value_id_t value_id) {
+  IREE_ASSERT_ARGUMENT(domain);
+  IREE_ASSERT(
+      iree_any_bit_set(domain->flags, LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED));
+  if (value_id >= domain->module->value_ordinal_scratch.capacity) {
+    return LOOM_VALUE_ORDINAL_INVALID;
+  }
+  const loom_value_ordinal_t value_ordinal =
+      domain->module->value_ordinal_scratch.ordinals_by_value_id[value_id];
+  if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID) {
+    return LOOM_VALUE_ORDINAL_INVALID;
+  }
+  IREE_ASSERT_LT(value_ordinal, domain->value_count);
+  IREE_ASSERT_EQ(domain->value_ids[value_ordinal], value_id);
+  return value_ordinal;
+}
+
 // Returns the local ordinal for |value_id|. This is an invariant-checked direct
 // array lookup: callers must only ask for values covered by the acquired
 // domain.
 static inline loom_value_ordinal_t loom_local_value_domain_ordinal(
     const loom_local_value_domain_t* domain, loom_value_id_t value_id) {
-  IREE_ASSERT_ARGUMENT(domain);
-  IREE_ASSERT(
-      iree_any_bit_set(domain->flags, LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED));
-  IREE_ASSERT_LT(value_id, domain->module->value_ordinal_scratch.capacity);
   const loom_value_ordinal_t value_ordinal =
-      domain->module->value_ordinal_scratch.ordinals_by_value_id[value_id];
+      loom_local_value_domain_try_ordinal(domain, value_id);
   IREE_ASSERT_NE(value_ordinal, LOOM_VALUE_ORDINAL_INVALID);
-  IREE_ASSERT_LT(value_ordinal, domain->value_count);
   return value_ordinal;
 }
 

@@ -232,6 +232,12 @@ iree_status_t loom_liveness_analyze_region_with_order(
 const loom_liveness_interval_t* loom_liveness_interval_for_value(
     const loom_liveness_analysis_t* analysis, loom_value_id_t value_id);
 
+// Returns the interval for |value_ordinal|, or NULL when that local value has
+// no interval.
+const loom_liveness_interval_t* loom_liveness_interval_for_value_ordinal(
+    const loom_liveness_analysis_t* analysis,
+    loom_value_ordinal_t value_ordinal);
+
 // Returns the block record for |block|, or NULL when |block| is not owned by
 // the analyzed region.
 const loom_liveness_block_info_t* loom_liveness_block_info_for_block(

@@ -1227,15 +1227,25 @@ const loom_liveness_interval_t* loom_liveness_interval_for_value(
   if (!analysis) return NULL;
   for (iree_host_size_t i = 0; i < analysis->value_count; ++i) {
     if (analysis->value_ids[i] != value_id) continue;
-    if (!analysis->value_interval_indices) return NULL;
-    uint32_t interval_index = analysis->value_interval_indices[i];
-    if (interval_index == UINT32_MAX ||
-        interval_index >= analysis->interval_count) {
-      return NULL;
-    }
-    return &analysis->intervals[interval_index];
+    return loom_liveness_interval_for_value_ordinal(analysis,
+                                                    (loom_value_ordinal_t)i);
   }
   return NULL;
+}
+
+const loom_liveness_interval_t* loom_liveness_interval_for_value_ordinal(
+    const loom_liveness_analysis_t* analysis,
+    loom_value_ordinal_t value_ordinal) {
+  if (!analysis || !analysis->value_interval_indices ||
+      value_ordinal >= analysis->value_count) {
+    return NULL;
+  }
+  uint32_t interval_index = analysis->value_interval_indices[value_ordinal];
+  if (interval_index == UINT32_MAX ||
+      interval_index >= analysis->interval_count) {
+    return NULL;
+  }
+  return &analysis->intervals[interval_index];
 }
 
 const loom_liveness_block_info_t* loom_liveness_block_info_for_block(

@@ -701,8 +701,14 @@ static iree_status_t loom_low_allocation_resolve_fixed_values(
         fixed_value->location_kind, fixed_value->location_base,
         fixed_value->location_count, IREE_SV("fixed value")));
 
-    const loom_liveness_interval_t* interval = loom_liveness_interval_for_value(
-        &state->liveness, fixed_value->value_id);
+    const loom_value_ordinal_t value_ordinal =
+        loom_local_value_domain_try_ordinal(state->value_domain,
+                                            fixed_value->value_id);
+    const loom_liveness_interval_t* interval =
+        value_ordinal == LOOM_VALUE_ORDINAL_INVALID
+            ? NULL
+            : loom_liveness_interval_for_value_ordinal(&state->liveness,
+                                                       value_ordinal);
     if (interval == NULL ||
         !loom_low_allocation_interval_is_allocatable(interval)) {
       return iree_make_status(
