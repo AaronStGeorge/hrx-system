@@ -317,75 +317,16 @@ static bool loom_low_lower_op_uses_policy(const loom_module_t* module,
          !loom_low_lower_op_is_source_metadata(op->kind);
 }
 
-static iree_status_t loom_low_lower_record_value_ordinal(
-    loom_low_lower_context_t* context, loom_value_id_t value_id) {
-  IREE_ASSERT_LT(value_id, context->module->values.count);
-  const iree_host_size_t minimum_capacity =
-      (iree_host_size_t)context->lowering.value_count + 1;
-  if (minimum_capacity >= LOOM_VALUE_ORDINAL_INVALID) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "source function value count exceeds 32-bit "
-                            "local ordinal capacity");
-  }
-  if (minimum_capacity > context->lowering.value_capacity) {
-    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-        &context->arena, context->lowering.value_count, minimum_capacity,
-        sizeof(*context->lowering.value_ids), &context->lowering.value_capacity,
-        (void**)&context->lowering.value_ids));
-  }
-  const loom_value_ordinal_t ordinal = context->lowering.value_count++;
-  loom_module_value_ordinal_scratch_set(context->module, value_id, ordinal);
-  context->lowering.value_ids[ordinal] = value_id;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_lower_record_region_value_ordinals(
-    loom_low_lower_context_t* context, loom_region_t* region) {
-  loom_block_t* block = NULL;
-  loom_region_for_each_block(region, block) {
-    for (uint16_t i = 0; i < block->arg_count; ++i) {
-      IREE_RETURN_IF_ERROR(
-          loom_low_lower_record_value_ordinal(context, block->arg_ids[i]));
-    }
-    loom_op_t* op = NULL;
-    loom_block_for_each_op(block, op) {
-      const loom_value_id_t* results = loom_op_const_results(op);
-      for (uint16_t i = 0; i < op->result_count; ++i) {
-        IREE_RETURN_IF_ERROR(
-            loom_low_lower_record_value_ordinal(context, results[i]));
-      }
-      loom_region_t** regions = loom_op_regions(op);
-      for (uint8_t i = 0; i < op->region_count; ++i) {
-        if (regions[i] != NULL) {
-          IREE_RETURN_IF_ERROR(
-              loom_low_lower_record_region_value_ordinals(context, regions[i]));
-        }
-      }
-    }
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_lowering_frame_initialize_value_ordinals(
     loom_low_lower_context_t* context, loom_region_t* source_body) {
-  context->lowering.module = context->module;
-  loom_module_value_ordinal_scratch_acquire(context->module);
-  context->lowering.value_ordinal_scratch_acquired = true;
-  return loom_low_lower_record_region_value_ordinals(context, source_body);
+  return loom_local_value_domain_acquire_for_region(
+      context->module, source_body, &context->arena,
+      &context->lowering.value_domain);
 }
 
 static void loom_low_lowering_frame_deinitialize(
     loom_low_lower_context_t* context) {
-  if (!context->lowering.value_ordinal_scratch_acquired) {
-    return;
-  }
-  for (loom_value_ordinal_t ordinal = 0;
-       ordinal < context->lowering.value_count; ++ordinal) {
-    loom_module_value_ordinal_scratch_clear(
-        context->module, context->lowering.value_ids[ordinal]);
-  }
-  loom_module_value_ordinal_scratch_release(context->module);
-  context->lowering.value_ordinal_scratch_acquired = false;
+  loom_local_value_domain_release(&context->lowering.value_domain);
 }
 
 static iree_status_t loom_low_lower_prepare_plan(
@@ -1223,6 +1164,7 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
     loom_kernel_async_legality_options_t async_legality_options = {
         .arena = &context.arena,
         .fact_table = &context.lowering.fact_table,
+        .value_domain = &context.lowering.value_domain,
         .emitter = options->emitter,
         .phase_name = IREE_SV("source-low"),
     };
@@ -1266,14 +1208,16 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
     return iree_ok_status();
   }
 
-  if (iree_status_is_ok(status) && context.lowering.value_count != 0) {
-    status =
-        iree_arena_allocate_array(&context.arena, context.lowering.value_count,
-                                  sizeof(*context.lowering.value_map),
-                                  (void**)&context.lowering.value_map);
+  if (iree_status_is_ok(status) &&
+      context.lowering.value_domain.value_count != 0) {
+    status = iree_arena_allocate_array(
+        &context.arena, context.lowering.value_domain.value_count,
+        sizeof(*context.lowering.value_map),
+        (void**)&context.lowering.value_map);
   }
   if (iree_status_is_ok(status)) {
-    for (loom_value_ordinal_t i = 0; i < context.lowering.value_count; ++i) {
+    for (loom_value_ordinal_t i = 0;
+         i < context.lowering.value_domain.value_count; ++i) {
       context.lowering.value_map[i] = LOOM_VALUE_ID_INVALID;
     }
   }

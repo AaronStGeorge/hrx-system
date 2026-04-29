@@ -23,6 +23,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/analysis/symbolic_expr.h"
 #include "loom/ir/ir.h"
+#include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/util/fact_table.h"
@@ -99,7 +100,7 @@ typedef struct loom_view_region_t {
   loom_view_region_precision_flags_t precision_flags;
 } loom_view_region_t;
 
-// Dense analysis table for one module or function-local analysis run.
+// Dense analysis table for one function-local value domain.
 typedef struct loom_view_region_table_t {
   // Module whose SSA values are summarized.
   const loom_module_t* module;
@@ -116,14 +117,14 @@ typedef struct loom_view_region_table_t {
   // Symbolic expression context shared by all region construction.
   loom_symbolic_expr_context_t expression_context;
 
-  // Dense map from value ID to region ID, or LOOM_VIEW_REGION_ID_INVALID.
-  loom_view_region_id_t* value_region_ids;
+  // Borrowed active local value domain used for value ID to ordinal mapping.
+  const loom_local_value_domain_t* value_domain;
 
-  // Per-value construction state for recursion guards.
-  uint8_t* value_states;
+  // Dense map from local value ordinal to region ID, or INVALID.
+  loom_view_region_id_t* region_ids_by_value_ordinal;
 
-  // Allocated entry count for value_region_ids and value_states.
-  iree_host_size_t value_capacity;
+  // Per-local-value construction state for recursion guards.
+  uint8_t* states_by_value_ordinal;
 
   // Compact region storage indexed by region ID.
   loom_view_region_t* regions;
@@ -135,10 +136,13 @@ typedef struct loom_view_region_table_t {
   iree_host_size_t region_capacity;
 } loom_view_region_table_t;
 
-// Initializes a view-region table. The table does not compute facts; callers
-// pass the current fact table they want the analysis to consume.
+// Initializes a view-region table from a caller-owned active local value
+// domain. The table does not compute facts; callers pass the current fact table
+// they want the analysis to consume. The value domain must remain active until
+// the table is dead.
 iree_status_t loom_view_region_table_initialize(
-    const loom_module_t* module, loom_value_fact_table_t* fact_table,
+    loom_value_fact_table_t* fact_table,
+    const loom_local_value_domain_t* value_domain,
     iree_arena_allocator_t* arena, loom_view_region_table_t* out_table);
 
 // Ensures a region summary exists for |value_id| when it has a view type.
@@ -147,15 +151,9 @@ iree_status_t loom_view_region_table_get(loom_view_region_table_t* table,
                                          loom_value_id_t value_id,
                                          const loom_view_region_t** out_region);
 
-// Walks a region tree, constructs summaries for view values, and derives
-// per-view access flags from memory-operand descriptors.
-iree_status_t loom_view_region_table_analyze_region(
-    loom_view_region_table_t* table, loom_region_t* region);
-
-// Function-like convenience wrapper around
-// loom_view_region_table_analyze_region.
-iree_status_t loom_view_region_table_analyze_function(
-    loom_view_region_table_t* table, loom_func_like_t function);
+// Walks the table's local value domain region, constructs summaries for view
+// values, and derives per-view access flags from memory-operand descriptors.
+iree_status_t loom_view_region_table_analyze(loom_view_region_table_t* table);
 
 // Returns aggregate access flags for all summarized regions with
 // |root_value_id|.

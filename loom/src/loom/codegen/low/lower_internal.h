@@ -14,6 +14,7 @@
 #include "loom/codegen/low/builder.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/memory_access.h"
+#include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
 #include "loom/util/fact_table.h"
 
@@ -42,16 +43,8 @@ typedef struct loom_low_lower_selected_plan_t {
 } loom_low_lower_selected_plan_t;
 
 typedef struct loom_low_lowering_frame_t {
-  // Module whose value-ordinal scratch map is active for this frame.
-  loom_module_t* module;
-  // Source value IDs indexed by function-local value ordinal.
-  loom_value_id_t* value_ids;
-  // Number of entries in value_ids.
-  loom_value_ordinal_t value_count;
-  // Allocated capacity of value_ids.
-  iree_host_size_t value_capacity;
-  // True after this frame acquires module value-ordinal scratch.
-  bool value_ordinal_scratch_acquired;
+  // Active source-function value domain for dense per-value lowering state.
+  loom_local_value_domain_t value_domain;
   // Source value facts computed once before planning.
   loom_value_fact_table_t fact_table;
   // Source local value ordinal to emitted low value ID map.
@@ -82,11 +75,7 @@ typedef struct loom_low_lowering_frame_t {
 
 static inline loom_value_ordinal_t loom_low_lowering_frame_value_ordinal(
     const loom_low_lowering_frame_t* frame, loom_value_id_t value_id) {
-  const loom_value_ordinal_t ordinal =
-      loom_module_value_ordinal_scratch_lookup(frame->module, value_id);
-  IREE_ASSERT_NE(ordinal, LOOM_VALUE_ORDINAL_INVALID);
-  IREE_ASSERT_LT(ordinal, frame->value_count);
-  return ordinal;
+  return loom_local_value_domain_ordinal(&frame->value_domain, value_id);
 }
 
 struct loom_low_lower_context_t {

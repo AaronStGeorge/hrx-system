@@ -225,10 +225,10 @@ static iree_status_t loom_kernel_async_legality_ensure_movement_analysis(
     state->fact_table = &state->local_fact_table;
   }
   IREE_RETURN_IF_ERROR(loom_movement_analysis_initialize(
-      state->module, state->fact_table, state->options->arena,
+      state->fact_table, state->options->value_domain, state->options->arena,
       &state->movement_analysis));
-  IREE_RETURN_IF_ERROR(loom_movement_analysis_analyze_function(
-      &state->movement_analysis, state->function));
+  IREE_RETURN_IF_ERROR(
+      loom_movement_analysis_analyze(&state->movement_analysis));
   state->movement_analysis_ready = true;
   return iree_ok_status();
 }
@@ -685,7 +685,6 @@ iree_status_t loom_kernel_async_legality_verify_function(
     const loom_kernel_async_legality_options_t* options,
     loom_kernel_async_legality_result_t* out_result) {
   IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(options && options->arena);
   IREE_ASSERT_ARGUMENT(out_result);
   *out_result = (loom_kernel_async_legality_result_t){0};
 
@@ -693,6 +692,8 @@ iree_status_t loom_kernel_async_legality_verify_function(
   if (!body) {
     return iree_ok_status();
   }
+  IREE_ASSERT_ARGUMENT(options && options->arena && options->value_domain);
+  IREE_ASSERT_EQ(options->value_domain->region, body);
 
   loom_kernel_async_legality_state_t state = {
       .module = module,

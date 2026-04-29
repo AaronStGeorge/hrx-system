@@ -47,6 +47,7 @@ class ViewRegionsTest : public ::testing::Test {
   }
 
   void TearDown() override {
+    loom_local_value_domain_release(&value_domain_);
     loom_module_free(module_);
     loom_context_deinitialize(&context_);
     iree_arena_deinitialize(&analysis_arena_);
@@ -227,10 +228,12 @@ class ViewRegionsTest : public ::testing::Test {
 
   void Analyze(loom_value_fact_table_t* facts,
                loom_view_region_table_t* out_table) {
+    IREE_ASSERT_OK(loom_local_value_domain_acquire_for_region(
+        module_, loom_func_like_body(function_), &analysis_arena_,
+        &value_domain_));
     IREE_ASSERT_OK(loom_view_region_table_initialize(
-        module_, facts, &analysis_arena_, out_table));
-    IREE_ASSERT_OK(
-        loom_view_region_table_analyze_function(out_table, function_));
+        facts, &value_domain_, &analysis_arena_, out_table));
+    IREE_ASSERT_OK(loom_view_region_table_analyze(out_table));
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -238,6 +241,7 @@ class ViewRegionsTest : public ::testing::Test {
   loom_context_t context_;
   loom_module_t* module_ = nullptr;
   loom_func_like_t function_;
+  loom_local_value_domain_t value_domain_ = {};
   loom_builder_t builder_;
 };
 

@@ -26,34 +26,6 @@ enum loom_view_region_value_state_e {
   LOOM_VIEW_REGION_VALUE_READY = 2,
 };
 
-static iree_status_t loom_view_region_table_ensure_value_capacity(
-    loom_view_region_table_t* table, iree_host_size_t minimum_capacity) {
-  if (minimum_capacity <= table->value_capacity) return iree_ok_status();
-
-  iree_host_size_t old_capacity = table->value_capacity;
-  iree_host_size_t new_capacity = table->value_capacity;
-  void* new_value_region_ids = table->value_region_ids;
-  IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-      table->arena, old_capacity, minimum_capacity,
-      sizeof(*table->value_region_ids), &new_capacity, &new_value_region_ids));
-
-  void* new_value_states = table->value_states;
-  iree_host_size_t new_state_capacity = old_capacity;
-  IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-      table->arena, old_capacity, new_capacity, sizeof(*table->value_states),
-      &new_state_capacity, &new_value_states));
-
-  table->value_capacity = new_capacity;
-  table->value_region_ids = (loom_view_region_id_t*)new_value_region_ids;
-  table->value_states = (uint8_t*)new_value_states;
-  for (iree_host_size_t i = old_capacity; i < table->value_capacity; ++i) {
-    table->value_region_ids[i] = LOOM_VIEW_REGION_ID_INVALID;
-  }
-  memset(table->value_states + old_capacity, 0,
-         table->value_capacity - old_capacity);
-  return iree_ok_status();
-}
-
 static iree_status_t loom_view_region_table_append_region(
     loom_view_region_table_t* table, const loom_view_region_t* region,
     loom_view_region_t** out_region) {
@@ -73,19 +45,37 @@ static iree_status_t loom_view_region_table_append_region(
 }
 
 iree_status_t loom_view_region_table_initialize(
-    const loom_module_t* module, loom_value_fact_table_t* fact_table,
+    loom_value_fact_table_t* fact_table,
+    const loom_local_value_domain_t* value_domain,
     iree_arena_allocator_t* arena, loom_view_region_table_t* out_table) {
+  IREE_ASSERT_ARGUMENT(fact_table);
+  IREE_ASSERT_ARGUMENT(value_domain);
+  IREE_ASSERT(loom_local_value_domain_is_acquired(value_domain));
+  IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(out_table);
   memset(out_table, 0, sizeof(*out_table));
-  out_table->module = module;
+  out_table->module = value_domain->module;
   out_table->fact_table = fact_table;
   out_table->fact_context.table = fact_table;
   out_table->arena = arena;
-  loom_symbolic_expr_context_initialize(module, fact_table, arena,
+  out_table->value_domain = value_domain;
+  loom_symbolic_expr_context_initialize(value_domain->module, fact_table, arena,
                                         &out_table->expression_context);
-  if (module) {
-    IREE_RETURN_IF_ERROR(loom_view_region_table_ensure_value_capacity(
-        out_table, module->values.count));
+  const iree_host_size_t value_count = value_domain->value_count;
+  if (value_count == 0) {
+    return iree_ok_status();
   }
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, value_count, sizeof(*out_table->region_ids_by_value_ordinal),
+      (void**)&out_table->region_ids_by_value_ordinal));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, value_count, sizeof(*out_table->states_by_value_ordinal),
+      (void**)&out_table->states_by_value_ordinal));
+  for (iree_host_size_t i = 0; i < value_count; ++i) {
+    out_table->region_ids_by_value_ordinal[i] = LOOM_VIEW_REGION_ID_INVALID;
+  }
+  memset(out_table->states_by_value_ordinal, 0,
+         value_count * sizeof(*out_table->states_by_value_ordinal));
   return iree_ok_status();
 }
 
@@ -710,18 +700,21 @@ static iree_status_t loom_view_region_build_for_value(
 iree_status_t loom_view_region_table_get(
     loom_view_region_table_t* table, loom_value_id_t value_id,
     const loom_view_region_t** out_region) {
+  IREE_ASSERT_ARGUMENT(table);
+  IREE_ASSERT_ARGUMENT(out_region);
+  IREE_ASSERT_ARGUMENT(table->module);
+  IREE_ASSERT_ARGUMENT(table->value_domain);
+  IREE_ASSERT(value_id < table->module->values.count);
   *out_region = NULL;
-  if (!table->module || value_id >= table->module->values.count) {
-    return iree_ok_status();
-  }
-  IREE_RETURN_IF_ERROR(
-      loom_view_region_table_ensure_value_capacity(table, value_id + 1));
+  const loom_value_ordinal_t value_ordinal =
+      loom_local_value_domain_ordinal(table->value_domain, value_id);
   loom_type_t type = loom_module_value_type(table->module, value_id);
   if (!loom_type_is_view(type)) return iree_ok_status();
 
-  uint8_t state = table->value_states[value_id];
+  uint8_t state = table->states_by_value_ordinal[value_ordinal];
   if (state == LOOM_VIEW_REGION_VALUE_READY) {
-    loom_view_region_id_t region_id = table->value_region_ids[value_id];
+    loom_view_region_id_t region_id =
+        table->region_ids_by_value_ordinal[value_ordinal];
     if (region_id != LOOM_VIEW_REGION_ID_INVALID &&
         region_id < table->region_count) {
       *out_region = &table->regions[region_id];
@@ -730,7 +723,8 @@ iree_status_t loom_view_region_table_get(
   }
   if (state == LOOM_VIEW_REGION_VALUE_VISITING) return iree_ok_status();
 
-  table->value_states[value_id] = LOOM_VIEW_REGION_VALUE_VISITING;
+  table->states_by_value_ordinal[value_ordinal] =
+      LOOM_VIEW_REGION_VALUE_VISITING;
   loom_view_region_t region = {0};
   iree_status_t status =
       loom_view_region_build_for_value(table, value_id, &region);
@@ -740,13 +734,16 @@ iree_status_t loom_view_region_table_get(
     status =
         loom_view_region_table_append_region(table, &region, &stored_region);
     if (iree_status_is_ok(status)) {
-      table->value_region_ids[value_id] = stored_region->region_id;
-      table->value_states[value_id] = LOOM_VIEW_REGION_VALUE_READY;
+      table->region_ids_by_value_ordinal[value_ordinal] =
+          stored_region->region_id;
+      table->states_by_value_ordinal[value_ordinal] =
+          LOOM_VIEW_REGION_VALUE_READY;
       *out_region = stored_region;
     }
   }
   if (!iree_status_is_ok(status)) {
-    table->value_states[value_id] = LOOM_VIEW_REGION_VALUE_EMPTY;
+    table->states_by_value_ordinal[value_ordinal] =
+        LOOM_VIEW_REGION_VALUE_EMPTY;
   }
   return status;
 }
@@ -788,8 +785,11 @@ static iree_status_t loom_view_region_table_record_op_accesses(
   return iree_ok_status();
 }
 
+static iree_status_t loom_view_region_table_analyze_region(
+    loom_view_region_table_t* table, const loom_region_t* region);
+
 static iree_status_t loom_view_region_table_analyze_op_tree(
-    loom_view_region_table_t* table, loom_op_t* op) {
+    loom_view_region_table_t* table, const loom_op_t* op) {
   IREE_RETURN_IF_ERROR(loom_view_region_table_record_op_accesses(table, op));
   const loom_value_id_t* results = loom_op_const_results(op);
   for (uint16_t i = 0; i < op->result_count; ++i) {
@@ -797,7 +797,7 @@ static iree_status_t loom_view_region_table_analyze_op_tree(
     IREE_RETURN_IF_ERROR(
         loom_view_region_table_get(table, results[i], &region));
   }
-  loom_region_t** regions = loom_op_regions(op);
+  loom_region_t* const* regions = loom_op_regions(op);
   for (uint8_t i = 0; i < op->region_count; ++i) {
     if (regions[i]) {
       IREE_RETURN_IF_ERROR(
@@ -807,17 +807,17 @@ static iree_status_t loom_view_region_table_analyze_op_tree(
   return iree_ok_status();
 }
 
-iree_status_t loom_view_region_table_analyze_region(
-    loom_view_region_table_t* table, loom_region_t* region) {
+static iree_status_t loom_view_region_table_analyze_region(
+    loom_view_region_table_t* table, const loom_region_t* region) {
   if (!region) return iree_ok_status();
-  loom_block_t* block = NULL;
+  const loom_block_t* block = NULL;
   loom_region_for_each_block(region, block) {
     for (uint16_t i = 0; i < block->arg_count; ++i) {
       const loom_view_region_t* view_region = NULL;
       IREE_RETURN_IF_ERROR(loom_view_region_table_get(
           table, loom_block_arg_id(block, i), &view_region));
     }
-    loom_op_t* op = NULL;
+    const loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
       IREE_RETURN_IF_ERROR(loom_view_region_table_analyze_op_tree(table, op));
     }
@@ -825,10 +825,11 @@ iree_status_t loom_view_region_table_analyze_region(
   return iree_ok_status();
 }
 
-iree_status_t loom_view_region_table_analyze_function(
-    loom_view_region_table_t* table, loom_func_like_t function) {
+iree_status_t loom_view_region_table_analyze(loom_view_region_table_t* table) {
+  IREE_ASSERT_ARGUMENT(table);
+  IREE_ASSERT_ARGUMENT(table->value_domain);
   return loom_view_region_table_analyze_region(table,
-                                               loom_func_like_body(function));
+                                               table->value_domain->region);
 }
 
 loom_view_access_flags_t loom_view_region_table_root_access_flags(

@@ -768,25 +768,25 @@ static iree_status_t loom_movement_describe_async(
 //===----------------------------------------------------------------------===//
 
 iree_status_t loom_movement_analysis_initialize(
-    const loom_module_t* module, loom_value_fact_table_t* fact_table,
+    loom_value_fact_table_t* fact_table,
+    const loom_local_value_domain_t* value_domain,
     iree_arena_allocator_t* arena, loom_movement_analysis_t* out_analysis) {
-  IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(fact_table);
+  IREE_ASSERT_ARGUMENT(value_domain);
   IREE_ASSERT_ARGUMENT(arena);
   IREE_ASSERT_ARGUMENT(out_analysis);
   *out_analysis = (loom_movement_analysis_t){0};
-  out_analysis->module = module;
+  out_analysis->module = value_domain->module;
   out_analysis->fact_table = fact_table;
   out_analysis->arena = arena;
-  return loom_view_region_table_initialize(module, fact_table, arena,
+  return loom_view_region_table_initialize(fact_table, value_domain, arena,
                                            &out_analysis->view_regions);
 }
 
-iree_status_t loom_movement_analysis_analyze_function(
-    loom_movement_analysis_t* analysis, loom_func_like_t function) {
+iree_status_t loom_movement_analysis_analyze(
+    loom_movement_analysis_t* analysis) {
   IREE_ASSERT_ARGUMENT(analysis);
-  return loom_view_region_table_analyze_function(&analysis->view_regions,
-                                                 function);
+  return loom_view_region_table_analyze(&analysis->view_regions);
 }
 
 bool loom_movement_op_kind_is_async(loom_op_kind_t op_kind) {

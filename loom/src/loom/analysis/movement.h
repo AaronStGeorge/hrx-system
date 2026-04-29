@@ -19,6 +19,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/analysis/view_regions.h"
 #include "loom/ir/ir.h"
+#include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
 #include "loom/ops/vector/memory.h"
 #include "loom/util/fact_table.h"
@@ -241,14 +242,16 @@ typedef struct loom_movement_analysis_t {
   loom_view_region_table_t view_regions;
 } loom_movement_analysis_t;
 
-// Initializes movement analysis over a module and current fact table.
+// Initializes movement analysis from a caller-owned active local value domain.
+// The domain must remain active until the analysis is dead.
 iree_status_t loom_movement_analysis_initialize(
-    const loom_module_t* module, loom_value_fact_table_t* fact_table,
+    loom_value_fact_table_t* fact_table,
+    const loom_local_value_domain_t* value_domain,
     iree_arena_allocator_t* arena, loom_movement_analysis_t* out_analysis);
 
-// Pre-analyzes all view regions reachable from a function body.
-iree_status_t loom_movement_analysis_analyze_function(
-    loom_movement_analysis_t* analysis, loom_func_like_t function);
+// Pre-analyzes all view regions reachable from the analysis value domain.
+iree_status_t loom_movement_analysis_analyze(
+    loom_movement_analysis_t* analysis);
 
 // Returns true when op_kind is represented by the async movement table.
 bool loom_movement_op_kind_is_async(loom_op_kind_t op_kind);

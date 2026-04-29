@@ -45,6 +45,7 @@ class MovementTest : public ::testing::Test {
   }
 
   void TearDown() override {
+    loom_local_value_domain_release(&value_domain_);
     loom_module_free(module_);
     loom_context_deinitialize(&context_);
     iree_arena_deinitialize(&analysis_arena_);
@@ -206,10 +207,12 @@ class MovementTest : public ::testing::Test {
 
   void InitializeAnalysis(loom_movement_analysis_t* out_analysis) {
     ComputeFacts(&facts_);
+    IREE_ASSERT_OK(loom_local_value_domain_acquire_for_region(
+        module_, loom_func_like_body(function_), &analysis_arena_,
+        &value_domain_));
     IREE_ASSERT_OK(loom_movement_analysis_initialize(
-        module_, &facts_, &analysis_arena_, out_analysis));
-    IREE_ASSERT_OK(
-        loom_movement_analysis_analyze_function(out_analysis, function_));
+        &facts_, &value_domain_, &analysis_arena_, out_analysis));
+    IREE_ASSERT_OK(loom_movement_analysis_analyze(out_analysis));
   }
 
   bool Describe(loom_movement_analysis_t* analysis, const loom_op_t* op,
@@ -228,6 +231,7 @@ class MovementTest : public ::testing::Test {
   loom_func_like_t function_;
   loom_builder_t builder_;
   loom_value_fact_table_t facts_ = {};
+  loom_local_value_domain_t value_domain_ = {};
 };
 
 TEST_F(MovementTest, ClassifiesStaticDenseVectorLoadFootprint) {

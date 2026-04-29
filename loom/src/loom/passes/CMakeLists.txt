@@ -192,6 +192,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::analysis::kernel_async_legality
     loom::src::loom::ir
+    loom::src::loom::ops::op_defs
     loom::src::loom::pass::types
   PUBLIC
 )

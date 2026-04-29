@@ -7,6 +7,8 @@
 #include "loom/passes/kernel_async_legality.h"
 
 #include "loom/analysis/kernel_async_legality.h"
+#include "loom/ir/local_value_domain.h"
+#include "loom/ops/op_defs.h"
 
 //===----------------------------------------------------------------------===//
 // Statistics
@@ -51,14 +53,27 @@ static void loom_kernel_async_legality_add_stat(loom_pass_t* pass,
 iree_status_t loom_kernel_async_legality_run(loom_pass_t* pass,
                                              loom_module_t* module,
                                              loom_func_like_t function) {
+  loom_region_t* body = loom_func_like_body(function);
+  if (!body) {
+    return iree_ok_status();
+  }
+
+  loom_local_value_domain_t value_domain = {0};
+  iree_status_t status = loom_local_value_domain_acquire_for_region(
+      module, body, pass->arena, &value_domain);
   loom_kernel_async_legality_options_t options = {
       .arena = pass->arena,
+      .value_domain = &value_domain,
       .emitter = pass->diagnostic_emitter,
       .phase_name = pass->info->name,
   };
   loom_kernel_async_legality_result_t result = {0};
-  IREE_RETURN_IF_ERROR(loom_kernel_async_legality_verify_function(
-      module, function, &options, &result));
+  if (iree_status_is_ok(status)) {
+    status = loom_kernel_async_legality_verify_function(module, function,
+                                                        &options, &result);
+  }
+  loom_local_value_domain_release(&value_domain);
+  IREE_RETURN_IF_ERROR(status);
 
   loom_kernel_async_legality_add_stat(
       pass, LOOM_KERNEL_ASYNC_LEGALITY_STAT_BLOCKS_CHECKED,
