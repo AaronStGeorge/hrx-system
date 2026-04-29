@@ -228,6 +228,61 @@ TEST_F(LowAllocationTest, CoalescesTiedResultWithOperand) {
 
   ExpectSameLocation(FindAssignmentByName(allocation, "acc"),
                      FindAssignmentByName(allocation, "out"));
+  ASSERT_EQ(allocation.placement.relation_count, 1u);
+  EXPECT_EQ(allocation.placement.relations[0].cause,
+            LOOM_LOW_PLACEMENT_CAUSE_TIED_RESULT);
+  EXPECT_TRUE(iree_all_bits_set(allocation.placement.relations[0].flags,
+                                LOOM_LOW_PLACEMENT_RELATION_FLAG_HARD));
+}
+
+TEST_F(LowAllocationTest, CoalescesCopyThroughPlacement) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%value: reg<test.i32>) -> "
+      "(reg<test.i32>) {\n"
+      "  %copy = low.copy %value : reg<test.i32> -> reg<test.i32>\n"
+      "  low.return %copy : reg<test.i32>\n"
+      "}\n");
+  loom_low_allocation_table_t allocation = AllocateFirstLowFunction();
+
+  ExpectSameLocation(FindAssignmentByName(allocation, "value"),
+                     FindAssignmentByName(allocation, "copy"));
+  ASSERT_EQ(allocation.copy_decision_count, 1u);
+  EXPECT_EQ(allocation.copy_decisions[0].kind,
+            LOOM_LOW_ALLOCATION_COPY_COALESCED);
+  ASSERT_EQ(allocation.placement.relation_count, 1u);
+  EXPECT_EQ(allocation.placement.relations[0].cause,
+            LOOM_LOW_PLACEMENT_CAUSE_LOW_COPY);
+}
+
+TEST_F(LowAllocationTest, CoalescesSliceAndConcatThroughPlacement) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%lo: reg<test.i32>, "
+      "%hi: reg<test.i32>) -> (reg<test.i32>) {\n"
+      "  %pair = low.concat(%lo, %hi) : (reg<test.i32>, reg<test.i32>) -> "
+      "reg<test.i32 x2>\n"
+      "  %lane = low.slice %pair[1] : reg<test.i32 x2> -> reg<test.i32>\n"
+      "  low.return %lane : reg<test.i32>\n"
+      "}\n");
+  loom_low_allocation_table_t allocation = AllocateFirstLowFunction();
+
+  const loom_low_allocation_assignment_t* lo =
+      FindAssignmentByName(allocation, "lo");
+  const loom_low_allocation_assignment_t* hi =
+      FindAssignmentByName(allocation, "hi");
+  const loom_low_allocation_assignment_t* pair =
+      FindAssignmentByName(allocation, "pair");
+  const loom_low_allocation_assignment_t* lane =
+      FindAssignmentByName(allocation, "lane");
+  ASSERT_NE(lo, nullptr);
+  ASSERT_NE(hi, nullptr);
+  ASSERT_NE(pair, nullptr);
+  ASSERT_NE(lane, nullptr);
+  EXPECT_EQ(pair->location_kind, lo->location_kind);
+  EXPECT_EQ(pair->location_base, lo->location_base);
+  EXPECT_EQ(pair->location_count, 2u);
+  ExpectSameLocation(hi, lane);
+  EXPECT_EQ(hi->location_base, pair->location_base + 1);
+  ASSERT_EQ(allocation.placement.relation_count, 3u);
 }
 
 TEST_F(LowAllocationTest, RecordsBranchEdgeCopyGroups) {

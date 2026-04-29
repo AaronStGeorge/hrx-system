@@ -212,6 +212,22 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    placement
+  HDRS
+    "placement.h"
+  SRCS
+    "placement.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::liveness
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     allocation
   HDRS
     "allocation.h"
@@ -221,6 +237,7 @@ loom_cc_library(
     ::descriptors
     ::diagnostics
     ::function
+    ::placement
     ::register_class_map
     ::requirements
     ::target_binding

@@ -48,6 +48,8 @@ typedef struct loom_low_allocation_build_state_t {
   iree_host_size_t resolved_reserved_range_count;
   // Liveness analysis for |body|.
   loom_liveness_analysis_t liveness;
+  // Function-local placement relations over |liveness|.
+  loom_low_placement_table_t placement;
   // Active function-local value domain shared with liveness/allocation.
   const loom_local_value_domain_t* value_domain;
   // Mutable assignment records being built.
@@ -1143,6 +1145,40 @@ static iree_status_t loom_low_allocation_assignment_index_for_value(
                           (unsigned)value_id);
 }
 
+static iree_status_t loom_low_allocation_value_ordinal_for_interval(
+    const loom_low_allocation_build_state_t* state,
+    const loom_liveness_interval_t* interval,
+    loom_value_ordinal_t* out_value_ordinal) {
+  IREE_ASSERT_ARGUMENT(out_value_ordinal);
+  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+  if (!loom_low_allocation_value_ordinal_for_value(state, interval->value_id,
+                                                   &value_ordinal)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "low allocation interval value %u is outside the local value domain",
+        (unsigned)interval->value_id);
+  }
+  *out_value_ordinal = value_ordinal;
+  return iree_ok_status();
+}
+
+static const loom_low_placement_relation_t*
+loom_low_allocation_first_placement_relation(
+    const loom_low_allocation_build_state_t* state,
+    loom_value_ordinal_t result_ordinal, loom_low_placement_cause_t cause) {
+  const loom_low_placement_relation_range_t range =
+      loom_low_placement_relation_range_for_value_ordinal(&state->placement,
+                                                          result_ordinal);
+  for (uint32_t i = 0; i < range.count; ++i) {
+    const loom_low_placement_relation_t* relation =
+        &state->placement.relations[range.start + i];
+    if (relation->cause == cause) {
+      return relation;
+    }
+  }
+  return NULL;
+}
+
 static iree_status_t loom_low_allocation_append_assignment(
     loom_low_allocation_build_state_t* state,
     const loom_low_allocation_assignment_t* assignment,
@@ -1176,63 +1212,22 @@ static iree_status_t loom_low_allocation_append_assignment(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_allocation_tied_operand_for_result(
-    const loom_module_t* module, loom_value_id_t result_id, bool* out_has_tie,
-    loom_value_id_t* out_operand_id) {
-  *out_has_tie = false;
-  *out_operand_id = LOOM_VALUE_ID_INVALID;
-  const loom_value_t* value = loom_module_value(module, result_id);
-  if (loom_value_is_block_arg(value)) {
-    return iree_ok_status();
-  }
-  const loom_op_t* op = loom_value_def_op(value);
-  if (!op || op->tied_result_count == 0) {
-    return iree_ok_status();
-  }
-
-  const loom_value_id_t* results = loom_op_const_results(op);
-  const loom_value_id_t* operands = loom_op_const_operands(op);
-  const loom_tied_result_t* tied_results = loom_op_tied_results(op);
-  for (uint16_t i = 0; i < op->tied_result_count; ++i) {
-    const loom_tied_result_t tied = tied_results[i];
-    if (tied.result_index >= op->result_count ||
-        tied.operand_index >= op->operand_count) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "low allocation saw malformed tied result metadata");
-    }
-    if (results[tied.result_index] != result_id) {
-      continue;
-    }
-    if (*out_has_tie) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "low allocation result value has multiple tied operands");
-    }
-    if (tied.has_type_change) {
-      return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "low allocation requires explicit materialization for "
-          "type-changing tied results");
-    }
-    *out_has_tie = true;
-    *out_operand_id = operands[tied.operand_index];
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_allocation_assign_tied_interval(
     loom_low_allocation_build_state_t* state,
     const loom_liveness_interval_t* interval, bool* out_assigned) {
   *out_assigned = false;
-  bool has_tie = false;
-  loom_value_id_t tied_operand_id = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_allocation_tied_operand_for_result(
-      state->module, interval->value_id, &has_tie, &tied_operand_id));
-  if (!has_tie) {
+  loom_value_ordinal_t result_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_value_ordinal_for_interval(
+      state, interval, &result_ordinal));
+  const loom_low_placement_relation_t* relation =
+      loom_low_allocation_first_placement_relation(
+          state, result_ordinal, LOOM_LOW_PLACEMENT_CAUSE_TIED_RESULT);
+  if (!relation) {
     return iree_ok_status();
   }
 
+  const loom_value_id_t tied_operand_id =
+      loom_low_placement_value_id(&state->placement, relation->source_ordinal);
   uint32_t operand_assignment_index = 0;
   IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
       state, tied_operand_id, &operand_assignment_index));
@@ -1360,120 +1355,193 @@ static iree_status_t loom_low_allocation_append_interval_at_location(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_allocation_append_coalesced_interval(
+static iree_status_t loom_low_allocation_append_relation_interval(
     loom_low_allocation_build_state_t* state,
     const loom_liveness_interval_t* interval,
-    const loom_low_allocation_assignment_t* storage_assignment,
-    uint32_t storage_offset, uint32_t unit_count,
+    const loom_low_placement_relation_t* relation,
     const loom_value_id_t* ignored_value_ids, uint16_t ignored_value_count,
     bool* out_assigned) {
   *out_assigned = false;
-  if (!loom_low_allocation_assignment_is_coalescable(storage_assignment) ||
-      !loom_low_allocation_assignment_unit_span_fits(
-          storage_assignment, storage_offset, unit_count)) {
-    return iree_ok_status();
-  }
-  return loom_low_allocation_append_interval_at_location(
-      state, interval, storage_assignment->descriptor_reg_class_id,
-      storage_assignment->location_kind,
-      storage_assignment->location_base + storage_offset, unit_count,
-      ignored_value_ids, ignored_value_count, out_assigned);
-}
-
-static iree_status_t loom_low_allocation_assign_slice_interval(
-    loom_low_allocation_build_state_t* state,
-    const loom_liveness_interval_t* interval, const loom_op_t* op,
-    bool* out_assigned) {
-  *out_assigned = false;
-  const int64_t offset = loom_low_slice_offset(op);
-  if (offset < 0 || offset > UINT32_MAX) {
+  if (relation->result_unit_offset > interval->unit_count ||
+      relation->unit_count >
+          interval->unit_count - relation->result_unit_offset) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "low allocation saw malformed low.slice offset");
+                            "allocation placement relation exceeds result "
+                            "interval units");
   }
-  const uint32_t source_offset = (uint32_t)offset;
   uint32_t source_assignment_index = 0;
-  const loom_value_id_t source_value_id = loom_low_slice_source(op);
+  const loom_value_id_t source_value_id =
+      loom_low_placement_value_id(&state->placement, relation->source_ordinal);
   IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
       state, source_value_id, &source_assignment_index));
   const loom_low_allocation_assignment_t* source_assignment =
       &state->assignments[source_assignment_index];
-  return loom_low_allocation_append_coalesced_interval(
-      state, interval, source_assignment, source_offset, interval->unit_count,
-      &source_value_id, /*ignored_value_count=*/1, out_assigned);
+  if (!loom_low_allocation_assignment_is_coalescable(source_assignment)) {
+    return iree_ok_status();
+  }
+  if (!loom_low_allocation_assignment_unit_span_fits(
+          source_assignment, relation->source_unit_offset,
+          relation->unit_count)) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "allocation placement relation exceeds source "
+                            "assignment units");
+  }
+  const uint32_t source_unit_location =
+      source_assignment->location_base + relation->source_unit_offset;
+  if (source_unit_location < relation->result_unit_offset) {
+    return iree_ok_status();
+  }
+  const uint32_t result_location_base =
+      source_unit_location - relation->result_unit_offset;
+  return loom_low_allocation_append_interval_at_location(
+      state, interval, source_assignment->descriptor_reg_class_id,
+      source_assignment->location_kind, result_location_base,
+      interval->unit_count, ignored_value_ids, ignored_value_count,
+      out_assigned);
+}
+
+static iree_status_t loom_low_allocation_assign_relation_interval(
+    loom_low_allocation_build_state_t* state,
+    const loom_liveness_interval_t* interval,
+    const loom_low_placement_relation_t* relation, bool* out_assigned) {
+  *out_assigned = false;
+  const loom_value_id_t source_value_id =
+      loom_low_placement_value_id(&state->placement, relation->source_ordinal);
+  return loom_low_allocation_append_relation_interval(
+      state, interval, relation, &source_value_id,
+      /*ignored_value_count=*/1, out_assigned);
 }
 
 static iree_status_t loom_low_allocation_assign_concat_interval(
     loom_low_allocation_build_state_t* state,
-    const loom_liveness_interval_t* interval, const loom_op_t* op,
-    bool* out_assigned) {
+    const loom_liveness_interval_t* interval,
+    const loom_low_placement_relation_range_t* range, bool* out_assigned) {
   *out_assigned = false;
-  loom_value_slice_t sources = loom_low_concat_sources(op);
-  if (sources.count == 0) {
+  if (range->count == 0) {
     return iree_ok_status();
   }
 
-  uint32_t first_assignment_index = 0;
-  IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
-      state, sources.values[0], &first_assignment_index));
-  const loom_low_allocation_assignment_t* first_assignment =
-      &state->assignments[first_assignment_index];
-  if (!loom_low_allocation_assignment_is_coalescable(first_assignment)) {
+  uint16_t ignored_value_count = 0;
+  for (uint32_t i = 0; i < range->count; ++i) {
+    const loom_low_placement_relation_t* relation =
+        &state->placement.relations[range->start + i];
+    if (relation->cause != LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT) {
+      continue;
+    }
+    if (ignored_value_count == UINT16_MAX) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low.concat placement source count exceeds "
+                              "uint16_t");
+    }
+    ++ignored_value_count;
+  }
+  if (ignored_value_count == 0) {
     return iree_ok_status();
   }
-  uint32_t expected_base = first_assignment->location_base;
+  loom_value_id_t inline_ignored_value_ids[8];
+  loom_value_id_t* ignored_value_ids = inline_ignored_value_ids;
+  if (ignored_value_count > IREE_ARRAYSIZE(inline_ignored_value_ids)) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        state->arena, ignored_value_count, sizeof(*ignored_value_ids),
+        (void**)&ignored_value_ids));
+  }
+
+  uint32_t result_location_base = 0;
   uint32_t coalesced_unit_count = 0;
-  for (uint16_t i = 0; i < sources.count; ++i) {
+  uint16_t ignored_value_index = 0;
+  bool has_result_location_base = false;
+  for (uint32_t i = 0; i < range->count; ++i) {
+    const loom_low_placement_relation_t* relation =
+        &state->placement.relations[range->start + i];
+    if (relation->cause != LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT) {
+      continue;
+    }
     uint32_t source_assignment_index = 0;
+    const loom_value_id_t source_value_id = loom_low_placement_value_id(
+        &state->placement, relation->source_ordinal);
+    ignored_value_ids[ignored_value_index++] = source_value_id;
     IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
-        state, sources.values[i], &source_assignment_index));
+        state, source_value_id, &source_assignment_index));
     const loom_low_allocation_assignment_t* source_assignment =
         &state->assignments[source_assignment_index];
-    if (!loom_low_allocation_assignment_is_coalescable(source_assignment) ||
-        source_assignment->location_kind != first_assignment->location_kind ||
-        source_assignment->descriptor_reg_class_id !=
-            first_assignment->descriptor_reg_class_id ||
-        source_assignment->location_base != expected_base) {
+    if (!loom_low_allocation_assignment_is_coalescable(source_assignment)) {
       return iree_ok_status();
     }
-    if (source_assignment->location_count > UINT32_MAX - coalesced_unit_count) {
+    if (!loom_low_allocation_assignment_unit_span_fits(
+            source_assignment, relation->source_unit_offset,
+            relation->unit_count)) {
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "low.concat placement relation exceeds source "
+                              "assignment units");
+    }
+    const uint32_t source_unit_location =
+        source_assignment->location_base + relation->source_unit_offset;
+    if (source_unit_location < relation->result_unit_offset) {
+      return iree_ok_status();
+    }
+    const uint32_t candidate_base =
+        source_unit_location - relation->result_unit_offset;
+    if (!has_result_location_base) {
+      result_location_base = candidate_base;
+      has_result_location_base = true;
+    } else if (result_location_base != candidate_base) {
+      return iree_ok_status();
+    }
+    if (relation->unit_count > UINT32_MAX - coalesced_unit_count) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "low.concat coalesced unit count exceeds u32");
     }
-    coalesced_unit_count += source_assignment->location_count;
-    if (expected_base > UINT32_MAX - source_assignment->location_count) {
-      return iree_ok_status();
-    }
-    expected_base += source_assignment->location_count;
+    coalesced_unit_count += relation->unit_count;
   }
   if (coalesced_unit_count != interval->unit_count) {
-    return iree_ok_status();
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "low.concat placement relations do not cover the "
+                            "result interval");
   }
+  const loom_value_id_t first_source_value_id = ignored_value_ids[0];
+  uint32_t first_assignment_index = 0;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
+      state, first_source_value_id, &first_assignment_index));
+  const loom_low_allocation_assignment_t* first_assignment =
+      &state->assignments[first_assignment_index];
   return loom_low_allocation_append_interval_at_location(
       state, interval, first_assignment->descriptor_reg_class_id,
-      first_assignment->location_kind, first_assignment->location_base,
-      interval->unit_count, sources.values, sources.count, out_assigned);
+      first_assignment->location_kind, result_location_base,
+      interval->unit_count, ignored_value_ids, ignored_value_count,
+      out_assigned);
 }
 
 static iree_status_t loom_low_allocation_assign_structural_interval(
     loom_low_allocation_build_state_t* state,
     const loom_liveness_interval_t* interval, bool* out_assigned) {
   *out_assigned = false;
-  const loom_value_t* value =
-      loom_module_value(state->module, interval->value_id);
-  if (loom_value_is_block_arg(value)) {
-    return iree_ok_status();
-  }
-  const loom_op_t* op = loom_value_def_op(value);
-  if (!op) {
-    return iree_ok_status();
-  }
-  if (loom_low_slice_isa(op)) {
-    return loom_low_allocation_assign_slice_interval(state, interval, op,
-                                                     out_assigned);
-  }
-  if (loom_low_concat_isa(op)) {
-    return loom_low_allocation_assign_concat_interval(state, interval, op,
-                                                      out_assigned);
+  loom_value_ordinal_t result_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_value_ordinal_for_interval(
+      state, interval, &result_ordinal));
+  const loom_low_placement_relation_range_t range =
+      loom_low_placement_relation_range_for_value_ordinal(&state->placement,
+                                                          result_ordinal);
+  for (uint32_t i = 0; i < range.count; ++i) {
+    const loom_low_placement_relation_t* relation =
+        &state->placement.relations[range.start + i];
+    switch (relation->cause) {
+      case LOOM_LOW_PLACEMENT_CAUSE_LOW_COPY:
+      case LOOM_LOW_PLACEMENT_CAUSE_LOW_SLICE: {
+        IREE_RETURN_IF_ERROR(loom_low_allocation_assign_relation_interval(
+            state, interval, relation, out_assigned));
+        if (*out_assigned) {
+          return iree_ok_status();
+        }
+        break;
+      }
+      case LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT: {
+        IREE_RETURN_IF_ERROR(loom_low_allocation_assign_concat_interval(
+            state, interval, &range, out_assigned));
+        return iree_ok_status();
+      }
+      default:
+        break;
+    }
   }
   return iree_ok_status();
 }
@@ -1485,7 +1553,9 @@ static iree_host_size_t loom_low_allocation_count_copy_ops(
   loom_region_for_each_block(body, block) {
     loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
-      if (loom_low_copy_isa(op)) ++copy_count;
+      if (loom_low_copy_isa(op)) {
+        ++copy_count;
+      }
     }
   }
   return copy_count;
@@ -2378,204 +2448,133 @@ static iree_status_t loom_low_allocation_map_assignment_index(
                           (unsigned)value_id);
 }
 
-static iree_status_t loom_low_allocation_tied_values_for_op(
-    const loom_op_t* op, loom_tied_result_t tied,
-    loom_value_id_t* out_result_id, loom_value_id_t* out_operand_id) {
-  if (tied.result_index >= op->result_count ||
-      tied.operand_index >= op->operand_count) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "allocation table saw malformed tied result "
-                            "metadata");
+static bool loom_low_allocation_relation_cause_can_alias(
+    loom_low_placement_cause_t cause) {
+  switch (cause) {
+    case LOOM_LOW_PLACEMENT_CAUSE_TIED_RESULT:
+    case LOOM_LOW_PLACEMENT_CAUSE_LOW_COPY:
+    case LOOM_LOW_PLACEMENT_CAUSE_LOW_SLICE:
+    case LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT:
+      return true;
+    default:
+      return false;
   }
-  if (tied.has_type_change) {
+}
+
+static iree_status_t loom_low_allocation_assignment_value_ordinal(
+    const loom_low_allocation_table_t* table,
+    const loom_low_allocation_assignment_t* assignment,
+    loom_value_ordinal_t* out_value_ordinal) {
+  IREE_ASSERT_ARGUMENT(out_value_ordinal);
+  const loom_value_ordinal_t value_ordinal =
+      loom_module_value_ordinal_scratch_lookup(table->module,
+                                               assignment->value_id);
+  if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID ||
+      value_ordinal >= table->placement.value_count) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "allocation table requires explicit materialization for "
-        "type-changing tied results");
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation assignment value %u is outside the placement table",
+        (unsigned)assignment->value_id);
   }
-  const loom_value_id_t* results = loom_op_const_results(op);
-  const loom_value_id_t* operands = loom_op_const_operands(op);
-  *out_result_id = results[tied.result_index];
-  *out_operand_id = operands[tied.operand_index];
+  if (loom_low_placement_value_id(&table->placement, value_ordinal) !=
+      assignment->value_id) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation placement ordinal does not match assignment value");
+  }
+  *out_value_ordinal = value_ordinal;
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_allocation_values_are_tied(
-    const loom_region_t* body, loom_value_id_t lhs_value_id,
-    loom_value_id_t rhs_value_id, bool* out_are_tied) {
-  *out_are_tied = false;
-  loom_block_t* block = NULL;
-  loom_region_for_each_block(body, block) {
-    loom_op_t* op = NULL;
-    loom_block_for_each_op(block, op) {
-      const loom_tied_result_t* tied_results = loom_op_tied_results(op);
-      for (uint16_t i = 0; i < op->tied_result_count; ++i) {
-        loom_value_id_t result_id = LOOM_VALUE_ID_INVALID;
-        loom_value_id_t operand_id = LOOM_VALUE_ID_INVALID;
-        IREE_RETURN_IF_ERROR(loom_low_allocation_tied_values_for_op(
-            op, tied_results[i], &result_id, &operand_id));
-        if ((result_id == lhs_value_id && operand_id == rhs_value_id) ||
-            (result_id == rhs_value_id && operand_id == lhs_value_id)) {
-          *out_are_tied = true;
-          return iree_ok_status();
-        }
-      }
-    }
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_allocation_slice_pair_is_structural_alias(
-    const loom_low_allocation_assignment_t* lhs,
-    const loom_low_allocation_assignment_t* rhs, const loom_op_t* op,
-    bool* out_is_alias) {
-  *out_is_alias = false;
-  const int64_t offset = loom_low_slice_offset(op);
-  if (offset < 0 || offset > UINT32_MAX) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "allocation table saw malformed low.slice offset");
-  }
-  const uint32_t source_offset = (uint32_t)offset;
-  const loom_value_id_t source_id = loom_low_slice_source(op);
-  const loom_value_id_t result_id = loom_low_slice_result(op);
-  const loom_low_allocation_assignment_t* source_assignment = NULL;
-  const loom_low_allocation_assignment_t* result_assignment = NULL;
-  if (lhs->value_id == source_id && rhs->value_id == result_id) {
-    source_assignment = lhs;
-    result_assignment = rhs;
-  } else if (rhs->value_id == source_id && lhs->value_id == result_id) {
-    source_assignment = rhs;
-    result_assignment = lhs;
-  } else {
-    return iree_ok_status();
-  }
-  *out_is_alias = loom_low_allocation_assignment_subranges_match(
-      result_assignment, /*lhs_start=*/0, source_assignment, source_offset,
-      result_assignment->location_count);
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_allocation_concat_pair_is_structural_alias(
+static bool loom_low_allocation_relation_matches_pair(
     const loom_low_allocation_table_t* table,
     const loom_low_allocation_assignment_t* lhs,
-    const loom_low_allocation_assignment_t* rhs, const loom_op_t* op,
-    bool* out_is_alias) {
-  *out_is_alias = false;
-  const loom_value_id_t result_id = loom_low_concat_result(op);
+    const loom_low_allocation_assignment_t* rhs,
+    const loom_low_placement_relation_t* relation) {
+  const loom_value_id_t result_value_id =
+      loom_low_placement_value_id(&table->placement, relation->result_ordinal);
+  const loom_value_id_t source_value_id =
+      loom_low_placement_value_id(&table->placement, relation->source_ordinal);
   const loom_low_allocation_assignment_t* result_assignment = NULL;
   const loom_low_allocation_assignment_t* source_assignment = NULL;
-  if (lhs->value_id == result_id) {
+  if (lhs->value_id == result_value_id && rhs->value_id == source_value_id) {
     result_assignment = lhs;
     source_assignment = rhs;
-  } else if (rhs->value_id == result_id) {
+  } else if (rhs->value_id == result_value_id &&
+             lhs->value_id == source_value_id) {
     result_assignment = rhs;
     source_assignment = lhs;
   } else {
-    return iree_ok_status();
+    return false;
   }
-
-  uint32_t result_offset = 0;
-  loom_value_slice_t sources = loom_low_concat_sources(op);
-  for (uint16_t i = 0; i < sources.count; ++i) {
-    const loom_value_id_t source_id = sources.values[i];
-    if (source_id == source_assignment->value_id) {
-      *out_is_alias = loom_low_allocation_assignment_subranges_match(
-          result_assignment, result_offset, source_assignment,
-          /*rhs_start=*/0, source_assignment->location_count);
-      return iree_ok_status();
-    }
-    uint32_t previous_assignment_index = 0;
-    IREE_RETURN_IF_ERROR(loom_low_allocation_map_assignment_index(
-        table, source_id, &previous_assignment_index));
-    const loom_low_allocation_assignment_t* previous_assignment =
-        &table->assignments[previous_assignment_index];
-    if (previous_assignment->location_count > UINT32_MAX - result_offset) {
-      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "low.concat structural offset exceeds u32");
-    }
-    result_offset += previous_assignment->location_count;
-  }
-  return iree_ok_status();
+  return loom_low_allocation_assignment_subranges_match(
+      result_assignment, relation->result_unit_offset, source_assignment,
+      relation->source_unit_offset, relation->unit_count);
 }
 
-static iree_status_t loom_low_allocation_pair_is_structural_alias(
+static iree_status_t loom_low_allocation_pair_is_placement_alias(
     const loom_low_allocation_table_t* table,
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs, bool* out_is_alias) {
   *out_is_alias = false;
-  const loom_value_t* lhs_value =
-      loom_module_value(table->module, lhs->value_id);
-  const loom_value_t* rhs_value =
-      loom_module_value(table->module, rhs->value_id);
-  const loom_op_t* lhs_def =
-      loom_value_is_block_arg(lhs_value) ? NULL : loom_value_def_op(lhs_value);
-  const loom_op_t* rhs_def =
-      loom_value_is_block_arg(rhs_value) ? NULL : loom_value_def_op(rhs_value);
-  bool lhs_alias = false;
-  if (lhs_def && loom_low_slice_isa(lhs_def)) {
-    IREE_RETURN_IF_ERROR(loom_low_allocation_slice_pair_is_structural_alias(
-        lhs, rhs, lhs_def, &lhs_alias));
-    if (lhs_alias) {
-      *out_is_alias = true;
-      return iree_ok_status();
+  loom_value_ordinal_t lhs_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_assignment_value_ordinal(table, lhs, &lhs_ordinal));
+  loom_value_ordinal_t rhs_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_assignment_value_ordinal(table, rhs, &rhs_ordinal));
+  const loom_value_ordinal_t ordinals[] = {lhs_ordinal, rhs_ordinal};
+  for (iree_host_size_t ordinal_index = 0;
+       ordinal_index < IREE_ARRAYSIZE(ordinals); ++ordinal_index) {
+    const loom_low_placement_relation_range_t range =
+        loom_low_placement_relation_range_for_value_ordinal(
+            &table->placement, ordinals[ordinal_index]);
+    for (uint32_t i = 0; i < range.count; ++i) {
+      const loom_low_placement_relation_t* relation =
+          &table->placement.relations[range.start + i];
+      if (!loom_low_allocation_relation_cause_can_alias(relation->cause)) {
+        continue;
+      }
+      if (loom_low_allocation_relation_matches_pair(table, lhs, rhs,
+                                                    relation)) {
+        *out_is_alias = true;
+        return iree_ok_status();
+      }
     }
-  } else if (lhs_def && loom_low_concat_isa(lhs_def)) {
-    IREE_RETURN_IF_ERROR(loom_low_allocation_concat_pair_is_structural_alias(
-        table, lhs, rhs, lhs_def, &lhs_alias));
-    if (lhs_alias) {
-      *out_is_alias = true;
-      return iree_ok_status();
-    }
   }
-  if (rhs_def == lhs_def) {
-    return iree_ok_status();
-  }
-  bool rhs_alias = false;
-  if (rhs_def && loom_low_slice_isa(rhs_def)) {
-    IREE_RETURN_IF_ERROR(loom_low_allocation_slice_pair_is_structural_alias(
-        lhs, rhs, rhs_def, &rhs_alias));
-  } else if (rhs_def && loom_low_concat_isa(rhs_def)) {
-    IREE_RETURN_IF_ERROR(loom_low_allocation_concat_pair_is_structural_alias(
-        table, lhs, rhs, rhs_def, &rhs_alias));
-  }
-  *out_is_alias = rhs_alias;
   return iree_ok_status();
 }
 
 static iree_status_t loom_low_allocation_verify_tied_result_assignments(
-    const loom_low_allocation_table_t* table, const loom_region_t* body) {
-  loom_block_t* block = NULL;
-  loom_region_for_each_block(body, block) {
-    loom_op_t* op = NULL;
-    loom_block_for_each_op(block, op) {
-      const loom_tied_result_t* tied_results = loom_op_tied_results(op);
-      for (uint16_t i = 0; i < op->tied_result_count; ++i) {
-        loom_value_id_t result_id = LOOM_VALUE_ID_INVALID;
-        loom_value_id_t operand_id = LOOM_VALUE_ID_INVALID;
-        IREE_RETURN_IF_ERROR(loom_low_allocation_tied_values_for_op(
-            op, tied_results[i], &result_id, &operand_id));
+    const loom_low_allocation_table_t* table) {
+  for (iree_host_size_t i = 0; i < table->placement.relation_count; ++i) {
+    const loom_low_placement_relation_t* relation =
+        &table->placement.relations[i];
+    if (relation->cause != LOOM_LOW_PLACEMENT_CAUSE_TIED_RESULT) {
+      continue;
+    }
+    const loom_value_id_t result_id = loom_low_placement_value_id(
+        &table->placement, relation->result_ordinal);
+    const loom_value_id_t operand_id = loom_low_placement_value_id(
+        &table->placement, relation->source_ordinal);
+    uint32_t result_assignment_index = 0;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_map_assignment_index(
+        table, result_id, &result_assignment_index));
+    uint32_t operand_assignment_index = 0;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_map_assignment_index(
+        table, operand_id, &operand_assignment_index));
 
-        uint32_t result_assignment_index = 0;
-        IREE_RETURN_IF_ERROR(loom_low_allocation_map_assignment_index(
-            table, result_id, &result_assignment_index));
-        uint32_t operand_assignment_index = 0;
-        IREE_RETURN_IF_ERROR(loom_low_allocation_map_assignment_index(
-            table, operand_id, &operand_assignment_index));
-
-        const loom_low_allocation_assignment_t* result_assignment =
-            &table->assignments[result_assignment_index];
-        const loom_low_allocation_assignment_t* operand_assignment =
-            &table->assignments[operand_assignment_index];
-        if (!loom_low_allocation_assignment_is_coalescable(result_assignment) ||
-            !loom_low_allocation_assignment_is_coalescable(
-                operand_assignment) ||
-            !loom_low_allocation_assignment_locations_equal(
-                result_assignment, operand_assignment)) {
-          return iree_make_status(
-              IREE_STATUS_FAILED_PRECONDITION,
-              "allocation tied result does not share the operand location");
-        }
-      }
+    const loom_low_allocation_assignment_t* result_assignment =
+        &table->assignments[result_assignment_index];
+    const loom_low_allocation_assignment_t* operand_assignment =
+        &table->assignments[operand_assignment_index];
+    if (!loom_low_allocation_assignment_is_coalescable(result_assignment) ||
+        !loom_low_allocation_assignment_is_coalescable(operand_assignment) ||
+        !loom_low_allocation_assignment_locations_equal(result_assignment,
+                                                        operand_assignment)) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "allocation tied result does not share the operand location");
     }
   }
   return iree_ok_status();
@@ -2900,6 +2899,25 @@ static iree_status_t loom_low_allocation_verify_table_contents(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "allocation table low function body is required");
   }
+  if (table->placement.module != table->module ||
+      table->placement.region != body ||
+      table->placement.value_ids != table->liveness.value_ids ||
+      table->placement.value_count != table->liveness.value_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "allocation table placement analysis must match liveness");
+  }
+  if (table->placement.value_count > 0 &&
+      !table->placement.ranges_by_result_ordinal) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "allocation table placement relation ranges are required");
+  }
+  if (table->placement.relation_count > 0 && !table->placement.relations) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "allocation table placement relations are required");
+  }
   if (table->assignment_count > 0 && !table->assignments) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "allocation table assignments are required");
@@ -2946,16 +2964,10 @@ static iree_status_t loom_low_allocation_verify_table_contents(
               table->target.descriptor_set, lhs, rhs)) {
         continue;
       }
-      bool pair_is_tied = false;
-      IREE_RETURN_IF_ERROR(loom_low_allocation_values_are_tied(
-          body, lhs->value_id, rhs->value_id, &pair_is_tied));
-      if (pair_is_tied) {
-        continue;
-      }
-      bool pair_is_structural_alias = false;
-      IREE_RETURN_IF_ERROR(loom_low_allocation_pair_is_structural_alias(
-          table, lhs, rhs, &pair_is_structural_alias));
-      if (pair_is_structural_alias) {
+      bool pair_is_placement_alias = false;
+      IREE_RETURN_IF_ERROR(loom_low_allocation_pair_is_placement_alias(
+          table, lhs, rhs, &pair_is_placement_alias));
+      if (pair_is_placement_alias) {
         continue;
       }
       return iree_make_status(
@@ -2964,7 +2976,7 @@ static iree_status_t loom_low_allocation_verify_table_contents(
     }
   }
   IREE_RETURN_IF_ERROR(
-      loom_low_allocation_verify_tied_result_assignments(table, body));
+      loom_low_allocation_verify_tied_result_assignments(table));
   for (iree_host_size_t i = 0; i < table->remark_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_verify_remark(
         &table->remarks[i], i, table->assignment_count));
@@ -3415,6 +3427,11 @@ iree_status_t loom_low_allocate_function(
         &value_domain, options->liveness_order, arena, &state.liveness);
   }
   if (iree_status_is_ok(status)) {
+    status = loom_low_placement_analyze_region(module, state.body,
+                                               &value_domain, &state.liveness,
+                                               arena, &state.placement);
+  }
+  if (iree_status_is_ok(status)) {
     status = loom_low_allocation_resolve_fixed_values(&state);
   }
   if (iree_status_is_ok(status)) {
@@ -3437,6 +3454,7 @@ iree_status_t loom_low_allocate_function(
         .function_op = low_func_op,
         .target = state.target,
         .liveness = state.liveness,
+        .placement = state.placement,
         .allocation_mode = loom_low_function_allocation(low_func_op),
         .assignments = state.assignments,
         .assignment_count = state.assignment_count,

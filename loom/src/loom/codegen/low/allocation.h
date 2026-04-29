@@ -18,6 +18,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/analysis/liveness.h"
 #include "loom/codegen/low/descriptors.h"
+#include "loom/codegen/low/placement.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
@@ -298,6 +299,8 @@ typedef struct loom_low_allocation_table_t {
   loom_low_resolved_target_t target;
   // Liveness analysis that produced the allocated intervals.
   loom_liveness_analysis_t liveness;
+  // Placement relations consumed while assigning intervals.
+  loom_low_placement_table_t placement;
   // Allocation mode requested on the low function, or 0 for the default.
   uint8_t allocation_mode;
   // Per-interval assignments in allocation order.

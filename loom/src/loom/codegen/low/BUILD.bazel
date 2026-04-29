@@ -46,6 +46,7 @@ loom_assert_no_dependencies(
         ":packet",
         ":packet_asm",
         ":packet_json",
+        ":placement",
         ":frame",
         ":preparation",
         ":pass_environment",
@@ -71,6 +72,7 @@ loom_assert_no_dependencies(
         ":packet",
         ":packet_asm",
         ":packet_json",
+        ":placement",
         ":frame",
         ":register_class_map",
         ":source_memory_plan",
@@ -247,6 +249,19 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "placement",
+    srcs = ["placement.c"],
+    hdrs = ["placement.h"],
+    deps = [
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "allocation",
     srcs = ["allocation.c"],
     hdrs = ["allocation.h"],
@@ -254,6 +269,7 @@ loom_cc_library(
         ":descriptors",
         ":diagnostics",
         ":function",
+        ":placement",
         ":register_class_map",
         ":requirements",
         ":target_binding",
