@@ -57,6 +57,17 @@ typedef struct loom_low_allocation_build_state_t {
   // Assignment indices by liveness local value ordinal. Missing entries contain
   // UINT32_MAX.
   uint32_t* assignment_indices_by_value_ordinal;
+  // Assignment-index window still live at the current interval start.
+  struct {
+    // Assignment indices sorted by increasing assignment end point.
+    uint32_t* assignment_indices;
+    // First active entry in |assignment_indices|.
+    iree_host_size_t start;
+    // Number of active entries in |assignment_indices|.
+    iree_host_size_t count;
+  } active;
+  // Maximum assigned location end indexed by descriptor register class ID.
+  uint32_t* max_assigned_location_end_by_reg_class;
   // Mutable spill materialization plan records being built.
   loom_low_allocation_spill_plan_t* spill_plans;
   // Mutable remark records being built.
@@ -851,8 +862,12 @@ static bool loom_low_allocation_candidate_conflicts(
       .location_base = location_base,
       .location_count = location_count,
   };
-  for (iree_host_size_t i = 0; i < state->assignment_count; ++i) {
-    const loom_low_allocation_assignment_t* existing = &state->assignments[i];
+  for (iree_host_size_t i = 0; i < state->active.count; ++i) {
+    const uint32_t assignment_index =
+        state->active.assignment_indices[state->active.start + i];
+    IREE_ASSERT_LT(assignment_index, state->assignment_count);
+    const loom_low_allocation_assignment_t* existing =
+        &state->assignments[assignment_index];
     if (loom_low_allocation_value_id_is_ignored(
             existing->value_id, ignored_value_ids, ignored_value_count)) {
       continue;
@@ -884,27 +899,53 @@ static bool loom_low_allocation_candidate_conflicts(
   return false;
 }
 
-static uint32_t loom_low_allocation_unbounded_search_limit(
+static uint32_t loom_low_allocation_assignment_location_end(
+    const loom_low_allocation_assignment_t* assignment) {
+  const uint64_t location_end =
+      (uint64_t)assignment->location_base + assignment->location_count;
+  return location_end > UINT32_MAX ? UINT32_MAX : (uint32_t)location_end;
+}
+
+static void loom_low_allocation_record_assignment_location_end(
+    loom_low_allocation_build_state_t* state,
+    const loom_low_allocation_assignment_t* assignment) {
+  IREE_ASSERT(state->max_assigned_location_end_by_reg_class != NULL);
+  const uint16_t reg_class_id = assignment->descriptor_reg_class_id;
+  IREE_ASSERT(reg_class_id != LOOM_LOW_REG_CLASS_NONE &&
+              reg_class_id < state->target.descriptor_set->reg_class_count);
+  const loom_low_reg_class_t* reg_class = loom_low_allocation_reg_class_at(
+      state->target.descriptor_set, reg_class_id);
+  if (assignment->location_kind !=
+      loom_low_allocation_reg_class_location_kind(reg_class)) {
+    return;
+  }
+  const uint32_t location_end =
+      loom_low_allocation_assignment_location_end(assignment);
+  if (state->max_assigned_location_end_by_reg_class[reg_class_id] <
+      location_end) {
+    state->max_assigned_location_end_by_reg_class[reg_class_id] = location_end;
+  }
+}
+
+static uint32_t loom_low_allocation_assigned_location_search_limit(
     const loom_low_allocation_build_state_t* state, uint16_t reg_class_id,
     loom_low_allocation_location_kind_t location_kind) {
   uint32_t max_end = 0;
-  for (iree_host_size_t i = 0; i < state->assignment_count; ++i) {
-    const loom_low_allocation_assignment_t* assignment = &state->assignments[i];
-    if (assignment->location_kind != location_kind) {
-      continue;
-    }
+  for (uint16_t i = 0; i < state->target.descriptor_set->reg_class_count; ++i) {
     if (!loom_low_allocation_reg_classes_share_storage(
-            state->target.descriptor_set, assignment->descriptor_reg_class_id,
-            reg_class_id)) {
+            state->target.descriptor_set, i, reg_class_id)) {
       continue;
     }
-    uint64_t assignment_end =
-        (uint64_t)assignment->location_base + assignment->location_count;
-    if (assignment_end > UINT32_MAX) {
-      return UINT32_MAX;
+    const loom_low_reg_class_t* reg_class =
+        loom_low_allocation_reg_class_at(state->target.descriptor_set, i);
+    if (loom_low_allocation_reg_class_location_kind(reg_class) !=
+        location_kind) {
+      continue;
     }
-    if ((uint32_t)assignment_end > max_end) {
-      max_end = (uint32_t)assignment_end;
+    const uint32_t assignment_end =
+        state->max_assigned_location_end_by_reg_class[i];
+    if (assignment_end > max_end) {
+      max_end = assignment_end;
     }
   }
   for (iree_host_size_t i = 0; i < state->resolved_fixed_value_count; ++i) {
@@ -962,7 +1003,7 @@ static bool loom_low_allocation_find_location(
   if (capacity.is_bounded) {
     last_base = capacity.max_units - interval->unit_count;
   } else {
-    last_base = loom_low_allocation_unbounded_search_limit(
+    last_base = loom_low_allocation_assigned_location_search_limit(
         state, capacity.descriptor_reg_class_id, capacity.location_kind);
   }
 
@@ -1179,6 +1220,52 @@ loom_low_allocation_first_placement_relation(
   return NULL;
 }
 
+static void loom_low_allocation_expire_active_assignments(
+    loom_low_allocation_build_state_t* state, uint32_t start_point) {
+  while (state->active.count > 0) {
+    const uint32_t assignment_index =
+        state->active.assignment_indices[state->active.start];
+    IREE_ASSERT_LT(assignment_index, state->assignment_count);
+    const loom_low_allocation_assignment_t* assignment =
+        &state->assignments[assignment_index];
+    if (assignment->end_point > start_point) {
+      break;
+    }
+    ++state->active.start;
+    --state->active.count;
+  }
+}
+
+static bool loom_low_allocation_active_assignment_less(
+    const loom_low_allocation_build_state_t* state, uint32_t lhs_index,
+    uint32_t rhs_index) {
+  const loom_low_allocation_assignment_t* lhs = &state->assignments[lhs_index];
+  const loom_low_allocation_assignment_t* rhs = &state->assignments[rhs_index];
+  if (lhs->end_point != rhs->end_point) {
+    return lhs->end_point < rhs->end_point;
+  }
+  return lhs_index < rhs_index;
+}
+
+static void loom_low_allocation_activate_assignment(
+    loom_low_allocation_build_state_t* state, uint32_t assignment_index) {
+  IREE_ASSERT(state->active.assignment_indices != NULL);
+  IREE_ASSERT_LT(assignment_index, state->assignment_count);
+  iree_host_size_t insert_index = state->active.start + state->active.count;
+  while (insert_index > state->active.start) {
+    const uint32_t previous_assignment_index =
+        state->active.assignment_indices[insert_index - 1];
+    if (loom_low_allocation_active_assignment_less(
+            state, previous_assignment_index, assignment_index)) {
+      break;
+    }
+    state->active.assignment_indices[insert_index] = previous_assignment_index;
+    --insert_index;
+  }
+  state->active.assignment_indices[insert_index] = assignment_index;
+  ++state->active.count;
+}
+
 static iree_status_t loom_low_allocation_append_assignment(
     loom_low_allocation_build_state_t* state,
     const loom_low_allocation_assignment_t* assignment,
@@ -1206,6 +1293,8 @@ static iree_status_t loom_low_allocation_append_assignment(
   const uint32_t assignment_index = (uint32_t)state->assignment_count;
   state->assignments[state->assignment_count++] = *assignment;
   state->assignment_indices_by_value_ordinal[value_ordinal] = assignment_index;
+  loom_low_allocation_record_assignment_location_end(state, assignment);
+  loom_low_allocation_activate_assignment(state, assignment_index);
   if (out_assignment_index) {
     *out_assignment_index = assignment_index;
   }
@@ -2158,7 +2247,7 @@ static iree_status_t loom_low_allocation_find_edge_copy_temporary(
     }
     last_location = capacity.max_units - 1u;
   } else {
-    last_location = loom_low_allocation_unbounded_search_limit(
+    last_location = loom_low_allocation_assigned_location_search_limit(
         state, storage_class->descriptor_reg_class_id,
         storage_class->location_kind);
     if (last_location == UINT32_MAX) {
@@ -2317,6 +2406,19 @@ static iree_status_t loom_low_allocation_assign_intervals(
   for (iree_host_size_t i = 0; i < state->liveness.value_count; ++i) {
     state->assignment_indices_by_value_ordinal[i] = UINT32_MAX;
   }
+  state->active.assignment_indices = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(state->arena, allocatable_count,
+                                sizeof(*state->active.assignment_indices),
+                                (void**)&state->active.assignment_indices));
+  state->max_assigned_location_end_by_reg_class = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->arena, state->target.descriptor_set->reg_class_count,
+      sizeof(*state->max_assigned_location_end_by_reg_class),
+      (void**)&state->max_assigned_location_end_by_reg_class));
+  memset(state->max_assigned_location_end_by_reg_class, 0,
+         state->target.descriptor_set->reg_class_count *
+             sizeof(*state->max_assigned_location_end_by_reg_class));
   state->spill_plans = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       state->arena, allocatable_count, sizeof(*state->spill_plans),
@@ -2340,6 +2442,8 @@ static iree_status_t loom_low_allocation_assign_intervals(
 
   for (iree_host_size_t i = 0; i < allocatable_count; ++i) {
     const loom_liveness_interval_t* interval = intervals[i];
+    loom_low_allocation_expire_active_assignments(state, interval->start_point);
+
     bool assigned_fixed_interval = false;
     IREE_RETURN_IF_ERROR(loom_low_allocation_assign_fixed_interval(
         state, interval, &assigned_fixed_interval));
