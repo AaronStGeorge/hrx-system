@@ -22,6 +22,13 @@ loom_cc_library(
     "compare.c"
     "facts.c"
     "tables.c"
+    "tables.h"
+    "tables/analysis.c"
+    "tables/arithmetic.c"
+    "tables/bitwise.c"
+    "tables/comparison.c"
+    "tables/conversion.c"
+    "tables/math.c"
     "verify.c"
   DEPS
     loom::src::loom::error::emitter

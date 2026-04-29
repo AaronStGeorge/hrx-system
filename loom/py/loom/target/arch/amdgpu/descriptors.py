@@ -42,6 +42,7 @@ from loom.target.low_descriptors import (
     Constraint,
     ConstraintKind,
     Descriptor,
+    DescriptorCategory,
     DescriptorFlag,
     DescriptorSet,
     Effect,
@@ -123,6 +124,60 @@ _SCHEDULE_WAIT_LOAD = "amdgpu.wait.load"
 _SCHEDULE_WAIT_STORE = "amdgpu.wait.store"
 _SCHEDULE_WAIT_ALU = "amdgpu.wait.alu"
 _SCHEDULE_WAIT_IDLE = "amdgpu.wait.idle"
+
+AMDGPU_SCALAR_DESCRIPTOR_CATEGORY = DescriptorCategory(
+    "scalar",
+    doc="Scalar ALU, scalar data movement, and SGPR descriptors.",
+)
+AMDGPU_VECTOR_DESCRIPTOR_CATEGORY = DescriptorCategory(
+    "vector",
+    doc="Vector ALU, vector data movement, and VGPR descriptors.",
+)
+AMDGPU_CONVERT_DESCRIPTOR_CATEGORY = DescriptorCategory(
+    "convert",
+    doc="Numeric conversion descriptors.",
+)
+AMDGPU_COMPARE_SELECT_DESCRIPTOR_CATEGORY = DescriptorCategory(
+    "compare_select",
+    doc="Comparison and predicate-controlled selection descriptors.",
+)
+AMDGPU_MEMORY_DESCRIPTOR_CATEGORY = DescriptorCategory(
+    "memory",
+    doc="Non-atomic memory load, store, and transfer descriptors.",
+)
+AMDGPU_ATOMIC_DESCRIPTOR_CATEGORY = DescriptorCategory(
+    "atomic",
+    doc="Atomic memory operation descriptors.",
+)
+AMDGPU_MATRIX_DESCRIPTOR_CATEGORY = DescriptorCategory(
+    "matrix",
+    doc="Matrix, dot, WMMA, MFMA, and SWMMAC descriptors.",
+)
+AMDGPU_CONTROL_DESCRIPTOR_CATEGORY = DescriptorCategory(
+    "control",
+    doc="Control, wait, barrier, and special state descriptors.",
+)
+AMDGPU_CACHE_DESCRIPTOR_CATEGORY = DescriptorCategory(
+    "cache",
+    doc="Cache control and prefetch descriptors.",
+)
+AMDGPU_MISC_DESCRIPTOR_CATEGORY = DescriptorCategory(
+    "misc",
+    doc="Descriptors that do not fit another stable AMDGPU category.",
+)
+
+AMDGPU_DESCRIPTOR_CATEGORIES = (
+    AMDGPU_SCALAR_DESCRIPTOR_CATEGORY,
+    AMDGPU_VECTOR_DESCRIPTOR_CATEGORY,
+    AMDGPU_CONVERT_DESCRIPTOR_CATEGORY,
+    AMDGPU_COMPARE_SELECT_DESCRIPTOR_CATEGORY,
+    AMDGPU_MEMORY_DESCRIPTOR_CATEGORY,
+    AMDGPU_ATOMIC_DESCRIPTOR_CATEGORY,
+    AMDGPU_MATRIX_DESCRIPTOR_CATEGORY,
+    AMDGPU_CONTROL_DESCRIPTOR_CATEGORY,
+    AMDGPU_CACHE_DESCRIPTOR_CATEGORY,
+    AMDGPU_MISC_DESCRIPTOR_CATEGORY,
+)
 
 _COUNTER_VMEM_LOAD = 1
 _COUNTER_VMEM_STORE = 2
@@ -6235,6 +6290,7 @@ _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         ),
     ),
     descriptors=(),
+    categories=AMDGPU_DESCRIPTOR_CATEGORIES,
 )
 
 
@@ -6350,6 +6406,7 @@ _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         ),
     ),
     descriptors=(),
+    categories=AMDGPU_DESCRIPTOR_CATEGORIES,
 )
 
 _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
@@ -6482,6 +6539,7 @@ _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         ),
     ),
     descriptors=(),
+    categories=AMDGPU_DESCRIPTOR_CATEGORIES,
 )
 
 _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
@@ -6752,6 +6810,7 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             flags=_PSEUDO_DEAD_REMOVABLE_FLAGS,
         ),
     ),
+    categories=AMDGPU_DESCRIPTOR_CATEGORIES,
 )
 
 
@@ -7050,6 +7109,58 @@ def amdgpu_common_reg_class_ids() -> tuple[tuple[str, int], ...]:
     return tuple(result)
 
 
+def _amdgpu_descriptor_category(descriptor: Descriptor) -> DescriptorCategory:
+    semantic_tag = descriptor.semantic_tag or ""
+    if semantic_tag.startswith(("matrix.", "dot.")):
+        return AMDGPU_MATRIX_DESCRIPTOR_CATEGORY
+    if ".atomic." in semantic_tag:
+        return AMDGPU_ATOMIC_DESCRIPTOR_CATEGORY
+    if semantic_tag.startswith("memory.cache."):
+        return AMDGPU_CACHE_DESCRIPTOR_CATEGORY
+    if semantic_tag.startswith("memory."):
+        return AMDGPU_MEMORY_DESCRIPTOR_CATEGORY
+    if semantic_tag.startswith(("control.", "special.")):
+        return AMDGPU_CONTROL_DESCRIPTOR_CATEGORY
+    if semantic_tag.startswith(("cmp.", "integer.compare.", "float.compare.")):
+        return AMDGPU_COMPARE_SELECT_DESCRIPTOR_CATEGORY
+    if semantic_tag.startswith("select."):
+        return AMDGPU_COMPARE_SELECT_DESCRIPTOR_CATEGORY
+    if semantic_tag.startswith("convert."):
+        return AMDGPU_CONVERT_DESCRIPTOR_CATEGORY
+    if descriptor.key.startswith("amdgpu.s_"):
+        return AMDGPU_SCALAR_DESCRIPTOR_CATEGORY
+    if descriptor.key.startswith("amdgpu.v_"):
+        return AMDGPU_VECTOR_DESCRIPTOR_CATEGORY
+    return AMDGPU_MISC_DESCRIPTOR_CATEGORY
+
+
+def _categorize_amdgpu_descriptors(
+    descriptors: tuple[Descriptor, ...],
+) -> tuple[Descriptor, ...]:
+    return tuple(
+        replace(descriptor, category=_amdgpu_descriptor_category(descriptor))
+        for descriptor in descriptors
+    )
+
+
+def amdgpu_descriptor_category_groups(
+    descriptors: tuple[Descriptor, ...],
+) -> tuple[tuple[DescriptorCategory, tuple[Descriptor, ...]], ...]:
+    """Groups AMDGPU descriptors by stable category while preserving order."""
+
+    grouped: dict[DescriptorCategory, list[Descriptor]] = {
+        category: [] for category in AMDGPU_DESCRIPTOR_CATEGORIES
+    }
+    for descriptor in descriptors:
+        category = descriptor.category or _amdgpu_descriptor_category(descriptor)
+        grouped[category].append(descriptor)
+    return tuple(
+        (category, tuple(grouped[category]))
+        for category in AMDGPU_DESCRIPTOR_CATEGORIES
+        if grouped[category]
+    )
+
+
 def _with_overlay_descriptors(
     base: DescriptorSet,
     spec: AmdgpuIsaFactSource,
@@ -7058,11 +7169,13 @@ def _with_overlay_descriptors(
     manual_descriptors = _manual_scalar_move_descriptors(spec)
     descriptor_set = replace(
         base,
-        descriptors=(
-            manual_descriptors[0],
-            *overlay_descriptors,
-            *manual_descriptors[1:],
-            *base.descriptors,
+        descriptors=_categorize_amdgpu_descriptors(
+            (
+                manual_descriptors[0],
+                *overlay_descriptors,
+                *manual_descriptors[1:],
+                *base.descriptors,
+            )
         ),
     )
     _validate_address_immediate_units(descriptor_set)

@@ -23,6 +23,17 @@ def descriptor_stable_id(key: str) -> int:
     return stable_id_from_string(key)
 
 
+def _validate_metadata_key(kind: str, key: str) -> None:
+    if not key:
+        raise ValueError(f"{kind} key must not be empty")
+    allowed = set("abcdefghijklmnopqrstuvwxyz0123456789._-")
+    if any(char not in allowed for char in key):
+        raise ValueError(
+            f"{kind} key {key!r} must contain only lowercase letters, "
+            "digits, '.', '_', or '-'"
+        )
+
+
 class CEnum(Enum):
     @property
     def c_name(self) -> str:
@@ -162,6 +173,22 @@ class DescriptorFlag(CEnum):
     TERMINATOR = "LOOM_LOW_DESCRIPTOR_FLAG_TERMINATOR"
     DEAD_REMOVABLE = "LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE"
     PSEUDO = "LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO"
+
+
+@dataclass(frozen=True, slots=True)
+class DescriptorCategory:
+    """Stable category for grouping related descriptors inside a set.
+
+    Categories are generator-facing metadata. They provide a semantic shard
+    boundary for large target-owned descriptor sets without deriving file layout
+    from incidental descriptor order.
+    """
+
+    key: str
+    doc: str = ""
+
+    def __post_init__(self) -> None:
+        _validate_metadata_key("descriptor category", self.key)
 
 
 @dataclass(frozen=True, slots=True)
@@ -339,6 +366,7 @@ class Descriptor:
     encoding_format_id: int = 0
     encoding_id: int = 0
     flags: tuple[DescriptorFlag, ...] = ()
+    category: DescriptorCategory | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -360,3 +388,26 @@ class DescriptorSet:
     descriptors: tuple[Descriptor, ...]
     register_parts: tuple[RegisterPart, ...] = ()
     enum_domains: tuple[EnumDomain, ...] = ()
+    categories: tuple[DescriptorCategory, ...] = ()
+    default_category: DescriptorCategory | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            self.default_category is not None
+            and self.default_category not in self.categories
+        ):
+            raise ValueError(
+                f"DescriptorSet '{self.key}': default_category "
+                f"'{self.default_category.key}' is not declared in categories"
+            )
+        for descriptor in self.descriptors:
+            if (
+                descriptor.category is not None
+                and self.categories
+                and descriptor.category not in self.categories
+            ):
+                raise ValueError(
+                    f"DescriptorSet '{self.key}': descriptor "
+                    f"'{descriptor.key}' category '{descriptor.category.key}' "
+                    "is not declared in categories"
+                )

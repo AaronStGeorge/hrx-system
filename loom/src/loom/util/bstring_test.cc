@@ -11,25 +11,13 @@
 namespace {
 
 // Test B-strings covering different lengths.
-static const uint8_t kEmpty[] = "\x00";
-static const uint8_t kX[] =
-    "\x01"
-    "x";
-static const uint8_t kTo[] =
-    "\x02"
-    "to";
-static const uint8_t kNsw[] =
-    "\x03"
-    "nsw";
-static const uint8_t kStep[] =
-    "\x04"
-    "step";
-static const uint8_t kHello[] =
-    "\x05"
-    "hello";
-static const uint8_t kIterArgs[] =
-    "\x09"
-    "iter_args";
+static const uint8_t kEmpty[] = LOOM_BSTRING_LITERAL(0, "");
+static const uint8_t kX[] = LOOM_BSTRING_LITERAL(1, "x");
+static const uint8_t kTo[] = LOOM_BSTRING_LITERAL(2, "to");
+static const uint8_t kNsw[] = LOOM_BSTRING_LITERAL(3, "nsw");
+static const uint8_t kStep[] = LOOM_BSTRING_LITERAL(4, "step");
+static const uint8_t kHello[] = LOOM_BSTRING_LITERAL(5, "hello");
+static const uint8_t kIterArgs[] = LOOM_BSTRING_LITERAL(9, "iter_args");
 
 TEST(BString, Length) {
   EXPECT_EQ(loom_bstring_length(kEmpty), 0);
@@ -138,11 +126,27 @@ TEST(BString, ArrayTableLookup) {
   EXPECT_EQ(found, -1);
 }
 
+TEST(BString, InlineReferenceLiteral) {
+  static const loom_bstring_t kResult = LOOM_BSTRING_REF(6, "result");
+
+  EXPECT_EQ(loom_bstring_length(kResult), 6);
+  EXPECT_TRUE(loom_bstring_equal(kResult, IREE_SV("result")));
+}
+
+TEST(BString, InlineOpNameReferenceLiteral) {
+  static const loom_bstring_t kOpName = LOOM_OP_NAME_REF(12, 6, "vector.empty");
+
+  EXPECT_EQ(kOpName[0], 12);
+  EXPECT_EQ(kOpName[1], 6);
+  EXPECT_EQ(std::string_view(reinterpret_cast<const char*>(kOpName + 2), 12),
+            "vector.empty");
+}
+
 // clang-format off
 static const uint8_t kPackedStrings[] =
-    LOOM_BSTRING_LITERAL("\x00", "")
-    LOOM_BSTRING_LITERAL("\x05", "hello")
-    LOOM_BSTRING_LITERAL("\x04", "step");
+    LOOM_BSTRING_LITERAL(0, "")
+    LOOM_BSTRING_LITERAL(5, "hello")
+    LOOM_BSTRING_LITERAL(4, "step");
 // clang-format on
 
 enum {

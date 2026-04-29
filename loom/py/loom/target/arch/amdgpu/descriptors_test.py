@@ -15,15 +15,23 @@ from loom.target.arch.amdgpu.descriptors import (
     _ADDRESS_OFFSET_DWORD_ENCODING_ID,
     _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID,
     _GFX12_TH_ATOMIC_RETURN_VALUE,
+    AMDGPU_ATOMIC_DESCRIPTOR_CATEGORY,
+    AMDGPU_COMPARE_SELECT_DESCRIPTOR_CATEGORY,
+    AMDGPU_CONTROL_DESCRIPTOR_CATEGORY,
+    AMDGPU_DESCRIPTOR_CATEGORIES,
+    AMDGPU_MEMORY_DESCRIPTOR_CATEGORY,
+    AMDGPU_VECTOR_DESCRIPTOR_CATEGORY,
     AmdgpuAtomicKind,
     AmdgpuAtomicMemorySpace,
     AmdgpuAtomicOperationKind,
     AmdgpuAtomicValueKind,
     AmdgpuMemoryAddressForm,
+    _categorize_amdgpu_descriptors,
     _gfx12_core_overlays,
     _gfx1250_core_overlays,
     _validate_address_immediate_units,
     amdgpu_atomic_descriptor_candidates,
+    amdgpu_descriptor_category_groups,
 )
 from loom.target.low_descriptors import (
     Descriptor,
@@ -73,6 +81,78 @@ def _immediate_default(immediates: tuple[Immediate, ...], name: str) -> int:
         if immediate.field_name == name:
             return immediate.default_value
     raise AssertionError(f"missing immediate '{name}'")
+
+
+def _descriptor(key: str, semantic_tag: str) -> Descriptor:
+    return Descriptor(
+        key=key,
+        mnemonic=None,
+        semantic_tag=semantic_tag,
+        operands=(),
+        schedule_class="amdgpu.test",
+    )
+
+
+def test_amdgpu_descriptor_categories_are_stable() -> None:
+    assert tuple(category.key for category in AMDGPU_DESCRIPTOR_CATEGORIES) == (
+        "scalar",
+        "vector",
+        "convert",
+        "compare_select",
+        "memory",
+        "atomic",
+        "matrix",
+        "control",
+        "cache",
+        "misc",
+    )
+
+
+def test_amdgpu_descriptor_categorization_uses_semantics() -> None:
+    descriptors = _categorize_amdgpu_descriptors(
+        (
+            _descriptor("amdgpu.v_add_u32", "integer.add.u32"),
+            _descriptor("amdgpu.v_cmp_eq_i32", "cmp.i32.eq"),
+            _descriptor("amdgpu.buffer_load_dword", "memory.load.u32"),
+            _descriptor("amdgpu.global_atomic_add_u32", "memory.global.atomic.add.u32"),
+            _descriptor("amdgpu.s_waitcnt", "control.waitcnt"),
+        )
+    )
+
+    assert tuple(descriptor.category for descriptor in descriptors) == (
+        AMDGPU_VECTOR_DESCRIPTOR_CATEGORY,
+        AMDGPU_COMPARE_SELECT_DESCRIPTOR_CATEGORY,
+        AMDGPU_MEMORY_DESCRIPTOR_CATEGORY,
+        AMDGPU_ATOMIC_DESCRIPTOR_CATEGORY,
+        AMDGPU_CONTROL_DESCRIPTOR_CATEGORY,
+    )
+
+
+def test_amdgpu_descriptor_category_groups_preserve_category_and_descriptor_order() -> (
+    None
+):
+    descriptors = _categorize_amdgpu_descriptors(
+        (
+            _descriptor("amdgpu.buffer_load_dword", "memory.load.u32"),
+            _descriptor("amdgpu.v_add_u32", "integer.add.u32"),
+            _descriptor("amdgpu.global_atomic_add_u32", "memory.global.atomic.add.u32"),
+            _descriptor("amdgpu.buffer_store_dword", "memory.store.u32"),
+        )
+    )
+
+    groups = amdgpu_descriptor_category_groups(descriptors)
+
+    assert [category for category, _ in groups] == [
+        AMDGPU_VECTOR_DESCRIPTOR_CATEGORY,
+        AMDGPU_MEMORY_DESCRIPTOR_CATEGORY,
+        AMDGPU_ATOMIC_DESCRIPTOR_CATEGORY,
+    ]
+    assert [descriptor.key for _, group in groups for descriptor in group] == [
+        "amdgpu.v_add_u32",
+        "amdgpu.buffer_load_dword",
+        "amdgpu.buffer_store_dword",
+        "amdgpu.global_atomic_add_u32",
+    ]
 
 
 def test_atomic_descriptor_candidates_are_derived_from_overlay_metadata() -> None:

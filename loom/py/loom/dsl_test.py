@@ -100,6 +100,7 @@ from loom.dsl import (
     NoAncestor,
     OffsetCountMatchesRank,
     Op,
+    OpCategory,
     Operand,
     OpPhase,
     PackedPayloadBitCountMatchesStorage,
@@ -1226,6 +1227,55 @@ class TestDialect:
         g = Dialect("target", default_phase=OpPhase.MODULE_METADATA)
         assert g.default_phase == OpPhase.MODULE_METADATA
 
+    def test_categories(self) -> None:
+        structural = OpCategory("structure", doc="Structural ops.")
+        compute = OpCategory("compute", doc="Compute ops.")
+
+        g = Dialect(
+            "vector",
+            categories=[structural, compute],
+            default_category=compute,
+        )
+
+        assert g.categories == (structural, compute)
+        assert g.default_category == compute
+
+    def test_default_category_must_be_declared(self) -> None:
+        with pytest.raises(
+            ValueError,
+            match=(
+                r"Dialect 'vector': default_category 'compute' "
+                r"is not declared in categories"
+            ),
+        ):
+            Dialect(
+                "vector",
+                categories=[OpCategory("structure")],
+                default_category=OpCategory("compute"),
+            )
+
+
+class TestOpCategory:
+    def test_basic(self) -> None:
+        category = OpCategory("memory.atomic", doc="Atomic memory ops.")
+
+        assert category.key == "memory.atomic"
+        assert category.doc == "Atomic memory ops."
+
+    def test_rejects_empty_key(self) -> None:
+        with pytest.raises(ValueError, match="op category key must not be empty"):
+            OpCategory("")
+
+    def test_rejects_unstable_key_spelling(self) -> None:
+        with pytest.raises(
+            ValueError,
+            match=(
+                r"op category key 'Memory/Atomic' must contain only lowercase "
+                r"letters, digits, '.', '_', or '-'"
+            ),
+        ):
+            OpCategory("Memory/Atomic")
+
 
 # ============================================================================
 # Type declaration
@@ -1287,6 +1337,42 @@ class TestOp:
         )
 
         assert op.effective_phase == OpPhase.MODULE_METADATA
+
+    def test_category_metadata(self) -> None:
+        coordinate = OpCategory("coordinate")
+        memory = OpCategory("memory")
+        dialect = Dialect("vector", categories=[coordinate, memory])
+        op = Op("vector.iota", group=dialect, category=coordinate)
+
+        assert op.category == coordinate
+        assert op.effective_category == coordinate
+
+    def test_effective_category_uses_dialect_default(self) -> None:
+        compute = OpCategory("compute")
+        op = Op(
+            "vector.addf",
+            group=Dialect(
+                "vector",
+                categories=[compute],
+                default_category=compute,
+            ),
+        )
+
+        assert op.effective_category == compute
+
+    def test_category_must_be_declared_by_dialect(self) -> None:
+        with pytest.raises(
+            ValueError,
+            match=(
+                r"Op 'vector\.load': category 'memory' is not declared "
+                r"by dialect 'vector'"
+            ),
+        ):
+            Op(
+                "vector.load",
+                group=Dialect("vector", categories=[OpCategory("compute")]),
+                category=OpCategory("memory"),
+            )
 
     def test_repr(self) -> None:
         op = Op("test.op")

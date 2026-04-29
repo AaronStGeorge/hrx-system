@@ -27,6 +27,7 @@ from loom.target.low_descriptors import (
     AsmImmediate,
     Constraint,
     ConstraintKind,
+    DescriptorCategory,
     DescriptorFlag,
     EncodingFieldValue,
     EnumDomain,
@@ -62,6 +63,73 @@ def test_generate_ireevm_core_descriptor_set() -> None:
     assert manifest["table_counts"]["asm_forms"] >= 9
     assert any(descriptor["key"] == "iree.vm.call.import.i32" for descriptor in manifest["descriptors"])
     assert any(form["mnemonic"] == "vm.add.i32" for form in manifest["asm_forms"])
+
+
+def test_descriptor_category_validates_stable_key_spelling() -> None:
+    category = DescriptorCategory("memory.atomic", doc="Atomic memory.")
+
+    assert category.key == "memory.atomic"
+    assert category.doc == "Atomic memory."
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"descriptor category key 'Memory/Atomic' must contain only "
+            r"lowercase letters, digits, '.', '_', or '-'"
+        ),
+    ):
+        DescriptorCategory("Memory/Atomic")
+
+
+def test_descriptor_set_validates_category_membership() -> None:
+    category = DescriptorCategory("control")
+    descriptor = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET.descriptors[0],
+        category=category,
+    )
+    descriptor_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        categories=(category,),
+        descriptors=(descriptor,),
+    )
+
+    assert descriptor_set.categories == (category,)
+    assert descriptor_set.descriptors[0].category == category
+
+
+def test_descriptor_set_rejects_unknown_default_category() -> None:
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"DescriptorSet 'test.low.core': default_category 'memory' "
+            r"is not declared in categories"
+        ),
+    ):
+        replace(
+            TEST_LOW_CORE_DESCRIPTOR_SET,
+            categories=(DescriptorCategory("control"),),
+            default_category=DescriptorCategory("memory"),
+        )
+
+
+def test_descriptor_set_rejects_unknown_descriptor_category() -> None:
+    descriptor = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET.descriptors[0],
+        category=DescriptorCategory("memory"),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            rf"DescriptorSet 'test.low.core': descriptor '{descriptor.key}' "
+            r"category 'memory' is not declared in categories"
+        ),
+    ):
+        replace(
+            TEST_LOW_CORE_DESCRIPTOR_SET,
+            categories=(DescriptorCategory("control"),),
+            descriptors=(descriptor,),
+        )
 
 
 def test_allowlist_closes_over_referenced_descriptor_tables() -> None:

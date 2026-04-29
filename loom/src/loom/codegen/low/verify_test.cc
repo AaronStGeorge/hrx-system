@@ -750,24 +750,24 @@ TEST_F(LowDescriptorVerifyTest, RejectsResultCountMismatch) {
 
 // clang-format off
 static const uint8_t kFeatureTestStrings[] =
-    LOOM_BSTRING_LITERAL("\x00", "")
-    LOOM_BSTRING_LITERAL("\x09", "test.core")
-    LOOM_BSTRING_LITERAL("\x0b", "test.target")
-    LOOM_BSTRING_LITERAL("\x0d", "test.features")
-    LOOM_BSTRING_LITERAL("\x08", "test.gpr")
-    LOOM_BSTRING_LITERAL("\x08", "test.alt")
-    LOOM_BSTRING_LITERAL("\x03", "dst")
-    LOOM_BSTRING_LITERAL("\x03", "lhs")
-    LOOM_BSTRING_LITERAL("\x03", "rhs")
-    LOOM_BSTRING_LITERAL("\x04", "exec")
-    LOOM_BSTRING_LITERAL("\x04", "mode")
-    LOOM_BSTRING_LITERAL("\x08", "test.alu")
-    LOOM_BSTRING_LITERAL("\x09", "test.mode")
-    LOOM_BSTRING_LITERAL("\x04", "fast")
-    LOOM_BSTRING_LITERAL("\x04", "slow")
-    LOOM_BSTRING_LITERAL("\x0c", "test.add.i32")
-    LOOM_BSTRING_LITERAL("\x07", "add.i32")
-    LOOM_BSTRING_LITERAL("\x0f", "integer.add.i32");
+    LOOM_BSTRING_LITERAL(0, "")
+    LOOM_BSTRING_LITERAL(9, "test.core")
+    LOOM_BSTRING_LITERAL(11, "test.target")
+    LOOM_BSTRING_LITERAL(13, "test.features")
+    LOOM_BSTRING_LITERAL(8, "test.gpr")
+    LOOM_BSTRING_LITERAL(8, "test.alt")
+    LOOM_BSTRING_LITERAL(3, "dst")
+    LOOM_BSTRING_LITERAL(3, "lhs")
+    LOOM_BSTRING_LITERAL(3, "rhs")
+    LOOM_BSTRING_LITERAL(4, "exec")
+    LOOM_BSTRING_LITERAL(4, "mode")
+    LOOM_BSTRING_LITERAL(8, "test.alu")
+    LOOM_BSTRING_LITERAL(9, "test.mode")
+    LOOM_BSTRING_LITERAL(4, "fast")
+    LOOM_BSTRING_LITERAL(4, "slow")
+    LOOM_BSTRING_LITERAL(12, "test.add.i32")
+    LOOM_BSTRING_LITERAL(7, "add.i32")
+    LOOM_BSTRING_LITERAL(15, "integer.add.i32");
 // clang-format on
 
 enum {

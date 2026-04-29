@@ -27,7 +27,9 @@ from loom.assembly import (
 from loom.dsl import (
     ANY,
     ATTR_TYPE_I64_ARRAY,
+    ATTR_TYPE_SYMBOL,
     INTEGER,
+    SYMBOL_DEFINE,
     AttrDef,
     AttrMatchesElementType,
     BitRangeWithinElementWidth,
@@ -41,6 +43,7 @@ from loom.dsl import (
     LiteralMatchesElementType,
     MemoryAccessInterface,
     Op,
+    OpCategory,
     Operand,
     OpPhase,
     PackedPayloadBitCountMatchesStorage,
@@ -49,6 +52,7 @@ from loom.dsl import (
     Result,
     SameType,
     Successor,
+    SymbolDefinition,
     TotalBitCountEqual,
     TypeConstraint,
     TypeDef,
@@ -59,6 +63,8 @@ from loom.gen.c_tables import (
     TYPE_CONSTRAINT_MAP,
     generate_builders_c,
     generate_ops_h,
+    generate_sharded_tables_c,
+    generate_tables_aggregator_c,
     generate_tables_c,
     generate_type_registry,
 )
@@ -81,6 +87,19 @@ def test_generate_type_registry_emits_fact_domain_pointer() -> None:
     assert "extern const loom_value_fact_domain_t loom_test_handle_fact_domain;" in type_registry_c
     assert ".fact_domain = &loom_test_handle_fact_domain," in type_registry_c
     assert "loom_value_fact_type_domain_resolver_callback_make(\n          loom_type_registry_resolve_fact_domain, NULL)" in type_registry_c
+
+
+def test_generate_type_registry_omits_zero_default_descriptor_fields() -> None:
+    type_def = TypeDef(name="test.handle")
+
+    _, type_registry_c = generate_type_registry([type_def])
+
+    assert ".param_count = 0," not in type_registry_c
+    assert ".fact_domain = NULL," not in type_registry_c
+    assert ".semantic = LOOM_TYPE_SEMANTIC_ORDINARY," not in type_registry_c
+    assert ".contract_families = 0," not in type_registry_c
+    assert ".format_elements = NULL," not in type_registry_c
+    assert ".format_element_count = 0," not in type_registry_c
 
 
 def test_generate_type_registry_emits_type_semantics() -> None:
@@ -130,6 +149,88 @@ def test_generate_dialect_tables_emit_dense_op_semantics() -> None:
     assert "static const loom_op_semantics_t loom_test_semantics_array[] = {" in tables_c
     assert ".phase = LOOM_OP_PHASE_EXECUTABLE," in tables_c
     assert ".contract_families = LOOM_CONTRACT_VECTOR_COORDINATE," in tables_c
+    assert "loom_op_dialect_id(kind) != LOOM_DIALECT_TEST" in tables_c
+    assert "return loom_test_semantics_array[op_index];" in tables_c
+
+
+def test_generate_tables_omits_zero_default_vtable_fields() -> None:
+    op = Op("test.noop", group=Dialect("test"))
+
+    tables_c = generate_tables_c("test", 0x01, [op])
+
+    assert "static const loom_op_vtable_t loom_test_noop_vtable = {" in tables_c
+    assert "#define _BSTRING(length, value)" in tables_c
+    assert '.name = _OP_NAME(9, 4, "test.noop"),' in tables_c
+    assert ".fixed_operand_count = 0," not in tables_c
+    assert ".symbol_kind = LOOM_SYMBOL_NONE," not in tables_c
+    assert ".canonicalize = NULL," not in tables_c
+    assert ".format_elements = NULL," not in tables_c
+    assert ".format_element_count = 0," not in tables_c
+    assert ".contract_families = 0," not in tables_c
+
+
+def test_generate_tables_omits_zero_default_symbol_definition_fields() -> None:
+    dialect = Dialect("test")
+    op = Op(
+        "test.symbol",
+        group=dialect,
+        traits=[SYMBOL_DEFINE],
+        attrs=[AttrDef("name", ATTR_TYPE_SYMBOL)],
+        symbol_def=SymbolDefinition(
+            field="name",
+            name="test symbol",
+            interfaces=["record"],
+        ),
+    )
+
+    tables_c = generate_tables_c("test", 0x01, [op])
+
+    assert "static const loom_symbol_definition_descriptor_t loom_test_symbol_symbol_def = {" in tables_c
+    assert '.name = _BSTRING(11, "test symbol"),' in tables_c
+    assert ".name_attr_index = 0," not in tables_c
+    assert ".interfaces = LOOM_SYMBOL_INTERFACE_RECORD," in tables_c
+    assert ".bytecode_kind = LOOM_SYMBOL_NONE," not in tables_c
+    assert ".fact_domain = NULL," not in tables_c
+
+
+def test_generate_sharded_tables_exports_vtables_and_keeps_dense_aggregator() -> None:
+    dialect = Dialect(
+        "test",
+        dialect_id=0x01,
+        categories=[OpCategory("structure"), OpCategory("math")],
+    )
+    first = Op("test.first", group=dialect, category=dialect.categories[0])
+    second = Op("test.second", group=dialect, category=dialect.categories[1])
+
+    table_files = generate_sharded_tables_c(
+        "test",
+        0x01,
+        [
+            (dialect.categories[0], [first]),
+            (dialect.categories[1], [second]),
+        ],
+    )
+
+    assert sorted(table_files) == ["tables.c", "tables.h", "tables/math.c", "tables/structure.c"]
+    assert '#include "loom/ops/test/tables.h"' in table_files["tables/structure.c"]
+    assert "#define _BSTRING(length, value)" not in table_files["tables/structure.c"]
+    assert "#define _BSTRING(length, value)" in table_files["tables.h"]
+    assert "const loom_op_vtable_t loom_test_first_vtable = {" in table_files["tables/structure.c"]
+    assert "loom_test_dialect_vtables" not in table_files["tables/structure.c"]
+    assert "extern const loom_op_vtable_t loom_test_first_vtable;" in table_files["tables.h"]
+    assert "extern const loom_op_vtable_t loom_test_second_vtable;" in table_files["tables.h"]
+    assert '#include "loom/ops/test/tables.h"' in table_files["tables.c"]
+    assert "    &loom_test_first_vtable," in table_files["tables.c"]
+    assert "    &loom_test_second_vtable," in table_files["tables.c"]
+    assert "loom_op_semantics_t loom_test_op_semantics(" in table_files["tables.c"]
+
+
+def test_generate_tables_aggregator_rejects_wrong_dialect_kind() -> None:
+    dialect = Dialect("test", dialect_id=0x01)
+    op = Op("test.first", group=dialect)
+
+    tables_c = generate_tables_aggregator_c("test", 0x01, [op])
+
     assert "loom_op_dialect_id(kind) != LOOM_DIALECT_TEST" in tables_c
     assert "return loom_test_semantics_array[op_index];" in tables_c
 
@@ -387,12 +488,51 @@ def test_generate_tables_preserves_operand_and_result_descriptor_names() -> None
 
     tables_c = generate_tables_c("test", 0, [op])
 
-    assert 'static const uint8_t loom_test_reduce_input_operand_bname[] = "\\x05" "input";' in tables_c
-    assert 'static const uint8_t loom_test_reduce_partials_operand_bname[] = "\\x08" "partials";' in tables_c
-    assert 'static const uint8_t loom_test_reduce_results_result_bname[] = "\\x07" "results";' in tables_c
-    assert "{loom_test_reduce_input_operand_bname, LOOM_TYPE_CONSTRAINT_INTEGER, 0}" in tables_c
-    assert ("{loom_test_reduce_partials_operand_bname, LOOM_TYPE_CONSTRAINT_INTEGER, LOOM_OPERAND_VARIADIC}") in tables_c
-    assert ("{loom_test_reduce_results_result_bname, LOOM_TYPE_CONSTRAINT_INTEGER, LOOM_RESULT_VARIADIC}") in tables_c
+    assert '{_BSTRING(5, "input"), LOOM_TYPE_CONSTRAINT_INTEGER, 0}' in tables_c
+    assert ('{_BSTRING(8, "partials"), LOOM_TYPE_CONSTRAINT_INTEGER, LOOM_OPERAND_VARIADIC}') in tables_c
+    assert ('{_BSTRING(7, "results"), LOOM_TYPE_CONSTRAINT_INTEGER, LOOM_RESULT_VARIADIC}') in tables_c
+
+
+def test_generate_tables_keeps_repeated_descriptor_names_local() -> None:
+    dialect = Dialect("test")
+    first = Op("test.first", group=dialect, results=[Result("result", INTEGER)])
+    second = Op("test.second", group=dialect, results=[Result("result", INTEGER)])
+
+    tables_c = generate_tables_c("test", 0, [first, second])
+
+    assert tables_c.count('_BSTRING(6, "result")') == 2
+    result_rows = [line.strip() for line in tables_c.splitlines() if "LOOM_TYPE_CONSTRAINT_INTEGER" in line and "LOOM_RESULT_" not in line]
+    assert len(result_rows) == 2
+    assert result_rows[0] == result_rows[1]
+
+
+def test_generate_tables_groups_op_metadata_and_uses_arraysize_counts() -> None:
+    op = Op(
+        "test.project",
+        group=Dialect("test"),
+        operands=[Operand("input", INTEGER)],
+        results=[Result("result", INTEGER)],
+        attrs=[AttrDef("label", "string")],
+        constraints=[SameType("input", "result")],
+        format=[Ref("input"), Attr("label"), ResultType("result")],
+    )
+
+    tables_c = generate_tables_c("test", 0, [op])
+
+    format_index = tables_c.index("static const loom_format_element_t loom_test_project_format[]")
+    operand_index = tables_c.index("static const loom_operand_descriptor_t loom_test_project_operand_desc[]")
+    result_index = tables_c.index("static const loom_result_descriptor_t loom_test_project_result_desc[]")
+    attr_index = tables_c.index("static const loom_attr_descriptor_t loom_test_project_attr_desc[]")
+    constraint_index = tables_c.index("static const loom_constraint_t loom_test_project_constraints[]")
+    vtable_index = tables_c.index("static const loom_op_vtable_t loom_test_project_vtable")
+
+    assert format_index < operand_index < result_index < attr_index < constraint_index < vtable_index
+    assert ".attribute_count = IREE_ARRAYSIZE(loom_test_project_attr_desc)," in tables_c
+    assert ".constraint_count = IREE_ARRAYSIZE(loom_test_project_constraints)," in tables_c
+    assert ".format_element_count = IREE_ARRAYSIZE(loom_test_project_format)," in tables_c
+    assert ".attribute_count = 1," not in tables_c
+    assert ".constraint_count = 1," not in tables_c
+    assert ".format_element_count = 3," not in tables_c
 
 
 def test_generate_tables_emits_call_like_interface() -> None:
@@ -618,7 +758,7 @@ def test_external_enum_alias_uses_shared_c_type_without_typedef() -> None:
     assert "loom_shared_mode_t mode" in builders_c
     assert "loom_shared_mode_t secondary_mode" in builders_c
     assert tables_c.count("static const loom_bstring_t loom_shared_mode_names[]") == 1
-    assert tables_c.count("loom_shared_mode_names") == 3
+    assert tables_c.count("loom_shared_mode_names") == 5
 
 
 def test_flags_attrs_do_not_shift_regular_attr_indices() -> None:

@@ -133,6 +133,7 @@ __all__ = [
     "OpPhase",
     "ContractFamily",
     "TypeSemantic",
+    "OpCategory",
     # Trait constructors.
     "AllTypesMatch",
     "HasAncestor",
@@ -874,6 +875,35 @@ class ContractFamily(Enum):
         self.key = key
         self.c_name = c_name
         self.diagnostic_name = diagnostic_name
+
+
+def _validate_metadata_key(kind: str, key: str) -> None:
+    if not key:
+        raise ValueError(f"{kind} key must not be empty")
+    allowed = set("abcdefghijklmnopqrstuvwxyz0123456789._-")
+    if any(char not in allowed for char in key):
+        raise ValueError(
+            f"{kind} key {key!r} must contain only lowercase letters, "
+            "digits, '.', '_', or '-'"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class OpCategory:
+    """Stable category for grouping related ops inside a dialect.
+
+    Categories are generator-facing metadata. They give large dialects a durable
+    semantic shard boundary so generated tables can be split without deriving
+    file layout from incidental source order.
+    """
+
+    key: str
+    doc: str = ""
+
+    def __init__(self, key: str, *, doc: str = "") -> None:
+        _validate_metadata_key("op category", key)
+        object.__setattr__(self, "key", key)
+        object.__setattr__(self, "doc", doc)
 
 
 @unique
@@ -2249,6 +2279,8 @@ class Dialect:
     doc: str = ""
     enums: tuple[EnumDef, ...] = ()
     default_phase: OpPhase | None = None
+    categories: tuple[OpCategory, ...] = ()
+    default_category: OpCategory | None = None
 
     def __init__(
         self,
@@ -2258,12 +2290,22 @@ class Dialect:
         doc: str = "",
         enums: list[EnumDef] | tuple[EnumDef, ...] = (),
         default_phase: OpPhase | None = None,
+        categories: list[OpCategory] | tuple[OpCategory, ...] = (),
+        default_category: OpCategory | None = None,
     ) -> None:
+        frozen_categories = tuple(categories)
+        if default_category is not None and default_category not in frozen_categories:
+            raise ValueError(
+                f"Dialect '{name}': default_category '{default_category.key}' "
+                "is not declared in categories"
+            )
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "dialect_id", dialect_id)
         object.__setattr__(self, "doc", doc)
         object.__setattr__(self, "enums", tuple(enums))
         object.__setattr__(self, "default_phase", default_phase)
+        object.__setattr__(self, "categories", frozen_categories)
+        object.__setattr__(self, "default_category", default_category)
 
 
 # ============================================================================
@@ -3075,6 +3117,7 @@ class Op:
     verify: str = ""  # C function name for op-specific verification, or "".
     phase: OpPhase | None = None
     contracts: tuple[ContractFamily, ...] = ()
+    category: OpCategory | None = None
     symbol_def: SymbolDefinition | None = None
     interfaces: tuple[
         Any, ...
@@ -3103,6 +3146,7 @@ class Op:
         verify: str = "",
         phase: OpPhase | None = None,
         contracts: list[ContractFamily] | tuple[ContractFamily, ...] = (),
+        category: OpCategory | None = None,
         symbol_def: SymbolDefinition | None = None,
         interfaces: list[Any] | tuple[Any, ...] = (),
         format: list[FormatElement] | tuple[FormatElement, ...] = (),
@@ -3134,6 +3178,17 @@ class Op:
         object.__setattr__(self, "verify", verify)
         object.__setattr__(self, "phase", phase)
         object.__setattr__(self, "contracts", tuple(contracts))
+        if (
+            category is not None
+            and group is not None
+            and group.categories
+            and category not in group.categories
+        ):
+            raise ValueError(
+                f"Op '{name}': category '{category.key}' is not declared "
+                f"by dialect '{group.name}'"
+            )
+        object.__setattr__(self, "category", category)
         object.__setattr__(self, "symbol_def", symbol_def)
         object.__setattr__(self, "interfaces", tuple(interfaces))
         object.__setattr__(self, "format", frozen_format)
@@ -3233,6 +3288,15 @@ class Op:
         if self.group is None:
             return None
         return self.group.default_phase
+
+    @property
+    def effective_category(self) -> OpCategory | None:
+        """Returns the op category after applying its dialect default."""
+        if self.category is not None:
+            return self.category
+        if self.group is None:
+            return None
+        return self.group.default_category
 
     @property
     def is_pure(self) -> bool:

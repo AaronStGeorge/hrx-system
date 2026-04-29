@@ -85,6 +85,7 @@ from loom.dsl import (
     LastAxisGroupedBy,
     MemoryAccessInterface,
     Op,
+    OpCategory,
     Operand,
     OpPhase,
     PackedPayloadBitCountMatchesStorage,
@@ -108,6 +109,75 @@ from loom.dsl import (
 # Group and shared attrs
 # ============================================================================
 
+VECTOR_CONSTRUCTION_CATEGORY = OpCategory(
+    "construction",
+    doc="Vector constants, splats, shape producers, and aggregate construction.",
+)
+VECTOR_AGGREGATE_CATEGORY = OpCategory(
+    "aggregate",
+    doc="Vector aggregate lane extraction, insertion, and rearrangement.",
+)
+VECTOR_TABLE_CATEGORY = OpCategory(
+    "table",
+    doc="Register-table lookup, quantization, and transform descriptors.",
+)
+VECTOR_MEMORY_CATEGORY = OpCategory(
+    "memory",
+    doc="Vector memory transfer operations.",
+)
+VECTOR_ATOMIC_CATEGORY = OpCategory(
+    "atomic",
+    doc="Vector atomic memory operations.",
+)
+VECTOR_COMPARE_CATEGORY = OpCategory(
+    "compare",
+    doc="Vector selection and comparison operations.",
+)
+VECTOR_FLOAT_ARITHMETIC_CATEGORY = OpCategory(
+    "float_arithmetic",
+    doc="Lanewise floating-point arithmetic operations.",
+)
+VECTOR_INTEGER_ARITHMETIC_CATEGORY = OpCategory(
+    "integer_arithmetic",
+    doc="Lanewise integer arithmetic and bitwise operations.",
+)
+VECTOR_MATH_CATEGORY = OpCategory(
+    "math",
+    doc="Lanewise transcendental, rounding, and classification operations.",
+)
+VECTOR_CAST_CATEGORY = OpCategory(
+    "cast",
+    doc="Vector element-type conversion operations.",
+)
+VECTOR_BITPACK_CATEGORY = OpCategory(
+    "bitpack",
+    doc="Vector bitfield and packed-payload operations.",
+)
+VECTOR_CONTRACTION_CATEGORY = OpCategory(
+    "contraction",
+    doc="Vector dot and contraction operations.",
+)
+VECTOR_REDUCTION_CATEGORY = OpCategory(
+    "reduction",
+    doc="Vector horizontal reduction operations.",
+)
+
+VECTOR_OP_CATEGORIES = (
+    VECTOR_CONSTRUCTION_CATEGORY,
+    VECTOR_AGGREGATE_CATEGORY,
+    VECTOR_TABLE_CATEGORY,
+    VECTOR_MEMORY_CATEGORY,
+    VECTOR_ATOMIC_CATEGORY,
+    VECTOR_COMPARE_CATEGORY,
+    VECTOR_FLOAT_ARITHMETIC_CATEGORY,
+    VECTOR_INTEGER_ARITHMETIC_CATEGORY,
+    VECTOR_MATH_CATEGORY,
+    VECTOR_CAST_CATEGORY,
+    VECTOR_BITPACK_CATEGORY,
+    VECTOR_CONTRACTION_CATEGORY,
+    VECTOR_REDUCTION_CATEGORY,
+)
+
 vector_ops = Dialect(
     "vector",
     dialect_id=0x0E,
@@ -118,6 +188,7 @@ vector_ops = Dialect(
         "zero-lane memory effects. Typed vector poison represents invalid "
         "observations that must be removed or diagnosed before target lowering."
     ),
+    categories=VECTOR_OP_CATEGORIES,
 )
 
 CombiningKind = EnumDef(
@@ -3411,7 +3482,7 @@ vector_reduce = Op(
 # Registry
 # ============================================================================
 
-ALL_VECTOR_OPS: tuple[Op, ...] = (
+VECTOR_CONSTRUCTION_OPS: tuple[Op, ...] = (
     vector_constant,
     vector_poison,
     vector_empty,
@@ -3420,6 +3491,9 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_mask_range,
     vector_broadcast,
     vector_from_elements,
+)
+
+VECTOR_AGGREGATE_OPS: tuple[Op, ...] = (
     vector_extract,
     vector_insert,
     vector_slice,
@@ -3428,9 +3502,15 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_shuffle,
     vector_interleave,
     vector_deinterleave,
+)
+
+VECTOR_TABLE_OPS: tuple[Op, ...] = (
     vector_table_lookup,
     vector_table_quantize,
     vector_transform,
+)
+
+VECTOR_MEMORY_OPS: tuple[Op, ...] = (
     vector_load,
     vector_store,
     vector_load_mask,
@@ -3441,14 +3521,23 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_scatter,
     vector_gather_mask,
     vector_scatter_mask,
+)
+
+VECTOR_ATOMIC_OPS: tuple[Op, ...] = (
     vector_atomic_reduce,
     vector_atomic_reduce_mask,
     vector_atomic_rmw,
     vector_atomic_rmw_mask,
     vector_atomic_cmpxchg,
+)
+
+VECTOR_COMPARE_OPS: tuple[Op, ...] = (
     vector_select,
     vector_cmpi,
     vector_cmpf,
+)
+
+VECTOR_FLOAT_ARITHMETIC_OPS: tuple[Op, ...] = (
     vector_addf,
     vector_subf,
     vector_mulf,
@@ -3462,6 +3551,9 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_maxnumf,
     vector_copysignf,
     vector_fmaf,
+)
+
+VECTOR_INTEGER_ARITHMETIC_OPS: tuple[Op, ...] = (
     vector_addi,
     vector_subi,
     vector_muli,
@@ -3490,6 +3582,9 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_ctlzi,
     vector_cttzi,
     vector_ctpopi,
+)
+
+VECTOR_MATH_OPS: tuple[Op, ...] = (
     vector_expf,
     vector_exp2f,
     vector_expm1f,
@@ -3526,6 +3621,9 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_isfinitef,
     vector_signf,
     vector_signi,
+)
+
+VECTOR_CAST_OPS: tuple[Op, ...] = (
     vector_extf,
     vector_fptrunc,
     vector_extsi,
@@ -3536,16 +3634,41 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_fptosi,
     vector_fptoui,
     vector_bitcast,
+)
+
+VECTOR_BITPACK_OPS: tuple[Op, ...] = (
     vector_bitfield_extractu,
     vector_bitfield_extracts,
     vector_bitfield_insert,
     vector_bitpack,
     vector_bitunpacku,
     vector_bitunpacks,
+)
+
+VECTOR_CONTRACTION_OPS: tuple[Op, ...] = (
     vector_dotf,
     vector_dot2f,
     vector_dot4i,
     vector_dot8i4,
     vector_dot4f8,
-    vector_reduce,
 )
+
+VECTOR_REDUCTION_OPS: tuple[Op, ...] = (vector_reduce,)
+
+VECTOR_OP_CATEGORY_GROUPS: tuple[tuple[OpCategory, tuple[Op, ...]], ...] = (
+    (VECTOR_CONSTRUCTION_CATEGORY, VECTOR_CONSTRUCTION_OPS),
+    (VECTOR_AGGREGATE_CATEGORY, VECTOR_AGGREGATE_OPS),
+    (VECTOR_TABLE_CATEGORY, VECTOR_TABLE_OPS),
+    (VECTOR_MEMORY_CATEGORY, VECTOR_MEMORY_OPS),
+    (VECTOR_ATOMIC_CATEGORY, VECTOR_ATOMIC_OPS),
+    (VECTOR_COMPARE_CATEGORY, VECTOR_COMPARE_OPS),
+    (VECTOR_FLOAT_ARITHMETIC_CATEGORY, VECTOR_FLOAT_ARITHMETIC_OPS),
+    (VECTOR_INTEGER_ARITHMETIC_CATEGORY, VECTOR_INTEGER_ARITHMETIC_OPS),
+    (VECTOR_MATH_CATEGORY, VECTOR_MATH_OPS),
+    (VECTOR_CAST_CATEGORY, VECTOR_CAST_OPS),
+    (VECTOR_BITPACK_CATEGORY, VECTOR_BITPACK_OPS),
+    (VECTOR_CONTRACTION_CATEGORY, VECTOR_CONTRACTION_OPS),
+    (VECTOR_REDUCTION_CATEGORY, VECTOR_REDUCTION_OPS),
+)
+
+ALL_VECTOR_OPS: tuple[Op, ...] = tuple(op for _, category_ops in VECTOR_OP_CATEGORY_GROUPS for op in category_ops)

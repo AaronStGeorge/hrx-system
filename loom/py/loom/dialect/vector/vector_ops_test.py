@@ -12,6 +12,8 @@ from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.vector import (
     ALL_VECTOR_OPS,
+    VECTOR_OP_CATEGORIES,
+    VECTOR_OP_CATEGORY_GROUPS,
     AtomicKind,
     AtomicOrdering,
     AtomicScope,
@@ -21,6 +23,7 @@ from loom.dialect.vector import (
     IntegerDot8I4Kind,
     QuantizeNaN,
     QuantizeTie,
+    vector_ops,
 )
 from loom.dsl import ENCODING_TRANSFORM, FLOAT, I1, INTEGER, SCALAR, VECTOR, EffectKind, Op
 
@@ -71,6 +74,16 @@ VECTOR_TO_SCALAR_SOURCE_FILES = (
 
 def _op_by_name() -> dict[str, Op]:
     return {op.name: op for op in ALL_VECTOR_OPS}
+
+
+def test_vector_op_category_groups_cover_registry_once() -> None:
+    grouped_ops = [op for _, category_ops in VECTOR_OP_CATEGORY_GROUPS for op in category_ops]
+    grouped_names = [op.name for op in grouped_ops]
+
+    assert tuple(grouped_ops) == ALL_VECTOR_OPS
+    assert len(grouped_names) == len(set(grouped_names))
+    assert tuple(category for category, _ in VECTOR_OP_CATEGORY_GROUPS) == VECTOR_OP_CATEGORIES
+    assert vector_ops.categories == VECTOR_OP_CATEGORIES
 
 
 def _assert_optional_cache_policy_attrs(op: Op) -> None:

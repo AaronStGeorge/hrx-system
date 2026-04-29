@@ -19,6 +19,13 @@ from typing import TYPE_CHECKING
 # defs MUST be imported before submodules — submodules import
 # scalar_ops/FastMathFlags/IntOverflowFlags from this package.
 from loom.dialect.scalar.defs import (  # isort: split
+    SCALAR_ANALYSIS_CATEGORY,
+    SCALAR_ARITHMETIC_CATEGORY,
+    SCALAR_BITWISE_CATEGORY,
+    SCALAR_COMPARISON_CATEGORY,
+    SCALAR_CONVERSION_CATEGORY,
+    SCALAR_MATH_CATEGORY,
+    SCALAR_OP_CATEGORIES,
     FastMathFlags,
     IntOverflowFlags,
     scalar_ops,
@@ -32,20 +39,30 @@ from loom.dialect.scalar.conversion import ALL_CONVERSION_OPS
 from loom.dialect.scalar.math import ALL_MATH_OPS
 
 if TYPE_CHECKING:
-    from loom.dsl import Op
+    from loom.dsl import Op, OpCategory
 
 __all__ = [
     "scalar_ops",
+    "SCALAR_ANALYSIS_CATEGORY",
+    "SCALAR_ARITHMETIC_CATEGORY",
+    "SCALAR_BITWISE_CATEGORY",
+    "SCALAR_COMPARISON_CATEGORY",
+    "SCALAR_CONVERSION_CATEGORY",
+    "SCALAR_MATH_CATEGORY",
+    "SCALAR_OP_CATEGORIES",
+    "SCALAR_OP_CATEGORY_GROUPS",
     "FastMathFlags",
     "IntOverflowFlags",
     "ALL_SCALAR_OPS",
 ]
 
-ALL_SCALAR_OPS: tuple[Op, ...] = (
-    *ALL_ARITHMETIC_OPS,
-    *ALL_MATH_OPS,
-    *ALL_COMPARISON_OPS,
-    *ALL_CONVERSION_OPS,
-    *ALL_BITWISE_OPS,
-    *ALL_ANALYSIS_OPS,
+SCALAR_OP_CATEGORY_GROUPS: tuple[tuple[OpCategory, tuple[Op, ...]], ...] = (
+    (SCALAR_ARITHMETIC_CATEGORY, ALL_ARITHMETIC_OPS),
+    (SCALAR_MATH_CATEGORY, ALL_MATH_OPS),
+    (SCALAR_COMPARISON_CATEGORY, ALL_COMPARISON_OPS),
+    (SCALAR_CONVERSION_CATEGORY, ALL_CONVERSION_OPS),
+    (SCALAR_BITWISE_CATEGORY, ALL_BITWISE_OPS),
+    (SCALAR_ANALYSIS_CATEGORY, ALL_ANALYSIS_OPS),
 )
+
+ALL_SCALAR_OPS: tuple[Op, ...] = tuple(op for _, category_ops in SCALAR_OP_CATEGORY_GROUPS for op in category_ops)

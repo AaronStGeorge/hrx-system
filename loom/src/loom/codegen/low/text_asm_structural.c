@@ -11,15 +11,15 @@
 #include "loom/ops/low/ops.h"
 
 static const uint8_t kLowAsmResourceIndexName[] =
-    LOOM_BSTRING_LITERAL("\x05", "index");
+    LOOM_BSTRING_LITERAL(5, "index");
 static const uint8_t kLowAsmResourceSemanticTypeName[] =
-    LOOM_BSTRING_LITERAL("\x0d", "semantic_type");
+    LOOM_BSTRING_LITERAL(13, "semantic_type");
 static const uint8_t kLowAsmResourceValidByteCountName[] =
-    LOOM_BSTRING_LITERAL("\x10", "valid_byte_count");
+    LOOM_BSTRING_LITERAL(16, "valid_byte_count");
 static const uint8_t kLowAsmResourceCacheSwizzleStrideName[] =
-    LOOM_BSTRING_LITERAL("\x14", "cache_swizzle_stride");
+    LOOM_BSTRING_LITERAL(20, "cache_swizzle_stride");
 static const uint8_t kLowAsmFrameIndexOffsetName[] =
-    LOOM_BSTRING_LITERAL("\x06", "offset");
+    LOOM_BSTRING_LITERAL(6, "offset");
 
 static const loom_attr_descriptor_t kLowAsmResourceIndexAttr = {
     kLowAsmResourceIndexName, LOOM_ATTR_I64, 0, 0, NULL, NULL};

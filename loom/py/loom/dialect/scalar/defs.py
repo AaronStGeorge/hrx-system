@@ -11,18 +11,60 @@ Contains the scalar Dialect and its associated EnumDef types
 submodules.
 """
 
-from loom.dsl import Dialect, EnumCase, EnumDef
+from loom.dsl import Dialect, EnumCase, EnumDef, OpCategory
 
 __all__ = [
     "scalar_ops",
+    "SCALAR_ANALYSIS_CATEGORY",
+    "SCALAR_ARITHMETIC_CATEGORY",
+    "SCALAR_BITWISE_CATEGORY",
+    "SCALAR_COMPARISON_CATEGORY",
+    "SCALAR_CONVERSION_CATEGORY",
+    "SCALAR_MATH_CATEGORY",
+    "SCALAR_OP_CATEGORIES",
     "FastMathFlags",
     "IntOverflowFlags",
 ]
+
+SCALAR_ARITHMETIC_CATEGORY = OpCategory(
+    "arithmetic",
+    doc="Integer and floating-point scalar arithmetic operations.",
+)
+SCALAR_MATH_CATEGORY = OpCategory(
+    "math",
+    doc="Scalar transcendental, rounding, and special math operations.",
+)
+SCALAR_COMPARISON_CATEGORY = OpCategory(
+    "comparison",
+    doc="Scalar comparison, classification, and sign operations.",
+)
+SCALAR_CONVERSION_CATEGORY = OpCategory(
+    "conversion",
+    doc="Scalar type conversion, constants, and poison operations.",
+)
+SCALAR_BITWISE_CATEGORY = OpCategory(
+    "bitwise",
+    doc="Scalar bitwise logic, shifts, rotates, and bit counting operations.",
+)
+SCALAR_ANALYSIS_CATEGORY = OpCategory(
+    "analysis",
+    doc="Scalar fact and predicate refinement operations.",
+)
+
+SCALAR_OP_CATEGORIES = (
+    SCALAR_ARITHMETIC_CATEGORY,
+    SCALAR_MATH_CATEGORY,
+    SCALAR_COMPARISON_CATEGORY,
+    SCALAR_CONVERSION_CATEGORY,
+    SCALAR_BITWISE_CATEGORY,
+    SCALAR_ANALYSIS_CATEGORY,
+)
 
 scalar_ops = Dialect(
     "scalar",
     dialect_id=0x02,
     doc=("Scalar arithmetic, math, conversion, and typed poison ops. Loom poison is an invalid value sentinel introduced by canonicalization and diagnosed if it survives to an observation boundary."),
+    categories=SCALAR_OP_CATEGORIES,
 )
 
 FastMathFlags = EnumDef(

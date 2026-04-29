@@ -14,19 +14,19 @@ namespace {
 
 // clang-format off
 static const uint8_t kRequirementStrings[] =
-    LOOM_BSTRING_LITERAL("\x00", "")
-    LOOM_BSTRING_LITERAL("\x09", "test.core")
-    LOOM_BSTRING_LITERAL("\x0b", "test.target")
-    LOOM_BSTRING_LITERAL("\x0d", "test.features")
-    LOOM_BSTRING_LITERAL("\x08", "test.gpr")
-    LOOM_BSTRING_LITERAL("\x03", "dst")
-    LOOM_BSTRING_LITERAL("\x03", "lhs")
-    LOOM_BSTRING_LITERAL("\x03", "rhs")
-    LOOM_BSTRING_LITERAL("\x08", "test.alu")
-    LOOM_BSTRING_LITERAL("\x0c", "test.alu.i32")
-    LOOM_BSTRING_LITERAL("\x0c", "test.add.i32")
-    LOOM_BSTRING_LITERAL("\x07", "add.i32")
-    LOOM_BSTRING_LITERAL("\x0f", "integer.add.i32");
+    LOOM_BSTRING_LITERAL(0, "")
+    LOOM_BSTRING_LITERAL(9, "test.core")
+    LOOM_BSTRING_LITERAL(11, "test.target")
+    LOOM_BSTRING_LITERAL(13, "test.features")
+    LOOM_BSTRING_LITERAL(8, "test.gpr")
+    LOOM_BSTRING_LITERAL(3, "dst")
+    LOOM_BSTRING_LITERAL(3, "lhs")
+    LOOM_BSTRING_LITERAL(3, "rhs")
+    LOOM_BSTRING_LITERAL(8, "test.alu")
+    LOOM_BSTRING_LITERAL(12, "test.alu.i32")
+    LOOM_BSTRING_LITERAL(12, "test.add.i32")
+    LOOM_BSTRING_LITERAL(7, "add.i32")
+    LOOM_BSTRING_LITERAL(15, "integer.add.i32");
 // clang-format on
 
 enum {

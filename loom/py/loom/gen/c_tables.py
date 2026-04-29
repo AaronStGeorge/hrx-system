@@ -78,6 +78,7 @@ from loom.dsl import (
     RegionDef,
     TiedResult,
     TypeConstraint,
+    TypeDef,
     TypeSemantic,
 )
 from loom.fields import FieldKind, FieldLayout, compute_layout
@@ -443,6 +444,11 @@ def _c_prefix(op: Op) -> str:
     return "loom_" + op.name.replace(".", "_")
 
 
+def _c_identifier(value: str) -> str:
+    """Returns a C identifier fragment for a DSL key."""
+    return re.sub(r"[^0-9A-Za-z_]", "_", value)
+
+
 def _c_enum_name(op: Op) -> str:
     """Returns the C enum constant name for an op kind.
 
@@ -490,6 +496,32 @@ def _type_semantic_c_name(semantic: TypeSemantic) -> str:
     """Returns the C enum for a type semantic role."""
 
     return semantic.c_name
+
+
+def _emit_op_semantics(lines: list[str], op: Op) -> None:
+    """Appends a sparse initializer for one op semantic metadata row."""
+
+    contract_families = _contract_family_mask(op.contracts)
+    lines.append("    {")
+    lines.append(f"        .phase = {_op_phase_c_name(op)},")
+    if contract_families != "0":
+        lines.append(f"        .contract_families = {contract_families},")
+    lines.append("    },")
+
+
+def _emit_type_semantics(lines: list[str], type_def: TypeDef) -> None:
+    """Appends a sparse initializer for one type semantic metadata row."""
+
+    semantic = _type_semantic_c_name(type_def.semantic)
+    contract_families = _contract_family_mask(type_def.contracts)
+    if semantic == "LOOM_TYPE_SEMANTIC_ORDINARY" and contract_families == "0":
+        return
+    lines.append("    .semantics = {")
+    if semantic != "LOOM_TYPE_SEMANTIC_ORDINARY":
+        lines.append(f"        .semantic = {semantic},")
+    if contract_families != "0":
+        lines.append(f"        .contract_families = {contract_families},")
+    lines.append("    },")
 
 
 _T = TypeVar("_T")
@@ -2651,15 +2683,31 @@ def _generate_builder_implementation(
 # ============================================================================
 
 
-def _bstring_initializer(name: str) -> str:
-    """Returns a C array initializer for a B-string op name.
+def _c_string_literal(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
 
-    "test.addi" -> '"\\x09\\x04" "test.addi"'
-    """
-    dot = name.index(".")
-    total = len(name)
-    namespace = dot
-    return f'"\\x{total:02x}\\x{namespace:02x}" "{name}"'
+
+def _bstring_expr(value: str) -> str:
+    if len(value.encode()) > 255:
+        raise ValueError(f"B-string '{value}' exceeds 255 bytes")
+    return f'_BSTRING({len(value.encode())}, "{_c_string_literal(value)}")'
+
+
+def _op_name_expr(value: str) -> str:
+    value_length = len(value.encode())
+    namespace_length = len(value.rsplit(".", 1)[0].encode()) if "." in value else 0
+    if value_length > 255:
+        raise ValueError(f"op name '{value}' exceeds 255 bytes")
+    if namespace_length > 255:
+        raise ValueError(f"op namespace '{value}' exceeds 255 bytes")
+    return f'_OP_NAME({value_length}, {namespace_length}, "{_c_string_literal(value)}")'
+
+
+def _emit_table_string_macros(lines: list[str], _dialect_name: str) -> None:
+    lines.append("#define _BSTRING(length, value) LOOM_BSTRING_REF(length, value)")
+    lines.append("#define _OP_NAME(length, namespace_length, value) \\")
+    lines.append("  LOOM_OP_NAME_REF(length, namespace_length, value)")
+    lines.append("")
 
 
 # ============================================================================
@@ -2952,7 +3000,15 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
 # ============================================================================
 
 
-def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str:
+def generate_tables_c(
+    dialect_name: str,
+    dialect_id: int,
+    ops: Sequence[Op],
+    *,
+    emit_registration: bool = True,
+    export_vtables: bool = False,
+    private_header: bool = False,
+) -> str:
     """Generates the tables.c file for a dialect (.rodata)."""
     lines: list[str] = []
     ops_by_name = {op.name: op for op in ops}
@@ -2961,106 +3017,17 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
     lines.extend(line_comment_header("//", generator="loom.gen.c_tables"))
     lines.append("// clang-format off")
     lines.append("")
-    lines.append(f'#include "loom/ops/{dialect_name}/ops.h"')
+    if private_header:
+        lines.append(f'#include "loom/ops/{dialect_name}/tables.h"')
+    else:
+        lines.append(f'#include "loom/ops/{dialect_name}/ops.h"')
     lines.append('#include "loom/error/error_defs.h"')
     lines.append("")
+    if not private_header:
+        _emit_table_string_macros(lines, dialect_name)
 
     # Canonicalize functions are declared in ops.h (not here) so there
     # are no extern declarations in .c files.
-
-    # B-string names.
-    for op in ops:
-        prefix = _c_prefix(op)
-        bstr = _bstring_initializer(op.name)
-        lines.append(f"static const uint8_t {prefix}_name[] = {bstr};")
-    lines.append("")
-
-    # Format element arrays.
-    for op in ops:
-        prefix = _c_prefix(op)
-        elements = _translate_format_elements(op)
-        if not elements:
-            lines.append(f"static const loom_format_element_t* const {prefix}_format = NULL;")
-            continue
-        lines.append(f"static const loom_format_element_t {prefix}_format[] = {{")
-        for kind, field_index, data in elements:
-            lines.append(f"    {{{kind}, {field_index}, {data}}},")
-        lines.append("};")
-    lines.append("")
-
-    # Operand descriptors.
-    for op in ops:
-        func_args_are_operands = _func_args_are_operands(op)
-        explicit_func_args_operand = _explicit_func_args_operand(op)
-        synthesize_func_args_operand = func_args_are_operands and explicit_func_args_operand is None
-        if not op.operands and not synthesize_func_args_operand:
-            continue
-        prefix = _c_prefix(op)
-        for operand in op.operands:
-            name = operand.name
-            assert len(name) < 256, f"operand name too long: {name!r}"
-            bstr_name = f"{prefix}_{name}_operand_bname"
-            lines.append(f'static const uint8_t {bstr_name}[] = "\\x{len(name):02x}" "{name}";')
-        func_args_name = ""
-        if synthesize_func_args_operand:
-            func_args_name = _func_args_field_name(op)
-            assert len(func_args_name) < 256, f"func args name too long: {func_args_name!r}"
-            bstr_name = f"{prefix}_{func_args_name}_operand_bname"
-            lines.append(f'static const uint8_t {bstr_name}[] = "\\x{len(func_args_name):02x}" "{func_args_name}";')
-        # Build effect map from declared effects.
-        effect_map: dict[str, EffectKind] = {}
-        for effect in op.effects:
-            effect_map[effect.operand] = effect.kind
-        lines.append(f"static const loom_operand_descriptor_t {prefix}_operand_desc[] = {{")
-        for operand in op.operands:
-            bstr_name = f"{prefix}_{operand.name}_operand_bname"
-            type_constraint = TYPE_CONSTRAINT_MAP[operand.type_constraint]
-            flags_parts = []
-            if operand.variadic:
-                flags_parts.append("LOOM_OPERAND_VARIADIC")
-            if operand.optional:
-                flags_parts.append("LOOM_OPERAND_OPTIONAL")
-            effect_kind = effect_map.get(operand.name)
-            if effect_kind in (EffectKind.READ, EffectKind.READWRITE):
-                flags_parts.append("LOOM_OPERAND_READS")
-            if effect_kind in (EffectKind.WRITE, EffectKind.READWRITE):
-                flags_parts.append("LOOM_OPERAND_WRITES")
-            flags = " | ".join(flags_parts) if flags_parts else "0"
-            lines.append(f"    {{{bstr_name}, {type_constraint}, {flags}}},")
-        if synthesize_func_args_operand:
-            bstr_name = f"{prefix}_{func_args_name}_operand_bname"
-            lines.append(f"    {{{bstr_name}, LOOM_TYPE_CONSTRAINT_ANY, LOOM_OPERAND_VARIADIC}},")
-        lines.append("};")
-    lines.append("")
-
-    # Result descriptors.
-    for op in ops:
-        if not op.results:
-            continue
-        prefix = _c_prefix(op)
-        for result in op.results:
-            name = result.name
-            assert len(name) < 256, f"result name too long: {name!r}"
-            bstr_name = f"{prefix}_{name}_result_bname"
-            lines.append(f'static const uint8_t {bstr_name}[] = "\\x{len(name):02x}" "{name}";')
-        lines.append(f"static const loom_result_descriptor_t {prefix}_result_desc[] = {{")
-        for result in op.results:
-            bstr_name = f"{prefix}_{result.name}_result_bname"
-            type_constraint = TYPE_CONSTRAINT_MAP[result.type_constraint]
-            flags_parts = []
-            if result.variadic:
-                flags_parts.append("LOOM_RESULT_VARIADIC")
-            if result.allocates:
-                flags_parts.append("LOOM_RESULT_ALLOCATES")
-            flags = " | ".join(flags_parts) if flags_parts else "0"
-            lines.append(f"    {{{bstr_name}, {type_constraint}, {flags}}},")
-        lines.append("};")
-    lines.append("")
-
-    # Enum case name B-string arrays (emitted before attr descriptors
-    # that reference them). Each entry is a loom_bstring_t.
-    # Shared enums get one array with the dialect-level name; per-op
-    # enums get their own array as before.
     shared_enums = _collect_shared_enums(dialect_name, ops)
 
     def _emit_enum_case_names(lines: list[str], array_name: str, enum_def: EnumDef) -> None:
@@ -3071,17 +3038,78 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         for v in range(max_value + 1):
             name = value_to_name.get(v)
             if name is not None:
-                assert len(name) < 256, f"enum case name too long: {name!r}"
-                lines.append(f'    (const uint8_t*)"\\x{len(name):02x}" "{name}",')
+                lines.append(f"    {_bstring_expr(name)},")
             else:
                 lines.append("    NULL,")
         lines.append("};")
 
-    # Enum case name arrays. Generated C may expose an external enum alias,
-    # a dialect-level shared enum, or a per-op enum typedef, but all three
-    # still need one parser/printer keyword table per C symbol name.
+    # Symbol definition descriptors may refer to fact domains outside this
+    # generated translation unit.
+    symbol_fact_domain_symbols = sorted({fact_domain for op in ops if op.symbol_def is not None if (fact_domain := _symbol_fact_domain_symbol(op)) is not None})
+    if symbol_fact_domain_symbols:
+        lines.extend(f"extern const loom_symbol_fact_domain_t {fact_domain};" for fact_domain in symbol_fact_domain_symbols)
+        lines.append("")
+
     emitted_enum_case_name_arrays: set[str] = set()
+
+    # Op metadata blocks.
     for op in ops:
+        prefix = _c_prefix(op)
+        layout = compute_layout(op)
+        elements = _translate_format_elements(op)
+        non_flags = _non_flags_attrs(op)
+        has_flags = _has_flags_attr(op)
+
+        # Format element array.
+        if elements:
+            lines.append(f"static const loom_format_element_t {prefix}_format[] = {{")
+            for kind, field_index, data in elements:
+                lines.append(f"    {{{kind}, {field_index}, {data}}},")
+            lines.append("};")
+
+        # Operand descriptors.
+        func_args_are_operands = _func_args_are_operands(op)
+        explicit_func_args_operand = _explicit_func_args_operand(op)
+        synthesize_func_args_operand = func_args_are_operands and explicit_func_args_operand is None
+        if op.operands or synthesize_func_args_operand:
+            func_args_name = _func_args_field_name(op) if synthesize_func_args_operand else ""
+            effect_map = {effect.operand: effect.kind for effect in op.effects}
+            lines.append(f"static const loom_operand_descriptor_t {prefix}_operand_desc[] = {{")
+            for operand in op.operands:
+                type_constraint = TYPE_CONSTRAINT_MAP[operand.type_constraint]
+                flags_parts = []
+                if operand.variadic:
+                    flags_parts.append("LOOM_OPERAND_VARIADIC")
+                if operand.optional:
+                    flags_parts.append("LOOM_OPERAND_OPTIONAL")
+                effect_kind = effect_map.get(operand.name)
+                if effect_kind in (EffectKind.READ, EffectKind.READWRITE):
+                    flags_parts.append("LOOM_OPERAND_READS")
+                if effect_kind in (EffectKind.WRITE, EffectKind.READWRITE):
+                    flags_parts.append("LOOM_OPERAND_WRITES")
+                flags = " | ".join(flags_parts) if flags_parts else "0"
+                lines.append(f"    {{{_bstring_expr(operand.name)}, {type_constraint}, {flags}}},")
+            if synthesize_func_args_operand:
+                lines.append(f"    {{{_bstring_expr(func_args_name)}, LOOM_TYPE_CONSTRAINT_ANY, LOOM_OPERAND_VARIADIC}},")
+            lines.append("};")
+
+        # Result descriptors.
+        if op.results:
+            lines.append(f"static const loom_result_descriptor_t {prefix}_result_desc[] = {{")
+            for result in op.results:
+                type_constraint = TYPE_CONSTRAINT_MAP[result.type_constraint]
+                flags_parts = []
+                if result.variadic:
+                    flags_parts.append("LOOM_RESULT_VARIADIC")
+                if result.allocates:
+                    flags_parts.append("LOOM_RESULT_ALLOCATES")
+                flags = " | ".join(flags_parts) if flags_parts else "0"
+                lines.append(f"    {{{_bstring_expr(result.name)}, {type_constraint}, {flags}}},")
+            lines.append("};")
+
+        # Enum case name arrays. Generated C may expose an external enum alias,
+        # a dialect-level shared enum, or a per-op enum typedef, but all three
+        # still need one parser/printer keyword table per C symbol name.
         for attr_def in op.attrs:
             if attr_def.attr_type == "enum" and attr_def.enum_def:
                 array_name = _enum_names_array_name(op, attr_def, shared_enums)
@@ -3090,223 +3118,142 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
                 _emit_enum_case_names(lines, array_name, attr_def.enum_def)
                 emitted_enum_case_name_arrays.add(array_name)
 
-    # Instance flags case name B-string arrays (for ops with Flags
-    # format element). Each entry is a loom_bstring_t.
-    for op in ops:
-        if not _has_flags_attr(op):
-            continue
-        prefix = _c_prefix(op)
-        flags_attr = next(a for a in op.attrs if a.attr_type == ATTR_TYPE_FLAGS)
-        assert flags_attr.enum_def is not None, f"flags attr on {op.name} has no enum_def"
-        flags_enum = flags_attr.enum_def
-        # Emit individual bit cases sorted by value.
-        individual_cases = [c for c in flags_enum.cases if c.value != 0 and (c.value & (c.value - 1)) == 0]
-        individual_cases.sort(key=lambda c: c.value)
-        array_name = f"{prefix}_instance_flags_names"
-        lines.append(f"static const loom_bstring_t {array_name}[] = {{")
-        for case in individual_cases:
-            assert len(case.keyword) < 256, f"flag case name too long: {case.keyword!r}"
-            lines.append(f'    (const uint8_t*)"\\x{len(case.keyword):02x}" "{case.keyword}",')
-        lines.append("};")
-    lines.append("")
+        # Instance flags case name array.
+        if has_flags:
+            flags_attr = next(a for a in op.attrs if a.attr_type == ATTR_TYPE_FLAGS)
+            assert flags_attr.enum_def is not None, f"flags attr on {op.name} has no enum_def"
+            individual_cases = [c for c in flags_attr.enum_def.cases if c.value != 0 and (c.value & (c.value - 1)) == 0]
+            individual_cases.sort(key=lambda c: c.value)
+            array_name = f"{prefix}_instance_flags_names"
+            lines.append(f"static const loom_bstring_t {array_name}[] = {{")
+            lines.extend(f"    {_bstring_expr(case.keyword)}," for case in individual_cases)
+            lines.append("};")
 
-    # Attribute symbol-reference descriptors.
-    for op in ops:
-        non_flags = _non_flags_attrs(op)
-        if not any(attr.symbol_ref is not None for attr in non_flags):
-            continue
-        prefix = _c_prefix(op)
+        # Attribute symbol-reference descriptors.
         for attr_def in non_flags:
             if attr_def.symbol_ref is None:
                 continue
-            name = attr_def.symbol_ref.name
-            assert len(name) < 256, f"symbol reference name too long: {name!r}"
-            name_bstr = f"{prefix}_{attr_def.name}_symbol_ref_bname"
-            lines.append(f'static const uint8_t {name_bstr}[] = "\\x{len(name):02x}" "{name}";')
             flags = _symbol_interface_flags(attr_def.symbol_ref.interfaces)
             descriptor_name = f"{prefix}_{attr_def.name}_symbol_ref"
-            lines.append(f"static const loom_symbol_reference_descriptor_t {descriptor_name} = {{{name_bstr}, {flags}}};")
-    lines.append("")
+            lines.append(f"static const loom_symbol_reference_descriptor_t {descriptor_name} = {{{_bstring_expr(attr_def.symbol_ref.name)}, {flags}}};")
 
-    # Attribute name B-strings and descriptors.
-    # Each attr name is a B-string: [length]"name". The descriptor
-    # references the B-string pointer for efficient comparison/hashing.
-    for op in ops:
-        non_flags = _non_flags_attrs(op)
-        if not non_flags:
-            continue
-        prefix = _c_prefix(op)
-        for attr_def in non_flags:
-            name = attr_def.name
-            assert len(name) < 256, f"attr name too long: {name!r}"
-            bstr_name = f"{prefix}_{name}_bname"
-            lines.append(f'static const uint8_t {bstr_name}[] = "\\x{len(name):02x}" "{name}";')
-        lines.append(f"static const loom_attr_descriptor_t {prefix}_attr_desc[] = {{")
-        for attr_def in non_flags:
-            if attr_def.attr_type not in ATTR_KIND_MAP:
-                raise ValueError(f"attr {attr_def.name!r} on {op.name!r} has unknown attr_type {attr_def.attr_type!r} with no C mapping")
-            attr_kind = ATTR_KIND_MAP[attr_def.attr_type]
-            flag_names = []
-            if attr_def.optional:
-                flag_names.append("LOOM_ATTR_OPTIONAL")
-            if attr_def.open_enum:
-                flag_names.append("LOOM_ATTR_OPEN_ENUM")
-            flags = " | ".join(flag_names) if flag_names else "0"
-            if attr_def.attr_type == "enum" and attr_def.enum_def:
-                enum_names = _enum_names_array_name(op, attr_def, shared_enums)
-                max_value = max(c.value for c in attr_def.enum_def.cases)
-                enum_case_count = max_value + 1
-            else:
-                enum_names = "NULL"
-                enum_case_count = 0
-            symbol_ref = f"&{prefix}_{attr_def.name}_symbol_ref" if attr_def.symbol_ref is not None else "NULL"
-            bstr_name = f"{prefix}_{attr_def.name}_bname"
-            lines.append(f"    {{{bstr_name}, {attr_kind}, {flags}, {enum_case_count}, {enum_names}, {symbol_ref}}},")
-        lines.append("};")
-    lines.append("")
+        # Attribute descriptors.
+        if non_flags:
+            lines.append(f"static const loom_attr_descriptor_t {prefix}_attr_desc[] = {{")
+            for attr_def in non_flags:
+                if attr_def.attr_type not in ATTR_KIND_MAP:
+                    raise ValueError(f"attr {attr_def.name!r} on {op.name!r} has unknown attr_type {attr_def.attr_type!r} with no C mapping")
+                attr_kind = ATTR_KIND_MAP[attr_def.attr_type]
+                flag_names = []
+                if attr_def.optional:
+                    flag_names.append("LOOM_ATTR_OPTIONAL")
+                if attr_def.open_enum:
+                    flag_names.append("LOOM_ATTR_OPEN_ENUM")
+                flags = " | ".join(flag_names) if flag_names else "0"
+                if attr_def.attr_type == "enum" and attr_def.enum_def:
+                    enum_names = _enum_names_array_name(op, attr_def, shared_enums)
+                    enum_case_count = f"IREE_ARRAYSIZE({enum_names})"
+                else:
+                    enum_names = "NULL"
+                    enum_case_count = "0"
+                symbol_ref = f"&{prefix}_{attr_def.name}_symbol_ref" if attr_def.symbol_ref is not None else "NULL"
+                lines.append(f"    {{{_bstring_expr(attr_def.name)}, {attr_kind}, {flags}, {enum_case_count}, {enum_names}, {symbol_ref}}},")
+            lines.append("};")
 
-    # Region descriptors.
-    for op in ops:
-        if not op.regions:
-            continue
-        prefix = _c_prefix(op)
-        implicit_terminator = _implicit_terminator_kind(op, ops_by_name)
-        lines.append(f"static const loom_region_descriptor_t {prefix}_region_desc[] = {{")
-        for region_def in op.regions:
-            flags = "LOOM_REGION_SINGLE_BLOCK" if region_def.single_block else "0"
-            terminator = _region_terminator_kind(op, region_def, ops_by_name)
-            lines.append(f"    {{{terminator}, {implicit_terminator}, {flags}}},")
-        lines.append("};")
-    lines.append("")
+        # Region descriptors.
+        if op.regions:
+            implicit_terminator = _implicit_terminator_kind(op, ops_by_name)
+            lines.append(f"static const loom_region_descriptor_t {prefix}_region_desc[] = {{")
+            for region_def in op.regions:
+                flags = "LOOM_REGION_SINGLE_BLOCK" if region_def.single_block else "0"
+                terminator = _region_terminator_kind(op, region_def, ops_by_name)
+                lines.append(f"    {{{terminator}, {implicit_terminator}, {flags}}},")
+            lines.append("};")
 
-    # Constraint tables.
-    for op in ops:
-        if not op.constraints:
-            continue
-        prefix = _c_prefix(op)
-        layout = compute_layout(op)
-        lines.append(f"static const loom_constraint_t {prefix}_constraints[] = {{")
-        for constraint in op.constraints:
-            constraint_entry = CONSTRAINT_MAP.get(constraint.name)
-            if constraint_entry is None:
-                raise ValueError(f"Op '{op.name}': unknown constraint '{constraint.name}'")
-            relation_name, property_name = constraint_entry
-            if property_name == "$data":
-                if constraint.data is None:
-                    raise ValueError(f"Op '{op.name}' constraint {constraint.name}: missing data payload")
-                if not isinstance(constraint.data, int):
-                    raise ValueError(f"Op '{op.name}' constraint {constraint.name}: data payload must be an integer")
-                if constraint.data < 0 or constraint.data > 255:
-                    raise ValueError(f"Op '{op.name}' constraint {constraint.name}: data payload out of uint8_t range")
-                property_name = str(constraint.data)
-            elif property_name == "$type_constraint_data":
-                if not isinstance(constraint.data, TypeConstraint):
-                    raise ValueError(f"Op '{op.name}' constraint {constraint.name}: data payload must be a TypeConstraint")
-                property_name = TYPE_CONSTRAINT_MAP[constraint.data]
-            # Resolve field name args to packed field references.
-            arg_refs: list[str] = []
-            for arg_name in constraint.args:
-                field = layout.fields.get(arg_name)
-                if field is None:
-                    raise ValueError(f"Op '{op.name}' constraint {constraint.name}: unknown field '{arg_name}'")
-                if field.kind == FieldKind.SUCCESSOR:
-                    raise ValueError(f"Op '{op.name}' constraint {constraint.name}: successor field '{arg_name}' cannot be encoded as a value/type constraint argument")
-                category = FIELD_CATEGORY_MAP[field.kind]
-                arg_refs.append(
-                    _constraint_arg_ref(
-                        op,
-                        constraint.name,
-                        arg_name,
-                        category,
-                        field.index,
-                    )
-                )
-            # Pad to 4 args.
-            while len(arg_refs) < 4:
-                arg_refs.append("0")
-            args_str = ", ".join(arg_refs)
-            if constraint.error is not None:
-                error_ref = _error_ref_literal(constraint.error)
-            else:
-                error_ref = "LOOM_ERROR_REF_NONE"
-            lines.append(f"    {{{relation_name}, {property_name}, {len(constraint.args)}, 0, {{{args_str}}}, {error_ref}}},")
-        lines.append("};")
-    lines.append("")
+        # Constraint table.
+        if op.constraints:
+            lines.append(f"static const loom_constraint_t {prefix}_constraints[] = {{")
+            for constraint in op.constraints:
+                constraint_entry = CONSTRAINT_MAP.get(constraint.name)
+                if constraint_entry is None:
+                    raise ValueError(f"Op '{op.name}': unknown constraint '{constraint.name}'")
+                relation_name, property_name = constraint_entry
+                if property_name == "$data":
+                    if constraint.data is None:
+                        raise ValueError(f"Op '{op.name}' constraint {constraint.name}: missing data payload")
+                    if not isinstance(constraint.data, int):
+                        raise ValueError(f"Op '{op.name}' constraint {constraint.name}: data payload must be an integer")
+                    if constraint.data < 0 or constraint.data > 255:
+                        raise ValueError(f"Op '{op.name}' constraint {constraint.name}: data payload out of uint8_t range")
+                    property_name = str(constraint.data)
+                elif property_name == "$type_constraint_data":
+                    if not isinstance(constraint.data, TypeConstraint):
+                        raise ValueError(f"Op '{op.name}' constraint {constraint.name}: data payload must be a TypeConstraint")
+                    property_name = TYPE_CONSTRAINT_MAP[constraint.data]
+                arg_refs: list[str] = []
+                for arg_name in constraint.args:
+                    field = layout.fields.get(arg_name)
+                    if field is None:
+                        raise ValueError(f"Op '{op.name}' constraint {constraint.name}: unknown field '{arg_name}'")
+                    if field.kind == FieldKind.SUCCESSOR:
+                        raise ValueError(f"Op '{op.name}' constraint {constraint.name}: successor field '{arg_name}' cannot be encoded as a value/type constraint argument")
+                    category = FIELD_CATEGORY_MAP[field.kind]
+                    arg_refs.append(_constraint_arg_ref(op, constraint.name, arg_name, category, field.index))
+                while len(arg_refs) < 4:
+                    arg_refs.append("0")
+                args_str = ", ".join(arg_refs)
+                error_ref = _error_ref_literal(constraint.error) if constraint.error is not None else "LOOM_ERROR_REF_NONE"
+                lines.append(f"    {{{relation_name}, {property_name}, {len(constraint.args)}, 0, {{{args_str}}}, {error_ref}}},")
+            lines.append("};")
 
-    # Interface vtables. Emitted before the op vtables they are
-    # referenced from. Table-driven off _INTERFACES — adding a new
-    # interface requires no changes to this loop.
-    for spec in _INTERFACES:
-        for op in ops:
+        # Interface vtables.
+        for spec in _INTERFACES:
             _emit_interface_vtable(op, spec, lines)
 
-    # Symbol definition descriptors. These keep symbol-definition shape in the
-    # generated op metadata instead of a central op-name map.
-    symbol_fact_domain_symbols = sorted({fact_domain for op in ops if op.symbol_def is not None if (fact_domain := _symbol_fact_domain_symbol(op)) is not None})
-    if symbol_fact_domain_symbols:
-        lines.extend(f"extern const loom_symbol_fact_domain_t {fact_domain};" for fact_domain in symbol_fact_domain_symbols)
-        lines.append("")
-    for op in ops:
-        if op.symbol_def is None:
-            continue
-        prefix = _c_prefix(op)
-        name = op.symbol_def.name
-        assert len(name) < 256, f"symbol definition name too long: {name!r}"
-        name_bstr = f"{prefix}_symbol_def_bname"
-        attr_index = _resolve_attr_index(op, op.symbol_def.field, "symbol_def")
-        flags = _symbol_interface_flags(op.symbol_def.interfaces)
-        fact_domain = _symbol_fact_domain_symbol(op)
-        lines.append(f'static const uint8_t {name_bstr}[] = "\\x{len(name):02x}" "{name}";')
-        lines.append(f"static const loom_symbol_definition_descriptor_t {prefix}_symbol_def = {{")
-        lines.append(f"    .name = {name_bstr},")
-        lines.append(f"    .name_attr_index = {attr_index},")
-        lines.append(f"    .interfaces = {flags},")
-        lines.append(f"    .bytecode_kind = {op.symbol_def.bytecode_kind},")
-        lines.append(f"    .fact_domain = {'&' + fact_domain if fact_domain else 'NULL'},")
-        lines.append("};")
+        # Symbol definition descriptor.
+        if op.symbol_def is not None:
+            attr_index = _resolve_attr_index(op, op.symbol_def.field, "symbol_def")
+            flags = _symbol_interface_flags(op.symbol_def.interfaces)
+            fact_domain = _symbol_fact_domain_symbol(op)
+            lines.append(f"static const loom_symbol_definition_descriptor_t {prefix}_symbol_def = {{")
+            lines.append(f"    .name = {_bstring_expr(op.symbol_def.name)},")
+            if attr_index != 0:
+                lines.append(f"    .name_attr_index = {attr_index},")
+            if flags != "0":
+                lines.append(f"    .interfaces = {flags},")
+            if op.symbol_def.bytecode_kind != "LOOM_SYMBOL_NONE":
+                lines.append(f"    .bytecode_kind = {op.symbol_def.bytecode_kind},")
+            if fact_domain:
+                lines.append(f"    .fact_domain = &{fact_domain},")
+            lines.append("};")
 
-    # Structural placement descriptors.
-    for op in ops:
-        prefix = _c_prefix(op)
+        # Structural placement descriptor.
         required_ancestor_kinds = _trait_op_kinds(op, ops_by_name, "HasAncestor")
         forbidden_ancestor_kinds = _trait_op_kinds(op, ops_by_name, "NoAncestor")
-        if not required_ancestor_kinds and not forbidden_ancestor_kinds:
-            continue
-        required_ptr = "NULL"
-        forbidden_ptr = "NULL"
-        if required_ancestor_kinds:
-            required_ptr = f"{prefix}_required_ancestors"
-            lines.append(f"static const loom_op_kind_t {required_ptr}[] = {{")
-            lines.extend(f"    {kind}," for kind in required_ancestor_kinds)
+        if required_ancestor_kinds or forbidden_ancestor_kinds:
+            required_ptr = "NULL"
+            forbidden_ptr = "NULL"
+            if required_ancestor_kinds:
+                required_ptr = f"{prefix}_required_ancestors"
+                lines.append(f"static const loom_op_kind_t {required_ptr}[] = {{")
+                lines.extend(f"    {kind}," for kind in required_ancestor_kinds)
+                lines.append("};")
+            if forbidden_ancestor_kinds:
+                forbidden_ptr = f"{prefix}_forbidden_ancestors"
+                lines.append(f"static const loom_op_kind_t {forbidden_ptr}[] = {{")
+                lines.extend(f"    {kind}," for kind in forbidden_ancestor_kinds)
+                lines.append("};")
+            lines.append(f"static const loom_op_placement_descriptor_t {prefix}_placement = {{")
+            if required_ptr != "NULL":
+                lines.append(f"    .required_ancestors = {required_ptr},")
+                lines.append(f"    .required_ancestor_count = IREE_ARRAYSIZE({required_ptr}),")
+            if forbidden_ptr != "NULL":
+                lines.append(f"    .forbidden_ancestors = {forbidden_ptr},")
+                lines.append(f"    .forbidden_ancestor_count = IREE_ARRAYSIZE({forbidden_ptr}),")
             lines.append("};")
-        if forbidden_ancestor_kinds:
-            forbidden_ptr = f"{prefix}_forbidden_ancestors"
-            lines.append(f"static const loom_op_kind_t {forbidden_ptr}[] = {{")
-            lines.extend(f"    {kind}," for kind in forbidden_ancestor_kinds)
-            lines.append("};")
-        lines.append(f"static const loom_op_placement_descriptor_t {prefix}_placement = {{")
-        lines.append(f"    .required_ancestors = {required_ptr},")
-        lines.append(f"    .forbidden_ancestors = {forbidden_ptr},")
-        lines.append(f"    .required_ancestor_count = {len(required_ancestor_kinds)},")
-        lines.append(f"    .forbidden_ancestor_count = {len(forbidden_ancestor_kinds)},")
-        lines.append("};")
-        lines.append("")
 
-    # Vtables.
-    for op in ops:
-        prefix = _c_prefix(op)
-        layout = compute_layout(op)
-        elements = _translate_format_elements(op)
+        # Vtable.
         traits = _trait_flags(op)
-
-        len(op.operands)
-        len(op.results)
-
-        # Flags attrs are stored in instance_flags, not in the attr array.
-        non_flags = _non_flags_attrs(op)
-        has_flags = _has_flags_attr(op)
-
-        # Build vtable_flags bitfield.
         vtable_flag_bits: list[str] = []
         if layout.variadic_operand or _func_args_are_operands(op):
             vtable_flag_bits.append("LOOM_OP_VTABLE_VARIADIC_OPERANDS")
@@ -3318,9 +3265,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
             vtable_flag_bits.append("LOOM_OP_VTABLE_HAS_INSTANCE_FLAGS")
         vtable_flags_str = " | ".join(vtable_flag_bits) if vtable_flag_bits else "0"
 
-        # Emit vtable in cache-optimized field order (see loom_op_vtable_t).
         sym_kind = _symbol_kind(op)
-        constraint_count = len(op.constraints) if op.constraints else 0
         canon = op.canonicalize or "NULL"
         infer_facts_fn = op.facts or "NULL"
         type_transfer_fn = op.type_transfer or "NULL"
@@ -3337,47 +3282,46 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         constraint_ptr = f"{prefix}_constraints" if op.constraints else "NULL"
         fmt_ptr = f"{prefix}_format" if elements else "NULL"
 
-        lines.append(f"static const loom_op_vtable_t {prefix}_vtable = {{")
+        vtable_storage = "const" if export_vtables else "static const"
+        lines.append(f"{vtable_storage} loom_op_vtable_t {prefix}_vtable = {{")
 
-        # Cache line 1: compiler pass hot path.
-        lines.append(f"    .traits = {traits},")
-        lines.append(f"    .fixed_operand_count = {layout.fixed_operand_count},")
-        lines.append(f"    .fixed_result_count = {layout.fixed_result_count},")
-        lines.append(f"    .attribute_count = {len(non_flags)},")
-        lines.append(f"    .region_count = {len(op.regions)},")
-        lines.append(f"    .vtable_flags = {vtable_flags_str},")
-        lines.append(f"    .symbol_kind = {sym_kind},")
-        lines.append(f"    .constraint_count = {constraint_count},")
-        lines.append(f"    .canonicalize = {canon},")
-        lines.append(f"    .infer_facts = {infer_facts_fn},")
-        lines.append(f"    .effective_traits = {eff_traits},")
-        lines.append(f"    .attr_descriptors = {attr_desc_ptr},")
-        lines.append(f"    .operand_descriptors = {operand_desc_ptr},")
-        lines.append(f"    .type_transfer = {type_transfer_fn},")
+        def append_nonzero(field_name: str, value: int | str) -> None:
+            if value != 0 and value != "0":
+                lines.append(f"    .{field_name} = {value},")
 
-        # Cache line 2: verify + parse/print + diagnostics.
-        lines.append(f"    .result_descriptors = {result_desc_ptr},")
-        lines.append(f"    .region_descriptors = {region_desc_ptr},")
-        lines.append(f"    .constraints = {constraint_ptr},")
-        lines.append(f"    .verify = {verify_fn},")
-        lines.append(f"    .name = {prefix}_name,")
-        lines.append(f"    .format_elements = {fmt_ptr},")
+        def append_nonnull(field_name: str, value: str) -> None:
+            if value != "NULL":
+                lines.append(f"    .{field_name} = {value},")
+
+        append_nonzero("traits", traits)
+        append_nonzero("fixed_operand_count", layout.fixed_operand_count)
+        append_nonzero("fixed_result_count", layout.fixed_result_count)
+        append_nonzero("vtable_flags", vtable_flags_str)
+        if sym_kind != "LOOM_SYMBOL_NONE":
+            lines.append(f"    .symbol_kind = {sym_kind},")
+        append_nonnull("canonicalize", canon)
+        append_nonnull("infer_facts", infer_facts_fn)
+        append_nonnull("effective_traits", eff_traits)
+        append_nonnull("type_transfer", type_transfer_fn)
+        append_nonnull("verify", verify_fn)
+        lines.append(f"    .name = {_op_name_expr(op.name)},")
+        if attr_desc_ptr != "NULL":
+            lines.append(f"    .attr_descriptors = {attr_desc_ptr},")
+            lines.append(f"    .attribute_count = IREE_ARRAYSIZE({attr_desc_ptr}),")
+        append_nonnull("operand_descriptors", operand_desc_ptr)
+        append_nonnull("result_descriptors", result_desc_ptr)
+        if region_desc_ptr != "NULL":
+            lines.append(f"    .region_descriptors = {region_desc_ptr},")
+            lines.append(f"    .region_count = IREE_ARRAYSIZE({region_desc_ptr}),")
+        if constraint_ptr != "NULL":
+            lines.append(f"    .constraints = {constraint_ptr},")
+            lines.append(f"    .constraint_count = IREE_ARRAYSIZE({constraint_ptr}),")
+        append_nonnull("format_elements", fmt_ptr)
+        if elements:
+            lines.append(f"    .format_element_count = IREE_ARRAYSIZE({fmt_ptr}),")
         if has_flags:
             lines.append(f"    .instance_flags_case_names = {prefix}_instance_flags_names,")
-            flags_attr = next(a for a in op.attrs if a.attr_type == ATTR_TYPE_FLAGS)
-            assert flags_attr.enum_def is not None, f"flags attr on {op.name} has no enum_def"
-            flags_enum = flags_attr.enum_def
-            individual_cases = [c for c in flags_enum.cases if c.value != 0 and (c.value & (c.value - 1)) == 0]
-            lines.append(f"    .format_element_count = {len(elements)},")
-            lines.append(f"    .instance_flags_case_count = {len(individual_cases)},")
-        else:
-            lines.append("    .instance_flags_case_names = NULL,")
-            lines.append(f"    .format_element_count = {len(elements)},")
-            lines.append("    .instance_flags_case_count = 0,")
-
-        # Cache line 3: interface pointers. NULL pointer fields are omitted
-        # and rely on static zero-initialization; this keeps generated tables
-        # sparse as the interface set grows.
+            lines.append(f"    .instance_flags_case_count = IREE_ARRAYSIZE({prefix}_instance_flags_names),")
         for spec in _INTERFACES:
             interface_ptr = interface_ptrs[spec.vtable_field]
             if interface_ptr != "NULL":
@@ -3389,6 +3333,13 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
 
         lines.append("};")
         lines.append("")
+
+    lines.append("#undef _OP_NAME")
+    lines.append("#undef _BSTRING")
+    lines.append("")
+
+    if not emit_registration:
+        return "\n".join(lines)
 
     # Registration function.
     lines.append(f"static const loom_op_vtable_t* const loom_{dialect_name}_vtable_array[] = {{")
@@ -3406,10 +3357,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
 
     lines.append(f"static const loom_op_semantics_t loom_{dialect_name}_semantics_array[] = {{")
     for op in ops:
-        lines.append("    {")
-        lines.append(f"        .phase = {_op_phase_c_name(op)},")
-        lines.append(f"        .contract_families = {_contract_family_mask(op.contracts)},")
-        lines.append("    },")
+        _emit_op_semantics(lines, op)
     lines.append("};")
     lines.append("")
     lines.append(f"const loom_op_semantics_t* loom_{dialect_name}_dialect_op_semantics(")
@@ -3432,6 +3380,112 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
     lines.append("")
 
     return "\n".join(lines)
+
+
+def generate_tables_h(dialect_name: str, ops: Sequence[Op]) -> str:
+    """Generates private declarations shared by a sharded dialect table."""
+    guard = f"LOOM_OPS_{dialect_name.upper()}_TABLES_H_"
+    lines: list[str] = []
+
+    lines.append(COPYRIGHT)
+    lines.extend(line_comment_header("//", generator="loom.gen.c_tables"))
+    lines.append("")
+    lines.append(f"#ifndef {guard}")
+    lines.append(f"#define {guard}")
+    lines.append("")
+    lines.append(f'#include "loom/ops/{dialect_name}/ops.h"')
+    lines.append("")
+    _emit_table_string_macros(lines, dialect_name)
+    lines.append("#ifdef __cplusplus")
+    lines.append('extern "C" {')
+    lines.append("#endif")
+    lines.append("")
+    lines.extend(f"extern const loom_op_vtable_t {_c_prefix(op)}_vtable;" for op in ops)
+    lines.append("")
+    lines.append("#ifdef __cplusplus")
+    lines.append('}  // extern "C"')
+    lines.append("#endif")
+    lines.append("")
+    lines.append(f"#endif  // {guard}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def generate_tables_aggregator_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str:
+    """Generates a dialect table aggregator for sharded per-op vtable files."""
+    lines: list[str] = []
+
+    lines.append(COPYRIGHT)
+    lines.extend(line_comment_header("//", generator="loom.gen.c_tables"))
+    lines.append("// clang-format off")
+    lines.append("")
+    lines.append(f'#include "loom/ops/{dialect_name}/tables.h"')
+    lines.append("")
+
+    lines.append(f"static const loom_op_vtable_t* const loom_{dialect_name}_vtable_array[] = {{")
+    lines.extend(f"    &{_c_prefix(op)}_vtable," for op in ops)
+    lines.append("};")
+    lines.append("")
+    lines.append(f"const loom_op_vtable_t* const* loom_{dialect_name}_dialect_vtables(")
+    lines.append("    iree_host_size_t* out_count) {")
+    lines.append(f"  *out_count = IREE_ARRAYSIZE(loom_{dialect_name}_vtable_array);")
+    lines.append(f"  return loom_{dialect_name}_vtable_array;")
+    lines.append("}")
+    lines.append("")
+
+    lines.append(f"static const loom_op_semantics_t loom_{dialect_name}_semantics_array[] = {{")
+    for op in ops:
+        _emit_op_semantics(lines, op)
+    lines.append("};")
+    lines.append("")
+    lines.append(f"const loom_op_semantics_t* loom_{dialect_name}_dialect_op_semantics(")
+    lines.append("    iree_host_size_t* out_count) {")
+    lines.append(f"  *out_count = IREE_ARRAYSIZE(loom_{dialect_name}_semantics_array);")
+    lines.append(f"  return loom_{dialect_name}_semantics_array;")
+    lines.append("}")
+    lines.append("")
+    lines.append(f"loom_op_semantics_t loom_{dialect_name}_op_semantics(")
+    lines.append("    loom_op_kind_t kind) {")
+    lines.append(f"  if (loom_op_dialect_id(kind) != {_c_dialect_enum(dialect_name)}) {{")
+    lines.append("    return loom_op_semantics_empty();")
+    lines.append("  }")
+    lines.append("  uint8_t op_index = loom_op_dialect_index(kind);")
+    lines.append(f"  if (op_index >= IREE_ARRAYSIZE(loom_{dialect_name}_semantics_array)) {{")
+    lines.append("    return loom_op_semantics_empty();")
+    lines.append("  }")
+    lines.append(f"  return loom_{dialect_name}_semantics_array[op_index];")
+    lines.append("}")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+def generate_sharded_tables_c(
+    dialect_name: str,
+    dialect_id: int,
+    category_groups: Sequence[tuple[Any, Sequence[Op]]],
+) -> dict[str, str]:
+    """Generates an aggregator plus category shards for one dialect."""
+    all_ops: list[Op] = []
+    table_files: dict[str, str] = {}
+    for category, category_ops in category_groups:
+        shard_ops = list(category_ops)
+        all_ops.extend(shard_ops)
+        if not shard_ops:
+            continue
+        category_key = category.key
+        filename = f"tables/{_c_identifier(category_key)}.c"
+        table_files[filename] = generate_tables_c(
+            dialect_name,
+            dialect_id,
+            shard_ops,
+            emit_registration=False,
+            export_vtables=True,
+            private_header=True,
+        )
+    table_files["tables.c"] = generate_tables_aggregator_c(dialect_name, dialect_id, all_ops)
+    table_files["tables.h"] = generate_tables_h(dialect_name, all_ops)
+    return table_files
 
 
 # ============================================================================
@@ -3958,14 +4012,14 @@ def generate_type_registry(
         source.append(f"static const loom_type_descriptor_t loom_type_{ident}_descriptor = {{")
         source.append(f"    .name = loom_type_{ident}_name,")
         source.append(f"    .ir_kind = {ir_kind},")
-        source.append(f"    .param_count = {param_count},")
-        source.append(f"    .fact_domain = {'&' + fact_domain if fact_domain else 'NULL'},")
-        source.append("    .semantics = {")
-        source.append(f"        .semantic = {_type_semantic_c_name(td.semantic)},")
-        source.append(f"        .contract_families = {_contract_family_mask(td.contracts)},")
-        source.append("    },")
-        source.append(f"    .format_elements = {fmt_ref},")
-        source.append(f"    .format_element_count = {fmt_count},")
+        if param_count != 0:
+            source.append(f"    .param_count = {param_count},")
+        if fact_domain:
+            source.append(f"    .fact_domain = &{fact_domain},")
+        _emit_type_semantics(source, td)
+        if fmt_ref != "NULL":
+            source.append(f"    .format_elements = {fmt_ref},")
+            source.append(f"    .format_element_count = {fmt_count},")
         source.append("};")
         source.append("")
 
@@ -4123,54 +4177,64 @@ def main() -> None:
     from loom.dialect.low import ALL_LOW_OPS, low_ops
     from loom.dialect.pass_ import ALL_PASS_OPS, pass_ops
     from loom.dialect.pool import ALL_POOL_OPS, pool_ops
-    from loom.dialect.scalar import ALL_SCALAR_OPS, scalar_ops
+    from loom.dialect.scalar import ALL_SCALAR_OPS, SCALAR_OP_CATEGORY_GROUPS, scalar_ops
     from loom.dialect.scf import ALL_SCF_OPS, scf_ops
     from loom.dialect.target import ALL_TARGET_OPS, target_ops
     from loom.dialect.test import ALL_TEST_OPS, test_ops
-    from loom.dialect.vector import ALL_VECTOR_OPS, vector_ops
+    from loom.dialect.vector import ALL_VECTOR_OPS, VECTOR_OP_CATEGORY_GROUPS, vector_ops
     from loom.dialect.view import ALL_VIEW_OPS, view_ops
 
     dialects = [
-        (test_ops, list(ALL_TEST_OPS)),
-        (scalar_ops, list(ALL_SCALAR_OPS)),
-        (func_ops, list(ALL_FUNC_OPS)),
-        (encoding_ops, list(ALL_ENCODING_OPS)),
-        (pool_ops, list(ALL_POOL_OPS)),
-        (global_ops, list(ALL_GLOBAL_OPS)),
-        (scf_ops, list(ALL_SCF_OPS)),
-        (cfg_ops, list(ALL_CFG_OPS)),
-        (check_ops, list(ALL_CHECK_OPS)),
-        (buffer_ops, list(ALL_BUFFER_OPS)),
-        (view_ops, list(ALL_VIEW_OPS)),
-        (vector_ops, list(ALL_VECTOR_OPS)),
-        (index_ops, list(ALL_INDEX_OPS)),
-        (kernel_ops, list(ALL_KERNEL_OPS)),
-        (llvmir_ops, list(ALL_LLVMIR_OPS)),
-        (target_ops, list(ALL_TARGET_OPS)),
-        (low_ops, list(ALL_LOW_OPS)),
-        (pass_ops, list(ALL_PASS_OPS)),
+        (test_ops, list(ALL_TEST_OPS), None),
+        (scalar_ops, list(ALL_SCALAR_OPS), SCALAR_OP_CATEGORY_GROUPS),
+        (func_ops, list(ALL_FUNC_OPS), None),
+        (encoding_ops, list(ALL_ENCODING_OPS), None),
+        (pool_ops, list(ALL_POOL_OPS), None),
+        (global_ops, list(ALL_GLOBAL_OPS), None),
+        (scf_ops, list(ALL_SCF_OPS), None),
+        (cfg_ops, list(ALL_CFG_OPS), None),
+        (check_ops, list(ALL_CHECK_OPS), None),
+        (buffer_ops, list(ALL_BUFFER_OPS), None),
+        (view_ops, list(ALL_VIEW_OPS), None),
+        (vector_ops, list(ALL_VECTOR_OPS), VECTOR_OP_CATEGORY_GROUPS),
+        (index_ops, list(ALL_INDEX_OPS), None),
+        (kernel_ops, list(ALL_KERNEL_OPS), None),
+        (llvmir_ops, list(ALL_LLVMIR_OPS), None),
+        (target_ops, list(ALL_TARGET_OPS), None),
+        (low_ops, list(ALL_LOW_OPS), None),
+        (pass_ops, list(ALL_PASS_OPS), None),
     ]
-    production_dialects = [(dialect, ops) for dialect, ops in dialects if dialect.name != "test"]
+    production_dialects = [(dialect, ops) for dialect, ops, _ in dialects if dialect.name != "test"]
 
     output_root = _bootstrap.REPO_ROOT / "loom" / "src" / "loom" / "ops"
 
-    for dialect, ops in dialects:
+    for dialect, ops, table_shards in dialects:
         dialect_dir = output_root / dialect.name
         dialect_dir.mkdir(parents=True, exist_ok=True)
 
         ops_h = generate_ops_h(dialect.name, dialect.dialect_id, ops)
-        tables_c = generate_tables_c(dialect.name, dialect.dialect_id, ops)
+        table_files = generate_sharded_tables_c(dialect.name, dialect.dialect_id, table_shards) if table_shards is not None else {"tables.c": generate_tables_c(dialect.name, dialect.dialect_id, ops)}
         builders_c = generate_builders_c(dialect.name, ops)
 
         ops_h_path = dialect_dir / "ops.h"
-        tables_c_path = dialect_dir / "tables.c"
         builders_c_path = dialect_dir / "builders.c"
+        generated_paths = {dialect_dir / filename for filename in table_files}
+        if table_shards is not None:
+            for stale_path in dialect_dir.glob("tables_*.c"):
+                if stale_path not in generated_paths:
+                    stale_path.unlink()
+            shard_dir = dialect_dir / "tables"
+            if shard_dir.exists():
+                for stale_path in shard_dir.glob("*.c"):
+                    if stale_path not in generated_paths:
+                        stale_path.unlink()
 
         for path, content in [
             (ops_h_path, ops_h),
-            (tables_c_path, tables_c),
             (builders_c_path, builders_c),
+            *((dialect_dir / filename, content) for filename, content in table_files.items()),
         ]:
+            path.parent.mkdir(parents=True, exist_ok=True)
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
         rel = dialect_dir.relative_to(output_root)
@@ -4201,7 +4265,7 @@ def main() -> None:
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
 
-    total_ops = sum(len(ops) for _, ops in dialects)
+    total_ops = sum(len(ops) for _, ops, _ in dialects)
     op_registry_ops = sum(len(ops) for _, ops in production_dialects)
     total_types = len(all_types)
     print(f"  op tables: {total_ops} ops")
