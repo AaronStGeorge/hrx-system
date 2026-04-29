@@ -1,0 +1,45 @@
+// RUN: pass canonicalize
+
+target.profile @test_target preset("test-low")
+
+func.def @low_const_concat_uniform_zero() -> (i64, i64) {
+  %zero = low.const<test.const.i32> {i32_value = 0} : reg<test.i32>
+  %quad = low.concat(%zero, %zero, %zero, %zero) : (reg<test.i32>, reg<test.i32>, reg<test.i32>, reg<test.i32>) -> reg<test.i32 x4>
+  %copy = low.copy %quad : reg<test.i32 x4> -> reg<test.i32 x4>
+  %slice = low.slice %copy[1] : reg<test.i32 x4> -> reg<test.i32 x2>
+  %wide = low.concat(%slice, %slice) : (reg<test.i32 x2>, reg<test.i32 x2>) -> reg<test.i32 x4>
+  %lo = test.fact_all_equal_range_lo %wide : reg<test.i32 x4> -> i64
+  %hi = test.fact_all_equal_range_hi %wide : reg<test.i32 x4> -> i64
+  func.return %lo, %hi : i64, i64
+}
+
+// ----
+target.profile @test_target preset("test-low")
+
+func.def @low_const_concat_uniform_zero() -> (i64, i64) {
+  %lo = scalar.constant 0 : i64
+  %hi = scalar.constant 0 : i64
+  func.return %lo, %hi : i64, i64
+}
+
+// ====
+
+target.profile @test_target preset("test-low")
+
+func.def @low_concat_rejects_mixed_elements() -> (i64, i64) {
+  %zero = low.const<test.const.i32> {i32_value = 0} : reg<test.i32>
+  %one = low.const<test.const.i32> {i32_value = 1} : reg<test.i32>
+  %pair = low.concat(%zero, %one) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
+  %lo = test.fact_all_equal_range_lo %pair : reg<test.i32 x2> -> i64
+  %hi = test.fact_all_equal_range_hi %pair : reg<test.i32 x2> -> i64
+  func.return %lo, %hi : i64, i64
+}
+
+// ----
+target.profile @test_target preset("test-low")
+
+func.def @low_concat_rejects_mixed_elements() -> (i64, i64) {
+  %lo = scalar.constant -9223372036854775808 : i64
+  %hi = scalar.constant -9223372036854775808 : i64
+  func.return %lo, %hi : i64, i64
+}

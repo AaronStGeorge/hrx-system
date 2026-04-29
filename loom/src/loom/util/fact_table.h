@@ -90,7 +90,9 @@ loom_value_fact_type_domain_resolver_callback_make(
 // payloads degrade to no extension, which is the domain top/unknown value.
 #define LOOM_VALUE_FACT_RAW_PAYLOAD_LENGTH_LIMIT 256
 
-// All lanes of a vector value share the same element facts.
+// Every logical element of an aggregate value shares the same facts. Vector
+// values interpret the element as a lane; target-low register-range values
+// interpret it as one register unit.
 typedef struct loom_value_fact_uniform_element_t {
   // Scalar facts that apply to every lane.
   loom_value_facts_t element;
@@ -636,6 +638,14 @@ iree_status_t loom_value_facts_make_small_static_lanes(
 bool loom_value_facts_query_small_static_lanes(
     const loom_fact_context_t* context, loom_value_facts_t facts,
     loom_value_fact_small_static_lanes_t* out);
+
+// Returns true when |facts| represents a scalar value or aggregate whose every
+// logical element has the same facts. Unknown scalar facts are not reported
+// because carrying a uniform-unknown extension adds no useful information.
+// |out_element| is required and receives the shared element facts.
+bool loom_value_facts_query_all_equal_element(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    loom_value_facts_t* out_element);
 
 // Creates facts for a vector.iota-style lane-coordinate sequence.
 iree_status_t loom_value_facts_make_vector_iota(

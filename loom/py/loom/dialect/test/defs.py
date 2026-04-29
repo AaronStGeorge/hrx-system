@@ -313,6 +313,30 @@ test_fact_range_hi = Op(
     examples=["%hi = test.fact_range_hi %x : index -> i64"],
 )
 
+test_fact_all_equal_range_lo = Op(
+    "test.fact_all_equal_range_lo",
+    group=test_ops,
+    doc="Exposes the all-equal element range lower bound as an i64 constant.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_all_equal_range_lo_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%lo = test.fact_all_equal_range_lo %x : reg<test.i32 x4> -> i64"],
+)
+
+test_fact_all_equal_range_hi = Op(
+    "test.fact_all_equal_range_hi",
+    group=test_ops,
+    doc="Exposes the all-equal element range upper bound as an i64 constant.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_all_equal_range_hi_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%hi = test.fact_all_equal_range_hi %x : reg<test.i32 x4> -> i64"],
+)
+
 test_fact_divisor = Op(
     "test.fact_divisor",
     group=test_ops,
@@ -1724,6 +1748,8 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_dim,
     test_fact_range_lo,
     test_fact_range_hi,
+    test_fact_all_equal_range_lo,
+    test_fact_all_equal_range_hi,
     test_fact_divisor,
     test_fact_non_negative,
     test_fact_non_zero,

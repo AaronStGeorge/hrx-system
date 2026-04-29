@@ -722,9 +722,9 @@ low_const = Op(
         AttrDef("descriptor_id", "i64"),
         AttrDef("attrs", "dict", optional=True),
     ],
-    results=[Result("result", REGISTER)],
-    traits=[UNKNOWN_EFFECTS],
+    results=[Result("result", REGISTER, allocates=True)],
     verify="loom_low_const_verify",
+    facts="loom_low_const_facts",
     format=[
         DescriptorRef("opcode", "descriptor_id"),
         AttrDict("attrs"),
@@ -751,6 +751,7 @@ low_copy = Op(
         SameRegisterClass("source", "result"),
     ],
     verify="loom_low_copy_verify",
+    facts="loom_low_copy_facts",
     format=[
         Ref("source"),
         COLON,
@@ -781,6 +782,7 @@ low_slice = Op(
         SameRegisterClass("source", "result"),
     ],
     verify="loom_low_slice_verify",
+    facts="loom_low_slice_facts",
     format=[
         Ref("source"),
         GLUE,
@@ -813,6 +815,7 @@ low_concat = Op(
         SameRegisterClass("sources", "result"),
         RegisterUnitsSumTo("sources", "result"),
     ],
+    facts="loom_low_concat_facts",
     format=[
         GLUE,
         LPAREN,

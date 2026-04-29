@@ -886,6 +886,45 @@ bool loom_value_facts_query_small_static_lanes(
   return true;
 }
 
+bool loom_value_facts_query_all_equal_element(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    loom_value_facts_t* out_element) {
+  IREE_ASSERT_ARGUMENT(out_element);
+  loom_value_fact_uniform_element_t uniform = {0};
+  if (loom_value_facts_query_uniform_element(context, facts, &uniform)) {
+    if (loom_value_facts_is_unknown(uniform.element)) {
+      return false;
+    }
+    *out_element = uniform.element;
+    return true;
+  }
+
+  loom_value_fact_small_static_lanes_t lanes = {0};
+  if (loom_value_facts_query_small_static_lanes(context, facts, &lanes)) {
+    if (lanes.count == 0) {
+      return false;
+    }
+    loom_value_facts_t element = lanes.lanes[0];
+    if (loom_value_facts_is_unknown(element)) {
+      return false;
+    }
+    for (iree_host_size_t i = 1; i < lanes.count; ++i) {
+      if (!loom_value_facts_equal(element, lanes.lanes[i])) {
+        return false;
+      }
+    }
+    *out_element = element;
+    return true;
+  }
+
+  if (facts.extension_id != LOOM_VALUE_FACT_EXTENSION_ID_NONE ||
+      loom_value_facts_is_unknown(facts)) {
+    return false;
+  }
+  *out_element = facts;
+  return true;
+}
+
 iree_status_t loom_value_facts_make_vector_iota(
     loom_fact_context_t* context, loom_value_fact_vector_iota_t iota,
     loom_value_facts_t* out) {

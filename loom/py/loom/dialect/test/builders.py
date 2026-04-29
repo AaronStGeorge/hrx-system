@@ -588,6 +588,30 @@ class TestBuilders:
         _operands.append(value)
         return cast(ValueRef, self._b.build("test.fact_range_hi", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def fact_all_equal_range_lo(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Exposes the all-equal element range lower bound as an i64 constant.
+
+        Example::
+            %lo = test.fact_all_equal_range_lo %x : reg<test.i32 x4> -> i64
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_all_equal_range_lo", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_all_equal_range_hi(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Exposes the all-equal element range upper bound as an i64 constant.
+
+        Example::
+            %hi = test.fact_all_equal_range_hi %x : reg<test.i32 x4> -> i64
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_all_equal_range_hi", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def fact_divisor(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Exposes the analysis known divisor as an i64 constant.
 

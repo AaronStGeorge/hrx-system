@@ -77,6 +77,34 @@ iree_status_t loom_test_fact_range_hi_facts(
   return iree_ok_status();
 }
 
+iree_status_t loom_test_fact_all_equal_range_lo_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_facts_t element_facts = loom_value_facts_unknown();
+  if (!loom_value_facts_query_all_equal_element(context, operand_facts[0],
+                                                &element_facts)) {
+    result_facts[0] = loom_value_facts_exact_i64(INT64_MIN);
+    return iree_ok_status();
+  }
+  result_facts[0] = loom_value_facts_exact_i64(element_facts.range_lo);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_all_equal_range_hi_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_facts_t element_facts = loom_value_facts_unknown();
+  if (!loom_value_facts_query_all_equal_element(context, operand_facts[0],
+                                                &element_facts)) {
+    result_facts[0] = loom_value_facts_exact_i64(INT64_MIN);
+    return iree_ok_status();
+  }
+  result_facts[0] = loom_value_facts_exact_i64(element_facts.range_hi);
+  return iree_ok_status();
+}
+
 iree_status_t loom_test_fact_divisor_facts(
     loom_fact_context_t* context, const loom_module_t* module,
     const loom_op_t* op, const loom_value_facts_t* operand_facts,

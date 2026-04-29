@@ -17,6 +17,7 @@ loom_cc_library(
     "ops.h"
   SRCS
     "builders.c"
+    "facts.c"
     "tables.c"
     "verify.c"
   DEPS
@@ -29,6 +30,7 @@ loom_cc_library(
     loom::src::loom::ops::successor_verify
     loom::src::loom::ops::target
     loom::src::loom::target::types
+    loom::src::loom::util::fact_table
     loom::src::loom::util::stable_id
   PUBLIC
 )

@@ -194,7 +194,9 @@ iree_status_t loom_low_build_resolved_descriptor_const(
       /*region_count=*/0, /*tied_result_count=*/0, /*attribute_count=*/3,
       location, out_op));
   (*out_op)->traits =
-      loom_low_descriptor_effective_traits(descriptor_set, descriptor);
+      (loom_low_descriptor_effective_traits(descriptor_set, descriptor) &
+       ~LOOM_TRAIT_PURE) |
+      LOOM_TRAIT_UNIQUE_IDENTITY;
   loom_op_attrs(*out_op)[loom_low_const_opcode_ATTR_INDEX] =
       loom_attr_string(opcode_id);
   loom_op_attrs(*out_op)[loom_low_const_descriptor_id_ATTR_INDEX] =
