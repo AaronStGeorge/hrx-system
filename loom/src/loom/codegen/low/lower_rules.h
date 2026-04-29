@@ -200,6 +200,8 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_PACK_ELEMENTS = 2,
   // Emits literal_i64 as an i64 attribute into the emitted low packet.
   LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL = 3,
+  // Emits an exact integer source value fact as an i64 packet attribute.
+  LOOM_LOW_LOWER_ATTR_COPY_VALUE_EXACT_I64 = 4,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {
@@ -217,6 +219,8 @@ typedef struct loom_low_lower_attr_copy_t {
   uint8_t source_element_bit_width;
   // Low bit position of the projected or packed value in the emitted i64.
   uint8_t target_bit_offset;
+  // Source value-ref table row consumed by VALUE_EXACT_I64 rows.
+  uint16_t value_ref_index;
   // Literal value emitted by I64_LITERAL rows.
   int64_t literal_i64;
 } loom_low_lower_attr_copy_t;
@@ -265,6 +269,8 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_SIGNED_BIT_COUNT = 13,
   // Source value facts must fit in an unsigned integer with |u64| bits.
   LOOM_LOW_LOWER_GUARD_VALUE_UNSIGNED_BIT_COUNT = 14,
+  // Source value facts must be an exact non-floating integer.
+  LOOM_LOW_LOWER_GUARD_VALUE_EXACT_I64 = 15,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {

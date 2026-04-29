@@ -1490,6 +1490,31 @@ def _v_add_u32_overlay(instruction_name: str) -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_add_u32_literal_overlay(instruction_name: str) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_add_u32.lit",
+        instruction_name=instruction_name,
+        mnemonic="v_add_u32",
+        encoding_name="VOP2_INST_LITERAL",
+        encoding_condition="has_lit",
+        semantic_tag="integer.add.u32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("VSRC1", _vgpr_operand("rhs")),
+        ),
+        asm_forms=_asm(
+            mnemonic="v_add_u32_lit",
+            results=("dst",),
+            operands=("rhs",),
+            immediates=("imm32",),
+        ),
+        immediate_fields=("LITERAL",),
+        immediates=(_U32_IMMEDIATE,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_sub_u32_overlay(instruction_name: str, mnemonic: str) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_sub_u32",
@@ -5468,6 +5493,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         *_s_cmp_i32_overlays(),
         _s_and_saveexec_b64_overlay("default"),
         _v_add_u32_overlay("V_ADD_U32"),
+        _v_add_u32_literal_overlay("V_ADD_U32"),
         _v_sub_u32_overlay("V_SUB_U32", "v_sub_u32"),
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
@@ -5634,6 +5660,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         *_s_cmp_i32_overlays(),
         _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
         _v_add_u32_overlay("V_ADD_NC_U32"),
+        _v_add_u32_literal_overlay("V_ADD_NC_U32"),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
@@ -5801,6 +5828,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         *_s_cmp_i32_overlays(),
         _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
         _v_add_u32_overlay("V_ADD_NC_U32"),
+        _v_add_u32_literal_overlay("V_ADD_NC_U32"),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
@@ -5997,6 +6025,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         *_s_cmp_i32_overlays(),
         _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
         _v_add_u32_overlay("V_ADD_NC_U32"),
+        _v_add_u32_literal_overlay("V_ADD_NC_U32"),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),

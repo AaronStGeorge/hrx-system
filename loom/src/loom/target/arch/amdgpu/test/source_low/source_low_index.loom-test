@@ -45,6 +45,45 @@ low.kernel.def target(@target) @index_madd_global_b32() asm<amdgpu.gfx11.core> {
 
 // ====
 
+kernel.def @index_madd_constant_addend_global_b32(%input: buffer,
+                                                  %output: buffer) {
+  %x0 = kernel.workitem.id<x> : index
+  %x = index.assume %x0 [range(%x0, 0, 3)] : index
+  %zero = index.constant 0 : offset
+  %row_stride = index.constant 4 : index
+  %column = index.constant 1 : index
+  %linear = index.madd %x, %row_stride, %column : index
+  %input_view = buffer.view %input[%zero] : buffer -> view<16xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<16xi32, #dense>
+  %loaded = vector.load %input_view[%linear] : view<16xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %output_view[%linear] : vector<1xi32>, view<16xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) @index_madd_constant_addend_global_b32() asm<amdgpu.gfx11.core> {
+  %x = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x4>
+  %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %row_stride = s_mov_b32 4
+  %column = s_mov_b32 1
+  %17 = v_mov_b32 4
+  %18 = v_mul_lo_u32 %x, %17
+  %linear = v_add_u32_lit %18, 1
+  %20 = v_mov_b32 2
+  %21 = v_lshlrev_b32 %20, %linear
+  %22 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b32 %21, %22 {offset = 0}
+  %24 = v_mov_b32 2
+  %25 = v_lshlrev_b32 %24, %linear
+  %26 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %25, %loaded, %26 {offset = 0}
+  return
+}
+
+// ====
+
 kernel.def @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {
   %y0 = kernel.workitem.id<y> : index
   %y = index.assume %y0 [range(%y0, 0, 63)] : index
