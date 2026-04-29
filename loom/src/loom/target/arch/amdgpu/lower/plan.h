@@ -221,15 +221,22 @@ typedef struct loom_amdgpu_memory_access_plan_t {
 #define LOOM_AMDGPU_EXPLICIT_PACKET_IMMEDIATE_CAPACITY 4
 
 typedef struct loom_amdgpu_explicit_packet_immediate_t {
-  // Borrowed immediate field name from the selected descriptor.
-  iree_string_view_t name;
+  // Module string ID for the immediate field name.
+  loom_string_id_t name_id;
   // Concrete immediate value emitted for the packet.
   uint16_t value;
 } loom_amdgpu_explicit_packet_immediate_t;
 
+typedef struct loom_amdgpu_explicit_packet_immediate_template_t {
+  // Borrowed immediate field name resolved during packet planning.
+  iree_string_view_t name;
+  // Concrete immediate value emitted for the packet.
+  uint16_t value;
+} loom_amdgpu_explicit_packet_immediate_template_t;
+
 typedef struct loom_amdgpu_explicit_packet_plan_t {
-  // Stable descriptor ID selected for the explicit packet.
-  uint64_t descriptor_id;
+  // Descriptor row selected for the explicit packet.
+  loom_low_lower_resolved_descriptor_t descriptor;
   // Immediate rows emitted on the descriptor.
   loom_amdgpu_explicit_packet_immediate_t
       immediates[LOOM_AMDGPU_EXPLICIT_PACKET_IMMEDIATE_CAPACITY];
@@ -247,6 +254,8 @@ typedef uint32_t loom_amdgpu_atomic_packet_attr_flags_t;
 typedef struct loom_amdgpu_atomic_packet_attrs_t {
   // Attribute bits populated for the selected atomic packet.
   loom_amdgpu_atomic_packet_attr_flags_t flags;
+  // Module string ID for the scope attribute when present.
+  loom_string_id_t scope_attr_name_id;
   // VGLOBAL SCOPE immediate value encoded on GFX12 atomic packets.
   int64_t scope;
 } loom_amdgpu_atomic_packet_attrs_t;
@@ -289,8 +298,8 @@ typedef struct loom_amdgpu_atomic_plan_t {
   int64_t immediate_offset;
   // Static byte offset materialized through the scalar SOFFSET operand.
   uint32_t scalar_byte_offset;
-  // Stable descriptor ID selected for the active descriptor set.
-  uint64_t descriptor_id;
+  // Descriptor row selected for the active descriptor set.
+  loom_low_lower_resolved_descriptor_t descriptor;
   // Descriptor attrs emitted directly on the selected atomic packet.
   loom_amdgpu_atomic_packet_attrs_t packet_attrs;
   // Explicit packets required to implement source atomic ordering.
@@ -332,14 +341,14 @@ typedef struct loom_amdgpu_async_gather_plan_t {
   int64_t source_immediate_offset;
   // Number of bytes moved by the selected async packet.
   uint32_t packet_byte_count;
-  // Stable descriptor ID selected for the active descriptor set.
-  uint64_t descriptor_id;
+  // Descriptor row selected for the active descriptor set.
+  loom_low_lower_resolved_descriptor_t descriptor;
 } loom_amdgpu_async_gather_plan_t;
 
 #define LOOM_AMDGPU_ASYNC_WAIT_IMMEDIATE_CAPACITY \
   LOOM_AMDGPU_EXPLICIT_PACKET_IMMEDIATE_CAPACITY
 
-typedef loom_amdgpu_explicit_packet_immediate_t
+typedef loom_amdgpu_explicit_packet_immediate_template_t
     loom_amdgpu_async_wait_immediate_t;
 
 typedef struct loom_amdgpu_async_wait_plan_t {

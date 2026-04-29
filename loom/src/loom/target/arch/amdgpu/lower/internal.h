@@ -141,9 +141,9 @@ iree_status_t loom_amdgpu_make_vgpr_range_type(
     loom_low_lower_context_t* context, uint32_t unit_count,
     loom_type_t* out_type);
 
-// Builds the register type for a descriptor's implicit resource operand.
-iree_status_t loom_amdgpu_make_descriptor_implicit_resource_type(
-    loom_low_lower_context_t* context, uint64_t descriptor_id,
+// Builds the register type for a descriptor row's implicit resource operand.
+iree_status_t loom_amdgpu_make_descriptor_row_implicit_resource_type(
+    loom_low_lower_context_t* context, const loom_low_descriptor_t* descriptor,
     loom_type_t* out_type);
 
 // Returns whether a low register type belongs to the requested AMDGPU register
@@ -416,6 +416,13 @@ iree_status_t loom_amdgpu_low_result_type(loom_low_lower_context_t* context,
                                           loom_value_id_t source_result,
                                           loom_type_t* out_low_type);
 
+// Resolves one optional explicit packet descriptor and its immediate names.
+iree_status_t loom_amdgpu_resolve_explicit_packet_plan(
+    loom_low_lower_context_t* context, uint64_t descriptor_id,
+    const loom_amdgpu_explicit_packet_immediate_template_t* immediates,
+    iree_host_size_t immediate_count,
+    loom_amdgpu_explicit_packet_plan_t* out_plan, bool* out_present);
+
 // Emits one descriptor-backed low.op with source provenance.
 iree_status_t loom_amdgpu_emit_low_op(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
@@ -479,11 +486,10 @@ iree_status_t loom_amdgpu_emit_low_slice(loom_low_lower_context_t* context,
                                          loom_value_id_t* out_value);
 
 // Emits a value into M0 for special-register packet operands.
-iree_status_t loom_amdgpu_emit_m0_u32(loom_low_lower_context_t* context,
-                                      const loom_op_t* source_op,
-                                      uint64_t consumer_descriptor_id,
-                                      uint32_t value,
-                                      loom_value_id_t* out_value_id);
+iree_status_t loom_amdgpu_emit_m0_u32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_resolved_descriptor_t* consumer_descriptor,
+    uint32_t value, loom_value_id_t* out_value_id);
 
 // Returns true when the target bundle belongs to an AMDGPU contract set.
 bool loom_amdgpu_low_legality_bundle_is_amdgpu(

@@ -61,6 +61,14 @@ typedef enum loom_x86_memory_address_kind_e {
 typedef struct loom_x86_memory_access_plan_t {
   // Target-independent memory decomposition shared across targets.
   loom_low_source_memory_access_plan_t source;
+  // Descriptor row selected for the x86 memory packet.
+  loom_low_lower_resolved_descriptor_t descriptor;
+  // Low register type produced by load packets, or none for store packets.
+  loom_type_t load_result_type;
+  // Module string ID for the disp32 memory operand attribute.
+  loom_string_id_t disp32_attr_name_id;
+  // Module string ID for the indexed scale memory operand attribute.
+  loom_string_id_t scale_attr_name_id;
   // Selected x86 register-width value form.
   loom_x86_memory_value_kind_t value_kind;
   // Selected x86 addressing form.
@@ -93,15 +101,65 @@ static bool loom_x86_dynamic_stride_as_address_scale(int64_t byte_stride,
   }
 }
 
-static bool loom_x86_select_memory_access(
+static uint64_t loom_x86_memory_access_descriptor_id(
+    const loom_op_t* source_op, const loom_x86_memory_access_plan_t* plan) {
+  switch (source_op->kind) {
+    case LOOM_OP_VECTOR_LOAD:
+      if (plan->address_kind == LOOM_X86_MEMORY_ADDRESS_STATIC) {
+        return plan->value_kind == LOOM_X86_MEMORY_VALUE_XMM32
+                   ? X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_LOAD_XMM
+                   : X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_LOAD_ZMM;
+      }
+      return plan->value_kind == LOOM_X86_MEMORY_VALUE_XMM32
+                 ? X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_LOAD_INDEXED_XMM
+                 : X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_LOAD_INDEXED_ZMM;
+    case LOOM_OP_VECTOR_STORE:
+      if (plan->address_kind == LOOM_X86_MEMORY_ADDRESS_STATIC) {
+        return plan->value_kind == LOOM_X86_MEMORY_VALUE_XMM32
+                   ? X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_STORE_XMM
+                   : X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_STORE_ZMM;
+      }
+      return plan->value_kind == LOOM_X86_MEMORY_VALUE_XMM32
+                 ? X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_STORE_INDEXED_XMM
+                 : X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_STORE_INDEXED_ZMM;
+    default:
+      IREE_ASSERT_UNREACHABLE("unexpected x86 memory source op kind");
+      return LOOM_LOW_DESCRIPTOR_ID_NONE;
+  }
+}
+
+static iree_status_t loom_x86_select_memory_load_result_type(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_x86_memory_access_plan_t* out_plan) {
+    const loom_x86_memory_access_plan_t* plan, loom_type_t* out_type) {
+  IREE_ASSERT_ARGUMENT(out_type);
+  *out_type = loom_type_none();
+  if (source_op->kind != LOOM_OP_VECTOR_LOAD) {
+    return iree_ok_status();
+  }
+  if (plan->value_kind == LOOM_X86_MEMORY_VALUE_XMM32) {
+    return loom_x86_make_xmm_register_type(context, out_type);
+  }
+  return loom_x86_make_zmm_register_type(context, out_type);
+}
+
+static iree_status_t loom_x86_select_memory_access(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_x86_memory_access_plan_t* out_plan, bool* out_selected) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  IREE_ASSERT_ARGUMENT(out_selected);
+  *out_plan = (loom_x86_memory_access_plan_t){
+      .load_result_type = loom_type_none(),
+      .disp32_attr_name_id = LOOM_STRING_ID_INVALID,
+      .scale_attr_name_id = LOOM_STRING_ID_INVALID,
+  };
+  *out_selected = false;
+
   loom_low_source_memory_access_diagnostic_t diagnostic = {0};
-  const loom_module_t* module = loom_low_lower_context_module(context);
+  loom_module_t* module = loom_low_lower_context_module(context);
   if (!loom_low_source_memory_access_plan_build(
           module, loom_low_lower_context_fact_table(context), source_op,
           &out_plan->source, &diagnostic)) {
-    return false;
+    return iree_ok_status();
   }
   out_plan->value_kind = loom_x86_select_memory_value_kind(&out_plan->source);
   if (out_plan->value_kind == LOOM_X86_MEMORY_VALUE_NONE ||
@@ -109,22 +167,38 @@ static bool loom_x86_select_memory_access(
       !loom_x86_i64_fits_disp32(out_plan->source.static_byte_offset) ||
       !loom_x86_source_value_is_block_argument(
           module, out_plan->source.root_value_id)) {
-    return false;
+    return iree_ok_status();
   }
   if (!loom_low_source_memory_access_is_dynamic(&out_plan->source)) {
     out_plan->address_kind = LOOM_X86_MEMORY_ADDRESS_STATIC;
     out_plan->index_scale = 0;
-    return true;
+  } else {
+    const loom_low_source_memory_dynamic_term_t* term =
+        loom_low_source_memory_access_single_dynamic_term(&out_plan->source);
+    if (!term ||
+        term->source != LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE) {
+      return iree_ok_status();
+    }
+    out_plan->address_kind = LOOM_X86_MEMORY_ADDRESS_INDEXED;
+    if (!loom_x86_dynamic_stride_as_address_scale(term->byte_stride,
+                                                  &out_plan->index_scale)) {
+      return iree_ok_status();
+    }
   }
-  const loom_low_source_memory_dynamic_term_t* term =
-      loom_low_source_memory_access_single_dynamic_term(&out_plan->source);
-  if (!term ||
-      term->source != LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE) {
-    return false;
+
+  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor(
+      context, loom_x86_memory_access_descriptor_id(source_op, out_plan),
+      &out_plan->descriptor));
+  IREE_RETURN_IF_ERROR(loom_x86_select_memory_load_result_type(
+      context, source_op, out_plan, &out_plan->load_result_type));
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(
+      module, IREE_SV("disp32"), &out_plan->disp32_attr_name_id));
+  if (out_plan->address_kind == LOOM_X86_MEMORY_ADDRESS_INDEXED) {
+    IREE_RETURN_IF_ERROR(loom_module_intern_string(
+        module, IREE_SV("scale"), &out_plan->scale_attr_name_id));
   }
-  out_plan->address_kind = LOOM_X86_MEMORY_ADDRESS_INDEXED;
-  return loom_x86_dynamic_stride_as_address_scale(term->byte_stride,
-                                                  &out_plan->index_scale);
+  *out_selected = true;
+  return iree_ok_status();
 }
 
 iree_status_t loom_x86_select_avx512_op(void* user_data,
@@ -140,10 +214,15 @@ iree_status_t loom_x86_select_avx512_op(void* user_data,
       return iree_ok_status();
     case LOOM_OP_VECTOR_LOAD:
     case LOOM_OP_VECTOR_STORE: {
-      loom_x86_memory_access_plan_t* plan = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-          context, sizeof(*plan), (void**)&plan));
-      if (loom_x86_select_memory_access(context, source_op, plan)) {
+      loom_x86_memory_access_plan_t selected_plan = {0};
+      bool selected = false;
+      IREE_RETURN_IF_ERROR(loom_x86_select_memory_access(
+          context, source_op, &selected_plan, &selected));
+      if (selected) {
+        loom_x86_memory_access_plan_t* plan = NULL;
+        IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+            context, sizeof(*plan), (void**)&plan));
+        *plan = selected_plan;
         *out_plan = loom_low_lower_plan_make(source_op->kind, plan);
       }
       return iree_ok_status();
@@ -153,34 +232,24 @@ iree_status_t loom_x86_select_avx512_op(void* user_data,
   }
 }
 
-static iree_status_t loom_x86_make_disp32_attr(
-    loom_low_lower_context_t* context, int64_t value,
-    loom_named_attr_t* out_attr) {
-  IREE_ASSERT_ARGUMENT(out_attr);
+static loom_named_attr_t loom_x86_make_disp32_attr(loom_string_id_t name_id,
+                                                   int64_t value) {
+  IREE_ASSERT(name_id != LOOM_STRING_ID_INVALID);
   IREE_ASSERT(loom_x86_i64_fits_disp32(value));
-  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_module_intern_string(
-      loom_low_lower_context_module(context), IREE_SV("disp32"), &name_id));
-  *out_attr = (loom_named_attr_t){
+  return (loom_named_attr_t){
       .name_id = name_id,
       .value = loom_attr_i64(value),
   };
-  return iree_ok_status();
 }
 
-static iree_status_t loom_x86_make_scale_attr(loom_low_lower_context_t* context,
-                                              uint8_t value,
-                                              loom_named_attr_t* out_attr) {
-  IREE_ASSERT_ARGUMENT(out_attr);
+static loom_named_attr_t loom_x86_make_scale_attr(loom_string_id_t name_id,
+                                                  uint8_t value) {
+  IREE_ASSERT(name_id != LOOM_STRING_ID_INVALID);
   IREE_ASSERT(value == 1 || value == 2 || value == 4 || value == 8);
-  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_module_intern_string(
-      loom_low_lower_context_module(context), IREE_SV("scale"), &name_id));
-  *out_attr = (loom_named_attr_t){
+  return (loom_named_attr_t){
       .name_id = name_id,
       .value = loom_attr_i64(value),
   };
-  return iree_ok_status();
 }
 
 static iree_status_t loom_x86_lower_buffer_alias(
@@ -199,43 +268,29 @@ static iree_status_t loom_x86_lower_vector_load(
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, plan->source.root_value_id, &base));
 
-  loom_named_attr_t attrs[2] = {0};
-  IREE_RETURN_IF_ERROR(loom_x86_make_disp32_attr(
-      context, plan->source.static_byte_offset, &attrs[0]));
-  loom_type_t result_type = loom_type_none();
-  uint64_t descriptor_id =
-      X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_LOAD_ZMM;
-  if (plan->value_kind == LOOM_X86_MEMORY_VALUE_XMM32) {
-    IREE_RETURN_IF_ERROR(
-        loom_x86_make_xmm_register_type(context, &result_type));
-    descriptor_id = X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_LOAD_XMM;
-  } else {
-    IREE_RETURN_IF_ERROR(
-        loom_x86_make_zmm_register_type(context, &result_type));
-  }
+  loom_named_attr_t attrs[2] = {
+      loom_x86_make_disp32_attr(plan->disp32_attr_name_id,
+                                plan->source.static_byte_offset),
+  };
   loom_value_id_t operands[2] = {base, LOOM_VALUE_ID_INVALID};
   iree_host_size_t operand_count = 1;
   iree_host_size_t attr_count = 1;
   if (plan->address_kind == LOOM_X86_MEMORY_ADDRESS_INDEXED) {
-    descriptor_id =
-        plan->value_kind == LOOM_X86_MEMORY_VALUE_XMM32
-            ? X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_LOAD_INDEXED_XMM
-            : X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_LOAD_INDEXED_ZMM;
     const loom_low_source_memory_dynamic_term_t* term =
         loom_low_source_memory_access_single_dynamic_term(&plan->source);
     IREE_ASSERT(term);
     IREE_RETURN_IF_ERROR(
         loom_low_lower_lookup_value(context, term->index, &operands[1]));
-    IREE_RETURN_IF_ERROR(
-        loom_x86_make_scale_attr(context, plan->index_scale, &attrs[1]));
+    attrs[1] =
+        loom_x86_make_scale_attr(plan->scale_attr_name_id, plan->index_scale);
     operand_count = 2;
     attr_count = 2;
   }
   loom_op_t* load_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
-      context, descriptor_id, operands, operand_count,
-      loom_make_named_attr_slice(attrs, attr_count), &result_type, 1, NULL, 0,
-      source_op->location, &load_op));
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+      context, &plan->descriptor, operands, operand_count,
+      loom_make_named_attr_slice(attrs, attr_count), &plan->load_result_type, 1,
+      NULL, 0, source_op->location, &load_op));
   IREE_RETURN_IF_ERROR(loom_low_lower_record_source_memory_access(
       context, load_op, &plan->source));
   return loom_low_lower_bind_value(
@@ -253,36 +308,27 @@ static iree_status_t loom_x86_lower_vector_store(
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
       context, loom_vector_store_value(source_op), &value));
 
-  loom_named_attr_t attrs[2] = {0};
-  IREE_RETURN_IF_ERROR(loom_x86_make_disp32_attr(
-      context, plan->source.static_byte_offset, &attrs[0]));
-  uint64_t descriptor_id =
-      X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_STORE_ZMM;
-  if (plan->value_kind == LOOM_X86_MEMORY_VALUE_XMM32) {
-    descriptor_id =
-        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_STORE_XMM;
-  }
+  loom_named_attr_t attrs[2] = {
+      loom_x86_make_disp32_attr(plan->disp32_attr_name_id,
+                                plan->source.static_byte_offset),
+  };
   loom_value_id_t operands[3] = {value, base, LOOM_VALUE_ID_INVALID};
   iree_host_size_t operand_count = 2;
   iree_host_size_t attr_count = 1;
   if (plan->address_kind == LOOM_X86_MEMORY_ADDRESS_INDEXED) {
-    descriptor_id =
-        plan->value_kind == LOOM_X86_MEMORY_VALUE_XMM32
-            ? X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_STORE_INDEXED_XMM
-            : X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_STORE_INDEXED_ZMM;
     const loom_low_source_memory_dynamic_term_t* term =
         loom_low_source_memory_access_single_dynamic_term(&plan->source);
     IREE_ASSERT(term);
     IREE_RETURN_IF_ERROR(
         loom_low_lower_lookup_value(context, term->index, &operands[2]));
-    IREE_RETURN_IF_ERROR(
-        loom_x86_make_scale_attr(context, plan->index_scale, &attrs[1]));
+    attrs[1] =
+        loom_x86_make_scale_attr(plan->scale_attr_name_id, plan->index_scale);
     operand_count = 3;
     attr_count = 2;
   }
   loom_op_t* store_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
-      context, descriptor_id, operands, operand_count,
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+      context, &plan->descriptor, operands, operand_count,
       loom_make_named_attr_slice(attrs, attr_count), NULL, 0, NULL, 0,
       source_op->location, &store_op));
   return loom_low_lower_record_source_memory_access(context, store_op,

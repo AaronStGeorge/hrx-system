@@ -226,29 +226,14 @@ iree_status_t loom_amdgpu_make_vgpr_range_type(
                                         unit_count, out_type);
 }
 
-iree_status_t loom_amdgpu_make_descriptor_implicit_resource_type(
-    loom_low_lower_context_t* context, uint64_t descriptor_id,
+iree_status_t loom_amdgpu_make_descriptor_row_implicit_resource_type(
+    loom_low_lower_context_t* context, const loom_low_descriptor_t* descriptor,
     loom_type_t* out_type) {
   IREE_ASSERT_ARGUMENT(out_type);
   *out_type = loom_type_none();
+  IREE_ASSERT(descriptor != NULL);
   const loom_low_descriptor_set_t* descriptor_set =
       loom_low_lower_context_descriptor_set(context);
-  const uint32_t descriptor_ordinal =
-      loom_low_descriptor_set_lookup_descriptor_by_id(descriptor_set,
-                                                      descriptor_id);
-  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU descriptor set does not contain requested "
-                            "implicit-resource descriptor");
-  }
-  const loom_low_descriptor_t* descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set, descriptor_ordinal);
-  if (descriptor == NULL) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU implicit-resource descriptor ordinal is invalid");
-  }
-
   const loom_low_operand_t* operands =
       &descriptor_set->operands[descriptor->operand_start];
   for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
