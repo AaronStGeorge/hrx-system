@@ -33,6 +33,21 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "value_facts",
+    srcs = ["value_facts.c"],
+    hdrs = ["value_facts.h"],
+    deps = [
+        ":types",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops:type_registry",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "pipeline",
     srcs = ["pipeline.c"],
     hdrs = ["pipeline.h"],
@@ -140,6 +155,7 @@ loom_cc_library(
         ":predicate",
         ":program",
         ":report",
+        ":value_facts",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
@@ -244,6 +260,18 @@ loom_cc_test(
         ":program",
         ":report",
         "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/pass/test:harness",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "value_facts_test",
+    srcs = ["value_facts_test.cc"],
+    deps = [
+        ":value_facts",
+        "//loom/src/loom/ops/test",
         "//loom/src/loom/pass/test:harness",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

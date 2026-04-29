@@ -82,6 +82,18 @@ static iree_status_t loom_value_fact_table_allocate_initial_capacity(
   return iree_ok_status();
 }
 
+static iree_status_t loom_value_fact_table_append_touched_value(
+    loom_value_fact_table_t* table, loom_value_id_t value_id) {
+  if (table->touched_count >= table->touched_capacity) {
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        table->arena, table->touched_count, table->touched_count + 1,
+        sizeof(*table->touched_values), &table->touched_capacity,
+        (void**)&table->touched_values));
+  }
+  table->touched_values[table->touched_count++] = value_id;
+  return iree_ok_status();
+}
+
 static uint32_t loom_value_fact_hash_bytes(const void* data,
                                            iree_host_size_t length,
                                            uint32_t hash) {
@@ -365,8 +377,9 @@ static iree_status_t loom_value_fact_table_clone_fact_array(
                             "fact array pointer required");
   }
   loom_value_facts_t* cloned_facts = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      table->arena, count, sizeof(loom_value_facts_t), (void**)&cloned_facts));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(table->transient_arena, count,
+                                                 sizeof(loom_value_facts_t),
+                                                 (void**)&cloned_facts));
   memcpy(cloned_facts, facts, count * sizeof(loom_value_facts_t));
   *out_facts = cloned_facts;
   return iree_ok_status();
@@ -397,7 +410,7 @@ static iree_status_t loom_value_fact_table_materialize_extension_payload(
       entry->payload.type_payload.length > 0) {
     void* data = NULL;
     IREE_RETURN_IF_ERROR(iree_arena_allocate(
-        table->arena, entry->payload.type_payload.length, &data));
+        table->transient_arena, entry->payload.type_payload.length, &data));
     memcpy(data, entry->payload.type_payload.data,
            entry->payload.type_payload.length);
     entry->payload.type_payload.data = data;
@@ -421,8 +434,8 @@ static iree_status_t loom_value_fact_table_ensure_extension_capacity(
 
   loom_value_fact_extension_entry_t* new_entries = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      table->arena, new_capacity, sizeof(loom_value_fact_extension_entry_t),
-      (void**)&new_entries));
+      table->transient_arena, new_capacity,
+      sizeof(loom_value_fact_extension_entry_t), (void**)&new_entries));
   memset(new_entries, 0,
          new_capacity * sizeof(loom_value_fact_extension_entry_t));
   if (table->extensions.count > 0) {
@@ -438,8 +451,8 @@ static iree_status_t loom_value_fact_table_rehash_extensions(
     loom_value_fact_table_t* table, iree_host_size_t new_bucket_count) {
   loom_value_fact_extension_id_t* new_buckets = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      table->arena, new_bucket_count, sizeof(loom_value_fact_extension_id_t),
-      (void**)&new_buckets));
+      table->transient_arena, new_bucket_count,
+      sizeof(loom_value_fact_extension_id_t), (void**)&new_buckets));
   memset(new_buckets, 0,
          new_bucket_count * sizeof(loom_value_fact_extension_id_t));
   for (iree_host_size_t i = 0; i < table->extensions.count; ++i) {
@@ -474,7 +487,8 @@ static iree_status_t loom_value_fact_table_ensure_extension_buckets(
 
 static iree_status_t loom_value_fact_context_require_table(
     loom_fact_context_t* context, loom_value_fact_table_t** out_table) {
-  if (!context || !context->table || !context->table->arena) {
+  if (!context || !context->table || !context->table->arena ||
+      !context->table->transient_arena) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "initialized fact context required");
   }
@@ -788,8 +802,9 @@ iree_status_t loom_value_fact_table_facts_scratch(
     return iree_ok_status();
   }
   loom_value_facts_t* new_scratch = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      table->arena, count, sizeof(loom_value_facts_t), (void**)&new_scratch));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(table->transient_arena, count,
+                                                 sizeof(loom_value_facts_t),
+                                                 (void**)&new_scratch));
   table->scratch.facts.values = new_scratch;
   table->scratch.facts.capacity = count;
   *out = new_scratch;
@@ -804,8 +819,9 @@ iree_status_t loom_value_fact_table_value_id_scratch(
     return iree_ok_status();
   }
   loom_value_id_t* new_scratch = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      table->arena, count, sizeof(loom_value_id_t), (void**)&new_scratch));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(table->transient_arena, count,
+                                                 sizeof(loom_value_id_t),
+                                                 (void**)&new_scratch));
   table->scratch.value_ids.values = new_scratch;
   table->scratch.value_ids.capacity = count;
   *out = new_scratch;
@@ -1040,13 +1056,44 @@ bool loom_value_facts_query_extension_payload(
 iree_status_t loom_value_fact_table_initialize(
     loom_value_fact_table_t* table, iree_arena_allocator_t* arena,
     iree_host_size_t initial_capacity) {
+  return loom_value_fact_table_initialize_with_arenas(table, arena, arena,
+                                                      initial_capacity);
+}
+
+iree_status_t loom_value_fact_table_initialize_with_arenas(
+    loom_value_fact_table_t* table, iree_arena_allocator_t* arena,
+    iree_arena_allocator_t* transient_arena,
+    iree_host_size_t initial_capacity) {
   IREE_ASSERT_ARGUMENT(table);
   IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(transient_arena);
   memset(table, 0, sizeof(*table));
   table->arena = arena;
+  table->transient_arena = transient_arena;
   table->context.table = table;
   return loom_value_fact_table_allocate_initial_capacity(table,
                                                          initial_capacity);
+}
+
+void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table) {
+  IREE_ASSERT_ARGUMENT(table);
+  for (iree_host_size_t i = 0; i < table->touched_count; ++i) {
+    table->entries[table->touched_values[i]] = (loom_value_facts_t){0};
+  }
+  table->touched_count = 0;
+  table->count = 0;
+  table->extensions.entries = NULL;
+  table->extensions.capacity = 0;
+  table->extensions.count = 0;
+  table->extensions.buckets = NULL;
+  table->extensions.bucket_count = 0;
+  table->scratch.facts.values = NULL;
+  table->scratch.facts.capacity = 0;
+  table->scratch.value_ids.values = NULL;
+  table->scratch.value_ids.capacity = 0;
+  table->context.table = table;
+  table->context.function = (loom_func_like_t){0};
+  table->context.target_bundle = NULL;
 }
 
 iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
@@ -1054,6 +1101,11 @@ iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
                                            loom_value_facts_t facts) {
   IREE_ASSERT_ARGUMENT(table);
   IREE_ASSERT_LT(value_id, table->capacity);
+  IREE_ASSERT_NE(facts.known_divisor, 0);
+  if (table->entries[value_id].known_divisor == 0) {
+    IREE_RETURN_IF_ERROR(
+        loom_value_fact_table_append_touched_value(table, value_id));
+  }
   table->entries[value_id] = facts;
   if ((iree_host_size_t)value_id + 1 > table->count) {
     table->count = (iree_host_size_t)value_id + 1;
@@ -1072,8 +1124,9 @@ static iree_status_t loom_value_fact_table_clone_fact_array_between_tables(
                             "source fact array pointer required");
   }
   loom_value_facts_t* cloned_facts = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      target->arena, count, sizeof(loom_value_facts_t), (void**)&cloned_facts));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(target->transient_arena, count,
+                                                 sizeof(loom_value_facts_t),
+                                                 (void**)&cloned_facts));
   for (iree_host_size_t i = 0; i < count; ++i) {
     IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_fact(
         target, source, source_facts[i], &cloned_facts[i]));
@@ -1177,7 +1230,8 @@ iree_status_t loom_value_fact_table_clone_fact(
       if (source_entry->payload.type_payload.length > 0) {
         void* data = NULL;
         IREE_RETURN_IF_ERROR(iree_arena_allocate(
-            target->arena, source_entry->payload.type_payload.length, &data));
+            target->transient_arena, source_entry->payload.type_payload.length,
+            &data));
         memcpy(data, source_entry->payload.type_payload.data,
                source_entry->payload.type_payload.length);
         target_entry.payload.type_payload.data = data;
@@ -1622,8 +1676,9 @@ static iree_status_t loom_value_fact_table_allocate_fact_array(
     loom_value_facts_t** out_facts) {
   *out_facts = NULL;
   if (count == 0) return iree_ok_status();
-  return iree_arena_allocate_array(
-      table->arena, count, sizeof(loom_value_facts_t), (void**)out_facts);
+  return iree_arena_allocate_array(table->transient_arena, count,
+                                   sizeof(loom_value_facts_t),
+                                   (void**)out_facts);
 }
 
 static iree_status_t loom_value_fact_table_initialize_loop_state(
@@ -1638,7 +1693,7 @@ static iree_status_t loom_value_fact_table_initialize_loop_state(
   *out_types = NULL;
   if (count > 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        table->arena, count, sizeof(loom_type_t), (void**)out_types));
+        table->transient_arena, count, sizeof(loom_type_t), (void**)out_types));
   }
 
   loom_value_slice_t iter_args = loom_loop_like_iter_args(loop);
@@ -2043,9 +2098,9 @@ iree_status_t loom_value_fact_table_compute(loom_value_fact_table_t* table,
   // operand facts are computed before their users.
   iree_host_size_t stack_capacity = LOOM_FACT_TABLE_INITIAL_REGION_STACK;
   loom_value_fact_region_frame_t* region_stack = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(table->arena, stack_capacity,
-                                                 sizeof(*region_stack),
-                                                 (void**)&region_stack));
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(table->transient_arena, stack_capacity,
+                                sizeof(*region_stack), (void**)&region_stack));
   iree_host_size_t stack_count = 0;
   region_stack[stack_count++] = (loom_value_fact_region_frame_t){
       .region = body,
@@ -2067,8 +2122,8 @@ iree_status_t loom_value_fact_table_compute(loom_value_fact_table_t* table,
         iree_host_size_t needed = stack_count + op->region_count;
         if (needed > stack_capacity) {
           IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-              table->arena, stack_count, needed, sizeof(*region_stack),
-              &stack_capacity, (void**)&region_stack));
+              table->transient_arena, stack_count, needed,
+              sizeof(*region_stack), &stack_capacity, (void**)&region_stack));
         }
         loom_region_t** regions = loom_op_regions(op);
         for (uint8_t r = 0; r < op->region_count; ++r) {

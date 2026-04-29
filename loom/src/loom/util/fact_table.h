@@ -416,8 +416,10 @@ struct loom_value_fact_domain_t {
 };
 
 struct loom_value_fact_table_t {
-  // Arena for all allocations owned by the table.
+  // Arena for direct-address entries and touched-value storage.
   iree_arena_allocator_t* arena;
+  // Arena for scope-local extension payloads and inference scratch buffers.
+  iree_arena_allocator_t* transient_arena;
 
   // Dense fact entries indexed by value ID.
   loom_value_facts_t* entries;
@@ -425,6 +427,12 @@ struct loom_value_fact_table_t {
   iree_host_size_t count;
   // Allocated entry count.
   iree_host_size_t capacity;
+  // Value IDs defined in the current populated scope.
+  loom_value_id_t* touched_values;
+  // Number of populated entries in touched_values.
+  iree_host_size_t touched_count;
+  // Allocated touched_values entry count.
+  iree_host_size_t touched_capacity;
   // Context object passed to op-specific fact inference callbacks.
   loom_fact_context_t context;
 
@@ -474,6 +482,20 @@ struct loom_value_fact_table_t {
 iree_status_t loom_value_fact_table_initialize(
     loom_value_fact_table_t* table, iree_arena_allocator_t* arena,
     iree_host_size_t initial_capacity);
+
+// Initializes the table using separate arenas for persistent direct-address
+// entries and transient scope-local payloads. Use this when reusing one table
+// across multiple populated scopes: clear touched entries, reset the transient
+// arena, and keep the direct entry array live.
+iree_status_t loom_value_fact_table_initialize_with_arenas(
+    loom_value_fact_table_t* table, iree_arena_allocator_t* arena,
+    iree_arena_allocator_t* transient_arena, iree_host_size_t initial_capacity);
+
+// Clears facts populated in the current scope and forgets transient extension
+// and scratch state. Callers that provided a separate transient arena should
+// reset that arena after this call. Direct-address entry storage and touched
+// storage remain allocated for reuse.
+void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table);
 
 // Looks up facts for a value. Returns unknown facts if the value ID
 // is out of range or the entry is undefined (known_divisor == 0).

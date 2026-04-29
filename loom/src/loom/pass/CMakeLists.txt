@@ -37,6 +37,24 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    value_facts
+  HDRS
+    "value_facts.h"
+  SRCS
+    "value_facts.c"
+  DEPS
+    ::types
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::type_registry
+    loom::src::loom::util::fact_table
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     pipeline
   HDRS
     "pipeline.h"
@@ -168,6 +186,7 @@ loom_cc_library(
     ::predicate
     ::program
     ::report
+    ::value_facts
     iree::base
     iree::base::internal::arena
     loom::src::loom::error::error_defs
@@ -283,6 +302,19 @@ loom_cc_test(
     ::program
     ::report
     loom::src::loom::error::error_defs
+    loom::src::loom::pass::test::harness
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    value_facts_test
+  SRCS
+    "value_facts_test.cc"
+  DEPS
+    ::value_facts
+    loom::src::loom::ops::test
     loom::src::loom::pass::test::harness
     iree::testing::gtest
     iree::testing::gtest_main

@@ -27,6 +27,7 @@ typedef struct loom_module_t loom_module_t;
 typedef struct loom_pass_environment_t loom_pass_environment_t;
 typedef struct loom_pass_decoded_options_t loom_pass_decoded_options_t;
 typedef struct loom_pass_t loom_pass_t;
+typedef struct loom_pass_value_fact_owner_t loom_pass_value_fact_owner_t;
 
 typedef enum loom_pass_kind_e {
   LOOM_PASS_MODULE = 0,
@@ -104,6 +105,8 @@ struct loom_pass_t {
   iree_diagnostic_emitter_t diagnostic_emitter;
   // Caller-owned execution environment capabilities.
   const loom_pass_environment_t* environment;
+  // Interpreter-owned scoped value-fact workspace for this module execution.
+  loom_pass_value_fact_owner_t* value_facts;
   // Opaque caller data borrowed for this invocation.
   void* user_data;
 };

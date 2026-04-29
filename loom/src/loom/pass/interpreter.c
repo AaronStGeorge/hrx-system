@@ -15,6 +15,7 @@
 #include "loom/ops/pass/ops.h"
 #include "loom/pass/predicate.h"
 #include "loom/pass/report.h"
+#include "loom/pass/value_facts.h"
 
 typedef struct loom_pass_interpreter_epoch_t {
   // Number of module symbols at the observation point.
@@ -45,6 +46,8 @@ typedef struct loom_pass_interpreter_state_t {
   loom_module_t* module;
   // Caller-supplied execution options.
   const loom_pass_interpreter_options_t* options;
+  // Scoped value-fact workspace shared across pass invocations.
+  loom_pass_value_fact_owner_t value_facts;
 } loom_pass_interpreter_state_t;
 
 typedef struct loom_pass_interpreter_diagnostic_counter_t {
@@ -158,6 +161,7 @@ static iree_status_t loom_pass_interpreter_make_pass(
       .decoded_options = invoke->decoded_options,
       .diagnostic_emitter = diagnostic_emitter,
       .environment = &state->options->environment,
+      .value_facts = &state->value_facts,
       .user_data = pass_user_data,
   };
   if (invoke->info->statistic_count == 0) {
@@ -320,6 +324,9 @@ static iree_status_t loom_pass_interpreter_invoke(
   }
   if (iree_status_is_ok(status)) {
     *out_changed |= invocation_changed;
+  }
+  if (invocation_changed) {
+    loom_pass_value_fact_owner_invalidate(&state->value_facts);
   }
 
   if (created && invoke->descriptor->destroy) {
@@ -823,12 +830,16 @@ iree_status_t loom_pass_interpreter_run_module(
       .module = module,
       .options = options,
   };
+  loom_pass_value_fact_owner_initialize(options->block_pool,
+                                        &state.value_facts);
   loom_pass_interpreter_frame_t frame = {
       .kind = LOOM_PASS_MODULE,
   };
   bool changed = false;
-  return loom_pass_interpreter_execute_range(
+  iree_status_t status = loom_pass_interpreter_execute_range(
       &state, &frame, 0, program->instruction_count, &changed);
+  loom_pass_value_fact_owner_deinitialize(&state.value_facts);
+  return status;
 }
 
 iree_status_t loom_pass_interpreter_run_function(
@@ -849,6 +860,8 @@ iree_status_t loom_pass_interpreter_run_function(
       .module = module,
       .options = options,
   };
+  loom_pass_value_fact_owner_initialize(options->block_pool,
+                                        &state.value_facts);
   loom_symbol_ref_t callee = loom_func_like_callee(function);
   loom_symbol_t* symbol = NULL;
   if (loom_symbol_ref_is_valid(callee) && callee.module_id == 0 &&
@@ -861,6 +874,8 @@ iree_status_t loom_pass_interpreter_run_function(
       .function = function,
   };
   bool changed = false;
-  return loom_pass_interpreter_execute_range(
+  iree_status_t status = loom_pass_interpreter_execute_range(
       &state, &frame, 0, program->instruction_count, &changed);
+  loom_pass_value_fact_owner_deinitialize(&state.value_facts);
+  return status;
 }

@@ -200,6 +200,49 @@ TEST_F(FactTableTest, DefineUpdatesExisting) {
   EXPECT_EQ(result.range_lo, 99);
 }
 
+TEST_F(FactTableTest, ClearScopeClearsOnlyTouchedEntriesAndKeepsStorage) {
+  iree_arena_allocator_t transient_arena = {};
+  iree_arena_initialize(&block_pool_, &transient_arena);
+
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize_with_arenas(
+      &table, &arena_, &transient_arena, 100));
+
+  IREE_ASSERT_OK(
+      loom_value_fact_table_define(&table, 5, loom_value_facts_exact_i64(42)));
+  IREE_ASSERT_OK(
+      loom_value_fact_table_define(&table, 8, loom_value_facts_exact_i64(99)));
+  IREE_ASSERT_OK(
+      loom_value_fact_table_define(&table, 8, loom_value_facts_exact_i64(7)));
+
+  loom_value_facts_t* const entries = table.entries;
+  loom_value_id_t* const touched_values = table.touched_values;
+  EXPECT_EQ(table.touched_count, 2u);
+  EXPECT_TRUE(
+      loom_value_facts_is_exact(loom_value_fact_table_lookup(&table, 5)));
+  EXPECT_TRUE(
+      loom_value_facts_is_exact(loom_value_fact_table_lookup(&table, 8)));
+
+  loom_value_fact_table_clear_scope(&table);
+  iree_arena_reset(&transient_arena);
+
+  EXPECT_EQ(table.entries, entries);
+  EXPECT_EQ(table.touched_values, touched_values);
+  EXPECT_EQ(table.touched_count, 0u);
+  EXPECT_EQ(table.count, 0u);
+  EXPECT_TRUE(
+      loom_value_facts_is_unknown(loom_value_fact_table_lookup(&table, 5)));
+  EXPECT_TRUE(
+      loom_value_facts_is_unknown(loom_value_fact_table_lookup(&table, 8)));
+
+  IREE_ASSERT_OK(
+      loom_value_fact_table_define(&table, 5, loom_value_facts_exact_i64(123)));
+  EXPECT_EQ(table.touched_count, 1u);
+  EXPECT_EQ(loom_value_fact_table_lookup(&table, 5).range_lo, 123);
+
+  iree_arena_deinitialize(&transient_arena);
+}
+
 //===----------------------------------------------------------------------===//
 // Capacity
 //===----------------------------------------------------------------------===//
