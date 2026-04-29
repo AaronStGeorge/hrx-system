@@ -17,6 +17,7 @@
 #include "loom/ops/test/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
+#include "loom/pass/value_facts.h"
 
 namespace loom {
 namespace {
@@ -274,9 +275,15 @@ TEST_F(TypePropagationTest, ValueFactsNarrowDynamicDimensions) {
 
   iree_arena_allocator_t pass_arena;
   iree_arena_initialize(&block_pool_, &pass_arena);
+  loom_pass_value_fact_owner_t value_fact_owner = {};
+  loom_pass_value_fact_owner_initialize(&block_pool_, &value_fact_owner);
+  loom_value_fact_table_t* facts = NULL;
+  IREE_ASSERT_OK(loom_pass_value_fact_owner_prepare(
+      &value_fact_owner, module_,
+      loom_pass_value_fact_scope_function(function_), &facts));
   loom_rewriter_t rewriter;
   IREE_ASSERT_OK(loom_rewriter_initialize(&rewriter, module_, &pass_arena));
-  IREE_ASSERT_OK(loom_rewriter_enable_analysis(&rewriter, function_));
+  IREE_ASSERT_OK(loom_rewriter_enable_analysis(&rewriter, function_, facts));
   loom_type_propagator_t* propagator = NULL;
   IREE_ASSERT_OK(
       loom_type_propagator_allocate(module_, &pass_arena, &propagator));
@@ -292,6 +299,7 @@ TEST_F(TypePropagationTest, ValueFactsNarrowDynamicDimensions) {
   EXPECT_EQ(loom_type_dim_static_size_at(refined_vector, 0), 16);
 
   loom_rewriter_deinitialize(&rewriter);
+  loom_pass_value_fact_owner_deinitialize(&value_fact_owner);
   iree_arena_deinitialize(&pass_arena);
 }
 

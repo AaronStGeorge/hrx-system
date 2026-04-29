@@ -23,6 +23,7 @@
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/pass/types.h"
+#include "loom/pass/value_facts.h"
 
 namespace loom {
 namespace {
@@ -121,7 +122,11 @@ class VectorToScalarTransformTest : public ::testing::Test {
     pass.arena = &pass_arena;
     pass.diagnostic_emitter.fn = CollectDiagnosticEmission;
     pass.diagnostic_emitter.user_data = collector;
+    loom_pass_value_fact_owner_t value_facts = {};
+    loom_pass_value_fact_owner_initialize(&block_pool_, &value_facts);
+    pass.value_facts = &value_facts;
     status = loom_vector_to_scalar_run(&pass, module, function);
+    loom_pass_value_fact_owner_deinitialize(&value_facts);
     iree_arena_deinitialize(&pass_arena);
     loom_module_free(module);
     return status;

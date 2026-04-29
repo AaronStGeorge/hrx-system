@@ -2637,7 +2637,8 @@ iree_status_t loom_refine_boundaries_run_with_options(
   loom_canonicalizer_t canonicalizer = {0};
   bool canonicalizer_initialized = false;
   if (iree_status_is_ok(status)) {
-    status = loom_canonicalizer_initialize(module, pass->arena, &canonicalizer);
+    status = loom_canonicalizer_initialize(module, pass->arena,
+                                           pass->value_facts, &canonicalizer);
     canonicalizer_initialized = iree_status_is_ok(status);
   }
 

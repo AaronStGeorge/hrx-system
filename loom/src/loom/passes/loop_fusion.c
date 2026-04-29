@@ -11,6 +11,7 @@
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/pass/value_facts.h"
 #include "loom/rewrite/materialize.h"
 #include "loom/rewrite/remap.h"
 #include "loom/rewrite/rewriter.h"
@@ -361,7 +362,7 @@ static bool loom_loop_fusion_candidate_is_legal(
     loom_loop_fusion_context_t* context,
     const loom_loop_fusion_for_info_t* first,
     const loom_loop_fusion_for_info_t* second) {
-  if (!loom_loop_domain_equal(&context->rewriter->fact_table, first->domain,
+  if (!loom_loop_domain_equal(context->rewriter->fact_table, first->domain,
                               second->domain)) {
     return false;
   }
@@ -855,7 +856,12 @@ iree_status_t loom_loop_fusion_run(loom_pass_t* pass, loom_module_t* module,
   loom_rewriter_t rewriter;
   IREE_RETURN_IF_ERROR(
       loom_rewriter_initialize(&rewriter, module, pass->arena));
-  iree_status_t status = loom_rewriter_enable_analysis(&rewriter, function);
+  loom_value_fact_table_t* facts = NULL;
+  iree_status_t status = loom_pass_value_facts_prepare(
+      pass, module, loom_pass_value_fact_scope_function(function), &facts);
+  if (iree_status_is_ok(status)) {
+    status = loom_rewriter_enable_analysis(&rewriter, function, facts);
+  }
 
   iree_arena_allocator_t fusion_arena = {0};
   bool fusion_arena_initialized = false;
@@ -888,6 +894,9 @@ iree_status_t loom_loop_fusion_run(loom_pass_t* pass, loom_module_t* module,
     loom_pass_mark_changed(pass);
   }
   loom_rewriter_deinitialize(&rewriter);
+  if (!iree_status_is_ok(status)) {
+    loom_pass_value_fact_owner_invalidate(pass->value_facts);
+  }
   if (fusion_arena_initialized) {
     iree_arena_deinitialize(&fusion_arena);
   }

@@ -107,11 +107,25 @@ void loom_pass_value_fact_owner_deinitialize(
 // reusable direct-address storage when capacity still matches the module.
 void loom_pass_value_fact_owner_invalidate(loom_pass_value_fact_owner_t* owner);
 
-// Acquires facts for |scope|. The returned table is borrowed and remains valid
-// until the owner is invalidated, reacquired for another scope, or
-// deinitialized.
+// Prepares empty fact storage for |scope|. The returned table is borrowed and
+// may be populated by the caller through normal fact-table APIs. Use this for
+// production algorithms such as rewriting that must compute and incrementally
+// maintain facts while they mutate IR. If population fails, the caller must
+// invalidate the owner before returning the failure.
+iree_status_t loom_pass_value_fact_owner_prepare(
+    loom_pass_value_fact_owner_t* owner, loom_module_t* module,
+    loom_pass_value_fact_scope_t scope, loom_value_fact_table_t** out_table);
+
+// Acquires computed facts for |scope|. The returned table is borrowed and
+// remains valid until the owner is invalidated, prepared or acquired for
+// another scope, or deinitialized.
 iree_status_t loom_pass_value_fact_owner_acquire(
     loom_pass_value_fact_owner_t* owner, loom_module_t* module,
+    loom_pass_value_fact_scope_t scope, loom_value_fact_table_t** out_table);
+
+// Prepares scoped fact storage through a pass invocation.
+iree_status_t loom_pass_value_facts_prepare(
+    loom_pass_t* pass, loom_module_t* module,
     loom_pass_value_fact_scope_t scope, loom_value_fact_table_t** out_table);
 
 // Acquires scoped facts through a pass invocation.

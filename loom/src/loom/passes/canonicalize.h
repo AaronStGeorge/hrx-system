@@ -62,12 +62,18 @@ typedef struct loom_canonicalizer_t {
   // Module being transformed.
   loom_module_t* module;
 
+  // Caller-owned reusable value-fact storage used for function analysis.
+  loom_pass_value_fact_owner_t* value_facts;
+
   // Parent arena whose block pool backs the resettable scratch arena.
   iree_arena_allocator_t* parent_arena;
 
-  // Reset before each function run; owns the rewriter worklist, fact table, and
+  // Reset before each function run; owns the rewriter worklist and
   // symbolic-expression scratch state for the most recent run.
   iree_arena_allocator_t scratch_arena;
+
+  // Borrowed facts from value_facts for the most recent successful run.
+  loom_value_fact_table_t* latest_facts;
 
   // True after scratch_arena has been initialized and before deinitialize.
   bool scratch_arena_initialized;
@@ -83,6 +89,7 @@ typedef struct loom_canonicalizer_t {
 // is reset for each run.
 iree_status_t loom_canonicalizer_initialize(
     loom_module_t* module, iree_arena_allocator_t* parent_arena,
+    loom_pass_value_fact_owner_t* value_facts,
     loom_canonicalizer_t* out_canonicalizer);
 
 // Releases transient worklist state and returns scratch blocks to the parent

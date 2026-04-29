@@ -18,6 +18,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
+#include "loom/pass/value_facts.h"
 
 namespace loom {
 namespace {
@@ -103,12 +104,16 @@ class RefineBoundariesTest : public ::testing::Test {
     pass.instance_arena = &pass_arena;
     pass.arena = &pass_arena;
     pass.statistics = statistics->data();
+    loom_pass_value_fact_owner_t value_facts = {};
+    loom_pass_value_fact_owner_initialize(&block_pool_, &value_facts);
+    pass.value_facts = &value_facts;
     if (collector) {
       pass.diagnostic_emitter.fn = CollectDiagnosticEmission;
       pass.diagnostic_emitter.user_data = collector;
     }
     iree_status_t status =
         loom_refine_boundaries_run_with_options(&pass, module, options);
+    loom_pass_value_fact_owner_deinitialize(&value_facts);
     iree_arena_deinitialize(&pass_arena);
     return status;
   }

@@ -21,6 +21,7 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
+#include "loom/pass/value_facts.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/rewrite/type_propagation.h"
 #include "loom/util/walk.h"
@@ -522,7 +523,7 @@ static iree_status_t loom_canonicalize_try_symbolic_integer_cmp(
   loom_condition_fact_set_initialize(
       relation_storage, IREE_ARRAYSIZE(relation_storage), &condition_facts);
   IREE_RETURN_IF_ERROR(loom_condition_facts_query(
-      rewriter->module, &rewriter->fact_table, loom_op_const_results(op)[0],
+      rewriter->module, rewriter->fact_table, loom_op_const_results(op)[0],
       /*assumed_truth=*/true, &condition_facts));
   if (condition_facts.integer_relation_count != 1) {
     return iree_ok_status();
@@ -646,7 +647,7 @@ static iree_status_t loom_canonicalize_edge_assume_set_append_predicate(
       source >= rewriter->module->values.count) {
     return iree_ok_status();
   }
-  if (loom_canonicalize_value_exact_integer(&rewriter->fact_table, source)) {
+  if (loom_canonicalize_value_exact_integer(rewriter->fact_table, source)) {
     return iree_ok_status();
   }
 
@@ -725,7 +726,7 @@ static iree_status_t loom_canonicalize_edge_assume_set_append_relation(
   if (relation->left.kind == LOOM_CONDITION_INTEGER_OPERAND_VALUE) {
     loom_predicate_t predicate = {0};
     if (loom_condition_integer_relation_make_predicate_for_value(
-            relation, &rewriter->fact_table, relation->left.value_id,
+            relation, rewriter->fact_table, relation->left.value_id,
             &predicate)) {
       IREE_RETURN_IF_ERROR(loom_canonicalize_edge_assume_set_append_predicate(
           rewriter, assume_set, relation->left.value_id, predicate));
@@ -734,7 +735,7 @@ static iree_status_t loom_canonicalize_edge_assume_set_append_relation(
   if (relation->right.kind == LOOM_CONDITION_INTEGER_OPERAND_VALUE) {
     loom_predicate_t predicate = {0};
     if (loom_condition_integer_relation_make_predicate_for_value(
-            relation, &rewriter->fact_table, relation->right.value_id,
+            relation, rewriter->fact_table, relation->right.value_id,
             &predicate)) {
       IREE_RETURN_IF_ERROR(loom_canonicalize_edge_assume_set_append_predicate(
           rewriter, assume_set, relation->right.value_id, predicate));
@@ -1080,7 +1081,7 @@ static iree_status_t loom_canonicalize_materialize_condition_facts_in_region(
   loom_condition_fact_set_initialize(
       relation_storage, IREE_ARRAYSIZE(relation_storage), &condition_facts);
   IREE_RETURN_IF_ERROR(
-      loom_condition_facts_query(rewriter->module, &rewriter->fact_table,
+      loom_condition_facts_query(rewriter->module, rewriter->fact_table,
                                  condition, assumed_truth, &condition_facts));
   if (condition_facts.integer_relation_count == 0) return iree_ok_status();
 
@@ -1196,6 +1197,10 @@ static void loom_canonicalizer_reset_run_state(
     loom_rewriter_deinitialize(&canonicalizer->state->rewriter);
     canonicalizer->state->rewriter_initialized = false;
   }
+  if (canonicalizer->value_facts) {
+    loom_pass_value_fact_owner_invalidate(canonicalizer->value_facts);
+  }
+  canonicalizer->latest_facts = NULL;
   if (canonicalizer->scratch_arena_initialized) {
     iree_arena_reset(&canonicalizer->scratch_arena);
   }
@@ -1223,20 +1228,20 @@ static void loom_canonicalizer_record_rewrite(
 
 iree_status_t loom_canonicalizer_initialize(
     loom_module_t* module, iree_arena_allocator_t* parent_arena,
+    loom_pass_value_fact_owner_t* value_facts,
     loom_canonicalizer_t* out_canonicalizer) {
-  if (!module || !parent_arena || !parent_arena->block_pool ||
-      !out_canonicalizer) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "module, parent arena with block pool, and output canonicalizer are "
-        "required");
-  }
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(parent_arena);
+  IREE_ASSERT_ARGUMENT(parent_arena->block_pool);
+  IREE_ASSERT_ARGUMENT(value_facts);
+  IREE_ASSERT_ARGUMENT(out_canonicalizer);
   memset(out_canonicalizer, 0, sizeof(*out_canonicalizer));
   loom_canonicalizer_state_t* state = NULL;
   IREE_RETURN_IF_ERROR(
       iree_arena_allocate(parent_arena, sizeof(*state), (void**)&state));
   memset(state, 0, sizeof(*state));
   out_canonicalizer->module = module;
+  out_canonicalizer->value_facts = value_facts;
   out_canonicalizer->parent_arena = parent_arena;
   out_canonicalizer->state = state;
   iree_arena_initialize(parent_arena->block_pool,
@@ -1260,8 +1265,7 @@ const loom_value_fact_table_t* loom_canonicalizer_fact_table(
       !canonicalizer->state->rewriter_initialized) {
     return NULL;
   }
-  if (!canonicalizer->state->rewriter.fact_table.entries) return NULL;
-  return &canonicalizer->state->rewriter.fact_table;
+  return canonicalizer->latest_facts;
 }
 
 iree_status_t loom_canonicalizer_run_function(
@@ -1286,12 +1290,22 @@ iree_status_t loom_canonicalizer_run_function(
   canonicalizer->state->rewriter_initialized = true;
   rewriter->materialize_constant = loom_constant_build;
 
-  iree_status_t status = loom_rewriter_enable_analysis_with_seed_facts(
-      rewriter, function, options ? options->seed_facts : NULL);
+  loom_value_fact_table_t* function_facts = NULL;
+  iree_status_t status = loom_pass_value_fact_owner_prepare(
+      canonicalizer->value_facts, canonicalizer->module,
+      loom_pass_value_fact_scope_function(function), &function_facts);
+  if (iree_status_is_ok(status)) {
+    canonicalizer->latest_facts = function_facts;
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_rewriter_enable_analysis_with_seed_facts(
+        rewriter, function, function_facts,
+        options ? options->seed_facts : NULL);
+  }
   loom_symbolic_expr_context_t expression_context;
   if (iree_status_is_ok(status)) {
     loom_symbolic_expr_context_initialize(
-        canonicalizer->module, &rewriter->fact_table,
+        canonicalizer->module, rewriter->fact_table,
         &canonicalizer->scratch_arena, &expression_context);
   }
   loom_type_propagator_t* type_propagator = NULL;
@@ -1451,6 +1465,8 @@ iree_status_t loom_canonicalizer_run_function(
   if (!iree_status_is_ok(status)) {
     loom_rewriter_deinitialize(rewriter);
     canonicalizer->state->rewriter_initialized = false;
+    loom_pass_value_fact_owner_invalidate(canonicalizer->value_facts);
+    canonicalizer->latest_facts = NULL;
     iree_arena_reset(&canonicalizer->scratch_arena);
   }
   return status;
@@ -1459,8 +1475,8 @@ iree_status_t loom_canonicalizer_run_function(
 iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
                                     loom_func_like_t function) {
   loom_canonicalizer_t canonicalizer;
-  IREE_RETURN_IF_ERROR(
-      loom_canonicalizer_initialize(module, pass->arena, &canonicalizer));
+  IREE_RETURN_IF_ERROR(loom_canonicalizer_initialize(
+      module, pass->arena, pass->value_facts, &canonicalizer));
 
   loom_canonicalizer_result_t result;
   iree_status_t status = loom_canonicalizer_run_function(

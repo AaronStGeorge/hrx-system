@@ -58,8 +58,8 @@ static bool loom_vector_value_is_all_exact_i64(const loom_rewriter_t* rewriter,
                                                int64_t expected_value) {
   loom_value_facts_t facts = loom_rewriter_value_facts(rewriter, value_id);
   loom_value_facts_t element = {0};
-  if (!loom_vector_query_all_equal_element(&rewriter->fact_table.context, facts,
-                                           &element)) {
+  if (!loom_vector_query_all_equal_element(&rewriter->fact_table->context,
+                                           facts, &element)) {
     return false;
   }
   return loom_value_facts_is_exact(element) &&
@@ -75,7 +75,7 @@ static bool loom_vector_value_is_unit_stride_iota(
   }
   loom_value_fact_vector_iota_t iota = {0};
   if (!loom_value_facts_query_vector_iota(
-          &rewriter->fact_table.context,
+          &rewriter->fact_table->context,
           loom_rewriter_value_facts(rewriter, value_id), &iota)) {
     return false;
   }
@@ -239,8 +239,8 @@ static iree_status_t loom_vector_canonicalize_uniform_result(
   loom_value_id_t result = loom_op_const_results(op)[0];
   loom_value_facts_t facts = loom_rewriter_value_facts(rewriter, result);
   loom_value_facts_t element = {0};
-  if (!loom_vector_query_all_equal_element(&rewriter->fact_table.context, facts,
-                                           &element) ||
+  if (!loom_vector_query_all_equal_element(&rewriter->fact_table->context,
+                                           facts, &element) ||
       !loom_value_facts_is_exact(element)) {
     return iree_ok_status();
   }

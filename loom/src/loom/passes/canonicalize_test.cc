@@ -15,6 +15,7 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/pass/value_facts.h"
 #include "loom/rewrite/rewriter.h"
 
 namespace loom {
@@ -75,7 +76,11 @@ class CanonicalizeTest : public ::testing::Test {
     memset(&pass, 0, sizeof(pass));
     pass.info = loom_canonicalize_pass_info();
     pass.arena = &pass_arena;
+    loom_pass_value_fact_owner_t value_facts = {};
+    loom_pass_value_fact_owner_initialize(&block_pool_, &value_facts);
+    pass.value_facts = &value_facts;
     iree_status_t status = loom_canonicalize_run(&pass, module_, func_like_);
+    loom_pass_value_fact_owner_deinitialize(&value_facts);
     iree_arena_deinitialize(&pass_arena);
     return status;
   }
@@ -470,7 +475,11 @@ TEST_F(CanonicalizeTest, NullFunctionBody) {
   memset(&pass, 0, sizeof(pass));
   pass.info = loom_canonicalize_pass_info();
   pass.arena = &pass_arena;
+  loom_pass_value_fact_owner_t value_facts = {};
+  loom_pass_value_fact_owner_initialize(&block_pool_, &value_facts);
+  pass.value_facts = &value_facts;
   IREE_EXPECT_OK(loom_canonicalize_run(&pass, module_, empty_func));
+  loom_pass_value_fact_owner_deinitialize(&value_facts);
   iree_arena_deinitialize(&pass_arena);
 }
 
@@ -538,9 +547,11 @@ TEST_F(CanonicalizeTest, DriverAcceptsSeedFacts) {
 
   iree_arena_allocator_t pass_arena;
   iree_arena_initialize(&block_pool_, &pass_arena);
+  loom_pass_value_fact_owner_t value_facts = {};
+  loom_pass_value_fact_owner_initialize(&block_pool_, &value_facts);
   loom_canonicalizer_t canonicalizer;
-  IREE_ASSERT_OK(
-      loom_canonicalizer_initialize(module_, &pass_arena, &canonicalizer));
+  IREE_ASSERT_OK(loom_canonicalizer_initialize(module_, &pass_arena,
+                                               &value_facts, &canonicalizer));
   loom_canonicalizer_result_t result;
   loom_canonicalizer_options_t options = {
       .seed_facts = &seed_facts,
@@ -562,6 +573,7 @@ TEST_F(CanonicalizeTest, DriverAcceptsSeedFacts) {
   EXPECT_EQ(addi_facts.range_lo, 42);
 
   loom_canonicalizer_deinitialize(&canonicalizer);
+  loom_pass_value_fact_owner_deinitialize(&value_facts);
   iree_arena_deinitialize(&pass_arena);
   iree_arena_deinitialize(&seed_arena);
 }
@@ -569,9 +581,11 @@ TEST_F(CanonicalizeTest, DriverAcceptsSeedFacts) {
 TEST_F(CanonicalizeTest, DriverResetsScratchArenaBetweenRuns) {
   iree_arena_allocator_t pass_arena;
   iree_arena_initialize(&block_pool_, &pass_arena);
+  loom_pass_value_fact_owner_t value_facts = {};
+  loom_pass_value_fact_owner_initialize(&block_pool_, &value_facts);
   loom_canonicalizer_t canonicalizer;
-  IREE_ASSERT_OK(
-      loom_canonicalizer_initialize(module_, &pass_arena, &canonicalizer));
+  IREE_ASSERT_OK(loom_canonicalizer_initialize(module_, &pass_arena,
+                                               &value_facts, &canonicalizer));
 
   loom_canonicalizer_result_t result;
   IREE_ASSERT_OK(loom_canonicalizer_run_function(&canonicalizer, func_like_,
@@ -586,6 +600,7 @@ TEST_F(CanonicalizeTest, DriverResetsScratchArenaBetweenRuns) {
   EXPECT_EQ(loom_canonicalizer_fact_table(&canonicalizer), nullptr);
 
   loom_canonicalizer_deinitialize(&canonicalizer);
+  loom_pass_value_fact_owner_deinitialize(&value_facts);
   iree_arena_deinitialize(&pass_arena);
 }
 

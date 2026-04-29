@@ -68,6 +68,7 @@ loom_cc_library(
     loom::src::loom::pass::pipeline
     loom::src::loom::pass::registry
     loom::src::loom::pass::types
+    loom::src::loom::pass::value_facts
     loom::src::loom::rewrite::rewriter
     loom::src::loom::rewrite::type_propagation
     loom::src::loom::util::fact_table
@@ -89,6 +90,7 @@ loom_cc_test(
     loom::src::loom::ops::test
     loom::src::loom::ops::vector
     loom::src::loom::pass::types
+    loom::src::loom::pass::value_facts
     loom::src::loom::rewrite::rewriter
     iree::testing::gtest
     iree::testing::gtest_main
@@ -232,6 +234,7 @@ loom_cc_library(
     loom::src::loom::ops::index
     loom::src::loom::ops::op_defs
     loom::src::loom::pass::types
+    loom::src::loom::pass::value_facts
   PUBLIC
 )
 
@@ -267,6 +270,7 @@ loom_cc_library(
     loom::src::loom::ops::scf
     loom::src::loom::ops::vector
     loom::src::loom::pass::types
+    loom::src::loom::pass::value_facts
     loom::src::loom::rewrite::materialize
     loom::src::loom::rewrite::remap
     loom::src::loom::rewrite::rewriter
@@ -317,6 +321,7 @@ loom_cc_test(
     loom::src::loom::ops::func
     loom::src::loom::ops::index
     loom::src::loom::pass::types
+    loom::src::loom::pass::value_facts
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -428,6 +433,7 @@ loom_cc_library(
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
     loom::src::loom::pass::types
+    loom::src::loom::pass::value_facts
     loom::src::loom::rewrite::rewriter
     loom::src::loom::util::math
   PUBLIC
@@ -497,6 +503,7 @@ loom_cc_test(
     loom::src::loom::ops::scf
     loom::src::loom::ops::vector
     loom::src::loom::pass::types
+    loom::src::loom::pass::value_facts
     iree::testing::gtest
     iree::testing::gtest_main
 )

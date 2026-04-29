@@ -28,6 +28,25 @@ static bool loom_pass_value_fact_scope_equal(loom_pass_value_fact_scope_t lhs,
   }
 }
 
+static iree_status_t loom_pass_value_fact_scope_validate(
+    loom_pass_value_fact_scope_t scope) {
+  if (scope.kind == LOOM_PASS_VALUE_FACT_SCOPE_NONE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "value fact scope is required");
+  }
+  if (scope.kind == LOOM_PASS_VALUE_FACT_SCOPE_FUNCTION &&
+      !loom_func_like_isa(scope.function)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "function value fact scope is required");
+  }
+  if (scope.kind != LOOM_PASS_VALUE_FACT_SCOPE_FUNCTION &&
+      scope.kind != LOOM_PASS_VALUE_FACT_SCOPE_MODULE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unsupported value fact scope");
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_pass_value_fact_owner_ensure_table(
     loom_pass_value_fact_owner_t* owner, loom_module_t* module) {
   IREE_ASSERT_ARGUMENT(owner);
@@ -103,6 +122,22 @@ void loom_pass_value_fact_owner_invalidate(
   owner->active_scope = loom_pass_value_fact_scope_none();
 }
 
+iree_status_t loom_pass_value_fact_owner_prepare(
+    loom_pass_value_fact_owner_t* owner, loom_module_t* module,
+    loom_pass_value_fact_scope_t scope, loom_value_fact_table_t** out_table) {
+  IREE_ASSERT_ARGUMENT(owner);
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(out_table);
+  *out_table = NULL;
+
+  IREE_RETURN_IF_ERROR(loom_pass_value_fact_scope_validate(scope));
+  IREE_RETURN_IF_ERROR(loom_pass_value_fact_owner_ensure_table(owner, module));
+  loom_pass_value_fact_owner_invalidate(owner);
+  owner->table.context.target_bundle = scope.target_bundle;
+  *out_table = &owner->table;
+  return iree_ok_status();
+}
+
 iree_status_t loom_pass_value_fact_owner_acquire(
     loom_pass_value_fact_owner_t* owner, loom_module_t* module,
     loom_pass_value_fact_scope_t scope, loom_value_fact_table_t** out_table) {
@@ -111,16 +146,7 @@ iree_status_t loom_pass_value_fact_owner_acquire(
   IREE_ASSERT_ARGUMENT(out_table);
   *out_table = NULL;
 
-  if (scope.kind == LOOM_PASS_VALUE_FACT_SCOPE_NONE) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "value fact scope is required");
-  }
-  if (scope.kind == LOOM_PASS_VALUE_FACT_SCOPE_FUNCTION &&
-      !loom_func_like_isa(scope.function)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "function value fact scope is required");
-  }
-
+  IREE_RETURN_IF_ERROR(loom_pass_value_fact_scope_validate(scope));
   IREE_RETURN_IF_ERROR(loom_pass_value_fact_owner_ensure_table(owner, module));
   if (owner->module == module &&
       loom_pass_value_fact_scope_equal(owner->active_scope, scope)) {
@@ -128,8 +154,8 @@ iree_status_t loom_pass_value_fact_owner_acquire(
     return iree_ok_status();
   }
 
-  loom_pass_value_fact_owner_invalidate(owner);
-  owner->table.context.target_bundle = scope.target_bundle;
+  IREE_RETURN_IF_ERROR(
+      loom_pass_value_fact_owner_prepare(owner, module, scope, out_table));
   iree_status_t status = iree_ok_status();
   switch (scope.kind) {
     case LOOM_PASS_VALUE_FACT_SCOPE_FUNCTION:
@@ -146,11 +172,19 @@ iree_status_t loom_pass_value_fact_owner_acquire(
   }
   if (iree_status_is_ok(status)) {
     owner->active_scope = scope;
-    *out_table = &owner->table;
     return iree_ok_status();
   }
   loom_pass_value_fact_owner_invalidate(owner);
   return status;
+}
+
+iree_status_t loom_pass_value_facts_prepare(
+    loom_pass_t* pass, loom_module_t* module,
+    loom_pass_value_fact_scope_t scope, loom_value_fact_table_t** out_table) {
+  IREE_ASSERT_ARGUMENT(pass);
+  IREE_ASSERT_ARGUMENT(pass->value_facts);
+  return loom_pass_value_fact_owner_prepare(pass->value_facts, module, scope,
+                                            out_table);
 }
 
 iree_status_t loom_pass_value_facts_acquire(

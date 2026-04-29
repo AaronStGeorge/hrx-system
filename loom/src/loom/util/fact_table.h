@@ -16,8 +16,9 @@
 // capacity. Compute runs a forward pass over a function, calling each op's fact
 // inference function to seed initial facts from constants and op semantics.
 //
-// The table is a reusable component: embedded in the rewriter for
-// canonicalization, usable standalone for IPO or analysis tools.
+// The table is a reusable component: borrowed by the rewriter for
+// canonicalization, owned by pass-scoped storage, and usable standalone for IPO
+// or analysis tools.
 //
 // Typical lifecycle:
 //

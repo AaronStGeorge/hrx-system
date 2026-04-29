@@ -258,7 +258,7 @@ static iree_status_t loom_vector_to_scalar_validate_iota_permutation(
   }
   loom_value_facts_t* lane_facts = NULL;
   IREE_RETURN_IF_ERROR(loom_value_fact_table_facts_scratch(
-      &state->rewriter->fact_table, source_lane_count_size, &lane_facts));
+      state->rewriter->fact_table, source_lane_count_size, &lane_facts));
   int64_t source_lane = base;
   for (iree_host_size_t i = 0; i < source_lane_count_size; ++i) {
     lane_facts[i] = loom_value_facts_exact_i64(source_lane);
@@ -279,7 +279,7 @@ static iree_status_t loom_vector_to_scalar_validate_from_elements_permutation(
       loom_vector_from_elements_elements(from_elements_op);
   loom_value_facts_t* lane_facts = NULL;
   IREE_RETURN_IF_ERROR(loom_value_fact_table_facts_scratch(
-      &state->rewriter->fact_table, elements.count, &lane_facts));
+      state->rewriter->fact_table, elements.count, &lane_facts));
   for (uint16_t i = 0; i < elements.count; ++i) {
     lane_facts[i] =
         loom_rewriter_value_facts(state->rewriter, elements.values[i]);
@@ -301,7 +301,7 @@ static iree_status_t loom_vector_to_scalar_validate_transform_permutation(
   loom_value_facts_t facts =
       loom_rewriter_value_facts(state->rewriter, permutation);
   loom_value_fact_vector_iota_t iota = {0};
-  if (loom_value_facts_query_vector_iota(&state->rewriter->fact_table.context,
+  if (loom_value_facts_query_vector_iota(&state->rewriter->fact_table->context,
                                          facts, &iota)) {
     return loom_vector_to_scalar_validate_iota_permutation(
         state, iota, source_type, source_lane_count);
@@ -309,14 +309,14 @@ static iree_status_t loom_vector_to_scalar_validate_transform_permutation(
 
   loom_value_fact_uniform_element_t uniform = {0};
   if (loom_value_facts_query_uniform_element(
-          &state->rewriter->fact_table.context, facts, &uniform)) {
+          &state->rewriter->fact_table->context, facts, &uniform)) {
     return loom_vector_to_scalar_validate_uniform_permutation(
         state, uniform.element, source_lane_count);
   }
 
   loom_value_fact_small_static_lanes_t lanes = {0};
   if (loom_value_facts_query_small_static_lanes(
-          &state->rewriter->fact_table.context, facts, &lanes)) {
+          &state->rewriter->fact_table->context, facts, &lanes)) {
     return loom_vector_to_scalar_validate_permutation_facts(
         state, lanes.lanes, lanes.count, source_lane_count);
   }

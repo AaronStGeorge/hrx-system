@@ -17,6 +17,7 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/pass/value_facts.h"
 #include "loom/passes/vector_to_scalar_internal.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/util/math.h"
@@ -538,7 +539,12 @@ iree_status_t loom_vector_to_scalar_run(loom_pass_t* pass,
   loom_rewriter_t rewriter;
   IREE_RETURN_IF_ERROR(
       loom_rewriter_initialize(&rewriter, module, pass->arena));
-  iree_status_t status = loom_rewriter_enable_analysis(&rewriter, function);
+  loom_value_fact_table_t* facts = NULL;
+  iree_status_t status = loom_pass_value_facts_prepare(
+      pass, module, loom_pass_value_fact_scope_function(function), &facts);
+  if (iree_status_is_ok(status)) {
+    status = loom_rewriter_enable_analysis(&rewriter, function, facts);
+  }
   if (iree_status_is_ok(status)) {
     status = loom_rewriter_seed_function(&rewriter, function);
   }
@@ -555,5 +561,8 @@ iree_status_t loom_vector_to_scalar_run(loom_pass_t* pass,
     status = loom_vector_to_scalar_lower_op(pass, &rewriter, op);
   }
   loom_rewriter_deinitialize(&rewriter);
+  if (!iree_status_is_ok(status)) {
+    loom_pass_value_fact_owner_invalidate(pass->value_facts);
+  }
   return status;
 }

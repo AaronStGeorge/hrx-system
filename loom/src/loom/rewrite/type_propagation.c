@@ -870,7 +870,7 @@ static iree_status_t loom_type_propagator_relation_variadic_match(
 static iree_status_t loom_type_propagator_seed_op_value_facts(
     loom_type_propagator_t* propagator, const loom_rewriter_t* rewriter,
     loom_op_t* op) {
-  if (!rewriter->fact_table.entries) return iree_ok_status();
+  if (!rewriter->fact_table) return iree_ok_status();
   const loom_value_id_t* operands = loom_op_const_operands(op);
   for (uint16_t i = 0; i < op->operand_count; ++i) {
     loom_value_id_t value_id = operands[i];
@@ -880,7 +880,7 @@ static iree_status_t loom_type_propagator_seed_op_value_facts(
     loom_type_t refined_type = current_type;
     loom_type_refinement_result_t result = LOOM_TYPE_REFINEMENT_UNCHANGED;
     IREE_RETURN_IF_ERROR(loom_type_refine_with_value_facts(
-        current_type, &rewriter->fact_table, propagator->arena, &refined_type,
+        current_type, rewriter->fact_table, propagator->arena, &refined_type,
         &result));
     if (result == LOOM_TYPE_REFINEMENT_CONFLICT) {
       propagator->conflict = true;
@@ -900,7 +900,7 @@ static iree_status_t loom_type_propagator_seed_op_value_facts(
     loom_type_t refined_type = current_type;
     loom_type_refinement_result_t result = LOOM_TYPE_REFINEMENT_UNCHANGED;
     IREE_RETURN_IF_ERROR(loom_type_refine_with_value_facts(
-        current_type, &rewriter->fact_table, propagator->arena, &refined_type,
+        current_type, rewriter->fact_table, propagator->arena, &refined_type,
         &result));
     if (result == LOOM_TYPE_REFINEMENT_CONFLICT) {
       propagator->conflict = true;

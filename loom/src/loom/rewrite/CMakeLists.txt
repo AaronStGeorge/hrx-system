@@ -23,7 +23,6 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ir::facts
     loom::src::loom::ops::op_defs
-    loom::src::loom::ops::type_registry
     loom::src::loom::util::fact_table
   PUBLIC
 )
@@ -160,6 +159,7 @@ loom_cc_test(
     loom::src::loom::ops::test
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
+    loom::src::loom::pass::value_facts
     iree::testing::gtest
     iree::testing::gtest_main
 )

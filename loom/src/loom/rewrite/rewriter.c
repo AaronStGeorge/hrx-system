@@ -11,7 +11,6 @@
 #include "loom/ir/context.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
-#include "loom/ops/type_registry.h"
 
 #define LOOM_REWRITER_INITIAL_WORKLIST_CAPACITY 64
 #define LOOM_REWRITER_INITIAL_REGION_STACK_CAPACITY 8
@@ -35,10 +34,10 @@ static iree_status_t loom_rewriter_on_op_finalized(void* user_data,
   IREE_RETURN_IF_ERROR(loom_rewriter_add_to_worklist(rewriter, op));
   IREE_RETURN_IF_ERROR(
       loom_rewriter_add_parent_summary_ops_to_worklist(rewriter, op));
-  if (rewriter->fact_table.entries) {
+  if (rewriter->fact_table) {
     bool facts_changed = false;
     IREE_RETURN_IF_ERROR(loom_value_fact_table_compute_op_and_report(
-        &rewriter->fact_table, rewriter->module, op, &facts_changed));
+        rewriter->fact_table, rewriter->module, op, &facts_changed));
     if (facts_changed) {
       rewriter->flags |= LOOM_REWRITER_FLAG_FACTS_CHANGED;
       IREE_RETURN_IF_ERROR(
@@ -133,26 +132,22 @@ iree_status_t loom_rewriter_seed_function(loom_rewriter_t* rewriter,
 }
 
 iree_status_t loom_rewriter_enable_analysis(loom_rewriter_t* rewriter,
-                                            loom_func_like_t function) {
+                                            loom_func_like_t function,
+                                            loom_value_fact_table_t* facts) {
   return loom_rewriter_enable_analysis_with_seed_facts(rewriter, function,
-                                                       NULL);
+                                                       facts, NULL);
 }
 
 iree_status_t loom_rewriter_enable_analysis_with_seed_facts(
     loom_rewriter_t* rewriter, loom_func_like_t function,
-    const loom_value_fact_table_t* seed_facts) {
-  iree_host_size_t value_count = rewriter->module->values.count;
-  // Allocate with headroom for new values created during the pass.
-  iree_host_size_t capacity = value_count + value_count / 2;
-  if (capacity < 256) capacity = 256;
-  IREE_RETURN_IF_ERROR(loom_value_fact_table_initialize(
-      &rewriter->fact_table, rewriter->arena, capacity));
-  loom_type_registry_configure_fact_context(&rewriter->fact_table.context);
+    loom_value_fact_table_t* facts, const loom_value_fact_table_t* seed_facts) {
+  IREE_ASSERT_ARGUMENT(facts);
+  rewriter->fact_table = facts;
   if (seed_facts) {
     IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_defined_facts(
-        &rewriter->fact_table, seed_facts, rewriter->module));
+        rewriter->fact_table, seed_facts, rewriter->module));
   }
-  return loom_value_fact_table_compute(&rewriter->fact_table, rewriter->module,
+  return loom_value_fact_table_compute(rewriter->fact_table, rewriter->module,
                                        function);
 }
 
@@ -172,7 +167,7 @@ iree_status_t loom_rewriter_build_constant(loom_rewriter_t* rewriter,
 iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
                                      bool* out_folded) {
   *out_folded = false;
-  if (!rewriter->fact_table.entries) return iree_ok_status();
+  if (!rewriter->fact_table) return iree_ok_status();
   const loom_op_vtable_t* vtable = loom_op_vtable(rewriter->module, op);
   if (!vtable || (!vtable->infer_facts && !vtable->loop_like)) {
     return iree_ok_status();
@@ -181,7 +176,7 @@ iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
   // Compute facts for this op (updates the table, reuses table scratch).
   bool facts_changed = false;
   IREE_RETURN_IF_ERROR(loom_value_fact_table_compute_op_and_report(
-      &rewriter->fact_table, rewriter->module, op, &facts_changed));
+      rewriter->fact_table, rewriter->module, op, &facts_changed));
   if (facts_changed) {
     rewriter->flags |= LOOM_REWRITER_FLAG_FACTS_CHANGED;
     // Ensure downstream ops are revisited with updated facts. Type-use edges
@@ -205,7 +200,7 @@ iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
   for (uint16_t i = 0; i < op->result_count; ++i) {
     if (results[i] == LOOM_VALUE_ID_INVALID) return iree_ok_status();
     loom_value_facts_t facts =
-        loom_value_fact_table_lookup(&rewriter->fact_table, results[i]);
+        loom_value_fact_table_lookup(rewriter->fact_table, results[i]);
     if (!loom_value_facts_is_exact(facts)) return iree_ok_status();
   }
   if (op->result_count == 0) return iree_ok_status();
@@ -219,11 +214,11 @@ iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
 
   loom_value_id_t* replacement_ids = NULL;
   IREE_RETURN_IF_ERROR(loom_value_fact_table_value_id_scratch(
-      &rewriter->fact_table, op->result_count, &replacement_ids));
+      rewriter->fact_table, op->result_count, &replacement_ids));
 
   for (uint16_t i = 0; i < op->result_count; ++i) {
     loom_value_facts_t facts =
-        loom_value_fact_table_lookup(&rewriter->fact_table, results[i]);
+        loom_value_fact_table_lookup(rewriter->fact_table, results[i]);
     loom_type_t result_type =
         loom_module_value_type(rewriter->module, results[i]);
     IREE_RETURN_IF_ERROR(loom_rewriter_build_constant(

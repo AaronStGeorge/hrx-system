@@ -90,10 +90,9 @@ struct loom_rewriter_t {
   iree_host_size_t worklist_count;
   iree_host_size_t worklist_capacity;
 
-  // Per-value analysis facts. Populated when a pass calls
-  // loom_rewriter_enable_analysis. A zero-initialized table (entries
-  // == NULL) means analysis is disabled.
-  loom_value_fact_table_t fact_table;
+  // Borrowed per-value analysis facts. Populated when a pass calls
+  // loom_rewriter_enable_analysis. NULL means analysis is disabled.
+  loom_value_fact_table_t* fact_table;
 
   // Dialect-provided constant materialization. Set by the pass before
   // enabling analysis. NULL means try_fold cannot materialize
@@ -113,26 +112,28 @@ void loom_rewriter_deinitialize(loom_rewriter_t* rewriter);
 iree_status_t loom_rewriter_seed_function(loom_rewriter_t* rewriter,
                                           loom_func_like_t function);
 
-// Enables value analysis on this rewriter. Initializes the fact table
-// and runs the initial forward pass over the function, seeding facts from fact
-// inference functions. Call once after initialize, before the worklist
-// loop. Patterns can then query facts via loom_rewriter_value_facts.
+// Enables value analysis on this rewriter using caller-owned fact storage and
+// runs the initial forward pass over the function, seeding facts from fact
+// inference functions. Call once after initialize, before the worklist loop.
+// Patterns can then query facts via loom_rewriter_value_facts.
 iree_status_t loom_rewriter_enable_analysis(loom_rewriter_t* rewriter,
-                                            loom_func_like_t function);
+                                            loom_func_like_t function,
+                                            loom_value_fact_table_t* facts);
 
 // Enables value analysis and first clones caller-provided seed facts into the
-// rewriter-owned fact table. Extension payloads are re-interned so seed facts
-// can come from a different analysis context. Block-argument seeders preserve
+// caller-owned fact table. Extension payloads are re-interned so seed facts can
+// come from a different analysis context. Block-argument seeders preserve
 // already-defined facts from |seed_facts|.
 iree_status_t loom_rewriter_enable_analysis_with_seed_facts(
     loom_rewriter_t* rewriter, loom_func_like_t function,
-    const loom_value_fact_table_t* seed_facts);
+    loom_value_fact_table_t* facts, const loom_value_fact_table_t* seed_facts);
 
 // Looks up facts from the rewriter's fact table. Returns unknown
 // facts if analysis is not enabled or the value is not defined.
 static inline loom_value_facts_t loom_rewriter_value_facts(
     const loom_rewriter_t* rewriter, loom_value_id_t value_id) {
-  return loom_value_fact_table_lookup(&rewriter->fact_table, value_id);
+  if (!rewriter->fact_table) return loom_value_facts_unknown();
+  return loom_value_fact_table_lookup(rewriter->fact_table, value_id);
 }
 
 // Materializes a constant value using the rewriter's callback.
