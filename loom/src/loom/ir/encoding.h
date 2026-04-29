@@ -75,8 +75,7 @@ typedef struct loom_encoding_vtable_t {
   // Encoding family name for lookup and printing, without a leading '#'.
   iree_string_view_t name;
 
-  // Semantic role for this family. Leave UNKNOWN for unconstrained families;
-  // role helpers still classify built-in family names.
+  // Semantic role for this family. Leave UNKNOWN for unconstrained families.
   loom_encoding_role_t role;
 
   // Verifies that `encoding` carries a valid parameter set for this family.

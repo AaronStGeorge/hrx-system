@@ -25,22 +25,6 @@ iree_string_view_t loom_encoding_role_description(loom_encoding_role_t role) {
   }
 }
 
-static loom_encoding_role_t loom_encoding_builtin_role_by_name(
-    iree_string_view_t name) {
-  if (iree_string_view_equal(name, IREE_SV("dense")) ||
-      iree_string_view_equal(name, IREE_SV("strided"))) {
-    return LOOM_ENCODING_ROLE_ADDRESS_LAYOUT;
-  }
-  if (iree_string_view_equal(name, IREE_SV("physical_storage"))) {
-    return LOOM_ENCODING_ROLE_PHYSICAL_STORAGE;
-  }
-  if (iree_string_view_equal(name, IREE_SV("numeric_transform")) ||
-      iree_string_view_equal(name, IREE_SV("orthogonal_transform"))) {
-    return LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM;
-  }
-  return LOOM_ENCODING_ROLE_UNKNOWN;
-}
-
 loom_encoding_role_t loom_encoding_static_role(
     const loom_module_t* module, const loom_encoding_t* encoding) {
   if (!module || !encoding || encoding->name_id == LOOM_STRING_ID_INVALID ||
@@ -54,9 +38,6 @@ loom_encoding_role_t loom_encoding_static_role(
   if (vtable && vtable->role != LOOM_ENCODING_ROLE_UNKNOWN) {
     return vtable->role;
   }
-
-  loom_encoding_role_t builtin_role = loom_encoding_builtin_role_by_name(name);
-  if (builtin_role != LOOM_ENCODING_ROLE_UNKNOWN) return builtin_role;
 
   return LOOM_ENCODING_ROLE_STORAGE_SCHEMA;
 }

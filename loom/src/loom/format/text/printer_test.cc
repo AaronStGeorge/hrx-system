@@ -30,6 +30,7 @@ static const loom_encoding_vtable_t kQ8_0EncodingVtable = {
 
 static const loom_encoding_vtable_t kDenseEncodingVtable = {
     .name = IREE_SV("dense"),
+    .role = LOOM_ENCODING_ROLE_ADDRESS_LAYOUT,
 };
 
 // Helper to print a type and return the output as a std::string.
