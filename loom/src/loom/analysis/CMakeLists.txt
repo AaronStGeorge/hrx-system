@@ -135,6 +135,7 @@ loom_cc_library(
     ::policy
     iree::base
     loom::src::loom::ir
+    loom::src::loom::util::fact_table
   PUBLIC
 )
 

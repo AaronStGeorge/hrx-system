@@ -29,9 +29,11 @@ static bool loom_contract_preparation_fallback_is_allowed(
 
 static bool loom_contract_view_payload_has_storage_schema(
     const loom_contract_view_payload_t* payload) {
-  return payload->storage_schema.static_spec_encoding_id != 0 ||
+  const loom_value_fact_storage_schema_t source_schema =
+      payload->operand.encoded.source_schema;
+  return source_schema.static_spec_encoding_id != 0 ||
          !loom_value_fact_encoded_operand_schema_is_unknown(
-             payload->storage_schema.encoded_operand);
+             source_schema.encoded_operand);
 }
 
 static void loom_contract_operand_preparation_initialize_none(
@@ -46,7 +48,8 @@ static void loom_contract_operand_preparation_initialize_none(
   if (loom_contract_view_payload_has_storage_schema(&options->source_payload)) {
     out_preparation->flags |=
         LOOM_CONTRACT_PREPARATION_PRESERVES_STORAGE_SCHEMA;
-    out_preparation->storage_schema = options->source_payload.storage_schema;
+    out_preparation->storage_schema =
+        options->source_payload.operand.encoded.source_schema;
   }
 }
 
@@ -192,7 +195,7 @@ bool loom_contract_operand_preparation_select(
       .numeric_transform = numeric_transform,
       .source_payload = options->source_payload,
       .address_layout = options->address_layout,
-      .storage_schema = options->source_payload.storage_schema,
+      .storage_schema = options->source_payload.operand.encoded.source_schema,
   };
   if (options->address_layout.kind != LOOM_VALUE_FACT_ADDRESS_LAYOUT_UNKNOWN) {
     out_preparation->flags |= LOOM_CONTRACT_PREPARATION_HAS_ADDRESS_LAYOUT;

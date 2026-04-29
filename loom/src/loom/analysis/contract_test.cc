@@ -18,6 +18,27 @@ loom_contract_operand_t Operand(loom_contract_operand_role_t role,
   };
 }
 
+loom_value_fact_storage_schema_t EncodedTargetSchema() {
+  loom_value_fact_storage_schema_t schema = {};
+  schema.encoded_operand.element_format = LOOM_VALUE_FACT_NUMERIC_FORMAT_I8;
+  schema.encoded_operand.payload_packing =
+      LOOM_VALUE_FACT_PAYLOAD_PACKING_TARGET_FRAGMENT;
+  schema.encoded_operand.payload_register_count = 1;
+  schema.encoded_operand.payload_element_count = 4;
+  return schema;
+}
+
+loom_value_fact_storage_schema_t ScaledEncodedTargetSchema() {
+  loom_value_fact_storage_schema_t schema = EncodedTargetSchema();
+  schema.encoded_operand.element_format =
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_F4_E2M1;
+  schema.encoded_operand.scale_topology =
+      LOOM_VALUE_FACT_SCALE_TOPOLOGY_BLOCK_1D;
+  schema.encoded_operand.scale_group_element_count = 32;
+  schema.encoded_operand.scale_operand_count = 1;
+  return schema;
+}
+
 loom_contract_request_t CompletePackedDotRequest() {
   loom_contract_request_t request = {};
   loom_contract_request_initialize(&request);
@@ -49,11 +70,45 @@ TEST(ContractTest, ValidatesCompletePackedDotRequest) {
 
 TEST(ContractTest, RejectsUnavailableRequiredCapability) {
   loom_contract_request_t request = CompletePackedDotRequest();
-  request.required_capability_flags = LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS;
+  request.lhs.encoded.target_schema = EncodedTargetSchema();
+  request.lhs.encoded.required_capability_flags =
+      LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS;
 
   loom_contract_diagnostic_t diagnostic = {};
   EXPECT_FALSE(loom_contract_request_validate(&request, &diagnostic));
   EXPECT_EQ(diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_CAPABILITY);
+}
+
+TEST(ContractTest, RejectsMissingAuxiliaryOperands) {
+  loom_contract_request_t request = CompletePackedDotRequest();
+  request.lhs.encoded.target_schema = ScaledEncodedTargetSchema();
+  request.lhs.encoded.required_auxiliary_operands =
+      LOOM_CONTRACT_AUXILIARY_OPERAND_SCALE;
+  request.lhs.encoded.available_capability_flags =
+      LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS;
+  request.lhs.encoded.required_capability_flags =
+      LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS;
+
+  loom_contract_diagnostic_t diagnostic = {};
+  EXPECT_FALSE(loom_contract_request_validate(&request, &diagnostic));
+  EXPECT_EQ(diagnostic.rejection_bits,
+            LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND);
+}
+
+TEST(ContractTest, RejectsUnknownSchemaFactsSeparately) {
+  loom_contract_request_t request = CompletePackedDotRequest();
+  request.lhs.encoded.available_auxiliary_operands =
+      LOOM_CONTRACT_AUXILIARY_OPERAND_SCALE;
+  request.lhs.encoded.required_auxiliary_operands =
+      LOOM_CONTRACT_AUXILIARY_OPERAND_SCALE;
+  request.lhs.encoded.available_capability_flags =
+      LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS;
+  request.lhs.encoded.required_capability_flags =
+      LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS;
+
+  loom_contract_diagnostic_t diagnostic = {};
+  EXPECT_FALSE(loom_contract_request_validate(&request, &diagnostic));
+  EXPECT_EQ(diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_SCHEMA);
 }
 
 TEST(ContractTest, RejectsMissingShapeRoleAndCapability) {
@@ -71,7 +126,9 @@ TEST(ContractTest, RejectsMissingShapeRoleAndCapability) {
       Operand(LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN, LOOM_CONTRACT_NUMERIC_I32);
   request.result =
       Operand(LOOM_CONTRACT_OPERAND_ROLE_RESULT, LOOM_CONTRACT_NUMERIC_I32);
-  request.required_capability_flags = LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS;
+  request.lhs.encoded.target_schema = EncodedTargetSchema();
+  request.lhs.encoded.required_capability_flags =
+      LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS;
 
   loom_contract_diagnostic_t diagnostic = {};
   EXPECT_FALSE(loom_contract_request_validate(&request, &diagnostic));

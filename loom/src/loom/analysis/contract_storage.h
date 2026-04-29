@@ -26,9 +26,20 @@ bool loom_contract_scale_kind_from_storage_schema(
     loom_value_fact_storage_schema_t schema,
     loom_contract_scale_kind_t* out_scale_kind);
 
+// Returns auxiliary SSA data roles required by an encoded storage schema.
+loom_contract_auxiliary_operand_flags_t
+loom_contract_required_auxiliary_operands_from_storage_schema(
+    loom_value_fact_storage_schema_t schema);
+
 // Returns generic contract capability facts proven by a storage schema.
 loom_contract_capability_flags_t
-loom_contract_capability_flags_from_storage_schema(
+loom_contract_available_capability_flags_from_storage_schema(
+    loom_value_fact_storage_schema_t schema);
+
+// Returns generic contract capability facts required to preserve an encoded
+// storage schema without reference decode.
+loom_contract_capability_flags_t
+loom_contract_required_capability_flags_from_storage_schema(
     loom_value_fact_storage_schema_t schema);
 
 // Maps an encoded storage-schema payload to a generic contract operand.
@@ -54,15 +65,6 @@ typedef struct loom_contract_view_payload_t {
 
   // Generic operand facts for this payload.
   loom_contract_operand_t operand;
-
-  // Explicit scale operand shape proven by the payload schema.
-  loom_contract_scale_kind_t scale_kind;
-
-  // Generic capability flags proven by the payload schema.
-  loom_contract_capability_flags_t available_capability_flags;
-
-  // Raw storage-schema facts recovered from the view type, when present.
-  loom_value_fact_storage_schema_t storage_schema;
 } loom_contract_view_payload_t;
 
 // Queries a view type's contract payload interpretation.
@@ -103,9 +105,6 @@ typedef struct loom_contract_matrix_request_options_t {
 
   // Requested target primitive capability class.
   loom_contract_capability_class_t capability_class;
-
-  // Capability flags the selected target primitive must require.
-  loom_contract_capability_flags_t required_capability_flags;
 
   // Fallback and target primitive selection policy.
   loom_lowering_policy_t policy;

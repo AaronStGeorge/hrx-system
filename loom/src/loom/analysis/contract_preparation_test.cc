@@ -51,7 +51,6 @@ loom_contract_view_payload_t PlainPayload(
               .role = role,
               .numeric_type = numeric_type,
           },
-      .scale_kind = LOOM_CONTRACT_SCALE_NONE,
   };
 }
 
@@ -60,21 +59,12 @@ loom_contract_view_payload_t MatrixPayload(
     loom_value_fact_storage_schema_t schema) {
   loom_contract_view_payload_t payload = {
       .kind = LOOM_CONTRACT_VIEW_PAYLOAD_UNSUPPORTED_STORAGE_SCHEMA,
-      .scale_kind = LOOM_CONTRACT_SCALE_NONE,
-      .storage_schema = schema,
   };
   if (!loom_contract_operand_from_storage_schema(role, schema,
                                                  &payload.operand)) {
     return payload;
   }
-  if (!loom_contract_scale_kind_from_storage_schema(schema,
-                                                    &payload.scale_kind)) {
-    payload.operand.numeric_type = LOOM_CONTRACT_NUMERIC_UNKNOWN;
-    return payload;
-  }
   payload.kind = LOOM_CONTRACT_VIEW_PAYLOAD_ENCODED_OPERAND_SCHEMA;
-  payload.available_capability_flags =
-      loom_contract_capability_flags_from_storage_schema(schema);
   return payload;
 }
 
@@ -87,9 +77,11 @@ loom_contract_view_payload_t BlockQuantPayload(
           (loom_contract_operand_t){
               .role = role,
               .numeric_type = LOOM_CONTRACT_NUMERIC_UNKNOWN,
+              .encoded =
+                  (loom_contract_encoded_operand_t){
+                      .source_schema = schema,
+                  },
           },
-      .scale_kind = LOOM_CONTRACT_SCALE_UNKNOWN,
-      .storage_schema = schema,
   };
 }
 

@@ -34,7 +34,6 @@ loom_contract_view_payload_t PlainPayload(
               .role = role,
               .numeric_type = numeric_type,
           },
-      .scale_kind = LOOM_CONTRACT_SCALE_NONE,
   };
 }
 

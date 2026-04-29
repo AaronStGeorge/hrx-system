@@ -1178,6 +1178,7 @@ loom_cc_library(
     deps = [
         ":matrix_contract",
         "//loom/src/loom/analysis:contract",
+        "//loom/src/loom/analysis:contract_storage",
     ],
 )
 
@@ -1198,6 +1199,7 @@ loom_cc_test(
     deps = [
         ":matrix_contract",
         ":matrix_contract_projection",
+        "//loom/src/loom/analysis:contract_storage",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

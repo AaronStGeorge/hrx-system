@@ -20,6 +20,60 @@ static bool loom_contract_operand_numeric_is_known(
   return operand.numeric_type != LOOM_CONTRACT_NUMERIC_UNKNOWN;
 }
 
+static bool loom_contract_storage_schema_is_known(
+    loom_value_fact_storage_schema_t schema) {
+  return schema.static_spec_encoding_id != 0 ||
+         !loom_value_fact_encoded_operand_schema_is_unknown(
+             schema.encoded_operand);
+}
+
+static bool loom_contract_encoded_operand_has_facts(
+    const loom_contract_encoded_operand_t* encoded) {
+  return loom_contract_storage_schema_is_known(encoded->source_schema) ||
+         loom_contract_storage_schema_is_known(encoded->target_schema) ||
+         encoded->available_auxiliary_operands != 0 ||
+         encoded->required_auxiliary_operands != 0 ||
+         encoded->available_capability_flags != 0 ||
+         encoded->required_capability_flags != 0;
+}
+
+static loom_contract_rejection_bits_t
+loom_contract_encoded_operand_rejection_bits(
+    const loom_contract_encoded_operand_t* encoded) {
+  if (!loom_contract_encoded_operand_has_facts(encoded)) {
+    return LOOM_CONTRACT_REJECTION_NONE;
+  }
+
+  loom_contract_rejection_bits_t rejection_bits = LOOM_CONTRACT_REJECTION_NONE;
+  if (loom_value_fact_encoded_operand_schema_is_unknown(
+          encoded->target_schema.encoded_operand) ||
+      !loom_value_fact_encoded_operand_schema_scale_is_complete(
+          encoded->target_schema.encoded_operand)) {
+    rejection_bits |= LOOM_CONTRACT_REJECTION_SCHEMA;
+  }
+  if (!iree_all_bits_set(encoded->available_auxiliary_operands,
+                         encoded->required_auxiliary_operands)) {
+    rejection_bits |= LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND;
+  }
+  if (!iree_all_bits_set(encoded->available_capability_flags,
+                         encoded->required_capability_flags)) {
+    rejection_bits |= LOOM_CONTRACT_REJECTION_CAPABILITY;
+  }
+  return rejection_bits;
+}
+
+static loom_contract_capability_flags_t
+loom_contract_operand_available_capability_flags(
+    loom_contract_operand_t operand) {
+  return operand.encoded.available_capability_flags;
+}
+
+static loom_contract_capability_flags_t
+loom_contract_operand_required_capability_flags(
+    loom_contract_operand_t operand) {
+  return operand.encoded.required_capability_flags;
+}
+
 //===----------------------------------------------------------------------===//
 // Public API
 //===----------------------------------------------------------------------===//
@@ -27,7 +81,6 @@ static bool loom_contract_operand_numeric_is_known(
 void loom_contract_request_initialize(loom_contract_request_t* out_request) {
   IREE_ASSERT_ARGUMENT(out_request);
   *out_request = (loom_contract_request_t){
-      .scale_kind = LOOM_CONTRACT_SCALE_NONE,
       .policy = LOOM_LOWERING_POLICY_REFERENCE_ALLOWED,
   };
 }
@@ -68,13 +121,14 @@ bool loom_contract_request_validate(
   if (request->capability_class == LOOM_CONTRACT_CAPABILITY_CLASS_UNKNOWN) {
     rejection_bits |= LOOM_CONTRACT_REJECTION_CAPABILITY;
   }
-  if (request->scale_kind == LOOM_CONTRACT_SCALE_UNKNOWN) {
-    rejection_bits |= LOOM_CONTRACT_REJECTION_CAPABILITY;
-  }
-  if (!iree_all_bits_set(request->available_capability_flags,
-                         request->required_capability_flags)) {
-    rejection_bits |= LOOM_CONTRACT_REJECTION_CAPABILITY;
-  }
+  rejection_bits |=
+      loom_contract_encoded_operand_rejection_bits(&request->lhs.encoded);
+  rejection_bits |=
+      loom_contract_encoded_operand_rejection_bits(&request->rhs.encoded);
+  rejection_bits |= loom_contract_encoded_operand_rejection_bits(
+      &request->accumulator.encoded);
+  rejection_bits |=
+      loom_contract_encoded_operand_rejection_bits(&request->result.encoded);
   if (request->policy == LOOM_LOWERING_POLICY_UNKNOWN) {
     rejection_bits |= LOOM_CONTRACT_REJECTION_POLICY;
   }
@@ -83,6 +137,27 @@ bool loom_contract_request_validate(
     out_diagnostic->rejection_bits = rejection_bits;
   }
   return rejection_bits == 0;
+}
+
+loom_contract_capability_flags_t
+loom_contract_request_available_capability_flags(
+    const loom_contract_request_t* request) {
+  IREE_ASSERT_ARGUMENT(request);
+  return loom_contract_operand_available_capability_flags(request->lhs) |
+         loom_contract_operand_available_capability_flags(request->rhs) |
+         loom_contract_operand_available_capability_flags(
+             request->accumulator) |
+         loom_contract_operand_available_capability_flags(request->result);
+}
+
+loom_contract_capability_flags_t
+loom_contract_request_required_capability_flags(
+    const loom_contract_request_t* request) {
+  IREE_ASSERT_ARGUMENT(request);
+  return loom_contract_operand_required_capability_flags(request->lhs) |
+         loom_contract_operand_required_capability_flags(request->rhs) |
+         loom_contract_operand_required_capability_flags(request->accumulator) |
+         loom_contract_operand_required_capability_flags(request->result);
 }
 
 bool loom_contract_numeric_type_from_scalar(
@@ -180,6 +255,13 @@ iree_string_view_t loom_contract_rejection_detail(
   }
   if (iree_any_bit_set(rejection_bits, LOOM_CONTRACT_REJECTION_FRAGMENT)) {
     return IREE_SV("contract fragment facts are insufficient");
+  }
+  if (iree_any_bit_set(rejection_bits, LOOM_CONTRACT_REJECTION_SCHEMA)) {
+    return IREE_SV("contract encoded schema facts are missing or inconsistent");
+  }
+  if (iree_any_bit_set(rejection_bits,
+                       LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND)) {
+    return IREE_SV("contract auxiliary data operands are missing");
   }
   if (iree_any_bit_set(rejection_bits, LOOM_CONTRACT_REJECTION_CAPABILITY)) {
     return IREE_SV("contract capability class is unsupported");

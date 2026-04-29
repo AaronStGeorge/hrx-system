@@ -1538,6 +1538,7 @@ loom_cc_library(
   DEPS
     ::matrix_contract
     loom::src::loom::analysis::contract
+    loom::src::loom::analysis::contract_storage
   PUBLIC
 )
 
@@ -1561,6 +1562,7 @@ loom_cc_test(
   DEPS
     ::matrix_contract
     ::matrix_contract_projection
+    loom::src::loom::analysis::contract_storage
     iree::testing::gtest
     iree::testing::gtest_main
 )

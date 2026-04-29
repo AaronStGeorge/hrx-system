@@ -6,6 +6,8 @@
 
 #include "loom/target/arch/amdgpu/matrix_contract_projection.h"
 
+#include "loom/analysis/contract_storage.h"
+
 static bool loom_amdgpu_matrix_numeric_from_contract(
     loom_contract_numeric_type_t numeric_type,
     loom_amdgpu_matrix_numeric_type_t* out_numeric_type) {
@@ -134,7 +136,7 @@ loom_amdgpu_matrix_flags_from_contract(
   return flags;
 }
 
-static bool loom_amdgpu_matrix_scale_from_contract(
+static bool loom_amdgpu_matrix_scale_from_generic(
     loom_contract_scale_kind_t scale_kind,
     loom_amdgpu_matrix_scale_kind_t* out_scale_kind) {
   *out_scale_kind = LOOM_AMDGPU_MATRIX_SCALE_NONE;
@@ -152,6 +154,28 @@ static bool loom_amdgpu_matrix_scale_from_contract(
     default:
       return false;
   }
+}
+
+static bool loom_amdgpu_matrix_scale_kind_from_contract_operand(
+    loom_contract_operand_t operand,
+    loom_contract_scale_kind_t* out_scale_kind) {
+  return loom_contract_scale_kind_from_storage_schema(
+      operand.encoded.target_schema, out_scale_kind);
+}
+
+static bool loom_amdgpu_matrix_scale_from_contract(
+    const loom_contract_request_t* contract_request,
+    loom_amdgpu_matrix_scale_kind_t* out_scale_kind) {
+  loom_contract_scale_kind_t lhs_scale_kind = LOOM_CONTRACT_SCALE_UNKNOWN;
+  loom_contract_scale_kind_t rhs_scale_kind = LOOM_CONTRACT_SCALE_UNKNOWN;
+  if (!loom_amdgpu_matrix_scale_kind_from_contract_operand(
+          contract_request->lhs, &lhs_scale_kind) ||
+      !loom_amdgpu_matrix_scale_kind_from_contract_operand(
+          contract_request->rhs, &rhs_scale_kind) ||
+      lhs_scale_kind != rhs_scale_kind) {
+    return false;
+  }
+  return loom_amdgpu_matrix_scale_from_generic(lhs_scale_kind, out_scale_kind);
 }
 
 static bool loom_amdgpu_matrix_contract_fail(
@@ -200,9 +224,9 @@ bool loom_amdgpu_matrix_contract_match_request_from_contract(
   request.feature_bits = feature_bits;
   request.wave_size = wave_size;
   request.available_flags = loom_amdgpu_matrix_flags_from_contract(
-      contract_request->available_capability_flags);
+      loom_contract_request_available_capability_flags(contract_request));
   request.required_flags = loom_amdgpu_matrix_flags_from_contract(
-      contract_request->required_capability_flags);
+      loom_contract_request_required_capability_flags(contract_request));
   if (!loom_amdgpu_matrix_payload_from_contract(contract_request->lhs,
                                                 &request.lhs_payload) ||
       !loom_amdgpu_matrix_payload_from_contract(contract_request->rhs,
@@ -214,7 +238,7 @@ bool loom_amdgpu_matrix_contract_match_request_from_contract(
     return loom_amdgpu_matrix_contract_fail(LOOM_CONTRACT_REJECTION_NUMERIC,
                                             out_diagnostic);
   }
-  if (!loom_amdgpu_matrix_scale_from_contract(contract_request->scale_kind,
+  if (!loom_amdgpu_matrix_scale_from_contract(contract_request,
                                               &request.scale_kind)) {
     return loom_amdgpu_matrix_contract_fail(LOOM_CONTRACT_REJECTION_CAPABILITY,
                                             out_diagnostic);

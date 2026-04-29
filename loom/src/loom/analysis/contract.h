@@ -17,6 +17,7 @@
 #include "iree/base/api.h"
 #include "loom/analysis/policy.h"
 #include "loom/ir/types.h"
+#include "loom/util/fact_table.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -173,6 +174,31 @@ typedef enum loom_contract_capability_flag_bits_e {
 // Bitset of loom_contract_capability_flag_bits_t values.
 typedef uint32_t loom_contract_capability_flags_t;
 
+typedef enum loom_contract_auxiliary_operand_flag_bits_e {
+  // Primary/local scale values are provided as an auxiliary operand.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_SCALE = 1u << 0,
+  // Secondary/global/super-scale values are provided as an auxiliary operand.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_SECONDARY_SCALE = 1u << 1,
+  // Affine zero-point values are provided as an auxiliary operand.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_ZERO_POINT = 1u << 2,
+  // Affine minimum/base values are provided as an auxiliary operand.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_MIN = 1u << 3,
+  // Sparse mask, index, or structured metadata is provided as an auxiliary
+  // operand.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_SPARSE_METADATA = 1u << 4,
+  // Codebook or table lookup data is provided as an auxiliary operand.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_CODEBOOK_TABLE = 1u << 5,
+  // Residual/outlier correction data is provided as an auxiliary operand.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_RESIDUAL = 1u << 6,
+  // Sign-side-stream data is provided as an auxiliary operand.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_SIGN = 1u << 7,
+  // Runtime amax/statistics data is provided as an auxiliary operand.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_RUNTIME_AMAX = 1u << 8,
+} loom_contract_auxiliary_operand_flag_bits_t;
+
+// Bitset of loom_contract_auxiliary_operand_flag_bits_t values.
+typedef uint32_t loom_contract_auxiliary_operand_flags_t;
+
 typedef struct loom_contract_shape_t {
   // Exact M/result-row extent, or 0 when unknown.
   int64_t m;
@@ -183,6 +209,28 @@ typedef struct loom_contract_shape_t {
   // Exact K/reduction extent, or 0 when unknown.
   int64_t k;
 } loom_contract_shape_t;
+
+typedef struct loom_contract_encoded_operand_t {
+  // Schema facts proven for the source operand before preparation or
+  // reencoding.
+  loom_value_fact_storage_schema_t source_schema;
+
+  // Schema facts the selected target primitive or reference path consumes.
+  loom_value_fact_storage_schema_t target_schema;
+
+  // Bitset of auxiliary SSA operands currently attached to this role.
+  loom_contract_auxiliary_operand_flags_t available_auxiliary_operands;
+
+  // Bitset of auxiliary SSA operands required by target_schema.
+  loom_contract_auxiliary_operand_flags_t required_auxiliary_operands;
+
+  // Bitset of capability facts or operands currently attached to this role.
+  loom_contract_capability_flags_t available_capability_flags;
+
+  // Bitset of capability facts the selected target primitive must preserve for
+  // this role.
+  loom_contract_capability_flags_t required_capability_flags;
+} loom_contract_encoded_operand_t;
 
 typedef struct loom_contract_operand_t {
   // Role this operand plays in the contraction.
@@ -196,6 +244,9 @@ typedef struct loom_contract_operand_t {
 
   // Logical scalar element count represented by the payload, or 0.
   uint16_t payload_element_count;
+
+  // Role-local encoded payload, scale, sparsity, and auxiliary-data facts.
+  loom_contract_encoded_operand_t encoded;
 } loom_contract_operand_t;
 
 typedef struct loom_contract_fragment_t {
@@ -246,15 +297,6 @@ typedef struct loom_contract_request_t {
   // Requested target primitive capability class.
   loom_contract_capability_class_t capability_class;
 
-  // Bitset of capability facts or operands available to target adapters.
-  loom_contract_capability_flags_t available_capability_flags;
-
-  // Bitset of capability facts the selected target primitive must require.
-  loom_contract_capability_flags_t required_capability_flags;
-
-  // Explicit scale operand kind required by this contract.
-  loom_contract_scale_kind_t scale_kind;
-
   // Fallback and target primitive selection policy.
   loom_lowering_policy_t policy;
 } loom_contract_request_t;
@@ -276,6 +318,10 @@ enum loom_contract_rejection_bits_e {
   LOOM_CONTRACT_REJECTION_CAPABILITY = 1u << 5,
   // Lowering policy does not permit the only available lowering family.
   LOOM_CONTRACT_REJECTION_POLICY = 1u << 6,
+  // One or more encoded schema facts were missing or internally inconsistent.
+  LOOM_CONTRACT_REJECTION_SCHEMA = 1u << 7,
+  // One or more required auxiliary data operands were missing.
+  LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND = 1u << 8,
 };
 
 // Bitset of loom_contract_rejection_bits_e values.
@@ -293,6 +339,18 @@ void loom_contract_request_initialize(loom_contract_request_t* out_request);
 // Validates the target-independent fields required before target projection.
 bool loom_contract_request_validate(const loom_contract_request_t* request,
                                     loom_contract_diagnostic_t* out_diagnostic);
+
+// Returns the union of role-local capability facts available to target
+// adapters.
+loom_contract_capability_flags_t
+loom_contract_request_available_capability_flags(
+    const loom_contract_request_t* request);
+
+// Returns the union of role-local capability facts the selected target
+// primitive must preserve.
+loom_contract_capability_flags_t
+loom_contract_request_required_capability_flags(
+    const loom_contract_request_t* request);
 
 // Maps a Loom scalar type to a generic contract numeric type.
 bool loom_contract_numeric_type_from_scalar(

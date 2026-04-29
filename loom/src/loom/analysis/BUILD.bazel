@@ -114,6 +114,7 @@ loom_cc_library(
     deps = [
         ":policy",
         "//loom/src/loom/ir",
+        "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
     ],
 )

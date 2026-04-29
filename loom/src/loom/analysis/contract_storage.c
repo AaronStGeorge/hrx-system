@@ -109,8 +109,73 @@ bool loom_contract_scale_kind_from_storage_schema(
   }
 }
 
+static bool loom_contract_encoded_format_requires_selector(
+    loom_value_fact_numeric_format_flags_t format) {
+  const loom_value_fact_numeric_format_flags_t selector_formats =
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3 |
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2 |
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FN |
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_BF8 |
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_F6_E3M2 |
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_F6_E2M3 |
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_BF6 |
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_F4_E2M1;
+  return iree_any_bit_set(format, selector_formats);
+}
+
+loom_contract_auxiliary_operand_flags_t
+loom_contract_required_auxiliary_operands_from_storage_schema(
+    loom_value_fact_storage_schema_t schema) {
+  loom_contract_auxiliary_operand_flags_t flags = 0;
+  loom_value_fact_encoded_operand_schema_t operand = schema.encoded_operand;
+  if (operand.scale_operand_count != 0) {
+    flags |= LOOM_CONTRACT_AUXILIARY_OPERAND_SCALE;
+  }
+  if (operand.scale_operand_count > 1 ||
+      operand.secondary_scale_format !=
+          LOOM_VALUE_FACT_NUMERIC_FORMAT_UNKNOWN ||
+      iree_any_bit_set(
+          operand.scale_topology,
+          LOOM_VALUE_FACT_SCALE_TOPOLOGY_HIERARCHICAL |
+              LOOM_VALUE_FACT_SCALE_TOPOLOGY_SUBBLOCK_IN_SUPERBLOCK) ||
+      iree_any_bit_set(
+          operand.affine_policy,
+          LOOM_VALUE_FACT_AFFINE_POLICY_SUPER_SCALE_TIMES_SUBSCALE)) {
+    flags |= LOOM_CONTRACT_AUXILIARY_OPERAND_SECONDARY_SCALE;
+  }
+  if (iree_any_bit_set(operand.affine_policy,
+                       LOOM_VALUE_FACT_AFFINE_POLICY_SCALE_PLUS_ZERO_POINT)) {
+    flags |= LOOM_CONTRACT_AUXILIARY_OPERAND_ZERO_POINT;
+  }
+  if (iree_any_bit_set(operand.affine_policy,
+                       LOOM_VALUE_FACT_AFFINE_POLICY_SCALE_PLUS_MIN)) {
+    flags |= LOOM_CONTRACT_AUXILIARY_OPERAND_MIN;
+  }
+  if (iree_any_bit_set(operand.sparsity_policy,
+                       LOOM_VALUE_FACT_SPARSITY_POLICY_ALL)) {
+    flags |= LOOM_CONTRACT_AUXILIARY_OPERAND_SPARSE_METADATA;
+  }
+  if (iree_any_bit_set(
+          operand.codebook_policy,
+          LOOM_VALUE_FACT_CODEBOOK_POLICY_STATIC_SYMBOL_TABLE |
+              LOOM_VALUE_FACT_CODEBOOK_POLICY_GLOBAL_DATA_TABLE |
+              LOOM_VALUE_FACT_CODEBOOK_POLICY_DYNAMIC_TABLE_OPERAND |
+              LOOM_VALUE_FACT_CODEBOOK_POLICY_PER_SUPERBLOCK_TABLE)) {
+    flags |= LOOM_CONTRACT_AUXILIARY_OPERAND_CODEBOOK_TABLE;
+  }
+  if (iree_any_bit_set(operand.sparsity_policy,
+                       LOOM_VALUE_FACT_SPARSITY_POLICY_OUTLIER_SIDE_STREAM)) {
+    flags |= LOOM_CONTRACT_AUXILIARY_OPERAND_RESIDUAL;
+  }
+  if (iree_any_bit_set(operand.scale_topology,
+                       LOOM_VALUE_FACT_SCALE_TOPOLOGY_RUNTIME_AMAX_DERIVED)) {
+    flags |= LOOM_CONTRACT_AUXILIARY_OPERAND_RUNTIME_AMAX;
+  }
+  return flags;
+}
+
 loom_contract_capability_flags_t
-loom_contract_capability_flags_from_storage_schema(
+loom_contract_available_capability_flags_from_storage_schema(
     loom_value_fact_storage_schema_t schema) {
   loom_contract_capability_flags_t flags = 0;
   loom_contract_numeric_type_t numeric_type = LOOM_CONTRACT_NUMERIC_UNKNOWN;
@@ -138,11 +203,51 @@ loom_contract_capability_flags_from_storage_schema(
   return flags;
 }
 
+loom_contract_capability_flags_t
+loom_contract_required_capability_flags_from_storage_schema(
+    loom_value_fact_storage_schema_t schema) {
+  loom_contract_capability_flags_t flags = 0;
+  loom_value_fact_encoded_operand_schema_t operand = schema.encoded_operand;
+  const loom_contract_auxiliary_operand_flags_t auxiliary_operands =
+      loom_contract_required_auxiliary_operands_from_storage_schema(schema);
+  if (iree_any_bit_set(auxiliary_operands,
+                       LOOM_CONTRACT_AUXILIARY_OPERAND_SCALE)) {
+    flags |= LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS;
+  }
+  if (operand.scale_format != 0 || operand.secondary_scale_format != 0) {
+    flags |= LOOM_CONTRACT_CAPABILITY_SCALE_FORMAT_SELECTORS;
+  }
+  if (iree_any_bit_set(operand.sparsity_policy,
+                       LOOM_VALUE_FACT_SPARSITY_POLICY_ALL)) {
+    flags |= LOOM_CONTRACT_CAPABILITY_SPARSE_METADATA;
+  }
+  if (loom_contract_encoded_format_requires_selector(operand.element_format)) {
+    flags |= LOOM_CONTRACT_CAPABILITY_FORMAT_SELECTORS;
+  }
+  return flags;
+}
+
 bool loom_contract_operand_from_storage_schema(
     loom_contract_operand_role_t role, loom_value_fact_storage_schema_t schema,
     loom_contract_operand_t* out_operand) {
   IREE_ASSERT_ARGUMENT(out_operand);
-  *out_operand = (loom_contract_operand_t){0};
+  *out_operand = (loom_contract_operand_t){
+      .role = role,
+      .encoded =
+          (loom_contract_encoded_operand_t){
+              .source_schema = schema,
+              .target_schema = schema,
+              .required_auxiliary_operands =
+                  loom_contract_required_auxiliary_operands_from_storage_schema(
+                      schema),
+              .available_capability_flags =
+                  loom_contract_available_capability_flags_from_storage_schema(
+                      schema),
+              .required_capability_flags =
+                  loom_contract_required_capability_flags_from_storage_schema(
+                      schema),
+          },
+  };
   loom_value_fact_encoded_operand_schema_t operand = schema.encoded_operand;
   if (!iree_any_bit_set(operand.payload_packing,
                         LOOM_VALUE_FACT_PAYLOAD_PACKING_TARGET_FRAGMENT) ||
@@ -155,12 +260,9 @@ bool loom_contract_operand_from_storage_schema(
                                                       &numeric_type)) {
     return false;
   }
-  *out_operand = (loom_contract_operand_t){
-      .role = role,
-      .numeric_type = numeric_type,
-      .payload_register_count = operand.payload_register_count,
-      .payload_element_count = operand.payload_element_count,
-  };
+  out_operand->numeric_type = numeric_type;
+  out_operand->payload_register_count = operand.payload_register_count;
+  out_operand->payload_element_count = operand.payload_element_count;
   return true;
 }
 
@@ -176,7 +278,6 @@ bool loom_contract_view_payload_from_type(
               .role = role,
               .numeric_type = LOOM_CONTRACT_NUMERIC_UNKNOWN,
           },
-      .scale_kind = LOOM_CONTRACT_SCALE_NONE,
   };
   if (!loom_type_is_view(view_type)) {
     return false;
@@ -186,19 +287,11 @@ bool loom_contract_view_payload_from_type(
   if (loom_encoding_query_type_storage_schema(context, module, view_type,
                                               &storage_schema)) {
     out_payload->kind = LOOM_CONTRACT_VIEW_PAYLOAD_UNSUPPORTED_STORAGE_SCHEMA;
-    out_payload->storage_schema = storage_schema;
     if (!loom_contract_operand_from_storage_schema(role, storage_schema,
                                                    &out_payload->operand)) {
       return true;
     }
-    if (!loom_contract_scale_kind_from_storage_schema(
-            storage_schema, &out_payload->scale_kind)) {
-      out_payload->operand.numeric_type = LOOM_CONTRACT_NUMERIC_UNKNOWN;
-      return true;
-    }
     out_payload->kind = LOOM_CONTRACT_VIEW_PAYLOAD_ENCODED_OPERAND_SCHEMA;
-    out_payload->available_capability_flags =
-        loom_contract_capability_flags_from_storage_schema(storage_schema);
     return true;
   }
 
@@ -219,14 +312,6 @@ static bool loom_contract_payload_is_supported(
          payload->kind == LOOM_CONTRACT_VIEW_PAYLOAD_ENCODED_OPERAND_SCHEMA;
 }
 
-static bool loom_contract_payload_scale_kind_matches(
-    const loom_contract_view_payload_t* lhs,
-    const loom_contract_view_payload_t* rhs,
-    loom_contract_scale_kind_t* out_scale_kind) {
-  *out_scale_kind = lhs->scale_kind;
-  return lhs->scale_kind == rhs->scale_kind;
-}
-
 bool loom_contract_request_from_matrix_payloads(
     const loom_contract_matrix_request_options_t* options,
     loom_contract_request_t* out_request,
@@ -241,13 +326,6 @@ bool loom_contract_request_from_matrix_payloads(
   if (!loom_contract_payload_is_supported(&options->lhs) ||
       !loom_contract_payload_is_supported(&options->rhs)) {
     return loom_contract_storage_fail(LOOM_CONTRACT_REJECTION_NUMERIC,
-                                      out_diagnostic);
-  }
-
-  loom_contract_scale_kind_t scale_kind = LOOM_CONTRACT_SCALE_UNKNOWN;
-  if (!loom_contract_payload_scale_kind_matches(&options->lhs, &options->rhs,
-                                                &scale_kind)) {
-    return loom_contract_storage_fail(LOOM_CONTRACT_REJECTION_CAPABILITY,
                                       out_diagnostic);
   }
 
@@ -269,11 +347,6 @@ bool loom_contract_request_from_matrix_payloads(
   };
   out_request->fragment = options->fragment;
   out_request->capability_class = options->capability_class;
-  out_request->available_capability_flags =
-      options->lhs.available_capability_flags |
-      options->rhs.available_capability_flags;
-  out_request->required_capability_flags = options->required_capability_flags;
-  out_request->scale_kind = scale_kind;
   out_request->policy = options->policy;
   return loom_contract_request_validate(out_request, out_diagnostic);
 }

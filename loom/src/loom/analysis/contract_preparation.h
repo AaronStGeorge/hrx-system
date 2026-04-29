@@ -52,40 +52,45 @@ typedef enum loom_contract_numeric_transform_e {
   LOOM_CONTRACT_NUMERIC_TRANSFORM_DECODE_REPACK = 3,
 } loom_contract_numeric_transform_t;
 
+typedef enum loom_contract_preparation_flag_bits_e {
+  // The preparation result carries explicit address-layout facts.
+  LOOM_CONTRACT_PREPARATION_HAS_ADDRESS_LAYOUT = 1u << 0,
+  // The source storage schema is preserved by this preparation.
+  LOOM_CONTRACT_PREPARATION_PRESERVES_STORAGE_SCHEMA = 1u << 1,
+  // The logical RHS of the algebra is transposed before contraction.
+  LOOM_CONTRACT_PREPARATION_LOGICAL_RHS_TRANSPOSE = 1u << 2,
+  // The physical operand layout is packed independently of algebraic transpose.
+  LOOM_CONTRACT_PREPARATION_PHYSICAL_PACKING = 1u << 3,
+  // The physical RHS layout is N-major blocked for MMT4D-style kernels.
+  LOOM_CONTRACT_PREPARATION_PHYSICAL_N_MAJOR_BLOCKED = 1u << 4,
+  // The preparation constrains fragment or lane ownership.
+  LOOM_CONTRACT_PREPARATION_FRAGMENT_OWNERSHIP = 1u << 5,
+} loom_contract_preparation_flag_bits_t;
+
+// Bitset of loom_contract_preparation_flag_bits_t values.
 typedef uint32_t loom_contract_preparation_flags_t;
 
-// The preparation result carries explicit address-layout facts.
-#define LOOM_CONTRACT_PREPARATION_HAS_ADDRESS_LAYOUT ((uint32_t)1u << 0)
-// The source storage schema is preserved by this preparation.
-#define LOOM_CONTRACT_PREPARATION_PRESERVES_STORAGE_SCHEMA ((uint32_t)1u << 1)
-// The logical RHS of the algebra is transposed before contraction.
-#define LOOM_CONTRACT_PREPARATION_LOGICAL_RHS_TRANSPOSE ((uint32_t)1u << 2)
-// The physical operand layout is packed independently of algebraic transpose.
-#define LOOM_CONTRACT_PREPARATION_PHYSICAL_PACKING ((uint32_t)1u << 3)
-// The physical RHS layout is N-major blocked for MMT4D-style kernels.
-#define LOOM_CONTRACT_PREPARATION_PHYSICAL_N_MAJOR_BLOCKED ((uint32_t)1u << 4)
-// The preparation constrains fragment or lane ownership.
-#define LOOM_CONTRACT_PREPARATION_FRAGMENT_OWNERSHIP ((uint32_t)1u << 5)
+enum loom_contract_preparation_rejection_bits_e {
+  // No preparation rejection was recorded.
+  LOOM_CONTRACT_PREPARATION_REJECTION_NONE = 0u,
+  // The requested preparation was incomplete or inconsistent.
+  LOOM_CONTRACT_PREPARATION_REJECTION_INVALID_REQUEST = 1u << 0,
+  // The requested preparation family cannot apply to the operand role.
+  LOOM_CONTRACT_PREPARATION_REJECTION_ROLE = 1u << 1,
+  // The requested preparation family is unavailable.
+  LOOM_CONTRACT_PREPARATION_REJECTION_UNAVAILABLE = 1u << 2,
+  // The requested preparation would have needed to be inserted earlier.
+  LOOM_CONTRACT_PREPARATION_REJECTION_TOO_LATE = 1u << 3,
+  // Optimized lowering policy does not permit the available fallback.
+  LOOM_CONTRACT_PREPARATION_REJECTION_POLICY = 1u << 4,
+  // The requested physical preparation is missing address-layout facts.
+  LOOM_CONTRACT_PREPARATION_REJECTION_ADDRESS_LAYOUT = 1u << 5,
+  // The requested numeric transform is missing or inconsistent.
+  LOOM_CONTRACT_PREPARATION_REJECTION_NUMERIC_TRANSFORM = 1u << 6,
+};
 
+// Bitset of loom_contract_preparation_rejection_bits_e values.
 typedef uint32_t loom_contract_preparation_rejection_bits_t;
-
-// No preparation rejection was recorded.
-#define LOOM_CONTRACT_PREPARATION_REJECTION_NONE ((uint32_t)0u)
-// The requested preparation was incomplete or inconsistent.
-#define LOOM_CONTRACT_PREPARATION_REJECTION_INVALID_REQUEST ((uint32_t)1u << 0)
-// The requested preparation family cannot apply to the operand role.
-#define LOOM_CONTRACT_PREPARATION_REJECTION_ROLE ((uint32_t)1u << 1)
-// The requested preparation family is unavailable.
-#define LOOM_CONTRACT_PREPARATION_REJECTION_UNAVAILABLE ((uint32_t)1u << 2)
-// The requested preparation would have needed to be inserted earlier.
-#define LOOM_CONTRACT_PREPARATION_REJECTION_TOO_LATE ((uint32_t)1u << 3)
-// Optimized lowering policy does not permit the available fallback.
-#define LOOM_CONTRACT_PREPARATION_REJECTION_POLICY ((uint32_t)1u << 4)
-// The requested physical preparation is missing address-layout facts.
-#define LOOM_CONTRACT_PREPARATION_REJECTION_ADDRESS_LAYOUT ((uint32_t)1u << 5)
-// The requested numeric transform is missing or inconsistent.
-#define LOOM_CONTRACT_PREPARATION_REJECTION_NUMERIC_TRANSFORM \
-  ((uint32_t)1u << 6)
 
 typedef struct loom_contract_preparation_diagnostic_t {
   // Bitset of loom_contract_preparation_rejection_bits_t values.
