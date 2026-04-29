@@ -54,16 +54,18 @@ typedef uint64_t loom_amdgpu_matrix_feature_bits_t;
 // Processor supports gfx1250 SWMMAC modifier/reuse variants.
 #define LOOM_AMDGPU_MATRIX_FEATURE_SWMMAC_GFX1250 (UINT64_C(1) << 13)
 
-// Bitset describing legal wave sizes for a matrix contract.
-typedef uint32_t loom_amdgpu_matrix_wave_size_bits_t;
+enum loom_amdgpu_matrix_wave_size_bits_e {
+  // Contract may be selected for wave32 code generation.
+  LOOM_AMDGPU_MATRIX_WAVE_SIZE_32 = 1u << 0,
+  // Contract may be selected for wave64 code generation.
+  LOOM_AMDGPU_MATRIX_WAVE_SIZE_64 = 1u << 1,
+  // Contract may be selected for either wave32 or wave64 code generation.
+  LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY =
+      LOOM_AMDGPU_MATRIX_WAVE_SIZE_32 | LOOM_AMDGPU_MATRIX_WAVE_SIZE_64,
+};
 
-// Contract may be selected for wave32 code generation.
-#define LOOM_AMDGPU_MATRIX_WAVE_SIZE_32 ((uint32_t)1u << 0)
-// Contract may be selected for wave64 code generation.
-#define LOOM_AMDGPU_MATRIX_WAVE_SIZE_64 ((uint32_t)1u << 1)
-// Contract may be selected for either wave32 or wave64 code generation.
-#define LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY \
-  (LOOM_AMDGPU_MATRIX_WAVE_SIZE_32 | LOOM_AMDGPU_MATRIX_WAVE_SIZE_64)
+// Bitset of loom_amdgpu_matrix_wave_size_bits_e values.
+typedef uint32_t loom_amdgpu_matrix_wave_size_bits_t;
 
 typedef enum loom_amdgpu_matrix_family_e {
   // Unknown or uninitialized matrix contract family.
@@ -137,31 +139,33 @@ typedef enum loom_amdgpu_matrix_format_selector_e {
   LOOM_AMDGPU_MATRIX_FORMAT_SELECTOR_FP4 = 4,
 } loom_amdgpu_matrix_format_selector_t;
 
-// Bitset of optional ABI operands/modifiers required by a contract.
-typedef uint32_t loom_amdgpu_matrix_contract_flags_t;
+typedef enum loom_amdgpu_matrix_contract_flag_bits_e {
+  // Contract consumes an explicit sparse index operand.
+  LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE = 1u << 0,
+  // Contract consumes explicit scale operands.
+  LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALED = 1u << 1,
+  // Contract consumes matrix-format selector operands.
+  LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_MATRIX_FORMATS = 1u << 2,
+  // Contract consumes matrix reuse immediate operands.
+  LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_REUSE = 1u << 3,
+  // Contract consumes a clamp immediate operand.
+  LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_CLAMP = 1u << 4,
+  // Contract consumes A/B sign-selection immediate operands.
+  LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SIGN_SELECT = 1u << 5,
+  // Contract consumes A/B operand modifier immediate operands.
+  LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_AB_MODIFIERS = 1u << 6,
+  // Contract consumes a C accumulator modifier immediate operand.
+  LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_C_MODIFIER = 1u << 7,
+  // Contract consumes a GFX11/GFX12 op_sel operand.
+  LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_OPSEL = 1u << 8,
+  // A zero scale can refine to an unscaled contract with the same shape.
+  LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_ZERO_SCALE_FALLBACK = 1u << 9,
+  // Contract consumes scale-format selector operands.
+  LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALE_FORMATS = 1u << 10,
+} loom_amdgpu_matrix_contract_flag_bits_t;
 
-// Contract consumes an explicit sparse index operand.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE ((uint32_t)1u << 0)
-// Contract consumes explicit scale operands.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALED ((uint32_t)1u << 1)
-// Contract consumes matrix-format selector operands.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_MATRIX_FORMATS ((uint32_t)1u << 2)
-// Contract consumes matrix reuse immediate operands.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_REUSE ((uint32_t)1u << 3)
-// Contract consumes a clamp immediate operand.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_CLAMP ((uint32_t)1u << 4)
-// Contract consumes A/B sign-selection immediate operands.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SIGN_SELECT ((uint32_t)1u << 5)
-// Contract consumes A/B operand modifier immediate operands.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_AB_MODIFIERS ((uint32_t)1u << 6)
-// Contract consumes a C accumulator modifier immediate operand.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_C_MODIFIER ((uint32_t)1u << 7)
-// Contract consumes a GFX11/GFX12 op_sel operand.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_OPSEL ((uint32_t)1u << 8)
-// A zero scale can refine to an unscaled contract with the same shape.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_ZERO_SCALE_FALLBACK ((uint32_t)1u << 9)
-// Contract consumes scale-format selector operands.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALE_FORMATS ((uint32_t)1u << 10)
+// Bitset of loom_amdgpu_matrix_contract_flag_bits_t values.
+typedef uint32_t loom_amdgpu_matrix_contract_flags_t;
 
 // Matrix contract does not have a target-low descriptor mapping yet.
 #define LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_ID_NONE UINT64_C(0)
@@ -216,61 +220,57 @@ typedef struct loom_amdgpu_matrix_contract_descriptor_t {
   loom_amdgpu_matrix_scale_kind_t scale_kind;
 } loom_amdgpu_matrix_contract_descriptor_t;
 
-// Bitset of structural reasons that prevented a matrix contract match.
-typedef uint32_t loom_amdgpu_matrix_contract_rejection_bits_t;
+enum loom_amdgpu_matrix_contract_rejection_bits_e {
+  // No rejection reason was recorded.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_NONE = 0u,
+  // The requested family rejected every descriptor.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_FAMILY = 1u << 0,
+  // The requested tile shape rejected every family-compatible descriptor.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_TILE_SHAPE = 1u << 1,
+  // The requested matrix A payload rejected every shape-compatible descriptor.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_LHS_PAYLOAD = 1u << 2,
+  // The requested matrix B payload rejected every shape-compatible descriptor.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_RHS_PAYLOAD = 1u << 3,
+  // The requested accumulator payload rejected every shape-compatible
+  // descriptor.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_ACCUMULATOR_PAYLOAD = 1u << 4,
+  // The requested result payload rejected every shape-compatible descriptor.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_RESULT_PAYLOAD = 1u << 5,
+  // The requested scale kind rejected every payload-compatible descriptor.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_SCALE_KIND = 1u << 6,
+  // The selected processor feature bits rejected every semantic candidate.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_FEATURES = 1u << 7,
+  // The selected wave size rejected every feature-compatible candidate.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_WAVE_SIZE = 1u << 8,
+  // A candidate required a sparse index fact or operand that was unavailable.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_SPARSE = 1u << 9,
+  // A candidate required scale operands that were unavailable.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_SCALE = 1u << 10,
+  // A candidate required matrix-format selectors that were unavailable.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_MATRIX_FORMATS = 1u << 11,
+  // A candidate required reuse operands that were unavailable.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_REUSE = 1u << 12,
+  // A candidate required a clamp operand that was unavailable.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_CLAMP = 1u << 13,
+  // A candidate required sign-selection operands that were unavailable.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_SIGN_SELECT = 1u << 14,
+  // A candidate required A/B operand modifiers that were unavailable.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_AB_MODIFIERS = 1u << 15,
+  // A candidate required a C accumulator modifier that was unavailable.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_C_MODIFIER = 1u << 16,
+  // A candidate required op_sel operands that were unavailable.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_OPSEL = 1u << 17,
+  // A candidate required scale-format selectors that were unavailable.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_SCALE_FORMATS = 1u << 18,
+  // The request required target flags that the remaining candidates do not
+  // carry.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_REQUIRED_FLAGS = 1u << 19,
+  // The request itself was invalid or absent.
+  LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_INVALID_REQUEST = 1u << 20,
+};
 
-// No rejection reason was recorded.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_NONE ((uint32_t)0u)
-// The requested family rejected every descriptor.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_FAMILY ((uint32_t)1u << 0)
-// The requested tile shape rejected every family-compatible descriptor.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_TILE_SHAPE ((uint32_t)1u << 1)
-// The requested matrix A payload rejected every shape-compatible descriptor.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_LHS_PAYLOAD ((uint32_t)1u << 2)
-// The requested matrix B payload rejected every shape-compatible descriptor.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_RHS_PAYLOAD ((uint32_t)1u << 3)
-// The requested accumulator payload rejected every shape-compatible descriptor.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_ACCUMULATOR_PAYLOAD \
-  ((uint32_t)1u << 4)
-// The requested result payload rejected every shape-compatible descriptor.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_RESULT_PAYLOAD ((uint32_t)1u << 5)
-// The requested scale kind rejected every payload-compatible descriptor.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_SCALE_KIND ((uint32_t)1u << 6)
-// The selected processor feature bits rejected every semantic candidate.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_FEATURES ((uint32_t)1u << 7)
-// The selected wave size rejected every feature-compatible candidate.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_WAVE_SIZE ((uint32_t)1u << 8)
-// A candidate required a sparse index fact or operand that was unavailable.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_SPARSE ((uint32_t)1u << 9)
-// A candidate required scale operands that were unavailable.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_SCALE ((uint32_t)1u << 10)
-// A candidate required matrix-format selectors that were unavailable.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_MATRIX_FORMATS \
-  ((uint32_t)1u << 11)
-// A candidate required reuse operands that were unavailable.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_REUSE ((uint32_t)1u << 12)
-// A candidate required a clamp operand that was unavailable.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_CLAMP ((uint32_t)1u << 13)
-// A candidate required sign-selection operands that were unavailable.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_SIGN_SELECT \
-  ((uint32_t)1u << 14)
-// A candidate required A/B operand modifiers that were unavailable.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_AB_MODIFIERS \
-  ((uint32_t)1u << 15)
-// A candidate required a C accumulator modifier that was unavailable.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_C_MODIFIER \
-  ((uint32_t)1u << 16)
-// A candidate required op_sel operands that were unavailable.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_OPSEL ((uint32_t)1u << 17)
-// A candidate required scale-format selectors that were unavailable.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_SCALE_FORMATS \
-  ((uint32_t)1u << 18)
-// The request required target flags that the remaining candidates do not carry.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_REQUIRED_FLAGS \
-  ((uint32_t)1u << 19)
-// The request itself was invalid or absent.
-#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_INVALID_REQUEST \
-  ((uint32_t)1u << 20)
+// Bitset of loom_amdgpu_matrix_contract_rejection_bits_e values.
+typedef uint32_t loom_amdgpu_matrix_contract_rejection_bits_t;
 
 typedef struct loom_amdgpu_matrix_contract_match_request_t {
   // Optional instruction family. UNKNOWN allows any family.

@@ -10,36 +10,34 @@
 
 namespace {
 
-loom_value_fact_storage_schema_t MatrixSchema(
-    loom_value_fact_matrix_format_t format,
-    loom_value_fact_matrix_scale_kind_t scale_kind,
-    loom_value_fact_matrix_scale_format_t scale_format,
-    uint16_t packed_register_count, uint16_t packed_element_count) {
+loom_value_fact_storage_schema_t EncodedSchema(
+    loom_value_fact_numeric_format_flags_t element_format,
+    uint16_t scale_group_element_count,
+    loom_value_fact_numeric_format_flags_t scale_format,
+    uint16_t payload_register_count, uint16_t payload_element_count) {
   loom_value_fact_storage_schema_t schema = {};
-  schema.matrix.format = format;
-  schema.matrix.scale_kind = scale_kind;
-  schema.matrix.scale_format = scale_format;
-  schema.matrix.scale_placement =
-      LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_EXPLICIT;
-  schema.matrix.scale_conversion =
-      LOOM_VALUE_FACT_MATRIX_SCALE_CONVERSION_CONVERGENT;
-  schema.matrix.packed_register_count = packed_register_count;
-  schema.matrix.packed_element_count = packed_element_count;
-  schema.matrix.zero_scale_fallback =
-      scale_kind != LOOM_VALUE_FACT_MATRIX_SCALE_NONE;
+  schema.encoded_operand.element_format = element_format;
+  schema.encoded_operand.payload_packing =
+      LOOM_VALUE_FACT_PAYLOAD_PACKING_TARGET_FRAGMENT;
+  schema.encoded_operand.scale_format = scale_format;
+  schema.encoded_operand.scale_topology =
+      scale_group_element_count == 0 ? LOOM_VALUE_FACT_SCALE_TOPOLOGY_NONE
+                                     : LOOM_VALUE_FACT_SCALE_TOPOLOGY_BLOCK_1D;
+  schema.encoded_operand.payload_register_count = payload_register_count;
+  schema.encoded_operand.payload_element_count = payload_element_count;
+  schema.encoded_operand.scale_group_element_count = scale_group_element_count;
+  schema.encoded_operand.scale_operand_count =
+      scale_group_element_count == 0 ? 0 : 1;
+  if (scale_group_element_count != 0) {
+    schema.encoded_operand.flags |=
+        LOOM_VALUE_FACT_ENCODED_OPERAND_FLAG_ZERO_SCALE_FALLBACK;
+  }
   return schema;
 }
 
 loom_value_fact_storage_schema_t BlockQuantSchema(uint16_t static_schema_id) {
   loom_value_fact_storage_schema_t schema = {};
   schema.static_spec_encoding_id = static_schema_id;
-  schema.matrix.format = LOOM_VALUE_FACT_MATRIX_FORMAT_UNKNOWN;
-  schema.matrix.scale_kind = LOOM_VALUE_FACT_MATRIX_SCALE_UNKNOWN;
-  schema.matrix.scale_format = LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_UNKNOWN;
-  schema.matrix.scale_placement =
-      LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_UNKNOWN;
-  schema.matrix.scale_conversion =
-      LOOM_VALUE_FACT_MATRIX_SCALE_CONVERSION_UNKNOWN;
   return schema;
 }
 
@@ -74,7 +72,7 @@ loom_contract_view_payload_t MatrixPayload(
     payload.operand.numeric_type = LOOM_CONTRACT_NUMERIC_UNKNOWN;
     return payload;
   }
-  payload.kind = LOOM_CONTRACT_VIEW_PAYLOAD_MATRIX_STORAGE_SCHEMA;
+  payload.kind = LOOM_CONTRACT_VIEW_PAYLOAD_ENCODED_OPERAND_SCHEMA;
   payload.available_capability_flags =
       loom_contract_capability_flags_from_storage_schema(schema);
   return payload;
@@ -174,9 +172,9 @@ TEST(ContractPreparationTest, PreservesStorageSchemasThroughPacking) {
       loom_value_facts_exact_i64(8),
       loom_value_facts_exact_i64(1),
   };
-  loom_value_fact_storage_schema_t matrix_schema = MatrixSchema(
-      LOOM_VALUE_FACT_MATRIX_FORMAT_FP6, LOOM_VALUE_FACT_MATRIX_SCALE_32,
-      LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_NONE, 6, 32);
+  loom_value_fact_storage_schema_t matrix_schema =
+      EncodedSchema(LOOM_VALUE_FACT_NUMERIC_FORMAT_F6_E3M2, 32,
+                    LOOM_VALUE_FACT_NUMERIC_FORMAT_NONE, 6, 32);
   loom_contract_operand_preparation_options_t options = BaseRhsOptions(
       MatrixPayload(LOOM_CONTRACT_OPERAND_ROLE_RHS, matrix_schema),
       StridedLayout(rhs_strides, IREE_ARRAYSIZE(rhs_strides)));
@@ -188,9 +186,10 @@ TEST(ContractPreparationTest, PreservesStorageSchemasThroughPacking) {
                                LOOM_CONTRACT_PREPARATION_HAS_ADDRESS_LAYOUT));
   EXPECT_TRUE(iree_any_bit_set(
       preparation.flags, LOOM_CONTRACT_PREPARATION_PRESERVES_STORAGE_SCHEMA));
-  EXPECT_EQ(preparation.storage_schema.matrix.format,
-            LOOM_VALUE_FACT_MATRIX_FORMAT_FP6);
-  EXPECT_EQ(preparation.storage_schema.matrix.packed_register_count, 6u);
+  EXPECT_EQ(preparation.storage_schema.encoded_operand.element_format,
+            LOOM_VALUE_FACT_NUMERIC_FORMAT_F6_E3M2);
+  EXPECT_EQ(preparation.storage_schema.encoded_operand.payload_register_count,
+            6u);
 
   loom_value_fact_storage_schema_t block_quant_schema = BlockQuantSchema(7);
   options = BaseRhsOptions(
@@ -199,8 +198,8 @@ TEST(ContractPreparationTest, PreservesStorageSchemasThroughPacking) {
   ASSERT_TRUE(loom_contract_operand_preparation_select(&options, &preparation,
                                                        nullptr));
   EXPECT_EQ(preparation.storage_schema.static_spec_encoding_id, 7u);
-  EXPECT_EQ(preparation.storage_schema.matrix.format,
-            LOOM_VALUE_FACT_MATRIX_FORMAT_UNKNOWN);
+  EXPECT_EQ(preparation.storage_schema.encoded_operand.element_format,
+            LOOM_VALUE_FACT_NUMERIC_FORMAT_UNKNOWN);
   EXPECT_EQ(preparation.source_payload.kind,
             LOOM_CONTRACT_VIEW_PAYLOAD_UNSUPPORTED_STORAGE_SCHEMA);
 }

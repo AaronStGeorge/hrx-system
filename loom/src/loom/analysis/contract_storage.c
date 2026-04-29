@@ -17,28 +17,68 @@ static bool loom_contract_storage_fail(
   return false;
 }
 
-bool loom_contract_numeric_type_from_matrix_format(
-    loom_value_fact_matrix_format_t format,
+bool loom_contract_numeric_type_from_encoded_format(
+    loom_value_fact_numeric_format_flags_t format,
     loom_contract_numeric_type_t* out_numeric_type) {
   IREE_ASSERT_ARGUMENT(out_numeric_type);
   *out_numeric_type = LOOM_CONTRACT_NUMERIC_UNKNOWN;
   switch (format) {
-    case LOOM_VALUE_FACT_MATRIX_FORMAT_FP8:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FN:
       *out_numeric_type = LOOM_CONTRACT_NUMERIC_FP8;
       return true;
-    case LOOM_VALUE_FACT_MATRIX_FORMAT_BF8:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_BF8:
       *out_numeric_type = LOOM_CONTRACT_NUMERIC_BF8;
       return true;
-    case LOOM_VALUE_FACT_MATRIX_FORMAT_FP6:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F6_E3M2:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F6_E2M3:
       *out_numeric_type = LOOM_CONTRACT_NUMERIC_FP6;
       return true;
-    case LOOM_VALUE_FACT_MATRIX_FORMAT_BF6:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_BF6:
       *out_numeric_type = LOOM_CONTRACT_NUMERIC_BF6;
       return true;
-    case LOOM_VALUE_FACT_MATRIX_FORMAT_FP4:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F4_E2M1:
       *out_numeric_type = LOOM_CONTRACT_NUMERIC_FP4;
       return true;
-    case LOOM_VALUE_FACT_MATRIX_FORMAT_UNKNOWN:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_I4:
+      *out_numeric_type = LOOM_CONTRACT_NUMERIC_I4;
+      return true;
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_U4:
+      *out_numeric_type = LOOM_CONTRACT_NUMERIC_U4;
+      return true;
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_I8:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_QUANT_I8:
+      *out_numeric_type = LOOM_CONTRACT_NUMERIC_I8;
+      return true;
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_U8:
+      *out_numeric_type = LOOM_CONTRACT_NUMERIC_U8;
+      return true;
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_I16:
+      *out_numeric_type = LOOM_CONTRACT_NUMERIC_I16;
+      return true;
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_U16:
+      *out_numeric_type = LOOM_CONTRACT_NUMERIC_U16;
+      return true;
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_I32:
+      *out_numeric_type = LOOM_CONTRACT_NUMERIC_I32;
+      return true;
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_U32:
+      *out_numeric_type = LOOM_CONTRACT_NUMERIC_U32;
+      return true;
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F16:
+      *out_numeric_type = LOOM_CONTRACT_NUMERIC_F16;
+      return true;
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_BF16:
+      *out_numeric_type = LOOM_CONTRACT_NUMERIC_BF16;
+      return true;
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F32:
+      *out_numeric_type = LOOM_CONTRACT_NUMERIC_F32;
+      return true;
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F64:
+      *out_numeric_type = LOOM_CONTRACT_NUMERIC_F64;
+      return true;
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_UNKNOWN:
     default:
       return false;
   }
@@ -49,17 +89,21 @@ bool loom_contract_scale_kind_from_storage_schema(
     loom_contract_scale_kind_t* out_scale_kind) {
   IREE_ASSERT_ARGUMENT(out_scale_kind);
   *out_scale_kind = LOOM_CONTRACT_SCALE_UNKNOWN;
-  switch (schema.matrix.scale_kind) {
-    case LOOM_VALUE_FACT_MATRIX_SCALE_NONE:
-      *out_scale_kind = LOOM_CONTRACT_SCALE_NONE;
-      return true;
-    case LOOM_VALUE_FACT_MATRIX_SCALE_32:
+  loom_value_fact_encoded_operand_schema_t operand = schema.encoded_operand;
+  if (!loom_value_fact_encoded_operand_schema_has_scale(operand)) {
+    *out_scale_kind = LOOM_CONTRACT_SCALE_NONE;
+    return true;
+  }
+  if (operand.scale_topology == 0 || operand.scale_operand_count == 0) {
+    return false;
+  }
+  switch (operand.scale_group_element_count) {
+    case 32:
       *out_scale_kind = LOOM_CONTRACT_SCALE_32;
       return true;
-    case LOOM_VALUE_FACT_MATRIX_SCALE_16:
+    case 16:
       *out_scale_kind = LOOM_CONTRACT_SCALE_16;
       return true;
-    case LOOM_VALUE_FACT_MATRIX_SCALE_UNKNOWN:
     default:
       return false;
   }
@@ -70,21 +114,26 @@ loom_contract_capability_flags_from_storage_schema(
     loom_value_fact_storage_schema_t schema) {
   loom_contract_capability_flags_t flags = 0;
   loom_contract_numeric_type_t numeric_type = LOOM_CONTRACT_NUMERIC_UNKNOWN;
-  if (loom_contract_numeric_type_from_matrix_format(schema.matrix.format,
-                                                    &numeric_type)) {
+  loom_value_fact_encoded_operand_schema_t operand = schema.encoded_operand;
+  if (loom_contract_numeric_type_from_encoded_format(operand.element_format,
+                                                     &numeric_type)) {
     flags |= LOOM_CONTRACT_CAPABILITY_FORMAT_SELECTORS;
   }
-  if (schema.matrix.scale_kind != LOOM_VALUE_FACT_MATRIX_SCALE_UNKNOWN &&
-      schema.matrix.scale_kind != LOOM_VALUE_FACT_MATRIX_SCALE_NONE) {
+  if (loom_value_fact_encoded_operand_schema_has_scale(operand) &&
+      operand.scale_operand_count != 0) {
     flags |= LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS;
   }
-  if (schema.matrix.scale_format !=
-          LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_UNKNOWN &&
-      schema.matrix.scale_format != LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_NONE) {
+  if (operand.scale_format != 0 || operand.secondary_scale_format != 0) {
     flags |= LOOM_CONTRACT_CAPABILITY_SCALE_FORMAT_SELECTORS;
   }
-  if (schema.matrix.zero_scale_fallback) {
+  if (iree_any_bit_set(
+          operand.flags,
+          LOOM_VALUE_FACT_ENCODED_OPERAND_FLAG_ZERO_SCALE_FALLBACK)) {
     flags |= LOOM_CONTRACT_CAPABILITY_ZERO_SCALE_FALLBACK;
+  }
+  if (iree_any_bit_set(operand.sparsity_policy,
+                       LOOM_VALUE_FACT_SPARSITY_POLICY_ALL)) {
+    flags |= LOOM_CONTRACT_CAPABILITY_SPARSE_METADATA;
   }
   return flags;
 }
@@ -94,16 +143,23 @@ bool loom_contract_operand_from_storage_schema(
     loom_contract_operand_t* out_operand) {
   IREE_ASSERT_ARGUMENT(out_operand);
   *out_operand = (loom_contract_operand_t){0};
+  loom_value_fact_encoded_operand_schema_t operand = schema.encoded_operand;
+  if (!iree_any_bit_set(operand.payload_packing,
+                        LOOM_VALUE_FACT_PAYLOAD_PACKING_TARGET_FRAGMENT) ||
+      operand.payload_register_count == 0 ||
+      operand.payload_element_count == 0) {
+    return false;
+  }
   loom_contract_numeric_type_t numeric_type = LOOM_CONTRACT_NUMERIC_UNKNOWN;
-  if (!loom_contract_numeric_type_from_matrix_format(schema.matrix.format,
-                                                     &numeric_type)) {
+  if (!loom_contract_numeric_type_from_encoded_format(operand.element_format,
+                                                      &numeric_type)) {
     return false;
   }
   *out_operand = (loom_contract_operand_t){
       .role = role,
       .numeric_type = numeric_type,
-      .payload_register_count = schema.matrix.packed_register_count,
-      .payload_element_count = schema.matrix.packed_element_count,
+      .payload_register_count = operand.payload_register_count,
+      .payload_element_count = operand.payload_element_count,
   };
   return true;
 }
@@ -140,7 +196,7 @@ bool loom_contract_view_payload_from_type(
       out_payload->operand.numeric_type = LOOM_CONTRACT_NUMERIC_UNKNOWN;
       return true;
     }
-    out_payload->kind = LOOM_CONTRACT_VIEW_PAYLOAD_MATRIX_STORAGE_SCHEMA;
+    out_payload->kind = LOOM_CONTRACT_VIEW_PAYLOAD_ENCODED_OPERAND_SCHEMA;
     out_payload->available_capability_flags =
         loom_contract_capability_flags_from_storage_schema(storage_schema);
     return true;
@@ -160,7 +216,7 @@ bool loom_contract_view_payload_from_type(
 static bool loom_contract_payload_is_supported(
     const loom_contract_view_payload_t* payload) {
   return payload->kind == LOOM_CONTRACT_VIEW_PAYLOAD_PLAIN_ELEMENT ||
-         payload->kind == LOOM_CONTRACT_VIEW_PAYLOAD_MATRIX_STORAGE_SCHEMA;
+         payload->kind == LOOM_CONTRACT_VIEW_PAYLOAD_ENCODED_OPERAND_SCHEMA;
 }
 
 static bool loom_contract_payload_scale_kind_matches(

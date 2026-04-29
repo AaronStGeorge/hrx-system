@@ -223,31 +223,50 @@ iree_status_t loom_test_fact_encoding_matrix_field_facts(
   loom_value_fact_encoding_summary_t summary =
       loom_test_encoding_summary_or_empty(context, operand_facts[0]);
   loom_value_fact_storage_schema_t schema = summary.storage_schema;
-  loom_value_fact_matrix_storage_schema_t matrix = schema.matrix;
+  loom_value_fact_encoded_operand_schema_t encoded = schema.encoded_operand;
   loom_string_id_t field = loom_test_fact_encoding_matrix_field_field(op);
   int64_t value = INT64_MIN;
-  if (loom_test_string_id_equal(module, field, IREE_SV("format"))) {
-    value = (int64_t)matrix.format;
-  } else if (loom_test_string_id_equal(module, field, IREE_SV("scale_kind"))) {
-    value = (int64_t)matrix.scale_kind;
+  if (loom_test_string_id_equal(module, field, IREE_SV("element_format"))) {
+    value = (int64_t)encoded.element_format;
+  } else if (loom_test_string_id_equal(module, field,
+                                       IREE_SV("payload_packing"))) {
+    value = (int64_t)encoded.payload_packing;
+  } else if (loom_test_string_id_equal(module, field,
+                                       IREE_SV("scale_topology"))) {
+    value = (int64_t)encoded.scale_topology;
   } else if (loom_test_string_id_equal(module, field,
                                        IREE_SV("scale_format"))) {
-    value = (int64_t)matrix.scale_format;
+    value = (int64_t)encoded.scale_format;
   } else if (loom_test_string_id_equal(module, field,
-                                       IREE_SV("scale_placement"))) {
-    value = (int64_t)matrix.scale_placement;
+                                       IREE_SV("secondary_scale_format"))) {
+    value = (int64_t)encoded.secondary_scale_format;
+  } else if (loom_test_string_id_equal(module, field, IREE_SV("affine"))) {
+    value = (int64_t)encoded.affine_policy;
+  } else if (loom_test_string_id_equal(module, field, IREE_SV("rounding"))) {
+    value = (int64_t)encoded.rounding_policy;
+  } else if (loom_test_string_id_equal(module, field, IREE_SV("codebook"))) {
+    value = (int64_t)encoded.codebook_policy;
+  } else if (loom_test_string_id_equal(module, field, IREE_SV("sparsity"))) {
+    value = (int64_t)encoded.sparsity_policy;
   } else if (loom_test_string_id_equal(module, field,
-                                       IREE_SV("scale_conversion"))) {
-    value = (int64_t)matrix.scale_conversion;
+                                       IREE_SV("payload_registers"))) {
+    value = (int64_t)encoded.payload_register_count;
   } else if (loom_test_string_id_equal(module, field,
-                                       IREE_SV("packed_registers"))) {
-    value = (int64_t)matrix.packed_register_count;
+                                       IREE_SV("payload_elements"))) {
+    value = (int64_t)encoded.payload_element_count;
   } else if (loom_test_string_id_equal(module, field,
-                                       IREE_SV("packed_elements"))) {
-    value = (int64_t)matrix.packed_element_count;
+                                       IREE_SV("scale_group_elements"))) {
+    value = (int64_t)encoded.scale_group_element_count;
+  } else if (loom_test_string_id_equal(module, field,
+                                       IREE_SV("scale_operands"))) {
+    value = (int64_t)encoded.scale_operand_count;
   } else if (loom_test_string_id_equal(module, field,
                                        IREE_SV("zero_scale_fallback"))) {
-    value = matrix.zero_scale_fallback ? 1 : 0;
+    value = iree_any_bit_set(
+                encoded.flags,
+                LOOM_VALUE_FACT_ENCODED_OPERAND_FLAG_ZERO_SCALE_FALLBACK)
+                ? 1
+                : 0;
   } else if (loom_test_string_id_equal(module, field, IREE_SV("static_spec"))) {
     value = (int64_t)schema.static_spec_encoding_id;
   }

@@ -30,19 +30,8 @@ static bool loom_contract_preparation_fallback_is_allowed(
 static bool loom_contract_view_payload_has_storage_schema(
     const loom_contract_view_payload_t* payload) {
   return payload->storage_schema.static_spec_encoding_id != 0 ||
-         payload->storage_schema.matrix.format !=
-             LOOM_VALUE_FACT_MATRIX_FORMAT_UNKNOWN ||
-         payload->storage_schema.matrix.scale_kind !=
-             LOOM_VALUE_FACT_MATRIX_SCALE_UNKNOWN ||
-         payload->storage_schema.matrix.scale_format !=
-             LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_UNKNOWN ||
-         payload->storage_schema.matrix.scale_placement !=
-             LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_UNKNOWN ||
-         payload->storage_schema.matrix.scale_conversion !=
-             LOOM_VALUE_FACT_MATRIX_SCALE_CONVERSION_UNKNOWN ||
-         payload->storage_schema.matrix.packed_register_count != 0 ||
-         payload->storage_schema.matrix.packed_element_count != 0 ||
-         payload->storage_schema.matrix.zero_scale_fallback;
+         !loom_value_fact_encoded_operand_schema_is_unknown(
+             payload->storage_schema.encoded_operand);
 }
 
 static void loom_contract_operand_preparation_initialize_none(

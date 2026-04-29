@@ -145,27 +145,27 @@ func.def @static_strided_physical_storage_layout_summary() -> (i64, i64) {
 
 // ====
 
-// AMDGPU matrix storage schemas seed selector, packed-fragment, scale, and
-// reference-conversion facts without adding fp6/fp4 scalar types.
-func.def @amdgpu_matrix_schema_summary() -> (i64, i64, i64, i64, i64, i64) {
-  %schema = encoding.define #amdgpu_matrix_operand<format="fp6", packed_elements=32, packed_registers=6, scale="scale32", scale_conversion="convergent", scale_format="none", scale_placement="explicit", zero_scale_fallback=true> : encoding<schema>
-  %format = test.fact_encoding_matrix_field %schema["format"] : encoding<schema> -> i64
-  %scale = test.fact_encoding_matrix_field %schema["scale_kind"] : encoding<schema> -> i64
-  %placement = test.fact_encoding_matrix_field %schema["scale_placement"] : encoding<schema> -> i64
-  %conversion = test.fact_encoding_matrix_field %schema["scale_conversion"] : encoding<schema> -> i64
-  %registers = test.fact_encoding_matrix_field %schema["packed_registers"] : encoding<schema> -> i64
+// Matrix operand storage schemas seed target-independent encoded payload facts
+// without adding fp6/fp4 scalar types.
+func.def @matrix_operand_schema_summary() -> (i64, i64, i64, i64, i64, i64) {
+  %schema = encoding.define #matrix_operand<affine=0, codebook=0, element_format=268435456, payload_elements=32, payload_packing=256, payload_registers=6, rounding=0, scale_format=0, scale_group_elements=32, scale_operands=1, scale_topology=32, secondary_scale_format=0, sparsity=0, zero_scale_fallback=true> : encoding<schema>
+  %format = test.fact_encoding_matrix_field %schema["element_format"] : encoding<schema> -> i64
+  %packing = test.fact_encoding_matrix_field %schema["payload_packing"] : encoding<schema> -> i64
+  %scale = test.fact_encoding_matrix_field %schema["scale_topology"] : encoding<schema> -> i64
+  %group = test.fact_encoding_matrix_field %schema["scale_group_elements"] : encoding<schema> -> i64
+  %registers = test.fact_encoding_matrix_field %schema["payload_registers"] : encoding<schema> -> i64
   %fallback = test.fact_encoding_matrix_field %schema["zero_scale_fallback"] : encoding<schema> -> i64
-  func.return %format, %scale, %placement, %conversion, %registers, %fallback : i64, i64, i64, i64, i64, i64
+  func.return %format, %packing, %scale, %group, %registers, %fallback : i64, i64, i64, i64, i64, i64
 }
 // ----
-func.def @amdgpu_matrix_schema_summary() -> (i64, i64, i64, i64, i64, i64) {
-  %format = scalar.constant 3 : i64
-  %scale = scalar.constant 2 : i64
-  %placement = scalar.constant 2 : i64
-  %conversion = scalar.constant 3 : i64
+func.def @matrix_operand_schema_summary() -> (i64, i64, i64, i64, i64, i64) {
+  %format = scalar.constant 268435456 : i64
+  %packing = scalar.constant 256 : i64
+  %scale = scalar.constant 32 : i64
+  %group = scalar.constant 32 : i64
   %registers = scalar.constant 6 : i64
   %fallback = scalar.constant 1 : i64
-  func.return %format, %scale, %placement, %conversion, %registers, %fallback : i64, i64, i64, i64, i64, i64
+  func.return %format, %packing, %scale, %group, %registers, %fallback : i64, i64, i64, i64, i64, i64
 }
 
 // ====
@@ -174,35 +174,35 @@ func.def @amdgpu_matrix_schema_summary() -> (i64, i64, i64, i64, i64, i64) {
 // layout facts, giving consumers one encoding value to query.
 func.def @physical_storage_matrix_schema_summary() -> (i64, i64, i64, i64) {
   %layout = encoding.layout.dense : encoding<layout>
-  %schema = encoding.define #amdgpu_matrix_operand<format="fp4", packed_elements=128, packed_registers=16, scale="scale16", scale_conversion="convergent", scale_format="e4m3", scale_placement="row1", zero_scale_fallback=true> : encoding<schema>
+  %schema = encoding.define #matrix_operand<affine=0, codebook=0, element_format=2147483648, payload_elements=128, payload_packing=256, payload_registers=16, rounding=0, scale_format=8388608, scale_group_elements=16, scale_operands=1, scale_topology=32, secondary_scale_format=0, sparsity=0, zero_scale_fallback=true> : encoding<schema>
   %storage = encoding.define #physical_storage {layout = %layout : encoding<layout>, schema = %schema : encoding<schema>} : encoding<storage>
-  %format = test.fact_encoding_matrix_field %storage["format"] : encoding<storage> -> i64
+  %format = test.fact_encoding_matrix_field %storage["element_format"] : encoding<storage> -> i64
   %scale_format = test.fact_encoding_matrix_field %storage["scale_format"] : encoding<storage> -> i64
-  %placement = test.fact_encoding_matrix_field %storage["scale_placement"] : encoding<storage> -> i64
-  %elements = test.fact_encoding_matrix_field %storage["packed_elements"] : encoding<storage> -> i64
-  func.return %format, %scale_format, %placement, %elements : i64, i64, i64, i64
+  %group = test.fact_encoding_matrix_field %storage["scale_group_elements"] : encoding<storage> -> i64
+  %elements = test.fact_encoding_matrix_field %storage["payload_elements"] : encoding<storage> -> i64
+  func.return %format, %scale_format, %group, %elements : i64, i64, i64, i64
 }
 // ----
 func.def @physical_storage_matrix_schema_summary() -> (i64, i64, i64, i64) {
-  %format = scalar.constant 5 : i64
-  %scale_format = scalar.constant 4 : i64
-  %placement = scalar.constant 4 : i64
+  %format = scalar.constant 2147483648 : i64
+  %scale_format = scalar.constant 8388608 : i64
+  %group = scalar.constant 16 : i64
   %elements = scalar.constant 128 : i64
-  func.return %format, %scale_format, %placement, %elements : i64, i64, i64, i64
+  func.return %format, %scale_format, %group, %elements : i64, i64, i64, i64
 }
 
 // ====
 
 // Static physical-storage specs recurse through their nested schema too.
 func.def @static_physical_storage_matrix_schema_summary() -> (i64, i64) {
-  %storage = encoding.define #physical_storage<layout=#dense, schema=#amdgpu_matrix_operand<format="bf6", packed_elements=32, packed_registers=6, scale="none", scale_conversion="none", scale_format="none", scale_placement="none", zero_scale_fallback=false>> : encoding<storage>
-  %format = test.fact_encoding_matrix_field %storage["format"] : encoding<storage> -> i64
-  %registers = test.fact_encoding_matrix_field %storage["packed_registers"] : encoding<storage> -> i64
+  %storage = encoding.define #physical_storage<layout=#dense, schema=#matrix_operand<affine=0, codebook=0, element_format=1073741824, payload_elements=32, payload_packing=256, payload_registers=6, rounding=0, scale_format=0, scale_group_elements=0, scale_operands=0, scale_topology=0, secondary_scale_format=0, sparsity=0, zero_scale_fallback=false>> : encoding<storage>
+  %format = test.fact_encoding_matrix_field %storage["element_format"] : encoding<storage> -> i64
+  %registers = test.fact_encoding_matrix_field %storage["payload_registers"] : encoding<storage> -> i64
   func.return %format, %registers : i64, i64
 }
 // ----
 func.def @static_physical_storage_matrix_schema_summary() -> (i64, i64) {
-  %format = scalar.constant 4 : i64
+  %format = scalar.constant 1073741824 : i64
   %registers = scalar.constant 6 : i64
   func.return %format, %registers : i64, i64
 }
@@ -212,14 +212,14 @@ func.def @static_physical_storage_matrix_schema_summary() -> (i64, i64) {
 // Exact static-spec assumptions can seed matrix schema facts for encoding
 // arguments that cross function or kernel boundaries.
 func.def @assume_spec_matrix_schema_summary(%schema: encoding<schema>) -> (i64, i64) {
-  %schema2 = encoding.assume.spec %schema, #amdgpu_matrix_operand<format="bf8", packed_elements=32, packed_registers=8, scale="scale32", scale_conversion="lane_local", scale_format="e5m3", scale_placement="row0", zero_scale_fallback=false> : encoding<schema>
-  %format = test.fact_encoding_matrix_field %schema2["format"] : encoding<schema> -> i64
-  %conversion = test.fact_encoding_matrix_field %schema2["scale_conversion"] : encoding<schema> -> i64
-  func.return %format, %conversion : i64, i64
+  %schema2 = encoding.assume.spec %schema, #matrix_operand<affine=0, codebook=0, element_format=134217728, payload_elements=32, payload_packing=256, payload_registers=8, rounding=0, scale_format=16777216, scale_group_elements=32, scale_operands=1, scale_topology=32, secondary_scale_format=0, sparsity=0, zero_scale_fallback=false> : encoding<schema>
+  %format = test.fact_encoding_matrix_field %schema2["element_format"] : encoding<schema> -> i64
+  %scale_format = test.fact_encoding_matrix_field %schema2["scale_format"] : encoding<schema> -> i64
+  func.return %format, %scale_format : i64, i64
 }
 // ----
 func.def @assume_spec_matrix_schema_summary(%schema: encoding<schema>) -> (i64, i64) {
-  %format = scalar.constant 2 : i64
-  %conversion = scalar.constant 2 : i64
-  func.return %format, %conversion : i64, i64
+  %format = scalar.constant 134217728 : i64
+  %scale_format = scalar.constant 16777216 : i64
+  func.return %format, %scale_format : i64, i64
 }

@@ -139,22 +139,16 @@ static uint32_t loom_value_fact_hash_address_layout(
   return hash;
 }
 
-static uint32_t loom_value_fact_hash_matrix_storage_schema(
-    loom_value_fact_matrix_storage_schema_t schema, uint32_t hash) {
-  hash = loom_value_fact_hash_u32((uint32_t)schema.format, hash);
-  hash = loom_value_fact_hash_u32((uint32_t)schema.scale_kind, hash);
-  hash = loom_value_fact_hash_u32((uint32_t)schema.scale_format, hash);
-  hash = loom_value_fact_hash_u32((uint32_t)schema.scale_placement, hash);
-  hash = loom_value_fact_hash_u32((uint32_t)schema.scale_conversion, hash);
-  hash = loom_value_fact_hash_u32(schema.packed_register_count, hash);
-  hash = loom_value_fact_hash_u32(schema.packed_element_count, hash);
-  return loom_value_fact_hash_u32(schema.zero_scale_fallback ? 1u : 0u, hash);
+static uint32_t loom_value_fact_hash_encoded_operand_schema(
+    loom_value_fact_encoded_operand_schema_t schema, uint32_t hash) {
+  return loom_value_fact_hash_bytes(&schema, sizeof(schema), hash);
 }
 
 static uint32_t loom_value_fact_hash_storage_schema(
     loom_value_fact_storage_schema_t schema, uint32_t hash) {
   hash = loom_value_fact_hash_u32(schema.static_spec_encoding_id, hash);
-  return loom_value_fact_hash_matrix_storage_schema(schema.matrix, hash);
+  return loom_value_fact_hash_encoded_operand_schema(schema.encoded_operand,
+                                                     hash);
 }
 
 static uint32_t loom_value_fact_hash_encoding_summary(
@@ -233,36 +227,64 @@ static bool loom_value_fact_address_layout_equal(
                 lhs.rank * sizeof(loom_value_facts_t)) == 0;
 }
 
-static bool loom_value_fact_matrix_storage_schema_equal(
-    loom_value_fact_matrix_storage_schema_t lhs,
-    loom_value_fact_matrix_storage_schema_t rhs) {
-  return lhs.format == rhs.format && lhs.scale_kind == rhs.scale_kind &&
-         lhs.scale_format == rhs.scale_format &&
-         lhs.scale_placement == rhs.scale_placement &&
-         lhs.scale_conversion == rhs.scale_conversion &&
-         lhs.packed_register_count == rhs.packed_register_count &&
-         lhs.packed_element_count == rhs.packed_element_count &&
-         lhs.zero_scale_fallback == rhs.zero_scale_fallback;
+bool loom_value_fact_encoded_operand_schema_equal(
+    loom_value_fact_encoded_operand_schema_t lhs,
+    loom_value_fact_encoded_operand_schema_t rhs) {
+  return memcmp(&lhs, &rhs, sizeof(lhs)) == 0;
 }
 
-static bool loom_value_fact_matrix_storage_schema_is_unknown(
-    loom_value_fact_matrix_storage_schema_t schema) {
-  return schema.format == LOOM_VALUE_FACT_MATRIX_FORMAT_UNKNOWN &&
-         schema.scale_kind == LOOM_VALUE_FACT_MATRIX_SCALE_UNKNOWN &&
-         schema.scale_format == LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_UNKNOWN &&
-         schema.scale_placement ==
-             LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_UNKNOWN &&
-         schema.scale_conversion ==
-             LOOM_VALUE_FACT_MATRIX_SCALE_CONVERSION_UNKNOWN &&
-         schema.packed_register_count == 0 &&
-         schema.packed_element_count == 0 && !schema.zero_scale_fallback;
+bool loom_value_fact_encoded_operand_schema_is_unknown(
+    loom_value_fact_encoded_operand_schema_t schema) {
+  loom_value_fact_encoded_operand_schema_t unknown;
+  memset(&unknown, 0, sizeof(unknown));
+  return loom_value_fact_encoded_operand_schema_equal(schema, unknown);
+}
+
+typedef struct loom_value_fact_encoded_operand_scale_schema_t {
+  uint64_t scale_format;
+  uint64_t secondary_scale_format;
+  uint32_t scale_topology;
+  uint32_t flags;
+  uint16_t scale_group_element_count;
+  uint16_t scale_operand_count;
+} loom_value_fact_encoded_operand_scale_schema_t;
+
+static loom_value_fact_encoded_operand_scale_schema_t
+loom_value_fact_encoded_operand_scale_schema(
+    loom_value_fact_encoded_operand_schema_t schema) {
+  loom_value_fact_encoded_operand_scale_schema_t scale_schema;
+  memset(&scale_schema, 0, sizeof(scale_schema));
+  scale_schema.scale_format = schema.scale_format;
+  scale_schema.secondary_scale_format = schema.secondary_scale_format;
+  scale_schema.scale_topology = schema.scale_topology;
+  scale_schema.flags = schema.flags;
+  scale_schema.scale_group_element_count = schema.scale_group_element_count;
+  scale_schema.scale_operand_count = schema.scale_operand_count;
+  return scale_schema;
+}
+
+bool loom_value_fact_encoded_operand_schema_has_scale(
+    loom_value_fact_encoded_operand_schema_t schema) {
+  loom_value_fact_encoded_operand_scale_schema_t scale_schema =
+      loom_value_fact_encoded_operand_scale_schema(schema);
+  loom_value_fact_encoded_operand_scale_schema_t empty;
+  memset(&empty, 0, sizeof(empty));
+  return memcmp(&scale_schema, &empty, sizeof(scale_schema)) != 0;
+}
+
+bool loom_value_fact_encoded_operand_schema_scale_is_complete(
+    loom_value_fact_encoded_operand_schema_t schema) {
+  if (!loom_value_fact_encoded_operand_schema_has_scale(schema)) return true;
+  return schema.scale_topology != 0 && schema.scale_group_element_count != 0 &&
+         schema.scale_operand_count != 0;
 }
 
 static bool loom_value_fact_storage_schema_equal(
     loom_value_fact_storage_schema_t lhs,
     loom_value_fact_storage_schema_t rhs) {
   return lhs.static_spec_encoding_id == rhs.static_spec_encoding_id &&
-         loom_value_fact_matrix_storage_schema_equal(lhs.matrix, rhs.matrix);
+         loom_value_fact_encoded_operand_schema_equal(lhs.encoded_operand,
+                                                      rhs.encoded_operand);
 }
 
 static bool loom_value_fact_encoding_summary_equal(
@@ -953,8 +975,8 @@ iree_status_t loom_value_facts_make_encoding_summary(
       summary.static_spec_encoding_id == 0 &&
       summary.address_layout.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_UNKNOWN &&
       summary.storage_schema.static_spec_encoding_id == 0 &&
-      loom_value_fact_matrix_storage_schema_is_unknown(
-          summary.storage_schema.matrix)) {
+      loom_value_fact_encoded_operand_schema_is_unknown(
+          summary.storage_schema.encoded_operand)) {
     *out = loom_value_facts_unknown();
     return iree_ok_status();
   }

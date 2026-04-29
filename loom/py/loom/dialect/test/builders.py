@@ -722,10 +722,10 @@ class TestBuilders:
         return cast(ValueRef, self._b.build("test.fact_encoding_layout_stride_hi", _operands, results=results, attributes=_attributes, regions=_regions))
 
     def fact_encoding_matrix_field(self, *, value: ValueRef, field: str, results: list[Type | TiedResultSpec]) -> ValueRef:
-        """Exposes a packed matrix storage-schema summary field as an i64 constant. Supported fields are format, scale_kind, scale_format, scale_placement, scale_conversion, packed_registers, packed_elements, zero_scale_fallback, and static_spec.
+        """Exposes an encoded-operand storage-schema summary field as an i64 constant. Supported fields are element_format, payload_packing, scale_topology, scale_format, secondary_scale_format, affine, rounding, codebook, sparsity, payload_registers, payload_elements, scale_group_elements, scale_operands, zero_scale_fallback, and static_spec.
 
         Example::
-            %format = test.fact_encoding_matrix_field %schema["format"] : encoding<schema> -> i64
+            %format = test.fact_encoding_matrix_field %schema["element_format"] : encoding<schema> -> i64
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}

@@ -122,50 +122,56 @@ typedef enum loom_contract_capability_class_e {
   LOOM_CONTRACT_CAPABILITY_CLASS_UKERNEL = 4,
 } loom_contract_capability_class_t;
 
-typedef uint32_t loom_contract_fragment_atom_bits_t;
+typedef enum loom_contract_fragment_atom_bits_e {
+  // The fragment carries a logical algebra axis.
+  LOOM_CONTRACT_FRAGMENT_LOGICAL = 1u << 0,
+  // The fragment carries a physical storage-record axis.
+  LOOM_CONTRACT_FRAGMENT_STORAGE_RECORD = 1u << 1,
+  // The fragment carries payload-internal grouping.
+  LOOM_CONTRACT_FRAGMENT_INTERNAL = 1u << 2,
+  // The fragment carries CPU/vector lane ownership.
+  LOOM_CONTRACT_FRAGMENT_VECTOR_LANE = 1u << 3,
+  // The fragment groups multiple target instructions for one logical contract.
+  LOOM_CONTRACT_FRAGMENT_INSTRUCTION_GROUP = 1u << 4,
+  // The fragment carries subgroup or wave lane ownership.
+  LOOM_CONTRACT_FRAGMENT_SUBGROUP_LANE = 1u << 5,
+  // The fragment carries workgroup-level ownership.
+  LOOM_CONTRACT_FRAGMENT_WORKGROUP = 1u << 6,
+  // The fragment carries bank or swizzle-sensitive ownership.
+  LOOM_CONTRACT_FRAGMENT_MEMORY_BANK = 1u << 7,
+} loom_contract_fragment_atom_bits_t;
 
-// The fragment carries a logical algebra axis.
-#define LOOM_CONTRACT_FRAGMENT_LOGICAL ((uint32_t)1u << 0)
-// The fragment carries a physical storage-record axis.
-#define LOOM_CONTRACT_FRAGMENT_STORAGE_RECORD ((uint32_t)1u << 1)
-// The fragment carries payload-internal grouping.
-#define LOOM_CONTRACT_FRAGMENT_INTERNAL ((uint32_t)1u << 2)
-// The fragment carries CPU/vector lane ownership.
-#define LOOM_CONTRACT_FRAGMENT_VECTOR_LANE ((uint32_t)1u << 3)
-// The fragment groups multiple target instructions for one logical contract.
-#define LOOM_CONTRACT_FRAGMENT_INSTRUCTION_GROUP ((uint32_t)1u << 4)
-// The fragment carries subgroup or wave lane ownership.
-#define LOOM_CONTRACT_FRAGMENT_SUBGROUP_LANE ((uint32_t)1u << 5)
-// The fragment carries workgroup-level ownership.
-#define LOOM_CONTRACT_FRAGMENT_WORKGROUP ((uint32_t)1u << 6)
-// The fragment carries bank or swizzle-sensitive ownership.
-#define LOOM_CONTRACT_FRAGMENT_MEMORY_BANK ((uint32_t)1u << 7)
+// Bitset of loom_contract_fragment_atom_bits_t values.
+typedef uint32_t loom_contract_fragment_atom_flags_t;
 
+typedef enum loom_contract_capability_flag_bits_e {
+  // The request has sparse metadata operands or facts available.
+  LOOM_CONTRACT_CAPABILITY_SPARSE_METADATA = 1u << 0,
+  // The request has explicit scale operands or facts available.
+  LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS = 1u << 1,
+  // The request has matrix or payload format-selector operands or facts
+  // available.
+  LOOM_CONTRACT_CAPABILITY_FORMAT_SELECTORS = 1u << 2,
+  // The request has target reuse operands or facts available.
+  LOOM_CONTRACT_CAPABILITY_REUSE = 1u << 3,
+  // The request has clamp operands or facts available.
+  LOOM_CONTRACT_CAPABILITY_CLAMP = 1u << 4,
+  // The request has sign-selection operands or facts available.
+  LOOM_CONTRACT_CAPABILITY_SIGN_SELECT = 1u << 5,
+  // The request has operand modifier operands or facts available.
+  LOOM_CONTRACT_CAPABILITY_OPERAND_MODIFIERS = 1u << 6,
+  // The request has accumulator modifier operands or facts available.
+  LOOM_CONTRACT_CAPABILITY_ACCUMULATOR_MODIFIER = 1u << 7,
+  // The request has op-select operands or facts available.
+  LOOM_CONTRACT_CAPABILITY_OPSEL = 1u << 8,
+  // The request has scale-format selector operands or facts available.
+  LOOM_CONTRACT_CAPABILITY_SCALE_FORMAT_SELECTORS = 1u << 9,
+  // The request permits zero-scale fallback to an unscaled primitive.
+  LOOM_CONTRACT_CAPABILITY_ZERO_SCALE_FALLBACK = 1u << 10,
+} loom_contract_capability_flag_bits_t;
+
+// Bitset of loom_contract_capability_flag_bits_t values.
 typedef uint32_t loom_contract_capability_flags_t;
-
-// The request has sparse metadata operands or facts available.
-#define LOOM_CONTRACT_CAPABILITY_SPARSE_METADATA ((uint32_t)1u << 0)
-// The request has explicit scale operands or facts available.
-#define LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS ((uint32_t)1u << 1)
-// The request has matrix or payload format-selector operands or facts
-// available.
-#define LOOM_CONTRACT_CAPABILITY_FORMAT_SELECTORS ((uint32_t)1u << 2)
-// The request has target reuse operands or facts available.
-#define LOOM_CONTRACT_CAPABILITY_REUSE ((uint32_t)1u << 3)
-// The request has clamp operands or facts available.
-#define LOOM_CONTRACT_CAPABILITY_CLAMP ((uint32_t)1u << 4)
-// The request has sign-selection operands or facts available.
-#define LOOM_CONTRACT_CAPABILITY_SIGN_SELECT ((uint32_t)1u << 5)
-// The request has operand modifier operands or facts available.
-#define LOOM_CONTRACT_CAPABILITY_OPERAND_MODIFIERS ((uint32_t)1u << 6)
-// The request has accumulator modifier operands or facts available.
-#define LOOM_CONTRACT_CAPABILITY_ACCUMULATOR_MODIFIER ((uint32_t)1u << 7)
-// The request has op-select operands or facts available.
-#define LOOM_CONTRACT_CAPABILITY_OPSEL ((uint32_t)1u << 8)
-// The request has scale-format selector operands or facts available.
-#define LOOM_CONTRACT_CAPABILITY_SCALE_FORMAT_SELECTORS ((uint32_t)1u << 9)
-// The request permits zero-scale fallback to an unscaled primitive.
-#define LOOM_CONTRACT_CAPABILITY_ZERO_SCALE_FALLBACK ((uint32_t)1u << 10)
 
 typedef struct loom_contract_shape_t {
   // Exact M/result-row extent, or 0 when unknown.
@@ -194,7 +200,7 @@ typedef struct loom_contract_operand_t {
 
 typedef struct loom_contract_fragment_t {
   // Bitset of loom_contract_fragment_atom_bits_t values.
-  loom_contract_fragment_atom_bits_t atom_bits;
+  loom_contract_fragment_atom_flags_t atom_bits;
 
   // Native vector width in bits for CPU/vector fragments, or 0.
   uint16_t vector_bit_width;
@@ -253,24 +259,27 @@ typedef struct loom_contract_request_t {
   loom_lowering_policy_t policy;
 } loom_contract_request_t;
 
-typedef uint32_t loom_contract_rejection_bits_t;
+enum loom_contract_rejection_bits_e {
+  // No generic rejection reason was recorded.
+  LOOM_CONTRACT_REJECTION_NONE = 0u,
+  // The request itself was invalid or absent.
+  LOOM_CONTRACT_REJECTION_INVALID_REQUEST = 1u << 0,
+  // The exact M/N/K shape or K grouping was missing or invalid.
+  LOOM_CONTRACT_REJECTION_SHAPE = 1u << 1,
+  // One or more operand roles were missing or inconsistent.
+  LOOM_CONTRACT_REJECTION_ROLE = 1u << 2,
+  // One or more numeric payload facts were missing or unsupported.
+  LOOM_CONTRACT_REJECTION_NUMERIC = 1u << 3,
+  // Fragment facts required by the requested capability class were missing.
+  LOOM_CONTRACT_REJECTION_FRAGMENT = 1u << 4,
+  // The requested capability class or capability flags were unsupported.
+  LOOM_CONTRACT_REJECTION_CAPABILITY = 1u << 5,
+  // Lowering policy does not permit the only available lowering family.
+  LOOM_CONTRACT_REJECTION_POLICY = 1u << 6,
+};
 
-// No generic rejection reason was recorded.
-#define LOOM_CONTRACT_REJECTION_NONE ((uint32_t)0u)
-// The request itself was invalid or absent.
-#define LOOM_CONTRACT_REJECTION_INVALID_REQUEST ((uint32_t)1u << 0)
-// The exact M/N/K shape or K grouping was missing or invalid.
-#define LOOM_CONTRACT_REJECTION_SHAPE ((uint32_t)1u << 1)
-// One or more operand roles were missing or inconsistent.
-#define LOOM_CONTRACT_REJECTION_ROLE ((uint32_t)1u << 2)
-// One or more numeric payload facts were missing or unsupported.
-#define LOOM_CONTRACT_REJECTION_NUMERIC ((uint32_t)1u << 3)
-// Fragment facts required by the requested capability class were missing.
-#define LOOM_CONTRACT_REJECTION_FRAGMENT ((uint32_t)1u << 4)
-// The requested capability class or capability flags were unsupported.
-#define LOOM_CONTRACT_REJECTION_CAPABILITY ((uint32_t)1u << 5)
-// Lowering policy does not permit the only available lowering family.
-#define LOOM_CONTRACT_REJECTION_POLICY ((uint32_t)1u << 6)
+// Bitset of loom_contract_rejection_bits_e values.
+typedef uint32_t loom_contract_rejection_bits_t;
 
 typedef struct loom_contract_diagnostic_t {
   // Bitset of loom_contract_rejection_bits_t values.

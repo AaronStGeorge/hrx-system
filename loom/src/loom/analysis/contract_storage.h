@@ -16,9 +16,9 @@
 extern "C" {
 #endif
 
-// Maps a matrix storage-schema format to a generic contract numeric type.
-bool loom_contract_numeric_type_from_matrix_format(
-    loom_value_fact_matrix_format_t format,
+// Maps an encoded operand format to a generic contract numeric type.
+bool loom_contract_numeric_type_from_encoded_format(
+    loom_value_fact_numeric_format_flags_t format,
     loom_contract_numeric_type_t* out_numeric_type);
 
 // Maps a matrix storage-schema scale kind to a generic contract scale kind.
@@ -31,7 +31,7 @@ loom_contract_capability_flags_t
 loom_contract_capability_flags_from_storage_schema(
     loom_value_fact_storage_schema_t schema);
 
-// Maps a matrix storage-schema payload to a generic contract operand.
+// Maps an encoded storage-schema payload to a generic contract operand.
 bool loom_contract_operand_from_storage_schema(
     loom_contract_operand_role_t role, loom_value_fact_storage_schema_t schema,
     loom_contract_operand_t* out_operand);
@@ -41,8 +41,8 @@ typedef enum loom_contract_view_payload_kind_e {
   LOOM_CONTRACT_VIEW_PAYLOAD_UNKNOWN = 0,
   // The view payload is the shaped type's element type.
   LOOM_CONTRACT_VIEW_PAYLOAD_PLAIN_ELEMENT = 1,
-  // The view payload is a matrix storage schema with native-fragment facts.
-  LOOM_CONTRACT_VIEW_PAYLOAD_MATRIX_STORAGE_SCHEMA = 2,
+  // The view payload is an encoded storage schema with native-fragment facts.
+  LOOM_CONTRACT_VIEW_PAYLOAD_ENCODED_OPERAND_SCHEMA = 2,
   // The view has a storage schema, but not one representable as a native
   // matrix contract payload.
   LOOM_CONTRACT_VIEW_PAYLOAD_UNSUPPORTED_STORAGE_SCHEMA = 3,

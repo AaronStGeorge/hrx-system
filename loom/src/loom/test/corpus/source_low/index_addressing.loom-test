@@ -17,8 +17,7 @@ kernel.def @index_madd_global_b32(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @index_madd_constant_addend_global_b32(%input: buffer,
-                                                  %output: buffer) {
+kernel.def @index_madd_constant_addend_global_b32(%input: buffer, %output: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 0, 3)] : index
   %zero = index.constant 0 : offset

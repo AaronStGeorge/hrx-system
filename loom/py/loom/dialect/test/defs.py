@@ -461,10 +461,12 @@ test_fact_encoding_matrix_field = Op(
     "test.fact_encoding_matrix_field",
     group=test_ops,
     doc=(
-        "Exposes a packed matrix storage-schema summary field as an i64 "
-        "constant. Supported fields are format, scale_kind, scale_format, "
-        "scale_placement, scale_conversion, packed_registers, "
-        "packed_elements, zero_scale_fallback, and static_spec."
+        "Exposes an encoded-operand storage-schema summary field as an i64 "
+        "constant. Supported fields are element_format, payload_packing, "
+        "scale_topology, scale_format, secondary_scale_format, affine, "
+        "rounding, codebook, sparsity, payload_registers, payload_elements, "
+        "scale_group_elements, scale_operands, zero_scale_fallback, and "
+        "static_spec."
     ),
     operands=[Operand("value", ANY_ENCODING)],
     attrs=[AttrDef("field", "string", doc="Matrix schema field to inspect.")],
@@ -482,7 +484,7 @@ test_fact_encoding_matrix_field = Op(
         ResultType("result"),
     ],
     examples=[
-        '%format = test.fact_encoding_matrix_field %schema["format"] : encoding<schema> -> i64',
+        '%format = test.fact_encoding_matrix_field %schema["element_format"] : encoding<schema> -> i64',
     ],
 )
 

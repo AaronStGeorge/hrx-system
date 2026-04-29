@@ -148,101 +148,317 @@ typedef struct loom_value_fact_address_layout_t {
   const loom_value_facts_t* strides;
 } loom_value_fact_address_layout_t;
 
-// Logical low-bit matrix format carried by a packed matrix storage schema.
-typedef enum loom_value_fact_matrix_format_e {
-  // No usable matrix-format fact is known.
-  LOOM_VALUE_FACT_MATRIX_FORMAT_UNKNOWN = 0,
-  // AMD FP8 payload selected by hardware matrix-format immediates.
-  LOOM_VALUE_FACT_MATRIX_FORMAT_FP8 = 1,
-  // AMD BF8 payload selected by hardware matrix-format immediates.
-  LOOM_VALUE_FACT_MATRIX_FORMAT_BF8 = 2,
-  // AMD FP6 payload selected by hardware matrix-format immediates.
-  LOOM_VALUE_FACT_MATRIX_FORMAT_FP6 = 3,
-  // AMD BF6 payload selected by hardware matrix-format immediates.
-  LOOM_VALUE_FACT_MATRIX_FORMAT_BF6 = 4,
-  // AMD FP4 payload selected by hardware matrix-format immediates.
-  LOOM_VALUE_FACT_MATRIX_FORMAT_FP4 = 5,
-} loom_value_fact_matrix_format_t;
+// Target-independent numeric format used by encoded operand schemas. This
+// describes the semantic value represented by payload, scale, table, or sparse
+// metadata fields; it is not a promise that the physical vector value uses
+// unpacked lanes of this type.
+typedef enum loom_value_fact_numeric_format_bits_e {
+  // Zero: unknown for required fields, none for optional fields.
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_UNKNOWN = 0,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_NONE = 0,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_F64 = 1ull << 0,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_F32 = 1ull << 1,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_TF32 = 1ull << 2,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_F16 = 1ull << 3,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_BF16 = 1ull << 4,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_I32 = 1ull << 5,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_U32 = 1ull << 6,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_I16 = 1ull << 7,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_U16 = 1ull << 8,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_I8 = 1ull << 9,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_U8 = 1ull << 10,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_I6 = 1ull << 11,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_U6 = 1ull << 12,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_I5 = 1ull << 13,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_U5 = 1ull << 14,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_I4 = 1ull << 15,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_U4 = 1ull << 16,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_I3 = 1ull << 17,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_U3 = 1ull << 18,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_I2 = 1ull << 19,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_U2 = 1ull << 20,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_I1 = 1ull << 21,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_U1 = 1ull << 22,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3 = 1ull << 23,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2 = 1ull << 24,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FN = 1ull << 25,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E8M0 = 1ull << 26,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_BF8 = 1ull << 27,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_F6_E3M2 = 1ull << 28,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_F6_E2M3 = 1ull << 29,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_BF6 = 1ull << 30,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_F4_E2M1 = 1ull << 31,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_TERNARY = 1ull << 32,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_SIGN_BIT = 1ull << 33,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_CODEBOOK_INDEX = 1ull << 34,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_QUANT_I8 = 1ull << 35,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_QUANT_I6 = 1ull << 36,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_QUANT_I4 = 1ull << 37,
+  LOOM_VALUE_FACT_NUMERIC_FORMAT_ALL =
+      (LOOM_VALUE_FACT_NUMERIC_FORMAT_F64 | LOOM_VALUE_FACT_NUMERIC_FORMAT_F32 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_TF32 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_F16 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_BF16 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_I32 | LOOM_VALUE_FACT_NUMERIC_FORMAT_U32 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_I16 | LOOM_VALUE_FACT_NUMERIC_FORMAT_U16 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_I8 | LOOM_VALUE_FACT_NUMERIC_FORMAT_U8 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_I6 | LOOM_VALUE_FACT_NUMERIC_FORMAT_U6 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_I5 | LOOM_VALUE_FACT_NUMERIC_FORMAT_U5 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_I4 | LOOM_VALUE_FACT_NUMERIC_FORMAT_U4 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_I3 | LOOM_VALUE_FACT_NUMERIC_FORMAT_U3 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_I2 | LOOM_VALUE_FACT_NUMERIC_FORMAT_U2 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_I1 | LOOM_VALUE_FACT_NUMERIC_FORMAT_U1 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FN |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E8M0 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_BF8 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_F6_E3M2 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_F6_E2M3 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_BF6 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_F4_E2M1 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_TERNARY |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_SIGN_BIT |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_CODEBOOK_INDEX |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_QUANT_I8 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_QUANT_I6 |
+       LOOM_VALUE_FACT_NUMERIC_FORMAT_QUANT_I4),
+} loom_value_fact_numeric_format_bits_t;
 
-// Explicit scale operand shape used by a packed matrix storage schema.
-typedef enum loom_value_fact_matrix_scale_kind_e {
-  // No usable scale-kind fact is known.
-  LOOM_VALUE_FACT_MATRIX_SCALE_UNKNOWN = 0,
-  // Matrix payload has no explicit scale operands.
-  LOOM_VALUE_FACT_MATRIX_SCALE_NONE = 1,
-  // Matrix payload uses 32-bit scale exponent operands.
-  LOOM_VALUE_FACT_MATRIX_SCALE_32 = 2,
-  // Matrix payload uses 16-bit scale exponent operands.
-  LOOM_VALUE_FACT_MATRIX_SCALE_16 = 3,
-} loom_value_fact_matrix_scale_kind_t;
+typedef uint64_t loom_value_fact_numeric_format_flags_t;
 
-// Hardware scale exponent format used by a packed matrix storage schema.
-typedef enum loom_value_fact_matrix_scale_format_e {
-  // No usable scale-format fact is known.
-  LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_UNKNOWN = 0,
-  // No scale-format selector is used.
-  LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_NONE = 1,
-  // AMD MATRIX_SCALE_FMT_E8 selector.
-  LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_E8 = 2,
-  // AMD MATRIX_SCALE_FMT_E5M3 selector.
-  LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_E5M3 = 3,
-  // AMD MATRIX_SCALE_FMT_E4M3 selector.
-  LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_E4M3 = 4,
-} loom_value_fact_matrix_scale_format_t;
+// Physical payload bit/field layout used by an encoded operand schema.
+typedef enum loom_value_fact_payload_packing_bits_e {
+  // No usable payload-packing fact is known.
+  LOOM_VALUE_FACT_PAYLOAD_PACKING_UNKNOWN = 0,
+  LOOM_VALUE_FACT_PAYLOAD_PACKING_DENSE_LANES = 1u << 0,
+  LOOM_VALUE_FACT_PAYLOAD_PACKING_LITTLE_ENDIAN_NIBBLES = 1u << 1,
+  LOOM_VALUE_FACT_PAYLOAD_PACKING_BIG_ENDIAN_NIBBLES = 1u << 2,
+  LOOM_VALUE_FACT_PAYLOAD_PACKING_BITFIELD_STREAM = 1u << 3,
+  LOOM_VALUE_FACT_PAYLOAD_PACKING_BITPLANE_STREAM = 1u << 4,
+  LOOM_VALUE_FACT_PAYLOAD_PACKING_MULTI_STREAM = 1u << 5,
+  LOOM_VALUE_FACT_PAYLOAD_PACKING_BASE_N_PACKED = 1u << 6,
+  LOOM_VALUE_FACT_PAYLOAD_PACKING_CODEBOOK_INDICES = 1u << 7,
+  LOOM_VALUE_FACT_PAYLOAD_PACKING_TARGET_FRAGMENT = 1u << 8,
+  LOOM_VALUE_FACT_PAYLOAD_PACKING_INTERLEAVED_SCALE_PAYLOAD = 1u << 9,
+  LOOM_VALUE_FACT_PAYLOAD_PACKING_SEPARATE_SCALE_PAYLOAD = 1u << 10,
+  LOOM_VALUE_FACT_PAYLOAD_PACKING_ALL =
+      (LOOM_VALUE_FACT_PAYLOAD_PACKING_DENSE_LANES |
+       LOOM_VALUE_FACT_PAYLOAD_PACKING_LITTLE_ENDIAN_NIBBLES |
+       LOOM_VALUE_FACT_PAYLOAD_PACKING_BIG_ENDIAN_NIBBLES |
+       LOOM_VALUE_FACT_PAYLOAD_PACKING_BITFIELD_STREAM |
+       LOOM_VALUE_FACT_PAYLOAD_PACKING_BITPLANE_STREAM |
+       LOOM_VALUE_FACT_PAYLOAD_PACKING_MULTI_STREAM |
+       LOOM_VALUE_FACT_PAYLOAD_PACKING_BASE_N_PACKED |
+       LOOM_VALUE_FACT_PAYLOAD_PACKING_CODEBOOK_INDICES |
+       LOOM_VALUE_FACT_PAYLOAD_PACKING_TARGET_FRAGMENT |
+       LOOM_VALUE_FACT_PAYLOAD_PACKING_INTERLEAVED_SCALE_PAYLOAD |
+       LOOM_VALUE_FACT_PAYLOAD_PACKING_SEPARATE_SCALE_PAYLOAD),
+} loom_value_fact_payload_packing_bits_t;
 
-// Placement of scale exponent operands relative to a matrix fragment.
-typedef enum loom_value_fact_matrix_scale_placement_e {
-  // No usable scale-placement fact is known.
-  LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_UNKNOWN = 0,
-  // No scale exponent placement is used.
-  LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_NONE = 1,
-  // Scale exponents are supplied as explicit operands without row selection.
-  LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_EXPLICIT = 2,
-  // Scale exponents use hardware row-zero placement.
-  LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_ROW0 = 3,
-  // Scale exponents use hardware row-one placement.
-  LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_ROW1 = 4,
-} loom_value_fact_matrix_scale_placement_t;
+typedef uint32_t loom_value_fact_payload_packing_flags_t;
 
-// Scale conversion dependency shape for reference expansion.
-typedef enum loom_value_fact_matrix_scale_conversion_e {
-  // No usable scale-conversion fact is known.
-  LOOM_VALUE_FACT_MATRIX_SCALE_CONVERSION_UNKNOWN = 0,
-  // No scale conversion is required.
-  LOOM_VALUE_FACT_MATRIX_SCALE_CONVERSION_NONE = 1,
-  // Scale conversion is lane-local and can be scalarized independently.
-  LOOM_VALUE_FACT_MATRIX_SCALE_CONVERSION_LANE_LOCAL = 2,
-  // Scale conversion is convergent and may observe values from other lanes.
-  LOOM_VALUE_FACT_MATRIX_SCALE_CONVERSION_CONVERGENT = 3,
-} loom_value_fact_matrix_scale_conversion_t;
+// How scale-like data maps to logical elements.
+typedef enum loom_value_fact_scale_topology_bits_e {
+  // Zero: unknown when isolated, none when the whole scale descriptor is zero.
+  LOOM_VALUE_FACT_SCALE_TOPOLOGY_UNKNOWN = 0,
+  LOOM_VALUE_FACT_SCALE_TOPOLOGY_NONE = 0,
+  LOOM_VALUE_FACT_SCALE_TOPOLOGY_TENSOR_GLOBAL = 1u << 0,
+  LOOM_VALUE_FACT_SCALE_TOPOLOGY_ROW = 1u << 1,
+  LOOM_VALUE_FACT_SCALE_TOPOLOGY_COLUMN = 1u << 2,
+  LOOM_VALUE_FACT_SCALE_TOPOLOGY_CHANNEL = 1u << 3,
+  LOOM_VALUE_FACT_SCALE_TOPOLOGY_GROUP_1D = 1u << 4,
+  LOOM_VALUE_FACT_SCALE_TOPOLOGY_BLOCK_1D = 1u << 5,
+  LOOM_VALUE_FACT_SCALE_TOPOLOGY_BLOCK_2D = 1u << 6,
+  LOOM_VALUE_FACT_SCALE_TOPOLOGY_SUBBLOCK_IN_SUPERBLOCK = 1u << 7,
+  LOOM_VALUE_FACT_SCALE_TOPOLOGY_HIERARCHICAL = 1u << 8,
+  LOOM_VALUE_FACT_SCALE_TOPOLOGY_PER_TOKEN = 1u << 9,
+  LOOM_VALUE_FACT_SCALE_TOPOLOGY_PER_HEAD = 1u << 10,
+  LOOM_VALUE_FACT_SCALE_TOPOLOGY_PER_PAGE = 1u << 11,
+  LOOM_VALUE_FACT_SCALE_TOPOLOGY_RUNTIME_AMAX_DERIVED = 1u << 12,
+  LOOM_VALUE_FACT_SCALE_TOPOLOGY_ALL =
+      (LOOM_VALUE_FACT_SCALE_TOPOLOGY_TENSOR_GLOBAL |
+       LOOM_VALUE_FACT_SCALE_TOPOLOGY_ROW |
+       LOOM_VALUE_FACT_SCALE_TOPOLOGY_COLUMN |
+       LOOM_VALUE_FACT_SCALE_TOPOLOGY_CHANNEL |
+       LOOM_VALUE_FACT_SCALE_TOPOLOGY_GROUP_1D |
+       LOOM_VALUE_FACT_SCALE_TOPOLOGY_BLOCK_1D |
+       LOOM_VALUE_FACT_SCALE_TOPOLOGY_BLOCK_2D |
+       LOOM_VALUE_FACT_SCALE_TOPOLOGY_SUBBLOCK_IN_SUPERBLOCK |
+       LOOM_VALUE_FACT_SCALE_TOPOLOGY_HIERARCHICAL |
+       LOOM_VALUE_FACT_SCALE_TOPOLOGY_PER_TOKEN |
+       LOOM_VALUE_FACT_SCALE_TOPOLOGY_PER_HEAD |
+       LOOM_VALUE_FACT_SCALE_TOPOLOGY_PER_PAGE |
+       LOOM_VALUE_FACT_SCALE_TOPOLOGY_RUNTIME_AMAX_DERIVED),
+} loom_value_fact_scale_topology_bits_t;
 
-// Packed matrix operand facts for storage schemas that can map to native
-// target matrix contracts or to an explicit reference expansion.
-typedef struct loom_value_fact_matrix_storage_schema_t {
-  // Logical matrix element format.
-  loom_value_fact_matrix_format_t format;
+typedef uint32_t loom_value_fact_scale_topology_flags_t;
 
-  // Explicit scale operand shape.
-  loom_value_fact_matrix_scale_kind_t scale_kind;
+// Affine or correction policy applied after payload decode.
+typedef enum loom_value_fact_affine_policy_bits_e {
+  // Zero: no affine policy.
+  LOOM_VALUE_FACT_AFFINE_POLICY_UNKNOWN = 0,
+  LOOM_VALUE_FACT_AFFINE_POLICY_NONE = 0,
+  LOOM_VALUE_FACT_AFFINE_POLICY_SCALE_ONLY = 1u << 0,
+  LOOM_VALUE_FACT_AFFINE_POLICY_SCALE_PLUS_MIN = 1u << 1,
+  LOOM_VALUE_FACT_AFFINE_POLICY_SCALE_PLUS_ZERO_POINT = 1u << 2,
+  LOOM_VALUE_FACT_AFFINE_POLICY_SCALE_PLUS_BIAS = 1u << 3,
+  LOOM_VALUE_FACT_AFFINE_POLICY_SUPER_SCALE_TIMES_SUBSCALE = 1u << 4,
+  LOOM_VALUE_FACT_AFFINE_POLICY_SUM_CORRECTION = 1u << 5,
+  LOOM_VALUE_FACT_AFFINE_POLICY_ALL =
+      (LOOM_VALUE_FACT_AFFINE_POLICY_SCALE_ONLY |
+       LOOM_VALUE_FACT_AFFINE_POLICY_SCALE_PLUS_MIN |
+       LOOM_VALUE_FACT_AFFINE_POLICY_SCALE_PLUS_ZERO_POINT |
+       LOOM_VALUE_FACT_AFFINE_POLICY_SCALE_PLUS_BIAS |
+       LOOM_VALUE_FACT_AFFINE_POLICY_SUPER_SCALE_TIMES_SUBSCALE |
+       LOOM_VALUE_FACT_AFFINE_POLICY_SUM_CORRECTION),
+} loom_value_fact_affine_policy_bits_t;
 
-  // Hardware scale exponent format.
-  loom_value_fact_matrix_scale_format_t scale_format;
+typedef uint32_t loom_value_fact_affine_policy_flags_t;
 
-  // Scale exponent operand placement.
-  loom_value_fact_matrix_scale_placement_t scale_placement;
+// Rounding/conversion policy for reference encode/decode or reencoding.
+typedef enum loom_value_fact_rounding_policy_bits_e {
+  // Zero: no rounding policy.
+  LOOM_VALUE_FACT_ROUNDING_POLICY_UNKNOWN = 0,
+  LOOM_VALUE_FACT_ROUNDING_POLICY_NONE = 0,
+  LOOM_VALUE_FACT_ROUNDING_POLICY_NEAREST_EVEN = 1u << 0,
+  LOOM_VALUE_FACT_ROUNDING_POLICY_NEAREST_AWAY = 1u << 1,
+  LOOM_VALUE_FACT_ROUNDING_POLICY_TOWARD_ZERO = 1u << 2,
+  LOOM_VALUE_FACT_ROUNDING_POLICY_DOWN = 1u << 3,
+  LOOM_VALUE_FACT_ROUNDING_POLICY_UP = 1u << 4,
+  LOOM_VALUE_FACT_ROUNDING_POLICY_STOCHASTIC = 1u << 5,
+  LOOM_VALUE_FACT_ROUNDING_POLICY_SATFINITE = 1u << 6,
+  LOOM_VALUE_FACT_ROUNDING_POLICY_OVERFLOW_TO_INF = 1u << 7,
+  LOOM_VALUE_FACT_ROUNDING_POLICY_OVERFLOW_TO_NAN = 1u << 8,
+  LOOM_VALUE_FACT_ROUNDING_POLICY_FLUSH_SUBNORMAL = 1u << 9,
+  LOOM_VALUE_FACT_ROUNDING_POLICY_PRESERVE_SUBNORMAL = 1u << 10,
+  LOOM_VALUE_FACT_ROUNDING_POLICY_RELU_CLAMP = 1u << 11,
+  LOOM_VALUE_FACT_ROUNDING_POLICY_FINITE_ONLY = 1u << 12,
+  LOOM_VALUE_FACT_ROUNDING_POLICY_ALL =
+      (LOOM_VALUE_FACT_ROUNDING_POLICY_NEAREST_EVEN |
+       LOOM_VALUE_FACT_ROUNDING_POLICY_NEAREST_AWAY |
+       LOOM_VALUE_FACT_ROUNDING_POLICY_TOWARD_ZERO |
+       LOOM_VALUE_FACT_ROUNDING_POLICY_DOWN |
+       LOOM_VALUE_FACT_ROUNDING_POLICY_UP |
+       LOOM_VALUE_FACT_ROUNDING_POLICY_STOCHASTIC |
+       LOOM_VALUE_FACT_ROUNDING_POLICY_SATFINITE |
+       LOOM_VALUE_FACT_ROUNDING_POLICY_OVERFLOW_TO_INF |
+       LOOM_VALUE_FACT_ROUNDING_POLICY_OVERFLOW_TO_NAN |
+       LOOM_VALUE_FACT_ROUNDING_POLICY_FLUSH_SUBNORMAL |
+       LOOM_VALUE_FACT_ROUNDING_POLICY_PRESERVE_SUBNORMAL |
+       LOOM_VALUE_FACT_ROUNDING_POLICY_RELU_CLAMP |
+       LOOM_VALUE_FACT_ROUNDING_POLICY_FINITE_ONLY),
+} loom_value_fact_rounding_policy_bits_t;
 
-  // Whether reference scale conversion is lane-local or convergent.
-  loom_value_fact_matrix_scale_conversion_t scale_conversion;
+typedef uint32_t loom_value_fact_rounding_policy_flags_t;
 
-  // Number of 32-bit payload registers in the packed fragment.
-  uint16_t packed_register_count;
+// Table/codebook source policy for nonlinear encoded operands.
+typedef enum loom_value_fact_codebook_policy_bits_e {
+  // Zero: no codebook policy.
+  LOOM_VALUE_FACT_CODEBOOK_POLICY_UNKNOWN = 0,
+  LOOM_VALUE_FACT_CODEBOOK_POLICY_NONE = 0,
+  LOOM_VALUE_FACT_CODEBOOK_POLICY_STATIC_BUILTIN_TABLE = 1u << 0,
+  LOOM_VALUE_FACT_CODEBOOK_POLICY_STATIC_SYMBOL_TABLE = 1u << 1,
+  LOOM_VALUE_FACT_CODEBOOK_POLICY_GLOBAL_DATA_TABLE = 1u << 2,
+  LOOM_VALUE_FACT_CODEBOOK_POLICY_DYNAMIC_TABLE_OPERAND = 1u << 3,
+  LOOM_VALUE_FACT_CODEBOOK_POLICY_PER_SUPERBLOCK_TABLE = 1u << 4,
+  LOOM_VALUE_FACT_CODEBOOK_POLICY_ALL =
+      (LOOM_VALUE_FACT_CODEBOOK_POLICY_STATIC_BUILTIN_TABLE |
+       LOOM_VALUE_FACT_CODEBOOK_POLICY_STATIC_SYMBOL_TABLE |
+       LOOM_VALUE_FACT_CODEBOOK_POLICY_GLOBAL_DATA_TABLE |
+       LOOM_VALUE_FACT_CODEBOOK_POLICY_DYNAMIC_TABLE_OPERAND |
+       LOOM_VALUE_FACT_CODEBOOK_POLICY_PER_SUPERBLOCK_TABLE),
+} loom_value_fact_codebook_policy_bits_t;
 
-  // Number of logical matrix elements represented by the packed fragment.
-  uint16_t packed_element_count;
+typedef uint32_t loom_value_fact_codebook_policy_flags_t;
 
-  // Whether a zero scale can refine to an unscaled target contract.
-  bool zero_scale_fallback;
-} loom_value_fact_matrix_storage_schema_t;
+// Sparse metadata contract attached to an encoded operand.
+typedef enum loom_value_fact_sparsity_policy_bits_e {
+  // Zero: no sparsity policy.
+  LOOM_VALUE_FACT_SPARSITY_POLICY_UNKNOWN = 0,
+  LOOM_VALUE_FACT_SPARSITY_POLICY_NONE = 0,
+  LOOM_VALUE_FACT_SPARSITY_POLICY_MASK = 1u << 0,
+  LOOM_VALUE_FACT_SPARSITY_POLICY_N_M_STRUCTURED = 1u << 1,
+  LOOM_VALUE_FACT_SPARSITY_POLICY_BLOCK_SPARSE = 1u << 2,
+  LOOM_VALUE_FACT_SPARSITY_POLICY_BSR = 1u << 3,
+  LOOM_VALUE_FACT_SPARSITY_POLICY_CSR = 1u << 4,
+  LOOM_VALUE_FACT_SPARSITY_POLICY_COO = 1u << 5,
+  LOOM_VALUE_FACT_SPARSITY_POLICY_PAGE_TABLE = 1u << 6,
+  LOOM_VALUE_FACT_SPARSITY_POLICY_MOE_ROUTING = 1u << 7,
+  LOOM_VALUE_FACT_SPARSITY_POLICY_OUTLIER_SIDE_STREAM = 1u << 8,
+  LOOM_VALUE_FACT_SPARSITY_POLICY_ALL =
+      (LOOM_VALUE_FACT_SPARSITY_POLICY_MASK |
+       LOOM_VALUE_FACT_SPARSITY_POLICY_N_M_STRUCTURED |
+       LOOM_VALUE_FACT_SPARSITY_POLICY_BLOCK_SPARSE |
+       LOOM_VALUE_FACT_SPARSITY_POLICY_BSR |
+       LOOM_VALUE_FACT_SPARSITY_POLICY_CSR |
+       LOOM_VALUE_FACT_SPARSITY_POLICY_COO |
+       LOOM_VALUE_FACT_SPARSITY_POLICY_PAGE_TABLE |
+       LOOM_VALUE_FACT_SPARSITY_POLICY_MOE_ROUTING |
+       LOOM_VALUE_FACT_SPARSITY_POLICY_OUTLIER_SIDE_STREAM),
+} loom_value_fact_sparsity_policy_bits_t;
+
+typedef uint32_t loom_value_fact_sparsity_policy_flags_t;
+
+typedef enum loom_value_fact_encoded_operand_flag_bits_e {
+  // A zero scale can refine to an unscaled target contract.
+  LOOM_VALUE_FACT_ENCODED_OPERAND_FLAG_ZERO_SCALE_FALLBACK = 1u << 0,
+} loom_value_fact_encoded_operand_flag_bits_t;
+
+typedef uint32_t loom_value_fact_encoded_operand_flags_t;
+
+// Target-independent encoded operand facts for storage schemas or prepared
+// matrix/vector fragments. Bulk payload, scale, table, and sparse metadata data
+// remain SSA values; this summary only records compact interpretation facts.
+typedef struct loom_value_fact_encoded_operand_schema_t {
+  // Logical element format after payload interpretation.
+  loom_value_fact_numeric_format_flags_t element_format;
+
+  // Primary/local scale format.
+  loom_value_fact_numeric_format_flags_t scale_format;
+
+  // Secondary/global/super scale format for hierarchical schemes.
+  loom_value_fact_numeric_format_flags_t secondary_scale_format;
+
+  // Physical payload packing or target-fragment arrangement.
+  loom_value_fact_payload_packing_flags_t payload_packing;
+
+  // How scale values are broadcast over logical elements.
+  loom_value_fact_scale_topology_flags_t scale_topology;
+
+  // Affine, offset, or correction contract.
+  loom_value_fact_affine_policy_flags_t affine_policy;
+
+  // Rounding or finite-policy contract.
+  loom_value_fact_rounding_policy_flags_t rounding_policy;
+
+  // Codebook/table ownership contract.
+  loom_value_fact_codebook_policy_flags_t codebook_policy;
+
+  // Sparse metadata contract.
+  loom_value_fact_sparsity_policy_flags_t sparsity_policy;
+
+  // Bitset of loom_value_fact_encoded_operand_flag_bits_t values.
+  loom_value_fact_encoded_operand_flags_t flags;
+
+  // Reserved zero bits keep the descriptor padding-free for raw equality.
+  uint32_t reserved;
+
+  // Number of 32-bit payload registers in a prepared fragment, or zero when
+  // not target-fragment-shaped.
+  uint16_t payload_register_count;
+
+  // Number of logical elements represented by the payload.
+  uint16_t payload_element_count;
+
+  // Number of logical elements covered by one primary/local scale value.
+  uint16_t scale_group_element_count;
+
+  // Number of explicit scale-like SSA operands required by this schema.
+  uint16_t scale_operand_count;
+} loom_value_fact_encoded_operand_schema_t;
+static_assert(sizeof(loom_value_fact_encoded_operand_schema_t) == 64,
+              "encoded operand schema must be padding-free for raw equality");
 
 // Summary of a storage-schema encoding.
 typedef struct loom_value_fact_storage_schema_t {
@@ -250,9 +466,31 @@ typedef struct loom_value_fact_storage_schema_t {
   // storage schema is known.
   uint16_t static_spec_encoding_id;
 
-  // Packed matrix facts when the schema describes a native matrix fragment.
-  loom_value_fact_matrix_storage_schema_t matrix;
+  // Target-independent encoded operand facts.
+  loom_value_fact_encoded_operand_schema_t encoded_operand;
 } loom_value_fact_storage_schema_t;
+
+// Returns true when encoded operand schemas are byte-identical. Encoded schema
+// records are fixed-width descriptors and must be zero-initialized before
+// population so padding never participates in equality.
+bool loom_value_fact_encoded_operand_schema_equal(
+    loom_value_fact_encoded_operand_schema_t lhs,
+    loom_value_fact_encoded_operand_schema_t rhs);
+
+// Returns true when no encoded operand facts are known.
+bool loom_value_fact_encoded_operand_schema_is_unknown(
+    loom_value_fact_encoded_operand_schema_t schema);
+
+// Returns true when the scale subdescriptor is nonzero. The scale
+// subdescriptor includes scale formats, topology, scale counts, and scale
+// flags; payload and non-scale interpretation fields are ignored.
+bool loom_value_fact_encoded_operand_schema_has_scale(
+    loom_value_fact_encoded_operand_schema_t schema);
+
+// Returns true when the scale subdescriptor is either all-zero or complete
+// enough to identify explicit scale topology and operands.
+bool loom_value_fact_encoded_operand_schema_scale_is_complete(
+    loom_value_fact_encoded_operand_schema_t schema);
 
 // Summary of an SSA encoding value.
 typedef struct loom_value_fact_encoding_summary_t {

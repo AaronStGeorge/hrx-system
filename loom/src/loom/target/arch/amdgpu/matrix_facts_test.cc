@@ -10,34 +10,35 @@
 
 namespace {
 
-loom_value_fact_storage_schema_t MatrixSchema(
-    loom_value_fact_matrix_format_t format,
-    loom_value_fact_matrix_scale_kind_t scale_kind,
-    loom_value_fact_matrix_scale_format_t scale_format,
-    uint16_t packed_register_count, uint16_t packed_element_count) {
+loom_value_fact_storage_schema_t EncodedSchema(
+    loom_value_fact_numeric_format_flags_t element_format,
+    uint16_t scale_group_element_count,
+    loom_value_fact_numeric_format_flags_t scale_format,
+    uint16_t payload_register_count, uint16_t payload_element_count) {
   loom_value_fact_storage_schema_t schema = {};
-  schema.matrix.format = format;
-  schema.matrix.scale_kind = scale_kind;
-  schema.matrix.scale_format = scale_format;
-  schema.matrix.scale_placement =
-      scale_kind == LOOM_VALUE_FACT_MATRIX_SCALE_NONE
-          ? LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_NONE
-          : LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_EXPLICIT;
-  schema.matrix.scale_conversion =
-      scale_kind == LOOM_VALUE_FACT_MATRIX_SCALE_NONE
-          ? LOOM_VALUE_FACT_MATRIX_SCALE_CONVERSION_NONE
-          : LOOM_VALUE_FACT_MATRIX_SCALE_CONVERSION_CONVERGENT;
-  schema.matrix.packed_register_count = packed_register_count;
-  schema.matrix.packed_element_count = packed_element_count;
-  schema.matrix.zero_scale_fallback =
-      scale_kind != LOOM_VALUE_FACT_MATRIX_SCALE_NONE;
+  schema.encoded_operand.element_format = element_format;
+  schema.encoded_operand.payload_packing =
+      LOOM_VALUE_FACT_PAYLOAD_PACKING_TARGET_FRAGMENT;
+  schema.encoded_operand.scale_format = scale_format;
+  schema.encoded_operand.scale_topology =
+      scale_group_element_count == 0 ? LOOM_VALUE_FACT_SCALE_TOPOLOGY_NONE
+                                     : LOOM_VALUE_FACT_SCALE_TOPOLOGY_BLOCK_1D;
+  schema.encoded_operand.payload_register_count = payload_register_count;
+  schema.encoded_operand.payload_element_count = payload_element_count;
+  schema.encoded_operand.scale_group_element_count = scale_group_element_count;
+  schema.encoded_operand.scale_operand_count =
+      scale_group_element_count == 0 ? 0 : 1;
+  if (scale_group_element_count != 0) {
+    schema.encoded_operand.flags |=
+        LOOM_VALUE_FACT_ENCODED_OPERAND_FLAG_ZERO_SCALE_FALLBACK;
+  }
   return schema;
 }
 
 TEST(MatrixFactsTest, MapsSchemaToPayloadSelectorAndFlags) {
-  loom_value_fact_storage_schema_t schema = MatrixSchema(
-      LOOM_VALUE_FACT_MATRIX_FORMAT_FP6, LOOM_VALUE_FACT_MATRIX_SCALE_32,
-      LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_NONE, 6, 32);
+  loom_value_fact_storage_schema_t schema =
+      EncodedSchema(LOOM_VALUE_FACT_NUMERIC_FORMAT_F6_E3M2, 32,
+                    LOOM_VALUE_FACT_NUMERIC_FORMAT_NONE, 6, 32);
 
   loom_amdgpu_matrix_payload_shape_t payload = {};
   EXPECT_TRUE(loom_amdgpu_matrix_payload_from_storage_schema(schema, &payload));
