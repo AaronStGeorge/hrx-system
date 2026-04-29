@@ -16,6 +16,7 @@
 #include "loom/codegen/low/memory_access.h"
 #include "loom/codegen/low/register_class_map.h"
 #include "loom/codegen/low/schedule/types.h"
+#include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
 
 #ifdef __cplusplus
@@ -57,6 +58,27 @@ typedef struct loom_low_schedule_pressure_cliff_range_t {
   uint32_t count;
 } loom_low_schedule_pressure_cliff_range_t;
 
+enum loom_low_schedule_value_flag_bits_e {
+  // Value is live in the current simulated block schedule.
+  LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE = 1u << 0,
+};
+typedef uint16_t loom_low_schedule_value_flags_t;
+
+typedef struct loom_low_schedule_value_record_t {
+  // Module value represented by this local record.
+  loom_value_id_t value_id;
+  // Same-block producer node index, or NONE for block arguments/external defs.
+  uint32_t producer_node;
+  // Register units contributed to the pressure model.
+  uint32_t unit_count;
+  // Remaining operand uses in the current simulated block schedule.
+  uint32_t remaining_use_count;
+  // Descriptor-set-local register class, or LOOM_LOW_REG_CLASS_NONE.
+  uint16_t register_class_id;
+  // Mutable per-schedule flags.
+  loom_low_schedule_value_flags_t flags;
+} loom_low_schedule_value_record_t;
+
 typedef struct loom_low_schedule_build_state_t {
   // Module containing the low function being scheduled.
   loom_module_t* module;
@@ -72,6 +94,10 @@ typedef struct loom_low_schedule_build_state_t {
   loom_low_resolved_target_t target;
   // Descriptor register-class lookup map for module register types.
   loom_low_register_class_map_t register_class_map;
+  // Installed function-local value domain for this scheduling run.
+  const loom_local_value_domain_t* value_domain;
+  // Dense per-local-value scheduler records indexed by value ordinal.
+  loom_low_schedule_value_record_t* values;
   // Schedule block records indexed by region block ordinal.
   loom_low_schedule_block_t* blocks;
   // Schedule node records indexed by scheduler node ordinal.
@@ -117,8 +143,6 @@ typedef struct loom_low_schedule_build_state_t {
   // Per-resource aggregate resource pressure, dense by descriptor resource id
   // until compacted after scheduling.
   loom_low_schedule_resource_summary_t* resource_summaries;
-  // Producer node index for each module value, or none for block arguments.
-  uint32_t* value_node_indices;
   // Number of populated dependency records.
   iree_host_size_t dependency_count;
   // Allocated dependency record capacity.

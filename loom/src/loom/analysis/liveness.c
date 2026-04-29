@@ -48,12 +48,13 @@ typedef struct loom_liveness_build_state_t {
   loom_liveness_order_t order;
   // Arena owning all analysis result storage.
   iree_arena_allocator_t* arena;
-  // Value IDs indexed by region-local value ordinal.
-  loom_value_id_t* value_ids;
+  // Installed local value domain shared with adjacent compiler phases.
+  const loom_local_value_domain_t* value_domain;
+  // Value IDs indexed by region-local value ordinal. Borrowed from
+  // value_domain.
+  const loom_value_id_t* value_ids;
   // Number of initialized local value IDs.
   iree_host_size_t value_count;
-  // Number of local value ID records allocated.
-  iree_host_size_t value_id_capacity;
   // Number of 64-bit words in local value bitsets.
   iree_host_size_t word_count;
   // Mutable per-block liveness state.
@@ -64,8 +65,6 @@ typedef struct loom_liveness_build_state_t {
   uint32_t* value_interval_indices;
   // Mutable pressure summary state.
   loom_liveness_pressure_state_t pressure_state;
-  // True while |module|'s value ordinal scratch is owned by this analysis.
-  bool value_ordinal_scratch_acquired;
 } loom_liveness_build_state_t;
 
 typedef iree_status_t (*loom_liveness_value_fn_t)(void* user_data,
@@ -252,33 +251,16 @@ bool loom_liveness_value_class_equal(loom_liveness_value_class_t lhs,
          lhs.register_class_id == rhs.register_class_id;
 }
 
-static iree_status_t loom_liveness_value_ordinal(
-    loom_liveness_build_state_t* state, loom_value_id_t value_id,
-    loom_value_ordinal_t* out_ordinal) {
-  IREE_ASSERT_ARGUMENT(out_ordinal);
-  if (value_id >= state->module->values.count) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "liveness saw out-of-range value id %u",
-                            (unsigned)value_id);
-  }
-  const loom_value_ordinal_t ordinal =
-      loom_module_value_ordinal_scratch_lookup(state->module, value_id);
-  if (ordinal == LOOM_VALUE_ORDINAL_INVALID || ordinal >= state->value_count) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "liveness saw value id %u outside the analyzed "
-                            "region-local value set",
-                            (unsigned)value_id);
-  }
-  *out_ordinal = ordinal;
-  return iree_ok_status();
+static loom_value_ordinal_t loom_liveness_value_ordinal(
+    loom_liveness_build_state_t* state, loom_value_id_t value_id) {
+  return loom_local_value_domain_ordinal(state->value_domain, value_id);
 }
 
 static iree_status_t loom_liveness_ensure_interval(
     loom_liveness_build_state_t* state, loom_value_id_t value_id,
     loom_liveness_mutable_interval_t** out_interval) {
-  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_liveness_value_ordinal(state, value_id, &value_ordinal));
+  const loom_value_ordinal_t value_ordinal =
+      loom_liveness_value_ordinal(state, value_id);
   uint32_t interval_index = state->value_interval_indices[value_ordinal];
   if (interval_index == UINT32_MAX) {
     interval_index = value_ordinal;
@@ -524,89 +506,6 @@ static iree_status_t loom_liveness_for_each_op_use(
   return loom_liveness_for_each_nested_external_use(module, op, visitor);
 }
 
-static iree_status_t loom_liveness_append_value_id(
-    loom_liveness_build_state_t* state, loom_value_id_t value_id) {
-  if (state->value_count >= LOOM_VALUE_ORDINAL_INVALID) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "liveness local value count exceeds uint32_t");
-  }
-  if (state->value_count >= state->value_id_capacity) {
-    iree_host_size_t old_capacity = state->value_id_capacity;
-    iree_host_size_t minimum_capacity =
-        old_capacity == 0 ? 64 : old_capacity * 2;
-    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-        state->arena, old_capacity, minimum_capacity, sizeof(*state->value_ids),
-        &state->value_id_capacity, (void**)&state->value_ids));
-  }
-  const loom_value_ordinal_t value_ordinal =
-      (loom_value_ordinal_t)state->value_count;
-  state->value_ids[state->value_count++] = value_id;
-  loom_module_value_ordinal_scratch_set(state->module, value_id, value_ordinal);
-  return iree_ok_status();
-}
-
-static iree_status_t loom_liveness_register_value(
-    loom_liveness_build_state_t* state, loom_value_id_t value_id) {
-  if (value_id >= state->module->values.count) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "liveness saw out-of-range value id %u",
-                            (unsigned)value_id);
-  }
-  if (loom_module_value_ordinal_scratch_lookup(state->module, value_id) !=
-      LOOM_VALUE_ORDINAL_INVALID) {
-    return iree_ok_status();
-  }
-  return loom_liveness_append_value_id(state, value_id);
-}
-
-static iree_status_t loom_liveness_register_value_callback(
-    void* user_data, loom_value_id_t value_id) {
-  return loom_liveness_register_value((loom_liveness_build_state_t*)user_data,
-                                      value_id);
-}
-
-static iree_status_t loom_liveness_register_region_values(
-    loom_liveness_build_state_t* state) {
-  loom_liveness_value_callback_t visitor = loom_liveness_value_callback_make(
-      loom_liveness_register_value_callback, state);
-  const loom_block_t* block = NULL;
-  loom_region_for_each_block(state->region, block) {
-    for (uint16_t i = 0; i < block->arg_count; ++i) {
-      IREE_RETURN_IF_ERROR(
-          loom_liveness_register_value(state, loom_block_arg_id(block, i)));
-      IREE_RETURN_IF_ERROR(loom_liveness_for_each_type_ref(
-          loom_block_arg_type(state->module, block, i), visitor));
-    }
-    const loom_op_t* op = NULL;
-    loom_block_for_each_op(block, op) {
-      const loom_value_id_t* results = loom_op_const_results(op);
-      for (uint16_t i = 0; i < op->result_count; ++i) {
-        IREE_RETURN_IF_ERROR(loom_liveness_register_value(state, results[i]));
-      }
-      IREE_RETURN_IF_ERROR(
-          loom_liveness_for_each_op_use(state->module, op, visitor));
-    }
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_liveness_build_state_initialize_values(
-    loom_liveness_build_state_t* state) {
-  loom_module_value_ordinal_scratch_acquire(state->module);
-  state->value_ordinal_scratch_acquired = true;
-  return loom_liveness_register_region_values(state);
-}
-
-static void loom_liveness_build_state_deinitialize(
-    loom_liveness_build_state_t* state) {
-  if (!state->value_ordinal_scratch_acquired) return;
-  for (iree_host_size_t i = 0; i < state->value_count; ++i) {
-    loom_module_value_ordinal_scratch_clear(state->module, state->value_ids[i]);
-  }
-  loom_module_value_ordinal_scratch_release(state->module);
-  state->value_ordinal_scratch_acquired = false;
-}
-
 //===----------------------------------------------------------------------===//
 // Local use/def construction
 //===----------------------------------------------------------------------===//
@@ -620,9 +519,8 @@ static iree_status_t loom_liveness_add_block_use(void* user_data,
                                                  loom_value_id_t value_id) {
   loom_liveness_use_def_state_t* state =
       (loom_liveness_use_def_state_t*)user_data;
-  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  IREE_RETURN_IF_ERROR(loom_liveness_value_ordinal(state->build_state, value_id,
-                                                   &value_ordinal));
+  const loom_value_ordinal_t value_ordinal =
+      loom_liveness_value_ordinal(state->build_state, value_id);
   if (!loom_liveness_bitset_test(state->block_state->def, value_ordinal)) {
     loom_liveness_bitset_set(state->block_state->use, value_ordinal);
   }
@@ -637,9 +535,8 @@ static iree_status_t loom_liveness_collect_block_use_def(
       .block_state = block_state,
   };
   for (uint16_t i = 0; i < block->arg_count; ++i) {
-    loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-    IREE_RETURN_IF_ERROR(loom_liveness_value_ordinal(
-        state, loom_block_arg_id(block, i), &value_ordinal));
+    const loom_value_ordinal_t value_ordinal =
+        loom_liveness_value_ordinal(state, loom_block_arg_id(block, i));
     loom_liveness_bitset_set(block_state->def, value_ordinal);
   }
   for (uint16_t i = 0; i < block->arg_count; ++i) {
@@ -652,9 +549,8 @@ static iree_status_t loom_liveness_collect_block_use_def(
   loom_block_for_each_op(block, op) {
     const loom_value_id_t* results = loom_op_const_results(op);
     for (uint16_t i = 0; i < op->result_count; ++i) {
-      loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-      IREE_RETURN_IF_ERROR(
-          loom_liveness_value_ordinal(state, results[i], &value_ordinal));
+      const loom_value_ordinal_t value_ordinal =
+          loom_liveness_value_ordinal(state, results[i]);
       loom_liveness_bitset_set(block_state->def, value_ordinal);
     }
     IREE_RETURN_IF_ERROR(loom_liveness_for_each_op_use(
@@ -991,9 +887,8 @@ static iree_status_t loom_liveness_add_use_to_bitset(void* user_data,
                                                      loom_value_id_t value_id) {
   loom_liveness_add_to_bitset_state_t* state =
       (loom_liveness_add_to_bitset_state_t*)user_data;
-  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  IREE_RETURN_IF_ERROR(loom_liveness_value_ordinal(state->build_state, value_id,
-                                                   &value_ordinal));
+  const loom_value_ordinal_t value_ordinal =
+      loom_liveness_value_ordinal(state->build_state, value_id);
   loom_liveness_bitset_set(*state->bitset, value_ordinal);
   return iree_ok_status();
 }
@@ -1031,9 +926,8 @@ static iree_status_t loom_liveness_compute_pressure(
         const loom_value_id_t* results = loom_op_const_results(op);
         for (uint16_t result_index = 0; result_index < op->result_count;
              ++result_index) {
-          loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-          IREE_RETURN_IF_ERROR(loom_liveness_value_ordinal(
-              state, results[result_index], &value_ordinal));
+          const loom_value_ordinal_t value_ordinal =
+              loom_liveness_value_ordinal(state, results[result_index]);
           loom_liveness_bitset_reset(live, value_ordinal);
         }
         loom_liveness_add_to_bitset_state_t add_state = {
@@ -1057,9 +951,8 @@ static iree_status_t loom_liveness_compute_pressure(
       const loom_value_id_t* results = loom_op_const_results(op);
       for (uint16_t result_index = 0; result_index < op->result_count;
            ++result_index) {
-        loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-        IREE_RETURN_IF_ERROR(loom_liveness_value_ordinal(
-            state, results[result_index], &value_ordinal));
+        const loom_value_ordinal_t value_ordinal =
+            loom_liveness_value_ordinal(state, results[result_index]);
         loom_liveness_bitset_reset(live, value_ordinal);
       }
       loom_liveness_add_to_bitset_state_t add_state = {
@@ -1208,17 +1101,41 @@ iree_status_t loom_liveness_analyze_region_with_order(
   IREE_ASSERT_ARGUMENT(out_analysis);
   memset(out_analysis, 0, sizeof(*out_analysis));
 
+  loom_local_value_domain_t value_domain = {0};
+  iree_status_t status = loom_local_value_domain_initialize_for_region(
+      module, region, arena, &value_domain);
+  if (iree_status_is_ok(status)) {
+    status = loom_liveness_analyze_local_value_domain(&value_domain, order,
+                                                      arena, out_analysis);
+  }
+  loom_local_value_domain_deinitialize(&value_domain);
+  return status;
+}
+
+iree_status_t loom_liveness_analyze_local_value_domain(
+    const loom_local_value_domain_t* value_domain, loom_liveness_order_t order,
+    iree_arena_allocator_t* arena, loom_liveness_analysis_t* out_analysis) {
+  IREE_ASSERT_ARGUMENT(value_domain);
+  IREE_ASSERT_ARGUMENT(value_domain->module);
+  IREE_ASSERT_ARGUMENT(value_domain->region);
+  IREE_ASSERT(loom_local_value_domain_is_installed(value_domain));
+  IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(out_analysis);
+  memset(out_analysis, 0, sizeof(*out_analysis));
+  loom_module_t* module = value_domain->module;
+  const loom_region_t* region = value_domain->region;
+
   loom_liveness_build_state_t state = {
       .module = module,
       .region = region,
       .order = order,
       .arena = arena,
+      .value_domain = value_domain,
+      .value_ids = value_domain->value_ids,
+      .value_count = value_domain->value_count,
   };
 
   iree_status_t status = loom_liveness_validate_order(region, order);
-  if (iree_status_is_ok(status)) {
-    status = loom_liveness_build_state_initialize_values(&state);
-  }
   if (iree_status_is_ok(status)) {
     state.word_count = loom_liveness_word_count(state.value_count);
     status = loom_liveness_allocate_block_states(&state, region->block_count);
@@ -1302,7 +1219,6 @@ iree_status_t loom_liveness_analyze_region_with_order(
     };
   }
 
-  loom_liveness_build_state_deinitialize(&state);
   return status;
 }
 

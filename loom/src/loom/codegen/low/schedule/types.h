@@ -42,6 +42,15 @@ typedef enum loom_low_schedule_node_kind_e {
   LOOM_LOW_SCHEDULE_NODE_TERMINATOR = 2,
 } loom_low_schedule_node_kind_t;
 
+enum loom_low_schedule_node_flag_bits_e {
+  // Value ordinals are stored in overflow_value_ordinals instead of
+  // inline_value_ordinals.
+  LOOM_LOW_SCHEDULE_NODE_FLAG_VALUE_ORDINALS_OVERFLOW = 1u << 0,
+};
+typedef uint16_t loom_low_schedule_node_flags_t;
+
+#define LOOM_LOW_SCHEDULE_NODE_INLINE_VALUE_ORDINAL_CAPACITY 4
+
 typedef enum loom_low_schedule_dependency_kind_e {
   // Unknown or uninitialized dependency kind.
   LOOM_LOW_SCHEDULE_DEPENDENCY_UNKNOWN = 0,
@@ -159,7 +168,65 @@ typedef struct loom_low_schedule_node_t {
   uint16_t hazard_count;
   // Number of descriptor effect rows.
   uint16_t effect_count;
+  // Number of operand value ordinals.
+  uint16_t operand_count;
+  // Number of result value ordinals.
+  uint16_t result_count;
+  // Per-node storage flags.
+  loom_low_schedule_node_flags_t flags;
+  // Operand ordinals followed by result ordinals. Small nodes store ordinals
+  // inline to avoid an extra pointer chase; large nodes store one contiguous
+  // arena allocation through overflow_value_ordinals.
+  union {
+    // Inline operand/result ordinals for the common low-op arity.
+    loom_value_ordinal_t inline_value_ordinals
+        [LOOM_LOW_SCHEDULE_NODE_INLINE_VALUE_ORDINAL_CAPACITY];
+    // Arena-owned overflow operand/result ordinal payload.
+    loom_value_ordinal_t* overflow_value_ordinals;
+  } value_ordinals;
 } loom_low_schedule_node_t;
+
+static inline loom_value_ordinal_t* loom_low_schedule_node_value_ordinals(
+    loom_low_schedule_node_t* node) {
+  if (iree_any_bit_set(node->flags,
+                       LOOM_LOW_SCHEDULE_NODE_FLAG_VALUE_ORDINALS_OVERFLOW)) {
+    return node->value_ordinals.overflow_value_ordinals;
+  }
+  return node->value_ordinals.inline_value_ordinals;
+}
+
+static inline const loom_value_ordinal_t*
+loom_low_schedule_node_const_value_ordinals(
+    const loom_low_schedule_node_t* node) {
+  if (iree_any_bit_set(node->flags,
+                       LOOM_LOW_SCHEDULE_NODE_FLAG_VALUE_ORDINALS_OVERFLOW)) {
+    return node->value_ordinals.overflow_value_ordinals;
+  }
+  return node->value_ordinals.inline_value_ordinals;
+}
+
+static inline loom_value_ordinal_t* loom_low_schedule_node_operand_ordinals(
+    loom_low_schedule_node_t* node) {
+  return loom_low_schedule_node_value_ordinals(node);
+}
+
+static inline const loom_value_ordinal_t*
+loom_low_schedule_node_const_operand_ordinals(
+    const loom_low_schedule_node_t* node) {
+  return loom_low_schedule_node_const_value_ordinals(node);
+}
+
+static inline loom_value_ordinal_t* loom_low_schedule_node_result_ordinals(
+    loom_low_schedule_node_t* node) {
+  return loom_low_schedule_node_value_ordinals(node) + node->operand_count;
+}
+
+static inline const loom_value_ordinal_t*
+loom_low_schedule_node_const_result_ordinals(
+    const loom_low_schedule_node_t* node) {
+  return loom_low_schedule_node_const_value_ordinals(node) +
+         node->operand_count;
+}
 
 // One dependency edge between two schedule nodes.
 typedef struct loom_low_schedule_dependency_t {
