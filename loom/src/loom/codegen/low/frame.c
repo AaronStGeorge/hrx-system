@@ -118,27 +118,8 @@ iree_status_t loom_low_emission_frame_build(
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(low_func_op);
   IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(options->descriptor_registry);
   IREE_ASSERT_ARGUMENT(arena);
   IREE_ASSERT_ARGUMENT(out_frame);
-  if (options->allocation_budget_count > 0 && !options->allocation_budgets) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "low allocation budgets are required when allocation_budget_count is "
-        "non-zero");
-  }
-  if (options->allocation_fixed_value_count > 0 &&
-      !options->allocation_fixed_values) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low allocation fixed values are required when "
-                            "allocation_fixed_value_count is non-zero");
-  }
-  if (options->allocation_reserved_range_count > 0 &&
-      !options->allocation_reserved_ranges) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low allocation reserved ranges are required when "
-                            "allocation_reserved_range_count is non-zero");
-  }
   if (!loom_low_function_def_isa(low_func_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected low.func.def or low.kernel.def");

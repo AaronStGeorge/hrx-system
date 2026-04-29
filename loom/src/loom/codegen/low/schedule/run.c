@@ -1332,7 +1332,7 @@ iree_status_t loom_low_schedule_function(
     loom_low_schedule_table_t* out_table) {
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(low_func_op);
-  IREE_ASSERT_ARGUMENT(options && options->descriptor_registry);
+  IREE_ASSERT_ARGUMENT(options);
   IREE_ASSERT_ARGUMENT(arena);
   IREE_ASSERT_ARGUMENT(out_table);
   if (!loom_low_function_def_isa(low_func_op)) {
@@ -1343,12 +1343,6 @@ iree_status_t loom_low_schedule_function(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unknown low schedule strategy %d",
                             (int)options->strategy);
-  }
-  if (options->pressure_cliffs.count != 0 && !options->pressure_cliffs.values) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "low schedule pressure cliff values are required when count is "
-        "non-zero");
   }
   *out_table = (loom_low_schedule_table_t){0};
 

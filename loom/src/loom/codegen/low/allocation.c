@@ -601,28 +601,6 @@ static iree_status_t loom_low_allocation_validate_physical_bounds(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_allocation_validate_option_shapes(
-    const loom_low_allocation_options_t* options) {
-  if (options->budget_count > 0 && !options->budgets) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "low allocation budgets are required when budget_count is non-zero");
-  }
-  if (options->fixed_value_count > 0 && !options->fixed_values) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "low allocation fixed values are required when fixed_value_count is "
-        "non-zero");
-  }
-  if (options->reserved_range_count > 0 && !options->reserved_ranges) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "low allocation reserved ranges are required when reserved_range_count "
-        "is non-zero");
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_allocation_resolve_reserved_ranges(
     loom_low_allocation_build_state_t* state) {
   if (state->options->reserved_range_count == 0) {
@@ -1149,7 +1127,6 @@ static bool loom_low_allocation_assignment_is_coalescable(
 static bool loom_low_allocation_value_ordinal_for_value(
     const loom_low_allocation_build_state_t* state, loom_value_id_t value_id,
     loom_value_ordinal_t* out_value_ordinal) {
-  IREE_ASSERT_ARGUMENT(state->value_domain);
   IREE_ASSERT(loom_local_value_domain_is_acquired(state->value_domain));
   const loom_value_ordinal_t value_ordinal =
       loom_module_value_ordinal_scratch_lookup(state->module, value_id);
@@ -3352,14 +3329,6 @@ iree_status_t loom_low_allocation_acquire_value_scratch(
       .value_ids = table->liveness.value_ids,
       .value_count = table->liveness.value_count,
   };
-  if (!table->module) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation table module is required");
-  }
-  if (table->liveness.value_count > 0 && !table->liveness.value_ids) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation table liveness values are required");
-  }
   if (table->liveness.value_count >= LOOM_VALUE_ORDINAL_INVALID) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "allocation value count exceeds local ordinal "
@@ -3440,7 +3409,6 @@ loom_low_allocation_try_map_active_value_assignment(
     const loom_low_allocation_table_t* table, loom_value_id_t value_id,
     uint32_t* out_assignment_index) {
   IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(table->module);
   const loom_value_ordinal_t value_ordinal =
       loom_module_value_ordinal_scratch_lookup(table->module, value_id);
   if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID) {
@@ -3490,7 +3458,6 @@ iree_status_t loom_low_allocation_assignment_register_class_name(
     const loom_low_allocation_assignment_t* assignment,
     iree_string_view_t* out_register_class_name) {
   IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(table && table->target.descriptor_set);
   IREE_ASSERT_ARGUMENT(assignment);
   IREE_ASSERT_ARGUMENT(out_register_class_name);
   *out_register_class_name = iree_string_view_empty();
@@ -3617,14 +3584,13 @@ iree_status_t loom_low_allocate_function(
     loom_low_allocation_table_t* out_table) {
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(low_func_op);
-  IREE_ASSERT_ARGUMENT(options && options->descriptor_registry);
+  IREE_ASSERT_ARGUMENT(options);
   IREE_ASSERT_ARGUMENT(arena);
   IREE_ASSERT_ARGUMENT(out_table);
   if (!loom_low_function_def_isa(low_func_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected low.func.def or low.kernel.def");
   }
-  IREE_RETURN_IF_ERROR(loom_low_allocation_validate_option_shapes(options));
   *out_table = (loom_low_allocation_table_t){0};
 
   loom_low_allocation_build_state_t state = {
