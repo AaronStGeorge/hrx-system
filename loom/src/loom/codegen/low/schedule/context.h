@@ -147,8 +147,8 @@ typedef struct loom_low_schedule_build_state_t {
   iree_host_size_t effect_read_capacity;
   // Number of rows in |memory_access_records|.
   iree_host_size_t memory_access_record_count;
-  // Next memory access record expected by dependency construction.
-  iree_host_size_t memory_access_record_cursor;
+  // Next memory access record to bind while walking function-order nodes.
+  iree_host_size_t memory_access_record_bind_index;
   // Allocated resource-use record capacity.
   iree_host_size_t resource_use_capacity;
   // Allocated effect-use record capacity.

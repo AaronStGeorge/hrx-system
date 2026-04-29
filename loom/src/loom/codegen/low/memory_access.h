@@ -88,10 +88,39 @@ typedef struct loom_low_memory_access_summary_t {
   const loom_low_byte_interval_t* byte_interval;
 } loom_low_memory_access_summary_t;
 
+typedef struct loom_low_memory_access_position_t {
+  // Region index of the low block when this row was recorded.
+  uint16_t block_index;
+  // Block-local ordinal of the low op when this row was recorded.
+  uint64_t block_ordinal;
+} loom_low_memory_access_position_t;
+
+// Compares two low op positions by function order. Returns <0 when |left|
+// comes before |right|, >0 when it comes after, and 0 for the same block-index
+// and block-ordinal key.
+static inline int loom_low_memory_access_position_compare_order(
+    const loom_low_memory_access_position_t* left,
+    const loom_low_memory_access_position_t* right) {
+  if (left->block_index < right->block_index) {
+    return -1;
+  }
+  if (left->block_index > right->block_index) {
+    return 1;
+  }
+  if (left->block_ordinal < right->block_ordinal) {
+    return -1;
+  }
+  if (left->block_ordinal > right->block_ordinal) {
+    return 1;
+  }
+  return 0;
+}
+
 typedef struct loom_low_memory_access_record_t {
-  // Low operation whose descriptor memory effect is refined by |summary|.
-  const loom_op_t* op;
-  // Source-derived memory access summary for |op|.
+  // Low function position whose descriptor memory effect is refined by
+  // |summary|.
+  loom_low_memory_access_position_t position;
+  // Source-derived memory access summary for the recorded low op position.
   loom_low_memory_access_summary_t summary;
   // Inline interval storage borrowed by |summary| when interval precision is
   // available.
@@ -101,8 +130,7 @@ typedef struct loom_low_memory_access_record_t {
 typedef struct loom_low_memory_access_table_t {
   // Low function that owns the recorded low operations.
   const loom_op_t* function_op;
-  // Source/emission-order memory access records, or NULL when empty. Records
-  // stay valid while recorded ops survive and keep their relative order.
+  // Function-order memory access records, or NULL when empty.
   const loom_low_memory_access_record_t* values;
   // Number of rows in |values|.
   iree_host_size_t count;

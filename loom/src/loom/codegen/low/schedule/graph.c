@@ -104,6 +104,37 @@ static iree_status_t loom_low_schedule_resolve_descriptor(
   return iree_ok_status();
 }
 
+static int loom_low_schedule_compare_memory_access_position(
+    const loom_low_memory_access_position_t* position, uint16_t block_index,
+    uint64_t block_ordinal) {
+  const loom_low_memory_access_position_t key = {
+      .block_index = block_index,
+      .block_ordinal = block_ordinal,
+  };
+  return loom_low_memory_access_position_compare_order(position, &key);
+}
+
+static void loom_low_schedule_bind_memory_access_record(
+    loom_low_schedule_build_state_t* state, uint32_t node_index,
+    uint16_t block_index, const loom_op_t* op) {
+  while (state->memory_access_record_bind_index <
+         state->memory_access_record_count) {
+    const loom_low_memory_access_record_t* record =
+        &state->memory_access_records[state->memory_access_record_bind_index];
+    const int compare = loom_low_schedule_compare_memory_access_position(
+        &record->position, block_index, op->block_ordinal);
+    if (compare > 0) {
+      return;
+    }
+    if (compare == 0) {
+      state->nodes[node_index].memory_access_record_index =
+          (uint32_t)state->memory_access_record_bind_index++;
+      return;
+    }
+    ++state->memory_access_record_bind_index;
+  }
+}
+
 static bool loom_low_schedule_dependency_equal(
     const loom_low_schedule_dependency_t* dependency, uint32_t producer_node,
     uint32_t consumer_node, loom_low_schedule_dependency_kind_t kind,
@@ -365,6 +396,8 @@ iree_status_t loom_low_schedule_fill_nodes(
       const loom_low_descriptor_t* descriptor = NULL;
       IREE_RETURN_IF_ERROR(
           loom_low_schedule_resolve_descriptor(state, op, node, &descriptor));
+      loom_low_schedule_bind_memory_access_record(state, next_node_index,
+                                                  block_index, op);
 
       const loom_value_id_t* results = loom_op_const_results(op);
       for (uint16_t result_index = 0; result_index < op->result_count;
@@ -562,35 +595,23 @@ static uint16_t loom_low_schedule_descriptor_dependency_memory_effect_count(
 }
 
 static const loom_low_memory_access_summary_t*
-loom_low_schedule_take_memory_access_summary(
+loom_low_schedule_lookup_memory_access_summary(
     loom_low_schedule_build_state_t* state, uint32_t node_index,
     const loom_low_descriptor_t* descriptor) {
-  while (state->memory_access_record_cursor <
-         state->memory_access_record_count) {
-    const loom_low_memory_access_record_t* record =
-        &state->memory_access_records[state->memory_access_record_cursor];
-    if (!iree_any_bit_set(record->op->flags, LOOM_OP_FLAG_DEAD)) {
-      break;
-    }
-    ++state->memory_access_record_cursor;
-  }
-  if (state->memory_access_record_cursor >= state->memory_access_record_count) {
+  const uint32_t record_index =
+      state->nodes[node_index].memory_access_record_index;
+  if (record_index == LOOM_LOW_SCHEDULE_MEMORY_ACCESS_RECORD_NONE) {
     return NULL;
   }
-
-  const loom_low_schedule_node_t* node = &state->nodes[node_index];
-  const loom_low_memory_access_record_t* record =
-      &state->memory_access_records[state->memory_access_record_cursor];
-  if (record->op != node->op) {
+  if (record_index >= state->memory_access_record_count) {
     return NULL;
   }
-  state->nodes[node_index].memory_access_record_index =
-      (uint32_t)state->memory_access_record_cursor;
-  ++state->memory_access_record_cursor;
   if (loom_low_schedule_descriptor_dependency_memory_effect_count(
           state->target.descriptor_set, descriptor) != 1) {
     return NULL;
   }
+  const loom_low_memory_access_record_t* record =
+      &state->memory_access_records[record_index];
   return &record->summary;
 }
 
@@ -607,8 +628,8 @@ static iree_status_t loom_low_schedule_note_descriptor_effects(
                           : iree_ok_status();
   }
   const loom_low_memory_access_summary_t* source_summary =
-      loom_low_schedule_take_memory_access_summary(state, node_index,
-                                                   descriptor);
+      loom_low_schedule_lookup_memory_access_summary(state, node_index,
+                                                     descriptor);
   const loom_low_descriptor_set_t* descriptor_set =
       state->target.descriptor_set;
   for (uint16_t i = 0; i < descriptor->effect_count; ++i) {

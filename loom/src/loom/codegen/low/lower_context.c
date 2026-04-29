@@ -383,8 +383,19 @@ iree_status_t loom_low_lower_record_memory_access_summary(
   loom_low_memory_access_record_t* record =
       &context->lowering.memory_access_records
            [context->lowering.memory_access_record_count++];
+  loom_region_t* low_body = loom_low_lower_context_low_body(context);
+  uint16_t block_index = LOOM_BLOCK_REGION_INDEX_INVALID;
+  IREE_ASSERT(low_body != NULL);
+  const bool found_block_index =
+      loom_region_try_block_index(low_body, low_op->parent_block, &block_index);
+  IREE_ASSERT(found_block_index);
+  (void)found_block_index;
   *record = (loom_low_memory_access_record_t){
-      .op = low_op,
+      .position =
+          {
+              .block_index = block_index,
+              .block_ordinal = low_op->block_ordinal,
+          },
       .summary = *summary,
   };
   if (summary->byte_interval != NULL) {

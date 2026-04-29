@@ -81,6 +81,33 @@ typedef struct loom_low_schedule_candidate_score_t {
   uint32_t source_ordinal;
 } loom_low_schedule_candidate_score_t;
 
+static iree_status_t loom_low_schedule_verify_memory_access_table(
+    loom_low_memory_access_table_t table, const loom_op_t* low_func_op,
+    const loom_region_t* body) {
+  IREE_ASSERT(body != NULL);
+  if (table.count == 0) {
+    return iree_ok_status();
+  }
+  if (!table.values || table.function_op != low_func_op ||
+      table.count > UINT32_MAX) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low schedule memory access table must match the scheduled function");
+  }
+  for (iree_host_size_t i = 0; i < table.count; ++i) {
+    const loom_low_memory_access_record_t* record = &table.values[i];
+    IREE_ASSERT(record->position.block_index !=
+                LOOM_BLOCK_REGION_INDEX_INVALID);
+    IREE_ASSERT(record->position.block_index < body->block_count);
+    IREE_ASSERT(record->position.block_ordinal != 0);
+    if (i != 0) {
+      IREE_ASSERT(loom_low_memory_access_position_compare_order(
+                      &table.values[i - 1].position, &record->position) < 0);
+    }
+  }
+  return iree_ok_status();
+}
+
 typedef struct loom_low_schedule_ready_heap_t {
   // Ready node indices in a min-heap ordered by source ordinal.
   uint32_t* node_indices;
@@ -1354,14 +1381,6 @@ iree_status_t loom_low_schedule_function(
                             "unknown low schedule strategy %d",
                             (int)options->strategy);
   }
-  if (options->memory_access_table.count != 0 &&
-      (!options->memory_access_table.values ||
-       options->memory_access_table.function_op != low_func_op ||
-       options->memory_access_table.count > UINT32_MAX)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "low schedule memory access table must match the scheduled function");
-  }
   if (options->pressure_cliffs.count != 0 && !options->pressure_cliffs.values) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -1377,13 +1396,12 @@ iree_status_t loom_low_schedule_function(
       .function_op = low_func_op,
       .body = loom_low_function_body((loom_op_t*)low_func_op),
   };
+  IREE_ASSERT(state.body != NULL);
+  IREE_RETURN_IF_ERROR(loom_low_schedule_verify_memory_access_table(
+      options->memory_access_table, low_func_op, state.body));
   if (options->memory_access_table.function_op == low_func_op) {
     state.memory_access_records = options->memory_access_table.values;
     state.memory_access_record_count = options->memory_access_table.count;
-  }
-  if (!state.body) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low function body is required");
   }
   IREE_RETURN_IF_ERROR(loom_low_descriptor_registry_verify_requirements(
       options->descriptor_registry,
