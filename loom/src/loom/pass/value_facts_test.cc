@@ -56,7 +56,7 @@ TEST_F(PassValueFactsTest, FunctionScopeComputesAndReusesCurrentFunction) {
   loom_pass_value_fact_owner_t owner = {};
   loom_pass_value_fact_owner_initialize(block_pool(), &owner);
 
-  const loom_value_fact_table_t* facts = nullptr;
+  loom_value_fact_table_t* facts = nullptr;
   IREE_ASSERT_OK(loom_pass_value_fact_owner_acquire(
       &owner, module, loom_pass_value_fact_scope_function(first), &facts));
   ASSERT_NE(facts, nullptr);
@@ -65,14 +65,14 @@ TEST_F(PassValueFactsTest, FunctionScopeComputesAndReusesCurrentFunction) {
       loom_value_fact_table_lookup(facts, second_value)));
   iree_host_size_t touched_count = facts->touched_count;
 
-  const loom_value_fact_table_t* reused_facts = nullptr;
+  loom_value_fact_table_t* reused_facts = nullptr;
   IREE_ASSERT_OK(loom_pass_value_fact_owner_acquire(
       &owner, module, loom_pass_value_fact_scope_function(first),
       &reused_facts));
   EXPECT_EQ(reused_facts, facts);
   EXPECT_EQ(reused_facts->touched_count, touched_count);
 
-  const loom_value_fact_table_t* second_facts = nullptr;
+  loom_value_fact_table_t* second_facts = nullptr;
   IREE_ASSERT_OK(loom_pass_value_fact_owner_acquire(
       &owner, module, loom_pass_value_fact_scope_function(second),
       &second_facts));
@@ -104,7 +104,7 @@ TEST_F(PassValueFactsTest, ModuleScopeComputesAllFunctionsExplicitly) {
   loom_pass_value_fact_owner_t owner = {};
   loom_pass_value_fact_owner_initialize(block_pool(), &owner);
 
-  const loom_value_fact_table_t* facts = nullptr;
+  loom_value_fact_table_t* facts = nullptr;
   IREE_ASSERT_OK(loom_pass_value_fact_owner_acquire(
       &owner, module, loom_pass_value_fact_scope_module(), &facts));
   ASSERT_NE(facts, nullptr);
@@ -128,7 +128,7 @@ TEST_F(PassValueFactsTest, InvalidateClearsActiveScopeWithoutLosingStorage) {
   loom_pass_value_fact_owner_t owner = {};
   loom_pass_value_fact_owner_initialize(block_pool(), &owner);
 
-  const loom_value_fact_table_t* facts = nullptr;
+  loom_value_fact_table_t* facts = nullptr;
   IREE_ASSERT_OK(loom_pass_value_fact_owner_acquire(
       &owner, module, loom_pass_value_fact_scope_function(function), &facts));
   ASSERT_NE(facts, nullptr);

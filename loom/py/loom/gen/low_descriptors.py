@@ -1098,7 +1098,7 @@ def _emit_string_table(compiled: _CompiledDescriptorSet, lines: list[str]) -> No
     for entry in pool.entries:
         length = len(entry.value.encode())
         escaped = _c_string_literal(entry.value)
-        lines.append(f'    LOOM_BSTRING_LITERAL("\\x{length:02x}", "{escaped}")')
+        lines.append(f'    LOOM_BSTRING_LITERAL({length}, "{escaped}")')
     lines[-1] += ";"
     lines.append("// clang-format on")
     lines.append("")

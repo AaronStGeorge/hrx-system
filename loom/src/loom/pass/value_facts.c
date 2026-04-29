@@ -105,8 +105,7 @@ void loom_pass_value_fact_owner_invalidate(
 
 iree_status_t loom_pass_value_fact_owner_acquire(
     loom_pass_value_fact_owner_t* owner, loom_module_t* module,
-    loom_pass_value_fact_scope_t scope,
-    const loom_value_fact_table_t** out_table) {
+    loom_pass_value_fact_scope_t scope, loom_value_fact_table_t** out_table) {
   IREE_ASSERT_ARGUMENT(owner);
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(out_table);
@@ -156,8 +155,7 @@ iree_status_t loom_pass_value_fact_owner_acquire(
 
 iree_status_t loom_pass_value_facts_acquire(
     loom_pass_t* pass, loom_module_t* module,
-    loom_pass_value_fact_scope_t scope,
-    const loom_value_fact_table_t** out_table) {
+    loom_pass_value_fact_scope_t scope, loom_value_fact_table_t** out_table) {
   IREE_ASSERT_ARGUMENT(pass);
   IREE_ASSERT_ARGUMENT(pass->value_facts);
   return loom_pass_value_fact_owner_acquire(pass->value_facts, module, scope,

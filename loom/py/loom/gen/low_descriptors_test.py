@@ -49,7 +49,7 @@ def test_generate_ireevm_core_descriptor_set() -> None:
 
     assert "loom_ireevm_core_descriptor_set" in generated.header
     assert "IREE_VM_CORE_REG_CLASS_ID_VM_I32" in generated.header
-    assert 'LOOM_BSTRING_LITERAL("\\x0c", "iree.vm.core")' in generated.source
+    assert 'LOOM_BSTRING_LITERAL(12, "iree.vm.core")' in generated.source
     assert "iree.vm.add.i32" in generated.source
     assert "fingerprint" not in generated.source
     assert "fingerprint" not in generated.manifest_json
@@ -156,7 +156,7 @@ def test_generate_wasm_core_simd128_descriptor_set() -> None:
 
     assert "loom_wasm_core_simd128_descriptor_set" in generated.header
     assert "WASM_CORE_SIMD128_REG_CLASS_ID_WASM_V128" in generated.header
-    assert 'LOOM_BSTRING_LITERAL("\\x11", "wasm.core.simd128")' in generated.source
+    assert 'LOOM_BSTRING_LITERAL(17, "wasm.core.simd128")' in generated.source
     assert "wasm.i32x4.add" in generated.source
     assert "fingerprint" not in generated.source
     assert "fingerprint" not in generated.manifest_json
@@ -178,7 +178,7 @@ def test_generate_x86_avx512_core_descriptor_set() -> None:
     generated = generate_descriptor_set(X86_AVX512_CORE_DESCRIPTOR_SET)
 
     assert "loom_x86_avx512_core_descriptor_set" in generated.header
-    assert 'LOOM_BSTRING_LITERAL("\\x0f", "x86.avx512.core")' in generated.source
+    assert 'LOOM_BSTRING_LITERAL(15, "x86.avx512.core")' in generated.source
     assert "x86.avx512.vpaddd.zmm" in generated.source
     assert "x86.avx512.vpdpbusd.zmm" in generated.source
     assert "x86.avx512.vdpbf16ps.zmm" in generated.source
@@ -221,7 +221,7 @@ def test_generate_x86_packed_dot_descriptor_set() -> None:
 
     assert "loom_x86_packed_dot_core_descriptor_set" in generated.header
     assert "X86_PACKED_DOT_CORE_REG_CLASS_ID_X86_XMM" in generated.header
-    assert 'LOOM_BSTRING_LITERAL("\\x13", "x86.packed_dot.core")' in generated.source
+    assert 'LOOM_BSTRING_LITERAL(19, "x86.packed_dot.core")' in generated.source
     assert "x86.avx512_vnni.vpdpbusd.zmm" in generated.source
     assert "x86.avx512_bf16.vdpbf16ps.zmm" in generated.source
     assert "x86.avx_vnni_int8.vpdpbssd.ymm" in generated.source

@@ -102,14 +102,12 @@ void loom_pass_value_fact_owner_invalidate(loom_pass_value_fact_owner_t* owner);
 // deinitialized.
 iree_status_t loom_pass_value_fact_owner_acquire(
     loom_pass_value_fact_owner_t* owner, loom_module_t* module,
-    loom_pass_value_fact_scope_t scope,
-    const loom_value_fact_table_t** out_table);
+    loom_pass_value_fact_scope_t scope, loom_value_fact_table_t** out_table);
 
 // Acquires scoped facts through a pass invocation.
 iree_status_t loom_pass_value_facts_acquire(
     loom_pass_t* pass, loom_module_t* module,
-    loom_pass_value_fact_scope_t scope,
-    const loom_value_fact_table_t** out_table);
+    loom_pass_value_fact_scope_t scope, loom_value_fact_table_t** out_table);
 
 #ifdef __cplusplus
 }  // extern "C"

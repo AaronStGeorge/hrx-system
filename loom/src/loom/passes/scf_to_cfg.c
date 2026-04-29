@@ -14,11 +14,10 @@
 #include "loom/ops/index/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scf/ops.h"
-#include "loom/ops/type_registry.h"
+#include "loom/pass/value_facts.h"
 #include "loom/rewrite/materialize.h"
 #include "loom/rewrite/remap.h"
 #include "loom/rewrite/rewriter.h"
-#include "loom/util/fact_table.h"
 
 //===----------------------------------------------------------------------===//
 // Statistics
@@ -76,7 +75,7 @@ typedef struct loom_scf_to_cfg_state_t {
   // Transient arena reset around each structured-op lowering.
   iree_arena_allocator_t* lowering_arena;
   // Value facts computed before mutation for structured legality checks.
-  loom_value_fact_table_t fact_table;
+  loom_value_fact_table_t* fact_table;
   // Region DFS stack for finding structured control flow.
   loom_scf_to_cfg_region_stack_t region_stack;
 } loom_scf_to_cfg_state_t;
@@ -508,7 +507,7 @@ static iree_status_t loom_scf_to_cfg_lower_for(loom_scf_to_cfg_state_t* state,
   iree_arena_reset(state->lowering_arena);
 
   loom_value_facts_t step_facts =
-      loom_value_fact_table_lookup(&state->fact_table, loom_scf_for_step(op));
+      loom_value_fact_table_lookup(state->fact_table, loom_scf_for_step(op));
   if (loom_value_facts_is_float(step_facts) ||
       !loom_value_facts_is_positive(step_facts)) {
     return loom_scf_to_cfg_fail(
@@ -1008,23 +1007,20 @@ iree_status_t loom_scf_to_cfg_run(loom_pass_t* pass, loom_module_t* module,
   };
   iree_status_t status =
       loom_scf_to_cfg_region_stack_initialize(pass->arena, &state.region_stack);
-  if (iree_status_is_ok(status)) {
-    status = loom_value_fact_table_initialize(&state.fact_table, pass->arena,
-                                              module->values.count);
-  }
-  if (iree_status_is_ok(status)) {
-    loom_type_registry_configure_fact_context(&state.fact_table.context);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_value_fact_table_compute(&state.fact_table, module, function);
-  }
 
   bool changed = true;
   bool any_changed = false;
   while (iree_status_is_ok(status) && changed) {
     changed = false;
+    status = loom_pass_value_facts_acquire(
+        pass, module, loom_pass_value_fact_scope_function(function),
+        &state.fact_table);
+    if (!iree_status_is_ok(status)) break;
     status = loom_scf_to_cfg_process_function_once(&state, function, &changed);
-    any_changed |= changed;
+    if (changed) {
+      any_changed = true;
+      loom_pass_value_fact_owner_invalidate(pass->value_facts);
+    }
   }
 
   if (iree_status_is_ok(status) && any_changed) {

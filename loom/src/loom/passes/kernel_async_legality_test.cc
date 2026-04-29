@@ -19,6 +19,7 @@
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/pass/types.h"
+#include "loom/pass/value_facts.h"
 
 namespace loom {
 namespace {
@@ -117,13 +118,17 @@ class KernelAsyncLegalityTest : public ::testing::Test {
 
     iree_arena_allocator_t pass_arena;
     iree_arena_initialize(&block_pool_, &pass_arena);
+    loom_pass_value_fact_owner_t value_facts = {};
+    loom_pass_value_fact_owner_initialize(&block_pool_, &value_facts);
     loom_pass_t pass = {};
     pass.info = loom_kernel_async_legality_pass_info();
     pass.instance_arena = &pass_arena;
     pass.arena = &pass_arena;
     pass.diagnostic_emitter.fn = CollectDiagnosticEmission;
     pass.diagnostic_emitter.user_data = collector;
+    pass.value_facts = &value_facts;
     status = loom_kernel_async_legality_run(&pass, module, function);
+    loom_pass_value_fact_owner_deinitialize(&value_facts);
     iree_arena_deinitialize(&pass_arena);
     loom_module_free(module);
     return status;

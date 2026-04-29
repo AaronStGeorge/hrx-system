@@ -15,11 +15,10 @@
 #include "loom/ops/cfg/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/special_values.h"
-#include "loom/ops/type_registry.h"
+#include "loom/pass/value_facts.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/util/cfg_graph.h"
 #include "loom/util/dominance.h"
-#include "loom/util/fact_table.h"
 
 //===----------------------------------------------------------------------===//
 // Statistics
@@ -2529,12 +2528,10 @@ iree_status_t loom_cfg_simplify_run(loom_pass_t* pass, loom_module_t* module,
     changed = false;
     iree_arena_reset(&analysis_arena);
 
-    loom_value_fact_table_t fact_table = {0};
-    status = loom_value_fact_table_initialize(&fact_table, &analysis_arena,
-                                              module->values.count);
-    if (!iree_status_is_ok(status)) break;
-    loom_type_registry_configure_fact_context(&fact_table.context);
-    status = loom_value_fact_table_compute(&fact_table, module, function);
+    loom_value_fact_table_t* fact_table = NULL;
+    status = loom_pass_value_facts_acquire(
+        pass, module, loom_pass_value_fact_scope_function(function),
+        &fact_table);
     if (!iree_status_is_ok(status)) break;
 
     status = loom_cfg_simplify_mark_cfg_regions(loom_func_like_body(function),
@@ -2546,11 +2543,14 @@ iree_status_t loom_cfg_simplify_run(loom_pass_t* pass, loom_module_t* module,
         loom_dominance_info_initialize(module, &analysis_arena, &dominance);
     if (!iree_status_is_ok(status)) break;
 
-    state.fact_table = &fact_table;
+    state.fact_table = fact_table;
     state.dominance = &dominance;
     status =
         loom_cfg_simplify_process_function_once(&state, function, &changed);
-    any_changed |= changed;
+    if (changed) {
+      any_changed = true;
+      loom_pass_value_fact_owner_invalidate(pass->value_facts);
+    }
   }
 
   if (iree_status_is_ok(status) && any_changed) {
