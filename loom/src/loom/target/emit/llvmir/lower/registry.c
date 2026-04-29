@@ -241,12 +241,14 @@ static iree_status_t loom_llvmir_lowering_lower_return_type(
 iree_status_t loom_llvmir_lowering_map_value(
     loom_llvmir_lowering_state_t* state, loom_value_id_t source_value_id,
     loom_llvmir_value_id_t target_value_id) {
-  if (source_value_id >= state->value_map_count) {
+  if (source_value_id >= state->value_count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "source value id %u is out of range",
                             (unsigned)source_value_id);
   }
-  state->value_map[source_value_id] = target_value_id;
+  state->values[source_value_id].target_value_id = target_value_id;
+  state->values[source_value_id].pointer_address_space = UINT32_MAX;
+  state->values[source_value_id].pointer_alignment = 0;
   return iree_ok_status();
 }
 
@@ -256,20 +258,21 @@ iree_status_t loom_llvmir_lowering_map_pointer_value(
     uint64_t minimum_alignment) {
   IREE_RETURN_IF_ERROR(
       loom_llvmir_lowering_map_value(state, source_value_id, target_value_id));
-  state->value_pointer_address_spaces[source_value_id] = address_space;
-  state->value_pointer_alignments[source_value_id] = minimum_alignment;
+  state->values[source_value_id].pointer_address_space = address_space;
+  state->values[source_value_id].pointer_alignment = minimum_alignment;
   return iree_ok_status();
 }
 
 iree_status_t loom_llvmir_lowering_lookup_value(
     const loom_llvmir_lowering_state_t* state, loom_value_id_t source_value_id,
     loom_llvmir_value_id_t* out_target_value_id) {
-  if (source_value_id >= state->value_map_count) {
+  if (source_value_id >= state->value_count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "source value id %u is out of range",
                             (unsigned)source_value_id);
   }
-  loom_llvmir_value_id_t target_value_id = state->value_map[source_value_id];
+  loom_llvmir_value_id_t target_value_id =
+      state->values[source_value_id].target_value_id;
   if (target_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "source value id %u has not been lowered",
@@ -285,7 +288,7 @@ iree_status_t loom_llvmir_lowering_lookup_pointer(
     uint64_t* out_minimum_alignment) {
   IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lookup_value(state, source_value_id,
                                                          out_target_value_id));
-  uint32_t address_space = state->value_pointer_address_spaces[source_value_id];
+  uint32_t address_space = state->values[source_value_id].pointer_address_space;
   if (address_space == UINT32_MAX) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "source value id %u is not lowered as a pointer",
@@ -293,7 +296,7 @@ iree_status_t loom_llvmir_lowering_lookup_pointer(
   }
   if (out_address_space) *out_address_space = address_space;
   if (out_minimum_alignment) {
-    *out_minimum_alignment = state->value_pointer_alignments[source_value_id];
+    *out_minimum_alignment = state->values[source_value_id].pointer_alignment;
   }
   return iree_ok_status();
 }
@@ -338,14 +341,14 @@ static iree_status_t loom_llvmir_lowering_lower_fact_identity(
     loom_llvmir_value_id_t target_value = LOOM_LLVMIR_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(
         loom_llvmir_lowering_lookup_value(state, operands[i], &target_value));
-    uint32_t address_space = state->value_pointer_address_spaces[operands[i]];
+    uint32_t address_space = state->values[operands[i]].pointer_address_space;
     if (address_space == UINT32_MAX) {
       IREE_RETURN_IF_ERROR(
           loom_llvmir_lowering_map_value(state, results[i], target_value));
     } else {
       IREE_RETURN_IF_ERROR(loom_llvmir_lowering_map_pointer_value(
           state, results[i], target_value, address_space,
-          state->value_pointer_alignments[operands[i]]));
+          state->values[operands[i]].pointer_alignment));
     }
   }
   return iree_ok_status();
@@ -357,13 +360,13 @@ static iree_status_t loom_llvmir_lowering_lower_primary_identity(
   loom_llvmir_value_id_t target_value = LOOM_LLVMIR_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_lowering_lookup_value(state, source_value_id, &target_value));
-  uint32_t address_space = state->value_pointer_address_spaces[source_value_id];
+  uint32_t address_space = state->values[source_value_id].pointer_address_space;
   if (address_space == UINT32_MAX) {
     return loom_llvmir_lowering_map_value(state, result_value_id, target_value);
   }
   return loom_llvmir_lowering_map_pointer_value(
       state, result_value_id, target_value, address_space,
-      state->value_pointer_alignments[source_value_id]);
+      state->values[source_value_id].pointer_alignment);
 }
 
 static loom_llvmir_linkage_t loom_llvmir_lowering_function_linkage(
@@ -1247,26 +1250,17 @@ static iree_status_t loom_llvmir_lowering_lower_body(
   loom_region_t* body = loom_func_like_body(func);
   if (!body) return iree_ok_status();
 
-  iree_arena_block_pool_t fact_block_pool;
-  iree_arena_block_pool_initialize(4096, state->allocator, &fact_block_pool);
-  iree_arena_allocator_t fact_arena;
-  iree_arena_initialize(&fact_block_pool, &fact_arena);
-  loom_value_fact_table_t fact_table;
-  iree_status_t status = loom_value_fact_table_initialize(
-      &fact_table, &fact_arena, state->source_module->values.count);
-  if (iree_status_is_ok(status)) {
-    loom_type_registry_configure_fact_context(&fact_table.context);
-  }
-  if (iree_status_is_ok(status)) {
-    status =
-        loom_value_fact_table_compute(&fact_table, state->source_module, func);
-  }
   const loom_value_fact_table_t* previous_fact_table = state->fact_table;
+  loom_value_fact_table_clear_scope(&state->function_fact_table);
+  iree_arena_reset(&state->fact_transient_arena);
+
+  iree_status_t status = loom_value_fact_table_compute(
+      &state->function_fact_table, state->source_module, func);
   if (iree_status_is_ok(status)) {
-    state->fact_table = &fact_table;
+    state->fact_table = &state->function_fact_table;
     if (iree_any_bit_set(body->flags, LOOM_REGION_INSTANCE_FLAG_CFG)) {
-      status = loom_llvmir_lowering_lower_cfg_body(state, target_function, body,
-                                                   func.op, &fact_arena);
+      status = loom_llvmir_lowering_lower_cfg_body(
+          state, target_function, body, func.op, &state->fact_transient_arena);
     } else if (body->block_count != 1) {
       status = loom_llvmir_lowering_unsupported_op(
           state, func.op,
@@ -1287,8 +1281,8 @@ static iree_status_t loom_llvmir_lowering_lower_body(
     }
     state->fact_table = previous_fact_table;
   }
-  iree_arena_deinitialize(&fact_arena);
-  iree_arena_block_pool_deinitialize(&fact_block_pool);
+  loom_value_fact_table_clear_scope(&state->function_fact_table);
+  iree_arena_reset(&state->fact_transient_arena);
   return status;
 }
 
@@ -1314,7 +1308,7 @@ static iree_status_t loom_llvmir_lowering_state_initialize(
   state->allocator = allocator;
   state->providers = options->providers;
   state->provider_count = options->provider_count;
-  state->value_map_count = source_module->values.count;
+  state->value_count = source_module->values.count;
   state->symbol_function_count = source_module->symbols.count;
   state->kernel_attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
   state->nontemporal_metadata_id = LOOM_LLVMIR_METADATA_ID_INVALID;
@@ -1341,22 +1335,22 @@ static iree_status_t loom_llvmir_lowering_state_initialize(
                                                    &state->target_module));
 
   iree_status_t status = iree_ok_status();
-  if (state->value_map_count > 0) {
-    status = iree_allocator_malloc(
-        allocator, state->value_map_count * sizeof(*state->value_map),
-        (void**)&state->value_map);
+  iree_arena_block_pool_initialize(4096, allocator, &state->fact_block_pool);
+  iree_arena_initialize(&state->fact_block_pool, &state->fact_storage_arena);
+  iree_arena_initialize(&state->fact_block_pool, &state->fact_transient_arena);
+  state->flags |=
+      LOOM_LLVMIR_LOWERING_STATE_FLAG_FUNCTION_FACT_TABLE_INITIALIZED;
+  status = loom_value_fact_table_initialize_with_arenas(
+      &state->function_fact_table, &state->fact_storage_arena,
+      &state->fact_transient_arena, source_module->values.count);
+  if (iree_status_is_ok(status)) {
+    loom_type_registry_configure_fact_context(
+        &state->function_fact_table.context);
   }
-  if (iree_status_is_ok(status) && state->value_map_count > 0) {
-    status = iree_allocator_malloc(
-        allocator,
-        state->value_map_count * sizeof(*state->value_pointer_address_spaces),
-        (void**)&state->value_pointer_address_spaces);
-  }
-  if (iree_status_is_ok(status) && state->value_map_count > 0) {
-    status = iree_allocator_malloc(
-        allocator,
-        state->value_map_count * sizeof(*state->value_pointer_alignments),
-        (void**)&state->value_pointer_alignments);
+  if (iree_status_is_ok(status) && state->value_count > 0) {
+    status = iree_allocator_malloc(allocator,
+                                   state->value_count * sizeof(*state->values),
+                                   (void**)&state->values);
   }
   if (iree_status_is_ok(status) && state->symbol_function_count > 0) {
     status = iree_allocator_malloc(
@@ -1365,10 +1359,12 @@ static iree_status_t loom_llvmir_lowering_state_initialize(
         (void**)&state->symbol_functions);
   }
   if (iree_status_is_ok(status)) {
-    for (iree_host_size_t i = 0; i < state->value_map_count; ++i) {
-      state->value_map[i] = LOOM_LLVMIR_VALUE_ID_INVALID;
-      state->value_pointer_address_spaces[i] = UINT32_MAX;
-      state->value_pointer_alignments[i] = 0;
+    for (iree_host_size_t i = 0; i < state->value_count; ++i) {
+      state->values[i] = (loom_llvmir_lowering_value_state_t){
+          .target_value_id = LOOM_LLVMIR_VALUE_ID_INVALID,
+          .pointer_address_space = UINT32_MAX,
+          .pointer_alignment = 0,
+      };
     }
     for (iree_host_size_t i = 0; i < state->symbol_function_count; ++i) {
       state->symbol_functions[i] = NULL;
@@ -1381,22 +1377,32 @@ static iree_status_t loom_llvmir_lowering_state_initialize(
     }
     iree_allocator_free(state->allocator, state->symbol_functions);
     state->symbol_functions = NULL;
-    iree_allocator_free(state->allocator, state->value_pointer_alignments);
-    state->value_pointer_alignments = NULL;
-    iree_allocator_free(state->allocator, state->value_pointer_address_spaces);
-    state->value_pointer_address_spaces = NULL;
-    iree_allocator_free(state->allocator, state->value_map);
-    state->value_map = NULL;
+    iree_allocator_free(state->allocator, state->values);
+    state->values = NULL;
+    if (iree_any_bit_set(
+            state->flags,
+            LOOM_LLVMIR_LOWERING_STATE_FLAG_FUNCTION_FACT_TABLE_INITIALIZED)) {
+      iree_arena_deinitialize(&state->fact_transient_arena);
+      iree_arena_deinitialize(&state->fact_storage_arena);
+      iree_arena_block_pool_deinitialize(&state->fact_block_pool);
+      state->flags &=
+          ~LOOM_LLVMIR_LOWERING_STATE_FLAG_FUNCTION_FACT_TABLE_INITIALIZED;
+    }
   }
   return status;
 }
 
 static void loom_llvmir_lowering_state_deinitialize(
     loom_llvmir_lowering_state_t* state) {
+  if (iree_any_bit_set(
+          state->flags,
+          LOOM_LLVMIR_LOWERING_STATE_FLAG_FUNCTION_FACT_TABLE_INITIALIZED)) {
+    iree_arena_deinitialize(&state->fact_transient_arena);
+    iree_arena_deinitialize(&state->fact_storage_arena);
+    iree_arena_block_pool_deinitialize(&state->fact_block_pool);
+  }
   iree_allocator_free(state->allocator, state->symbol_functions);
-  iree_allocator_free(state->allocator, state->value_pointer_alignments);
-  iree_allocator_free(state->allocator, state->value_pointer_address_spaces);
-  iree_allocator_free(state->allocator, state->value_map);
+  iree_allocator_free(state->allocator, state->values);
 }
 
 iree_status_t loom_llvmir_lower_module(

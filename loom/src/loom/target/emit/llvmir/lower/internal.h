@@ -11,6 +11,7 @@
 #define LOOM_TARGET_LLVMIR_LOWER_INTERNAL_H_
 
 #include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
 #include "loom/ir/module.h"
 #include "loom/target/emit/llvmir/builder.h"
 #include "loom/target/emit/llvmir/lower.h"
@@ -34,6 +35,20 @@ typedef struct loom_llvmir_lowering_intrinsic_cache_key_t {
 typedef iree_status_t (*loom_llvmir_lowering_provider_intrinsic_decl_fn_t)(
     loom_llvmir_module_t* module, loom_llvmir_function_t** out_function);
 
+typedef enum loom_llvmir_lowering_state_flag_bits_e {
+  LOOM_LLVMIR_LOWERING_STATE_FLAG_FUNCTION_FACT_TABLE_INITIALIZED = 1u << 0,
+} loom_llvmir_lowering_state_flag_bits_t;
+typedef uint32_t loom_llvmir_lowering_state_flags_t;
+
+typedef struct loom_llvmir_lowering_value_state_t {
+  // Target LLVMIR value mapped from the source Loom value.
+  loom_llvmir_value_id_t target_value_id;
+  // Pointer address space, or UINT32_MAX when the value is not a pointer.
+  uint32_t pointer_address_space;
+  // Pointer minimum alignment, or zero when unknown or not a pointer.
+  uint64_t pointer_alignment;
+} loom_llvmir_lowering_value_state_t;
+
 struct loom_llvmir_lowering_state_t {
   // Source Loom module being lowered.
   const loom_module_t* source_module;
@@ -47,18 +62,24 @@ struct loom_llvmir_lowering_state_t {
   const loom_llvmir_lowering_provider_t* const* providers;
   // Number of provider pointers in |providers|.
   iree_host_size_t provider_count;
-  // Map from source Loom value id to target LLVMIR value id.
-  loom_llvmir_value_id_t* value_map;
-  // Number of entries in |value_map|.
-  iree_host_size_t value_map_count;
-  // Per-source-value pointer address space, or UINT32_MAX for non-pointers.
-  uint32_t* value_pointer_address_spaces;
-  // Per-source-value minimum pointer alignment, or zero when unknown.
-  uint64_t* value_pointer_alignments;
+  // Lowering state flags.
+  loom_llvmir_lowering_state_flags_t flags;
+  // Whole-module direct map from source value ID to LLVMIR lowering state.
+  loom_llvmir_lowering_value_state_t* values;
+  // Number of entries in |values|.
+  iree_host_size_t value_count;
   // Map from source module symbol id to target LLVMIR function object.
   loom_llvmir_function_t** symbol_functions;
   // Number of entries in |symbol_functions|.
   iree_host_size_t symbol_function_count;
+  // Block pool for reusable function-scope value-fact storage.
+  iree_arena_block_pool_t fact_block_pool;
+  // Arena for reusable direct-address value-fact entries.
+  iree_arena_allocator_t fact_storage_arena;
+  // Arena for function-scope extension payloads and fact inference scratch.
+  iree_arena_allocator_t fact_transient_arena;
+  // Reusable function-scope fact table populated while lowering a body.
+  loom_value_fact_table_t function_fact_table;
   // Function-local fact table active while lowering a body, or NULL.
   const loom_value_fact_table_t* fact_table;
   // Cached profile kernel attribute group, or INVALID until materialized.
