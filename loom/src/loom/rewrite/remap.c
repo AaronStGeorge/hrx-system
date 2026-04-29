@@ -19,6 +19,111 @@ static bool loom_ir_remap_is_initialized(const loom_ir_remap_t* remap) {
   return remap && remap->source_module && remap->target_module && remap->arena;
 }
 
+static iree_host_size_t loom_ir_remap_value_hash(loom_value_id_t value_id) {
+  uint32_t hash = value_id;
+  hash ^= hash >> 16;
+  hash *= 0x7feb352du;
+  hash ^= hash >> 15;
+  hash *= 0x846ca68bu;
+  hash ^= hash >> 16;
+  return (iree_host_size_t)hash;
+}
+
+static iree_status_t loom_ir_remap_value_map_capacity_for_count(
+    iree_host_size_t count, iree_host_size_t* out_capacity) {
+  iree_host_size_t minimum_capacity = 0;
+  if (!iree_host_size_checked_mul(count, 2, &minimum_capacity)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "remap value map capacity overflow");
+  }
+  minimum_capacity = iree_max(minimum_capacity, 16);
+  iree_host_size_t capacity =
+      iree_host_size_next_power_of_two(minimum_capacity);
+  if (capacity < minimum_capacity) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "remap value map capacity overflow");
+  }
+  *out_capacity = capacity;
+  return iree_ok_status();
+}
+
+static void loom_ir_remap_initialize_value_map_entries(
+    loom_ir_remap_value_entry_t* entries, iree_host_size_t capacity) {
+  for (iree_host_size_t i = 0; i < capacity; ++i) {
+    entries[i] = (loom_ir_remap_value_entry_t){
+        .source_value = LOOM_VALUE_ID_INVALID,
+        .target_value = LOOM_VALUE_ID_INVALID,
+    };
+  }
+}
+
+static loom_ir_remap_value_entry_t* loom_ir_remap_find_value_map_slot(
+    loom_ir_remap_value_entry_t* entries, iree_host_size_t capacity,
+    loom_value_id_t source_value) {
+  IREE_ASSERT(capacity > 0);
+  IREE_ASSERT(iree_host_size_is_power_of_two(capacity));
+  const iree_host_size_t mask = capacity - 1;
+  iree_host_size_t slot =
+      loom_ir_remap_value_hash(source_value) & (iree_host_size_t)mask;
+  while (true) {
+    loom_ir_remap_value_entry_t* entry = &entries[slot];
+    if (entry->source_value == LOOM_VALUE_ID_INVALID ||
+        entry->source_value == source_value) {
+      return entry;
+    }
+    slot = (slot + 1) & mask;
+  }
+}
+
+static const loom_ir_remap_value_entry_t*
+loom_ir_remap_find_const_value_map_slot(const loom_ir_remap_t* remap,
+                                        loom_value_id_t source_value) {
+  if (!remap || remap->value_map_entry_capacity == 0) {
+    return NULL;
+  }
+  const loom_ir_remap_value_entry_t* entry = loom_ir_remap_find_value_map_slot(
+      remap->value_map_entries, remap->value_map_entry_capacity, source_value);
+  return entry->source_value == source_value ? entry : NULL;
+}
+
+static void loom_ir_remap_insert_value_map_entry(
+    loom_ir_remap_value_entry_t* entries, iree_host_size_t capacity,
+    loom_value_id_t source_value, loom_value_id_t target_value) {
+  loom_ir_remap_value_entry_t* entry =
+      loom_ir_remap_find_value_map_slot(entries, capacity, source_value);
+  IREE_ASSERT(entry->source_value == LOOM_VALUE_ID_INVALID);
+  *entry = (loom_ir_remap_value_entry_t){
+      .source_value = source_value,
+      .target_value = target_value,
+  };
+}
+
+static iree_status_t loom_ir_remap_ensure_value_map_capacity(
+    loom_ir_remap_t* remap, iree_host_size_t required_count) {
+  if (required_count <= remap->value_map_entry_capacity / 2) {
+    return iree_ok_status();
+  }
+  iree_host_size_t new_capacity = 0;
+  IREE_RETURN_IF_ERROR(loom_ir_remap_value_map_capacity_for_count(
+      required_count, &new_capacity));
+  loom_ir_remap_value_entry_t* new_entries = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      remap->arena, new_capacity, sizeof(*new_entries), (void**)&new_entries));
+  loom_ir_remap_initialize_value_map_entries(new_entries, new_capacity);
+  for (iree_host_size_t i = 0; i < remap->value_map_entry_capacity; ++i) {
+    const loom_ir_remap_value_entry_t old_entry = remap->value_map_entries[i];
+    if (old_entry.source_value == LOOM_VALUE_ID_INVALID) {
+      continue;
+    }
+    loom_ir_remap_insert_value_map_entry(new_entries, new_capacity,
+                                         old_entry.source_value,
+                                         old_entry.target_value);
+  }
+  remap->value_map_entries = new_entries;
+  remap->value_map_entry_capacity = new_capacity;
+  return iree_ok_status();
+}
+
 iree_status_t loom_ir_remap_initialize(const loom_module_t* source_module,
                                        loom_module_t* target_module,
                                        iree_arena_allocator_t* arena,
@@ -34,19 +139,11 @@ iree_status_t loom_ir_remap_initialize(const loom_module_t* source_module,
       .source_module = source_module,
       .target_module = target_module,
       .arena = arena,
+      .source_value_snapshot_count = source_module->values.count,
       .allow_unmapped_values = options ? options->allow_unmapped_values : false,
       .remap_symbol = options ? options->remap_symbol
                               : loom_ir_remap_symbol_callback_empty(),
   };
-
-  remap.value_map_count = source_module->values.count;
-  if (remap.value_map_count > 0) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, remap.value_map_count,
-                                                   sizeof(loom_value_id_t),
-                                                   (void**)&remap.value_map));
-    memset(remap.value_map, 0xFF,
-           remap.value_map_count * sizeof(loom_value_id_t));
-  }
 
   *out_remap = remap;
   return iree_ok_status();
@@ -65,12 +162,12 @@ iree_status_t loom_ir_remap_map_value(loom_ir_remap_t* remap,
         "source value %%%u out of range (source module has %" PRIhsz " values)",
         (unsigned)source_value, remap->source_module->values.count);
   }
-  if (source_value >= remap->value_map_count) {
+  if (source_value >= remap->source_value_snapshot_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "source value %%%u is not covered by this remap's %" PRIhsz
-        "-entry value map",
-        (unsigned)source_value, remap->value_map_count);
+        "source value %%%u was defined after this remap's %" PRIhsz
+        "-value source snapshot",
+        (unsigned)source_value, remap->source_value_snapshot_count);
   }
   if (target_value >= remap->target_module->values.count) {
     return iree_make_status(
@@ -78,7 +175,26 @@ iree_status_t loom_ir_remap_map_value(loom_ir_remap_t* remap,
         "target value %%%u out of range (target module has %" PRIhsz " values)",
         (unsigned)target_value, remap->target_module->values.count);
   }
-  remap->value_map[source_value] = target_value;
+  loom_ir_remap_value_entry_t* entry = NULL;
+  if (remap->value_map_entry_capacity > 0) {
+    entry = loom_ir_remap_find_value_map_slot(remap->value_map_entries,
+                                              remap->value_map_entry_capacity,
+                                              source_value);
+    if (entry->source_value == source_value) {
+      entry->target_value = target_value;
+      return iree_ok_status();
+    }
+  }
+  IREE_RETURN_IF_ERROR(loom_ir_remap_ensure_value_map_capacity(
+      remap, remap->mapped_value_count + 1));
+  entry = loom_ir_remap_find_value_map_slot(
+      remap->value_map_entries, remap->value_map_entry_capacity, source_value);
+  IREE_ASSERT(entry->source_value == LOOM_VALUE_ID_INVALID);
+  *entry = (loom_ir_remap_value_entry_t){
+      .source_value = source_value,
+      .target_value = target_value,
+  };
+  ++remap->mapped_value_count;
   return iree_ok_status();
 }
 
@@ -101,11 +217,20 @@ iree_status_t loom_ir_remap_map_values(loom_ir_remap_t* remap,
 bool loom_ir_remap_try_lookup_value(const loom_ir_remap_t* remap,
                                     loom_value_id_t source_value,
                                     loom_value_id_t* out_target_value) {
-  if (out_target_value) *out_target_value = LOOM_VALUE_ID_INVALID;
-  if (!remap || source_value >= remap->value_map_count) return false;
-  loom_value_id_t target_value = remap->value_map[source_value];
-  if (target_value == LOOM_VALUE_ID_INVALID) return false;
-  if (out_target_value) *out_target_value = target_value;
+  if (out_target_value) {
+    *out_target_value = LOOM_VALUE_ID_INVALID;
+  }
+  if (!remap || source_value >= remap->source_value_snapshot_count) {
+    return false;
+  }
+  const loom_ir_remap_value_entry_t* entry =
+      loom_ir_remap_find_const_value_map_slot(remap, source_value);
+  if (!entry) {
+    return false;
+  }
+  if (out_target_value) {
+    *out_target_value = entry->target_value;
+  }
   return true;
 }
 
@@ -126,6 +251,13 @@ iree_status_t loom_ir_remap_resolve_value(const loom_ir_remap_t* remap,
         IREE_STATUS_INVALID_ARGUMENT,
         "source value %%%u out of range (source module has %" PRIhsz " values)",
         (unsigned)source_value, remap->source_module->values.count);
+  }
+  if (source_value >= remap->source_value_snapshot_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "source value %%%u was defined after this remap's %" PRIhsz
+        "-value source snapshot",
+        (unsigned)source_value, remap->source_value_snapshot_count);
   }
 
   if (loom_ir_remap_try_lookup_value(remap, source_value, out_target_value)) {

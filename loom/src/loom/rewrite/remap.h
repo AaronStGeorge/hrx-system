@@ -68,7 +68,15 @@ typedef struct loom_ir_remap_options_t {
   loom_ir_remap_symbol_callback_t remap_symbol;
 } loom_ir_remap_options_t;
 
-// Dense SSA remap table for one source module and one target module.
+// Sparse SSA value mapping entry.
+typedef struct loom_ir_remap_value_entry_t {
+  // Source-module value ID being remapped.
+  loom_value_id_t source_value;
+  // Target-module value ID replacing source_value.
+  loom_value_id_t target_value;
+} loom_ir_remap_value_entry_t;
+
+// SSA remap table for one source module and one target module.
 typedef struct loom_ir_remap_t {
   // Module whose IDs appear in source IR payloads.
   const loom_module_t* source_module;
@@ -76,10 +84,14 @@ typedef struct loom_ir_remap_t {
   loom_module_t* target_module;
   // Scratch arena for remap tables and temporary recursive type arrays.
   iree_arena_allocator_t* arena;
-  // Dense source value id -> target value id table.
-  loom_value_id_t* value_map;
-  // Number of source value IDs covered by value_map.
-  iree_host_size_t value_map_count;
+  // Source-module value table count captured at remap initialization.
+  iree_host_size_t source_value_snapshot_count;
+  // Open-addressed source value ID -> target value ID entries.
+  loom_ir_remap_value_entry_t* value_map_entries;
+  // Number of installed SSA value mappings.
+  iree_host_size_t mapped_value_count;
+  // Allocated entry slots in value_map_entries.
+  iree_host_size_t value_map_entry_capacity;
   // Source block pointer table for successor target remapping.
   const loom_block_t** block_map_sources;
   // Target block pointer table parallel to block_map_sources.
@@ -99,9 +111,9 @@ typedef struct loom_ir_remap_t {
 
 // Initializes |out_remap| for source -> target materialization.
 //
-// The remap owns no teardown work; all allocations go through |arena|. The
-// source module is treated as immutable for the lifetime of the remap so the
-// dense value table can be indexed directly by source value ID.
+// The remap owns no teardown work; all allocations go through |arena|. Source
+// values are snapshotted at initialization: values created later in the source
+// module are not part of the source domain for this remap.
 iree_status_t loom_ir_remap_initialize(const loom_module_t* source_module,
                                        loom_module_t* target_module,
                                        iree_arena_allocator_t* arena,
@@ -125,7 +137,7 @@ iree_status_t loom_ir_remap_map_values(loom_ir_remap_t* remap,
                                        iree_host_size_t value_count);
 
 // Looks up a mapped SSA value. Returns false when |source_value| is outside the
-// source table or when no explicit mapping exists.
+// remap source snapshot or when no explicit mapping exists.
 bool loom_ir_remap_try_lookup_value(const loom_ir_remap_t* remap,
                                     loom_value_id_t source_value,
                                     loom_value_id_t* out_target_value);
