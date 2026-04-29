@@ -188,6 +188,9 @@ typedef enum loom_refine_boundaries_replacement_state_e {
 } loom_refine_boundaries_replacement_state_t;
 
 typedef struct loom_refine_boundaries_replacement_entry_t {
+  // Original value ID summarized by this entry.
+  loom_value_id_t old_value;
+
   // Current summary state for this value.
   loom_refine_boundaries_replacement_state_t state;
 
@@ -196,62 +199,147 @@ typedef struct loom_refine_boundaries_replacement_entry_t {
 } loom_refine_boundaries_replacement_entry_t;
 
 typedef struct loom_refine_boundaries_replacement_table_t {
-  // Arena that owns dense replacement entries.
+  // Arena that owns sparse replacement entries.
   iree_arena_allocator_t* arena;
 
-  // Dense entries indexed by original value ID.
+  // Open-addressed replacement entries keyed by original value ID.
   loom_refine_boundaries_replacement_entry_t* entries;
 
-  // Highest initialized value ID plus one.
-  iree_host_size_t count;
+  // Number of installed replacement entries.
+  iree_host_size_t entry_count;
 
   // Allocated entry count.
-  iree_host_size_t capacity;
+  iree_host_size_t entry_capacity;
 } loom_refine_boundaries_replacement_table_t;
+
+static iree_host_size_t loom_refine_boundaries_value_hash(
+    loom_value_id_t value_id) {
+  uint32_t hash = value_id;
+  hash ^= hash >> 16;
+  hash *= 0x7feb352du;
+  hash ^= hash >> 15;
+  hash *= 0x846ca68bu;
+  hash ^= hash >> 16;
+  return (iree_host_size_t)hash;
+}
+
+static iree_status_t loom_refine_boundaries_replacement_capacity_for_count(
+    iree_host_size_t entry_count, iree_host_size_t* out_entry_capacity) {
+  iree_host_size_t minimum_capacity = 0;
+  if (!iree_host_size_checked_mul(entry_count, 2, &minimum_capacity)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "replacement table capacity overflow");
+  }
+  minimum_capacity = iree_max(minimum_capacity, 16);
+  iree_host_size_t entry_capacity =
+      iree_host_size_next_power_of_two(minimum_capacity);
+  if (entry_capacity < minimum_capacity) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "replacement table capacity overflow");
+  }
+  *out_entry_capacity = entry_capacity;
+  return iree_ok_status();
+}
+
+static void loom_refine_boundaries_replacement_entries_initialize(
+    loom_refine_boundaries_replacement_entry_t* entries,
+    iree_host_size_t entry_capacity) {
+  for (iree_host_size_t i = 0; i < entry_capacity; ++i) {
+    entries[i] = (loom_refine_boundaries_replacement_entry_t){
+        .old_value = LOOM_VALUE_ID_INVALID,
+        .state = LOOM_REFINE_BOUNDARIES_REPLACEMENT_NONE,
+        .replacement = LOOM_VALUE_ID_INVALID,
+    };
+  }
+}
+
+static loom_refine_boundaries_replacement_entry_t*
+loom_refine_boundaries_replacement_table_find_slot(
+    loom_refine_boundaries_replacement_entry_t* entries,
+    iree_host_size_t entry_capacity, loom_value_id_t old_value) {
+  IREE_ASSERT(entry_capacity > 0);
+  IREE_ASSERT(iree_host_size_is_power_of_two(entry_capacity));
+  const iree_host_size_t mask = entry_capacity - 1;
+  iree_host_size_t slot = loom_refine_boundaries_value_hash(old_value) & mask;
+  while (true) {
+    loom_refine_boundaries_replacement_entry_t* entry = &entries[slot];
+    if (entry->old_value == LOOM_VALUE_ID_INVALID ||
+        entry->old_value == old_value) {
+      return entry;
+    }
+    slot = (slot + 1) & mask;
+  }
+}
+
+static const loom_refine_boundaries_replacement_entry_t*
+loom_refine_boundaries_replacement_table_find_const_slot(
+    const loom_refine_boundaries_replacement_table_t* table,
+    loom_value_id_t old_value) {
+  if (table->entry_capacity == 0) {
+    return NULL;
+  }
+  const loom_refine_boundaries_replacement_entry_t* entry =
+      loom_refine_boundaries_replacement_table_find_slot(
+          table->entries, table->entry_capacity, old_value);
+  return entry->old_value == old_value ? entry : NULL;
+}
+
+static void loom_refine_boundaries_replacement_table_insert_entry(
+    loom_refine_boundaries_replacement_entry_t* entries,
+    iree_host_size_t entry_capacity,
+    loom_refine_boundaries_replacement_entry_t source_entry) {
+  loom_refine_boundaries_replacement_entry_t* entry =
+      loom_refine_boundaries_replacement_table_find_slot(
+          entries, entry_capacity, source_entry.old_value);
+  IREE_ASSERT(entry->old_value == LOOM_VALUE_ID_INVALID);
+  *entry = source_entry;
+}
 
 static iree_status_t loom_refine_boundaries_replacement_table_ensure_capacity(
     loom_refine_boundaries_replacement_table_t* table,
-    iree_host_size_t minimum_count) {
-  if (minimum_count <= table->capacity) return iree_ok_status();
-
-  iree_host_size_t new_capacity = table->capacity > 0 ? table->capacity : 256;
-  while (new_capacity < minimum_count) {
-    if (new_capacity > SIZE_MAX / 2) {
-      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                              "replacement table capacity overflow");
-    }
-    new_capacity *= 2;
+    iree_host_size_t required_entry_count) {
+  if (required_entry_count <= table->entry_capacity / 2) {
+    return iree_ok_status();
   }
-
+  iree_host_size_t new_entry_capacity = 0;
+  IREE_RETURN_IF_ERROR(loom_refine_boundaries_replacement_capacity_for_count(
+      required_entry_count, &new_entry_capacity));
   loom_refine_boundaries_replacement_entry_t* new_entries = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      table->arena, new_capacity, sizeof(*new_entries), (void**)&new_entries));
-  memset(new_entries, 0, new_capacity * sizeof(*new_entries));
-  if (table->count > 0) {
-    memcpy(new_entries, table->entries, table->count * sizeof(*new_entries));
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(table->arena, new_entry_capacity,
+                                sizeof(*new_entries), (void**)&new_entries));
+  loom_refine_boundaries_replacement_entries_initialize(new_entries,
+                                                        new_entry_capacity);
+  for (iree_host_size_t i = 0; i < table->entry_capacity; ++i) {
+    loom_refine_boundaries_replacement_entry_t entry = table->entries[i];
+    if (entry.old_value == LOOM_VALUE_ID_INVALID) {
+      continue;
+    }
+    loom_refine_boundaries_replacement_table_insert_entry(
+        new_entries, new_entry_capacity, entry);
   }
-
   table->entries = new_entries;
-  table->capacity = new_capacity;
+  table->entry_capacity = new_entry_capacity;
   return iree_ok_status();
 }
 
 static iree_status_t loom_refine_boundaries_replacement_table_initialize(
     loom_refine_boundaries_replacement_table_t* table,
-    iree_arena_allocator_t* arena, iree_host_size_t initial_capacity) {
+    iree_arena_allocator_t* arena) {
   memset(table, 0, sizeof(*table));
   table->arena = arena;
-  return loom_refine_boundaries_replacement_table_ensure_capacity(
-      table, initial_capacity);
+  return iree_ok_status();
 }
 
 static bool loom_refine_boundaries_replacement_table_lookup(
     const loom_refine_boundaries_replacement_table_t* table,
     loom_value_id_t old_value, loom_value_id_t* out_replacement) {
-  if (old_value >= table->count) return false;
   const loom_refine_boundaries_replacement_entry_t* entry =
-      &table->entries[old_value];
-  if (entry->state != LOOM_REFINE_BOUNDARIES_REPLACEMENT_VALUE) return false;
+      loom_refine_boundaries_replacement_table_find_const_slot(table,
+                                                               old_value);
+  if (!entry || entry->state != LOOM_REFINE_BOUNDARIES_REPLACEMENT_VALUE) {
+    return false;
+  }
   *out_replacement = entry->replacement;
   return true;
 }
@@ -265,14 +353,16 @@ static bool loom_refine_boundaries_replacement_table_resolve(
     return false;
   }
 
-  for (iree_host_size_t depth = 0; depth < table->count; ++depth) {
+  for (iree_host_size_t depth = 0; depth < table->entry_count; ++depth) {
     loom_value_id_t next = LOOM_VALUE_ID_INVALID;
     if (!loom_refine_boundaries_replacement_table_lookup(table, replacement,
                                                          &next)) {
       *out_replacement = replacement;
       return true;
     }
-    if (next == replacement || next == old_value) return false;
+    if (next == replacement || next == old_value) {
+      return false;
+    }
     replacement = next;
   }
   return false;
@@ -286,13 +376,27 @@ static iree_status_t loom_refine_boundaries_replacement_table_entry(
   if (old_value == LOOM_VALUE_ID_INVALID) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(loom_refine_boundaries_replacement_table_ensure_capacity(
-      table, (iree_host_size_t)old_value + 1));
-  if (old_value >= table->count) {
-    table->count = (iree_host_size_t)old_value + 1;
+  if (table->entry_capacity > 0) {
+    loom_refine_boundaries_replacement_entry_t* entry =
+        loom_refine_boundaries_replacement_table_find_slot(
+            table->entries, table->entry_capacity, old_value);
+    if (entry->old_value == old_value) {
+      *out_entry = entry;
+      return iree_ok_status();
+    }
   }
-
-  *out_entry = &table->entries[old_value];
+  IREE_RETURN_IF_ERROR(loom_refine_boundaries_replacement_table_ensure_capacity(
+      table, table->entry_count + 1));
+  loom_refine_boundaries_replacement_entry_t* entry =
+      loom_refine_boundaries_replacement_table_find_slot(
+          table->entries, table->entry_capacity, old_value);
+  if (entry->old_value == LOOM_VALUE_ID_INVALID) {
+    entry->old_value = old_value;
+    entry->state = LOOM_REFINE_BOUNDARIES_REPLACEMENT_NONE;
+    entry->replacement = LOOM_VALUE_ID_INVALID;
+    ++table->entry_count;
+  }
+  *out_entry = entry;
   return iree_ok_status();
 }
 
@@ -306,7 +410,9 @@ static iree_status_t loom_refine_boundaries_replacement_table_define(
   loom_refine_boundaries_replacement_entry_t* entry = NULL;
   IREE_RETURN_IF_ERROR(
       loom_refine_boundaries_replacement_table_entry(table, old_value, &entry));
-  if (!entry) return iree_ok_status();
+  if (!entry) {
+    return iree_ok_status();
+  }
   if (entry->state == LOOM_REFINE_BOUNDARIES_REPLACEMENT_NONE) {
     entry->state = LOOM_REFINE_BOUNDARIES_REPLACEMENT_VALUE;
     entry->replacement = replacement;
@@ -328,7 +434,9 @@ static iree_status_t loom_refine_boundaries_replacement_table_block(
   loom_refine_boundaries_replacement_entry_t* entry = NULL;
   IREE_RETURN_IF_ERROR(
       loom_refine_boundaries_replacement_table_entry(table, old_value, &entry));
-  if (!entry) return iree_ok_status();
+  if (!entry) {
+    return iree_ok_status();
+  }
   entry->state = LOOM_REFINE_BOUNDARIES_REPLACEMENT_CONFLICT;
   entry->replacement = LOOM_VALUE_ID_INVALID;
   return iree_ok_status();
@@ -337,16 +445,37 @@ static iree_status_t loom_refine_boundaries_replacement_table_block(
 static bool loom_refine_boundaries_replacement_tables_equal(
     const loom_refine_boundaries_replacement_table_t* lhs,
     const loom_refine_boundaries_replacement_table_t* rhs) {
-  iree_host_size_t count = lhs->count > rhs->count ? lhs->count : rhs->count;
-  for (iree_host_size_t i = 0; i < count; ++i) {
-    loom_value_id_t lhs_replacement = LOOM_VALUE_ID_INVALID;
+  for (iree_host_size_t i = 0; i < lhs->entry_capacity; ++i) {
+    const loom_refine_boundaries_replacement_entry_t* lhs_entry =
+        &lhs->entries[i];
+    if (lhs_entry->old_value == LOOM_VALUE_ID_INVALID ||
+        lhs_entry->state != LOOM_REFINE_BOUNDARIES_REPLACEMENT_VALUE) {
+      continue;
+    }
     loom_value_id_t rhs_replacement = LOOM_VALUE_ID_INVALID;
-    bool lhs_has = loom_refine_boundaries_replacement_table_lookup(
-        lhs, (loom_value_id_t)i, &lhs_replacement);
-    bool rhs_has = loom_refine_boundaries_replacement_table_lookup(
-        rhs, (loom_value_id_t)i, &rhs_replacement);
-    if (lhs_has != rhs_has) return false;
-    if (lhs_has && lhs_replacement != rhs_replacement) return false;
+    if (!loom_refine_boundaries_replacement_table_lookup(
+            rhs, lhs_entry->old_value, &rhs_replacement)) {
+      return false;
+    }
+    if (lhs_entry->replacement != rhs_replacement) {
+      return false;
+    }
+  }
+  for (iree_host_size_t i = 0; i < rhs->entry_capacity; ++i) {
+    const loom_refine_boundaries_replacement_entry_t* rhs_entry =
+        &rhs->entries[i];
+    if (rhs_entry->old_value == LOOM_VALUE_ID_INVALID ||
+        rhs_entry->state != LOOM_REFINE_BOUNDARIES_REPLACEMENT_VALUE) {
+      continue;
+    }
+    loom_value_id_t lhs_replacement = LOOM_VALUE_ID_INVALID;
+    if (!loom_refine_boundaries_replacement_table_lookup(
+            lhs, rhs_entry->old_value, &lhs_replacement)) {
+      return false;
+    }
+    if (rhs_entry->replacement != lhs_replacement) {
+      return false;
+    }
   }
   return true;
 }
@@ -361,13 +490,13 @@ typedef struct loom_refine_boundaries_boundary_state_t {
 
 static iree_status_t loom_refine_boundaries_boundary_state_initialize(
     loom_refine_boundaries_boundary_state_t* state,
-    iree_arena_allocator_t* arena, iree_host_size_t value_capacity) {
+    iree_arena_allocator_t* arena, iree_host_size_t fact_value_capacity) {
   memset(state, 0, sizeof(*state));
-  IREE_RETURN_IF_ERROR(
-      loom_value_fact_table_initialize(&state->facts, arena, value_capacity));
+  IREE_RETURN_IF_ERROR(loom_value_fact_table_initialize(&state->facts, arena,
+                                                        fact_value_capacity));
   loom_type_registry_configure_fact_context(&state->facts.context);
   return loom_refine_boundaries_replacement_table_initialize(
-      &state->replacements, arena, value_capacity);
+      &state->replacements, arena);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2613,7 +2742,7 @@ iree_status_t loom_refine_boundaries_run_with_options(
   uint32_t max_iterations = options && options->max_iterations > 0
                                 ? options->max_iterations
                                 : LOOM_REFINE_BOUNDARIES_DEFAULT_MAX_ITERATIONS;
-  const iree_host_size_t boundary_value_capacity = module->values.capacity;
+  const iree_host_size_t boundary_fact_value_capacity = module->values.capacity;
 
   iree_arena_allocator_t facts_arena_a;
   iree_arena_allocator_t facts_arena_b;
@@ -2632,7 +2761,7 @@ iree_status_t loom_refine_boundaries_run_with_options(
   loom_refine_boundaries_boundary_state_t* next_boundary = &boundary_state_b;
 
   iree_status_t status = loom_refine_boundaries_boundary_state_initialize(
-      current_boundary, current_facts_arena, boundary_value_capacity);
+      current_boundary, current_facts_arena, boundary_fact_value_capacity);
 
   loom_canonicalizer_t canonicalizer = {0};
   bool canonicalizer_initialized = false;
@@ -2655,7 +2784,7 @@ iree_status_t loom_refine_boundaries_run_with_options(
     if (!iree_status_is_ok(status)) break;
 
     status = loom_refine_boundaries_boundary_state_initialize(
-        next_boundary, next_facts_arena, boundary_value_capacity);
+        next_boundary, next_facts_arena, boundary_fact_value_capacity);
     if (!iree_status_is_ok(status)) break;
 
     int64_t signature_type_changed_count = 0;
