@@ -354,9 +354,9 @@ typedef struct loom_low_lower_options_t {
   iree_diagnostic_emitter_t emitter;
   // Maximum number of errors to emit before aborting. Zero means no limit.
   uint32_t max_errors;
-  // Optional arena receiving production sidecars that must outlive lowering,
+  // Optional arena receiving production tables that must outlive lowering,
   // such as source-derived memory access summaries consumed by packetization.
-  iree_arena_allocator_t* sidecar_arena;
+  iree_arena_allocator_t* table_arena;
   // Enables production source-to-low report counters and optional rows.
   bool report_enabled;
   // Optional caller-owned storage for production source-low report rows.
@@ -588,8 +588,8 @@ iree_status_t loom_low_lower_emit_resolved_descriptor_const(
 
 // Records a source-derived memory summary for an emitted low memory packet.
 //
-// The row is copied into options.sidecar_arena when provided. Calls are ignored
-// when the current lowering run has no sidecar arena, preserving conservative
+// The row is copied into options.table_arena when provided. Calls are ignored
+// when the current lowering run has no table arena, preserving conservative
 // descriptor-only scheduling for callers that do not need source precision.
 iree_status_t loom_low_lower_record_memory_access_summary(
     loom_low_lower_context_t* context, const loom_op_t* low_op,

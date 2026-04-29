@@ -23,15 +23,15 @@ extern "C" {
 
 // Validates the target-independent native fragment emission contract.
 //
-// The schedule and allocation sidecars must describe the same low function, all
+// The schedule and allocation tables must describe the same low function, all
 // low.return terminators must be ABI-lowered void returns, all allocated
 // register values and edge-copy temporaries must have physical locations, and
 // allocation must contain no unmaterialized spill plans or spill-slot
 // assignments. Target-owned emitters remain responsible for their target
 // identity and instruction descriptor contracts.
 iree_status_t loom_native_fragment_validate_emission_inputs(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation);
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation);
 
 #ifdef __cplusplus
 }  // extern "C"

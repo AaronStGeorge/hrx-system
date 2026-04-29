@@ -465,9 +465,9 @@ static iree_status_t loom_low_lower_prepare_plan(
   IREE_RETURN_IF_ERROR(loom_low_lower_allocate_scratch_array(
       context, plan_capacity, sizeof(*context->lowering.selected_plans),
       (void**)&context->lowering.selected_plans));
-  if (context->options->sidecar_arena != NULL) {
+  if (context->options->table_arena != NULL) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        context->options->sidecar_arena, plan_capacity,
+        context->options->table_arena, plan_capacity,
         sizeof(*context->lowering.memory_access_records),
         (void**)&context->lowering.memory_access_records));
     context->lowering.memory_access_record_capacity = plan_capacity;

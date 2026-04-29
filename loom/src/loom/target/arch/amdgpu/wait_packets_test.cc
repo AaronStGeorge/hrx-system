@@ -139,7 +139,7 @@ class AmdgpuWaitPacketsTest : public ::testing::Test {
 
   iree_status_t BuildWaitPackets(
       const loom_module_t* module, const loom_op_t* low_function,
-      iree_arena_allocator_t* arena, loom_low_schedule_sidecar_t* out_schedule,
+      iree_arena_allocator_t* arena, loom_low_schedule_table_t* out_schedule,
       loom_amdgpu_wait_plan_t* out_wait_plan,
       loom_amdgpu_wait_packet_plan_t* out_packet_plan) {
     loom_low_schedule_options_t schedule_options = {
@@ -186,7 +186,7 @@ low.func.def target(@target) @func(%value: reg<amdgpu.vgpr>, %resource: reg<amdg
 
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
-  loom_low_schedule_sidecar_t schedule = {};
+  loom_low_schedule_table_t schedule = {};
   loom_amdgpu_wait_plan_t wait_plan = {};
   loom_amdgpu_wait_packet_plan_t packet_plan = {};
   IREE_ASSERT_OK(BuildWaitPackets(module.get(), low_function, &arena, &schedule,
@@ -237,7 +237,7 @@ low.func.def target(@target) @func(%value: reg<amdgpu.vgpr>, %resource: reg<amdg
 
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
-  loom_low_schedule_sidecar_t schedule = {};
+  loom_low_schedule_table_t schedule = {};
   loom_amdgpu_wait_plan_t wait_plan = {};
   loom_amdgpu_wait_packet_plan_t packet_plan = {};
   IREE_ASSERT_OK(BuildWaitPackets(module.get(), low_function, &arena, &schedule,
@@ -287,7 +287,7 @@ low.func.def target(@target) @func(%value: reg<amdgpu.vgpr>, %resource: reg<amdg
 
     iree_arena_allocator_t arena;
     iree_arena_initialize(&block_pool_, &arena);
-    loom_low_schedule_sidecar_t schedule = {};
+    loom_low_schedule_table_t schedule = {};
     loom_amdgpu_wait_plan_t wait_plan = {};
     loom_amdgpu_wait_packet_plan_t packet_plan = {};
     IREE_ASSERT_OK(BuildWaitPackets(module.get(), low_function, &arena,
@@ -330,7 +330,7 @@ TEST_F(AmdgpuWaitPacketsTest, SelectsAluWaitDescriptorPerTarget) {
         iree_make_cstring_view(test_case.descriptor_set_key), &descriptor_set));
     ASSERT_NE(descriptor_set, nullptr) << test_case.descriptor_set_key;
 
-    loom_low_schedule_sidecar_t schedule = {};
+    loom_low_schedule_table_t schedule = {};
     schedule.target.descriptor_set = descriptor_set;
     loom_amdgpu_wait_plan_action_t action = {
         .kind = LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED,
@@ -426,7 +426,7 @@ TEST_F(AmdgpuWaitPacketsTest, SelectsLdsAndSmemWaitDescriptorsForGfx12) {
         iree_make_cstring_view(test_case.descriptor_set_key), &descriptor_set));
     ASSERT_NE(descriptor_set, nullptr) << test_case.descriptor_set_key;
 
-    loom_low_schedule_sidecar_t schedule = {};
+    loom_low_schedule_table_t schedule = {};
     schedule.target.descriptor_set = descriptor_set;
     loom_amdgpu_wait_plan_action_t action = {
         .kind = LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED,
@@ -463,7 +463,7 @@ TEST_F(AmdgpuWaitPacketsTest, RejectsUnrepresentableAluWaitOnGfx950) {
       LookupDescriptorSet(IREE_SV("amdgpu.gfx950.core"), &descriptor_set));
   ASSERT_NE(descriptor_set, nullptr);
 
-  loom_low_schedule_sidecar_t schedule = {};
+  loom_low_schedule_table_t schedule = {};
   schedule.target.descriptor_set = descriptor_set;
   loom_amdgpu_wait_plan_action_t action = {
       .kind = LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED,

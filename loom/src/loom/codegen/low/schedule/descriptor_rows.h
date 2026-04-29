@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Descriptor schedule-row projection into schedule sidecar records.
+// Descriptor schedule-row projection into schedule table records.
 
 #ifndef LOOM_CODEGEN_LOW_SCHEDULE_DESCRIPTOR_ROWS_H_
 #define LOOM_CODEGEN_LOW_SCHEDULE_DESCRIPTOR_ROWS_H_

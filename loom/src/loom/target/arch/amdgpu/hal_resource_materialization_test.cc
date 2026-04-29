@@ -10,8 +10,8 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/function.h"
-#include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
@@ -300,18 +300,18 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
   EXPECT_EQ(fixed_values[0].location_count, 2u);
 
   VerifyModule();
-  loom_low_packetization_options_t packetization_options = {
+  loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = &target_registry_.registry,
       .allocation_fixed_values = fixed_values,
       .allocation_fixed_value_count = fixed_value_count,
   };
-  loom_low_packetization_t packetization = {};
-  IREE_ASSERT_OK(loom_low_packetize_function(
-      module_, function_op, &packetization_options, &arena_, &packetization));
+  loom_low_emission_frame_t frame = {};
+  IREE_ASSERT_OK(loom_low_emission_frame_build(
+      module_, function_op, &frame_options, &arena_, &frame));
 
   loom_amdgpu_wait_plan_t wait_plan = {};
-  IREE_ASSERT_OK(loom_amdgpu_wait_plan_build(&packetization.schedule, &arena_,
-                                             &wait_plan));
+  IREE_ASSERT_OK(
+      loom_amdgpu_wait_plan_build(&frame.schedule, &arena_, &wait_plan));
   loom_amdgpu_wait_packet_plan_t wait_packets = {};
   IREE_ASSERT_OK(
       loom_amdgpu_wait_packet_plan_build(&wait_plan, &arena_, &wait_packets));
@@ -319,8 +319,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
 
   iree_const_byte_span_t text = iree_const_byte_span_empty();
   IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream_with_wait_packets(
-      &packetization.schedule, &packetization.allocation, &wait_packets, &text,
-      &arena_));
+      &frame.schedule, &frame.allocation, &wait_packets, &text, &arena_));
   ASSERT_GT(text.data_length, 16u);
   EXPECT_EQ(text.data[text.data_length - 4], 0x00u);
   EXPECT_EQ(text.data[text.data_length - 3], 0x00u);

@@ -54,8 +54,8 @@ typedef struct loom_amdgpu_wait_dependency_link_t {
 } loom_amdgpu_wait_dependency_link_t;
 
 typedef struct loom_amdgpu_wait_plan_builder_t {
-  // Schedule sidecar being analyzed.
-  const loom_low_schedule_sidecar_t* schedule;
+  // Schedule table being analyzed.
+  const loom_low_schedule_table_t* schedule;
   // Arena that owns all output and scratch arrays.
   iree_arena_allocator_t* arena;
   // Per-node counter classification.
@@ -194,7 +194,7 @@ static iree_status_t loom_amdgpu_wait_effect_counter_mask(
 
 static iree_status_t loom_amdgpu_wait_plan_allocate(
     loom_amdgpu_wait_plan_builder_t* builder) {
-  const loom_low_schedule_sidecar_t* schedule = builder->schedule;
+  const loom_low_schedule_table_t* schedule = builder->schedule;
   if (schedule->node_count != 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         builder->arena, schedule->node_count, sizeof(*builder->node_states),
@@ -274,7 +274,7 @@ static iree_status_t loom_amdgpu_wait_plan_append_dependency_link(
 
 static iree_status_t loom_amdgpu_wait_plan_classify_hazards(
     loom_amdgpu_wait_plan_builder_t* builder) {
-  const loom_low_schedule_sidecar_t* schedule = builder->schedule;
+  const loom_low_schedule_table_t* schedule = builder->schedule;
   for (iree_host_size_t i = 0; i < schedule->hazard_use_count; ++i) {
     const loom_low_schedule_hazard_use_t* hazard = &schedule->hazard_uses[i];
     if (hazard->kind != LOOM_LOW_HAZARD_KIND_WAIT_COUNTER) {
@@ -303,7 +303,7 @@ static iree_status_t loom_amdgpu_wait_plan_classify_hazards(
 
 static iree_status_t loom_amdgpu_wait_plan_classify_effects(
     loom_amdgpu_wait_plan_builder_t* builder) {
-  const loom_low_schedule_sidecar_t* schedule = builder->schedule;
+  const loom_low_schedule_table_t* schedule = builder->schedule;
   for (iree_host_size_t i = 0; i < schedule->effect_use_count; ++i) {
     const loom_low_schedule_effect_use_t* effect = &schedule->effect_uses[i];
     if (effect->node_index >= schedule->node_count) {
@@ -385,7 +385,7 @@ static iree_status_t loom_amdgpu_wait_plan_classify_effects(
 
 static iree_status_t loom_amdgpu_wait_plan_finish_node_classification(
     loom_amdgpu_wait_plan_builder_t* builder) {
-  const loom_low_schedule_sidecar_t* schedule = builder->schedule;
+  const loom_low_schedule_table_t* schedule = builder->schedule;
   for (iree_host_size_t i = 0; i < schedule->node_count; ++i) {
     loom_amdgpu_wait_node_state_t* node_state = &builder->node_states[i];
     if (node_state->has_generic_counter_effect) {
@@ -452,7 +452,7 @@ static iree_status_t loom_amdgpu_wait_plan_finish_node_classification(
 
 static iree_status_t loom_amdgpu_wait_plan_build_dependency_links(
     loom_amdgpu_wait_plan_builder_t* builder) {
-  const loom_low_schedule_sidecar_t* schedule = builder->schedule;
+  const loom_low_schedule_table_t* schedule = builder->schedule;
   for (iree_host_size_t i = 0; i < schedule->dependency_count; ++i) {
     const loom_low_schedule_dependency_t* dependency =
         &schedule->dependencies[i];
@@ -701,7 +701,7 @@ static iree_status_t loom_amdgpu_wait_plan_process_node(
 
 static iree_status_t loom_amdgpu_wait_plan_build_actions(
     loom_amdgpu_wait_plan_builder_t* builder) {
-  const loom_low_schedule_sidecar_t* schedule = builder->schedule;
+  const loom_low_schedule_table_t* schedule = builder->schedule;
   for (iree_host_size_t block_index = 0; block_index < schedule->block_count;
        ++block_index) {
     const loom_low_schedule_block_t* block = &schedule->blocks[block_index];
@@ -733,7 +733,7 @@ static iree_status_t loom_amdgpu_wait_plan_build_actions(
 }
 
 iree_status_t loom_amdgpu_wait_plan_build(
-    const loom_low_schedule_sidecar_t* schedule, iree_arena_allocator_t* arena,
+    const loom_low_schedule_table_t* schedule, iree_arena_allocator_t* arena,
     loom_amdgpu_wait_plan_t* out_plan) {
   IREE_ASSERT_ARGUMENT(schedule);
   IREE_ASSERT_ARGUMENT(arena);
@@ -768,7 +768,7 @@ static iree_string_view_t loom_amdgpu_wait_plan_json_symbol_name(
 }
 
 static iree_string_view_t loom_amdgpu_wait_plan_json_function_name(
-    const loom_low_schedule_sidecar_t* schedule) {
+    const loom_low_schedule_table_t* schedule) {
   if (loom_low_function_def_isa(schedule->function_op)) {
     return loom_amdgpu_wait_plan_json_symbol_name(
         schedule->module, loom_low_function_callee(schedule->function_op));
@@ -782,7 +782,7 @@ iree_status_t loom_amdgpu_wait_plan_format_json(
   IREE_ASSERT_ARGUMENT(builder);
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
-  const loom_low_schedule_sidecar_t* schedule = plan->schedule;
+  const loom_low_schedule_table_t* schedule = plan->schedule;
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
       &stream, "\"format\":\"loom.amdgpu.wait_plan.v0\""));

@@ -60,10 +60,10 @@ typedef struct loom_ireevm_bytecode_writer_t {
 } loom_ireevm_bytecode_writer_t;
 
 typedef struct loom_ireevm_emit_state_t {
-  // Schedule sidecar being emitted.
-  const loom_low_schedule_sidecar_t* schedule;
-  // Allocation sidecar supplying VM register ordinals.
-  const loom_low_allocation_sidecar_t* allocation;
+  // Schedule table being emitted.
+  const loom_low_schedule_table_t* schedule;
+  // Allocation table supplying VM register ordinals.
+  const loom_low_allocation_table_t* allocation;
   // Mutable bytecode writer.
   loom_ireevm_bytecode_writer_t writer;
   // Maximum i32 register ordinal plus one.
@@ -222,7 +222,7 @@ static iree_status_t loom_ireevm_bytecode_fixup_branch_targets(
 }
 
 static iree_status_t loom_ireevm_validate_i32_register_assignment(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_low_allocation_assignment_t* assignment,
     uint16_t* out_register) {
   if (assignment->location_kind != LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID) {
@@ -261,7 +261,7 @@ static iree_status_t loom_ireevm_validate_i32_register_assignment(
 }
 
 static iree_status_t loom_ireevm_analyze_register_metadata(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     uint32_t* out_i32_register_count) {
   uint32_t i32_register_count = 0;
   for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
@@ -554,14 +554,14 @@ static iree_status_t loom_ireevm_emit_packet(
   return loom_ireevm_emit_structural_packet(state, packet->node->op);
 }
 
-static iree_status_t loom_ireevm_validate_sidecars(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation) {
+static iree_status_t loom_ireevm_validate_tables(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation) {
   if (!schedule || !allocation) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "schedule and allocation sidecars are required");
+                            "schedule and allocation tables are required");
   }
-  IREE_RETURN_IF_ERROR(loom_low_packet_validate_sidecars(schedule, allocation));
+  IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(schedule, allocation));
   if (schedule->target.descriptor_set != loom_ireevm_core_descriptor_set()) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "VM bytecode emission requires iree.vm.core");
@@ -573,7 +573,7 @@ static iree_status_t loom_ireevm_validate_sidecars(
   if (allocation->spill_count != 0 || allocation->spill_plan_count != 0) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "VM bytecode emission requires unspilled allocation sidecars");
+        "VM bytecode emission requires unspilled allocation tables");
   }
   return iree_ok_status();
 }
@@ -620,15 +620,15 @@ void loom_ireevm_function_bytecode_deinitialize(
 }
 
 iree_status_t loom_ireevm_emit_function_bytecode(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation, iree_allocator_t allocator,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation, iree_allocator_t allocator,
     loom_ireevm_function_bytecode_t* out_bytecode) {
   if (!out_bytecode) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "VM bytecode output is required");
   }
   *out_bytecode = (loom_ireevm_function_bytecode_t){0};
-  IREE_RETURN_IF_ERROR(loom_ireevm_validate_sidecars(schedule, allocation));
+  IREE_RETURN_IF_ERROR(loom_ireevm_validate_tables(schedule, allocation));
 
   loom_ireevm_emit_state_t state = {
       .schedule = schedule,

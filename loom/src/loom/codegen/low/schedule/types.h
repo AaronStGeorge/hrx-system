@@ -4,15 +4,15 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Target-independent scheduler sidecar for target-low functions.
+// Target-independent scheduler table for target-low functions.
 //
 // This layer consumes ordinary Loom IR plus descriptor tables and produces a
-// deterministic schedule sidecar. The default scheduler is intentionally
+// deterministic schedule table. The default scheduler is intentionally
 // conservative: it builds the dependency graph and records a source-priority
 // topological order without mutating IR. Optional strategies can score bounded
 // windows of dependency-ready nodes for register pressure and target resources
 // while still keeping target hazard insertion, allocation, and diagnostics on
-// this sidecar instead of creating a second low-level IR container.
+// this table instead of creating a second low-level IR container.
 
 #ifndef LOOM_CODEGEN_LOW_SCHEDULE_TYPES_H_
 #define LOOM_CODEGEN_LOW_SCHEDULE_TYPES_H_
@@ -463,7 +463,7 @@ typedef struct loom_low_schedule_block_t {
   uint32_t node_start;
   // Number of nodes owned by this block.
   uint32_t node_count;
-  // First entry in the sidecar scheduled-node-index array.
+  // First entry in the table scheduled-node-index array.
   uint32_t scheduled_node_start;
   // Number of scheduled-node-index entries owned by this block.
   uint32_t scheduled_node_count;
@@ -486,12 +486,12 @@ typedef struct loom_low_schedule_options_t {
   loom_low_schedule_strategy_t strategy;
 } loom_low_schedule_options_t;
 
-// Schedule sidecar for one target-low function body. All arrays are arena-owned
+// Schedule table for one target-low function body. All arrays are arena-owned
 // by the caller-provided arena passed to loom_low_schedule_function.
-typedef struct loom_low_schedule_sidecar_t {
+typedef struct loom_low_schedule_table_t {
   // Module containing the scheduled low function.
   const loom_module_t* module;
-  // Target-low function operation scheduled by this sidecar.
+  // Target-low function operation scheduled by this table.
   const loom_op_t* function_op;
   // Resolved target context selected by |function_op|.
   loom_low_resolved_target_t target;
@@ -552,7 +552,7 @@ typedef struct loom_low_schedule_sidecar_t {
   const loom_low_schedule_resource_summary_t* resource_summaries;
   // Number of resource summary records.
   iree_host_size_t resource_summary_count;
-} loom_low_schedule_sidecar_t;
+} loom_low_schedule_table_t;
 
 #ifdef __cplusplus
 }  // extern "C"

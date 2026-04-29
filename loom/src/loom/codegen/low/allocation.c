@@ -22,7 +22,7 @@ typedef struct loom_low_allocation_build_state_t {
   const loom_module_t* module;
   // Caller-provided allocation options.
   const loom_low_allocation_options_t* options;
-  // Arena owning all sidecar arrays.
+  // Arena owning all table arrays.
   iree_arena_allocator_t* arena;
   // Body region of the low function.
   loom_region_t* body;
@@ -1142,7 +1142,7 @@ static iree_status_t loom_low_allocation_append_assignment(
   IREE_ASSERT_ARGUMENT(assignment);
   if (state->assignment_count >= UINT32_MAX) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "allocation sidecar exceeds uint32_t range");
+                            "allocation table exceeds uint32_t range");
   }
   uint32_t interval_index = 0;
   if (!loom_low_allocation_interval_index_for_value(state, assignment->value_id,
@@ -2288,7 +2288,7 @@ static iree_status_t loom_low_allocation_assign_intervals(
         state, interval->value_class, &capacity));
     if (state->spill_count > UINT32_MAX) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "allocation sidecar exceeds uint32_t range");
+                              "allocation table exceeds uint32_t range");
     }
 
     uint32_t location_base = 0;
@@ -2355,11 +2355,11 @@ static bool loom_low_allocation_assignment_pair_conflicts(
          loom_low_allocation_location_ranges_overlap(lhs, rhs);
 }
 
-static iree_status_t loom_low_allocation_assignment_index_in_sidecar(
-    const loom_low_allocation_sidecar_t* sidecar, loom_value_id_t value_id,
+static iree_status_t loom_low_allocation_assignment_index_in_table(
+    const loom_low_allocation_table_t* table, loom_value_id_t value_id,
     uint32_t* out_assignment_index) {
-  for (iree_host_size_t i = 0; i < sidecar->assignment_count; ++i) {
-    if (sidecar->assignments[i].value_id == value_id) {
+  for (iree_host_size_t i = 0; i < table->assignment_count; ++i) {
+    if (table->assignments[i].value_id == value_id) {
       if (i > UINT32_MAX) {
         return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                                 "allocation assignment index exceeds uint32_t");
@@ -2369,7 +2369,7 @@ static iree_status_t loom_low_allocation_assignment_index_in_sidecar(
     }
   }
   return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                          "allocation sidecar is missing assignment for value "
+                          "allocation table is missing assignment for value "
                           "%u",
                           (unsigned)value_id);
 }
@@ -2380,13 +2380,13 @@ static iree_status_t loom_low_allocation_tied_values_for_op(
   if (tied.result_index >= op->result_count ||
       tied.operand_index >= op->operand_count) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "allocation sidecar saw malformed tied result "
+                            "allocation table saw malformed tied result "
                             "metadata");
   }
   if (tied.has_type_change) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
-        "allocation sidecar requires explicit materialization for "
+        "allocation table requires explicit materialization for "
         "type-changing tied results");
   }
   const loom_value_id_t* results = loom_op_const_results(op);
@@ -2428,9 +2428,8 @@ static iree_status_t loom_low_allocation_slice_pair_is_structural_alias(
   *out_is_alias = false;
   const int64_t offset = loom_low_slice_offset(op);
   if (offset < 0 || offset > UINT32_MAX) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "allocation sidecar saw malformed low.slice offset");
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "allocation table saw malformed low.slice offset");
   }
   const uint32_t source_offset = (uint32_t)offset;
   const loom_value_id_t source_id = loom_low_slice_source(op);
@@ -2453,7 +2452,7 @@ static iree_status_t loom_low_allocation_slice_pair_is_structural_alias(
 }
 
 static iree_status_t loom_low_allocation_concat_pair_is_structural_alias(
-    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_table_t* table,
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs, const loom_op_t* op,
     bool* out_is_alias) {
@@ -2482,10 +2481,10 @@ static iree_status_t loom_low_allocation_concat_pair_is_structural_alias(
       return iree_ok_status();
     }
     uint32_t previous_assignment_index = 0;
-    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_in_sidecar(
-        sidecar, source_id, &previous_assignment_index));
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_in_table(
+        table, source_id, &previous_assignment_index));
     const loom_low_allocation_assignment_t* previous_assignment =
-        &sidecar->assignments[previous_assignment_index];
+        &table->assignments[previous_assignment_index];
     if (previous_assignment->location_count > UINT32_MAX - result_offset) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "low.concat structural offset exceeds u32");
@@ -2496,14 +2495,14 @@ static iree_status_t loom_low_allocation_concat_pair_is_structural_alias(
 }
 
 static iree_status_t loom_low_allocation_pair_is_structural_alias(
-    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_table_t* table,
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs, bool* out_is_alias) {
   *out_is_alias = false;
   const loom_value_t* lhs_value =
-      loom_module_value(sidecar->module, lhs->value_id);
+      loom_module_value(table->module, lhs->value_id);
   const loom_value_t* rhs_value =
-      loom_module_value(sidecar->module, rhs->value_id);
+      loom_module_value(table->module, rhs->value_id);
   const loom_op_t* lhs_def =
       loom_value_is_block_arg(lhs_value) ? NULL : loom_value_def_op(lhs_value);
   const loom_op_t* rhs_def =
@@ -2518,7 +2517,7 @@ static iree_status_t loom_low_allocation_pair_is_structural_alias(
     }
   } else if (lhs_def && loom_low_concat_isa(lhs_def)) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_concat_pair_is_structural_alias(
-        sidecar, lhs, rhs, lhs_def, &lhs_alias));
+        table, lhs, rhs, lhs_def, &lhs_alias));
     if (lhs_alias) {
       *out_is_alias = true;
       return iree_ok_status();
@@ -2533,14 +2532,14 @@ static iree_status_t loom_low_allocation_pair_is_structural_alias(
         lhs, rhs, rhs_def, &rhs_alias));
   } else if (rhs_def && loom_low_concat_isa(rhs_def)) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_concat_pair_is_structural_alias(
-        sidecar, lhs, rhs, rhs_def, &rhs_alias));
+        table, lhs, rhs, rhs_def, &rhs_alias));
   }
   *out_is_alias = rhs_alias;
   return iree_ok_status();
 }
 
 static iree_status_t loom_low_allocation_verify_tied_result_assignments(
-    const loom_low_allocation_sidecar_t* sidecar, const loom_region_t* body) {
+    const loom_low_allocation_table_t* table, const loom_region_t* body) {
   loom_block_t* block = NULL;
   loom_region_for_each_block(body, block) {
     loom_op_t* op = NULL;
@@ -2553,16 +2552,16 @@ static iree_status_t loom_low_allocation_verify_tied_result_assignments(
             op, tied_results[i], &result_id, &operand_id));
 
         uint32_t result_assignment_index = 0;
-        IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_in_sidecar(
-            sidecar, result_id, &result_assignment_index));
+        IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_in_table(
+            table, result_id, &result_assignment_index));
         uint32_t operand_assignment_index = 0;
-        IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_in_sidecar(
-            sidecar, operand_id, &operand_assignment_index));
+        IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_in_table(
+            table, operand_id, &operand_assignment_index));
 
         const loom_low_allocation_assignment_t* result_assignment =
-            &sidecar->assignments[result_assignment_index];
+            &table->assignments[result_assignment_index];
         const loom_low_allocation_assignment_t* operand_assignment =
-            &sidecar->assignments[operand_assignment_index];
+            &table->assignments[operand_assignment_index];
         if (!loom_low_allocation_assignment_is_coalescable(result_assignment) ||
             !loom_low_allocation_assignment_is_coalescable(
                 operand_assignment) ||
@@ -2579,7 +2578,7 @@ static iree_status_t loom_low_allocation_verify_tied_result_assignments(
 }
 
 static iree_status_t loom_low_allocation_verify_assignment(
-    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_table_t* table,
     const loom_low_allocation_assignment_t* assignment,
     iree_host_size_t assignment_index) {
   if (!loom_low_allocation_location_kind_is_known(assignment->location_kind)) {
@@ -2606,7 +2605,7 @@ static iree_status_t loom_low_allocation_verify_assignment(
   }
   if (assignment->descriptor_reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
       assignment->descriptor_reg_class_id >=
-          sidecar->target.descriptor_set->reg_class_count) {
+          table->target.descriptor_set->reg_class_count) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "allocation assignment %zu has invalid descriptor register class ID "
@@ -2631,7 +2630,7 @@ static iree_status_t loom_low_allocation_verify_remark(
   if (remark->assignment_index >= assignment_count) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
-        "allocation remark %zu references assignment %u, but sidecar has only "
+        "allocation remark %zu references assignment %u, but table has only "
         "%zu assignments",
         remark_index, remark->assignment_index, assignment_count);
   }
@@ -2639,20 +2638,20 @@ static iree_status_t loom_low_allocation_verify_remark(
 }
 
 static iree_status_t loom_low_allocation_verify_spill_plan(
-    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_table_t* table,
     const loom_low_allocation_spill_plan_t* spill_plan,
     iree_host_size_t spill_plan_index) {
-  if (spill_plan->assignment_index >= sidecar->assignment_count) {
+  if (spill_plan->assignment_index >= table->assignment_count) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
-        "allocation spill plan %zu references assignment %u, but sidecar has "
+        "allocation spill plan %zu references assignment %u, but table has "
         "only %zu assignments",
         spill_plan_index, spill_plan->assignment_index,
-        sidecar->assignment_count);
+        table->assignment_count);
   }
   const loom_low_allocation_assignment_t* assignment =
-      &sidecar->assignments[spill_plan->assignment_index];
-  if (spill_plan->value_id >= sidecar->module->values.count) {
+      &table->assignments[spill_plan->assignment_index];
+  if (spill_plan->value_id >= table->module->values.count) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
         "allocation spill plan %zu references out-of-range value %u",
@@ -2692,7 +2691,7 @@ static iree_status_t loom_low_allocation_verify_spill_plan(
 }
 
 static iree_status_t loom_low_allocation_verify_copy_decision(
-    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_table_t* table,
     const loom_low_allocation_copy_decision_t* copy_decision,
     iree_host_size_t copy_decision_index) {
   if (!loom_low_allocation_copy_kind_is_known(copy_decision->kind)) {
@@ -2705,19 +2704,19 @@ static iree_status_t loom_low_allocation_verify_copy_decision(
                             "allocation copy decision %zu has no kind",
                             copy_decision_index);
   }
-  if (copy_decision->source_assignment_index >= sidecar->assignment_count ||
-      copy_decision->result_assignment_index >= sidecar->assignment_count) {
+  if (copy_decision->source_assignment_index >= table->assignment_count ||
+      copy_decision->result_assignment_index >= table->assignment_count) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
         "allocation copy decision %zu references assignments %u and %u, but "
-        "sidecar has only %zu assignments",
+        "table has only %zu assignments",
         copy_decision_index, copy_decision->source_assignment_index,
-        copy_decision->result_assignment_index, sidecar->assignment_count);
+        copy_decision->result_assignment_index, table->assignment_count);
   }
   const loom_low_allocation_assignment_t* source_assignment =
-      &sidecar->assignments[copy_decision->source_assignment_index];
+      &table->assignments[copy_decision->source_assignment_index];
   const loom_low_allocation_assignment_t* result_assignment =
-      &sidecar->assignments[copy_decision->result_assignment_index];
+      &table->assignments[copy_decision->result_assignment_index];
   if (source_assignment->value_id != copy_decision->source_value_id ||
       result_assignment->value_id != copy_decision->result_value_id) {
     return iree_make_status(
@@ -2741,22 +2740,22 @@ static iree_status_t loom_low_allocation_verify_copy_decision(
 }
 
 static iree_status_t loom_low_allocation_verify_edge_copy(
-    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_table_t* table,
     const loom_low_allocation_edge_copy_t* edge_copy,
     iree_host_size_t edge_copy_index) {
-  if (edge_copy->source_assignment_index >= sidecar->assignment_count ||
-      edge_copy->destination_assignment_index >= sidecar->assignment_count) {
+  if (edge_copy->source_assignment_index >= table->assignment_count ||
+      edge_copy->destination_assignment_index >= table->assignment_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "allocation edge-copy %zu references assignment %u -> %u outside "
         "assignment count %zu",
         edge_copy_index, edge_copy->source_assignment_index,
-        edge_copy->destination_assignment_index, sidecar->assignment_count);
+        edge_copy->destination_assignment_index, table->assignment_count);
   }
   const loom_low_allocation_assignment_t* source_assignment =
-      &sidecar->assignments[edge_copy->source_assignment_index];
+      &table->assignments[edge_copy->source_assignment_index];
   const loom_low_allocation_assignment_t* destination_assignment =
-      &sidecar->assignments[edge_copy->destination_assignment_index];
+      &table->assignments[edge_copy->destination_assignment_index];
   if (source_assignment->value_id != edge_copy->source_value_id ||
       destination_assignment->value_id != edge_copy->destination_value_id) {
     return iree_make_status(
@@ -2783,7 +2782,7 @@ static iree_status_t loom_low_allocation_verify_edge_copy(
 }
 
 static iree_status_t loom_low_allocation_verify_edge_copy_group(
-    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_table_t* table,
     const loom_low_allocation_edge_copy_group_t* group,
     iree_host_size_t group_index, uint32_t expected_source_ordinal,
     iree_host_size_t expected_copy_start) {
@@ -2806,28 +2805,28 @@ static iree_status_t loom_low_allocation_verify_edge_copy_group(
   }
   uint32_t expected_program_point = UINT32_MAX;
   IREE_RETURN_IF_ERROR(loom_low_allocation_op_program_point_in_liveness(
-      &sidecar->liveness, group->terminator_op, &expected_program_point));
+      &table->liveness, group->terminator_op, &expected_program_point));
   if (group->program_point != expected_program_point) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "allocation edge-copy group %zu has program point %u but expected %u",
         group_index, group->program_point, expected_program_point);
   }
-  if (group->copy_start > sidecar->edge_copy_count ||
-      group->copy_count > sidecar->edge_copy_count - group->copy_start) {
+  if (group->copy_start > table->edge_copy_count ||
+      group->copy_count > table->edge_copy_count - group->copy_start) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "allocation edge-copy group %zu range is outside edge-copy count %zu",
-        group_index, sidecar->edge_copy_count);
+        group_index, table->edge_copy_count);
   }
-  if (group->temporary_start > sidecar->edge_copy_temporary_count ||
+  if (group->temporary_start > table->edge_copy_temporary_count ||
       group->temporary_count >
-          sidecar->edge_copy_temporary_count - group->temporary_start) {
+          table->edge_copy_temporary_count - group->temporary_start) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "allocation edge-copy group %zu temporary range is outside temporary "
         "count %zu",
-        group_index, sidecar->edge_copy_temporary_count);
+        group_index, table->edge_copy_temporary_count);
   }
   loom_value_slice_t args = loom_low_br_args(group->terminator_op);
   const loom_block_t* dest = loom_low_br_dest(group->terminator_op);
@@ -2839,7 +2838,7 @@ static iree_status_t loom_low_allocation_verify_edge_copy_group(
   }
   for (uint16_t i = 0; i < dest->arg_count; ++i) {
     const loom_low_allocation_edge_copy_t* edge_copy =
-        &sidecar->edge_copies[group->copy_start + i];
+        &table->edge_copies[group->copy_start + i];
     if (edge_copy->source_value_id != args.values[i] ||
         edge_copy->destination_value_id != dest->arg_ids[i]) {
       return iree_make_status(
@@ -2852,7 +2851,7 @@ static iree_status_t loom_low_allocation_verify_edge_copy_group(
 }
 
 static iree_status_t loom_low_allocation_verify_edge_copy_temporary(
-    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_table_t* table,
     const loom_low_allocation_edge_copy_temporary_t* temporary,
     iree_host_size_t temporary_index) {
   if (!loom_low_allocation_location_kind_is_known(temporary->location_kind) ||
@@ -2865,7 +2864,7 @@ static iree_status_t loom_low_allocation_verify_edge_copy_temporary(
   }
   if (temporary->descriptor_reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
       temporary->descriptor_reg_class_id >=
-          sidecar->target.descriptor_set->reg_class_count) {
+          table->target.descriptor_set->reg_class_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "allocation edge-copy temporary %zu has invalid descriptor register "
@@ -2875,76 +2874,72 @@ static iree_status_t loom_low_allocation_verify_edge_copy_temporary(
   return iree_ok_status();
 }
 
-iree_status_t loom_low_allocation_verify_sidecar(
-    const loom_low_allocation_sidecar_t* sidecar) {
-  IREE_ASSERT_ARGUMENT(sidecar);
-  if (!sidecar->module) {
+iree_status_t loom_low_allocation_verify_table(
+    const loom_low_allocation_table_t* table) {
+  IREE_ASSERT_ARGUMENT(table);
+  if (!table->module) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation sidecar module is required");
+                            "allocation table module is required");
   }
-  if (!sidecar->function_op ||
-      !loom_low_function_def_isa(sidecar->function_op)) {
+  if (!table->function_op || !loom_low_function_def_isa(table->function_op)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "allocation sidecar low function definition is required");
+        "allocation table low function definition is required");
   }
-  if (!sidecar->target.descriptor_set) {
+  if (!table->target.descriptor_set) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation sidecar target descriptor set is "
+                            "allocation table target descriptor set is "
                             "required");
   }
-  loom_region_t* body =
-      loom_low_function_body((loom_op_t*)sidecar->function_op);
+  loom_region_t* body = loom_low_function_body((loom_op_t*)table->function_op);
   if (!body) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation sidecar low function body is required");
+                            "allocation table low function body is required");
   }
-  if (sidecar->assignment_count > 0 && !sidecar->assignments) {
+  if (table->assignment_count > 0 && !table->assignments) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation sidecar assignments are required");
+                            "allocation table assignments are required");
   }
-  if (sidecar->spill_plan_count > 0 && !sidecar->spill_plans) {
+  if (table->spill_plan_count > 0 && !table->spill_plans) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation sidecar spill plans are required");
+                            "allocation table spill plans are required");
   }
-  if (sidecar->remark_count > 0 && !sidecar->remarks) {
+  if (table->remark_count > 0 && !table->remarks) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation sidecar remarks are required");
+                            "allocation table remarks are required");
   }
-  if (sidecar->copy_decision_count > 0 && !sidecar->copy_decisions) {
+  if (table->copy_decision_count > 0 && !table->copy_decisions) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation sidecar copy decisions are required");
+                            "allocation table copy decisions are required");
   }
-  if (sidecar->edge_copy_count > 0 && !sidecar->edge_copies) {
+  if (table->edge_copy_count > 0 && !table->edge_copies) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation sidecar edge copies are required");
+                            "allocation table edge copies are required");
   }
-  if (sidecar->edge_copy_group_count > 0 && !sidecar->edge_copy_groups) {
+  if (table->edge_copy_group_count > 0 && !table->edge_copy_groups) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation sidecar edge-copy groups are required");
+                            "allocation table edge-copy groups are required");
   }
-  if (sidecar->edge_copy_temporary_count > 0 &&
-      !sidecar->edge_copy_temporaries) {
+  if (table->edge_copy_temporary_count > 0 && !table->edge_copy_temporaries) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "allocation sidecar edge-copy temporaries are required");
+        "allocation table edge-copy temporaries are required");
   }
   iree_host_size_t spill_count = 0;
-  for (iree_host_size_t i = 0; i < sidecar->assignment_count; ++i) {
-    const loom_low_allocation_assignment_t* assignment =
-        &sidecar->assignments[i];
+  for (iree_host_size_t i = 0; i < table->assignment_count; ++i) {
+    const loom_low_allocation_assignment_t* assignment = &table->assignments[i];
     IREE_RETURN_IF_ERROR(
-        loom_low_allocation_verify_assignment(sidecar, assignment, i));
+        loom_low_allocation_verify_assignment(table, assignment, i));
     if (assignment->location_kind == LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT) {
       ++spill_count;
     }
   }
-  for (iree_host_size_t i = 0; i < sidecar->assignment_count; ++i) {
-    const loom_low_allocation_assignment_t* lhs = &sidecar->assignments[i];
-    for (iree_host_size_t j = i + 1; j < sidecar->assignment_count; ++j) {
-      const loom_low_allocation_assignment_t* rhs = &sidecar->assignments[j];
+  for (iree_host_size_t i = 0; i < table->assignment_count; ++i) {
+    const loom_low_allocation_assignment_t* lhs = &table->assignments[i];
+    for (iree_host_size_t j = i + 1; j < table->assignment_count; ++j) {
+      const loom_low_allocation_assignment_t* rhs = &table->assignments[j];
       if (!loom_low_allocation_assignment_pair_conflicts(
-              sidecar->target.descriptor_set, lhs, rhs)) {
+              table->target.descriptor_set, lhs, rhs)) {
         continue;
       }
       bool pair_is_tied = false;
@@ -2955,7 +2950,7 @@ iree_status_t loom_low_allocation_verify_sidecar(
       }
       bool pair_is_structural_alias = false;
       IREE_RETURN_IF_ERROR(loom_low_allocation_pair_is_structural_alias(
-          sidecar, lhs, rhs, &pair_is_structural_alias));
+          table, lhs, rhs, &pair_is_structural_alias));
       if (pair_is_structural_alias) {
         continue;
       }
@@ -2965,21 +2960,21 @@ iree_status_t loom_low_allocation_verify_sidecar(
     }
   }
   IREE_RETURN_IF_ERROR(
-      loom_low_allocation_verify_tied_result_assignments(sidecar, body));
-  for (iree_host_size_t i = 0; i < sidecar->remark_count; ++i) {
+      loom_low_allocation_verify_tied_result_assignments(table, body));
+  for (iree_host_size_t i = 0; i < table->remark_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_verify_remark(
-        &sidecar->remarks[i], i, sidecar->assignment_count));
+        &table->remarks[i], i, table->assignment_count));
   }
-  for (iree_host_size_t i = 0; i < sidecar->spill_plan_count; ++i) {
+  for (iree_host_size_t i = 0; i < table->spill_plan_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_verify_spill_plan(
-        sidecar, &sidecar->spill_plans[i], i));
+        table, &table->spill_plans[i], i));
   }
   iree_host_size_t coalesced_copy_count = 0;
   iree_host_size_t materialized_copy_count = 0;
-  for (iree_host_size_t i = 0; i < sidecar->copy_decision_count; ++i) {
+  for (iree_host_size_t i = 0; i < table->copy_decision_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_verify_copy_decision(
-        sidecar, &sidecar->copy_decisions[i], i));
-    switch (sidecar->copy_decisions[i].kind) {
+        table, &table->copy_decisions[i], i));
+    switch (table->copy_decisions[i].kind) {
       case LOOM_LOW_ALLOCATION_COPY_COALESCED:
         ++coalesced_copy_count;
         break;
@@ -2994,13 +2989,13 @@ iree_status_t loom_low_allocation_verify_sidecar(
   iree_host_size_t edge_copy_count = 0;
   IREE_RETURN_IF_ERROR(loom_low_allocation_count_edge_copy_groups(
       body, &edge_copy_group_count, &edge_copy_count));
-  if (sidecar->edge_copy_group_count != edge_copy_group_count ||
-      sidecar->edge_copy_count != edge_copy_count) {
+  if (table->edge_copy_group_count != edge_copy_group_count ||
+      table->edge_copy_count != edge_copy_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "allocation sidecar has %zu edge-copy groups/%zu edge copies for "
+        "allocation table has %zu edge-copy groups/%zu edge copies for "
         "%zu/%zu low.br edge payloads",
-        sidecar->edge_copy_group_count, sidecar->edge_copy_count,
+        table->edge_copy_group_count, table->edge_copy_count,
         edge_copy_group_count, edge_copy_count);
   }
   iree_host_size_t expected_edge_copy_start = 0;
@@ -3016,10 +3011,10 @@ iree_status_t loom_low_allocation_verify_sidecar(
         continue;
       }
       IREE_RETURN_IF_ERROR(loom_low_allocation_verify_edge_copy_group(
-          sidecar, &sidecar->edge_copy_groups[expected_edge_copy_group_index],
+          table, &table->edge_copy_groups[expected_edge_copy_group_index],
           expected_edge_copy_group_index, source_ordinal,
           expected_edge_copy_start));
-      if (sidecar->edge_copy_groups[expected_edge_copy_group_index]
+      if (table->edge_copy_groups[expected_edge_copy_group_index]
               .temporary_start != expected_edge_copy_temporary_start) {
         return iree_make_status(
             IREE_STATUS_FAILED_PRECONDITION,
@@ -3028,70 +3023,69 @@ iree_status_t loom_low_allocation_verify_sidecar(
             expected_edge_copy_group_index);
       }
       expected_edge_copy_start +=
-          sidecar->edge_copy_groups[expected_edge_copy_group_index].copy_count;
+          table->edge_copy_groups[expected_edge_copy_group_index].copy_count;
       expected_edge_copy_temporary_start +=
-          sidecar->edge_copy_groups[expected_edge_copy_group_index]
+          table->edge_copy_groups[expected_edge_copy_group_index]
               .temporary_count;
       ++expected_edge_copy_group_index;
       ++source_ordinal;
     }
   }
-  if (expected_edge_copy_temporary_start !=
-      sidecar->edge_copy_temporary_count) {
+  if (expected_edge_copy_temporary_start != table->edge_copy_temporary_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "allocation edge-copy temporary ranges cover %zu records but sidecar "
+        "allocation edge-copy temporary ranges cover %zu records but table "
         "has %zu",
-        expected_edge_copy_temporary_start, sidecar->edge_copy_temporary_count);
+        expected_edge_copy_temporary_start, table->edge_copy_temporary_count);
   }
-  for (iree_host_size_t i = 0; i < sidecar->edge_copy_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_low_allocation_verify_edge_copy(
-        sidecar, &sidecar->edge_copies[i], i));
+  for (iree_host_size_t i = 0; i < table->edge_copy_count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_low_allocation_verify_edge_copy(table, &table->edge_copies[i], i));
   }
-  for (iree_host_size_t i = 0; i < sidecar->edge_copy_temporary_count; ++i) {
+  for (iree_host_size_t i = 0; i < table->edge_copy_temporary_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_verify_edge_copy_temporary(
-        sidecar, &sidecar->edge_copy_temporaries[i], i));
+        table, &table->edge_copy_temporaries[i], i));
   }
   iree_host_size_t expected_copy_decision_count =
       loom_low_allocation_count_copy_ops(body);
-  if (sidecar->copy_decision_count != expected_copy_decision_count) {
+  if (table->copy_decision_count != expected_copy_decision_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "allocation sidecar has %zu copy decisions for %zu low.copy ops",
-        sidecar->copy_decision_count, expected_copy_decision_count);
+        "allocation table has %zu copy decisions for %zu low.copy ops",
+        table->copy_decision_count, expected_copy_decision_count);
   }
-  if (sidecar->spill_count != spill_count) {
+  if (table->spill_count != spill_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "allocation sidecar spill_count is %zu but assignments contain %zu "
+        "allocation table spill_count is %zu but assignments contain %zu "
         "spills",
-        sidecar->spill_count, spill_count);
+        table->spill_count, spill_count);
   }
-  if (sidecar->spill_plan_count != spill_count) {
+  if (table->spill_plan_count != spill_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "allocation sidecar has %zu spill plans for %zu spilled assignments",
-        sidecar->spill_plan_count, spill_count);
+        "allocation table has %zu spill plans for %zu spilled assignments",
+        table->spill_plan_count, spill_count);
   }
-  if (sidecar->coalesced_copy_count != coalesced_copy_count ||
-      sidecar->materialized_copy_count != materialized_copy_count) {
+  if (table->coalesced_copy_count != coalesced_copy_count ||
+      table->materialized_copy_count != materialized_copy_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "allocation sidecar copy counters do not match copy decisions");
+        "allocation table copy counters do not match copy decisions");
   }
   return iree_ok_status();
 }
 
 const loom_low_allocation_edge_copy_group_t*
 loom_low_allocation_find_edge_copy_group_by_source_ordinal(
-    const loom_low_allocation_sidecar_t* sidecar, uint32_t source_ordinal) {
-  IREE_ASSERT_ARGUMENT(sidecar);
+    const loom_low_allocation_table_t* table, uint32_t source_ordinal) {
+  IREE_ASSERT_ARGUMENT(table);
   iree_host_size_t lower = 0;
-  iree_host_size_t upper = sidecar->edge_copy_group_count;
+  iree_host_size_t upper = table->edge_copy_group_count;
   while (lower < upper) {
     iree_host_size_t middle = lower + (upper - lower) / 2;
     const loom_low_allocation_edge_copy_group_t* group =
-        &sidecar->edge_copy_groups[middle];
+        &table->edge_copy_groups[middle];
     if (source_ordinal < group->source_ordinal) {
       upper = middle;
     } else if (source_ordinal > group->source_ordinal) {
@@ -3104,17 +3098,17 @@ loom_low_allocation_find_edge_copy_group_by_source_ordinal(
 }
 
 iree_status_t loom_low_allocation_assignment_register_class_name(
-    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_table_t* table,
     const loom_low_allocation_assignment_t* assignment,
     iree_string_view_t* out_register_class_name) {
-  IREE_ASSERT_ARGUMENT(sidecar);
-  IREE_ASSERT_ARGUMENT(sidecar && sidecar->target.descriptor_set);
+  IREE_ASSERT_ARGUMENT(table);
+  IREE_ASSERT_ARGUMENT(table && table->target.descriptor_set);
   IREE_ASSERT_ARGUMENT(assignment);
   IREE_ASSERT_ARGUMENT(out_register_class_name);
   *out_register_class_name = iree_string_view_empty();
   if (assignment->descriptor_reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
       assignment->descriptor_reg_class_id >=
-          sidecar->target.descriptor_set->reg_class_count) {
+          table->target.descriptor_set->reg_class_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "allocation assignment %" PRIu32
@@ -3122,31 +3116,30 @@ iree_status_t loom_low_allocation_assignment_register_class_name(
         assignment->value_id, assignment->descriptor_reg_class_id);
   }
   const loom_low_reg_class_t* reg_class =
-      &sidecar->target.descriptor_set
+      &table->target.descriptor_set
            ->reg_classes[assignment->descriptor_reg_class_id];
-  return loom_low_descriptor_set_string(sidecar->target.descriptor_set,
+  return loom_low_descriptor_set_string(table->target.descriptor_set,
                                         reg_class->name_string_offset,
                                         out_register_class_name);
 }
 
 static iree_status_t loom_low_allocation_emit_predicted_spills(
-    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_table_t* table,
     iree_diagnostic_emitter_t emitter) {
-  for (iree_host_size_t i = 0; i < sidecar->spill_plan_count; ++i) {
-    const loom_low_allocation_spill_plan_t* spill_plan =
-        &sidecar->spill_plans[i];
+  for (iree_host_size_t i = 0; i < table->spill_plan_count; ++i) {
+    const loom_low_allocation_spill_plan_t* spill_plan = &table->spill_plans[i];
     const loom_low_allocation_assignment_t* assignment =
-        &sidecar->assignments[spill_plan->assignment_index];
+        &table->assignments[spill_plan->assignment_index];
     loom_diagnostic_param_t params[] = {
-        loom_param_string(loom_low_diagnostic_target_key(&sidecar->target)),
-        loom_param_string(loom_low_diagnostic_export_name(&sidecar->target)),
-        loom_param_string(loom_low_diagnostic_config_key(&sidecar->target)),
+        loom_param_string(loom_low_diagnostic_target_key(&table->target)),
+        loom_param_string(loom_low_diagnostic_export_name(&table->target)),
+        loom_param_string(loom_low_diagnostic_config_key(&table->target)),
         loom_param_string(loom_low_diagnostic_function_name(
-            sidecar->module, sidecar->function_op)),
-        loom_param_string(loom_low_diagnostic_value_name(sidecar->module,
+            table->module, table->function_op)),
+        loom_param_string(loom_low_diagnostic_value_name(table->module,
                                                          spill_plan->value_id)),
         loom_param_string(loom_low_diagnostic_value_class_name(
-            sidecar->module, assignment->value_class)),
+            table->module, assignment->value_class)),
         loom_param_u32(spill_plan->byte_size),
         loom_param_u32(spill_plan->store_count),
         loom_param_u32(spill_plan->reload_count),
@@ -3155,7 +3148,7 @@ static iree_status_t loom_low_allocation_emit_predicted_spills(
     };
     loom_diagnostic_emission_t emission = {
         .op = loom_low_diagnostic_value_origin_op(
-            sidecar->module, spill_plan->value_id, sidecar->function_op),
+            table->module, spill_plan->value_id, table->function_op),
         .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 8),
         .params = params,
         .param_count = IREE_ARRAYSIZE(params),
@@ -3178,12 +3171,12 @@ static iree_string_view_t loom_low_allocation_copy_decision_name(
 }
 
 static iree_string_view_t loom_low_allocation_copy_decision_reason(
-    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_table_t* table,
     const loom_low_allocation_copy_decision_t* copy_decision) {
   const loom_low_allocation_assignment_t* source_assignment =
-      &sidecar->assignments[copy_decision->source_assignment_index];
+      &table->assignments[copy_decision->source_assignment_index];
   const loom_low_allocation_assignment_t* result_assignment =
-      &sidecar->assignments[copy_decision->result_assignment_index];
+      &table->assignments[copy_decision->result_assignment_index];
   if (!loom_low_allocation_assignment_is_coalescable(source_assignment)) {
     return IREE_SV("source value is not assigned to a register-like location");
   }
@@ -3198,30 +3191,29 @@ static iree_string_view_t loom_low_allocation_copy_decision_reason(
 }
 
 static iree_status_t loom_low_allocation_emit_copy_decisions(
-    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_table_t* table,
     iree_diagnostic_emitter_t emitter) {
-  for (iree_host_size_t i = 0; i < sidecar->copy_decision_count; ++i) {
+  for (iree_host_size_t i = 0; i < table->copy_decision_count; ++i) {
     const loom_low_allocation_copy_decision_t* copy_decision =
-        &sidecar->copy_decisions[i];
+        &table->copy_decisions[i];
     loom_diagnostic_param_t params[] = {
-        loom_param_string(loom_low_diagnostic_target_key(&sidecar->target)),
-        loom_param_string(loom_low_diagnostic_export_name(&sidecar->target)),
-        loom_param_string(loom_low_diagnostic_config_key(&sidecar->target)),
+        loom_param_string(loom_low_diagnostic_target_key(&table->target)),
+        loom_param_string(loom_low_diagnostic_export_name(&table->target)),
+        loom_param_string(loom_low_diagnostic_config_key(&table->target)),
         loom_param_string(loom_low_diagnostic_function_name(
-            sidecar->module, sidecar->function_op)),
+            table->module, table->function_op)),
         loom_param_string(loom_low_diagnostic_value_name(
-            sidecar->module, copy_decision->source_value_id)),
+            table->module, copy_decision->source_value_id)),
         loom_param_string(loom_low_diagnostic_value_name(
-            sidecar->module, copy_decision->result_value_id)),
+            table->module, copy_decision->result_value_id)),
         loom_param_string(
             loom_low_allocation_copy_decision_name(copy_decision->kind)),
         loom_param_string(
-            loom_low_allocation_copy_decision_reason(sidecar, copy_decision)),
+            loom_low_allocation_copy_decision_reason(table, copy_decision)),
     };
     loom_diagnostic_emission_t emission = {
         .op = loom_low_diagnostic_value_origin_op(
-            sidecar->module, copy_decision->result_value_id,
-            sidecar->function_op),
+            table->module, copy_decision->result_value_id, table->function_op),
         .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 6),
         .params = params,
         .param_count = IREE_ARRAYSIZE(params),
@@ -3234,18 +3226,18 @@ static iree_status_t loom_low_allocation_emit_copy_decisions(
 iree_status_t loom_low_allocate_function(
     const loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_allocation_options_t* options, iree_arena_allocator_t* arena,
-    loom_low_allocation_sidecar_t* out_sidecar) {
+    loom_low_allocation_table_t* out_table) {
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(low_func_op);
   IREE_ASSERT_ARGUMENT(options && options->descriptor_registry);
   IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_sidecar);
+  IREE_ASSERT_ARGUMENT(out_table);
   if (!loom_low_function_def_isa(low_func_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected low.func.def or low.kernel.def");
   }
   IREE_RETURN_IF_ERROR(loom_low_allocation_validate_option_shapes(options));
-  *out_sidecar = (loom_low_allocation_sidecar_t){0};
+  *out_table = (loom_low_allocation_table_t){0};
 
   loom_low_allocation_build_state_t state = {
       .module = module,
@@ -3285,7 +3277,7 @@ iree_status_t loom_low_allocate_function(
   IREE_RETURN_IF_ERROR(
       loom_low_allocation_record_edge_copy_temporaries(&state));
 
-  loom_low_allocation_sidecar_t sidecar = {
+  loom_low_allocation_table_t table = {
       .module = module,
       .function_op = low_func_op,
       .target = state.target,
@@ -3309,18 +3301,18 @@ iree_status_t loom_low_allocate_function(
       .coalesced_copy_count = state.coalesced_copy_count,
       .materialized_copy_count = state.materialized_copy_count,
   };
-  loom_target_bundle_storage_rebind(&sidecar.target.bundle_storage);
-  IREE_RETURN_IF_ERROR(loom_low_allocation_verify_sidecar(&sidecar));
+  loom_target_bundle_storage_rebind(&table.target.bundle_storage);
+  IREE_RETURN_IF_ERROR(loom_low_allocation_verify_table(&table));
   if (iree_any_bit_set(options->diagnostic_flags,
                        LOOM_LOW_ALLOCATION_DIAGNOSTIC_PREDICTED_SPILLS)) {
     IREE_RETURN_IF_ERROR(
-        loom_low_allocation_emit_predicted_spills(&sidecar, options->emitter));
+        loom_low_allocation_emit_predicted_spills(&table, options->emitter));
   }
   if (iree_any_bit_set(options->diagnostic_flags,
                        LOOM_LOW_ALLOCATION_DIAGNOSTIC_COPY_DECISIONS)) {
     IREE_RETURN_IF_ERROR(
-        loom_low_allocation_emit_copy_decisions(&sidecar, options->emitter));
+        loom_low_allocation_emit_copy_decisions(&table, options->emitter));
   }
-  *out_sidecar = sidecar;
+  *out_table = table;
   return iree_ok_status();
 }

@@ -13,8 +13,8 @@
 #include "loom/target/emit/native/amdgpu/kernel_record.h"
 
 iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_kernel_hsaco_options_t* options,
     loom_amdgpu_kernel_hsaco_contribution_t* out_contribution,
     iree_arena_allocator_t* scratch_arena) {
@@ -133,8 +133,8 @@ iree_status_t loom_amdgpu_write_kernel_hsaco_contributions(
 }
 
 iree_status_t loom_amdgpu_emit_kernel_hsaco(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_kernel_hsaco_options_t* options, iree_io_stream_t* stream,
     iree_arena_allocator_t* scratch_arena) {
   loom_amdgpu_kernel_hsaco_options_t contribution_options =

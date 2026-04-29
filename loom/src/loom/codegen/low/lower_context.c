@@ -370,14 +370,14 @@ iree_status_t loom_low_lower_record_memory_access_summary(
   IREE_ASSERT_ARGUMENT(context);
   IREE_ASSERT_ARGUMENT(low_op);
   IREE_ASSERT_ARGUMENT(summary);
-  if (context->options->sidecar_arena == NULL) {
+  if (context->options->table_arena == NULL) {
     return iree_ok_status();
   }
   if (context->lowering.memory_access_record_count >=
       context->lowering.memory_access_record_capacity) {
     return iree_make_status(
         IREE_STATUS_INTERNAL,
-        "source-to-low memory access sidecar exceeded planned capacity");
+        "source-to-low memory access table exceeded planned capacity");
   }
 
   loom_low_memory_access_record_t* record =

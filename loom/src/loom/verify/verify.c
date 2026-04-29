@@ -124,7 +124,7 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
   IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // OperandDict format elements are stored as ordinary variadic operands plus
-  // a key -> operand-ordinal DICT attribute. Verify that sidecar metadata is
+  // a key -> operand-ordinal DICT attribute. Verify that field metadata is
   // canonical and exactly describes the operand segment before later passes
   // depend on keyed lookup.
   loom_verify_operand_dicts(state, op, vtable);

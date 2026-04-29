@@ -12,7 +12,7 @@
 typedef struct loom_x86_loom_check_emit_options_t {
   // Module-local low.func.def symbol selected by the RUN line.
   iree_string_view_t function_symbol_name;
-  // Candidate selection strategy used by low packetization.
+  // Candidate selection strategy used by low frame.
   loom_low_schedule_strategy_t schedule_strategy;
   // True once a strategy option has been parsed.
   bool has_schedule_strategy_option;
@@ -116,10 +116,9 @@ static iree_status_t loom_x86_loom_check_parse_emit_options(
 }
 
 static iree_status_t loom_x86_loom_check_emit_assembly(
-    const loom_low_packetization_t* packetization,
-    iree_string_builder_t* builder) {
-  return loom_x86_emit_assembly_fragment(&packetization->schedule,
-                                         &packetization->allocation, builder);
+    const loom_low_emission_frame_t* frame, iree_string_builder_t* builder) {
+  return loom_x86_emit_assembly_fragment(&frame->schedule, &frame->allocation,
+                                         builder);
 }
 
 static iree_status_t loom_x86_loom_check_emit_provider_execute(
@@ -130,13 +129,13 @@ static iree_status_t loom_x86_loom_check_emit_provider_execute(
   IREE_RETURN_IF_ERROR(
       loom_x86_loom_check_parse_emit_options(request, &options));
 
-  loom_low_packetization_t packetization = {0};
+  loom_low_emission_frame_t frame = {0};
   IREE_RETURN_IF_ERROR(loom_check_low_emit_packetize_function(
       request, options.function_symbol_name, options.schedule_strategy,
       options.allocation_budgets, options.allocation_budget_count,
       options.allocation_fixed_value_specs,
-      options.allocation_fixed_value_spec_count, &packetization));
-  return loom_x86_loom_check_emit_assembly(&packetization,
+      options.allocation_fixed_value_spec_count, &frame));
+  return loom_x86_loom_check_emit_assembly(&frame,
                                            &request->result->actual_output);
 }
 

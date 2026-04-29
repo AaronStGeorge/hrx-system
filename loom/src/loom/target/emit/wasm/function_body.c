@@ -174,10 +174,10 @@ typedef struct loom_wasm_attr_name_ids_t {
 } loom_wasm_attr_name_ids_t;
 
 typedef struct loom_wasm_emit_state_t {
-  // Schedule sidecar being emitted.
-  const loom_low_schedule_sidecar_t* schedule;
-  // Allocation sidecar supplying class-local target ids.
-  const loom_low_allocation_sidecar_t* allocation;
+  // Schedule table being emitted.
+  const loom_low_schedule_table_t* schedule;
+  // Allocation table supplying class-local target ids.
+  const loom_low_allocation_table_t* allocation;
   // Cached module attr-name IDs used to decode low packet immediates.
   loom_wasm_attr_name_ids_t attr_names;
   // Derived Wasm local namespace layout.
@@ -326,7 +326,7 @@ static iree_status_t loom_wasm_local_layout_add_entry(
 }
 
 static iree_status_t loom_wasm_validate_target_id_assignment(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_low_allocation_assignment_t* assignment,
     loom_wasm_value_type_t* out_value_type) {
   if (assignment->location_kind != LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID) {
@@ -352,7 +352,7 @@ static iree_status_t loom_wasm_validate_target_id_assignment(
 }
 
 static iree_status_t loom_wasm_lookup_assignment(
-    const loom_low_allocation_sidecar_t* allocation, loom_value_id_t value_id,
+    const loom_low_allocation_table_t* allocation, loom_value_id_t value_id,
     const loom_low_allocation_assignment_t** out_assignment,
     loom_wasm_value_type_t* out_value_type) {
   const loom_low_allocation_assignment_t* assignment =
@@ -369,7 +369,7 @@ static iree_status_t loom_wasm_lookup_assignment(
 }
 
 static iree_status_t loom_wasm_local_layout_add_parameter(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     loom_wasm_local_layout_t* layout, loom_value_id_t value_id,
     uint32_t parameter_index) {
   const loom_low_allocation_assignment_t* assignment = NULL;
@@ -399,7 +399,7 @@ static iree_status_t loom_wasm_local_layout_add_parameter(
 }
 
 static iree_status_t loom_wasm_local_layout_add_assignment(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     loom_wasm_local_layout_t* layout,
     const loom_low_allocation_assignment_t* assignment) {
   loom_wasm_value_type_t value_type = 0;
@@ -425,7 +425,7 @@ static iree_status_t loom_wasm_local_layout_add_assignment(
 }
 
 static iree_status_t loom_wasm_build_local_layout(
-    const loom_low_allocation_sidecar_t* allocation, iree_allocator_t allocator,
+    const loom_low_allocation_table_t* allocation, iree_allocator_t allocator,
     loom_wasm_local_layout_t* out_layout) {
   *out_layout = (loom_wasm_local_layout_t){
       .allocator = allocator,
@@ -889,14 +889,14 @@ static iree_status_t loom_wasm_emit_function_body_payload(
   return loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_END);
 }
 
-static iree_status_t loom_wasm_validate_sidecars(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation) {
+static iree_status_t loom_wasm_validate_tables(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation) {
   if (!schedule || !allocation) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "schedule and allocation sidecars are required");
+                            "schedule and allocation tables are required");
   }
-  IREE_RETURN_IF_ERROR(loom_low_packet_validate_sidecars(schedule, allocation));
+  IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(schedule, allocation));
   if (schedule->target.descriptor_set !=
       loom_wasm_core_simd128_descriptor_set()) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -910,7 +910,7 @@ static iree_status_t loom_wasm_validate_sidecars(
   if (allocation->spill_count != 0 || allocation->spill_plan_count != 0) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "Wasm emission requires unspilled allocation sidecars");
+        "Wasm emission requires unspilled allocation tables");
   }
   return iree_ok_status();
 }
@@ -925,15 +925,15 @@ void loom_wasm_function_body_deinitialize(loom_wasm_function_body_t* body,
 }
 
 iree_status_t loom_wasm_emit_function_body(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation, iree_allocator_t allocator,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation, iree_allocator_t allocator,
     loom_wasm_function_body_t* out_body) {
   if (!out_body) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "Wasm function-body output is required");
   }
   *out_body = (loom_wasm_function_body_t){0};
-  IREE_RETURN_IF_ERROR(loom_wasm_validate_sidecars(schedule, allocation));
+  IREE_RETURN_IF_ERROR(loom_wasm_validate_tables(schedule, allocation));
 
   loom_wasm_emit_state_t state = {
       .schedule = schedule,

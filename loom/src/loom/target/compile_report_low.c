@@ -76,7 +76,7 @@ static uint64_t loom_target_compile_report_value_register_unit_count(
 
 static const loom_low_allocation_assignment_t*
 loom_target_compile_report_find_assignment(
-    const loom_low_allocation_sidecar_t* allocation, loom_value_id_t value_id) {
+    const loom_low_allocation_table_t* allocation, loom_value_id_t value_id) {
   for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
     if (allocation->assignments[i].value_id == value_id) {
       return &allocation->assignments[i];
@@ -86,7 +86,7 @@ loom_target_compile_report_find_assignment(
 }
 
 static bool loom_target_compile_report_slice_move_count(
-    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     uint64_t* out_unit_count) {
   *out_unit_count = 0;
   const int64_t offset = loom_low_slice_offset(op);
@@ -129,7 +129,7 @@ static bool loom_target_compile_report_slice_move_count(
 }
 
 static bool loom_target_compile_report_concat_move_count(
-    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     uint64_t* out_unit_count) {
   *out_unit_count = 0;
   const loom_low_allocation_assignment_t* result_assignment =
@@ -177,7 +177,7 @@ static bool loom_target_compile_report_concat_move_count(
 
 static void loom_target_compile_report_record_low_copy_moves(
     loom_target_compile_report_t* report,
-    const loom_low_allocation_sidecar_t* allocation) {
+    const loom_low_allocation_table_t* allocation) {
   uint64_t packet_count = 0;
   uint64_t unit_count = 0;
   for (iree_host_size_t i = 0; i < allocation->copy_decision_count; ++i) {
@@ -190,7 +190,7 @@ static void loom_target_compile_report_record_low_copy_moves(
     if (decision->result_assignment_index >= allocation->assignment_count) {
       IREE_ASSERT(false,
                   "verified copy decision result assignment must fit "
-                  "allocation sidecar");
+                  "allocation table");
       continue;
     }
     unit_count += allocation->assignments[decision->result_assignment_index]
@@ -203,7 +203,7 @@ static void loom_target_compile_report_record_low_copy_moves(
 
 static void loom_target_compile_report_record_edge_copy_moves(
     loom_target_compile_report_t* report,
-    const loom_low_allocation_sidecar_t* allocation) {
+    const loom_low_allocation_table_t* allocation) {
   uint64_t packet_count = 0;
   uint64_t unit_count = 0;
   for (iree_host_size_t i = 0; i < allocation->edge_copy_group_count; ++i) {
@@ -212,7 +212,7 @@ static void loom_target_compile_report_record_edge_copy_moves(
     if (group->copy_start > allocation->edge_copy_count ||
         group->copy_count > allocation->edge_copy_count - group->copy_start) {
       IREE_ASSERT(false,
-                  "verified edge-copy group range must fit allocation sidecar");
+                  "verified edge-copy group range must fit allocation table");
       continue;
     }
     uint64_t group_unit_count = 0;
@@ -224,7 +224,7 @@ static void loom_target_compile_report_record_edge_copy_moves(
               allocation->assignment_count) {
         IREE_ASSERT(false,
                     "verified edge-copy assignments must fit allocation "
-                    "sidecar");
+                    "table");
         continue;
       }
       const loom_low_allocation_assignment_t* source_assignment =
@@ -259,17 +259,17 @@ static void loom_target_compile_report_record_edge_copy_moves(
 
 static void loom_target_compile_report_record_structural_packet_moves(
     loom_target_compile_report_t* report,
-    const loom_low_packetization_t* packetization) {
+    const loom_low_emission_frame_t* frame) {
   uint64_t constant_packet_count = 0;
   uint64_t constant_unit_count = 0;
   uint64_t slice_packet_count = 0;
   uint64_t slice_unit_count = 0;
   uint64_t concat_packet_count = 0;
   uint64_t concat_unit_count = 0;
-  const loom_module_t* module = packetization->schedule.module;
-  const loom_low_allocation_sidecar_t* allocation = &packetization->allocation;
-  for (iree_host_size_t i = 0; i < packetization->schedule.node_count; ++i) {
-    const loom_op_t* op = packetization->schedule.nodes[i].op;
+  const loom_module_t* module = frame->schedule.module;
+  const loom_low_allocation_table_t* allocation = &frame->allocation;
+  for (iree_host_size_t i = 0; i < frame->schedule.node_count; ++i) {
+    const loom_op_t* op = frame->schedule.nodes[i].op;
     if (op == NULL) {
       continue;
     }
@@ -309,13 +309,10 @@ static void loom_target_compile_report_record_structural_packet_moves(
 
 static void loom_target_compile_report_record_move_causes(
     loom_target_compile_report_t* report,
-    const loom_low_packetization_t* packetization) {
-  loom_target_compile_report_record_low_copy_moves(report,
-                                                   &packetization->allocation);
-  loom_target_compile_report_record_edge_copy_moves(report,
-                                                    &packetization->allocation);
-  loom_target_compile_report_record_structural_packet_moves(report,
-                                                            packetization);
+    const loom_low_emission_frame_t* frame) {
+  loom_target_compile_report_record_low_copy_moves(report, &frame->allocation);
+  loom_target_compile_report_record_edge_copy_moves(report, &frame->allocation);
+  loom_target_compile_report_record_structural_packet_moves(report, frame);
 }
 
 static loom_target_compile_report_source_low_selection_kind_t
@@ -408,7 +405,7 @@ static void loom_target_compile_report_record_pressure_rows(
 
 static void loom_target_compile_report_record_spill_rows(
     loom_target_compile_report_t* report,
-    const loom_low_allocation_sidecar_t* allocation) {
+    const loom_low_allocation_table_t* allocation) {
   for (iree_host_size_t i = 0; i < allocation->spill_plan_count; ++i) {
     const loom_low_allocation_spill_plan_t* spill_plan =
         &allocation->spill_plans[i];
@@ -438,35 +435,29 @@ static void loom_target_compile_report_record_spill_rows(
   }
 }
 
-void loom_target_compile_report_record_low_packetization(
+void loom_target_compile_report_record_low_emission_frame(
     loom_target_compile_report_t* report,
-    const loom_low_packetization_t* packetization) {
+    const loom_low_emission_frame_t* frame) {
   IREE_ASSERT_ARGUMENT(report);
-  IREE_ASSERT_ARGUMENT(packetization);
+  IREE_ASSERT_ARGUMENT(frame);
 
-  const loom_liveness_analysis_t* liveness =
-      &packetization->allocation.liveness;
+  const loom_liveness_analysis_t* liveness = &frame->allocation.liveness;
   uint64_t peak_live_units = 0;
   for (iree_host_size_t i = 0; i < liveness->pressure_summary_count; ++i) {
     const uint64_t live_units = liveness->pressure_summaries[i].peak_live_units;
     peak_live_units = iree_max(peak_live_units, live_units);
   }
   loom_target_compile_report_record_schedule(
-      report, packetization->schedule.node_count,
-      packetization->schedule.scheduled_node_count,
-      packetization->schedule.dependency_count,
-      packetization->schedule.resource_use_count,
-      packetization->schedule.hazard_gap_count,
-      packetization->schedule.model_summary_count,
+      report, frame->schedule.node_count, frame->schedule.scheduled_node_count,
+      frame->schedule.dependency_count, frame->schedule.resource_use_count,
+      frame->schedule.hazard_gap_count, frame->schedule.model_summary_count,
       liveness->pressure_summary_count, peak_live_units);
   loom_target_compile_report_record_allocation(
-      report, packetization->allocation.assignment_count,
-      packetization->allocation.spill_count,
-      packetization->allocation.spill_plan_count,
-      packetization->allocation.coalesced_copy_count,
-      packetization->allocation.materialized_copy_count);
-  loom_target_compile_report_record_move_causes(report, packetization);
+      report, frame->allocation.assignment_count, frame->allocation.spill_count,
+      frame->allocation.spill_plan_count,
+      frame->allocation.coalesced_copy_count,
+      frame->allocation.materialized_copy_count);
+  loom_target_compile_report_record_move_causes(report, frame);
   loom_target_compile_report_record_pressure_rows(report, liveness);
-  loom_target_compile_report_record_spill_rows(report,
-                                               &packetization->allocation);
+  loom_target_compile_report_record_spill_rows(report, &frame->allocation);
 }

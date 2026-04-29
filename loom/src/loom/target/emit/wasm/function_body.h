@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// WebAssembly function-body emission from target-low packet sidecars.
+// WebAssembly function-body emission from target-low packet tables.
 //
 // This emits the size-prefixed function body stored in a Wasm code section,
 // not a complete Wasm module. Module sections, imports/exports, validation
@@ -40,13 +40,13 @@ void loom_wasm_function_body_deinitialize(loom_wasm_function_body_t* body,
                                           iree_allocator_t allocator);
 
 // Emits a size-prefixed Wasm code-section function body for one scheduled and
-// allocated low.func.def. The sidecars must describe the same function and the
+// allocated low.func.def. The tables must describe the same function and the
 // wasm.core.simd128 descriptor set. The current emitter supports the straight-
 // line scalar i32 and SIMD128 subset with unspilled target-id allocation;
 // unsupported packets fail loud instead of producing partial Wasm.
 iree_status_t loom_wasm_emit_function_body(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation, iree_allocator_t allocator,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation, iree_allocator_t allocator,
     loom_wasm_function_body_t* out_body);
 
 #ifdef __cplusplus

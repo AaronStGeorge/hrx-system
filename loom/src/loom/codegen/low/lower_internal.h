@@ -63,7 +63,7 @@ typedef struct loom_low_lowering_frame_t {
   iree_host_size_t selected_plan_capacity;
   // Next selected plan consumed by the emission walk.
   iree_host_size_t selected_plan_emit_index;
-  // Source-derived memory access rows copied into options.sidecar_arena.
+  // Source-derived memory access rows copied into options.table_arena.
   loom_low_memory_access_record_t* memory_access_records;
   // Number of memory access rows recorded during emission.
   iree_host_size_t memory_access_record_count;

@@ -11,8 +11,8 @@
 
 #include "iree/base/internal/arena.h"
 #include "iree/io/vec_stream.h"
+#include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/lower.h"
-#include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/preparation.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
@@ -58,12 +58,12 @@ static bool loom_amdgpu_module_compile_bundle_is_compatible(
 typedef struct loom_amdgpu_module_compile_kernel_plan_t {
   // Target-resolved function entry used to build this kernel.
   const loom_target_module_compile_entry_t* entry;
-  // Selected or lowered low.kernel.def op for packetization.
+  // Selected or lowered low.kernel.def op for frame.
   loom_op_t* low_function_op;
   // Source-derived memory summaries for low_function_op, when this plan lowered
   // from source IR in this compile.
   loom_low_memory_access_table_t memory_access_table;
-  // ABI/resource materialization result captured before packetization.
+  // ABI/resource materialization result captured before frame.
   loom_amdgpu_hal_resource_materialization_result_t materialization;
   // Fixed allocator values derived from the HAL ABI live-ins.
   const loom_low_allocation_fixed_value_t* fixed_values;
@@ -180,17 +180,17 @@ static iree_status_t loom_amdgpu_module_compile_read_stream_contents(
 }
 
 static iree_status_t loom_amdgpu_module_compile_build_hsaco_contribution(
-    const loom_low_packetization_t* packetization,
+    const loom_low_emission_frame_t* frame,
     const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout,
     const loom_amdgpu_native_preflight_t* preflight,
     loom_amdgpu_kernel_hsaco_contribution_t* out_contribution,
-    iree_arena_allocator_t* sidecar_arena) {
+    iree_arena_allocator_t* table_arena) {
   loom_amdgpu_wait_plan_t wait_plan = {0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_wait_plan_build(&packetization->schedule,
-                                                   sidecar_arena, &wait_plan));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_wait_plan_build(&frame->schedule, table_arena, &wait_plan));
   loom_amdgpu_wait_packet_plan_t wait_packets = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_plan_build(
-      &wait_plan, sidecar_arena, &wait_packets));
+      &wait_plan, table_arena, &wait_packets));
 
   const loom_amdgpu_kernel_hsaco_options_t hsaco_options = {
       .abi_layout = abi_layout,
@@ -198,14 +198,14 @@ static iree_status_t loom_amdgpu_module_compile_build_hsaco_contribution(
       .wait_packets = &wait_packets,
   };
   return loom_amdgpu_build_kernel_hsaco_contribution(
-      &packetization->schedule, &packetization->allocation, &hsaco_options,
-      out_contribution, sidecar_arena);
+      &frame->schedule, &frame->allocation, &hsaco_options, out_contribution,
+      table_arena);
 }
 
 static iree_status_t loom_amdgpu_module_compile_write_hsaco(
     const loom_amdgpu_kernel_hsaco_contribution_t* contributions,
     iree_host_size_t contribution_count, iree_const_byte_span_t* out_hsaco,
-    iree_arena_allocator_t* sidecar_arena, iree_allocator_t allocator) {
+    iree_arena_allocator_t* table_arena, iree_allocator_t allocator) {
   IREE_ASSERT_ARGUMENT(out_hsaco);
   *out_hsaco = iree_const_byte_span_empty();
 
@@ -215,7 +215,7 @@ static iree_status_t loom_amdgpu_module_compile_write_hsaco(
           IREE_IO_STREAM_MODE_SEEKABLE | IREE_IO_STREAM_MODE_RESIZABLE,
       32 * 1024, allocator, &stream));
   iree_status_t status = loom_amdgpu_write_kernel_hsaco_contributions(
-      contributions, contribution_count, stream, sidecar_arena);
+      contributions, contribution_count, stream, table_arena);
   if (iree_status_is_ok(status)) {
     status = loom_amdgpu_module_compile_read_stream_contents(stream, allocator,
                                                              out_hsaco);
@@ -230,7 +230,7 @@ static iree_status_t loom_amdgpu_module_compile_lower_function(
     const loom_target_module_compile_entry_t* entry,
     loom_func_like_t source_function,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    uint32_t max_errors, iree_arena_allocator_t* sidecar_arena,
+    uint32_t max_errors, iree_arena_allocator_t* table_arena,
     loom_target_compile_report_t* report, loom_low_lower_result_t* out_result) {
   loom_low_lower_policy_registry_t policy_registry = {0};
   loom_amdgpu_low_lower_policy_registry_initialize(&policy_registry);
@@ -240,7 +240,7 @@ static iree_status_t loom_amdgpu_module_compile_lower_function(
 
   loom_low_lower_report_storage_t report_storage = {0};
   IREE_RETURN_IF_ERROR(loom_target_compile_report_allocate_low_lowering_rows(
-      report, sidecar_arena, &report_storage));
+      report, table_arena, &report_storage));
   static const loom_target_low_legality_provider_t* const
       kLowLegalityProviders[] = {
           &loom_amdgpu_low_legality_provider_storage,
@@ -261,7 +261,7 @@ static iree_status_t loom_amdgpu_module_compile_lower_function(
       .max_errors = max_errors,
       .report_enabled = report != NULL,
       .report_storage = report_storage,
-      .sidecar_arena = sidecar_arena,
+      .table_arena = table_arena,
   };
   IREE_RETURN_IF_ERROR(loom_low_lower_function(module, source_function,
                                                &lower_options, out_result));
@@ -283,7 +283,7 @@ static iree_status_t loom_amdgpu_module_compile_select_low_function(
     const loom_target_module_compile_entry_t* entry,
     loom_func_like_t source_function,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    uint32_t max_errors, iree_arena_allocator_t* sidecar_arena,
+    uint32_t max_errors, iree_arena_allocator_t* table_arena,
     loom_target_compile_report_t* report, loom_op_t** out_low_function_op,
     loom_low_memory_access_table_t* out_memory_access_table) {
   IREE_ASSERT_ARGUMENT(out_low_function_op);
@@ -305,7 +305,7 @@ static iree_status_t loom_amdgpu_module_compile_select_low_function(
   loom_low_lower_result_t lower_result = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_lower_function(
       module, low_registry, entry, source_function, diagnostic_emitter,
-      max_errors, sidecar_arena, report, &lower_result));
+      max_errors, table_arena, report, &lower_result));
 
   *out_low_function_op = lower_result.low_func_op;
   *out_memory_access_table = lower_result.memory_access_table;
@@ -317,7 +317,7 @@ static iree_status_t loom_amdgpu_module_compile_prepare_kernel_plan(
     const loom_target_low_descriptor_registry_t* low_registry,
     const loom_target_module_compile_entry_t* entry,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    uint32_t max_errors, iree_arena_allocator_t* sidecar_arena,
+    uint32_t max_errors, iree_arena_allocator_t* table_arena,
     loom_target_compile_report_t* report,
     loom_amdgpu_module_compile_kernel_plan_t* out_plan) {
   IREE_ASSERT_ARGUMENT(out_plan);
@@ -328,7 +328,7 @@ static iree_status_t loom_amdgpu_module_compile_prepare_kernel_plan(
   loom_op_t* low_function_op = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_select_low_function(
       module, low_registry, entry, entry->func, diagnostic_emitter, max_errors,
-      sidecar_arena, report, &low_function_op, &out_plan->memory_access_table));
+      table_arena, report, &low_function_op, &out_plan->memory_access_table));
   out_plan->low_function_op = low_function_op;
   if (report != NULL) {
     loom_symbol_ref_t lowered_ref = entry->func_ref;
@@ -347,28 +347,28 @@ static iree_status_t loom_amdgpu_module_compile_materialize_kernel_resources(
     loom_module_t* module,
     const loom_target_low_descriptor_registry_t* low_registry,
     loom_amdgpu_module_compile_kernel_plan_t* plan,
-    iree_arena_allocator_t* sidecar_arena) {
+    iree_arena_allocator_t* table_arena) {
   const loom_low_descriptor_set_t* descriptor_set = NULL;
   IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
       &low_registry->registry, &plan->entry->bundle_storage.bundle,
       LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &descriptor_set));
   return loom_amdgpu_hal_resource_materialize(
       module, plan->low_function_op, &plan->entry->bundle_storage.bundle,
-      descriptor_set, &plan->materialization, sidecar_arena);
+      descriptor_set, &plan->materialization, table_arena);
 }
 
 static iree_status_t loom_amdgpu_module_compile_compute_kernel_fixed_values(
     loom_module_t* module,
     const loom_target_low_descriptor_registry_t* low_registry,
     loom_amdgpu_module_compile_kernel_plan_t* plan,
-    iree_arena_allocator_t* sidecar_arena) {
+    iree_arena_allocator_t* table_arena) {
   const loom_low_descriptor_set_t* descriptor_set = NULL;
   IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
       &low_registry->registry, &plan->entry->bundle_storage.bundle,
       LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &descriptor_set));
   return loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
       module, plan->low_function_op, descriptor_set, &plan->fixed_values,
-      &plan->fixed_value_count, sidecar_arena);
+      &plan->fixed_value_count, table_arena);
 }
 
 static iree_status_t loom_amdgpu_module_compile_build_kernel_contribution(
@@ -376,7 +376,7 @@ static iree_status_t loom_amdgpu_module_compile_build_kernel_contribution(
     const loom_target_low_descriptor_registry_t* low_registry,
     const loom_amdgpu_module_compile_kernel_plan_t* plan,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    iree_arena_allocator_t* sidecar_arena, loom_target_compile_report_t* report,
+    iree_arena_allocator_t* table_arena, loom_target_compile_report_t* report,
     loom_amdgpu_kernel_hsaco_contribution_t* out_contribution,
     loom_amdgpu_hal_executable_export_t* out_export) {
   IREE_ASSERT_ARGUMENT(out_contribution);
@@ -391,10 +391,10 @@ static iree_status_t loom_amdgpu_module_compile_build_kernel_contribution(
   loom_low_schedule_pressure_cliff_list_t schedule_pressure_cliffs =
       loom_low_schedule_pressure_cliff_list_empty();
   IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
-      descriptor_set, sidecar_arena, &schedule_pressure_cliffs));
+      descriptor_set, table_arena, &schedule_pressure_cliffs));
 
-  loom_low_packetization_t packetization = {0};
-  const loom_low_packetization_options_t packetization_options = {
+  loom_low_emission_frame_t frame = {0};
+  const loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = &low_registry->registry,
       .schedule_pressure_cliffs = schedule_pressure_cliffs,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
@@ -403,20 +403,19 @@ static iree_status_t loom_amdgpu_module_compile_build_kernel_contribution(
       .allocation_fixed_value_count = plan->fixed_value_count,
       .emitter = loom_target_module_compile_emitter(diagnostic_emitter),
   };
-  IREE_RETURN_IF_ERROR(loom_low_packetize_function(
-      module, plan->low_function_op, &packetization_options, sidecar_arena,
-      &packetization));
+  IREE_RETURN_IF_ERROR(loom_low_emission_frame_build(
+      module, plan->low_function_op, &frame_options, table_arena, &frame));
   if (report != NULL) {
-    loom_target_compile_report_record_low_packetization(report, &packetization);
+    loom_target_compile_report_record_low_emission_frame(report, &frame);
   }
 
   loom_amdgpu_native_preflight_t preflight = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_native_preflight_analyze(
-      &packetization.schedule, &packetization.allocation, &preflight));
+      &frame.schedule, &frame.allocation, &preflight));
 
   IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_build_hsaco_contribution(
-      &packetization, &plan->materialization.abi_layout, &preflight,
-      out_contribution, sidecar_arena));
+      &frame, &plan->materialization.abi_layout, &preflight, out_contribution,
+      table_arena));
   if (report != NULL) {
     loom_target_compile_report_record_emission(
         report, out_contribution->summary.instruction_count,
@@ -432,7 +431,7 @@ static iree_status_t loom_amdgpu_module_compile_build_kernel_contribution(
   loom_amdgpu_hal_executable_binding_flags_t* binding_flags = NULL;
   if (abi_layout->resource_count != 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        sidecar_arena, abi_layout->resource_count, sizeof(*binding_flags),
+        table_arena, abi_layout->resource_count, sizeof(*binding_flags),
         (void**)&binding_flags));
     memset(binding_flags, 0,
            abi_layout->resource_count * sizeof(*binding_flags));
@@ -458,7 +457,7 @@ static iree_status_t loom_amdgpu_module_compile_entries(
     const loom_target_low_descriptor_registry_t* low_registry,
     loom_target_module_compile_entry_list_t entries,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    iree_arena_block_pool_t* block_pool, iree_arena_allocator_t* sidecar_arena,
+    iree_arena_block_pool_t* block_pool, iree_arena_allocator_t* table_arena,
     loom_target_compile_report_t* report,
     loom_amdgpu_hal_executable_t* out_executable, iree_allocator_t allocator) {
   if (entries.count == 0 || entries.values == NULL) {
@@ -472,21 +471,21 @@ static iree_status_t loom_amdgpu_module_compile_entries(
       entries.count == 1 ? report : NULL;
   loom_amdgpu_module_compile_kernel_plan_t* plans = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      sidecar_arena, entries.count, sizeof(*plans), (void**)&plans));
+      table_arena, entries.count, sizeof(*plans), (void**)&plans));
   loom_op_t** low_function_ops = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(sidecar_arena, entries.count,
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(table_arena, entries.count,
                                                  sizeof(*low_function_ops),
                                                  (void**)&low_function_ops));
   for (uint16_t i = 0; i < entries.count; ++i) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_prepare_kernel_plan(
         module, low_registry, &entries.values[i], diagnostic_emitter,
-        max_errors, sidecar_arena, single_entry_report, &plans[i]));
+        max_errors, table_arena, single_entry_report, &plans[i]));
     low_function_ops[i] = plans[i].low_function_op;
   }
   for (uint16_t i = 0; i < entries.count; ++i) {
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_module_compile_materialize_kernel_resources(
-            module, low_registry, &plans[i], sidecar_arena));
+            module, low_registry, &plans[i], table_arena));
   }
   const loom_low_preparation_options_t preparation_options = {
       .pass_registry = loom_pass_builtin_registry(),
@@ -499,7 +498,7 @@ static iree_status_t loom_amdgpu_module_compile_entries(
       block_pool));
   for (uint16_t i = 0; i < entries.count; ++i) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_compute_kernel_fixed_values(
-        module, low_registry, &plans[i], sidecar_arena));
+        module, low_registry, &plans[i], table_arena));
   }
 
   IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_module(
@@ -510,21 +509,21 @@ static iree_status_t loom_amdgpu_module_compile_entries(
       max_errors));
 
   loom_amdgpu_kernel_hsaco_contribution_t* contributions = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(sidecar_arena, entries.count,
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(table_arena, entries.count,
                                                  sizeof(*contributions),
                                                  (void**)&contributions));
   loom_amdgpu_hal_executable_export_t* exports = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      sidecar_arena, entries.count, sizeof(*exports), (void**)&exports));
+      table_arena, entries.count, sizeof(*exports), (void**)&exports));
   for (uint16_t i = 0; i < entries.count; ++i) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_build_kernel_contribution(
-        module, low_registry, &plans[i], diagnostic_emitter, sidecar_arena,
+        module, low_registry, &plans[i], diagnostic_emitter, table_arena,
         single_entry_report, &contributions[i], &exports[i]));
   }
 
   iree_const_byte_span_t hsaco = iree_const_byte_span_empty();
   iree_status_t status = loom_amdgpu_module_compile_write_hsaco(
-      contributions, entries.count, &hsaco, sidecar_arena, allocator);
+      contributions, entries.count, &hsaco, table_arena, allocator);
   if (iree_status_is_ok(status)) {
     status = loom_amdgpu_emit_hal_executable(contributions[0].target, hsaco,
                                              exports, entries.count, allocator,
@@ -578,8 +577,8 @@ iree_status_t loom_amdgpu_compile_hal_executable(
 
   iree_arena_block_pool_t block_pool;
   iree_arena_block_pool_initialize(32 * 1024, allocator, &block_pool);
-  iree_arena_allocator_t sidecar_arena;
-  iree_arena_initialize(&block_pool, &sidecar_arena);
+  iree_arena_allocator_t table_arena;
+  iree_arena_initialize(&block_pool, &table_arena);
 
   loom_target_module_compile_entry_t single_entry = {0};
   loom_target_module_compile_entry_list_t entries = {0};
@@ -601,11 +600,11 @@ iree_status_t loom_amdgpu_compile_hal_executable(
     if (!iree_string_view_is_empty(artifact_symbol)) {
       status = loom_target_module_compile_select_artifact_entries(
           module, artifact_symbol, &low_registry, entry_predicate,
-          IREE_SV("AMDGPU HAL-native"), &sidecar_arena, &entries);
+          IREE_SV("AMDGPU HAL-native"), &table_arena, &entries);
     } else {
       status = loom_target_module_compile_select_entry(
           module, &target_options, &low_registry, entry_predicate,
-          IREE_SV("AMDGPU HAL-native"), &sidecar_arena, &single_entry);
+          IREE_SV("AMDGPU HAL-native"), &table_arena, &single_entry);
       if (iree_status_is_ok(status)) {
         entries = (loom_target_module_compile_entry_list_t){
             .values = &single_entry,
@@ -627,7 +626,7 @@ iree_status_t loom_amdgpu_compile_hal_executable(
   if (iree_status_is_ok(status)) {
     status = loom_amdgpu_module_compile_entries(
         module, &target_options, &low_registry, entries, &diagnostic_emitter,
-        &block_pool, &sidecar_arena, report, out_executable, allocator);
+        &block_pool, &table_arena, report, out_executable, allocator);
   }
   if (iree_status_is_ok(status) && report != NULL) {
     loom_target_compile_report_record_artifact_size(
@@ -640,7 +639,7 @@ iree_status_t loom_amdgpu_compile_hal_executable(
   if (report != NULL) {
     loom_target_compile_report_record_status(report, status);
   }
-  iree_arena_deinitialize(&sidecar_arena);
+  iree_arena_deinitialize(&table_arena);
   iree_arena_block_pool_deinitialize(&block_pool);
   return status;
 }

@@ -195,8 +195,8 @@ class AmdgpuOccupancyTest : public ::testing::Test {
       const loom_module_t* module, const loom_op_t* low_function,
       const loom_low_allocation_budget_t* budgets,
       iree_host_size_t budget_count, iree_arena_allocator_t* arena,
-      loom_low_allocation_sidecar_t* out_allocation,
-      loom_amdgpu_occupancy_sidecar_t* out_occupancy,
+      loom_low_allocation_table_t* out_allocation,
+      loom_amdgpu_occupancy_table_t* out_occupancy,
       const loom_amdgpu_occupancy_options_t* occupancy_options = nullptr) {
     loom_low_allocation_options_t allocation_options = {
         .descriptor_registry = &low_registry_.registry,
@@ -210,7 +210,7 @@ class AmdgpuOccupancyTest : public ::testing::Test {
   }
 
   const loom_amdgpu_occupancy_register_class_t* FindClass(
-      const loom_amdgpu_occupancy_sidecar_t& occupancy,
+      const loom_amdgpu_occupancy_table_t& occupancy,
       iree_string_view_t register_class) {
     for (iree_host_size_t i = 0; i < occupancy.register_class_count; ++i) {
       if (iree_string_view_equal(occupancy.register_classes[i].register_class,
@@ -239,8 +239,8 @@ TEST_F(AmdgpuOccupancyTest, Gfx11VgprPressureReportsNextCliff) {
 
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
-  loom_low_allocation_sidecar_t allocation = {};
-  loom_amdgpu_occupancy_sidecar_t occupancy = {};
+  loom_low_allocation_table_t allocation = {};
+  loom_amdgpu_occupancy_table_t occupancy = {};
   IREE_ASSERT_OK(AllocateAndBuildOccupancy(module.get(), low_function, nullptr,
                                            0, &arena, &allocation, &occupancy));
 
@@ -295,8 +295,8 @@ TEST_F(AmdgpuOccupancyTest, SpillsReportScratchPressure) {
   };
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
-  loom_low_allocation_sidecar_t allocation = {};
-  loom_amdgpu_occupancy_sidecar_t occupancy = {};
+  loom_low_allocation_table_t allocation = {};
+  loom_amdgpu_occupancy_table_t occupancy = {};
   IREE_ASSERT_OK(AllocateAndBuildOccupancy(module.get(), low_function, budgets,
                                            IREE_ARRAYSIZE(budgets), &arena,
                                            &allocation, &occupancy));
@@ -333,8 +333,8 @@ TEST_F(AmdgpuOccupancyTest, EmitsStructuredOccupancyRemarks) {
   };
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
-  loom_low_allocation_sidecar_t allocation = {};
-  loom_amdgpu_occupancy_sidecar_t occupancy = {};
+  loom_low_allocation_table_t allocation = {};
+  loom_amdgpu_occupancy_table_t occupancy = {};
   IREE_ASSERT_OK(AllocateAndBuildOccupancy(module.get(), low_function, nullptr,
                                            0, &arena, &allocation, &occupancy,
                                            &occupancy_options));
@@ -376,8 +376,8 @@ TEST_F(AmdgpuOccupancyTest, AllCurrentDescriptorSetsSelectModels) {
 
     iree_arena_allocator_t arena;
     iree_arena_initialize(&block_pool_, &arena);
-    loom_low_allocation_sidecar_t allocation = {};
-    loom_amdgpu_occupancy_sidecar_t occupancy = {};
+    loom_low_allocation_table_t allocation = {};
+    loom_amdgpu_occupancy_table_t occupancy = {};
     IREE_ASSERT_OK(AllocateAndBuildOccupancy(module.get(), low_function,
                                              nullptr, 0, &arena, &allocation,
                                              &occupancy));

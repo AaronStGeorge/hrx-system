@@ -276,9 +276,9 @@ iree_status_t loom_low_materialize_allocation_run(loom_pass_t* pass,
       .budget_count = state ? state->budget_count : 0,
       .emitter = pass->diagnostic_emitter,
   };
-  loom_low_allocation_sidecar_t sidecar = {0};
+  loom_low_allocation_table_t table = {0};
   IREE_RETURN_IF_ERROR(loom_low_allocate_function(
-      module, function.op, &allocation_options, pass->arena, &sidecar));
+      module, function.op, &allocation_options, pass->arena, &table));
 
   loom_low_allocation_materialization_result_t result = {0};
   loom_low_allocation_materialization_options_t materialization_options = {
@@ -287,7 +287,7 @@ iree_status_t loom_low_materialize_allocation_run(loom_pass_t* pass,
                      : (iree_diagnostic_emitter_t){0},
   };
   IREE_RETURN_IF_ERROR(loom_low_allocation_materialize_spills(
-      module, &sidecar, &materialization_options, pass->arena, &result));
+      module, &table, &materialization_options, pass->arena, &result));
 
   loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_SLOTS,
                           result.slot_count);

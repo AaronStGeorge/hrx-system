@@ -57,7 +57,7 @@ typedef enum loom_low_descriptor_packet_kind_e {
 //
 // Text IR names descriptor packets with stable spellings. Compiled in-memory
 // consumers resolve that source spelling through this boundary and carry
-// descriptor ordinals or pointers in their own dense sidecars.
+// descriptor ordinals or pointers in their own dense tables.
 typedef struct loom_low_resolved_descriptor_packet_t {
   // Operation represented by this packet record.
   const loom_op_t* op;

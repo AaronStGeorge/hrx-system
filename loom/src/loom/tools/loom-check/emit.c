@@ -9,10 +9,10 @@
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_json.h"
 #include "loom/codegen/low/descriptors_manifest.h"
+#include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/packet_json.h"
-#include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/register_class_map.h"
 #include "loom/codegen/low/schedule/json.h"
 #include "loom/codegen/low/schedule/run.h"
@@ -964,10 +964,10 @@ static iree_status_t loom_check_emit_write_low_schedule_json(
       .diagnostic_flags = diagnostic_flags,
       .strategy = strategy,
   };
-  loom_low_schedule_sidecar_t sidecar = {0};
+  loom_low_schedule_table_t table = {0};
   IREE_RETURN_IF_ERROR(loom_low_schedule_function(
-      module, low_function, &options, analysis_arena, &sidecar));
-  return loom_low_schedule_format_json(&sidecar, &result->actual_output);
+      module, low_function, &options, analysis_arena, &table));
+  return loom_low_schedule_format_json(&table, &result->actual_output);
 }
 
 static iree_status_t loom_check_emit_write_low_allocation_json(
@@ -996,10 +996,10 @@ static iree_status_t loom_check_emit_write_low_allocation_json(
       .emitter = emitter,
       .diagnostic_flags = diagnostic_flags,
   };
-  loom_low_allocation_sidecar_t sidecar = {0};
+  loom_low_allocation_table_t table = {0};
   IREE_RETURN_IF_ERROR(loom_low_allocate_function(
-      module, low_function, &options, analysis_arena, &sidecar));
-  return loom_low_allocation_format_json(&sidecar, &result->actual_output);
+      module, low_function, &options, analysis_arena, &table));
+  return loom_low_allocation_format_json(&table, &result->actual_output);
 }
 
 static iree_status_t loom_check_emit_write_low_packet_json(
@@ -1022,7 +1022,7 @@ static iree_status_t loom_check_emit_write_low_packet_json(
   IREE_RETURN_IF_ERROR(loom_check_low_emit_resolve_fixed_value_specs(
       module, low_function, fixed_specs, fixed_spec_count, &fixed_values,
       &fixed_value_count, analysis_arena));
-  loom_low_packetization_options_t packetization_options = {
+  loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = descriptor_registry,
       .schedule_strategy = strategy,
       .allocation_budgets = budgets,
@@ -1031,10 +1031,9 @@ static iree_status_t loom_check_emit_write_low_packet_json(
       .allocation_fixed_value_count = fixed_value_count,
       .emitter = emitter,
   };
-  loom_low_packetization_t packetization = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_low_packetize_function(module, low_function, &packetization_options,
-                                  analysis_arena, &packetization));
+  loom_low_emission_frame_t frame = {0};
+  IREE_RETURN_IF_ERROR(loom_low_emission_frame_build(
+      module, low_function, &frame_options, analysis_arena, &frame));
   const loom_target_low_packet_diagnostics_options_t diagnostic_options = {
       .provider_list = packet_diagnostic_provider_list,
       .diagnostic_flags = packet_diagnostic_flags,
@@ -1042,9 +1041,8 @@ static iree_status_t loom_check_emit_write_low_packet_json(
   };
   loom_target_low_packet_diagnostics_result_t diagnostic_result = {0};
   IREE_RETURN_IF_ERROR(loom_target_low_packet_diagnostics_emit_function(
-      &packetization, &diagnostic_options, &diagnostic_result));
-  return loom_low_packet_format_json(&packetization.schedule,
-                                     &packetization.allocation,
+      &frame, &diagnostic_options, &diagnostic_result));
+  return loom_low_packet_format_json(&frame.schedule, &frame.allocation,
                                      &result->actual_output);
 }
 

@@ -13,7 +13,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
@@ -151,7 +151,7 @@ class WasmFunctionBodyTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    ReleaseSidecars();
+    ReleaseTables();
     if (module_) {
       loom_module_free(module_);
       module_ = nullptr;
@@ -194,9 +194,8 @@ class WasmFunctionBodyTest : public ::testing::Test {
     return nullptr;
   }
 
-  void BuildSidecars(const char* body,
-                     loom_low_schedule_sidecar_t* out_schedule,
-                     loom_low_allocation_sidecar_t* out_allocation) {
+  void BuildTables(const char* body, loom_low_schedule_table_t* out_schedule,
+                   loom_low_allocation_table_t* out_allocation) {
     std::string source =
         "target.profile @wasm_target preset(\"wasm-simd128\")\n";
     source += body;
@@ -230,24 +229,23 @@ class WasmFunctionBodyTest : public ::testing::Test {
         loom_low_verify_module(module_, &verify_options, &verify_result));
     EXPECT_EQ(verify_result.error_count, 0u);
 
-    iree_arena_initialize(&block_pool_, &sidecar_arena_);
-    sidecar_arena_initialized_ = true;
+    iree_arena_initialize(&block_pool_, &table_arena_);
+    table_arena_initialized_ = true;
 
-    loom_low_packetization_options_t packetization_options = {
+    loom_low_emission_frame_options_t frame_options = {
         .descriptor_registry = &registry_,
     };
-    loom_low_packetization_t packetization = {};
-    IREE_ASSERT_OK(
-        loom_low_packetize_function(module_, low_func, &packetization_options,
-                                    &sidecar_arena_, &packetization));
-    *out_schedule = packetization.schedule;
-    *out_allocation = packetization.allocation;
+    loom_low_emission_frame_t frame = {};
+    IREE_ASSERT_OK(loom_low_emission_frame_build(
+        module_, low_func, &frame_options, &table_arena_, &frame));
+    *out_schedule = frame.schedule;
+    *out_allocation = frame.allocation;
   }
 
-  void ReleaseSidecars() {
-    if (sidecar_arena_initialized_) {
-      iree_arena_deinitialize(&sidecar_arena_);
-      sidecar_arena_initialized_ = false;
+  void ReleaseTables() {
+    if (table_arena_initialized_) {
+      iree_arena_deinitialize(&table_arena_);
+      table_arena_initialized_ = false;
     }
   }
 
@@ -255,14 +253,14 @@ class WasmFunctionBodyTest : public ::testing::Test {
   loom_context_t context_;
   loom_module_t* module_ = nullptr;
   loom_low_descriptor_registry_t registry_ = {};
-  iree_arena_allocator_t sidecar_arena_ = {};
-  bool sidecar_arena_initialized_ = false;
+  iree_arena_allocator_t table_arena_ = {};
+  bool table_arena_initialized_ = false;
 };
 
 TEST_F(WasmFunctionBodyTest, EmitsStraightLineI32FunctionBody) {
-  loom_low_schedule_sidecar_t schedule = {};
-  loom_low_allocation_sidecar_t allocation = {};
-  BuildSidecars(
+  loom_low_schedule_table_t schedule = {};
+  loom_low_allocation_table_t allocation = {};
+  BuildTables(
       "low.func.def target(@wasm_target) @wasm_test(%input: reg<wasm.i32>) "
       "-> (reg<wasm.i32>) {\n"
       "  %one = low.const<wasm.i32.const> {i32_value = 1} : reg<wasm.i32>\n"
@@ -301,9 +299,9 @@ TEST_F(WasmFunctionBodyTest, EmitsStraightLineI32FunctionBody) {
 }
 
 TEST_F(WasmFunctionBodyTest, EmitsV128ConstFunctionBody) {
-  loom_low_schedule_sidecar_t schedule = {};
-  loom_low_allocation_sidecar_t allocation = {};
-  BuildSidecars(
+  loom_low_schedule_table_t schedule = {};
+  loom_low_allocation_table_t allocation = {};
+  BuildTables(
       "low.func.def target(@wasm_target) @wasm_test() -> (reg<wasm.v128>) {\n"
       "  %bits = low.const<wasm.v128.const> {lo64 = 72623859790382856, "
       "hi64 = 1230066625199609624} : reg<wasm.v128>\n"
@@ -335,9 +333,9 @@ TEST_F(WasmFunctionBodyTest, EmitsV128ConstFunctionBody) {
 }
 
 TEST_F(WasmFunctionBodyTest, EmitsStraightLineSimdFunctionBody) {
-  loom_low_schedule_sidecar_t schedule = {};
-  loom_low_allocation_sidecar_t allocation = {};
-  BuildSidecars(
+  loom_low_schedule_table_t schedule = {};
+  loom_low_allocation_table_t allocation = {};
+  BuildTables(
       "low.func.def target(@wasm_target) @wasm_test(%addr: reg<wasm.i32>, "
       "%lhs : reg<wasm.v128>, %rhs : reg<wasm.v128>) -> "
       "(reg<wasm.v128>) {\n"
@@ -397,9 +395,9 @@ TEST_F(WasmFunctionBodyTest, EmitsStraightLineSimdFunctionBody) {
 }
 
 TEST_F(WasmFunctionBodyTest, EmitsSimdLaneFunctionBody) {
-  loom_low_schedule_sidecar_t schedule = {};
-  loom_low_allocation_sidecar_t allocation = {};
-  BuildSidecars(
+  loom_low_schedule_table_t schedule = {};
+  loom_low_allocation_table_t allocation = {};
+  BuildTables(
       "low.func.def target(@wasm_target) @wasm_test(%v: reg<wasm.v128>, "
       "%x : reg<wasm.i32>) -> (reg<wasm.v128>) {\n"
       "  %lane = low.op<wasm.i32x4.extract_lane>(%v) {lane = 1} : "
@@ -467,9 +465,9 @@ TEST_F(WasmFunctionBodyTest, EmitsSimdLaneFunctionBody) {
 }
 
 TEST_F(WasmFunctionBodyTest, EmitsF32LaneFunctionBody) {
-  loom_low_schedule_sidecar_t schedule = {};
-  loom_low_allocation_sidecar_t allocation = {};
-  BuildSidecars(
+  loom_low_schedule_table_t schedule = {};
+  loom_low_allocation_table_t allocation = {};
+  BuildTables(
       "low.func.def target(@wasm_target) @wasm_test(%v: reg<wasm.v128>, "
       "%x : reg<wasm.f32>) -> (reg<wasm.v128>) {\n"
       "  %lane = low.op<wasm.f32x4.extract_lane>(%v) {lane = 2} : "
@@ -521,9 +519,9 @@ TEST_F(WasmFunctionBodyTest, EmitsF32LaneFunctionBody) {
 }
 
 TEST_F(WasmFunctionBodyTest, RejectsSpilledAllocation) {
-  loom_low_schedule_sidecar_t schedule = {};
-  loom_low_allocation_sidecar_t allocation = {};
-  BuildSidecars(
+  loom_low_schedule_table_t schedule = {};
+  loom_low_allocation_table_t allocation = {};
+  BuildTables(
       "low.func.def target(@wasm_target) @wasm_test(%input: reg<wasm.i32>) "
       "-> (reg<wasm.i32>) {\n"
       "  low.return %input : reg<wasm.i32>\n"
@@ -534,7 +532,7 @@ TEST_F(WasmFunctionBodyTest, RejectsSpilledAllocation) {
       allocation.assignments,
       allocation.assignments + allocation.assignment_count);
   ReassignFirstValue(&assignments, LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT);
-  loom_low_allocation_sidecar_t spilled_allocation = allocation;
+  loom_low_allocation_table_t spilled_allocation = allocation;
   spilled_allocation.assignments = assignments.data();
 
   FunctionBodyOwner owner;

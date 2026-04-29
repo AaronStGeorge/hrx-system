@@ -47,7 +47,7 @@ typedef struct loom_x86_assembly_state_t {
 } loom_x86_assembly_state_t;
 
 static iree_status_t loom_x86_resolve_descriptor_set_kind(
-    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_schedule_table_t* schedule,
     loom_x86_descriptor_set_kind_t* out_kind) {
   if (iree_string_view_equal(schedule->target.descriptor_set_key,
                              IREE_SV("x86.avx512.core"))) {
@@ -1116,8 +1116,8 @@ static iree_status_t loom_x86_append_cond_branch_packet(
 }
 
 iree_status_t loom_x86_emit_assembly_fragment(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     iree_string_builder_t* builder) {
   if (schedule == NULL || schedule->target.descriptor_set == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

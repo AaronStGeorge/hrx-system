@@ -11,7 +11,7 @@
 #define LOOM_TOOLS_LOOM_CHECK_LOW_EMIT_H_
 
 #include "iree/base/api.h"
-#include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/frame.h"
 #include "loom/tools/loom-check/execute.h"
 
 #ifdef __cplusplus
@@ -78,7 +78,7 @@ iree_status_t loom_check_low_emit_resolve_fixed_value_specs(
     iree_host_size_t* out_fixed_value_count, iree_arena_allocator_t* arena);
 
 // Packetizes the selected low function through the registry linked into the
-// emit provider request. |out_packetization| stores sidecar pointers allocated
+// emit provider request. |out_frame| stores table pointers allocated
 // from request->case_arena.
 iree_status_t loom_check_low_emit_packetize_function(
     const loom_check_emit_provider_request_t* request,
@@ -88,7 +88,7 @@ iree_status_t loom_check_low_emit_packetize_function(
     iree_host_size_t allocation_budget_count,
     const loom_check_low_emit_fixed_value_spec_t* allocation_fixed_specs,
     iree_host_size_t allocation_fixed_spec_count,
-    loom_low_packetization_t* out_packetization);
+    loom_low_emission_frame_t* out_frame);
 
 #ifdef __cplusplus
 }  // extern "C"

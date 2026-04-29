@@ -10,7 +10,7 @@
 // order. This layer owns the AMDGPU interpretation of those facts: memory
 // packets create outstanding wait-counter work, explicit wait packets drain
 // counters, and missing waits are reported as planned insertions before the
-// packet that needs the wait. The plan is a sidecar only; IR materialization is
+// packet that needs the wait. The plan is a table only; IR materialization is
 // a later target-owned pass.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_WAIT_PLAN_H_
@@ -109,10 +109,10 @@ typedef struct loom_amdgpu_wait_plan_action_t {
   uint32_t outstanding_before;
 } loom_amdgpu_wait_plan_action_t;
 
-// AMDGPU wait-counter sidecar for one scheduled low function.
+// AMDGPU wait-counter table for one scheduled low function.
 typedef struct loom_amdgpu_wait_plan_t {
-  // Schedule sidecar this plan was built from.
-  const loom_low_schedule_sidecar_t* schedule;
+  // Schedule table this plan was built from.
+  const loom_low_schedule_table_t* schedule;
   // Wait actions in scheduled packet order.
   const loom_amdgpu_wait_plan_action_t* actions;
   // Number of action records.
@@ -138,7 +138,7 @@ iree_string_view_t loom_amdgpu_wait_plan_reason_name(
 // must keep |schedule| immutable and |arena| alive for as long as |out_plan| is
 // used.
 iree_status_t loom_amdgpu_wait_plan_build(
-    const loom_low_schedule_sidecar_t* schedule, iree_arena_allocator_t* arena,
+    const loom_low_schedule_table_t* schedule, iree_arena_allocator_t* arena,
     loom_amdgpu_wait_plan_t* out_plan);
 
 // Appends a compact JSON representation of |plan| to |builder|.

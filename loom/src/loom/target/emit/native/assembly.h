@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Shared native assembly-fragment formatting over low packet sidecars.
+// Shared native assembly-fragment formatting over low packet tables.
 //
 // This layer is intentionally small: it owns native-fragment contract
 // validation, scheduled packet iteration, block labels, and
@@ -25,10 +25,10 @@ extern "C" {
 #endif
 
 typedef struct loom_native_assembly_packet_context_t {
-  // Schedule sidecar being formatted.
-  const loom_low_schedule_sidecar_t* schedule;
-  // Allocation sidecar supplying physical locations.
-  const loom_low_allocation_sidecar_t* allocation;
+  // Schedule table being formatted.
+  const loom_low_schedule_table_t* schedule;
+  // Allocation table supplying physical locations.
+  const loom_low_allocation_table_t* allocation;
   // Scheduled packet currently being formatted.
   const loom_low_packet_view_t* packet;
   // Text destination for the fragment.
@@ -55,7 +55,7 @@ typedef struct loom_native_assembly_structural_packet_callback_t {
 
 typedef struct loom_native_assembly_format_options_t {
   // Optional hook that appends zero or more complete assembly lines before the
-  // current scheduled packet. Targets use this for sidecar-materialized packets
+  // current scheduled packet. Targets use this for table-materialized packets
   // such as waits or delays without teaching the shared formatter target facts.
   loom_native_assembly_append_packet_callback_t append_before_packet;
   // Required formatter for descriptor-backed low.op and low.const packets.
@@ -72,14 +72,14 @@ typedef struct loom_native_assembly_format_options_t {
 // envelope. Unsupported structural packets fail loud through the target-owned
 // callback table instead of being printed as comments or pseudo-ops.
 iree_status_t loom_native_assembly_format_fragment(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     const loom_native_assembly_format_options_t* options,
     iree_string_builder_t* builder);
 
 // Appends the canonical local block label for |block|, such as ".Lbb0".
 iree_status_t loom_native_assembly_append_block_label(
-    const loom_low_schedule_sidecar_t* schedule, const loom_block_t* block,
+    const loom_low_schedule_table_t* schedule, const loom_block_t* block,
     iree_string_builder_t* builder);
 
 // Returns the interned module string for |string_id|, or the empty string when

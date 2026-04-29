@@ -13,7 +13,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
@@ -187,7 +187,7 @@ class WasmModuleBinaryTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    ReleaseSidecars();
+    ReleaseTables();
     if (module_) {
       loom_module_free(module_);
       module_ = nullptr;
@@ -230,9 +230,8 @@ class WasmModuleBinaryTest : public ::testing::Test {
     return nullptr;
   }
 
-  void BuildSidecars(const char* body,
-                     loom_low_schedule_sidecar_t* out_schedule,
-                     loom_low_allocation_sidecar_t* out_allocation) {
+  void BuildTables(const char* body, loom_low_schedule_table_t* out_schedule,
+                   loom_low_allocation_table_t* out_allocation) {
     std::string source =
         "target.profile @wasm_target preset(\"wasm-simd128\")\n";
     source += body;
@@ -266,24 +265,23 @@ class WasmModuleBinaryTest : public ::testing::Test {
         loom_low_verify_module(module_, &verify_options, &verify_result));
     EXPECT_EQ(verify_result.error_count, 0u);
 
-    iree_arena_initialize(&block_pool_, &sidecar_arena_);
-    sidecar_arena_initialized_ = true;
+    iree_arena_initialize(&block_pool_, &table_arena_);
+    table_arena_initialized_ = true;
 
-    loom_low_packetization_options_t packetization_options = {
+    loom_low_emission_frame_options_t frame_options = {
         .descriptor_registry = &registry_,
     };
-    loom_low_packetization_t packetization = {};
-    IREE_ASSERT_OK(
-        loom_low_packetize_function(module_, low_func, &packetization_options,
-                                    &sidecar_arena_, &packetization));
-    *out_schedule = packetization.schedule;
-    *out_allocation = packetization.allocation;
+    loom_low_emission_frame_t frame = {};
+    IREE_ASSERT_OK(loom_low_emission_frame_build(
+        module_, low_func, &frame_options, &table_arena_, &frame));
+    *out_schedule = frame.schedule;
+    *out_allocation = frame.allocation;
   }
 
-  void ReleaseSidecars() {
-    if (sidecar_arena_initialized_) {
-      iree_arena_deinitialize(&sidecar_arena_);
-      sidecar_arena_initialized_ = false;
+  void ReleaseTables() {
+    if (table_arena_initialized_) {
+      iree_arena_deinitialize(&table_arena_);
+      table_arena_initialized_ = false;
     }
   }
 
@@ -302,14 +300,14 @@ class WasmModuleBinaryTest : public ::testing::Test {
   loom_context_t context_;
   loom_module_t* module_ = nullptr;
   loom_low_descriptor_registry_t registry_ = {};
-  iree_arena_allocator_t sidecar_arena_ = {};
-  bool sidecar_arena_initialized_ = false;
+  iree_arena_allocator_t table_arena_ = {};
+  bool table_arena_initialized_ = false;
 };
 
 TEST_F(WasmModuleBinaryTest, EmitsStraightLineI32Module) {
-  loom_low_schedule_sidecar_t schedule = {};
-  loom_low_allocation_sidecar_t allocation = {};
-  BuildSidecars(
+  loom_low_schedule_table_t schedule = {};
+  loom_low_allocation_table_t allocation = {};
+  BuildTables(
       "low.func.def target(@wasm_target) @wasm_test(%input: reg<wasm.i32>) "
       "-> (reg<wasm.i32>) {\n"
       "  %one = low.const<wasm.i32.const> {i32_value = 1} : reg<wasm.i32>\n"
@@ -349,9 +347,9 @@ TEST_F(WasmModuleBinaryTest, EmitsStraightLineI32Module) {
 }
 
 TEST_F(WasmModuleBinaryTest, EmitsSimdMemoryModule) {
-  loom_low_schedule_sidecar_t schedule = {};
-  loom_low_allocation_sidecar_t allocation = {};
-  BuildSidecars(
+  loom_low_schedule_table_t schedule = {};
+  loom_low_allocation_table_t allocation = {};
+  BuildTables(
       "low.func.def target(@wasm_target) @wasm_test(%addr: reg<wasm.i32>, "
       "%lhs : reg<wasm.v128>, %rhs : reg<wasm.v128>) -> "
       "(reg<wasm.v128>) {\n"
@@ -403,9 +401,9 @@ TEST_F(WasmModuleBinaryTest, EmitsSimdMemoryModule) {
 }
 
 TEST_F(WasmModuleBinaryTest, DisassemblesSimdMemoryModuleWithLlvmObjdump) {
-  loom_low_schedule_sidecar_t schedule = {};
-  loom_low_allocation_sidecar_t allocation = {};
-  BuildSidecars(
+  loom_low_schedule_table_t schedule = {};
+  loom_low_allocation_table_t allocation = {};
+  BuildTables(
       "low.func.def target(@wasm_target) @wasm_test(%addr: reg<wasm.i32>, "
       "%lhs : reg<wasm.v128>, %rhs : reg<wasm.v128>) -> "
       "(reg<wasm.v128>) {\n"
@@ -471,9 +469,9 @@ TEST_F(WasmModuleBinaryTest, DisassemblesSimdMemoryModuleWithLlvmObjdump) {
 }
 
 TEST_F(WasmModuleBinaryTest, RejectsEmptyExportName) {
-  loom_low_schedule_sidecar_t schedule = {};
-  loom_low_allocation_sidecar_t allocation = {};
-  BuildSidecars(
+  loom_low_schedule_table_t schedule = {};
+  loom_low_allocation_table_t allocation = {};
+  BuildTables(
       "low.func.def target(@wasm_target) @wasm_test(%input: reg<wasm.i32>) "
       "-> (reg<wasm.i32>) {\n"
       "  low.return %input : reg<wasm.i32>\n"

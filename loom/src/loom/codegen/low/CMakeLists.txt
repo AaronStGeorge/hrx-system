@@ -327,11 +327,11 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    packetization
+    frame
   HDRS
-    "packetization.h"
+    "frame.h"
   SRCS
-    "packetization.c"
+    "frame.c"
   DEPS
     ::allocation
     ::function
@@ -610,8 +610,8 @@ loom_cc_test(
   SRCS
     "source_lowering_function_test.cc"
   DEPS
+    ::frame
     ::lower
-    ::packetization
     ::source_selection
     ::verify
     iree::base::internal::arena
@@ -754,8 +754,8 @@ loom_cc_test(
   SRCS
     "packet_asm_test.cc"
   DEPS
+    ::frame
     ::packet_asm
-    ::packetization
     ::verify
     iree::base::internal::arena
     loom::src::loom::format::text::parser
@@ -770,12 +770,12 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
-    packetization_test
+    frame_test
   SRCS
-    "packetization_test.cc"
+    "frame_test.cc"
   DEPS
+    ::frame
     ::packet
-    ::packetization
     ::verify
     iree::base::internal::arena
     loom::src::loom::format::text::parser

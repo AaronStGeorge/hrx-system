@@ -132,8 +132,8 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::frame
     loom::src::loom::codegen::low::lower
-    loom::src::loom::codegen::low::packetization
     loom::src::loom::ir
     loom::src::loom::ops::low
   PUBLIC
@@ -207,8 +207,8 @@ loom_cc_library(
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::diagnostics
+    loom::src::loom::codegen::low::frame
     loom::src::loom::codegen::low::packet
-    loom::src::loom::codegen::low::packetization
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir

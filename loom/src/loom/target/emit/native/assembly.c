@@ -70,7 +70,7 @@ iree_status_t loom_native_assembly_read_i64_attr(const loom_module_t* module,
 }
 
 iree_status_t loom_native_assembly_append_block_label(
-    const loom_low_schedule_sidecar_t* schedule, const loom_block_t* block,
+    const loom_low_schedule_table_t* schedule, const loom_block_t* block,
     iree_string_builder_t* builder) {
   if (schedule == NULL || block == NULL || builder == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -143,8 +143,8 @@ static void loom_native_assembly_truncate_builder(
 }
 
 iree_status_t loom_native_assembly_format_fragment(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     const loom_native_assembly_format_options_t* options,
     iree_string_builder_t* builder) {
   if (options == NULL || options->append_descriptor_packet.fn == NULL) {

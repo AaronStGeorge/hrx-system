@@ -15,12 +15,12 @@
 #include "loom/util/stream.h"
 
 typedef struct loom_low_packet_asm_state_t {
-  // Schedule sidecar being rendered.
-  const loom_low_schedule_sidecar_t* schedule;
-  // Allocation sidecar supplying locations for SSA values.
-  const loom_low_allocation_sidecar_t* allocation;
-  // Optional per-packet selected asm-form sidecar.
-  const loom_low_packet_asm_form_sidecar_t* selected_asm_forms;
+  // Schedule table being rendered.
+  const loom_low_schedule_table_t* schedule;
+  // Allocation table supplying locations for SSA values.
+  const loom_low_allocation_table_t* allocation;
+  // Optional per-packet selected asm-form table.
+  const loom_low_packet_asm_form_table_t* selected_asm_forms;
   // Formatter options supplied by the caller.
   const loom_low_packet_asm_options_t* options;
   // Text destination.
@@ -445,8 +445,8 @@ static iree_status_t loom_low_packet_asm_append_packet(
 }
 
 iree_status_t loom_low_packet_asm_format(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     const loom_low_packet_asm_options_t* options,
     iree_string_builder_t* builder) {
   if (options == NULL || options->format_value.fn == NULL) {
@@ -457,9 +457,9 @@ iree_status_t loom_low_packet_asm_format(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low packet asm output builder is required");
   }
-  IREE_RETURN_IF_ERROR(loom_low_packet_validate_sidecars(schedule, allocation));
+  IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(schedule, allocation));
   if (options->selected_asm_forms != NULL) {
-    IREE_RETURN_IF_ERROR(loom_low_packet_validate_asm_form_sidecar(
+    IREE_RETURN_IF_ERROR(loom_low_packet_validate_asm_form_table(
         schedule, options->selected_asm_forms));
   }
 

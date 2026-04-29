@@ -9,7 +9,7 @@
 // This is the production bridge between source-to-low lowering and
 // packetization: it runs the fixed low-prep pass pipeline through the normal
 // pass program/interpreter infrastructure on selected low functions. It does
-// not parse tool pipeline strings, emit artifacts, or construct sidecars.
+// not parse tool pipeline strings, emit artifacts, or construct tables.
 
 #ifndef LOOM_CODEGEN_LOW_PREPARATION_H_
 #define LOOM_CODEGEN_LOW_PREPARATION_H_

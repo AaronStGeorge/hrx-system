@@ -77,7 +77,7 @@ typedef struct loom_amdgpu_wait_packet_t {
   iree_host_size_t immediate_count;
 } loom_amdgpu_wait_packet_t;
 
-// Concrete wait-packet insertion sidecar for one scheduled AMDGPU function.
+// Concrete wait-packet insertion table for one scheduled AMDGPU function.
 typedef struct loom_amdgpu_wait_packet_plan_t {
   // Logical wait plan this concrete packet plan was built from.
   const loom_amdgpu_wait_plan_t* wait_plan;

@@ -288,7 +288,7 @@ iree_status_t loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
 }
 
 static iree_status_t loom_amdgpu_occupancy_find_register_class(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_occupancy_register_class_t* register_classes,
     iree_host_size_t register_class_count, uint16_t descriptor_reg_class_id,
     uint32_t* out_index) {
@@ -328,7 +328,7 @@ static iree_status_t loom_amdgpu_occupancy_find_register_class(
 }
 
 static iree_status_t loom_amdgpu_occupancy_collect_allocations(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     loom_amdgpu_occupancy_register_class_t* class_summaries,
     iree_host_size_t class_summary_count) {
   for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
@@ -373,10 +373,10 @@ static iree_status_t loom_amdgpu_occupancy_add_u32(uint32_t lhs, uint32_t rhs,
 }
 
 static iree_status_t loom_amdgpu_occupancy_collect_spills(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     loom_amdgpu_occupancy_register_class_t* class_summaries,
     iree_host_size_t class_summary_count,
-    loom_amdgpu_occupancy_sidecar_t* sidecar) {
+    loom_amdgpu_occupancy_table_t* table) {
   for (iree_host_size_t i = 0; i < allocation->spill_plan_count; ++i) {
     const loom_low_allocation_spill_plan_t* spill_plan =
         &allocation->spill_plans[i];
@@ -417,17 +417,17 @@ static iree_status_t loom_amdgpu_occupancy_collect_spills(
         class_summary->spill_reload_count, spill_plan->reload_count,
         &class_summary->spill_reload_count));
 
-    IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_add_u32(sidecar->spill_count, 1,
-                                                       &sidecar->spill_count));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_add_u32(table->spill_count, 1,
+                                                       &table->spill_count));
     IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_add_u32(
-        sidecar->scratch_spill_bytes, spill_plan->byte_size,
-        &sidecar->scratch_spill_bytes));
+        table->scratch_spill_bytes, spill_plan->byte_size,
+        &table->scratch_spill_bytes));
     IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_add_u32(
-        sidecar->spill_store_count, spill_plan->store_count,
-        &sidecar->spill_store_count));
+        table->spill_store_count, spill_plan->store_count,
+        &table->spill_store_count));
     IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_add_u32(
-        sidecar->spill_reload_count, spill_plan->reload_count,
-        &sidecar->spill_reload_count));
+        table->spill_reload_count, spill_plan->reload_count,
+        &table->spill_reload_count));
   }
   return iree_ok_status();
 }
@@ -453,77 +453,75 @@ static iree_status_t loom_amdgpu_occupancy_flat_workgroup_size(
 static iree_status_t loom_amdgpu_occupancy_finalize_limits(
     const loom_amdgpu_occupancy_model_t* model,
     loom_amdgpu_occupancy_register_class_t* class_summaries,
-    loom_amdgpu_occupancy_sidecar_t* sidecar) {
-  sidecar->resident_waves_per_simd = sidecar->max_waves_per_simd;
-  sidecar->limiting_register_class_index = LOOM_AMDGPU_OCCUPANCY_CLASS_NONE;
-  for (iree_host_size_t i = 0; i < sidecar->register_class_count; ++i) {
+    loom_amdgpu_occupancy_table_t* table) {
+  table->resident_waves_per_simd = table->max_waves_per_simd;
+  table->limiting_register_class_index = LOOM_AMDGPU_OCCUPANCY_CLASS_NONE;
+  for (iree_host_size_t i = 0; i < table->register_class_count; ++i) {
     loom_amdgpu_occupancy_register_class_t* class_summary = &class_summaries[i];
     const loom_amdgpu_occupancy_register_class_model_t* class_model =
         &model->register_classes[i];
     IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_wave_limit(
-        class_model, sidecar->max_waves_per_simd,
-        class_summary->allocated_units, &class_summary->rounded_units,
-        &class_summary->wave_limit));
+        class_model, table->max_waves_per_simd, class_summary->allocated_units,
+        &class_summary->rounded_units, &class_summary->wave_limit));
     IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_next_cliff_units(
-        class_model, sidecar->max_waves_per_simd,
-        class_summary->allocated_units, class_summary->wave_limit,
-        &class_summary->next_cliff_units));
+        class_model, table->max_waves_per_simd, class_summary->allocated_units,
+        class_summary->wave_limit, &class_summary->next_cliff_units));
     class_summary->units_until_next_cliff =
         class_summary->next_cliff_units == 0
             ? UINT32_MAX
             : class_summary->next_cliff_units - class_summary->allocated_units;
-    if (class_summary->wave_limit < sidecar->resident_waves_per_simd) {
-      sidecar->resident_waves_per_simd = class_summary->wave_limit;
-      sidecar->limiting_register_class_index = (uint32_t)i;
+    if (class_summary->wave_limit < table->resident_waves_per_simd) {
+      table->resident_waves_per_simd = class_summary->wave_limit;
+      table->limiting_register_class_index = (uint32_t)i;
     }
   }
-  if (sidecar->max_waves_per_simd == 0) {
-    sidecar->occupancy_percent = 0;
+  if (table->max_waves_per_simd == 0) {
+    table->occupancy_percent = 0;
   } else {
-    sidecar->occupancy_percent =
-        (sidecar->resident_waves_per_simd * 100u) / sidecar->max_waves_per_simd;
+    table->occupancy_percent =
+        (table->resident_waves_per_simd * 100u) / table->max_waves_per_simd;
   }
   return iree_ok_status();
 }
 
 static iree_string_view_t loom_amdgpu_occupancy_limiting_resource_name(
-    const loom_amdgpu_occupancy_sidecar_t* sidecar) {
-  if (sidecar->limiting_register_class_index ==
+    const loom_amdgpu_occupancy_table_t* table) {
+  if (table->limiting_register_class_index ==
       LOOM_AMDGPU_OCCUPANCY_CLASS_NONE) {
     return IREE_SV("max_waves");
   }
-  if (sidecar->limiting_register_class_index >= sidecar->register_class_count) {
+  if (table->limiting_register_class_index >= table->register_class_count) {
     return IREE_SV("unknown");
   }
-  return sidecar->register_classes[sidecar->limiting_register_class_index]
+  return table->register_classes[table->limiting_register_class_index]
       .register_class;
 }
 
 static iree_status_t loom_amdgpu_occupancy_emit_summary(
-    const loom_amdgpu_occupancy_sidecar_t* sidecar,
+    const loom_amdgpu_occupancy_table_t* table,
     iree_diagnostic_emitter_t emitter) {
   iree_string_view_t limiting_resource =
-      loom_amdgpu_occupancy_limiting_resource_name(sidecar);
-  for (iree_host_size_t i = 0; i < sidecar->register_class_count; ++i) {
+      loom_amdgpu_occupancy_limiting_resource_name(table);
+  for (iree_host_size_t i = 0; i < table->register_class_count; ++i) {
     const loom_amdgpu_occupancy_register_class_t* class_summary =
-        &sidecar->register_classes[i];
+        &table->register_classes[i];
     loom_diagnostic_param_t params[] = {
         loom_param_string(
-            loom_low_diagnostic_target_key(&sidecar->allocation->target)),
+            loom_low_diagnostic_target_key(&table->allocation->target)),
         loom_param_string(
-            loom_low_diagnostic_export_name(&sidecar->allocation->target)),
+            loom_low_diagnostic_export_name(&table->allocation->target)),
         loom_param_string(
-            loom_low_diagnostic_config_key(&sidecar->allocation->target)),
+            loom_low_diagnostic_config_key(&table->allocation->target)),
         loom_param_string(loom_low_diagnostic_function_name(
-            sidecar->allocation->module, sidecar->allocation->function_op)),
+            table->allocation->module, table->allocation->function_op)),
         loom_param_string(class_summary->register_class),
         loom_param_u32(class_summary->pool_units),
         loom_param_u32(class_summary->allocated_units),
-        loom_param_u32(sidecar->occupancy_percent),
+        loom_param_u32(table->occupancy_percent),
         loom_param_string(limiting_resource),
     };
     loom_diagnostic_emission_t emission = {
-        .op = sidecar->allocation->function_op,
+        .op = table->allocation->function_op,
         .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 10),
         .params = params,
         .param_count = IREE_ARRAYSIZE(params),
@@ -534,14 +532,13 @@ static iree_status_t loom_amdgpu_occupancy_emit_summary(
 }
 
 iree_status_t loom_amdgpu_occupancy_build(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_occupancy_options_t* options,
-    iree_arena_allocator_t* arena,
-    loom_amdgpu_occupancy_sidecar_t* out_sidecar) {
+    iree_arena_allocator_t* arena, loom_amdgpu_occupancy_table_t* out_table) {
   IREE_ASSERT_ARGUMENT(allocation);
   IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_sidecar);
-  *out_sidecar = (loom_amdgpu_occupancy_sidecar_t){0};
+  IREE_ASSERT_ARGUMENT(out_table);
+  *out_table = (loom_amdgpu_occupancy_table_t){0};
 
   const loom_amdgpu_occupancy_model_t* model = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_select_model(
@@ -557,7 +554,7 @@ iree_status_t loom_amdgpu_occupancy_build(
            model->register_class_count * sizeof(*register_classes));
   }
 
-  loom_amdgpu_occupancy_sidecar_t sidecar = {
+  loom_amdgpu_occupancy_table_t table = {
       .allocation = allocation,
       .target_cpu = allocation->target.bundle_storage.snapshot.target_cpu,
       .wave_size = model->wave_size,
@@ -569,11 +566,10 @@ iree_status_t loom_amdgpu_occupancy_build(
   };
   IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_flat_workgroup_size(
       &allocation->target.bundle_storage.export_plan,
-      &sidecar.flat_workgroup_size));
-  if (sidecar.flat_workgroup_size != 0 && sidecar.wave_size != 0) {
-    sidecar.waves_per_workgroup =
-        (sidecar.flat_workgroup_size + sidecar.wave_size - 1) /
-        sidecar.wave_size;
+      &table.flat_workgroup_size));
+  if (table.flat_workgroup_size != 0 && table.wave_size != 0) {
+    table.waves_per_workgroup =
+        (table.flat_workgroup_size + table.wave_size - 1) / table.wave_size;
   }
   for (iree_host_size_t i = 0; i < model->register_class_count; ++i) {
     register_classes[i] = (loom_amdgpu_occupancy_register_class_t){
@@ -590,16 +586,16 @@ iree_status_t loom_amdgpu_occupancy_build(
   IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_collect_allocations(
       allocation, register_classes, model->register_class_count));
   IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_collect_spills(
-      allocation, register_classes, model->register_class_count, &sidecar));
+      allocation, register_classes, model->register_class_count, &table));
   IREE_RETURN_IF_ERROR(
-      loom_amdgpu_occupancy_finalize_limits(model, register_classes, &sidecar));
+      loom_amdgpu_occupancy_finalize_limits(model, register_classes, &table));
 
   if (options && iree_any_bit_set(options->diagnostic_flags,
                                   LOOM_AMDGPU_OCCUPANCY_DIAGNOSTIC_SUMMARY)) {
     IREE_RETURN_IF_ERROR(
-        loom_amdgpu_occupancy_emit_summary(&sidecar, options->emitter));
+        loom_amdgpu_occupancy_emit_summary(&table, options->emitter));
   }
-  *out_sidecar = sidecar;
+  *out_table = table;
   return iree_ok_status();
 }
 
@@ -642,9 +638,9 @@ static iree_status_t loom_amdgpu_occupancy_write_register_class(
 }
 
 iree_status_t loom_amdgpu_occupancy_format_json(
-    const loom_amdgpu_occupancy_sidecar_t* sidecar,
+    const loom_amdgpu_occupancy_table_t* table,
     iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(sidecar && sidecar->allocation);
+  IREE_ASSERT_ARGUMENT(table && table->allocation);
   IREE_ASSERT_ARGUMENT(builder);
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
@@ -654,45 +650,44 @@ iree_status_t loom_amdgpu_occupancy_format_json(
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"function\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      &stream,
-      loom_low_diagnostic_function_name(sidecar->allocation->module,
-                                        sidecar->allocation->function_op)));
+      &stream, loom_low_diagnostic_function_name(
+                   table->allocation->module, table->allocation->function_op)));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"target\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      &stream, sidecar->allocation->target.target_name));
+      &stream, table->allocation->target.target_name));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"descriptor_set\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      &stream, sidecar->allocation->target.descriptor_set_key));
+      &stream, table->allocation->target.descriptor_set_key));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"target_cpu\":"));
   IREE_RETURN_IF_ERROR(
-      loom_json_write_escaped_string(&stream, sidecar->target_cpu));
+      loom_json_write_escaped_string(&stream, table->target_cpu));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream,
       ",\"wave_size\":%" PRIu32 ",\"max_waves_per_simd\":%" PRIu32
       ",\"flat_workgroup_size\":%" PRIu32 ",\"waves_per_workgroup\":%" PRIu32
       ",\"resident_waves_per_simd\":%" PRIu32 ",\"occupancy_percent\":%" PRIu32
       ",\"limiting_resource\":",
-      sidecar->wave_size, sidecar->max_waves_per_simd,
-      sidecar->flat_workgroup_size, sidecar->waves_per_workgroup,
-      sidecar->resident_waves_per_simd, sidecar->occupancy_percent));
+      table->wave_size, table->max_waves_per_simd, table->flat_workgroup_size,
+      table->waves_per_workgroup, table->resident_waves_per_simd,
+      table->occupancy_percent));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      &stream, loom_amdgpu_occupancy_limiting_resource_name(sidecar)));
+      &stream, loom_amdgpu_occupancy_limiting_resource_name(table)));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream,
       ",\"spill_count\":%" PRIu32 ",\"scratch_spill_bytes\":%" PRIu32
       ",\"spill_store_count\":%" PRIu32 ",\"spill_reload_count\":%" PRIu32
       ",\"register_classes\":[",
-      sidecar->spill_count, sidecar->scratch_spill_bytes,
-      sidecar->spill_store_count, sidecar->spill_reload_count));
-  for (iree_host_size_t i = 0; i < sidecar->register_class_count; ++i) {
+      table->spill_count, table->scratch_spill_bytes, table->spill_store_count,
+      table->spill_reload_count));
+  for (iree_host_size_t i = 0; i < table->register_class_count; ++i) {
     if (i > 0) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
     }
     IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_write_register_class(
-        &sidecar->register_classes[i], &stream));
+        &table->register_classes[i], &stream));
   }
   return loom_output_stream_write_cstring(&stream, "]}");
 }

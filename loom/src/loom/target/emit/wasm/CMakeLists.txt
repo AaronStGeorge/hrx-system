@@ -110,7 +110,7 @@ loom_cc_test(
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::packetization
+    loom::src::loom::codegen::low::frame
     loom::src::loom::codegen::low::verify
     loom::src::loom::format::text::parser
     loom::src::loom::ir
@@ -132,7 +132,7 @@ loom_cc_test(
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::packetization
+    loom::src::loom::codegen::low::frame
     loom::src::loom::codegen::low::verify
     loom::src::loom::format::text::parser
     loom::src::loom::ir

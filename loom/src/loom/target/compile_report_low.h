@@ -4,14 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Compile-report adapters for target-low packetization sidecars.
+// Compile-report adapters for target-low emission frames.
 
 #ifndef LOOM_TARGET_COMPILE_REPORT_LOW_H_
 #define LOOM_TARGET_COMPILE_REPORT_LOW_H_
 
 #include "iree/base/internal/arena.h"
+#include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/lower.h"
-#include "loom/codegen/low/packetization.h"
 #include "loom/target/compile_report.h"
 
 #ifdef __cplusplus
@@ -21,9 +21,9 @@ extern "C" {
 // Records schedule, allocation, pressure-row, and spill-row summaries for one
 // packetized low function. Optional detail rows are copied only when |report|
 // has caller-owned row storage configured.
-void loom_target_compile_report_record_low_packetization(
+void loom_target_compile_report_record_low_emission_frame(
     loom_target_compile_report_t* report,
-    const loom_low_packetization_t* packetization);
+    const loom_low_emission_frame_t* frame);
 
 // Records source-to-low selection and emission summaries for one lowered
 // source function. Optional detail rows are copied only when |report| has

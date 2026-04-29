@@ -14,7 +14,7 @@
 #include "iree/testing/status_matchers.h"
 #include "iree/vm/api.h"
 #include "iree/vm/bytecode/module.h"
-#include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/schedule/types.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
@@ -134,7 +134,7 @@ class IreeVmFunctionBytecodeTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    ReleaseSidecars();
+    ReleaseTables();
     if (module_) {
       loom_module_free(module_);
       module_ = nullptr;
@@ -178,9 +178,8 @@ class IreeVmFunctionBytecodeTest : public ::testing::Test {
     return nullptr;
   }
 
-  void BuildSidecars(const char* body,
-                     loom_low_schedule_sidecar_t* out_schedule,
-                     loom_low_allocation_sidecar_t* out_allocation) {
+  void BuildTables(const char* body, loom_low_schedule_table_t* out_schedule,
+                   loom_low_allocation_table_t* out_allocation) {
     std::string source = "target.profile @vm_target preset(\"iree-vm\")\n";
     source += body;
     module_ = ParseSource(source.c_str());
@@ -213,24 +212,23 @@ class IreeVmFunctionBytecodeTest : public ::testing::Test {
         loom_low_verify_module(module_, &verify_options, &verify_result));
     EXPECT_EQ(verify_result.error_count, 0u);
 
-    iree_arena_initialize(&block_pool_, &sidecar_arena_);
-    sidecar_arena_initialized_ = true;
+    iree_arena_initialize(&block_pool_, &table_arena_);
+    table_arena_initialized_ = true;
 
-    loom_low_packetization_options_t packetization_options = {
+    loom_low_emission_frame_options_t frame_options = {
         .descriptor_registry = &registry_,
     };
-    loom_low_packetization_t packetization = {};
-    IREE_ASSERT_OK(
-        loom_low_packetize_function(module_, low_func, &packetization_options,
-                                    &sidecar_arena_, &packetization));
-    *out_schedule = packetization.schedule;
-    *out_allocation = packetization.allocation;
+    loom_low_emission_frame_t frame = {};
+    IREE_ASSERT_OK(loom_low_emission_frame_build(
+        module_, low_func, &frame_options, &table_arena_, &frame));
+    *out_schedule = frame.schedule;
+    *out_allocation = frame.allocation;
   }
 
-  void ReleaseSidecars() {
-    if (sidecar_arena_initialized_) {
-      iree_arena_deinitialize(&sidecar_arena_);
-      sidecar_arena_initialized_ = false;
+  void ReleaseTables() {
+    if (table_arena_initialized_) {
+      iree_arena_deinitialize(&table_arena_);
+      table_arena_initialized_ = false;
     }
   }
 
@@ -238,14 +236,14 @@ class IreeVmFunctionBytecodeTest : public ::testing::Test {
   loom_context_t context_;
   loom_module_t* module_ = nullptr;
   loom_low_descriptor_registry_t registry_ = {};
-  iree_arena_allocator_t sidecar_arena_ = {};
-  bool sidecar_arena_initialized_ = false;
+  iree_arena_allocator_t table_arena_ = {};
+  bool table_arena_initialized_ = false;
 };
 
 TEST_F(IreeVmFunctionBytecodeTest, EmitsStraightLineI32FunctionBody) {
-  loom_low_schedule_sidecar_t schedule = {};
-  loom_low_allocation_sidecar_t allocation = {};
-  BuildSidecars(
+  loom_low_schedule_table_t schedule = {};
+  loom_low_allocation_table_t allocation = {};
+  BuildTables(
       "low.func.def target(@vm_target) @add(%lhs: reg<vm.i32>, %rhs: "
       "reg<vm.i32>) -> (reg<vm.i32>) {\n"
       "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : "
@@ -276,9 +274,9 @@ TEST_F(IreeVmFunctionBytecodeTest, EmitsStraightLineI32FunctionBody) {
 }
 
 TEST_F(IreeVmFunctionBytecodeTest, EmitsBranchRemapList) {
-  loom_low_schedule_sidecar_t schedule = {};
-  loom_low_allocation_sidecar_t allocation = {};
-  BuildSidecars(
+  loom_low_schedule_table_t schedule = {};
+  loom_low_allocation_table_t allocation = {};
+  BuildTables(
       "low.func.def target(@vm_target) @branch(%arg: reg<vm.i32>) -> "
       "(reg<vm.i32>) {\n"
       "  low.br ^join(%arg: reg<vm.i32>)\n"
@@ -300,7 +298,7 @@ TEST_F(IreeVmFunctionBytecodeTest, EmitsBranchRemapList) {
       allocation.assignments,
       allocation.assignments + allocation.assignment_count);
   ReassignValue(&assignments, loom_block_arg_id(join_block, 0), 1);
-  loom_low_allocation_sidecar_t remap_allocation = allocation;
+  loom_low_allocation_table_t remap_allocation = allocation;
   remap_allocation.assignments = assignments.data();
 
   BytecodeOwner owner;
@@ -321,9 +319,9 @@ TEST_F(IreeVmFunctionBytecodeTest, EmitsBranchRemapList) {
 }
 
 TEST_F(IreeVmFunctionBytecodeTest, EmitsLoadableExecutableVmModuleArchive) {
-  loom_low_schedule_sidecar_t schedule = {};
-  loom_low_allocation_sidecar_t allocation = {};
-  BuildSidecars(
+  loom_low_schedule_table_t schedule = {};
+  loom_low_allocation_table_t allocation = {};
+  BuildTables(
       "low.func.def target(@vm_target) @add(%lhs: reg<vm.i32>, %rhs: "
       "reg<vm.i32>) -> (reg<vm.i32>) {\n"
       "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : "

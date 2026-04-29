@@ -170,7 +170,7 @@ typedef struct loom_diagnostic_string_list_t {
 // during rendering.
 typedef struct loom_diagnostic_param_t {
   loom_param_kind_t kind;  // Active parameter value variant.
-  // Optional structured sidecar describing the op field this param names.
+  // Optional structured metadata describing the op field this param names.
   loom_diagnostic_field_ref_t field_ref;
   union {
     iree_string_view_t string;                  // LOOM_PARAM_STRING payload.
@@ -245,9 +245,9 @@ static inline loom_diagnostic_param_t loom_param_type(loom_type_t value) {
   return param;
 }
 
-// Attaches a structured field ref sidecar to an existing diagnostic parameter.
+// Attaches structured field-ref metadata to an existing diagnostic parameter.
 // The parameter's rendered value remains unchanged; sinks can consume the
-// sidecar for highlighting and machine-oriented JSON metadata.
+// metadata for highlighting and machine-oriented JSON metadata.
 static inline loom_diagnostic_param_t loom_param_with_field_ref(
     loom_diagnostic_param_t param, loom_diagnostic_field_ref_t field_ref) {
   param.field_ref = field_ref;

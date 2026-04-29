@@ -9,27 +9,27 @@
 #include <inttypes.h>
 #include <string.h>
 
-iree_status_t loom_low_packet_validate_sidecars(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation) {
+iree_status_t loom_low_packet_validate_tables(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation) {
   IREE_ASSERT_ARGUMENT(schedule);
   IREE_ASSERT_ARGUMENT(allocation);
   if (schedule->module == NULL || schedule->function_op == NULL ||
       allocation->module == NULL || allocation->function_op == NULL) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "schedule and allocation sidecars must name a low function");
+        "schedule and allocation tables must name a low function");
   }
   if (schedule->module != allocation->module ||
       schedule->function_op != allocation->function_op) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "schedule and allocation sidecars must describe the same low function");
+        "schedule and allocation tables must describe the same low function");
   }
   if (schedule->target.descriptor_set != allocation->target.descriptor_set) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "schedule and allocation sidecars must use the same descriptor set");
+        "schedule and allocation tables must use the same descriptor set");
   }
   return iree_ok_status();
 }
@@ -59,25 +59,25 @@ static iree_status_t loom_low_packet_validate_asm_form_ordinal(
   return iree_ok_status();
 }
 
-iree_status_t loom_low_packet_validate_asm_form_sidecar(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_packet_asm_form_sidecar_t* asm_forms) {
+iree_status_t loom_low_packet_validate_asm_form_table(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_packet_asm_form_table_t* asm_forms) {
   IREE_ASSERT_ARGUMENT(schedule);
   IREE_ASSERT_ARGUMENT(asm_forms);
   if (schedule->module != asm_forms->module ||
       schedule->function_op != asm_forms->function_op) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "selected asm-form sidecar must describe the scheduled low function");
+        "selected asm-form table must describe the scheduled low function");
   }
   if (schedule->target.descriptor_set != asm_forms->target.descriptor_set) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "selected asm-form sidecar must use the schedule descriptor set");
+        "selected asm-form table must use the schedule descriptor set");
   }
   if (asm_forms->asm_form_ordinal_count != schedule->scheduled_node_count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "selected asm-form sidecar has %" PRIhsz
+                            "selected asm-form table has %" PRIhsz
                             " packet entries for %" PRIhsz " scheduled packets",
                             asm_forms->asm_form_ordinal_count,
                             schedule->scheduled_node_count);
@@ -86,7 +86,7 @@ iree_status_t loom_low_packet_validate_asm_form_sidecar(
       asm_forms->asm_form_ordinals == NULL) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "selected asm-form sidecar entries are required for non-empty sidecar");
+        "selected asm-form table entries are required for non-empty table");
   }
   for (iree_host_size_t packet_index = 0;
        packet_index < asm_forms->asm_form_ordinal_count; ++packet_index) {
@@ -120,12 +120,12 @@ iree_status_t loom_low_packet_validate_asm_form_sidecar(
 }
 
 iree_host_size_t loom_low_packet_count(
-    const loom_low_schedule_sidecar_t* schedule) {
+    const loom_low_schedule_table_t* schedule) {
   return schedule ? schedule->scheduled_node_count : 0;
 }
 
 iree_status_t loom_low_packet_node_index_at(
-    const loom_low_schedule_sidecar_t* schedule, iree_host_size_t packet_index,
+    const loom_low_schedule_table_t* schedule, iree_host_size_t packet_index,
     uint32_t* out_node_index) {
   IREE_ASSERT_ARGUMENT(schedule);
   IREE_ASSERT_ARGUMENT(out_node_index);
@@ -145,12 +145,12 @@ iree_status_t loom_low_packet_node_index_at(
 }
 
 iree_status_t loom_low_packet_view_at(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     iree_host_size_t packet_index, loom_low_packet_view_t* out_packet) {
   IREE_ASSERT_ARGUMENT(out_packet);
   memset(out_packet, 0, sizeof(*out_packet));
-  IREE_RETURN_IF_ERROR(loom_low_packet_validate_sidecars(schedule, allocation));
+  IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(schedule, allocation));
 
   uint32_t node_index = LOOM_LOW_SCHEDULE_NODE_NONE;
   IREE_RETURN_IF_ERROR(
@@ -189,8 +189,8 @@ iree_status_t loom_low_packet_view_at(
 }
 
 iree_status_t loom_low_packet_lookup_asm_form(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_packet_asm_form_sidecar_t* asm_forms,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_packet_asm_form_table_t* asm_forms,
     const loom_low_packet_view_t* packet, uint32_t* out_asm_form_ordinal) {
   IREE_ASSERT_ARGUMENT(out_asm_form_ordinal);
   *out_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
@@ -207,13 +207,13 @@ iree_status_t loom_low_packet_lookup_asm_form(
         schedule->target.descriptor_set != asm_forms->target.descriptor_set) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "selected asm-form sidecar must match the scheduled low function");
+          "selected asm-form table must match the scheduled low function");
     }
     if (packet->packet_index >= asm_forms->asm_form_ordinal_count ||
         asm_forms->asm_form_ordinals == NULL) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "selected asm-form sidecar does not cover packet %" PRIhsz,
+          "selected asm-form table does not cover packet %" PRIhsz,
           packet->packet_index);
     }
     const uint32_t selected_asm_form_ordinal =
@@ -232,7 +232,7 @@ iree_status_t loom_low_packet_lookup_asm_form(
 }
 
 const loom_low_allocation_assignment_t* loom_low_packet_find_assignment(
-    const loom_low_allocation_sidecar_t* allocation, loom_value_id_t value_id,
+    const loom_low_allocation_table_t* allocation, loom_value_id_t value_id,
     iree_host_size_t* out_assignment_index) {
   if (out_assignment_index) {
     *out_assignment_index = IREE_HOST_SIZE_MAX;
@@ -251,8 +251,8 @@ const loom_low_allocation_assignment_t* loom_low_packet_find_assignment(
   return NULL;
 }
 
-uint32_t loom_low_packet_block_index(
-    const loom_low_schedule_sidecar_t* schedule, const loom_block_t* block) {
+uint32_t loom_low_packet_block_index(const loom_low_schedule_table_t* schedule,
+                                     const loom_block_t* block) {
   if (!schedule || !block) {
     return LOOM_LOW_PACKET_INDEX_NONE;
   }
@@ -267,7 +267,7 @@ uint32_t loom_low_packet_block_index(
 }
 
 uint32_t loom_low_packet_hazard_gap_packet_index(
-    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_schedule_table_t* schedule,
     const loom_low_schedule_hazard_gap_t* hazard_gap,
     uint32_t scheduled_ordinal) {
   if (!schedule || !hazard_gap ||

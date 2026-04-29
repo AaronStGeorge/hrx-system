@@ -6,7 +6,7 @@
 
 #include "loom/target/emit/native/amdgpu/check/loom_check.h"
 
-#include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/frame.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/wait_packets.h"
@@ -22,7 +22,7 @@ typedef enum loom_amdgpu_loom_check_wait_mode_e {
 typedef struct loom_amdgpu_loom_check_emit_options_t {
   // Module-local target-low function symbol selected by the RUN line.
   iree_string_view_t function_symbol_name;
-  // Candidate selection strategy used by low packetization.
+  // Candidate selection strategy used by low frame.
   loom_low_schedule_strategy_t schedule_strategy;
   // True once a strategy option has been parsed.
   bool has_schedule_strategy_option;
@@ -153,23 +153,22 @@ static iree_status_t loom_amdgpu_loom_check_parse_emit_options(
 }
 
 static iree_status_t loom_amdgpu_loom_check_emit_assembly(
-    const loom_low_packetization_t* packetization,
+    const loom_low_emission_frame_t* frame,
     const loom_amdgpu_loom_check_emit_options_t* options,
     iree_string_builder_t* builder, iree_arena_allocator_t* arena) {
   if (options->wait_mode == LOOM_AMDGPU_LOOM_CHECK_WAIT_MODE_NONE) {
-    return loom_amdgpu_emit_assembly_fragment(
-        &packetization->schedule, &packetization->allocation, builder);
+    return loom_amdgpu_emit_assembly_fragment(&frame->schedule,
+                                              &frame->allocation, builder);
   }
 
   loom_amdgpu_wait_plan_t wait_plan = {0};
   IREE_RETURN_IF_ERROR(
-      loom_amdgpu_wait_plan_build(&packetization->schedule, arena, &wait_plan));
+      loom_amdgpu_wait_plan_build(&frame->schedule, arena, &wait_plan));
   loom_amdgpu_wait_packet_plan_t wait_packets = {0};
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_wait_packet_plan_build(&wait_plan, arena, &wait_packets));
   return loom_amdgpu_emit_assembly_fragment_with_wait_packets(
-      &packetization->schedule, &packetization->allocation, &wait_packets,
-      builder);
+      &frame->schedule, &frame->allocation, &wait_packets, builder);
 }
 
 static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
@@ -179,15 +178,14 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
   loom_amdgpu_loom_check_emit_options_t options;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_loom_check_parse_emit_options(request, &options));
-  loom_low_packetization_t packetization = {0};
+  loom_low_emission_frame_t frame = {0};
   IREE_RETURN_IF_ERROR(loom_check_low_emit_packetize_function(
       request, options.function_symbol_name, options.schedule_strategy,
       options.allocation_budgets, options.allocation_budget_count,
       options.allocation_fixed_value_specs,
-      options.allocation_fixed_value_spec_count, &packetization));
-  return loom_amdgpu_loom_check_emit_assembly(&packetization, &options,
-                                              &request->result->actual_output,
-                                              request->case_arena);
+      options.allocation_fixed_value_spec_count, &frame));
+  return loom_amdgpu_loom_check_emit_assembly(
+      &frame, &options, &request->result->actual_output, request->case_arena);
 }
 
 static iree_status_t loom_amdgpu_loom_check_emit_provider_append_names(

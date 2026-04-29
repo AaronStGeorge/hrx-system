@@ -62,7 +62,7 @@ typedef struct loom_low_schedule_build_state_t {
   const loom_module_t* module;
   // Scheduler options provided by the caller.
   const loom_low_schedule_options_t* options;
-  // Arena owning all sidecar storage produced by this schedule.
+  // Arena owning all table storage produced by this schedule.
   iree_arena_allocator_t* arena;
   // Low function definition operation being scheduled.
   const loom_op_t* function_op;

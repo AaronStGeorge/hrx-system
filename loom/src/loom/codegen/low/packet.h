@@ -7,7 +7,7 @@
 // Target-independent packet views over scheduled and allocated low functions.
 //
 // The packet layer is the emitter-facing join between schedule and allocation
-// sidecars. It intentionally does not serialize, print types, or know about any
+// tables. It intentionally does not serialize, print types, or know about any
 // target backend. Native, VM, SPIR-V, and diagnostic emitters can all consume
 // this view without copying the schedule/allocation join logic into each
 // backend or routing through JSON.
@@ -38,15 +38,15 @@ typedef struct loom_low_packet_view_t {
   const loom_low_descriptor_t* descriptor;
 } loom_low_packet_view_t;
 
-// Optional selected asm-form sidecar for scheduled packets. Target legality or
-// target emitters populate this sidecar when descriptor-backed packets have
+// Optional selected asm-form table for scheduled packets. Target legality or
+// target emitters populate this table when descriptor-backed packets have
 // multiple legal asm forms. Entries are indexed by packet ordinal; structural
 // packets and descriptor packets that should use their unique canonical form
 // use LOOM_LOW_ASM_FORM_ORDINAL_NONE.
-typedef struct loom_low_packet_asm_form_sidecar_t {
+typedef struct loom_low_packet_asm_form_table_t {
   // Module containing the packetized low function.
   const loom_module_t* module;
-  // Target-low function operation packetized by this sidecar.
+  // Target-low function operation packetized by this table.
   const loom_op_t* function_op;
   // Resolved target context selected by |function_op|.
   loom_low_resolved_target_t target;
@@ -54,60 +54,60 @@ typedef struct loom_low_packet_asm_form_sidecar_t {
   const uint32_t* asm_form_ordinals;
   // Number of records in |asm_form_ordinals|.
   iree_host_size_t asm_form_ordinal_count;
-} loom_low_packet_asm_form_sidecar_t;
+} loom_low_packet_asm_form_table_t;
 
 // Verifies that |schedule| and |allocation| describe the same low function and
 // target descriptor set. This is an emitter contract check, not target
 // legality.
-iree_status_t loom_low_packet_validate_sidecars(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation);
+iree_status_t loom_low_packet_validate_tables(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation);
 
 // Verifies that |asm_forms| describes selected asm forms for |schedule|.
-iree_status_t loom_low_packet_validate_asm_form_sidecar(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_packet_asm_form_sidecar_t* asm_forms);
+iree_status_t loom_low_packet_validate_asm_form_table(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_packet_asm_form_table_t* asm_forms);
 
 // Returns the number of scheduled packets in |schedule|. NULL schedules have no
 // packets.
 iree_host_size_t loom_low_packet_count(
-    const loom_low_schedule_sidecar_t* schedule);
+    const loom_low_schedule_table_t* schedule);
 
 // Returns the schedule-node index at |packet_index|.
 iree_status_t loom_low_packet_node_index_at(
-    const loom_low_schedule_sidecar_t* schedule, iree_host_size_t packet_index,
+    const loom_low_schedule_table_t* schedule, iree_host_size_t packet_index,
     uint32_t* out_node_index);
 
 // Returns the packet view at |packet_index|.
 iree_status_t loom_low_packet_view_at(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     iree_host_size_t packet_index, loom_low_packet_view_t* out_packet);
 
-// Resolves the asm form for |packet|. A selected asm-form sidecar overrides the
+// Resolves the asm form for |packet|. A selected asm-form table overrides the
 // descriptor canonical form when it names a valid form for the packet's
 // descriptor; otherwise the descriptor must have a unique canonical form.
 iree_status_t loom_low_packet_lookup_asm_form(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_packet_asm_form_sidecar_t* asm_forms,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_packet_asm_form_table_t* asm_forms,
     const loom_low_packet_view_t* packet, uint32_t* out_asm_form_ordinal);
 
 // Finds the allocation assignment for |value_id|. Returns NULL when the value
 // has no assignment. |out_assignment_index| is optional.
 const loom_low_allocation_assignment_t* loom_low_packet_find_assignment(
-    const loom_low_allocation_sidecar_t* allocation, loom_value_id_t value_id,
+    const loom_low_allocation_table_t* allocation, loom_value_id_t value_id,
     iree_host_size_t* out_assignment_index);
 
 // Returns the region-block index for |block|, or LOOM_LOW_PACKET_INDEX_NONE
 // when |block| does not belong to |schedule|.
-uint32_t loom_low_packet_block_index(
-    const loom_low_schedule_sidecar_t* schedule, const loom_block_t* block);
+uint32_t loom_low_packet_block_index(const loom_low_schedule_table_t* schedule,
+                                     const loom_block_t* block);
 
 // Maps a hazard-gap scheduled ordinal within the gap block to a packet index.
 // Returns LOOM_LOW_PACKET_INDEX_NONE when the gap block is invalid or the
 // computed packet index cannot fit in the packet-index sentinel domain.
 uint32_t loom_low_packet_hazard_gap_packet_index(
-    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_schedule_table_t* schedule,
     const loom_low_schedule_hazard_gap_t* hazard_gap,
     uint32_t scheduled_ordinal);
 

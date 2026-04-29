@@ -146,7 +146,7 @@ typedef iree_status_t (*loom_check_initialize_low_descriptor_registry_fn_t)(
 
 // Callback for the descriptor registry package used by low asm parsing,
 // target preset expansion, descriptor-local verification, scheduling, and
-// allocation sidecar emission.
+// allocation table emission.
 typedef struct loom_check_initialize_low_descriptor_registry_callback_t {
   // Function that initializes the selected linked target-low registry package.
   loom_check_initialize_low_descriptor_registry_fn_t fn;

@@ -109,7 +109,7 @@ static void loom_highlight_field_callback(void* user_data,
   ++collector->highlight_count;
 }
 
-// Converts a diagnostic field ref sidecar to the printer callback ref used by
+// Converts diagnostic field-ref metadata to the printer callback ref used by
 // loom_text_print_operation_with_field_callback. Returns false when
 // the diagnostic ref does not identify an op field that the printer can label.
 static bool loom_verify_print_field_ref(
@@ -195,7 +195,7 @@ static bool loom_verify_print_field_ref_from_location_field(
   return true;
 }
 
-// Collects parser-sidecar highlights from the op's file location after
+// Collects parser-provided highlights from the op's file location after
 // resolving the whole-op source range to original source text.
 static iree_host_size_t loom_collect_source_backed_highlights(
     const loom_module_t* module, const loom_op_t* op,
@@ -255,7 +255,7 @@ static iree_host_size_t loom_collect_source_backed_highlights(
 }
 
 // Converts a packed verifier constraint field ref into the diagnostic-local
-// sidecar representation. |element_offset| lets callers point at a specific
+// metadata representation. |element_offset| lets callers point at a specific
 // element inside a variadic field while preserving the human-facing name shape.
 loom_diagnostic_field_ref_t loom_verify_diagnostic_field_ref(
     uint8_t field_ref, uint16_t element_offset) {

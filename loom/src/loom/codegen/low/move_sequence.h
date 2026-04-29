@@ -69,14 +69,14 @@ iree_status_t loom_low_move_location_from_assignment_unit(
 
 // Counts scalar unit moves required by one allocation edge-copy group.
 iree_status_t loom_low_move_sequence_count_edge_copy_units(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_low_allocation_edge_copy_group_t* group,
     iree_host_size_t* out_move_count);
 
 // Populates |moves| from one allocation edge-copy group. |move_count| must
 // match loom_low_move_sequence_count_edge_copy_units.
 iree_status_t loom_low_move_sequence_populate_edge_copy_units(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_low_allocation_edge_copy_group_t* group, loom_low_move_t* moves,
     iree_host_size_t move_count);
 
@@ -84,7 +84,7 @@ iree_status_t loom_low_move_sequence_populate_edge_copy_units(
 // allocation edge-copy group. |temporary_location_count| must match
 // group->temporary_count.
 iree_status_t loom_low_move_sequence_populate_edge_copy_temporaries(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_low_allocation_edge_copy_group_t* group,
     loom_low_move_location_t* temporary_locations,
     iree_host_size_t temporary_location_count);
@@ -92,25 +92,25 @@ iree_status_t loom_low_move_sequence_populate_edge_copy_temporaries(
 // Counts scalar unit moves required to materialize one low.slice. Coalesced
 // structural slices require zero moves.
 iree_status_t loom_low_move_sequence_count_slice_units(
-    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     iree_host_size_t* out_move_count);
 
 // Populates |moves| from one low.slice. |move_count| must match
 // loom_low_move_sequence_count_slice_units.
 iree_status_t loom_low_move_sequence_populate_slice_units(
-    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     loom_low_move_t* moves, iree_host_size_t move_count);
 
 // Counts scalar unit moves required to materialize one low.concat. Coalesced
 // structural concats require zero moves.
 iree_status_t loom_low_move_sequence_count_concat_units(
-    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     iree_host_size_t* out_move_count);
 
 // Populates |moves| from one low.concat. |move_count| must match
 // loom_low_move_sequence_count_concat_units.
 iree_status_t loom_low_move_sequence_populate_concat_units(
-    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     loom_low_move_t* moves, iree_host_size_t move_count);
 
 // Emits |moves| as a sequential move list that preserves parallel-copy

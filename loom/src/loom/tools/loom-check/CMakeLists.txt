@@ -53,10 +53,10 @@ loom_cc_library(
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::allocation_json
     loom::src::loom::codegen::low::descriptors_manifest
+    loom::src::loom::codegen::low::frame
     loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::packet_json
-    loom::src::loom::codegen::low::packetization
     loom::src::loom::codegen::low::pass_environment
     loom::src::loom::codegen::low::register_class_map
     loom::src::loom::codegen::low::schedule

@@ -251,7 +251,7 @@ static iree_status_t loom_amdgpu_kernel_record_collect_segment_usage(
 }
 
 static iree_status_t loom_amdgpu_kernel_record_validate_kernarg_live_in(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout) {
   if (!abi_layout->uses_kernarg_segment_ptr) {
     return iree_ok_status();
@@ -290,7 +290,7 @@ static iree_status_t loom_amdgpu_kernel_record_validate_kernarg_live_in(
 }
 
 static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
-    const loom_low_allocation_sidecar_t* allocation, uint32_t system_sgpr_base,
+    const loom_low_allocation_table_t* allocation, uint32_t system_sgpr_base,
     bool target_has_packed_workitem_id,
     loom_amdgpu_kernel_descriptor_flags_t* out_flags) {
   IREE_ASSERT_ARGUMENT(out_flags);
@@ -529,8 +529,8 @@ static iree_status_t loom_amdgpu_kernel_record_build_metadata_arguments(
 }
 
 iree_status_t loom_amdgpu_kernel_record_build(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_kernel_record_options_t* options,
     loom_amdgpu_kernel_record_t* out_record,
     iree_arena_allocator_t* scratch_arena) {

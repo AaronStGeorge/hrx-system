@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// AMDGPU native assembly-fragment emission from target-low packet sidecars.
+// AMDGPU native assembly-fragment emission from target-low packet tables.
 
 #ifndef LOOM_TARGET_EMIT_NATIVE_AMDGPU_ASSEMBLY_H_
 #define LOOM_TARGET_EMIT_NATIVE_AMDGPU_ASSEMBLY_H_
@@ -24,16 +24,16 @@ extern "C" {
 // outputs; it does not emit kernel metadata, PAL metadata, or an ELF code
 // object envelope. Values must be physically allocated and unspilled.
 iree_status_t loom_amdgpu_emit_assembly_fragment(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     iree_string_builder_t* builder);
 
 // Emits an AMDGPU assembly fragment with planned wait packets inserted before
 // their scheduled packet insertion points. |wait_packets| must be derived from
 // |schedule| and remain alive for the duration of emission.
 iree_status_t loom_amdgpu_emit_assembly_fragment_with_wait_packets(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_wait_packet_plan_t* wait_packets,
     iree_string_builder_t* builder);
 

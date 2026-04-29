@@ -710,7 +710,7 @@ static iree_string_view_t loom_amdgpu_wait_packet_json_symbol_name(
 
 static iree_string_view_t loom_amdgpu_wait_packet_json_function_name(
     const loom_amdgpu_wait_packet_plan_t* plan) {
-  const loom_low_schedule_sidecar_t* schedule = plan->wait_plan->schedule;
+  const loom_low_schedule_table_t* schedule = plan->wait_plan->schedule;
   if (loom_low_function_def_isa(schedule->function_op)) {
     return loom_amdgpu_wait_packet_json_symbol_name(
         schedule->module, loom_low_function_callee(schedule->function_op));
@@ -752,7 +752,7 @@ iree_status_t loom_amdgpu_wait_packet_plan_format_json(
   }
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
-  const loom_low_schedule_sidecar_t* schedule = plan->wait_plan->schedule;
+  const loom_low_schedule_table_t* schedule = plan->wait_plan->schedule;
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
       &stream, "\"format\":\"loom.amdgpu.wait_packet_plan.v0\""));

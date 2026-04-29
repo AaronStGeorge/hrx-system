@@ -17,8 +17,8 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/lower.h"
-#include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/testing/source_workload.h"
 #include "loom/ir/ir.h"
 #include "loom/pass/registry.h"

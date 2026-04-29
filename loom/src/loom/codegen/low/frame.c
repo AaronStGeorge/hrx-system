@@ -4,15 +4,15 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/frame.h"
 
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packet.h"
 #include "loom/codegen/low/schedule/run.h"
 #include "loom/ops/low/ops.h"
 
-static iree_status_t loom_low_packetization_liveness_order_from_schedule(
-    loom_op_t* low_func_op, const loom_low_schedule_sidecar_t* schedule,
+static iree_status_t loom_low_emission_frame_liveness_order_from_schedule(
+    loom_op_t* low_func_op, const loom_low_schedule_table_t* schedule,
     iree_arena_allocator_t* arena, loom_liveness_order_t* out_order) {
   IREE_ASSERT_ARGUMENT(low_func_op);
   IREE_ASSERT_ARGUMENT(schedule);
@@ -29,13 +29,13 @@ static iree_status_t loom_low_packetization_liveness_order_from_schedule(
       schedule->block_count != body->block_count) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "low packetization schedule must describe the low function body");
+        "low emission-frame schedule must describe the low function body");
   }
   if (schedule->scheduled_node_count != 0 &&
       schedule->scheduled_node_indices == NULL) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "low packetization schedule has packets but no packet index table");
+        "low emission-frame schedule has packets but no packet index table");
   }
 
   loom_liveness_block_order_t* block_orders = NULL;
@@ -50,7 +50,7 @@ static iree_status_t loom_low_packetization_liveness_order_from_schedule(
     if (schedule_block->block != block ||
         schedule_block->scheduled_node_count != block->op_count) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "low packetization schedule block %u does not "
+                              "low emission-frame schedule block %u does not "
                               "match the function body",
                               block_index);
     }
@@ -69,7 +69,7 @@ static iree_status_t loom_low_packetization_liveness_order_from_schedule(
       if (packet_index >= schedule->scheduled_node_count) {
         return iree_make_status(
             IREE_STATUS_OUT_OF_RANGE,
-            "low packetization schedule block %u references packet %" PRIhsz
+            "low emission-frame schedule block %u references packet %" PRIhsz
             " outside the schedule",
             block_index, packet_index);
       }
@@ -77,7 +77,7 @@ static iree_status_t loom_low_packetization_liveness_order_from_schedule(
           schedule->scheduled_node_indices[packet_index];
       if (node_index >= schedule->node_count) {
         return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                "low packetization schedule packet %" PRIhsz
+                                "low emission-frame schedule packet %" PRIhsz
                                 " references node %" PRIu32,
                                 packet_index, node_index);
       }
@@ -86,7 +86,7 @@ static iree_status_t loom_low_packetization_liveness_order_from_schedule(
           node->scheduled_ordinal != scheduled_ordinal) {
         return iree_make_status(
             IREE_STATUS_FAILED_PRECONDITION,
-            "low packetization schedule node does not match its block order");
+            "low emission-frame schedule node does not match its block order");
       }
       ops[scheduled_ordinal] = node->op;
       ++total_scheduled_nodes;
@@ -100,7 +100,7 @@ static iree_status_t loom_low_packetization_liveness_order_from_schedule(
   if (total_scheduled_nodes != schedule->scheduled_node_count) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "low packetization schedule has %" PRIhsz
+        "low emission-frame schedule has %" PRIhsz
         " scheduled packet(s) but body blocks cover %" PRIhsz,
         schedule->scheduled_node_count, total_scheduled_nodes);
   }
@@ -111,16 +111,15 @@ static iree_status_t loom_low_packetization_liveness_order_from_schedule(
   return iree_ok_status();
 }
 
-iree_status_t loom_low_packetize_function(
+iree_status_t loom_low_emission_frame_build(
     loom_module_t* module, loom_op_t* low_func_op,
-    const loom_low_packetization_options_t* options,
-    iree_arena_allocator_t* arena,
-    loom_low_packetization_t* out_packetization) {
+    const loom_low_emission_frame_options_t* options,
+    iree_arena_allocator_t* arena, loom_low_emission_frame_t* out_frame) {
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(low_func_op);
   IREE_ASSERT_ARGUMENT(options && options->descriptor_registry);
   IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_packetization);
+  IREE_ASSERT_ARGUMENT(out_frame);
   if (options->allocation_budget_count > 0 && !options->allocation_budgets) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -144,7 +143,10 @@ iree_status_t loom_low_packetize_function(
                             "expected low.func.def or low.kernel.def");
   }
 
-  *out_packetization = (loom_low_packetization_t){0};
+  *out_frame = (loom_low_emission_frame_t){
+      .module = module,
+      .function_op = low_func_op,
+  };
 
   loom_low_schedule_options_t schedule_options = {
       .descriptor_registry = options->descriptor_registry,
@@ -154,13 +156,12 @@ iree_status_t loom_low_packetize_function(
       .diagnostic_flags = options->schedule_diagnostic_flags,
       .strategy = options->schedule_strategy,
   };
-  IREE_RETURN_IF_ERROR(
-      loom_low_schedule_function(module, low_func_op, &schedule_options, arena,
-                                 &out_packetization->schedule));
+  IREE_RETURN_IF_ERROR(loom_low_schedule_function(
+      module, low_func_op, &schedule_options, arena, &out_frame->schedule));
 
   loom_liveness_order_t liveness_order = loom_liveness_order_empty();
-  IREE_RETURN_IF_ERROR(loom_low_packetization_liveness_order_from_schedule(
-      low_func_op, &out_packetization->schedule, arena, &liveness_order));
+  IREE_RETURN_IF_ERROR(loom_low_emission_frame_liveness_order_from_schedule(
+      low_func_op, &out_frame->schedule, arena, &liveness_order));
   loom_low_allocation_options_t allocation_options = {
       .liveness_order = liveness_order,
       .descriptor_registry = options->descriptor_registry,
@@ -173,10 +174,11 @@ iree_status_t loom_low_packetize_function(
       .emitter = options->emitter,
       .diagnostic_flags = options->allocation_diagnostic_flags,
   };
-  IREE_RETURN_IF_ERROR(
-      loom_low_allocate_function(module, low_func_op, &allocation_options,
-                                 arena, &out_packetization->allocation));
+  IREE_RETURN_IF_ERROR(loom_low_allocate_function(
+      module, low_func_op, &allocation_options, arena, &out_frame->allocation));
 
-  return loom_low_packet_validate_sidecars(&out_packetization->schedule,
-                                           &out_packetization->allocation);
+  IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(&out_frame->schedule,
+                                                       &out_frame->allocation));
+  out_frame->target = out_frame->schedule.target;
+  return iree_ok_status();
 }

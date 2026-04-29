@@ -9,7 +9,7 @@
 #include <inttypes.h>
 
 #include "iree/base/internal/arena.h"
-#include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/preparation.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
@@ -124,7 +124,7 @@ static iree_status_t loom_ireevm_module_compile_lower_function(
     const loom_target_module_compile_entry_t* entry,
     loom_func_like_t source_function,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    uint32_t max_errors, iree_arena_allocator_t* sidecar_arena,
+    uint32_t max_errors, iree_arena_allocator_t* table_arena,
     loom_target_compile_report_t* report, loom_low_lower_result_t* out_result) {
   loom_low_lower_policy_registry_t policy_registry = {0};
   loom_ireevm_low_lower_policy_registry_initialize(&policy_registry);
@@ -134,7 +134,7 @@ static iree_status_t loom_ireevm_module_compile_lower_function(
 
   loom_low_lower_report_storage_t report_storage = {0};
   IREE_RETURN_IF_ERROR(loom_target_compile_report_allocate_low_lowering_rows(
-      report, sidecar_arena, &report_storage));
+      report, table_arena, &report_storage));
   const loom_low_lower_options_t lower_options = {
       .target_ref = entry->target_ref,
       .bundle = &entry->bundle_storage.bundle,
@@ -146,7 +146,7 @@ static iree_status_t loom_ireevm_module_compile_lower_function(
       .max_errors = max_errors,
       .report_enabled = report != NULL,
       .report_storage = report_storage,
-      .sidecar_arena = sidecar_arena,
+      .table_arena = table_arena,
   };
   IREE_RETURN_IF_ERROR(loom_low_lower_function(module, source_function,
                                                &lower_options, out_result));
@@ -216,15 +216,15 @@ iree_status_t loom_ireevm_compile_module_archive(
 
   iree_arena_block_pool_t block_pool;
   iree_arena_block_pool_initialize(32 * 1024, allocator, &block_pool);
-  iree_arena_allocator_t sidecar_arena;
-  iree_arena_initialize(&block_pool, &sidecar_arena);
+  iree_arena_allocator_t table_arena;
+  iree_arena_initialize(&block_pool, &table_arena);
 
   iree_status_t status = loom_target_module_compile_verify_module(
       module, &target_options, LOOM_IREEVM_MODULE_COMPILE_DEFAULT_MAX_ERRORS);
   if (iree_status_is_ok(status)) {
     status = loom_target_module_compile_select_entry(
         module, &target_options, &low_registry, entry_predicate,
-        IREE_SV("IREE VM"), &sidecar_arena, &entry);
+        IREE_SV("IREE VM"), &table_arena, &entry);
   }
   if (iree_status_is_ok(status) && report != NULL) {
     loom_target_compile_report_record_target_bundle(
@@ -246,7 +246,7 @@ iree_status_t loom_ireevm_compile_module_archive(
   if (iree_status_is_ok(status)) {
     status = loom_ireevm_module_compile_lower_function(
         module, &low_registry, &entry, source_function, &diagnostic_emitter,
-        max_errors, &sidecar_arena, report, &lower_result);
+        max_errors, &table_arena, report, &lower_result);
   }
   if (iree_status_is_ok(status) && report != NULL) {
     status = loom_ireevm_module_compile_symbol_name(
@@ -280,30 +280,27 @@ iree_status_t loom_ireevm_compile_module_archive(
         LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         &diagnostic_emitter, max_errors);
   }
-  loom_low_packetization_t packetization = {0};
+  loom_low_emission_frame_t frame = {0};
   if (iree_status_is_ok(status)) {
-    const loom_low_packetization_options_t packetization_options = {
+    const loom_low_emission_frame_options_t frame_options = {
         .descriptor_registry = &low_registry.registry,
         .memory_access_table = lower_result.memory_access_table,
         .emitter = loom_target_module_compile_emitter(&diagnostic_emitter),
     };
-    status = loom_low_packetize_function(module, lower_result.low_func_op,
-                                         &packetization_options, &sidecar_arena,
-                                         &packetization);
+    status = loom_low_emission_frame_build(
+        module, lower_result.low_func_op, &frame_options, &table_arena, &frame);
   }
   if (iree_status_is_ok(status) && report != NULL) {
-    loom_target_compile_report_record_low_packetization(report, &packetization);
+    loom_target_compile_report_record_low_emission_frame(report, &frame);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_ireevm_emit_function_bytecode(&packetization.schedule,
-                                                &packetization.allocation,
-                                                allocator, &bytecode);
+    status = loom_ireevm_emit_function_bytecode(
+        &frame.schedule, &frame.allocation, allocator, &bytecode);
   }
   if (iree_status_is_ok(status) && report != NULL) {
     loom_target_compile_report_record_emission(
         report,
-        packetization.schedule.scheduled_node_count +
-            packetization.schedule.block_count,
+        frame.schedule.scheduled_node_count + frame.schedule.block_count,
         bytecode.bytecode_length, bytecode.data_length);
   }
   if (iree_status_is_ok(status)) {
@@ -331,7 +328,7 @@ iree_status_t loom_ireevm_compile_module_archive(
     loom_target_compile_report_record_status(report, status);
   }
   loom_ireevm_function_bytecode_deinitialize(&bytecode, allocator);
-  iree_arena_deinitialize(&sidecar_arena);
+  iree_arena_deinitialize(&table_arena);
   iree_arena_block_pool_deinitialize(&block_pool);
   iree_string_builder_deinitialize(&calling_convention_builder);
   return status;

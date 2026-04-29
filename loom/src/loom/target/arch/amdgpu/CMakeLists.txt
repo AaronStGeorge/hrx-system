@@ -793,8 +793,8 @@ loom_cc_test(
     ::wait_plan
     iree::base
     iree::base::internal::arena
+    loom::src::loom::codegen::low::frame
     loom::src::loom::codegen::low::function
-    loom::src::loom::codegen::low::packetization
     loom::src::loom::codegen::low::target_binding
     loom::src::loom::codegen::low::verify
     loom::src::loom::format::text::parser

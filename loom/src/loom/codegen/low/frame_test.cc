@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/frame.h"
 
 #include <string>
 
@@ -53,8 +53,8 @@ class LowPacketizationTest : public ::testing::Test {
     loom_module_t* module = nullptr;
     IREE_EXPECT_OK(
         loom_text_parse(iree_make_string_view(source.data(), source.size()),
-                        IREE_SV("low_packetization_test.loom"), &context_,
-                        &block_pool_, &parse_options, &module));
+                        IREE_SV("low_frame_test.loom"), &context_, &block_pool_,
+                        &parse_options, &module));
     EXPECT_NE(module, nullptr);
     return module;
   }
@@ -106,7 +106,7 @@ class LowPacketizationTest : public ::testing::Test {
   loom_target_low_descriptor_registry_t target_registry_ = {};
 };
 
-TEST_F(LowPacketizationTest, BuildsMatchingScheduleAndAllocationSidecars) {
+TEST_F(LowPacketizationTest, BuildsMatchingScheduleAndAllocationTables) {
   ParseAndVerify(
       "low.func.def target(@test_target) @packetized(%lhs: reg<test.i32>, "
       "%rhs: reg<test.i32>) -> (reg<test.i32>) {\n"
@@ -120,34 +120,34 @@ TEST_F(LowPacketizationTest, BuildsMatchingScheduleAndAllocationSidecars) {
   loom_op_t* low_function = FindFirstLowFunction(module_);
   ASSERT_NE(low_function, nullptr);
 
-  iree_arena_allocator_t sidecar_arena;
-  iree_arena_initialize(&block_pool_, &sidecar_arena);
-  loom_low_packetization_t packetization = {};
-  loom_low_packetization_options_t options = {
+  iree_arena_allocator_t table_arena;
+  iree_arena_initialize(&block_pool_, &table_arena);
+  loom_low_emission_frame_t frame = {};
+  loom_low_emission_frame_options_t options = {
       .descriptor_registry = &target_registry_.registry,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE,
   };
-  IREE_ASSERT_OK(loom_low_packetize_function(module_, low_function, &options,
-                                             &sidecar_arena, &packetization));
+  IREE_ASSERT_OK(loom_low_emission_frame_build(module_, low_function, &options,
+                                               &table_arena, &frame));
 
-  EXPECT_EQ(packetization.schedule.module, module_);
-  EXPECT_EQ(packetization.allocation.module, module_);
-  EXPECT_EQ(packetization.schedule.function_op, low_function);
-  EXPECT_EQ(packetization.allocation.function_op, low_function);
-  EXPECT_EQ(packetization.schedule.target.descriptor_set,
-            packetization.allocation.target.descriptor_set);
-  EXPECT_EQ(packetization.schedule.scheduled_node_count, 4u);
-  EXPECT_GT(packetization.allocation.assignment_count, 0u);
-  EXPECT_GT(packetization.schedule.pressure_step_count, 0u);
-  IREE_EXPECT_OK(loom_low_packet_validate_sidecars(&packetization.schedule,
-                                                   &packetization.allocation));
+  EXPECT_EQ(frame.schedule.module, module_);
+  EXPECT_EQ(frame.allocation.module, module_);
+  EXPECT_EQ(frame.schedule.function_op, low_function);
+  EXPECT_EQ(frame.allocation.function_op, low_function);
+  EXPECT_EQ(frame.schedule.target.descriptor_set,
+            frame.allocation.target.descriptor_set);
+  EXPECT_EQ(frame.schedule.scheduled_node_count, 4u);
+  EXPECT_GT(frame.allocation.assignment_count, 0u);
+  EXPECT_GT(frame.schedule.pressure_step_count, 0u);
+  IREE_EXPECT_OK(
+      loom_low_packet_validate_tables(&frame.schedule, &frame.allocation));
 
   loom_low_packet_view_t first_packet = {};
-  IREE_ASSERT_OK(loom_low_packet_view_at(
-      &packetization.schedule, &packetization.allocation, 0, &first_packet));
+  IREE_ASSERT_OK(loom_low_packet_view_at(&frame.schedule, &frame.allocation, 0,
+                                         &first_packet));
   EXPECT_NE(first_packet.node, nullptr);
 
-  iree_arena_deinitialize(&sidecar_arena);
+  iree_arena_deinitialize(&table_arena);
 }
 
 TEST_F(LowPacketizationTest, RejectsMissingDescriptorRegistry) {
@@ -158,14 +158,14 @@ TEST_F(LowPacketizationTest, RejectsMissingDescriptorRegistry) {
   loom_op_t* low_function = FindFirstLowFunction(module_);
   ASSERT_NE(low_function, nullptr);
 
-  iree_arena_allocator_t sidecar_arena;
-  iree_arena_initialize(&block_pool_, &sidecar_arena);
-  loom_low_packetization_t packetization = {};
-  loom_low_packetization_options_t options = {};
-  iree_status_t status = loom_low_packetize_function(
-      module_, low_function, &options, &sidecar_arena, &packetization);
+  iree_arena_allocator_t table_arena;
+  iree_arena_initialize(&block_pool_, &table_arena);
+  loom_low_emission_frame_t frame = {};
+  loom_low_emission_frame_options_t options = {};
+  iree_status_t status = loom_low_emission_frame_build(
+      module_, low_function, &options, &table_arena, &frame);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
-  iree_arena_deinitialize(&sidecar_arena);
+  iree_arena_deinitialize(&table_arena);
 }
 
 TEST_F(LowPacketizationTest, RejectsNonLowFunction) {
@@ -178,16 +178,16 @@ TEST_F(LowPacketizationTest, RejectsNonLowFunction) {
   loom_op_t* ordinary_function = loom_module_block(module_)->first_op;
   ASSERT_NE(ordinary_function, nullptr);
 
-  iree_arena_allocator_t sidecar_arena;
-  iree_arena_initialize(&block_pool_, &sidecar_arena);
-  loom_low_packetization_t packetization = {};
-  loom_low_packetization_options_t options = {
+  iree_arena_allocator_t table_arena;
+  iree_arena_initialize(&block_pool_, &table_arena);
+  loom_low_emission_frame_t frame = {};
+  loom_low_emission_frame_options_t options = {
       .descriptor_registry = &target_registry_.registry,
   };
-  iree_status_t status = loom_low_packetize_function(
-      module_, ordinary_function, &options, &sidecar_arena, &packetization);
+  iree_status_t status = loom_low_emission_frame_build(
+      module_, ordinary_function, &options, &table_arena, &frame);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
-  iree_arena_deinitialize(&sidecar_arena);
+  iree_arena_deinitialize(&table_arena);
 }
 
 }  // namespace

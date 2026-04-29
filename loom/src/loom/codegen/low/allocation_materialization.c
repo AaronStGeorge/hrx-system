@@ -17,42 +17,42 @@
 #include "loom/ops/op_defs.h"
 
 typedef struct loom_low_materialized_spill_slot_t {
-  // Sidecar spill slot ordinal represented by this generated symbol.
+  // Table spill slot ordinal represented by this generated symbol.
   uint32_t slot_index;
   // Symbol reference for the generated low.slot record.
   loom_symbol_ref_t symbol_ref;
 } loom_low_materialized_spill_slot_t;
 
 static iree_status_t loom_low_allocation_emit_materialized_spill(
-    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_table_t* table,
     const loom_low_allocation_spill_plan_t* plan, loom_symbol_ref_t slot_ref,
     iree_diagnostic_emitter_t emitter) {
-  if (plan->assignment_index >= sidecar->assignment_count) {
+  if (plan->assignment_index >= table->assignment_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "allocation spill plan references an out-of-range assignment");
   }
   const loom_low_allocation_assignment_t* assignment =
-      &sidecar->assignments[plan->assignment_index];
+      &table->assignments[plan->assignment_index];
   loom_diagnostic_param_t params[] = {
-      loom_param_string(loom_low_diagnostic_target_key(&sidecar->target)),
-      loom_param_string(loom_low_diagnostic_export_name(&sidecar->target)),
-      loom_param_string(loom_low_diagnostic_config_key(&sidecar->target)),
-      loom_param_string(loom_low_diagnostic_function_name(
-          sidecar->module, sidecar->function_op)),
+      loom_param_string(loom_low_diagnostic_target_key(&table->target)),
+      loom_param_string(loom_low_diagnostic_export_name(&table->target)),
+      loom_param_string(loom_low_diagnostic_config_key(&table->target)),
       loom_param_string(
-          loom_low_diagnostic_value_name(sidecar->module, plan->value_id)),
+          loom_low_diagnostic_function_name(table->module, table->function_op)),
+      loom_param_string(
+          loom_low_diagnostic_value_name(table->module, plan->value_id)),
       loom_param_string(loom_low_diagnostic_value_class_name(
-          sidecar->module, assignment->value_class)),
+          table->module, assignment->value_class)),
       loom_param_string(
-          loom_low_diagnostic_symbol_name(sidecar->module, slot_ref)),
+          loom_low_diagnostic_symbol_name(table->module, slot_ref)),
       loom_param_u32(plan->byte_size),
       loom_param_u32(plan->store_count),
       loom_param_u32(plan->reload_count),
   };
   loom_diagnostic_emission_t emission = {
-      .op = loom_low_diagnostic_value_origin_op(sidecar->module, plan->value_id,
-                                                sidecar->function_op),
+      .op = loom_low_diagnostic_value_origin_op(table->module, plan->value_id,
+                                                table->function_op),
       .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 9),
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
@@ -169,21 +169,20 @@ static iree_status_t loom_low_allocation_create_unique_slot_symbol(
 }
 
 static iree_status_t loom_low_allocation_insert_slot_records(
-    loom_module_t* module, const loom_low_allocation_sidecar_t* sidecar,
+    loom_module_t* module, const loom_low_allocation_table_t* table,
     iree_arena_allocator_t* arena, loom_low_materialized_spill_slot_t* slots) {
-  loom_symbol_ref_t function_ref =
-      loom_low_function_callee(sidecar->function_op);
-  if (!sidecar->function_op->parent_block) {
+  loom_symbol_ref_t function_ref = loom_low_function_callee(table->function_op);
+  if (!table->function_op->parent_block) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "low function is not inserted in a block");
   }
 
   loom_builder_t builder;
   loom_builder_initialize(module, &module->arena,
-                          sidecar->function_op->parent_block, &builder);
-  const loom_op_t* insertion_anchor = sidecar->function_op;
-  for (iree_host_size_t i = 0; i < sidecar->spill_plan_count; ++i) {
-    const loom_low_allocation_spill_plan_t* plan = &sidecar->spill_plans[i];
+                          table->function_op->parent_block, &builder);
+  const loom_op_t* insertion_anchor = table->function_op;
+  for (iree_host_size_t i = 0; i < table->spill_plan_count; ++i) {
+    const loom_low_allocation_spill_plan_t* plan = &table->spill_plans[i];
     for (iree_host_size_t j = 0; j < i; ++j) {
       if (slots[j].slot_index == plan->slot_index) {
         return iree_make_status(
@@ -206,7 +205,7 @@ static iree_status_t loom_low_allocation_insert_slot_records(
     IREE_RETURN_IF_ERROR(loom_low_slot_build(
         &builder, slot_ref, function_ref, low_slot_space,
         (int64_t)plan->byte_size, (int64_t)plan->byte_alignment,
-        sidecar->function_op->location, &slot_op));
+        table->function_op->location, &slot_op));
     insertion_anchor = slot_op;
     slots[i] = (loom_low_materialized_spill_slot_t){
         .slot_index = plan->slot_index,
@@ -298,7 +297,7 @@ static iree_status_t loom_low_allocation_insert_reload_for_use(
 }
 
 static iree_status_t loom_low_allocation_materialize_one_spill_plan(
-    loom_module_t* module, const loom_low_allocation_sidecar_t* sidecar,
+    loom_module_t* module, const loom_low_allocation_table_t* table,
     const loom_low_allocation_spill_plan_t* plan, loom_symbol_ref_t slot_ref,
     iree_diagnostic_emitter_t emitter, iree_arena_allocator_t* arena,
     loom_low_allocation_materialization_result_t* result) {
@@ -322,7 +321,7 @@ static iree_status_t loom_low_allocation_materialize_one_spill_plan(
 
   if (plan->store_count > 0) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_insert_spill_store(
-        module, sidecar->function_op, plan, slot_ref));
+        module, table->function_op, plan, slot_ref));
     if (result->spill_count == UINT32_MAX) {
       return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                               "materialized spill count overflow");
@@ -339,12 +338,12 @@ static iree_status_t loom_low_allocation_materialize_one_spill_plan(
     }
     ++result->reload_count;
   }
-  return loom_low_allocation_emit_materialized_spill(sidecar, plan, slot_ref,
+  return loom_low_allocation_emit_materialized_spill(table, plan, slot_ref,
                                                      emitter);
 }
 
 iree_status_t loom_low_allocation_materialize_spills(
-    loom_module_t* module, const loom_low_allocation_sidecar_t* sidecar,
+    loom_module_t* module, const loom_low_allocation_table_t* table,
     const loom_low_allocation_materialization_options_t* options,
     iree_arena_allocator_t* arena,
     loom_low_allocation_materialization_result_t* out_result) {
@@ -353,12 +352,12 @@ iree_status_t loom_low_allocation_materialize_spills(
   loom_low_allocation_materialization_result_t result = {0};
   if (out_result) *out_result = result;
 
-  IREE_RETURN_IF_ERROR(loom_low_allocation_verify_sidecar(sidecar));
-  if (sidecar->module != module) {
+  IREE_RETURN_IF_ERROR(loom_low_allocation_verify_table(table));
+  if (table->module != module) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation sidecar belongs to a different module");
+                            "allocation table belongs to a different module");
   }
-  if (sidecar->spill_plan_count == 0) return iree_ok_status();
+  if (table->spill_plan_count == 0) return iree_ok_status();
 
   const bool allow_existing_slot_traffic =
       options && options->allow_existing_slot_traffic;
@@ -366,25 +365,25 @@ iree_status_t loom_low_allocation_materialize_spills(
       options ? options->emitter : (iree_diagnostic_emitter_t){0};
   if (!allow_existing_slot_traffic) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_verify_no_existing_slot_traffic(
-        sidecar->function_op));
+        table->function_op));
   }
-  if (sidecar->spill_plan_count > UINT32_MAX) {
+  if (table->spill_plan_count > UINT32_MAX) {
     return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                             "materialized slot count overflow");
   }
 
   loom_low_materialized_spill_slot_t* slots = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, sidecar->spill_plan_count, sizeof(*slots), (void**)&slots));
-  memset(slots, 0, sidecar->spill_plan_count * sizeof(*slots));
+      arena, table->spill_plan_count, sizeof(*slots), (void**)&slots));
+  memset(slots, 0, table->spill_plan_count * sizeof(*slots));
 
   IREE_RETURN_IF_ERROR(
-      loom_low_allocation_insert_slot_records(module, sidecar, arena, slots));
-  result.slot_count = (uint32_t)sidecar->spill_plan_count;
+      loom_low_allocation_insert_slot_records(module, table, arena, slots));
+  result.slot_count = (uint32_t)table->spill_plan_count;
 
-  for (iree_host_size_t i = 0; i < sidecar->spill_plan_count; ++i) {
+  for (iree_host_size_t i = 0; i < table->spill_plan_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_materialize_one_spill_plan(
-        module, sidecar, &sidecar->spill_plans[i], slots[i].symbol_ref, emitter,
+        module, table, &table->spill_plans[i], slots[i].symbol_ref, emitter,
         arena, &result));
   }
 

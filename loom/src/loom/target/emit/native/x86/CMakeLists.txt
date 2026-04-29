@@ -66,7 +66,7 @@ loom_cc_test(
     ::assembly
     iree::base
     iree::base::internal::arena
-    loom::src::loom::codegen::low::packetization
+    loom::src::loom::codegen::low::frame
     loom::src::loom::codegen::low::verify
     loom::src::loom::format::text::parser
     loom::src::loom::ir

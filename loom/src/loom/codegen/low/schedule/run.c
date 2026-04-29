@@ -221,7 +221,7 @@ static iree_status_t loom_low_schedule_initialize_pressure_cliff_ranges(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_schedule_initialize_descriptor_sidecars(
+static iree_status_t loom_low_schedule_initialize_descriptor_tables(
     loom_low_schedule_build_state_t* state, iree_host_size_t node_count) {
   iree_host_size_t resource_use_capacity = 0;
   iree_host_size_t effect_use_capacity = 0;
@@ -1339,12 +1339,12 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
 iree_status_t loom_low_schedule_function(
     const loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_schedule_options_t* options, iree_arena_allocator_t* arena,
-    loom_low_schedule_sidecar_t* out_sidecar) {
+    loom_low_schedule_table_t* out_table) {
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(low_func_op);
   IREE_ASSERT_ARGUMENT(options && options->descriptor_registry);
   IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_sidecar);
+  IREE_ASSERT_ARGUMENT(out_table);
   if (!loom_low_function_def_isa(low_func_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected low.func.def or low.kernel.def");
@@ -1368,7 +1368,7 @@ iree_status_t loom_low_schedule_function(
         "low schedule pressure cliff values are required when count is "
         "non-zero");
   }
-  *out_sidecar = (loom_low_schedule_sidecar_t){0};
+  *out_table = (loom_low_schedule_table_t){0};
 
   loom_low_schedule_build_state_t state = {
       .module = module,
@@ -1404,7 +1404,7 @@ iree_status_t loom_low_schedule_function(
       loom_low_schedule_initialize_storage(&state, node_count));
   IREE_RETURN_IF_ERROR(loom_low_schedule_fill_nodes(&state));
   IREE_RETURN_IF_ERROR(
-      loom_low_schedule_initialize_descriptor_sidecars(&state, node_count));
+      loom_low_schedule_initialize_descriptor_tables(&state, node_count));
   IREE_RETURN_IF_ERROR(loom_low_schedule_build_dependencies(&state));
   loom_liveness_analysis_t liveness = {0};
   IREE_RETURN_IF_ERROR(
@@ -1436,7 +1436,7 @@ iree_status_t loom_low_schedule_function(
     IREE_RETURN_IF_ERROR(loom_low_schedule_emit_hazard_gap_diagnostics(&state));
   }
 
-  *out_sidecar = (loom_low_schedule_sidecar_t){
+  *out_table = (loom_low_schedule_table_t){
       .module = module,
       .function_op = low_func_op,
       .target = state.target,
@@ -1467,6 +1467,6 @@ iree_status_t loom_low_schedule_function(
       .resource_summaries = state.resource_summaries,
       .resource_summary_count = state.resource_summary_count,
   };
-  loom_target_bundle_storage_rebind(&out_sidecar->target.bundle_storage);
+  loom_target_bundle_storage_rebind(&out_table->target.bundle_storage);
   return iree_ok_status();
 }

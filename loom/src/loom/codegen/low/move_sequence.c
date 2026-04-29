@@ -68,7 +68,7 @@ static void loom_low_move_location_from_edge_copy_temporary(
 
 static const loom_low_allocation_assignment_t*
 loom_low_move_sequence_find_assignment(
-    const loom_low_allocation_sidecar_t* allocation, loom_value_id_t value_id) {
+    const loom_low_allocation_table_t* allocation, loom_value_id_t value_id) {
   for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
     if (allocation->assignments[i].value_id == value_id) {
       return &allocation->assignments[i];
@@ -78,7 +78,7 @@ loom_low_move_sequence_find_assignment(
 }
 
 static iree_status_t loom_low_move_sequence_require_assignment(
-    const loom_low_allocation_sidecar_t* allocation, loom_value_id_t value_id,
+    const loom_low_allocation_table_t* allocation, loom_value_id_t value_id,
     const loom_low_allocation_assignment_t** out_assignment) {
   IREE_ASSERT_ARGUMENT(out_assignment);
   *out_assignment =
@@ -106,7 +106,7 @@ static iree_status_t loom_low_move_sequence_require_same_storage_class(
 }
 
 iree_status_t loom_low_move_sequence_count_edge_copy_units(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_low_allocation_edge_copy_group_t* group,
     iree_host_size_t* out_move_count) {
   IREE_ASSERT_ARGUMENT(allocation);
@@ -149,7 +149,7 @@ iree_status_t loom_low_move_sequence_count_edge_copy_units(
 }
 
 iree_status_t loom_low_move_sequence_populate_edge_copy_units(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_low_allocation_edge_copy_group_t* group, loom_low_move_t* moves,
     iree_host_size_t move_count) {
   IREE_ASSERT_ARGUMENT(allocation);
@@ -187,7 +187,7 @@ iree_status_t loom_low_move_sequence_populate_edge_copy_units(
 }
 
 iree_status_t loom_low_move_sequence_populate_edge_copy_temporaries(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_low_allocation_edge_copy_group_t* group,
     loom_low_move_location_t* temporary_locations,
     iree_host_size_t temporary_location_count) {
@@ -218,7 +218,7 @@ iree_status_t loom_low_move_sequence_populate_edge_copy_temporaries(
 }
 
 static iree_status_t loom_low_move_sequence_slice_assignments(
-    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     const loom_low_allocation_assignment_t** out_source_assignment,
     const loom_low_allocation_assignment_t** out_result_assignment,
     uint32_t* out_source_offset) {
@@ -255,7 +255,7 @@ static iree_status_t loom_low_move_sequence_slice_assignments(
 }
 
 iree_status_t loom_low_move_sequence_count_slice_units(
-    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     iree_host_size_t* out_move_count) {
   IREE_ASSERT_ARGUMENT(allocation);
   IREE_ASSERT_ARGUMENT(op);
@@ -276,7 +276,7 @@ iree_status_t loom_low_move_sequence_count_slice_units(
 }
 
 iree_status_t loom_low_move_sequence_populate_slice_units(
-    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     loom_low_move_t* moves, iree_host_size_t move_count) {
   IREE_ASSERT_ARGUMENT(allocation);
   IREE_ASSERT_ARGUMENT(op);
@@ -312,7 +312,7 @@ iree_status_t loom_low_move_sequence_populate_slice_units(
 }
 
 static iree_status_t loom_low_move_sequence_concat_assignments(
-    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     const loom_low_allocation_assignment_t** out_result_assignment,
     bool* out_coalesced, iree_host_size_t* out_move_count) {
   IREE_ASSERT_ARGUMENT(out_result_assignment);
@@ -364,7 +364,7 @@ static iree_status_t loom_low_move_sequence_concat_assignments(
 }
 
 iree_status_t loom_low_move_sequence_count_concat_units(
-    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     iree_host_size_t* out_move_count) {
   IREE_ASSERT_ARGUMENT(allocation);
   IREE_ASSERT_ARGUMENT(op);
@@ -380,7 +380,7 @@ iree_status_t loom_low_move_sequence_count_concat_units(
 }
 
 iree_status_t loom_low_move_sequence_populate_concat_units(
-    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     loom_low_move_t* moves, iree_host_size_t move_count) {
   IREE_ASSERT_ARGUMENT(allocation);
   IREE_ASSERT_ARGUMENT(op);

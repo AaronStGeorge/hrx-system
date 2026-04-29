@@ -22,8 +22,8 @@ extern "C" {
 // |allocation| to |builder|. The output is a diagnostic/test format and a
 // bytecode-shaped emitter input, not a durable serialized artifact.
 iree_status_t loom_low_packet_format_json(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     iree_string_builder_t* builder);
 
 #ifdef __cplusplus

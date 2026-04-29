@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // AMDGPU occupancy and register-pressure diagnostics over target-low allocation
-// sidecars.
+// tables.
 //
 // The generic low allocator reports physical register assignment and predicted
 // spills without knowing target occupancy rules. This layer owns the AMDGPU
@@ -37,7 +37,7 @@ typedef enum loom_amdgpu_occupancy_diagnostic_bits_e {
 // Bitset of loom_amdgpu_occupancy_diagnostic_bits_t values.
 typedef uint32_t loom_amdgpu_occupancy_diagnostic_flags_t;
 
-// Options controlling AMDGPU occupancy sidecar construction.
+// Options controlling AMDGPU occupancy table construction.
 typedef struct loom_amdgpu_occupancy_options_t {
   // Structured diagnostic emitter for occupancy feedback.
   iree_diagnostic_emitter_t emitter;
@@ -77,10 +77,10 @@ typedef struct loom_amdgpu_occupancy_register_class_t {
   uint32_t spill_reload_count;
 } loom_amdgpu_occupancy_register_class_t;
 
-// AMDGPU occupancy sidecar for one allocated target-low function body.
-typedef struct loom_amdgpu_occupancy_sidecar_t {
-  // Allocation sidecar this occupancy estimate was built from.
-  const loom_low_allocation_sidecar_t* allocation;
+// AMDGPU occupancy table for one allocated target-low function body.
+typedef struct loom_amdgpu_occupancy_table_t {
+  // Allocation table this occupancy estimate was built from.
+  const loom_low_allocation_table_t* allocation;
   // Target CPU selected by the low target snapshot.
   iree_string_view_t target_cpu;
   // AMDGPU wave size used by this model.
@@ -112,16 +112,15 @@ typedef struct loom_amdgpu_occupancy_sidecar_t {
   uint32_t spill_store_count;
   // Predicted spill reloads across all AMDGPU register classes.
   uint32_t spill_reload_count;
-} loom_amdgpu_occupancy_sidecar_t;
+} loom_amdgpu_occupancy_table_t;
 
 // Builds an AMDGPU occupancy estimate from |allocation|. The caller must keep
-// |allocation| immutable and |arena| alive for as long as |out_sidecar| is
+// |allocation| immutable and |arena| alive for as long as |out_table| is
 // used.
 iree_status_t loom_amdgpu_occupancy_build(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_occupancy_options_t* options,
-    iree_arena_allocator_t* arena,
-    loom_amdgpu_occupancy_sidecar_t* out_sidecar);
+    iree_arena_allocator_t* arena, loom_amdgpu_occupancy_table_t* out_table);
 
 // Builds target-provided schedule pressure cliffs for |descriptor_set|. The
 // returned list is sorted by descriptor register-class ID and cliff unit count
@@ -131,10 +130,9 @@ iree_status_t loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
     iree_arena_allocator_t* arena,
     loom_low_schedule_pressure_cliff_list_t* out_pressure_cliffs);
 
-// Appends a compact JSON representation of |sidecar| to |builder|.
+// Appends a compact JSON representation of |table| to |builder|.
 iree_status_t loom_amdgpu_occupancy_format_json(
-    const loom_amdgpu_occupancy_sidecar_t* sidecar,
-    iree_string_builder_t* builder);
+    const loom_amdgpu_occupancy_table_t* table, iree_string_builder_t* builder);
 
 #ifdef __cplusplus
 }  // extern "C"

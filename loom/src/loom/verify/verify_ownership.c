@@ -105,7 +105,7 @@ static iree_status_t loom_verify_tied_table_reset(
 }
 
 // Records one tied-result claim for |result_index| and returns the field
-// occurrence sidecar for the current claim. If this result index was claimed
+// occurrence metadata for the current claim. If this result index was claimed
 // previously, |out_first_occurrence| receives the first claimant occurrence and
 // the function returns true.
 static bool loom_verify_tied_table_claim_result(
@@ -127,7 +127,7 @@ static bool loom_verify_tied_table_claim_result(
 }
 
 // Records one tied-result claim for |operand_index| and returns the field
-// occurrence sidecar for the current claim. If this operand index was claimed
+// occurrence metadata for the current claim. If this operand index was claimed
 // previously, |out_first_occurrence| receives the first claimant occurrence and
 // the function returns true.
 static bool loom_verify_tied_table_claim_operand(

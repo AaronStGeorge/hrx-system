@@ -653,7 +653,7 @@ iree_status_t loom_parsed_op_add_tied_result(loom_parsed_op_t* parsed,
                                              iree_arena_allocator_t* arena,
                                              loom_tied_result_t tied);
 
-// Appends one source field span to the parsed-op sidecar. |start_token| is the
+// Appends one source field span to the parsed-op metadata. |start_token| is the
 // token where the field's source spelling began; |end_line|/|end_column| come
 // from the tokenizer's consumed-end cursor after the field parser finished.
 // No-op for parser-synthesized fields with LOOM_TOKEN_NONE.

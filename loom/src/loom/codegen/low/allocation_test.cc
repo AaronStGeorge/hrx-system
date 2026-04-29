@@ -37,9 +37,9 @@ class LowAllocationTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    if (sidecar_arena_initialized_) {
-      iree_arena_deinitialize(&sidecar_arena_);
-      sidecar_arena_initialized_ = false;
+    if (table_arena_initialized_) {
+      iree_arena_deinitialize(&table_arena_);
+      table_arena_initialized_ = false;
     }
     if (module_) {
       loom_module_free(module_);
@@ -94,29 +94,29 @@ class LowAllocationTest : public ::testing::Test {
 
   iree_status_t AllocateFirstLowFunctionWithOptions(
       const loom_low_allocation_options_t* options,
-      loom_low_allocation_sidecar_t* out_allocation) {
+      loom_low_allocation_table_t* out_allocation) {
     const loom_op_t* low_function = FindFirstLowFunction(module_);
     EXPECT_NE(low_function, nullptr);
-    EXPECT_FALSE(sidecar_arena_initialized_);
+    EXPECT_FALSE(table_arena_initialized_);
 
-    iree_arena_initialize(&block_pool_, &sidecar_arena_);
-    sidecar_arena_initialized_ = true;
+    iree_arena_initialize(&block_pool_, &table_arena_);
+    table_arena_initialized_ = true;
     return loom_low_allocate_function(module_, low_function, options,
-                                      &sidecar_arena_, out_allocation);
+                                      &table_arena_, out_allocation);
   }
 
-  loom_low_allocation_sidecar_t AllocateFirstLowFunction() {
+  loom_low_allocation_table_t AllocateFirstLowFunction() {
     loom_low_allocation_options_t options = {
         .descriptor_registry = &target_registry_.registry,
     };
-    loom_low_allocation_sidecar_t allocation = {};
+    loom_low_allocation_table_t allocation = {};
     IREE_EXPECT_OK(AllocateFirstLowFunctionWithOptions(&options, &allocation));
-    IREE_EXPECT_OK(loom_low_allocation_verify_sidecar(&allocation));
+    IREE_EXPECT_OK(loom_low_allocation_verify_table(&allocation));
     return allocation;
   }
 
   const loom_low_allocation_assignment_t* FindAssignmentByName(
-      const loom_low_allocation_sidecar_t& allocation, const char* name) {
+      const loom_low_allocation_table_t& allocation, const char* name) {
     iree_string_view_t expected_name = iree_make_cstring_view(name);
     for (iree_host_size_t i = 0; i < allocation.assignment_count; ++i) {
       const loom_low_allocation_assignment_t* assignment =
@@ -212,8 +212,8 @@ class LowAllocationTest : public ::testing::Test {
   loom_context_t context_;
   loom_module_t* module_ = nullptr;
   loom_target_low_descriptor_registry_t target_registry_ = {};
-  iree_arena_allocator_t sidecar_arena_ = {};
-  bool sidecar_arena_initialized_ = false;
+  iree_arena_allocator_t table_arena_ = {};
+  bool table_arena_initialized_ = false;
 };
 
 TEST_F(LowAllocationTest, CoalescesTiedResultWithOperand) {
@@ -224,7 +224,7 @@ TEST_F(LowAllocationTest, CoalescesTiedResultWithOperand) {
       "reg<test.i32>\n"
       "  low.return %out : reg<test.i32>\n"
       "}\n");
-  loom_low_allocation_sidecar_t allocation = AllocateFirstLowFunction();
+  loom_low_allocation_table_t allocation = AllocateFirstLowFunction();
 
   ExpectSameLocation(FindAssignmentByName(allocation, "acc"),
                      FindAssignmentByName(allocation, "out"));
@@ -240,7 +240,7 @@ TEST_F(LowAllocationTest, RecordsBranchEdgeCopyGroups) {
       "(reg<test.phys>, reg<test.phys>) -> reg<test.phys>\n"
       "  low.return %sum : reg<test.phys>\n"
       "}\n");
-  loom_low_allocation_sidecar_t allocation = AllocateFirstLowFunction();
+  loom_low_allocation_table_t allocation = AllocateFirstLowFunction();
 
   ASSERT_EQ(allocation.edge_copy_group_count, 1u);
   ASSERT_EQ(allocation.edge_copy_count, 1u);
@@ -278,7 +278,7 @@ TEST_F(LowAllocationTest, RecordsBranchEdgeCopyTemporariesForCycles) {
       "^join(%a: reg<test.phys>, %b: reg<test.phys>):\n"
       "  low.return %a, %b : reg<test.phys>, reg<test.phys>\n"
       "}\n");
-  loom_low_allocation_sidecar_t allocation = AllocateFirstLowFunction();
+  loom_low_allocation_table_t allocation = AllocateFirstLowFunction();
 
   ASSERT_EQ(allocation.edge_copy_group_count, 1u);
   const loom_low_allocation_edge_copy_group_t& group =
@@ -304,7 +304,7 @@ TEST_F(LowAllocationTest, RecordsDiamondBranchEdgeCopyGroups) {
       "^join(%incoming: reg<test.phys>):\n"
       "  low.return %incoming : reg<test.phys>\n"
       "}\n");
-  loom_low_allocation_sidecar_t allocation = AllocateFirstLowFunction();
+  loom_low_allocation_table_t allocation = AllocateFirstLowFunction();
 
   ASSERT_EQ(allocation.edge_copy_group_count, 2u);
   ASSERT_EQ(allocation.edge_copy_count, 2u);
@@ -332,7 +332,7 @@ TEST_F(LowAllocationTest, RejectsTiedResultWhenOperandSpills) {
       .budgets = &budget,
       .budget_count = 1,
   };
-  loom_low_allocation_sidecar_t allocation = {};
+  loom_low_allocation_table_t allocation = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_FAILED_PRECONDITION,
       AllocateFirstLowFunctionWithOptions(&options, &allocation));
@@ -350,7 +350,7 @@ TEST_F(LowAllocationTest, RejectsUnspillableRegisterClassExhaustion) {
   loom_low_allocation_options_t options = {
       .descriptor_registry = &target_registry_.registry,
   };
-  loom_low_allocation_sidecar_t allocation = {};
+  loom_low_allocation_table_t allocation = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_FAILED_PRECONDITION,
       AllocateFirstLowFunctionWithOptions(&options, &allocation));
@@ -379,9 +379,9 @@ TEST_F(LowAllocationTest, FixedValueLocationIsReusableAfterLastUse) {
       .fixed_values = &fixed_value,
       .fixed_value_count = 1,
   };
-  loom_low_allocation_sidecar_t allocation = {};
+  loom_low_allocation_table_t allocation = {};
   IREE_ASSERT_OK(AllocateFirstLowFunctionWithOptions(&options, &allocation));
-  IREE_ASSERT_OK(loom_low_allocation_verify_sidecar(&allocation));
+  IREE_ASSERT_OK(loom_low_allocation_verify_table(&allocation));
 
   ExpectPhysicalLocation(FindAssignmentByName(allocation, "fixed"), 0, 1);
   ExpectPhysicalLocation(FindAssignmentByName(allocation, "later"), 0, 1);
@@ -408,9 +408,9 @@ TEST_F(LowAllocationTest, FutureFixedValueBlocksOverlappingOrdinaryValue) {
       .fixed_values = &fixed_value,
       .fixed_value_count = 1,
   };
-  loom_low_allocation_sidecar_t allocation = {};
+  loom_low_allocation_table_t allocation = {};
   IREE_ASSERT_OK(AllocateFirstLowFunctionWithOptions(&options, &allocation));
-  IREE_ASSERT_OK(loom_low_allocation_verify_sidecar(&allocation));
+  IREE_ASSERT_OK(loom_low_allocation_verify_table(&allocation));
 
   ExpectPhysicalLocation(FindAssignmentByName(allocation, "late"), 0, 1);
   const loom_low_allocation_assignment_t* lhs_assignment =
@@ -426,7 +426,7 @@ TEST_F(LowAllocationTest, AlignsPowerOfTwoRegisterTuples) {
       "reg<test.phys x4>) {\n"
       "  low.return %scalar, %wide : reg<test.phys>, reg<test.phys x4>\n"
       "}\n");
-  loom_low_allocation_sidecar_t allocation = AllocateFirstLowFunction();
+  loom_low_allocation_table_t allocation = AllocateFirstLowFunction();
 
   ExpectPhysicalLocation(FindAssignmentByName(allocation, "scalar"), 0, 1);
   ExpectPhysicalLocation(FindAssignmentByName(allocation, "wide"), 4, 4);
@@ -451,7 +451,7 @@ TEST_F(LowAllocationTest, RejectsMisalignedFixedRegisterTuple) {
       .fixed_values = &fixed_value,
       .fixed_value_count = 1,
   };
-  loom_low_allocation_sidecar_t allocation = {};
+  loom_low_allocation_table_t allocation = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       AllocateFirstLowFunctionWithOptions(&options, &allocation));
@@ -476,9 +476,9 @@ TEST_F(LowAllocationTest, ReservedRangeBlocksWholeFunction) {
       .reserved_ranges = &reserved_range,
       .reserved_range_count = 1,
   };
-  loom_low_allocation_sidecar_t allocation = {};
+  loom_low_allocation_table_t allocation = {};
   IREE_ASSERT_OK(AllocateFirstLowFunctionWithOptions(&options, &allocation));
-  IREE_ASSERT_OK(loom_low_allocation_verify_sidecar(&allocation));
+  IREE_ASSERT_OK(loom_low_allocation_verify_table(&allocation));
 
   for (iree_host_size_t i = 0; i < allocation.assignment_count; ++i) {
     EXPECT_FALSE(
@@ -494,7 +494,7 @@ TEST_F(LowAllocationTest, AliasedRegisterClassesDoNotOverlap) {
       "  low.return %narrow, %wide : reg<test.alias32>, "
       "reg<test.alias64>\n"
       "}\n");
-  loom_low_allocation_sidecar_t allocation = AllocateFirstLowFunction();
+  loom_low_allocation_table_t allocation = AllocateFirstLowFunction();
 
   ExpectPhysicalLocation(FindAssignmentByName(allocation, "narrow"), 0, 1);
   ExpectSpillSlot(FindAssignmentByName(allocation, "wide"), 0, 1);
@@ -515,9 +515,9 @@ TEST_F(LowAllocationTest, BudgetAppliesToAliasedRegisterClass) {
       .budgets = &budget,
       .budget_count = 1,
   };
-  loom_low_allocation_sidecar_t allocation = {};
+  loom_low_allocation_table_t allocation = {};
   IREE_ASSERT_OK(AllocateFirstLowFunctionWithOptions(&options, &allocation));
-  IREE_ASSERT_OK(loom_low_allocation_verify_sidecar(&allocation));
+  IREE_ASSERT_OK(loom_low_allocation_verify_table(&allocation));
 
   ExpectSpillSlot(FindAssignmentByName(allocation, "narrow"), 0, 1);
 }
@@ -543,7 +543,7 @@ TEST_F(LowAllocationTest, RejectsDuplicateAliasedRegisterBudgets) {
       .budgets = budgets,
       .budget_count = IREE_ARRAYSIZE(budgets),
   };
-  loom_low_allocation_sidecar_t allocation = {};
+  loom_low_allocation_table_t allocation = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       AllocateFirstLowFunctionWithOptions(&options, &allocation));
@@ -570,9 +570,9 @@ TEST_F(LowAllocationTest, FutureFixedValueBlocksAliasedRegisterClass) {
       .fixed_values = &fixed_value,
       .fixed_value_count = 1,
   };
-  loom_low_allocation_sidecar_t allocation = {};
+  loom_low_allocation_table_t allocation = {};
   IREE_ASSERT_OK(AllocateFirstLowFunctionWithOptions(&options, &allocation));
-  IREE_ASSERT_OK(loom_low_allocation_verify_sidecar(&allocation));
+  IREE_ASSERT_OK(loom_low_allocation_verify_table(&allocation));
 
   ExpectSpillSlot(FindAssignmentByName(allocation, "narrow"), 0, 1);
   ExpectPhysicalLocation(FindAssignmentByName(allocation, "wide"), 0, 1);
@@ -595,9 +595,9 @@ TEST_F(LowAllocationTest, ReservedRangeBlocksAliasedRegisterClass) {
       .reserved_ranges = &reserved_range,
       .reserved_range_count = 1,
   };
-  loom_low_allocation_sidecar_t allocation = {};
+  loom_low_allocation_table_t allocation = {};
   IREE_ASSERT_OK(AllocateFirstLowFunctionWithOptions(&options, &allocation));
-  IREE_ASSERT_OK(loom_low_allocation_verify_sidecar(&allocation));
+  IREE_ASSERT_OK(loom_low_allocation_verify_table(&allocation));
 
   ExpectSpillSlot(FindAssignmentByName(allocation, "narrow"), 0, 1);
 }
@@ -629,7 +629,7 @@ TEST_F(LowAllocationTest, RejectsOverlappingReservedRanges) {
       .reserved_ranges = reserved_ranges,
       .reserved_range_count = IREE_ARRAYSIZE(reserved_ranges),
   };
-  loom_low_allocation_sidecar_t allocation = {};
+  loom_low_allocation_table_t allocation = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       AllocateFirstLowFunctionWithOptions(&options, &allocation));
@@ -660,7 +660,7 @@ TEST_F(LowAllocationTest, RejectsOverlappingAliasedReservedRanges) {
       .reserved_ranges = reserved_ranges,
       .reserved_range_count = IREE_ARRAYSIZE(reserved_ranges),
   };
-  loom_low_allocation_sidecar_t allocation = {};
+  loom_low_allocation_table_t allocation = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       AllocateFirstLowFunctionWithOptions(&options, &allocation));
@@ -674,7 +674,7 @@ TEST_F(LowAllocationTest, VerifierRejectsAliasedRegisterClassOverlap) {
       "  low.return %narrow, %wide : reg<test.alias32>, "
       "reg<test.alias64>\n"
       "}\n");
-  loom_low_allocation_sidecar_t allocation = AllocateFirstLowFunction();
+  loom_low_allocation_table_t allocation = AllocateFirstLowFunction();
   ASSERT_EQ(allocation.assignment_count, 2u);
 
   loom_low_allocation_assignment_t assignments[2] = {
@@ -688,11 +688,10 @@ TEST_F(LowAllocationTest, VerifierRejectsAliasedRegisterClassOverlap) {
   assignments[1].location_base = 0;
   assignments[1].location_count = 1;
 
-  loom_low_allocation_sidecar_t invalid_allocation = allocation;
+  loom_low_allocation_table_t invalid_allocation = allocation;
   invalid_allocation.assignments = assignments;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_FAILED_PRECONDITION,
-      loom_low_allocation_verify_sidecar(&invalid_allocation));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
+                        loom_low_allocation_verify_table(&invalid_allocation));
 }
 
 }  // namespace

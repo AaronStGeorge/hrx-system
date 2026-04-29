@@ -350,9 +350,9 @@ iree_status_t loom_check_low_emit_packetize_function(
     iree_host_size_t allocation_budget_count,
     const loom_check_low_emit_fixed_value_spec_t* allocation_fixed_specs,
     iree_host_size_t allocation_fixed_spec_count,
-    loom_low_packetization_t* out_packetization) {
+    loom_low_emission_frame_t* out_frame) {
   IREE_ASSERT_ARGUMENT(request);
-  IREE_ASSERT_ARGUMENT(out_packetization);
+  IREE_ASSERT_ARGUMENT(out_frame);
   if (request->low_registry == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low emit descriptor registry is required");
@@ -368,7 +368,7 @@ iree_status_t loom_check_low_emit_packetize_function(
       allocation_fixed_spec_count, &fixed_values, &fixed_value_count,
       request->case_arena));
 
-  loom_low_packetization_options_t packetization_options = {
+  loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = &request->low_registry->registry,
       .schedule_strategy = schedule_strategy,
       .allocation_budgets = allocation_budgets,
@@ -376,8 +376,8 @@ iree_status_t loom_check_low_emit_packetize_function(
       .allocation_fixed_values = fixed_values,
       .allocation_fixed_value_count = fixed_value_count,
   };
-  *out_packetization = (loom_low_packetization_t){0};
-  return loom_low_packetize_function(request->module, low_function,
-                                     &packetization_options,
-                                     request->case_arena, out_packetization);
+  *out_frame = (loom_low_emission_frame_t){0};
+  return loom_low_emission_frame_build(request->module, low_function,
+                                       &frame_options, request->case_arena,
+                                       out_frame);
 }

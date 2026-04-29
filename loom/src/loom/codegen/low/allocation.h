@@ -4,10 +4,10 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Target-independent allocation sidecar for target-low functions.
+// Target-independent allocation table for target-low functions.
 //
 // Loom low functions remain SSA after allocation. Physical registers, target
-// local IDs, and spill slots are sidecar facts over live intervals, while
+// local IDs, and spill slots are table facts over live intervals, while
 // copies, split intervals, spills, and reloads are explicit IR when a later
 // pass decides to materialize them.
 
@@ -253,7 +253,7 @@ typedef struct loom_low_allocation_edge_copy_group_t {
   uint32_t temporary_count;
 } loom_low_allocation_edge_copy_group_t;
 
-// Options controlling allocation sidecar construction.
+// Options controlling allocation table construction.
 typedef struct loom_low_allocation_options_t {
   // Optional operation order used for live intervals.
   loom_liveness_order_t liveness_order;
@@ -277,13 +277,13 @@ typedef struct loom_low_allocation_options_t {
   loom_low_allocation_diagnostic_flags_t diagnostic_flags;
 } loom_low_allocation_options_t;
 
-// Allocation sidecar for one target-low function body. All arrays are
+// Allocation table for one target-low function body. All arrays are
 // arena-owned by the caller-provided arena passed to
 // loom_low_allocate_function.
-typedef struct loom_low_allocation_sidecar_t {
+typedef struct loom_low_allocation_table_t {
   // Module containing the allocated low function.
   const loom_module_t* module;
-  // Target-low function operation allocated by this sidecar.
+  // Target-low function operation allocated by this table.
   const loom_op_t* function_op;
   // Resolved target context selected by |function_op|.
   loom_low_resolved_target_t target;
@@ -325,34 +325,34 @@ typedef struct loom_low_allocation_sidecar_t {
   iree_host_size_t coalesced_copy_count;
   // Number of low.copy ops that must remain materialized.
   iree_host_size_t materialized_copy_count;
-} loom_low_allocation_sidecar_t;
+} loom_low_allocation_table_t;
 
-// Allocates one target-low function body and writes an arena-owned sidecar.
+// Allocates one target-low function body and writes an arena-owned table.
 // This first allocator is deliberately simple and deterministic: it performs
 // per-class linear-scan-style first-fit assignment over liveness intervals,
 // uses target physical register counts or explicit budgets as hard limits, and
-// reports spills as sidecar remarks without mutating IR.
+// reports spills as table remarks without mutating IR.
 iree_status_t loom_low_allocate_function(
     const loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_allocation_options_t* options, iree_arena_allocator_t* arena,
-    loom_low_allocation_sidecar_t* out_sidecar);
+    loom_low_allocation_table_t* out_table);
 
 // Verifies that assigned intervals do not overlap on the same physical
 // register or target ID range. Spill slots are not treated as registers by this
 // verifier because materialized low.spill/low.reload insertion owns their
 // eventual storage reuse policy.
-iree_status_t loom_low_allocation_verify_sidecar(
-    const loom_low_allocation_sidecar_t* sidecar);
+iree_status_t loom_low_allocation_verify_table(
+    const loom_low_allocation_table_t* table);
 
 // Finds the edge-copy group for the source-order node, or NULL when the node
 // has no edge-copy payload.
 const loom_low_allocation_edge_copy_group_t*
 loom_low_allocation_find_edge_copy_group_by_source_ordinal(
-    const loom_low_allocation_sidecar_t* sidecar, uint32_t source_ordinal);
+    const loom_low_allocation_table_t* table, uint32_t source_ordinal);
 
 // Resolves the descriptor-set register class spelling for |assignment|.
 iree_status_t loom_low_allocation_assignment_register_class_name(
-    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_table_t* table,
     const loom_low_allocation_assignment_t* assignment,
     iree_string_view_t* out_register_class_name);
 

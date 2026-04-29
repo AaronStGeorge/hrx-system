@@ -43,7 +43,7 @@ static iree_status_t loom_amdgpu_native_preflight_update_high_water(
 }
 
 static iree_status_t loom_amdgpu_native_preflight_collect_register_usage(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     loom_amdgpu_native_preflight_t* preflight) {
   for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* assignment =
@@ -93,8 +93,8 @@ static iree_status_t loom_amdgpu_native_preflight_collect_register_usage(
 }
 
 iree_status_t loom_amdgpu_native_preflight_analyze(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     loom_amdgpu_native_preflight_t* out_preflight) {
   IREE_ASSERT_ARGUMENT(out_preflight);
   *out_preflight = (loom_amdgpu_native_preflight_t){0};

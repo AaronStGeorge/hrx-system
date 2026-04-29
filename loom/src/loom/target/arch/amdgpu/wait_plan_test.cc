@@ -125,7 +125,7 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
   iree_status_t BuildWaitPlan(const loom_module_t* module,
                               const loom_op_t* low_function,
                               iree_arena_allocator_t* arena,
-                              loom_low_schedule_sidecar_t* out_schedule,
+                              loom_low_schedule_table_t* out_schedule,
                               loom_amdgpu_wait_plan_t* out_plan) {
     loom_low_schedule_options_t schedule_options = {
         .descriptor_registry = &low_registry_.registry,
@@ -167,7 +167,7 @@ low.func.def target(@gfx11_target) @gfx11_func(%s0: reg<amdgpu.sgpr>, %resource:
 
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
-  loom_low_schedule_sidecar_t schedule = {};
+  loom_low_schedule_table_t schedule = {};
   loom_amdgpu_wait_plan_t plan = {};
   IREE_ASSERT_OK(
       BuildWaitPlan(module.get(), low_function, &arena, &schedule, &plan));
@@ -249,7 +249,7 @@ low.func.def target(@gfx950_target) @gfx950_func(%s0: reg<amdgpu.sgpr>, %resourc
 
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
-  loom_low_schedule_sidecar_t schedule = {};
+  loom_low_schedule_table_t schedule = {};
   loom_amdgpu_wait_plan_t plan = {};
   IREE_ASSERT_OK(
       BuildWaitPlan(module.get(), low_function, &arena, &schedule, &plan));
@@ -312,7 +312,7 @@ low.func.def target(@target) @func(%resource: reg<amdgpu.sgpr x4>, %soffset: reg
 
     iree_arena_allocator_t arena;
     iree_arena_initialize(&block_pool_, &arena);
-    loom_low_schedule_sidecar_t schedule = {};
+    loom_low_schedule_table_t schedule = {};
     loom_amdgpu_wait_plan_t plan = {};
     IREE_ASSERT_OK(
         BuildWaitPlan(module.get(), low_function, &arena, &schedule, &plan))
@@ -372,7 +372,7 @@ low.func.def target(@gfx11_target) @gfx11_func(%value: reg<amdgpu.vgpr>, %resour
 
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
-  loom_low_schedule_sidecar_t schedule = {};
+  loom_low_schedule_table_t schedule = {};
   loom_amdgpu_wait_plan_t plan = {};
   IREE_ASSERT_OK(
       BuildWaitPlan(module.get(), low_function, &arena, &schedule, &plan));
@@ -411,7 +411,7 @@ low.func.def target(@gfx11_target) @gfx11_func(%addr: reg<amdgpu.vgpr>, %value: 
 
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
-  loom_low_schedule_sidecar_t schedule = {};
+  loom_low_schedule_table_t schedule = {};
   loom_amdgpu_wait_plan_t plan = {};
   IREE_ASSERT_OK(
       BuildWaitPlan(module.get(), low_function, &arena, &schedule, &plan));
@@ -453,7 +453,7 @@ TEST_F(AmdgpuWaitPlanTest, RejectsUnknownWaitCounterId) {
       .reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER,
       .reference_id = 99,
   };
-  loom_low_schedule_sidecar_t schedule = {
+  loom_low_schedule_table_t schedule = {
       .nodes = &node,
       .node_count = 1,
       .hazard_uses = &hazard,

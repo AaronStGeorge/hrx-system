@@ -46,7 +46,7 @@ loom_assert_no_dependencies(
         ":packet",
         ":packet_asm",
         ":packet_json",
-        ":packetization",
+        ":frame",
         ":preparation",
         ":pass_environment",
         ":register_class_map",
@@ -71,7 +71,7 @@ loom_assert_no_dependencies(
         ":packet",
         ":packet_asm",
         ":packet_json",
-        ":packetization",
+        ":frame",
         ":register_class_map",
         ":source_memory_plan",
     ],
@@ -344,9 +344,9 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "packetization",
-    srcs = ["packetization.c"],
-    hdrs = ["packetization.h"],
+    name = "frame",
+    srcs = ["frame.c"],
+    hdrs = ["frame.h"],
     deps = [
         ":allocation",
         ":function",
@@ -603,8 +603,8 @@ loom_cc_test(
     name = "source_lowering_function_test",
     srcs = ["source_lowering_function_test.cc"],
     deps = [
+        ":frame",
         ":lower",
-        ":packetization",
         ":source_selection",
         ":verify",
         "//loom/src/loom/codegen/low/testing:ir_match_test_util",
@@ -740,8 +740,8 @@ loom_cc_test(
     name = "packet_asm_test",
     srcs = ["packet_asm_test.cc"],
     deps = [
+        ":frame",
         ":packet_asm",
-        ":packetization",
         ":verify",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
@@ -756,11 +756,11 @@ loom_cc_test(
 )
 
 loom_cc_test(
-    name = "packetization_test",
-    srcs = ["packetization_test.cc"],
+    name = "frame_test",
+    srcs = ["frame_test.cc"],
     deps = [
+        ":frame",
         ":packet",
-        ":packetization",
         ":verify",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",

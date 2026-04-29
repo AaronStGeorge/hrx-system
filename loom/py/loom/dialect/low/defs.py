@@ -134,7 +134,7 @@ LowAllocationMode = EnumDef(
         EnumCase(
             "assigned",
             2,
-            doc="Allocation sidecars assign physical registers, but rewriting may still repair copies/spills.",
+            doc="Allocation tables assign physical registers, but rewriting may still repair copies/spills.",
         ),
         EnumCase(
             "fixed",

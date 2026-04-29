@@ -64,7 +64,7 @@ typedef struct loom_encoding_table_t {
 //
 // Module encoding entries store only static family name + canonical parameter
 // attrs. Dynamic parameters are ordinary SSA operands on encoding.define, named
-// by an OperandDict sidecar so the merged parameter view is explicit in the IR
+// by OperandDict metadata so the merged parameter view is explicit in the IR
 // instead of hidden inside attribute payloads.
 //
 // The context-owned family vtable supplies runtime hooks for interpreting

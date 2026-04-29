@@ -28,10 +28,10 @@ static iree_string_view_t loom_low_allocation_json_symbol_name(
 }
 
 static iree_string_view_t loom_low_allocation_json_function_name(
-    const loom_low_allocation_sidecar_t* sidecar) {
-  if (loom_low_function_def_isa(sidecar->function_op)) {
+    const loom_low_allocation_table_t* table) {
+  if (loom_low_function_def_isa(table->function_op)) {
     return loom_low_allocation_json_symbol_name(
-        sidecar->module, loom_low_function_callee(sidecar->function_op));
+        table->module, loom_low_function_callee(table->function_op));
   }
   return IREE_SV("<unnamed>");
 }
@@ -153,9 +153,9 @@ static iree_status_t loom_low_allocation_json_write_type(
 }
 
 static iree_status_t loom_low_allocation_json_write_value(
-    const loom_low_allocation_sidecar_t* sidecar, loom_value_id_t value_id,
+    const loom_low_allocation_table_t* table, loom_value_id_t value_id,
     loom_output_stream_t* stream) {
-  const loom_module_t* module = sidecar->module;
+  const loom_module_t* module = table->module;
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream, "{\"id\":%u,\"name\":", (unsigned)value_id));
   if (value_id < module->values.count) {
@@ -174,7 +174,7 @@ static iree_status_t loom_low_allocation_json_write_value(
 }
 
 static iree_status_t loom_low_allocation_json_write_value_class(
-    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_table_t* table,
     loom_liveness_value_class_t value_class, loom_output_stream_t* stream) {
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream, "{\"type_kind\":%u,\"type_kind_name\":",
@@ -189,7 +189,7 @@ static iree_status_t loom_low_allocation_json_write_value_class(
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"register_class\":"));
   IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_string_or_null(
-      sidecar->module, value_class.register_class_id, stream));
+      table->module, value_class.register_class_id, stream));
   return loom_output_stream_write_cstring(stream, "}");
 }
 
@@ -211,17 +211,17 @@ static iree_status_t loom_low_allocation_json_write_location(
 }
 
 static iree_status_t loom_low_allocation_json_write_assignment(
-    const loom_low_allocation_sidecar_t* sidecar, iree_host_size_t index,
+    const loom_low_allocation_table_t* table, iree_host_size_t index,
     loom_output_stream_t* stream) {
   const loom_low_allocation_assignment_t* assignment =
-      &sidecar->assignments[index];
+      &table->assignments[index];
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream, "{\"index\":%zu,\"value\":", index));
   IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_value(
-      sidecar, assignment->value_id, stream));
+      table, assignment->value_id, stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\"class\":"));
   IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_value_class(
-      sidecar, assignment->value_class, stream));
+      table, assignment->value_class, stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream,
       ",\"start_point\":%" PRIu32 ",\"end_point\":%" PRIu32
@@ -233,10 +233,10 @@ static iree_status_t loom_low_allocation_json_write_assignment(
 }
 
 static iree_status_t loom_low_allocation_json_write_spill_plan(
-    const loom_low_allocation_sidecar_t* sidecar, iree_host_size_t index,
+    const loom_low_allocation_table_t* table, iree_host_size_t index,
     loom_output_stream_t* stream) {
   const loom_low_allocation_spill_plan_t* spill_plan =
-      &sidecar->spill_plans[index];
+      &table->spill_plans[index];
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream,
       "{\"index\":%zu,\"assignment\":%" PRIu32 ",\"slot\":%" PRIu32
@@ -246,7 +246,7 @@ static iree_status_t loom_low_allocation_json_write_spill_plan(
       stream, loom_low_spill_slot_space_name(spill_plan->slot_space)));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\"value\":"));
   IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_value(
-      sidecar, spill_plan->value_id, stream));
+      table, spill_plan->value_id, stream));
   return loom_output_stream_write_format(
       stream,
       ",\"byte_size\":%" PRIu32 ",\"byte_alignment\":%" PRIu32
@@ -256,9 +256,9 @@ static iree_status_t loom_low_allocation_json_write_spill_plan(
 }
 
 static iree_status_t loom_low_allocation_json_write_remark(
-    const loom_low_allocation_sidecar_t* sidecar, iree_host_size_t index,
+    const loom_low_allocation_table_t* table, iree_host_size_t index,
     loom_output_stream_t* stream) {
-  const loom_low_allocation_remark_t* remark = &sidecar->remarks[index];
+  const loom_low_allocation_remark_t* remark = &table->remarks[index];
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{\"kind\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
       stream, loom_low_allocation_json_remark_kind_name(remark->kind)));
@@ -277,10 +277,10 @@ static iree_status_t loom_low_allocation_json_write_remark(
 }
 
 static iree_status_t loom_low_allocation_json_write_copy_decision(
-    const loom_low_allocation_sidecar_t* sidecar, iree_host_size_t index,
+    const loom_low_allocation_table_t* table, iree_host_size_t index,
     loom_output_stream_t* stream) {
   const loom_low_allocation_copy_decision_t* copy_decision =
-      &sidecar->copy_decisions[index];
+      &table->copy_decisions[index];
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream, "{\"index\":%zu,\"kind\":", index));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
@@ -288,11 +288,11 @@ static iree_status_t loom_low_allocation_json_write_copy_decision(
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"source_value\":"));
   IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_value(
-      sidecar, copy_decision->source_value_id, stream));
+      table, copy_decision->source_value_id, stream));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"result_value\":"));
   IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_value(
-      sidecar, copy_decision->result_value_id, stream));
+      table, copy_decision->result_value_id, stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream,
       ",\"source_assignment\":%" PRIu32 ",\"result_assignment\":%" PRIu32 "}",
@@ -302,9 +302,8 @@ static iree_status_t loom_low_allocation_json_write_copy_decision(
 }
 
 iree_status_t loom_low_allocation_format_json(
-    const loom_low_allocation_sidecar_t* sidecar,
-    iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(sidecar);
+    const loom_low_allocation_table_t* table, iree_string_builder_t* builder) {
+  IREE_ASSERT_ARGUMENT(table);
   IREE_ASSERT_ARGUMENT(builder);
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
@@ -314,71 +313,70 @@ iree_status_t loom_low_allocation_format_json(
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"function\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      &stream, loom_low_allocation_json_function_name(sidecar)));
+      &stream, loom_low_allocation_json_function_name(table)));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"target\":"));
   IREE_RETURN_IF_ERROR(
-      loom_json_write_escaped_string(&stream, sidecar->target.target_name));
+      loom_json_write_escaped_string(&stream, table->target.target_name));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"descriptor_set\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      &stream, sidecar->target.descriptor_set_key));
+      &stream, table->target.descriptor_set_key));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"allocation_mode\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
-      &stream, loom_low_allocation_json_mode_name(sidecar->allocation_mode)));
+      &stream, loom_low_allocation_json_mode_name(table->allocation_mode)));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream,
       ",\"assignment_count\":%zu,\"remark_count\":%zu"
       ",\"copy_decision_count\":%zu,\"spill_count\":%zu"
       ",\"spill_plan_count\":%zu"
       ",\"coalesced_copy_count\":%zu,\"materialized_copy_count\":%zu",
-      sidecar->assignment_count, sidecar->remark_count,
-      sidecar->copy_decision_count, sidecar->spill_count,
-      sidecar->spill_plan_count, sidecar->coalesced_copy_count,
-      sidecar->materialized_copy_count));
+      table->assignment_count, table->remark_count, table->copy_decision_count,
+      table->spill_count, table->spill_plan_count, table->coalesced_copy_count,
+      table->materialized_copy_count));
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"assignments\":["));
-  for (iree_host_size_t i = 0; i < sidecar->assignment_count; ++i) {
+  for (iree_host_size_t i = 0; i < table->assignment_count; ++i) {
     if (i > 0) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
     }
     IREE_RETURN_IF_ERROR(
-        loom_low_allocation_json_write_assignment(sidecar, i, &stream));
+        loom_low_allocation_json_write_assignment(table, i, &stream));
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"spill_plans\":["));
-  for (iree_host_size_t i = 0; i < sidecar->spill_plan_count; ++i) {
+  for (iree_host_size_t i = 0; i < table->spill_plan_count; ++i) {
     if (i > 0) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
     }
     IREE_RETURN_IF_ERROR(
-        loom_low_allocation_json_write_spill_plan(sidecar, i, &stream));
+        loom_low_allocation_json_write_spill_plan(table, i, &stream));
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"copy_decisions\":["));
-  for (iree_host_size_t i = 0; i < sidecar->copy_decision_count; ++i) {
+  for (iree_host_size_t i = 0; i < table->copy_decision_count; ++i) {
     if (i > 0) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
     }
     IREE_RETURN_IF_ERROR(
-        loom_low_allocation_json_write_copy_decision(sidecar, i, &stream));
+        loom_low_allocation_json_write_copy_decision(table, i, &stream));
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"remarks\":["));
-  for (iree_host_size_t i = 0; i < sidecar->remark_count; ++i) {
+  for (iree_host_size_t i = 0; i < table->remark_count; ++i) {
     if (i > 0) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
     }
     IREE_RETURN_IF_ERROR(
-        loom_low_allocation_json_write_remark(sidecar, i, &stream));
+        loom_low_allocation_json_write_remark(table, i, &stream));
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]}"));
   return iree_ok_status();

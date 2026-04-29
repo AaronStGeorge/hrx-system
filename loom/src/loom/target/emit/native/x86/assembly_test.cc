@@ -11,7 +11,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
@@ -99,8 +99,8 @@ class X86AssemblyTest : public ::testing::Test {
     return nullptr;
   }
 
-  void BuildSidecars(const char* body, iree_arena_allocator_t* arena,
-                     loom_low_packetization_t* out_packetization) {
+  void BuildTables(const char* body, iree_arena_allocator_t* arena,
+                   loom_low_emission_frame_t* out_frame) {
     std::string source = "target.profile @x86_target preset(\"x86-avx512\")\n";
     source += body;
     ResetModule();
@@ -121,12 +121,11 @@ class X86AssemblyTest : public ::testing::Test {
 
     loom_op_t* low_function = FindFirstLowFunction(module_);
     ASSERT_NE(low_function, nullptr);
-    loom_low_packetization_options_t packetization_options = {
+    loom_low_emission_frame_options_t frame_options = {
         .descriptor_registry = &target_registry_.registry,
     };
-    IREE_ASSERT_OK(loom_low_packetize_function(module_, low_function,
-                                               &packetization_options, arena,
-                                               out_packetization));
+    IREE_ASSERT_OK(loom_low_emission_frame_build(
+        module_, low_function, &frame_options, arena, out_frame));
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -136,10 +135,10 @@ class X86AssemblyTest : public ::testing::Test {
 };
 
 TEST_F(X86AssemblyTest, DisassemblesAvx512ObjectWithLlvmObjdump) {
-  iree_arena_allocator_t sidecar_arena;
-  iree_arena_initialize(&block_pool_, &sidecar_arena);
-  loom_low_packetization_t packetization = {};
-  BuildSidecars(
+  iree_arena_allocator_t table_arena;
+  iree_arena_initialize(&block_pool_, &table_arena);
+  loom_low_emission_frame_t frame = {};
+  BuildTables(
       "low.func.def target(@x86_target) @x86_fragment(%base: "
       "reg<x86.gpr64>, %acc : reg<x86.zmm>, %lhs : reg<x86.zmm>, "
       "%rhs : reg<x86.zmm>) {\n"
@@ -154,12 +153,12 @@ TEST_F(X86AssemblyTest, DisassemblesAvx512ObjectWithLlvmObjdump) {
       "{disp32 = 64} : (reg<x86.zmm>, reg<x86.gpr64>)\n"
       "  low.return\n"
       "}\n",
-      &sidecar_arena, &packetization);
+      &table_arena, &frame);
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
-  IREE_ASSERT_OK(loom_x86_emit_assembly_fragment(
-      &packetization.schedule, &packetization.allocation, &builder));
+  IREE_ASSERT_OK(loom_x86_emit_assembly_fragment(&frame.schedule,
+                                                 &frame.allocation, &builder));
   std::string assembly =
       ".intel_syntax noprefix\n"
       ".text\n"
@@ -178,7 +177,7 @@ TEST_F(X86AssemblyTest, DisassemblesAvx512ObjectWithLlvmObjdump) {
   if (IsToolUnavailable(status)) {
     IREE_EXPECT_NOT_OK(status);
     iree_string_builder_deinitialize(&builder);
-    iree_arena_deinitialize(&sidecar_arena);
+    iree_arena_deinitialize(&table_arena);
     GTEST_SKIP() << "llvm-mc is unavailable in this test environment";
   }
   IREE_ASSERT_OK(status);
@@ -188,7 +187,7 @@ TEST_F(X86AssemblyTest, DisassemblesAvx512ObjectWithLlvmObjdump) {
                                      iree_allocator_system());
   if (!VersionTextListsX86Target(llvm_mc_version)) {
     iree_string_builder_deinitialize(&builder);
-    iree_arena_deinitialize(&sidecar_arena);
+    iree_arena_deinitialize(&table_arena);
     GTEST_SKIP() << "llvm-mc does not report x86 target support";
   }
 
@@ -210,7 +209,7 @@ TEST_F(X86AssemblyTest, DisassemblesAvx512ObjectWithLlvmObjdump) {
     IREE_EXPECT_NOT_OK(status);
     loom_llvm_tool_output_deinitialize(&object, iree_allocator_system());
     iree_string_builder_deinitialize(&builder);
-    iree_arena_deinitialize(&sidecar_arena);
+    iree_arena_deinitialize(&table_arena);
     GTEST_SKIP() << "llvm-objdump is unavailable in this test environment";
   }
   IREE_ASSERT_OK(status);
@@ -221,7 +220,7 @@ TEST_F(X86AssemblyTest, DisassemblesAvx512ObjectWithLlvmObjdump) {
   if (!VersionTextListsX86Target(objdump_version)) {
     loom_llvm_tool_output_deinitialize(&object, iree_allocator_system());
     iree_string_builder_deinitialize(&builder);
-    iree_arena_deinitialize(&sidecar_arena);
+    iree_arena_deinitialize(&table_arena);
     GTEST_SKIP() << "llvm-objdump does not report x86 target support";
   }
 
@@ -253,7 +252,7 @@ TEST_F(X86AssemblyTest, DisassemblesAvx512ObjectWithLlvmObjdump) {
   loom_llvm_tool_output_deinitialize(&disassembly, iree_allocator_system());
   loom_llvm_tool_output_deinitialize(&object, iree_allocator_system());
   iree_string_builder_deinitialize(&builder);
-  iree_arena_deinitialize(&sidecar_arena);
+  iree_arena_deinitialize(&table_arena);
 }
 
 }  // namespace

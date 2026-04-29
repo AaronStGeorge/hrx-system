@@ -11,7 +11,7 @@
 #include "loom/ops/low/ops.h"
 
 static iree_status_t loom_native_fragment_validate_void_returns(
-    const loom_low_schedule_sidecar_t* schedule) {
+    const loom_low_schedule_table_t* schedule) {
   for (iree_host_size_t i = 0; i < schedule->node_count; ++i) {
     const loom_op_t* op = schedule->nodes[i].op;
     if (!loom_low_return_isa(op)) {
@@ -31,7 +31,7 @@ static iree_status_t loom_native_fragment_validate_void_returns(
 }
 
 static iree_status_t loom_native_fragment_validate_physical_allocations(
-    const loom_low_allocation_sidecar_t* allocation) {
+    const loom_low_allocation_table_t* allocation) {
   for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* assignment =
         &allocation->assignments[i];
@@ -69,9 +69,9 @@ static iree_status_t loom_native_fragment_validate_physical_allocations(
 }
 
 iree_status_t loom_native_fragment_validate_emission_inputs(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation) {
-  IREE_RETURN_IF_ERROR(loom_low_packet_validate_sidecars(schedule, allocation));
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation) {
+  IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(schedule, allocation));
   if (allocation->spill_plan_count != 0 || allocation->spill_count != 0) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,

@@ -14,7 +14,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
@@ -110,7 +110,7 @@ class LowPacketAsmTest : public ::testing::Test {
 };
 
 iree_status_t FormatNamedAllocatedValue(
-    void* user_data, const loom_low_allocation_sidecar_t* allocation,
+    void* user_data, const loom_low_allocation_table_t* allocation,
     loom_value_id_t value_id,
     const loom_low_allocation_assignment_t* assignment,
     iree_host_size_t assignment_index, iree_string_builder_t* builder) {
@@ -132,9 +132,9 @@ iree_status_t FormatNamedAllocatedValue(
   return iree_string_builder_append_format(builder, "v%" PRIu32, value_id);
 }
 
-loom_low_packet_asm_form_sidecar_t MakeCanonicalAsmFormSidecar(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+loom_low_packet_asm_form_table_t MakeCanonicalAsmFormTable(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     std::vector<uint32_t>* selected_asm_forms) {
   selected_asm_forms->assign(schedule->scheduled_node_count,
                              LOOM_LOW_ASM_FORM_ORDINAL_NONE);
@@ -150,7 +150,7 @@ loom_low_packet_asm_form_sidecar_t MakeCanonicalAsmFormSidecar(
         &asm_form_ordinal));
     (*selected_asm_forms)[i] = asm_form_ordinal;
   }
-  return loom_low_packet_asm_form_sidecar_t{
+  return loom_low_packet_asm_form_table_t{
       .module = schedule->module,
       .function_op = schedule->function_op,
       .target = schedule->target,
@@ -174,23 +174,21 @@ TEST_F(LowPacketAsmTest, FormatsScheduledPacketsWithCanonicalAsmForms) {
   loom_op_t* low_function = FindFirstLowFunction(module_);
   ASSERT_NE(low_function, nullptr);
 
-  iree_arena_allocator_t sidecar_arena;
-  iree_arena_initialize(&block_pool_, &sidecar_arena);
-  loom_low_packetization_t packetization = {};
-  loom_low_packetization_options_t packetization_options = {
+  iree_arena_allocator_t table_arena;
+  iree_arena_initialize(&block_pool_, &table_arena);
+  loom_low_emission_frame_t frame = {};
+  loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = &target_registry_.registry,
   };
-  IREE_ASSERT_OK(loom_low_packetize_function(module_, low_function,
-                                             &packetization_options,
-                                             &sidecar_arena, &packetization));
+  IREE_ASSERT_OK(loom_low_emission_frame_build(
+      module_, low_function, &frame_options, &table_arena, &frame));
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
   std::vector<uint32_t> selected_asm_form_ordinals;
-  loom_low_packet_asm_form_sidecar_t selected_asm_forms =
-      MakeCanonicalAsmFormSidecar(&packetization.schedule,
-                                  &packetization.allocation,
-                                  &selected_asm_form_ordinals);
+  loom_low_packet_asm_form_table_t selected_asm_forms =
+      MakeCanonicalAsmFormTable(&frame.schedule, &frame.allocation,
+                                &selected_asm_form_ordinals);
   loom_low_packet_asm_options_t asm_options = {
       .selected_asm_forms = &selected_asm_forms,
       .format_value =
@@ -199,8 +197,7 @@ TEST_F(LowPacketAsmTest, FormatsScheduledPacketsWithCanonicalAsmForms) {
               .user_data = nullptr,
           },
   };
-  IREE_ASSERT_OK(loom_low_packet_asm_format(&packetization.schedule,
-                                            &packetization.allocation,
+  IREE_ASSERT_OK(loom_low_packet_asm_format(&frame.schedule, &frame.allocation,
                                             &asm_options, &builder));
   EXPECT_EQ(std::string(iree_string_builder_view(&builder).data,
                         iree_string_builder_view(&builder).size),
@@ -211,7 +208,7 @@ TEST_F(LowPacketAsmTest, FormatsScheduledPacketsWithCanonicalAsmForms) {
             "  cmp = test.cmp.eq.i32 copy, rhs\n"
             "  return cmp\n");
   iree_string_builder_deinitialize(&builder);
-  iree_arena_deinitialize(&sidecar_arena);
+  iree_arena_deinitialize(&table_arena);
 }
 
 TEST_F(LowPacketAsmTest, FormatsStructuralBranches) {
@@ -233,15 +230,14 @@ TEST_F(LowPacketAsmTest, FormatsStructuralBranches) {
   loom_op_t* low_function = FindFirstLowFunction(module_);
   ASSERT_NE(low_function, nullptr);
 
-  iree_arena_allocator_t sidecar_arena;
-  iree_arena_initialize(&block_pool_, &sidecar_arena);
-  loom_low_packetization_t packetization = {};
-  loom_low_packetization_options_t packetization_options = {
+  iree_arena_allocator_t table_arena;
+  iree_arena_initialize(&block_pool_, &table_arena);
+  loom_low_emission_frame_t frame = {};
+  loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = &target_registry_.registry,
   };
-  IREE_ASSERT_OK(loom_low_packetize_function(module_, low_function,
-                                             &packetization_options,
-                                             &sidecar_arena, &packetization));
+  IREE_ASSERT_OK(loom_low_emission_frame_build(
+      module_, low_function, &frame_options, &table_arena, &frame));
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
@@ -252,8 +248,7 @@ TEST_F(LowPacketAsmTest, FormatsStructuralBranches) {
               .user_data = nullptr,
           },
   };
-  IREE_ASSERT_OK(loom_low_packet_asm_format(&packetization.schedule,
-                                            &packetization.allocation,
+  IREE_ASSERT_OK(loom_low_packet_asm_format(&frame.schedule, &frame.allocation,
                                             &asm_options, &builder));
   const std::string output(iree_string_builder_view(&builder).data,
                            iree_string_builder_view(&builder).size);
@@ -262,7 +257,7 @@ TEST_F(LowPacketAsmTest, FormatsStructuralBranches) {
   EXPECT_NE(output.find("br ^bb3(sum)"), std::string::npos);
   EXPECT_NE(output.find("return result"), std::string::npos);
   iree_string_builder_deinitialize(&builder);
-  iree_arena_deinitialize(&sidecar_arena);
+  iree_arena_deinitialize(&table_arena);
 }
 
 TEST_F(LowPacketAsmTest, FormatsStructuralConcat) {
@@ -276,15 +271,14 @@ TEST_F(LowPacketAsmTest, FormatsStructuralConcat) {
   loom_op_t* low_function = FindFirstLowFunction(module_);
   ASSERT_NE(low_function, nullptr);
 
-  iree_arena_allocator_t sidecar_arena;
-  iree_arena_initialize(&block_pool_, &sidecar_arena);
-  loom_low_packetization_t packetization = {};
-  loom_low_packetization_options_t packetization_options = {
+  iree_arena_allocator_t table_arena;
+  iree_arena_initialize(&block_pool_, &table_arena);
+  loom_low_emission_frame_t frame = {};
+  loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = &target_registry_.registry,
   };
-  IREE_ASSERT_OK(loom_low_packetize_function(module_, low_function,
-                                             &packetization_options,
-                                             &sidecar_arena, &packetization));
+  IREE_ASSERT_OK(loom_low_emission_frame_build(
+      module_, low_function, &frame_options, &table_arena, &frame));
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
@@ -295,8 +289,7 @@ TEST_F(LowPacketAsmTest, FormatsStructuralConcat) {
               .user_data = nullptr,
           },
   };
-  IREE_ASSERT_OK(loom_low_packet_asm_format(&packetization.schedule,
-                                            &packetization.allocation,
+  IREE_ASSERT_OK(loom_low_packet_asm_format(&frame.schedule, &frame.allocation,
                                             &asm_options, &builder));
   EXPECT_EQ(std::string(iree_string_builder_view(&builder).data,
                         iree_string_builder_view(&builder).size),
@@ -304,7 +297,7 @@ TEST_F(LowPacketAsmTest, FormatsStructuralConcat) {
             "  pair = concat(lo, hi)\n"
             "  return pair\n");
   iree_string_builder_deinitialize(&builder);
-  iree_arena_deinitialize(&sidecar_arena);
+  iree_arena_deinitialize(&table_arena);
 }
 
 TEST_F(LowPacketAsmTest, FormatsStructuralSlice) {
@@ -317,15 +310,14 @@ TEST_F(LowPacketAsmTest, FormatsStructuralSlice) {
   loom_op_t* low_function = FindFirstLowFunction(module_);
   ASSERT_NE(low_function, nullptr);
 
-  iree_arena_allocator_t sidecar_arena;
-  iree_arena_initialize(&block_pool_, &sidecar_arena);
-  loom_low_packetization_t packetization = {};
-  loom_low_packetization_options_t packetization_options = {
+  iree_arena_allocator_t table_arena;
+  iree_arena_initialize(&block_pool_, &table_arena);
+  loom_low_emission_frame_t frame = {};
+  loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = &target_registry_.registry,
   };
-  IREE_ASSERT_OK(loom_low_packetize_function(module_, low_function,
-                                             &packetization_options,
-                                             &sidecar_arena, &packetization));
+  IREE_ASSERT_OK(loom_low_emission_frame_build(
+      module_, low_function, &frame_options, &table_arena, &frame));
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
@@ -336,8 +328,7 @@ TEST_F(LowPacketAsmTest, FormatsStructuralSlice) {
               .user_data = nullptr,
           },
   };
-  IREE_ASSERT_OK(loom_low_packet_asm_format(&packetization.schedule,
-                                            &packetization.allocation,
+  IREE_ASSERT_OK(loom_low_packet_asm_format(&frame.schedule, &frame.allocation,
                                             &asm_options, &builder));
   EXPECT_EQ(std::string(iree_string_builder_view(&builder).data,
                         iree_string_builder_view(&builder).size),
@@ -345,7 +336,7 @@ TEST_F(LowPacketAsmTest, FormatsStructuralSlice) {
             "  lane = slice pair[1]\n"
             "  return lane\n");
   iree_string_builder_deinitialize(&builder);
-  iree_arena_deinitialize(&sidecar_arena);
+  iree_arena_deinitialize(&table_arena);
 }
 
 TEST_F(LowPacketAsmTest, RejectsMissingValueFormatter) {
@@ -356,25 +347,23 @@ TEST_F(LowPacketAsmTest, RejectsMissingValueFormatter) {
   loom_op_t* low_function = FindFirstLowFunction(module_);
   ASSERT_NE(low_function, nullptr);
 
-  iree_arena_allocator_t sidecar_arena;
-  iree_arena_initialize(&block_pool_, &sidecar_arena);
-  loom_low_packetization_t packetization = {};
-  loom_low_packetization_options_t packetization_options = {
+  iree_arena_allocator_t table_arena;
+  iree_arena_initialize(&block_pool_, &table_arena);
+  loom_low_emission_frame_t frame = {};
+  loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = &target_registry_.registry,
   };
-  IREE_ASSERT_OK(loom_low_packetize_function(module_, low_function,
-                                             &packetization_options,
-                                             &sidecar_arena, &packetization));
+  IREE_ASSERT_OK(loom_low_emission_frame_build(
+      module_, low_function, &frame_options, &table_arena, &frame));
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
   loom_low_packet_asm_options_t asm_options = {};
-  iree_status_t status = loom_low_packet_asm_format(&packetization.schedule,
-                                                    &packetization.allocation,
-                                                    &asm_options, &builder);
+  iree_status_t status = loom_low_packet_asm_format(
+      &frame.schedule, &frame.allocation, &asm_options, &builder);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
   iree_string_builder_deinitialize(&builder);
-  iree_arena_deinitialize(&sidecar_arena);
+  iree_arena_deinitialize(&table_arena);
 }
 
 TEST_F(LowPacketAsmTest, RejectsInvalidSelectedAsmForms) {
@@ -385,23 +374,22 @@ TEST_F(LowPacketAsmTest, RejectsInvalidSelectedAsmForms) {
   loom_op_t* low_function = FindFirstLowFunction(module_);
   ASSERT_NE(low_function, nullptr);
 
-  iree_arena_allocator_t sidecar_arena;
-  iree_arena_initialize(&block_pool_, &sidecar_arena);
-  loom_low_packetization_t packetization = {};
-  loom_low_packetization_options_t packetization_options = {
+  iree_arena_allocator_t table_arena;
+  iree_arena_initialize(&block_pool_, &table_arena);
+  loom_low_emission_frame_t frame = {};
+  loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = &target_registry_.registry,
   };
-  IREE_ASSERT_OK(loom_low_packetize_function(module_, low_function,
-                                             &packetization_options,
-                                             &sidecar_arena, &packetization));
+  IREE_ASSERT_OK(loom_low_emission_frame_build(
+      module_, low_function, &frame_options, &table_arena, &frame));
 
   const uint32_t selected_asm_form_ordinals[1] = {
       LOOM_LOW_ASM_FORM_ORDINAL_NONE,
   };
-  loom_low_packet_asm_form_sidecar_t selected_asm_forms = {
-      .module = packetization.schedule.module,
-      .function_op = packetization.schedule.function_op,
-      .target = packetization.schedule.target,
+  loom_low_packet_asm_form_table_t selected_asm_forms = {
+      .module = frame.schedule.module,
+      .function_op = frame.schedule.function_op,
+      .target = frame.schedule.target,
       .asm_form_ordinals = selected_asm_form_ordinals,
       .asm_form_ordinal_count = 0,
   };
@@ -415,12 +403,11 @@ TEST_F(LowPacketAsmTest, RejectsInvalidSelectedAsmForms) {
               .user_data = nullptr,
           },
   };
-  iree_status_t status = loom_low_packet_asm_format(&packetization.schedule,
-                                                    &packetization.allocation,
-                                                    &asm_options, &builder);
+  iree_status_t status = loom_low_packet_asm_format(
+      &frame.schedule, &frame.allocation, &asm_options, &builder);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
   iree_string_builder_deinitialize(&builder);
-  iree_arena_deinitialize(&sidecar_arena);
+  iree_arena_deinitialize(&table_arena);
 }
 
 }  // namespace

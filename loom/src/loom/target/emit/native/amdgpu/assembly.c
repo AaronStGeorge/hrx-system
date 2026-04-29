@@ -1409,7 +1409,7 @@ static iree_status_t loom_amdgpu_append_cond_branch_packet(
 }
 
 static iree_status_t loom_amdgpu_verify_assembly_target(
-    const loom_low_schedule_sidecar_t* schedule) {
+    const loom_low_schedule_table_t* schedule) {
   if (schedule == NULL || schedule->target.descriptor_set == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU assembly schedule target is required");
@@ -1429,7 +1429,7 @@ static iree_status_t loom_amdgpu_verify_assembly_target(
 }
 
 static iree_status_t loom_amdgpu_verify_wait_packet_plan(
-    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_schedule_table_t* schedule,
     const loom_amdgpu_wait_packet_plan_t* wait_packets) {
   if (wait_packets == NULL || wait_packets->wait_plan == NULL ||
       wait_packets->wait_plan->schedule != schedule) {
@@ -1519,8 +1519,8 @@ static loom_native_assembly_format_options_t loom_amdgpu_assembly_options(
 }
 
 iree_status_t loom_amdgpu_emit_assembly_fragment(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     iree_string_builder_t* builder) {
   IREE_RETURN_IF_ERROR(loom_amdgpu_verify_assembly_target(schedule));
   const loom_native_assembly_format_options_t options =
@@ -1531,8 +1531,8 @@ iree_status_t loom_amdgpu_emit_assembly_fragment(
 }
 
 iree_status_t loom_amdgpu_emit_assembly_fragment_with_wait_packets(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_wait_packet_plan_t* wait_packets,
     iree_string_builder_t* builder) {
   IREE_RETURN_IF_ERROR(loom_amdgpu_verify_assembly_target(schedule));

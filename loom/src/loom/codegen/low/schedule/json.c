@@ -30,10 +30,10 @@ static iree_string_view_t loom_low_schedule_json_symbol_name(
 }
 
 static iree_string_view_t loom_low_schedule_json_function_name(
-    const loom_low_schedule_sidecar_t* sidecar) {
-  if (loom_low_function_def_isa(sidecar->function_op)) {
+    const loom_low_schedule_table_t* table) {
+  if (loom_low_function_def_isa(table->function_op)) {
     return loom_low_schedule_json_symbol_name(
-        sidecar->module, loom_low_function_callee(sidecar->function_op));
+        table->module, loom_low_function_callee(table->function_op));
   }
   return IREE_SV("<unnamed>");
 }
@@ -104,7 +104,7 @@ static iree_status_t loom_low_schedule_json_write_hazard_reference(
 }
 
 static iree_status_t loom_low_schedule_json_descriptor_key(
-    const loom_low_schedule_sidecar_t* sidecar,
+    const loom_low_schedule_table_t* table,
     const loom_low_schedule_node_t* node, iree_string_view_t* out_key) {
   IREE_ASSERT_ARGUMENT(out_key);
   *out_key = iree_string_view_empty();
@@ -112,7 +112,7 @@ static iree_status_t loom_low_schedule_json_descriptor_key(
     return iree_ok_status();
   }
   const loom_low_descriptor_t* descriptor =
-      loom_low_descriptor_set_descriptor_at(sidecar->target.descriptor_set,
+      loom_low_descriptor_set_descriptor_at(table->target.descriptor_set,
                                             node->descriptor_ordinal);
   if (descriptor == NULL) {
     return iree_make_status(
@@ -120,14 +120,13 @@ static iree_status_t loom_low_schedule_json_descriptor_key(
         "schedule node references descriptor ordinal %" PRIu32,
         node->descriptor_ordinal);
   }
-  return loom_low_descriptor_set_string(sidecar->target.descriptor_set,
+  return loom_low_descriptor_set_string(table->target.descriptor_set,
                                         descriptor->key_string_offset, out_key);
 }
 
 iree_status_t loom_low_schedule_format_json(
-    const loom_low_schedule_sidecar_t* sidecar,
-    iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(sidecar);
+    const loom_low_schedule_table_t* table, iree_string_builder_t* builder) {
+  IREE_ASSERT_ARGUMENT(table);
   IREE_ASSERT_ARGUMENT(builder);
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
@@ -137,15 +136,15 @@ iree_status_t loom_low_schedule_format_json(
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"function\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      &stream, loom_low_schedule_json_function_name(sidecar)));
+      &stream, loom_low_schedule_json_function_name(table)));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"target\":"));
   IREE_RETURN_IF_ERROR(
-      loom_json_write_escaped_string(&stream, sidecar->target.target_name));
+      loom_json_write_escaped_string(&stream, table->target.target_name));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"descriptor_set\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      &stream, sidecar->target.descriptor_set_key));
+      &stream, table->target.descriptor_set_key));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream,
       ",\"block_count\":%zu,\"node_count\":%zu,\"dependency_count\":%zu"
@@ -154,19 +153,18 @@ iree_status_t loom_low_schedule_format_json(
       ",\"hazard_use_count\":%zu"
       ",\"hazard_gap_count\":%zu"
       ",\"model_summary_count\":%zu,\"resource_summary_count\":%zu",
-      sidecar->block_count, sidecar->node_count, sidecar->dependency_count,
-      sidecar->candidate_decision_count, sidecar->resource_use_count,
-      sidecar->effect_use_count, sidecar->hazard_use_count,
-      sidecar->hazard_gap_count, sidecar->model_summary_count,
-      sidecar->resource_summary_count));
+      table->block_count, table->node_count, table->dependency_count,
+      table->candidate_decision_count, table->resource_use_count,
+      table->effect_use_count, table->hazard_use_count, table->hazard_gap_count,
+      table->model_summary_count, table->resource_summary_count));
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"blocks\":["));
-  for (iree_host_size_t i = 0; i < sidecar->block_count; ++i) {
+  for (iree_host_size_t i = 0; i < table->block_count; ++i) {
     if (i > 0) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
     }
-    const loom_low_schedule_block_t* block = &sidecar->blocks[i];
+    const loom_low_schedule_block_t* block = &table->blocks[i];
     IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
         &stream,
         "{\"index\":%zu,\"node_start\":%" PRIu32 ",\"node_count\":%" PRIu32
@@ -179,11 +177,11 @@ iree_status_t loom_low_schedule_format_json(
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"nodes\":["));
-  for (iree_host_size_t i = 0; i < sidecar->node_count; ++i) {
+  for (iree_host_size_t i = 0; i < table->node_count; ++i) {
     if (i > 0) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
     }
-    const loom_low_schedule_node_t* node = &sidecar->nodes[i];
+    const loom_low_schedule_node_t* node = &table->nodes[i];
     IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
         &stream,
         "{\"index\":%zu,\"block\":%" PRIu32 ",\"source_ordinal\":%" PRIu32
@@ -193,12 +191,12 @@ iree_status_t loom_low_schedule_format_json(
         &stream, loom_low_schedule_json_node_kind(node->kind)));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ",\"op\":"));
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-        &stream, loom_op_name(sidecar->module, node->op)));
+        &stream, loom_op_name(table->module, node->op)));
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(&stream, ",\"descriptor\":"));
     iree_string_view_t descriptor_key = iree_string_view_empty();
     IREE_RETURN_IF_ERROR(
-        loom_low_schedule_json_descriptor_key(sidecar, node, &descriptor_key));
+        loom_low_schedule_json_descriptor_key(table, node, &descriptor_key));
     IREE_RETURN_IF_ERROR(
         loom_low_schedule_json_write_nullable_string(&stream, descriptor_key));
     IREE_RETURN_IF_ERROR(
@@ -226,23 +224,22 @@ iree_status_t loom_low_schedule_format_json(
 
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
       &stream, ",\"scheduled_node_indices\":["));
-  for (iree_host_size_t i = 0; i < sidecar->scheduled_node_count; ++i) {
+  for (iree_host_size_t i = 0; i < table->scheduled_node_count; ++i) {
     if (i > 0) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        &stream, "%" PRIu32, sidecar->scheduled_node_indices[i]));
+        &stream, "%" PRIu32, table->scheduled_node_indices[i]));
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"dependencies\":["));
-  for (iree_host_size_t i = 0; i < sidecar->dependency_count; ++i) {
+  for (iree_host_size_t i = 0; i < table->dependency_count; ++i) {
     if (i > 0) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
     }
-    const loom_low_schedule_dependency_t* dependency =
-        &sidecar->dependencies[i];
+    const loom_low_schedule_dependency_t* dependency = &table->dependencies[i];
     IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
         &stream, "{\"from\":%" PRIu32 ",\"to\":%" PRIu32 ",\"kind\":",
         dependency->producer_node, dependency->consumer_node));
@@ -260,15 +257,14 @@ iree_status_t loom_low_schedule_format_json(
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
 
-  if (sidecar->pressure_step_count > 0) {
+  if (table->pressure_step_count > 0) {
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
         &stream, ",\"scheduled_pressure_steps\":["));
-    for (iree_host_size_t i = 0; i < sidecar->pressure_step_count; ++i) {
+    for (iree_host_size_t i = 0; i < table->pressure_step_count; ++i) {
       if (i > 0) {
         IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
       }
-      const loom_low_schedule_pressure_step_t* step =
-          &sidecar->pressure_steps[i];
+      const loom_low_schedule_pressure_step_t* step = &table->pressure_steps[i];
       IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
           &stream,
           "{\"node\":%" PRIu32 ",\"block\":%" PRIu32
@@ -282,15 +278,15 @@ iree_status_t loom_low_schedule_format_json(
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
   }
 
-  if (sidecar->candidate_decision_count > 0) {
+  if (table->candidate_decision_count > 0) {
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
         &stream, ",\"candidate_decisions\":["));
-    for (iree_host_size_t i = 0; i < sidecar->candidate_decision_count; ++i) {
+    for (iree_host_size_t i = 0; i < table->candidate_decision_count; ++i) {
       if (i > 0) {
         IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
       }
       const loom_low_schedule_candidate_decision_t* decision =
-          &sidecar->candidate_decisions[i];
+          &table->candidate_decisions[i];
       IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
           &stream,
           "{\"block\":%" PRIu32 ",\"scheduled_ordinal\":%" PRIu32
@@ -414,15 +410,15 @@ iree_status_t loom_low_schedule_format_json(
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
   }
 
-  if (sidecar->resource_use_count > 0) {
+  if (table->resource_use_count > 0) {
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
         &stream, ",\"scheduled_resource_uses\":["));
-    for (iree_host_size_t i = 0; i < sidecar->resource_use_count; ++i) {
+    for (iree_host_size_t i = 0; i < table->resource_use_count; ++i) {
       if (i > 0) {
         IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
       }
       const loom_low_schedule_resource_use_t* resource_use =
-          &sidecar->resource_uses[i];
+          &table->resource_uses[i];
       IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
           &stream,
           "{\"node\":%" PRIu32 ",\"block\":%" PRIu32
@@ -449,15 +445,14 @@ iree_status_t loom_low_schedule_format_json(
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
   }
 
-  if (sidecar->effect_use_count > 0) {
+  if (table->effect_use_count > 0) {
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
         &stream, ",\"scheduled_effect_uses\":["));
-    for (iree_host_size_t i = 0; i < sidecar->effect_use_count; ++i) {
+    for (iree_host_size_t i = 0; i < table->effect_use_count; ++i) {
       if (i > 0) {
         IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
       }
-      const loom_low_schedule_effect_use_t* effect_use =
-          &sidecar->effect_uses[i];
+      const loom_low_schedule_effect_use_t* effect_use = &table->effect_uses[i];
       iree_string_view_t effect_kind_name =
           loom_low_effect_kind_name(effect_use->kind);
       iree_string_view_t memory_space_name =
@@ -481,15 +476,14 @@ iree_status_t loom_low_schedule_format_json(
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
   }
 
-  if (sidecar->hazard_use_count > 0) {
+  if (table->hazard_use_count > 0) {
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
         &stream, ",\"scheduled_hazard_uses\":["));
-    for (iree_host_size_t i = 0; i < sidecar->hazard_use_count; ++i) {
+    for (iree_host_size_t i = 0; i < table->hazard_use_count; ++i) {
       if (i > 0) {
         IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
       }
-      const loom_low_schedule_hazard_use_t* hazard_use =
-          &sidecar->hazard_uses[i];
+      const loom_low_schedule_hazard_use_t* hazard_use = &table->hazard_uses[i];
       iree_string_view_t hazard_kind_name =
           loom_low_hazard_kind_name(hazard_use->kind);
       iree_string_view_t reference_kind_name =
@@ -518,15 +512,14 @@ iree_status_t loom_low_schedule_format_json(
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
   }
 
-  if (sidecar->hazard_gap_count > 0) {
+  if (table->hazard_gap_count > 0) {
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
         &stream, ",\"scheduled_hazard_gaps\":["));
-    for (iree_host_size_t i = 0; i < sidecar->hazard_gap_count; ++i) {
+    for (iree_host_size_t i = 0; i < table->hazard_gap_count; ++i) {
       if (i > 0) {
         IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
       }
-      const loom_low_schedule_hazard_gap_t* hazard_gap =
-          &sidecar->hazard_gaps[i];
+      const loom_low_schedule_hazard_gap_t* hazard_gap = &table->hazard_gaps[i];
       iree_string_view_t hazard_kind_name =
           loom_low_hazard_kind_name(hazard_gap->kind);
       iree_string_view_t reference_kind_name =
@@ -563,15 +556,15 @@ iree_status_t loom_low_schedule_format_json(
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
   }
 
-  if (sidecar->model_summary_count > 0) {
+  if (table->model_summary_count > 0) {
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(&stream, ",\"model_summaries\":["));
-    for (iree_host_size_t i = 0; i < sidecar->model_summary_count; ++i) {
+    for (iree_host_size_t i = 0; i < table->model_summary_count; ++i) {
       if (i > 0) {
         IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
       }
       const loom_low_schedule_model_summary_t* summary =
-          &sidecar->model_summaries[i];
+          &table->model_summaries[i];
       IREE_RETURN_IF_ERROR(
           loom_output_stream_write_cstring(&stream, "{\"schedule_class\":"));
       IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
@@ -596,15 +589,15 @@ iree_status_t loom_low_schedule_format_json(
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
   }
 
-  if (sidecar->resource_summary_count > 0) {
+  if (table->resource_summary_count > 0) {
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(&stream, ",\"resource_summaries\":["));
-    for (iree_host_size_t i = 0; i < sidecar->resource_summary_count; ++i) {
+    for (iree_host_size_t i = 0; i < table->resource_summary_count; ++i) {
       if (i > 0) {
         IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
       }
       const loom_low_schedule_resource_summary_t* summary =
-          &sidecar->resource_summaries[i];
+          &table->resource_summaries[i];
       IREE_RETURN_IF_ERROR(
           loom_output_stream_write_cstring(&stream, "{\"resource\":"));
       IREE_RETURN_IF_ERROR(
@@ -631,7 +624,7 @@ iree_status_t loom_low_schedule_format_json(
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"liveness\":"));
-  IREE_RETURN_IF_ERROR(loom_liveness_format_json(&sidecar->liveness, builder));
+  IREE_RETURN_IF_ERROR(loom_liveness_format_json(&table->liveness, builder));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
   return iree_ok_status();
 }

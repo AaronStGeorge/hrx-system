@@ -7,7 +7,7 @@
 // AMDGPU per-kernel native emission facts.
 //
 // This layer derives the target, ABI, metadata, descriptor, and register facts
-// shared by text assembly and direct HSACO emission from target-low sidecars.
+// shared by text assembly and direct HSACO emission from target-low tables.
 
 #ifndef LOOM_TARGET_EMIT_NATIVE_AMDGPU_KERNEL_RECORD_H_
 #define LOOM_TARGET_EMIT_NATIVE_AMDGPU_KERNEL_RECORD_H_
@@ -55,8 +55,8 @@ typedef struct loom_amdgpu_kernel_record_options_t {
 // Builds the shared emission record for one scheduled and allocated target-low
 // HAL kernel. The returned record points into input IR and |scratch_arena|.
 iree_status_t loom_amdgpu_kernel_record_build(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_kernel_record_options_t* options,
     loom_amdgpu_kernel_record_t* out_record,
     iree_arena_allocator_t* scratch_arena);

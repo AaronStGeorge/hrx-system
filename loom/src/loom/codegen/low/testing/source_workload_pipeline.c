@@ -188,43 +188,41 @@ iree_status_t loom_low_source_workload_run_pipeline(
           loom_low_source_workload_count_low_descriptor_ops(lowered_funcs[i]);
     }
 
-    iree_arena_allocator_t packet_arena;
-    bool packet_arena_initialized = false;
+    iree_arena_allocator_t frame_arena;
+    bool frame_arena_initialized = false;
     if (iree_status_is_ok(status)) {
-      iree_arena_initialize(block_pool, &packet_arena);
-      packet_arena_initialized = true;
+      iree_arena_initialize(block_pool, &frame_arena);
+      frame_arena_initialized = true;
     }
-    const loom_low_packetization_options_t packet_options = {
+    const loom_low_emission_frame_options_t frame_options = {
         .descriptor_registry = options->descriptor_registry,
         .schedule_strategy = options->schedule_strategy,
     };
     for (iree_host_size_t i = 0;
          i < selection_list.count && iree_status_is_ok(status); ++i) {
-      loom_low_packetization_t packetization = {0};
-      status =
-          loom_low_packetize_function(module, lowered_funcs[i], &packet_options,
-                                      &packet_arena, &packetization);
+      loom_low_emission_frame_t frame = {0};
+      status = loom_low_emission_frame_build(
+          module, lowered_funcs[i], &frame_options, &frame_arena, &frame);
       if (iree_status_is_ok(status)) {
         out_counters->schedule_node_count +=
-            packetization.schedule.scheduled_node_count;
+            frame.schedule.scheduled_node_count;
         out_counters->schedule_dependency_count +=
-            packetization.schedule.dependency_count;
+            frame.schedule.dependency_count;
         out_counters->schedule_resource_use_count +=
-            packetization.schedule.resource_use_count;
+            frame.schedule.resource_use_count;
         out_counters->schedule_hazard_gap_count +=
-            packetization.schedule.hazard_gap_count;
+            frame.schedule.hazard_gap_count;
         out_counters->allocation_assignment_count +=
-            packetization.allocation.assignment_count;
-        out_counters->allocation_spill_count +=
-            packetization.allocation.spill_count;
+            frame.allocation.assignment_count;
+        out_counters->allocation_spill_count += frame.allocation.spill_count;
         out_counters->allocation_coalesced_copy_count +=
-            packetization.allocation.coalesced_copy_count;
+            frame.allocation.coalesced_copy_count;
         out_counters->allocation_materialized_copy_count +=
-            packetization.allocation.materialized_copy_count;
+            frame.allocation.materialized_copy_count;
       }
     }
-    if (packet_arena_initialized) {
-      iree_arena_deinitialize(&packet_arena);
+    if (frame_arena_initialized) {
+      iree_arena_deinitialize(&frame_arena);
     }
   }
 

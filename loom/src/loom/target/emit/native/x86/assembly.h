@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// x86 native assembly-fragment emission from target-low packet sidecars.
+// x86 native assembly-fragment emission from target-low packet tables.
 
 #ifndef LOOM_TARGET_EMIT_NATIVE_X86_ASSEMBLY_H_
 #define LOOM_TARGET_EMIT_NATIVE_X86_ASSEMBLY_H_
@@ -23,8 +23,8 @@ extern "C" {
 // outputs; it does not emit a platform ABI prologue/epilogue or object file.
 // Values must be physically allocated and unspilled.
 iree_status_t loom_x86_emit_assembly_fragment(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     iree_string_builder_t* builder);
 
 #ifdef __cplusplus

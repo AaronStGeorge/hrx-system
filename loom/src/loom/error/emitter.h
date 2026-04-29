@@ -78,7 +78,7 @@ static inline bool loom_diagnostic_field_ref_is_set(
 // A secondary op location to attach to a structured diagnostic. The caller
 // identifies the related op and note label; the owning subsystem resolves the
 // op to a source range when materializing the final loom_diagnostic_t. An
-// optional field_ref sidecar lets the note highlight a specific field
+// optional field_ref metadata lets the note highlight a specific field
 // occurrence on the related op without formatting that structure into prose.
 typedef struct loom_diagnostic_related_op_t {
   iree_string_view_t label;

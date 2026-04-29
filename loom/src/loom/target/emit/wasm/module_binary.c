@@ -64,7 +64,7 @@ static iree_status_t loom_wasm_module_write_name(
 }
 
 static iree_status_t loom_wasm_module_write_value_type_list(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_value_id_t* value_ids, uint32_t value_count,
     loom_wasm_binary_writer_t* writer) {
   IREE_RETURN_IF_ERROR(loom_wasm_binary_write_u32_leb(writer, value_count));
@@ -97,7 +97,7 @@ static iree_status_t loom_wasm_module_write_value_type_list(
 }
 
 static iree_status_t loom_wasm_module_find_return_values(
-    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_schedule_table_t* schedule,
     loom_value_slice_t* out_return_values) {
   IREE_ASSERT_ARGUMENT(out_return_values);
   *out_return_values = (loom_value_slice_t){0};
@@ -117,8 +117,8 @@ static iree_status_t loom_wasm_module_find_return_values(
 }
 
 static iree_status_t loom_wasm_module_write_type_section_payload(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     loom_wasm_binary_writer_t* payload_writer) {
   loom_func_like_t function =
       loom_func_like_cast(schedule->module, (loom_op_t*)schedule->function_op);
@@ -152,8 +152,8 @@ static iree_status_t loom_wasm_module_write_type_section_payload(
 }
 
 static iree_status_t loom_wasm_module_write_type_section(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     loom_wasm_binary_writer_t* module_writer, iree_allocator_t allocator) {
   loom_wasm_binary_writer_t payload_writer;
   loom_wasm_binary_writer_initialize(allocator, &payload_writer);
@@ -258,8 +258,8 @@ static iree_status_t loom_wasm_module_write_code_section(
 }
 
 static iree_status_t loom_wasm_module_uses_memory(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation, bool* out_uses_memory) {
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation, bool* out_uses_memory) {
   *out_uses_memory = false;
   iree_host_size_t packet_count = loom_low_packet_count(schedule);
   for (iree_host_size_t i = 0; i < packet_count; ++i) {
@@ -310,8 +310,8 @@ void loom_wasm_module_binary_deinitialize(loom_wasm_module_binary_t* module,
 }
 
 iree_status_t loom_wasm_emit_single_function_module(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     iree_string_view_t export_name, iree_allocator_t allocator,
     loom_wasm_module_binary_t* out_module) {
   if (!out_module) {

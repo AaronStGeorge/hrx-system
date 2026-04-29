@@ -6,8 +6,8 @@
 
 // Target-owned diagnostics over packetized target-low functions.
 //
-// This layer runs after low packetization has joined schedule and allocation
-// sidecars into emitter-order packet views. It gives optional target packages a
+// This layer runs after an emission frame has joined schedule and allocation
+// tables into emitter-order packet views. It gives optional target packages a
 // cold diagnostic hook for authored low.func/low.op packets without teaching
 // generic tools about target-specific descriptor IDs or performance hazards.
 
@@ -15,8 +15,8 @@
 #define LOOM_TARGET_LOW_PACKET_DIAGNOSTICS_H_
 
 #include "iree/base/api.h"
+#include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/packet.h"
-#include "loom/codegen/low/packetization.h"
 #include "loom/error/emitter.h"
 
 #ifdef __cplusplus
@@ -106,7 +106,7 @@ typedef struct loom_target_low_packet_diagnostics_result_t {
 
 // Emits target-owned diagnostics for one packetized low.func.def.
 iree_status_t loom_target_low_packet_diagnostics_emit_function(
-    const loom_low_packetization_t* packetization,
+    const loom_low_emission_frame_t* frame,
     const loom_target_low_packet_diagnostics_options_t* options,
     loom_target_low_packet_diagnostics_result_t* out_result);
 
@@ -114,12 +114,12 @@ iree_status_t loom_target_low_packet_diagnostics_emit_function(
 const loom_module_t* loom_target_low_packet_diagnostics_module(
     const loom_target_low_packet_diagnostic_context_t* context);
 
-// Returns the scheduled sidecar being diagnosed.
-const loom_low_schedule_sidecar_t* loom_target_low_packet_diagnostics_schedule(
+// Returns the scheduled table being diagnosed.
+const loom_low_schedule_table_t* loom_target_low_packet_diagnostics_schedule(
     const loom_target_low_packet_diagnostic_context_t* context);
 
-// Returns the allocation sidecar being diagnosed.
-const loom_low_allocation_sidecar_t*
+// Returns the allocation table being diagnosed.
+const loom_low_allocation_table_t*
 loom_target_low_packet_diagnostics_allocation(
     const loom_target_low_packet_diagnostic_context_t* context);
 

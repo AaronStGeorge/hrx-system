@@ -21,7 +21,7 @@ extern "C" {
 // Per-run reporting state for a parsed loom-check file.
 //
 // loom_check_file_t is the immutable parse product: cases, directives, input
-// sections, expected sections, and parsed annotations. This report sidecar owns
+// sections, expected sections, and parsed annotations. This report table owns
 // execution state that is only meaningful for one run of that parsed file, such
 // as whether each expected diagnostic annotation matched an actual diagnostic.
 typedef struct loom_check_file_report_t {

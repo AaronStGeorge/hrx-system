@@ -24,10 +24,10 @@
 #define LOOM_AMDGPU_INLINE_MOVE_COUNT 16u
 
 typedef struct loom_amdgpu_encode_state_t {
-  // Schedule sidecar being encoded.
-  const loom_low_schedule_sidecar_t* schedule;
-  // Allocation sidecar supplying physical locations.
-  const loom_low_allocation_sidecar_t* allocation;
+  // Schedule table being encoded.
+  const loom_low_schedule_table_t* schedule;
+  // Allocation table supplying physical locations.
+  const loom_low_allocation_table_t* allocation;
   // Resolved native target encoding profile.
   const loom_amdgpu_descriptor_set_info_t* target;
   // Resolved bit-encoding table for target descriptor packets, or NULL when
@@ -123,7 +123,7 @@ static const loom_named_attr_t* loom_amdgpu_find_packet_attr_by_name_id(
 }
 
 static iree_status_t loom_amdgpu_find_assignment(
-    const loom_low_allocation_sidecar_t* allocation, loom_value_id_t value_id,
+    const loom_low_allocation_table_t* allocation, loom_value_id_t value_id,
     const loom_low_allocation_assignment_t** out_assignment) {
   IREE_ASSERT_ARGUMENT(out_assignment);
   *out_assignment = NULL;
@@ -140,7 +140,7 @@ static iree_status_t loom_amdgpu_find_assignment(
 }
 
 static iree_status_t loom_amdgpu_assignment_sgpr(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_low_allocation_assignment_t* assignment,
     uint16_t* out_register) {
   IREE_ASSERT_ARGUMENT(out_register);
@@ -170,7 +170,7 @@ static iree_status_t loom_amdgpu_assignment_sgpr(
 }
 
 static iree_status_t loom_amdgpu_assignment_vgpr(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_low_allocation_assignment_t* assignment,
     uint16_t* out_register) {
   IREE_ASSERT_ARGUMENT(out_register);
@@ -200,7 +200,7 @@ static iree_status_t loom_amdgpu_assignment_vgpr(
 }
 
 static iree_status_t loom_amdgpu_verify_scc_assignment(
-    const loom_low_allocation_sidecar_t* allocation, loom_value_id_t value_id) {
+    const loom_low_allocation_table_t* allocation, loom_value_id_t value_id) {
   const loom_low_allocation_assignment_t* assignment = NULL;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_find_assignment(allocation, value_id, &assignment));
@@ -218,7 +218,7 @@ static iree_status_t loom_amdgpu_verify_scc_assignment(
 }
 
 static iree_status_t loom_amdgpu_move_location_sgpr(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_low_move_location_t* location, uint16_t* out_register) {
   IREE_ASSERT_ARGUMENT(out_register);
   *out_register = 0;
@@ -239,7 +239,7 @@ static iree_status_t loom_amdgpu_move_location_sgpr(
 }
 
 static iree_status_t loom_amdgpu_move_location_vgpr(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_low_move_location_t* location, uint16_t* out_register) {
   IREE_ASSERT_ARGUMENT(out_register);
   *out_register = 0;
@@ -1350,7 +1350,7 @@ static iree_status_t loom_amdgpu_encode_packet(
 }
 
 static iree_status_t loom_amdgpu_resolve_encoding_target(
-    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_schedule_table_t* schedule,
     const loom_amdgpu_descriptor_set_info_t** out_target) {
   IREE_ASSERT_ARGUMENT(out_target);
   *out_target = NULL;
@@ -1365,7 +1365,7 @@ static iree_status_t loom_amdgpu_resolve_encoding_target(
 }
 
 static iree_status_t loom_amdgpu_verify_wait_packet_plan(
-    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_schedule_table_t* schedule,
     const loom_amdgpu_wait_packet_plan_t* wait_packets) {
   if (wait_packets == NULL || wait_packets->wait_plan == NULL ||
       wait_packets->wait_plan->schedule != schedule) {
@@ -1388,7 +1388,7 @@ static iree_status_t loom_amdgpu_verify_wait_packet_plan(
 }
 
 static iree_status_t loom_amdgpu_resolve_immediate_name_ids(
-    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_schedule_table_t* schedule,
     const loom_string_id_t** out_immediate_name_ids,
     iree_host_size_t* out_immediate_name_id_count,
     iree_arena_allocator_t* arena) {
@@ -1453,8 +1453,8 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_into_state(
 }
 
 static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_wait_packet_plan_t* wait_packets,
     iree_const_byte_span_t* out_text, iree_arena_allocator_t* arena) {
   IREE_ASSERT_ARGUMENT(out_text);
@@ -1533,16 +1533,16 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
 }
 
 iree_status_t loom_amdgpu_encode_instruction_stream(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     iree_const_byte_span_t* out_text, iree_arena_allocator_t* arena) {
   return loom_amdgpu_encode_instruction_stream_internal(schedule, allocation,
                                                         NULL, out_text, arena);
 }
 
 iree_status_t loom_amdgpu_encode_instruction_stream_with_wait_packets(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_wait_packet_plan_t* wait_packets,
     iree_const_byte_span_t* out_text, iree_arena_allocator_t* arena) {
   return loom_amdgpu_encode_instruction_stream_internal(

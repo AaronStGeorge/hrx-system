@@ -73,8 +73,8 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
 }
 
 static iree_status_t loom_amdgpu_kernel_assembly_emit(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_kernel_assembly_options_t* options,
     iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
   if (builder == NULL || scratch_arena == NULL) {
@@ -125,16 +125,16 @@ static iree_status_t loom_amdgpu_kernel_assembly_emit(
 }
 
 iree_status_t loom_amdgpu_emit_kernel_assembly(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
   return loom_amdgpu_kernel_assembly_emit(schedule, allocation, NULL, builder,
                                           scratch_arena);
 }
 
 iree_status_t loom_amdgpu_emit_kernel_assembly_with_options(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_kernel_assembly_options_t* options,
     iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
   if (options == NULL) {
@@ -146,8 +146,8 @@ iree_status_t loom_amdgpu_emit_kernel_assembly_with_options(
 }
 
 iree_status_t loom_amdgpu_emit_kernel_assembly_with_wait_packets(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_wait_packet_plan_t* wait_packets,
     iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
   if (wait_packets == NULL) {

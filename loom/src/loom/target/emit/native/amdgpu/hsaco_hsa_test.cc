@@ -21,8 +21,8 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/descriptors.h"
+#include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/function.h"
-#include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
@@ -708,18 +708,18 @@ class LowKernelCompiler {
                               "AMDGPU HSA low kernel failed low verification");
     }
 
-    loom_low_packetization_options_t packetization_options = {
+    loom_low_emission_frame_options_t frame_options = {
         .descriptor_registry = &target_registry_.registry,
         .allocation_fixed_values = fixed_values,
         .allocation_fixed_value_count = fixed_value_count,
     };
-    loom_low_packetization_t packetization = {};
-    IREE_RETURN_IF_ERROR(loom_low_packetize_function(
-        module_, low_function, &packetization_options, arena, &packetization));
+    loom_low_emission_frame_t frame = {};
+    IREE_RETURN_IF_ERROR(loom_low_emission_frame_build(
+        module_, low_function, &frame_options, arena, &frame));
 
     loom_amdgpu_wait_plan_t wait_plan = {};
-    IREE_RETURN_IF_ERROR(loom_amdgpu_wait_plan_build(&packetization.schedule,
-                                                     arena, &wait_plan));
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_wait_plan_build(&frame.schedule, arena, &wait_plan));
     loom_amdgpu_wait_packet_plan_t wait_packets = {};
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_wait_packet_plan_build(&wait_plan, arena, &wait_packets));
@@ -729,9 +729,9 @@ class LowKernelCompiler {
         .abi_layout = &materialization.abi_layout,
         .wait_packets = &wait_packets,
     };
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_kernel_hsaco(
-        &packetization.schedule, &packetization.allocation, &hsaco_options,
-        stream.get(), arena));
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_emit_kernel_hsaco(&frame.schedule, &frame.allocation,
+                                      &hsaco_options, stream.get(), arena));
     *out_hsaco = StreamBytes(stream.get());
     return iree_ok_status();
   }

@@ -10,8 +10,8 @@
 #include "loom/error/error_defs.h"
 
 struct loom_target_low_packet_diagnostic_context_t {
-  // Packetization sidecars being diagnosed.
-  const loom_low_packetization_t* packetization;
+  // Emission frame being diagnosed.
+  const loom_low_emission_frame_t* frame;
   // Caller-owned diagnostic options.
   const loom_target_low_packet_diagnostics_options_t* options;
   // Result object receiving counters.
@@ -41,13 +41,12 @@ iree_status_t loom_target_low_packet_diagnostic_provider_list_verify(
 }
 
 static iree_status_t loom_target_low_packet_diagnostics_verify_options(
-    const loom_low_packetization_t* packetization,
+    const loom_low_emission_frame_t* frame,
     const loom_target_low_packet_diagnostics_options_t* options,
     loom_target_low_packet_diagnostics_result_t* out_result) {
-  if (packetization == NULL || options == NULL || out_result == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "packetization, options, and output result are required");
+  if (frame == NULL || options == NULL || out_result == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "frame, options, and output result are required");
   }
   const loom_target_low_packet_diagnostic_flags_t unknown_flags =
       options->diagnostic_flags & ~LOOM_TARGET_LOW_PACKET_DIAGNOSTIC_ALL;
@@ -58,8 +57,7 @@ static iree_status_t loom_target_low_packet_diagnostics_verify_options(
   }
   IREE_RETURN_IF_ERROR(loom_target_low_packet_diagnostic_provider_list_verify(
       options->provider_list));
-  return loom_low_packet_validate_sidecars(&packetization->schedule,
-                                           &packetization->allocation);
+  return loom_low_packet_validate_tables(&frame->schedule, &frame->allocation);
 }
 
 static iree_status_t loom_target_low_packet_diagnostics_emit(
@@ -96,7 +94,7 @@ static iree_status_t loom_target_low_packet_diagnostics_packet_key(
     return iree_ok_status();
   }
   return loom_low_descriptor_set_string(
-      context->packetization->schedule.target.descriptor_set,
+      context->frame->schedule.target.descriptor_set,
       packet->descriptor->key_string_offset, out_key);
 }
 
@@ -112,8 +110,7 @@ iree_status_t loom_target_low_packet_diagnostics_record_packet(
   const loom_low_descriptor_t* descriptor = packet->descriptor;
   const uint32_t operand_count = descriptor ? descriptor->operand_count : 0;
   const uint32_t result_count = descriptor ? descriptor->result_count : 0;
-  const loom_low_schedule_sidecar_t* schedule =
-      &context->packetization->schedule;
+  const loom_low_schedule_table_t* schedule = &context->frame->schedule;
   loom_diagnostic_param_t params[] = {
       loom_param_string(loom_low_diagnostic_target_key(&schedule->target)),
       loom_param_string(loom_low_diagnostic_export_name(&schedule->target)),
@@ -134,18 +131,18 @@ iree_status_t loom_target_low_packet_diagnostics_record_packet(
 
 const loom_module_t* loom_target_low_packet_diagnostics_module(
     const loom_target_low_packet_diagnostic_context_t* context) {
-  return context->packetization->schedule.module;
+  return context->frame->schedule.module;
 }
 
-const loom_low_schedule_sidecar_t* loom_target_low_packet_diagnostics_schedule(
+const loom_low_schedule_table_t* loom_target_low_packet_diagnostics_schedule(
     const loom_target_low_packet_diagnostic_context_t* context) {
-  return &context->packetization->schedule;
+  return &context->frame->schedule;
 }
 
-const loom_low_allocation_sidecar_t*
+const loom_low_allocation_table_t*
 loom_target_low_packet_diagnostics_allocation(
     const loom_target_low_packet_diagnostic_context_t* context) {
-  return &context->packetization->allocation;
+  return &context->frame->allocation;
 }
 
 loom_target_low_packet_diagnostic_flags_t
@@ -155,11 +152,11 @@ loom_target_low_packet_diagnostics_diagnostic_flags(
 }
 
 iree_status_t loom_target_low_packet_diagnostics_emit_function(
-    const loom_low_packetization_t* packetization,
+    const loom_low_emission_frame_t* frame,
     const loom_target_low_packet_diagnostics_options_t* options,
     loom_target_low_packet_diagnostics_result_t* out_result) {
   IREE_RETURN_IF_ERROR(loom_target_low_packet_diagnostics_verify_options(
-      packetization, options, out_result));
+      frame, options, out_result));
   *out_result = (loom_target_low_packet_diagnostics_result_t){0};
   if (options->diagnostic_flags == 0 ||
       loom_target_low_packet_diagnostic_provider_list_is_empty(
@@ -168,18 +165,16 @@ iree_status_t loom_target_low_packet_diagnostics_emit_function(
   }
 
   loom_target_low_packet_diagnostic_context_t context = {
-      .packetization = packetization,
+      .frame = frame,
       .options = options,
       .result = out_result,
   };
-  const iree_host_size_t packet_count =
-      loom_low_packet_count(&packetization->schedule);
+  const iree_host_size_t packet_count = loom_low_packet_count(&frame->schedule);
   for (iree_host_size_t packet_index = 0; packet_index < packet_count;
        ++packet_index) {
     loom_low_packet_view_t packet = {0};
-    IREE_RETURN_IF_ERROR(loom_low_packet_view_at(&packetization->schedule,
-                                                 &packetization->allocation,
-                                                 packet_index, &packet));
+    IREE_RETURN_IF_ERROR(loom_low_packet_view_at(
+        &frame->schedule, &frame->allocation, packet_index, &packet));
     for (iree_host_size_t provider_index = 0;
          provider_index < options->provider_list.count; ++provider_index) {
       const loom_target_low_packet_diagnostic_provider_t* provider =

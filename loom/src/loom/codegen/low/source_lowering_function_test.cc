@@ -10,8 +10,8 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/lower.h"
-#include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/source_selection.h"
 #include "loom/codegen/low/testing/ir_match_test_util.h"
 #include "loom/codegen/low/verify.h"
@@ -165,7 +165,7 @@ class SourceLoweringFunctionTest : public ::testing::Test {
 
   void LowerTargetedSource(loom_module_t* module, EmissionCollector* collector,
                            loom_low_lower_result_t* out_result,
-                           iree_arena_allocator_t* sidecar_arena = nullptr) {
+                           iree_arena_allocator_t* table_arena = nullptr) {
     iree_arena_allocator_t selection_arena;
     iree_arena_initialize(module->arena.block_pool, &selection_arena);
     const loom_low_source_selection_options_t selection_options = {
@@ -184,7 +184,7 @@ class SourceLoweringFunctionTest : public ::testing::Test {
         .policy = selection.policy,
         .emitter = collector->emitter(),
         .max_errors = 20,
-        .sidecar_arena = sidecar_arena,
+        .table_arena = table_arena,
     };
     IREE_CHECK_OK(
         loom_low_lower_function(module, selection.func, &options, out_result));
@@ -211,16 +211,16 @@ class SourceLoweringFunctionTest : public ::testing::Test {
     return loom_low_verify_module(module, &options, out_result);
   }
 
-  iree_status_t Packetize(loom_module_t* module, loom_op_t* low_func_op,
-                          loom_low_memory_access_table_t memory_access_table,
-                          iree_arena_allocator_t* arena,
-                          loom_low_packetization_t* out_packetization) {
-    const loom_low_packetization_options_t options = {
+  iree_status_t BuildEmissionFrame(
+      loom_module_t* module, loom_op_t* low_func_op,
+      loom_low_memory_access_table_t memory_access_table,
+      iree_arena_allocator_t* arena, loom_low_emission_frame_t* out_frame) {
+    const loom_low_emission_frame_options_t options = {
         .descriptor_registry = &registry_.registry,
         .memory_access_table = memory_access_table,
     };
-    return loom_low_packetize_function(module, low_func_op, &options, arena,
-                                       out_packetization);
+    return loom_low_emission_frame_build(module, low_func_op, &options, arena,
+                                         out_frame);
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -230,7 +230,7 @@ class SourceLoweringFunctionTest : public ::testing::Test {
 };
 
 static iree_host_size_t CountDependencies(
-    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_schedule_table_t* schedule,
     loom_low_schedule_dependency_kind_t kind) {
   iree_host_size_t count = 0;
   for (iree_host_size_t i = 0; i < schedule->dependency_count; ++i) {
@@ -242,7 +242,7 @@ static iree_host_size_t CountDependencies(
 }
 
 static iree_host_size_t CountMemoryAccessNodes(
-    const loom_low_schedule_sidecar_t* schedule) {
+    const loom_low_schedule_table_t* schedule) {
   iree_host_size_t count = 0;
   for (iree_host_size_t i = 0; i < schedule->node_count; ++i) {
     if (schedule->nodes[i].memory_access_record_index !=
@@ -529,10 +529,10 @@ TEST_F(SourceLoweringFunctionTest, CarriesMemoryAccessSummariesToSchedule) {
       "  func.return %loaded : vector<4xi32>\n"
       "}\n");
 
-  iree_arena_allocator_t sidecar_arena;
-  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  iree_arena_allocator_t table_arena;
+  iree_arena_initialize(&block_pool_, &table_arena);
   LowerTargetedSource(module.get(), &lower_collector, &lower_result,
-                      &sidecar_arena);
+                      &table_arena);
   EXPECT_EQ(lower_result.error_count, 0u);
   EXPECT_TRUE(lower_collector.emissions.empty());
   ASSERT_NE(lower_result.low_func_op, nullptr);
@@ -540,27 +540,27 @@ TEST_F(SourceLoweringFunctionTest, CarriesMemoryAccessSummariesToSchedule) {
             lower_result.low_func_op);
   ASSERT_EQ(lower_result.memory_access_table.count, 2u);
 
-  loom_low_packetization_t conservative_packetization = {};
-  IREE_ASSERT_OK(Packetize(module.get(), lower_result.low_func_op,
-                           loom_low_memory_access_table_empty(), &sidecar_arena,
-                           &conservative_packetization));
-  loom_low_packetization_t precise_packetization = {};
-  IREE_ASSERT_OK(Packetize(module.get(), lower_result.low_func_op,
-                           lower_result.memory_access_table, &sidecar_arena,
-                           &precise_packetization));
+  loom_low_emission_frame_t conservative_frame = {};
+  IREE_ASSERT_OK(BuildEmissionFrame(module.get(), lower_result.low_func_op,
+                                    loom_low_memory_access_table_empty(),
+                                    &table_arena, &conservative_frame));
+  loom_low_emission_frame_t precise_frame = {};
+  IREE_ASSERT_OK(BuildEmissionFrame(module.get(), lower_result.low_func_op,
+                                    lower_result.memory_access_table,
+                                    &table_arena, &precise_frame));
 
-  EXPECT_EQ(CountDependencies(&conservative_packetization.schedule,
+  EXPECT_EQ(CountDependencies(&conservative_frame.schedule,
                               LOOM_LOW_SCHEDULE_DEPENDENCY_EFFECT),
             1u);
-  EXPECT_EQ(CountDependencies(&precise_packetization.schedule,
+  EXPECT_EQ(CountDependencies(&precise_frame.schedule,
                               LOOM_LOW_SCHEDULE_DEPENDENCY_EFFECT),
             0u);
   EXPECT_TRUE(loom_low_memory_access_table_is_empty(
-      conservative_packetization.schedule.memory_access_table));
-  EXPECT_EQ(CountMemoryAccessNodes(&conservative_packetization.schedule), 0u);
-  EXPECT_EQ(precise_packetization.schedule.memory_access_table.count, 2u);
-  EXPECT_EQ(CountMemoryAccessNodes(&precise_packetization.schedule), 2u);
-  iree_arena_deinitialize(&sidecar_arena);
+      conservative_frame.schedule.memory_access_table));
+  EXPECT_EQ(CountMemoryAccessNodes(&conservative_frame.schedule), 0u);
+  EXPECT_EQ(precise_frame.schedule.memory_access_table.count, 2u);
+  EXPECT_EQ(CountMemoryAccessNodes(&precise_frame.schedule), 2u);
+  iree_arena_deinitialize(&table_arena);
 }
 
 }  // namespace

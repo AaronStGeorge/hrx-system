@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// IREE VM function-body bytecode emission from target-low packet sidecars.
+// IREE VM function-body bytecode emission from target-low packet tables.
 //
 // This emits the bytecode stream stored inside a VM function definition, not a
 // complete VMFB/module archive. The surrounding module table, import/export
@@ -42,13 +42,13 @@ void loom_ireevm_function_bytecode_deinitialize(
     loom_ireevm_function_bytecode_t* bytecode, iree_allocator_t allocator);
 
 // Emits IREE VM function-body bytecode for one scheduled and allocated
-// low.func.def. The sidecars must describe the same function and target. The
+// low.func.def. The tables must describe the same function and target. The
 // current emitter supports the iree.vm.core i32 scalar subset with unspilled
 // target-id allocation; unsupported packets fail loud instead of silently
 // producing partial bytecode.
 iree_status_t loom_ireevm_emit_function_bytecode(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation, iree_allocator_t allocator,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation, iree_allocator_t allocator,
     loom_ireevm_function_bytecode_t* out_bytecode);
 
 #ifdef __cplusplus

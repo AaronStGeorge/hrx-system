@@ -32,7 +32,7 @@ static iree_string_view_t loom_low_packet_json_symbol_name(
 }
 
 static iree_string_view_t loom_low_packet_json_function_name(
-    const loom_low_schedule_sidecar_t* schedule) {
+    const loom_low_schedule_table_t* schedule) {
   if (loom_low_function_def_isa(schedule->function_op)) {
     return loom_low_packet_json_symbol_name(
         schedule->module, loom_low_function_callee(schedule->function_op));
@@ -177,7 +177,7 @@ static iree_status_t loom_low_packet_json_write_location(
 }
 
 static iree_status_t loom_low_packet_json_write_value(
-    const loom_low_allocation_sidecar_t* allocation, loom_value_id_t value_id,
+    const loom_low_allocation_table_t* allocation, loom_value_id_t value_id,
     loom_output_stream_t* stream) {
   const loom_module_t* module = allocation->module;
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
@@ -205,7 +205,7 @@ static iree_status_t loom_low_packet_json_write_value(
 }
 
 static iree_status_t loom_low_packet_json_write_value_array(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_table_t* allocation,
     const loom_value_id_t* values, iree_host_size_t value_count,
     loom_output_stream_t* stream) {
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '['));
@@ -220,7 +220,7 @@ static iree_status_t loom_low_packet_json_write_value_array(
 }
 
 static iree_status_t loom_low_packet_json_write_hazard_gaps(
-    const loom_low_schedule_sidecar_t* schedule, loom_output_stream_t* stream) {
+    const loom_low_schedule_table_t* schedule, loom_output_stream_t* stream) {
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '['));
   for (iree_host_size_t i = 0; i < schedule->hazard_gap_count; ++i) {
     if (i > 0) {
@@ -553,7 +553,7 @@ static iree_status_t loom_low_packet_json_write_descriptor_string_or_null(
 }
 
 static iree_status_t loom_low_packet_json_write_block_ref(
-    const loom_low_schedule_sidecar_t* schedule, const loom_block_t* block,
+    const loom_low_schedule_table_t* schedule, const loom_block_t* block,
     loom_output_stream_t* stream) {
   uint32_t block_index = loom_low_packet_block_index(schedule, block);
   if (block_index == LOOM_LOW_PACKET_INDEX_NONE) {
@@ -563,7 +563,7 @@ static iree_status_t loom_low_packet_json_write_block_ref(
 }
 
 static iree_status_t loom_low_packet_json_write_successors(
-    const loom_low_schedule_sidecar_t* schedule, const loom_op_t* op,
+    const loom_low_schedule_table_t* schedule, const loom_op_t* op,
     loom_output_stream_t* stream) {
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '['));
   loom_block_t* const* successors = loom_op_const_successors(op);
@@ -581,7 +581,7 @@ static iree_status_t loom_low_packet_json_write_successors(
 }
 
 static iree_status_t loom_low_packet_json_write_low_packet_attrs(
-    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_schedule_table_t* schedule,
     const loom_low_schedule_node_t* node, loom_output_stream_t* stream) {
   const loom_module_t* module = schedule->module;
   loom_named_attr_slice_t attrs = {0};
@@ -653,8 +653,8 @@ static iree_status_t loom_low_packet_json_write_low_packet_attrs(
 }
 
 static iree_status_t loom_low_packet_json_write_packet(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     const loom_low_packet_view_t* packet, loom_output_stream_t* stream) {
   const loom_low_schedule_node_t* node = packet->node;
   const loom_low_descriptor_set_t* descriptor_set =
@@ -749,13 +749,13 @@ static iree_status_t loom_low_packet_json_write_packet(
 }
 
 iree_status_t loom_low_packet_format_json(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     iree_string_builder_t* builder) {
   IREE_ASSERT_ARGUMENT(schedule);
   IREE_ASSERT_ARGUMENT(allocation);
   IREE_ASSERT_ARGUMENT(builder);
-  IREE_RETURN_IF_ERROR(loom_low_packet_validate_sidecars(schedule, allocation));
+  IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(schedule, allocation));
 
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);

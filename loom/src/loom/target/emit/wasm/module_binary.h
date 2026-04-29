@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Minimal WebAssembly module binary emission from target-low packet sidecars.
+// Minimal WebAssembly module binary emission from target-low packet tables.
 //
 // This target-owned layer wraps one emitted Wasm function body in the real Wasm
 // binary module envelope: type, function, optional memory, export, and code
@@ -37,13 +37,13 @@ void loom_wasm_module_binary_deinitialize(loom_wasm_module_binary_t* module,
                                           iree_allocator_t allocator);
 
 // Emits a complete Wasm binary module containing one exported function lowered
-// from the provided target-low sidecars. The sidecars must describe one
+// from the provided target-low tables. The tables must describe one
 // wasm.core.simd128 low.func.def supported by loom_wasm_emit_function_body.
 // Memory is defined only when scheduled descriptor packets carry load/store
 // schedule-class flags.
 iree_status_t loom_wasm_emit_single_function_module(
-    const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
     iree_string_view_t export_name, iree_allocator_t allocator,
     loom_wasm_module_binary_t* out_module);
 

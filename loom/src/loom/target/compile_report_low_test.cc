@@ -115,7 +115,7 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
           .reload_count = 4,
       },
   };
-  const loom_low_packetization_t packetization = {
+  const loom_low_emission_frame_t frame = {
       .schedule =
           {
               .nodes = schedule_nodes,
@@ -150,7 +150,7 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
           },
   };
 
-  loom_target_compile_report_record_low_packetization(&report, &packetization);
+  loom_target_compile_report_record_low_emission_frame(&report, &frame);
 
   EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE));
