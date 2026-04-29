@@ -39,6 +39,8 @@ from loom.target.low_descriptors import (
     ImmediateFlag,
     ImmediateKind,
     OperandFlag,
+    OperandForm,
+    OperandFormMatchKind,
     OperandRole,
 )
 from loom.target.test.descriptors import TEST_LOW_CORE_DESCRIPTOR_SET
@@ -149,6 +151,48 @@ def test_allowlist_closes_over_referenced_descriptor_tables() -> None:
     assert manifest["table_counts"]["schedule_classes"] == 1
     assert manifest["table_counts"]["resources"] == 1
     assert "iree.vm.call.import.i32" not in generated.source
+
+
+def test_allowlist_closes_over_operand_form_replacements() -> None:
+    base_descriptor = TEST_LOW_CORE_DESCRIPTOR_SET.descriptors[1]
+    replacement_descriptor = replace(
+        base_descriptor,
+        key="test.add.i32.rhs_zero",
+        mnemonic="test.add.i32.rhs_zero",
+        operands=base_descriptor.operands[:2],
+        asm_forms=(AsmForm(results=("dst",), operands=("lhs",)),),
+    )
+    source_descriptor = replace(
+        base_descriptor,
+        operand_forms=(
+            OperandForm(
+                replacement_descriptor=replacement_descriptor.key,
+                source_operand="rhs",
+                match_kind=OperandFormMatchKind.ALL_EQUAL_I64,
+                match_i64=0,
+            ),
+        ),
+    )
+    descriptor_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(source_descriptor, replacement_descriptor),
+    )
+
+    generated = generate_descriptor_set(
+        descriptor_set,
+        DescriptorAllowlist(keys=(source_descriptor.key,)),
+    )
+    manifest = json.loads(generated.manifest_json)
+
+    assert [descriptor["key"] for descriptor in manifest["descriptors"]] == [
+        source_descriptor.key,
+        replacement_descriptor.key,
+    ]
+    assert manifest["table_counts"]["operand_forms"] == 1
+    assert manifest["table_counts"]["operand_form_operand_indices"] == 1
+    assert manifest["descriptors"][0]["operand_forms"] == 1
+    assert manifest["descriptors"][1]["operand_forms"] == 0
+    assert ".match_kind = LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_I64" in generated.source
 
 
 def test_generate_wasm_core_simd128_descriptor_set() -> None:

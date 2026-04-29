@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 17u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 18u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -218,6 +218,13 @@ typedef enum loom_low_constraint_kind_e {
 
 // Bitset of descriptor constraint flags.
 typedef uint16_t loom_low_constraint_flags_t;
+
+typedef enum loom_low_operand_form_match_kind_e {
+  // Unknown or uninitialized operand-form predicate.
+  LOOM_LOW_OPERAND_FORM_MATCH_UNKNOWN = 0,
+  // Operand facts prove every scalar element/register unit equals match_i64.
+  LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_I64 = 1,
+} loom_low_operand_form_match_kind_t;
 
 typedef enum loom_low_latency_kind_e {
   // Unknown or uninitialized latency kind.
@@ -587,6 +594,10 @@ typedef struct loom_low_descriptor_t {
   uint32_t constraint_start;
   // Number of constraint rows for this descriptor.
   uint16_t constraint_count;
+  // First operand-form row for descriptor-family packet selection.
+  uint32_t operand_form_start;
+  // Number of operand-form rows for this descriptor.
+  uint16_t operand_form_count;
   // Required schedule-class identifier for this descriptor.
   uint16_t schedule_class_id;
   // Descriptor flags used by verifier, scheduler, and optimizer.
@@ -595,6 +606,23 @@ typedef struct loom_low_descriptor_t {
   // LOOM_LOW_ASM_FORM_ORDINAL_NONE when no unambiguous form exists.
   uint32_t canonical_asm_form_ordinal;
 } loom_low_descriptor_t;
+
+typedef struct loom_low_operand_form_t {
+  // Descriptor ordinal selected when the source operand predicate matches.
+  uint32_t replacement_descriptor_ordinal;
+  // First source packet-operand index used by the replacement descriptor.
+  uint32_t operand_map_start;
+  // Descriptor-local operand index whose value facts select this form.
+  uint16_t source_operand_index;
+  // Packet operand position corresponding to source_operand_index.
+  uint16_t source_packet_operand_index;
+  // Number of packet operand positions in operand_form_operand_indices.
+  uint16_t operand_map_count;
+  // Predicate kind used to test the source operand facts.
+  loom_low_operand_form_match_kind_t match_kind;
+  // Predicate integer payload. ALL_EQUAL_I64 compares against this value.
+  int64_t match_i64;
+} loom_low_operand_form_t;
 
 typedef struct loom_low_descriptor_ref_t {
   // String-table offset for the stable symbolic descriptor key.
@@ -705,6 +733,14 @@ typedef struct loom_low_descriptor_set_t {
   const loom_low_constraint_t* constraints;
   // Number of constraint rows owned by this set.
   uint32_t constraint_count;
+  // Dense operand-form rows referenced by descriptors.
+  const loom_low_operand_form_t* operand_forms;
+  // Number of operand-form rows owned by this set.
+  uint32_t operand_form_count;
+  // Packed source packet-operand positions referenced by operand forms.
+  const uint16_t* operand_form_operand_indices;
+  // Number of operand-form operand-index rows owned by this set.
+  uint32_t operand_form_operand_index_count;
   // Dense register classes accepted by descriptor operands.
   const loom_low_reg_class_t* reg_classes;
   // Number of register classes owned by this set.

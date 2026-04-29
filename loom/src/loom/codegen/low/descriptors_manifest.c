@@ -661,7 +661,10 @@ static iree_status_t loom_low_append_manifest_descriptor_rows(
         builder, "{\"encoding_field\":%" PRIu16 ",\"value\":%" PRIu64 "}",
         field_value->encoding_field_id, field_value->value));
   }
-  return iree_string_builder_append_cstring(builder, "]");
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(builder, "],\"operand_forms\":"));
+  return iree_string_builder_append_format(builder, "%" PRIu16,
+                                           descriptor->operand_form_count);
 }
 
 iree_status_t loom_low_descriptor_set_format_manifest_json(
@@ -699,6 +702,7 @@ iree_status_t loom_low_descriptor_set_format_manifest_json(
       ",\"immediates\":%" PRIu32 ",\"enum_domains\":%" PRIu32
       ",\"enum_values\":%" PRIu32 ",\"effects\":%" PRIu32
       ",\"constraints\":%" PRIu32 ",\"reg_classes\":%" PRIu32
+      ",\"operand_forms\":%" PRIu32 ",\"operand_form_operand_indices\":%" PRIu32
       ",\"reg_class_alts\":%" PRIu32 ",\"schedule_classes\":%" PRIu32
       ",\"issue_uses\":%" PRIu32 ",\"resources\":%" PRIu32
       ",\"hazards\":%" PRIu32 ",\"pressure_deltas\":%" PRIu32
@@ -711,6 +715,8 @@ iree_status_t loom_low_descriptor_set_format_manifest_json(
       descriptor_set->immediate_count, descriptor_set->enum_domain_count,
       descriptor_set->enum_value_count, descriptor_set->effect_count,
       descriptor_set->constraint_count, descriptor_set->reg_class_count,
+      descriptor_set->operand_form_count,
+      descriptor_set->operand_form_operand_index_count,
       descriptor_set->reg_class_alt_count, descriptor_set->schedule_class_count,
       descriptor_set->issue_use_count, descriptor_set->resource_count,
       descriptor_set->hazard_count, descriptor_set->pressure_delta_count,

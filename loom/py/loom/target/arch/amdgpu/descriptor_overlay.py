@@ -43,6 +43,7 @@ from loom.target.low_descriptors import (
     Immediate,
     Operand,
     OperandFlag,
+    OperandForm,
     OperandRole,
 )
 
@@ -127,6 +128,7 @@ class AmdgpuDescriptorOverlay:
     fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = ()
     effects: tuple[Effect, ...] = ()
     constraints: tuple[Constraint, ...] = ()
+    operand_forms: tuple[OperandForm, ...] = ()
     feature_mask_words: tuple[int, ...] = ()
     flags: tuple[DescriptorFlag, ...] = ()
     asm_forms: tuple[AsmForm, ...] | None = None
@@ -193,6 +195,7 @@ def materialize_amdgpu_descriptor_overlay(
         asm_forms=_asm_forms_for_overlay(overlay),
         effects=overlay.effects,
         constraints=overlay.constraints,
+        operand_forms=overlay.operand_forms,
         feature_mask_words=overlay.feature_mask_words,
         encoding_format_id=_encoding_format_id(overlay),
         encoding_id=encoding.opcode

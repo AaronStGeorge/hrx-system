@@ -11,6 +11,7 @@
 #include "loom/codegen/low/pass_requirements.h"
 #include "loom/codegen/low/passes/allocation.h"
 #include "loom/codegen/low/passes/dce.h"
+#include "loom/codegen/low/passes/operand_forms.h"
 #include "loom/codegen/low/passes/source_to_low.h"
 #include "loom/passes/branch_fusion.h"
 #include "loom/passes/branch_sink.h"
@@ -78,6 +79,17 @@ static const loom_pass_requirement_def_t kLowDceRequirements[] = {
             IREE_SVL("Requires a pass environment target-low descriptor "
                      "registry."),
     },
+};
+
+static const loom_pass_requirement_def_t kLowSelectOperandFormsRequirements[] =
+    {
+        {
+            .key = IREE_SVL(
+                LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY),
+            .description =
+                IREE_SVL("Requires a pass environment target-low descriptor "
+                         "registry."),
+        },
 };
 
 static const loom_pass_option_schema_t kLowSourceToLowOptionSchema[] = {
@@ -182,6 +194,13 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .requirement_defs = kLowMaterializeAllocationRequirements,
         .requirement_count =
             IREE_ARRAYSIZE(kLowMaterializeAllocationRequirements),
+    },
+    {
+        .key = IREE_SVL("low-select-operand-forms"),
+        .info = loom_low_select_operand_forms_pass_info,
+        .function_run = loom_low_select_operand_forms_run,
+        .requirement_defs = kLowSelectOperandFormsRequirements,
+        .requirement_count = IREE_ARRAYSIZE(kLowSelectOperandFormsRequirements),
     },
     {
         .key = IREE_SVL("normalize-kernel-resources"),

@@ -237,6 +237,13 @@ static iree_status_t loom_low_verify_tables_present(
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->encoding_field_values,
       descriptor_set->encoding_field_value_count, "encoding_field_values"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      descriptor_set->operand_forms, descriptor_set->operand_form_count,
+      "operand_forms"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      descriptor_set->operand_form_operand_indices,
+      descriptor_set->operand_form_operand_index_count,
+      "operand_form_operand_indices"));
   return iree_ok_status();
 }
 
@@ -639,6 +646,134 @@ static iree_status_t loom_low_verify_descriptor_constraints(
         break;
       default:
         break;
+    }
+  }
+  return iree_ok_status();
+}
+
+static bool loom_low_operand_form_match_kind_is_valid(
+    loom_low_operand_form_match_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_I64:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static uint16_t loom_low_descriptor_packet_operand_count(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  uint16_t count = 0;
+  const loom_low_operand_t* operands =
+      &descriptor_set->operands[descriptor->operand_start];
+  for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
+    if (loom_low_operand_role_is_packet_operand(operands[i].role) &&
+        !iree_any_bit_set(operands[i].flags, LOOM_LOW_OPERAND_FLAG_IMPLICIT)) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+static iree_status_t loom_low_verify_descriptor_operand_forms(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint32_t descriptor_index) {
+  const uint16_t source_packet_operand_count =
+      loom_low_descriptor_packet_operand_count(descriptor_set, descriptor);
+  for (uint16_t i = 0; i < descriptor->operand_form_count; ++i) {
+    const uint32_t form_index = descriptor->operand_form_start + i;
+    const loom_low_operand_form_t* form =
+        &descriptor_set->operand_forms[form_index];
+    if (form->replacement_descriptor_ordinal >=
+        descriptor_set->descriptor_count) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low descriptor %" PRIu32 " operand form %" PRIu32
+                              " references replacement descriptor %" PRIu32
+                              " but only %" PRIu32 " descriptors exist",
+                              descriptor_index, form_index,
+                              form->replacement_descriptor_ordinal,
+                              descriptor_set->descriptor_count);
+    }
+    if (form->source_operand_index >= descriptor->operand_count) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low descriptor %" PRIu32 " operand form %" PRIu32
+                              " references source operand %" PRIu16
+                              " but descriptor has only %" PRIu16 " operands",
+                              descriptor_index, form_index,
+                              form->source_operand_index,
+                              descriptor->operand_count);
+    }
+    const loom_low_operand_t* source_operand =
+        &descriptor_set
+             ->operands[descriptor->operand_start + form->source_operand_index];
+    if (!loom_low_operand_role_is_packet_operand(source_operand->role) ||
+        iree_any_bit_set(source_operand->flags,
+                         LOOM_LOW_OPERAND_FLAG_IMPLICIT)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low descriptor %" PRIu32 " operand form %" PRIu32
+          " source operand %" PRIu16 " is not an explicit packet operand",
+          descriptor_index, form_index, form->source_operand_index);
+    }
+    if (form->source_packet_operand_index >= source_packet_operand_count) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "low descriptor %" PRIu32 " operand form %" PRIu32
+          " references source packet operand %" PRIu16
+          " but descriptor has only %" PRIu16 " packet operands",
+          descriptor_index, form_index, form->source_packet_operand_index,
+          source_packet_operand_count);
+    }
+    if (!loom_low_operand_form_match_kind_is_valid(form->match_kind)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low descriptor %" PRIu32 " operand form %" PRIu32
+                              " has unknown match kind %u",
+                              descriptor_index, form_index, form->match_kind);
+    }
+
+    const loom_low_descriptor_t* replacement =
+        &descriptor_set->descriptors[form->replacement_descriptor_ordinal];
+    if (replacement->result_count != descriptor->result_count) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low descriptor %" PRIu32 " operand form %" PRIu32
+          " replacement descriptor %" PRIu32 " has result count %" PRIu16
+          " instead of %" PRIu16,
+          descriptor_index, form_index, form->replacement_descriptor_ordinal,
+          replacement->result_count, descriptor->result_count);
+    }
+    const uint16_t replacement_packet_operand_count =
+        loom_low_descriptor_packet_operand_count(descriptor_set, replacement);
+    if (form->operand_map_count != replacement_packet_operand_count) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low descriptor %" PRIu32 " operand form %" PRIu32 " maps %" PRIu16
+          " operands but replacement descriptor %" PRIu32 " has %" PRIu16
+          " packet operands",
+          descriptor_index, form_index, form->operand_map_count,
+          form->replacement_descriptor_ordinal,
+          replacement_packet_operand_count);
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_low_verify_span(form->operand_map_start, form->operand_map_count,
+                             descriptor_set->operand_form_operand_index_count,
+                             "operand_form_operand_indices"));
+    for (uint16_t map_index = 0; map_index < form->operand_map_count;
+         ++map_index) {
+      const uint16_t source_packet_operand_index =
+          descriptor_set->operand_form_operand_indices[form->operand_map_start +
+                                                       map_index];
+      if (source_packet_operand_index >= source_packet_operand_count) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "low descriptor %" PRIu32 " operand form %" PRIu32
+            " operand map row %" PRIu16
+            " references source packet operand "
+            "%" PRIu16 " but descriptor has only %" PRIu16 " packet operands",
+            descriptor_index, form_index, map_index,
+            source_packet_operand_index, source_packet_operand_count);
+      }
     }
   }
   return iree_ok_status();
@@ -1198,6 +1333,9 @@ static iree_status_t loom_low_verify_descriptor(
   IREE_RETURN_IF_ERROR(loom_low_verify_span(
       descriptor->constraint_start, descriptor->constraint_count,
       descriptor_set->constraint_count, "constraints"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_span(
+      descriptor->operand_form_start, descriptor->operand_form_count,
+      descriptor_set->operand_form_count, "operand_forms"));
   if (descriptor->schedule_class_id != LOOM_LOW_SCHEDULE_CLASS_NONE &&
       descriptor->schedule_class_id >= descriptor_set->schedule_class_count) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -1224,6 +1362,8 @@ static iree_status_t loom_low_verify_descriptor(
       descriptor_set, descriptor, descriptor_index));
   IREE_RETURN_IF_ERROR(
       loom_low_verify_descriptor_constraints(descriptor_set, descriptor));
+  IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_operand_forms(
+      descriptor_set, descriptor, descriptor_index));
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_operand_encoding_fields(
       descriptor_set, descriptor, descriptor_index));
   return loom_low_verify_descriptor_canonical_asm_form(

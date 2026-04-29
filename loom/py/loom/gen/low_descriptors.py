@@ -46,6 +46,8 @@ from loom.target.low_descriptors import (
     IssueUse,
     Operand,
     OperandFlag,
+    OperandForm,
+    OperandFormMatchKind,
     OperandRole,
     PressureDelta,
     RegClass,
@@ -147,6 +149,8 @@ class _CompiledDescriptorSet:
     pressure_deltas: list[PressureDelta]
     feature_mask_words: list[int]
     encoding_field_values: list[EncodingFieldValue]
+    operand_forms: list[_CompiledOperandForm]
+    operand_form_operand_indices: list[int]
     descriptor_rows: list[dict[str, int]]
     descriptor_refs: list[tuple[str, int]]
     descriptor_id_refs: list[tuple[int, int]]
@@ -176,6 +180,17 @@ class _CompiledAsmForm:
     result_index_start: int = 0
     operand_index_start: int = 0
     immediate_start: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class _CompiledOperandForm:
+    replacement_descriptor_ordinal: int
+    source_operand_index: int
+    source_packet_operand_index: int
+    match_kind: OperandFormMatchKind
+    match_i64: int
+    operand_map_start: int
+    operand_map_count: int
 
 
 def _c_identifier(value: str) -> str:
@@ -295,6 +310,11 @@ def _validate_u64(value: int, description: str) -> None:
         raise ValueError(f"{description} does not fit u64")
 
 
+def _validate_i64(value: int, description: str) -> None:
+    if value < -(1 << 63) or value > (1 << 63) - 1:
+        raise ValueError(f"{description} does not fit i64")
+
+
 def _bit_mask(bit_count: int) -> int:
     if bit_count == 0:
         return 0
@@ -377,6 +397,18 @@ def _select_descriptors(spec: DescriptorSet, allowlist: DescriptorAllowlist | No
             raise ValueError(f"allowlist references unknown mnemonic '{mnemonic}'")
         for descriptor in descriptors:
             selected[descriptor.key] = descriptor
+
+    changed = True
+    while changed:
+        changed = False
+        for descriptor in tuple(selected.values()):
+            for operand_form in descriptor.operand_forms:
+                replacement = key_map.get(operand_form.replacement_descriptor)
+                if replacement is None:
+                    raise ValueError(f"descriptor '{descriptor.key}' operand form references unknown replacement descriptor '{operand_form.replacement_descriptor}'")
+                if replacement.key not in selected:
+                    selected[replacement.key] = replacement
+                    changed = True
 
     return [descriptor for descriptor in spec.descriptors if descriptor.key in selected]
 
@@ -540,6 +572,73 @@ def _index_descriptor_fields(
     return operand_indices, immediate_indices
 
 
+def _descriptor_packet_operand_indices(descriptor: Descriptor) -> tuple[int, ...]:
+    return tuple(i for i, operand in enumerate(descriptor.operands) if _operand_role_is_packet_input(operand.role) and OperandFlag.IMPLICIT not in operand.flags)
+
+
+def _compile_operand_form(
+    descriptor: Descriptor,
+    descriptor_ordinals: dict[str, int],
+    selected_descriptors: Sequence[Descriptor],
+    operand_form: OperandForm,
+    operand_map_start: int,
+) -> tuple[_CompiledOperandForm, tuple[int, ...]]:
+    operand_indices, _immediate_indices = _index_descriptor_fields(descriptor)
+    source_operand_index = operand_indices.get(operand_form.source_operand)
+    if source_operand_index is None:
+        raise ValueError(f"descriptor '{descriptor.key}' operand form references unknown source operand '{operand_form.source_operand}'")
+    source_packet_indices = _descriptor_packet_operand_indices(descriptor)
+    source_packet_index_by_operand_index = {operand_index: packet_index for packet_index, operand_index in enumerate(source_packet_indices)}
+    source_packet_operand_index = source_packet_index_by_operand_index.get(source_operand_index)
+    if source_packet_operand_index is None:
+        raise ValueError(f"descriptor '{descriptor.key}' operand form source '{operand_form.source_operand}' is not a packet operand")
+    _validate_i64(
+        operand_form.match_i64,
+        f"descriptor '{descriptor.key}' operand form match value",
+    )
+
+    replacement_ordinal = descriptor_ordinals[operand_form.replacement_descriptor]
+    replacement = selected_descriptors[replacement_ordinal]
+    source_result_count = _validate_descriptor_operands(descriptor)
+    replacement_result_count = _validate_descriptor_operands(replacement)
+    if replacement_result_count != source_result_count:
+        raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' must have the same result count")
+    for i in range(source_result_count):
+        source_result = descriptor.operands[i].field_name
+        replacement_result = replacement.operands[i].field_name
+        if replacement_result != source_result:
+            raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' result {i} is '{replacement_result}' instead of '{source_result}'")
+    source_immediates = tuple(immediate.field_name for immediate in descriptor.immediates)
+    replacement_immediates = tuple(immediate.field_name for immediate in replacement.immediates)
+    if replacement_immediates != source_immediates:
+        raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' must have the same immediate fields")
+
+    replacement_packet_indices = _descriptor_packet_operand_indices(replacement)
+    source_packet_index_by_field = {descriptor.operands[operand_index].field_name: packet_index for packet_index, operand_index in enumerate(source_packet_indices)}
+    operand_map: list[int] = []
+    for replacement_operand_index in replacement_packet_indices:
+        field_name = replacement.operands[replacement_operand_index].field_name
+        if field_name == operand_form.source_operand:
+            raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' still consumes source operand '{field_name}'")
+        source_packet_index = source_packet_index_by_field.get(field_name)
+        if source_packet_index is None:
+            raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' operand '{field_name}' does not exist in the source packet")
+        operand_map.append(source_packet_index)
+
+    return (
+        _CompiledOperandForm(
+            replacement_descriptor_ordinal=replacement_ordinal,
+            source_operand_index=source_operand_index,
+            source_packet_operand_index=source_packet_operand_index,
+            match_kind=operand_form.match_kind,
+            match_i64=operand_form.match_i64,
+            operand_map_start=operand_map_start,
+            operand_map_count=len(operand_map),
+        ),
+        tuple(operand_map),
+    )
+
+
 def _validate_unique_asm_fields(descriptor: Descriptor, asm_form: AsmForm, mnemonic: str) -> None:
     seen_fields: set[str] = set()
     for field_name in (
@@ -654,6 +753,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
     selected_descriptors = _select_descriptors(spec, allowlist)
     if not selected_descriptors:
         raise ValueError(f"descriptor set '{spec.key}' selected no descriptors")
+    descriptor_ordinals = {descriptor.key: i for i, descriptor in enumerate(selected_descriptors)}
     for reg_class in spec.reg_classes:
         if reg_class.full_register_part_mask == 0:
             raise ValueError(f"register class '{reg_class.name}' has an empty full register-part mask")
@@ -889,6 +989,8 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
     pressure_deltas: list[PressureDelta] = []
     feature_mask_words: list[int] = []
     encoding_field_values: list[EncodingFieldValue] = []
+    operand_forms: list[_CompiledOperandForm] = []
+    operand_form_operand_indices: list[int] = []
     descriptor_rows: list[dict[str, int]] = []
     schedule_rows: list[dict[str, int]] = []
     enum_domain_rows: list[dict[str, int]] = []
@@ -966,6 +1068,19 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         feature_mask_words.extend(descriptor.feature_mask_words)
         encoding_field_value_start = len(encoding_field_values)
         encoding_field_values.extend(descriptor.encoding_field_values)
+        operand_form_start = len(operand_forms)
+        for operand_form in descriptor.operand_forms:
+            if operand_form.replacement_descriptor not in descriptor_ordinals:
+                raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{operand_form.replacement_descriptor}' was not selected")
+            compiled_form, operand_map = _compile_operand_form(
+                descriptor,
+                descriptor_ordinals,
+                selected_descriptors,
+                operand_form,
+                len(operand_form_operand_indices),
+            )
+            operand_forms.append(compiled_form)
+            operand_form_operand_indices.extend(operand_map)
         descriptor_rows.append(
             {
                 "operand_start": operand_start,
@@ -981,6 +1096,8 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
                 "feature_mask_word_count": len(descriptor.feature_mask_words),
                 "encoding_field_value_start": encoding_field_value_start,
                 "encoding_field_value_count": len(descriptor.encoding_field_values),
+                "operand_form_start": operand_form_start,
+                "operand_form_count": len(descriptor.operand_forms),
             }
         )
 
@@ -1025,6 +1142,8 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         pressure_deltas=pressure_deltas,
         feature_mask_words=feature_mask_words,
         encoding_field_values=encoding_field_values,
+        operand_forms=operand_forms,
+        operand_form_operand_indices=operand_form_operand_indices,
         descriptor_rows=descriptor_rows,
         descriptor_refs=descriptor_refs,
         descriptor_id_refs=descriptor_id_refs,
@@ -1439,6 +1558,29 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
     )
     _emit_array(
         lines,
+        "loom_low_operand_form_t",
+        spec.c_table_prefix,
+        "OperandForms",
+        [
+            [
+                f".replacement_descriptor_ordinal = {operand_form.replacement_descriptor_ordinal},",
+                f".operand_map_start = {operand_form.operand_map_start},",
+                f".source_operand_index = {operand_form.source_operand_index},",
+                f".source_packet_operand_index = {operand_form.source_packet_operand_index},",
+                f".operand_map_count = {operand_form.operand_map_count},",
+                f".match_kind = {operand_form.match_kind.c_name},",
+                f".match_i64 = {_i64_literal(operand_form.match_i64)},",
+            ]
+            for operand_form in compiled.operand_forms
+        ],
+    )
+    if compiled.operand_form_operand_indices:
+        lines.append(f"static const uint16_t k{spec.c_table_prefix}OperandFormOperandIndices[] = {{")
+        lines.extend(f"    {operand_index}," for operand_index in compiled.operand_form_operand_indices)
+        lines.append("};")
+        lines.append("")
+    _emit_array(
+        lines,
         "loom_low_descriptor_t",
         spec.c_table_prefix,
         "Descriptors",
@@ -1463,6 +1605,8 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
                 f".effect_count = {compiled.descriptor_rows[i]['effect_count']},",
                 f".constraint_start = {compiled.descriptor_rows[i]['constraint_start']},",
                 f".constraint_count = {compiled.descriptor_rows[i]['constraint_count']},",
+                f".operand_form_start = {compiled.descriptor_rows[i]['operand_form_start']},",
+                f".operand_form_count = {compiled.descriptor_rows[i]['operand_form_count']},",
                 f".schedule_class_id = {compiled.schedule_class_ids[descriptor.schedule_class]},",
                 f".flags = {_flag_expr(descriptor.flags)},",
                 f".canonical_asm_form_ordinal = {_canonical_asm_form_ordinal_expr(compiled.canonical_asm_form_ordinals[i])},",
@@ -1578,6 +1722,8 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         "asm_operand_indices": "asm_operand_index_count",
         "asm_immediates": "asm_immediate_count",
         "encoding_field_values": "encoding_field_value_count",
+        "operand_forms": "operand_form_count",
+        "operand_form_operand_indices": "operand_form_operand_index_count",
     }
 
     def append_optional_table(field_name: str, table_name: str) -> None:
@@ -1605,6 +1751,8 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
     append_optional_table("asm_operand_indices", "AsmOperandIndices")
     append_optional_table("asm_immediates", "AsmImmediates")
     append_optional_table("encoding_field_values", "EncodingFieldValues")
+    append_optional_table("operand_forms", "OperandForms")
+    append_optional_table("operand_form_operand_indices", "OperandFormOperandIndices")
     if compiled.feature_mask_words:
         lines.append(f"    .feature_mask_words = k{spec.c_table_prefix}FeatureMaskWords,")
         lines.append(f"    .feature_mask_word_count = IREE_ARRAYSIZE(k{spec.c_table_prefix}FeatureMaskWords),")
@@ -1644,6 +1792,7 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
                     for field_value in descriptor.encoding_field_values
                 ],
                 "effects": compiled.descriptor_rows[i]["effect_count"],
+                "operand_forms": compiled.descriptor_rows[i]["operand_form_count"],
                 "asm_forms": sum(1 for asm_form in compiled.asm_forms if asm_form.descriptor_ordinal == i),
                 "flags": [flag.c_name for flag in descriptor.flags],
             }
@@ -1697,6 +1846,8 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
             "pressure_deltas": len(compiled.pressure_deltas),
             "feature_mask_words": len(compiled.feature_mask_words),
             "encoding_field_values": len(compiled.encoding_field_values),
+            "operand_forms": len(compiled.operand_forms),
+            "operand_form_operand_indices": len(compiled.operand_form_operand_indices),
             "asm_forms": len(compiled.asm_forms),
             "asm_operand_indices": len(compiled.asm_operand_indices),
             "asm_immediates": len(compiled.asm_immediates),

@@ -57,6 +57,29 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    operand_forms
+  HDRS
+    "operand_forms.h"
+  SRCS
+    "operand_forms.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::function
+    loom::src::loom::codegen::low::pass_environment
+    loom::src::loom::codegen::low::target_binding
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::op_defs
+    loom::src::loom::pass::types
+    loom::src::loom::pass::value_facts
+    loom::src::loom::rewrite::rewriter
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     source_to_low
   HDRS
     "source_to_low.h"

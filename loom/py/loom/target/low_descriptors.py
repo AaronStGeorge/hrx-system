@@ -14,7 +14,7 @@ from pathlib import Path
 
 from loom.stable_id import stable_id_from_string
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 17
+LOW_DESCRIPTOR_SET_ABI_VERSION = 18
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 
 
@@ -175,6 +175,10 @@ class DescriptorFlag(CEnum):
     PSEUDO = "LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO"
 
 
+class OperandFormMatchKind(CEnum):
+    ALL_EQUAL_I64 = "LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_I64"
+
+
 @dataclass(frozen=True, slots=True)
 class DescriptorCategory:
     """Stable category for grouping related descriptors inside a set.
@@ -304,6 +308,17 @@ class Constraint:
 
 
 @dataclass(frozen=True, slots=True)
+class OperandForm:
+    replacement_descriptor: str
+    source_operand: str
+    match_kind: OperandFormMatchKind
+    match_i64: int = 0
+
+    def __post_init__(self) -> None:
+        _validate_metadata_key("replacement descriptor", self.replacement_descriptor)
+
+
+@dataclass(frozen=True, slots=True)
 class IssueUse:
     resource: str
     cycles: int
@@ -366,6 +381,7 @@ class Descriptor:
     encoding_format_id: int = 0
     encoding_id: int = 0
     flags: tuple[DescriptorFlag, ...] = ()
+    operand_forms: tuple[OperandForm, ...] = ()
     category: DescriptorCategory | None = None
 
 

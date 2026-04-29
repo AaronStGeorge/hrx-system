@@ -61,6 +61,8 @@ from loom.target.low_descriptors import (
     ModelQuality,
     Operand,
     OperandFlag,
+    OperandForm,
+    OperandFormMatchKind,
     OperandRole,
     RegClass,
     RegClassAlt,
@@ -4734,6 +4736,64 @@ def _v_wmma_16x16x16_overlay(
     )
 
 
+def _with_zero_accumulator_form(
+    overlay: AmdgpuDescriptorOverlay,
+) -> tuple[AmdgpuDescriptorOverlay, AmdgpuDescriptorOverlay]:
+    if overlay.mnemonic is None:
+        raise ValueError(
+            f"WMMA descriptor '{overlay.descriptor_key}' needs a mnemonic for "
+            "its zero-accumulator asm form"
+        )
+    zero_descriptor_key = f"{overlay.descriptor_key}.acc_zero"
+    source_overlay = replace(
+        overlay,
+        operand_forms=(
+            *overlay.operand_forms,
+            OperandForm(
+                replacement_descriptor=zero_descriptor_key,
+                source_operand="acc",
+                match_kind=OperandFormMatchKind.ALL_EQUAL_I64,
+                match_i64=0,
+            ),
+        ),
+    )
+
+    zero_operands = tuple(
+        operand_overlay
+        for operand_overlay in overlay.operands
+        if operand_overlay.descriptor_operand.field_name != "acc"
+    )
+    zero_result_names = tuple(
+        operand_overlay.descriptor_operand.field_name
+        for operand_overlay in zero_operands
+        if operand_overlay.descriptor_operand.role is OperandRole.RESULT
+    )
+    zero_operand_names = tuple(
+        operand_overlay.descriptor_operand.field_name
+        for operand_overlay in zero_operands
+        if operand_overlay.descriptor_operand.role
+        in (OperandRole.OPERAND, OperandRole.PREDICATE, OperandRole.RESOURCE)
+        and OperandFlag.IMPLICIT not in operand_overlay.descriptor_operand.flags
+    )
+    zero_overlay = replace(
+        overlay,
+        descriptor_key=zero_descriptor_key,
+        operands=zero_operands,
+        fixed_encoding_fields=(
+            *overlay.fixed_encoding_fields,
+            ("SRC2", _predefined("0")),
+        ),
+        constraints=(),
+        operand_forms=(),
+        asm_forms=_asm(
+            mnemonic=f"{overlay.mnemonic}_acc_zero",
+            results=zero_result_names,
+            operands=zero_operand_names,
+        ),
+    )
+    return source_overlay, zero_overlay
+
+
 def _v_wmma_f32_16x16x16_f16_overlay(
     *, input_units: int = 4
 ) -> AmdgpuDescriptorOverlay:
@@ -5877,12 +5937,16 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_dot8_i32_iu4_overlay(lhs_signed=True, rhs_signed=False),
         _v_dot8_i32_iu4_overlay(lhs_signed=False, rhs_signed=True),
         _v_dot8_u32_u4_overlay(),
-        _v_wmma_f32_16x16x16_f16_overlay(input_units=8),
-        _v_wmma_f32_16x16x16_bf16_overlay(input_units=8),
-        _v_wmma_f16_16x16x16_f16_overlay(input_units=8, accumulator_units=8),
-        _v_wmma_bf16_16x16x16_bf16_overlay(input_units=8, accumulator_units=8),
-        _v_wmma_i32_16x16x16_iu8_overlay(operand_units=4),
-        _v_wmma_i32_16x16x16_iu4_overlay(operand_units=2),
+        *_with_zero_accumulator_form(_v_wmma_f32_16x16x16_f16_overlay(input_units=8)),
+        *_with_zero_accumulator_form(_v_wmma_f32_16x16x16_bf16_overlay(input_units=8)),
+        *_with_zero_accumulator_form(
+            _v_wmma_f16_16x16x16_f16_overlay(input_units=8, accumulator_units=8)
+        ),
+        *_with_zero_accumulator_form(
+            _v_wmma_bf16_16x16x16_bf16_overlay(input_units=8, accumulator_units=8)
+        ),
+        *_with_zero_accumulator_form(_v_wmma_i32_16x16x16_iu8_overlay(operand_units=4)),
+        *_with_zero_accumulator_form(_v_wmma_i32_16x16x16_iu4_overlay(operand_units=2)),
         _s_barrier_overlay(),
         *_gfx11_cache_control_overlays(),
         _s_waitcnt_overlay(
@@ -6073,17 +6137,25 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_dot4_f32_packed8_overlay(lhs_type="bf8", rhs_type="fp8"),
         _v_dot4_f32_packed8_overlay(lhs_type="fp8", rhs_type="fp8"),
         _v_dot4_f32_packed8_overlay(lhs_type="bf8", rhs_type="bf8"),
-        _v_wmma_f32_16x16x16_f16_overlay(),
-        _v_wmma_f32_16x16x16_bf16_overlay(),
-        _v_wmma_f16_16x16x16_f16_overlay(),
-        _v_wmma_bf16_16x16x16_bf16_overlay(),
-        _v_wmma_i32_16x16x16_iu8_overlay(),
-        _v_wmma_i32_16x16x16_iu4_overlay(),
-        _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="fp8", rhs_type="fp8"),
-        _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="fp8", rhs_type="bf8"),
-        _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="bf8", rhs_type="fp8"),
-        _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="bf8", rhs_type="bf8"),
-        _v_wmma_i32_16x16x32_iu4_overlay(),
+        *_with_zero_accumulator_form(_v_wmma_f32_16x16x16_f16_overlay()),
+        *_with_zero_accumulator_form(_v_wmma_f32_16x16x16_bf16_overlay()),
+        *_with_zero_accumulator_form(_v_wmma_f16_16x16x16_f16_overlay()),
+        *_with_zero_accumulator_form(_v_wmma_bf16_16x16x16_bf16_overlay()),
+        *_with_zero_accumulator_form(_v_wmma_i32_16x16x16_iu8_overlay()),
+        *_with_zero_accumulator_form(_v_wmma_i32_16x16x16_iu4_overlay()),
+        *_with_zero_accumulator_form(
+            _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="fp8", rhs_type="fp8")
+        ),
+        *_with_zero_accumulator_form(
+            _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="fp8", rhs_type="bf8")
+        ),
+        *_with_zero_accumulator_form(
+            _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="bf8", rhs_type="fp8")
+        ),
+        *_with_zero_accumulator_form(
+            _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="bf8", rhs_type="bf8")
+        ),
+        *_with_zero_accumulator_form(_v_wmma_i32_16x16x32_iu4_overlay()),
         *_gfx12_cache_control_overlays(),
         *_gfx12_prefetch_overlays(),
         _s_wait_loadcnt_overlay(),
@@ -6270,17 +6342,25 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_dot4_f32_packed8_overlay(lhs_type="bf8", rhs_type="fp8"),
         _v_dot4_f32_packed8_overlay(lhs_type="fp8", rhs_type="fp8"),
         _v_dot4_f32_packed8_overlay(lhs_type="bf8", rhs_type="bf8"),
-        _v_wmma_f32_16x16x16_f16_overlay(),
-        _v_wmma_f32_16x16x16_bf16_overlay(),
-        _v_wmma_f16_16x16x16_f16_overlay(),
-        _v_wmma_bf16_16x16x16_bf16_overlay(),
-        _v_wmma_i32_16x16x16_iu8_overlay(),
-        _v_wmma_i32_16x16x16_iu4_overlay(),
-        _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="fp8", rhs_type="fp8"),
-        _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="fp8", rhs_type="bf8"),
-        _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="bf8", rhs_type="fp8"),
-        _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="bf8", rhs_type="bf8"),
-        _v_wmma_i32_16x16x32_iu4_overlay(),
+        *_with_zero_accumulator_form(_v_wmma_f32_16x16x16_f16_overlay()),
+        *_with_zero_accumulator_form(_v_wmma_f32_16x16x16_bf16_overlay()),
+        *_with_zero_accumulator_form(_v_wmma_f16_16x16x16_f16_overlay()),
+        *_with_zero_accumulator_form(_v_wmma_bf16_16x16x16_bf16_overlay()),
+        *_with_zero_accumulator_form(_v_wmma_i32_16x16x16_iu8_overlay()),
+        *_with_zero_accumulator_form(_v_wmma_i32_16x16x16_iu4_overlay()),
+        *_with_zero_accumulator_form(
+            _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="fp8", rhs_type="fp8")
+        ),
+        *_with_zero_accumulator_form(
+            _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="fp8", rhs_type="bf8")
+        ),
+        *_with_zero_accumulator_form(
+            _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="bf8", rhs_type="fp8")
+        ),
+        *_with_zero_accumulator_form(
+            _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="bf8", rhs_type="bf8")
+        ),
+        *_with_zero_accumulator_form(_v_wmma_i32_16x16x32_iu4_overlay()),
         *_gfx12_cache_control_overlays(),
         *_gfx12_prefetch_overlays(),
         _s_wait_loadcnt_overlay(),

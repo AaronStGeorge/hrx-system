@@ -76,6 +76,10 @@ static iree_status_t loom_low_preparation_build_pipeline(
   iree_status_t status =
       loom_low_preparation_build_run(&builder, IREE_SV("cse"));
   if (iree_status_is_ok(status)) {
+    status = loom_low_preparation_build_run(
+        &builder, IREE_SV("low-select-operand-forms"));
+  }
+  if (iree_status_is_ok(status)) {
     status = loom_low_preparation_build_run(&builder, IREE_SV("low-dce"));
   }
   if (iree_status_is_ok(status)) {
