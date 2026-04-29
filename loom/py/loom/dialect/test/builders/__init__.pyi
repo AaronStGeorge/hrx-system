@@ -1,0 +1,638 @@
+# GENERATED FILE: DO NOT EDIT.
+# Generator: loom.gen.builders_pyi.
+# Regenerate: python3 loom/py/loom/gen/run.py builders_pyi --in-place
+# ruff: noqa
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from typing import Any
+
+from loom.builder import TiedResultSpec, ValueRef
+from loom.ir import Block, Predicate, Region, Type
+from loom.builders import DialectBuilder
+
+class TestBuilder(DialectBuilder):
+    def addi(
+        self,
+        *,
+        lhs: ValueRef,
+        rhs: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def neg(
+        self,
+        *,
+        input: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def cast(
+        self,
+        *,
+        input: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def constant(
+        self,
+        *,
+        value: Any,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def use(
+        self,
+        *,
+        values: list[ValueRef] = ...,
+    ) -> None: ...
+    def cmp(
+        self,
+        *,
+        predicate: str,
+        lhs: ValueRef,
+        rhs: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def map(
+        self,
+        *,
+        inputs: list[ValueRef] = ...,
+        body: Region | None = ...,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def update(
+        self,
+        *,
+        source: ValueRef,
+        target: ValueRef,
+        offsets: list[int | ValueRef],
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def invoke(
+        self,
+        *,
+        callee: str,
+        operands: list[ValueRef] = ...,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> list[ValueRef]: ...
+    def low_call(
+        self,
+        *,
+        callee: str,
+        operands: list[ValueRef] = ...,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> list[ValueRef]: ...
+    def low_invoke(
+        self,
+        *,
+        callee: str,
+        operands: list[ValueRef] = ...,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> list[ValueRef]: ...
+    def slice(
+        self,
+        *,
+        source: ValueRef,
+        offsets: list[int | ValueRef],
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def loop(
+        self,
+        *,
+        lower_bound: ValueRef,
+        upper_bound: ValueRef,
+        step: ValueRef,
+        iter_args: list[ValueRef] = ...,
+        results: list[Type | TiedResultSpec],
+        body: Region | None = ...,
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> list[ValueRef]: ...
+    def block_args(
+        self,
+        *,
+        inputs: list[ValueRef] = ...,
+        body: Region | None = ...,
+    ) -> None: ...
+    def branch(
+        self,
+        *,
+        condition: ValueRef,
+        results: list[Type | TiedResultSpec],
+        then_region: Region | None = ...,
+        else_region: Region | None = ...,
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> list[ValueRef]: ...
+    def implicit_yield(
+        self,
+    ) -> None: ...
+    def yield_(
+        self,
+        *,
+        values: list[ValueRef] = ...,
+    ) -> None: ...
+    def br(
+        self,
+        *,
+        dest: Block,
+    ) -> None: ...
+    def func(
+        self,
+        *,
+        visibility: str | None = ...,
+        cc: str | None = ...,
+        callee: str,
+        args: list[ValueRef] = ...,
+        results: list[Type | TiedResultSpec],
+        predicates: list[Predicate] = ...,
+        body: Region | None = ...,
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> list[ValueRef]: ...
+    def decl(
+        self,
+        *,
+        visibility: str | None = ...,
+        cc: str | None = ...,
+        callee: str,
+        args: list[ValueRef] = ...,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> list[ValueRef]: ...
+    def record(
+        self,
+        *,
+        kind: str | None = ...,
+        symbol: str,
+        dict: Mapping[str, Any] | None = ...,
+    ) -> None: ...
+    def attrs(
+        self,
+        *,
+        input: ValueRef,
+        dict: Mapping[str, Any] | None = ...,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def operand_dict(
+        self,
+        *,
+        input: ValueRef,
+        params: dict[str, ValueRef] = ...,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def attr_table(
+        self,
+        *,
+        selector: ValueRef,
+        case_keys: list[int],
+        values: list[ValueRef] = ...,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> list[ValueRef]: ...
+    def region_table(
+        self,
+        *,
+        selector: ValueRef,
+        case_keys: list[int],
+        default_region: Region,
+        case_regions: list[Region],
+    ) -> None: ...
+    def deflate(
+        self,
+        *,
+        input: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> list[ValueRef]: ...
+    def assume(
+        self,
+        *,
+        values: list[ValueRef] = ...,
+        predicates: list[Predicate],
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> list[ValueRef]: ...
+    def convert(
+        self,
+        *,
+        input: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def reduce(
+        self,
+        *,
+        inputs: list[ValueRef] = ...,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def read_resource(
+        self,
+        *,
+        source: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def write_resource(
+        self,
+        *,
+        target: ValueRef,
+        data: ValueRef,
+    ) -> None: ...
+    def mutate_resource(
+        self,
+        *,
+        target: ValueRef,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def alloc(
+        self,
+        *,
+        size: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def isolated_region(
+        self,
+        *,
+        results: list[Type | TiedResultSpec],
+        body: Region | None = ...,
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> list[ValueRef]: ...
+    def counter(
+        self,
+        *,
+        value: int,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def dim(
+        self,
+        *,
+        source: ValueRef,
+        dim_index: int,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_range_lo(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_range_hi(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_all_equal_range_lo(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_all_equal_range_hi(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_divisor(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_non_negative(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_non_zero(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_positive(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_power_of_two(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_is_vector_iota(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_is_vector_prefix_mask(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_encoding_layout_kind(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_encoding_layout_stride_hi(
+        self,
+        *,
+        value: ValueRef,
+        axis: int,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_encoding_matrix_field(
+        self,
+        *,
+        value: ValueRef,
+        field: str,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_is_buffer_reference(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_is_view_reference(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_buffer_memory_space(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_view_memory_space(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_view_root_matches(
+        self,
+        *,
+        view: ValueRef,
+        root: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_alias_scope_known(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_alias_scope_matches(
+        self,
+        *,
+        lhs: ValueRef,
+        rhs: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_view_byte_offset_lo(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_view_byte_offset_hi(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_view_byte_length_lo(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_view_byte_length_hi(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_view_min_alignment(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_buffer_min_alignment(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_view_root_min_alignment(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def fact_view_element_bytes(
+        self,
+        *,
+        value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def region_syntax(
+        self,
+        *,
+        body: Region | None = ...,
+    ) -> None: ...
+    def low_asm_region(
+        self,
+        *,
+        body: Region | None = ...,
+    ) -> None: ...
+    def clause_constant(
+        self,
+        *,
+        value: Any,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def clause_copy(
+        self,
+        *,
+        source: ValueRef,
+        target: ValueRef,
+    ) -> None: ...
+    def typed_use(
+        self,
+        *,
+        values: list[ValueRef] = ...,
+    ) -> None: ...

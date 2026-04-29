@@ -7,7 +7,8 @@
 """Root-invocable runner for Loom generators.
 
 Usage:
-    python3 loom/py/loom/gen/run.py builders
+    python3 loom/py/loom/gen/run.py builders_pyi --in-place
+    python3 loom/py/loom/gen/run.py builders_pyi --check
     python3 loom/py/loom/gen/run.py c_tables
     python3 loom/py/loom/gen/run.py low_descriptors
     python3 loom/py/loom/gen/run.py textmate
@@ -22,14 +23,14 @@ from pathlib import Path
 import bootstrap
 
 GENERATORS = {
-    "builders": "loom.gen.builders",
+    "builders_pyi": "loom.gen.builders_pyi",
     "c_errors": "loom.gen.c_errors",
     "c_tables": "loom.gen.c_tables",
     "low_descriptors": "loom.gen.low_descriptors",
     "textmate": "loom.gen.textmate",
 }
 
-ARGUMENT_GENERATORS: set[str] = set()
+ARGUMENT_GENERATORS: set[str] = {"builders_pyi"}
 
 
 def _usage() -> str:

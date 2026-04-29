@@ -1,0 +1,52 @@
+# GENERATED FILE: DO NOT EDIT.
+# Generator: loom.gen.builders_pyi.
+# Regenerate: python3 loom/py/loom/gen/run.py builders_pyi --in-place
+# ruff: noqa
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from typing import Any
+
+from loom.builder import TiedResultSpec, ValueRef
+from loom.ir import Block, Predicate, Region, Type
+from loom.builders import DialectBuilder
+
+class GlobalBuilder(DialectBuilder):
+    def constant(
+        self,
+        *,
+        symbol: str,
+        results: list[Type | TiedResultSpec],
+        predicates: list[Predicate] = ...,
+        initializer: Any | None = ...,
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def variable(
+        self,
+        *,
+        symbol: str,
+        results: list[Type | TiedResultSpec],
+        predicates: list[Predicate] = ...,
+        initializer: Any | None = ...,
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def load(
+        self,
+        *,
+        global_: str,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> list[ValueRef]: ...
+    def store(
+        self,
+        *,
+        value: ValueRef,
+        global_: str,
+    ) -> None: ...

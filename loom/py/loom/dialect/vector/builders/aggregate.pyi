@@ -1,0 +1,96 @@
+# GENERATED FILE: DO NOT EDIT.
+# Generator: loom.gen.builders_pyi.
+# Regenerate: python3 loom/py/loom/gen/run.py builders_pyi --in-place
+# ruff: noqa
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from typing import Any
+
+from loom.builder import TiedResultSpec, ValueRef
+from loom.ir import Block, Predicate, Region, Type
+
+class VectorAggregateMixin:
+    def extract(
+        self,
+        *,
+        source: ValueRef,
+        indices: list[int | ValueRef],
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def insert(
+        self,
+        *,
+        value: ValueRef,
+        dest: ValueRef,
+        indices: list[int | ValueRef],
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def slice(
+        self,
+        *,
+        source: ValueRef,
+        offsets: list[int | ValueRef],
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def concat(
+        self,
+        *,
+        axis: int,
+        inputs: list[ValueRef] = ...,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def transpose(
+        self,
+        *,
+        permutation: list[int],
+        source: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def shuffle(
+        self,
+        *,
+        source_lanes: list[int],
+        source: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def interleave(
+        self,
+        *,
+        axis: int,
+        even: ValueRef,
+        odd: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...
+    def deinterleave(
+        self,
+        *,
+        axis: int,
+        source: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> list[ValueRef]: ...

@@ -47,8 +47,13 @@ def main() -> int:
 
     print("loom-lint: generators")
     ok &= _run(
-        "python builders",
-        [sys.executable, "loom/py/loom/gen/run.py", "builders"],
+        "python builder stubs",
+        [
+            sys.executable,
+            "loom/py/loom/gen/run.py",
+            "builders_pyi",
+            "--in-place",
+        ],
         cwd=REPO_ROOT,
     )
     ok &= _run(
