@@ -143,7 +143,7 @@ const loom_low_descriptor_set_t* loom_low_lower_context_descriptor_set(
 
 const loom_value_fact_table_t* loom_low_lower_context_fact_table(
     const loom_low_lower_context_t* context) {
-  return &context->lowering.fact_table;
+  return context->lowering.fact_table;
 }
 
 iree_host_size_t loom_low_lower_context_selected_plan_count(

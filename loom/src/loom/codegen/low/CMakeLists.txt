@@ -426,7 +426,6 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::target
-    loom::src::loom::ops::type_registry
     loom::src::loom::target::low_legality
     loom::src::loom::target::types
     loom::src::loom::util::fact_table
@@ -627,6 +626,7 @@ loom_cc_test(
     loom::src::loom::ops::scalar
     loom::src::loom::ops::target
     loom::src::loom::ops::vector
+    loom::src::loom::pass::value_facts
     loom::src::loom::target::test::descriptors_ids
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
@@ -656,6 +656,7 @@ loom_cc_test(
     loom::src::loom::ops::scalar
     loom::src::loom::ops::target
     loom::src::loom::ops::vector
+    loom::src::loom::pass::value_facts
     loom::src::loom::target::test::descriptors_ids
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
@@ -681,6 +682,7 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
     loom::src::loom::ops::target
+    loom::src::loom::pass::value_facts
     loom::src::loom::target::test::descriptors_ids
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
@@ -706,6 +708,7 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
     loom::src::loom::ops::target
+    loom::src::loom::pass::value_facts
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
     loom::src::loom::testing::diagnostic_matchers

@@ -17,6 +17,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/low/ops.h"
+#include "loom/pass/value_facts.h"
 #include "loom/verify/verify.h"
 
 static iree_status_t loom_low_source_workload_verify_general_module(
@@ -107,10 +108,14 @@ iree_status_t loom_low_source_workload_run_pipeline(
 
   iree_arena_allocator_t lowering_arena;
   bool lowering_arena_initialized = false;
+  loom_pass_value_fact_owner_t value_facts = {0};
+  bool value_facts_initialized = false;
   loom_low_lower_result_t lower_result = {0};
   if (iree_status_is_ok(status)) {
     iree_arena_initialize(block_pool, &lowering_arena);
     lowering_arena_initialized = true;
+    loom_pass_value_fact_owner_initialize(block_pool, &value_facts);
+    value_facts_initialized = true;
     const loom_low_source_selection_options_t selection_options = {
         .descriptor_registry = options->descriptor_registry,
         .policy_registry = options->policy_registry,
@@ -132,17 +137,28 @@ iree_status_t loom_low_source_workload_run_pipeline(
     for (iree_host_size_t i = 0;
          i < selection_list.count && iree_status_is_ok(status); ++i) {
       const loom_low_source_selection_t* selection = &selection_list.values[i];
+      loom_value_fact_table_t* fact_table = NULL;
+      status = loom_pass_value_fact_owner_acquire(
+          &value_facts, module,
+          loom_pass_value_fact_scope_function_for_target(
+              selection->func, selection->target_bundle),
+          &fact_table);
+      if (!iree_status_is_ok(status)) {
+        break;
+      }
       const loom_low_lower_options_t lower_options = {
           .target_ref = selection->target_ref,
           .bundle = selection->target_bundle,
           .descriptor_registry = options->descriptor_registry,
           .descriptor_requirements = options->descriptor_requirements,
           .policy = selection->policy,
+          .fact_table = fact_table,
           .max_errors = 20,
       };
       loom_low_lower_result_t func_lower_result = {0};
       status = loom_low_lower_function(module, selection->func, &lower_options,
                                        &func_lower_result);
+      loom_pass_value_fact_owner_invalidate(&value_facts);
       lower_result.error_count += func_lower_result.error_count;
       lower_result.remark_count += func_lower_result.remark_count;
       if (iree_status_is_ok(status) && func_lower_result.error_count != 0) {
@@ -226,6 +242,9 @@ iree_status_t loom_low_source_workload_run_pipeline(
     }
   }
 
+  if (value_facts_initialized) {
+    loom_pass_value_fact_owner_deinitialize(&value_facts);
+  }
   if (lowering_arena_initialized) {
     iree_arena_deinitialize(&lowering_arena);
   }

@@ -29,6 +29,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/target/ops.h"
+#include "loom/pass/value_facts.h"
 #include "loom/target/low_descriptor_registry_manifest.h"
 #include "loom/target/low_packet_diagnostics.h"
 #include "loom/target/module_compiler.h"
@@ -1268,6 +1269,8 @@ static iree_status_t loom_check_emit_write_source_low_text(
 
   iree_arena_allocator_t selection_arena;
   iree_arena_initialize(module->arena.block_pool, &selection_arena);
+  loom_pass_value_fact_owner_t value_facts = {0};
+  loom_pass_value_fact_owner_initialize(module->arena.block_pool, &value_facts);
   loom_low_source_selection_list_t selection_list = {0};
   const loom_low_source_selection_options_t selection_options = {
       .descriptor_registry = &low_registry->registry,
@@ -1289,6 +1292,15 @@ static iree_status_t loom_check_emit_write_source_low_text(
                                        descriptor_set_key)) {
       has_multiple_descriptor_sets = true;
     }
+    loom_value_fact_table_t* fact_table = NULL;
+    status = loom_pass_value_fact_owner_acquire(
+        &value_facts, module,
+        loom_pass_value_fact_scope_function_for_target(
+            selection->func, selection->target_bundle),
+        &fact_table);
+    if (!iree_status_is_ok(status)) {
+      break;
+    }
     const loom_low_lower_options_t lower_options = {
         .target_ref = selection->target_ref,
         .bundle = selection->target_bundle,
@@ -1298,12 +1310,14 @@ static iree_status_t loom_check_emit_write_source_low_text(
         .legality_provider_list = legality_provider_list,
         .legality_diagnostic_flags = request->source_low_diagnostic_flags,
         .policy = selection->policy,
+        .fact_table = fact_table,
         .emitter = loom_target_module_compile_emitter(&pass_emitter),
         .max_errors = 20,
     };
     loom_low_lower_result_t lower_result = {0};
     status = loom_low_lower_function(module, selection->func, &lower_options,
                                      &lower_result);
+    loom_pass_value_fact_owner_invalidate(&value_facts);
     if (iree_status_is_ok(status) &&
         (lower_result.error_count > 0 || lower_result.low_func_op == NULL)) {
       status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1312,6 +1326,7 @@ static iree_status_t loom_check_emit_write_source_low_text(
                                 lower_result.error_count == 1 ? "" : "s");
     }
   }
+  loom_pass_value_fact_owner_deinitialize(&value_facts);
   iree_arena_deinitialize(&selection_arena);
   IREE_RETURN_IF_ERROR(status);
   if (selection_list.count == 0) {

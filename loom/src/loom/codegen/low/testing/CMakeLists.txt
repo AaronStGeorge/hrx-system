@@ -56,6 +56,7 @@ loom_cc_library(
     loom::src::loom::ops::func
     loom::src::loom::ops::low
     loom::src::loom::pass::registry
+    loom::src::loom::pass::value_facts
     loom::src::loom::verify
   TESTONLY
   PUBLIC

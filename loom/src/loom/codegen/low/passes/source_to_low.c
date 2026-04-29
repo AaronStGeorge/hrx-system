@@ -14,6 +14,7 @@
 #include "loom/codegen/low/source_selection.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
+#include "loom/pass/value_facts.h"
 #include "loom/verify/verify.h"
 
 typedef struct loom_low_source_to_low_pass_state_t {
@@ -181,6 +182,13 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
     const loom_low_source_selection_t* selection = &selection_list.values[i];
     const loom_target_low_legality_provider_list_t* legality_provider_list =
         loom_low_pass_capability_legality_provider_list(low_capability);
+    loom_value_fact_table_t* fact_table = NULL;
+    status = loom_pass_value_facts_acquire(
+        pass, module,
+        loom_pass_value_fact_scope_function_for_target(
+            selection->func, selection->target_bundle),
+        &fact_table);
+    if (!iree_status_is_ok(status)) break;
     const loom_low_lower_options_t lower_options = {
         .target_ref = selection->target_ref,
         .bundle = selection->target_bundle,
@@ -192,12 +200,14 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
                 ? *legality_provider_list
                 : loom_target_low_legality_provider_list_empty(),
         .policy = selection->policy,
+        .fact_table = fact_table,
         .emitter = pass->diagnostic_emitter,
         .max_errors = state ? state->max_errors : 20,
     };
     loom_low_lower_result_t lower_result = {0};
     status = loom_low_lower_function(module, selection->func, &lower_options,
                                      &lower_result);
+    loom_pass_value_fact_owner_invalidate(pass->value_facts);
     loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_ERRORS,
                             lower_result.error_count);
     loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_REMARKS,

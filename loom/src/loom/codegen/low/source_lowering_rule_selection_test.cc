@@ -18,6 +18,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/target/ops.h"
+#include "loom/pass/value_facts.h"
 #include "loom/target/test/descriptors.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/target/test/lower.h"
@@ -236,6 +237,15 @@ class SourceLoweringRuleSelectionTest : public ::testing::Test {
     loom_low_source_selection_t selection = {};
     IREE_CHECK_OK(loom_low_select_source_func(module, &selection_options,
                                               &selection_arena, &selection));
+    loom_pass_value_fact_owner_t value_facts = {};
+    loom_pass_value_fact_owner_initialize(module->arena.block_pool,
+                                          &value_facts);
+    loom_value_fact_table_t* fact_table = nullptr;
+    IREE_ASSERT_OK(loom_pass_value_fact_owner_acquire(
+        &value_facts, module,
+        loom_pass_value_fact_scope_function_for_target(selection.func,
+                                                       selection.target_bundle),
+        &fact_table));
     const loom_low_lower_options_t options = {
         .target_ref = selection.target_ref,
         .bundle = selection.target_bundle,
@@ -243,10 +253,12 @@ class SourceLoweringRuleSelectionTest : public ::testing::Test {
         .descriptor_requirements =
             LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .policy = selection.policy,
+        .fact_table = fact_table,
         .max_errors = 20,
     };
     IREE_CHECK_OK(
         loom_low_lower_function(module, selection.func, &options, out_result));
+    loom_pass_value_fact_owner_deinitialize(&value_facts);
     iree_arena_deinitialize(&selection_arena);
   }
 

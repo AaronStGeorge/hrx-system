@@ -16,6 +16,7 @@
 #include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/pass/builtin_registry.h"
+#include "loom/pass/value_facts.h"
 #include "loom/target/compile_report_low.h"
 #include "loom/target/emit/ireevm/function_bytecode.h"
 #include "loom/target/emit/ireevm/low_registry.h"
@@ -125,6 +126,7 @@ static iree_status_t loom_ireevm_module_compile_lower_function(
     loom_func_like_t source_function,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     uint32_t max_errors, iree_arena_allocator_t* table_arena,
+    loom_pass_value_fact_owner_t* value_facts,
     loom_target_compile_report_t* report, loom_low_lower_result_t* out_result) {
   loom_low_lower_policy_registry_t policy_registry = {0};
   loom_ireevm_low_lower_policy_registry_initialize(&policy_registry);
@@ -135,6 +137,12 @@ static iree_status_t loom_ireevm_module_compile_lower_function(
   loom_low_lower_report_storage_t report_storage = {0};
   IREE_RETURN_IF_ERROR(loom_target_compile_report_allocate_low_lowering_rows(
       report, table_arena, &report_storage));
+  loom_value_fact_table_t* fact_table = NULL;
+  IREE_RETURN_IF_ERROR(loom_pass_value_fact_owner_acquire(
+      value_facts, module,
+      loom_pass_value_fact_scope_function_for_target(
+          source_function, &entry->bundle_storage.bundle),
+      &fact_table));
   const loom_low_lower_options_t lower_options = {
       .target_ref = entry->target_ref,
       .bundle = &entry->bundle_storage.bundle,
@@ -142,14 +150,17 @@ static iree_status_t loom_ireevm_module_compile_lower_function(
       .descriptor_requirements =
           LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
       .policy = policy,
+      .fact_table = fact_table,
       .emitter = loom_target_module_compile_emitter(diagnostic_emitter),
       .max_errors = max_errors,
       .report_enabled = report != NULL,
       .report_storage = report_storage,
       .table_arena = table_arena,
   };
-  IREE_RETURN_IF_ERROR(loom_low_lower_function(module, source_function,
-                                               &lower_options, out_result));
+  iree_status_t status = loom_low_lower_function(module, source_function,
+                                                 &lower_options, out_result);
+  loom_pass_value_fact_owner_invalidate(value_facts);
+  IREE_RETURN_IF_ERROR(status);
   if (report != NULL) {
     loom_target_compile_report_record_low_lowering(report, out_result);
   }
@@ -218,6 +229,8 @@ iree_status_t loom_ireevm_compile_module_archive(
   iree_arena_block_pool_initialize(32 * 1024, allocator, &block_pool);
   iree_arena_allocator_t table_arena;
   iree_arena_initialize(&block_pool, &table_arena);
+  loom_pass_value_fact_owner_t value_facts;
+  loom_pass_value_fact_owner_initialize(&block_pool, &value_facts);
 
   iree_status_t status = loom_target_module_compile_verify_module(
       module, &target_options, LOOM_IREEVM_MODULE_COMPILE_DEFAULT_MAX_ERRORS);
@@ -246,7 +259,7 @@ iree_status_t loom_ireevm_compile_module_archive(
   if (iree_status_is_ok(status)) {
     status = loom_ireevm_module_compile_lower_function(
         module, &low_registry, &entry, source_function, &diagnostic_emitter,
-        max_errors, &table_arena, report, &lower_result);
+        max_errors, &table_arena, &value_facts, report, &lower_result);
   }
   if (iree_status_is_ok(status) && report != NULL) {
     status = loom_ireevm_module_compile_symbol_name(
@@ -329,6 +342,7 @@ iree_status_t loom_ireevm_compile_module_archive(
     loom_target_compile_report_record_status(report, status);
   }
   loom_ireevm_function_bytecode_deinitialize(&bytecode, allocator);
+  loom_pass_value_fact_owner_deinitialize(&value_facts);
   iree_arena_deinitialize(&table_arena);
   iree_arena_block_pool_deinitialize(&block_pool);
   iree_string_builder_deinitialize(&calling_convention_builder);

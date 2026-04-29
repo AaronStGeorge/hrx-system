@@ -285,6 +285,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::ops::target
     loom::src::loom::pass::builtin_registry
+    loom::src::loom::pass::value_facts
     loom::src::loom::target::arch::amdgpu::hal_kernel_abi
     loom::src::loom::target::arch::amdgpu::hal_resource_materialization
     loom::src::loom::target::arch::amdgpu::low_registry

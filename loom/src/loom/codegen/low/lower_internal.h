@@ -16,7 +16,6 @@
 #include "loom/codegen/low/memory_access.h"
 #include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
-#include "loom/util/fact_table.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,8 +44,8 @@ typedef struct loom_low_lower_selected_plan_t {
 typedef struct loom_low_lowering_frame_t {
   // Active source-function value domain for dense per-value lowering state.
   loom_local_value_domain_t value_domain;
-  // Source value facts computed once before planning.
-  loom_value_fact_table_t fact_table;
+  // Borrowed source value facts computed before planning.
+  loom_value_fact_table_t* fact_table;
   // Source local value ordinal to emitted low value ID map.
   loom_value_id_t* value_map;
   // Source block ordinal to emitted low block pointer map.

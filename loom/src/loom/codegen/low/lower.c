@@ -20,7 +20,6 @@
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
-#include "loom/ops/type_registry.h"
 
 static bool loom_low_lower_type_is_none(loom_type_t type) {
   return loom_type_kind(type) == LOOM_TYPE_NONE;
@@ -212,6 +211,15 @@ static iree_status_t loom_low_lower_validate_options(
       !options->bundle->export_plan || !options->bundle->config) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "complete target bundle is required");
+  }
+  if (!options->fact_table) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "source value facts are required");
+  }
+  if (options->fact_table->context.target_bundle != options->bundle) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "source value facts must be scoped to the selected target bundle");
   }
   if (!options->descriptor_registry) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1118,6 +1126,7 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
       .policy = options->policy,
       .result = out_result,
   };
+  context.lowering.fact_table = options->fact_table;
   if (options->report_enabled) {
     out_result->report_rows = options->report_storage.rows;
     out_result->report_row_capacity = options->report_storage.row_capacity;
@@ -1126,23 +1135,12 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
 
   iree_status_t status =
       loom_low_lowering_frame_initialize_value_ordinals(&context, source_body);
-  if (iree_status_is_ok(status)) {
-    status = loom_value_fact_table_initialize(
-        &context.lowering.fact_table, &context.arena, module->values.count);
-  }
-  context.lowering.fact_table.context.target_bundle = options->bundle;
-  loom_type_registry_configure_fact_context(
-      &context.lowering.fact_table.context);
-  if (iree_status_is_ok(status)) {
-    status = loom_value_fact_table_compute(&context.lowering.fact_table, module,
-                                           source_function);
-  }
 
   loom_vector_memory_footprint_result_t footprint_result = {0};
   if (iree_status_is_ok(status)) {
     const loom_vector_memory_footprint_options_t footprint_options = {
         .arena = &context.arena,
-        .fact_table = &context.lowering.fact_table,
+        .fact_table = context.lowering.fact_table,
         .emitter = options->emitter,
         .max_errors = options->max_errors,
     };
@@ -1162,7 +1160,7 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
   if (iree_status_is_ok(status)) {
     loom_kernel_async_legality_options_t async_legality_options = {
         .arena = &context.arena,
-        .fact_table = &context.lowering.fact_table,
+        .fact_table = context.lowering.fact_table,
         .value_domain = &context.lowering.value_domain,
         .emitter = options->emitter,
         .phase_name = IREE_SV("source-low"),
@@ -1187,7 +1185,7 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
         .descriptor_registry = options->descriptor_registry,
         .descriptor_requirements = options->descriptor_requirements,
         .provider_list = options->legality_provider_list,
-        .fact_table = &context.lowering.fact_table,
+        .fact_table = context.lowering.fact_table,
         .diagnostic_flags = options->legality_diagnostic_flags,
         .emitter = options->emitter,
         .max_errors = options->max_errors,

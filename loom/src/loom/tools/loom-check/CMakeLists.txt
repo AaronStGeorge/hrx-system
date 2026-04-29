@@ -80,6 +80,7 @@ loom_cc_library(
     loom::src::loom::pass::builtin_registry
     loom::src::loom::pass::pipeline
     loom::src::loom::pass::tooling
+    loom::src::loom::pass::value_facts
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::low_descriptor_registry_manifest
     loom::src::loom::target::low_legality

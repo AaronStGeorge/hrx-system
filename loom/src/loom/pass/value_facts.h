@@ -59,6 +59,16 @@ static inline loom_pass_value_fact_scope_t loom_pass_value_fact_scope_function(
   };
 }
 
+static inline loom_pass_value_fact_scope_t
+loom_pass_value_fact_scope_function_for_target(
+    loom_func_like_t function, const loom_target_bundle_t* target_bundle) {
+  return (loom_pass_value_fact_scope_t){
+      .kind = LOOM_PASS_VALUE_FACT_SCOPE_FUNCTION,
+      .function = function,
+      .target_bundle = target_bundle,
+  };
+}
+
 static inline loom_pass_value_fact_scope_t loom_pass_value_fact_scope_module(
     void) {
   return (loom_pass_value_fact_scope_t){

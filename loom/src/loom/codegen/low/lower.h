@@ -350,6 +350,9 @@ typedef struct loom_low_lower_options_t {
   loom_target_low_legality_diagnostic_flags_t legality_diagnostic_flags;
   // Target lowering policy for descriptor and type choices.
   const loom_low_lower_policy_t* policy;
+  // Borrowed source value facts for |source_function| and |bundle|. Lowering
+  // is a pure consumer of facts; callers own acquisition and invalidation.
+  loom_value_fact_table_t* fact_table;
   // Structured diagnostic emitter for user legality and lowering failures.
   iree_diagnostic_emitter_t emitter;
   // Maximum number of errors to emit before aborting. Zero means no limit.

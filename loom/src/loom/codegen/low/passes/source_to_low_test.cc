@@ -18,6 +18,7 @@
 #include "loom/ops/func/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
+#include "loom/pass/value_facts.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/target/test/lower.h"
 #include "loom/testing/module_ptr.h"
@@ -141,6 +142,8 @@ TEST_F(LowLowerPassTest, VerifiesLoweredModuleBeforeReturningSuccess) {
 
   iree_arena_allocator_t instance_arena;
   iree_arena_initialize(&block_pool_, &instance_arena);
+  loom_pass_value_fact_owner_t value_facts = {};
+  loom_pass_value_fact_owner_initialize(&block_pool_, &value_facts);
   const loom_pass_info_t* pass_info = loom_low_source_to_low_pass_info();
   std::vector<int64_t> statistics(pass_info->statistic_count, 0);
   loom_low_pass_environment_storage_t low_pass_environment_storage;
@@ -155,12 +158,14 @@ TEST_F(LowLowerPassTest, VerifiesLoweredModuleBeforeReturningSuccess) {
       .arena = &instance_arena,
       .statistics = statistics.data(),
       .environment = &environment,
+      .value_facts = &value_facts,
   };
 
   IREE_ASSERT_OK(
       loom_low_source_to_low_create(&pass, iree_string_view_empty()));
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_low_source_to_low_run(&pass, module.get()));
+  loom_pass_value_fact_owner_deinitialize(&value_facts);
   iree_arena_deinitialize(&instance_arena);
 }
 
