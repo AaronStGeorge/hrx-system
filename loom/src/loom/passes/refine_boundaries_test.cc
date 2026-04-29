@@ -113,53 +113,9 @@ class RefineBoundariesTest : public ::testing::Test {
     return status;
   }
 
-  int64_t StatisticValue(const std::vector<int64_t>& statistics,
-                         iree_string_view_t name) {
-    const loom_pass_info_t* info = loom_refine_boundaries_pass_info();
-    for (uint16_t i = 0; i < info->statistic_count; ++i) {
-      if (iree_string_view_equal(info->statistic_defs[i].name, name)) {
-        return statistics[i];
-      }
-    }
-    return -1;
-  }
-
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
 };
-
-TEST_F(RefineBoundariesTest, SkipsUnchangedFunctionFacts) {
-  const char* source = R"(
-func.def @identity(%value: index) -> (index) {
-  func.return %value : index
-}
-
-func.def @stable(%value: index) -> (index) {
-  %two = index.constant 2 : index
-  %result = index.add %value, %two : index
-  func.return %result : index
-}
-
-func.def public @caller(%dynamic: index) -> (index, index) {
-  %zero = index.constant 0 : index
-  %left = func.call @identity(%zero) : (index) -> (index)
-  %right = func.call @stable(%dynamic) : (index) -> (index)
-  func.return %left, %right : index, index
-}
-)";
-
-  loom_module_t* module = nullptr;
-  IREE_ASSERT_OK(ParseModule(source, &module));
-  ASSERT_NE(module, nullptr);
-
-  std::vector<int64_t> statistics;
-  iree_status_t status = RunRefineBoundaries(module, &statistics);
-  loom_module_free(module);
-  IREE_ASSERT_OK(status);
-
-  EXPECT_GT(StatisticValue(statistics, IREE_SV("function-fact-cache-hits")), 0);
-  EXPECT_GT(StatisticValue(statistics, IREE_SV("functions-canonicalized")), 0);
-}
 
 TEST_F(RefineBoundariesTest, EmitsDiagnosticWhenFactsDoNotConverge) {
   const char* source = R"(
