@@ -363,10 +363,12 @@ loom_cc_test(
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar
     loom::src::loom::ops::scf
+    loom::src::loom::ops::type_registry
     loom::src::loom::ops::vector
     loom::src::loom::target::test::low_registry
     loom::src::loom::testing::diagnostic_matchers
     loom::src::loom::testing::module_ptr
+    loom::src::loom::util::fact_table
     iree::testing::gtest
     iree::testing::gtest_main
 )

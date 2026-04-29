@@ -193,7 +193,9 @@ loom_cc_library(
     loom::src::loom::analysis::kernel_async_legality
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::type_registry
     loom::src::loom::pass::types
+    loom::src::loom::util::fact_table
   PUBLIC
 )
 
@@ -444,7 +446,9 @@ loom_cc_library(
     iree::base
     loom::src::loom::analysis::vector_memory_footprint
     loom::src::loom::ir
+    loom::src::loom::ops::type_registry
     loom::src::loom::pass::types
+    loom::src::loom::util::fact_table
   PUBLIC
 )
 

@@ -14,7 +14,6 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
-#include "loom/ops/type_registry.h"
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/util/fact_table.h"
@@ -38,9 +37,6 @@ typedef struct loom_vector_memory_footprint_state_t {
 
   // Result object receiving counters and proof failures.
   loom_vector_memory_footprint_result_t* result;
-
-  // Locally computed fact table when the caller did not provide one.
-  loom_value_fact_table_t local_fact_table;
 
   // True once the current access has emitted a proof failure.
   bool current_access_failed;
@@ -1105,7 +1101,9 @@ iree_status_t loom_vector_memory_footprint_verify_function(
     const loom_vector_memory_footprint_options_t* options,
     loom_vector_memory_footprint_result_t* out_result) {
   IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(options && options->arena);
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(options->arena);
+  IREE_ASSERT_ARGUMENT(options->fact_table);
   IREE_ASSERT_ARGUMENT(out_result);
   *out_result = (loom_vector_memory_footprint_result_t){0};
 
@@ -1120,15 +1118,6 @@ iree_status_t loom_vector_memory_footprint_verify_function(
       .fact_table = options->fact_table,
       .result = out_result,
   };
-  if (state.fact_table == NULL) {
-    IREE_RETURN_IF_ERROR(loom_value_fact_table_initialize(
-        &state.local_fact_table, options->arena, module->values.count));
-    state.local_fact_table.context.target_bundle = options->target_bundle;
-    loom_type_registry_configure_fact_context(&state.local_fact_table.context);
-    IREE_RETURN_IF_ERROR(loom_value_fact_table_compute(&state.local_fact_table,
-                                                       module, function));
-    state.fact_table = &state.local_fact_table;
-  }
   loom_symbolic_expr_context_initialize(
       module, state.fact_table, options->arena, &state.expression_context);
 

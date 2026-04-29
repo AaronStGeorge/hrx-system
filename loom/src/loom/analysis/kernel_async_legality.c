@@ -33,11 +33,8 @@ typedef struct loom_kernel_async_legality_state_t {
   // Result object receiving diagnostic and stream counters.
   loom_kernel_async_legality_result_t* result;
 
-  // Precomputed or locally computed function-local value facts.
+  // Caller-owned function-local value facts.
   loom_value_fact_table_t* fact_table;
-
-  // Locally computed value facts when options.fact_table is NULL.
-  loom_value_fact_table_t local_fact_table;
 
   // Target-independent movement analysis for async token producers.
   loom_movement_analysis_t movement_analysis;
@@ -215,14 +212,6 @@ static iree_status_t loom_kernel_async_legality_ensure_movement_analysis(
     loom_kernel_async_legality_state_t* state) {
   if (state->movement_analysis_ready) {
     return iree_ok_status();
-  }
-  if (!state->fact_table) {
-    IREE_RETURN_IF_ERROR(loom_value_fact_table_initialize(
-        &state->local_fact_table, state->options->arena,
-        state->module->values.count));
-    IREE_RETURN_IF_ERROR(loom_value_fact_table_compute(
-        &state->local_fact_table, state->module, state->function));
-    state->fact_table = &state->local_fact_table;
   }
   IREE_RETURN_IF_ERROR(loom_movement_analysis_initialize(
       state->fact_table, state->options->value_domain, state->options->arena,
@@ -685,6 +674,10 @@ iree_status_t loom_kernel_async_legality_verify_function(
     const loom_kernel_async_legality_options_t* options,
     loom_kernel_async_legality_result_t* out_result) {
   IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(options->arena);
+  IREE_ASSERT_ARGUMENT(options->value_domain);
+  IREE_ASSERT_ARGUMENT(options->fact_table);
   IREE_ASSERT_ARGUMENT(out_result);
   *out_result = (loom_kernel_async_legality_result_t){0};
 
@@ -692,7 +685,6 @@ iree_status_t loom_kernel_async_legality_verify_function(
   if (!body) {
     return iree_ok_status();
   }
-  IREE_ASSERT_ARGUMENT(options && options->arena && options->value_domain);
   IREE_ASSERT_EQ(options->value_domain->region, body);
 
   loom_kernel_async_legality_state_t state = {

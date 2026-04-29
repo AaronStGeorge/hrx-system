@@ -1143,7 +1143,6 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
     const loom_vector_memory_footprint_options_t footprint_options = {
         .arena = &context.arena,
         .fact_table = &context.lowering.fact_table,
-        .target_bundle = options->bundle,
         .emitter = options->emitter,
         .max_errors = options->max_errors,
     };

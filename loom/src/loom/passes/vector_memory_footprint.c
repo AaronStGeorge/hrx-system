@@ -9,6 +9,8 @@
 #include <inttypes.h>
 
 #include "loom/analysis/vector_memory_footprint.h"
+#include "loom/ops/type_registry.h"
+#include "loom/util/fact_table.h"
 
 enum {
   LOOM_VECTOR_MEMORY_FOOTPRINT_STAT_OPS_CHECKED = 0,
@@ -37,9 +39,20 @@ const loom_pass_info_t* loom_vector_memory_footprint_pass_info(void) {
 iree_status_t loom_vector_memory_footprint_run(loom_pass_t* pass,
                                                loom_module_t* module,
                                                loom_func_like_t function) {
+  if (!loom_func_like_body(function)) {
+    return iree_ok_status();
+  }
+  loom_value_fact_table_t fact_table = {0};
+  IREE_RETURN_IF_ERROR(loom_value_fact_table_initialize(
+      &fact_table, pass->arena, module->values.count));
+  loom_type_registry_configure_fact_context(&fact_table.context);
+  IREE_RETURN_IF_ERROR(
+      loom_value_fact_table_compute(&fact_table, module, function));
+
   loom_vector_memory_footprint_result_t result = {0};
   const loom_vector_memory_footprint_options_t options = {
       .arena = pass->arena,
+      .fact_table = &fact_table,
       .emitter = pass->diagnostic_emitter,
   };
   IREE_RETURN_IF_ERROR(loom_vector_memory_footprint_verify_function(

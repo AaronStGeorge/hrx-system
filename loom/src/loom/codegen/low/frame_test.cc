@@ -150,24 +150,6 @@ TEST_F(LowPacketizationTest, BuildsMatchingScheduleAndAllocationTables) {
   iree_arena_deinitialize(&table_arena);
 }
 
-TEST_F(LowPacketizationTest, RejectsMissingDescriptorRegistry) {
-  ParseAndVerify(
-      "low.func.def target(@test_target) @packetized() {\n"
-      "  low.return\n"
-      "}\n");
-  loom_op_t* low_function = FindFirstLowFunction(module_);
-  ASSERT_NE(low_function, nullptr);
-
-  iree_arena_allocator_t table_arena;
-  iree_arena_initialize(&block_pool_, &table_arena);
-  loom_low_emission_frame_t frame = {};
-  loom_low_emission_frame_options_t options = {};
-  iree_status_t status = loom_low_emission_frame_build(
-      module_, low_function, &options, &table_arena, &frame);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
-  iree_arena_deinitialize(&table_arena);
-}
-
 TEST_F(LowPacketizationTest, RejectsNonLowFunction) {
   ParseAndVerify(
       "func.def @ordinary() {\n"

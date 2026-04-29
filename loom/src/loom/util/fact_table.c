@@ -71,33 +71,14 @@ struct loom_value_fact_extension_entry_t {
   } payload;
 };
 
-static iree_status_t loom_value_fact_table_ensure_capacity(
-    loom_value_fact_table_t* table, iree_host_size_t minimum_count) {
-  if (minimum_count <= table->capacity) return iree_ok_status();
-
-  iree_host_size_t new_capacity = table->capacity > 0 ? table->capacity : 256;
-  while (new_capacity < minimum_count) {
-    if (new_capacity > SIZE_MAX / 2) {
-      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                              "fact table capacity overflow");
-    }
-    new_capacity *= 2;
-  }
-
-  loom_value_facts_t* new_entries = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(table->arena, new_capacity,
+static iree_status_t loom_value_fact_table_allocate_initial_capacity(
+    loom_value_fact_table_t* table, iree_host_size_t capacity) {
+  if (capacity == 0) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(table->arena, capacity,
                                                  sizeof(loom_value_facts_t),
-                                                 (void**)&new_entries));
-
-  // Zero-fill: known_divisor == 0 is the "undefined" sentinel.
-  memset(new_entries, 0, new_capacity * sizeof(loom_value_facts_t));
-  if (table->count > 0) {
-    memcpy(new_entries, table->entries,
-           table->count * sizeof(loom_value_facts_t));
-  }
-
-  table->entries = new_entries;
-  table->capacity = new_capacity;
+                                                 (void**)&table->entries));
+  memset(table->entries, 0, capacity * sizeof(loom_value_facts_t));
+  table->capacity = capacity;
   return iree_ok_status();
 }
 
@@ -1059,18 +1040,20 @@ bool loom_value_facts_query_extension_payload(
 iree_status_t loom_value_fact_table_initialize(
     loom_value_fact_table_t* table, iree_arena_allocator_t* arena,
     iree_host_size_t initial_capacity) {
+  IREE_ASSERT_ARGUMENT(table);
+  IREE_ASSERT_ARGUMENT(arena);
   memset(table, 0, sizeof(*table));
   table->arena = arena;
   table->context.table = table;
-  if (initial_capacity == 0) return iree_ok_status();
-  return loom_value_fact_table_ensure_capacity(table, initial_capacity);
+  return loom_value_fact_table_allocate_initial_capacity(table,
+                                                         initial_capacity);
 }
 
 iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
                                            loom_value_id_t value_id,
                                            loom_value_facts_t facts) {
-  IREE_RETURN_IF_ERROR(loom_value_fact_table_ensure_capacity(
-      table, (iree_host_size_t)value_id + 1));
+  IREE_ASSERT_ARGUMENT(table);
+  IREE_ASSERT_LT(value_id, table->capacity);
   table->entries[value_id] = facts;
   if ((iree_host_size_t)value_id + 1 > table->count) {
     table->count = (iree_host_size_t)value_id + 1;

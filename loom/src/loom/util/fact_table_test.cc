@@ -149,7 +149,7 @@ TEST_F(FactTableTest, ZeroInitIsValid) {
 TEST_F(FactTableTest, InitializePreallocates) {
   loom_value_fact_table_t table = {0};
   IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 100));
-  EXPECT_GE(table.capacity, (iree_host_size_t)100);
+  EXPECT_EQ(table.capacity, (iree_host_size_t)100);
   // All entries are undefined (unknown).
   loom_value_facts_t facts = loom_value_fact_table_lookup(&table, 0);
   EXPECT_TRUE(loom_value_facts_is_unknown(facts));
@@ -201,35 +201,17 @@ TEST_F(FactTableTest, DefineUpdatesExisting) {
 }
 
 //===----------------------------------------------------------------------===//
-// Growth
+// Capacity
 //===----------------------------------------------------------------------===//
 
-TEST_F(FactTableTest, LazyGrowth) {
-  // Initialize with zero capacity — no entries pre-allocated.
+TEST_F(FactTableTest, DefineWithinCapacityPreservesExistingEntries) {
   loom_value_fact_table_t table = {0};
-  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
-  EXPECT_EQ(table.capacity, (iree_host_size_t)0);
-
-  // Define a value — should trigger allocation.
-  IREE_ASSERT_OK(
-      loom_value_fact_table_define(&table, 10, loom_value_facts_exact_i64(7)));
-
-  EXPECT_GT(table.capacity, (iree_host_size_t)10);
-  loom_value_facts_t result = loom_value_fact_table_lookup(&table, 10);
-  EXPECT_TRUE(loom_value_facts_is_exact(result));
-  EXPECT_EQ(result.range_lo, 7);
-}
-
-TEST_F(FactTableTest, GrowthPreservesExistingEntries) {
-  loom_value_fact_table_t table = {0};
-  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 4));
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 101));
 
   IREE_ASSERT_OK(
       loom_value_fact_table_define(&table, 0, loom_value_facts_exact_i64(10)));
   IREE_ASSERT_OK(
       loom_value_fact_table_define(&table, 1, loom_value_facts_exact_i64(20)));
-
-  // Define beyond capacity to trigger growth.
   IREE_ASSERT_OK(loom_value_fact_table_define(&table, 100,
                                               loom_value_facts_exact_i64(30)));
 
@@ -478,7 +460,7 @@ TEST_F(FactTableTest, EncodingSummaryStridedLayoutInternsStrideFacts) {
 
 TEST_F(FactTableTest, CloneDefinedFactsReinternsExtensions) {
   loom_value_fact_table_t source = {0};
-  IREE_ASSERT_OK(loom_value_fact_table_initialize(&source, &arena_, 0));
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&source, &arena_, 8));
 
   loom_value_facts_t strides[] = {
       loom_value_facts_make(16, 64, 16),
@@ -502,7 +484,7 @@ TEST_F(FactTableTest, CloneDefinedFactsReinternsExtensions) {
   iree_arena_allocator_t target_arena;
   iree_arena_initialize(&block_pool_, &target_arena);
   loom_value_fact_table_t target = {0};
-  IREE_ASSERT_OK(loom_value_fact_table_initialize(&target, &target_arena, 0));
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&target, &target_arena, 8));
   IREE_ASSERT_OK(
       loom_value_fact_table_clone_defined_facts(&target, &source, nullptr));
 

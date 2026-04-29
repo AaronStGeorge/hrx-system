@@ -25,6 +25,7 @@
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
+#include "loom/ops/type_registry.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/testing/diagnostic_matchers.h"
@@ -162,8 +163,30 @@ class TargetLowLegalityTest : public ::testing::Test {
             LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .emitter = collector->emitter(),
     };
-    return loom_target_low_verify_function_legality(
-        module, FirstFunction(module), &options, result);
+    return VerifyWithOptions(module, options, result);
+  }
+
+  iree_status_t VerifyWithOptions(loom_module_t* module,
+                                  loom_target_low_legality_options_t options,
+                                  loom_target_low_legality_result_t* result) {
+    loom_func_like_t function = FirstFunction(module);
+    iree_arena_allocator_t fact_arena = {0};
+    iree_arena_initialize(&block_pool_, &fact_arena);
+    loom_value_fact_table_t fact_table = {0};
+    iree_status_t status = loom_value_fact_table_initialize(
+        &fact_table, &fact_arena, module->values.count);
+    if (iree_status_is_ok(status)) {
+      fact_table.context.target_bundle = options.bundle;
+      loom_type_registry_configure_fact_context(&fact_table.context);
+      status = loom_value_fact_table_compute(&fact_table, module, function);
+    }
+    if (iree_status_is_ok(status)) {
+      options.fact_table = &fact_table;
+      status = loom_target_low_verify_function_legality(module, function,
+                                                        &options, result);
+    }
+    iree_arena_deinitialize(&fact_arena);
+    return status;
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -349,8 +372,7 @@ TEST_F(TargetLowLegalityTest, ProviderMayClaimProviderRequiredOp) {
       .emitter = collector.emitter(),
   };
   loom_target_low_legality_result_t result = {};
-  IREE_ASSERT_OK(loom_target_low_verify_function_legality(
-      module.get(), FirstFunction(module.get()), &options, &result));
+  IREE_ASSERT_OK(VerifyWithOptions(module.get(), options, &result));
 
   EXPECT_EQ(result.error_count, 0u);
   EXPECT_EQ(result.remark_count, 0u);
@@ -404,8 +426,7 @@ TEST_F(TargetLowLegalityTest, ProviderMayClaimTensorAsyncContractValues) {
       .emitter = collector.emitter(),
   };
   loom_target_low_legality_result_t result = {};
-  IREE_ASSERT_OK(loom_target_low_verify_function_legality(
-      module.get(), FirstFunction(module.get()), &options, &result));
+  IREE_ASSERT_OK(VerifyWithOptions(module.get(), options, &result));
 
   EXPECT_EQ(result.error_count, 0u);
   EXPECT_EQ(result.remark_count, 0u);
@@ -451,8 +472,7 @@ TEST_F(TargetLowLegalityTest, ProviderMayClaimCoreSourceOp) {
       .emitter = collector.emitter(),
   };
   loom_target_low_legality_result_t result = {};
-  IREE_ASSERT_OK(loom_target_low_verify_function_legality(
-      module.get(), FirstFunction(module.get()), &options, &result));
+  IREE_ASSERT_OK(VerifyWithOptions(module.get(), options, &result));
 
   ASSERT_EQ(result.error_count, 1u);
   ASSERT_EQ(collector.emissions.size(), 1u);
@@ -507,8 +527,7 @@ TEST_F(TargetLowLegalityTest, ProviderRecordsContractDecision) {
       .emitter = collector.emitter(),
   };
   loom_target_low_legality_result_t result = {};
-  IREE_ASSERT_OK(loom_target_low_verify_function_legality(
-      module.get(), FirstFunction(module.get()), &options, &result));
+  IREE_ASSERT_OK(VerifyWithOptions(module.get(), options, &result));
 
   EXPECT_EQ(result.error_count, 0u);
   ASSERT_EQ(result.remark_count, 1u);

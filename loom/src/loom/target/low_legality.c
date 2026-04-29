@@ -16,7 +16,6 @@
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/type_registry.h"
-#include "loom/util/fact_table.h"
 #include "loom/util/walk.h"
 
 typedef uint8_t loom_target_low_legality_t;
@@ -42,8 +41,6 @@ struct loom_target_low_legality_context_t {
   const loom_value_fact_table_t* fact_table;
   // Result object receiving counters and selected descriptor set.
   loom_target_low_legality_result_t* result;
-  // Locally computed fact table when the caller did not provide one.
-  loom_value_fact_table_t local_fact_table;
   // Scratch arena for the IR walker.
   iree_arena_allocator_t arena;
 };
@@ -289,11 +286,14 @@ static iree_status_t loom_target_low_legality_validate_options(
     const loom_target_low_legality_options_t* options,
     loom_target_low_legality_result_t* out_result,
     const loom_low_descriptor_set_t** out_descriptor_set) {
-  if (!module || !loom_func_like_isa(function) || !options || !out_result ||
-      !out_descriptor_set) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(options->fact_table);
+  IREE_ASSERT_ARGUMENT(out_result);
+  IREE_ASSERT_ARGUMENT(out_descriptor_set);
+  if (!loom_func_like_isa(function)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "module, function, options, result, and descriptor "
-                            "output are required");
+                            "target-low legality function is required");
   }
   *out_descriptor_set = NULL;
   if (!options->bundle || !options->bundle->snapshot ||
@@ -680,9 +680,8 @@ iree_status_t loom_target_low_verify_function_legality(
     const loom_module_t* module, loom_func_like_t function,
     const loom_target_low_legality_options_t* options,
     loom_target_low_legality_result_t* out_result) {
-  if (out_result) {
-    *out_result = (loom_target_low_legality_result_t){0};
-  }
+  IREE_ASSERT_ARGUMENT(out_result);
+  *out_result = (loom_target_low_legality_result_t){0};
   const loom_low_descriptor_set_t* descriptor_set = NULL;
   IREE_RETURN_IF_ERROR(loom_target_low_legality_validate_options(
       module, function, options, out_result, &descriptor_set));
@@ -696,22 +695,9 @@ iree_status_t loom_target_low_verify_function_legality(
       .result = out_result,
   };
   iree_arena_initialize(module->arena.block_pool, &context.arena);
+  context.fact_table = options->fact_table;
 
   iree_status_t status = iree_ok_status();
-  if (options->fact_table != NULL) {
-    context.fact_table = options->fact_table;
-  } else {
-    status = loom_value_fact_table_initialize(
-        &context.local_fact_table, &context.arena, module->values.count);
-    context.local_fact_table.context.target_bundle = options->bundle;
-    if (iree_status_is_ok(status)) {
-      status = loom_value_fact_table_compute(&context.local_fact_table, module,
-                                             function);
-    }
-    if (iree_status_is_ok(status)) {
-      context.fact_table = &context.local_fact_table;
-    }
-  }
   if (iree_status_is_ok(status)) {
     status = loom_target_low_legality_verify_function_signature(&context);
   }

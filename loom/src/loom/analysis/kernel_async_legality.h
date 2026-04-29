@@ -31,9 +31,7 @@ typedef struct loom_kernel_async_legality_options_t {
   iree_arena_allocator_t* arena;
   // Active local value domain for the function being verified.
   const loom_local_value_domain_t* value_domain;
-  // Optional borrowed precomputed function-local value facts. The analysis
-  // only reads this table. When omitted, the analysis computes facts in
-  // |arena|.
+  // Borrowed function-local value facts. The analysis only reads this table.
   loom_value_fact_table_t* fact_table;
   // Structured diagnostic emitter for user legality failures.
   iree_diagnostic_emitter_t emitter;

@@ -12,9 +12,9 @@
 // known_divisor == 0 (valid facts always have known_divisor >= 1),
 // allowing O(1) initialization via memset(0).
 //
-// Define stores facts for a value ID, growing the array as needed. Compute
-// runs a forward pass over a function, calling each op's fact inference
-// function to seed initial facts from constants and op semantics.
+// Define stores facts for a value ID inside the caller-declared value
+// capacity. Compute runs a forward pass over a function, calling each op's fact
+// inference function to seed initial facts from constants and op semantics.
 //
 // The table is a reusable component: embedded in the rewriter for
 // canonicalization, usable standalone for IPO or analysis tools.
@@ -465,10 +465,12 @@ struct loom_value_fact_table_t {
   } scratch;
 };
 
-// Initializes the table with the given arena and pre-allocates for
-// |initial_capacity| values. All entries are zero-initialized
-// (known_divisor == 0 means undefined). The arena is stored and used
-// for all subsequent allocations (entries, scratch growth).
+// Initializes the table with the given arena and exactly pre-allocates
+// |initial_capacity| value entries. All entries are zero-initialized
+// (known_divisor == 0 means undefined). The arena is stored and used for
+// subsequent extension payloads and scratch buffers. Value entries never grow
+// after initialization; callers must declare the direct-address value domain up
+// front.
 iree_status_t loom_value_fact_table_initialize(
     loom_value_fact_table_t* table, iree_arena_allocator_t* arena,
     iree_host_size_t initial_capacity);
@@ -483,7 +485,7 @@ static inline loom_value_facts_t loom_value_fact_table_lookup(
   return table->entries[value_id];
 }
 
-// Defines (or updates) facts for a value. Grows the table as needed.
+// Defines (or updates) facts for a value inside the initialized capacity.
 iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
                                            loom_value_id_t value_id,
                                            loom_value_facts_t facts);

@@ -104,8 +104,7 @@ typedef struct loom_target_low_legality_options_t {
   loom_low_descriptor_requirement_flags_t descriptor_requirements;
   // Optional target-specific source legality providers.
   loom_target_low_legality_provider_list_t provider_list;
-  // Optional caller-owned facts for |function|. When omitted, legality
-  // computes a transient table in its scratch arena.
+  // Caller-owned facts for |function|.
   const loom_value_fact_table_t* fact_table;
   // Optional target-specific feedback diagnostics to emit during source
   // legality. Zero keeps legality quiet except for errors and provider-owned

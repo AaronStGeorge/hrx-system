@@ -25,14 +25,10 @@ extern "C" {
 #endif
 
 typedef struct loom_vector_memory_footprint_options_t {
-  // Scratch arena used for local fact tables and symbolic expressions.
+  // Scratch arena used for symbolic expressions.
   iree_arena_allocator_t* arena;
-  // Optional caller-owned value facts for |function|. When omitted, the
-  // analysis computes a transient table using |arena|.
+  // Caller-owned value facts for |function|.
   const loom_value_fact_table_t* fact_table;
-  // Target bundle used when computing local value facts. Ignored when
-  // |fact_table| is provided.
-  const loom_target_bundle_t* target_bundle;
   // Structured diagnostic emitter for user footprint proof failures.
   iree_diagnostic_emitter_t emitter;
   // Maximum number of errors to emit before suppressing further diagnostics.

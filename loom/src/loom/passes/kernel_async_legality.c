@@ -9,6 +9,8 @@
 #include "loom/analysis/kernel_async_legality.h"
 #include "loom/ir/local_value_domain.h"
 #include "loom/ops/op_defs.h"
+#include "loom/ops/type_registry.h"
+#include "loom/util/fact_table.h"
 
 //===----------------------------------------------------------------------===//
 // Statistics
@@ -61,9 +63,19 @@ iree_status_t loom_kernel_async_legality_run(loom_pass_t* pass,
   loom_local_value_domain_t value_domain = {0};
   iree_status_t status = loom_local_value_domain_acquire_for_region(
       module, body, pass->arena, &value_domain);
+  loom_value_fact_table_t fact_table = {0};
+  if (iree_status_is_ok(status)) {
+    status = loom_value_fact_table_initialize(&fact_table, pass->arena,
+                                              module->values.count);
+  }
+  if (iree_status_is_ok(status)) {
+    loom_type_registry_configure_fact_context(&fact_table.context);
+    status = loom_value_fact_table_compute(&fact_table, module, function);
+  }
   loom_kernel_async_legality_options_t options = {
       .arena = pass->arena,
       .value_domain = &value_domain,
+      .fact_table = &fact_table,
       .emitter = pass->diagnostic_emitter,
       .phase_name = pass->info->name,
   };
