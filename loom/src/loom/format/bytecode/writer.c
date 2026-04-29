@@ -888,23 +888,97 @@ static iree_status_t loom_bytecode_numbering_intern_op(
 // Value numbering (per-function)
 //===----------------------------------------------------------------------===//
 
+typedef struct loom_bytecode_value_numbering_entry_t {
+  // Module value ID being mapped.
+  loom_value_id_t value_id;
+  // Body-local value number assigned to |value_id|.
+  uint32_t number;
+} loom_bytecode_value_numbering_entry_t;
+
 typedef struct loom_bytecode_value_numbering_t {
-  uint32_t* map;              // module value_id → function-local number.
-  uint32_t next_number;       // Next value number to assign.
-  iree_host_size_t capacity;  // Size of |map| array.
+  // Module containing numbered values.
+  const loom_module_t* module;
+  // Arena that owns |entries|.
+  iree_arena_allocator_t* arena;
+  // Sorted map from module value ID to body-local value number.
+  loom_bytecode_value_numbering_entry_t* entries;
+  // Number of initialized entries.
+  iree_host_size_t count;
+  // Allocated entry capacity.
+  iree_host_size_t capacity;
+  // Next value number to assign.
+  uint32_t next_number;
 } loom_bytecode_value_numbering_t;
+
+static void loom_bytecode_value_numbering_initialize(
+    loom_bytecode_value_numbering_t* value_numbering,
+    const loom_module_t* module, iree_arena_allocator_t* arena) {
+  *value_numbering = (loom_bytecode_value_numbering_t){
+      .module = module,
+      .arena = arena,
+  };
+}
+
+static iree_host_size_t loom_bytecode_value_numbering_lower_bound(
+    const loom_bytecode_value_numbering_t* value_numbering,
+    loom_value_id_t value_id, bool* out_found) {
+  iree_host_size_t lo = 0;
+  iree_host_size_t hi = value_numbering->count;
+  while (lo < hi) {
+    iree_host_size_t mid = lo + (hi - lo) / 2;
+    if (value_numbering->entries[mid].value_id < value_id) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  *out_found = lo < value_numbering->count &&
+               value_numbering->entries[lo].value_id == value_id;
+  return lo;
+}
+
+static iree_status_t loom_bytecode_value_numbering_ensure_capacity(
+    loom_bytecode_value_numbering_t* value_numbering,
+    iree_host_size_t minimum_capacity) {
+  if (minimum_capacity <= value_numbering->capacity) {
+    return iree_ok_status();
+  }
+  return iree_arena_grow_array(
+      value_numbering->arena, value_numbering->count, minimum_capacity,
+      sizeof(*value_numbering->entries), &value_numbering->capacity,
+      (void**)&value_numbering->entries);
+}
 
 static iree_status_t loom_bytecode_value_numbering_assign_value(
     loom_bytecode_value_numbering_t* value_numbering,
     loom_value_id_t value_id) {
-  if (value_id >= value_numbering->capacity) {
+  if (value_id >= value_numbering->module->values.count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "value_id %u exceeds value table capacity %" PRIhsz,
-                            value_id, value_numbering->capacity);
+                            "value_id %u exceeds module value count %" PRIhsz,
+                            value_id, value_numbering->module->values.count);
   }
-  if (value_numbering->map[value_id] == LOOM_WRITER_ID_NONE) {
-    value_numbering->map[value_id] = value_numbering->next_number++;
+  bool found = false;
+  iree_host_size_t entry_index = loom_bytecode_value_numbering_lower_bound(
+      value_numbering, value_id, &found);
+  if (found) {
+    return iree_ok_status();
   }
+  if (value_numbering->next_number == LOOM_WRITER_ID_NONE) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "bytecode local value number exceeds uint32");
+  }
+  IREE_RETURN_IF_ERROR(loom_bytecode_value_numbering_ensure_capacity(
+      value_numbering, value_numbering->count + 1));
+  memmove(&value_numbering->entries[entry_index + 1],
+          &value_numbering->entries[entry_index],
+          (value_numbering->count - entry_index) *
+              sizeof(*value_numbering->entries));
+  value_numbering->entries[entry_index] =
+      (loom_bytecode_value_numbering_entry_t){
+          .value_id = value_id,
+          .number = value_numbering->next_number++,
+      };
+  ++value_numbering->count;
   return iree_ok_status();
 }
 
@@ -914,35 +988,34 @@ static iree_status_t loom_bytecode_value_numbering_assign_value(
 static iree_status_t loom_bytecode_resolve_value_number(
     const loom_bytecode_value_numbering_t* value_numbering,
     loom_value_id_t value_id, uint32_t* out_number) {
-  if (value_id >= value_numbering->capacity) {
+  if (value_id >= value_numbering->module->values.count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "value_id %u exceeds value table capacity %" PRIhsz,
-                            value_id, value_numbering->capacity);
+                            "value_id %u exceeds module value count %" PRIhsz,
+                            value_id, value_numbering->module->values.count);
   }
-  uint32_t number = value_numbering->map[value_id];
-  if (number == LOOM_WRITER_ID_NONE) {
+  bool found = false;
+  iree_host_size_t entry_index = loom_bytecode_value_numbering_lower_bound(
+      value_numbering, value_id, &found);
+  if (!found) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "value_id %u has no assigned value number "
                             "(undefined or not in scope)",
                             value_id);
   }
-  *out_number = number;
+  *out_number = value_numbering->entries[entry_index].number;
   return iree_ok_status();
 }
 
-static void loom_bytecode_value_numbering_assign_region(
+static iree_status_t loom_bytecode_value_numbering_assign_region(
     loom_bytecode_value_numbering_t* value_numbering,
-    const loom_module_t* module, const loom_region_t* region) {
+    const loom_region_t* region) {
   for (uint16_t block_index = 0; block_index < region->block_count;
        ++block_index) {
     const loom_block_t* block = loom_region_const_block(region, block_index);
     // Block arguments define values.
     for (uint16_t arg_index = 0; arg_index < block->arg_count; ++arg_index) {
-      loom_value_id_t value_id = loom_block_arg_id(block, arg_index);
-      if (value_id < value_numbering->capacity &&
-          value_numbering->map[value_id] == LOOM_WRITER_ID_NONE) {
-        value_numbering->map[value_id] = value_numbering->next_number++;
-      }
+      IREE_RETURN_IF_ERROR(loom_bytecode_value_numbering_assign_value(
+          value_numbering, loom_block_arg_id(block, arg_index)));
     }
     // Op results define values.
     const loom_op_t* op = NULL;
@@ -950,23 +1023,21 @@ static void loom_bytecode_value_numbering_assign_region(
       const loom_value_id_t* results = loom_op_const_results(op);
       for (uint16_t result_index = 0; result_index < op->result_count;
            ++result_index) {
-        loom_value_id_t value_id = results[result_index];
-        if (value_id < value_numbering->capacity &&
-            value_numbering->map[value_id] == LOOM_WRITER_ID_NONE) {
-          value_numbering->map[value_id] = value_numbering->next_number++;
-        }
+        IREE_RETURN_IF_ERROR(loom_bytecode_value_numbering_assign_value(
+            value_numbering, results[result_index]));
       }
       // Recurse into nested regions.
       loom_region_t** regions = loom_op_regions(op);
       for (uint8_t region_index = 0; region_index < op->region_count;
            ++region_index) {
         if (regions[region_index]) {
-          loom_bytecode_value_numbering_assign_region(value_numbering, module,
-                                                      regions[region_index]);
+          IREE_RETURN_IF_ERROR(loom_bytecode_value_numbering_assign_region(
+              value_numbering, regions[region_index]));
         }
       }
     }
   }
+  return iree_ok_status();
 }
 
 //===----------------------------------------------------------------------===//
@@ -2455,17 +2526,6 @@ static iree_status_t loom_bytecode_write_ir_section(
   const loom_module_t* module = numbering->module;
   iree_host_size_t section_start = page_writer->total_written;
 
-  // Allocate value numbering map from the arena. Allocated once,
-  // reused per-function via memset. The arena never frees individual
-  // allocations so there's nothing to clean up.
-  loom_bytecode_value_numbering_t value_numbering = {0};
-  value_numbering.capacity = module->values.count;
-  if (value_numbering.capacity > 0) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        numbering->arena, value_numbering.capacity, sizeof(uint32_t),
-        (void**)&value_numbering.map));
-  }
-
   for (iree_host_size_t symbol_index = 0; symbol_index < module->symbols.count;
        ++symbol_index) {
     const loom_symbol_t* symbol = &module->symbols.entries[symbol_index];
@@ -2517,18 +2577,18 @@ static iree_status_t loom_bytecode_write_ir_section(
       continue;
     }
 
-    // Reset value numbering for this serialized body.
-    if (value_numbering.map) {
-      memset(value_numbering.map, 0xFF,
-             value_numbering.capacity * sizeof(uint32_t));
-    }
-    value_numbering.next_number = 0;
-
-    // Assign value numbers.
-    loom_bytecode_value_numbering_assign_region(&value_numbering, module, body);
-
     loom_bytecode_body_counts_t body_counts = {0};
     loom_bytecode_count_region_tree(body, &body_counts);
+
+    loom_bytecode_value_numbering_t value_numbering;
+    loom_bytecode_value_numbering_initialize(&value_numbering, module,
+                                             numbering->arena);
+    IREE_RETURN_IF_ERROR(loom_bytecode_value_numbering_ensure_capacity(
+        &value_numbering, body_counts.value_count));
+
+    // Assign value numbers in the same definition order used by the reader.
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_value_numbering_assign_region(&value_numbering, body));
 
     // Write the body summary and root region.
     iree_host_size_t body_start = page_writer->total_written;
@@ -2648,6 +2708,8 @@ static iree_status_t loom_bytecode_write_func_metadata(
   uint16_t result_count = func_like.op->result_count;
   IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(builder, arg_count));
   IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(builder, result_count));
+  IREE_RETURN_IF_ERROR(loom_bytecode_value_numbering_ensure_capacity(
+      signature_numbering, (iree_host_size_t)arg_count + result_count));
 
   for (uint16_t i = 0; i < arg_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_bytecode_value_numbering_assign_value(
@@ -2768,6 +2830,8 @@ static iree_status_t loom_bytecode_write_global_metadata(
       numbering->arena, module, op, &local_values));
   IREE_RETURN_IF_ERROR(
       loom_bytecode_number_global(numbering, op, &local_values));
+  IREE_RETURN_IF_ERROR(loom_bytecode_value_numbering_ensure_capacity(
+      value_numbering, local_values.count));
 
   uint32_t writer_op_id = 0;
   IREE_RETURN_IF_ERROR(
@@ -2974,15 +3038,6 @@ static iree_status_t loom_bytecode_write_symbols_section(
     const loom_bytecode_ir_offset_t* ir_offsets) {
   const loom_module_t* module = numbering->module;
 
-  loom_bytecode_value_numbering_t signature_numbering = {
-      .capacity = module->values.count,
-  };
-  if (signature_numbering.capacity > 0) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        numbering->arena, signature_numbering.capacity, sizeof(uint32_t),
-        (void**)&signature_numbering.map));
-  }
-
   // Classify symbols.
   uint32_t import_count = 0;
   uint32_t export_count = 0;
@@ -3092,21 +3147,17 @@ static iree_status_t loom_bytecode_write_symbols_section(
       loom_func_like_t func_like =
           loom_func_like_cast(module, symbol->defining_op);
       if (loom_func_like_isa(func_like)) {
-        if (signature_numbering.map) {
-          memset(signature_numbering.map, 0xFF,
-                 signature_numbering.capacity * sizeof(uint32_t));
-        }
-        signature_numbering.next_number = 0;
+        loom_bytecode_value_numbering_t signature_numbering;
+        loom_bytecode_value_numbering_initialize(&signature_numbering, module,
+                                                 numbering->arena);
         IREE_RETURN_IF_ERROR(loom_bytecode_write_func_metadata(
             builder, numbering, module, func_like, &signature_numbering,
             ir_offsets[symbol_index]));
       }
     } else if (has_global_metadata && symbol->defining_op) {
-      if (signature_numbering.map) {
-        memset(signature_numbering.map, 0xFF,
-               signature_numbering.capacity * sizeof(uint32_t));
-      }
-      signature_numbering.next_number = 0;
+      loom_bytecode_value_numbering_t signature_numbering;
+      loom_bytecode_value_numbering_initialize(&signature_numbering, module,
+                                               numbering->arena);
       IREE_RETURN_IF_ERROR(loom_bytecode_write_global_metadata(
           builder, numbering, module, symbol->defining_op,
           &signature_numbering));
