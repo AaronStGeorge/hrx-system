@@ -194,9 +194,10 @@ static iree_status_t loom_low_packet_json_write_value(
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(stream, "null,\"type\":null"));
   }
-  iree_host_size_t assignment_index = IREE_HOST_SIZE_MAX;
+  uint32_t assignment_index = UINT32_MAX;
   const loom_low_allocation_assignment_t* assignment =
-      loom_low_packet_find_assignment(allocation, value_id, &assignment_index);
+      loom_low_allocation_map_active_value_assignment(allocation, value_id,
+                                                      &assignment_index);
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"location\":"));
   IREE_RETURN_IF_ERROR(loom_low_packet_json_write_location(
@@ -748,15 +749,10 @@ static iree_status_t loom_low_packet_json_write_packet(
   return loom_output_stream_write_char(stream, '}');
 }
 
-iree_status_t loom_low_packet_format_json(
+static iree_status_t loom_low_packet_json_write(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
     iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(schedule);
-  IREE_ASSERT_ARGUMENT(allocation);
-  IREE_ASSERT_ARGUMENT(builder);
-  IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(schedule, allocation));
-
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));
@@ -833,4 +829,22 @@ iree_status_t loom_low_packet_format_json(
 
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(&stream, '}'));
   return iree_ok_status();
+}
+
+iree_status_t loom_low_packet_format_json(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
+    iree_string_builder_t* builder) {
+  IREE_ASSERT_ARGUMENT(schedule);
+  IREE_ASSERT_ARGUMENT(allocation);
+  IREE_ASSERT_ARGUMENT(builder);
+  IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(schedule, allocation));
+
+  loom_low_allocation_value_scratch_t value_scratch = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_acquire_value_scratch(allocation, &value_scratch));
+  iree_status_t status =
+      loom_low_packet_json_write(schedule, allocation, builder);
+  loom_low_allocation_release_value_scratch(&value_scratch);
+  return status;
 }

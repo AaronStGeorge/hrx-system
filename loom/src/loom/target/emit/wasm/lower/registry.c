@@ -1465,8 +1465,7 @@ static iree_status_t loom_wasm_lower_vector_extract(
       break;
     }
     default:
-      IREE_ASSERT_UNREACHABLE();
-      break;
+      IREE_CHECK_UNREACHABLE();
   }
   return loom_low_lower_bind_value(
       context, loom_vector_extract_result(source_op), result);
@@ -1493,8 +1492,7 @@ static iree_status_t loom_wasm_lower_vector_insert(
       descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_REPLACE_LANE;
       break;
     default:
-      IREE_ASSERT_UNREACHABLE();
-      break;
+      IREE_CHECK_UNREACHABLE();
   }
   loom_type_t result_type = loom_type_none();
   IREE_RETURN_IF_ERROR(
@@ -1611,8 +1609,7 @@ static iree_status_t loom_wasm_emit_op(void* user_data,
     case LOOM_OP_VECTOR_REDUCE:
       return loom_wasm_lower_vector_reduce(context, source_op);
     default:
-      IREE_ASSERT_UNREACHABLE();
-      return iree_ok_status();
+      IREE_CHECK_UNREACHABLE();
   }
 }
 

@@ -135,6 +135,14 @@ void loom_module_value_ordinal_scratch_acquire(loom_module_t* module);
 // frame has cleared all value IDs it registered.
 void loom_module_value_ordinal_scratch_release(loom_module_t* module);
 
+// Returns true while a compiler frame owns the module value-ordinal scratch
+// map.
+static inline bool loom_module_value_ordinal_scratch_is_active(
+    const loom_module_t* module) {
+  IREE_ASSERT(module != NULL);
+  return module->value_ordinal_scratch.is_active;
+}
+
 // Registers |value_id| with |ordinal| in the active value-ordinal scratch map.
 static inline void loom_module_value_ordinal_scratch_set(
     loom_module_t* module, loom_value_id_t value_id,

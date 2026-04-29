@@ -51,16 +51,10 @@ static iree_status_t loom_low_packet_asm_append_descriptor_string(
 
 static iree_status_t loom_low_packet_asm_append_value(
     loom_low_packet_asm_state_t* state, loom_value_id_t value_id) {
-  iree_host_size_t assignment_index = IREE_HOST_SIZE_MAX;
+  uint32_t assignment_index = UINT32_MAX;
   const loom_low_allocation_assignment_t* assignment =
-      loom_low_packet_find_assignment(state->allocation, value_id,
-                                      &assignment_index);
-  if (assignment == NULL) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "low packet asm value %" PRIu32
-                            " has no allocation assignment",
-                            value_id);
-  }
+      loom_low_allocation_map_active_value_assignment(
+          state->allocation, value_id, &assignment_index);
   return state->options->format_value.fn(
       state->options->format_value.user_data, state->allocation, value_id,
       assignment, assignment_index, state->builder);
@@ -444,6 +438,29 @@ static iree_status_t loom_low_packet_asm_append_packet(
   return loom_low_packet_asm_append_structural_packet(state, packet->node->op);
 }
 
+static iree_status_t loom_low_packet_asm_append_block(
+    loom_low_packet_asm_state_t* state, iree_host_size_t block_index) {
+  const loom_low_schedule_table_t* schedule = state->schedule;
+  iree_string_builder_t* builder = state->builder;
+  const loom_low_schedule_block_t* block = &schedule->blocks[block_index];
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_format(builder, "^bb%" PRIhsz, block_index));
+  IREE_RETURN_IF_ERROR(
+      loom_low_packet_asm_append_block_arguments(state, block->block));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ":\n"));
+  for (uint32_t i = 0; i < block->scheduled_node_count; ++i) {
+    const iree_host_size_t packet_index =
+        (iree_host_size_t)block->scheduled_node_start + i;
+    loom_low_packet_view_t packet = {0};
+    IREE_RETURN_IF_ERROR(loom_low_packet_view_at(schedule, state->allocation,
+                                                 packet_index, &packet));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "  "));
+    IREE_RETURN_IF_ERROR(loom_low_packet_asm_append_packet(state, &packet));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "\n"));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_packet_asm_format(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
@@ -463,6 +480,9 @@ iree_status_t loom_low_packet_asm_format(
         schedule, options->selected_asm_forms));
   }
 
+  loom_low_allocation_value_scratch_t value_scratch = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_acquire_value_scratch(allocation, &value_scratch));
   loom_low_packet_asm_state_t state = {
       .schedule = schedule,
       .allocation = allocation,
@@ -470,24 +490,12 @@ iree_status_t loom_low_packet_asm_format(
       .options = options,
       .builder = builder,
   };
-  for (iree_host_size_t block_index = 0; block_index < schedule->block_count;
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t block_index = 0;
+       block_index < schedule->block_count && iree_status_is_ok(status);
        ++block_index) {
-    const loom_low_schedule_block_t* block = &schedule->blocks[block_index];
-    IREE_RETURN_IF_ERROR(
-        iree_string_builder_append_format(builder, "^bb%" PRIhsz, block_index));
-    IREE_RETURN_IF_ERROR(
-        loom_low_packet_asm_append_block_arguments(&state, block->block));
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ":\n"));
-    for (uint32_t i = 0; i < block->scheduled_node_count; ++i) {
-      const iree_host_size_t packet_index =
-          (iree_host_size_t)block->scheduled_node_start + i;
-      loom_low_packet_view_t packet = {0};
-      IREE_RETURN_IF_ERROR(
-          loom_low_packet_view_at(schedule, allocation, packet_index, &packet));
-      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "  "));
-      IREE_RETURN_IF_ERROR(loom_low_packet_asm_append_packet(&state, &packet));
-      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "\n"));
-    }
+    status = loom_low_packet_asm_append_block(&state, block_index);
   }
-  return iree_ok_status();
+  loom_low_allocation_release_value_scratch(&value_scratch);
+  return status;
 }

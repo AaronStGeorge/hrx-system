@@ -67,29 +67,10 @@ static void loom_low_move_location_from_edge_copy_temporary(
 }
 
 static const loom_low_allocation_assignment_t*
-loom_low_move_sequence_find_assignment(
-    const loom_low_allocation_table_t* allocation, loom_value_id_t value_id) {
-  for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
-    if (allocation->assignments[i].value_id == value_id) {
-      return &allocation->assignments[i];
-    }
-  }
-  return NULL;
-}
-
-static iree_status_t loom_low_move_sequence_require_assignment(
-    const loom_low_allocation_table_t* allocation, loom_value_id_t value_id,
-    const loom_low_allocation_assignment_t** out_assignment) {
-  IREE_ASSERT_ARGUMENT(out_assignment);
-  *out_assignment =
-      loom_low_move_sequence_find_assignment(allocation, value_id);
-  if (!*out_assignment) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "structural move references value %u without an "
-                            "allocation assignment",
-                            (unsigned)value_id);
-  }
-  return iree_ok_status();
+loom_low_move_sequence_assignment(const loom_low_allocation_table_t* allocation,
+                                  loom_value_id_t value_id) {
+  return loom_low_allocation_map_active_value_assignment(allocation, value_id,
+                                                         NULL);
 }
 
 static iree_status_t loom_low_move_sequence_require_same_storage_class(
@@ -236,10 +217,10 @@ static iree_status_t loom_low_move_sequence_slice_assignments(
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "low.slice offset is outside uint32_t range");
   }
-  IREE_RETURN_IF_ERROR(loom_low_move_sequence_require_assignment(
-      allocation, loom_low_slice_source(op), out_source_assignment));
-  IREE_RETURN_IF_ERROR(loom_low_move_sequence_require_assignment(
-      allocation, loom_low_slice_result(op), out_result_assignment));
+  *out_source_assignment =
+      loom_low_move_sequence_assignment(allocation, loom_low_slice_source(op));
+  *out_result_assignment =
+      loom_low_move_sequence_assignment(allocation, loom_low_slice_result(op));
   IREE_RETURN_IF_ERROR(loom_low_move_sequence_require_same_storage_class(
       *out_source_assignment, *out_result_assignment, IREE_SV("low.slice")));
   const uint32_t source_offset = (uint32_t)offset;
@@ -325,14 +306,14 @@ static iree_status_t loom_low_move_sequence_concat_assignments(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected low.concat");
   }
-  IREE_RETURN_IF_ERROR(loom_low_move_sequence_require_assignment(
-      allocation, loom_low_concat_result(op), out_result_assignment));
+  *out_result_assignment =
+      loom_low_move_sequence_assignment(allocation, loom_low_concat_result(op));
   uint32_t result_offset = 0;
   loom_value_slice_t sources = loom_low_concat_sources(op);
   for (uint16_t i = 0; i < sources.count; ++i) {
     const loom_low_allocation_assignment_t* source_assignment = NULL;
-    IREE_RETURN_IF_ERROR(loom_low_move_sequence_require_assignment(
-        allocation, sources.values[i], &source_assignment));
+    source_assignment =
+        loom_low_move_sequence_assignment(allocation, sources.values[i]);
     IREE_RETURN_IF_ERROR(loom_low_move_sequence_require_same_storage_class(
         *out_result_assignment, source_assignment, IREE_SV("low.concat")));
     if (result_offset > (*out_result_assignment)->location_count ||
@@ -409,8 +390,8 @@ iree_status_t loom_low_move_sequence_populate_concat_units(
   loom_value_slice_t sources = loom_low_concat_sources(op);
   for (uint16_t i = 0; i < sources.count; ++i) {
     const loom_low_allocation_assignment_t* source_assignment = NULL;
-    IREE_RETURN_IF_ERROR(loom_low_move_sequence_require_assignment(
-        allocation, sources.values[i], &source_assignment));
+    source_assignment =
+        loom_low_move_sequence_assignment(allocation, sources.values[i]);
     for (uint32_t source_unit = 0;
          source_unit < source_assignment->location_count; ++source_unit) {
       IREE_RETURN_IF_ERROR(loom_low_move_location_from_assignment_unit(

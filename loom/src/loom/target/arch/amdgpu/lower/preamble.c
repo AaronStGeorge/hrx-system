@@ -458,7 +458,6 @@ iree_status_t loom_amdgpu_lower_preamble_op(loom_low_lower_context_t* context,
           context, loom_kernel_workgroup_id_result(source_op), &low_result);
     }
     default:
-      IREE_ASSERT_UNREACHABLE();
-      return iree_ok_status();
+      IREE_CHECK_UNREACHABLE();
   }
 }

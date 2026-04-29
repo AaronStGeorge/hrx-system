@@ -231,26 +231,6 @@ iree_status_t loom_low_packet_lookup_asm_form(
       out_asm_form_ordinal);
 }
 
-const loom_low_allocation_assignment_t* loom_low_packet_find_assignment(
-    const loom_low_allocation_table_t* allocation, loom_value_id_t value_id,
-    iree_host_size_t* out_assignment_index) {
-  if (out_assignment_index) {
-    *out_assignment_index = IREE_HOST_SIZE_MAX;
-  }
-  if (!allocation) {
-    return NULL;
-  }
-  for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
-    if (allocation->assignments[i].value_id == value_id) {
-      if (out_assignment_index) {
-        *out_assignment_index = i;
-      }
-      return &allocation->assignments[i];
-    }
-  }
-  return NULL;
-}
-
 uint32_t loom_low_packet_block_index(const loom_low_schedule_table_t* schedule,
                                      const loom_block_t* block) {
   if (!schedule || !block) {

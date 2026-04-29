@@ -43,20 +43,11 @@ static iree_status_t loom_amdgpu_append_mnemonic(
   return iree_string_builder_append_string(context->builder, mnemonic);
 }
 
-static iree_status_t loom_amdgpu_find_assignment(
+static const loom_low_allocation_assignment_t* loom_amdgpu_map_assignment(
     const loom_native_assembly_packet_context_t* context,
-    loom_value_id_t value_id,
-    const loom_low_allocation_assignment_t** out_assignment) {
-  const loom_low_allocation_assignment_t* assignment =
-      loom_low_packet_find_assignment(context->allocation, value_id, NULL);
-  if (assignment == NULL) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU assembly value %" PRIu32
-                            " has no allocation assignment",
-                            value_id);
-  }
-  *out_assignment = assignment;
-  return iree_ok_status();
+    loom_value_id_t value_id) {
+  return loom_low_allocation_map_active_value_assignment(context->allocation,
+                                                         value_id, NULL);
 }
 
 static bool loom_amdgpu_assignments_match(
@@ -132,8 +123,7 @@ static iree_status_t loom_amdgpu_append_value(
     const loom_native_assembly_packet_context_t* context,
     loom_value_id_t value_id) {
   const loom_low_allocation_assignment_t* assignment = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_find_assignment(context, value_id, &assignment));
+  assignment = loom_amdgpu_map_assignment(context, value_id);
   return loom_amdgpu_append_assignment(context, assignment);
 }
 
@@ -1078,12 +1068,10 @@ static iree_status_t loom_amdgpu_append_copy_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
   const loom_op_t* op = context->packet->node->op;
-  const loom_low_allocation_assignment_t* source_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      context, loom_low_copy_source(op), &source_assignment));
-  const loom_low_allocation_assignment_t* result_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      context, loom_low_copy_result(op), &result_assignment));
+  const loom_low_allocation_assignment_t* source_assignment =
+      loom_amdgpu_map_assignment(context, loom_low_copy_source(op));
+  const loom_low_allocation_assignment_t* result_assignment =
+      loom_amdgpu_map_assignment(context, loom_low_copy_result(op));
   if (loom_amdgpu_assignments_match(source_assignment, result_assignment)) {
     return iree_ok_status();
   }
@@ -1164,9 +1152,8 @@ static iree_status_t loom_amdgpu_append_slice_packet(
     return iree_ok_status();
   }
 
-  const loom_low_allocation_assignment_t* result_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      context, loom_low_slice_result(op), &result_assignment));
+  const loom_low_allocation_assignment_t* result_assignment =
+      loom_amdgpu_map_assignment(context, loom_low_slice_result(op));
   iree_string_view_t mnemonic = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_amdgpu_copy_mnemonic(
       result_assignment->descriptor_reg_class_id, &mnemonic));
@@ -1204,9 +1191,8 @@ static iree_status_t loom_amdgpu_append_concat_packet(
     return iree_ok_status();
   }
 
-  const loom_low_allocation_assignment_t* result_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      context, loom_low_concat_result(op), &result_assignment));
+  const loom_low_allocation_assignment_t* result_assignment =
+      loom_amdgpu_map_assignment(context, loom_low_concat_result(op));
   iree_string_view_t mnemonic = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_amdgpu_copy_mnemonic(
       result_assignment->descriptor_reg_class_id, &mnemonic));
@@ -1250,13 +1236,11 @@ static iree_status_t loom_amdgpu_append_matrix_packet(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU matrix result must be tied to an accumulator operand");
   }
-  const loom_low_allocation_assignment_t* result_assignment = NULL;
-  const loom_low_allocation_assignment_t* accumulator_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      context, loom_op_const_results(op)[0], &result_assignment));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      context, loom_op_const_operands(op)[accumulator_operand_index],
-      &accumulator_assignment));
+  const loom_low_allocation_assignment_t* result_assignment =
+      loom_amdgpu_map_assignment(context, loom_op_const_results(op)[0]);
+  const loom_low_allocation_assignment_t* accumulator_assignment =
+      loom_amdgpu_map_assignment(
+          context, loom_op_const_operands(op)[accumulator_operand_index]);
   if (!loom_amdgpu_assignments_match(result_assignment,
                                      accumulator_assignment)) {
     return iree_make_status(
@@ -1376,9 +1360,8 @@ static iree_status_t loom_amdgpu_append_branch_packet(
 static iree_status_t loom_amdgpu_verify_scc_condition_assignment(
     const loom_native_assembly_packet_context_t* context,
     loom_value_id_t condition_value_id) {
-  const loom_low_allocation_assignment_t* assignment = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_find_assignment(context, condition_value_id, &assignment));
+  const loom_low_allocation_assignment_t* assignment =
+      loom_amdgpu_map_assignment(context, condition_value_id);
   if (assignment->descriptor_reg_class_id != LOOM_AMDGPU_REG_CLASS_ID_SCC) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU assembly conditional branch condition must "

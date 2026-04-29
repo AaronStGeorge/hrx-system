@@ -118,8 +118,7 @@ iree_status_t loom_amdgpu_emit_sgpr_byte_offset_terms(
       case LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR:
         continue;
       case LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_NONE:
-        IREE_ASSERT_UNREACHABLE();
-        continue;
+        IREE_CHECK_UNREACHABLE();
     }
     const loom_low_source_memory_dynamic_term_t* term =
         &source->dynamic_terms[i];

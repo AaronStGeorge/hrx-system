@@ -21,7 +21,7 @@ extern "C" {
 // Records schedule, allocation, pressure-row, and spill-row summaries for one
 // packetized low function. Optional detail rows are copied only when |report|
 // has caller-owned row storage configured.
-void loom_target_compile_report_record_low_emission_frame(
+iree_status_t loom_target_compile_report_record_low_emission_frame(
     loom_target_compile_report_t* report,
     const loom_low_emission_frame_t* frame);
 

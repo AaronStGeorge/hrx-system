@@ -268,6 +268,8 @@ class AmdgpuEncodingTest : public ::testing::Test {
     direct_scheduled_node_indices_.clear();
     direct_blocks_.clear();
     direct_assignments_.clear();
+    direct_liveness_value_ids_.clear();
+    direct_assignment_indices_by_value_ordinal_.clear();
     direct_function_ = nullptr;
     direct_target_ = {};
     IREE_ASSERT_OK(loom_module_allocate(
@@ -319,6 +321,8 @@ class AmdgpuEncodingTest : public ::testing::Test {
 
   void AddDirectAssignment(loom_value_id_t value_id, uint16_t reg_class_id,
                            uint32_t location_base, uint32_t unit_count) {
+    ASSERT_LE(direct_assignments_.size(), (iree_host_size_t)UINT32_MAX);
+    const uint32_t assignment_index = (uint32_t)direct_assignments_.size();
     direct_assignments_.push_back(loom_low_allocation_assignment_t{
         .value_id = value_id,
         .value_class = {},
@@ -330,6 +334,8 @@ class AmdgpuEncodingTest : public ::testing::Test {
         .location_base = location_base,
         .location_count = unit_count,
     });
+    direct_liveness_value_ids_.push_back(value_id);
+    direct_assignment_indices_by_value_ordinal_.push_back(assignment_index);
   }
 
   void AddDirectDescriptorPacket(loom_op_t* op, uint64_t descriptor_id) {
@@ -437,10 +443,16 @@ class AmdgpuEncodingTest : public ::testing::Test {
         .module = module_,
         .function_op = direct_function_,
         .target = direct_target_,
-        .liveness = {},
+        .liveness =
+            {
+                .value_ids = direct_liveness_value_ids_.data(),
+                .value_count = direct_liveness_value_ids_.size(),
+            },
         .allocation_mode = 0,
         .assignments = direct_assignments_.data(),
         .assignment_count = direct_assignments_.size(),
+        .assignment_indices_by_value_ordinal =
+            direct_assignment_indices_by_value_ordinal_.data(),
         .spill_plans = nullptr,
         .spill_plan_count = 0,
         .remarks = nullptr,
@@ -477,6 +489,8 @@ class AmdgpuEncodingTest : public ::testing::Test {
   std::vector<uint32_t> direct_scheduled_node_indices_;
   std::vector<loom_low_schedule_block_t> direct_blocks_;
   std::vector<loom_low_allocation_assignment_t> direct_assignments_;
+  std::vector<loom_value_id_t> direct_liveness_value_ids_;
+  std::vector<uint32_t> direct_assignment_indices_by_value_ordinal_;
 };
 
 TEST_F(AmdgpuEncodingTest, DirectlyEncodesReturnPacket) {

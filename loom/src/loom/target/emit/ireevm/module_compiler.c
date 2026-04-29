@@ -291,7 +291,8 @@ iree_status_t loom_ireevm_compile_module_archive(
         module, lower_result.low_func_op, &frame_options, &table_arena, &frame);
   }
   if (iree_status_is_ok(status) && report != NULL) {
-    loom_target_compile_report_record_low_emission_frame(report, &frame);
+    status =
+        loom_target_compile_report_record_low_emission_frame(report, &frame);
   }
   if (iree_status_is_ok(status)) {
     status = loom_ireevm_emit_function_bytecode(

@@ -122,21 +122,10 @@ static const loom_named_attr_t* loom_amdgpu_find_packet_attr_by_name_id(
   return NULL;
 }
 
-static iree_status_t loom_amdgpu_find_assignment(
-    const loom_low_allocation_table_t* allocation, loom_value_id_t value_id,
-    const loom_low_allocation_assignment_t** out_assignment) {
-  IREE_ASSERT_ARGUMENT(out_assignment);
-  *out_assignment = NULL;
-  const loom_low_allocation_assignment_t* assignment =
-      loom_low_packet_find_assignment(allocation, value_id, NULL);
-  if (assignment == NULL) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU native encoding value %" PRIu32
-                            " has no allocation assignment",
-                            value_id);
-  }
-  *out_assignment = assignment;
-  return iree_ok_status();
+static const loom_low_allocation_assignment_t* loom_amdgpu_map_assignment(
+    const loom_low_allocation_table_t* allocation, loom_value_id_t value_id) {
+  return loom_low_allocation_map_active_value_assignment(allocation, value_id,
+                                                         NULL);
 }
 
 static iree_status_t loom_amdgpu_assignment_sgpr(
@@ -201,9 +190,8 @@ static iree_status_t loom_amdgpu_assignment_vgpr(
 
 static iree_status_t loom_amdgpu_verify_scc_assignment(
     const loom_low_allocation_table_t* allocation, loom_value_id_t value_id) {
-  const loom_low_allocation_assignment_t* assignment = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_find_assignment(allocation, value_id, &assignment));
+  const loom_low_allocation_assignment_t* assignment =
+      loom_amdgpu_map_assignment(allocation, value_id);
   if (assignment->descriptor_reg_class_id != LOOM_AMDGPU_REG_CLASS_ID_SCC) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
@@ -268,10 +256,10 @@ static iree_status_t loom_amdgpu_packet_result_sgpr(
                             "AMDGPU native encoding result index is out of "
                             "range");
   }
-  const loom_low_allocation_assignment_t* assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      state->allocation, loom_op_const_results(packet->node->op)[result_index],
-      &assignment));
+  const loom_low_allocation_assignment_t* assignment =
+      loom_amdgpu_map_assignment(
+          state->allocation,
+          loom_op_const_results(packet->node->op)[result_index]);
   return loom_amdgpu_assignment_sgpr(state->allocation, assignment,
                                      out_register);
 }
@@ -285,10 +273,10 @@ static iree_status_t loom_amdgpu_packet_result_vgpr(
                             "AMDGPU native encoding result index is out of "
                             "range");
   }
-  const loom_low_allocation_assignment_t* assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      state->allocation, loom_op_const_results(packet->node->op)[result_index],
-      &assignment));
+  const loom_low_allocation_assignment_t* assignment =
+      loom_amdgpu_map_assignment(
+          state->allocation,
+          loom_op_const_results(packet->node->op)[result_index]);
   return loom_amdgpu_assignment_vgpr(state->allocation, assignment,
                                      out_register);
 }
@@ -331,8 +319,8 @@ static iree_status_t loom_amdgpu_packet_descriptor_operand_assignment(
     }
     value_id = loom_op_const_operands(op)[operand_index];
   }
-  return loom_amdgpu_find_assignment(state->allocation, value_id,
-                                     out_assignment);
+  *out_assignment = loom_amdgpu_map_assignment(state->allocation, value_id);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_assignment_field_value(
@@ -776,12 +764,10 @@ static iree_status_t loom_amdgpu_encode_edge_copy_group(
 static iree_status_t loom_amdgpu_encode_copy_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
   const loom_op_t* op = packet->node->op;
-  const loom_low_allocation_assignment_t* source_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      state->allocation, loom_low_copy_source(op), &source_assignment));
-  const loom_low_allocation_assignment_t* result_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      state->allocation, loom_low_copy_result(op), &result_assignment));
+  const loom_low_allocation_assignment_t* source_assignment =
+      loom_amdgpu_map_assignment(state->allocation, loom_low_copy_source(op));
+  const loom_low_allocation_assignment_t* result_assignment =
+      loom_amdgpu_map_assignment(state->allocation, loom_low_copy_result(op));
   if (source_assignment->location_count != result_assignment->location_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
@@ -1485,6 +1471,9 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
                                                    (void**)&block_offsets));
   }
 
+  loom_low_allocation_value_scratch_t scratch = {0};
+  iree_status_t status =
+      loom_low_allocation_acquire_value_scratch(allocation, &scratch);
   loom_amdgpu_encode_state_t sizing_state = {
       .schedule = schedule,
       .allocation = allocation,
@@ -1497,15 +1486,14 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
       .arena = arena,
       .block_offsets = block_offsets,
   };
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_encode_instruction_stream_into_state(&sizing_state));
-  if (sizing_state.length == 0) {
-    return iree_ok_status();
+  if (iree_status_is_ok(status)) {
+    status = loom_amdgpu_encode_instruction_stream_into_state(&sizing_state);
   }
 
   uint8_t* data = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate(arena, sizing_state.length, (void**)&data));
+  if (iree_status_is_ok(status) && sizing_state.length != 0) {
+    status = iree_arena_allocate(arena, sizing_state.length, (void**)&data);
+  }
   loom_amdgpu_encode_state_t writing_state = {
       .schedule = schedule,
       .allocation = allocation,
@@ -1520,16 +1508,21 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
       .capacity = sizing_state.length,
       .block_offsets = block_offsets,
   };
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_encode_instruction_stream_into_state(&writing_state));
-  if (writing_state.length != sizing_state.length) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU native encoding wrote %" PRIhsz
-                            " bytes after planning %" PRIhsz,
-                            writing_state.length, sizing_state.length);
+  if (iree_status_is_ok(status) && sizing_state.length != 0) {
+    status = loom_amdgpu_encode_instruction_stream_into_state(&writing_state);
   }
-  *out_text = iree_make_const_byte_span(data, writing_state.length);
-  return iree_ok_status();
+  if (iree_status_is_ok(status) &&
+      writing_state.length != sizing_state.length) {
+    status = iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "AMDGPU native encoding wrote %" PRIhsz
+                              " bytes after planning %" PRIhsz,
+                              writing_state.length, sizing_state.length);
+  }
+  if (iree_status_is_ok(status) && sizing_state.length != 0) {
+    *out_text = iree_make_const_byte_span(data, writing_state.length);
+  }
+  loom_low_allocation_release_value_scratch(&scratch);
+  return status;
 }
 
 iree_status_t loom_amdgpu_encode_instruction_stream(

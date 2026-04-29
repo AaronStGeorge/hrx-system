@@ -87,20 +87,11 @@ static iree_status_t loom_x86_append_mnemonic(
   return iree_string_builder_append_string(context->builder, mnemonic);
 }
 
-static iree_status_t loom_x86_find_assignment(
+static const loom_low_allocation_assignment_t* loom_x86_map_assignment(
     const loom_native_assembly_packet_context_t* context,
-    loom_value_id_t value_id,
-    const loom_low_allocation_assignment_t** out_assignment) {
-  const loom_low_allocation_assignment_t* assignment =
-      loom_low_packet_find_assignment(context->allocation, value_id, NULL);
-  if (assignment == NULL) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "x86 assembly value %" PRIu32
-                            " has no allocation assignment",
-                            value_id);
-  }
-  *out_assignment = assignment;
-  return iree_ok_status();
+    loom_value_id_t value_id) {
+  return loom_low_allocation_map_active_value_assignment(context->allocation,
+                                                         value_id, NULL);
 }
 
 static bool loom_x86_assignments_match(
@@ -281,9 +272,8 @@ static iree_status_t loom_x86_append_value(
     const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context,
     loom_value_id_t value_id) {
-  const loom_low_allocation_assignment_t* assignment = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_x86_find_assignment(context, value_id, &assignment));
+  const loom_low_allocation_assignment_t* assignment =
+      loom_x86_map_assignment(context, value_id);
   return loom_x86_append_assignment(state, context, assignment);
 }
 
@@ -556,12 +546,10 @@ static iree_status_t loom_x86_append_tied_ternary_packet(
     const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context) {
   const loom_op_t* op = context->packet->node->op;
-  const loom_low_allocation_assignment_t* result_assignment = NULL;
-  const loom_low_allocation_assignment_t* accumulator_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_x86_find_assignment(
-      context, loom_op_const_results(op)[0], &result_assignment));
-  IREE_RETURN_IF_ERROR(loom_x86_find_assignment(
-      context, loom_op_const_operands(op)[0], &accumulator_assignment));
+  const loom_low_allocation_assignment_t* result_assignment =
+      loom_x86_map_assignment(context, loom_op_const_results(op)[0]);
+  const loom_low_allocation_assignment_t* accumulator_assignment =
+      loom_x86_map_assignment(context, loom_op_const_operands(op)[0]);
   if (!loom_x86_assignments_match(result_assignment, accumulator_assignment)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
@@ -583,12 +571,10 @@ static iree_status_t loom_x86_append_tied_binary_packet(
     const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context) {
   const loom_op_t* op = context->packet->node->op;
-  const loom_low_allocation_assignment_t* result_assignment = NULL;
-  const loom_low_allocation_assignment_t* lhs_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_x86_find_assignment(
-      context, loom_op_const_results(op)[0], &result_assignment));
-  IREE_RETURN_IF_ERROR(loom_x86_find_assignment(
-      context, loom_op_const_operands(op)[0], &lhs_assignment));
+  const loom_low_allocation_assignment_t* result_assignment =
+      loom_x86_map_assignment(context, loom_op_const_results(op)[0]);
+  const loom_low_allocation_assignment_t* lhs_assignment =
+      loom_x86_map_assignment(context, loom_op_const_operands(op)[0]);
   if (!loom_x86_assignments_match(result_assignment, lhs_assignment)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
@@ -862,12 +848,10 @@ static iree_status_t loom_x86_append_copy_packet(
   const loom_x86_assembly_state_t* state =
       (const loom_x86_assembly_state_t*)user_data;
   const loom_op_t* op = context->packet->node->op;
-  const loom_low_allocation_assignment_t* source_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_x86_find_assignment(
-      context, loom_low_copy_source(op), &source_assignment));
-  const loom_low_allocation_assignment_t* result_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_x86_find_assignment(
-      context, loom_low_copy_result(op), &result_assignment));
+  const loom_low_allocation_assignment_t* source_assignment =
+      loom_x86_map_assignment(context, loom_low_copy_source(op));
+  const loom_low_allocation_assignment_t* result_assignment =
+      loom_x86_map_assignment(context, loom_low_copy_result(op));
   if (loom_x86_assignments_match(source_assignment, result_assignment)) {
     return iree_ok_status();
   }
@@ -1085,9 +1069,8 @@ static iree_status_t loom_x86_append_cond_branch_packet(
   const loom_x86_assembly_state_t* state =
       (const loom_x86_assembly_state_t*)user_data;
   const loom_op_t* op = context->packet->node->op;
-  const loom_low_allocation_assignment_t* condition_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_x86_find_assignment(
-      context, loom_low_cond_br_condition(op), &condition_assignment));
+  const loom_low_allocation_assignment_t* condition_assignment =
+      loom_x86_map_assignment(context, loom_low_cond_br_condition(op));
   loom_x86_register_class_kind_t register_class_kind = 0;
   IREE_RETURN_IF_ERROR(loom_x86_register_class_kind(
       state, context, condition_assignment, &register_class_kind));

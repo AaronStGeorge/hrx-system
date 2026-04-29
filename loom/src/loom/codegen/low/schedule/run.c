@@ -1383,7 +1383,7 @@ iree_status_t loom_low_schedule_function(
   loom_low_schedule_count_nodes(state.body, &node_count);
   loom_local_value_domain_t value_domain = {0};
   loom_liveness_analysis_t liveness = {0};
-  iree_status_t status = loom_local_value_domain_initialize_for_region(
+  iree_status_t status = loom_local_value_domain_acquire_for_region(
       module, state.body, arena, &value_domain);
   if (iree_status_is_ok(status)) {
     state.value_domain = &value_domain;
@@ -1469,6 +1469,6 @@ iree_status_t loom_low_schedule_function(
     };
     loom_target_bundle_storage_rebind(&out_table->target.bundle_storage);
   }
-  loom_local_value_domain_deinitialize(&value_domain);
+  loom_local_value_domain_release(&value_domain);
   return status;
 }

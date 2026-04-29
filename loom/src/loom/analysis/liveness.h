@@ -197,7 +197,7 @@ typedef struct loom_liveness_analysis_t {
 
 // Computes liveness for |region|. The caller must keep |module| and |region|
 // semantically immutable for as long as |out_analysis| is used and must keep
-// |arena| alive. The analysis installs a local value domain while it runs.
+// |arena| alive. The analysis acquires a local value domain while it runs.
 //
 // CFG regions use explicit successor edges. Structured regions use local block
 // use/def sets only; each block is analyzed independently because structured
@@ -207,9 +207,9 @@ iree_status_t loom_liveness_analyze_region(
     loom_module_t* module, const loom_region_t* region,
     iree_arena_allocator_t* arena, loom_liveness_analysis_t* out_analysis);
 
-// Computes liveness over an already-installed local value domain.
+// Computes liveness over an already-acquired local value domain.
 //
-// The domain must cover the analyzed region and remain installed until the
+// The domain must cover the analyzed region and remain acquired until the
 // analysis completes. This lets adjacent compiler phases share one dense local
 // value map instead of rebuilding module scratch ownership per analysis.
 iree_status_t loom_liveness_analyze_local_value_domain(

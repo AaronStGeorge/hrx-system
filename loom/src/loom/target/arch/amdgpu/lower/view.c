@@ -34,8 +34,7 @@ iree_status_t loom_amdgpu_lower_view_op(loom_low_lower_context_t* context,
       result = loom_view_subview_result(source_op);
       break;
     default:
-      IREE_ASSERT_UNREACHABLE();
-      return iree_ok_status();
+      IREE_CHECK_UNREACHABLE();
   }
 
   loom_value_id_t low_source = LOOM_VALUE_ID_INVALID;

@@ -406,7 +406,8 @@ static iree_status_t loom_amdgpu_module_compile_build_kernel_contribution(
   IREE_RETURN_IF_ERROR(loom_low_emission_frame_build(
       module, plan->low_function_op, &frame_options, table_arena, &frame));
   if (report != NULL) {
-    loom_target_compile_report_record_low_emission_frame(report, &frame);
+    IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_record_low_emission_frame(report, &frame));
   }
 
   loom_amdgpu_native_preflight_t preflight = {0};

@@ -274,7 +274,7 @@ static iree_status_t loom_local_value_domain_register_region_values(
   return iree_ok_status();
 }
 
-iree_status_t loom_local_value_domain_initialize_for_region(
+iree_status_t loom_local_value_domain_acquire_for_region(
     loom_module_t* module, const loom_region_t* region,
     iree_arena_allocator_t* arena, loom_local_value_domain_t* out_domain) {
   IREE_ASSERT_ARGUMENT(module);
@@ -286,18 +286,18 @@ iree_status_t loom_local_value_domain_initialize_for_region(
       .region = region,
   };
   loom_module_value_ordinal_scratch_acquire(module);
-  out_domain->flags |= LOOM_LOCAL_VALUE_DOMAIN_FLAG_INSTALLED;
+  out_domain->flags |= LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED;
   iree_status_t status =
       loom_local_value_domain_register_region_values(out_domain, arena);
   if (!iree_status_is_ok(status)) {
-    loom_local_value_domain_deinitialize(out_domain);
+    loom_local_value_domain_release(out_domain);
   }
   return status;
 }
 
-void loom_local_value_domain_deinitialize(loom_local_value_domain_t* domain) {
-  if (!domain || !iree_any_bit_set(domain->flags,
-                                   LOOM_LOCAL_VALUE_DOMAIN_FLAG_INSTALLED)) {
+void loom_local_value_domain_release(loom_local_value_domain_t* domain) {
+  if (!domain ||
+      !iree_any_bit_set(domain->flags, LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED)) {
     return;
   }
   for (loom_value_ordinal_t i = 0; i < domain->value_count; ++i) {
@@ -305,5 +305,5 @@ void loom_local_value_domain_deinitialize(loom_local_value_domain_t* domain) {
                                             domain->value_ids[i]);
   }
   loom_module_value_ordinal_scratch_release(domain->module);
-  domain->flags &= ~LOOM_LOCAL_VALUE_DOMAIN_FLAG_INSTALLED;
+  domain->flags &= ~LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED;
 }

@@ -351,17 +351,15 @@ static iree_status_t loom_wasm_validate_target_id_assignment(
       assignment->descriptor_reg_class_id, out_value_type);
 }
 
-static iree_status_t loom_wasm_lookup_assignment(
+static iree_status_t loom_wasm_map_assignment(
     const loom_low_allocation_table_t* allocation, loom_value_id_t value_id,
     const loom_low_allocation_assignment_t** out_assignment,
     loom_wasm_value_type_t* out_value_type) {
+  IREE_ASSERT_ARGUMENT(out_assignment);
+  IREE_ASSERT_ARGUMENT(out_value_type);
   const loom_low_allocation_assignment_t* assignment =
-      loom_low_packet_find_assignment(allocation, value_id, NULL);
-  if (!assignment) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "Wasm value %u has no allocation",
-                            (unsigned)value_id);
-  }
+      loom_low_allocation_map_active_value_assignment(allocation, value_id,
+                                                      NULL);
   IREE_RETURN_IF_ERROR(loom_wasm_validate_target_id_assignment(
       allocation, assignment, out_value_type));
   *out_assignment = assignment;
@@ -374,8 +372,8 @@ static iree_status_t loom_wasm_local_layout_add_parameter(
     uint32_t parameter_index) {
   const loom_low_allocation_assignment_t* assignment = NULL;
   loom_wasm_value_type_t value_type = 0;
-  IREE_RETURN_IF_ERROR(loom_wasm_lookup_assignment(allocation, value_id,
-                                                   &assignment, &value_type));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_map_assignment(allocation, value_id, &assignment, &value_type));
   uint32_t local_index = 0;
   IREE_RETURN_IF_ERROR(
       loom_wasm_local_layout_append_type(layout, value_type, &local_index));
@@ -463,8 +461,8 @@ static iree_status_t loom_wasm_lookup_local(
     uint32_t* out_local_index, loom_wasm_value_type_t* out_value_type) {
   const loom_low_allocation_assignment_t* assignment = NULL;
   loom_wasm_value_type_t value_type = 0;
-  IREE_RETURN_IF_ERROR(loom_wasm_lookup_assignment(state->allocation, value_id,
-                                                   &assignment, &value_type));
+  IREE_RETURN_IF_ERROR(loom_wasm_map_assignment(state->allocation, value_id,
+                                                &assignment, &value_type));
   loom_wasm_local_entry_t* entry = loom_wasm_local_layout_find_entry(
       &state->locals, assignment->descriptor_reg_class_id,
       assignment->location_base);
@@ -941,8 +939,12 @@ iree_status_t loom_wasm_emit_function_body(
   };
   loom_wasm_attr_name_ids_initialize(schedule->module, &state.attr_names);
   loom_wasm_binary_writer_initialize(allocator, &state.writer);
+  loom_low_allocation_value_scratch_t scratch = {0};
   iree_status_t status =
-      loom_wasm_build_local_layout(allocation, allocator, &state.locals);
+      loom_low_allocation_acquire_value_scratch(allocation, &scratch);
+  if (iree_status_is_ok(status)) {
+    status = loom_wasm_build_local_layout(allocation, allocator, &state.locals);
+  }
   if (iree_status_is_ok(status)) {
     status = loom_wasm_emit_function_body_payload(&state);
   }
@@ -977,6 +979,7 @@ iree_status_t loom_wasm_emit_function_body(
   }
 
   loom_wasm_binary_writer_deinitialize(&output_writer);
+  loom_low_allocation_release_value_scratch(&scratch);
   loom_wasm_binary_writer_deinitialize(&state.writer);
   loom_wasm_local_layout_deinitialize(&state.locals);
   return status;

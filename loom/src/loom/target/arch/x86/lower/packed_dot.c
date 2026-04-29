@@ -347,8 +347,7 @@ iree_status_t loom_x86_emit_packed_dot_op(void* user_data,
           context, source_op,
           (const loom_x86_packed_dot_plan_t*)plan.target_data);
     default:
-      IREE_ASSERT_UNREACHABLE();
-      return iree_ok_status();
+      IREE_CHECK_UNREACHABLE();
   }
 }
 

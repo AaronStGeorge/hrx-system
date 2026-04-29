@@ -7,6 +7,7 @@
 #include "loom/target/compile_report_low.h"
 
 #include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
 
 namespace loom {
 namespace {
@@ -18,6 +19,25 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
   loom_target_compile_report_pressure_row_t pressure_rows[1] = {};
   loom_target_compile_report_spill_row_t spill_rows[1] = {};
   loom_low_schedule_node_t schedule_nodes[13] = {};
+  loom_value_t module_values[6] = {};
+  loom_value_ordinal_t value_ordinals[6] = {
+      LOOM_VALUE_ORDINAL_INVALID, LOOM_VALUE_ORDINAL_INVALID,
+      LOOM_VALUE_ORDINAL_INVALID, LOOM_VALUE_ORDINAL_INVALID,
+      LOOM_VALUE_ORDINAL_INVALID, LOOM_VALUE_ORDINAL_INVALID,
+  };
+  loom_module_t module = {
+      .values =
+          {
+              .count = IREE_ARRAYSIZE(module_values),
+              .capacity = IREE_ARRAYSIZE(module_values),
+              .entries = module_values,
+          },
+      .value_ordinal_scratch =
+          {
+              .ordinals_by_value_id = value_ordinals,
+              .capacity = IREE_ARRAYSIZE(value_ordinals),
+          },
+  };
   const loom_target_compile_report_row_storage_t row_storage = {
       .pressure_rows = pressure_rows,
       .pressure_row_capacity = IREE_ARRAYSIZE(pressure_rows),
@@ -69,6 +89,14 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
           .location_base = 1,
           .location_count = 1,
       },
+  };
+  const loom_value_id_t liveness_value_ids[] = {
+      4,
+      5,
+  };
+  const uint32_t assignment_indices_by_value_ordinal[] = {
+      0,
+      1,
   };
   const loom_low_allocation_copy_decision_t copy_decisions[] = {
       {
@@ -128,14 +156,19 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
           },
       .allocation =
           {
+              .module = &module,
               .liveness =
                   {
+                      .value_ids = liveness_value_ids,
+                      .value_count = IREE_ARRAYSIZE(liveness_value_ids),
                       .pressure_summaries = pressure_summaries,
                       .pressure_summary_count =
                           IREE_ARRAYSIZE(pressure_summaries),
                   },
               .assignments = assignments,
               .assignment_count = IREE_ARRAYSIZE(assignments),
+              .assignment_indices_by_value_ordinal =
+                  assignment_indices_by_value_ordinal,
               .spill_plans = spill_plans,
               .spill_plan_count = IREE_ARRAYSIZE(spill_plans),
               .copy_decisions = copy_decisions,
@@ -150,7 +183,8 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
           },
   };
 
-  loom_target_compile_report_record_low_emission_frame(&report, &frame);
+  IREE_ASSERT_OK(
+      loom_target_compile_report_record_low_emission_frame(&report, &frame));
 
   EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE));

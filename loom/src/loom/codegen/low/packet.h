@@ -92,12 +92,6 @@ iree_status_t loom_low_packet_lookup_asm_form(
     const loom_low_packet_asm_form_table_t* asm_forms,
     const loom_low_packet_view_t* packet, uint32_t* out_asm_form_ordinal);
 
-// Finds the allocation assignment for |value_id|. Returns NULL when the value
-// has no assignment. |out_assignment_index| is optional.
-const loom_low_allocation_assignment_t* loom_low_packet_find_assignment(
-    const loom_low_allocation_table_t* allocation, loom_value_id_t value_id,
-    iree_host_size_t* out_assignment_index);
-
 // Returns the region-block index for |block|, or LOOM_LOW_PACKET_INDEX_NONE
 // when |block| does not belong to |schedule|.
 uint32_t loom_low_packet_block_index(const loom_low_schedule_table_t* schedule,

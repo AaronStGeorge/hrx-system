@@ -789,7 +789,6 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_async(
       return loom_amdgpu_low_legality_reject_async_transfer(provider, context,
                                                             op);
     default:
-      IREE_ASSERT_UNREACHABLE();
-      return iree_ok_status();
+      IREE_CHECK_UNREACHABLE();
   }
 }

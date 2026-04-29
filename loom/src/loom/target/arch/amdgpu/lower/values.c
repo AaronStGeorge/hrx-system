@@ -457,8 +457,7 @@ static iree_status_t loom_amdgpu_lower_vector_from_elements(
       }
       break;
     default:
-      IREE_ASSERT_UNREACHABLE();
-      return iree_ok_status();
+      IREE_CHECK_UNREACHABLE();
   }
   if (plan->element_count == 1) {
     return loom_low_lower_bind_value(context, plan->result, lanes[0]);
@@ -498,7 +497,6 @@ iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
           context, source_op,
           (const loom_amdgpu_vector_from_elements_plan_t*)plan.target_data);
     default:
-      IREE_ASSERT_UNREACHABLE();
-      return iree_ok_status();
+      IREE_CHECK_UNREACHABLE();
   }
 }

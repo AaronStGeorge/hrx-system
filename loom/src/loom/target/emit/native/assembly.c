@@ -142,6 +142,47 @@ static void loom_native_assembly_truncate_builder(
   }
 }
 
+static iree_status_t loom_native_assembly_append_block(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
+    const loom_native_assembly_format_options_t* options,
+    iree_string_builder_t* builder, iree_host_size_t block_index) {
+  const loom_low_schedule_block_t* block = &schedule->blocks[block_index];
+  IREE_RETURN_IF_ERROR(
+      loom_native_assembly_append_block_label(schedule, block->block, builder));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ":\n"));
+  for (uint32_t i = 0; i < block->scheduled_node_count; ++i) {
+    const iree_host_size_t packet_index =
+        (iree_host_size_t)block->scheduled_node_start + i;
+    loom_low_packet_view_t packet = {0};
+    IREE_RETURN_IF_ERROR(
+        loom_low_packet_view_at(schedule, allocation, packet_index, &packet));
+    if (loom_low_live_in_isa(packet.node->op)) {
+      continue;
+    }
+    loom_native_assembly_packet_context_t context = {
+        .schedule = schedule,
+        .allocation = allocation,
+        .packet = &packet,
+        .builder = builder,
+    };
+    if (options->append_before_packet.fn != NULL) {
+      IREE_RETURN_IF_ERROR(options->append_before_packet.fn(
+          options->append_before_packet.user_data, &context));
+    }
+    const iree_host_size_t line_start = iree_string_builder_size(builder);
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "  "));
+    const iree_host_size_t content_start = iree_string_builder_size(builder);
+    IREE_RETURN_IF_ERROR(loom_native_assembly_append_packet(options, &context));
+    if (iree_string_builder_size(builder) == content_start) {
+      loom_native_assembly_truncate_builder(builder, line_start);
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "\n"));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_native_assembly_format_fragment(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
@@ -165,42 +206,16 @@ iree_status_t loom_native_assembly_format_fragment(
   IREE_RETURN_IF_ERROR(
       loom_native_fragment_validate_emission_inputs(schedule, allocation));
 
-  for (iree_host_size_t block_index = 0; block_index < schedule->block_count;
+  loom_low_allocation_value_scratch_t value_scratch = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_acquire_value_scratch(allocation, &value_scratch));
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t block_index = 0;
+       block_index < schedule->block_count && iree_status_is_ok(status);
        ++block_index) {
-    const loom_low_schedule_block_t* block = &schedule->blocks[block_index];
-    IREE_RETURN_IF_ERROR(loom_native_assembly_append_block_label(
-        schedule, block->block, builder));
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ":\n"));
-    for (uint32_t i = 0; i < block->scheduled_node_count; ++i) {
-      const iree_host_size_t packet_index =
-          (iree_host_size_t)block->scheduled_node_start + i;
-      loom_low_packet_view_t packet = {0};
-      IREE_RETURN_IF_ERROR(
-          loom_low_packet_view_at(schedule, allocation, packet_index, &packet));
-      if (loom_low_live_in_isa(packet.node->op)) {
-        continue;
-      }
-      loom_native_assembly_packet_context_t context = {
-          .schedule = schedule,
-          .allocation = allocation,
-          .packet = &packet,
-          .builder = builder,
-      };
-      if (options->append_before_packet.fn != NULL) {
-        IREE_RETURN_IF_ERROR(options->append_before_packet.fn(
-            options->append_before_packet.user_data, &context));
-      }
-      const iree_host_size_t line_start = iree_string_builder_size(builder);
-      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "  "));
-      const iree_host_size_t content_start = iree_string_builder_size(builder);
-      IREE_RETURN_IF_ERROR(
-          loom_native_assembly_append_packet(options, &context));
-      if (iree_string_builder_size(builder) == content_start) {
-        loom_native_assembly_truncate_builder(builder, line_start);
-        continue;
-      }
-      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "\n"));
-    }
+    status = loom_native_assembly_append_block(schedule, allocation, options,
+                                               builder, block_index);
   }
-  return iree_ok_status();
+  loom_low_allocation_release_value_scratch(&value_scratch);
+  return status;
 }

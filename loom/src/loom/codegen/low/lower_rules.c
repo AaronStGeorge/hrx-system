@@ -82,11 +82,9 @@ static loom_value_id_t loom_low_lower_rule_source_value(
       IREE_ASSERT_LT(value_ref->index, source_op->result_count);
       return loom_op_const_results(source_op)[value_ref->index];
     case LOOM_LOW_LOWER_VALUE_REF_TEMPORARY:
-      IREE_ASSERT_UNREACHABLE();
-      return LOOM_VALUE_ID_INVALID;
+      IREE_CHECK_UNREACHABLE();
     default:
-      IREE_ASSERT_UNREACHABLE();
-      return LOOM_VALUE_ID_INVALID;
+      IREE_CHECK_UNREACHABLE();
   }
 }
 
@@ -164,8 +162,7 @@ static iree_status_t loom_low_lower_rule_low_value(
       *out_low_value_id = state->temporaries[value_ref->index];
       return iree_ok_status();
     default:
-      IREE_ASSERT_UNREACHABLE();
-      return iree_ok_status();
+      IREE_CHECK_UNREACHABLE();
   }
 }
 
@@ -472,8 +469,7 @@ static iree_status_t loom_low_lower_rule_guard_matches(
           guard->u64, /*is_signed_domain=*/false);
       return iree_ok_status();
     default:
-      IREE_ASSERT_UNREACHABLE();
-      return iree_ok_status();
+      IREE_CHECK_UNREACHABLE();
   }
 }
 
@@ -806,8 +802,7 @@ static iree_status_t loom_low_lower_rule_build_attrs(
         attrs[i].value = loom_attr_i64(attr_copy->literal_i64);
         break;
       default:
-        IREE_ASSERT_UNREACHABLE();
-        break;
+        IREE_CHECK_UNREACHABLE();
     }
   }
   *out_attrs = loom_make_named_attr_slice(attrs, emit->attr_copy_count);
@@ -958,8 +953,7 @@ static iree_status_t loom_low_lower_rule_bind_results(
         break;
       case LOOM_LOW_LOWER_VALUE_REF_OPERAND:
       default:
-        IREE_ASSERT_UNREACHABLE();
-        break;
+        IREE_CHECK_UNREACHABLE();
     }
   }
   return iree_ok_status();
@@ -1273,8 +1267,7 @@ iree_status_t loom_low_lower_rule_set_emit_rule(
         break;
       }
       default:
-        IREE_ASSERT_UNREACHABLE();
-        break;
+        IREE_CHECK_UNREACHABLE();
     }
   }
   return loom_low_lower_rule_elide_results(context, rule_set, source_op, rule);

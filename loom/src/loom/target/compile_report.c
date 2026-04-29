@@ -106,11 +106,9 @@ void loom_target_compile_report_record_move_cause(
   if (packet_count == 0 && unit_count == 0) {
     return;
   }
-  if (cause <= LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_NONE ||
-      cause >= LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_COUNT) {
-    IREE_ASSERT(false, "invalid residual move cause");
-    return;
-  }
+  IREE_ASSERT(cause > LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_NONE &&
+                  cause < LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_COUNT,
+              "invalid residual move cause");
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_MOVE_CAUSES;
   loom_target_compile_report_move_cause_counts_t* counts =
       &report->move_causes[cause];

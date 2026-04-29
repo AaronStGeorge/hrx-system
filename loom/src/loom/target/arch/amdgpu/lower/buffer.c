@@ -135,8 +135,7 @@ iree_status_t loom_amdgpu_lower_buffer_op(loom_low_lower_context_t* context,
     case LOOM_OP_BUFFER_VIEW:
       return loom_amdgpu_lower_buffer_view(context, source_op);
     default:
-      IREE_ASSERT_UNREACHABLE();
-      return iree_ok_status();
+      IREE_CHECK_UNREACHABLE();
   }
 }
 

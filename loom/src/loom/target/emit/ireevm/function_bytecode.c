@@ -282,13 +282,10 @@ static iree_status_t loom_ireevm_analyze_register_metadata(
 static iree_status_t loom_ireevm_lookup_i32_register(
     loom_ireevm_emit_state_t* state, loom_value_id_t value_id,
     uint16_t* out_register) {
+  IREE_ASSERT_ARGUMENT(out_register);
   const loom_low_allocation_assignment_t* assignment =
-      loom_low_packet_find_assignment(state->allocation, value_id, NULL);
-  if (!assignment) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "VM bytecode value %u has no allocation",
-                            (unsigned)value_id);
-  }
+      loom_low_allocation_map_active_value_assignment(state->allocation,
+                                                      value_id, NULL);
   return loom_ireevm_validate_i32_register_assignment(state->allocation,
                                                       assignment, out_register);
 }
@@ -634,8 +631,13 @@ iree_status_t loom_ireevm_emit_function_bytecode(
       .schedule = schedule,
       .allocation = allocation,
   };
-  iree_status_t status = loom_ireevm_analyze_register_metadata(
-      allocation, &state.i32_register_count);
+  loom_low_allocation_value_scratch_t scratch = {0};
+  iree_status_t status =
+      loom_low_allocation_acquire_value_scratch(allocation, &scratch);
+  if (iree_status_is_ok(status)) {
+    status = loom_ireevm_analyze_register_metadata(allocation,
+                                                   &state.i32_register_count);
+  }
   iree_host_size_t fixup_capacity = 0;
   if (iree_status_is_ok(status) &&
       !iree_host_size_checked_mul(schedule->scheduled_node_count, 2,
@@ -677,6 +679,7 @@ iree_status_t loom_ireevm_emit_function_bytecode(
     state.writer.data = NULL;
   }
 
+  loom_low_allocation_release_value_scratch(&scratch);
   loom_ireevm_bytecode_writer_deinitialize(&state.writer);
   return status;
 }

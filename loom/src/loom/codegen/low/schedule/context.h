@@ -94,7 +94,7 @@ typedef struct loom_low_schedule_build_state_t {
   loom_low_resolved_target_t target;
   // Descriptor register-class lookup map for module register types.
   loom_low_register_class_map_t register_class_map;
-  // Installed function-local value domain for this scheduling run.
+  // Active function-local value domain for this scheduling run.
   const loom_local_value_domain_t* value_domain;
   // Dense per-local-value scheduler records indexed by value ordinal.
   loom_low_schedule_value_record_t* values;

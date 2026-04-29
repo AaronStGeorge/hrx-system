@@ -70,12 +70,8 @@ static iree_status_t loom_wasm_module_write_value_type_list(
   IREE_RETURN_IF_ERROR(loom_wasm_binary_write_u32_leb(writer, value_count));
   for (uint32_t i = 0; i < value_count; ++i) {
     const loom_low_allocation_assignment_t* assignment =
-        loom_low_packet_find_assignment(allocation, value_ids[i], NULL);
-    if (!assignment) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "Wasm signature value %u has no allocation",
-                              (unsigned)value_ids[i]);
-    }
+        loom_low_allocation_map_active_value_assignment(allocation,
+                                                        value_ids[i], NULL);
     if (assignment->value_class.type_kind != LOOM_TYPE_REGISTER) {
       return iree_make_status(
           IREE_STATUS_UNIMPLEMENTED,
@@ -157,12 +153,18 @@ static iree_status_t loom_wasm_module_write_type_section(
     loom_wasm_binary_writer_t* module_writer, iree_allocator_t allocator) {
   loom_wasm_binary_writer_t payload_writer;
   loom_wasm_binary_writer_initialize(allocator, &payload_writer);
-  iree_status_t status = loom_wasm_module_write_type_section_payload(
-      schedule, allocation, &payload_writer);
+  loom_low_allocation_value_scratch_t scratch = {0};
+  iree_status_t status =
+      loom_low_allocation_acquire_value_scratch(allocation, &scratch);
+  if (iree_status_is_ok(status)) {
+    status = loom_wasm_module_write_type_section_payload(schedule, allocation,
+                                                         &payload_writer);
+  }
   if (iree_status_is_ok(status)) {
     status = loom_wasm_module_write_section(
         module_writer, LOOM_WASM_SECTION_TYPE, &payload_writer);
   }
+  loom_low_allocation_release_value_scratch(&scratch);
   loom_wasm_binary_writer_deinitialize(&payload_writer);
   return status;
 }

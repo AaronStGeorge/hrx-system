@@ -1716,8 +1716,7 @@ static iree_status_t loom_test_low_emit_op(void* user_data,
           context, source_op,
           (const loom_test_low_memory_access_plan_t*)plan.target_data);
     default:
-      IREE_ASSERT_UNREACHABLE();
-      return iree_ok_status();
+      IREE_CHECK_UNREACHABLE();
   }
 }
 

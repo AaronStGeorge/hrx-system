@@ -113,7 +113,7 @@ iree_status_t FormatNamedAllocatedValue(
     void* user_data, const loom_low_allocation_table_t* allocation,
     loom_value_id_t value_id,
     const loom_low_allocation_assignment_t* assignment,
-    iree_host_size_t assignment_index, iree_string_builder_t* builder) {
+    uint32_t assignment_index, iree_string_builder_t* builder) {
   (void)user_data;
   (void)assignment_index;
   if (assignment->location_kind == LOOM_LOW_ALLOCATION_LOCATION_UNASSIGNED) {

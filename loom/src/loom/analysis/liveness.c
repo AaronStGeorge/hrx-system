@@ -48,7 +48,7 @@ typedef struct loom_liveness_build_state_t {
   loom_liveness_order_t order;
   // Arena owning all analysis result storage.
   iree_arena_allocator_t* arena;
-  // Installed local value domain shared with adjacent compiler phases.
+  // Active local value domain shared with adjacent compiler phases.
   const loom_local_value_domain_t* value_domain;
   // Value IDs indexed by region-local value ordinal. Borrowed from
   // value_domain.
@@ -1102,13 +1102,13 @@ iree_status_t loom_liveness_analyze_region_with_order(
   memset(out_analysis, 0, sizeof(*out_analysis));
 
   loom_local_value_domain_t value_domain = {0};
-  iree_status_t status = loom_local_value_domain_initialize_for_region(
+  iree_status_t status = loom_local_value_domain_acquire_for_region(
       module, region, arena, &value_domain);
   if (iree_status_is_ok(status)) {
     status = loom_liveness_analyze_local_value_domain(&value_domain, order,
                                                       arena, out_analysis);
   }
-  loom_local_value_domain_deinitialize(&value_domain);
+  loom_local_value_domain_release(&value_domain);
   return status;
 }
 
@@ -1118,7 +1118,7 @@ iree_status_t loom_liveness_analyze_local_value_domain(
   IREE_ASSERT_ARGUMENT(value_domain);
   IREE_ASSERT_ARGUMENT(value_domain->module);
   IREE_ASSERT_ARGUMENT(value_domain->region);
-  IREE_ASSERT(loom_local_value_domain_is_installed(value_domain));
+  IREE_ASSERT(loom_local_value_domain_is_acquired(value_domain));
   IREE_ASSERT_ARGUMENT(arena);
   IREE_ASSERT_ARGUMENT(out_analysis);
   memset(out_analysis, 0, sizeof(*out_analysis));

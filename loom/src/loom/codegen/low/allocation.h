@@ -63,6 +63,15 @@ typedef enum loom_low_allocation_diagnostic_bits_e {
 // Bitset of loom_low_allocation_diagnostic_bits_t values.
 typedef uint32_t loom_low_allocation_diagnostic_flags_t;
 
+typedef enum loom_low_allocation_value_scratch_flag_bits_e {
+  // The lease acquired the module value-ordinal scratch map and must release
+  // it.
+  LOOM_LOW_ALLOCATION_VALUE_SCRATCH_FLAG_ACQUIRED = 1u << 0,
+} loom_low_allocation_value_scratch_flag_bits_t;
+
+// Bitset of loom_low_allocation_value_scratch_flag_bits_t values.
+typedef uint16_t loom_low_allocation_value_scratch_flags_t;
+
 // Optional fixed register budget used by tests, tuning loops, and target
 // overlays. A missing budget uses the descriptor set's physical register count;
 // a descriptor class with physical_count == 0 is treated as unbounded.
@@ -282,7 +291,7 @@ typedef struct loom_low_allocation_options_t {
 // loom_low_allocate_function.
 typedef struct loom_low_allocation_table_t {
   // Module containing the allocated low function.
-  const loom_module_t* module;
+  loom_module_t* module;
   // Target-low function operation allocated by this table.
   const loom_op_t* function_op;
   // Resolved target context selected by |function_op|.
@@ -295,6 +304,9 @@ typedef struct loom_low_allocation_table_t {
   const loom_low_allocation_assignment_t* assignments;
   // Number of records in |assignments|.
   iree_host_size_t assignment_count;
+  // Assignment indices by liveness local value ordinal. Entries without an
+  // assignment contain UINT32_MAX.
+  const uint32_t* assignment_indices_by_value_ordinal;
   // Spill materialization plans in assignment order.
   const loom_low_allocation_spill_plan_t* spill_plans;
   // Number of records in |spill_plans|.
@@ -327,6 +339,20 @@ typedef struct loom_low_allocation_table_t {
   iree_host_size_t materialized_copy_count;
 } loom_low_allocation_table_t;
 
+// Active allocation-owned lease over the module value-ordinal scratch map.
+typedef struct loom_low_allocation_value_scratch_t {
+  // Module whose scratch map is borrowed by this lease.
+  loom_module_t* module;
+  // Allocation table whose liveness value order defines the active map.
+  const loom_low_allocation_table_t* table;
+  // Value IDs indexed by allocation-local ordinal.
+  const loom_value_id_t* value_ids;
+  // Number of records in |value_ids|.
+  iree_host_size_t value_count;
+  // Lease lifecycle flags.
+  loom_low_allocation_value_scratch_flags_t flags;
+} loom_low_allocation_value_scratch_t;
+
 // Allocates one target-low function body and writes an arena-owned table.
 // This first allocator is deliberately simple and deterministic: it performs
 // per-class linear-scan-style first-fit assignment over liveness intervals,
@@ -343,6 +369,38 @@ iree_status_t loom_low_allocate_function(
 // eventual storage reuse policy.
 iree_status_t loom_low_allocation_verify_table(
     const loom_low_allocation_table_t* table);
+
+// Acquires |table|'s local value map in module ordinal scratch.
+iree_status_t loom_low_allocation_acquire_value_scratch(
+    const loom_low_allocation_table_t* table,
+    loom_low_allocation_value_scratch_t* out_scratch);
+
+// Releases an allocation value scratch lease.
+void loom_low_allocation_release_value_scratch(
+    loom_low_allocation_value_scratch_t* scratch);
+
+// Returns the assignment for |value_ordinal|, or NULL when that local value has
+// no assignment. |out_assignment_index| is optional.
+const loom_low_allocation_assignment_t*
+loom_low_allocation_assignment_for_value_ordinal(
+    const loom_low_allocation_table_t* table,
+    loom_value_ordinal_t value_ordinal, uint32_t* out_assignment_index);
+
+// Maps |value_id| through the active module value-ordinal scratch map to its
+// assignment, or NULL when the active local domain has no assignment for the
+// value. |out_assignment_index| is optional.
+const loom_low_allocation_assignment_t*
+loom_low_allocation_try_map_active_value_assignment(
+    const loom_low_allocation_table_t* table, loom_value_id_t value_id,
+    uint32_t* out_assignment_index);
+
+// Maps |value_id| through the active module value-ordinal scratch map to its
+// assignment. The value must have an assignment; missing entries are compiler
+// bugs.
+const loom_low_allocation_assignment_t*
+loom_low_allocation_map_active_value_assignment(
+    const loom_low_allocation_table_t* table, loom_value_id_t value_id,
+    uint32_t* out_assignment_index);
 
 // Finds the edge-copy group for the source-order node, or NULL when the node
 // has no edge-copy payload.

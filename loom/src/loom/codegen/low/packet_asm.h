@@ -26,7 +26,7 @@ typedef iree_status_t (*loom_low_packet_asm_format_value_fn_t)(
     void* user_data, const loom_low_allocation_table_t* allocation,
     loom_value_id_t value_id,
     const loom_low_allocation_assignment_t* assignment,
-    iree_host_size_t assignment_index, iree_string_builder_t* builder);
+    uint32_t assignment_index, iree_string_builder_t* builder);
 
 // Callback used to spell one allocated SSA value in packet assembly output.
 typedef struct loom_low_packet_asm_format_value_callback_t {
@@ -49,8 +49,8 @@ typedef struct loom_low_packet_asm_options_t {
 } loom_low_packet_asm_options_t;
 
 // Formats |schedule| and |allocation| as scheduled packet assembly text.
-// The tables must describe the same target-low function and target
-// descriptor set.
+// The tables must describe the same target-low function and target descriptor
+// set.
 iree_status_t loom_low_packet_asm_format(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
