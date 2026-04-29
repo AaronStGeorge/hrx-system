@@ -21,25 +21,20 @@ low.kernel.def target(@target) @index_madd_global_b32() asm<amdgpu.gfx11.core> {
   %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x4>
-  %15 = v_mov_b32 1023
-  %x = v_and_b32 %packed_tid, %15
-  %17 = v_mov_b32 10
-  %18 = v_lshrrev_b32 %17, %packed_tid
-  %19 = v_mov_b32 1023
-  %y = v_and_b32 %18, %19
+  %x = v_and_b32_lit %packed_tid, 1023
+  %16 = v_lshrrev_b32_lit %packed_tid, 10
+  %y = v_and_b32_lit %16, 1023
   %zero = s_mov_b32 0
   %row_stride = s_mov_b32 4
-  %23 = v_mov_b32 4
-  %24 = v_mul_lo_u32 %y, %23
-  %linear = v_add_u32 %24, %x
-  %26 = v_mov_b32 2
-  %27 = v_lshlrev_b32 %26, %linear
-  %28 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b32 %27, %28 {offset = 0}
-  %30 = v_mov_b32 2
-  %31 = v_lshlrev_b32 %30, %linear
-  %32 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %31, %loaded, %32 {offset = 0}
+  %20 = v_mov_b32 4
+  %21 = v_mul_lo_u32 %y, %20
+  %linear = v_add_u32 %21, %x
+  %23 = v_lshlrev_b32_lit %linear, 2
+  %24 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b32 %23, %24 {offset = 0}
+  %26 = v_lshlrev_b32_lit %linear, 2
+  %27 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %26, %loaded, %27 {offset = 0}
   return
 }
 
@@ -70,14 +65,12 @@ low.kernel.def target(@target) @index_madd_constant_addend_global_b32() asm<amdg
   %16 = v_mov_b32 4
   %17 = v_mul_lo_u32 %x, %16
   %linear = v_add_u32_lit %17, 1
-  %19 = v_mov_b32 2
-  %20 = v_lshlrev_b32 %19, %linear
-  %21 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b32 %20, %21 {offset = 0}
-  %23 = v_mov_b32 2
-  %24 = v_lshlrev_b32 %23, %linear
-  %25 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %24, %loaded, %25 {offset = 0}
+  %19 = v_lshlrev_b32_lit %linear, 2
+  %20 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b32 %19, %20 {offset = 0}
+  %22 = v_lshlrev_b32_lit %linear, 2
+  %23 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %22, %loaded, %23 {offset = 0}
   return
 }
 
@@ -102,26 +95,21 @@ kernel.def @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {
 low.kernel.def target(@target) @workitem_y_lds_uses_explicit_vaddr() asm<amdgpu.gfx11.core> {
   %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
   %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
-  %12 = v_mov_b32 10
-  %13 = v_lshrrev_b32 %12, %packed_tid
-  %14 = v_mov_b32 1023
-  %y = v_and_b32 %13, %14
+  %12 = v_lshrrev_b32_lit %packed_tid, 10
+  %y = v_and_b32_lit %12, 1023
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
   %scratch_view = frame_index @workitem_y_lds_uses_explicit_vaddr__lds5 {offset = 0} : reg<amdgpu.vgpr>
   %value = v_mov_b32 7
-  %20 = v_mov_b32 2
-  %21 = v_lshlrev_b32 %20, %y
-  %22 = v_add_u32 %scratch_view, %21
-  ds_write_b32 %22, %value {offset = 0}
-  %23 = v_mov_b32 2
-  %24 = v_lshlrev_b32 %23, %y
-  %25 = v_add_u32 %scratch_view, %24
-  %loaded = ds_read_b32 %25 {offset = 0}
-  %27 = v_mov_b32 2
-  %28 = v_lshlrev_b32 %27, %y
-  %29 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %28, %loaded, %29 {offset = 0}
+  %18 = v_lshlrev_b32_lit %y, 2
+  %19 = v_add_u32 %scratch_view, %18
+  ds_write_b32 %19, %value {offset = 0}
+  %20 = v_lshlrev_b32_lit %y, 2
+  %21 = v_add_u32 %scratch_view, %20
+  %loaded = ds_read_b32 %21 {offset = 0}
+  %23 = v_lshlrev_b32_lit %y, 2
+  %24 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %23, %loaded, %24 {offset = 0}
   return
 }
 

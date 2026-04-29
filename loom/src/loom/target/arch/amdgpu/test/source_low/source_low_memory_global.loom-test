@@ -47,41 +47,39 @@ low.kernel.def target(@target) @i32_b128() asm<amdgpu.gfx11.core> {
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
-  %16 = v_mov_b32 4
-  %17 = v_lshlrev_b32 %16, %tid
-  %18 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b128 %17, %18 {offset = 0}
-  %20 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %21 = v_add_u32_lit %20, 9
-  %22 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %23 = v_add_u32_lit %22, 9
-  %24 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %25 = v_add_u32_lit %24, 9
-  %26 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %27 = v_add_u32_lit %26, 9
-  %raised = concat(%21, %23, %25, %27) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %16 = v_lshlrev_b32_lit %tid, 4
+  %17 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b128 %16, %17 {offset = 0}
+  %19 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %20 = v_add_u32_lit %19, 9
+  %21 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %22 = v_add_u32_lit %21, 9
+  %23 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %24 = v_add_u32_lit %23, 9
+  %25 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %26 = v_add_u32_lit %25, 9
+  %raised = concat(%20, %22, %24, %26) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %28 = v_mov_b32 4
   %29 = v_mov_b32 4
   %30 = v_mov_b32 4
   %31 = v_mov_b32 4
-  %32 = v_mov_b32 4
-  %drop = concat(%29, %30, %31, %32) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %34 = slice %raised[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %35 = slice %drop[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %36 = v_sub_nc_u32 %34, %35
-  %37 = slice %raised[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %38 = slice %drop[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %39 = v_sub_nc_u32 %37, %38
-  %40 = slice %raised[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %41 = slice %drop[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %42 = v_sub_nc_u32 %40, %41
-  %43 = slice %raised[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %44 = slice %drop[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %45 = v_sub_nc_u32 %43, %44
-  %result = concat(%36, %39, %42, %45) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %47 = v_mov_b32 4
-  %48 = v_lshlrev_b32 %47, %tid
-  %49 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %48, %result, %49 {offset = 0}
+  %drop = concat(%28, %29, %30, %31) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %33 = slice %raised[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %34 = slice %drop[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %35 = v_sub_nc_u32 %33, %34
+  %36 = slice %raised[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %37 = slice %drop[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %38 = v_sub_nc_u32 %36, %37
+  %39 = slice %raised[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %40 = slice %drop[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %41 = v_sub_nc_u32 %39, %40
+  %42 = slice %raised[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %43 = slice %drop[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %44 = v_sub_nc_u32 %42, %43
+  %result = concat(%35, %38, %41, %44) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %46 = v_lshlrev_b32_lit %tid, 4
+  %47 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b128 %46, %result, %47 {offset = 0}
   return
 }
 
@@ -105,27 +103,20 @@ low.kernel.def target(@target) @i32_scalar_2d_store() asm<amdgpu.gfx11.core> {
   %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x4>
-  %13 = v_mov_b32 1023
-  %x = v_and_b32 %packed_tid, %13
-  %15 = v_mov_b32 10
-  %16 = v_lshrrev_b32 %15, %packed_tid
-  %17 = v_mov_b32 1023
-  %y = v_and_b32 %16, %17
+  %x = v_and_b32_lit %packed_tid, 1023
+  %14 = v_lshrrev_b32_lit %packed_tid, 10
+  %y = v_and_b32_lit %14, 1023
   %zero = s_mov_b32 0
-  %20 = v_mov_b32 5
-  %21 = v_lshlrev_b32 %20, %y
-  %22 = v_mov_b32 2
-  %23 = v_lshlrev_b32 %22, %x
-  %24 = v_add_u32 %21, %23
-  %25 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b32 %24, %25 {offset = 0}
-  %27 = v_mov_b32 5
-  %28 = v_lshlrev_b32 %27, %y
-  %29 = v_mov_b32 2
-  %30 = v_lshlrev_b32 %29, %x
-  %31 = v_add_u32 %28, %30
-  %32 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %31, %loaded, %32 {offset = 0}
+  %17 = v_lshlrev_b32_lit %y, 5
+  %18 = v_lshlrev_b32_lit %x, 2
+  %19 = v_add_u32 %17, %18
+  %20 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b32 %19, %20 {offset = 0}
+  %22 = v_lshlrev_b32_lit %y, 5
+  %23 = v_lshlrev_b32_lit %x, 2
+  %24 = v_add_u32 %22, %23
+  %25 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %24, %loaded, %25 {offset = 0}
   return
 }
 
@@ -150,14 +141,12 @@ low.kernel.def target(@target) @i32_dynamic_constant_index() asm<amdgpu.gfx11.co
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %zero_offset = s_mov_b32 0
   %zero = s_mov_b32 0
-  %14 = v_mov_b32 4
-  %15 = v_lshlrev_b32 %14, %tid
-  %16 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b128 %15, %16 {offset = 0}
-  %18 = v_mov_b32 4
-  %19 = v_lshlrev_b32 %18, %tid
-  %20 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %19, %loaded, %20 {offset = 0}
+  %14 = v_lshlrev_b32_lit %tid, 4
+  %15 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b128 %14, %15 {offset = 0}
+  %17 = v_lshlrev_b32_lit %tid, 4
+  %18 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b128 %17, %loaded, %18 {offset = 0}
   return
 }
 
@@ -180,14 +169,12 @@ low.kernel.def target(@target) @f16x2_b32() asm<amdgpu.gfx11.core> {
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
-  %12 = v_mov_b32 2
-  %13 = v_lshlrev_b32 %12, %tid
-  %14 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b32 %13, %14 {offset = 0}
-  %16 = v_mov_b32 2
-  %17 = v_lshlrev_b32 %16, %tid
-  %18 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %17, %loaded, %18 {offset = 0}
+  %12 = v_lshlrev_b32_lit %tid, 2
+  %13 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b32 %12, %13 {offset = 0}
+  %15 = v_lshlrev_b32_lit %tid, 2
+  %16 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %15, %loaded, %16 {offset = 0}
   return
 }
 
@@ -210,14 +197,12 @@ low.kernel.def target(@target) @f16x4_b64() asm<amdgpu.gfx11.core> {
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
-  %12 = v_mov_b32 3
-  %13 = v_lshlrev_b32 %12, %tid
-  %14 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b64 %13, %14 {offset = 0}
-  %16 = v_mov_b32 3
-  %17 = v_lshlrev_b32 %16, %tid
-  %18 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b64 %17, %loaded, %18 {offset = 0}
+  %12 = v_lshlrev_b32_lit %tid, 3
+  %13 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b64 %12, %13 {offset = 0}
+  %15 = v_lshlrev_b32_lit %tid, 3
+  %16 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b64 %15, %loaded, %16 {offset = 0}
   return
 }
 
@@ -240,14 +225,12 @@ low.kernel.def target(@target) @bf16x2_b32() asm<amdgpu.gfx11.core> {
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
-  %12 = v_mov_b32 2
-  %13 = v_lshlrev_b32 %12, %tid
-  %14 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b32 %13, %14 {offset = 0}
-  %16 = v_mov_b32 2
-  %17 = v_lshlrev_b32 %16, %tid
-  %18 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %17, %loaded, %18 {offset = 0}
+  %12 = v_lshlrev_b32_lit %tid, 2
+  %13 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b32 %12, %13 {offset = 0}
+  %15 = v_lshlrev_b32_lit %tid, 2
+  %16 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %15, %loaded, %16 {offset = 0}
   return
 }
 
@@ -270,13 +253,11 @@ low.kernel.def target(@target) @bf16x4_b64() asm<amdgpu.gfx11.core> {
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
-  %12 = v_mov_b32 3
-  %13 = v_lshlrev_b32 %12, %tid
-  %14 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b64 %13, %14 {offset = 0}
-  %16 = v_mov_b32 3
-  %17 = v_lshlrev_b32 %16, %tid
-  %18 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b64 %17, %loaded, %18 {offset = 0}
+  %12 = v_lshlrev_b32_lit %tid, 3
+  %13 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b64 %12, %13 {offset = 0}
+  %15 = v_lshlrev_b32_lit %tid, 3
+  %16 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b64 %15, %loaded, %16 {offset = 0}
   return
 }

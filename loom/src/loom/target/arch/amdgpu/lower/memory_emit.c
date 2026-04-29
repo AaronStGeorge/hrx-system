@@ -29,7 +29,8 @@ iree_status_t loom_amdgpu_emit_memory_vaddr(
       case LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET:
         continue;
       case LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_NONE:
-        IREE_CHECK_UNREACHABLE();
+        IREE_ASSERT_UNREACHABLE("unknown AMDGPU memory dynamic index kind");
+        IREE_BUILTIN_UNREACHABLE();
     }
     const loom_low_source_memory_dynamic_term_t* term =
         &access->source.dynamic_terms[i];
@@ -40,23 +41,28 @@ iree_status_t loom_amdgpu_emit_memory_vaddr(
     if (term->byte_stride != 1) {
       const bool use_shift =
           term->byte_shift != LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE;
-      loom_value_id_t low_scale = LOOM_VALUE_ID_INVALID;
-      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
-          use_shift ? term->byte_shift : term->byte_stride, vgpr_type,
-          &low_scale));
-      loom_value_id_t operands[] = {
-          use_shift ? low_scale : low_index,
-          use_shift ? low_index : low_scale,
-      };
-      loom_op_t* low_offset_op = NULL;
-      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-          context, source_op,
-          use_shift ? LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHLREV_B32
-                    : LOOM_AMDGPU_DESCRIPTOR_ID_V_MUL_LO_U32,
-          operands, IREE_ARRAYSIZE(operands),
-          loom_make_named_attr_slice(NULL, 0), &vgpr_type, 1, &low_offset_op));
-      low_offset = loom_value_slice_get(loom_low_op_results(low_offset_op), 0);
+      if (use_shift) {
+        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
+            context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHLREV_B32_LIT,
+            low_index, term->byte_shift, vgpr_type, &low_offset));
+      } else {
+        loom_value_id_t low_scale = LOOM_VALUE_ID_INVALID;
+        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+            context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
+            term->byte_stride, vgpr_type, &low_scale));
+        loom_value_id_t operands[] = {
+            low_index,
+            low_scale,
+        };
+        loom_op_t* low_offset_op = NULL;
+        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
+            context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MUL_LO_U32,
+            operands, IREE_ARRAYSIZE(operands),
+            loom_make_named_attr_slice(NULL, 0), &vgpr_type, 1,
+            &low_offset_op));
+        low_offset =
+            loom_value_slice_get(loom_low_op_results(low_offset_op), 0);
+      }
     }
     if (low_accumulator == LOOM_VALUE_ID_INVALID) {
       low_accumulator = low_offset;
@@ -72,21 +78,18 @@ iree_status_t loom_amdgpu_emit_memory_vaddr(
   }
 
   if (access->vaddr_static_byte_offset != 0) {
-    loom_value_id_t low_static_offset = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
-        access->vaddr_static_byte_offset, vgpr_type, &low_static_offset));
     if (low_accumulator == LOOM_VALUE_ID_INVALID) {
+      loom_value_id_t low_static_offset = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
+          access->vaddr_static_byte_offset, vgpr_type, &low_static_offset));
       *out_low_vaddr = low_static_offset;
       return iree_ok_status();
     }
-    loom_value_id_t add_operands[] = {low_accumulator, low_static_offset};
-    loom_op_t* low_add_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_U32, add_operands,
-        IREE_ARRAYSIZE(add_operands), loom_make_named_attr_slice(NULL, 0),
-        &vgpr_type, 1, &low_add_op));
-    low_accumulator = loom_value_slice_get(loom_low_op_results(low_add_op), 0);
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_U32_LIT,
+        low_accumulator, access->vaddr_static_byte_offset, vgpr_type,
+        &low_accumulator));
   }
 
   if (low_accumulator == LOOM_VALUE_ID_INVALID) {

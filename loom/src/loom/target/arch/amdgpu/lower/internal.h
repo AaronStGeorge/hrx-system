@@ -448,11 +448,17 @@ iree_status_t loom_amdgpu_emit_vgpr_binary(
     uint64_t descriptor_id, loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t lane_type, loom_value_id_t* out_value);
 
-// Emits one VGPR shift descriptor op with a materialized immediate shift
-// amount. If |shift| is zero, returns |value| unchanged.
+// Emits one VGPR descriptor op with one VGPR operand and one imm32 literal.
+iree_status_t loom_amdgpu_emit_vgpr_binary_literal(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t descriptor_id, loom_value_id_t value, uint32_t literal,
+    loom_type_t lane_type, loom_value_id_t* out_value);
+
+// Emits one VGPR literal-shift descriptor op. If |shift| is zero, returns
+// |value| unchanged.
 iree_status_t loom_amdgpu_emit_vgpr_shift(loom_low_lower_context_t* context,
                                           const loom_op_t* source_op,
-                                          uint64_t descriptor_id,
+                                          uint64_t literal_descriptor_id,
                                           uint32_t shift, loom_value_id_t value,
                                           loom_type_t lane_type,
                                           loom_value_id_t* out_value);

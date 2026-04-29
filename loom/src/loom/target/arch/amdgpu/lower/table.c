@@ -112,16 +112,12 @@ static iree_status_t loom_amdgpu_table_lookup_extract_i8_index_lane(
 
   loom_value_id_t shifted = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHRREV_B32,
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHRREV_B32_LIT,
       byte_offset * 8u, source_register, lane_type, &shifted));
 
-  loom_value_id_t mask = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32, 0xFFu, lane_type,
-      &mask));
-  return loom_amdgpu_emit_vgpr_binary(context, source_op,
-                                      LOOM_AMDGPU_DESCRIPTOR_ID_V_AND_B32,
-                                      shifted, mask, lane_type, out_index_lane);
+  return loom_amdgpu_emit_vgpr_binary_literal(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_AND_B32_LIT, shifted,
+      0xFFu, lane_type, out_index_lane);
 }
 
 static iree_status_t loom_amdgpu_table_lookup_extract_index_lane(

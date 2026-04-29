@@ -203,14 +203,14 @@ static iree_status_t loom_amdgpu_emit_packed_workitem_id_extract(
       break;
     case LOOM_KERNEL_DIMENSION_Y: {
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHRREV_B32,
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHRREV_B32_LIT,
           LOOM_AMDGPU_PACKED_WORKITEM_ID_DIMENSION_BITS, packed_id, vgpr_type,
           &shifted_id));
       break;
     }
     case LOOM_KERNEL_DIMENSION_Z: {
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHRREV_B32,
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHRREV_B32_LIT,
           LOOM_AMDGPU_PACKED_WORKITEM_ID_DIMENSION_BITS * 2u, packed_id,
           vgpr_type, &shifted_id));
       break;
@@ -221,13 +221,10 @@ static iree_status_t loom_amdgpu_emit_packed_workitem_id_extract(
                               (unsigned)dimension);
   }
 
-  loom_value_id_t mask = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
-      LOOM_AMDGPU_PACKED_WORKITEM_ID_DIMENSION_MASK, vgpr_type, &mask));
-  return loom_amdgpu_emit_vgpr_binary(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_AND_B32, shifted_id, mask,
-      vgpr_type, out_low_value_id);
+  return loom_amdgpu_emit_vgpr_binary_literal(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_AND_B32_LIT, shifted_id,
+      LOOM_AMDGPU_PACKED_WORKITEM_ID_DIMENSION_MASK, vgpr_type,
+      out_low_value_id);
 }
 
 static iree_status_t loom_amdgpu_lookup_packed_workitem_id_live_in(

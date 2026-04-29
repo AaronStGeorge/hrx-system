@@ -35,8 +35,7 @@ func.def @i8x4_slice_high_half(%bytes: vector<4xi8>) -> (vector<2xi8>) {
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @i8x4_slice_high_half(%bytes: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
-  %5 = v_mov_b32 16
-  %high = v_lshrrev_b32 %5, %bytes
+  %high = v_lshrrev_b32_lit %bytes, 16
   return %high
 }
 

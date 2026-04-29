@@ -18,13 +18,11 @@ low.kernel.def target(@target) @cache_system_bypass_load_device_writeback_store(
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
-  %12 = v_mov_b32 4
-  %13 = v_lshlrev_b32 %12, %tid
-  %14 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b128 %13, %14 {offset = 0, scope = 3, th = 3}
-  %16 = v_mov_b32 4
-  %17 = v_lshlrev_b32 %16, %tid
-  %18 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %17, %loaded, %18 {offset = 0, scope = 2, th = 7}
+  %12 = v_lshlrev_b32_lit %tid, 4
+  %13 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b128 %12, %13 {offset = 0, scope = 3, th = 3}
+  %15 = v_lshlrev_b32_lit %tid, 4
+  %16 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b128 %15, %loaded, %16 {offset = 0, scope = 2, th = 7}
   return
 }

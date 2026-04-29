@@ -257,7 +257,7 @@ static iree_status_t loom_amdgpu_lower_vector_slice_packed_register_bits(
       continue;
     }
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHRREV_B32,
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHRREV_B32_LIT,
         source_register_bit_offset, source_register, lane_type,
         &low_registers[i]));
   }

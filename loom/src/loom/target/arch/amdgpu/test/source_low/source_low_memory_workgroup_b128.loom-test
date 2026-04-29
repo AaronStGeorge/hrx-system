@@ -25,22 +25,18 @@ low.kernel.def target(@target) @lds_b128_roundtrip() asm<amdgpu.gfx11.core> {
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 1024
   %scratch_view = frame_index @lds_b128_roundtrip__lds6 {offset = 0} : reg<amdgpu.vgpr>
-  %18 = v_mov_b32 4
-  %19 = v_lshlrev_b32 %18, %tid
-  %20 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b128 %19, %20 {offset = 0}
-  %22 = v_mov_b32 4
-  %23 = v_lshlrev_b32 %22, %tid
+  %18 = v_lshlrev_b32_lit %tid, 4
+  %19 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b128 %18, %19 {offset = 0}
+  %21 = v_lshlrev_b32_lit %tid, 4
+  %22 = v_add_u32 %scratch_view, %21
+  ds_write_b128 %22, %loaded {offset = 0}
+  %23 = v_lshlrev_b32_lit %tid, 4
   %24 = v_add_u32 %scratch_view, %23
-  ds_write_b128 %24, %loaded {offset = 0}
-  %25 = v_mov_b32 4
-  %26 = v_lshlrev_b32 %25, %tid
-  %27 = v_add_u32 %scratch_view, %26
-  %roundtrip = ds_read_b128 %27 {offset = 0}
-  %29 = v_mov_b32 4
-  %30 = v_lshlrev_b32 %29, %tid
-  %31 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %30, %roundtrip, %31 {offset = 0}
+  %roundtrip = ds_read_b128 %24 {offset = 0}
+  %26 = v_lshlrev_b32_lit %tid, 4
+  %27 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b128 %26, %roundtrip, %27 {offset = 0}
   return
 }
 
@@ -74,26 +70,20 @@ low.kernel.def target(@target) @lds_b128_large_static_offset_roundtrip() asm<amd
   %large = s_mov_b32 1024
   %bytes = s_mov_b32 4096
   %scratch_view = frame_index @lds_b128_large_static_offset_roundtrip__lds7 {offset = 0} : reg<amdgpu.vgpr>
-  %20 = v_mov_b32 4
-  %21 = v_lshlrev_b32 %20, %tid
-  %22 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b128 %21, %22 {offset = 0}
-  %24 = v_mov_b32 4
-  %25 = v_lshlrev_b32 %24, %tid
-  %26 = v_add_u32 %scratch_view, %25
-  %27 = v_mov_b32 1024
-  %28 = v_add_u32 %26, %27
-  ds_write_b128 %28, %loaded {offset = 0}
-  %29 = v_mov_b32 4
-  %30 = v_lshlrev_b32 %29, %tid
-  %31 = v_add_u32 %scratch_view, %30
-  %32 = v_mov_b32 1024
-  %33 = v_add_u32 %31, %32
-  %roundtrip = ds_read_b128 %33 {offset = 0}
-  %35 = v_mov_b32 4
-  %36 = v_lshlrev_b32 %35, %tid
-  %37 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %36, %roundtrip, %37 {offset = 0}
+  %20 = v_lshlrev_b32_lit %tid, 4
+  %21 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b128 %20, %21 {offset = 0}
+  %23 = v_lshlrev_b32_lit %tid, 4
+  %24 = v_add_u32 %scratch_view, %23
+  %25 = v_add_u32_lit %24, 1024
+  ds_write_b128 %25, %loaded {offset = 0}
+  %26 = v_lshlrev_b32_lit %tid, 4
+  %27 = v_add_u32 %scratch_view, %26
+  %28 = v_add_u32_lit %27, 1024
+  %roundtrip = ds_read_b128 %28 {offset = 0}
+  %30 = v_lshlrev_b32_lit %tid, 4
+  %31 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b128 %30, %roundtrip, %31 {offset = 0}
   return
 }
 
