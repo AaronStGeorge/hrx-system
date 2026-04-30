@@ -7,7 +7,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
-#include "loom/passes/vector_to_scalar_internal.h"
+#include "loom/passes/vector/to_scalar_internal.h"
 
 //===----------------------------------------------------------------------===//
 // Static aggregate lowering

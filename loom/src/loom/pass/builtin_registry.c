@@ -28,8 +28,8 @@
 #include "loom/passes/scf_to_cfg.h"
 #include "loom/passes/strip_hints.h"
 #include "loom/passes/symbol_dce.h"
-#include "loom/passes/vector_memory_footprint.h"
-#include "loom/passes/vector_to_scalar.h"
+#include "loom/passes/vector/memory_footprint.h"
+#include "loom/passes/vector/to_scalar.h"
 
 static const loom_pass_option_schema_t kCanonicalizeOptionSchema[] = {
     {

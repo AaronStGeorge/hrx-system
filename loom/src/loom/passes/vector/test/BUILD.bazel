@@ -15,19 +15,7 @@ package(
 loom_check_test_suite(
     name = "test",
     srcs = [
-        "branch_fusion.loom-test",
-        "branch_sink.loom-test",
-        "cfg_compatibility.loom-test",
-        "cfg_simplify.loom-test",
-        "cfg_simplify_scf_pipeline.loom-test",
-        "kernel_async_legality.loom-test",
-        "kernel_resources.loom-test",
-        "licm.loom-test",
-        "loop_fusion.loom-test",
-        "refine_boundaries.loom-test",
-        "scf_index.loom-test",
-        "scf_to_cfg.loom-test",
-        "symbol_dce.loom-test",
+        "to_scalar.loom-test",
     ],
     runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )

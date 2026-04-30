@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/passes/vector_to_scalar.h"
+#include "loom/passes/vector/to_scalar.h"
 
 #include <string>
 

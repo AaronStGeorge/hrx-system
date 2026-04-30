@@ -11,7 +11,7 @@
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
-#include "loom/passes/vector_to_scalar_internal.h"
+#include "loom/passes/vector/to_scalar_internal.h"
 
 //===----------------------------------------------------------------------===//
 // Logical view indices

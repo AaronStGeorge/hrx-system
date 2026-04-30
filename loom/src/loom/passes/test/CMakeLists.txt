@@ -153,15 +153,4 @@ iree_executable_test(
     "loom-check"
 )
 
-iree_executable_test(
-  NAME
-    "vector_to_scalar"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/vector_to_scalar.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check::loom-check-test
-  LABELS
-    "loom-check"
-)
-
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

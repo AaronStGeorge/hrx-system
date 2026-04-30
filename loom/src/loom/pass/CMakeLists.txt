@@ -248,8 +248,8 @@ loom_cc_library(
     loom::src::loom::passes::scf_to_cfg
     loom::src::loom::passes::strip_hints
     loom::src::loom::passes::symbol_dce
-    loom::src::loom::passes::vector_memory_footprint
-    loom::src::loom::passes::vector_to_scalar
+    loom::src::loom::passes::vector::memory_footprint
+    loom::src::loom::passes::vector::to_scalar
   PUBLIC
 )
 
