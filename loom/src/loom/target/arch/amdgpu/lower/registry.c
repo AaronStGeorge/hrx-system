@@ -502,20 +502,6 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_select_vector_table_lookup_dispatch,
                 loom_amdgpu_emit_vector_table_lookup_dispatch,
                 loom_amdgpu_low_legality_verify_vector_table),
-        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_DOTF)] = LOOM_AMDGPU_LEGALITY_ROW(
-            LOOM_OP_VECTOR_DOTF, loom_amdgpu_low_legality_verify_vector_dot),
-        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_DOT2F)] = LOOM_AMDGPU_LEGALITY_ROW(
-            LOOM_OP_VECTOR_DOT2F, loom_amdgpu_low_legality_verify_vector_dot),
-        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_DOT4I)] = LOOM_AMDGPU_LEGALITY_ROW(
-            LOOM_OP_VECTOR_DOT4I, loom_amdgpu_low_legality_verify_vector_dot),
-        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_DOT8I4)] =
-            LOOM_AMDGPU_LEGALITY_ROW(
-                LOOM_OP_VECTOR_DOT8I4,
-                loom_amdgpu_low_legality_verify_vector_dot),
-        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_DOT4F8)] =
-            LOOM_AMDGPU_LEGALITY_ROW(
-                LOOM_OP_VECTOR_DOT4F8,
-                loom_amdgpu_low_legality_verify_vector_dot),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_BITFIELD_EXTRACTU)] =
             LOOM_AMDGPU_DATA_ROW(
                 LOOM_OP_VECTOR_BITFIELD_EXTRACTU,
@@ -897,6 +883,8 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
     .name = IREE_SVL("amdgpu-register-lower"),
     .map_type = {.fn = loom_amdgpu_map_type, .user_data = NULL},
     .map_value = {.fn = loom_amdgpu_map_value, .user_data = NULL},
+    .map_contract_value = {.fn = loom_amdgpu_map_contract_value,
+                           .user_data = NULL},
     .map_argument = {.fn = loom_amdgpu_map_argument, .user_data = NULL},
     .emit_preamble = {.fn = loom_amdgpu_emit_preamble, .user_data = NULL},
     .emit_cond_branch = {.fn = loom_amdgpu_emit_cond_branch, .user_data = NULL},

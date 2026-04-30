@@ -168,9 +168,28 @@ iree_status_t loom_test_low_lower_rule_match_map_value(
   (void)source_op;
   IREE_ASSERT_ARGUMENT(out_mapped_value);
   IREE_ASSERT_LT(source_value_id, context->module->values.count);
+  const loom_target_contract_query_environment_t environment = {
+      .module = context->module,
+      .descriptor_set = context->descriptor_set,
+  };
+  return loom_test_low_lower_map_contract_value(
+      NULL, &environment, source_op, source_value_id, out_mapped_value);
+}
+
+iree_status_t loom_test_low_lower_map_contract_value(
+    void* user_data,
+    const loom_target_contract_query_environment_t* environment,
+    const loom_op_t* source_op, loom_value_id_t source_value_id,
+    loom_low_lower_rule_mapped_value_t* out_mapped_value) {
+  (void)user_data;
+  (void)source_op;
+  IREE_ASSERT_ARGUMENT(environment);
+  IREE_ASSERT_ARGUMENT(environment->module);
+  IREE_ASSERT_ARGUMENT(out_mapped_value);
+  IREE_ASSERT_LT(source_value_id, environment->module->values.count);
   *out_mapped_value = loom_low_lower_rule_mapped_value_none();
   loom_type_t source_type =
-      loom_module_value_type(context->module, source_value_id);
+      loom_module_value_type(environment->module, source_value_id);
   if (loom_test_low_is_i32(source_type) || loom_test_low_is_i1(source_type) ||
       loom_test_low_is_index_like(source_type)) {
     *out_mapped_value = loom_low_lower_rule_mapped_value_register(
@@ -1447,6 +1466,7 @@ static const loom_low_lower_rule_span_t kTestLowSpans[] = {
 };
 
 const loom_low_lower_rule_set_t loom_test_low_lower_rule_set = {
+    .flags = LOOM_LOW_LOWER_RULE_SET_FLAG_TARGET_CONTRACT_QUERY,
     .spans = kTestLowSpans,
     .span_count = IREE_ARRAYSIZE(kTestLowSpans),
     .rules = kTestLowRules,
@@ -1729,6 +1749,8 @@ static const loom_low_lower_rule_set_t* const kTestLowRuleSets[] = {
 static const loom_low_lower_policy_t kTestLowLowerPolicy = {
     .name = IREE_SVL("test-low-lower-policy"),
     .map_type = {.fn = loom_test_low_lower_map_type, .user_data = NULL},
+    .map_contract_value = {.fn = loom_test_low_lower_map_contract_value,
+                           .user_data = NULL},
     .map_argument = {.fn = loom_test_low_lower_map_argument, .user_data = NULL},
     .rule_sets =
         {

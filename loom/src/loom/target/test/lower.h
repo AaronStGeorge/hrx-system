@@ -46,6 +46,14 @@ iree_status_t loom_test_low_lower_rule_match_map_value(
     const loom_op_t* source_op, loom_value_id_t source_value_id,
     loom_low_lower_rule_mapped_value_t* out_mapped_value);
 
+// Maps one source value into target-low register metadata for read-only target
+// contract queries.
+iree_status_t loom_test_low_lower_map_contract_value(
+    void* user_data,
+    const loom_target_contract_query_environment_t* environment,
+    const loom_op_t* source_op, loom_value_id_t source_value_id,
+    loom_low_lower_rule_mapped_value_t* out_mapped_value);
+
 // Accepts every source value as materializable for rule-table selection tests.
 bool loom_test_low_lower_rule_match_can_materialize(
     void* user_data, const loom_low_lower_rule_match_context_t* context,

@@ -2,7 +2,6 @@
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
 func.def @dot4i_s8s8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
-  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
   %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
   func.return %dot : vector<1xi32>
 }
@@ -16,7 +15,6 @@ low.func.def target(@target) abi(hal_kernel) @dot4i_s8s8(%lhs: reg<amdgpu.vgpr>,
 // ====
 
 func.def @dot4i_u8u8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
-  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
   %dot = vector.dot4i<u8u8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
   func.return %dot : vector<1xi32>
 }
@@ -30,7 +28,6 @@ low.func.def target(@target) abi(hal_kernel) @dot4i_u8u8(%lhs: reg<amdgpu.vgpr>,
 // ====
 
 func.def @dot8i4_u4u4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi32>) -> (vector<1xi32>) {
-  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
   %dot = vector.dot8i4<u4u4> %lhs, %rhs, %acc : vector<1xi32>
   func.return %dot : vector<1xi32>
 }
@@ -44,7 +41,6 @@ low.func.def target(@target) abi(hal_kernel) @dot8i4_u4u4(%lhs: reg<amdgpu.vgpr>
 // ====
 
 func.def @dot4i_u8s8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
-  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
   %dot = vector.dot4i<u8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
   func.return %dot : vector<1xi32>
 }
@@ -58,7 +54,6 @@ low.func.def target(@target) abi(hal_kernel) @dot4i_u8s8(%lhs: reg<amdgpu.vgpr>,
 // ====
 
 func.def @dot4i_s8u8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
-  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
   %dot = vector.dot4i<s8u8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
   func.return %dot : vector<1xi32>
 }
@@ -72,7 +67,6 @@ low.func.def target(@target) abi(hal_kernel) @dot4i_s8u8(%lhs: reg<amdgpu.vgpr>,
 // ====
 
 func.def @dot8i4_s4s4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi32>) -> (vector<1xi32>) {
-  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
   %dot = vector.dot8i4<s4s4> %lhs, %rhs, %acc : vector<1xi32>
   func.return %dot : vector<1xi32>
 }
@@ -86,7 +80,6 @@ low.func.def target(@target) abi(hal_kernel) @dot8i4_s4s4(%lhs: reg<amdgpu.vgpr>
 // ====
 
 func.def @dot8i4_u4s4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi32>) -> (vector<1xi32>) {
-  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
   %dot = vector.dot8i4<u4s4> %lhs, %rhs, %acc : vector<1xi32>
   func.return %dot : vector<1xi32>
 }
@@ -100,7 +93,6 @@ low.func.def target(@target) abi(hal_kernel) @dot8i4_u4s4(%lhs: reg<amdgpu.vgpr>
 // ====
 
 func.def @dot8i4_s4u4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi32>) -> (vector<1xi32>) {
-  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
   %dot = vector.dot8i4<s4u4> %lhs, %rhs, %acc : vector<1xi32>
   func.return %dot : vector<1xi32>
 }

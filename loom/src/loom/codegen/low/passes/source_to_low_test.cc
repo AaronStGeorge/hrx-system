@@ -60,6 +60,8 @@ static const loom_low_lower_rule_set_t* const kInvalidPreambleRuleSets[] = {
 static const loom_low_lower_policy_t kInvalidPreamblePolicy = {
     .name = IREE_SVL("invalid-preamble-policy"),
     .map_type = {.fn = loom_test_low_lower_map_type, .user_data = nullptr},
+    .map_contract_value = {.fn = loom_test_low_lower_map_contract_value,
+                           .user_data = nullptr},
     .map_argument = {.fn = loom_test_low_lower_map_argument,
                      .user_data = nullptr},
     .emit_preamble = {.fn = EmitInvalidPreamble, .user_data = nullptr},

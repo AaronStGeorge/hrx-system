@@ -113,6 +113,8 @@ static iree_status_t TestEmitCallbackOp(void* user_data,
 static const loom_low_lower_policy_t kTestHybridLowerPolicy = {
     .name = IREE_SVL("test-hybrid-lower-policy"),
     .map_type = {.fn = loom_test_low_lower_map_type, .user_data = nullptr},
+    .map_contract_value = {.fn = loom_test_low_lower_map_contract_value,
+                           .user_data = nullptr},
     .map_argument = {.fn = loom_test_low_lower_map_argument,
                      .user_data = nullptr},
     .rule_sets =

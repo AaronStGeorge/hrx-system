@@ -928,6 +928,7 @@ static const loom_low_lower_rule_span_t loom_wasm_rule_spans[] = {
 #undef LOOM_WASM_RULE_SPAN
 
 static const loom_low_lower_rule_set_t loom_wasm_rule_set = {
+    .flags = LOOM_LOW_LOWER_RULE_SET_FLAG_TARGET_CONTRACT_QUERY,
     .spans = loom_wasm_rule_spans,
     .span_count = IREE_ARRAYSIZE(loom_wasm_rule_spans),
     .rules = loom_wasm_rules,

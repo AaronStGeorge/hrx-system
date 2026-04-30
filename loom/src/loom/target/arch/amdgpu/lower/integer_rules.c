@@ -768,6 +768,7 @@ static_assert(LOOM_OP_SCALAR_MULI < LOOM_OP_SCALAR_ANDI &&
               "AMDGPU integer rule spans must stay sorted by source op kind");
 
 const loom_low_lower_rule_set_t loom_amdgpu_integer_rule_set = {
+    .flags = LOOM_LOW_LOWER_RULE_SET_FLAG_TARGET_CONTRACT_QUERY,
     .spans = kAmdgpuIntegerRuleSpans,
     .span_count = IREE_ARRAYSIZE(kAmdgpuIntegerRuleSpans),
     .rules = kAmdgpuIntegerRules,

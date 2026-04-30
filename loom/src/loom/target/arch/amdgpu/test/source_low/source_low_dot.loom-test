@@ -2,7 +2,6 @@
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
 func.def @f32_dotf(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %acc: f32) -> (f32) {
-  // REMARK@+1: BACKEND/002 "selected AMDGPU f32 dot FMA contract"
   %dot = vector.dotf %lhs, %rhs, %acc : vector<4xf32>, vector<4xf32>, f32
   func.return %dot : f32
 }
@@ -27,7 +26,6 @@ low.func.def target(@target) abi(hal_kernel) @f32_dotf(%lhs: reg<amdgpu.vgpr x4>
 // ====
 
 func.def @f16_dot2f(%lhs: vector<8xf16>, %rhs: vector<8xf16>, %acc: vector<4xf32>) -> (vector<4xf32>) {
-  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
   %dot = vector.dot2f %lhs, %rhs, %acc : vector<8xf16>, vector<8xf16>, vector<4xf32>
   func.return %dot : vector<4xf32>
 }
@@ -57,7 +55,6 @@ low.func.def target(@target) abi(hal_kernel) @f16_dot2f(%lhs: reg<amdgpu.vgpr x4
 // ====
 
 func.def @bf16_dot2f(%lhs: vector<8xbf16>, %rhs: vector<8xbf16>, %acc: vector<4xf32>) -> (vector<4xf32>) {
-  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
   %dot = vector.dot2f %lhs, %rhs, %acc : vector<8xbf16>, vector<8xbf16>, vector<4xf32>
   func.return %dot : vector<4xf32>
 }

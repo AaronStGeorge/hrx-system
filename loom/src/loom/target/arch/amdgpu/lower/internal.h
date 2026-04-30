@@ -186,6 +186,14 @@ iree_status_t loom_amdgpu_map_value(void* user_data,
                                     loom_type_t source_type,
                                     loom_type_t* out_low_type);
 
+// Maps a source value to AMDGPU descriptor register metadata for read-only
+// target contract queries.
+iree_status_t loom_amdgpu_map_contract_value(
+    void* user_data,
+    const loom_target_contract_query_environment_t* environment,
+    const loom_op_t* source_op, loom_value_id_t source_value_id,
+    loom_low_lower_rule_mapped_value_t* out_mapped_value);
+
 // Maps one source function argument to the low ABI representation selected for
 // the active AMDGPU bundle.
 iree_status_t loom_amdgpu_map_argument(
@@ -824,12 +832,6 @@ iree_status_t loom_amdgpu_lower_vector_slice(
 // Verifies source vector structural op legality for AMDGPU target-low
 // selection.
 iree_status_t loom_amdgpu_low_legality_verify_vector_structural(
-    const loom_target_low_legality_provider_t* provider,
-    loom_target_low_legality_context_t* context, const loom_op_t* op,
-    bool* out_handled);
-
-// Verifies source vector-dot legality for AMDGPU target-low selection.
-iree_status_t loom_amdgpu_low_legality_verify_vector_dot(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);

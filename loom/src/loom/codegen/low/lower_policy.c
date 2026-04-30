@@ -65,6 +65,25 @@ static iree_status_t loom_low_lower_policy_verify_static_rule_set(
   return iree_ok_status();
 }
 
+static bool loom_low_lower_policy_rule_set_needs_contract_value_mapping(
+    const loom_low_lower_rule_set_t* rule_set) {
+  if (!iree_any_bit_set(rule_set->flags,
+                        LOOM_LOW_LOWER_RULE_SET_FLAG_TARGET_CONTRACT_QUERY) ||
+      rule_set->guards == NULL) {
+    return false;
+  }
+  for (uint16_t i = 0; i < rule_set->guard_count; ++i) {
+    switch (rule_set->guards[i].kind) {
+      case LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_CLASS:
+      case LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT_EQ:
+        return true;
+      default:
+        break;
+    }
+  }
+  return false;
+}
+
 static iree_status_t loom_low_lower_policy_registry_verify_tables(
     const loom_low_lower_policy_registry_t* registry) {
   if (registry == NULL) {
@@ -111,10 +130,29 @@ iree_status_t loom_low_lower_policy_verify(
         "target-low lowering policy rule set list is too large");
   }
   for (iree_host_size_t i = 0; i < policy->rule_sets.count; ++i) {
-    if (policy->rule_sets.values[i] == NULL) {
+    const loom_low_lower_rule_set_t* rule_set = policy->rule_sets.values[i];
+    if (rule_set == NULL) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "target-low lowering policy rule set entries are required");
+    }
+    if ((rule_set->flags &
+         ~LOOM_LOW_LOWER_RULE_SET_FLAG_TARGET_CONTRACT_QUERY) != 0) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "target-low lowering rule set has unknown behavior flags");
+    }
+    if (rule_set->guard_count != 0 && rule_set->guards == NULL) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "target-low lowering rule set guard table is required");
+    }
+    if (policy->map_contract_value.fn == NULL &&
+        loom_low_lower_policy_rule_set_needs_contract_value_mapping(rule_set)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "target-low lowering policy must provide a contract value mapper for "
+          "contract-query rule sets with register guards");
     }
   }
   const bool has_rule_sets =

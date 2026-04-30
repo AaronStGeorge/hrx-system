@@ -1,8 +1,5 @@
 // RUN: emit source-low target-preset=wasm-simd128 output=low
 
-// ERROR@+3: BACKEND/001 "vector<4xi32>"
-// ERROR@+2: BACKEND/001 "vector<4xi32>"
-// ERROR@+1: BACKEND/001 "vector<4xi32>"
 func.def @unsupported_vector_shape(%lhs: vector<8xi32>, %rhs: vector<8xi32>) -> (vector<8xi32>) {
   // ERROR@+1: BACKEND/001 "vector<4xi32>"
   %sum = vector.addi %lhs, %rhs : vector<8xi32>

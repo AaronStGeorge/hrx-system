@@ -1882,6 +1882,7 @@ static const loom_low_lower_rule_span_t loom_x86_avx512_rule_spans[] = {
 };
 
 const loom_low_lower_rule_set_t loom_x86_avx512_rule_set = {
+    .flags = LOOM_LOW_LOWER_RULE_SET_FLAG_TARGET_CONTRACT_QUERY,
     .spans = loom_x86_avx512_rule_spans,
     .span_count = IREE_ARRAYSIZE(loom_x86_avx512_rule_spans),
     .rules = loom_x86_avx512_rules,

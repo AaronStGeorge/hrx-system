@@ -377,6 +377,7 @@ static const loom_low_lower_rule_span_t loom_ireevm_rule_spans[] = {
 };
 
 static const loom_low_lower_rule_set_t loom_ireevm_rule_set = {
+    .flags = LOOM_LOW_LOWER_RULE_SET_FLAG_TARGET_CONTRACT_QUERY,
     .spans = loom_ireevm_rule_spans,
     .span_count = IREE_ARRAYSIZE(loom_ireevm_rule_spans),
     .rules = loom_ireevm_rules,

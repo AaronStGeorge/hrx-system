@@ -641,7 +641,6 @@ loom_cc_library(
         "lower/buffer.c",
         "lower/compare_rules.c",
         "lower/control.c",
-        "lower/dot.c",
         "lower/dot_rules.c",
         "lower/emit_support.c",
         "lower/integer_rules.c",

@@ -174,12 +174,29 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    contract
+  HDRS
+    "contract.h"
+  DEPS
+    ::types
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::util::fact_table
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     low_legality
   HDRS
     "low_legality.h"
   SRCS
     "low_legality.c"
   DEPS
+    ::contract
     ::low_descriptor_registry
     ::types
     iree::base

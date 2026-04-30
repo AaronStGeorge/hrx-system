@@ -36,6 +36,42 @@ typedef struct loom_low_lower_rule_set_t loom_low_lower_rule_set_t;
 typedef struct loom_low_source_memory_access_plan_t
     loom_low_source_memory_access_plan_t;
 
+typedef struct loom_low_lower_rule_mapped_value_t {
+  // True when the source value maps to a target-low register.
+  bool is_register;
+  // Descriptor-set register-class ID, or LOOM_LOW_REG_CLASS_NONE if the mapped
+  // value only has a module string ID for its class.
+  uint16_t descriptor_register_class_id;
+  // Module string ID for the register class, or LOOM_STRING_ID_INVALID if the
+  // mapped value carries a descriptor-set register-class ID directly.
+  loom_string_id_t register_class_id;
+  // Number of target-low allocation units occupied by the mapped register.
+  uint32_t register_unit_count;
+} loom_low_lower_rule_mapped_value_t;
+
+// Creates a non-register mapped value.
+static inline loom_low_lower_rule_mapped_value_t
+loom_low_lower_rule_mapped_value_none(void) {
+  return (loom_low_lower_rule_mapped_value_t){
+      .is_register = false,
+      .descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE,
+      .register_class_id = LOOM_STRING_ID_INVALID,
+      .register_unit_count = 0,
+  };
+}
+
+// Creates a mapped register value addressed by descriptor-set register class.
+static inline loom_low_lower_rule_mapped_value_t
+loom_low_lower_rule_mapped_value_register(uint16_t descriptor_register_class_id,
+                                          uint32_t register_unit_count) {
+  return (loom_low_lower_rule_mapped_value_t){
+      .is_register = true,
+      .descriptor_register_class_id = descriptor_register_class_id,
+      .register_class_id = LOOM_STRING_ID_INVALID,
+      .register_unit_count = register_unit_count,
+  };
+}
+
 typedef struct loom_low_lower_rule_set_list_t {
   // Total number of rule sets in the list.
   iree_host_size_t count;
@@ -79,6 +115,21 @@ typedef struct loom_low_lower_map_value_callback_t {
   // Caller-owned payload passed to |fn|.
   void* user_data;
 } loom_low_lower_map_value_callback_t;
+
+typedef iree_status_t (*loom_low_lower_map_contract_value_fn_t)(
+    void* user_data,
+    const loom_target_contract_query_environment_t* environment,
+    const loom_op_t* source_op, loom_value_id_t source_value_id,
+    loom_low_lower_rule_mapped_value_t* out_mapped_value);
+
+typedef struct loom_low_lower_map_contract_value_callback_t {
+  // Optional callback invoked during read-only contract queries to map one
+  // source value into target-low register metadata without creating register
+  // types or formatting diagnostics.
+  loom_low_lower_map_contract_value_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_map_contract_value_callback_t;
 
 typedef enum loom_low_lower_abi_argument_kind_e {
   // Source argument is passed as a low function block argument.
@@ -260,6 +311,10 @@ typedef struct loom_low_lower_policy_t {
   // Optionally maps concrete source SSA values to target-low register types
   // when type alone does not determine the target register class.
   loom_low_lower_map_value_callback_t map_value;
+  // Optionally maps concrete source SSA values to descriptor register metadata
+  // for read-only target contract queries. Missing means table guards that need
+  // register mapping cannot match.
+  loom_low_lower_map_contract_value_callback_t map_contract_value;
   // Optionally maps source function arguments to non-direct ABI imports.
   loom_low_lower_map_argument_callback_t map_argument;
   // Optionally emits target live-ins or other structural preamble packets.

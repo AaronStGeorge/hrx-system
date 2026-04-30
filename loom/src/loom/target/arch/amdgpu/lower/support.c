@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -576,6 +577,105 @@ iree_status_t loom_amdgpu_map_value(void* user_data,
   }
   return loom_amdgpu_map_type(user_data, context, source_op, source_type,
                               out_low_type);
+}
+
+static iree_status_t loom_amdgpu_map_contract_register(
+    const loom_target_contract_query_environment_t* environment,
+    uint16_t descriptor_register_class_id, uint32_t register_unit_count,
+    loom_low_lower_rule_mapped_value_t* out_mapped_value) {
+  IREE_ASSERT_ARGUMENT(out_mapped_value);
+  if (descriptor_register_class_id >=
+      environment->descriptor_set->reg_class_count) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU contract register class %" PRIu16
+                            " is outside the selected descriptor set",
+                            descriptor_register_class_id);
+  }
+  *out_mapped_value = loom_low_lower_rule_mapped_value_register(
+      descriptor_register_class_id, register_unit_count);
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_map_contract_value(
+    void* user_data,
+    const loom_target_contract_query_environment_t* environment,
+    const loom_op_t* source_op, loom_value_id_t source_value_id,
+    loom_low_lower_rule_mapped_value_t* out_mapped_value) {
+  (void)user_data;
+  (void)source_op;
+  IREE_ASSERT_ARGUMENT(environment);
+  IREE_ASSERT_ARGUMENT(environment->module);
+  IREE_ASSERT_ARGUMENT(environment->descriptor_set);
+  IREE_ASSERT_ARGUMENT(out_mapped_value);
+  *out_mapped_value = loom_low_lower_rule_mapped_value_none();
+  if (source_value_id >= environment->module->values.count) {
+    return iree_ok_status();
+  }
+
+  const loom_type_t source_type =
+      loom_module_value_type(environment->module, source_value_id);
+  if (loom_amdgpu_type_is_i1(source_type) &&
+      loom_amdgpu_module_value_is_native_i1_mask(environment->module,
+                                                 source_value_id)) {
+    return loom_amdgpu_map_contract_register(
+        environment, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2, out_mapped_value);
+  }
+  if (loom_amdgpu_value_is_subgroup_lane_mask_result(environment->module,
+                                                     source_value_id)) {
+    return loom_amdgpu_map_contract_register(
+        environment, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2, out_mapped_value);
+  }
+  if (loom_amdgpu_type_is_i1(source_type)) {
+    return loom_amdgpu_map_contract_register(
+        environment, LOOM_AMDGPU_REG_CLASS_ID_SCC, 1, out_mapped_value);
+  }
+  if (loom_amdgpu_type_is_f32(source_type)) {
+    return loom_amdgpu_map_contract_register(
+        environment, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1, out_mapped_value);
+  }
+  if ((loom_amdgpu_type_is_i32(source_type) ||
+       loom_amdgpu_type_is_address_scalar(source_type)) &&
+      loom_amdgpu_module_value_prefers_vgpr(environment->module,
+                                            source_value_id)) {
+    return loom_amdgpu_map_contract_register(
+        environment, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1, out_mapped_value);
+  }
+  if (loom_amdgpu_type_is_i32(source_type) ||
+      loom_amdgpu_type_is_address_scalar(source_type)) {
+    return loom_amdgpu_map_contract_register(
+        environment, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1, out_mapped_value);
+  }
+
+  const uint32_t vector_lane_count =
+      loom_amdgpu_vector_32bit_lane_count(source_type);
+  if (vector_lane_count != 0) {
+    return loom_amdgpu_map_contract_register(
+        environment, LOOM_AMDGPU_REG_CLASS_ID_VGPR, vector_lane_count,
+        out_mapped_value);
+  }
+  const uint32_t mask_lane_count =
+      loom_amdgpu_vector_i1_lane_count(source_type);
+  if (mask_lane_count != 0) {
+    return loom_amdgpu_map_contract_register(
+        environment, LOOM_AMDGPU_REG_CLASS_ID_SGPR, mask_lane_count * 2u,
+        out_mapped_value);
+  }
+
+  uint32_t unused_payload_bit_count = 0;
+  uint32_t packed_register_count = 0;
+  if (loom_amdgpu_type_packed_16bit_float_storage(
+          source_type, &unused_payload_bit_count, &packed_register_count)) {
+    return loom_amdgpu_map_contract_register(
+        environment, LOOM_AMDGPU_REG_CLASS_ID_VGPR, packed_register_count,
+        out_mapped_value);
+  }
+  if (loom_amdgpu_type_packed_integer_storage(
+          source_type, &unused_payload_bit_count, &packed_register_count)) {
+    return loom_amdgpu_map_contract_register(
+        environment, LOOM_AMDGPU_REG_CLASS_ID_VGPR, packed_register_count,
+        out_mapped_value);
+  }
+  return iree_ok_status();
 }
 
 bool loom_amdgpu_module_value_as_exact_index_constant(

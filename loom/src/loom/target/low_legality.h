@@ -22,6 +22,7 @@
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/op_defs.h"
+#include "loom/target/contract.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/types.h"
 #include "loom/util/fact_table.h"
@@ -116,6 +117,10 @@ typedef struct loom_target_low_legality_options_t {
   loom_low_descriptor_requirement_flags_t descriptor_requirements;
   // Optional target-specific source legality providers.
   loom_target_low_legality_provider_list_t provider_list;
+  // Optional contract query over the selected target lowering policy. This is
+  // consulted before target-local providers so table-backed contracts stay the
+  // source of truth for table-backed source-to-low emission.
+  loom_target_contract_query_callback_t contract_query;
   // Caller-owned facts for |function|.
   const loom_value_fact_table_t* fact_table;
   // Optional target-specific feedback diagnostics to emit during source

@@ -151,10 +151,25 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "contract",
+    hdrs = ["contract.h"],
+    deps = [
+        ":types",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "low_legality",
     srcs = ["low_legality.c"],
     hdrs = ["low_legality.h"],
     deps = [
+        ":contract",
         ":low_descriptor_registry",
         ":types",
         "//loom/src/loom/error:emitter",

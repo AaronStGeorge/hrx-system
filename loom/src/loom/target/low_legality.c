@@ -531,6 +531,62 @@ static iree_status_t loom_target_low_legality_try_provider_op(
   return iree_ok_status();
 }
 
+static iree_status_t loom_target_low_legality_reject_contract_query(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    const loom_target_contract_query_result_t* result) {
+  if (result->rejection != NULL) {
+    return loom_target_low_legality_reject(
+        context, NULL, op, result->rejection->subject_kind,
+        result->rejection->subject_name, result->rejection->reason);
+  }
+  return loom_target_low_legality_reject(
+      context, NULL, op, IREE_SV("op"), loom_op_name(context->module, op),
+      result->outcome == LOOM_TARGET_CONTRACT_QUERY_INVALID_IR
+          ? IREE_SV("source op violates the selected target contract")
+          : IREE_SV("source op is not supported by the selected target "
+                    "contract"));
+}
+
+static iree_status_t loom_target_low_legality_try_contract_query_op(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled) {
+  *out_handled = false;
+  if (loom_target_contract_query_callback_is_empty(
+          context->options->contract_query)) {
+    return iree_ok_status();
+  }
+
+  const loom_target_contract_query_environment_t environment = {
+      .module = context->module,
+      .function = context->function,
+      .bundle = context->options->bundle,
+      .descriptor_set = context->descriptor_set,
+      .fact_table = context->fact_table,
+      .arena = &context->arena,
+  };
+  loom_target_contract_query_result_t result =
+      loom_target_contract_query_result_empty();
+  IREE_RETURN_IF_ERROR(context->options->contract_query.fn(
+      context->options->contract_query.user_data, &environment, op, &result));
+  switch (result.outcome) {
+    case LOOM_TARGET_CONTRACT_QUERY_UNHANDLED:
+      return iree_ok_status();
+    case LOOM_TARGET_CONTRACT_QUERY_LEGAL:
+      *out_handled = true;
+      return iree_ok_status();
+    case LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED:
+    case LOOM_TARGET_CONTRACT_QUERY_INVALID_IR:
+      *out_handled = true;
+      return loom_target_low_legality_reject_contract_query(context, op,
+                                                            &result);
+    default:
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "target contract query returned unknown outcome "
+                              "%d",
+                              (int)result.outcome);
+  }
+}
+
 static iree_status_t loom_target_low_legality_reject_op(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     iree_string_view_t reason) {
@@ -628,6 +684,13 @@ static iree_status_t loom_target_low_legality_verify_op(
     loom_target_low_legality_context_t* context, const loom_op_t* op) {
   IREE_RETURN_IF_ERROR(
       loom_target_low_legality_verify_op_value_types(context, op));
+
+  bool contract_handled = false;
+  IREE_RETURN_IF_ERROR(loom_target_low_legality_try_contract_query_op(
+      context, op, &contract_handled));
+  if (contract_handled) {
+    return iree_ok_status();
+  }
 
   bool provider_handled = false;
   IREE_RETURN_IF_ERROR(

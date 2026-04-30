@@ -93,42 +93,6 @@ typedef struct loom_low_lower_value_materializer_t {
   loom_low_lower_materialize_value_fn_t materialize;
 } loom_low_lower_value_materializer_t;
 
-typedef struct loom_low_lower_rule_mapped_value_t {
-  // True when the source value maps to a target-low register.
-  bool is_register;
-  // Descriptor-set register-class ID, or LOOM_LOW_REG_CLASS_NONE if the mapped
-  // value only has a module string ID for its class.
-  uint16_t descriptor_register_class_id;
-  // Module string ID for the register class, or LOOM_STRING_ID_INVALID if the
-  // mapped value carries a descriptor-set register-class ID directly.
-  loom_string_id_t register_class_id;
-  // Number of target-low allocation units occupied by the mapped register.
-  uint32_t register_unit_count;
-} loom_low_lower_rule_mapped_value_t;
-
-// Creates a non-register mapped value.
-static inline loom_low_lower_rule_mapped_value_t
-loom_low_lower_rule_mapped_value_none(void) {
-  return (loom_low_lower_rule_mapped_value_t){
-      .is_register = false,
-      .descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE,
-      .register_class_id = LOOM_STRING_ID_INVALID,
-      .register_unit_count = 0,
-  };
-}
-
-// Creates a mapped register value addressed by descriptor-set register class.
-static inline loom_low_lower_rule_mapped_value_t
-loom_low_lower_rule_mapped_value_register(uint16_t descriptor_register_class_id,
-                                          uint32_t register_unit_count) {
-  return (loom_low_lower_rule_mapped_value_t){
-      .is_register = true,
-      .descriptor_register_class_id = descriptor_register_class_id,
-      .register_class_id = LOOM_STRING_ID_INVALID,
-      .register_unit_count = register_unit_count,
-  };
-}
-
 typedef iree_status_t (*loom_low_lower_rule_match_map_value_fn_t)(
     void* user_data, const loom_low_lower_rule_match_context_t* context,
     const loom_op_t* source_op, loom_value_id_t source_value_id,
@@ -408,7 +372,17 @@ typedef struct loom_low_lower_rule_span_t {
   uint16_t rule_count;
 } loom_low_lower_rule_span_t;
 
+typedef uint16_t loom_low_lower_rule_set_flags_t;
+
+// Rule set can answer read-only target contract queries before source-to-low
+// emission. Rule sets without this flag are emission helpers whose legality is
+// still owned by target-local family analysis.
+#define LOOM_LOW_LOWER_RULE_SET_FLAG_TARGET_CONTRACT_QUERY \
+  ((loom_low_lower_rule_set_flags_t)1u << 0)
+
 typedef struct loom_low_lower_rule_set_t {
+  // Rule-set behavior flags.
+  loom_low_lower_rule_set_flags_t flags;
   // Source op kind to rule-span lookup table sorted by source_op_kind.
   const loom_low_lower_rule_span_t* spans;
   // Number of rows in spans.

@@ -851,6 +851,7 @@ static const loom_low_lower_rule_span_t kAmdgpuDotRuleSpans[] = {
 };
 
 const loom_low_lower_rule_set_t loom_amdgpu_dot_rule_set = {
+    .flags = LOOM_LOW_LOWER_RULE_SET_FLAG_TARGET_CONTRACT_QUERY,
     .spans = kAmdgpuDotRuleSpans,
     .span_count = IREE_ARRAYSIZE(kAmdgpuDotRuleSpans),
     .rules = kAmdgpuDotRules,
