@@ -47,3 +47,19 @@ kernel.def @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {
   vector.store %loaded, %output_view[%y] : vector<1xi32>, view<64xi32, #dense>
   kernel.return
 }
+
+// ====
+
+kernel.def workgroup_size(8, 4, 1) @dispatch_id_xy_global_b32(%output: buffer) {
+  %dispatch_x0 = kernel.workitem.dispatch.id<x> : index
+  %dispatch_x = index.assume %dispatch_x0 [range(%dispatch_x0, 0, 31)] : index
+  %dispatch_y0 = kernel.workitem.dispatch.id<y> : index
+  %dispatch_y = index.assume %dispatch_y0 [range(%dispatch_y0, 0, 15)] : index
+  %row_stride = index.constant 32 : index
+  %linear = index.madd %dispatch_y, %row_stride, %dispatch_x : index
+  %zero = index.constant 0 : offset
+  %output_view = buffer.view %output[%zero] : buffer -> view<512xi32, #dense>
+  %one = vector.constant 1 : vector<1xi32>
+  vector.store %one, %output_view[%linear] : vector<1xi32>, view<512xi32, #dense>
+  kernel.return
+}

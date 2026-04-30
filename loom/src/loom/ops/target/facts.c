@@ -227,6 +227,9 @@ static iree_status_t loom_target_profile_apply_override(
   } else if (iree_string_view_equal(name, IREE_SV("offset_bitwidth"))) {
     return loom_target_profile_u32_attr(value, name, 1, 64,
                                         &facts->snapshot.offset_bitwidth);
+  } else if (iree_string_view_equal(name, IREE_SV("subgroup_size"))) {
+    return loom_target_profile_u32_attr(value, name, 0, UINT32_MAX,
+                                        &facts->snapshot.subgroup_size);
   } else if (iree_string_view_equal(name, IREE_SV("memory_space_generic"))) {
     return loom_target_profile_u32_attr(value, name, 0, UINT32_MAX,
                                         &facts->snapshot.memory_spaces.generic);

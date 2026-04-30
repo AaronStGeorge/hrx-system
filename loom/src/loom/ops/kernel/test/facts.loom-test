@@ -10,10 +10,15 @@ kernel.def workgroup_size(64, 8, 1) @fixed_workgroup_query_facts() {
   %tid_hi = test.fact_range_hi %tid_x : index -> i64
   %size_lo = test.fact_range_lo %size_x : index -> i64
   %size_hi = test.fact_range_hi %size_x : index -> i64
+  %size_divisor = test.fact_divisor %size_x : index -> i64
+  %size_power_of_two = test.fact_power_of_two %size_x : index -> i1
   %lane_hi = test.fact_range_hi %lane : index -> i64
+  %subgroup_count_lo = test.fact_range_lo %subgroup_count : index -> i64
   %subgroup_count_hi = test.fact_range_hi %subgroup_count : index -> i64
+  %subgroup_count_positive = test.fact_positive %subgroup_count : index -> i1
+  %byte_offset_divisor = test.fact_divisor %byte_offset : index -> i64
   %byte_offset_hi = test.fact_range_hi %byte_offset : index -> i64
-  test.use %tid_hi, %size_lo, %size_hi, %lane_hi, %subgroup_count_hi, %byte_offset_hi : i64, i64, i64, i64, i64, i64
+  test.use %tid_hi, %size_lo, %size_hi, %size_divisor, %size_power_of_two, %lane_hi, %subgroup_count_lo, %subgroup_count_hi, %subgroup_count_positive, %byte_offset_divisor, %byte_offset_hi : i64, i64, i64, i64, i1, i64, i64, i64, i1, i64, i64
   kernel.return
 }
 
@@ -22,10 +27,15 @@ kernel.def workgroup_size(64, 8, 1) @fixed_workgroup_query_facts() {
   %tid_hi = scalar.constant 63 : i64
   %size_lo = scalar.constant 64 : i64
   %size_hi = scalar.constant 64 : i64
+  %size_divisor = scalar.constant 64 : i64
+  %size_power_of_two = scalar.constant true : i1
   %lane_hi = scalar.constant 127 : i64
+  %subgroup_count_lo = scalar.constant 4 : i64
   %subgroup_count_hi = scalar.constant 512 : i64
+  %subgroup_count_positive = scalar.constant true : i1
+  %byte_offset_divisor = scalar.constant 4 : i64
   %byte_offset_hi = scalar.constant 252 : i64
-  test.use %tid_hi, %size_lo, %size_hi, %lane_hi, %subgroup_count_hi, %byte_offset_hi : i64, i64, i64, i64, i64, i64
+  test.use %tid_hi, %size_lo, %size_hi, %size_divisor, %size_power_of_two, %lane_hi, %subgroup_count_lo, %subgroup_count_hi, %subgroup_count_positive, %byte_offset_divisor, %byte_offset_hi : i64, i64, i64, i64, i1, i64, i64, i64, i1, i64, i64
   kernel.return
 }
 
@@ -44,7 +54,10 @@ kernel.def @default_hal_query_facts() {
   %dispatch_id_hi = test.fact_range_hi %dispatch_id : index -> i64
   %subgroup_size_lo = test.fact_range_lo %subgroup_size : index -> i64
   %subgroup_size_hi = test.fact_range_hi %subgroup_size : index -> i64
-  test.use %workgroup_size_lo, %workgroup_size_hi, %workgroup_count_lo, %workgroup_count_hi, %dispatch_id_lo, %dispatch_id_hi, %subgroup_size_lo, %subgroup_size_hi : i64, i64, i64, i64, i64, i64, i64, i64
+  %workgroup_size_positive = test.fact_positive %workgroup_size : index -> i1
+  %workgroup_count_positive = test.fact_positive %workgroup_count : index -> i1
+  %subgroup_size_positive = test.fact_positive %subgroup_size : index -> i1
+  test.use %workgroup_size_lo, %workgroup_size_hi, %workgroup_count_lo, %workgroup_count_hi, %dispatch_id_lo, %dispatch_id_hi, %subgroup_size_lo, %subgroup_size_hi, %workgroup_size_positive, %workgroup_count_positive, %subgroup_size_positive : i64, i64, i64, i64, i64, i64, i64, i64, i1, i1, i1
   kernel.return
 }
 
@@ -58,6 +71,9 @@ kernel.def @default_hal_query_facts() {
   %dispatch_id_hi = scalar.constant 4294967295 : i64
   %subgroup_size_lo = scalar.constant 1 : i64
   %subgroup_size_hi = scalar.constant 128 : i64
-  test.use %workgroup_size_lo, %workgroup_size_hi, %workgroup_count_lo, %workgroup_count_hi, %dispatch_id_lo, %dispatch_id_hi, %subgroup_size_lo, %subgroup_size_hi : i64, i64, i64, i64, i64, i64, i64, i64
+  %workgroup_size_positive = scalar.constant true : i1
+  %workgroup_count_positive = scalar.constant true : i1
+  %subgroup_size_positive = scalar.constant true : i1
+  test.use %workgroup_size_lo, %workgroup_size_hi, %workgroup_count_lo, %workgroup_count_hi, %dispatch_id_lo, %dispatch_id_hi, %subgroup_size_lo, %subgroup_size_hi, %workgroup_size_positive, %workgroup_count_positive, %subgroup_size_positive : i64, i64, i64, i64, i64, i64, i64, i64, i1, i1, i1
   kernel.return
 }

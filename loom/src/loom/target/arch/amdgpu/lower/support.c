@@ -325,6 +325,12 @@ bool loom_amdgpu_module_value_prefers_vgpr(const loom_module_t* module,
     case LOOM_OP_KERNEL_WORKITEM_ID:
       return loom_kernel_workitem_id_dimension(defining_op) <
              LOOM_KERNEL_DIMENSION_COUNT_;
+    case LOOM_OP_KERNEL_WORKITEM_DISPATCH_ID:
+      return loom_kernel_workitem_dispatch_id_dimension(defining_op) <
+             LOOM_KERNEL_DIMENSION_COUNT_;
+    case LOOM_OP_KERNEL_SUBGROUP_ID:
+    case LOOM_OP_KERNEL_SUBGROUP_LANE_ID:
+      return true;
     case LOOM_OP_INDEX_ADD:
       return loom_amdgpu_module_value_prefers_vgpr(
                  module, loom_index_add_lhs(defining_op)) ||

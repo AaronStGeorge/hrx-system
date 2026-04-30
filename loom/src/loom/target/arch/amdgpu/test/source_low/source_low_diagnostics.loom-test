@@ -281,3 +281,43 @@ kernel.def @index_madd_result_width_rejected() {
   %sum = index.madd %x, %scale, %base : index
   kernel.return
 }
+
+// ====
+
+kernel.def @workgroup_count_rejected() {
+  // ERROR@+1: BACKEND/001 "AMDGPU HAL kernel ABI does not expose dispatch workgroup count live-ins yet"
+  %count = kernel.workgroup.count<x> : index
+  kernel.return
+}
+
+// ====
+
+kernel.def @subgroup_id_rejected() {
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup.id lowering needs workitem linearization and wavefront division"
+  %id = kernel.subgroup.id : index
+  kernel.return
+}
+
+// ====
+
+kernel.def @subgroup_lane_id_rejected() {
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup.lane.id lowering needs wave lane-id packet descriptors"
+  %id = kernel.subgroup.lane.id : index
+  kernel.return
+}
+
+// ====
+
+kernel.def @subgroup_reduce_rejected(%value: f32) {
+  // ERROR@+1: BACKEND/001 "AMDGPU source-to-low needs target packet lowering for this collective form"
+  %sum = kernel.subgroup.reduce<addf> %value : f32
+  kernel.return
+}
+
+// ====
+
+kernel.def @workgroup_vote_count_rejected(%predicate: i1) {
+  // ERROR@+1: BACKEND/001 "AMDGPU source-to-low needs target packet lowering for this collective form"
+  %count = kernel.workgroup.vote.count %predicate : i1 -> i32
+  kernel.return
+}

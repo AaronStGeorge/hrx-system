@@ -1101,6 +1101,7 @@ TEST_F(ExecuteTest, EmitTargetLowRegistryManifestReportsRegisteredBundle) {
   EXPECT_NE(actual_output.find("\"bundle_count\":1"), std::string::npos);
   EXPECT_NE(actual_output.find("\"key\":\"test.low.core\""), std::string::npos);
   EXPECT_NE(actual_output.find("\"name\":\"test-low\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"subgroup_size\":0"), std::string::npos);
   EXPECT_NE(actual_output.find("\"descriptor_set\":\"test.low.core\""),
             std::string::npos);
   loom_check_result_deinitialize(&result);

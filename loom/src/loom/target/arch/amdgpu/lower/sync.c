@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/ir/context.h"
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
 
@@ -60,4 +61,21 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_barrier(
   }
 
   return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_low_legality_verify_kernel_collective(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled) {
+  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
+  if (!loom_amdgpu_low_legality_bundle_is_amdgpu(bundle)) {
+    return iree_ok_status();
+  }
+  *out_handled = true;
+
+  return loom_target_low_legality_reject(
+      context, provider, op, IREE_SV("collective"),
+      loom_op_name(loom_target_low_legality_module(context), op),
+      IREE_SV("AMDGPU source-to-low needs target packet lowering for this "
+              "collective form"));
 }

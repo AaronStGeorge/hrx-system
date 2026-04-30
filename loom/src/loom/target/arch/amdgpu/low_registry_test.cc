@@ -16,7 +16,8 @@ namespace {
 void ExpectBundleSelectsDescriptorSet(
     const loom_target_low_descriptor_registry_t* registry,
     iree_string_view_t bundle_key, const loom_target_bundle_t* expected_bundle,
-    iree_string_view_t expected_descriptor_set_key) {
+    iree_string_view_t expected_descriptor_set_key,
+    uint32_t expected_subgroup_size) {
   const loom_target_bundle_t* bundle = nullptr;
   IREE_ASSERT_OK(loom_target_low_descriptor_registry_lookup_bundle(
       registry, bundle_key, &bundle));
@@ -31,6 +32,7 @@ void ExpectBundleSelectsDescriptorSet(
   EXPECT_EQ(bundle->snapshot->max_workgroup_size.y, 1024u);
   EXPECT_EQ(bundle->snapshot->max_workgroup_size.z, 1024u);
   EXPECT_EQ(bundle->snapshot->max_flat_workgroup_size, 1024u);
+  EXPECT_EQ(bundle->snapshot->subgroup_size, expected_subgroup_size);
   EXPECT_EQ(bundle->snapshot->max_grid_size.x, 2147483647u);
   EXPECT_EQ(bundle->snapshot->max_grid_size.y, 65535u);
   EXPECT_EQ(bundle->snapshot->max_grid_size.z, 65535u);
@@ -60,16 +62,16 @@ TEST(AmdgpuLowRegistryTest, VerifiesLinkedRegistryPackage) {
 
   ExpectBundleSelectsDescriptorSet(&registry, IREE_SV("amdgpu-gfx950"),
                                    &loom_amdgpu_low_target_bundle_gfx950_core,
-                                   IREE_SV("amdgpu.gfx950.core"));
+                                   IREE_SV("amdgpu.gfx950.core"), 64);
   ExpectBundleSelectsDescriptorSet(&registry, IREE_SV("amdgpu-gfx11"),
                                    &loom_amdgpu_low_target_bundle_gfx11_core,
-                                   IREE_SV("amdgpu.gfx11.core"));
+                                   IREE_SV("amdgpu.gfx11.core"), 32);
   ExpectBundleSelectsDescriptorSet(&registry, IREE_SV("amdgpu-gfx12"),
                                    &loom_amdgpu_low_target_bundle_gfx12_core,
-                                   IREE_SV("amdgpu.gfx12.core"));
+                                   IREE_SV("amdgpu.gfx12.core"), 32);
   ExpectBundleSelectsDescriptorSet(&registry, IREE_SV("amdgpu-gfx1250"),
                                    &loom_amdgpu_low_target_bundle_gfx1250_core,
-                                   IREE_SV("amdgpu.gfx1250.core"));
+                                   IREE_SV("amdgpu.gfx1250.core"), 32);
 }
 
 }  // namespace

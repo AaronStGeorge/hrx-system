@@ -266,6 +266,7 @@ target.profile @gfx preset("test.profile") {
   hal_binding_alignment = 16,
   index_bitwidth = 64,
   memory_space_descriptor = 9,
+  subgroup_size = 32,
   target_cpu = "gfx1100",
   target_features = "+wavefrontsize32"
 }
@@ -281,6 +282,7 @@ target.profile @gfx preset("test.profile") {
   EXPECT_TRUE(iree_string_view_equal(facts->snapshot.target_features,
                                      IREE_SV("+wavefrontsize32")));
   EXPECT_EQ(facts->snapshot.index_bitwidth, 64u);
+  EXPECT_EQ(facts->snapshot.subgroup_size, 32u);
   EXPECT_EQ(facts->snapshot.memory_spaces.descriptor, 9u);
   EXPECT_EQ(facts->export_plan.abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);
   EXPECT_EQ(facts->export_plan.hal_kernel.binding_alignment, 16u);

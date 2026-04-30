@@ -148,6 +148,8 @@ static iree_status_t loom_amdgpu_module_compile_apply_target_cpu(
   IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_set_target_profile_cpu(
       module, entry, processor->target_cpu));
   entry->bundle_storage.snapshot.target_cpu = processor->target_cpu;
+  entry->bundle_storage.snapshot.subgroup_size =
+      processor->default_wavefront_size;
   loom_target_bundle_storage_rebind(&entry->bundle_storage);
   return iree_ok_status();
 }

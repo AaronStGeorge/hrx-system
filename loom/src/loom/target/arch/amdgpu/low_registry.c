@@ -23,54 +23,58 @@
       "v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:" \
       "2048-n32:64-S32-A5-G1-ni:7:8:9")
 
-#define LOOM_AMDGPU_LOW_SNAPSHOT(symbol, snapshot_name, cpu)   \
-  static const loom_target_snapshot_t symbol = {               \
-      .name = IREE_SVL(snapshot_name),                         \
-      .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE, \
-      .target_triple = LOOM_AMDGPU_TARGET_TRIPLE,              \
-      .data_layout = LOOM_AMDGPU_DATA_LAYOUT,                  \
-      .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,      \
-      .target_cpu = IREE_SVL(cpu),                             \
-      .default_pointer_bitwidth = 64,                          \
-      .index_bitwidth = 32,                                    \
-      .offset_bitwidth = 64,                                   \
-      .max_workgroup_size =                                    \
-          {                                                    \
-              .x = 1024,                                       \
-              .y = 1024,                                       \
-              .z = 1024,                                       \
-          },                                                   \
-      .max_flat_workgroup_size = 1024,                         \
-      .max_grid_size =                                         \
-          {                                                    \
-              .x = INT32_MAX,                                  \
-              .y = UINT16_MAX,                                 \
-              .z = UINT16_MAX,                                 \
-          },                                                   \
-      .max_flat_grid_size = UINT32_MAX,                        \
-      .max_workgroup_count =                                   \
-          {                                                    \
-              .x = INT32_MAX,                                  \
-              .y = UINT16_MAX,                                 \
-              .z = UINT16_MAX,                                 \
-          },                                                   \
-      .memory_spaces =                                         \
-          {                                                    \
-              .generic = 0,                                    \
-              .global = 1,                                     \
-              .workgroup = 3,                                  \
-              .constant = 4,                                   \
-              .private_memory = 5,                             \
-              .host = UINT32_MAX,                              \
-              .descriptor = 7,                                 \
-          },                                                   \
+#define LOOM_AMDGPU_LOW_SNAPSHOT(symbol, snapshot_name, cpu, wavefront_size) \
+  static const loom_target_snapshot_t symbol = {                             \
+      .name = IREE_SVL(snapshot_name),                                       \
+      .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,               \
+      .target_triple = LOOM_AMDGPU_TARGET_TRIPLE,                            \
+      .data_layout = LOOM_AMDGPU_DATA_LAYOUT,                                \
+      .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,                    \
+      .target_cpu = IREE_SVL(cpu),                                           \
+      .default_pointer_bitwidth = 64,                                        \
+      .index_bitwidth = 32,                                                  \
+      .offset_bitwidth = 64,                                                 \
+      .max_workgroup_size =                                                  \
+          {                                                                  \
+              .x = 1024,                                                     \
+              .y = 1024,                                                     \
+              .z = 1024,                                                     \
+          },                                                                 \
+      .max_flat_workgroup_size = 1024,                                       \
+      .subgroup_size = wavefront_size,                                       \
+      .max_grid_size =                                                       \
+          {                                                                  \
+              .x = INT32_MAX,                                                \
+              .y = UINT16_MAX,                                               \
+              .z = UINT16_MAX,                                               \
+          },                                                                 \
+      .max_flat_grid_size = UINT32_MAX,                                      \
+      .max_workgroup_count =                                                 \
+          {                                                                  \
+              .x = INT32_MAX,                                                \
+              .y = UINT16_MAX,                                               \
+              .z = UINT16_MAX,                                               \
+          },                                                                 \
+      .memory_spaces =                                                       \
+          {                                                                  \
+              .generic = 0,                                                  \
+              .global = 1,                                                   \
+              .workgroup = 3,                                                \
+              .constant = 4,                                                 \
+              .private_memory = 5,                                           \
+              .host = UINT32_MAX,                                            \
+              .descriptor = 7,                                               \
+          },                                                                 \
   }
 
-LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuGfx950Snapshot, "amdgpu-gfx950-low", "gfx950");
-LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuGfx11Snapshot, "amdgpu-gfx11-low", "gfx1100");
-LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuGfx12Snapshot, "amdgpu-gfx12-low", "gfx1200");
+LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuGfx950Snapshot, "amdgpu-gfx950-low", "gfx950",
+                         64);
+LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuGfx11Snapshot, "amdgpu-gfx11-low", "gfx1100",
+                         32);
+LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuGfx12Snapshot, "amdgpu-gfx12-low", "gfx1200",
+                         32);
 LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuGfx1250Snapshot, "amdgpu-gfx1250-low",
-                         "gfx1250");
+                         "gfx1250", 32);
 
 static const loom_target_export_plan_t kAmdgpuHalExportPlan = {
     .name = IREE_SVL("amdgpu-hal"),

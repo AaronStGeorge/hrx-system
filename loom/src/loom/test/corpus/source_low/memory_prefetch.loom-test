@@ -17,3 +17,19 @@ kernel.def @prefetch_workgroup_id(%input: buffer) {
   view.prefetch %input_view[%bounded_gid] {intent = read, locality = l2} : view<64xi32, #dense>
   kernel.return
 }
+
+// ====
+
+kernel.def workgroup_size(8, 4, 1) @prefetch_fixed_query_offset(%input: buffer) {
+  %workgroup_size_x = kernel.workgroup.size<x> : index
+  %workgroup_size_y = kernel.workgroup.size<y> : index
+  %subgroup_size = kernel.subgroup.size : index
+  %subgroup_count = kernel.subgroup.count : index
+  %offset0 = index.add %workgroup_size_x, %workgroup_size_y : index
+  %offset1 = index.add %offset0, %subgroup_size : index
+  %offset = index.add %offset1, %subgroup_count : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
+  view.prefetch %input_view[%offset] {intent = read, locality = l1} : view<64xi32, #dense>
+  kernel.return
+}

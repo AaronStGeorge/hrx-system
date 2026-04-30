@@ -120,9 +120,10 @@ static iree_status_t loom_target_low_manifest_write_bundle_summary(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream,
       ",\"default_pointer_bitwidth\":%" PRIu32 ",\"index_bitwidth\":%" PRIu32
-      ",\"offset_bitwidth\":%" PRIu32 ",",
+      ",\"offset_bitwidth\":%" PRIu32 ",\"subgroup_size\":%" PRIu32 ",",
       bundle->snapshot->default_pointer_bitwidth,
-      bundle->snapshot->index_bitwidth, bundle->snapshot->offset_bitwidth));
+      bundle->snapshot->index_bitwidth, bundle->snapshot->offset_bitwidth,
+      bundle->snapshot->subgroup_size));
   IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_memory_spaces(
       stream, &bundle->snapshot->memory_spaces));
   IREE_RETURN_IF_ERROR(

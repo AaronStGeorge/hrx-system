@@ -142,6 +142,9 @@ typedef struct loom_target_snapshot_t {
   // Maximum flat local workgroup size. Zero means the target has not supplied a
   // tighter total-workitem limit across the workgroup dimensions.
   uint32_t max_flat_workgroup_size;
+  // Fixed subgroup size in invocations. Zero means the target has not supplied
+  // a target-wide fixed subgroup size.
+  uint32_t subgroup_size;
   // Maximum API/hardware dispatched grid size per dimension, in workitems.
   // Zero dimensions mean the target has not supplied a tighter limit.
   loom_target_grid_size_t max_grid_size;

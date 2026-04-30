@@ -296,6 +296,12 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
 iree_status_t loom_amdgpu_lower_preamble_op(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op);
 
+// Verifies AMDGPU low legality for launch preamble query source ops.
+iree_status_t loom_amdgpu_low_legality_verify_kernel_preamble(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
 // Selects a workgroup barrier packet for a source kernel.barrier op.
 iree_status_t loom_amdgpu_select_kernel_barrier_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
@@ -307,6 +313,13 @@ iree_status_t loom_amdgpu_lower_kernel_barrier(
 
 // Verifies source kernel.barrier legality for AMDGPU target-low selection.
 iree_status_t loom_amdgpu_low_legality_verify_kernel_barrier(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
+// Verifies AMDGPU low legality for collective source ops without selected
+// packet lowering yet.
+iree_status_t loom_amdgpu_low_legality_verify_kernel_collective(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
