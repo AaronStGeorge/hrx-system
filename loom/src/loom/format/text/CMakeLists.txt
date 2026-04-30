@@ -24,79 +24,63 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    parser
+    tokenizer
   HDRS
-    "parser.h"
-    "parser_internal.h"
-    "parser_low_asm_internal.h"
+    "tokenizer.h"
   SRCS
-    "parser.c"
-    "parser_accumulator.c"
-    "parser_attrs.c"
-    "parser_diagnostics.c"
-    "parser_format.c"
-    "parser_format_signatures.c"
-    "parser_format_tables.c"
-    "parser_locations.c"
-    "parser_low_asm.c"
-    "parser_low_asm_structural.c"
-    "parser_pipeline.c"
-    "parser_scope.c"
-    "parser_types.c"
+    "tokenizer.c"
   DEPS
-    ::low_asm
-    ::tokenizer
     iree::base
     iree::base::internal::arena
+    iree::base::internal::unicode
     loom::src::loom::error::diagnostic
     loom::src::loom::error::error_defs
-    loom::src::loom::error::renderer
-    loom::src::loom::ir
-    loom::src::loom::ir::symbol_map
-    loom::src::loom::ops::op_defs
-    loom::src::loom::ops::type_registry
-    loom::src::loom::util::stable_id
   PUBLIC
 )
 
 loom_cc_test(
   NAME
-    parser_test
+    tokenizer_test
   SRCS
-    "parser_test.cc"
+    "tokenizer_test.cc"
   DEPS
-    ::parser
-    ::printer
+    ::tokenizer
     iree::base::internal::arena
-    loom::src::loom::error::diagnostic
     loom::src::loom::error::error_defs
-    loom::src::loom::ir
-    loom::src::loom::ops::op_defs
-    loom::src::loom::ops::test
-    loom::src::loom::testing::diagnostic_matchers
-    loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main
 )
 
-loom_cc_test(
+loom_cc_fuzz(
   NAME
-    low_asm_parser_test
+    tokenizer_fuzz
   SRCS
-    "low_asm_parser_test.cc"
+    "tokenizer_fuzz.cc"
   DEPS
-    ::parser
+    ::tokenizer
+    iree::base
     iree::base::internal::arena
-    loom::src::loom::codegen::low::text_asm
-    loom::src::loom::error::error_defs
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::test
-    loom::src::loom::target::test::alt_descriptors
-    loom::src::loom::target::test::descriptors
-    loom::src::loom::testing::diagnostic_matchers
-    iree::testing::gtest
-    iree::testing::gtest_main
+    iree::base::internal::unicode
+)
+
+loom_cc_library(
+  NAME
+    parser
+  HDRS
+    "parser.h"
+  DEPS
+    loom::src::loom::format::text::parser::parser_impl
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    printer
+  HDRS
+    "printer.h"
+  DEPS
+    loom::src::loom::format::text::printer::printer_impl
+  PUBLIC
 )
 
 loom_cc_test(
@@ -129,112 +113,6 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
-loom_cc_benchmark(
-  NAME
-    parser_scope_benchmark
-  SRCS
-    "parser_scope_benchmark.cc"
-  DEPS
-    ::parser
-    benchmark
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::ir
-    loom::src::loom::ops::test
-    iree::testing::benchmark_main
-  TESTONLY
-)
-
-loom_cc_library(
-  NAME
-    printer
-  HDRS
-    "printer.h"
-    "printer_internal.h"
-  SRCS
-    "printer.c"
-    "printer_atoms.c"
-    "printer_format.c"
-    "printer_format_regions.c"
-    "printer_format_signatures.c"
-    "printer_format_tables.c"
-    "printer_low_asm.c"
-    "printer_pipeline.c"
-  DEPS
-    ::low_asm
-    iree::base
-    iree::base::internal::arena
-    iree::base::internal::unicode
-    loom::src::loom::ir
-    loom::src::loom::ops::op_defs
-    loom::src::loom::util::stream
-  PUBLIC
-)
-
-loom_cc_test(
-  NAME
-    printer_test
-  SRCS
-    "printer_test.cc"
-  DEPS
-    ::printer
-    iree::base::internal::arena
-    loom::src::loom::ir
-    loom::src::loom::ops::op_defs
-    loom::src::loom::ops::test
-    loom::src::loom::util::stream
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    low_asm_printer_test
-  SRCS
-    "low_asm_printer_test.cc"
-  DEPS
-    ::parser
-    ::printer
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::text_asm
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::test
-    loom::src::loom::target::test::alt_descriptors
-    loom::src::loom::target::test::descriptors
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_library(
-  NAME
-    tokenizer
-  HDRS
-    "tokenizer.h"
-  SRCS
-    "tokenizer.c"
-  DEPS
-    iree::base
-    iree::base::internal::arena
-    iree::base::internal::unicode
-    loom::src::loom::error::diagnostic
-    loom::src::loom::error::error_defs
-  PUBLIC
-)
-
-loom_cc_test(
-  NAME
-    tokenizer_test
-  SRCS
-    "tokenizer_test.cc"
-  DEPS
-    ::tokenizer
-    iree::base::internal::arena
-    loom::src::loom::error::error_defs
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 loom_cc_fuzz(
   NAME
     parser_fuzz
@@ -248,18 +126,6 @@ loom_cc_fuzz(
     loom::src::loom::ir
     loom::src::loom::testing::context
     loom::src::loom::testing::gen
-)
-
-loom_cc_fuzz(
-  NAME
-    tokenizer_fuzz
-  SRCS
-    "tokenizer_fuzz.cc"
-  DEPS
-    ::tokenizer
-    iree::base
-    iree::base::internal::arena
-    iree::base::internal::unicode
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

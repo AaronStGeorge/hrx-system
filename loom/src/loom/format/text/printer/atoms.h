@@ -1,0 +1,66 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#ifndef LOOM_FORMAT_TEXT_PRINTER_ATOMS_H_
+#define LOOM_FORMAT_TEXT_PRINTER_ATOMS_H_
+
+#include "iree/base/api.h"
+#include "loom/format/text/printer/context.h"
+#include "loom/ir/ir.h"
+#include "loom/util/stream.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Stack buffer size for formatting auto-generated value names (%0, %1, ...).
+#define LOOM_VALUE_NAME_BUFFER_SIZE 32
+
+// Resolves an SSA value name into |buffer|, including the leading percent sign.
+iree_string_view_t loom_print_resolve_value_name(const loom_module_t* module,
+                                                 loom_value_id_t value_id,
+                                                 char* buffer,
+                                                 iree_host_size_t buffer_size);
+
+// Prints an SSA value reference without token spacing.
+iree_status_t loom_print_value_ref(loom_output_stream_t* stream,
+                                   const loom_module_t* module,
+                                   loom_value_id_t value_id);
+
+// Prints a value name and reports its emitted field range.
+iree_status_t loom_print_value_name_with_field(
+    loom_print_context_t* ctx, loom_value_id_t value_id,
+    loom_print_field_ref_t field_ref);
+
+// Prints a canonical attribute payload.
+iree_status_t loom_print_attr(loom_output_stream_t* stream,
+                              const loom_attribute_t* attr,
+                              const loom_module_t* module,
+                              const loom_attr_descriptor_t* descriptor);
+
+// Prints the canonical type of |value_id|, or <unknown> for malformed IR.
+iree_status_t loom_print_value_type(loom_print_context_t* ctx,
+                                    loom_value_id_t value_id);
+
+// Prints the canonical result type of |value_id|, or <unknown> for malformed
+// IR.
+iree_status_t loom_print_result_value_type(loom_print_context_t* ctx,
+                                           loom_value_id_t value_id);
+
+// Prints a source location annotation.
+iree_status_t loom_print_location(loom_output_stream_t* stream,
+                                  const loom_module_t* module,
+                                  loom_location_id_t location_id);
+
+// Prints all encoding aliases declared in |module|.
+iree_status_t loom_print_encoding_aliases(loom_print_context_t* ctx,
+                                          const loom_module_t* module);
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
+#endif  // LOOM_FORMAT_TEXT_PRINTER_ATOMS_H_

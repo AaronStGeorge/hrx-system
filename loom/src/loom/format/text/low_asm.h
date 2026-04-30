@@ -142,6 +142,24 @@ typedef struct loom_text_low_asm_statement_t {
   loom_location_id_t location;
 } loom_text_low_asm_statement_t;
 
+// Contract for descriptor-backed statement descriptions.
+//
+// A describe callback is called after the canonical IR has been verified by the
+// owning low dialect/descriptor registry. It either returns UNKNOWN for a valid
+// operation that has no lossless low asm spelling, or returns a fully
+// well-formed statement:
+// - PACKET result/operand counts match |packet| and all result/operand IDs are
+//   valid in the module value table.
+// - PACKET immediate attributes are canonical for |packet|; missing optional
+//   immediates are represented by descriptor defaults.
+// - RETURN operands and STRUCTURAL results/operands are valid module values.
+// - STRUCTURAL statements carry the result/operand/attribute shape required by
+//   their structural kind.
+//
+// The text printer relies on this contract and only performs formatting and
+// lossless-spelling availability checks. Semantic validation belongs in the
+// verifier and descriptor-backed describe implementation, not in the printer.
+
 // Resolves an `asm<...>` descriptor-set key to an environment-owned handle.
 // Returns OK with NULL when no descriptor set matches.
 typedef iree_status_t (*loom_text_low_asm_lookup_descriptor_set_fn_t)(
@@ -238,6 +256,8 @@ typedef struct loom_text_low_asm_vtable_t {
   loom_text_low_asm_build_structural_fn_t build_structural;
   // Describes a canonical operation as a printable low asm statement. Returns
   // OK with UNKNOWN when the operation is valid but has no lossless asm form.
+  // See the statement description contract above for the validity guarantees
+  // required when a concrete statement kind is returned.
   loom_text_low_asm_describe_operation_fn_t describe_operation;
 } loom_text_low_asm_vtable_t;
 
