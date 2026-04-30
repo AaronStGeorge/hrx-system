@@ -134,6 +134,12 @@ iree_string_view_t loom_vector_encoding_auxiliary_key_name(
 bool loom_vector_encoding_auxiliary_key_lookup(
     iree_string_view_t name, loom_vector_encoding_auxiliary_key_t* out_key);
 
+// Resolves a stable key ID to a dense auxiliary key enum. This is the preferred
+// path once text has crossed into IR because it avoids comparing spellings in
+// analysis and verification loops.
+bool loom_vector_encoding_auxiliary_key_lookup_stable_id(
+    uint64_t stable_id, loom_vector_encoding_auxiliary_key_t* out_key);
+
 // Resolves the conventional key for an explicit scale-like schema operand.
 // Returns false when |index| exceeds the fixed auxiliary scale vocabulary.
 bool loom_vector_encoding_auxiliary_scale_key(

@@ -24,6 +24,8 @@ from loom.assembly import (
     FormatElement,
     IndexList,
     OperandDict,
+    OptionalGroup,
+    PredicateList,
     Ref,
     Refs,
     ResultType,
@@ -45,6 +47,7 @@ from loom.dsl import (
     ATTR_TYPE_FLAGS,
     ATTR_TYPE_I64,
     ATTR_TYPE_I64_ARRAY,
+    ATTR_TYPE_PREDICATE_LIST,
     COMMUTATIVE,
     CONSTANT_LIKE,
     ELEMENTWISE,
@@ -197,6 +200,16 @@ vector_ops = Dialect(
         "observations that must be removed or diagnosed before target lowering."
     ),
     categories=VECTOR_OP_CATEGORIES,
+)
+
+VectorFragmentRole = EnumDef(
+    "VectorFragmentRole",
+    [
+        EnumCase("lhs", 0, doc="Left-hand matrix operand fragment."),
+        EnumCase("rhs", 1, doc="Right-hand matrix operand fragment."),
+        EnumCase("init", 2, doc="Initial accumulator matrix fragment."),
+        EnumCase("result", 3, doc="Result accumulator matrix fragment."),
+    ],
 )
 
 CombiningKind = EnumDef(
@@ -1229,6 +1242,77 @@ vector_encode = Op(
     examples=[
         "%payload = vector.encode %values using %schema {amax = %amax : vector<1xf32>, scale = %scale : vector<1xf16>} : vector<32xf32>, encoding<schema> -> vector<4xi32>",
         "%payload = vector.encode %values using %schema : vector<32xf32>, encoding<schema> -> vector<4xi32>",
+    ],
+)
+
+vector_fragment = Op(
+    "vector.fragment",
+    group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Attach a matrix-fragment interpretation to a physical vector value "
+        "without changing the physical vector type. The role selects how the "
+        "two shape operands are interpreted: lhs is [m, k], rhs is [k, n], "
+        "and init/result are [m, n]. Dense/default fragments need only the "
+        "data value and shape SSA values. Encoded fragments carry schema and "
+        "scale/table/sparse metadata values in the keyed using dictionary so "
+        "bulk runtime data remains ordinary SSA while lowering can consume a "
+        "compact resolved fragment fact."
+    ),
+    operands=[
+        Operand("data", VECTOR, doc="Physical vector lanes or packed registers."),
+        Operand("rows", INDEX, doc="Logical matrix row count for this fragment role."),
+        Operand("columns", INDEX, doc="Logical matrix column count for this fragment role."),
+        Operand(
+            "params",
+            ANY,
+            variadic=True,
+            doc="Optional schema, scale, table, metadata, or online state operands.",
+        ),
+    ],
+    results=[Result("result", VECTOR, doc="The same physical vector value with fragment facts.")],
+    attrs=[
+        AttrDef("role", ATTR_TYPE_ENUM, enum_def=VectorFragmentRole),
+        AttrDef(
+            "param_names",
+            ATTR_TYPE_DICT,
+            optional=True,
+            doc="Sorted fragment parameter names mapped to parameter operand ordinals.",
+        ),
+        AttrDef(
+            "predicates",
+            ATTR_TYPE_PREDICATE_LIST,
+            optional=True,
+            doc="Optional local facts constraining fragment shape or parameter values.",
+        ),
+    ],
+    constraints=[SameType("data", "result")],
+    verify="loom_vector_fragment_verify",
+    facts="loom_vector_fragment_facts",
+    traits=[PURE, REFINABLE_RESULT_TYPE_REFS],
+    format=[
+        TemplateParam("role"),
+        Ref("data"),
+        kw("shape"),
+        LBRACKET,
+        Ref("rows"),
+        COMMA,
+        Ref("columns"),
+        RBRACKET,
+        OptionalGroup(
+            [kw("using"), OperandDict("params", "param_names")],
+            anchor="params",
+        ),
+        OptionalGroup(
+            [kw("where"), PredicateList("predicates")],
+            anchor="predicates",
+        ),
+        COLON,
+        ResultType("result"),
+    ],
+    examples=[
+        "%fragment = vector.fragment<lhs> %payload shape [%m, %k] : vector<4xi32>",
+        "%fragment = vector.fragment<rhs> %payload shape [%k, %n] using {scale = %scale : vector<1xf16>, schema = %schema : encoding<schema>} : vector<4xi32>",
     ],
 )
 
@@ -3762,6 +3846,7 @@ VECTOR_REDUCTION_OPS: tuple[Op, ...] = (vector_reduce,)
 VECTOR_ENCODING_OPS: tuple[Op, ...] = (
     vector_decode,
     vector_encode,
+    vector_fragment,
 )
 
 VECTOR_OP_CATEGORY_GROUPS: tuple[tuple[OpCategory, tuple[Op, ...]], ...] = (

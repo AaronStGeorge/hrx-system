@@ -20,6 +20,7 @@ from loom.dialect.vector.defs import (
     IntegerDot8I4Kind,
     QuantizeNaN,
     QuantizeTie,
+    VectorFragmentRole,
     vector_ops,
 )
 
@@ -35,6 +36,7 @@ __all__ = [
     "IntegerDot8I4Kind",
     "QuantizeNaN",
     "QuantizeTie",
+    "VectorFragmentRole",
     "VECTOR_OP_CATEGORIES",
     "VECTOR_OP_CATEGORY_GROUPS",
     "ALL_VECTOR_OPS",

@@ -20,6 +20,7 @@
 #include "loom/ops/encoding/storage.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/encoding_auxiliary.h"
+#include "loom/ops/vector/fragment.h"
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/util/fact_table.h"
@@ -1743,6 +1744,99 @@ iree_status_t loom_vector_encode_verify(const loom_module_t* module,
   return loom_vector_verify_encoded_auxiliary(
       module, op, emitter, loom_vector_encode_schema(op),
       loom_vector_encode_auxiliary(op), loom_vector_encode_auxiliary_names(op));
+}
+
+static iree_status_t loom_vector_verify_fragment_schema_type(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter, loom_value_id_t schema_value) {
+  if (schema_value == LOOM_VALUE_ID_INVALID ||
+      schema_value >= module->values.count) {
+    return iree_ok_status();
+  }
+  loom_type_t schema_type = loom_module_value_type(module, schema_value);
+  if (loom_type_satisfies_constraint(schema_type,
+                                     LOOM_TYPE_CONSTRAINT_ENCODING_SCHEMA)) {
+    return iree_ok_status();
+  }
+  return loom_vector_emit_operand_constraint(
+      emitter, op, IREE_SV("schema"), schema_type,
+      iree_make_cstring_view(
+          loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_ENCODING_SCHEMA)));
+}
+
+static iree_status_t loom_vector_verify_fragment_auxiliary_types(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter,
+    loom_vector_encoding_auxiliary_view_t auxiliary) {
+  for (uint8_t i = 0; i < LOOM_VECTOR_ENCODING_AUXILIARY_KEY_COUNT_; ++i) {
+    loom_vector_encoding_auxiliary_key_t key =
+        (loom_vector_encoding_auxiliary_key_t)i;
+    loom_vector_encoding_auxiliary_key_flags_t key_flag =
+        loom_vector_encoding_auxiliary_key_flag(key);
+    if (!iree_any_bit_set(auxiliary.present_keys, key_flag)) {
+      continue;
+    }
+    loom_value_id_t value = auxiliary.values[key];
+    if (value == LOOM_VALUE_ID_INVALID || value >= module->values.count) {
+      continue;
+    }
+    loom_type_t value_type = loom_module_value_type(module, value);
+    if (loom_type_satisfies_constraint(value_type,
+                                       LOOM_TYPE_CONSTRAINT_VECTOR)) {
+      continue;
+    }
+    return loom_vector_emit_operand_constraint(
+        emitter, op, loom_vector_encoding_auxiliary_key_name(key), value_type,
+        iree_make_cstring_view(
+            loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_VECTOR)));
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_vector_fragment_verify(const loom_module_t* module,
+                                          const loom_op_t* op,
+                                          iree_diagnostic_emitter_t emitter) {
+  loom_vector_fragment_parameter_view_t parameters;
+  iree_string_view_t unknown_key = iree_string_view_empty();
+  if (!loom_vector_fragment_parameter_view_resolve(
+          module, loom_vector_fragment_params(op),
+          loom_vector_fragment_param_names(op), &parameters, &unknown_key)) {
+    return loom_vector_emit_unknown_auxiliary_key(module, emitter, op,
+                                                  unknown_key);
+  }
+
+  if (!parameters.has_schema && parameters.auxiliary.present_keys != 0) {
+    return loom_vector_emit_missing_auxiliary_key(module, emitter, op,
+                                                  IREE_SV("schema"));
+  }
+
+  if (!parameters.has_schema) {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(loom_vector_verify_fragment_schema_type(
+      module, op, emitter, parameters.schema_value_id));
+  IREE_RETURN_IF_ERROR(loom_vector_verify_fragment_auxiliary_types(
+      module, op, emitter, parameters.auxiliary));
+
+  loom_value_fact_storage_schema_t storage_schema = {0};
+  if (!loom_vector_query_static_storage_schema_for_schema_value(
+          module, parameters.schema_value_id, &storage_schema)) {
+    return iree_ok_status();
+  }
+  if (loom_value_fact_encoded_operand_schema_is_unknown(
+          storage_schema.encoded_operand)) {
+    return iree_ok_status();
+  }
+
+  loom_vector_encoding_auxiliary_key_flags_t required_keys = 0;
+  if (!loom_vector_encoding_auxiliary_required_keys_from_schema(
+          storage_schema.encoded_operand, &required_keys, NULL)) {
+    return loom_vector_emit_missing_auxiliary_key(module, emitter, op,
+                                                  IREE_SV("scale"));
+  }
+  return loom_vector_verify_required_auxiliary_keys(
+      module, emitter, op, parameters.auxiliary.present_keys, required_keys);
 }
 
 static iree_status_t loom_vector_emit_encoding_dynamic_type_error(

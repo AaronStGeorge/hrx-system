@@ -34,3 +34,17 @@ class VectorEncodingMixin:
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
     ) -> ValueRef: ...
+    def fragment(
+        self,
+        *,
+        role: str,
+        data: ValueRef,
+        rows: ValueRef,
+        columns: ValueRef,
+        params: dict[str, ValueRef] = ...,
+        predicates: list[Predicate] = ...,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...

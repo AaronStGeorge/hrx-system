@@ -19,6 +19,7 @@ loom_cc_library(
         "canonicalize.c",
         "encoding_auxiliary.c",
         "facts.c",
+        "fragment.c",
         "memory.c",
         "tables.c",
         "tables.h",
@@ -41,6 +42,7 @@ loom_cc_library(
     ],
     hdrs = [
         "encoding_auxiliary.h",
+        "fragment.h",
         "memory.h",
         "ops.h",
     ],
@@ -57,6 +59,7 @@ loom_cc_library(
         "//loom/src/loom/rewrite:type_propagation",
         "//loom/src/loom/util:fact_table",
         "//loom/src/loom/util:math",
+        "//loom/src/loom/util:stable_id",
         "//runtime/src/iree/base",
     ],
 )
@@ -64,6 +67,18 @@ loom_cc_library(
 loom_cc_test(
     name = "encoding_auxiliary_test",
     srcs = ["encoding_auxiliary_test.cc"],
+    deps = [
+        ":vector",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "fragment_test",
+    srcs = ["fragment_test.cc"],
     deps = [
         ":vector",
         "//loom/src/loom/ir",

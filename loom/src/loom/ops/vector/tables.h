@@ -158,6 +158,7 @@ extern const loom_op_vtable_t loom_vector_dot4f8_vtable;
 extern const loom_op_vtable_t loom_vector_reduce_vtable;
 extern const loom_op_vtable_t loom_vector_decode_vtable;
 extern const loom_op_vtable_t loom_vector_encode_vtable;
+extern const loom_op_vtable_t loom_vector_fragment_vtable;
 
 #ifdef __cplusplus
 }  // extern "C"

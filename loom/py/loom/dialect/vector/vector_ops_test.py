@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from loom.assembly import OperandDict
+from loom.assembly import OperandDict, OptionalGroup, PredicateList, ResultType
 from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.vector import (
@@ -24,9 +24,10 @@ from loom.dialect.vector import (
     IntegerDot8I4Kind,
     QuantizeNaN,
     QuantizeTie,
+    VectorFragmentRole,
     vector_ops,
 )
-from loom.dsl import ENCODING_SCHEMA, ENCODING_TRANSFORM, FLOAT, I1, INTEGER, SCALAR, VECTOR, EffectKind, Op
+from loom.dsl import ANY, ENCODING_SCHEMA, ENCODING_TRANSFORM, FLOAT, I1, INDEX, INTEGER, SCALAR, VECTOR, EffectKind, Op
 
 _REPO_ROOT = Path(__file__).resolve().parents[5]
 
@@ -641,6 +642,56 @@ def test_vector_encode_decode_keep_schema_and_data_separate() -> None:
         assert "Pure" in trait_names
         assert "Elementwise" not in trait_names
         assert op.effects == ()
+
+
+def test_vector_fragment_preserves_physical_type_and_groups_interpretation_data() -> None:
+    op = _op_by_name()["vector.fragment"]
+    trait_names = {trait.name for trait in op.traits}
+    constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+
+    assert [case.keyword for case in VectorFragmentRole.cases] == ["lhs", "rhs", "init", "result"]
+    role_attr = op.attr("role")
+    data_operand = op.operand("data")
+    rows_operand = op.operand("rows")
+    columns_operand = op.operand("columns")
+    params_operand = op.operand("params")
+    result = op.result("result")
+    assert role_attr is not None
+    assert data_operand is not None
+    assert rows_operand is not None
+    assert columns_operand is not None
+    assert params_operand is not None
+    assert result is not None
+    assert role_attr.enum_def is VectorFragmentRole
+    assert data_operand.type_constraint == VECTOR
+    assert rows_operand.type_constraint == INDEX
+    assert columns_operand.type_constraint == INDEX
+    assert params_operand.type_constraint == ANY
+    assert params_operand.variadic
+    assert result.type_constraint == VECTOR
+    assert ("SameType", ("data", "result")) in constraints
+    assert "Pure" in trait_names
+    assert "Elementwise" not in trait_names
+    assert op.effects == ()
+
+    param_names_attr = op.attr("param_names")
+    predicates_attr = op.attr("predicates")
+    assert param_names_attr is not None
+    assert param_names_attr.attr_type == "dict"
+    assert param_names_attr.optional
+    assert predicates_attr is not None
+    assert predicates_attr.attr_type == "predicate_list"
+    assert predicates_attr.optional
+
+    using_groups = [
+        element
+        for element in op.format
+        if isinstance(element, OptionalGroup) and any(isinstance(inner, OperandDict) and inner.operands == "params" and inner.names == "param_names" for inner in element.elements)
+    ]
+    where_groups = [element for element in op.format if isinstance(element, OptionalGroup) and any(isinstance(inner, PredicateList) and inner.field == "predicates" for inner in element.elements)]
+    assert len(using_groups) == 1
+    assert len(where_groups) == 1
+    assert any(isinstance(element, ResultType) and element.field == "result" for element in op.format)
 
 
 def test_vector_layout_ops_make_lane_structure_explicit() -> None:

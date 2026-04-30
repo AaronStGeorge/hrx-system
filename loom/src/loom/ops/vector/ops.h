@@ -159,7 +159,8 @@ enum {
   LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 135),
   LOOM_OP_VECTOR_DECODE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 136),
   LOOM_OP_VECTOR_ENCODE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 137),
-  LOOM_OP_VECTOR_COUNT_ = 138,
+  LOOM_OP_VECTOR_FRAGMENT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 138),
+  LOOM_OP_VECTOR_COUNT_ = 139,
 };
 
 // Floating-point value-domain assumptions for vector operations.
@@ -265,6 +266,14 @@ typedef enum loom_vector_reduce_kind_e {
   LOOM_VECTOR_REDUCE_KIND_MAXNUMF = 14,
   LOOM_VECTOR_REDUCE_KIND_COUNT_ = 15,
 } loom_vector_reduce_kind_t;
+
+typedef enum loom_vector_fragment_role_e {
+  LOOM_VECTOR_FRAGMENT_ROLE_LHS = 0,
+  LOOM_VECTOR_FRAGMENT_ROLE_RHS = 1,
+  LOOM_VECTOR_FRAGMENT_ROLE_INIT = 2,
+  LOOM_VECTOR_FRAGMENT_ROLE_RESULT = 3,
+  LOOM_VECTOR_FRAGMENT_ROLE_COUNT_ = 4,
+} loom_vector_fragment_role_t;
 
 // LOOM_OP_VECTOR_CONSTANT: Materialize a compile-time vector value whose every lane has the same scalar attribute payload. The result type supplies both the vector shape and the element type used to interpret the payload.
 // %v = vector.constant 0.0 : vector<4xf32>
@@ -2946,6 +2955,38 @@ iree_status_t loom_vector_encode_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_vector_encode_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_FRAGMENT: Attach a matrix-fragment interpretation to a physical vector value without changing the physical vector type. The role selects how the two shape operands are interpreted: lhs is [m, k], rhs is [k, n], and init/result are [m, n]. Dense/default fragments need only the data value and shape SSA values. Encoded fragments carry schema and scale/table/sparse metadata values in the keyed using dictionary so bulk runtime data remains ordinary SSA while lowering can consume a compact resolved fragment fact.
+// %fragment = vector.fragment<lhs> %payload shape [%m, %k] : vector<4xi32>
+LOOM_DEFINE_ISA(loom_vector_fragment_isa, LOOM_OP_VECTOR_FRAGMENT)
+LOOM_DEFINE_OPERAND(loom_vector_fragment_data, 0)
+LOOM_DEFINE_OPERAND(loom_vector_fragment_rows, 1)
+LOOM_DEFINE_OPERAND(loom_vector_fragment_columns, 2)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_fragment_params, 3)
+LOOM_DEFINE_RESULT(loom_vector_fragment_result, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_fragment_role, 0, loom_vector_fragment_role_t)
+LOOM_DEFINE_ATTR_DICT(loom_vector_fragment_param_names, 1)
+iree_status_t loom_vector_fragment_build(
+    loom_builder_t* builder,
+    loom_vector_fragment_role_t role,
+    loom_may_consume loom_value_id_t data,
+    loom_may_consume loom_value_id_t rows,
+    loom_may_consume loom_value_id_t columns,
+    loom_may_consume const loom_named_value_t* params,
+    iree_host_size_t params_count,
+    loom_optional const loom_predicate_t* predicates,
+    iree_host_size_t predicates_count,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_fragment_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_vector_fragment_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

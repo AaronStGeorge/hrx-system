@@ -15,6 +15,7 @@ loom_cc_library(
     vector
   HDRS
     "encoding_auxiliary.h"
+    "fragment.h"
     "memory.h"
     "ops.h"
   SRCS
@@ -22,6 +23,7 @@ loom_cc_library(
     "canonicalize.c"
     "encoding_auxiliary.c"
     "facts.c"
+    "fragment.c"
     "memory.c"
     "tables.c"
     "tables.h"
@@ -55,6 +57,7 @@ loom_cc_library(
     loom::src::loom::rewrite::type_propagation
     loom::src::loom::util::fact_table
     loom::src::loom::util::math
+    loom::src::loom::util::stable_id
   PUBLIC
 )
 
@@ -63,6 +66,19 @@ loom_cc_test(
     encoding_auxiliary_test
   SRCS
     "encoding_auxiliary_test.cc"
+  DEPS
+    ::vector
+    iree::base::internal::arena
+    loom::src::loom::ir
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    fragment_test
+  SRCS
+    "fragment_test.cc"
   DEPS
     ::vector
     iree::base::internal::arena

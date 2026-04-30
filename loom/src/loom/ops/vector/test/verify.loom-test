@@ -858,6 +858,62 @@ func.def @decode_requires_schema_scale_auxiliary(%payload: vector<6xi32>) {
 
 // ====
 
+// Fragment shapes are dynamic SSA index values, not early static attributes.
+func.def @fragment_requires_index_shape(%payload: vector<6xi32>, %m: i32, %n: index) {
+  // ERROR@+1: TYPE/003 "rows" "index"
+  %fragment = vector.fragment<lhs> %payload shape [%m, %n] : vector<6xi32>
+  func.return
+}
+
+// ====
+
+// Fragment roles are a closed target-independent role enum.
+func.def @fragment_rejects_unknown_role(%payload: vector<6xi32>, %m: index, %k: index) {
+  // ERROR@+1: PARSE/017 "role"
+  %fragment = vector.fragment<side> %payload shape [%m, %k] : vector<6xi32>
+  func.return
+}
+
+// ====
+
+// Auxiliary fragment operands require the schema that interprets them.
+func.def @fragment_auxiliary_requires_schema(%payload: vector<6xi32>, %m: index, %k: index, %scale: vector<1xf16>) {
+  // ERROR@+1: ENCODING/016 "vector.fragment" "schema"
+  %fragment = vector.fragment<lhs> %payload shape [%m, %k] using {scale = %scale : vector<1xf16>} : vector<6xi32>
+  func.return
+}
+
+// ====
+
+// Fragment schema parameters must be storage schemas, not other encodings.
+func.def @fragment_requires_schema_role(%payload: vector<6xi32>, %m: index, %k: index, %xf: encoding<transform>) {
+  // ERROR@+1: TYPE/003 "schema" "encoding<schema>"
+  %fragment = vector.fragment<lhs> %payload shape [%m, %k] using {schema = %xf : encoding<transform>} : vector<6xi32>
+  func.return
+}
+
+// ====
+
+// Fragment parameter keys share the vector auxiliary vocabulary.
+func.def @fragment_rejects_unknown_auxiliary_key(%payload: vector<6xi32>, %m: index, %k: index, %scale: vector<1xf16>) {
+  %schema = encoding.define #matrix_operand<affine=0, codebook=0, element_format=268435456, payload_elements=32, payload_packing=256, payload_registers=6, rounding=0, scale_format=0, scale_group_elements=32, scale_operands=1, scale_topology=32, secondary_scale_format=0, sparsity=0, zero_scale_fallback=true> : encoding<schema>
+  // ERROR@+1: ENCODING/015 "vector.fragment" "mystery"
+  %fragment = vector.fragment<lhs> %payload shape [%m, %k] using {mystery = %scale : vector<1xf16>, schema = %schema : encoding<schema>} : vector<6xi32>
+  func.return
+}
+
+// ====
+
+// Static encoded fragment schemas can require named auxiliary operands.
+func.def @fragment_requires_schema_scale_auxiliary(%payload: vector<6xi32>, %m: index, %k: index) {
+  %schema = encoding.define #matrix_operand<affine=0, codebook=0, element_format=268435456, payload_elements=32, payload_packing=256, payload_registers=6, rounding=0, scale_format=0, scale_group_elements=32, scale_operands=1, scale_topology=32, secondary_scale_format=0, sparsity=0, zero_scale_fallback=true> : encoding<schema>
+  // ERROR@+1: ENCODING/016 "vector.fragment" "scale"
+  %fragment = vector.fragment<lhs> %payload shape [%m, %k] using {schema = %schema : encoding<schema>} : vector<6xi32>
+  func.return
+}
+
+// ====
+
 // Fully static threshold tables must be nondecreasing.
 func.def @table_quantize_unsorted_thresholds(%values: vector<4xf32>) {
   %t0 = scalar.constant 0.0 : f32

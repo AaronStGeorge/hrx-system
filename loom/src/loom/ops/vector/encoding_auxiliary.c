@@ -8,9 +8,19 @@
 
 #include <string.h>
 
+#include "loom/util/stable_id.h"
+
 //===----------------------------------------------------------------------===//
 // Key vocabulary
 //===----------------------------------------------------------------------===//
+
+typedef struct loom_vector_encoding_auxiliary_key_entry_t {
+  // Stable key ID computed from the textual spelling.
+  uint64_t stable_id;
+
+  // Dense auxiliary key represented by stable_id.
+  loom_vector_encoding_auxiliary_key_t key;
+} loom_vector_encoding_auxiliary_key_entry_t;
 
 static const iree_string_view_t loom_vector_encoding_auxiliary_key_names
     [LOOM_VECTOR_ENCODING_AUXILIARY_KEY_COUNT_] = {
@@ -44,6 +54,63 @@ static const iree_string_view_t loom_vector_encoding_auxiliary_key_names
         [LOOM_VECTOR_ENCODING_AUXILIARY_KEY_OUTLIERS] = IREE_SVL("outliers"),
 };
 
+static const loom_vector_encoding_auxiliary_key_entry_t
+    loom_vector_encoding_auxiliary_key_entries
+        [LOOM_VECTOR_ENCODING_AUXILIARY_KEY_COUNT_] = {
+            {UINT64_C(0x6aacb9fbb71a1d91),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_SCALE},
+            {UINT64_C(0x507a0c073a492ca0),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_SECONDARY_SCALE},
+            {UINT64_C(0x5d9da9b821605bf9),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_SCALE2},
+            {UINT64_C(0x5d9da8b821605a46),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_SCALE3},
+            {UINT64_C(0x5d9dabb821605f5f),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_SCALE4},
+            {UINT64_C(0x5d9daab821605dac),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_SCALE5},
+            {UINT64_C(0x5d9dadb8216062c5),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_SCALE6},
+            {UINT64_C(0x5d9dacb821606112),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_SCALE7},
+            {UINT64_C(0x09afcae67963036a),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_ZERO_POINT},
+            {UINT64_C(0x492fe3ad0447b657),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_MINIMUM},
+            {UINT64_C(0x5eb23f9bd0a849a4),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_BIAS},
+            {UINT64_C(0x0f67b0c0655e8301),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_SUM_CORRECTION},
+            {UINT64_C(0x5f46c30977adc339),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_CODEBOOK},
+            {UINT64_C(0x1d3397dbaa0549f2),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_SPARSITY},
+            {UINT64_C(0x28475f88f42fd020),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_METADATA},
+            {UINT64_C(0x144d56ffb313be92),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_INDICES},
+            {UINT64_C(0x2c1a6e8791d7495b),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_OFFSETS},
+            {UINT64_C(0x1f375fa2ce7b1849),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_MASK},
+            {UINT64_C(0x5bf80e4f308a2015),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_SIGNS},
+            {UINT64_C(0x76a77c4baed84ff6),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_RESIDUAL},
+            {UINT64_C(0x0c559483aef77f4a),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_AMAX},
+            {UINT64_C(0x1cda940a344e1571),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_THRESHOLDS},
+            {UINT64_C(0x5f6aa359631d7342),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_CENTROIDS},
+            {UINT64_C(0x0a1581c61695c46c),
+             LOOM_VECTOR_ENCODING_AUXILIARY_KEY_OUTLIERS},
+};
+
+static_assert(IREE_ARRAYSIZE(loom_vector_encoding_auxiliary_key_entries) ==
+                  LOOM_VECTOR_ENCODING_AUXILIARY_KEY_COUNT_,
+              "auxiliary key stable IDs out of sync with key enum");
+
 iree_string_view_t loom_vector_encoding_auxiliary_key_name(
     loom_vector_encoding_auxiliary_key_t key) {
   if (key >= LOOM_VECTOR_ENCODING_AUXILIARY_KEY_COUNT_) {
@@ -52,17 +119,22 @@ iree_string_view_t loom_vector_encoding_auxiliary_key_name(
   return loom_vector_encoding_auxiliary_key_names[key];
 }
 
-bool loom_vector_encoding_auxiliary_key_lookup(
-    iree_string_view_t name, loom_vector_encoding_auxiliary_key_t* out_key) {
+bool loom_vector_encoding_auxiliary_key_lookup_stable_id(
+    uint64_t stable_id, loom_vector_encoding_auxiliary_key_t* out_key) {
   for (uint8_t i = 0; i < LOOM_VECTOR_ENCODING_AUXILIARY_KEY_COUNT_; ++i) {
-    if (!iree_string_view_equal(name,
-                                loom_vector_encoding_auxiliary_key_names[i])) {
+    if (stable_id != loom_vector_encoding_auxiliary_key_entries[i].stable_id) {
       continue;
     }
-    *out_key = (loom_vector_encoding_auxiliary_key_t)i;
+    *out_key = loom_vector_encoding_auxiliary_key_entries[i].key;
     return true;
   }
   return false;
+}
+
+bool loom_vector_encoding_auxiliary_key_lookup(
+    iree_string_view_t name, loom_vector_encoding_auxiliary_key_t* out_key) {
+  return loom_vector_encoding_auxiliary_key_lookup_stable_id(
+      loom_stable_id_from_string(name), out_key);
 }
 
 bool loom_vector_encoding_auxiliary_scale_key(
@@ -113,7 +185,8 @@ bool loom_vector_encoding_auxiliary_view_resolve(
     }
     iree_string_view_t key_name = module->strings.entries[entry->name_id];
     loom_vector_encoding_auxiliary_key_t key = 0;
-    if (!loom_vector_encoding_auxiliary_key_lookup(key_name, &key)) {
+    if (!loom_vector_encoding_auxiliary_key_lookup_stable_id(
+            loom_stable_id_from_string(key_name), &key)) {
       if (out_unknown_key) {
         *out_unknown_key = key_name;
       }
