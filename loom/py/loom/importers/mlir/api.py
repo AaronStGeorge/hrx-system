@@ -23,6 +23,7 @@ def import_iree_ir(*, prefer_abi3_extensions: bool = False) -> Any:
         from iree.compiler import ir
         from iree.compiler.dialects import (
             affine,  # noqa: F401
+            amdgpu,  # noqa: F401
             arith,  # noqa: F401
             builtin,  # noqa: F401
             func,  # noqa: F401

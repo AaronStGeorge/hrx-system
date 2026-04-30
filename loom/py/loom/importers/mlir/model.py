@@ -101,7 +101,6 @@ class KernelFacts:
     subgroup_size: int | None
     bindings: tuple[Binding, ...]
     operation_counts: Counter[str]
-    source_mappings: tuple[str, ...]
     converted_body: ImportBodyReport
 
 
@@ -112,6 +111,9 @@ class MlirConversionContext(SourceImportSession):
     type_converter: MlirTypeConverter = field(default_factory=MlirTypeConverter)
     attr_decoder: MlirAttributeDecoder = field(default_factory=MlirAttributeDecoder)
     location_converter: MlirLocationConverter | None = None
+    source_names: dict[object, str] = field(default_factory=dict)
+    binding_args: dict[int, ValueRef] = field(default_factory=dict)
+    bindings_by_result: dict[str, Binding] = field(default_factory=dict)
 
     @classmethod
     def with_prelude(
@@ -122,6 +124,9 @@ class MlirConversionContext(SourceImportSession):
         diagnostics: DiagnosticEngine | None = None,
         preview_block: object | None = None,
         type_converter: MlirTypeConverter | None = None,
+        source_names: dict[object, str] | None = None,
+        binding_args: dict[int, ValueRef] | None = None,
+        bindings_by_result: dict[str, Binding] | None = None,
     ) -> MlirConversionContext:
         context = cls(
             builder=builder,
@@ -129,6 +134,9 @@ class MlirConversionContext(SourceImportSession):
             preview_block=preview_block,
             type_converter=type_converter or MlirTypeConverter(),
             location_converter=MlirLocationConverter(builder.module),
+            source_names=source_names or {},
+            binding_args=binding_args or {},
+            bindings_by_result=bindings_by_result or {},
         )
         context.capture_existing_value_names()
         for source, (ref, value_type) in values.items():
@@ -138,6 +146,17 @@ class MlirConversionContext(SourceImportSession):
     def type(self, value_type: str) -> Type:
         return self.type_converter.map_text(value_type)
 
+    def source_name(self, source: object) -> str:
+        return self.source_names.get(source) or super().source_name(source)
+
+    def result_name(self, source: object, fallback: str | None = None) -> str:
+        existing = self.value_map.get(source)
+        if existing is not None and existing.name:
+            return existing.name
+        if source in self.source_names:
+            return self.names.fresh(self.source_names[source])
+        return super().result_name(source, fallback)
+
     def build_constant(self, value: Any, value_type: str, name: str) -> ValueRef:
         result_type = self.type(value_type)
         constant_value = self.type_converter.coerce_constant_value(value, value_type)
@@ -145,12 +164,12 @@ class MlirConversionContext(SourceImportSession):
             return self.builder.index.constant(
                 value=constant_value,
                 results=[result_type],
-                name=self.reserve_name(name),
+                name=name,
             )
         return self.builder.scalar.constant(
             value=constant_value,
             results=[result_type],
-            name=self.reserve_name(name),
+            name=name,
         )
 
     def require_top_level(self, op: SourceOp, target: str) -> bool:
@@ -188,5 +207,8 @@ class MlirConversionContext(SourceImportSession):
             type_converter=self.type_converter,
             attr_decoder=self.attr_decoder,
             location_converter=self.location_converter,
+            source_names=self.source_names,
+            binding_args=self.binding_args,
+            bindings_by_result=self.bindings_by_result,
         )
         return child

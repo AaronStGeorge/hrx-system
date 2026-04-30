@@ -55,10 +55,8 @@ class MlirTypeConverter:
         if not source_type.startswith(prefix) or not source_type.endswith(">"):
             raise ValueError(f"expected memref type, got `{source_type}`")
         body = source_type[len(prefix) : -1]
-        descriptor_marker = ", #hal.descriptor_type"
-        if descriptor_marker in body:
-            body = body.split(descriptor_marker, 1)[0]
-        return f"view<{body}, #dense>"
+        shape_and_element = _split_top_level_comma(body)[0].strip()
+        return f"view<{_flatten_vector_element(shape_and_element)}, #dense>"
 
     def coerce_constant_value(self, value: Any, value_type: str) -> Any:
         if not isinstance(value, str):
@@ -86,7 +84,7 @@ def _parse_shaped_type(text: str) -> ShapedType:
 
 def _parse_shaped_body(type_kind: TypeKind, body: str) -> ShapedType:
     shape_and_element = _split_top_level_comma(body)[0].strip()
-    pieces = shape_and_element.split("x")
+    pieces = _split_top_level_x(shape_and_element)
     if len(pieces) < 2:
         raise ValueError(f"expected shaped type body with dimensions: {body}")
     element_kind = parse_scalar_type_kind(pieces[-1])
@@ -101,6 +99,19 @@ def _parse_shaped_body(type_kind: TypeKind, body: str) -> ShapedType:
     return ShapedType(type_kind, ScalarType(element_kind), tuple(dims))
 
 
+def _flatten_vector_element(shape_and_element: str) -> str:
+    pieces = _split_top_level_x(shape_and_element)
+    if not pieces:
+        return shape_and_element
+    element = pieces[-1]
+    if not element.startswith("vector<") or not element.endswith(">"):
+        return shape_and_element
+    nested = _split_top_level_x(element[7:-1])
+    if not nested:
+        return shape_and_element
+    return "x".join((*pieces[:-1], *nested))
+
+
 def _split_top_level_comma(text: str) -> tuple[str, ...]:
     pieces: list[str] = []
     start = 0
@@ -111,6 +122,22 @@ def _split_top_level_comma(text: str) -> tuple[str, ...]:
         elif char in ">)]":
             depth -= 1
         elif char == "," and depth == 0:
+            pieces.append(text[start:index])
+            start = index + 1
+    pieces.append(text[start:])
+    return tuple(pieces)
+
+
+def _split_top_level_x(text: str) -> tuple[str, ...]:
+    pieces: list[str] = []
+    start = 0
+    depth = 0
+    for index, char in enumerate(text):
+        if char in "<([":
+            depth += 1
+        elif char in ">)]":
+            depth -= 1
+        elif char == "x" and depth == 0:
             pieces.append(text[start:index])
             start = index + 1
     pieces.append(text[start:])

@@ -24,14 +24,47 @@ def convert_binding(op: SourceOp, context: MlirConversionContext) -> bool:
     if binding_attr is None:
         context.record_blocked(op.text, "binding subspan has no binding attribute")
         return True
-    mapped = context.mapped(op.result())
-    if mapped is None:
-        context.record_blocked(
-            op.text,
-            "binding subspan reached body conversion before kernel ABI prelude",
+    existing = context.mapped(op.result())
+    if existing is not None:
+        context.record_converted(
+            op.text, f"{context.ssa(existing)} = buffer.view prelude"
         )
         return True
-    context.record_converted(op.text, f"{context.ssa(mapped)} = buffer.view prelude")
+    binding = context.bindings_by_result.get(op.result().get_name())
+    if binding is None:
+        context.record_blocked(
+            op.text,
+            f"binding subspan result {op.result().get_name()} has no ABI binding",
+        )
+        return True
+    buffer = context.binding_args.get(binding.binding)
+    if buffer is None:
+        context.record_blocked(
+            op.text, f"binding {binding.binding} has no kernel buffer argument"
+        )
+        return True
+    byte_offset_source = op.operand()
+    byte_offset = context.mapped(byte_offset_source)
+    if byte_offset is None:
+        context.record_blocked(
+            op.text,
+            f"missing binding byte offset: {byte_offset_source.get_name()}",
+        )
+        return True
+    if byte_offset.type != context.type("offset"):
+        byte_offset = context.builder.index.cast(
+            input=byte_offset,
+            results=[context.type("offset")],
+            name=context.fresh_name(f"{byte_offset.name or 'offset'}_bytes"),
+        )
+    view = context.builder.buffer.view(
+        buffer=buffer,
+        byte_offset=byte_offset,
+        results=[context.type(binding.view_type)],
+        name=context.result_name(op.result(), f"binding{binding.binding}_view"),
+    )
+    context.map_result(op.result(), view, binding.view_type)
+    context.record_converted(op.text, f"{context.ssa(view)} = buffer.view")
     return True
 
 

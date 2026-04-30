@@ -18,6 +18,8 @@ from loom.ir import Region
 
 def register(registry: ConverterRegistry) -> None:
     registry.register("scf.for", convert_for)
+    registry.register("scf.forall", convert_forall)
+    registry.register("scf.forall.in_parallel", convert_forall_in_parallel)
     registry.register("scf.if", convert_if)
     registry.register("scf.yield", convert_yield)
 
@@ -47,7 +49,10 @@ def convert_for(op: SourceOp, context: MlirConversionContext) -> bool:
     result_types = tuple(str(result.type) for result in op.results)
     loop_body = context.builder.region(
         args=[
-            (block_arg.get_name().removeprefix("%"), context.type(str(block_arg.type)))
+            (
+                context.source_name(block_arg).removeprefix("%"),
+                context.type(str(block_arg.type)),
+            )
             for block_arg in block_args
         ]
     )
@@ -117,6 +122,71 @@ def convert_for(op: SourceOp, context: MlirConversionContext) -> bool:
     return True
 
 
+def convert_forall(op: SourceOp, context: MlirConversionContext) -> bool:
+    axes = _iree_workgroup_mapping_axes(op.attr("mapping"))
+    if not axes:
+        context.record_blocked(
+            op.text,
+            "scf.forall import currently requires IREE workgroup mappings",
+        )
+        return True
+    if op.results:
+        context.record_blocked(
+            op.text,
+            "scf.forall with shared output results needs tensor-level import",
+        )
+        return True
+    source_region = op.operation.regions[0]
+    blocks = tuple(source_region.blocks)
+    if len(blocks) != 1:
+        context.record_blocked(op.text, "scf.forall expected one body block")
+        return True
+    block_args = tuple(blocks[0].arguments)
+    if len(block_args) != len(axes):
+        context.record_blocked(
+            op.text,
+            "scf.forall workgroup mapping count does not match block arguments",
+        )
+        return True
+
+    child = context.fork(preview_block=context.preview_block)
+    child.registry = context.registry
+    for block_arg, axis in zip(block_args, axes, strict=True):
+        workgroup_id = context.builder.kernel.workgroup_id(
+            dimension=axis,
+            results=[context.type("index")],
+            name=child.fresh_name(f"wg{axis}"),
+        )
+        child.map_value(block_arg, workgroup_id, "index")
+
+    registry = context.registry
+    if not isinstance(registry, ConverterRegistry):
+        raise ValueError("conversion context has no registry")
+    for child_op in immediate_region_ops(
+        op.operation,
+        1,
+        region=source_region,
+    ):
+        registry.convert(child_op, child)
+
+    context.merge_child_records(child)
+    if child.blocked:
+        context.record_blocked(
+            op.text,
+            (
+                "scf.forall workgroup region import blocked by "
+                f"{len(child.blocked)} nested op(s)"
+            ),
+        )
+        return True
+    context.record_converted(
+        op.text,
+        "scf.forall workgroup mapping inlined "
+        f"({', '.join(f'kernel.workgroup.id<{axis}>' for axis in axes)})",
+    )
+    return True
+
+
 def convert_if(op: SourceOp, context: MlirConversionContext) -> bool:
     if _has_unmapped_dialect_type(op.text):
         context.record_blocked(
@@ -177,6 +247,11 @@ def convert_if(op: SourceOp, context: MlirConversionContext) -> bool:
     return True
 
 
+def convert_forall_in_parallel(op: SourceOp, context: MlirConversionContext) -> bool:
+    context.record_converted(op.text, "scf.forall.in_parallel")
+    return True
+
+
 def convert_yield(op: SourceOp, context: MlirConversionContext) -> bool:
     if not op.operands:
         context.builder.scf.yield_()
@@ -229,3 +304,25 @@ def _convert_single_block_region(
 
 def _has_unmapped_dialect_type(text: str) -> bool:
     return "!" in text
+
+
+def _iree_workgroup_mapping_axes(attr: object | None) -> tuple[str, ...]:
+    if attr is None:
+        return ()
+    text = str(attr).strip()
+    if not text.startswith("[") or not text.endswith("]"):
+        return ()
+    body = text[1:-1].strip()
+    if not body:
+        return ()
+    axes: list[str] = []
+    prefix = "#iree_codegen.workgroup_mapping<"
+    for piece in body.split(","):
+        mapping = piece.strip()
+        if not mapping.startswith(prefix) or not mapping.endswith(">"):
+            return ()
+        axis = mapping[len(prefix) : -1]
+        if axis not in {"x", "y", "z"}:
+            return ()
+        axes.append(axis)
+    return tuple(axes)

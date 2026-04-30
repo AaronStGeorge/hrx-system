@@ -28,6 +28,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     mlir_parser.add_argument("paths", nargs="+", type=Path)
     mlir_parser.add_argument("--kernel")
     mlir_parser.add_argument(
+        "--update",
+        action="store_true",
+        help="update inline expected output sections",
+    )
+    mlir_parser.add_argument(
         "--prefer-abi3-extensions",
         action="store_true",
         help="prefer local .abi3.so IREE compiler bindings",
@@ -45,13 +50,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     options = MlirCheckOptions(
         kernel=args.kernel,
         prefer_abi3_extensions=args.prefer_abi3_extensions,
+        update=args.update,
     )
-    results = [run_mlir_check(path, options=options) for path in args.paths]
+    results = [
+        result
+        for path in args.paths
+        for result in run_mlir_check(path, options=options)
+    ]
     if args.json:
         sys.stdout.write(f"{results_to_json(results)}\n")
     else:
         for result in results:
-            sys.stdout.write(f"{result.status}: {result.path}\n")
+            sys.stdout.write(
+                f"{result.status}: {result.path}:case{result.case_index}\n"
+            )
+            if result.mismatch:
+                sys.stdout.write(f"  {result.mismatch}\n")
+                if result.diff:
+                    sys.stdout.write(result.diff)
             if not result.passed:
                 first_line = _diagnostic_line(result.stderr or result.stdout)
                 if first_line:
@@ -60,6 +76,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         sys.stdout.write(
             "summary: "
             f"{summary['passed']} passed, "
+            f"{summary['updated']} updated, "
             f"{summary['failed']} failed, "
             f"{summary['crashed']} crashed"
             "\n"

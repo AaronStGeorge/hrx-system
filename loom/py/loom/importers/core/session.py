@@ -119,16 +119,21 @@ class SourceImportSession:
         for operand in operands:
             ref = self.mapped(operand)
             if ref is None:
-                missing.append(source_name(operand))
+                missing.append(self.source_name(operand))
             else:
                 mapped.append(ref)
         return (tuple(mapped) if not missing else None, tuple(missing))
+
+    def source_name(self, source: object) -> str:
+        return source_name(source)
 
     def result_name(self, source: object, fallback: str | None = None) -> str:
         existing = self.value_map.get(source)
         if existing is not None and existing.name:
             return existing.name
-        return self.names.fresh(source_name(source) if fallback is None else fallback)
+        return self.names.fresh(
+            self.source_name(source) if fallback is None else fallback
+        )
 
     def reserve_name(self, name: str) -> str:
         return self.names.reserve_or_fresh(name)
@@ -165,7 +170,7 @@ class SourceImportSession:
                 lhs=lhs,
                 rhs=rhs,
                 results=[self.type(result_type)],
-                name=self.reserve_name(name),
+                name=name,
             ),
         )
 
@@ -197,7 +202,7 @@ class SourceImportSession:
         existing = self.constants.get(key)
         if existing is not None:
             return existing
-        result = self.build_constant(value, value_type, base)
+        result = self.build_constant(value, value_type, self.reserve_name(base))
         self.constants[key] = result
         return result
 

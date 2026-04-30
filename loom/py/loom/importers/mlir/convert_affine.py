@@ -17,6 +17,7 @@ from loom.importers.mlir.model import MlirConversionContext, SourceOp
 
 def register(registry: ConverterRegistry) -> None:
     registry.register("affine.apply", convert_affine_apply)
+    registry.register("affine.delinearize_index", convert_delinearize_index)
 
 
 def convert_affine_apply(op: SourceOp, context: MlirConversionContext) -> bool:
@@ -47,6 +48,69 @@ def convert_affine_apply(op: SourceOp, context: MlirConversionContext) -> bool:
         or f"{context.ssa(lowered)} = affine.apply alias",
     )
     return True
+
+
+def convert_delinearize_index(op: SourceOp, context: MlirConversionContext) -> bool:
+    linear = context.mapped(op.operand())
+    if linear is None:
+        context.record_blocked(
+            op.text,
+            f"missing affine.delinearize_index operand: {op.operand().get_name()}",
+        )
+        return True
+    basis = context.attr_decoder.dense_i64_array(op.attr("static_basis"))
+    if len(basis) != len(op.results):
+        context.record_blocked(
+            op.text,
+            "affine.delinearize_index dynamic or outer-bound form is not imported",
+        )
+        return True
+    lowered: list[ValueRef] = []
+    emitted: list[str] = []
+    for index, result_value in enumerate(op.results):
+        tail_product = _product(basis[index + 1 :])
+        value = linear
+        if tail_product != 1:
+            divisor = context.ensure_constant(
+                str(tail_product), "index", f"c{tail_product}_index"
+            )
+            value = context.build_binary(
+                "index.div",
+                value,
+                divisor,
+                "index",
+                context.fresh_name(f"{linear.name or 'linear'}_div{tail_product}"),
+            )
+            emitted.append(f"{context.ssa(value)} = index.div ...")
+        if basis[index] > 0:
+            modulus = context.ensure_constant(
+                str(basis[index]), "index", f"c{basis[index]}_index"
+            )
+            value = context.build_binary(
+                "index.rem",
+                value,
+                modulus,
+                "index",
+                context.result_name(result_value),
+            )
+            emitted.append(f"{context.ssa(value)} = index.rem ...")
+        context.map_result(result_value, value, str(result_value.type))
+        lowered.append(value)
+    context.record_converted(
+        op.text,
+        tuple(emitted)
+        or tuple(
+            f"{context.ssa(value)} = affine.delinearize alias" for value in lowered
+        ),
+    )
+    return True
+
+
+def _product(values: tuple[int, ...]) -> int:
+    result = 1
+    for value in values:
+        result *= value
+    return result
 
 
 class AffineLowering:
@@ -86,13 +150,14 @@ class AffineLowering:
             return self._lower_binary(
                 "index.div", expr.lhs, expr.rhs, self._div_name(expr)
             )
+        if kind == "AffineModExpr":
+            return self._lower_binary(
+                "index.rem", expr.lhs, expr.rhs, self._rem_name(expr)
+            )
         self.failure = f"unsupported affine expression node `{kind}`"
         return None
 
     def _operand(self, index: int) -> ValueRef | None:
-        if index < 0 or index >= len(self.op.operands):
-            self.failure = f"affine operand index {index} is out of range"
-            return None
         operand = self.op.operand(index)
         mapped = self.context.mapped(operand)
         if mapped is None:
@@ -135,6 +200,11 @@ class AffineLowering:
         lhs = self._name_fragment(expr.lhs)
         rhs = self._name_fragment(expr.rhs)
         return f"{lhs}_div{rhs}"
+
+    def _rem_name(self, expr: Any) -> str:
+        lhs = self._name_fragment(expr.lhs)
+        rhs = self._name_fragment(expr.rhs)
+        return f"{lhs}_rem{rhs}"
 
     def _name_fragment(self, expr: Any) -> str:
         kind = type(expr).__name__

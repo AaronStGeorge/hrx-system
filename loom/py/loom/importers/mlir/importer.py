@@ -25,11 +25,12 @@ from loom.importers.core import (
 )
 from loom.importers.mlir.api import import_iree_ir
 from loom.importers.mlir.attrs import MlirAttributeDecoder
-from loom.importers.mlir.convert_gpu import gpu_dimension_axis, gpu_shuffle_mode
+from loom.importers.mlir.convert_gpu import gpu_dimension_axis
 from loom.importers.mlir.converter import convert_function_body, walk_operations
 from loom.importers.mlir.model import Binding, KernelFacts, MlirConversionContext
+from loom.importers.mlir.names import build_source_name_overrides
 from loom.importers.mlir.types import MlirTypeConverter
-from loom.ir import BUFFER_TYPE, INDEX, OFFSET, Module, rebuild_value_metadata
+from loom.ir import BUFFER_TYPE, INDEX, Module, rebuild_value_metadata
 
 AXIS_BY_INDEX = {
     0: "x",
@@ -68,9 +69,11 @@ def import_mlir_module(
     ir = import_iree_ir(prefer_abi3_extensions=options.prefer_abi3_extensions)
     with ir.Context():
         parsed_module = ir.Module.parse(chunk)
+        source_names = build_source_name_overrides(parsed_module.operation, chunk)
         loom_module, facts = _import_parsed_module(
             parsed_module,
             function_name,
+            source_names=source_names,
             diagnostics=diagnostics,
         )
 
@@ -89,6 +92,7 @@ def _import_parsed_module(
     parsed_module: Any,
     function_name: str,
     *,
+    source_names: dict[object, str],
     diagnostics: DiagnosticEngine,
 ) -> tuple[Module, KernelFacts]:
     operations = list(walk_operations(parsed_module.operation))
@@ -118,6 +122,7 @@ def _import_parsed_module(
         workgroup_size=workgroup_size,
         diagnostics=diagnostics,
         type_converter=type_converter,
+        source_names=source_names,
     )
     facts = KernelFacts(
         executable_name=symbol_name(executable_operation),
@@ -131,7 +136,6 @@ def _import_parsed_module(
         subgroup_size=subgroup_size,
         bindings=bindings,
         operation_counts=operation_counts,
-        source_mappings=source_mapping_comments(function_operation),
         converted_body=converted_body,
     )
     return loom_module, facts
@@ -338,6 +342,7 @@ def build_loom_module(
     workgroup_size: tuple[int, int, int] | None,
     diagnostics: DiagnosticEngine,
     type_converter: MlirTypeConverter,
+    source_names: dict[object, str],
 ) -> tuple[Module, ImportBodyReport]:
     module, builder = loom.module_builder()
     target_preset = target_format or "unknown"
@@ -363,39 +368,18 @@ def build_loom_module(
         body=body,
     )
 
-    binding_views: dict[str, ValueRef] = {}
     topology_values: dict[tuple[str, str], ValueRef] = {}
     prelude_values: dict[Any, tuple[ValueRef, str | None]] = {}
     attr_decoder = MlirAttributeDecoder()
 
     with builder.insertion_block(body.blocks[0]):
-        zero = builder.index.constant(value=0, results=[OFFSET], name="zero")
-        for binding in bindings:
-            view = builder.buffer.view(
-                buffer=binding_args[binding.binding],
-                byte_offset=zero,
-                results=[type_converter.map_text(binding.view_type)],
-                name=f"binding{binding.binding}_view",
-            )
-            binding_views[binding.result] = view
-
         binding_by_result = {binding.result: binding for binding in bindings}
         for operation in walk_operations(function_operation):
             name = operation_name(operation)
-            if name == "hal.interface.binding.subspan":
-                result = operation.results[0] if operation.results else None
-                if result is None:
-                    diagnostics.error("binding subspan has no result")
-                    continue
-                binding = binding_by_result[result.get_name()]
-                prelude_values[result] = (
-                    binding_views[binding.result],
-                    binding.view_type,
-                )
-            elif name == "gpu.thread_id":
-                result = operation.results[0] if operation.results else None
+            if name == "gpu.thread_id":
+                result = operation.results[0]
                 axis = gpu_dimension_axis(operation.attributes.get("dimension"))
-                if axis is not None and result is not None:
+                if axis is not None:
                     key = ("workitem", axis)
                     value = topology_values.get(key)
                     if value is None:
@@ -407,10 +391,10 @@ def build_loom_module(
                         topology_values[key] = value
                     prelude_values[result] = (value, "index")
             elif name == "hal.interface.workgroup.id":
-                result = operation.results[0] if operation.results else None
+                result = operation.results[0]
                 dimension = attr_decoder.integer(operation.attributes.get("dimension"))
                 axis = workgroup_axis(dimension)
-                if result is not None and axis is not None:
+                if axis is not None:
                     key = ("workgroup", axis)
                     value = topology_values.get(key)
                     if value is None:
@@ -428,50 +412,15 @@ def build_loom_module(
             diagnostics=diagnostics,
             preview_block=body.blocks[0],
             type_converter=type_converter,
+            source_names=source_names,
+            binding_args=binding_args,
+            bindings_by_result=binding_by_result,
         )
-        context.remember_constant("0", "offset", zero)
         converted_body = convert_function_body(function_operation, context)
         builder.kernel.return_()
 
     rebuild_value_metadata(module)
     return module, converted_body
-
-
-def source_mapping_comments(function_operation: Any) -> tuple[str, ...]:
-    mappings: list[str] = []
-    attr_decoder = MlirAttributeDecoder()
-    for operation in walk_operations(function_operation):
-        name = operation_name(operation)
-        stripped = first_line(operation)
-        if name == "hal.interface.binding.subspan":
-            binding_attr = operation.attributes.get("binding")
-            if binding_attr is not None:
-                mappings.append(
-                    f"{operation.results[0].get_name()}: "
-                    f"hal.interface.binding.subspan binding({binding_attr.value}) "
-                    "-> kernel arg + buffer.view"
-                )
-        elif name == "hal.interface.workgroup.id":
-            dimension = attr_decoder.integer(operation.attributes.get("dimension"))
-            axis = workgroup_axis(dimension) or "?"
-            mappings.append(f"{stripped} -> kernel.workgroup.id<{axis}>")
-        elif name == "gpu.thread_id":
-            axis = gpu_dimension_axis(operation.attributes.get("dimension")) or "?"
-            mappings.append(f"{stripped} -> kernel.workitem.id<{axis}>")
-        elif name == "gpu.shuffle":
-            mode = gpu_shuffle_mode(operation.attributes.get("mode")) or "unknown"
-            mappings.append(f"{stripped} -> kernel.subgroup.shuffle<{mode}>")
-        elif name == "gpu.barrier":
-            mappings.append(f"{stripped} -> kernel.workgroup.barrier")
-        elif name == "vector.transfer_read":
-            mappings.append(f"{stripped} -> vector.load / vector.load.mask candidate")
-        elif name == "vector.transfer_write":
-            mappings.append(f"{stripped} -> vector.store / vector.store.mask candidate")
-        elif name in {"scf.for", "scf.if"}:
-            mappings.append(f"{stripped} -> structural {name}")
-        elif name == "affine.apply":
-            mappings.append(f"{stripped} -> affine/index expression")
-    return tuple(mappings)
 
 
 def first_line(operation: Any) -> str:
@@ -581,14 +530,6 @@ def format_import_report(
         ]
         for name, count in sorted(facts.converted_body.unsupported_counts.items()):
             lines.append(f"- `{name}`: {count}")
-    if facts.source_mappings:
-        lines += [
-            "",
-            "## Source Mappings",
-            "",
-        ]
-        for mapping in facts.source_mappings:
-            lines.append(f"- `{mapping}`")
     return "\n".join(lines) + "\n"
 
 
