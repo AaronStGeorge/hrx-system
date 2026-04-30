@@ -274,6 +274,10 @@ extern const loom_low_lower_rule_set_t loom_amdgpu_reduce_rule_set;
 // Target-local rule table for source-level async group/wait sequencing ops.
 extern const loom_low_lower_rule_set_t loom_amdgpu_async_rule_set;
 
+// Returns the exact wavefront size selected by the active target bundle.
+iree_status_t loom_amdgpu_target_wavefront_size(
+    const loom_target_bundle_t* bundle, uint32_t* out_wavefront_size);
+
 // Selects a plan for value-construction source ops.
 iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op,
@@ -314,6 +318,23 @@ iree_status_t loom_amdgpu_lower_kernel_barrier(
 
 // Verifies source kernel.barrier legality for AMDGPU target-low selection.
 iree_status_t loom_amdgpu_low_legality_verify_kernel_barrier(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
+// Selects a native AMDGPU cross-lane packet for a source subgroup broadcast.
+iree_status_t loom_amdgpu_select_kernel_subgroup_broadcast_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_subgroup_broadcast_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source subgroup broadcast using one DS bpermute per 32-bit payload
+// register.
+iree_status_t loom_amdgpu_lower_kernel_subgroup_broadcast(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_broadcast_plan_t* plan);
+
+// Verifies source subgroup broadcast legality for native AMDGPU lowering.
+iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_broadcast(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);

@@ -1,0 +1,32 @@
+// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_broadcast_dynamic_lane_rejected(%input: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<1xi32, #dense>
+  %lane_vector = vector.load %input_view[0] : view<1xi32, #dense> -> vector<1xi32>
+  %lane = vector.extract %lane_vector[0] : vector<1xi32> -> i32
+  %value = scalar.constant 1 : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup broadcast requires an exact source lane"
+  %broadcast = kernel.subgroup.broadcast %value from %lane : i32, i32
+  kernel.return
+}
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_broadcast_lane_out_of_range_rejected() {
+  %value = scalar.constant 1 : i32
+  %lane = scalar.constant 32 : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup broadcast source lane must be within the selected wave32 or wave64 subgroup"
+  %broadcast = kernel.subgroup.broadcast %value from %lane : i32, i32
+  kernel.return
+}
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_broadcast_payload_rejected() {
+  %value = vector.constant 1 : vector<4xi8>
+  %lane = scalar.constant 0 : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup broadcast requires an i32 or f32 scalar"
+  %broadcast = kernel.subgroup.broadcast %value from %lane : vector<4xi8>, i32
+  kernel.return
+}

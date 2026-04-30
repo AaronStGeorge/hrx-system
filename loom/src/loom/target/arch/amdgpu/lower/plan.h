@@ -148,6 +148,29 @@ typedef struct loom_amdgpu_vector_select_plan_t {
   uint32_t lane_count;
 } loom_amdgpu_vector_select_plan_t;
 
+typedef enum loom_amdgpu_subgroup_payload_kind_e {
+  LOOM_AMDGPU_SUBGROUP_PAYLOAD_NONE = 0,
+  LOOM_AMDGPU_SUBGROUP_PAYLOAD_I32_SCALAR = 1,
+  LOOM_AMDGPU_SUBGROUP_PAYLOAD_F32_SCALAR = 2,
+  LOOM_AMDGPU_SUBGROUP_PAYLOAD_I32_VECTOR = 3,
+  LOOM_AMDGPU_SUBGROUP_PAYLOAD_F32_VECTOR = 4,
+} loom_amdgpu_subgroup_payload_kind_t;
+
+typedef struct loom_amdgpu_subgroup_broadcast_plan_t {
+  // Descriptor row selected for the native cross-lane read.
+  loom_low_lower_resolved_descriptor_t descriptor;
+  // Source value broadcast from source_lane.
+  loom_value_id_t value;
+  // Result value receiving the broadcast payload.
+  loom_value_id_t result;
+  // Source/result payload shape selected during planning.
+  loom_amdgpu_subgroup_payload_kind_t payload_kind;
+  // Number of 32-bit registers in the broadcast payload.
+  uint32_t register_count;
+  // Exact subgroup lane read by the broadcast.
+  uint32_t source_lane;
+} loom_amdgpu_subgroup_broadcast_plan_t;
+
 typedef struct loom_amdgpu_matrix_mma_plan_t {
   // Descriptor row selected for the native matrix instruction.
   loom_low_lower_resolved_descriptor_t descriptor;

@@ -546,6 +546,7 @@ loom_cc_library(
     "lower/reduce_rules.c"
     "lower/registry.c"
     "lower/structural.c"
+    "lower/subgroup.c"
     "lower/support.c"
     "lower/sync.c"
     "lower/table.c"
@@ -1326,6 +1327,28 @@ iree_executable_test(
     "source_low_slice_diagnostics"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_slice_diagnostics.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_subgroup_collective"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_subgroup_collective.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_subgroup_collective_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_subgroup_collective_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

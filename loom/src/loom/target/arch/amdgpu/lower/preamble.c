@@ -89,7 +89,7 @@ static bool loom_amdgpu_required_flat_workgroup_size(
   return true;
 }
 
-static iree_status_t loom_amdgpu_target_wavefront_size(
+iree_status_t loom_amdgpu_target_wavefront_size(
     const loom_target_bundle_t* bundle, uint32_t* out_wavefront_size) {
   IREE_ASSERT_ARGUMENT(out_wavefront_size);
   *out_wavefront_size = 0;
