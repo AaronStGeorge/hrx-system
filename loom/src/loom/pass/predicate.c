@@ -46,6 +46,8 @@ static const loom_pass_trait_name_t kLoomPassTraitNames[] = {
     {IREE_SVL("unique-identity"), LOOM_TRAIT_UNIQUE_IDENTITY},
     {IREE_SVL("Hint"), LOOM_TRAIT_HINT},
     {IREE_SVL("hint"), LOOM_TRAIT_HINT},
+    {IREE_SVL("Convergent"), LOOM_TRAIT_CONVERGENT},
+    {IREE_SVL("convergent"), LOOM_TRAIT_CONVERGENT},
     {IREE_SVL("SafeToSpeculate"), LOOM_TRAIT_SAFE_TO_SPECULATE},
     {IREE_SVL("safe-to-speculate"), LOOM_TRAIT_SAFE_TO_SPECULATE},
     {IREE_SVL("RefinableResultTypeRefs"),

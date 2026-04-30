@@ -429,6 +429,18 @@ TEST(VerifyTraitConsistencyTest, RejectsDeclaredIncompatibleSpeculationTraits) {
                            "UNKNOWN_EFFECTS");
 }
 
+TEST(VerifyTraitConsistencyTest, RejectsDeclaredSpeculatableConvergentTraits) {
+  static const uint8_t kBadConvergentName[] = {
+      8, 3, 'b', 'a', 'd', '.', 'c', 'o', 'n', 'v', '\0',
+  };
+  static const loom_op_vtable_t kBadConvergentVtable = {
+      .traits = LOOM_TRAIT_SAFE_TO_SPECULATE | LOOM_TRAIT_CONVERGENT,
+      .name = kBadConvergentName,
+  };
+  ExpectBadTraitDiagnostic(&kBadConvergentVtable, "bad.conv",
+                           "SAFE_TO_SPECULATE", "CONVERGENT");
+}
+
 //===----------------------------------------------------------------------===//
 // Structural checks
 //===----------------------------------------------------------------------===//

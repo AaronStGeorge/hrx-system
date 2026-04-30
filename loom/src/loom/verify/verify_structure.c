@@ -88,6 +88,11 @@ static bool loom_verify_trait_conflict(loom_trait_flags_t traits,
     *out_trait_b = IREE_SV("WRITES_MEMORY");
     return true;
   }
+  if (iree_all_bits_set(traits, LOOM_TRAIT_HINT | LOOM_TRAIT_CONVERGENT)) {
+    *out_trait_a = IREE_SV("HINT");
+    *out_trait_b = IREE_SV("CONVERGENT");
+    return true;
+  }
   if (iree_all_bits_set(traits,
                         LOOM_TRAIT_PURE | LOOM_TRAIT_NON_DETERMINISTIC)) {
     *out_trait_a = IREE_SV("PURE");
@@ -160,6 +165,12 @@ static bool loom_verify_trait_conflict(loom_trait_flags_t traits,
           traits, LOOM_TRAIT_SAFE_TO_SPECULATE | LOOM_TRAIT_WRITES_MEMORY)) {
     *out_trait_a = IREE_SV("SAFE_TO_SPECULATE");
     *out_trait_b = IREE_SV("WRITES_MEMORY");
+    return true;
+  }
+  if (iree_all_bits_set(traits,
+                        LOOM_TRAIT_SAFE_TO_SPECULATE | LOOM_TRAIT_CONVERGENT)) {
+    *out_trait_a = IREE_SV("SAFE_TO_SPECULATE");
+    *out_trait_b = IREE_SV("CONVERGENT");
     return true;
   }
   return false;
@@ -267,13 +278,15 @@ void loom_verify_func_purity_body_effects(loom_verify_state_t* state,
   if (loom_attr_as_enum(attrs[func_vtable->purity_attr_index]) == 0) return;
   loom_region_t* body = loom_op_regions(op)[func_vtable->body_region_index];
   if (!loom_region_has_read_effects(body) &&
-      !loom_region_has_write_effects(body)) {
+      !loom_region_has_write_effects(body) &&
+      !loom_region_has_convergent_effects(body)) {
     return;
   }
   loom_diagnostic_param_t params[] = {
       loom_param_string(loom_op_vtable_name(vtable)),
       loom_param_u32(body ? body->read_effect_count : 0),
       loom_param_u32(body ? body->write_effect_count : 0),
+      loom_param_u32(body ? body->convergent_effect_count : 0),
   };
   loom_verify_emit_structured(
       state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 17), params,

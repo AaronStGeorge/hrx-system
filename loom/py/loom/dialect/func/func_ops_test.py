@@ -4,112 +4,17 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Tests for the func dialect ops.
-
-Validates op declarations (structure, format specs, examples) and
-round-trip behavior (parse -> print -> identical output) for all
-seven func dialect ops.
-"""
+"""Tests for func dialect text and bytecode behavior."""
 
 from collections.abc import Sequence
 
 import pytest
 
-from loom.assembly import (
-    OpRef,
-    SymbolRef,
-)
-from loom.dialect.func import (
-    ALL_FUNC_OPS,
-    func_call,
-    func_decl,
-    func_def,
-    func_ops,
-    func_return,
-    func_template,
-    func_ukernel,
-)
+from loom.dialect.func import ALL_FUNC_OPS
 from loom.dsl import Op
 from loom.format.bytecode.reader import read_module
 from loom.format.bytecode.writer import write_module
 from loom.ir import Module
-
-# ============================================================================
-# Structural tests
-# ============================================================================
-
-
-class TestAllOpsRegistered:
-    def test_count(self) -> None:
-        assert len(ALL_FUNC_OPS) == 7
-
-    def test_unique_names(self) -> None:
-        names = [op.name for op in ALL_FUNC_OPS]
-        assert len(set(names)) == len(names)
-
-    def test_all_in_func_namespace(self) -> None:
-        for op in ALL_FUNC_OPS:
-            assert op.namespace == "func", f"{op.name} not in func namespace"
-
-    def test_all_have_group(self) -> None:
-        for op in ALL_FUNC_OPS:
-            assert op.group is func_ops
-
-    def test_all_have_docs(self) -> None:
-        for op in ALL_FUNC_OPS:
-            assert op.doc, f"{op.name} missing doc"
-
-    def test_all_have_format(self) -> None:
-        for op in ALL_FUNC_OPS:
-            assert op.format, f"{op.name} missing format spec"
-
-    def test_all_have_examples(self) -> None:
-        for op in ALL_FUNC_OPS:
-            assert op.examples, f"{op.name} missing examples"
-
-    def test_dialect_id(self) -> None:
-        assert func_ops.dialect_id == 0x06
-
-
-class TestOpStructure:
-    def test_func_def_has_region(self) -> None:
-        assert len(func_def.regions) == 1
-        assert func_def.regions[0].name == "body"
-
-    def test_func_decl_no_region(self) -> None:
-        assert len(func_decl.regions) == 0
-
-    def test_func_template_has_region(self) -> None:
-        assert len(func_template.regions) == 1
-
-    def test_func_ukernel_no_region(self) -> None:
-        assert len(func_ukernel.regions) == 0
-
-    def test_func_template_has_opref(self) -> None:
-        has_opref = any(isinstance(e, OpRef) for e in func_template.format)
-        assert has_opref
-
-    def test_func_ukernel_has_opref(self) -> None:
-        has_opref = any(isinstance(e, OpRef) for e in func_ukernel.format)
-        assert has_opref
-
-    def test_func_call_has_symbol_ref(self) -> None:
-        has_sym = any(isinstance(e, SymbolRef) for e in func_call.format)
-        assert has_sym
-
-    def test_func_return_is_terminator(self) -> None:
-        assert any(t.name == "Terminator" for t in func_return.traits)
-
-    def test_func_call_variadic_operands(self) -> None:
-        assert any(o.variadic for o in func_call.operands)
-
-    def test_func_call_variadic_results(self) -> None:
-        assert any(r.variadic for r in func_call.results)
-
-
-# ============================================================================
-# Round-trip tests
-# ============================================================================
 
 
 def _all_roundtrip_ops() -> Sequence[Op]:

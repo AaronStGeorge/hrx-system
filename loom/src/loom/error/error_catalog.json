@@ -1551,7 +1551,7 @@
     "severity": 0,
     "severity_name": "error",
     "summary": "Pure function body has effects.",
-    "message_template": "'{op_name}' declares pure but its body has {read_count} read-like and {write_count} write-like effect(s)",
+    "message_template": "'{op_name}' declares pure but its body has {read_count} read-like, {write_count} write-like, and {convergent_count} convergent effect(s)",
     "params": [
       {
         "name": "op_name",
@@ -1565,6 +1565,11 @@
       },
       {
         "name": "write_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "convergent_count",
         "kind": 2,
         "kind_name": "U32"
       }

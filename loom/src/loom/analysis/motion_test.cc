@@ -153,6 +153,10 @@ TEST_F(MotionTest, LocalClassificationSeparatesEraseRelocateAndSpeculate) {
   IREE_ASSERT_OK(loom_test_use_build(&builder_, &add_result, 1,
                                      LOOM_LOCATION_UNKNOWN, &use_op));
 
+  loom_op_t* convergent_op = nullptr;
+  IREE_ASSERT_OK(loom_test_convergent_build(
+      &builder_, lhs, i32_type, LOOM_LOCATION_UNKNOWN, &convergent_op));
+
   loom_op_t* source_op = nullptr;
   IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(1),
                                           tile_type, LOOM_LOCATION_UNKNOWN,
@@ -186,10 +190,13 @@ TEST_F(MotionTest, LocalClassificationSeparatesEraseRelocateAndSpeculate) {
   EXPECT_TRUE(loom_motion_op_can_erase(module_, dead_op));
   EXPECT_FALSE(loom_motion_op_can_erase(module_, add_op));
   EXPECT_FALSE(loom_motion_op_can_erase(module_, use_op));
+  EXPECT_FALSE(loom_motion_op_can_erase(module_, convergent_op));
   EXPECT_TRUE(loom_motion_op_can_relocate_effect_free(module_, add_op));
   EXPECT_FALSE(loom_motion_op_can_relocate_effect_free(module_, use_op));
+  EXPECT_FALSE(loom_motion_op_can_relocate_effect_free(module_, convergent_op));
   EXPECT_FALSE(loom_motion_op_can_relocate_effect_free(module_, update_op));
   EXPECT_FALSE(loom_motion_op_can_speculate(module_, add_op));
+  EXPECT_FALSE(loom_motion_op_can_speculate(module_, convergent_op));
   EXPECT_TRUE(loom_motion_op_can_speculate(module_, select_op));
 }
 

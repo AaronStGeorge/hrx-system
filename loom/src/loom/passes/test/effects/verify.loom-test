@@ -32,3 +32,13 @@ func.def pure @pure_body_rejects_nested_while_store(%cond: i1, %buffer: buffer, 
   }
   func.return
 }
+
+// ====
+
+// Convergent pure value ops are still observable at the function purity
+// boundary: a pure function must be freely callable as a value transform.
+// ERROR@+1: STRUCTURE/017
+func.def pure @pure_body_rejects_convergent(%value: i32) {
+  %dead = test.convergent %value : i32
+  func.return
+}

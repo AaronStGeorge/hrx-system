@@ -246,6 +246,11 @@ _CONTROL_EFFECT = Effect(
     flags=(EffectFlag.ORDERED,),
 )
 
+_CONVERGENT_EFFECT = Effect(
+    EffectKind.CONVERGENT,
+    flags=(EffectFlag.ORDERED, EffectFlag.DEPENDENCY),
+)
+
 _TIED_RESULT_CONSTRAINTS = (
     Constraint(ConstraintKind.TIED, 0, 1),
     Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
@@ -414,6 +419,15 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SCALAR_ALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="test.convergent.i32",
+            mnemonic="test.convergent.i32",
+            semantic_tag="test.convergent.i32",
+            operands=(_i32_result(), _i32_operand("input")),
+            effects=(_CONVERGENT_EFFECT,),
+            asm_forms=_asm(results=("dst",), operands=("input",)),
+            schedule_class=_SCHEDULE_SCALAR_ALU,
         ),
         Descriptor(
             key="test.mul.i32",

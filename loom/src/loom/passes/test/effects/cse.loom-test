@@ -63,6 +63,17 @@ func.def @unknown_effect_calls_do_not_cse(%value: i32) -> (i32, i32) {
 
 // ====
 
+// Convergent ops are not CSE candidates even when they are memory-pure and
+// operand-identical.
+// RUN: pass cse
+func.def @convergent_ops_do_not_cse(%value: i32) -> (i32, i32) {
+  %lhs = test.convergent %value : i32
+  %rhs = test.convergent %value : i32
+  func.return %lhs, %rhs : i32, i32
+}
+
+// ====
+
 // A write nested inside a region op is a barrier for memory reads in the
 // enclosing scope. The second load must not be replaced with the first load.
 // RUN: pass cse
@@ -119,6 +130,28 @@ target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @descriptor_low_ops_cse(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) {
   %a = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   low.return %a, %a : reg<test.i32>, reg<test.i32>
+}
+
+// ====
+
+// Descriptor-backed convergent low ops derive PURE and CONVERGENT from the
+// descriptor effect rows. The pure bit is not enough to make them CSE-able.
+// RUN: pass cse
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @descriptor_low_convergent_ops_do_not_cse(%value: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm<test.low.core> {
+  %a = test.convergent.i32 %value
+  %b = test.convergent.i32 %value
+  return %a, %b
+}
+
+// ----
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @descriptor_low_convergent_ops_do_not_cse(%value: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) {
+  %a = low.op<test.convergent.i32>(%value) : (reg<test.i32>) -> reg<test.i32>
+  %b = low.op<test.convergent.i32>(%value) : (reg<test.i32>) -> reg<test.i32>
+  low.return %a, %b : reg<test.i32>, reg<test.i32>
 }
 
 // ====

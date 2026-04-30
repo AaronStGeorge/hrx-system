@@ -174,7 +174,8 @@ static bool loom_loop_fusion_op_subtree_effects_are_allowed(
   loom_trait_flags_t traits = loom_op_effective_traits(module, op);
   if (iree_any_bit_set(traits, LOOM_TRAIT_HINT | LOOM_TRAIT_WRITES_MEMORY |
                                    LOOM_TRAIT_UNKNOWN_EFFECTS |
-                                   LOOM_TRAIT_NON_DETERMINISTIC)) {
+                                   LOOM_TRAIT_NON_DETERMINISTIC |
+                                   LOOM_TRAIT_CONVERGENT)) {
     return false;
   }
   if (!allow_reads && iree_any_bit_set(traits, LOOM_TRAIT_READS_MEMORY)) {

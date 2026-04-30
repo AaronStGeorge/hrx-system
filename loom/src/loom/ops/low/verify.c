@@ -1090,12 +1090,13 @@ static bool loom_low_func_like_is_pure(const loom_module_t* module,
   if (!loom_func_like_isa(func)) {
     return false;
   }
-  if (loom_func_like_purity(func) != 0) {
-    return true;
-  }
   loom_region_t* body = loom_func_like_body(func);
-  return body && !loom_region_has_read_effects(body) &&
-         !loom_region_has_write_effects(body);
+  if (body) {
+    return !loom_region_has_read_effects(body) &&
+           !loom_region_has_write_effects(body) &&
+           !loom_region_has_convergent_effects(body);
+  }
+  return loom_func_like_purity(func) != 0;
 }
 
 static iree_status_t loom_low_verify_call_argument_count(

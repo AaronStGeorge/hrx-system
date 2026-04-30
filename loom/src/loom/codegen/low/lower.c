@@ -458,11 +458,13 @@ static bool loom_low_lower_can_elide_source_storage(
   const loom_trait_flags_t traits =
       loom_op_effective_traits(context->module, source_op);
   if (iree_any_bit_set(traits, LOOM_TRAIT_TERMINATOR | LOOM_TRAIT_HINT |
-                                   LOOM_TRAIT_UNIQUE_IDENTITY)) {
+                                   LOOM_TRAIT_UNIQUE_IDENTITY |
+                                   LOOM_TRAIT_CONVERGENT)) {
     return false;
   }
   if (loom_traits_may_read(traits) || loom_traits_may_write(traits) ||
       loom_op_regions_have_write_effects(source_op) ||
+      loom_op_regions_have_convergent_effects(source_op) ||
       loom_op_regions_have_hints(context->module, source_op)) {
     return false;
   }

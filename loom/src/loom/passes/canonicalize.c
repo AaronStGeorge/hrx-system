@@ -195,6 +195,7 @@ static iree_status_t loom_canonicalize_try_propagate_poison(
   *out_propagated = false;
   loom_trait_flags_t traits = loom_op_effective_traits(rewriter->module, op);
   if (!iree_any_bit_set(traits, LOOM_TRAIT_PURE)) return iree_ok_status();
+  if (loom_traits_are_convergent(traits)) return iree_ok_status();
   if (!loom_canonicalize_op_has_poison_operand(rewriter->module, op)) {
     return iree_ok_status();
   }
@@ -288,6 +289,7 @@ static bool loom_canonicalize_can_replace_results_with_empty(
 
   loom_trait_flags_t traits = loom_op_effective_traits(module, op);
   if (!iree_any_bit_set(traits, LOOM_TRAIT_PURE)) return false;
+  if (loom_traits_are_convergent(traits)) return false;
 
   const loom_value_id_t* results = loom_op_const_results(op);
   for (uint16_t i = 0; i < op->result_count; ++i) {

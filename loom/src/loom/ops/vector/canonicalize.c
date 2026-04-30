@@ -230,6 +230,7 @@ static iree_status_t loom_vector_canonicalize_uniform_result(
   }
   loom_trait_flags_t traits = loom_op_effective_traits(rewriter->module, op);
   if (!iree_any_bit_set(traits, LOOM_TRAIT_PURE)) return iree_ok_status();
+  if (loom_traits_are_convergent(traits)) return iree_ok_status();
 
   loom_type_t result_type = {0};
   if (!loom_vector_get_single_result_type(rewriter, op, &result_type) ||

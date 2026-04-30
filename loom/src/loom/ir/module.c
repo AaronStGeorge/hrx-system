@@ -358,25 +358,31 @@ static void loom_region_adjust_effect_count(uint32_t* count, int32_t delta) {
 
 static void loom_region_adjust_effect_counts(loom_region_t* region,
                                              int32_t read_delta,
-                                             int32_t write_delta) {
-  if (read_delta == 0 && write_delta == 0) return;
+                                             int32_t write_delta,
+                                             int32_t convergent_delta) {
+  if (read_delta == 0 && write_delta == 0 && convergent_delta == 0) return;
   if (read_delta != 0) {
     loom_region_adjust_effect_count(&region->read_effect_count, read_delta);
   }
   if (write_delta != 0) {
     loom_region_adjust_effect_count(&region->write_effect_count, write_delta);
   }
+  if (convergent_delta != 0) {
+    loom_region_adjust_effect_count(&region->convergent_effect_count,
+                                    convergent_delta);
+  }
 }
 
-static void loom_module_adjust_op_ancestor_effect_counts(loom_op_t* op,
-                                                         int32_t read_delta,
-                                                         int32_t write_delta) {
-  if (read_delta == 0 && write_delta == 0) return;
+static void loom_module_adjust_op_ancestor_effect_counts(
+    loom_op_t* op, int32_t read_delta, int32_t write_delta,
+    int32_t convergent_delta) {
+  if (read_delta == 0 && write_delta == 0 && convergent_delta == 0) return;
   loom_region_t* region =
       op->parent_block ? op->parent_block->parent_region : NULL;
   loom_op_t* parent_op = op->parent_op;
   while (region) {
-    loom_region_adjust_effect_counts(region, read_delta, write_delta);
+    loom_region_adjust_effect_counts(region, read_delta, write_delta,
+                                     convergent_delta);
     if (!parent_op) break;
     region =
         parent_op->parent_block ? parent_op->parent_block->parent_region : NULL;
@@ -388,7 +394,9 @@ static void loom_module_adjust_op_direct_effect_counts(
     loom_op_t* op, loom_trait_flags_t traits, int32_t direction) {
   int32_t read_delta = loom_traits_may_read(traits) ? direction : 0;
   int32_t write_delta = loom_traits_may_write(traits) ? direction : 0;
-  loom_module_adjust_op_ancestor_effect_counts(op, read_delta, write_delta);
+  int32_t convergent_delta = loom_traits_are_convergent(traits) ? direction : 0;
+  loom_module_adjust_op_ancestor_effect_counts(op, read_delta, write_delta,
+                                               convergent_delta);
 }
 
 void loom_module_record_op_effects(loom_module_t* module, loom_op_t* op) {
@@ -429,10 +437,13 @@ void loom_module_update_op_direct_effects(loom_op_t* op,
   }
   int32_t old_read = loom_traits_may_read(old_traits) ? 1 : 0;
   int32_t old_write = loom_traits_may_write(old_traits) ? 1 : 0;
+  int32_t old_convergent = loom_traits_are_convergent(old_traits) ? 1 : 0;
   int32_t new_read = loom_traits_may_read(new_traits) ? 1 : 0;
   int32_t new_write = loom_traits_may_write(new_traits) ? 1 : 0;
+  int32_t new_convergent = loom_traits_are_convergent(new_traits) ? 1 : 0;
   loom_module_adjust_op_ancestor_effect_counts(op, new_read - old_read,
-                                               new_write - old_write);
+                                               new_write - old_write,
+                                               new_convergent - old_convergent);
 }
 
 static iree_status_t loom_region_blocks_ensure_capacity(loom_module_t* module,

@@ -55,6 +55,31 @@ func.def @dead_unknown_effect_call_stays(%value: i32) {
 
 // ====
 
+// A convergent op with an unused result is not dead: the dynamic participant
+// set at this point is part of the program semantics.
+// RUN: pass dce
+func.def @dead_convergent_stays(%value: i32) {
+  %dead = test.convergent %value : i32
+  func.return
+}
+
+// ====
+
+// A parent region op with an unused result is not dead when its body contains
+// convergent work. Dropping the scf.if would drop the participant set.
+// RUN: pass dce
+func.def @nested_convergent_keeps_parent(%cond: i1, %value: i32) {
+  %result = scf.if %cond -> (i32) {
+    %inner = test.convergent %value : i32
+    scf.yield %inner : i32
+  } else {
+    scf.yield %value : i32
+  }
+  func.return
+}
+
+// ====
+
 // A parent region op with an unused result is not dead when a nested body
 // writes memory. Dropping the scf.if would drop the store.
 // RUN: pass dce

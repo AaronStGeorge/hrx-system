@@ -241,6 +241,7 @@ TRAIT_MAP: dict[str, str] = {
     "IsolatedFromAbove": "LOOM_TRAIT_ISOLATED_FROM_ABOVE",
     "NonDeterministic": "LOOM_TRAIT_NON_DETERMINISTIC",
     "UnknownEffects": "LOOM_TRAIT_UNKNOWN_EFFECTS",
+    "Convergent": "LOOM_TRAIT_CONVERGENT",
     "UniqueIdentity": "LOOM_TRAIT_UNIQUE_IDENTITY",
     "Hint": "LOOM_TRAIT_HINT",
     "SafeToSpeculate": "LOOM_TRAIT_SAFE_TO_SPECULATE",

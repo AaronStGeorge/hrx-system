@@ -377,8 +377,10 @@ bool loom_op_is_trivially_dead(const loom_module_t* module,
   if (op->result_count == 0) return false;
   loom_trait_flags_t traits = loom_op_effective_traits(module, op);
   if (iree_any_bit_set(traits, LOOM_TRAIT_HINT)) return false;
+  if (loom_traits_are_convergent(traits)) return false;
   if (loom_traits_may_write(traits)) return false;
   if (loom_op_regions_have_write_effects(op)) return false;
+  if (loom_op_regions_have_convergent_effects(op)) return false;
   if (loom_op_regions_have_hints(module, op)) return false;
   return loom_op_results_unused(module, op);
 }
@@ -2383,6 +2385,7 @@ static void loom_region_reset_effect_summaries(loom_region_t* region) {
   if (!region) return;
   region->read_effect_count = 0;
   region->write_effect_count = 0;
+  region->convergent_effect_count = 0;
   loom_block_t* block = NULL;
   loom_region_for_each_block(region, block) {
     block->parent_region = region;

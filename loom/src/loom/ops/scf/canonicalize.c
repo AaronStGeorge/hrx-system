@@ -914,9 +914,11 @@ iree_status_t loom_scf_switch_canonicalize(loom_op_t* op,
 
 static bool loom_scf_if_regions_are_discardable(const loom_module_t* module,
                                                 loom_op_t* op) {
-  // Read-only branch work with no yielded observer is dead. Writes and hints
-  // are retained because they affect memory or requested code-generation shape.
+  // Read-only branch work with no yielded observer is dead. Writes,
+  // convergence, and hints are retained because they affect memory,
+  // participant-set semantics, or requested code-generation shape.
   if (loom_op_regions_have_write_effects(op)) return false;
+  if (loom_op_regions_have_convergent_effects(op)) return false;
   return !loom_op_regions_have_hints(module, op);
 }
 

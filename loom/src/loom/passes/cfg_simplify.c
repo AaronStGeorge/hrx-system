@@ -1155,7 +1155,8 @@ static bool loom_cfg_simplify_can_skip_block_prefix(
        op = op->next_op) {
     loom_trait_flags_t traits = loom_op_effective_traits(state->module, op);
     if (!iree_all_bits_set(traits, LOOM_TRAIT_PURE) ||
-        op->successor_count != 0 || op->region_count != 0) {
+        loom_traits_are_convergent(traits) || op->successor_count != 0 ||
+        op->region_count != 0) {
       return false;
     }
     const loom_value_id_t* results = loom_op_const_results(op);
@@ -1271,7 +1272,8 @@ static bool loom_cfg_simplify_can_replace_with_constant(
   }
   loom_trait_flags_t traits = loom_op_effective_traits(state->module, op);
   return iree_all_bits_set(traits, LOOM_TRAIT_PURE) &&
-         op->successor_count == 0 && op->region_count == 0;
+         !loom_traits_are_convergent(traits) && op->successor_count == 0 &&
+         op->region_count == 0;
 }
 
 static iree_status_t loom_cfg_simplify_replace_with_bool_constant(
@@ -1748,6 +1750,7 @@ static bool loom_cfg_simplify_is_mergeable_terminal_block(
   loom_trait_flags_t traits =
       loom_op_effective_traits(state->module, terminator);
   return iree_all_bits_set(traits, LOOM_TRAIT_TERMINATOR | LOOM_TRAIT_PURE) &&
+         !loom_traits_are_convergent(traits) &&
          terminator->successor_count == 0 && terminator->result_count == 0 &&
          terminator->region_count == 0;
 }
@@ -1858,6 +1861,7 @@ static bool loom_cfg_simplify_op_is_alpha_mergeable(
   if (!iree_all_bits_set(traits, LOOM_TRAIT_PURE)) return false;
   if (loom_traits_may_read(traits) || loom_traits_may_write(traits) ||
       loom_traits_has_unique_identity(traits) ||
+      loom_traits_are_convergent(traits) ||
       iree_any_bit_set(traits, LOOM_TRAIT_HINT)) {
     return false;
   }

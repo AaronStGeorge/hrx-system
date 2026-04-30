@@ -12,7 +12,9 @@
 //      the original dynamic execution predicate. Others speculate work onto
 //      control paths where it may execute more often. These are distinct
 //      contracts: PURE is enough for conservative effect-free relocation, while
-//      true speculation additionally requires SAFE_TO_SPECULATE.
+//      true speculation additionally requires SAFE_TO_SPECULATE. Convergent ops
+//      reject both policies because their dynamic participant set is part of
+//      their semantics.
 //
 //   2. SSA availability. Moving an op also moves its result types, attributes,
 //      and nested regions. Every ordinary operand and every SSA value embedded
@@ -82,14 +84,16 @@ bool loom_motion_op_can_erase(const loom_module_t* module, const loom_op_t* op);
 
 // Returns true if |op| may be moved by a transform that preserves the original
 // dynamic execution predicate. This rejects tied results, terminator roots,
-// hints, unknown effects, reads, writes, and nondeterminism. It intentionally
-// does not reject UNIQUE_IDENTITY beyond the ordinary purity/effect checks:
-// relocating one execution site without duplicating it is not CSE.
+// hints, convergence, unknown effects, reads, writes, and nondeterminism. It
+// intentionally does not reject UNIQUE_IDENTITY beyond the ordinary
+// purity/effect checks: relocating one execution site without duplicating it is
+// not CSE.
 bool loom_motion_op_can_relocate_effect_free(const loom_module_t* module,
                                              const loom_op_t* op);
 
 // Returns true if |op| may be executed on additional control paths. This
-// requires SAFE_TO_SPECULATE and rejects any region side effects or hints.
+// requires SAFE_TO_SPECULATE and rejects any region side effects, convergence,
+// or hints.
 bool loom_motion_op_can_speculate(const loom_module_t* module,
                                   const loom_op_t* op);
 

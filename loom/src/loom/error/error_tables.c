@@ -1176,6 +1176,7 @@ static const loom_error_param_def_t loom_err_structure_017_params[] = {
     {"op_name", LOOM_PARAM_STRING},
     {"read_count", LOOM_PARAM_U32},
     {"write_count", LOOM_PARAM_U32},
+    {"convergent_count", LOOM_PARAM_U32},
 };
 static const loom_error_def_t loom_err_structure_017 = {
     .error_id = "ERR_STRUCTURE_017",
@@ -1184,12 +1185,12 @@ static const loom_error_def_t loom_err_structure_017 = {
     .code = 17,
     .summary = "Pure function body has effects.",
     .message_template =
-        "'{op_name}' declares pure but its body has {read_count} read-like and "
-        "{write_count} write-like effect(s)",
+        "'{op_name}' declares pure but its body has {read_count} read-like, "
+        "{write_count} write-like, and {convergent_count} convergent effect(s)",
     .fix_hint_template =
         "Remove the pure modifier or remove the observable effects",
     .param_defs = loom_err_structure_017_params,
-    .param_count = 3,
+    .param_count = 4,
 };
 
 static const loom_error_param_def_t loom_err_structure_018_params[] = {

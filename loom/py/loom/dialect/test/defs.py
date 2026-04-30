@@ -57,6 +57,7 @@ from loom.dsl import (
     ANY_ENCODING,
     ATTR_TYPE_I64_ARRAY,
     CONSTANT_LIKE,
+    CONVERGENT,
     ELEMENTWISE,
     FLOAT,
     I1,
@@ -265,6 +266,18 @@ test_use = Op(
         "test.use %a : i32",
         "test.use %a, %b : i32, f32",
     ],
+)
+
+test_convergent = Op(
+    "test.convergent",
+    group=test_ops,
+    doc="Pure value transform whose dynamic participant set is semantically observable.",
+    operands=[Operand("input", ANY)],
+    results=[Result("result", ANY)],
+    constraints=[SameType("input", "result")],
+    traits=[PURE, CONVERGENT],
+    format=[Ref("input"), COLON, TypeOf("input")],
+    examples=["%result = test.convergent %input : i32"],
 )
 
 test_typed_use = Op(
@@ -1870,6 +1883,7 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_cast,
     test_constant,
     test_use,
+    test_convergent,
     test_cmp,
     test_map,
     test_update,

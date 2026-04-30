@@ -245,13 +245,14 @@ ERR_STRUCTURE_017 = ErrorDef(
     severity=Severity.ERROR,
     summary="Pure function body has effects.",
     message=(
-        "'{op_name}' declares pure but its body has {read_count} read-like "
-        "and {write_count} write-like effect(s)"
+        "'{op_name}' declares pure but its body has {read_count} read-like, "
+        "{write_count} write-like, and {convergent_count} convergent effect(s)"
     ),
     params=(
         ErrorParam("op_name", ParamKind.STRING),
         ErrorParam("read_count", ParamKind.U32),
         ErrorParam("write_count", ParamKind.U32),
+        ErrorParam("convergent_count", ParamKind.U32),
     ),
     fix_hint="Remove the pure modifier or remove the observable effects",
 )

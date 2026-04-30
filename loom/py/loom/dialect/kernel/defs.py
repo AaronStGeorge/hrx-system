@@ -40,6 +40,7 @@ from loom.dsl import (
     ANY,
     ATTR_TYPE_ENUM,
     ATTR_TYPE_I64,
+    CONVERGENT,
     I1,
     INDEX,
     INTEGER,
@@ -71,6 +72,8 @@ from loom.dsl import (
     TypeSemantic,
     Writes,
 )
+
+_KERNEL_CONVERGENT_TRAITS = [CONVERGENT, HasAncestor("kernel.def")]
 
 # ============================================================================
 # Dialect
@@ -560,7 +563,7 @@ kernel_subgroup_shuffle = Op(
         AttrDef("mode", ATTR_TYPE_ENUM, enum_def=KernelSubgroupShuffleMode, doc="Lane addressing mode."),
     ],
     constraints=[SameType("value", "result")],
-    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    traits=_KERNEL_CONVERGENT_TRAITS,
     verify="loom_kernel_subgroup_shuffle_verify",
     format=[
         TemplateParam("mode"),
@@ -591,7 +594,7 @@ kernel_subgroup_broadcast = Op(
     ],
     results=[Result("result", ANY, doc="Broadcast value.")],
     constraints=[SameType("value", "result")],
-    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    traits=_KERNEL_CONVERGENT_TRAITS,
     verify="loom_kernel_subgroup_broadcast_verify",
     format=[
         Ref("value"),
@@ -614,7 +617,7 @@ kernel_subgroup_broadcast_first = Op(
     operands=[Operand("value", ANY, doc="Per-invocation source value.")],
     results=[Result("result", ANY, doc="Broadcast value.")],
     constraints=[SameType("value", "result")],
-    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    traits=_KERNEL_CONVERGENT_TRAITS,
     verify="loom_kernel_subgroup_value_result_verify",
     format=[Ref("value"), COLON, TypeOf("value")],
     examples=["%r = kernel.subgroup.broadcast.first %v : f32"],
@@ -643,7 +646,7 @@ kernel_subgroup_reduce = Op(
     results=[Result("result", ANY, doc="Reduced value.")],
     attrs=_clustered_combining_attrs(),
     constraints=[SameType("value", "result")],
-    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    traits=_KERNEL_CONVERGENT_TRAITS,
     verify="loom_kernel_subgroup_reduce_verify",
     format=[
         TemplateParam("kind"),
@@ -669,7 +672,7 @@ kernel_subgroup_scan = Op(
         AttrDef("direction", ATTR_TYPE_ENUM, enum_def=KernelScanDirection, doc="Lane order to scan."),
     ],
     constraints=[SameType("value", "result")],
-    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    traits=_KERNEL_CONVERGENT_TRAITS,
     verify="loom_kernel_subgroup_scan_verify",
     format=[
         TemplateParam("kind"),
@@ -689,7 +692,7 @@ kernel_subgroup_vote_any = Op(
     doc="Return true when any active subgroup lane has a true predicate.",
     operands=[Operand("predicate", I1, doc="Per-invocation predicate.")],
     results=[Result("result", I1, doc="Subgroup-uniform vote result.")],
-    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    traits=_KERNEL_CONVERGENT_TRAITS,
     format=[Ref("predicate"), COLON, TypeOf("predicate")],
     examples=["%any = kernel.subgroup.vote.any %p : i1"],
 )
@@ -702,7 +705,7 @@ kernel_subgroup_vote_all = Op(
     doc="Return true when all active subgroup lanes have a true predicate.",
     operands=[Operand("predicate", I1, doc="Per-invocation predicate.")],
     results=[Result("result", I1, doc="Subgroup-uniform vote result.")],
-    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    traits=_KERNEL_CONVERGENT_TRAITS,
     format=[Ref("predicate"), COLON, TypeOf("predicate")],
     examples=["%all = kernel.subgroup.vote.all %p : i1"],
 )
@@ -715,7 +718,7 @@ kernel_subgroup_vote_ballot = Op(
     doc="Return an integer mask of active subgroup lanes whose predicate is true.",
     operands=[Operand("predicate", I1, doc="Per-invocation predicate.")],
     results=[Result("mask", INTEGER, doc="Integer subgroup lane mask.")],
-    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    traits=_KERNEL_CONVERGENT_TRAITS,
     verify="loom_kernel_subgroup_mask_result_verify",
     format=[Ref("predicate"), COLON, TypeOf("predicate"), ARROW, ResultType("mask")],
     examples=["%mask = kernel.subgroup.vote.ballot %p : i1 -> i64"],
@@ -728,7 +731,7 @@ kernel_subgroup_active_mask = Op(
     phase=OpPhase.EXECUTABLE,
     doc="Return an integer mask of the currently active subgroup lanes.",
     results=[Result("mask", INTEGER, doc="Integer active-lane mask.")],
-    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    traits=_KERNEL_CONVERGENT_TRAITS,
     verify="loom_kernel_subgroup_mask_result_verify",
     format=[COLON, ResultType("mask")],
     examples=["%mask = kernel.subgroup.active.mask : i64"],
@@ -742,7 +745,7 @@ kernel_subgroup_match_any = Op(
     doc="Return a lane mask of active subgroup invocations with the same scalar value.",
     operands=[Operand("value", SCALAR, doc="Value to compare across active subgroup lanes.")],
     results=[Result("mask", INTEGER, doc="Integer lane-equality mask.")],
-    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    traits=_KERNEL_CONVERGENT_TRAITS,
     verify="loom_kernel_subgroup_mask_result_verify",
     format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("mask")],
     examples=["%mask = kernel.subgroup.match.any %v : i32 -> i64"],
@@ -759,7 +762,7 @@ kernel_subgroup_match_all = Op(
         Result("mask", INTEGER, doc="Integer lane-equality mask."),
         Result("all_equal", I1, doc="True when all active lanes match."),
     ],
-    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    traits=_KERNEL_CONVERGENT_TRAITS,
     verify="loom_kernel_subgroup_match_all_verify",
     format=[
         Ref("value"),
@@ -786,7 +789,7 @@ kernel_workgroup_reduce = Op(
     results=[Result("result", ANY, doc="Reduced value.")],
     attrs=_collective_combining_attrs(),
     constraints=[SameType("value", "result")],
-    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    traits=_KERNEL_CONVERGENT_TRAITS,
     verify="loom_kernel_workgroup_reduce_verify",
     format=[TemplateParam("kind"), Ref("value"), COLON, TypeOf("value")],
     examples=["%sum = kernel.workgroup.reduce<addf> %v : f32"],
@@ -800,7 +803,7 @@ kernel_workgroup_vote_any = Op(
     doc="Return true when any workgroup invocation has a true predicate.",
     operands=[Operand("predicate", I1, doc="Per-invocation predicate.")],
     results=[Result("result", I1, doc="Workgroup-uniform vote result.")],
-    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    traits=_KERNEL_CONVERGENT_TRAITS,
     format=[Ref("predicate"), COLON, TypeOf("predicate")],
     examples=["%any = kernel.workgroup.vote.any %p : i1"],
 )
@@ -813,7 +816,7 @@ kernel_workgroup_vote_all = Op(
     doc="Return true when all workgroup invocations have a true predicate.",
     operands=[Operand("predicate", I1, doc="Per-invocation predicate.")],
     results=[Result("result", I1, doc="Workgroup-uniform vote result.")],
-    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    traits=_KERNEL_CONVERGENT_TRAITS,
     format=[Ref("predicate"), COLON, TypeOf("predicate")],
     examples=["%all = kernel.workgroup.vote.all %p : i1"],
 )
@@ -826,7 +829,7 @@ kernel_workgroup_vote_count = Op(
     doc="Count workgroup invocations with a true predicate.",
     operands=[Operand("predicate", I1, doc="Per-invocation predicate.")],
     results=[Result("result", INTEGER, doc="Integer true-predicate count.")],
-    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    traits=_KERNEL_CONVERGENT_TRAITS,
     verify="loom_kernel_workgroup_vote_count_verify",
     format=[Ref("predicate"), COLON, TypeOf("predicate"), ARROW, ResultType("result")],
     examples=["%count = kernel.workgroup.vote.count %p : i1 -> i32"],
@@ -913,7 +916,7 @@ kernel_barrier = Op(
             doc="Execution scope synchronized by the barrier.",
         ),
     ],
-    traits=[UNKNOWN_EFFECTS],
+    traits=[UNKNOWN_EFFECTS, CONVERGENT],
     verify="loom_kernel_barrier_verify",
     format=[AttrDict()],
     examples=[

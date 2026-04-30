@@ -31,6 +31,7 @@ from loom.dsl import (
     BUFFER,
     COMMUTATIVE,
     CONSTANT_LIKE,
+    CONVERGENT,
     DECOMPOSABLE,
     ELEMENTWISE,
     ENCODING_LAYOUT,
@@ -431,6 +432,7 @@ class TestTraits:
             CONSTANT_LIKE,
             ELEMENTWISE,
             DECOMPOSABLE,
+            CONVERGENT,
             SAFE_TO_SPECULATE,
             REFINABLE_RESULT_TYPE_REFS,
         ]
@@ -1675,6 +1677,14 @@ class TestEffects:
         with pytest.raises(ValueError, match="HINT.*NON_DETERMINISTIC"):
             Op("test.bad", traits=[HINT, NON_DETERMINISTIC])
 
+    def test_hint_with_convergent_raises(self) -> None:
+        with pytest.raises(ValueError, match="HINT.*CONVERGENT"):
+            Op("test.bad", traits=[HINT, CONVERGENT])
+
+    def test_convergent_can_be_pure(self) -> None:
+        op = Op("test.convergent", traits=[PURE, CONVERGENT])
+        assert op.is_pure
+
     def test_safe_to_speculate_conflicts_with_hint(self) -> None:
         with pytest.raises(ValueError, match="SAFE_TO_SPECULATE.*HINT"):
             Op("test.bad", traits=[SAFE_TO_SPECULATE, HINT])
@@ -1690,6 +1700,10 @@ class TestEffects:
     def test_safe_to_speculate_conflicts_with_unique_identity(self) -> None:
         with pytest.raises(ValueError, match="SAFE_TO_SPECULATE.*UNIQUE_IDENTITY"):
             Op("test.bad", traits=[SAFE_TO_SPECULATE, UNIQUE_IDENTITY])
+
+    def test_safe_to_speculate_conflicts_with_convergent(self) -> None:
+        with pytest.raises(ValueError, match="SAFE_TO_SPECULATE.*CONVERGENT"):
+            Op("test.bad", traits=[SAFE_TO_SPECULATE, CONVERGENT])
 
     def test_safe_to_speculate_with_explicit_effects_raises(self) -> None:
         with pytest.raises(ValueError, match="SAFE_TO_SPECULATE.*explicit effects"):

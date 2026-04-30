@@ -691,7 +691,8 @@ static iree_status_t loom_low_schedule_note_structural_effects(
     loom_low_schedule_effect_frontier_t* frontier, uint32_t node_index) {
   const loom_low_schedule_node_t* node = &state->nodes[node_index];
   if (iree_any_bit_set(node->traits, LOOM_TRAIT_NON_DETERMINISTIC |
-                                         LOOM_TRAIT_UNKNOWN_EFFECTS)) {
+                                         LOOM_TRAIT_UNKNOWN_EFFECTS |
+                                         LOOM_TRAIT_CONVERGENT)) {
     return loom_low_schedule_effect_frontier_note_ordered(state, frontier,
                                                           node_index);
   }

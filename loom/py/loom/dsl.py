@@ -126,6 +126,7 @@ __all__ = [
     "ISOLATED_FROM_ABOVE",
     "NON_DETERMINISTIC",
     "UNKNOWN_EFFECTS",
+    "CONVERGENT",
     "HINT",
     "SAFE_TO_SPECULATE",
     "REFINABLE_RESULT_TYPE_REFS",
@@ -819,6 +820,11 @@ NON_DETERMINISTIC = Trait("NonDeterministic")
 # Effects depend on runtime state (e.g., func.call depends on the callee).
 # Passes treat this conservatively as both READS_MEMORY and WRITES_MEMORY.
 UNKNOWN_EFFECTS = Trait("UnknownEffects")
+# Execution depends on the dynamic set of participating invocations. This is
+# independent of memory effects: a convergent op may still be pure, read/write
+# memory, or have unknown effects, but generic optimizers must not erase,
+# duplicate, speculate, or move it across convergence-changing boundaries.
+CONVERGENT = Trait("Convergent")
 # Each execution produces a result with a distinct identity, even when
 # operands and attributes are identical. Prevents CSE but allows DCE
 # (unused identity with no write effects is dead) and LICM. Derived
@@ -2784,6 +2790,11 @@ def _validate_no_effect_conflicts(
             f"Op '{op_name}': declares both HINT and NON_DETERMINISTIC. "
             f"Hints do not produce observable values."
         )
+    if "Hint" in trait_names and "Convergent" in trait_names:
+        raise ValueError(
+            f"Op '{op_name}': declares both HINT and CONVERGENT. "
+            f"Convergent execution is semantic, not a compiler hint."
+        )
     if "SafeToSpeculate" in trait_names and "Hint" in trait_names:
         raise ValueError(
             f"Op '{op_name}': declares both SAFE_TO_SPECULATE and HINT. "
@@ -2804,6 +2815,11 @@ def _validate_no_effect_conflicts(
         raise ValueError(
             f"Op '{op_name}': declares both SAFE_TO_SPECULATE and UNIQUE_IDENTITY. "
             f"Speculation must not create extra identities."
+        )
+    if "SafeToSpeculate" in trait_names and "Convergent" in trait_names:
+        raise ValueError(
+            f"Op '{op_name}': declares both SAFE_TO_SPECULATE and CONVERGENT. "
+            f"Speculation must not change the dynamic participant set."
         )
 
 

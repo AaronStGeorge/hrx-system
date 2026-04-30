@@ -1099,6 +1099,7 @@ static iree_status_t loom_low_verify_descriptor_effect_contract(
   }
 
   bool has_control_effect = false;
+  bool has_convergent_effect = false;
   loom_low_schedule_class_flags_t required_schedule_flags = 0;
   for (uint16_t i = 0; i < descriptor->effect_count; ++i) {
     const uint32_t effect_index = descriptor->effect_start + i;
@@ -1115,6 +1116,9 @@ static iree_status_t loom_low_verify_descriptor_effect_contract(
     if (effect->kind == LOOM_LOW_EFFECT_KIND_CONTROL) {
       has_control_effect = true;
     }
+    if (effect->kind == LOOM_LOW_EFFECT_KIND_CONVERGENT) {
+      has_convergent_effect = true;
+    }
     if (!is_side_effecting &&
         loom_low_effect_kind_requires_side_effecting_flag(effect->kind)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1130,6 +1134,12 @@ static iree_status_t loom_low_verify_descriptor_effect_contract(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor %" PRIu32
                             " is a terminator but has no control effect",
+                            descriptor_index);
+  }
+  if (is_dead_removable && has_convergent_effect) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor %" PRIu32
+                            " is convergent but dead-removable",
                             descriptor_index);
   }
   if (has_control_effect && !is_terminator) {

@@ -30,7 +30,11 @@ loom_trait_flags_t loom_low_descriptor_effective_traits(
       case LOOM_LOW_EFFECT_KIND_CALL:
       case LOOM_LOW_EFFECT_KIND_BARRIER:
       case LOOM_LOW_EFFECT_KIND_COUNTER:
+        traits |= LOOM_TRAIT_UNKNOWN_EFFECTS;
+        break;
       case LOOM_LOW_EFFECT_KIND_CONVERGENT:
+        traits |= LOOM_TRAIT_CONVERGENT;
+        break;
       default:
         traits |= LOOM_TRAIT_UNKNOWN_EFFECTS;
         break;

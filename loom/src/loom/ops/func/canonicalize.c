@@ -21,10 +21,13 @@
 
 static bool loom_func_like_is_pure(const loom_func_like_t func) {
   if (!loom_func_like_isa(func)) return false;
-  if (loom_func_like_purity(func) != 0) return true;
   loom_region_t* body = loom_func_like_body(func);
-  return body && !loom_region_has_read_effects(body) &&
-         !loom_region_has_write_effects(body);
+  if (body) {
+    return !loom_region_has_read_effects(body) &&
+           !loom_region_has_write_effects(body) &&
+           !loom_region_has_convergent_effects(body);
+  }
+  return loom_func_like_purity(func) != 0;
 }
 
 // Propagates callee purity to the call site. If the callee is a pure

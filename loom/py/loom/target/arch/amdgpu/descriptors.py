@@ -4432,7 +4432,6 @@ def _ds_swizzle_b32_overlay(
         immediates=(_ds_crosslane_offset_immediate(),),
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_CONVERGENT_EFFECT,),
-        flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
 
@@ -4462,7 +4461,6 @@ def _ds_permute_b32_overlay(
         immediates=(_ds_crosslane_offset_immediate(),),
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_CONVERGENT_EFFECT,),
-        flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
 

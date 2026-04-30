@@ -836,7 +836,7 @@ inline void ExpectAmdgpuDsCrosslaneDescriptor(
   EXPECT_EQ(descriptor->immediate_count, 1u);
   EXPECT_EQ(descriptor->effect_count, 1u);
   EXPECT_EQ(descriptor->encoding_format_id, expected_encoding_format_id);
-  EXPECT_NE(descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE, 0u);
+  EXPECT_EQ(descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE, 0u);
   EXPECT_EQ(descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING, 0u);
 
   const loom_low_operand_t* operands =
