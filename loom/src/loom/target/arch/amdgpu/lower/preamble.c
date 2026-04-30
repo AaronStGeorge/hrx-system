@@ -71,7 +71,7 @@ static bool loom_amdgpu_required_workgroup_size_dim(
   return *out_value != 0;
 }
 
-static bool loom_amdgpu_required_flat_workgroup_size(
+bool loom_amdgpu_required_flat_workgroup_size(
     loom_func_like_t function, const loom_target_bundle_t* bundle,
     uint32_t* out_flat_size) {
   IREE_ASSERT_ARGUMENT(out_flat_size);

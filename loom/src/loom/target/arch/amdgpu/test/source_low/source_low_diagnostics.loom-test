@@ -305,7 +305,7 @@ kernel.def @subgroup_lane_id_rejected() {
 // ====
 
 kernel.def @subgroup_reduce_rejected(%value: f32) {
-  // ERROR@+1: BACKEND/001 "AMDGPU source-to-low needs target packet lowering for this collective form"
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup reduce lowering requires a fixed workgroup size that is an exact multiple"
   %sum = kernel.subgroup.reduce<addf> %value : f32
   kernel.return
 }

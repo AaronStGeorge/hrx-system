@@ -193,6 +193,23 @@ typedef struct loom_amdgpu_subgroup_shuffle_plan_t {
   uint32_t width;
 } loom_amdgpu_subgroup_shuffle_plan_t;
 
+typedef struct loom_amdgpu_subgroup_reduce_plan_t {
+  // Descriptor row selected for each native cross-lane read.
+  loom_low_lower_resolved_descriptor_t bpermute_descriptor;
+  // Descriptor row selected for each native lane combine.
+  loom_low_lower_resolved_descriptor_t combine_descriptor;
+  // Source value reduced across subgroup lanes.
+  loom_value_id_t value;
+  // Result value receiving the reduced payload.
+  loom_value_id_t result;
+  // Source/result payload shape selected during planning.
+  loom_amdgpu_subgroup_payload_kind_t payload_kind;
+  // Number of 32-bit registers in the reduced payload.
+  uint32_t register_count;
+  // Exact subgroup width selected by the active target bundle.
+  uint32_t wavefront_size;
+} loom_amdgpu_subgroup_reduce_plan_t;
+
 typedef struct loom_amdgpu_matrix_mma_plan_t {
   // Descriptor row selected for the native matrix instruction.
   loom_low_lower_resolved_descriptor_t descriptor;

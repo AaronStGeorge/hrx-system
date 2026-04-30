@@ -278,6 +278,12 @@ extern const loom_low_lower_rule_set_t loom_amdgpu_async_rule_set;
 iree_status_t loom_amdgpu_target_wavefront_size(
     const loom_target_bundle_t* bundle, uint32_t* out_wavefront_size);
 
+// Returns the fixed flat workgroup size required by the source function or
+// target ABI.
+bool loom_amdgpu_required_flat_workgroup_size(
+    loom_func_like_t function, const loom_target_bundle_t* bundle,
+    uint32_t* out_flat_size);
+
 // Emits the current invocation lane id within its subgroup as a VGPR value.
 iree_status_t loom_amdgpu_emit_current_subgroup_lane_id(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
@@ -340,6 +346,23 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_shuffle(
 
 // Verifies source subgroup shuffle legality for native AMDGPU lowering.
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_shuffle(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
+// Selects native AMDGPU cross-lane packets for a source subgroup reduce.
+iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_subgroup_reduce_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source subgroup reduce using DS bpermute tree steps and native VGPR
+// combining packets.
+iree_status_t loom_amdgpu_lower_kernel_subgroup_reduce(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_reduce_plan_t* plan);
+
+// Verifies source subgroup reduce legality for native AMDGPU lowering.
+iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);

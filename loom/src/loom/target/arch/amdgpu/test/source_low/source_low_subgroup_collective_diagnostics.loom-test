@@ -77,3 +77,39 @@ kernel.def workgroup_size(64, 1, 1) @subgroup_shuffle_payload_rejected() {
   %shuffle, %valid = kernel.subgroup.shuffle<index> %value, %offset, %width : vector<4xi8>, i32, i32
   kernel.return
 }
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_reduce_cluster_rejected() {
+  %value = scalar.constant 1 : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup reduce lowering requires full subgroup reductions with cluster_size and cluster_stride absent"
+  %sum = kernel.subgroup.reduce<addi> %value {cluster_size = 16} : i32
+  kernel.return
+}
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_reduce_kind_rejected() {
+  %value = scalar.constant 1 : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup reduce requires an i32 add/mul/and/or/xor or f32 add/mul/minnum/maxnum combining kind"
+  %min = kernel.subgroup.reduce<minsi> %value : i32
+  kernel.return
+}
+
+// ====
+
+kernel.def workgroup_size(48, 1, 1) @subgroup_reduce_partial_wave_rejected() {
+  %value = scalar.constant 1 : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup reduce lowering requires a fixed workgroup size that is an exact multiple"
+  %sum = kernel.subgroup.reduce<addi> %value : i32
+  kernel.return
+}
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_reduce_payload_rejected() {
+  %value = vector.constant 1 : vector<4xi8>
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup reduce requires an i32 or f32 scalar"
+  %sum = kernel.subgroup.reduce<addi> %value : vector<4xi8>
+  kernel.return
+}
