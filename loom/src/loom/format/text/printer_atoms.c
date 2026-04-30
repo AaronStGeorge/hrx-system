@@ -131,6 +131,62 @@ static iree_status_t loom_print_encoding_type(loom_output_stream_t* stream,
   return loom_output_stream_write_char(stream, '>');
 }
 
+static bool loom_print_is_bare_identifier_start(char c) {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' ||
+         c == '$';
+}
+
+static bool loom_print_is_bare_identifier_continue(char c) {
+  return loom_print_is_bare_identifier_start(c) || (c >= '0' && c <= '9') ||
+         c == '-';
+}
+
+static bool loom_print_is_bare_string_attr(iree_string_view_t text) {
+  if (text.size == 0 || !loom_print_is_bare_identifier_start(text.data[0])) {
+    return false;
+  }
+  for (iree_host_size_t i = 1; i < text.size; ++i) {
+    if (!loom_print_is_bare_identifier_continue(text.data[i])) return false;
+  }
+  return true;
+}
+
+static bool loom_print_matrix_operand_symbol_param_name(
+    iree_string_view_t name) {
+  return iree_string_view_equal(name, IREE_SV("element_format")) ||
+         iree_string_view_equal(name, IREE_SV("payload_packing")) ||
+         iree_string_view_equal(name, IREE_SV("scale_topology")) ||
+         iree_string_view_equal(name, IREE_SV("scale_format")) ||
+         iree_string_view_equal(name, IREE_SV("secondary_scale_format")) ||
+         iree_string_view_equal(name, IREE_SV("affine")) ||
+         iree_string_view_equal(name, IREE_SV("rounding")) ||
+         iree_string_view_equal(name, IREE_SV("codebook")) ||
+         iree_string_view_equal(name, IREE_SV("sparsity"));
+}
+
+static bool loom_print_static_encoding_param_as_bare_symbol(
+    const loom_module_t* module, const loom_encoding_t* encoding,
+    const loom_named_attr_t* param, iree_string_view_t* out_symbol) {
+  *out_symbol = iree_string_view_empty();
+  if (param->value.kind != LOOM_ATTR_STRING ||
+      param->value.string_id == LOOM_STRING_ID_INVALID ||
+      param->value.string_id >= module->strings.count ||
+      encoding->name_id >= module->strings.count ||
+      param->name_id >= module->strings.count) {
+    return false;
+  }
+  if (!iree_string_view_equal(module->strings.entries[encoding->name_id],
+                              IREE_SV("matrix_operand")) ||
+      !loom_print_matrix_operand_symbol_param_name(
+          module->strings.entries[param->name_id])) {
+    return false;
+  }
+  iree_string_view_t symbol = module->strings.entries[param->value.string_id];
+  if (!loom_print_is_bare_string_attr(symbol)) return false;
+  *out_symbol = symbol;
+  return true;
+}
+
 static iree_status_t loom_print_canonical_encoding(
     loom_output_stream_t* stream, const loom_module_t* module,
     const loom_encoding_t* encoding) {
@@ -157,7 +213,14 @@ static iree_status_t loom_print_canonical_encoding(
           stream, module->strings.entries[param->name_id]));
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '='));
-    IREE_RETURN_IF_ERROR(loom_print_attr(stream, &param->value, module, NULL));
+    iree_string_view_t bare_symbol = iree_string_view_empty();
+    if (loom_print_static_encoding_param_as_bare_symbol(module, encoding, param,
+                                                        &bare_symbol)) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write(stream, bare_symbol));
+    } else {
+      IREE_RETURN_IF_ERROR(
+          loom_print_attr(stream, &param->value, module, NULL));
+    }
   }
   return loom_output_stream_write_char(stream, '>');
 }

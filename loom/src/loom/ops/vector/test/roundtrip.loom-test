@@ -423,7 +423,7 @@ func.def @schema_decode_static_payload(%payload: vector<4xi32>, %schema: encodin
 // matrix role, dynamic row/column shape, and optional encoded interpretation
 // operands that target selection consumes later.
 func.def @matrix_fragments(%lhs: vector<6xi32>, %rhs: vector<6xi32>, %acc: vector<8xf32>, %m: index, %n: index, %k: index, %scale: vector<1xf16>) {
-  %schema = encoding.define #matrix_operand<affine=0, codebook=0, element_format=268435456, payload_elements=32, payload_packing=256, payload_registers=6, rounding=0, scale_format=0, scale_group_elements=32, scale_operands=1, scale_topology=32, secondary_scale_format=0, sparsity=0, zero_scale_fallback=true> : encoding<schema>
+  %schema = encoding.define #matrix_operand<element_format=f6e3m2, payload_elements=32, payload_registers=6, scale_group_elements=32, scale_operands=1, scale_topology=block_1d, zero_scale_fallback=true> : encoding<schema>
   %lhs_fragment = vector.fragment<lhs> %lhs shape [%m, %k] using {scale = %scale : vector<1xf16>, schema = %schema : encoding<schema>} : vector<6xi32>
   %rhs_fragment = vector.fragment<rhs> %rhs shape [%k, %n] using {scale = %scale : vector<1xf16>, schema = %schema : encoding<schema>} where [mul(%k, 32)] : vector<6xi32>
   %init_fragment = vector.fragment<init> %acc shape [%m, %n] : vector<8xf32>

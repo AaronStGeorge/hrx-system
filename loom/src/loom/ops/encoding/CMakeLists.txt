@@ -15,6 +15,7 @@ loom_cc_library(
     encoding
   HDRS
     "families.h"
+    "matrix_operand.h"
     "numeric_transform.h"
     "ops.h"
     "params.h"
@@ -24,6 +25,7 @@ loom_cc_library(
     "builders.c"
     "facts.c"
     "families.c"
+    "matrix_operand.c"
     "numeric_transform.c"
     "roles.c"
     "storage.c"
@@ -36,6 +38,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::util::fact_table
+    loom::src::loom::util::stable_id
   PUBLIC
 )
 

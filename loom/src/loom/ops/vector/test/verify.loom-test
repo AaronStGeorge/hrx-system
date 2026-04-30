@@ -840,7 +840,7 @@ func.def @encode_requires_schema_role(%values: vector<32xf32>, %xf: encoding<tra
 // Auxiliary operands are keyed by a small vector-owned vocabulary so lowering
 // can resolve a compact bitset instead of matching arbitrary strings later.
 func.def @decode_rejects_unknown_auxiliary_key(%payload: vector<6xi32>, %scale: vector<1xf16>) {
-  %schema = encoding.define #matrix_operand<affine=0, codebook=0, element_format=268435456, payload_elements=32, payload_packing=256, payload_registers=6, rounding=0, scale_format=0, scale_group_elements=32, scale_operands=1, scale_topology=32, secondary_scale_format=0, sparsity=0, zero_scale_fallback=true> : encoding<schema>
+  %schema = encoding.define #matrix_operand<element_format=f6e3m2, payload_elements=32, payload_registers=6, scale_group_elements=32, scale_operands=1, scale_topology=block_1d, zero_scale_fallback=true> : encoding<schema>
   // ERROR@+1: ENCODING/015 "vector.decode" "mystery"
   %values = vector.decode %payload using %schema {mystery = %scale : vector<1xf16>} : vector<6xi32>, encoding<schema> -> vector<32xf32>
   func.return
@@ -850,7 +850,7 @@ func.def @decode_rejects_unknown_auxiliary_key(%payload: vector<6xi32>, %scale: 
 
 // Static encoded matrix schemas can require named auxiliary operands.
 func.def @decode_requires_schema_scale_auxiliary(%payload: vector<6xi32>) {
-  %schema = encoding.define #matrix_operand<affine=0, codebook=0, element_format=268435456, payload_elements=32, payload_packing=256, payload_registers=6, rounding=0, scale_format=0, scale_group_elements=32, scale_operands=1, scale_topology=32, secondary_scale_format=0, sparsity=0, zero_scale_fallback=true> : encoding<schema>
+  %schema = encoding.define #matrix_operand<element_format=f6e3m2, payload_elements=32, payload_registers=6, scale_group_elements=32, scale_operands=1, scale_topology=block_1d, zero_scale_fallback=true> : encoding<schema>
   // ERROR@+1: ENCODING/016 "vector.decode" "scale"
   %values = vector.decode %payload using %schema : vector<6xi32>, encoding<schema> -> vector<32xf32>
   func.return
@@ -896,7 +896,7 @@ func.def @fragment_requires_schema_role(%payload: vector<6xi32>, %m: index, %k: 
 
 // Fragment parameter keys share the vector auxiliary vocabulary.
 func.def @fragment_rejects_unknown_auxiliary_key(%payload: vector<6xi32>, %m: index, %k: index, %scale: vector<1xf16>) {
-  %schema = encoding.define #matrix_operand<affine=0, codebook=0, element_format=268435456, payload_elements=32, payload_packing=256, payload_registers=6, rounding=0, scale_format=0, scale_group_elements=32, scale_operands=1, scale_topology=32, secondary_scale_format=0, sparsity=0, zero_scale_fallback=true> : encoding<schema>
+  %schema = encoding.define #matrix_operand<element_format=f6e3m2, payload_elements=32, payload_registers=6, scale_group_elements=32, scale_operands=1, scale_topology=block_1d, zero_scale_fallback=true> : encoding<schema>
   // ERROR@+1: ENCODING/015 "vector.fragment" "mystery"
   %fragment = vector.fragment<lhs> %payload shape [%m, %k] using {mystery = %scale : vector<1xf16>, schema = %schema : encoding<schema>} : vector<6xi32>
   func.return
@@ -906,7 +906,7 @@ func.def @fragment_rejects_unknown_auxiliary_key(%payload: vector<6xi32>, %m: in
 
 // Static encoded fragment schemas can require named auxiliary operands.
 func.def @fragment_requires_schema_scale_auxiliary(%payload: vector<6xi32>, %m: index, %k: index) {
-  %schema = encoding.define #matrix_operand<affine=0, codebook=0, element_format=268435456, payload_elements=32, payload_packing=256, payload_registers=6, rounding=0, scale_format=0, scale_group_elements=32, scale_operands=1, scale_topology=32, secondary_scale_format=0, sparsity=0, zero_scale_fallback=true> : encoding<schema>
+  %schema = encoding.define #matrix_operand<element_format=f6e3m2, payload_elements=32, payload_registers=6, scale_group_elements=32, scale_operands=1, scale_topology=block_1d, zero_scale_fallback=true> : encoding<schema>
   // ERROR@+1: ENCODING/016 "vector.fragment" "scale"
   %fragment = vector.fragment<lhs> %payload shape [%m, %k] using {schema = %schema : encoding<schema>} : vector<6xi32>
   func.return

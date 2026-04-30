@@ -269,9 +269,10 @@ static bool loom_contract_vector_operand_from_fragment(
   *out_operand = (loom_contract_operand_t){0};
   *out_rejection_bits = LOOM_CONTRACT_REJECTION_NONE;
 
-  loom_value_fact_storage_schema_t schema = {0};
-  if (loom_contract_vector_fragment_storage_schema(fact, &schema)) {
-    if (!loom_contract_operand_from_storage_schema(role, schema, out_operand)) {
+  if (iree_any_bit_set(fact.flags, LOOM_VECTOR_FRAGMENT_FACT_FLAG_HAS_SCHEMA)) {
+    loom_value_fact_storage_schema_t schema = {0};
+    if (!loom_contract_vector_fragment_storage_schema(fact, &schema) ||
+        !loom_contract_operand_from_storage_schema(role, schema, out_operand)) {
       *out_rejection_bits = LOOM_CONTRACT_REJECTION_SCHEMA;
       return false;
     }

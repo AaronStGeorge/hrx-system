@@ -125,8 +125,16 @@ func.def @numeric_transform_jl_dense_rejects_orthonormal() {
 // ====
 
 func.def @matrix_operand_rejects_bad_element_format() {
-  // ERROR@+1: STRUCTURE/014 "element_format" "3"
-  %schema = encoding.define #matrix_operand<affine=0, codebook=0, element_format=3, payload_elements=32, payload_packing=256, payload_registers=6, rounding=0, scale_format=0, scale_group_elements=0, scale_operands=0, scale_topology=0, secondary_scale_format=0, sparsity=0, zero_scale_fallback=false> : encoding<schema>
+  // ERROR@+1: ENCODING/013 "matrix_operand" "element_format" "wat"
+  %schema = encoding.define #matrix_operand<element_format=wat, payload_elements=32, payload_registers=6> : encoding<schema>
+  func.return
+}
+
+// ====
+
+func.def @matrix_operand_rejects_numeric_element_format() {
+  // ERROR@+1: ENCODING/010 "matrix_operand" "element_format"
+  %schema = encoding.define #matrix_operand<element_format=268435456, payload_elements=32, payload_registers=6> : encoding<schema>
   func.return
 }
 
@@ -134,15 +142,7 @@ func.def @matrix_operand_rejects_bad_element_format() {
 
 func.def @matrix_operand_rejects_dynamic_params(%format: index) {
   // ERROR@+1: ENCODING/008 "matrix_operand" "element_format"
-  %schema = encoding.define #matrix_operand<affine=0, codebook=0, payload_elements=32, payload_packing=256, payload_registers=6, rounding=0, scale_format=0, scale_group_elements=0, scale_operands=0, scale_topology=0, secondary_scale_format=0, sparsity=0, zero_scale_fallback=false> {element_format = %format : index} : encoding<schema>
-  func.return
-}
-
-// ====
-
-func.def @matrix_operand_requires_explicit_zero_scale_fallback() {
-  // ERROR@+1: ENCODING/007 "matrix_operand" "zero_scale_fallback"
-  %schema = encoding.define #matrix_operand<affine=0, codebook=0, element_format=268435456, payload_elements=32, payload_packing=256, payload_registers=6, rounding=0, scale_format=0, scale_group_elements=32, scale_operands=1, scale_topology=32, secondary_scale_format=0, sparsity=0> : encoding<schema>
+  %schema = encoding.define #matrix_operand<payload_elements=32, payload_registers=6> {element_format = %format : index} : encoding<schema>
   func.return
 }
 
@@ -150,7 +150,7 @@ func.def @matrix_operand_requires_explicit_zero_scale_fallback() {
 
 func.def @matrix_operand_rejects_scale_format_without_scale_shape() {
   // ERROR@+1: STRUCTURE/014 "scale" "1"
-  %schema = encoding.define #matrix_operand<affine=0, codebook=0, element_format=2147483648, payload_elements=128, payload_packing=256, payload_registers=16, rounding=0, scale_format=8388608, scale_group_elements=0, scale_operands=0, scale_topology=0, secondary_scale_format=0, sparsity=0, zero_scale_fallback=false> : encoding<schema>
+  %schema = encoding.define #matrix_operand<element_format=f4e2m1, payload_elements=128, payload_registers=16, scale_format=f8e4m3> : encoding<schema>
   func.return
 }
 
@@ -158,7 +158,7 @@ func.def @matrix_operand_rejects_scale_format_without_scale_shape() {
 
 func.def @matrix_operand_rejects_scaled_schema_without_scale_operands() {
   // ERROR@+1: STRUCTURE/014 "scale" "1"
-  %schema = encoding.define #matrix_operand<affine=0, codebook=0, element_format=268435456, payload_elements=32, payload_packing=256, payload_registers=6, rounding=0, scale_format=0, scale_group_elements=32, scale_operands=0, scale_topology=32, secondary_scale_format=0, sparsity=0, zero_scale_fallback=true> : encoding<schema>
+  %schema = encoding.define #matrix_operand<element_format=f6e3m2, payload_elements=32, payload_registers=6, scale_group_elements=32, scale_topology=block_1d, zero_scale_fallback=true> : encoding<schema>
   func.return
 }
 
@@ -166,7 +166,7 @@ func.def @matrix_operand_rejects_scaled_schema_without_scale_operands() {
 
 func.def @matrix_operand_rejects_zero_payload_registers() {
   // ERROR@+1: STRUCTURE/014 "payload_registers" "0"
-  %schema = encoding.define #matrix_operand<affine=0, codebook=0, element_format=268435456, payload_elements=32, payload_packing=256, payload_registers=0, rounding=0, scale_format=0, scale_group_elements=0, scale_operands=0, scale_topology=0, secondary_scale_format=0, sparsity=0, zero_scale_fallback=false> : encoding<schema>
+  %schema = encoding.define #matrix_operand<element_format=f6e3m2, payload_elements=32, payload_registers=0> : encoding<schema>
   func.return
 }
 
