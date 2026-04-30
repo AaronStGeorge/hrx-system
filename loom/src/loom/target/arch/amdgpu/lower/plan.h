@@ -210,6 +210,46 @@ typedef struct loom_amdgpu_subgroup_reduce_plan_t {
   uint32_t wavefront_size;
 } loom_amdgpu_subgroup_reduce_plan_t;
 
+typedef struct loom_amdgpu_subgroup_active_mask_plan_t {
+  // Descriptor row selected to read the native EXEC lane mask.
+  loom_low_lower_resolved_descriptor_t exec_read_descriptor;
+  // Source mask result receiving the active-lane payload.
+  loom_value_id_t mask;
+  // Static bit width of the source integer mask result.
+  uint32_t mask_bit_count;
+} loom_amdgpu_subgroup_active_mask_plan_t;
+
+typedef struct loom_amdgpu_subgroup_ballot_plan_t {
+  // Source predicate already materialized as a native EXEC-width mask.
+  loom_value_id_t predicate;
+  // Source mask result receiving predicate bits for active lanes.
+  loom_value_id_t mask;
+  // Static bit width of the source integer mask result.
+  uint32_t mask_bit_count;
+} loom_amdgpu_subgroup_ballot_plan_t;
+
+typedef struct loom_amdgpu_subgroup_vote_any_plan_t {
+  // Descriptor row selected to compare the predicate mask against zero.
+  loom_low_lower_resolved_descriptor_t compare_descriptor;
+  // Descriptor row selected to materialize each half of the zero mask.
+  loom_low_lower_resolved_descriptor_t zero_descriptor;
+  // Source predicate already materialized as a native EXEC-width mask.
+  loom_value_id_t predicate;
+  // Subgroup-uniform i1 source result receiving SCC.
+  loom_value_id_t result;
+} loom_amdgpu_subgroup_vote_any_plan_t;
+
+typedef struct loom_amdgpu_subgroup_vote_all_plan_t {
+  // Descriptor row selected to compare predicate and active EXEC masks.
+  loom_low_lower_resolved_descriptor_t compare_descriptor;
+  // Descriptor row selected to read the native EXEC lane mask.
+  loom_low_lower_resolved_descriptor_t exec_read_descriptor;
+  // Source predicate already materialized as a native EXEC-width mask.
+  loom_value_id_t predicate;
+  // Subgroup-uniform i1 source result receiving SCC.
+  loom_value_id_t result;
+} loom_amdgpu_subgroup_vote_all_plan_t;
+
 typedef struct loom_amdgpu_matrix_mma_plan_t {
   // Descriptor row selected for the native matrix instruction.
   loom_low_lower_resolved_descriptor_t descriptor;

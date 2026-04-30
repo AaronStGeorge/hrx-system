@@ -255,6 +255,165 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_reduce_addi_i3
 }
 
 // ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_active_mask_i32_wave32(%output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %zero = index.constant 0 : offset
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
+  %mask = kernel.subgroup.active.mask : i32
+  %result = vector.from_elements %mask : vector<1xi32>
+  vector.store %result, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_active_mask_i32_wave32() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %10 = s_mov_b64_exec_read
+  %mask = slice %10[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %result = v_mov_b32_copy %mask
+  %13 = v_lshlrev_b32_lit %tid, 2
+  %14 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %13, %result, %14
+  return
+}
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_vote_ballot_i32_wave32(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
+  %loaded = vector.load %input_view[%tid] : view<64xi32, #dense> -> vector<1xi32>
+  %value = vector.extract %loaded[0] : vector<1xi32> -> i32
+  %threshold = scalar.constant 0 : i32
+  %predicate = scalar.cmpi sgt, %value, %threshold : i32
+  %mask = kernel.subgroup.vote.ballot %predicate : i1 -> i32
+  %result = vector.from_elements %mask : vector<1xi32>
+  vector.store %result, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_vote_ballot_i32_wave32() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %17 = v_lshlrev_b32_lit %tid, 2
+  %18 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %value = global_load_b32 %17, %18
+  %threshold = s_mov_b32 0
+  %21 = v_mov_b32 0
+  %predicate = v_cmp_gt_i32 %value, %21
+  %mask = slice %predicate[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %result = v_mov_b32_copy %mask
+  %25 = v_lshlrev_b32_lit %tid, 2
+  %26 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %25, %result, %26
+  return
+}
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_vote_any_wave32(%input: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
+  %loaded = vector.load %input_view[%tid] : view<64xi32, #dense> -> vector<1xi32>
+  %value = vector.extract %loaded[0] : vector<1xi32> -> i32
+  %threshold = scalar.constant 0 : i32
+  %predicate = scalar.cmpi sgt, %value, %threshold : i32
+  %any = kernel.subgroup.vote.any %predicate : i1
+  cfg.cond_br %any, ^then, ^else : i1
+^then:
+  kernel.return
+^else:
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_vote_any_wave32() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %13 = v_lshlrev_b32_lit %tid, 2
+  %14 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %value = global_load_b32 %13, %14
+  %threshold = s_mov_b32 0
+  %17 = v_mov_b32 0
+  %predicate = v_cmp_gt_i32 %value, %17
+  %19 = s_mov_b32 0
+  %20 = s_mov_b32 0
+  %21 = concat(%19, %20) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %any = s_cmp_lg_u64 %predicate, %21
+  low.cond_br %any, ^then, ^else : reg<amdgpu.scc>
+^then:
+  return
+^else:
+  return
+}
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_vote_all_wave32(%input: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
+  %loaded = vector.load %input_view[%tid] : view<64xi32, #dense> -> vector<1xi32>
+  %value = vector.extract %loaded[0] : vector<1xi32> -> i32
+  %threshold = scalar.constant 0 : i32
+  %predicate = scalar.cmpi sgt, %value, %threshold : i32
+  %all = kernel.subgroup.vote.all %predicate : i1
+  cfg.cond_br %all, ^then, ^else : i1
+^then:
+  kernel.return
+^else:
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_vote_all_wave32() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %13 = v_lshlrev_b32_lit %tid, 2
+  %14 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %value = global_load_b32 %13, %14
+  %threshold = s_mov_b32 0
+  %17 = v_mov_b32 0
+  %predicate = v_cmp_gt_i32 %value, %17
+  %19 = s_mov_b64_exec_read
+  %all = s_cmp_eq_u64 %predicate, %19
+  low.cond_br %all, ^then, ^else : reg<amdgpu.scc>
+^then:
+  return
+^else:
+  return
+}
+
+// ====
+// RUN: emit source-low target-preset=amdgpu-gfx950 output=low
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_active_mask_i64_wave64() {
+  %mask = kernel.subgroup.active.mask : i64
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_active_mask_i64_wave64() asm<amdgpu.gfx950.core> {
+  %mask = s_mov_b64_exec_read
+  return
+}
+
+// ====
 // RUN: emit source-low target-preset=amdgpu-gfx950 output=low
 
 kernel.def workgroup_size(64, 1, 1) @subgroup_broadcast_i32_wave64(%input: buffer, %output: buffer) {

@@ -113,3 +113,23 @@ kernel.def workgroup_size(64, 1, 1) @subgroup_reduce_payload_rejected() {
   %sum = kernel.subgroup.reduce<addi> %value : vector<4xi8>
   kernel.return
 }
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_vote_ballot_uniform_predicate_rejected() {
+  %lhs = scalar.constant 1 : i32
+  %rhs = scalar.constant 2 : i32
+  %predicate = scalar.cmpi slt, %lhs, %rhs : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup vote.ballot lowering requires a divergent i1 predicate"
+  %mask = kernel.subgroup.vote.ballot %predicate : i1 -> i32
+  kernel.return
+}
+
+// ====
+// RUN: emit source-low target-preset=amdgpu-gfx950 output=low
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_active_mask_i32_wave64_rejected() {
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup mask lowering requires an i64 mask result on wave64 targets"
+  %mask = kernel.subgroup.active.mask : i32
+  kernel.return
+}

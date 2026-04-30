@@ -682,15 +682,16 @@ _U32_IMMEDIATE = Immediate(
 )
 
 
-_MANUAL_SCALAR_MOVE_DESCRIPTOR_KEYS = (
+_MANUAL_SCALAR_DESCRIPTOR_KEYS = (
     "amdgpu.s_mov_b32",
     "amdgpu.s_mov_b32_m0",
     "amdgpu.s_mov_b64_exec",
+    "amdgpu.s_mov_b64_exec_read",
     "amdgpu.s_xor_b64_exec",
 )
 
 
-def _manual_scalar_move_descriptors(
+def _manual_scalar_descriptors(
     spec: AmdgpuIsaFactSource,
 ) -> tuple[Descriptor, ...]:
     s_mov_b32_opcode = _instruction_encoding_opcode(spec, "S_MOV_B32", "ENC_SOP1")
@@ -762,6 +763,32 @@ def _manual_scalar_move_descriptors(
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
             encoding_id=s_mov_b64_opcode,
             flags=(DescriptorFlag.SIDE_EFFECTING,),
+        ),
+        Descriptor(
+            key="amdgpu.s_mov_b64_exec_read",
+            mnemonic="s_mov_b64",
+            semantic_tag="control.exec.read",
+            operands=(
+                Operand(
+                    "dst",
+                    OperandRole.RESULT,
+                    _SGPR_ALT,
+                    encoding_field_id=amdgpu_encoding_field_id("SDST"),
+                    unit_count=2,
+                ),
+                _exec_state_read(),
+            ),
+            encoding_field_values=(
+                EncodingFieldValue(
+                    amdgpu_encoding_field_id("SSRC0"),
+                    spec.operand_predefined_value("OPR_SSRC", "EXEC_LO"),
+                ),
+            ),
+            asm_forms=_asm(mnemonic="s_mov_b64_exec_read", results=("dst",)),
+            schedule_class=_SCHEDULE_SALU,
+            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
+            encoding_id=s_mov_b64_opcode,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
             key="amdgpu.s_xor_b64_exec",
@@ -1477,6 +1504,30 @@ def _s_cmp_i32_overlay(
     )
 
 
+def _s_cmp_u64_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="ENC_SOPC",
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SSRC0", _sgpr_operand("lhs", units=2)),
+            AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs", units=2)),
+        ),
+        implicit_operands=(_scc_output(_scc_result()),),
+        asm_forms=_asm(results=("scc",), operands=("lhs", "rhs")),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_add_u32_overlay(instruction_name: str) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_add_u32",
@@ -1683,6 +1734,23 @@ def _s_cmp_i32_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             instruction_name="S_CMP_GE_U32",
             mnemonic="s_cmp_ge_u32",
             semantic_tag="integer.compare.uge.i32",
+        ),
+    )
+
+
+def _s_cmp_u64_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _s_cmp_u64_overlay(
+            descriptor_key="amdgpu.s_cmp_eq_u64",
+            instruction_name="S_CMP_EQ_U64",
+            mnemonic="s_cmp_eq_u64",
+            semantic_tag="integer.compare.eq.u64",
+        ),
+        _s_cmp_u64_overlay(
+            descriptor_key="amdgpu.s_cmp_lg_u64",
+            instruction_name="S_CMP_LG_U64",
+            mnemonic="s_cmp_lg_u64",
+            semantic_tag="integer.compare.ne.u64",
         ),
     )
 
@@ -5635,6 +5703,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_add_u32_overlay(),
         _s_sub_u32_overlay(),
         *_s_cmp_i32_overlays(),
+        *_s_cmp_u64_overlays(),
         _s_and_saveexec_b64_overlay("default"),
         _v_add_u32_overlay("V_ADD_U32"),
         _v_add_u32_literal_overlay("V_ADD_U32"),
@@ -5802,6 +5871,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_add_u32_overlay(),
         _s_sub_u32_overlay(),
         *_s_cmp_i32_overlays(),
+        *_s_cmp_u64_overlays(),
         _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
         _v_add_u32_overlay("V_ADD_NC_U32"),
         _v_add_u32_literal_overlay("V_ADD_NC_U32"),
@@ -5974,6 +6044,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_add_u32_overlay(),
         _s_sub_u32_overlay(),
         *_s_cmp_i32_overlays(),
+        *_s_cmp_u64_overlays(),
         _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
         _v_add_u32_overlay("V_ADD_NC_U32"),
         _v_add_u32_literal_overlay("V_ADD_NC_U32"),
@@ -6179,6 +6250,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_add_u32_overlay(),
         _s_sub_u32_overlay(),
         *_s_cmp_i32_overlays(),
+        *_s_cmp_u64_overlays(),
         _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
         _v_add_u32_overlay("V_ADD_NC_U32"),
         _v_add_u32_literal_overlay("V_ADD_NC_U32"),
@@ -7018,7 +7090,7 @@ def _amdgpu_core_descriptor_set_bases() -> tuple[DescriptorSet, ...]:
 
 def _amdgpu_descriptor_id_key_set() -> set[str]:
     keys: set[str] = set()
-    keys.update(_MANUAL_SCALAR_MOVE_DESCRIPTOR_KEYS)
+    keys.update(_MANUAL_SCALAR_DESCRIPTOR_KEYS)
     for descriptor_set in _amdgpu_core_descriptor_set_bases():
         keys.update(descriptor.key for descriptor in descriptor_set.descriptors)
     for overlays in (
@@ -7359,7 +7431,7 @@ def _with_overlay_descriptors(
     spec: AmdgpuIsaFactSource,
     overlay_descriptors: tuple[Descriptor, ...],
 ) -> DescriptorSet:
-    manual_descriptors = _manual_scalar_move_descriptors(spec)
+    manual_descriptors = _manual_scalar_descriptors(spec)
     descriptor_set = replace(
         base,
         descriptors=_categorize_amdgpu_descriptors(

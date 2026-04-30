@@ -177,6 +177,43 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_kernel_subgroup_reduce_dispatch,
                              loom_amdgpu_subgroup_reduce_plan_t,
                              loom_amdgpu_lower_kernel_subgroup_reduce)
 
+LOOM_AMDGPU_DEFINE_DATA_SELECT(
+    loom_amdgpu_select_kernel_subgroup_active_mask_dispatch,
+    loom_amdgpu_subgroup_active_mask_plan_t,
+    loom_amdgpu_select_kernel_subgroup_active_mask_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(
+    loom_amdgpu_emit_kernel_subgroup_active_mask_dispatch,
+    loom_amdgpu_subgroup_active_mask_plan_t,
+    loom_amdgpu_lower_kernel_subgroup_active_mask)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(
+    loom_amdgpu_select_kernel_subgroup_ballot_dispatch,
+    loom_amdgpu_subgroup_ballot_plan_t,
+    loom_amdgpu_select_kernel_subgroup_ballot_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_kernel_subgroup_ballot_dispatch,
+                             loom_amdgpu_subgroup_ballot_plan_t,
+                             loom_amdgpu_lower_kernel_subgroup_ballot)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(
+    loom_amdgpu_select_kernel_subgroup_vote_any_dispatch,
+    loom_amdgpu_subgroup_vote_any_plan_t,
+    loom_amdgpu_select_kernel_subgroup_vote_any_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_kernel_subgroup_vote_any_dispatch,
+                             loom_amdgpu_subgroup_vote_any_plan_t,
+                             loom_amdgpu_lower_kernel_subgroup_vote_any)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(
+    loom_amdgpu_select_kernel_subgroup_vote_all_dispatch,
+    loom_amdgpu_subgroup_vote_all_plan_t,
+    loom_amdgpu_select_kernel_subgroup_vote_all_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_kernel_subgroup_vote_all_dispatch,
+                             loom_amdgpu_subgroup_vote_all_plan_t,
+                             loom_amdgpu_lower_kernel_subgroup_vote_all)
+
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_kernel_async_gather_dispatch,
                                loom_amdgpu_async_gather_plan_t,
                                loom_amdgpu_select_kernel_async_gather_plan)
@@ -613,21 +650,33 @@ static const loom_amdgpu_lower_dispatch_row_t
                 LOOM_OP_KERNEL_SUBGROUP_SCAN,
                 loom_amdgpu_low_legality_verify_kernel_collective),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_VOTE_ANY)] =
-            LOOM_AMDGPU_LEGALITY_ROW(
+            LOOM_AMDGPU_DATA_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_VOTE_ANY,
-                loom_amdgpu_low_legality_verify_kernel_collective),
+                loom_amdgpu_subgroup_vote_any_plan_t,
+                loom_amdgpu_select_kernel_subgroup_vote_any_dispatch,
+                loom_amdgpu_emit_kernel_subgroup_vote_any_dispatch,
+                loom_amdgpu_low_legality_verify_kernel_subgroup_vote_any),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_VOTE_ALL)] =
-            LOOM_AMDGPU_LEGALITY_ROW(
+            LOOM_AMDGPU_DATA_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_VOTE_ALL,
-                loom_amdgpu_low_legality_verify_kernel_collective),
+                loom_amdgpu_subgroup_vote_all_plan_t,
+                loom_amdgpu_select_kernel_subgroup_vote_all_dispatch,
+                loom_amdgpu_emit_kernel_subgroup_vote_all_dispatch,
+                loom_amdgpu_low_legality_verify_kernel_subgroup_vote_all),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_VOTE_BALLOT)] =
-            LOOM_AMDGPU_LEGALITY_ROW(
+            LOOM_AMDGPU_DATA_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_VOTE_BALLOT,
-                loom_amdgpu_low_legality_verify_kernel_collective),
+                loom_amdgpu_subgroup_ballot_plan_t,
+                loom_amdgpu_select_kernel_subgroup_ballot_dispatch,
+                loom_amdgpu_emit_kernel_subgroup_ballot_dispatch,
+                loom_amdgpu_low_legality_verify_kernel_subgroup_ballot),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_ACTIVE_MASK)] =
-            LOOM_AMDGPU_LEGALITY_ROW(
+            LOOM_AMDGPU_DATA_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_ACTIVE_MASK,
-                loom_amdgpu_low_legality_verify_kernel_collective),
+                loom_amdgpu_subgroup_active_mask_plan_t,
+                loom_amdgpu_select_kernel_subgroup_active_mask_dispatch,
+                loom_amdgpu_emit_kernel_subgroup_active_mask_dispatch,
+                loom_amdgpu_low_legality_verify_kernel_subgroup_active_mask),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_MATCH_ANY)] =
             LOOM_AMDGPU_LEGALITY_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_MATCH_ANY,

@@ -178,6 +178,28 @@ static bool loom_amdgpu_descriptor_set_has_id(
              descriptor_set, descriptor_id) != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
 }
 
+static bool loom_amdgpu_subgroup_mask_bit_count(const loom_module_t* module,
+                                                loom_value_id_t value_id,
+                                                uint32_t* out_bit_count) {
+  IREE_ASSERT_ARGUMENT(out_bit_count);
+  *out_bit_count = 0;
+  const loom_type_t type = loom_module_value_type(module, value_id);
+  if (loom_amdgpu_type_is_i32(type)) {
+    *out_bit_count = 32;
+    return true;
+  }
+  if (loom_amdgpu_type_is_i64(type)) {
+    *out_bit_count = 64;
+    return true;
+  }
+  return false;
+}
+
+static bool loom_amdgpu_subgroup_mask_covers_wavefront(
+    uint32_t mask_bit_count, uint32_t wavefront_size) {
+  return mask_bit_count >= wavefront_size;
+}
+
 iree_status_t loom_amdgpu_select_kernel_subgroup_broadcast_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_broadcast_plan_t* out_plan, bool* out_selected) {
@@ -358,6 +380,181 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
   out_plan->payload_kind = payload_kind;
   out_plan->register_count = register_count;
   out_plan->wavefront_size = wavefront_size;
+  *out_selected = true;
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_select_kernel_subgroup_active_mask_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_subgroup_active_mask_plan_t* out_plan, bool* out_selected) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  *out_plan = (loom_amdgpu_subgroup_active_mask_plan_t){0};
+  IREE_ASSERT_ARGUMENT(out_selected);
+  *out_selected = false;
+  if (!loom_kernel_subgroup_active_mask_isa(source_op)) {
+    return iree_ok_status();
+  }
+
+  uint32_t wavefront_size = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
+      loom_low_lower_context_bundle(context), &wavefront_size));
+  if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size)) {
+    return iree_ok_status();
+  }
+
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_value_id_t mask = loom_kernel_subgroup_active_mask_mask(source_op);
+  uint32_t mask_bit_count = 0;
+  if (!loom_amdgpu_subgroup_mask_bit_count(module, mask, &mask_bit_count) ||
+      !loom_amdgpu_subgroup_mask_covers_wavefront(mask_bit_count,
+                                                  wavefront_size)) {
+    return iree_ok_status();
+  }
+
+  bool descriptor_present = false;
+  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B64_EXEC_READ,
+      &out_plan->exec_read_descriptor, &descriptor_present));
+  if (!descriptor_present) {
+    return iree_ok_status();
+  }
+
+  out_plan->mask = mask;
+  out_plan->mask_bit_count = mask_bit_count;
+  *out_selected = true;
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_select_kernel_subgroup_ballot_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_subgroup_ballot_plan_t* out_plan, bool* out_selected) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  *out_plan = (loom_amdgpu_subgroup_ballot_plan_t){0};
+  IREE_ASSERT_ARGUMENT(out_selected);
+  *out_selected = false;
+  if (!loom_kernel_subgroup_vote_ballot_isa(source_op)) {
+    return iree_ok_status();
+  }
+
+  uint32_t wavefront_size = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
+      loom_low_lower_context_bundle(context), &wavefront_size));
+  if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size)) {
+    return iree_ok_status();
+  }
+
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_value_id_t predicate =
+      loom_kernel_subgroup_vote_ballot_predicate(source_op);
+  if (!loom_amdgpu_module_value_is_native_i1_mask(module, predicate)) {
+    return iree_ok_status();
+  }
+
+  const loom_value_id_t mask = loom_kernel_subgroup_vote_ballot_mask(source_op);
+  uint32_t mask_bit_count = 0;
+  if (!loom_amdgpu_subgroup_mask_bit_count(module, mask, &mask_bit_count) ||
+      !loom_amdgpu_subgroup_mask_covers_wavefront(mask_bit_count,
+                                                  wavefront_size)) {
+    return iree_ok_status();
+  }
+
+  out_plan->predicate = predicate;
+  out_plan->mask = mask;
+  out_plan->mask_bit_count = mask_bit_count;
+  *out_selected = true;
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_select_kernel_subgroup_vote_any_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_subgroup_vote_any_plan_t* out_plan, bool* out_selected) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  *out_plan = (loom_amdgpu_subgroup_vote_any_plan_t){0};
+  IREE_ASSERT_ARGUMENT(out_selected);
+  *out_selected = false;
+  if (!loom_kernel_subgroup_vote_any_isa(source_op)) {
+    return iree_ok_status();
+  }
+
+  uint32_t wavefront_size = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
+      loom_low_lower_context_bundle(context), &wavefront_size));
+  if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size)) {
+    return iree_ok_status();
+  }
+
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_value_id_t predicate =
+      loom_kernel_subgroup_vote_any_predicate(source_op);
+  if (!loom_amdgpu_module_value_is_native_i1_mask(module, predicate)) {
+    return iree_ok_status();
+  }
+
+  bool compare_descriptor_present = false;
+  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_ID_S_CMP_LG_U64,
+      &out_plan->compare_descriptor, &compare_descriptor_present));
+  if (!compare_descriptor_present) {
+    return iree_ok_status();
+  }
+
+  bool zero_descriptor_present = false;
+  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32, &out_plan->zero_descriptor,
+      &zero_descriptor_present));
+  if (!zero_descriptor_present) {
+    return iree_ok_status();
+  }
+
+  out_plan->predicate = predicate;
+  out_plan->result = loom_kernel_subgroup_vote_any_result(source_op);
+  *out_selected = true;
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_select_kernel_subgroup_vote_all_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_subgroup_vote_all_plan_t* out_plan, bool* out_selected) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  *out_plan = (loom_amdgpu_subgroup_vote_all_plan_t){0};
+  IREE_ASSERT_ARGUMENT(out_selected);
+  *out_selected = false;
+  if (!loom_kernel_subgroup_vote_all_isa(source_op)) {
+    return iree_ok_status();
+  }
+
+  uint32_t wavefront_size = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
+      loom_low_lower_context_bundle(context), &wavefront_size));
+  if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size)) {
+    return iree_ok_status();
+  }
+
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_value_id_t predicate =
+      loom_kernel_subgroup_vote_all_predicate(source_op);
+  if (!loom_amdgpu_module_value_is_native_i1_mask(module, predicate)) {
+    return iree_ok_status();
+  }
+
+  bool compare_descriptor_present = false;
+  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_ID_S_CMP_EQ_U64,
+      &out_plan->compare_descriptor, &compare_descriptor_present));
+  if (!compare_descriptor_present) {
+    return iree_ok_status();
+  }
+
+  bool exec_read_descriptor_present = false;
+  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B64_EXEC_READ,
+      &out_plan->exec_read_descriptor, &exec_read_descriptor_present));
+  if (!exec_read_descriptor_present) {
+    return iree_ok_status();
+  }
+
+  out_plan->predicate = predicate;
+  out_plan->result = loom_kernel_subgroup_vote_all_result(source_op);
   *out_selected = true;
   return iree_ok_status();
 }
@@ -719,6 +916,348 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_reduce(
 
   return loom_amdgpu_bind_subgroup_payload_result(
       context, source_op, plan->result, plan->register_count, result_registers);
+}
+
+static iree_status_t loom_amdgpu_emit_subgroup_exec_mask(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_resolved_descriptor_t* descriptor,
+    loom_value_id_t* out_mask) {
+  IREE_ASSERT_ARGUMENT(descriptor);
+  IREE_ASSERT_ARGUMENT(out_mask);
+  *out_mask = LOOM_VALUE_ID_INVALID;
+  loom_type_t mask_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_make_sgpr_range_type(context, /*unit_count=*/2, &mask_type));
+  loom_op_t* low_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+      context, descriptor, /*operands=*/NULL, /*operand_count=*/0,
+      loom_make_named_attr_slice(NULL, 0), &mask_type, 1,
+      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
+      &low_op));
+  *out_mask = loom_value_slice_get(loom_low_op_results(low_op), 0);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_bind_subgroup_lane_mask_result(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_mask, uint32_t mask_bit_count,
+    loom_value_id_t low_mask) {
+  if (mask_bit_count == 64) {
+    return loom_low_lower_bind_value(context, source_mask, low_mask);
+  }
+  if (mask_bit_count != 32) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU subgroup mask has invalid bit width");
+  }
+
+  loom_type_t low_mask_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &low_mask_type));
+  loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(
+      context, source_op, low_mask, /*offset=*/0, low_mask_type, &low_result));
+  return loom_low_lower_bind_value(context, source_mask, low_result);
+}
+
+static iree_status_t loom_amdgpu_emit_subgroup_zero_lane_mask(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_resolved_descriptor_t* descriptor,
+    loom_value_id_t* out_mask) {
+  IREE_ASSERT_ARGUMENT(descriptor);
+  IREE_ASSERT_ARGUMENT(out_mask);
+  *out_mask = LOOM_VALUE_ID_INVALID;
+
+  loom_type_t sgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
+  loom_string_id_t imm32_attr_name_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_intern(context, IREE_SV("imm32"), &imm32_attr_name_id));
+
+  loom_value_id_t zero_halves[2] = {0};
+  for (uint32_t i = 0; i < IREE_ARRAYSIZE(zero_halves); ++i) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_resolved_const_u32(
+        context, source_op, descriptor, imm32_attr_name_id, 0, sgpr_type,
+        &zero_halves[i]));
+  }
+
+  loom_type_t mask_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_make_sgpr_range_type(context, /*unit_count=*/2, &mask_type));
+  loom_op_t* concat_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_concat_build(
+      loom_low_lower_context_builder(context), zero_halves,
+      IREE_ARRAYSIZE(zero_halves), mask_type, source_op->location, &concat_op));
+  *out_mask = loom_low_concat_result(concat_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_emit_subgroup_resolved_mask_compare(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_resolved_descriptor_t* descriptor, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_value_id_t* out_result) {
+  IREE_ASSERT_ARGUMENT(descriptor);
+  IREE_ASSERT_ARGUMENT(out_result);
+  *out_result = LOOM_VALUE_ID_INVALID;
+  loom_type_t result_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_scc_type(context, &result_type));
+  const loom_value_id_t operands[] = {
+      lhs,
+      rhs,
+  };
+  loom_op_t* low_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+      context, descriptor, operands, IREE_ARRAYSIZE(operands),
+      loom_make_named_attr_slice(NULL, 0), &result_type, 1,
+      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
+      &low_op));
+  *out_result = loom_value_slice_get(loom_low_op_results(low_op), 0);
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_lower_kernel_subgroup_active_mask(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_active_mask_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(plan);
+
+  loom_value_id_t low_mask = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_exec_mask(
+      context, source_op, &plan->exec_read_descriptor, &low_mask));
+  return loom_amdgpu_bind_subgroup_lane_mask_result(
+      context, source_op, plan->mask, plan->mask_bit_count, low_mask);
+}
+
+iree_status_t loom_amdgpu_lower_kernel_subgroup_ballot(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_ballot_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(plan);
+
+  loom_value_id_t low_predicate = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_lookup_value(context, plan->predicate, &low_predicate));
+  return loom_amdgpu_bind_subgroup_lane_mask_result(
+      context, source_op, plan->mask, plan->mask_bit_count, low_predicate);
+}
+
+iree_status_t loom_amdgpu_lower_kernel_subgroup_vote_any(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_vote_any_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(plan);
+
+  loom_value_id_t low_predicate = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_lookup_value(context, plan->predicate, &low_predicate));
+  loom_value_id_t zero_mask = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_zero_lane_mask(
+      context, source_op, &plan->zero_descriptor, &zero_mask));
+  loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_resolved_mask_compare(
+      context, source_op, &plan->compare_descriptor, low_predicate, zero_mask,
+      &low_result));
+  return loom_low_lower_bind_value(context, plan->result, low_result);
+}
+
+iree_status_t loom_amdgpu_lower_kernel_subgroup_vote_all(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_vote_all_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(plan);
+
+  loom_value_id_t low_predicate = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_lookup_value(context, plan->predicate, &low_predicate));
+  loom_value_id_t exec_mask = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_exec_mask(
+      context, source_op, &plan->exec_read_descriptor, &exec_mask));
+  loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_resolved_mask_compare(
+      context, source_op, &plan->compare_descriptor, low_predicate, exec_mask,
+      &low_result));
+  return loom_low_lower_bind_value(context, plan->result, low_result);
+}
+
+static iree_status_t loom_amdgpu_low_legality_verify_subgroup_wavefront(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    iree_string_view_t message, uint32_t* out_wavefront_size) {
+  IREE_ASSERT_ARGUMENT(out_wavefront_size);
+  *out_wavefront_size = 0;
+  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_target_wavefront_size(bundle, out_wavefront_size));
+  if (!loom_amdgpu_subgroup_wavefront_size_is_supported(*out_wavefront_size)) {
+    return loom_target_low_legality_reject(
+        context, provider, op, IREE_SV("subgroup"),
+        loom_op_name(loom_target_low_legality_module(context), op), message);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_low_legality_verify_subgroup_native_predicate(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    loom_value_id_t predicate, iree_string_view_t message) {
+  if (!loom_amdgpu_module_value_is_native_i1_mask(
+          loom_target_low_legality_module(context), predicate)) {
+    return loom_target_low_legality_reject(
+        context, provider, op, IREE_SV("predicate"),
+        loom_op_name(loom_target_low_legality_module(context), op), message);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_low_legality_verify_subgroup_mask_result(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    loom_value_id_t mask, uint32_t wavefront_size,
+    uint32_t* out_mask_bit_count) {
+  IREE_ASSERT_ARGUMENT(out_mask_bit_count);
+  *out_mask_bit_count = 0;
+  const loom_module_t* module = loom_target_low_legality_module(context);
+  if (!loom_amdgpu_subgroup_mask_bit_count(module, mask, out_mask_bit_count)) {
+    return loom_target_low_legality_reject(
+        context, provider, op, IREE_SV("mask"), loom_op_name(module, op),
+        IREE_SV("AMDGPU subgroup mask lowering requires an i32 or i64 integer "
+                "mask result"));
+  }
+  if (!loom_amdgpu_subgroup_mask_covers_wavefront(*out_mask_bit_count,
+                                                  wavefront_size)) {
+    return loom_target_low_legality_reject(
+        context, provider, op, IREE_SV("mask"), loom_op_name(module, op),
+        IREE_SV("AMDGPU subgroup mask lowering requires an i64 mask result on "
+                "wave64 targets"));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_low_legality_verify_subgroup_descriptor(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    uint64_t descriptor_id, iree_string_view_t descriptor_name,
+    iree_string_view_t message) {
+  if (!loom_amdgpu_descriptor_set_has_id(
+          loom_target_low_legality_descriptor_set(context), descriptor_id)) {
+    return loom_target_low_legality_reject(
+        context, provider, op, IREE_SV("descriptor"), descriptor_name, message);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_active_mask(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled) {
+  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
+  if (!loom_amdgpu_low_legality_bundle_is_amdgpu(bundle)) {
+    return iree_ok_status();
+  }
+  *out_handled = true;
+
+  uint32_t wavefront_size = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_wavefront(
+      provider, context, op,
+      IREE_SV("AMDGPU subgroup active.mask lowering requires a wave32 or "
+              "wave64 target subgroup"),
+      &wavefront_size));
+  uint32_t unused_mask_bit_count = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_mask_result(
+      provider, context, op, loom_kernel_subgroup_active_mask_mask(op),
+      wavefront_size, &unused_mask_bit_count));
+  return loom_amdgpu_low_legality_verify_subgroup_descriptor(
+      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B64_EXEC_READ,
+      IREE_SV("amdgpu.s_mov_b64_exec_read"),
+      IREE_SV("selected descriptor set does not provide a native EXEC mask "
+              "read packet"));
+}
+
+iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_ballot(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled) {
+  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
+  if (!loom_amdgpu_low_legality_bundle_is_amdgpu(bundle)) {
+    return iree_ok_status();
+  }
+  *out_handled = true;
+
+  uint32_t wavefront_size = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_wavefront(
+      provider, context, op,
+      IREE_SV("AMDGPU subgroup vote.ballot lowering requires a wave32 or "
+              "wave64 target subgroup"),
+      &wavefront_size));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_low_legality_verify_subgroup_native_predicate(
+          provider, context, op, loom_kernel_subgroup_vote_ballot_predicate(op),
+          IREE_SV("AMDGPU subgroup vote.ballot lowering requires a divergent "
+                  "i1 predicate that maps to a native EXEC-width mask")));
+  uint32_t unused_mask_bit_count = 0;
+  return loom_amdgpu_low_legality_verify_subgroup_mask_result(
+      provider, context, op, loom_kernel_subgroup_vote_ballot_mask(op),
+      wavefront_size, &unused_mask_bit_count);
+}
+
+iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_vote_any(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled) {
+  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
+  if (!loom_amdgpu_low_legality_bundle_is_amdgpu(bundle)) {
+    return iree_ok_status();
+  }
+  *out_handled = true;
+
+  uint32_t unused_wavefront_size = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_wavefront(
+      provider, context, op,
+      IREE_SV("AMDGPU subgroup vote.any lowering requires a wave32 or wave64 "
+              "target subgroup"),
+      &unused_wavefront_size));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_low_legality_verify_subgroup_native_predicate(
+          provider, context, op, loom_kernel_subgroup_vote_any_predicate(op),
+          IREE_SV("AMDGPU subgroup vote.any lowering requires a divergent i1 "
+                  "predicate that maps to a native EXEC-width mask")));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_descriptor(
+      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_ID_S_CMP_LG_U64,
+      IREE_SV("amdgpu.s_cmp_lg_u64"),
+      IREE_SV("selected descriptor set does not provide a native 64-bit SALU "
+              "mask compare packet")));
+  return loom_amdgpu_low_legality_verify_subgroup_descriptor(
+      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32,
+      IREE_SV("amdgpu.s_mov_b32"),
+      IREE_SV("selected descriptor set does not provide a native SGPR zero "
+              "materialization packet"));
+}
+
+iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_vote_all(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled) {
+  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
+  if (!loom_amdgpu_low_legality_bundle_is_amdgpu(bundle)) {
+    return iree_ok_status();
+  }
+  *out_handled = true;
+
+  uint32_t unused_wavefront_size = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_wavefront(
+      provider, context, op,
+      IREE_SV("AMDGPU subgroup vote.all lowering requires a wave32 or wave64 "
+              "target subgroup"),
+      &unused_wavefront_size));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_low_legality_verify_subgroup_native_predicate(
+          provider, context, op, loom_kernel_subgroup_vote_all_predicate(op),
+          IREE_SV("AMDGPU subgroup vote.all lowering requires a divergent i1 "
+                  "predicate that maps to a native EXEC-width mask")));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_descriptor(
+      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_ID_S_CMP_EQ_U64,
+      IREE_SV("amdgpu.s_cmp_eq_u64"),
+      IREE_SV("selected descriptor set does not provide a native 64-bit SALU "
+              "mask compare packet")));
+  return loom_amdgpu_low_legality_verify_subgroup_descriptor(
+      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B64_EXEC_READ,
+      IREE_SV("amdgpu.s_mov_b64_exec_read"),
+      IREE_SV("selected descriptor set does not provide a native EXEC mask "
+              "read packet"));
 }
 
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_shuffle(

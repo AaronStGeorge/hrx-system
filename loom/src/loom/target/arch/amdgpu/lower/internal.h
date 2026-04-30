@@ -49,6 +49,9 @@ extern "C" {
 // Returns true when the source type is a scalar i32.
 bool loom_amdgpu_type_is_i32(loom_type_t type);
 
+// Returns true when the source type is a scalar i64.
+bool loom_amdgpu_type_is_i64(loom_type_t type);
+
 // Returns true when the source type is a scalar i1.
 bool loom_amdgpu_type_is_i1(loom_type_t type);
 
@@ -156,6 +159,11 @@ iree_status_t loom_amdgpu_low_type_register_class_is(
 // if its scalar type could otherwise map to an SGPR.
 bool loom_amdgpu_module_value_prefers_vgpr(const loom_module_t* module,
                                            loom_value_id_t source_value_id);
+
+// Returns true when the module source value is an i1 represented by an
+// EXEC-width native lane mask.
+bool loom_amdgpu_module_value_is_native_i1_mask(
+    const loom_module_t* module, loom_value_id_t source_value_id);
 
 // Returns true when the source value should prefer a VGPR mapping even if its
 // scalar type could otherwise map to an SGPR.
@@ -363,6 +371,70 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_reduce(
 
 // Verifies source subgroup reduce legality for native AMDGPU lowering.
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
+// Selects native AMDGPU EXEC-mask packets for source subgroup active.mask.
+iree_status_t loom_amdgpu_select_kernel_subgroup_active_mask_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_subgroup_active_mask_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source subgroup active.mask by reading EXEC.
+iree_status_t loom_amdgpu_lower_kernel_subgroup_active_mask(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_active_mask_plan_t* plan);
+
+// Verifies source subgroup active.mask legality for native AMDGPU lowering.
+iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_active_mask(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
+// Selects native AMDGPU EXEC-mask packets for source subgroup vote.ballot.
+iree_status_t loom_amdgpu_select_kernel_subgroup_ballot_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_subgroup_ballot_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source subgroup vote.ballot by exposing the native predicate mask.
+iree_status_t loom_amdgpu_lower_kernel_subgroup_ballot(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_ballot_plan_t* plan);
+
+// Verifies source subgroup vote.ballot legality for native AMDGPU lowering.
+iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_ballot(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
+// Selects native AMDGPU SALU packets for source subgroup vote.any.
+iree_status_t loom_amdgpu_select_kernel_subgroup_vote_any_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_subgroup_vote_any_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source subgroup vote.any by comparing a predicate mask with zero.
+iree_status_t loom_amdgpu_lower_kernel_subgroup_vote_any(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_vote_any_plan_t* plan);
+
+// Verifies source subgroup vote.any legality for native AMDGPU lowering.
+iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_vote_any(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
+// Selects native AMDGPU SALU packets for source subgroup vote.all.
+iree_status_t loom_amdgpu_select_kernel_subgroup_vote_all_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_subgroup_vote_all_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source subgroup vote.all by comparing predicate and EXEC masks.
+iree_status_t loom_amdgpu_lower_kernel_subgroup_vote_all(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_vote_all_plan_t* plan);
+
+// Verifies source subgroup vote.all legality for native AMDGPU lowering.
+iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_vote_all(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
