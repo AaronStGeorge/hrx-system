@@ -6,7 +6,6 @@
 
 #include <stdint.h>
 
-#include "loom/codegen/low/function.h"
 #include "loom/ir/context.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
@@ -83,36 +82,22 @@ static iree_status_t loom_amdgpu_lower_buffer_alloca(
     const loom_amdgpu_buffer_alloca_plan_t* plan) {
   IREE_ASSERT_ARGUMENT(plan);
 
-  loom_symbol_ref_t slot_ref = loom_symbol_ref_null();
-  IREE_RETURN_IF_ERROR(loom_low_lower_create_function_symbol(
-      context, IREE_SV("__lds"), /*append_index=*/true,
-      loom_buffer_alloca_result(source_op), &slot_ref));
-
   loom_builder_t* builder = loom_low_lower_context_builder(context);
-  loom_func_like_t source_function =
-      loom_low_lower_context_source_function(context);
-  loom_builder_ip_t saved_ip = loom_builder_save(builder);
-  // The source function stays live until lowering completes; inserting before
-  // it appends low.slot records in source alloca order.
-  loom_builder_set_before(builder, source_function.op);
-  loom_op_t* slot_op = NULL;
-  iree_status_t status = loom_low_slot_build(
-      builder, slot_ref,
-      loom_low_function_callee(loom_low_lower_context_low_function(context)),
-      LOOM_LOW_SLOT_SPACE_LDS, plan->byte_length, plan->base_alignment,
-      source_op->location, &slot_op);
-  loom_builder_restore(builder, saved_ip);
-  IREE_RETURN_IF_ERROR(status);
+  loom_op_t* storage_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_storage_reserve_build(
+      builder, plan->byte_length, plan->base_alignment,
+      loom_type_storage(LOOM_STORAGE_SPACE_WORKGROUP), source_op->location,
+      &storage_op));
 
   loom_type_t vgpr_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
-  loom_op_t* frame_index_op = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_low_frame_index_build(builder, slot_ref, /*offset=*/0, vgpr_type,
-                                 source_op->location, &frame_index_op));
+  loom_op_t* address_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_storage_address_build(
+      builder, loom_low_storage_reserve_storage(storage_op),
+      /*offset=*/0, vgpr_type, source_op->location, &address_op));
   return loom_low_lower_bind_value(context,
                                    loom_buffer_alloca_result(source_op),
-                                   loom_low_frame_index_result(frame_index_op));
+                                   loom_low_storage_address_result(address_op));
 }
 
 static iree_status_t loom_amdgpu_lower_buffer_view(

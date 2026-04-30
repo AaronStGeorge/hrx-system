@@ -203,6 +203,7 @@ TYPE_CONSTRAINT_MAP: dict[TypeConstraint, str] = {
     TypeConstraint.ENCODING_TRANSFORM: "LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM",
     TypeConstraint.POOL: "LOOM_TYPE_CONSTRAINT_POOL",
     TypeConstraint.REGISTER: "LOOM_TYPE_CONSTRAINT_REGISTER",
+    TypeConstraint.STORAGE: "LOOM_TYPE_CONSTRAINT_STORAGE",
     TypeConstraint.I1: "LOOM_TYPE_CONSTRAINT_I1",
 }
 
@@ -3686,6 +3687,7 @@ _IR_KIND_MAP: dict[str, str] = {
     "vector": "LOOM_TYPE_VECTOR",
     "view": "LOOM_TYPE_VIEW",
     "buffer": "LOOM_TYPE_BUFFER",
+    "storage": "LOOM_TYPE_STORAGE",
     "pool": "LOOM_TYPE_POOL",
     "group": "LOOM_TYPE_GROUP",
     "dialect": "LOOM_TYPE_DIALECT",
@@ -3998,6 +4000,8 @@ def generate_type_registry(
     source.append('      return IREE_SV("view");')
     source.append("    case LOOM_TYPE_BUFFER:")
     source.append('      return IREE_SV("buffer");')
+    source.append("    case LOOM_TYPE_STORAGE:")
+    source.append('      return IREE_SV("low.storage");')
     source.append("    case LOOM_TYPE_GROUP:")
     source.append('      return IREE_SV("group");')
     source.append("    case LOOM_TYPE_POOL:")

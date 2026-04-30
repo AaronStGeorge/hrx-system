@@ -4612,7 +4612,7 @@
     "severity": 1,
     "severity_name": "warning",
     "summary": "Spill and reload operations inserted.",
-    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' inserted spill slot '{slot_name}' for {value_class} value '{value_name}' in '@{function_name}' using {spill_bytes} byte(s), {store_count} store(s), and {reload_count} reload(s)",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' inserted spill storage '{storage_name}' for {value_class} value '{value_name}' in '@{function_name}' using {spill_bytes} byte(s), {store_count} store(s), and {reload_count} reload(s)",
     "params": [
       {
         "name": "target_key",
@@ -4645,7 +4645,7 @@
         "kind_name": "STRING"
       },
       {
-        "name": "slot_name",
+        "name": "storage_name",
         "kind": 0,
         "kind_name": "STRING"
       },

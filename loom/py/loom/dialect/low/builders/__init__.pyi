@@ -163,28 +163,29 @@ class LowBuilder(DialectBuilder):
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
     ) -> list[ValueRef]: ...
-    def slot(
+    def reserve(
         self,
         *,
-        symbol: str,
-        function: str,
-        space: str,
-        size: int,
-        align: int,
+        byte_length: int,
+        byte_alignment: int,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
-    ) -> None: ...
+    ) -> ValueRef: ...
     def spill(
         self,
         *,
         value: ValueRef,
-        slot: str,
+        storage: ValueRef,
         offset: int,
         location_id: int | None = ...,
     ) -> None: ...
     def reload(
         self,
         *,
-        slot: str,
+        storage: ValueRef,
         offset: int,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -192,10 +193,10 @@ class LowBuilder(DialectBuilder):
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
     ) -> ValueRef: ...
-    def frame_index(
+    def address(
         self,
         *,
-        slot: str,
+        storage: ValueRef,
         offset: int,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,

@@ -54,6 +54,7 @@ from loom.dsl import (
     REFINABLE_RESULT_TYPE_REFS,
     REGISTER,
     SAFE_TO_SPECULATE,
+    STORAGE,
     TENSOR,
     TERMINATOR,
     TILE,
@@ -185,6 +186,7 @@ class TestTypeConstraints:
         assert OFFSET == TypeConstraint.OFFSET
         assert ADDRESS == TypeConstraint.ADDRESS
         assert BUFFER == TypeConstraint.BUFFER
+        assert STORAGE == TypeConstraint.STORAGE
         assert ANY_ENCODING == TypeConstraint.ANY_ENCODING
         assert ENCODING_LAYOUT == TypeConstraint.ENCODING_LAYOUT
         assert INTEGER_ELEMENT == TypeConstraint.INTEGER_ELEMENT
@@ -203,6 +205,7 @@ class TestTypeConstraints:
         assert INDEX.value == "index"
         assert OFFSET.value == "offset"
         assert ADDRESS.value == "address"
+        assert STORAGE.value == "storage"
 
     def test_element_family_constraints_are_shaped_specific(self) -> None:
         element_family_constraints = {

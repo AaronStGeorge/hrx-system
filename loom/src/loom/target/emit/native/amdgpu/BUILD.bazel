@@ -102,6 +102,7 @@ loom_cc_library(
     srcs = ["assembly.c"],
     hdrs = ["assembly.h"],
     deps = [
+        ":storage_layout",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:move_sequence",
         "//loom/src/loom/codegen/low:packet",
@@ -165,9 +166,9 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "slot_layout",
-    srcs = ["slot_layout.c"],
-    hdrs = ["slot_layout.h"],
+    name = "storage_layout",
+    srcs = ["storage_layout.c"],
+    hdrs = ["storage_layout.h"],
     deps = [
         "//loom/src/loom/codegen/low:function",
         "//loom/src/loom/ir",
@@ -182,7 +183,7 @@ loom_cc_library(
     srcs = ["encoding.c"],
     hdrs = ["encoding.h"],
     deps = [
-        ":slot_layout",
+        ":storage_layout",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:move_sequence",
@@ -208,7 +209,7 @@ loom_cc_library(
         ":descriptor",
         ":metadata",
         ":preflight",
-        ":slot_layout",
+        ":storage_layout",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:function",
         "//loom/src/loom/codegen/low:packet",

@@ -302,21 +302,21 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsKernelEnvelopeForGfx11) {
   EXPECT_NE(output.find(".end_amdgpu_metadata\n"), std::string::npos);
 }
 
-TEST_F(AmdgpuKernelAssemblyTest, EmitsFixedSegmentSizesFromLowSlots) {
+TEST_F(AmdgpuKernelAssemblyTest, EmitsFixedSegmentSizesFromStorage) {
   iree_arena_allocator_t table_arena;
   iree_arena_initialize(&block_pool_, &table_arena);
   loom_low_emission_frame_t frame = {};
   BuildTablesForPreset(
       "amdgpu-gfx11", "gfx_target",
       "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
+      "  %lds0 = low.storage.reserve {byte_alignment = 64, byte_length = 128} "
+      ": low.storage<workgroup>\n"
+      "  %lds1 = low.storage.reserve {byte_alignment = 16, byte_length = 16} "
+      ": low.storage<workgroup>\n"
+      "  %private0 = low.storage.reserve {byte_alignment = 16, "
+      "byte_length = 12} : low.storage<private>\n"
       "  low.return\n"
-      "}\n"
-      "low.slot @lds0 {align = 64, function = @loom_kernel, size = 128, "
-      "space = lds}\n"
-      "low.slot @lds1 {align = 16, function = @loom_kernel, size = 16, "
-      "space = lds}\n"
-      "low.slot @private0 {align = 16, function = @loom_kernel, size = 12, "
-      "space = private}\n",
+      "}\n",
       &table_arena, &frame);
 
   iree_string_builder_t builder;

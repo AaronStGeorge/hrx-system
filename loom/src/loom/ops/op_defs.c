@@ -54,6 +54,7 @@ const char* loom_type_constraint_name(loom_type_constraint_t constraint) {
       [LOOM_TYPE_CONSTRAINT_ENCODING_SCHEMA] = "encoding<schema>",
       [LOOM_TYPE_CONSTRAINT_ENCODING_STORAGE] = "encoding<storage>",
       [LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM] = "encoding<transform>",
+      [LOOM_TYPE_CONSTRAINT_STORAGE] = "storage",
   };
   static_assert(IREE_ARRAYSIZE(names) == LOOM_TYPE_CONSTRAINT_COUNT_,
                 "constraint names out of sync with enum");
@@ -136,6 +137,8 @@ bool loom_type_satisfies_constraint(loom_type_t type,
       return loom_type_is_pool(type);
     case LOOM_TYPE_CONSTRAINT_REGISTER:
       return loom_type_is_register(type);
+    case LOOM_TYPE_CONSTRAINT_STORAGE:
+      return loom_type_is_storage(type);
     case LOOM_TYPE_CONSTRAINT_I1:
       return loom_type_is_scalar(type) &&
              loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1;

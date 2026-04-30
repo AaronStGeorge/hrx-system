@@ -1431,6 +1431,9 @@ static iree_status_t loom_bytecode_reader_decode_type_kind(
     case LOOM_BYTECODE_TYPE_REGISTER:
       *out_kind = LOOM_TYPE_REGISTER;
       return iree_ok_status();
+    case LOOM_BYTECODE_TYPE_STORAGE:
+      *out_kind = LOOM_TYPE_STORAGE;
+      return iree_ok_status();
     default: {
       loom_diagnostic_param_t params[] = {
           loom_param_u32(kind_byte),
@@ -1784,6 +1787,20 @@ static iree_status_t loom_bytecode_reader_read_types(
         }
         type = loom_type_register((loom_string_id_t)class_id,
                                   (uint32_t)unit_count);
+        break;
+      }
+      case LOOM_TYPE_STORAGE: {
+        uint8_t space = 0;
+        uint64_t space_offset =
+            loom_bytecode_reader_cursor_absolute_position(&cursor);
+        IREE_RETURN_IF_ERROR(
+            loom_bytecode_reader_read_u8(reader, &cursor, &space));
+        if (space >= LOOM_STORAGE_SPACE_COUNT_) {
+          return loom_bytecode_reader_emit_enum_value(
+              reader, IREE_SV("storage_space"), space,
+              LOOM_STORAGE_SPACE_COUNT_, space_offset);
+        }
+        type = loom_type_storage((loom_storage_space_t)space);
         break;
       }
       case LOOM_TYPE_ENCODING: {

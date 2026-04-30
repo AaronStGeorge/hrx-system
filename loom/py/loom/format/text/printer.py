@@ -96,6 +96,7 @@ from loom.ir import (
     ScalarType,
     ShapedType,
     StaticDim,
+    StorageType,
     SymbolName,
     Type,
     TypeKind,
@@ -109,6 +110,7 @@ _IR_TYPE_CLASSES = (
     GroupType,
     FunctionType,
     RegisterType,
+    StorageType,
     DialectType,
     EncodingType,
     PoolType,
@@ -217,6 +219,8 @@ def print_type(
             )
             return f"({arg_strs}) -> ({result_strs})"
         case RegisterType():
+            return repr(ir_type)
+        case StorageType():
             return repr(ir_type)
         case NoneType():
             return "none"

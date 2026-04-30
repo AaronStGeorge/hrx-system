@@ -219,7 +219,7 @@ ERR_BACKEND_009 = ErrorDef(
     summary="Spill and reload operations inserted.",
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "inserted spill slot '{slot_name}' for {value_class} value "
+        "inserted spill storage '{storage_name}' for {value_class} value "
         "'{value_name}' in '@{function_name}' using {spill_bytes} byte(s), "
         "{store_count} store(s), and {reload_count} reload(s)"
     ),
@@ -230,7 +230,7 @@ ERR_BACKEND_009 = ErrorDef(
         ErrorParam("function_name", ParamKind.STRING),
         ErrorParam("value_name", ParamKind.STRING),
         ErrorParam("value_class", ParamKind.STRING),
-        ErrorParam("slot_name", ParamKind.STRING),
+        ErrorParam("storage_name", ParamKind.STRING),
         ErrorParam("spill_bytes", ParamKind.U32),
         ErrorParam("store_count", ParamKind.U32),
         ErrorParam("reload_count", ParamKind.U32),

@@ -18,20 +18,19 @@ low.kernel.def target(@target) @lds_atomic_add_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
-  %scratch_view = frame_index @lds_atomic_add_i32__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %10 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
+  %scratch_view = storage_address %10 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %one = s_mov_b32 1
-  %12 = v_lshlrev_b32_lit %tid, 2
-  %13 = v_add_u32 %scratch_view, %12
-  %14 = v_mov_b32 1
-  ds_add_u32 %13, %14 {offset = 0}
-  %15 = v_lshlrev_b32_lit %tid, 2
-  %16 = v_add_u32 %scratch_view, %15
-  %17 = v_mov_b32 1
-  %old = ds_add_rtn_u32 %16, %17 {offset = 0}
+  %13 = v_lshlrev_b32_lit %tid, 2
+  %14 = v_add_u32 %scratch_view, %13
+  %15 = v_mov_b32 1
+  ds_add_u32 %14, %15 {offset = 0}
+  %16 = v_lshlrev_b32_lit %tid, 2
+  %17 = v_add_u32 %scratch_view, %16
+  %18 = v_mov_b32 1
+  %old = ds_add_rtn_u32 %17, %18 {offset = 0}
   return
 }
-
-low.slot @lds_atomic_add_i32__lds3 {align = 4, function = @lds_atomic_add_i32, size = 256, space = lds}
 
 // ====
 
@@ -55,32 +54,31 @@ low.kernel.def target(@target) @lds_atomic_ordering_i32() asm<amdgpu.gfx11.core>
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
-  %scratch_view = frame_index @lds_atomic_ordering_i32__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %13 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
+  %scratch_view = storage_address %13 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %one = s_mov_b32 1
-  %15 = v_lshlrev_b32_lit %tid, 2
-  %16 = v_add_u32 %scratch_view, %15
-  %17 = v_mov_b32 1
-  ds_add_u32 %16, %17 {offset = 0}
-  %18 = v_lshlrev_b32_lit %tid, 2
-  %19 = v_add_u32 %scratch_view, %18
-  %20 = v_mov_b32 1
-  %old_acquire = ds_add_rtn_u32 %19, %20 {offset = 0}
-  %22 = v_lshlrev_b32_lit %tid, 2
-  %23 = v_add_u32 %scratch_view, %22
-  %24 = v_mov_b32 1
-  %old_release = ds_add_rtn_u32 %23, %24 {offset = 0}
-  %26 = v_lshlrev_b32_lit %tid, 2
-  %27 = v_add_u32 %scratch_view, %26
-  %28 = v_mov_b32 1
-  %old_acq_rel = ds_add_rtn_u32 %27, %28 {offset = 0}
-  %30 = v_lshlrev_b32_lit %tid, 2
-  %31 = v_add_u32 %scratch_view, %30
-  %32 = v_mov_b32 1
-  %old_seq_cst = ds_add_rtn_u32 %31, %32 {offset = 0}
+  %16 = v_lshlrev_b32_lit %tid, 2
+  %17 = v_add_u32 %scratch_view, %16
+  %18 = v_mov_b32 1
+  ds_add_u32 %17, %18 {offset = 0}
+  %19 = v_lshlrev_b32_lit %tid, 2
+  %20 = v_add_u32 %scratch_view, %19
+  %21 = v_mov_b32 1
+  %old_acquire = ds_add_rtn_u32 %20, %21 {offset = 0}
+  %23 = v_lshlrev_b32_lit %tid, 2
+  %24 = v_add_u32 %scratch_view, %23
+  %25 = v_mov_b32 1
+  %old_release = ds_add_rtn_u32 %24, %25 {offset = 0}
+  %27 = v_lshlrev_b32_lit %tid, 2
+  %28 = v_add_u32 %scratch_view, %27
+  %29 = v_mov_b32 1
+  %old_acq_rel = ds_add_rtn_u32 %28, %29 {offset = 0}
+  %31 = v_lshlrev_b32_lit %tid, 2
+  %32 = v_add_u32 %scratch_view, %31
+  %33 = v_mov_b32 1
+  %old_seq_cst = ds_add_rtn_u32 %32, %33 {offset = 0}
   return
 }
-
-low.slot @lds_atomic_ordering_i32__lds3 {align = 4, function = @lds_atomic_ordering_i32, size = 256, space = lds}
 
 // ====
 
@@ -101,18 +99,17 @@ low.kernel.def target(@target) @lds_atomic_add_f32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
-  %scratch_view = frame_index @lds_atomic_add_f32__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %10 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
+  %scratch_view = storage_address %10 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %one = v_mov_b32 1065353216
-  %12 = v_lshlrev_b32_lit %tid, 2
-  %13 = v_add_u32 %scratch_view, %12
-  ds_add_f32 %13, %one {offset = 0}
-  %14 = v_lshlrev_b32_lit %tid, 2
-  %15 = v_add_u32 %scratch_view, %14
-  %old = ds_add_rtn_f32 %15, %one {offset = 0}
+  %13 = v_lshlrev_b32_lit %tid, 2
+  %14 = v_add_u32 %scratch_view, %13
+  ds_add_f32 %14, %one {offset = 0}
+  %15 = v_lshlrev_b32_lit %tid, 2
+  %16 = v_add_u32 %scratch_view, %15
+  %old = ds_add_rtn_f32 %16, %one {offset = 0}
   return
 }
-
-low.slot @lds_atomic_add_f32__lds3 {align = 4, function = @lds_atomic_add_f32, size = 256, space = lds}
 
 // ====
 
@@ -135,24 +132,23 @@ low.kernel.def target(@target) @lds_atomic_minnum_maxnum_f32() asm<amdgpu.gfx11.
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
-  %scratch_view = frame_index @lds_atomic_minnum_maxnum_f32__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %11 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
+  %scratch_view = storage_address %11 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %limit = v_mov_b32 1065353216
-  %13 = v_lshlrev_b32_lit %tid, 2
-  %14 = v_add_u32 %scratch_view, %13
-  ds_min_f32 %14, %limit {offset = 0}
-  %15 = v_lshlrev_b32_lit %tid, 2
-  %16 = v_add_u32 %scratch_view, %15
-  ds_max_f32 %16, %limit {offset = 0}
-  %17 = v_lshlrev_b32_lit %tid, 2
-  %18 = v_add_u32 %scratch_view, %17
-  %old_min = ds_min_rtn_f32 %18, %limit {offset = 0}
-  %20 = v_lshlrev_b32_lit %tid, 2
-  %21 = v_add_u32 %scratch_view, %20
-  %old_max = ds_max_rtn_f32 %21, %limit {offset = 0}
+  %14 = v_lshlrev_b32_lit %tid, 2
+  %15 = v_add_u32 %scratch_view, %14
+  ds_min_f32 %15, %limit {offset = 0}
+  %16 = v_lshlrev_b32_lit %tid, 2
+  %17 = v_add_u32 %scratch_view, %16
+  ds_max_f32 %17, %limit {offset = 0}
+  %18 = v_lshlrev_b32_lit %tid, 2
+  %19 = v_add_u32 %scratch_view, %18
+  %old_min = ds_min_rtn_f32 %19, %limit {offset = 0}
+  %21 = v_lshlrev_b32_lit %tid, 2
+  %22 = v_add_u32 %scratch_view, %21
+  %old_max = ds_max_rtn_f32 %22, %limit {offset = 0}
   return
 }
-
-low.slot @lds_atomic_minnum_maxnum_f32__lds3 {align = 4, function = @lds_atomic_minnum_maxnum_f32, size = 256, space = lds}
 
 // ====
 
@@ -177,36 +173,35 @@ low.kernel.def target(@target) @lds_atomic_bitwise_i32() asm<amdgpu.gfx11.core> 
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
-  %scratch_view = frame_index @lds_atomic_bitwise_i32__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %12 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
+  %scratch_view = storage_address %12 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %mask = s_mov_b32 255
-  %14 = v_lshlrev_b32_lit %tid, 2
-  %15 = v_add_u32 %scratch_view, %14
-  %16 = v_mov_b32 255
-  ds_and_b32 %15, %16 {offset = 0}
-  %17 = v_lshlrev_b32_lit %tid, 2
-  %18 = v_add_u32 %scratch_view, %17
-  %19 = v_mov_b32 255
-  ds_or_b32 %18, %19 {offset = 0}
-  %20 = v_lshlrev_b32_lit %tid, 2
-  %21 = v_add_u32 %scratch_view, %20
-  %22 = v_mov_b32 255
-  ds_xor_b32 %21, %22 {offset = 0}
-  %23 = v_lshlrev_b32_lit %tid, 2
-  %24 = v_add_u32 %scratch_view, %23
-  %25 = v_mov_b32 255
-  %old_and = ds_and_rtn_b32 %24, %25 {offset = 0}
-  %27 = v_lshlrev_b32_lit %tid, 2
-  %28 = v_add_u32 %scratch_view, %27
-  %29 = v_mov_b32 255
-  %old_or = ds_or_rtn_b32 %28, %29 {offset = 0}
-  %31 = v_lshlrev_b32_lit %tid, 2
-  %32 = v_add_u32 %scratch_view, %31
-  %33 = v_mov_b32 255
-  %old_xor = ds_xor_rtn_b32 %32, %33 {offset = 0}
+  %15 = v_lshlrev_b32_lit %tid, 2
+  %16 = v_add_u32 %scratch_view, %15
+  %17 = v_mov_b32 255
+  ds_and_b32 %16, %17 {offset = 0}
+  %18 = v_lshlrev_b32_lit %tid, 2
+  %19 = v_add_u32 %scratch_view, %18
+  %20 = v_mov_b32 255
+  ds_or_b32 %19, %20 {offset = 0}
+  %21 = v_lshlrev_b32_lit %tid, 2
+  %22 = v_add_u32 %scratch_view, %21
+  %23 = v_mov_b32 255
+  ds_xor_b32 %22, %23 {offset = 0}
+  %24 = v_lshlrev_b32_lit %tid, 2
+  %25 = v_add_u32 %scratch_view, %24
+  %26 = v_mov_b32 255
+  %old_and = ds_and_rtn_b32 %25, %26 {offset = 0}
+  %28 = v_lshlrev_b32_lit %tid, 2
+  %29 = v_add_u32 %scratch_view, %28
+  %30 = v_mov_b32 255
+  %old_or = ds_or_rtn_b32 %29, %30 {offset = 0}
+  %32 = v_lshlrev_b32_lit %tid, 2
+  %33 = v_add_u32 %scratch_view, %32
+  %34 = v_mov_b32 255
+  %old_xor = ds_xor_rtn_b32 %33, %34 {offset = 0}
   return
 }
-
-low.slot @lds_atomic_bitwise_i32__lds3 {align = 4, function = @lds_atomic_bitwise_i32, size = 256, space = lds}
 
 // ====
 
@@ -227,20 +222,19 @@ low.kernel.def target(@target) @lds_atomic_sub_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
-  %scratch_view = frame_index @lds_atomic_sub_i32__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %10 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
+  %scratch_view = storage_address %10 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %delta = s_mov_b32 1
-  %12 = v_lshlrev_b32_lit %tid, 2
-  %13 = v_add_u32 %scratch_view, %12
-  %14 = v_mov_b32 1
-  ds_sub_u32 %13, %14 {offset = 0}
-  %15 = v_lshlrev_b32_lit %tid, 2
-  %16 = v_add_u32 %scratch_view, %15
-  %17 = v_mov_b32 1
-  %old_sub = ds_sub_rtn_u32 %16, %17 {offset = 0}
+  %13 = v_lshlrev_b32_lit %tid, 2
+  %14 = v_add_u32 %scratch_view, %13
+  %15 = v_mov_b32 1
+  ds_sub_u32 %14, %15 {offset = 0}
+  %16 = v_lshlrev_b32_lit %tid, 2
+  %17 = v_add_u32 %scratch_view, %16
+  %18 = v_mov_b32 1
+  %old_sub = ds_sub_rtn_u32 %17, %18 {offset = 0}
   return
 }
-
-low.slot @lds_atomic_sub_i32__lds3 {align = 4, function = @lds_atomic_sub_i32, size = 256, space = lds}
 
 // ====
 
@@ -260,16 +254,15 @@ low.kernel.def target(@target) @lds_atomic_exchange_i32() asm<amdgpu.gfx11.core>
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
-  %scratch_view = frame_index @lds_atomic_exchange_i32__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %10 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
+  %scratch_view = storage_address %10 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %value = s_mov_b32 7
-  %12 = v_lshlrev_b32_lit %tid, 2
-  %13 = v_add_u32 %scratch_view, %12
-  %14 = v_mov_b32 7
-  %old = ds_wrxchg_rtn_b32 %13, %14 {offset = 0}
+  %13 = v_lshlrev_b32_lit %tid, 2
+  %14 = v_add_u32 %scratch_view, %13
+  %15 = v_mov_b32 7
+  %old = ds_wrxchg_rtn_b32 %14, %15 {offset = 0}
   return
 }
-
-low.slot @lds_atomic_exchange_i32__lds3 {align = 4, function = @lds_atomic_exchange_i32, size = 256, space = lds}
 
 // ====
 
@@ -290,18 +283,17 @@ low.kernel.def target(@target) @lds_atomic_cmpxchg_i32() asm<amdgpu.gfx11.core> 
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
-  %scratch_view = frame_index @lds_atomic_cmpxchg_i32__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %11 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
+  %scratch_view = storage_address %11 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %expected = s_mov_b32 7
   %replacement = s_mov_b32 9
-  %14 = v_lshlrev_b32_lit %tid, 2
-  %15 = v_add_u32 %scratch_view, %14
-  %16 = v_mov_b32 7
-  %17 = v_mov_b32 9
-  %old = ds_cmpst_rtn_b32 %15, %16, %17 {offset = 0}
+  %15 = v_lshlrev_b32_lit %tid, 2
+  %16 = v_add_u32 %scratch_view, %15
+  %17 = v_mov_b32 7
+  %18 = v_mov_b32 9
+  %old = ds_cmpst_rtn_b32 %16, %17, %18 {offset = 0}
   return
 }
-
-low.slot @lds_atomic_cmpxchg_i32__lds3 {align = 4, function = @lds_atomic_cmpxchg_i32, size = 256, space = lds}
 
 // ====
 
@@ -328,41 +320,40 @@ low.kernel.def target(@target) @lds_atomic_minmax_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
-  %scratch_view = frame_index @lds_atomic_minmax_i32__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %13 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
+  %scratch_view = storage_address %13 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %limit = s_mov_b32 1
-  %15 = v_lshlrev_b32_lit %tid, 2
-  %16 = v_add_u32 %scratch_view, %15
-  %17 = v_mov_b32 1
-  ds_min_i32 %16, %17 {offset = 0}
-  %18 = v_lshlrev_b32_lit %tid, 2
-  %19 = v_add_u32 %scratch_view, %18
-  %20 = v_mov_b32 1
-  ds_max_i32 %19, %20 {offset = 0}
-  %21 = v_lshlrev_b32_lit %tid, 2
-  %22 = v_add_u32 %scratch_view, %21
-  %23 = v_mov_b32 1
-  ds_min_u32 %22, %23 {offset = 0}
-  %24 = v_lshlrev_b32_lit %tid, 2
-  %25 = v_add_u32 %scratch_view, %24
-  %26 = v_mov_b32 1
-  ds_max_u32 %25, %26 {offset = 0}
-  %27 = v_lshlrev_b32_lit %tid, 2
-  %28 = v_add_u32 %scratch_view, %27
-  %29 = v_mov_b32 1
-  %old_minsi = ds_min_rtn_i32 %28, %29 {offset = 0}
-  %31 = v_lshlrev_b32_lit %tid, 2
-  %32 = v_add_u32 %scratch_view, %31
-  %33 = v_mov_b32 1
-  %old_maxsi = ds_max_rtn_i32 %32, %33 {offset = 0}
-  %35 = v_lshlrev_b32_lit %tid, 2
-  %36 = v_add_u32 %scratch_view, %35
-  %37 = v_mov_b32 1
-  %old_minui = ds_min_rtn_u32 %36, %37 {offset = 0}
-  %39 = v_lshlrev_b32_lit %tid, 2
-  %40 = v_add_u32 %scratch_view, %39
-  %41 = v_mov_b32 1
-  %old_maxui = ds_max_rtn_u32 %40, %41 {offset = 0}
+  %16 = v_lshlrev_b32_lit %tid, 2
+  %17 = v_add_u32 %scratch_view, %16
+  %18 = v_mov_b32 1
+  ds_min_i32 %17, %18 {offset = 0}
+  %19 = v_lshlrev_b32_lit %tid, 2
+  %20 = v_add_u32 %scratch_view, %19
+  %21 = v_mov_b32 1
+  ds_max_i32 %20, %21 {offset = 0}
+  %22 = v_lshlrev_b32_lit %tid, 2
+  %23 = v_add_u32 %scratch_view, %22
+  %24 = v_mov_b32 1
+  ds_min_u32 %23, %24 {offset = 0}
+  %25 = v_lshlrev_b32_lit %tid, 2
+  %26 = v_add_u32 %scratch_view, %25
+  %27 = v_mov_b32 1
+  ds_max_u32 %26, %27 {offset = 0}
+  %28 = v_lshlrev_b32_lit %tid, 2
+  %29 = v_add_u32 %scratch_view, %28
+  %30 = v_mov_b32 1
+  %old_minsi = ds_min_rtn_i32 %29, %30 {offset = 0}
+  %32 = v_lshlrev_b32_lit %tid, 2
+  %33 = v_add_u32 %scratch_view, %32
+  %34 = v_mov_b32 1
+  %old_maxsi = ds_max_rtn_i32 %33, %34 {offset = 0}
+  %36 = v_lshlrev_b32_lit %tid, 2
+  %37 = v_add_u32 %scratch_view, %36
+  %38 = v_mov_b32 1
+  %old_minui = ds_min_rtn_u32 %37, %38 {offset = 0}
+  %40 = v_lshlrev_b32_lit %tid, 2
+  %41 = v_add_u32 %scratch_view, %40
+  %42 = v_mov_b32 1
+  %old_maxui = ds_max_rtn_u32 %41, %42 {offset = 0}
   return
 }
-
-low.slot @lds_atomic_minmax_i32__lds3 {align = 4, function = @lds_atomic_minmax_i32, size = 256, space = lds}

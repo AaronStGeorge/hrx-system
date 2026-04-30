@@ -90,10 +90,12 @@ typedef enum loom_text_low_asm_structural_kind_e {
   LOOM_TEXT_LOW_ASM_STRUCTURAL_CONCAT = 3,
   // Register range slice projection.
   LOOM_TEXT_LOW_ASM_STRUCTURAL_SLICE = 4,
-  // Symbolic low slot address before target frame layout.
-  LOOM_TEXT_LOW_ASM_STRUCTURAL_FRAME_INDEX = 5,
+  // Function-local storage reservation.
+  LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_RESERVE = 5,
+  // Function-local storage address materialization.
+  LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_ADDRESS = 6,
   // Explicit virtual-register copy/coalescing boundary.
-  LOOM_TEXT_LOW_ASM_STRUCTURAL_COPY = 6,
+  LOOM_TEXT_LOW_ASM_STRUCTURAL_COPY = 7,
 } loom_text_low_asm_structural_kind_t;
 
 typedef struct loom_text_low_asm_structural_attribute_t {

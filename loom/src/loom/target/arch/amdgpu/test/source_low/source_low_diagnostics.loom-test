@@ -23,21 +23,20 @@ low.kernel.def target(@target) @lds_b32_diagnostics() {
   %output_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
-  %scratch_view = low.frame_index @lds_b32_diagnostics__lds5 {offset = 0} : reg<amdgpu.vgpr>
+  %14 = low.storage.reserve {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %scratch_view = low.storage.address %14 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  %16 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %17 = low.op<amdgpu.s_mov_b32_m0>(%16) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  low.op<amdgpu.ds_write_addtid_b32>(%one, %17) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
-  %18 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %19 = low.op<amdgpu.s_mov_b32_m0>(%18) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  %loaded = low.op<amdgpu.ds_read_addtid_b32>(%19) {offset = 0} : (reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
-  %21 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %22 = low.slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  low.op<amdgpu.global_store_b32_saddr>(%21, %loaded, %22) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  %17 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %18 = low.op<amdgpu.s_mov_b32_m0>(%17) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.ds_write_addtid_b32>(%one, %18) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
+  %19 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %20 = low.op<amdgpu.s_mov_b32_m0>(%19) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  %loaded = low.op<amdgpu.ds_read_addtid_b32>(%20) {offset = 0} : (reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
+  %22 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %23 = low.slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  low.op<amdgpu.global_store_b32_saddr>(%22, %loaded, %23) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
   low.return
 }
-
-low.slot @lds_b32_diagnostics__lds5 {align = 16, function = @lds_b32_diagnostics, size = 256, space = lds}
 
 // ====
 
@@ -65,27 +64,26 @@ low.kernel.def target(@target) @lds_padded_diagnostics() asm<amdgpu.gfx11.core> 
   %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 2048
-  %scratch_view = frame_index @lds_padded_diagnostics__lds6 {offset = 0} : reg<amdgpu.vgpr>
-  %16 = v_mov_b32 1
+  %15 = storage {byte_alignment = 16, byte_length = 2048} : low.storage<workgroup>
+  %scratch_view = storage_address %15 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %17 = v_mov_b32 1
   %18 = v_mov_b32 1
   %19 = v_mov_b32 1
-  %one = concat(%16, %17, %18, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %21 = v_mov_b32 20
-  %22 = v_mul_lo_u32 %tid, %21
-  %23 = v_add_u32 %scratch_view, %22
-  ds_write_b128 %23, %one {offset = 0}
-  %24 = v_mov_b32 20
-  %25 = v_mul_lo_u32 %tid, %24
-  %26 = v_add_u32 %scratch_view, %25
-  %loaded = ds_read_b128 %26 {offset = 0}
-  %28 = v_lshlrev_b32_lit %tid, 4
-  %29 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %28, %loaded, %29 {offset = 0}
+  %20 = v_mov_b32 1
+  %one = concat(%17, %18, %19, %20) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %22 = v_mov_b32 20
+  %23 = v_mul_lo_u32 %tid, %22
+  %24 = v_add_u32 %scratch_view, %23
+  ds_write_b128 %24, %one {offset = 0}
+  %25 = v_mov_b32 20
+  %26 = v_mul_lo_u32 %tid, %25
+  %27 = v_add_u32 %scratch_view, %26
+  %loaded = ds_read_b128 %27 {offset = 0}
+  %29 = v_lshlrev_b32_lit %tid, 4
+  %30 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b128 %29, %loaded, %30 {offset = 0}
   return
 }
-
-low.slot @lds_padded_diagnostics__lds6 {align = 16, function = @lds_padded_diagnostics, size = 2048, space = lds}
 
 // ====
 
@@ -113,25 +111,24 @@ low.kernel.def target(@target) @lds_read2_write2_diagnostics() asm<amdgpu.gfx11.
   %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 2048
-  %scratch_view = frame_index @lds_read2_write2_diagnostics__lds6 {offset = 0} : reg<amdgpu.vgpr>
-  %16 = v_mov_b32 1
+  %15 = storage {byte_alignment = 16, byte_length = 2048} : low.storage<workgroup>
+  %scratch_view = storage_address %15 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %17 = v_mov_b32 1
-  %one = concat(%16, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %19 = v_lshlrev_b32_lit %tid, 5
-  %20 = v_add_u32 %scratch_view, %19
-  %21 = slice %one[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %22 = slice %one[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  ds_write2_b32 %20, %21, %22 {offset0 = 0, offset1 = 2}
-  %23 = v_lshlrev_b32_lit %tid, 5
-  %24 = v_add_u32 %scratch_view, %23
-  %loaded = ds_read2_b32 %24 {offset0 = 0, offset1 = 2}
-  %26 = v_lshlrev_b32_lit %tid, 3
-  %27 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b64 %26, %loaded, %27 {offset = 0}
+  %18 = v_mov_b32 1
+  %one = concat(%17, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %20 = v_lshlrev_b32_lit %tid, 5
+  %21 = v_add_u32 %scratch_view, %20
+  %22 = slice %one[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %23 = slice %one[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  ds_write2_b32 %21, %22, %23 {offset0 = 0, offset1 = 2}
+  %24 = v_lshlrev_b32_lit %tid, 5
+  %25 = v_add_u32 %scratch_view, %24
+  %loaded = ds_read2_b32 %25 {offset0 = 0, offset1 = 2}
+  %27 = v_lshlrev_b32_lit %tid, 3
+  %28 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b64 %27, %loaded, %28 {offset = 0}
   return
 }
-
-low.slot @lds_read2_write2_diagnostics__lds6 {align = 16, function = @lds_read2_write2_diagnostics, size = 2048, space = lds}
 
 // ====
 
@@ -158,25 +155,24 @@ low.kernel.def target(@target) @lds_conflict_risk_diagnostics() asm<amdgpu.gfx11
   %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 1024
-  %scratch_view = frame_index @lds_conflict_risk_diagnostics__lds5 {offset = 0} : reg<amdgpu.vgpr>
-  %15 = v_mov_b32 1
+  %14 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
+  %scratch_view = storage_address %14 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %16 = v_mov_b32 1
   %17 = v_mov_b32 1
   %18 = v_mov_b32 1
-  %one = concat(%15, %16, %17, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %20 = v_lshlrev_b32_lit %tid, 4
-  %21 = v_add_u32 %scratch_view, %20
-  ds_write_b128 %21, %one {offset = 0}
-  %22 = v_lshlrev_b32_lit %tid, 4
-  %23 = v_add_u32 %scratch_view, %22
-  %loaded = ds_read_b128 %23 {offset = 0}
-  %25 = v_lshlrev_b32_lit %tid, 4
-  %26 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %25, %loaded, %26 {offset = 0}
+  %19 = v_mov_b32 1
+  %one = concat(%16, %17, %18, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %21 = v_lshlrev_b32_lit %tid, 4
+  %22 = v_add_u32 %scratch_view, %21
+  ds_write_b128 %22, %one {offset = 0}
+  %23 = v_lshlrev_b32_lit %tid, 4
+  %24 = v_add_u32 %scratch_view, %23
+  %loaded = ds_read_b128 %24 {offset = 0}
+  %26 = v_lshlrev_b32_lit %tid, 4
+  %27 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b128 %26, %loaded, %27 {offset = 0}
   return
 }
-
-low.slot @lds_conflict_risk_diagnostics__lds5 {align = 16, function = @lds_conflict_risk_diagnostics, size = 1024, space = lds}
 
 // ====
 

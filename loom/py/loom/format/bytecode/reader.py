@@ -73,6 +73,8 @@ from loom.ir import (
     ScalarTypeKind,
     ShapedType,
     StaticDim,
+    StorageSpace,
+    StorageType,
     Symbol,
     SymbolKind,
     SymbolName,
@@ -542,6 +544,15 @@ class BytecodeReader:
                         ir_type = RegisterType(self._strings[class_id], unit_count)
                     except ValueError as err:
                         raise BytecodeError(str(err)) from err
+                case TypeKind.STORAGE:
+                    space_byte = data[offset]
+                    offset += 1
+                    try:
+                        ir_type = StorageType(StorageSpace(space_byte))
+                    except ValueError as err:
+                        raise BytecodeError(
+                            f"unknown storage space byte: {space_byte}"
+                        ) from err
                 case TypeKind.ENCODING:
                     role_byte = data[offset]
                     offset += 1

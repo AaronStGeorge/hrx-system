@@ -98,21 +98,20 @@ low.kernel.def target(@target) @workitem_y_lds_uses_explicit_vaddr() asm<amdgpu.
   %y = v_and_b32_lit %12, 1023
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
-  %scratch_view = frame_index @workitem_y_lds_uses_explicit_vaddr__lds5 {offset = 0} : reg<amdgpu.vgpr>
+  %16 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %scratch_view = storage_address %16 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %value = v_mov_b32 7
-  %18 = v_lshlrev_b32_lit %y, 2
-  %19 = v_add_u32 %scratch_view, %18
-  ds_write_b32 %19, %value {offset = 0}
-  %20 = v_lshlrev_b32_lit %y, 2
-  %21 = v_add_u32 %scratch_view, %20
-  %loaded = ds_read_b32 %21 {offset = 0}
-  %23 = v_lshlrev_b32_lit %y, 2
-  %24 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %23, %loaded, %24 {offset = 0}
+  %19 = v_lshlrev_b32_lit %y, 2
+  %20 = v_add_u32 %scratch_view, %19
+  ds_write_b32 %20, %value {offset = 0}
+  %21 = v_lshlrev_b32_lit %y, 2
+  %22 = v_add_u32 %scratch_view, %21
+  %loaded = ds_read_b32 %22 {offset = 0}
+  %24 = v_lshlrev_b32_lit %y, 2
+  %25 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %24, %loaded, %25 {offset = 0}
   return
 }
-
-low.slot @workitem_y_lds_uses_explicit_vaddr__lds5 {align = 16, function = @workitem_y_lds_uses_explicit_vaddr, size = 256, space = lds}
 
 // ====
 

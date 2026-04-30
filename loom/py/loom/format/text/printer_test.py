@@ -51,6 +51,8 @@ from loom.ir import (
     ScalarTypeKind,
     ShapedType,
     StaticDim,
+    StorageSpace,
+    StorageType,
     Type,
     TypeKind,
     Value,
@@ -254,6 +256,11 @@ class TestPrintType:
 
     def test_buffer_type(self) -> None:
         assert print_type(BUFFER_TYPE) == "buffer"
+
+    def test_storage_type(self) -> None:
+        assert (
+            print_type(StorageType(StorageSpace.WORKGROUP)) == "low.storage<workgroup>"
+        )
 
     def test_register_type(self) -> None:
         assert print_type(RegisterType("amdgpu.vgpr")) == "reg<amdgpu.vgpr>"

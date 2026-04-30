@@ -17,7 +17,7 @@
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/encoding.h"
 #include "loom/target/arch/amdgpu/target_info.h"
-#include "loom/target/emit/native/amdgpu/slot_layout.h"
+#include "loom/target/emit/native/amdgpu/storage_layout.h"
 #include "loom/target/emit/native/fragment.h"
 
 #define LOOM_AMDGPU_MAX_PACKET_FIELD_VALUES 32u
@@ -31,8 +31,8 @@ typedef struct loom_amdgpu_encode_state_t {
   // Resolved bit-encoding table for target descriptor packets, or NULL when
   // this descriptor set has no native encoding table.
   const loom_amdgpu_encoding_table_t* encoding_table;
-  // Fixed-segment layout shared by low.frame_index packets.
-  const loom_amdgpu_slot_layout_t* slot_layout;
+  // Fixed-segment layout shared by low.storage.address packets.
+  const loom_amdgpu_storage_layout_t* storage_layout;
   // Module string IDs for descriptor immediate rows, indexed by descriptor-set
   // immediate ordinal.
   const loom_string_id_t* immediate_name_ids;
@@ -1067,33 +1067,43 @@ static iree_status_t loom_amdgpu_encode_live_in_packet(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_encode_frame_index_packet(
+static iree_status_t loom_amdgpu_encode_storage_reserve_packet(
+    loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
+  (void)state;
+  (void)packet;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_encode_storage_address_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
   const loom_op_t* op = packet->node->op;
-  loom_amdgpu_slot_layout_slot_t slot;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_slot_layout_lookup_slot(
-      state->slot_layout, loom_low_frame_index_slot(op), &slot));
-  if (slot.space != LOOM_LOW_SLOT_SPACE_LDS) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU native encoding only supports low.frame_index for LDS slots");
+  loom_amdgpu_storage_layout_reservation_t reservation;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_storage_layout_lookup(
+      state->storage_layout, loom_low_storage_address_storage(op),
+      &reservation));
+  if (reservation.space != LOOM_STORAGE_SPACE_WORKGROUP) {
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "AMDGPU native encoding only supports "
+                            "low.storage.address for workgroup storage");
   }
-  const int64_t signed_offset = loom_low_frame_index_offset(op);
+  const int64_t signed_offset = loom_low_storage_address_offset(op);
   if (signed_offset < 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU native encoding low.frame_index offset must be non-negative");
+        "AMDGPU native encoding low.storage.address offset must be "
+        "non-negative");
   }
   const uint64_t offset = (uint64_t)signed_offset;
-  if (slot.byte_offset > UINT32_MAX || offset > UINT32_MAX - slot.byte_offset) {
+  if (reservation.byte_offset > UINT32_MAX ||
+      offset > UINT32_MAX - reservation.byte_offset) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU native encoding low.frame_index byte offset exceeds u32");
+        "AMDGPU native encoding low.storage.address byte offset exceeds u32");
   }
   uint16_t vdst = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_packet_result_vgpr(state, packet, 0, &vdst));
   return loom_amdgpu_encode_v_mov_b32_u32(
-      state, vdst, (uint32_t)(slot.byte_offset + offset));
+      state, vdst, (uint32_t)(reservation.byte_offset + offset));
 }
 
 static bool loom_amdgpu_wait_packet_is_before_node(
@@ -1283,10 +1293,13 @@ typedef struct loom_amdgpu_encode_structural_dispatch_t {
 static const loom_amdgpu_encode_structural_dispatch_t
     kLoomAmdgpuEncodeStructuralDispatch[] = {
         {LOOM_OP_LOW_LIVE_IN, loom_amdgpu_encode_live_in_packet},
+        {LOOM_OP_LOW_STORAGE_RESERVE,
+         loom_amdgpu_encode_storage_reserve_packet},
         {LOOM_OP_LOW_COPY, loom_amdgpu_encode_copy_packet},
         {LOOM_OP_LOW_SLICE, loom_amdgpu_encode_slice_packet},
         {LOOM_OP_LOW_CONCAT, loom_amdgpu_encode_concat_packet},
-        {LOOM_OP_LOW_FRAME_INDEX, loom_amdgpu_encode_frame_index_packet},
+        {LOOM_OP_LOW_STORAGE_ADDRESS,
+         loom_amdgpu_encode_storage_address_packet},
         {LOOM_OP_LOW_BR, loom_amdgpu_encode_branch_packet},
         {LOOM_OP_LOW_COND_BR, loom_amdgpu_encode_cond_branch_packet},
         {LOOM_OP_LOW_RETURN, loom_amdgpu_encode_return_packet},
@@ -1440,9 +1453,9 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
   iree_host_size_t immediate_name_id_count = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_immediate_name_ids(
       schedule, &immediate_name_ids, &immediate_name_id_count, arena));
-  loom_amdgpu_slot_layout_t slot_layout;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_slot_layout_build(
-      schedule->module, schedule->function_op, arena, &slot_layout));
+  loom_amdgpu_storage_layout_t storage_layout;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_storage_layout_build(
+      schedule->module, schedule->function_op, arena, &storage_layout));
   if (wait_packets != NULL) {
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_verify_wait_packet_plan(schedule, wait_packets));
@@ -1464,7 +1477,7 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
       .allocation = allocation,
       .target = target,
       .encoding_table = encoding_table,
-      .slot_layout = &slot_layout,
+      .storage_layout = &storage_layout,
       .immediate_name_ids = immediate_name_ids,
       .immediate_name_id_count = immediate_name_id_count,
       .wait_packets = wait_packets,
@@ -1485,7 +1498,7 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
       .allocation = allocation,
       .target = target,
       .encoding_table = encoding_table,
-      .slot_layout = &slot_layout,
+      .storage_layout = &storage_layout,
       .immediate_name_ids = immediate_name_ids,
       .immediate_name_id_count = immediate_name_id_count,
       .wait_packets = wait_packets,

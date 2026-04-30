@@ -697,21 +697,22 @@ TEST_F(LowVerifyTest, InvokeRejectsPureImpureCallee) {
   EXPECT_EQ(GetStringParam(*diagnostic, 2), "callee has no pure contract");
 }
 
-TEST_F(LowVerifyTest, SlotTrafficPassesWithOwnedSlot) {
+TEST_F(LowVerifyTest, StorageTrafficPassesWithOwnedStorage) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
       "test.record @vm_target {}\n"
       "low.func.def target(@vm_target) @slot_roundtrip(%input: reg<vm.i32>) "
       "-> (reg<vm.i32>) {\n"
-      "  low.spill %input, @slot_roundtrip_spill {offset = 0} : reg<vm.i32>\n"
-      "  %reload = low.reload @slot_roundtrip_spill {offset = 0} : "
-      "reg<vm.i32>\n"
-      "  %addr = low.frame_index @slot_roundtrip_spill {offset = 0} : "
-      "reg<vm.ptr>\n"
+      "  %storage = low.storage.reserve {byte_alignment = 4, byte_length = 4} "
+      ": low.storage<scratch>\n"
+      "  low.spill %input, %storage {offset = 0} : reg<vm.i32>, "
+      "low.storage<scratch>\n"
+      "  %reload = low.reload %storage {offset = 0} : low.storage<scratch> "
+      "-> reg<vm.i32>\n"
+      "  %addr = low.storage.address %storage {offset = 0} : "
+      "low.storage<scratch> -> reg<vm.ptr>\n"
       "  low.return %reload : reg<vm.i32>\n"
-      "}\n"
-      "low.slot @slot_roundtrip_spill {function = @slot_roundtrip, space = "
-      "scratch, size = 4, align = 4}\n",
+      "}\n",
       &capture);
   EXPECT_EQ(result.error_count, 0u);
   EXPECT_TRUE(capture.diagnostics.empty());

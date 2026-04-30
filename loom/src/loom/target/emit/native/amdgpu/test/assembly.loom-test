@@ -19,6 +19,25 @@ low.func.def target(@gfx11_target) @gfx11_constants(%resource: reg<amdgpu.sgpr x
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_storage_address waits=none
+target.profile @gfx11_target preset("amdgpu-gfx11")
+
+low.func.def target(@gfx11_target) @gfx11_storage_address() asm<amdgpu.gfx11.core> {
+  %lds0 = storage {byte_alignment = 64, byte_length = 128} : low.storage<workgroup>
+  %lds1 = storage {byte_alignment = 64, byte_length = 128} : low.storage<workgroup>
+  %addr0 = storage_address %lds0 {offset = 12} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %addr1 = storage_address %lds1 {offset = 4} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  return
+}
+
+// ----
+.Lbb0:
+  v_mov_b32 v0, 12
+  v_mov_b32 v0, 132
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_scheduled_liveness_resource
 target.profile @gfx11_target preset("amdgpu-gfx11")
 

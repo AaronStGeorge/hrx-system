@@ -54,6 +54,40 @@ bool loom_encoding_role_parse(iree_string_view_t text,
   return false;
 }
 
+const char* loom_storage_space_name(loom_storage_space_t space) {
+  static const char* const names[] = {
+      [LOOM_STORAGE_SPACE_STACK] = "stack",
+      [LOOM_STORAGE_SPACE_SCRATCH] = "scratch",
+      [LOOM_STORAGE_SPACE_PRIVATE] = "private",
+      [LOOM_STORAGE_SPACE_WORKGROUP] = "workgroup",
+  };
+  static_assert(IREE_ARRAYSIZE(names) == LOOM_STORAGE_SPACE_COUNT_,
+                "storage space names out of sync with enum");
+  if (loom_storage_space_is_valid(space)) return names[space];
+  return NULL;
+}
+
+bool loom_storage_space_parse(iree_string_view_t text,
+                              loom_storage_space_t* out_space) {
+  if (iree_string_view_equal(text, IREE_SV("stack"))) {
+    *out_space = LOOM_STORAGE_SPACE_STACK;
+    return true;
+  }
+  if (iree_string_view_equal(text, IREE_SV("scratch"))) {
+    *out_space = LOOM_STORAGE_SPACE_SCRATCH;
+    return true;
+  }
+  if (iree_string_view_equal(text, IREE_SV("private"))) {
+    *out_space = LOOM_STORAGE_SPACE_PRIVATE;
+    return true;
+  }
+  if (iree_string_view_equal(text, IREE_SV("workgroup"))) {
+    *out_space = LOOM_STORAGE_SPACE_WORKGROUP;
+    return true;
+  }
+  return false;
+}
+
 iree_status_t loom_type_function_build(const loom_type_t* arg_types,
                                        uint16_t arg_count,
                                        const loom_type_t* result_types,

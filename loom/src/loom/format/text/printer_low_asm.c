@@ -647,13 +647,30 @@ static iree_status_t loom_print_low_asm_structural_copy(
   return iree_ok_status();
 }
 
-static iree_status_t loom_print_low_asm_structural_frame_index(
+static iree_status_t loom_print_low_asm_structural_storage_reserve(
     loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
-  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "frame_index", false));
-  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "@", false));
-  IREE_RETURN_IF_ERROR(loom_print_emit(ctx, statement->structural_key, true));
+  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "storage", false));
   IREE_RETURN_IF_ERROR(loom_print_low_asm_structural_attr_dict(ctx, statement));
   return loom_print_low_asm_structural_result_type(ctx, statement);
+}
+
+static iree_status_t loom_print_low_asm_structural_storage_address(
+    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
+  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "storage_address", false));
+  IREE_RETURN_IF_ERROR(loom_print_low_asm_value_list(ctx, statement->operands,
+                                                     statement->operand_count,
+                                                     LOOM_PRINT_FIELD_OPERAND));
+  IREE_RETURN_IF_ERROR(loom_print_low_asm_structural_attr_dict(ctx, statement));
+  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ":", false));
+  IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+  IREE_RETURN_IF_ERROR(loom_print_value_type(ctx, statement->operands[0]));
+  loom_print_did_write(ctx);
+  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "->", false));
+  IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+  IREE_RETURN_IF_ERROR(
+      loom_print_result_value_type(ctx, statement->results[0]));
+  loom_print_did_write(ctx);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_print_low_asm_structural(
@@ -668,8 +685,10 @@ static iree_status_t loom_print_low_asm_structural(
       return loom_print_low_asm_structural_concat(ctx, statement);
     case LOOM_TEXT_LOW_ASM_STRUCTURAL_SLICE:
       return loom_print_low_asm_structural_slice(ctx, statement);
-    case LOOM_TEXT_LOW_ASM_STRUCTURAL_FRAME_INDEX:
-      return loom_print_low_asm_structural_frame_index(ctx, statement);
+    case LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_RESERVE:
+      return loom_print_low_asm_structural_storage_reserve(ctx, statement);
+    case LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_ADDRESS:
+      return loom_print_low_asm_structural_storage_address(ctx, statement);
     case LOOM_TEXT_LOW_ASM_STRUCTURAL_COPY:
       return loom_print_low_asm_structural_copy(ctx, statement);
     default:

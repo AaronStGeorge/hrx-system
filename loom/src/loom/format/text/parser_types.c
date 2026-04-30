@@ -673,6 +673,31 @@ static iree_status_t loom_parse_group_type(loom_parser_t* parser,
 }
 
 //===----------------------------------------------------------------------===//
+// Storage type parsing
+//===----------------------------------------------------------------------===//
+
+// Parses a storage type from the token stream. Called after LANGLE has
+// been consumed. Consumes tokens through RANGLE.
+static iree_status_t loom_parse_storage_type(loom_parser_t* parser,
+                                             loom_type_t* out_type) {
+  loom_token_t space_token;
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, &space_token);
+  loom_storage_space_t space = LOOM_STORAGE_SPACE_COUNT_;
+  if (!loom_storage_space_parse(space_token.text, &space)) {
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(IREE_SV("storage space")),
+        loom_param_string(space_token.text),
+    };
+    return loom_parser_emit(parser,
+                            loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 18),
+                            params, IREE_ARRAYSIZE(params), space_token);
+  }
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RANGLE, NULL);
+  *out_type = loom_type_storage(space);
+  return iree_ok_status();
+}
+
+//===----------------------------------------------------------------------===//
 // Dialect type parsing
 //===----------------------------------------------------------------------===//
 
@@ -933,6 +958,8 @@ static iree_status_t loom_parse_angle_bracketed_type(
     status = loom_parse_pool_type(parser, mode, out_type);
   } else if (kind == LOOM_TYPE_GROUP) {
     status = loom_parse_group_type(parser, out_type);
+  } else if (kind == LOOM_TYPE_STORAGE) {
+    status = loom_parse_storage_type(parser, out_type);
   } else {
     status = loom_parse_shaped_type(parser, kind, mode, out_type);
   }
@@ -940,9 +967,11 @@ static iree_status_t loom_parse_angle_bracketed_type(
   return status;
 }
 
-static iree_status_t loom_parse_registered_bare_type(
-    loom_parser_t* parser, loom_token_t token, loom_type_parse_mode_t mode,
-    loom_type_t* out_type, bool* out_matched) {
+static iree_status_t loom_parse_registered_type(loom_parser_t* parser,
+                                                loom_token_t token,
+                                                loom_type_parse_mode_t mode,
+                                                loom_type_t* out_type,
+                                                bool* out_matched) {
   *out_matched = false;
   const loom_type_descriptor_t* descriptor =
       loom_type_registry_lookup(token.text);
@@ -956,6 +985,7 @@ static iree_status_t loom_parse_registered_bare_type(
     case LOOM_TYPE_VIEW:
     case LOOM_TYPE_POOL:
     case LOOM_TYPE_GROUP:
+    case LOOM_TYPE_STORAGE:
       return loom_parse_angle_bracketed_type(parser, descriptor->ir_kind, mode,
                                              out_type);
     case LOOM_TYPE_BUFFER:
@@ -998,7 +1028,7 @@ iree_status_t loom_parse_type(loom_parser_t* parser,
     }
 
     bool matched_registered_type = false;
-    IREE_RETURN_IF_ERROR(loom_parse_registered_bare_type(
+    IREE_RETURN_IF_ERROR(loom_parse_registered_type(
         parser, token, mode, out_type, &matched_registered_type));
     if (matched_registered_type) {
       return iree_ok_status();
@@ -1015,6 +1045,13 @@ iree_status_t loom_parse_type(loom_parser_t* parser,
 
   // Dialect type: dotted name (e.g., hal.buffer).
   if (token.kind == LOOM_TOKEN_OP_NAME) {
+    bool matched_registered_type = false;
+    IREE_RETURN_IF_ERROR(loom_parse_registered_type(
+        parser, token, mode, out_type, &matched_registered_type));
+    if (matched_registered_type) {
+      return iree_ok_status();
+    }
+
     loom_tokenizer_next(&parser->tokenizer);
     return loom_parse_dialect_type(parser, token, mode, out_type);
   }

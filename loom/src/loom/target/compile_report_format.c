@@ -130,6 +130,8 @@ static iree_string_view_t loom_target_compile_report_type_kind_name(
       return IREE_SV("pool");
     case LOOM_TYPE_REGISTER:
       return IREE_SV("register");
+    case LOOM_TYPE_STORAGE:
+      return IREE_SV("storage");
     default:
       return IREE_SV("unknown");
   }

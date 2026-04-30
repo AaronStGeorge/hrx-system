@@ -53,6 +53,7 @@ from loom.ir import (
     ScalarType,
     ShapedType,
     StaticDim,
+    StorageType,
     SymbolKind,
     SymbolName,
     Type,
@@ -67,6 +68,7 @@ _IR_TYPE_CLASSES = (
     GroupType,
     FunctionType,
     RegisterType,
+    StorageType,
     DialectType,
     EncodingType,
     PoolType,
@@ -142,6 +144,7 @@ BYTECODE_TYPE_KIND_BY_IR_KIND: dict[TypeKind, int] = {
     TypeKind.VIEW: 10,
     TypeKind.BUFFER: 11,
     TypeKind.REGISTER: 12,
+    TypeKind.STORAGE: 13,
 }
 
 BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
@@ -150,7 +153,7 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 12
+FORMAT_VERSION = 13
 PRODUCER = "loom-py"
 
 SYMBOL_FLAG_PUBLIC = 0x0001
@@ -716,6 +719,9 @@ class BytecodeWriter:
                 buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.REGISTER])
                 buf.write_varint(self._ctx.strings[reg_class])
                 buf.write_varint(unit_count)
+            case StorageType(space=space):
+                buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.STORAGE])
+                buf.write_u8(space.value)
             case EncodingType(role=role):
                 buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.ENCODING])
                 buf.write_u8(role.value)

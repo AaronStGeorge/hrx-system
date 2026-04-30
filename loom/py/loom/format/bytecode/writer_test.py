@@ -90,6 +90,8 @@ from loom.ir import (
     ScalarTypeKind,
     ShapedType,
     StaticDim,
+    StorageSpace,
+    StorageType,
     Symbol,
     SymbolKind,
     SymbolName,
@@ -699,6 +701,9 @@ class TestTypesSection:
                 encoding=DynamicEncoding(),
             )
         )
+
+    def test_storage_workgroup(self) -> None:
+        self._roundtrip_type(StorageType(StorageSpace.WORKGROUP))
 
     def test_tensor_large_dim(self) -> None:
         self._roundtrip_type(ShapedType(TypeKind.TENSOR, F32, (StaticDim(1048576),)))

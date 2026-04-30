@@ -159,7 +159,8 @@ static iree_status_t loom_native_assembly_append_block(
     loom_low_packet_view_t packet = {0};
     IREE_RETURN_IF_ERROR(
         loom_low_packet_view_at(schedule, allocation, packet_index, &packet));
-    if (loom_low_live_in_isa(packet.node->op)) {
+    if (loom_low_live_in_isa(packet.node->op) ||
+        loom_low_storage_reserve_isa(packet.node->op)) {
       continue;
     }
     loom_native_assembly_packet_context_t context = {

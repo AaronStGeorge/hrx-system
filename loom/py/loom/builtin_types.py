@@ -48,6 +48,8 @@ __all__ = [
     "pool_type",
     # Group type.
     "group_type",
+    # Storage type.
+    "storage_type",
 ]
 
 # ============================================================================
@@ -176,6 +178,18 @@ group_type = TypeDef(
 )
 
 # ============================================================================
+# low.storage<space> — function-local byte storage
+# ============================================================================
+
+storage_type = TypeDef(
+    name="low.storage",
+    doc="Function-local byte storage handle.",
+    ir_kind="storage",
+    params=[TypeParam("space", ANY)],
+    format=[Attr("space")],
+)
+
+# ============================================================================
 # Registry
 # ============================================================================
 
@@ -187,4 +201,5 @@ ALL_BUILTIN_TYPES: tuple[TypeDef, ...] = (
     buffer_type,
     pool_type,
     group_type,
+    storage_type,
 )

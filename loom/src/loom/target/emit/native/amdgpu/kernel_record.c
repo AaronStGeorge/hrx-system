@@ -14,7 +14,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/preflight.h"
-#include "loom/target/emit/native/amdgpu/slot_layout.h"
+#include "loom/target/emit/native/amdgpu/storage_layout.h"
 #include "loom/target/launch.h"
 
 #define LOOM_AMDGPU_KERNEL_RECORD_KERNARG_USER_SGPR_COUNT 2u
@@ -236,10 +236,10 @@ static iree_status_t loom_amdgpu_kernel_record_validate_function_shape(
 
 static iree_status_t loom_amdgpu_kernel_record_collect_segment_usage(
     const loom_module_t* module, const loom_op_t* function_op,
-    loom_amdgpu_slot_layout_segment_sizes_t* out_usage) {
+    loom_amdgpu_storage_layout_segment_sizes_t* out_usage) {
   IREE_ASSERT_ARGUMENT(out_usage);
-  *out_usage = (loom_amdgpu_slot_layout_segment_sizes_t){0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_slot_layout_collect_segment_sizes(
+  *out_usage = (loom_amdgpu_storage_layout_segment_sizes_t){0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_storage_layout_collect_segment_sizes(
       module, function_op, out_usage));
   if (out_usage->group_segment_fixed_size > UINT32_MAX ||
       out_usage->private_segment_fixed_size > UINT32_MAX) {
@@ -583,7 +583,7 @@ iree_status_t loom_amdgpu_kernel_record_build(
     abi_layout = &derived_abi_layout;
   }
 
-  loom_amdgpu_slot_layout_segment_sizes_t segment_usage = {0};
+  loom_amdgpu_storage_layout_segment_sizes_t segment_usage = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_collect_segment_usage(
       schedule->module, schedule->function_op, &segment_usage));
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_validate_kernarg_live_in(

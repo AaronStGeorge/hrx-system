@@ -15,6 +15,7 @@
 #include "loom/target/arch/amdgpu/encoding.h"
 #include "loom/target/arch/amdgpu/register_class.h"
 #include "loom/target/arch/amdgpu/target_info.h"
+#include "loom/target/emit/native/amdgpu/storage_layout.h"
 #include "loom/target/emit/native/assembly.h"
 
 typedef struct loom_amdgpu_wait_packet_emit_state_t {
@@ -1149,6 +1150,50 @@ static iree_status_t loom_amdgpu_append_concat_packet(
   return loom_amdgpu_emit_move_sequence(context, mnemonic, move_count);
 }
 
+static iree_status_t loom_amdgpu_append_storage_address_packet(
+    void* user_data, const loom_native_assembly_packet_context_t* context) {
+  (void)user_data;
+  const loom_op_t* op = context->packet->node->op;
+  loom_amdgpu_storage_layout_reservation_t reservation;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_storage_layout_resolve(
+      context->schedule->module, context->schedule->function_op,
+      loom_low_storage_address_storage(op), &reservation));
+  if (reservation.space != LOOM_STORAGE_SPACE_WORKGROUP) {
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "AMDGPU assembly only supports "
+                            "low.storage.address for workgroup storage");
+  }
+  const int64_t signed_offset = loom_low_storage_address_offset(op);
+  if (signed_offset < 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU assembly low.storage.address offset must be non-negative");
+  }
+  const uint64_t offset = (uint64_t)signed_offset;
+  if (reservation.byte_offset > UINT32_MAX ||
+      offset > UINT32_MAX - reservation.byte_offset) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU assembly low.storage.address byte offset exceeds u32");
+  }
+
+  const loom_low_allocation_assignment_t* assignment =
+      loom_amdgpu_map_assignment(context, loom_low_storage_address_result(op));
+  if (assignment->descriptor_reg_class_id != LOOM_AMDGPU_REG_CLASS_ID_VGPR ||
+      assignment->location_count != 1) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU assembly low.storage.address result must "
+                            "be one VGPR");
+  }
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "v_mov_b32 "));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_assignment(context, assignment));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  return iree_string_builder_append_format(
+      context->builder, "%" PRIu32,
+      (uint32_t)(reservation.byte_offset + offset));
+}
+
 static iree_status_t loom_amdgpu_append_matrix_packet(
     const loom_native_assembly_packet_context_t* context) {
   const loom_op_t* op = context->packet->node->op;
@@ -1386,6 +1431,14 @@ static const loom_native_assembly_structural_packet_callback_t
             .append_packet =
                 {
                     .fn = loom_amdgpu_append_concat_packet,
+                    .user_data = NULL,
+                },
+        },
+        {
+            .op_kind = LOOM_OP_LOW_STORAGE_ADDRESS,
+            .append_packet =
+                {
+                    .fn = loom_amdgpu_append_storage_address_packet,
                     .user_data = NULL,
                 },
         },

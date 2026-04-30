@@ -485,9 +485,9 @@ iree_status_t loom_low_lower_redirect_empty_branch_dest(
     loom_block_t* low_dest);
 
 // Creates a module-local symbol derived from the emitted low function symbol.
-// The result is suitable for target-owned function records such as low.slot
-// declarations. |suffix| is appended to the low function name; |index| is then
-// appended in decimal form when |append_index| is true.
+// The result is suitable for target-owned function artifacts. |suffix| is
+// appended to the low function name; |index| is then appended in decimal form
+// when |append_index| is true.
 iree_status_t loom_low_lower_create_function_symbol(
     loom_low_lower_context_t* context, iree_string_view_t suffix,
     bool append_index, uint32_t index, loom_symbol_ref_t* out_symbol_ref);

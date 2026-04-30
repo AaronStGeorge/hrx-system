@@ -56,6 +56,7 @@ from loom.dsl import (
     ISOLATED_FROM_ABOVE,
     PURE,
     REGISTER,
+    STORAGE,
     SYMBOL_DEFINE,
     TERMINATOR,
     UNKNOWN_EFFECTS,
@@ -172,17 +173,6 @@ LowCodeImportKind = EnumDef(
         EnumCase("object", 4, doc="Imported implementation is a linked object-file symbol."),
     ],
     doc="External code source kind for an imported low function declaration.",
-)
-
-LowSlotSpace = EnumDef(
-    "LowSlotSpace",
-    [
-        EnumCase("stack", 1, doc="CPU stack-frame storage."),
-        EnumCase("scratch", 2, doc="GPU per-lane scratch storage."),
-        EnumCase("private", 3, doc="Target-private per-invocation storage."),
-        EnumCase("lds", 4, doc="GPU local data share or workgroup storage."),
-    ],
-    doc="Storage space represented by a low slot record.",
 )
 
 # ============================================================================
@@ -860,58 +850,44 @@ low_live_in = Op(
 )
 
 # ============================================================================
-# low.slot — explicit frame/storage slot record
+# low.storage.reserve — reserve function-local byte storage
 # ============================================================================
 
-low_slot = Op(
-    "low.slot",
+low_storage_reserve = Op(
+    "low.storage.reserve",
     group=low_ops,
     phase=OpPhase.EXECUTABLE,
-    doc="Explicit function-owned stack, scratch, private, or LDS storage slot.",
-    traits=[SYMBOL_DEFINE],
-    symbol_def=SymbolDefinition(
-        field="symbol",
-        name="low slot",
-        interfaces=["record"],
-        bytecode_kind="LOOM_SYMBOL_RECORD",
-    ),
+    doc="Reserve function-local byte storage.",
     attrs=[
-        AttrDef("symbol", "symbol"),
-        AttrDef(
-            "function",
-            "symbol",
-            symbol_ref=SymbolReference("function", ["func_like"]),
-        ),
-        AttrDef("space", ATTR_TYPE_ENUM, enum_def=LowSlotSpace),
-        AttrDef("size", ATTR_TYPE_I64),
-        AttrDef("align", ATTR_TYPE_I64),
+        AttrDef("byte_length", ATTR_TYPE_I64),
+        AttrDef("byte_alignment", ATTR_TYPE_I64),
     ],
-    verify="loom_low_slot_verify",
+    results=[Result("storage", STORAGE, allocates=True)],
+    verify="loom_low_storage_reserve_verify",
     format=[
-        SymbolRef("symbol"),
         AttrDict(),
+        COLON,
+        ResultType("storage"),
     ],
     examples=[
-        "low.slot @spill0 {function = @kernel, space = scratch, size = 16, align = 4}",
+        "%slot = low.storage.reserve {byte_alignment = 4, byte_length = 16} : low.storage<private>",
     ],
 )
 
 # ============================================================================
-# low.spill — explicit store from a register into a low slot
+# low.spill — explicit store from a register into low storage
 # ============================================================================
 
 low_spill = Op(
     "low.spill",
     group=low_ops,
     phase=OpPhase.EXECUTABLE,
-    doc="Explicit spill store from a register value into a low slot.",
-    operands=[Operand("value", REGISTER)],
+    doc="Explicit spill store from a register value into low storage.",
+    operands=[
+        Operand("value", REGISTER),
+        Operand("storage", STORAGE),
+    ],
     attrs=[
-        AttrDef(
-            "slot",
-            "symbol",
-            symbol_ref=SymbolReference("low slot", ["record"]),
-        ),
         AttrDef("offset", ATTR_TYPE_I64),
     ],
     traits=[UNKNOWN_EFFECTS],
@@ -919,75 +895,73 @@ low_spill = Op(
     format=[
         Ref("value"),
         COMMA,
-        SymbolRef("slot"),
+        Ref("storage"),
         AttrDict(),
         COLON,
         TypeOf("value"),
+        COMMA,
+        TypeOf("storage"),
     ],
     examples=[
-        "low.spill %value, @spill0 {offset = 0} : reg<amdgpu.vgpr x4>",
+        "low.spill %value, %slot {offset = 0} : reg<amdgpu.vgpr x4>, low.storage<private>",
     ],
 )
 
 # ============================================================================
-# low.reload — explicit load from a low slot into a register
+# low.reload — explicit load from low storage into a register
 # ============================================================================
 
 low_reload = Op(
     "low.reload",
     group=low_ops,
     phase=OpPhase.EXECUTABLE,
-    doc="Explicit reload from a low slot into a register value.",
+    doc="Explicit reload from low storage into a register value.",
+    operands=[Operand("storage", STORAGE)],
     attrs=[
-        AttrDef(
-            "slot",
-            "symbol",
-            symbol_ref=SymbolReference("low slot", ["record"]),
-        ),
         AttrDef("offset", ATTR_TYPE_I64),
     ],
     results=[Result("result", REGISTER)],
     traits=[UNKNOWN_EFFECTS],
     verify="loom_low_reload_verify",
     format=[
-        SymbolRef("slot"),
+        Ref("storage"),
         AttrDict(),
         COLON,
+        TypeOf("storage"),
+        ARROW,
         ResultType("result"),
     ],
     examples=[
-        "%reload = low.reload @spill0 {offset = 0} : reg<amdgpu.vgpr x4>",
+        "%reload = low.reload %slot {offset = 0} : low.storage<private> -> reg<amdgpu.vgpr x4>",
     ],
 )
 
 # ============================================================================
-# low.frame_index — symbolic address of a low slot before final layout
+# low.storage.address — materialize a storage address
 # ============================================================================
 
-low_frame_index = Op(
-    "low.frame_index",
+low_storage_address = Op(
+    "low.storage.address",
     group=low_ops,
     phase=OpPhase.EXECUTABLE,
-    doc="Symbolic address calculation for a low slot before target frame layout.",
+    doc="Materialize a target address for function-local storage.",
+    operands=[Operand("storage", STORAGE)],
     attrs=[
-        AttrDef(
-            "slot",
-            "symbol",
-            symbol_ref=SymbolReference("low slot", ["record"]),
-        ),
         AttrDef("offset", ATTR_TYPE_I64),
     ],
     results=[Result("result", REGISTER)],
     traits=[PURE],
-    verify="loom_low_frame_index_verify",
+    verify="loom_low_storage_address_verify",
     format=[
-        SymbolRef("slot"),
+        Ref("storage"),
         AttrDict(),
         COLON,
+        TypeOf("storage"),
+        ARROW,
         ResultType("result"),
     ],
     examples=[
-        "%addr = low.frame_index @spill0 {offset = 0} : reg<x86.gpr>",
+        "%addr = low.storage.address %slot {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>",
     ],
 )
 
@@ -1103,10 +1077,10 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     low_slice,
     low_concat,
     low_invoke,
-    low_slot,
+    low_storage_reserve,
     low_spill,
     low_reload,
-    low_frame_index,
+    low_storage_address,
     low_br,
     low_cond_br,
     low_resource,

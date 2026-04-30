@@ -58,6 +58,8 @@ from loom.ir import (
     ScalarTypeKind,
     ShapedType,
     StaticDim,
+    StorageSpace,
+    StorageType,
     StringTable,
     Symbol,
     SymbolKind,
@@ -323,6 +325,25 @@ class TestBufferType:
     def test_hashable(self) -> None:
         s = {BufferType(), BUFFER_TYPE, BufferType()}
         assert len(s) == 1
+
+
+class TestStorageType:
+    def test_basic(self) -> None:
+        t = StorageType(StorageSpace.WORKGROUP)
+        assert t.space == StorageSpace.WORKGROUP
+        assert t.type_kind == TypeKind.STORAGE
+        assert repr(t) == "low.storage<workgroup>"
+
+    def test_equality(self) -> None:
+        assert StorageType(StorageSpace.WORKGROUP) == StorageType(
+            StorageSpace.WORKGROUP
+        )
+        assert StorageType(StorageSpace.WORKGROUP) != StorageType(StorageSpace.PRIVATE)
+
+    def test_hashable(self) -> None:
+        a = StorageType(StorageSpace.WORKGROUP)
+        b = StorageType(StorageSpace.WORKGROUP)
+        assert len({a, b}) == 1
 
 
 class TestDynamicEncoding:

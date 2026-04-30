@@ -18,6 +18,7 @@ loom_cc_library(
   SRCS
     "assembly.c"
   DEPS
+    ::storage_layout
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
@@ -105,11 +106,11 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    slot_layout
+    storage_layout
   HDRS
-    "slot_layout.h"
+    "storage_layout.h"
   SRCS
-    "slot_layout.c"
+    "storage_layout.c"
   DEPS
     iree::base
     iree::base::internal::arena
@@ -127,7 +128,7 @@ loom_cc_library(
   SRCS
     "encoding.c"
   DEPS
-    ::slot_layout
+    ::storage_layout
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
@@ -156,7 +157,7 @@ loom_cc_library(
     ::descriptor
     ::metadata
     ::preflight
-    ::slot_layout
+    ::storage_layout
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation

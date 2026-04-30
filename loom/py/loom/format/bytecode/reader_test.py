@@ -57,6 +57,8 @@ from loom.ir import (
     ScalarTypeKind,
     ShapedType,
     StaticDim,
+    StorageSpace,
+    StorageType,
     Symbol,
     SymbolKind,
     TiedResult,
@@ -632,6 +634,10 @@ class TestTypeRoundTrips:
         assert isinstance(loaded.encoding, EncodingInstance)
         assert loaded.encoding.name == "strided"
         assert loaded.encoding.params == (("stride", 64),)
+
+    def test_storage_workgroup(self) -> None:
+        t = StorageType(StorageSpace.WORKGROUP)
+        assert self._roundtrip_type(t) == t
 
     def test_view_with_dynamic_layout(self) -> None:
         t = ShapedType(

@@ -14,21 +14,19 @@ low.func.def target(@test_target) @spill(%a: reg<test.i32>, %b: reg<test.i32>, %
 target.profile @test_target preset("test-low")
 
 low.func.def target(@test_target) @spill(%a: reg<test.i32>, %b: reg<test.i32>, %c: reg<test.i32>) -> (reg<test.i32>) {
-  low.spill %a, @spill_spill_0 {offset = 0} : reg<test.i32>
-  %8 = low.reload @spill_spill_0 {offset = 0} : reg<test.i32>
-  %ab = low.op<test.add.i32>(%8, %b) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
-  low.spill %ab, @spill_spill_1 {offset = 0} : reg<test.i32>
+  %spill_spill_storage_0 = low.storage.reserve {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  %spill_spill_storage_1 = low.storage.reserve {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  low.spill %a, %spill_spill_storage_0 {offset = 0} : reg<test.i32>, low.storage<private>
+  %10 = low.reload %spill_spill_storage_0 {offset = 0} : low.storage<private> -> reg<test.i32>
+  %ab = low.op<test.add.i32>(%10, %b) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.spill %ab, %spill_spill_storage_1 {offset = 0} : reg<test.i32>, low.storage<private>
   %bc = low.op<test.add.i32>(%b, %c) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
-  %10 = low.reload @spill_spill_1 {offset = 0} : reg<test.i32>
-  %sum = low.op<test.add.i32>(%10, %bc) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
-  %9 = low.reload @spill_spill_0 {offset = 0} : reg<test.i32>
-  %out = low.op<test.add.i32>(%sum, %9) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  %12 = low.reload %spill_spill_storage_1 {offset = 0} : low.storage<private> -> reg<test.i32>
+  %sum = low.op<test.add.i32>(%12, %bc) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  %11 = low.reload %spill_spill_storage_0 {offset = 0} : low.storage<private> -> reg<test.i32>
+  %out = low.op<test.add.i32>(%sum, %11) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   low.return %out : reg<test.i32>
 }
-
-low.slot @spill_spill_0 {align = 4, function = @spill, size = 4, space = private}
-
-low.slot @spill_spill_1 {align = 4, function = @spill, size = 4, space = private}
 
 // ====
 
@@ -36,9 +34,9 @@ low.slot @spill_spill_1 {align = 4, function = @spill, size = 4, space = private
 
 target.profile @test_target preset("test-low")
 
-// WARNING@+1: BACKEND/009 "test_target" "value 'a'" "test.i32" "spill_spill_0"
+// WARNING@+1: BACKEND/009 "test_target" "value 'a'" "test.i32" "spill_spill_storage_0"
 low.func.def target(@test_target) @spill(%a: reg<test.i32>, %b: reg<test.i32>, %c: reg<test.i32>) -> (reg<test.i32>) {
-  // WARNING@+1: BACKEND/009 "test_target" "value 'ab'" "test.i32" "spill_spill_1"
+  // WARNING@+1: BACKEND/009 "test_target" "value 'ab'" "test.i32" "spill_spill_storage_1"
   %ab = low.op<test.add.i32>(%a, %b) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   %bc = low.op<test.add.i32>(%b, %c) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   %sum = low.op<test.add.i32>(%ab, %bc) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
@@ -63,13 +61,12 @@ low.func.def target(@test_target) @phys(%lhs: reg<test.phys>, %rhs: reg<test.phy
 target.profile @test_target preset("test-low")
 
 low.func.def target(@test_target) @phys(%lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys>) {
-  low.spill %rhs, @phys_spill_0 {offset = 0} : reg<test.phys>
-  %4 = low.reload @phys_spill_0 {offset = 0} : reg<test.phys>
-  %sum = low.op<test.add.phys>(%lhs, %4) : (reg<test.phys>, reg<test.phys>) -> reg<test.phys>
+  %phys_spill_storage_0 = low.storage.reserve {byte_alignment = 64, byte_length = 64} : low.storage<stack>
+  low.spill %rhs, %phys_spill_storage_0 {offset = 0} : reg<test.phys>, low.storage<stack>
+  %5 = low.reload %phys_spill_storage_0 {offset = 0} : low.storage<stack> -> reg<test.phys>
+  %sum = low.op<test.add.phys>(%lhs, %5) : (reg<test.phys>, reg<test.phys>) -> reg<test.phys>
   low.return %sum : reg<test.phys>
 }
-
-low.slot @phys_spill_0 {align = 64, function = @phys, size = 64, space = stack}
 
 // ====
 
@@ -77,7 +74,7 @@ low.slot @phys_spill_0 {align = 64, function = @phys, size = 64, space = stack}
 
 target.profile @test_target preset("test-low")
 
-// WARNING@+1: BACKEND/009 "test_target" "value 'rhs'" "test.phys" "phys_spill_0"
+// WARNING@+1: BACKEND/009 "test_target" "value 'rhs'" "test.phys" "phys_spill_storage_0"
 low.func.def target(@test_target) @phys(%lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys>) {
   %sum = low.op<test.add.phys>(%lhs, %rhs) : (reg<test.phys>, reg<test.phys>) -> reg<test.phys>
   low.return %sum : reg<test.phys>

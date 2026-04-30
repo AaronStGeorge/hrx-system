@@ -17,6 +17,7 @@
 //   Buffer types:    buffer               (opaque storage identity)
 //   View types:      view<[%M]xf32, %layout> (typed buffer projection)
 //   Group types:     group<scope>         (barrier scoping)
+//   Storage types:   low.storage<workgroup> (function-local byte storage)
 //   Function types:  (f32, i32) -> (f64)  (callable signatures)
 //
 // Shape dimensions are either static integers or dynamic SSA value
@@ -94,7 +95,7 @@
 // chases. Values store types by value, while each module also interns
 // canonical type entries for deduplication.
 //
-//   bytes 0-3:  packed header (kind, element_type/role, rank, flags)
+//   bytes 0-3:  packed header (kind, element_type/role/space, rank, flags)
 //   bytes 4-5:  encoding_id
 //   bytes 6-7:  encoding_flags
 //   bytes 8-23: dims (inline for rank <= 2, overflow pointer otherwise)
@@ -245,6 +246,7 @@ typedef enum loom_type_kind_e {
   LOOM_TYPE_VIEW = 10,      // view<[%M]xf32, %layout> (buffer projection)
   LOOM_TYPE_BUFFER = 11,    // buffer (opaque storage identity)
   LOOM_TYPE_REGISTER = 12,  // reg<amdgpu.vgpr x4> (target-low registers)
+  LOOM_TYPE_STORAGE = 13,   // low.storage<workgroup> (function-local storage)
   LOOM_TYPE_COUNT_,
 } loom_type_kind_t;
 
@@ -293,6 +295,32 @@ const char* loom_encoding_role_name(loom_encoding_role_t role);
 bool loom_encoding_role_parse(iree_string_view_t text,
                               loom_encoding_role_t* out_role);
 
+// Function-local storage space. Stored in the element_type byte of the type
+// header for LOOM_TYPE_STORAGE.
+typedef enum loom_storage_space_e {
+  // Host stack-frame storage.
+  LOOM_STORAGE_SPACE_STACK = 0,
+  // Per-lane spill/scratch storage.
+  LOOM_STORAGE_SPACE_SCRATCH = 1,
+  // Target-private per-invocation storage.
+  LOOM_STORAGE_SPACE_PRIVATE = 2,
+  // Workgroup-local shared storage.
+  LOOM_STORAGE_SPACE_WORKGROUP = 3,
+  LOOM_STORAGE_SPACE_COUNT_,
+} loom_storage_space_t;
+
+// Returns true if |space| names a real storage space.
+static inline bool loom_storage_space_is_valid(loom_storage_space_t space) {
+  return (uint32_t)space < LOOM_STORAGE_SPACE_COUNT_;
+}
+
+// Returns the short text spelling for a storage space, or NULL if invalid.
+const char* loom_storage_space_name(loom_storage_space_t space);
+
+// Parses the short text spelling for a storage space.
+bool loom_storage_space_parse(iree_string_view_t text,
+                              loom_storage_space_t* out_space);
+
 // Type flags (packed into header bits 20-23).
 enum loom_type_flags_e {
   // Shape dims are stored inline in dims[0..1].
@@ -331,7 +359,8 @@ typedef struct loom_type_t {
   // Packed header:
   //   [0:7]   loom_type_kind_t
   //   [8:15]  loom_scalar_type_t (shaped types), loom_group_scope_t (group),
-  //           or loom_encoding_role_t (encoding)
+  //           loom_encoding_role_t (encoding), or loom_storage_space_t
+  //           (storage)
   //   [16:19] rank (0-LOOM_TYPE_MAX_RANK for shaped types, 0 otherwise)
   //   [20:23] loom_type_flags_e (inline_dims, all_static)
   //   [24:31] reserved
@@ -410,6 +439,12 @@ static inline loom_group_scope_t loom_type_group_scope(loom_type_t type) {
 // kind == LOOM_TYPE_ENCODING.
 static inline loom_encoding_role_t loom_type_encoding_role(loom_type_t type) {
   return (loom_encoding_role_t)((type.header >> 8) & 0xFF);
+}
+
+// Returns the storage space for a storage type. Only valid when
+// kind == LOOM_TYPE_STORAGE.
+static inline loom_storage_space_t loom_type_storage_space(loom_type_t type) {
+  return (loom_storage_space_t)((type.header >> 8) & 0xFF);
 }
 
 static inline uint32_t loom_type_make_header(loom_type_kind_t kind,
@@ -523,6 +558,10 @@ static inline bool loom_type_is_buffer(loom_type_t type) {
 
 static inline bool loom_type_is_register(loom_type_t type) {
   return loom_type_kind(type) == LOOM_TYPE_REGISTER;
+}
+
+static inline bool loom_type_is_storage(loom_type_t type) {
+  return loom_type_kind(type) == LOOM_TYPE_STORAGE;
 }
 
 static inline bool loom_type_is_function(loom_type_t type) {
@@ -723,6 +762,16 @@ static inline loom_type_t loom_type_register(loom_string_id_t reg_class_id,
       LOOM_TYPE_FLAG_INLINE_DIMS | LOOM_TYPE_FLAG_ALL_STATIC);
   type.dims[0] = reg_class_id;
   type.dims[1] = unit_count;
+  return type;
+}
+
+// Creates a function-local storage handle type.
+static inline loom_type_t loom_type_storage(loom_storage_space_t space) {
+  IREE_ASSERT(loom_storage_space_is_valid(space), "invalid storage space");
+  loom_type_t type = {0};
+  type.header = loom_type_make_header(
+      LOOM_TYPE_STORAGE, (loom_scalar_type_t)space, 0,
+      LOOM_TYPE_FLAG_INLINE_DIMS | LOOM_TYPE_FLAG_ALL_STATIC);
   return type;
 }
 

@@ -81,6 +81,7 @@ __all__ = [
     "ENCODING_TRANSFORM",
     "POOL",
     "REGISTER",
+    "STORAGE",
     "I1",
     # Type constraint helpers.
     "type_constraint_name",
@@ -263,6 +264,7 @@ class TypeConstraint(Enum):
       ENCODING_TRANSFORM → EncodingType with role=transform
       POOL     → PoolType
       REGISTER → RegisterType
+      STORAGE  → StorageType
 
     Element-qualified constraints are shaped-only: tile, tensor, vector,
     and view types can satisfy them, while scalar values continue to use
@@ -304,6 +306,7 @@ class TypeConstraint(Enum):
     ENCODING_TRANSFORM = "encoding<transform>"
     POOL = "pool"
     REGISTER = "register"
+    STORAGE = "storage"
     I1 = "i1"
 
 
@@ -340,6 +343,7 @@ ENCODING_STORAGE = TypeConstraint.ENCODING_STORAGE
 ENCODING_TRANSFORM = TypeConstraint.ENCODING_TRANSFORM
 POOL = TypeConstraint.POOL
 REGISTER = TypeConstraint.REGISTER
+STORAGE = TypeConstraint.STORAGE
 I1 = TypeConstraint.I1
 
 
@@ -1378,10 +1382,19 @@ def RanksMatch(a: str, b: str) -> Constraint:
 def _type_satisfies_field_constraint(
     value_type: Any, constraint: TypeConstraint
 ) -> bool:
-    from loom.ir import RegisterType, ScalarType, ScalarTypeKind, ShapedType, TypeKind
+    from loom.ir import (
+        RegisterType,
+        ScalarType,
+        ScalarTypeKind,
+        ShapedType,
+        StorageType,
+        TypeKind,
+    )
 
     if constraint == REGISTER:
         return isinstance(value_type, RegisterType)
+    if constraint == STORAGE:
+        return isinstance(value_type, StorageType)
 
     if constraint == RANK_ONE_VECTOR:
         return (

@@ -31,10 +31,10 @@ enum {
   LOOM_OP_LOW_SLICE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 8),
   LOOM_OP_LOW_CONCAT = LOOM_OP_KIND(LOOM_DIALECT_LOW, 9),
   LOOM_OP_LOW_INVOKE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 10),
-  LOOM_OP_LOW_SLOT = LOOM_OP_KIND(LOOM_DIALECT_LOW, 11),
+  LOOM_OP_LOW_STORAGE_RESERVE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 11),
   LOOM_OP_LOW_SPILL = LOOM_OP_KIND(LOOM_DIALECT_LOW, 12),
   LOOM_OP_LOW_RELOAD = LOOM_OP_KIND(LOOM_DIALECT_LOW, 13),
-  LOOM_OP_LOW_FRAME_INDEX = LOOM_OP_KIND(LOOM_DIALECT_LOW, 14),
+  LOOM_OP_LOW_STORAGE_ADDRESS = LOOM_OP_KIND(LOOM_DIALECT_LOW, 14),
   LOOM_OP_LOW_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 15),
   LOOM_OP_LOW_COND_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 16),
   LOOM_OP_LOW_RESOURCE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 17),
@@ -87,15 +87,6 @@ typedef enum loom_low_func_decl_import_kind_e {
   LOOM_LOW_FUNC_DECL_IMPORT_KIND_OBJECT = 4,
   LOOM_LOW_FUNC_DECL_IMPORT_KIND_COUNT_ = 5,
 } loom_low_func_decl_import_kind_t;
-
-// Storage space represented by a low slot record.
-typedef enum loom_low_slot_space_e {
-  LOOM_LOW_SLOT_SPACE_STACK = 1,
-  LOOM_LOW_SLOT_SPACE_SCRATCH = 2,
-  LOOM_LOW_SLOT_SPACE_PRIVATE = 3,
-  LOOM_LOW_SLOT_SPACE_LDS = 4,
-  LOOM_LOW_SLOT_SPACE_COUNT_ = 5,
-} loom_low_slot_space_t;
 
 // Target-provided ABI resource imported into a low function body.
 typedef enum loom_low_resource_import_kind_e {
@@ -452,37 +443,33 @@ iree_status_t loom_low_invoke_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_LOW_SLOT: Explicit function-owned stack, scratch, private, or LDS storage slot.
-// low.slot @spill0 {function = @kernel, space = scratch, size = 16, align = 4}
-LOOM_DEFINE_ISA(loom_low_slot_isa, LOOM_OP_LOW_SLOT)
-LOOM_DEFINE_ATTR_SYMBOL(loom_low_slot_symbol, 0)
-LOOM_DEFINE_ATTR_SYMBOL(loom_low_slot_function, 1)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_slot_space, 2, loom_low_slot_space_t)
-LOOM_DEFINE_ATTR_I64(loom_low_slot_size, 3)
-LOOM_DEFINE_ATTR_I64(loom_low_slot_align, 4)
-iree_status_t loom_low_slot_build(
+// LOOM_OP_LOW_STORAGE_RESERVE: Reserve function-local byte storage.
+// %slot = low.storage.reserve {byte_alignment = 4, byte_length = 16} : low.storage<private>
+LOOM_DEFINE_ISA(loom_low_storage_reserve_isa, LOOM_OP_LOW_STORAGE_RESERVE)
+LOOM_DEFINE_RESULT(loom_low_storage_reserve_storage, 0)
+LOOM_DEFINE_ATTR_I64(loom_low_storage_reserve_byte_length, 0)
+LOOM_DEFINE_ATTR_I64(loom_low_storage_reserve_byte_alignment, 1)
+iree_status_t loom_low_storage_reserve_build(
     loom_builder_t* builder,
-    loom_symbol_ref_t symbol,
-    loom_symbol_ref_t function,
-    loom_low_slot_space_t space,
-    int64_t size,
-    int64_t align,
+    int64_t byte_length,
+    int64_t byte_alignment,
+    loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-iree_status_t loom_low_slot_verify(
+iree_status_t loom_low_storage_reserve_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_LOW_SPILL: Explicit spill store from a register value into a low slot.
-// low.spill %value, @spill0 {offset = 0} : reg<amdgpu.vgpr x4>
+// LOOM_OP_LOW_SPILL: Explicit spill store from a register value into low storage.
+// low.spill %value, %slot {offset = 0} : reg<amdgpu.vgpr x4>, low.storage<private>
 LOOM_DEFINE_ISA(loom_low_spill_isa, LOOM_OP_LOW_SPILL)
 LOOM_DEFINE_OPERAND(loom_low_spill_value, 0)
-LOOM_DEFINE_ATTR_SYMBOL(loom_low_spill_slot, 0)
-LOOM_DEFINE_ATTR_I64(loom_low_spill_offset, 1)
+LOOM_DEFINE_OPERAND(loom_low_spill_storage, 1)
+LOOM_DEFINE_ATTR_I64(loom_low_spill_offset, 0)
 iree_status_t loom_low_spill_build(
     loom_builder_t* builder,
     loom_value_id_t value,
-    loom_symbol_ref_t slot,
+    loom_value_id_t storage,
     int64_t offset,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -490,15 +477,15 @@ iree_status_t loom_low_spill_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_LOW_RELOAD: Explicit reload from a low slot into a register value.
-// %reload = low.reload @spill0 {offset = 0} : reg<amdgpu.vgpr x4>
+// LOOM_OP_LOW_RELOAD: Explicit reload from low storage into a register value.
+// %reload = low.reload %slot {offset = 0} : low.storage<private> -> reg<amdgpu.vgpr x4>
 LOOM_DEFINE_ISA(loom_low_reload_isa, LOOM_OP_LOW_RELOAD)
+LOOM_DEFINE_OPERAND(loom_low_reload_storage, 0)
 LOOM_DEFINE_RESULT(loom_low_reload_result, 0)
-LOOM_DEFINE_ATTR_SYMBOL(loom_low_reload_slot, 0)
-LOOM_DEFINE_ATTR_I64(loom_low_reload_offset, 1)
+LOOM_DEFINE_ATTR_I64(loom_low_reload_offset, 0)
 iree_status_t loom_low_reload_build(
     loom_builder_t* builder,
-    loom_symbol_ref_t slot,
+    loom_may_consume loom_value_id_t storage,
     int64_t offset,
     loom_type_t result_type,
     loom_location_id_t location,
@@ -507,20 +494,20 @@ iree_status_t loom_low_reload_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_LOW_FRAME_INDEX: Symbolic address calculation for a low slot before target frame layout.
-// %addr = low.frame_index @spill0 {offset = 0} : reg<x86.gpr>
-LOOM_DEFINE_ISA(loom_low_frame_index_isa, LOOM_OP_LOW_FRAME_INDEX)
-LOOM_DEFINE_RESULT(loom_low_frame_index_result, 0)
-LOOM_DEFINE_ATTR_SYMBOL(loom_low_frame_index_slot, 0)
-LOOM_DEFINE_ATTR_I64(loom_low_frame_index_offset, 1)
-iree_status_t loom_low_frame_index_build(
+// LOOM_OP_LOW_STORAGE_ADDRESS: Materialize a target address for function-local storage.
+// %addr = low.storage.address %slot {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+LOOM_DEFINE_ISA(loom_low_storage_address_isa, LOOM_OP_LOW_STORAGE_ADDRESS)
+LOOM_DEFINE_OPERAND(loom_low_storage_address_storage, 0)
+LOOM_DEFINE_RESULT(loom_low_storage_address_result, 0)
+LOOM_DEFINE_ATTR_I64(loom_low_storage_address_offset, 0)
+iree_status_t loom_low_storage_address_build(
     loom_builder_t* builder,
-    loom_symbol_ref_t slot,
+    loom_may_consume loom_value_id_t storage,
     int64_t offset,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-iree_status_t loom_low_frame_index_verify(
+iree_status_t loom_low_storage_address_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

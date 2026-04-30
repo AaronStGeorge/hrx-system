@@ -53,6 +53,9 @@ __all__ = [
     "GroupScope",
     "GROUP_SCOPE_BY_NAME",
     "GroupType",
+    "StorageSpace",
+    "STORAGE_SPACE_BY_NAME",
+    "StorageType",
     "PoolType",
     "FunctionType",
     "NoneType",
@@ -236,7 +239,8 @@ class TypeKind(IntEnum):
     VIEW = 10
     BUFFER = 11
     REGISTER = 12
-    PLACEHOLDER = 13
+    STORAGE = 13
+    PLACEHOLDER = 14
 
 
 # ============================================================================
@@ -447,6 +451,49 @@ class GroupType:
         return f"group<{self.scope.text}>"
 
 
+class StorageSpace(IntEnum):
+    """Function-local byte storage space. Must match loom_storage_space_t."""
+
+    STACK = 0
+    SCRATCH = 1
+    PRIVATE = 2
+    WORKGROUP = 3
+
+    @property
+    def text(self) -> str:
+        """The canonical text representation for printing."""
+        return _STORAGE_SPACE_NAMES[self]
+
+
+_STORAGE_SPACE_NAMES: dict[StorageSpace, str] = {
+    StorageSpace.STACK: "stack",
+    StorageSpace.SCRATCH: "scratch",
+    StorageSpace.PRIVATE: "private",
+    StorageSpace.WORKGROUP: "workgroup",
+}
+
+STORAGE_SPACE_BY_NAME: dict[str, StorageSpace] = {
+    name: space for space, name in _STORAGE_SPACE_NAMES.items()
+}
+
+
+@dataclass(frozen=True, slots=True)
+class StorageType:
+    """A function-local byte storage handle: low.storage<space>."""
+
+    space: StorageSpace
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "space", StorageSpace(self.space))
+
+    @property
+    def type_kind(self) -> TypeKind:
+        return TypeKind.STORAGE
+
+    def __repr__(self) -> str:
+        return f"low.storage<{self.space.text}>"
+
+
 @dataclass(frozen=True, slots=True)
 class FunctionType:
     """A function type: (arg_types) -> (result_types)."""
@@ -641,6 +688,7 @@ type Type = (
     | ShapedType
     | BufferType
     | GroupType
+    | StorageType
     | FunctionType
     | RegisterType
     | DialectType

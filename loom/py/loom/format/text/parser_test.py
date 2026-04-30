@@ -57,6 +57,8 @@ from loom.ir import (
     ScalarTypeKind,
     ShapedType,
     StaticDim,
+    StorageSpace,
+    StorageType,
     SymbolName,
     Type,
     TypeKind,
@@ -427,6 +429,25 @@ class TestParseBufferType:
     def test_basic(self) -> None:
         result = _parse_type("buffer")
         assert result is BUFFER_TYPE
+
+
+# ============================================================================
+# Storage type
+# ============================================================================
+
+
+class TestParseStorageType:
+    def test_workgroup(self) -> None:
+        assert _parse_type("low.storage<workgroup>") == StorageType(
+            StorageSpace.WORKGROUP
+        )
+
+    def test_private(self) -> None:
+        assert _parse_type("low.storage<private>") == StorageType(StorageSpace.PRIVATE)
+
+    def test_unknown_space_fails(self) -> None:
+        with pytest.raises(ParseError, match="storage space"):
+            _parse_type("low.storage<lds>")
 
 
 # ============================================================================

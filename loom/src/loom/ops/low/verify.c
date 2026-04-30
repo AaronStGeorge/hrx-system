@@ -622,78 +622,85 @@ static const loom_op_t* loom_low_find_enclosing_low_executable_def(
   return NULL;
 }
 
-static iree_status_t loom_low_verify_slot_function(
+static iree_status_t loom_low_verify_nested_under_low_entry(
     const loom_module_t* module, const loom_op_t* op,
-    loom_symbol_ref_t function_ref, uint16_t attr_index,
-    iree_diagnostic_emitter_t emitter) {
-  const loom_symbol_t* symbol =
-      loom_low_lookup_defined_symbol(module, function_ref);
-  if (!symbol) {
-    return iree_ok_status();
-  }
-  if (loom_low_executable_def_isa(symbol->defining_op)) {
-    return iree_ok_status();
-  }
-  return loom_low_emit_symbol_kind_mismatch(
-      module, op, function_ref, attr_index, symbol,
-      IREE_SV("low function or low kernel definition"), emitter);
-}
-
-static iree_status_t loom_low_load_slot(const loom_module_t* module,
-                                        const loom_op_t* op,
-                                        loom_symbol_ref_t slot_ref,
-                                        uint16_t slot_attr_index,
-                                        iree_diagnostic_emitter_t emitter,
-                                        const loom_op_t** out_slot_op) {
-  *out_slot_op = NULL;
-  const loom_symbol_t* slot_symbol =
-      loom_low_lookup_defined_symbol(module, slot_ref);
-  if (!slot_symbol) {
-    return iree_ok_status();
-  }
-  if (!loom_low_slot_isa(slot_symbol->defining_op)) {
-    return loom_low_emit_symbol_kind_mismatch(module, op, slot_ref,
-                                              slot_attr_index, slot_symbol,
-                                              IREE_SV("low slot"), emitter);
-  }
-  *out_slot_op = slot_symbol->defining_op;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_verify_slot_use(
-    const loom_module_t* module, const loom_op_t* op,
-    loom_symbol_ref_t slot_ref, uint16_t slot_attr_index, int64_t offset,
-    uint16_t offset_attr_index, iree_diagnostic_emitter_t emitter) {
-  const loom_op_t* slot_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_load_slot(module, op, slot_ref, slot_attr_index,
-                                          emitter, &slot_op));
-  if (!slot_op) {
-    return iree_ok_status();
-  }
-
+    iree_string_view_t subject_name, iree_string_view_t reason,
+    iree_diagnostic_emitter_t emitter, const loom_op_t** out_enclosing_entry) {
   const loom_op_t* enclosing_func =
       loom_low_find_enclosing_low_executable_def(module, op);
   if (!enclosing_func) {
     return loom_low_emit_structural_storage_error(
-        module, op, loom_diagnostic_field_ref_none(),
-        IREE_SV("enclosing function"),
-        IREE_SV("slot traffic must be nested under a low function or low "
-                "kernel body"),
+        module, op, loom_diagnostic_field_ref_none(), subject_name, reason,
         NULL, 0, emitter);
   }
+  if (out_enclosing_entry) *out_enclosing_entry = enclosing_func;
+  return iree_ok_status();
+}
 
-  if (!loom_low_symbol_ref_equal(loom_low_slot_function(slot_op),
-                                 loom_low_function_symbol(enclosing_func))) {
+static iree_status_t loom_low_verify_storage_type(
+    const loom_module_t* module, const loom_op_t* op, loom_value_id_t value_id,
+    loom_diagnostic_field_kind_t field_kind, uint16_t field_index,
+    iree_string_view_t field_name, iree_diagnostic_emitter_t emitter) {
+  const loom_type_t storage_type = loom_module_value_type(module, value_id);
+  if (loom_type_is_storage(storage_type) &&
+      loom_storage_space_is_valid(loom_type_storage_space(storage_type))) {
+    return iree_ok_status();
+  }
+  return loom_low_emit_structural_storage_error(
+      module, op, loom_diagnostic_field_ref(field_kind, field_index),
+      field_name, IREE_SV("value must have a valid low.storage type"), NULL, 0,
+      emitter);
+}
+
+static const loom_op_t* loom_low_storage_defining_reserve(
+    const loom_module_t* module, loom_value_id_t storage_id) {
+  const loom_value_t* storage_value = loom_module_value(module, storage_id);
+  if (loom_value_is_block_arg(storage_value)) return NULL;
+  const loom_op_t* defining_op = loom_value_def_op(storage_value);
+  if (!defining_op || !loom_low_storage_reserve_isa(defining_op)) return NULL;
+  return defining_op;
+}
+
+static iree_status_t loom_low_verify_storage_use(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_value_id_t storage_id, uint16_t storage_operand_index, int64_t offset,
+    uint16_t offset_attr_index, iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(loom_low_verify_storage_type(
+      module, op, storage_id, LOOM_DIAGNOSTIC_FIELD_OPERAND,
+      storage_operand_index, IREE_SV("storage"), emitter));
+
+  const loom_op_t* enclosing_func = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_verify_nested_under_low_entry(
+      module, op, IREE_SV("enclosing function"),
+      IREE_SV("storage traffic must be nested under a low function or low "
+              "kernel body"),
+      emitter, &enclosing_func));
+
+  const loom_op_t* reserve_op =
+      loom_low_storage_defining_reserve(module, storage_id);
+  if (!reserve_op) {
+    return loom_low_emit_structural_storage_error(
+        module, op,
+        loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND,
+                                  storage_operand_index),
+        IREE_SV("storage"),
+        IREE_SV("storage traffic must use a low.storage.reserve result"), NULL,
+        0, emitter);
+  }
+
+  const loom_op_t* reserve_func =
+      loom_low_find_enclosing_low_executable_def(module, reserve_op);
+  if (reserve_func != enclosing_func) {
     loom_diagnostic_related_op_t related[] = {{
-        .label = IREE_SV("slot defined here"),
-        .op = slot_op,
+        .label = IREE_SV("storage reserved here"),
+        .op = reserve_op,
     }};
     return loom_low_emit_structural_storage_error(
         module, op,
-        loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                  slot_attr_index),
-        IREE_SV("slot"),
-        IREE_SV("slot owner must match the enclosing low entry"), related,
+        loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND,
+                                  storage_operand_index),
+        IREE_SV("storage"),
+        IREE_SV("storage owner must match the enclosing low entry"), related,
         IREE_ARRAYSIZE(related), emitter);
   }
 
@@ -703,18 +710,18 @@ static iree_status_t loom_low_verify_slot_use(
         IREE_SV("offset must be non-negative"), emitter);
   }
 
-  int64_t slot_size = loom_low_slot_size(slot_op);
-  if (slot_size > 0 && offset >= slot_size) {
+  const int64_t byte_length = loom_low_storage_reserve_byte_length(reserve_op);
+  if (byte_length > 0 && offset >= byte_length) {
     loom_diagnostic_related_op_t related[] = {{
-        .label = IREE_SV("slot defined here"),
-        .op = slot_op,
+        .label = IREE_SV("storage reserved here"),
+        .op = reserve_op,
     }};
     return loom_low_emit_structural_storage_error(
         module, op,
         loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
                                   offset_attr_index),
         IREE_SV("offset"),
-        IREE_SV("offset must address a byte inside the referenced slot"),
+        IREE_SV("offset must address a byte inside the referenced storage"),
         related, IREE_ARRAYSIZE(related), emitter);
   }
 
@@ -1291,31 +1298,32 @@ iree_status_t loom_low_func_decl_verify(const loom_module_t* module,
   return loom_low_verify_decl_code_import(module, op, emitter);
 }
 
-iree_status_t loom_low_slot_verify(const loom_module_t* module,
-                                   const loom_op_t* op,
-                                   iree_diagnostic_emitter_t emitter) {
-  IREE_RETURN_IF_ERROR(loom_low_verify_slot_function(
-      module, op, loom_low_slot_function(op), loom_low_slot_function_ATTR_INDEX,
-      emitter));
+iree_status_t loom_low_storage_reserve_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(loom_low_verify_nested_under_low_entry(
+      module, op, IREE_SV("enclosing function"),
+      IREE_SV("storage reservations must be nested under a low function or "
+              "low kernel body"),
+      emitter, NULL));
 
-  uint8_t space = loom_low_slot_space(op);
-  if (space < LOOM_LOW_SLOT_SPACE_STACK ||
-      space >= LOOM_LOW_SLOT_SPACE_COUNT_) {
+  IREE_RETURN_IF_ERROR(loom_low_verify_storage_type(
+      module, op, loom_low_storage_reserve_storage(op),
+      LOOM_DIAGNOSTIC_FIELD_RESULT, 0, IREE_SV("storage"), emitter));
+
+  if (loom_low_storage_reserve_byte_length(op) <= 0) {
     IREE_RETURN_IF_ERROR(loom_low_emit_structural_storage_attr_error(
-        module, op, loom_low_slot_space_ATTR_INDEX, IREE_SV("space"),
-        IREE_SV("space must name a supported low slot space"), emitter));
+        module, op, loom_low_storage_reserve_byte_length_ATTR_INDEX,
+        IREE_SV("byte_length"), IREE_SV("byte_length must be positive"),
+        emitter));
   }
 
-  if (loom_low_slot_size(op) <= 0) {
+  if (!loom_low_is_power_of_two_i64(
+          loom_low_storage_reserve_byte_alignment(op))) {
     IREE_RETURN_IF_ERROR(loom_low_emit_structural_storage_attr_error(
-        module, op, loom_low_slot_size_ATTR_INDEX, IREE_SV("size"),
-        IREE_SV("size must be positive"), emitter));
-  }
-
-  if (!loom_low_is_power_of_two_i64(loom_low_slot_align(op))) {
-    IREE_RETURN_IF_ERROR(loom_low_emit_structural_storage_attr_error(
-        module, op, loom_low_slot_align_ATTR_INDEX, IREE_SV("align"),
-        IREE_SV("alignment must be a positive power of two"), emitter));
+        module, op, loom_low_storage_reserve_byte_alignment_ATTR_INDEX,
+        IREE_SV("byte_alignment"),
+        IREE_SV("byte_alignment must be a positive power of two"), emitter));
   }
 
   return iree_ok_status();
@@ -1324,26 +1332,26 @@ iree_status_t loom_low_slot_verify(const loom_module_t* module,
 iree_status_t loom_low_spill_verify(const loom_module_t* module,
                                     const loom_op_t* op,
                                     iree_diagnostic_emitter_t emitter) {
-  return loom_low_verify_slot_use(
-      module, op, loom_low_spill_slot(op), loom_low_spill_slot_ATTR_INDEX,
-      loom_low_spill_offset(op), loom_low_spill_offset_ATTR_INDEX, emitter);
+  return loom_low_verify_storage_use(module, op, loom_low_spill_storage(op), 1,
+                                     loom_low_spill_offset(op),
+                                     loom_low_spill_offset_ATTR_INDEX, emitter);
 }
 
 iree_status_t loom_low_reload_verify(const loom_module_t* module,
                                      const loom_op_t* op,
                                      iree_diagnostic_emitter_t emitter) {
-  return loom_low_verify_slot_use(
-      module, op, loom_low_reload_slot(op), loom_low_reload_slot_ATTR_INDEX,
-      loom_low_reload_offset(op), loom_low_reload_offset_ATTR_INDEX, emitter);
+  return loom_low_verify_storage_use(
+      module, op, loom_low_reload_storage(op), 0, loom_low_reload_offset(op),
+      loom_low_reload_offset_ATTR_INDEX, emitter);
 }
 
-iree_status_t loom_low_frame_index_verify(const loom_module_t* module,
-                                          const loom_op_t* op,
-                                          iree_diagnostic_emitter_t emitter) {
-  return loom_low_verify_slot_use(
-      module, op, loom_low_frame_index_slot(op),
-      loom_low_frame_index_slot_ATTR_INDEX, loom_low_frame_index_offset(op),
-      loom_low_frame_index_offset_ATTR_INDEX, emitter);
+iree_status_t loom_low_storage_address_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  return loom_low_verify_storage_use(
+      module, op, loom_low_storage_address_storage(op), 0,
+      loom_low_storage_address_offset(op),
+      loom_low_storage_address_offset_ATTR_INDEX, emitter);
 }
 
 iree_status_t loom_low_resource_verify(const loom_module_t* module,

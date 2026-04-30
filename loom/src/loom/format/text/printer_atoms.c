@@ -376,6 +376,20 @@ iree_status_t loom_text_print_type(loom_type_t type,
       }
       return loom_output_stream_write_cstring(stream, ">");
     }
+    case LOOM_TYPE_STORAGE: {
+      const char* space_name =
+          loom_storage_space_name(loom_type_storage_space(type));
+      if (!space_name) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "unknown storage space %d",
+                                (int)loom_type_storage_space(type));
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, "low.storage<"));
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, space_name));
+      return loom_output_stream_write_cstring(stream, ">");
+    }
     case LOOM_TYPE_ENCODING:
       return loom_print_encoding_type(stream, type);
     case LOOM_TYPE_BUFFER:

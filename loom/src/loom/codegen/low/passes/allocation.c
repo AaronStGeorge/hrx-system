@@ -43,13 +43,14 @@ static const loom_pass_option_def_t kLowMaterializeAllocationOptions[] = {
 };
 
 enum {
-  LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_SLOTS = 0,
+  LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_STORAGE = 0,
   LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_SPILLS = 1,
   LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_RELOADS = 2,
 };
 
 static const loom_pass_statistic_def_t kLowMaterializeAllocationStatistics[] = {
-    {IREE_SVL("slots"), IREE_SVL("Number of low.slot records inserted.")},
+    {IREE_SVL("storage"),
+     IREE_SVL("Number of low.storage.reserve ops inserted.")},
     {IREE_SVL("spills"), IREE_SVL("Number of low.spill stores inserted.")},
     {IREE_SVL("reloads"), IREE_SVL("Number of low.reload ops inserted.")},
 };
@@ -289,13 +290,13 @@ iree_status_t loom_low_materialize_allocation_run(loom_pass_t* pass,
   IREE_RETURN_IF_ERROR(loom_low_allocation_materialize_spills(
       module, &table, &materialization_options, pass->arena, &result));
 
-  loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_SLOTS,
-                          result.slot_count);
+  loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_STORAGE,
+                          result.storage_count);
   loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_SPILLS,
                           result.spill_count);
   loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_RELOADS,
                           result.reload_count);
-  if (result.slot_count > 0 || result.spill_count > 0 ||
+  if (result.storage_count > 0 || result.spill_count > 0 ||
       result.reload_count > 0) {
     loom_pass_mark_changed(pass);
   }

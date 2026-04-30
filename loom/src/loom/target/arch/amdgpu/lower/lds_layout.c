@@ -4,13 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// AMDGPU source LDS slot layout.
+// AMDGPU source workgroup-storage layout.
 //
-// Source-to-low lowering must know the final LDS base for packets that encode
-// an LDS destination directly, such as global_load_lds. This layout mirrors the
-// low.slot declaration order emitted by lower_buffer.c: source block order,
-// then source op order, with each workgroup buffer.alloca packed into the LDS
-// segment after applying its declared alignment.
+// Source-to-low lowering must know the final workgroup-storage base for packets
+// that encode a workgroup-storage destination directly, such as
+// global_load_lds. This layout mirrors the low.storage.reserve order emitted by
+// lower_buffer.c: source block order, then source op order, with each
+// workgroup buffer.alloca packed into the workgroup segment after applying its
+// declared alignment.
 
 #include <stdint.h>
 

@@ -3239,11 +3239,11 @@ static const loom_error_def_t loom_err_backend_008 = {
 };
 
 static const loom_error_param_def_t loom_err_backend_009_params[] = {
-    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
-    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
-    {"value_name", LOOM_PARAM_STRING}, {"value_class", LOOM_PARAM_STRING},
-    {"slot_name", LOOM_PARAM_STRING},  {"spill_bytes", LOOM_PARAM_U32},
-    {"store_count", LOOM_PARAM_U32},   {"reload_count", LOOM_PARAM_U32},
+    {"target_key", LOOM_PARAM_STRING},   {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},   {"function_name", LOOM_PARAM_STRING},
+    {"value_name", LOOM_PARAM_STRING},   {"value_class", LOOM_PARAM_STRING},
+    {"storage_name", LOOM_PARAM_STRING}, {"spill_bytes", LOOM_PARAM_U32},
+    {"store_count", LOOM_PARAM_U32},     {"reload_count", LOOM_PARAM_U32},
 };
 static const loom_error_def_t loom_err_backend_009 = {
     .error_id = "ERR_BACKEND_009",
@@ -3253,7 +3253,7 @@ static const loom_error_def_t loom_err_backend_009 = {
     .summary = "Spill and reload operations inserted.",
     .message_template =
         "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "inserted spill slot '{slot_name}' for {value_class} value "
+        "inserted spill storage '{storage_name}' for {value_class} value "
         "'{value_name}' in '@{function_name}' using {spill_bytes} byte(s), "
         "{store_count} store(s), and {reload_count} reload(s)",
     .fix_hint_template = NULL,

@@ -407,6 +407,8 @@ typedef enum loom_type_constraint_e {
   LOOM_TYPE_CONSTRAINT_ENCODING_STORAGE,
   // Encoding type with numeric-transform role.
   LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM,
+  // Function-local byte storage handle.
+  LOOM_TYPE_CONSTRAINT_STORAGE,
   LOOM_TYPE_CONSTRAINT_COUNT_,
 } loom_type_constraint_t;
 

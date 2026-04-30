@@ -40,6 +40,8 @@ static iree_string_view_t loom_liveness_type_kind_name(
       return IREE_SV("buffer");
     case LOOM_TYPE_REGISTER:
       return IREE_SV("register");
+    case LOOM_TYPE_STORAGE:
+      return IREE_SV("storage");
     case LOOM_TYPE_COUNT_:
       break;
   }

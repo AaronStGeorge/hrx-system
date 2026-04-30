@@ -450,7 +450,7 @@ static iree_status_t loom_parse_low_asm_structural_copy(
       parsed_spans);
 }
 
-static iree_status_t loom_parse_low_asm_structural_frame_index(
+static iree_status_t loom_parse_low_asm_structural_storage_reserve(
     loom_parser_t* parser, const loom_low_asm_result_names_t* result_names,
     loom_token_t start_token, loom_token_t mnemonic_token,
     const iree_string_view_t* comments, iree_host_size_t comment_count,
@@ -462,17 +462,10 @@ static iree_status_t loom_parse_low_asm_structural_frame_index(
     return iree_ok_status();
   }
 
-  loom_token_t slot_token = loom_tokenizer_peek(&parser->tokenizer);
-  loom_attribute_t slot_attr = {0};
-  IREE_RETURN_IF_ERROR(loom_parse_symbol_ref_attr(parser, &slot_attr));
-  if (parser->error_count > errors_before) {
-    return iree_ok_status();
-  }
-
-  loom_named_attr_slice_t offset_attrs = loom_named_attr_slice_empty();
+  loom_named_attr_slice_t attrs = loom_named_attr_slice_empty();
   IREE_RETURN_IF_ERROR(loom_parse_low_asm_structural_attr_dict(
-      parser, LOOM_TEXT_LOW_ASM_STRUCTURAL_FRAME_INDEX, mnemonic_token,
-      &offset_attrs));
+      parser, LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_RESERVE, mnemonic_token,
+      &attrs));
   if (parser->error_count > errors_before) {
     return iree_ok_status();
   }
@@ -483,40 +476,63 @@ static iree_status_t loom_parse_low_asm_structural_frame_index(
     return iree_ok_status();
   }
 
-  loom_named_attr_t* attrs = NULL;
-  const iree_host_size_t attr_count = offset_attrs.count + 1;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      &parser->parser_arena, attr_count, sizeof(*attrs), (void**)&attrs));
-  loom_string_id_t slot_name_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_module_intern_string(
-      parser->module, IREE_SV("slot"), &slot_name_id));
-  attrs[0] = (loom_named_attr_t){
-      .name_id = slot_name_id,
-      .reserved = 0,
-      .value = slot_attr,
-  };
-  for (iree_host_size_t i = 0; i < offset_attrs.count; ++i) {
-    attrs[i + 1] = offset_attrs.entries[i];
+  return loom_parse_low_asm_structural_location_and_build(
+      parser, LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_RESERVE, result_names,
+      start_token, mnemonic_token, comments, comment_count, NULL, 0, attrs,
+      iree_string_view_empty(), 0, result_type, parsed_spans);
+}
+
+static iree_status_t loom_parse_low_asm_structural_storage_address(
+    loom_parser_t* parser, const loom_low_asm_result_names_t* result_names,
+    loom_token_t start_token, loom_token_t mnemonic_token,
+    const iree_string_view_t* comments, iree_host_size_t comment_count,
+    loom_parsed_op_t* parsed_spans) {
+  const uint32_t errors_before = parser->error_count;
+  IREE_RETURN_IF_ERROR(loom_parse_low_asm_expect_single_result(
+      parser, result_names, mnemonic_token));
+  if (parser->error_count > errors_before) {
+    return iree_ok_status();
   }
 
-  loom_parsed_attr_dict_entry_t stack_entries[2];
-  for (iree_host_size_t i = 0; i < attr_count; ++i) {
-    stack_entries[i] = (loom_parsed_attr_dict_entry_t){
-        .attr = attrs[i],
-        .key_token = i == 0 ? slot_token : loom_token_none(),
-    };
+  loom_value_id_t storage = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_parse_low_asm_value_ref(
+      parser, mnemonic_token, parsed_spans, /*operand_index=*/0, &storage));
+  if (parser->error_count > errors_before) {
+    return iree_ok_status();
   }
-  loom_parser_sort_attr_dict_entries(parser->module, stack_entries,
-                                     (uint16_t)attr_count);
-  for (iree_host_size_t i = 0; i < attr_count; ++i) {
-    attrs[i] = stack_entries[i].attr;
+
+  loom_named_attr_slice_t offset_attrs = loom_named_attr_slice_empty();
+  IREE_RETURN_IF_ERROR(loom_parse_low_asm_structural_attr_dict(
+      parser, LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_ADDRESS, mnemonic_token,
+      &offset_attrs));
+  if (parser->error_count > errors_before) {
+    return iree_ok_status();
+  }
+
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COLON, NULL);
+  loom_type_t storage_type = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &storage_type));
+  if (parser->error_count > errors_before) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_parse_low_asm_validate_operand_type(
+      parser, mnemonic_token, storage, storage_type));
+  if (parser->error_count > errors_before) {
+    return iree_ok_status();
+  }
+
+  loom_type_t result_type = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_parse_low_asm_arrow_result_type(parser, &result_type));
+  if (parser->error_count > errors_before) {
+    return iree_ok_status();
   }
 
   return loom_parse_low_asm_structural_location_and_build(
-      parser, LOOM_TEXT_LOW_ASM_STRUCTURAL_FRAME_INDEX, result_names,
-      start_token, mnemonic_token, comments, comment_count, NULL, 0,
-      loom_make_named_attr_slice(attrs, attr_count), iree_string_view_empty(),
-      0, result_type, parsed_spans);
+      parser, LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_ADDRESS, result_names,
+      start_token, mnemonic_token, comments, comment_count, &storage, 1,
+      offset_attrs, iree_string_view_empty(), 0, result_type, parsed_spans);
 }
 
 bool loom_low_asm_structural_kind_from_token(
@@ -541,8 +557,12 @@ bool loom_low_asm_structural_kind_from_token(
     *out_kind = LOOM_TEXT_LOW_ASM_STRUCTURAL_SLICE;
     return true;
   }
-  if (iree_string_view_equal(token.text, IREE_SV("frame_index"))) {
-    *out_kind = LOOM_TEXT_LOW_ASM_STRUCTURAL_FRAME_INDEX;
+  if (iree_string_view_equal(token.text, IREE_SV("storage"))) {
+    *out_kind = LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_RESERVE;
+    return true;
+  }
+  if (iree_string_view_equal(token.text, IREE_SV("storage_address"))) {
+    *out_kind = LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_ADDRESS;
     return true;
   }
   if (iree_string_view_equal(token.text, IREE_SV("copy"))) {
@@ -571,8 +591,12 @@ iree_status_t loom_parse_low_asm_structural(
       return loom_parse_low_asm_structural_slice(
           parser, result_names, start_token, mnemonic_token, comments,
           comment_count, parsed_spans);
-    case LOOM_TEXT_LOW_ASM_STRUCTURAL_FRAME_INDEX:
-      return loom_parse_low_asm_structural_frame_index(
+    case LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_RESERVE:
+      return loom_parse_low_asm_structural_storage_reserve(
+          parser, result_names, start_token, mnemonic_token, comments,
+          comment_count, parsed_spans);
+    case LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_ADDRESS:
+      return loom_parse_low_asm_structural_storage_address(
           parser, result_names, start_token, mnemonic_token, comments,
           comment_count, parsed_spans);
     case LOOM_TEXT_LOW_ASM_STRUCTURAL_COPY:

@@ -85,6 +85,7 @@ from loom.ir import (
     NONE_TYPE,
     OFFSET,
     PREDICATE_KINDS,
+    STORAGE_SPACE_BY_NAME,
     VALUE_DEF_BLOCK_NONE,
     Block,
     CanonicalAttrDict,
@@ -110,6 +111,7 @@ from loom.ir import (
     ScalarTypeKind,
     ShapedType,
     StaticDim,
+    StorageType,
     SymbolName,
     Type,
     TypeKind,
@@ -904,8 +906,19 @@ def _parse_type_interior(
         scope_name = parsed_attrs["scope"]
         group_scope = GROUP_SCOPE_BY_NAME.get(scope_name)
         if group_scope is None:
-            raise ValueError(f"unknown group scope '{scope_name}'")
+            raise ParseError(f"unknown group scope '{scope_name}'", location, filename)
         return GroupType(group_scope), {}
+
+    if type_def.ir_kind == "storage" and "space" in parsed_attrs:
+        space_name = parsed_attrs["space"]
+        storage_space = STORAGE_SPACE_BY_NAME.get(space_name)
+        if storage_space is None:
+            raise ParseError(
+                f"unknown storage space '{space_name}'",
+                location,
+                filename,
+            )
+        return StorageType(storage_space), {}
 
     return DialectType(type_def.name, tuple(parsed_params)), {}
 

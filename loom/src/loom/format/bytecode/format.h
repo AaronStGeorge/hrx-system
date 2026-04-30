@@ -62,7 +62,7 @@
 //
 //   offset  size  field
 //   0       4     magic: "LOOM" (0x4C 0x4F 0x4F 0x4D)
-//   4       1     format_version (currently 11)
+//   4       1     format_version (currently 13)
 //   5       1     location_mode (see loom_bytecode_location_mode_t)
 //   6       2     module_count
 //   8       4     file_string_pool_length (bytes)
@@ -85,7 +85,7 @@ extern "C" {
 
 #define LOOM_BYTECODE_MAGIC "LOOM"
 #define LOOM_BYTECODE_MAGIC_LENGTH 4
-#define LOOM_BYTECODE_FORMAT_VERSION 12
+#define LOOM_BYTECODE_FORMAT_VERSION 13
 
 // File-level source-location mode stored in the file header.
 enum loom_bytecode_location_mode_e {
@@ -318,7 +318,8 @@ typedef enum loom_bytecode_section_kind_e {
 //     [kind: byte]
 //       0 = none, 1 = scalar, 2 = tile, 3 = tensor, 4 = group,
 //       5 = function, 6 = dialect, 7 = encoding, 8 = pool,
-//       9 = vector, 10 = view, 11 = buffer, 12 = register
+//       9 = vector, 10 = view, 11 = buffer, 12 = register,
+//       13 = storage
 //     (SCALAR: [element_type: byte])
 //     (TILE/TENSOR/VECTOR/VIEW:
 //       [element_type: byte]
@@ -350,6 +351,8 @@ typedef enum loom_bytecode_section_kind_e {
 //     (REGISTER:
 //       [class_id: varint]          (string table index)
 //       [unit_count: varint]        (non-zero register-class unit count))
+//     (STORAGE:
+//       [space: byte]               (loom_bytecode_storage_space_t))
 
 // ==========================================================================
 // ENCODINGS section
@@ -815,6 +818,7 @@ typedef enum loom_bytecode_type_kind_e {
   LOOM_BYTECODE_TYPE_VIEW = 10,
   LOOM_BYTECODE_TYPE_BUFFER = 11,
   LOOM_BYTECODE_TYPE_REGISTER = 12,
+  LOOM_BYTECODE_TYPE_STORAGE = 13,
 } loom_bytecode_type_kind_t;
 
 // Group scope byte in the TYPES section (GROUP payload).
@@ -833,6 +837,15 @@ typedef enum loom_bytecode_encoding_role_e {
   LOOM_BYTECODE_ENCODING_ROLE_STORAGE = 3,
   LOOM_BYTECODE_ENCODING_ROLE_TRANSFORM = 4,
 } loom_bytecode_encoding_role_t;
+
+// Storage space byte in the TYPES section (STORAGE payload).
+// Append-only; do not reorder.
+typedef enum loom_bytecode_storage_space_e {
+  LOOM_BYTECODE_STORAGE_SPACE_STACK = 0,
+  LOOM_BYTECODE_STORAGE_SPACE_SCRATCH = 1,
+  LOOM_BYTECODE_STORAGE_SPACE_PRIVATE = 2,
+  LOOM_BYTECODE_STORAGE_SPACE_WORKGROUP = 3,
+} loom_bytecode_storage_space_t;
 
 // Encoding/layout attachment discriminator in TILE/TENSOR/VIEW type payloads.
 typedef enum loom_bytecode_encoding_attachment_e {

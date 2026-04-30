@@ -18,7 +18,11 @@ static const uint8_t kLowAsmResourceValidByteCountName[] =
     LOOM_BSTRING_LITERAL(16, "valid_byte_count");
 static const uint8_t kLowAsmResourceCacheSwizzleStrideName[] =
     LOOM_BSTRING_LITERAL(20, "cache_swizzle_stride");
-static const uint8_t kLowAsmFrameIndexOffsetName[] =
+static const uint8_t kLowAsmStorageReserveByteLengthName[] =
+    LOOM_BSTRING_LITERAL(11, "byte_length");
+static const uint8_t kLowAsmStorageReserveByteAlignmentName[] =
+    LOOM_BSTRING_LITERAL(14, "byte_alignment");
+static const uint8_t kLowAsmStorageAddressOffsetName[] =
     LOOM_BSTRING_LITERAL(6, "offset");
 
 static const loom_attr_descriptor_t kLowAsmResourceIndexAttr = {
@@ -39,8 +43,12 @@ static const loom_attr_descriptor_t kLowAsmResourceCacheSwizzleStrideAttr = {
     0,
     NULL,
     NULL};
-static const loom_attr_descriptor_t kLowAsmFrameIndexOffsetAttr = {
-    kLowAsmFrameIndexOffsetName, LOOM_ATTR_I64, 0, 0, NULL, NULL};
+static const loom_attr_descriptor_t kLowAsmStorageReserveByteLengthAttr = {
+    kLowAsmStorageReserveByteLengthName, LOOM_ATTR_I64, 0, 0, NULL, NULL};
+static const loom_attr_descriptor_t kLowAsmStorageReserveByteAlignmentAttr = {
+    kLowAsmStorageReserveByteAlignmentName, LOOM_ATTR_I64, 0, 0, NULL, NULL};
+static const loom_attr_descriptor_t kLowAsmStorageAddressOffsetAttr = {
+    kLowAsmStorageAddressOffsetName, LOOM_ATTR_I64, 0, 0, NULL, NULL};
 
 static iree_status_t loom_low_descriptor_text_asm_resource_key_to_kind(
     iree_string_view_t key, uint8_t* out_kind) {
@@ -94,9 +102,19 @@ iree_status_t loom_low_descriptor_text_asm_structural_attr_descriptor(
   (void)state;
   *out_descriptor = NULL;
   if (kind != LOOM_TEXT_LOW_ASM_STRUCTURAL_RESOURCE) {
-    if (kind == LOOM_TEXT_LOW_ASM_STRUCTURAL_FRAME_INDEX &&
+    if (kind == LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_RESERVE &&
+        iree_string_view_equal(attr_name, IREE_SV("byte_length"))) {
+      *out_descriptor = &kLowAsmStorageReserveByteLengthAttr;
+      return iree_ok_status();
+    }
+    if (kind == LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_RESERVE &&
+        iree_string_view_equal(attr_name, IREE_SV("byte_alignment"))) {
+      *out_descriptor = &kLowAsmStorageReserveByteAlignmentAttr;
+      return iree_ok_status();
+    }
+    if (kind == LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_ADDRESS &&
         iree_string_view_equal(attr_name, IREE_SV("offset"))) {
-      *out_descriptor = &kLowAsmFrameIndexOffsetAttr;
+      *out_descriptor = &kLowAsmStorageAddressOffsetAttr;
     }
     return iree_ok_status();
   }
@@ -195,28 +213,46 @@ static iree_status_t loom_low_descriptor_text_asm_build_resource(
       result_type, location, out_op);
 }
 
-static iree_status_t loom_low_descriptor_text_asm_build_frame_index(
+static iree_status_t loom_low_descriptor_text_asm_build_storage_reserve(
     loom_builder_t* builder, loom_named_attr_slice_t attrs,
     loom_type_t result_type, loom_location_id_t location, loom_op_t** out_op) {
-  const loom_named_attr_t* slot_attr = NULL;
+  const loom_named_attr_t* byte_length_attr = NULL;
   IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_required_attr(
-      builder->module, attrs, IREE_SV("slot"), &slot_attr));
-  if (slot_attr->value.kind != LOOM_ATTR_SYMBOL) {
+      builder->module, attrs, IREE_SV("byte_length"), &byte_length_attr));
+  if (byte_length_attr->value.kind != LOOM_ATTR_I64) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low asm frame_index slot must be a symbol attr");
+                            "low asm storage byte_length must be an i64 attr");
   }
 
+  const loom_named_attr_t* byte_alignment_attr = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_required_attr(
+      builder->module, attrs, IREE_SV("byte_alignment"), &byte_alignment_attr));
+  if (byte_alignment_attr->value.kind != LOOM_ATTR_I64) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low asm storage byte_alignment must be an i64 attr");
+  }
+
+  return loom_low_storage_reserve_build(builder, byte_length_attr->value.i64,
+                                        byte_alignment_attr->value.i64,
+                                        result_type, location, out_op);
+}
+
+static iree_status_t loom_low_descriptor_text_asm_build_storage_address(
+    loom_builder_t* builder, loom_value_id_t storage,
+    loom_named_attr_slice_t attrs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op) {
   const loom_named_attr_t* offset_attr = NULL;
   IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_required_attr(
       builder->module, attrs, IREE_SV("offset"), &offset_attr));
   if (offset_attr->value.kind != LOOM_ATTR_I64) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low asm frame_index offset must be an i64 attr");
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low asm storage_address offset must be an i64 attr");
   }
 
-  return loom_low_frame_index_build(builder, slot_attr->value.symbol,
-                                    offset_attr->value.i64, result_type,
-                                    location, out_op);
+  return loom_low_storage_address_build(
+      builder, storage, offset_attr->value.i64, result_type, location, out_op);
 }
 
 iree_status_t loom_low_descriptor_text_asm_build_structural(
@@ -255,13 +291,20 @@ iree_status_t loom_low_descriptor_text_asm_build_structural(
       }
       return loom_low_slice_build(builder, operands[0], offset, result_type,
                                   location, out_op);
-    case LOOM_TEXT_LOW_ASM_STRUCTURAL_FRAME_INDEX:
+    case LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_RESERVE:
       if (operand_count != 0) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "low asm frame_index takes no operands");
+                                "low asm storage takes no operands");
       }
-      return loom_low_descriptor_text_asm_build_frame_index(
+      return loom_low_descriptor_text_asm_build_storage_reserve(
           builder, attributes, result_type, location, out_op);
+    case LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_ADDRESS:
+      if (operand_count != 1) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low asm storage_address takes one operand");
+      }
+      return loom_low_descriptor_text_asm_build_storage_address(
+          builder, operands[0], attributes, result_type, location, out_op);
     case LOOM_TEXT_LOW_ASM_STRUCTURAL_COPY:
       if (operand_count != 1) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -409,42 +452,44 @@ static iree_status_t loom_low_descriptor_text_asm_describe_copy(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_descriptor_text_asm_symbol_name(
-    const loom_module_t* module, loom_symbol_ref_t ref,
-    iree_string_view_t* out_name) {
-  *out_name = iree_string_view_empty();
-  if (!loom_symbol_ref_is_valid(ref) || ref.module_id != 0 ||
-      ref.symbol_id >= module->symbols.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low asm structural symbol is out of range");
-  }
-  const loom_symbol_t* symbol = &module->symbols.entries[ref.symbol_id];
-  if (symbol->name_id >= module->strings.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low asm structural symbol name is out of range");
-  }
-  *out_name = module->strings.entries[symbol->name_id];
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_descriptor_text_asm_describe_frame_index(
+static iree_status_t loom_low_descriptor_text_asm_describe_storage_reserve(
     const loom_module_t* module, const loom_op_t* op,
     loom_text_low_asm_statement_t* out_statement) {
-  iree_string_view_t slot_name = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_symbol_name(
-      module, loom_low_frame_index_slot(op), &slot_name));
   *out_statement = (loom_text_low_asm_statement_t){
       .kind = LOOM_TEXT_LOW_ASM_STATEMENT_STRUCTURAL,
       .op = op,
-      .structural_kind = LOOM_TEXT_LOW_ASM_STRUCTURAL_FRAME_INDEX,
-      .structural_key = slot_name,
+      .structural_kind = LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_RESERVE,
       .results = loom_op_const_results(op),
       .result_count = 1,
       .location = op->location,
   };
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_set_structural_attr(
+      module, op, loom_low_storage_reserve_byte_alignment_ATTR_INDEX,
+      IREE_SV("byte_alignment"), &kLowAsmStorageReserveByteAlignmentAttr,
+      out_statement));
   return loom_low_descriptor_text_asm_set_structural_attr(
-      module, op, loom_low_frame_index_offset_ATTR_INDEX, IREE_SV("offset"),
-      &kLowAsmFrameIndexOffsetAttr, out_statement);
+      module, op, loom_low_storage_reserve_byte_length_ATTR_INDEX,
+      IREE_SV("byte_length"), &kLowAsmStorageReserveByteLengthAttr,
+      out_statement);
+}
+
+static iree_status_t loom_low_descriptor_text_asm_describe_storage_address(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_text_low_asm_statement_t* out_statement) {
+  (void)module;
+  *out_statement = (loom_text_low_asm_statement_t){
+      .kind = LOOM_TEXT_LOW_ASM_STATEMENT_STRUCTURAL,
+      .op = op,
+      .structural_kind = LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_ADDRESS,
+      .results = loom_op_const_results(op),
+      .result_count = 1,
+      .operands = loom_op_const_operands(op),
+      .operand_count = 1,
+      .location = op->location,
+  };
+  return loom_low_descriptor_text_asm_set_structural_attr(
+      module, op, loom_low_storage_address_offset_ATTR_INDEX, IREE_SV("offset"),
+      &kLowAsmStorageAddressOffsetAttr, out_statement);
 }
 
 iree_status_t loom_low_descriptor_text_asm_describe_structural_operation(
@@ -470,9 +515,13 @@ iree_status_t loom_low_descriptor_text_asm_describe_structural_operation(
     return loom_low_descriptor_text_asm_describe_copy(module, op,
                                                       out_statement);
   }
-  if (loom_low_frame_index_isa(op)) {
-    return loom_low_descriptor_text_asm_describe_frame_index(module, op,
-                                                             out_statement);
+  if (loom_low_storage_reserve_isa(op)) {
+    return loom_low_descriptor_text_asm_describe_storage_reserve(module, op,
+                                                                 out_statement);
+  }
+  if (loom_low_storage_address_isa(op)) {
+    return loom_low_descriptor_text_asm_describe_storage_address(module, op,
+                                                                 out_statement);
   }
   return iree_ok_status();
 }
