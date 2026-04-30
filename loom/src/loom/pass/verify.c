@@ -286,17 +286,22 @@ static iree_status_t loom_pass_verify_requirements(
   for (uint16_t i = 0; i < descriptor->requirement_count; ++i) {
     const loom_pass_requirement_def_t* requirement =
         &descriptor->requirement_defs[i];
-    bool satisfied = loom_pass_environment_satisfies_requirement(
-        &state->options->environment, requirement->key);
+    const loom_pass_environment_capability_t* capability =
+        loom_pass_environment_lookup(&state->options->environment,
+                                     requirement->capability_type);
+    bool satisfied = loom_pass_environment_capability_satisfies_requirement(
+        capability, requirement->key);
     if (satisfied) {
       continue;
     }
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "pass '%.*s' requirement '%.*s' is not satisfied by the pass "
-        "environment: %.*s",
+        "pass '%.*s' requirement '%.*s' from capability '%.*s' is not "
+        "satisfied by the pass environment: %.*s",
         (int)descriptor->key.size, descriptor->key.data,
         (int)requirement->key.size, requirement->key.data,
+        (int)requirement->capability_type->name.size,
+        requirement->capability_type->name.data,
         (int)requirement->description.size, requirement->description.data);
   }
   return iree_ok_status();

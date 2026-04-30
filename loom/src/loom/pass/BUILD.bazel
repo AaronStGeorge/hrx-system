@@ -81,6 +81,7 @@ loom_cc_library(
     srcs = ["registry.c"],
     hdrs = ["registry.h"],
     deps = [
+        ":environment",
         ":pipeline",
         ":types",
         "//loom/src/loom/ir",
@@ -137,6 +138,7 @@ loom_cc_library(
     srcs = ["report.c"],
     hdrs = ["report.h"],
     deps = [
+        ":environment",
         ":program",
         ":registry",
         ":types",
@@ -189,6 +191,7 @@ loom_cc_library(
     hdrs = ["builtin_registry.h"],
     deps = [
         ":registry",
+        "//loom/src/loom/codegen/low:pass_environment",
         "//loom/src/loom/codegen/low:pass_requirements",
         "//loom/src/loom/codegen/low/passes:allocation",
         "//loom/src/loom/codegen/low/passes:dce",
@@ -217,6 +220,7 @@ loom_cc_test(
     name = "registry_test",
     srcs = ["registry_test.cc"],
     deps = [
+        ":environment",
         ":registry",
         ":report",
         "//loom/src/loom/pass/test:registry",
@@ -308,6 +312,7 @@ loom_cc_test(
     deps = [
         ":builtin_registry",
         ":registry",
+        "//loom/src/loom/codegen/low:pass_environment",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

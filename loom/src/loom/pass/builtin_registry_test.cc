@@ -8,6 +8,7 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/pass_environment.h"
 
 namespace loom {
 namespace {
@@ -93,6 +94,8 @@ TEST(PassBuiltinRegistryTest, ValidatesBuiltinOptionSchemas) {
       LookupBuiltinPass(IREE_SV("low-materialize-allocation"));
   ASSERT_NE(allocation, nullptr);
   ASSERT_EQ(allocation->requirement_count, 1u);
+  EXPECT_EQ(allocation->requirement_defs[0].capability_type,
+            &loom_low_pass_capability_type);
   EXPECT_TRUE(
       iree_string_view_equal(allocation->requirement_defs[0].key,
                              IREE_SV("target.low-descriptor-registry")));
@@ -108,6 +111,8 @@ TEST(PassBuiltinRegistryTest, ValidatesBuiltinOptionSchemas) {
       LookupBuiltinPass(IREE_SV("low-select-operand-forms"));
   ASSERT_NE(operand_forms, nullptr);
   ASSERT_EQ(operand_forms->requirement_count, 1u);
+  EXPECT_EQ(operand_forms->requirement_defs[0].capability_type,
+            &loom_low_pass_capability_type);
   EXPECT_TRUE(
       iree_string_view_equal(operand_forms->requirement_defs[0].key,
                              IREE_SV("target.low-descriptor-registry")));
@@ -115,6 +120,8 @@ TEST(PassBuiltinRegistryTest, ValidatesBuiltinOptionSchemas) {
   const loom_pass_descriptor_t* low_dce = LookupBuiltinPass(IREE_SV("low-dce"));
   ASSERT_NE(low_dce, nullptr);
   ASSERT_EQ(low_dce->requirement_count, 1u);
+  EXPECT_EQ(low_dce->requirement_defs[0].capability_type,
+            &loom_low_pass_capability_type);
   EXPECT_TRUE(
       iree_string_view_equal(low_dce->requirement_defs[0].key,
                              IREE_SV("target.low-descriptor-registry")));
@@ -123,12 +130,16 @@ TEST(PassBuiltinRegistryTest, ValidatesBuiltinOptionSchemas) {
       LookupBuiltinPass(IREE_SV("source-to-low"));
   ASSERT_NE(source_to_low, nullptr);
   ASSERT_EQ(source_to_low->requirement_count, 2u);
+  EXPECT_EQ(source_to_low->requirement_defs[0].capability_type,
+            &loom_low_pass_capability_type);
   EXPECT_TRUE(
       iree_string_view_equal(source_to_low->requirement_defs[0].key,
                              IREE_SV("target.low-descriptor-registry")));
   EXPECT_TRUE(
       iree_string_view_equal(source_to_low->requirement_defs[1].key,
                              IREE_SV("target.low-lower-policy-registry")));
+  EXPECT_EQ(source_to_low->requirement_defs[1].capability_type,
+            &loom_low_pass_capability_type);
   IREE_ASSERT_OK(loom_pass_descriptor_validate_options(
       source_to_low, IREE_SV("max-errors=0")));
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,

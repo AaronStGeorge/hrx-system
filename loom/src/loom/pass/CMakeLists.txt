@@ -97,6 +97,7 @@ loom_cc_library(
   SRCS
     "registry.c"
   DEPS
+    ::environment
     ::pipeline
     ::types
     iree::base
@@ -165,6 +166,7 @@ loom_cc_library(
   SRCS
     "report.c"
   DEPS
+    ::environment
     ::program
     ::registry
     ::types
@@ -226,6 +228,7 @@ loom_cc_library(
     "builtin_registry.c"
   DEPS
     ::registry
+    loom::src::loom::codegen::low::pass_environment
     loom::src::loom::codegen::low::pass_requirements
     loom::src::loom::codegen::low::passes::allocation
     loom::src::loom::codegen::low::passes::dce
@@ -256,6 +259,7 @@ loom_cc_test(
   SRCS
     "registry_test.cc"
   DEPS
+    ::environment
     ::registry
     ::report
     iree::base::internal::arena
@@ -354,6 +358,7 @@ loom_cc_test(
   DEPS
     ::builtin_registry
     ::registry
+    loom::src::loom::codegen::low::pass_environment
     iree::testing::gtest
     iree::testing::gtest_main
 )

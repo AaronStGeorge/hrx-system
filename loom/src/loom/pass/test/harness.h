@@ -142,9 +142,9 @@ class PassTestHarness : public ::testing::Test {
   loom_context_t* context() { return &context_; }
 
  private:
-  static iree_status_t ConfigureTrace(
-      void* user_data, const loom_pass_program_instruction_t* instruction,
-      void** out_pass_user_data);
+  loom_pass_environment_t EnvironmentWithTrace(
+      loom_test_pass_trace_t* trace,
+      loom_pass_environment_t base_environment = {});
 
   // Block pool shared by parsing, compilation, and interpreter scratch.
   iree_arena_block_pool_t block_pool_ = {};
@@ -152,6 +152,12 @@ class PassTestHarness : public ::testing::Test {
   iree_arena_allocator_t scratch_arena_ = {};
   // Context containing only the pass and test dialects.
   loom_context_t context_ = {};
+  // Trace capability storage used while one interpreter/tool options object
+  // created by this harness is live.
+  loom_test_pass_trace_capability_t trace_capability_ = {};
+  // Capability pointer table used while one interpreter/tool options object
+  // created by this harness is live.
+  const loom_pass_environment_capability_t* environment_capabilities_[8] = {};
   // Parsed or allocated modules freed during TearDown.
   std::vector<loom_module_t*> modules_;
 };

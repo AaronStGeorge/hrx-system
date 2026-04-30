@@ -107,8 +107,6 @@ struct loom_pass_t {
   const loom_pass_environment_t* environment;
   // Interpreter-owned scoped value-fact workspace for this module execution.
   loom_pass_value_fact_owner_t* value_facts;
-  // Opaque caller data borrowed for this invocation.
-  void* user_data;
 };
 
 // Increments a statistic counter by |delta|. |statistic_index| must be less

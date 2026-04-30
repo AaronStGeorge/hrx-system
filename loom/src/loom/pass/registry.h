@@ -28,6 +28,8 @@ typedef uint32_t loom_pass_option_schema_flags_t;
 
 // Returns static pass metadata for one descriptor.
 typedef const loom_pass_info_t* (*loom_pass_info_fn_t)(void);
+typedef struct loom_pass_environment_capability_type_t
+    loom_pass_environment_capability_type_t;
 
 enum loom_pass_descriptor_flag_bits_e {
   // Descriptor is known to the registry but unavailable in this build/config.
@@ -75,6 +77,8 @@ typedef struct loom_pass_option_schema_t {
 
 // Static requirement declared by a pass descriptor.
 typedef struct loom_pass_requirement_def_t {
+  // Capability type that owns and can satisfy this requirement.
+  const loom_pass_environment_capability_type_t* capability_type;
   // Stable requirement key.
   iree_string_view_t key;
   // Human-readable description of the requirement.

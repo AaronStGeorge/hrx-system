@@ -15,6 +15,7 @@
 #ifndef LOOM_PASS_TEST_REGISTRY_H_
 #define LOOM_PASS_TEST_REGISTRY_H_
 
+#include "loom/pass/environment.h"
 #include "loom/pass/registry.h"
 
 #ifdef __cplusplus
@@ -31,7 +32,7 @@ typedef struct loom_test_pass_trace_event_t {
   iree_string_view_t symbol_name;
 } loom_test_pass_trace_event_t;
 
-// Optional per-entry user data consumed by the synthetic test passes.
+// Trace storage consumed by the synthetic test pass environment capability.
 typedef struct loom_test_pass_trace_t {
   // Number of times test.module-noop ran.
   int module_noop_invocation_count;
@@ -56,6 +57,32 @@ typedef struct loom_test_pass_trace_t {
   // Bounded chronological callback trace.
   loom_test_pass_trace_event_t events[LOOM_TEST_PASS_TRACE_EVENT_CAPACITY];
 } loom_test_pass_trace_t;
+
+// Capability type satisfying the synthetic target.profile requirement.
+extern const loom_pass_environment_capability_type_t
+    loom_test_pass_target_profile_capability_type;
+
+// Static capability satisfying the synthetic target.profile requirement.
+extern const loom_pass_environment_capability_t
+    loom_test_pass_target_profile_capability;
+
+// Capability type carrying synthetic pass trace storage.
+extern const loom_pass_environment_capability_type_t
+    loom_test_pass_trace_capability_type;
+
+typedef struct loom_test_pass_trace_capability_t {
+  // Base capability header. Must remain the first field.
+  loom_pass_environment_capability_t base;
+  // Mutable trace updated by synthetic pass callbacks.
+  loom_test_pass_trace_t* trace;
+} loom_test_pass_trace_capability_t;
+
+// Creates a borrowed trace capability for synthetic pass callbacks.
+loom_test_pass_trace_capability_t loom_test_pass_trace_capability_make(
+    loom_test_pass_trace_t* trace);
+
+// Looks up the synthetic pass trace from |pass->environment|.
+loom_test_pass_trace_t* loom_test_pass_trace_from_pass(const loom_pass_t* pass);
 
 // Returns a registry containing only synthetic test pass descriptors.
 const loom_pass_registry_t* loom_test_pass_registry(void);

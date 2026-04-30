@@ -84,9 +84,10 @@ const loom_pass_environment_capability_t* loom_pass_environment_lookup(
     const loom_pass_environment_t* environment,
     const loom_pass_environment_capability_type_t* type);
 
-// Returns true when any capability satisfies |requirement|.
-bool loom_pass_environment_satisfies_requirement(
-    const loom_pass_environment_t* environment, iree_string_view_t requirement);
+// Returns true when |capability| satisfies |requirement|.
+bool loom_pass_environment_capability_satisfies_requirement(
+    const loom_pass_environment_capability_t* capability,
+    iree_string_view_t requirement);
 
 #ifdef __cplusplus
 }  // extern "C"

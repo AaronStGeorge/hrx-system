@@ -148,11 +148,6 @@ static iree_status_t loom_pass_interpreter_make_pass(
     iree_diagnostic_emitter_t diagnostic_emitter,
     iree_arena_allocator_t* instance_arena, loom_pass_t* out_pass) {
   const loom_pass_program_invoke_t* invoke = &instruction->invoke;
-  void* pass_user_data = NULL;
-  if (state->options->configure.fn) {
-    IREE_RETURN_IF_ERROR(state->options->configure.fn(
-        state->options->configure.user_data, instruction, &pass_user_data));
-  }
   *out_pass = (loom_pass_t){
       .info = invoke->info,
       .module_run = invoke->module_run,
@@ -162,7 +157,6 @@ static iree_status_t loom_pass_interpreter_make_pass(
       .diagnostic_emitter = diagnostic_emitter,
       .environment = &state->options->environment,
       .value_facts = &state->value_facts,
-      .user_data = pass_user_data,
   };
   if (invoke->info->statistic_count == 0) {
     return iree_ok_status();

@@ -35,7 +35,6 @@ static iree_status_t loom_pass_tool_run_program(
       .predicate_provider = options->predicate_provider,
       .diagnostic_emitter = options->diagnostic_emitter,
       .environment = options->environment,
-      .configure = options->configure,
       .report = options->report,
   };
   if (program->root_kind == LOOM_PASS_MODULE) {

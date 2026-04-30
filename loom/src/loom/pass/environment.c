@@ -53,23 +53,12 @@ const loom_pass_environment_capability_t* loom_pass_environment_lookup(
   return NULL;
 }
 
-bool loom_pass_environment_satisfies_requirement(
-    const loom_pass_environment_t* environment,
+bool loom_pass_environment_capability_satisfies_requirement(
+    const loom_pass_environment_capability_t* capability,
     iree_string_view_t requirement) {
-  IREE_ASSERT_ARGUMENT(environment);
-  if (!environment->capabilities) {
+  if (!capability || !capability->type ||
+      !capability->type->satisfies_requirement) {
     return false;
   }
-  for (iree_host_size_t i = 0; i < environment->capability_count; ++i) {
-    const loom_pass_environment_capability_t* capability =
-        environment->capabilities[i];
-    if (!capability || !capability->type ||
-        !capability->type->satisfies_requirement) {
-      continue;
-    }
-    if (capability->type->satisfies_requirement(capability, requirement)) {
-      return true;
-    }
-  }
-  return false;
+  return capability->type->satisfies_requirement(capability, requirement);
 }

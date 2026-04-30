@@ -50,23 +50,6 @@ static iree_status_t EvaluateTargetPredicate(
   return iree_ok_status();
 }
 
-static bool SatisfyTargetProfileRequirement(
-    const loom_pass_environment_capability_t* capability,
-    iree_string_view_t requirement) {
-  (void)capability;
-  return iree_string_view_equal(requirement, IREE_SV("target.profile"));
-}
-
-static const loom_pass_environment_capability_type_t
-    kTargetProfileCapabilityType = {
-        .name = IREE_SVL("test.target-profile"),
-        .satisfies_requirement = SatisfyTargetProfileRequirement,
-};
-
-static const loom_pass_environment_capability_t kTargetProfileCapability = {
-    .type = &kTargetProfileCapabilityType,
-};
-
 }  // namespace
 
 PassProgramStorage::~PassProgramStorage() {
@@ -92,7 +75,7 @@ loom_pass_predicate_provider_t PassTestTargetPredicateProvider(
 
 loom_pass_environment_t PassTestTargetProfileEnvironment() {
   static const loom_pass_environment_capability_t* const capabilities[] = {
-      &kTargetProfileCapability,
+      &loom_test_pass_target_profile_capability,
   };
   return loom_pass_environment_make(capabilities, IREE_ARRAYSIZE(capabilities));
 }
@@ -264,12 +247,21 @@ iree_status_t PassTestHarness::Compile(
                                             &block_pool_, out_program);
 }
 
-iree_status_t PassTestHarness::ConfigureTrace(
-    void* user_data, const loom_pass_program_instruction_t* instruction,
-    void** out_pass_user_data) {
-  (void)instruction;
-  *out_pass_user_data = user_data;
-  return iree_ok_status();
+loom_pass_environment_t PassTestHarness::EnvironmentWithTrace(
+    loom_test_pass_trace_t* trace, loom_pass_environment_t base_environment) {
+  iree_host_size_t capability_count = 0;
+  for (iree_host_size_t i = 0; i < base_environment.capability_count; ++i) {
+    IREE_ASSERT(capability_count < IREE_ARRAYSIZE(environment_capabilities_));
+    environment_capabilities_[capability_count++] =
+        base_environment.capabilities[i];
+  }
+  if (trace) {
+    IREE_ASSERT(capability_count < IREE_ARRAYSIZE(environment_capabilities_));
+    trace_capability_ = loom_test_pass_trace_capability_make(trace);
+    environment_capabilities_[capability_count++] = &trace_capability_.base;
+  }
+  return loom_pass_environment_make(environment_capabilities_,
+                                    capability_count);
 }
 
 loom_pass_interpreter_options_t PassTestHarness::InterpreterOptions(
@@ -280,11 +272,7 @@ loom_pass_interpreter_options_t PassTestHarness::InterpreterOptions(
       .block_pool = &block_pool_,
       .predicate_provider = predicate_provider,
       .diagnostic_emitter = diagnostic_emitter,
-      .configure =
-          {
-              .fn = ConfigureTrace,
-              .user_data = trace,
-          },
+      .environment = EnvironmentWithTrace(trace),
       .report = report,
   };
 }
@@ -295,14 +283,9 @@ loom_pass_tool_run_options_t PassTestHarness::ToolOptions(
     loom_pass_environment_t environment) {
   return (loom_pass_tool_run_options_t){
       .registry = loom_test_pass_registry(),
-      .environment = environment,
+      .environment = EnvironmentWithTrace(trace, environment),
       .predicate_provider = predicate_provider,
       .block_pool = &block_pool_,
-      .configure =
-          {
-              .fn = ConfigureTrace,
-              .user_data = trace,
-          },
   };
 }
 

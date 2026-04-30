@@ -11,6 +11,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/pass/environment.h"
 #include "loom/pass/report.h"
 #include "loom/pass/test/registry.h"
 
@@ -33,6 +34,19 @@ static const loom_pass_info_t* BrokenStatisticsPassInfo() {
   };
   return &kInfo;
 }
+
+static bool SatisfyTestRequirement(
+    const loom_pass_environment_capability_t* capability,
+    iree_string_view_t requirement) {
+  (void)capability;
+  (void)requirement;
+  return true;
+}
+
+static const loom_pass_environment_capability_type_t kTestRequirementType = {
+    .name = IREE_SVL("test.requirements"),
+    .satisfies_requirement = SatisfyTestRequirement,
+};
 
 TEST(PassRegistryCoreTest, SyntheticRegistryVerifies) {
   IREE_ASSERT_OK(loom_pass_registry_verify(loom_test_pass_registry()));
@@ -60,6 +74,8 @@ TEST(PassRegistryCoreTest, FormatsRegistryMetadataJson) {
             std::string::npos);
   EXPECT_NE(text.find("\"requirements\":[{\"key\":\"target.profile\""),
             std::string::npos);
+  EXPECT_NE(text.find("\"capability\":\"test.target-profile\""),
+            std::string::npos);
 
   iree_string_builder_deinitialize(&builder);
 }
@@ -81,10 +97,12 @@ TEST(PassRegistryCoreTest, RejectsMissingStatisticMetadata) {
 TEST(PassRegistryCoreTest, VerifiesRequirementMetadata) {
   const loom_pass_requirement_def_t requirements[] = {
       {
+          .capability_type = &kTestRequirementType,
           .key = IREE_SVL("analysis.liveness"),
           .description = IREE_SVL("Requires precomputed liveness."),
       },
       {
+          .capability_type = &kTestRequirementType,
           .key = IREE_SVL("target.low-descriptor-registry"),
           .description = IREE_SVL("Requires a target-low descriptor registry."),
       },
@@ -101,13 +119,35 @@ TEST(PassRegistryCoreTest, VerifiesRequirementMetadata) {
   IREE_ASSERT_OK(loom_pass_registry_verify(&registry));
 }
 
+TEST(PassRegistryCoreTest, RejectsRequirementWithoutCapabilityType) {
+  const loom_pass_requirement_def_t requirements[] = {
+      {
+          .key = IREE_SVL("analysis.liveness"),
+          .description = IREE_SVL("Requires precomputed liveness."),
+      },
+  };
+  loom_pass_descriptor_t descriptor =
+      *LookupTestPass(IREE_SV("test.module-noop"));
+  descriptor.requirement_defs = requirements;
+  descriptor.requirement_count = IREE_ARRAYSIZE(requirements);
+  const loom_pass_registry_t registry = {
+      .descriptors = &descriptor,
+      .descriptor_count = 1,
+  };
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_registry_verify(&registry));
+}
+
 TEST(PassRegistryCoreTest, RejectsUnsortedRequirementMetadata) {
   const loom_pass_requirement_def_t requirements[] = {
       {
+          .capability_type = &kTestRequirementType,
           .key = IREE_SVL("target.low-descriptor-registry"),
           .description = IREE_SVL("Requires a target-low descriptor registry."),
       },
       {
+          .capability_type = &kTestRequirementType,
           .key = IREE_SVL("analysis.liveness"),
           .description = IREE_SVL("Requires precomputed liveness."),
       },

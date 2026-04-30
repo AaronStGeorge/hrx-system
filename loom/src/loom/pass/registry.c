@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "loom/ir/module.h"
+#include "loom/pass/environment.h"
 #include "loom/pass/pipeline.h"
 
 static bool loom_pass_descriptor_key_matches_info(
@@ -183,6 +184,15 @@ static iree_status_t loom_pass_registry_verify_requirements(
   for (uint16_t i = 0; i < descriptor->requirement_count; ++i) {
     const loom_pass_requirement_def_t* requirement =
         &descriptor->requirement_defs[i];
+    if (!requirement->capability_type ||
+        iree_string_view_is_empty(requirement->capability_type->name) ||
+        !requirement->capability_type->satisfies_requirement) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "pass descriptor '%.*s' requirement %u has no satisfying "
+          "capability type",
+          (int)descriptor->key.size, descriptor->key.data, (unsigned)i);
+    }
     if (iree_string_view_is_empty(requirement->key)) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,

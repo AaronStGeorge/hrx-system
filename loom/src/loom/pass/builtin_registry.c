@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 
+#include "loom/codegen/low/pass_environment.h"
 #include "loom/codegen/low/pass_requirements.h"
 #include "loom/codegen/low/passes/allocation.h"
 #include "loom/codegen/low/passes/dce.h"
@@ -63,6 +64,7 @@ static const loom_pass_option_schema_t kLowMaterializeAllocationOptionSchema[] =
 static const loom_pass_requirement_def_t
     kLowMaterializeAllocationRequirements[] = {
         {
+            .capability_type = &loom_low_pass_capability_type,
             .key = IREE_SVL(
                 LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY),
             .description =
@@ -73,6 +75,7 @@ static const loom_pass_requirement_def_t
 
 static const loom_pass_requirement_def_t kLowDceRequirements[] = {
     {
+        .capability_type = &loom_low_pass_capability_type,
         .key =
             IREE_SVL(LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY),
         .description =
@@ -84,6 +87,7 @@ static const loom_pass_requirement_def_t kLowDceRequirements[] = {
 static const loom_pass_requirement_def_t kLowSelectOperandFormsRequirements[] =
     {
         {
+            .capability_type = &loom_low_pass_capability_type,
             .key = IREE_SVL(
                 LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY),
             .description =
@@ -103,6 +107,7 @@ static const loom_pass_option_schema_t kLowSourceToLowOptionSchema[] = {
 
 static const loom_pass_requirement_def_t kLowSourceToLowRequirements[] = {
     {
+        .capability_type = &loom_low_pass_capability_type,
         .key =
             IREE_SVL(LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY),
         .description =
@@ -110,6 +115,7 @@ static const loom_pass_requirement_def_t kLowSourceToLowRequirements[] = {
                      "registry."),
     },
     {
+        .capability_type = &loom_low_pass_capability_type,
         .key = IREE_SVL(
             LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_LOWER_POLICY_REGISTRY),
         .description =

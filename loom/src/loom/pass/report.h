@@ -48,7 +48,7 @@ typedef struct loom_pass_report_invocation_t {
   iree_string_view_t symbol_name;
   // Program instruction index for deterministic correlation with traces.
   iree_host_size_t instruction_index;
-  // Monotonic elapsed time for configure/create/run/destroy in nanoseconds.
+  // Monotonic elapsed time for create/run/destroy in nanoseconds.
   iree_duration_t duration_nanoseconds;
   // True when the invocation changed IR or semantic module state.
   bool changed;

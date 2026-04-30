@@ -69,8 +69,9 @@ const loom_low_pass_capability_t* loom_low_pass_capability_from_environment(
 
 const loom_low_pass_capability_t* loom_low_pass_capability_from_pass(
     const loom_pass_t* pass) {
-  return pass ? loom_low_pass_capability_from_environment(pass->environment)
-              : NULL;
+  return pass && pass->environment
+             ? loom_low_pass_capability_from_environment(pass->environment)
+             : NULL;
 }
 
 const loom_low_descriptor_registry_t*

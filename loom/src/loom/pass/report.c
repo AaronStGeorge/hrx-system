@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/pass/environment.h"
 #include "loom/pass/program.h"
 #include "loom/pass/registry.h"
 #include "loom/util/json.h"
@@ -224,6 +225,9 @@ static iree_status_t loom_pass_report_format_descriptor_json(
         loom_output_stream_write_cstring(stream, i == 0 ? "{" : ",{"));
     IREE_RETURN_IF_ERROR(loom_pass_report_write_json_string_field(
         stream, "key", requirement->key));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+    IREE_RETURN_IF_ERROR(loom_pass_report_write_json_string_field(
+        stream, "capability", requirement->capability_type->name));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
     IREE_RETURN_IF_ERROR(loom_pass_report_write_json_string_field(
         stream, "description", requirement->description));

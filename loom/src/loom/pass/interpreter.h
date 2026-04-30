@@ -27,18 +27,6 @@ extern "C" {
 typedef struct loom_pass_interpreter_t loom_pass_interpreter_t;
 typedef struct loom_pass_report_t loom_pass_report_t;
 
-// Supplies optional pass instance user data for one INVOKE instruction.
-typedef iree_status_t (*loom_pass_interpreter_configure_fn_t)(
-    void* user_data, const loom_pass_program_instruction_t* instruction,
-    void** out_pass_user_data);
-
-typedef struct loom_pass_interpreter_configure_callback_t {
-  // Optional configure callback invoked before each pass instance is created.
-  loom_pass_interpreter_configure_fn_t fn;
-  // Opaque caller data passed to |fn|.
-  void* user_data;
-} loom_pass_interpreter_configure_callback_t;
-
 typedef struct loom_pass_interpreter_options_t {
   // Shared block pool used for pass instance, scratch, and snapshot arenas.
   iree_arena_block_pool_t* block_pool;
@@ -48,8 +36,6 @@ typedef struct loom_pass_interpreter_options_t {
   iree_diagnostic_emitter_t diagnostic_emitter;
   // Caller-owned execution environment capabilities.
   loom_pass_environment_t environment;
-  // Optional user-data callback for pass instances.
-  loom_pass_interpreter_configure_callback_t configure;
   // Optional caller-owned execution report appended as passes run.
   loom_pass_report_t* report;
 } loom_pass_interpreter_options_t;

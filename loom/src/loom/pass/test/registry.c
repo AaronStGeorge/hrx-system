@@ -10,8 +10,47 @@
 
 #include "loom/ops/op_defs.h"
 
-static loom_test_pass_trace_t* loom_test_pass_trace(loom_pass_t* pass) {
-  return (loom_test_pass_trace_t*)pass->user_data;
+static bool loom_test_pass_target_profile_satisfies_requirement(
+    const loom_pass_environment_capability_t* capability,
+    iree_string_view_t requirement) {
+  (void)capability;
+  return iree_string_view_equal(requirement, IREE_SV("target.profile"));
+}
+
+const loom_pass_environment_capability_type_t
+    loom_test_pass_target_profile_capability_type = {
+        .name = IREE_SVL("test.target-profile"),
+        .satisfies_requirement =
+            loom_test_pass_target_profile_satisfies_requirement,
+};
+
+const loom_pass_environment_capability_t
+    loom_test_pass_target_profile_capability = {
+        .type = &loom_test_pass_target_profile_capability_type,
+};
+
+const loom_pass_environment_capability_type_t
+    loom_test_pass_trace_capability_type = {
+        .name = IREE_SVL("test.pass-trace"),
+};
+
+loom_test_pass_trace_capability_t loom_test_pass_trace_capability_make(
+    loom_test_pass_trace_t* trace) {
+  return (loom_test_pass_trace_capability_t){
+      .base = {.type = &loom_test_pass_trace_capability_type},
+      .trace = trace,
+  };
+}
+
+loom_test_pass_trace_t* loom_test_pass_trace_from_pass(
+    const loom_pass_t* pass) {
+  if (!pass || !pass->environment) {
+    return NULL;
+  }
+  const loom_test_pass_trace_capability_t* capability =
+      (const loom_test_pass_trace_capability_t*)loom_pass_environment_lookup(
+          pass->environment, &loom_test_pass_trace_capability_type);
+  return capability ? capability->trace : NULL;
 }
 
 static iree_string_view_t loom_test_pass_function_name(
@@ -48,7 +87,7 @@ static iree_status_t loom_test_pass_trace_record(
 static iree_status_t loom_test_module_noop_run(loom_pass_t* pass,
                                                loom_module_t* module) {
   (void)module;
-  loom_test_pass_trace_t* trace = loom_test_pass_trace(pass);
+  loom_test_pass_trace_t* trace = loom_test_pass_trace_from_pass(pass);
   IREE_RETURN_IF_ERROR(loom_test_pass_trace_record(
       trace, IREE_SV("test.module-noop"), IREE_SV("<module>")));
   if (trace) ++trace->module_noop_invocation_count;
@@ -59,7 +98,7 @@ static iree_status_t loom_test_module_noop_run(loom_pass_t* pass,
 static iree_status_t loom_test_noop_run(loom_pass_t* pass,
                                         loom_module_t* module,
                                         loom_func_like_t function) {
-  loom_test_pass_trace_t* trace = loom_test_pass_trace(pass);
+  loom_test_pass_trace_t* trace = loom_test_pass_trace_from_pass(pass);
   IREE_RETURN_IF_ERROR(loom_test_pass_trace_record(
       trace, IREE_SV("test.noop"),
       loom_test_pass_function_name(module, function)));
@@ -71,7 +110,7 @@ static iree_status_t loom_test_noop_run(loom_pass_t* pass,
 static iree_status_t loom_test_mark_changed_run(loom_pass_t* pass,
                                                 loom_module_t* module,
                                                 loom_func_like_t function) {
-  loom_test_pass_trace_t* trace = loom_test_pass_trace(pass);
+  loom_test_pass_trace_t* trace = loom_test_pass_trace_from_pass(pass);
   IREE_RETURN_IF_ERROR(loom_test_pass_trace_record(
       trace, IREE_SV("test.mark-changed"),
       loom_test_pass_function_name(module, function)));
@@ -87,7 +126,7 @@ static iree_status_t loom_test_mark_changed_run(loom_pass_t* pass,
 static iree_status_t loom_test_options_create(loom_pass_t* pass,
                                               iree_string_view_t options) {
   (void)options;
-  loom_test_pass_trace_t* trace = loom_test_pass_trace(pass);
+  loom_test_pass_trace_t* trace = loom_test_pass_trace_from_pass(pass);
   if (trace && pass->decoded_options) {
     ++trace->options_decoded_create_count;
     if (pass->decoded_options->option_count > 0 &&
@@ -112,7 +151,7 @@ static iree_status_t loom_test_options_create(loom_pass_t* pass,
 static iree_status_t loom_test_options_run(loom_pass_t* pass,
                                            loom_module_t* module,
                                            loom_func_like_t function) {
-  loom_test_pass_trace_t* trace = loom_test_pass_trace(pass);
+  loom_test_pass_trace_t* trace = loom_test_pass_trace_from_pass(pass);
   IREE_RETURN_IF_ERROR(loom_test_pass_trace_record(
       trace, IREE_SV("test.options"),
       loom_test_pass_function_name(module, function)));
@@ -149,7 +188,7 @@ static iree_status_t loom_test_requires_target_run(loom_pass_t* pass,
 static iree_status_t loom_test_fail_run(loom_pass_t* pass,
                                         loom_module_t* module) {
   (void)module;
-  loom_test_pass_trace_t* trace = loom_test_pass_trace(pass);
+  loom_test_pass_trace_t* trace = loom_test_pass_trace_from_pass(pass);
   IREE_RETURN_IF_ERROR(loom_test_pass_trace_record(trace, IREE_SV("test.fail"),
                                                    IREE_SV("<module>")));
   if (trace) ++trace->fail_invocation_count;
@@ -224,6 +263,7 @@ static const loom_pass_option_schema_t kTestRequiredSchema[] = {
 
 static const loom_pass_requirement_def_t kTestRequiresTargetRequirements[] = {
     {
+        .capability_type = &loom_test_pass_target_profile_capability_type,
         .key = IREE_SVL("target.profile"),
         .description = IREE_SVL("Synthetic target profile availability."),
     },
