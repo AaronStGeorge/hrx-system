@@ -61,7 +61,6 @@ loom_assert_no_dependencies(
         ":low_registry",
         ":matrix_contract",
         ":matrix_contract_projection",
-        ":matrix_facts",
         ":occupancy",
         ":packet_diagnostics",
         ":register_class",
@@ -1170,16 +1169,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "matrix_facts",
-    srcs = ["matrix_facts.c"],
-    hdrs = ["matrix_facts.h"],
-    deps = [
-        ":matrix_contract",
-        "//loom/src/loom/util:fact_table",
-    ],
-)
-
-loom_cc_library(
     name = "matrix_contract_projection",
     srcs = ["matrix_contract_projection.c"],
     hdrs = ["matrix_contract_projection.h"],
@@ -1208,17 +1197,6 @@ loom_cc_test(
         ":matrix_contract",
         ":matrix_contract_projection",
         "//loom/src/loom/analysis:contract_storage",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "matrix_facts_test",
-    srcs = ["matrix_facts_test.cc"],
-    deps = [
-        ":matrix_contract",
-        ":matrix_facts",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
