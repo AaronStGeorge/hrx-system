@@ -3348,6 +3348,27 @@ iree_status_t loom_vector_reduce_facts(loom_fact_context_t* context,
   return iree_ok_status();
 }
 
+iree_status_t loom_vector_mma_facts(loom_fact_context_t* context,
+                                    const loom_module_t* module,
+                                    const loom_op_t* op,
+                                    const loom_value_facts_t* operand_facts,
+                                    loom_value_facts_t* result_facts) {
+  (void)module;
+  (void)op;
+  loom_vector_fragment_fact_t init_fragment;
+  if (!loom_vector_fragment_fact_query_value_facts(context, operand_facts[2],
+                                                   &init_fragment) ||
+      !iree_any_bit_set(init_fragment.role_flags,
+                        LOOM_VECTOR_FRAGMENT_ROLE_FLAG_INIT |
+                            LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT)) {
+    result_facts[0] = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+  init_fragment.role_flags = LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT;
+  return loom_vector_fragment_fact_make_value_facts(context, init_fragment,
+                                                    &result_facts[0]);
+}
+
 iree_status_t loom_vector_dotf_facts(loom_fact_context_t* context,
                                      const loom_module_t* module,
                                      const loom_op_t* op,

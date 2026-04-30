@@ -210,9 +210,11 @@ loom_cc_library(
     "contract_vector.c"
   DEPS
     ::contract
+    ::contract_storage
     iree::base
     loom::src::loom::ir
     loom::src::loom::ops::vector
+    loom::src::loom::util::fact_table
   PUBLIC
 )
 
@@ -226,8 +228,11 @@ loom_cc_test(
     iree::base::internal::arena
     loom::src::loom::format::text::parser
     loom::src::loom::ir
+    loom::src::loom::ops::encoding
     loom::src::loom::ops::func
+    loom::src::loom::ops::index
     loom::src::loom::ops::vector
+    loom::src::loom::pass::value_facts
     loom::src::loom::testing::module_ptr
     loom::src::loom::verify
     iree::testing::gtest

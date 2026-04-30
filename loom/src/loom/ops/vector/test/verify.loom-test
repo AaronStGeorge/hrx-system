@@ -914,6 +914,16 @@ func.def @fragment_requires_schema_scale_auxiliary(%payload: vector<6xi32>, %m: 
 
 // ====
 
+// Matrix MMA preserves the physical init/result vector type. Fragment
+// interpretation compatibility is a fact-backed lowering contract.
+func.def @mma_result_type_must_match_init(%lhs: vector<8xf16>, %rhs: vector<8xf16>, %init: vector<8xf32>) {
+  // ERROR@+1: TYPE/001 "init" "result"
+  %result = vector.mma %lhs, %rhs, %init : vector<8xf16>, vector<8xf16>, vector<4xf32>
+  func.return
+}
+
+// ====
+
 // Fully static threshold tables must be nondecreasing.
 func.def @table_quantize_unsorted_thresholds(%values: vector<4xf32>) {
   %t0 = scalar.constant 0.0 : f32

@@ -694,6 +694,31 @@ def test_vector_fragment_preserves_physical_type_and_groups_interpretation_data(
     assert any(isinstance(element, ResultType) and element.field == "result" for element in op.format)
 
 
+def test_vector_mma_keeps_contract_data_on_fragment_facts() -> None:
+    op = _op_by_name()["vector.mma"]
+    trait_names = {trait.name for trait in op.traits}
+    constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+
+    lhs_operand = op.operand("lhs")
+    rhs_operand = op.operand("rhs")
+    init_operand = op.operand("init")
+    result = op.result("result")
+    assert lhs_operand is not None
+    assert rhs_operand is not None
+    assert init_operand is not None
+    assert result is not None
+    assert lhs_operand.type_constraint == VECTOR
+    assert rhs_operand.type_constraint == VECTOR
+    assert init_operand.type_constraint == VECTOR
+    assert result.type_constraint == VECTOR
+    assert ("SameType", ("init", "result")) in constraints
+    assert "Pure" in trait_names
+    assert "Elementwise" not in trait_names
+    assert op.effects == ()
+    assert not op.attrs
+    assert any(isinstance(element, ResultType) and element.field == "result" for element in op.format)
+
+
 def test_vector_layout_ops_make_lane_structure_explicit() -> None:
     ops = _op_by_name()
     interleave_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.interleave"].constraints}

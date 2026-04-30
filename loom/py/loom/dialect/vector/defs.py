@@ -3623,6 +3623,49 @@ vector_dot4f8 = Op(
     ],
 )
 
+vector_mma = Op(
+    "vector.mma",
+    group=vector_ops,
+    contracts=[ContractFamily.VECTOR_CONTRACTION],
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Compute a matrix multiply-accumulate over target-shaped vector "
+        "fragments. The op consumes only the physical lhs, rhs, and init "
+        "vectors; logical M/N/K shape, fragment role, packed storage schema, "
+        "scales, codebooks, sparse metadata, and other interpretation data are "
+        "carried by vector.fragment facts on those operands. Lowering queries "
+        "those facts to select native matrix instructions or a reference "
+        "decomposition without baking target-specific witnesses into the MMA "
+        "syntax."
+    ),
+    operands=[
+        Operand("lhs", VECTOR, doc="Physical lhs fragment vector."),
+        Operand("rhs", VECTOR, doc="Physical rhs fragment vector."),
+        Operand("init", VECTOR, doc="Physical accumulator/addend fragment vector."),
+    ],
+    results=[Result("result", VECTOR, doc="Updated accumulator/result fragment vector.")],
+    constraints=[SameType("init", "result")],
+    facts="loom_vector_mma_facts",
+    traits=[PURE],
+    format=[
+        Ref("lhs"),
+        COMMA,
+        Ref("rhs"),
+        COMMA,
+        Ref("init"),
+        COLON,
+        TypeOf("lhs"),
+        COMMA,
+        TypeOf("rhs"),
+        COMMA,
+        ResultType("result"),
+    ],
+    examples=[
+        "%r = vector.mma %lhs, %rhs, %init : vector<8xf16>, vector<8xf16>, vector<8xf32>",
+        "%r = vector.mma %lhs, %rhs, %init : vector<6xi32>, vector<6xi32>, vector<8xf32>",
+    ],
+)
+
 
 # ============================================================================
 # Reductions
@@ -3839,6 +3882,7 @@ VECTOR_CONTRACTION_OPS: tuple[Op, ...] = (
     vector_dot4i,
     vector_dot8i4,
     vector_dot4f8,
+    vector_mma,
 )
 
 VECTOR_REDUCTION_OPS: tuple[Op, ...] = (vector_reduce,)

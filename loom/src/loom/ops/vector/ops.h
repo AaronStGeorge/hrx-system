@@ -156,11 +156,12 @@ enum {
   LOOM_OP_VECTOR_DOT4I = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 132),
   LOOM_OP_VECTOR_DOT8I4 = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 133),
   LOOM_OP_VECTOR_DOT4F8 = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 134),
-  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 135),
-  LOOM_OP_VECTOR_DECODE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 136),
-  LOOM_OP_VECTOR_ENCODE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 137),
-  LOOM_OP_VECTOR_FRAGMENT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 138),
-  LOOM_OP_VECTOR_COUNT_ = 139,
+  LOOM_OP_VECTOR_MMA = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 135),
+  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 136),
+  LOOM_OP_VECTOR_DECODE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 137),
+  LOOM_OP_VECTOR_ENCODE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 138),
+  LOOM_OP_VECTOR_FRAGMENT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 139),
+  LOOM_OP_VECTOR_COUNT_ = 140,
 };
 
 // Floating-point value-domain assumptions for vector operations.
@@ -2886,6 +2887,27 @@ iree_status_t loom_vector_dot4f8_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_vector_dot4f8_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_MMA: Compute a matrix multiply-accumulate over target-shaped vector fragments. The op consumes only the physical lhs, rhs, and init vectors; logical M/N/K shape, fragment role, packed storage schema, scales, codebooks, sparse metadata, and other interpretation data are carried by vector.fragment facts on those operands. Lowering queries those facts to select native matrix instructions or a reference decomposition without baking target-specific witnesses into the MMA syntax.
+// %r = vector.mma %lhs, %rhs, %init : vector<8xf16>, vector<8xf16>, vector<8xf32>
+LOOM_DEFINE_ISA(loom_vector_mma_isa, LOOM_OP_VECTOR_MMA)
+LOOM_DEFINE_OPERAND(loom_vector_mma_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_mma_rhs, 1)
+LOOM_DEFINE_OPERAND(loom_vector_mma_init, 2)
+LOOM_DEFINE_RESULT(loom_vector_mma_result, 0)
+iree_status_t loom_vector_mma_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t lhs,
+    loom_may_consume loom_value_id_t rhs,
+    loom_may_consume loom_value_id_t init,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_mma_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,

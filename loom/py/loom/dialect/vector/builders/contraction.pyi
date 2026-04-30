@@ -70,3 +70,14 @@ class VectorContractionMixin:
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
     ) -> ValueRef: ...
+    def mma(
+        self,
+        *,
+        lhs: ValueRef,
+        rhs: ValueRef,
+        init: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+    ) -> ValueRef: ...

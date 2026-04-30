@@ -178,8 +178,10 @@ loom_cc_library(
     hdrs = ["contract_vector.h"],
     deps = [
         ":contract",
+        ":contract_storage",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/vector",
+        "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
     ],
 )
@@ -191,8 +193,11 @@ loom_cc_test(
         ":contract_vector",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ops/encoding",
         "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/vector",
+        "//loom/src/loom/pass:value_facts",
         "//loom/src/loom/testing:module_ptr",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base/internal:arena",
