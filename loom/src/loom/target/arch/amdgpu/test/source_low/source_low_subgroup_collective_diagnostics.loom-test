@@ -30,3 +30,50 @@ kernel.def workgroup_size(64, 1, 1) @subgroup_broadcast_payload_rejected() {
   %broadcast = kernel.subgroup.broadcast %value from %lane : vector<4xi8>, i32
   kernel.return
 }
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_shuffle_dynamic_offset_rejected(%input: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<1xi32, #dense>
+  %offset_vector = vector.load %input_view[0] : view<1xi32, #dense> -> vector<1xi32>
+  %offset = vector.extract %offset_vector[0] : vector<1xi32> -> i32
+  %width = scalar.constant 32 : i32
+  %value = scalar.constant 1 : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup shuffle requires an exact lane offset"
+  %shuffle, %valid = kernel.subgroup.shuffle<xor> %value, %offset, %width : i32, i32, i32
+  kernel.return
+}
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_shuffle_partial_width_rejected() {
+  %value = scalar.constant 1 : i32
+  %offset = scalar.constant 1 : i32
+  %width = scalar.constant 16 : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup shuffle currently requires full selected wave32 or wave64 width"
+  %shuffle, %valid = kernel.subgroup.shuffle<down> %value, %offset, %width : i32, i32, i32
+  kernel.return
+}
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_shuffle_offset_out_of_range_rejected() {
+  %value = scalar.constant 1 : i32
+  %offset = scalar.constant 32 : i32
+  %width = scalar.constant 32 : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup shuffle offset/index must be within the selected wave32 or wave64 subgroup"
+  %shuffle, %valid = kernel.subgroup.shuffle<index> %value, %offset, %width : i32, i32, i32
+  kernel.return
+}
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_shuffle_payload_rejected() {
+  %value = vector.constant 1 : vector<4xi8>
+  %offset = scalar.constant 0 : i32
+  %width = scalar.constant 32 : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup shuffle requires an i32 or f32 scalar"
+  %shuffle, %valid = kernel.subgroup.shuffle<index> %value, %offset, %width : vector<4xi8>, i32, i32
+  kernel.return
+}

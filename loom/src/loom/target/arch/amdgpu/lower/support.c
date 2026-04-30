@@ -444,6 +444,18 @@ static bool loom_amdgpu_value_is_divergent_scalar_cmpi_result(
                                         loom_scalar_cmpi_rhs(defining_op));
 }
 
+static bool loom_amdgpu_value_is_subgroup_shuffle_valid_result(
+    loom_low_lower_context_t* context, loom_value_id_t source_value_id) {
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_value_t* value = loom_module_value(module, source_value_id);
+  if (loom_value_is_block_arg(value)) {
+    return false;
+  }
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  return defining_op != NULL && loom_kernel_subgroup_shuffle_isa(defining_op) &&
+         loom_value_def_index(value) == 1;
+}
+
 iree_status_t loom_amdgpu_map_type(void* user_data,
                                    loom_low_lower_context_t* context,
                                    const loom_op_t* source_op,
@@ -511,6 +523,11 @@ iree_status_t loom_amdgpu_map_value(void* user_data,
                                     loom_type_t source_type,
                                     loom_type_t* out_low_type) {
   (void)user_data;
+  if (loom_amdgpu_type_is_i1(source_type) &&
+      loom_amdgpu_value_is_subgroup_shuffle_valid_result(context,
+                                                         source_value_id)) {
+    return loom_amdgpu_make_sgpr_range_type(context, 2, out_low_type);
+  }
   if (loom_amdgpu_type_is_i1(source_type) &&
       loom_amdgpu_value_is_divergent_scalar_cmpi_result(context,
                                                         source_value_id)) {

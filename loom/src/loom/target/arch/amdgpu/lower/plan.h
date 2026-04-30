@@ -18,6 +18,7 @@
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/ir.h"
+#include "loom/ops/kernel/ops.h"
 #include "loom/target/arch/amdgpu/lower/kinds.h"
 
 #ifdef __cplusplus
@@ -170,6 +171,27 @@ typedef struct loom_amdgpu_subgroup_broadcast_plan_t {
   // Exact subgroup lane read by the broadcast.
   uint32_t source_lane;
 } loom_amdgpu_subgroup_broadcast_plan_t;
+
+typedef struct loom_amdgpu_subgroup_shuffle_plan_t {
+  // Descriptor row selected for the native cross-lane read.
+  loom_low_lower_resolved_descriptor_t descriptor;
+  // Source value moved across subgroup lanes.
+  loom_value_id_t value;
+  // Result value receiving the moved payload.
+  loom_value_id_t result;
+  // Per-lane mask reporting whether the selected source lane is valid.
+  loom_value_id_t valid;
+  // Source/result payload shape selected during planning.
+  loom_amdgpu_subgroup_payload_kind_t payload_kind;
+  // Number of 32-bit registers in the shuffled payload.
+  uint32_t register_count;
+  // Full-width lane addressing mode selected by the source op.
+  loom_kernel_subgroup_shuffle_mode_t mode;
+  // Exact lane offset or lane index interpreted by mode.
+  uint32_t offset;
+  // Exact subgroup width selected by the active target bundle.
+  uint32_t width;
+} loom_amdgpu_subgroup_shuffle_plan_t;
 
 typedef struct loom_amdgpu_matrix_mma_plan_t {
   // Descriptor row selected for the native matrix instruction.

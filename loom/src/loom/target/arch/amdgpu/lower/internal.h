@@ -278,6 +278,11 @@ extern const loom_low_lower_rule_set_t loom_amdgpu_async_rule_set;
 iree_status_t loom_amdgpu_target_wavefront_size(
     const loom_target_bundle_t* bundle, uint32_t* out_wavefront_size);
 
+// Emits the current invocation lane id within its subgroup as a VGPR value.
+iree_status_t loom_amdgpu_emit_current_subgroup_lane_id(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_type_t result_type, loom_value_id_t* out_lane_id);
+
 // Selects a plan for value-construction source ops.
 iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op,
@@ -318,6 +323,23 @@ iree_status_t loom_amdgpu_lower_kernel_barrier(
 
 // Verifies source kernel.barrier legality for AMDGPU target-low selection.
 iree_status_t loom_amdgpu_low_legality_verify_kernel_barrier(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
+// Selects a native AMDGPU cross-lane packet for a source subgroup shuffle.
+iree_status_t loom_amdgpu_select_kernel_subgroup_shuffle_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_subgroup_shuffle_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source subgroup shuffle using one DS bpermute per 32-bit payload
+// register.
+iree_status_t loom_amdgpu_lower_kernel_subgroup_shuffle(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_shuffle_plan_t* plan);
+
+// Verifies source subgroup shuffle legality for native AMDGPU lowering.
+iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_shuffle(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);

@@ -159,6 +159,15 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(
     loom_amdgpu_subgroup_broadcast_plan_t,
     loom_amdgpu_lower_kernel_subgroup_broadcast)
 
+LOOM_AMDGPU_DEFINE_DATA_SELECT(
+    loom_amdgpu_select_kernel_subgroup_shuffle_dispatch,
+    loom_amdgpu_subgroup_shuffle_plan_t,
+    loom_amdgpu_select_kernel_subgroup_shuffle_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_kernel_subgroup_shuffle_dispatch,
+                             loom_amdgpu_subgroup_shuffle_plan_t,
+                             loom_amdgpu_lower_kernel_subgroup_shuffle)
+
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_kernel_async_gather_dispatch,
                                loom_amdgpu_async_gather_plan_t,
                                loom_amdgpu_select_kernel_async_gather_plan)
@@ -566,9 +575,12 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_emit_preamble_dispatch,
                 loom_amdgpu_low_legality_verify_kernel_preamble),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_SHUFFLE)] =
-            LOOM_AMDGPU_LEGALITY_ROW(
+            LOOM_AMDGPU_DATA_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_SHUFFLE,
-                loom_amdgpu_low_legality_verify_kernel_collective),
+                loom_amdgpu_subgroup_shuffle_plan_t,
+                loom_amdgpu_select_kernel_subgroup_shuffle_dispatch,
+                loom_amdgpu_emit_kernel_subgroup_shuffle_dispatch,
+                loom_amdgpu_low_legality_verify_kernel_subgroup_shuffle),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_SUBGROUP_BROADCAST)] =
             LOOM_AMDGPU_DATA_ROW(
                 LOOM_OP_KERNEL_SUBGROUP_BROADCAST,
