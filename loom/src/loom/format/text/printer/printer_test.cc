@@ -1752,7 +1752,10 @@ static const uint8_t kPredTestPredicatesBname[] =
     "\x0a"
     "predicates";
 static const loom_attr_descriptor_t kPredTestAttrDesc[] = {
-    {kPredTestPredicatesBname, LOOM_ATTR_PREDICATE_LIST, 0, 0, NULL},
+    {
+        .name = kPredTestPredicatesBname,
+        .attr_kind = LOOM_ATTR_PREDICATE_LIST,
+    },
 };
 static const loom_op_vtable_t kPredTestVtable = {
     // Cache line 1: hot path.

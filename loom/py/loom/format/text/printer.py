@@ -1840,7 +1840,18 @@ class Printer:
         self, attributes: Mapping[str, Any], covered: set[str], op_decl: Op
     ) -> str:
         """Format {key = value, ...} for uncovered attributes."""
-        extras = {k: v for k, v in attributes.items() if k not in covered}
+        extras = {}
+        for key, value in attributes.items():
+            if key in covered:
+                continue
+            attr_def = op_decl.attr(key) if op_decl else None
+            if (
+                attr_def is not None
+                and attr_def.elide_default
+                and value == attr_def.default
+            ):
+                continue
+            extras[key] = value
         if not extras:
             return ""
 

@@ -18,12 +18,12 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extractu() asm<amdgpu
   %zero = s_mov_b32 0
   %10 = v_mov_b32 0
   %11 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b32 %10, %11 {offset = 0}
+  %loaded = global_load_b32 %10, %11
   %13 = v_lshrrev_b32_lit %loaded, 4
   %nibble = v_and_b32_lit %13, 15
   %15 = v_mov_b32 0
   %16 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %15, %nibble, %16 {offset = 0}
+  global_store_b32 %15, %nibble, %16
   return
 }
 
@@ -46,12 +46,12 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extracts() asm<amdgpu
   %zero = s_mov_b32 0
   %10 = v_mov_b32 0
   %11 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b32 %10, %11 {offset = 0}
+  %loaded = global_load_b32 %10, %11
   %13 = v_lshlrev_b32_lit %loaded, 24
   %nibble = v_ashrrev_i32_lit %13, 28
   %15 = v_mov_b32 0
   %16 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %15, %nibble, %16 {offset = 0}
+  global_store_b32 %15, %nibble, %16
   return
 }
 
@@ -77,17 +77,17 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_insert() asm<amdgpu.g
   %zero = s_mov_b32 0
   %14 = v_mov_b32 0
   %15 = slice %field_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %field = global_load_b32 %14, %15 {offset = 0}
+  %field = global_load_b32 %14, %15
   %17 = v_mov_b32 0
   %18 = slice %base_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %base = global_load_b32 %17, %18 {offset = 0}
+  %base = global_load_b32 %17, %18
   %20 = v_and_b32_lit %field, 15
   %21 = v_lshlrev_b32_lit %20, 8
   %22 = v_and_b32_lit %base, 4294963455
   %inserted = v_or_b32 %22, %21
   %24 = v_mov_b32 0
   %25 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %24, %inserted, %25 {offset = 0}
+  global_store_b32 %24, %inserted, %25
   return
 }
 
@@ -114,7 +114,7 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_b128_shape() asm<amdg
   %zero = s_mov_b32 0
   %14 = v_mov_b32 0
   %15 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b128 %14, %15 {offset = 0}
+  %loaded = global_load_b128 %14, %15
   %17 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %18 = v_and_b32_lit %17, 15
   %19 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
@@ -182,6 +182,6 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_b128_shape() asm<amdg
   %result = concat(%71, %74, %77, %80) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   %82 = v_mov_b32 0
   %83 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %82, %result, %83 {offset = 0}
+  global_store_b128 %82, %result, %83
   return
 }

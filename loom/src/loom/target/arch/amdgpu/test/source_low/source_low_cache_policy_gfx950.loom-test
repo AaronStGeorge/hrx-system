@@ -20,9 +20,9 @@ low.kernel.def target(@target) @cache_device_non_temporal_load_store() asm<amdgp
   %zero = s_mov_b32 0
   %12 = v_lshlrev_b32_lit %tid, 4
   %13 = s_mov_b32 0
-  %loaded = buffer_load_dwordx4 %input_view, %12, %13 {offset = 0, nt = 1}
+  %loaded = buffer_load_dwordx4 %input_view, %12, %13 {nt = 1}
   %15 = v_lshlrev_b32_lit %tid, 4
   %16 = s_mov_b32 0
-  buffer_store_dwordx4 %loaded, %output_view, %15, %16 {offset = 0, nt = 1}
+  buffer_store_dwordx4 %loaded, %output_view, %15, %16 {nt = 1}
   return
 }

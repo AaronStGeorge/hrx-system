@@ -20,7 +20,7 @@ low.func.def target(@target) abi(hal_kernel) @i32_reduce_add() asm<amdgpu.gfx11.
   %zero = s_mov_b32 0
   %12 = v_mov_b32 0
   %13 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b128 %12, %13 {offset = 0}
+  %loaded = global_load_b128 %12, %13
   %init = s_mov_b32 0
   %16 = v_mov_b32 0
   %17 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
@@ -33,7 +33,7 @@ low.func.def target(@target) abi(hal_kernel) @i32_reduce_add() asm<amdgpu.gfx11.
   %stored = v_add_u32 %22, %23
   %25 = v_mov_b32 0
   %26 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %25, %stored, %26 {offset = 0}
+  global_store_b32 %25, %stored, %26
   return
 }
 
@@ -58,7 +58,7 @@ low.func.def target(@target) abi(hal_kernel) @f32_reduce_add() asm<amdgpu.gfx11.
   %zero = s_mov_b32 0
   %12 = v_mov_b32 0
   %13 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b128 %12, %13 {offset = 0}
+  %loaded = global_load_b128 %12, %13
   %init = v_mov_b32 0
   %16 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %17 = v_add_f32 %init, %16
@@ -70,6 +70,6 @@ low.func.def target(@target) abi(hal_kernel) @f32_reduce_add() asm<amdgpu.gfx11.
   %stored = v_add_f32 %21, %22
   %24 = v_mov_b32 0
   %25 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %24, %stored, %25 {offset = 0}
+  global_store_b32 %24, %stored, %25
   return
 }

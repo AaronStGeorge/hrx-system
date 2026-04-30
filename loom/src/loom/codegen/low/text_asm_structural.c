@@ -26,29 +26,36 @@ static const uint8_t kLowAsmStorageAddressOffsetName[] =
     LOOM_BSTRING_LITERAL(6, "offset");
 
 static const loom_attr_descriptor_t kLowAsmResourceIndexAttr = {
-    kLowAsmResourceIndexName, LOOM_ATTR_I64, 0, 0, NULL, NULL};
+    .name = kLowAsmResourceIndexName,
+    .attr_kind = LOOM_ATTR_I64,
+};
 static const loom_attr_descriptor_t kLowAsmResourceSemanticTypeAttr = {
-    kLowAsmResourceSemanticTypeName, LOOM_ATTR_TYPE, 0, 0, NULL, NULL};
+    .name = kLowAsmResourceSemanticTypeName,
+    .attr_kind = LOOM_ATTR_TYPE,
+};
 static const loom_attr_descriptor_t kLowAsmResourceValidByteCountAttr = {
-    kLowAsmResourceValidByteCountName,
-    LOOM_ATTR_I64,
-    LOOM_ATTR_OPTIONAL,
-    0,
-    NULL,
-    NULL};
+    .name = kLowAsmResourceValidByteCountName,
+    .attr_kind = LOOM_ATTR_I64,
+    .flags = LOOM_ATTR_OPTIONAL,
+};
 static const loom_attr_descriptor_t kLowAsmResourceCacheSwizzleStrideAttr = {
-    kLowAsmResourceCacheSwizzleStrideName,
-    LOOM_ATTR_I64,
-    LOOM_ATTR_OPTIONAL,
-    0,
-    NULL,
-    NULL};
+    .name = kLowAsmResourceCacheSwizzleStrideName,
+    .attr_kind = LOOM_ATTR_I64,
+    .flags = LOOM_ATTR_OPTIONAL,
+};
 static const loom_attr_descriptor_t kLowAsmStorageReserveByteLengthAttr = {
-    kLowAsmStorageReserveByteLengthName, LOOM_ATTR_I64, 0, 0, NULL, NULL};
+    .name = kLowAsmStorageReserveByteLengthName,
+    .attr_kind = LOOM_ATTR_I64,
+};
 static const loom_attr_descriptor_t kLowAsmStorageReserveByteAlignmentAttr = {
-    kLowAsmStorageReserveByteAlignmentName, LOOM_ATTR_I64, 0, 0, NULL, NULL};
+    .name = kLowAsmStorageReserveByteAlignmentName,
+    .attr_kind = LOOM_ATTR_I64,
+};
 static const loom_attr_descriptor_t kLowAsmStorageAddressOffsetAttr = {
-    kLowAsmStorageAddressOffsetName, LOOM_ATTR_I64, 0, 0, NULL, NULL};
+    .name = kLowAsmStorageAddressOffsetName,
+    .attr_kind = LOOM_ATTR_I64,
+    .flags = LOOM_ATTR_ELIDE_DEFAULT,
+};
 
 static iree_status_t loom_low_descriptor_text_asm_resource_key_to_kind(
     iree_string_view_t key, uint8_t* out_kind) {
@@ -243,16 +250,20 @@ static iree_status_t loom_low_descriptor_text_asm_build_storage_address(
     loom_named_attr_slice_t attrs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op) {
   const loom_named_attr_t* offset_attr = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_required_attr(
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_lookup_attr(
       builder->module, attrs, IREE_SV("offset"), &offset_attr));
-  if (offset_attr->value.kind != LOOM_ATTR_I64) {
+  if (offset_attr && offset_attr->value.kind != LOOM_ATTR_I64) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "low asm storage_address offset must be an i64 attr");
   }
+  int64_t offset = 0;
+  if (offset_attr) {
+    offset = offset_attr->value.i64;
+  }
 
-  return loom_low_storage_address_build(
-      builder, storage, offset_attr->value.i64, result_type, location, out_op);
+  return loom_low_storage_address_build(builder, storage, offset, result_type,
+                                        location, out_op);
 }
 
 iree_status_t loom_low_descriptor_text_asm_build_structural(

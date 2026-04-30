@@ -25,19 +25,19 @@ low.kernel.def target(@target) @lds_b128_roundtrip() asm<amdgpu.gfx11.core> {
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 1024
   %17 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
-  %scratch_view = storage_address %17 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %scratch_view = storage_address %17 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %19 = v_lshlrev_b32_lit %tid, 4
   %20 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b128 %19, %20 {offset = 0}
+  %loaded = global_load_b128 %19, %20
   %22 = v_lshlrev_b32_lit %tid, 4
   %23 = v_add_u32 %scratch_view, %22
-  ds_write_b128 %23, %loaded {offset = 0}
+  ds_write_b128 %23, %loaded
   %24 = v_lshlrev_b32_lit %tid, 4
   %25 = v_add_u32 %scratch_view, %24
-  %roundtrip = ds_read_b128 %25 {offset = 0}
+  %roundtrip = ds_read_b128 %25
   %27 = v_lshlrev_b32_lit %tid, 4
   %28 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %27, %roundtrip, %28 {offset = 0}
+  global_store_b128 %27, %roundtrip, %28
   return
 }
 
@@ -69,20 +69,20 @@ low.kernel.def target(@target) @lds_b128_large_static_offset_roundtrip() asm<amd
   %large = s_mov_b32 1024
   %bytes = s_mov_b32 4096
   %19 = storage {byte_alignment = 16, byte_length = 4096} : low.storage<workgroup>
-  %scratch_view = storage_address %19 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %scratch_view = storage_address %19 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %21 = v_lshlrev_b32_lit %tid, 4
   %22 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b128 %21, %22 {offset = 0}
+  %loaded = global_load_b128 %21, %22
   %24 = v_lshlrev_b32_lit %tid, 4
   %25 = v_add_u32 %scratch_view, %24
   %26 = v_add_u32_lit %25, 1024
-  ds_write_b128 %26, %loaded {offset = 0}
+  ds_write_b128 %26, %loaded
   %27 = v_lshlrev_b32_lit %tid, 4
   %28 = v_add_u32 %scratch_view, %27
   %29 = v_add_u32_lit %28, 1024
-  %roundtrip = ds_read_b128 %29 {offset = 0}
+  %roundtrip = ds_read_b128 %29
   %31 = v_lshlrev_b32_lit %tid, 4
   %32 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %31, %roundtrip, %32 {offset = 0}
+  global_store_b128 %31, %roundtrip, %32
   return
 }

@@ -28,7 +28,8 @@ static bool loom_print_format_element_covers_attr(
     case LOOM_FORMAT_KIND_DESCRIPTOR_REF:
       return element->field_index == attr_index || element->data == attr_index;
     case LOOM_FORMAT_KIND_INDEX_LIST:
-      return element->data == attr_index;
+      return LOOM_FORMAT_INDEX_LIST_STATIC_ATTR_INDEX(element->data) ==
+             attr_index;
     case LOOM_FORMAT_KIND_OPERAND_DICT:
       return element->data == attr_index;
     case LOOM_FORMAT_KIND_ATTR_TABLE:
@@ -49,7 +50,13 @@ static bool loom_print_inline_attr_dict_attr_present(
   if (attr_index >= op->attribute_count) {
     return false;
   }
-  if (loom_attr_is_absent(loom_op_attrs(op)[attr_index])) {
+  const loom_attribute_t* attr = &loom_op_attrs(op)[attr_index];
+  if (loom_attr_is_absent(*attr)) {
+    return false;
+  }
+  const loom_attr_descriptor_t* descriptor =
+      &vtable->attr_descriptors[attr_index];
+  if (loom_attr_descriptor_elides_value(descriptor, attr)) {
     return false;
   }
   const loom_format_element_t* elements = vtable->format_elements;

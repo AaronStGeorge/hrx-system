@@ -1092,6 +1092,7 @@ def _named_offset_immediate(
     return Immediate(
         field_name,
         ImmediateKind.UNSIGNED,
+        flags=(ImmediateFlag.DEFAULT_VALUE,),
         bit_width=bit_width,
         encoding_id=encoding_id,
         unsigned_max=(2**bit_width) - 1,
@@ -1106,6 +1107,7 @@ def _signed_offset_immediate(
     return Immediate(
         "offset",
         ImmediateKind.SIGNED,
+        flags=(ImmediateFlag.DEFAULT_VALUE,),
         bit_width=bit_width,
         encoding_id=encoding_id,
         signed_min=-(2 ** (bit_width - 1)),
@@ -4398,6 +4400,7 @@ def _ds_crosslane_offset_immediate() -> Immediate:
     return Immediate(
         "offset",
         ImmediateKind.UNSIGNED,
+        flags=(ImmediateFlag.DEFAULT_VALUE,),
         bit_width=16,
         encoding_id=_ADDRESS_OFFSET_DS16_ENCODING_ID,
         encoding_slices=(

@@ -3153,6 +3153,8 @@ def generate_tables_c(
                 flag_names = []
                 if attr_def.optional:
                     flag_names.append("LOOM_ATTR_OPTIONAL")
+                if attr_def.elide_default:
+                    flag_names.append("LOOM_ATTR_ELIDE_DEFAULT")
                 if attr_def.open_enum:
                     flag_names.append("LOOM_ATTR_OPEN_ENUM")
                 flags = " | ".join(flag_names) if flag_names else "0"

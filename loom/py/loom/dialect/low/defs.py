@@ -888,7 +888,7 @@ low_spill = Op(
         Operand("storage", STORAGE),
     ],
     attrs=[
-        AttrDef("offset", ATTR_TYPE_I64),
+        AttrDef("offset", ATTR_TYPE_I64, default=0, elide_default=True),
     ],
     traits=[UNKNOWN_EFFECTS],
     verify="loom_low_spill_verify",
@@ -903,7 +903,7 @@ low_spill = Op(
         TypeOf("storage"),
     ],
     examples=[
-        "low.spill %value, %slot {offset = 0} : reg<amdgpu.vgpr x4>, low.storage<private>",
+        "low.spill %value, %slot : reg<amdgpu.vgpr x4>, low.storage<private>",
     ],
 )
 
@@ -918,7 +918,7 @@ low_reload = Op(
     doc="Explicit reload from low storage into a register value.",
     operands=[Operand("storage", STORAGE)],
     attrs=[
-        AttrDef("offset", ATTR_TYPE_I64),
+        AttrDef("offset", ATTR_TYPE_I64, default=0, elide_default=True),
     ],
     results=[Result("result", REGISTER)],
     traits=[UNKNOWN_EFFECTS],
@@ -932,7 +932,7 @@ low_reload = Op(
         ResultType("result"),
     ],
     examples=[
-        "%reload = low.reload %slot {offset = 0} : low.storage<private> -> reg<amdgpu.vgpr x4>",
+        "%reload = low.reload %slot : low.storage<private> -> reg<amdgpu.vgpr x4>",
     ],
 )
 
@@ -947,7 +947,7 @@ low_storage_address = Op(
     doc="Materialize a target address for function-local storage.",
     operands=[Operand("storage", STORAGE)],
     attrs=[
-        AttrDef("offset", ATTR_TYPE_I64),
+        AttrDef("offset", ATTR_TYPE_I64, default=0, elide_default=True),
     ],
     results=[Result("result", REGISTER)],
     traits=[PURE],
@@ -961,7 +961,7 @@ low_storage_address = Op(
         ResultType("result"),
     ],
     examples=[
-        "%addr = low.storage.address %slot {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>",
+        "%addr = low.storage.address %slot : low.storage<workgroup> -> reg<amdgpu.vgpr>",
     ],
 )
 

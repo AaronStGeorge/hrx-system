@@ -275,6 +275,15 @@ class TestAttrDef:
         a = AttrDef("transpose", "bool", default="false")
         assert a.default == "false"
 
+    def test_elide_default(self) -> None:
+        a = AttrDef("offset", "i64", default=0, elide_default=True)
+        assert a.default == 0
+        assert a.elide_default
+
+    def test_elide_default_requires_default(self) -> None:
+        with pytest.raises(ValueError, match="elide_default requires default"):
+            AttrDef("offset", "i64", elide_default=True)
+
     def test_enum_attr(self) -> None:
         a = AttrDef("predicate", "enum", enum_def=_cmpi_preds)
         assert a.enum_def is not None

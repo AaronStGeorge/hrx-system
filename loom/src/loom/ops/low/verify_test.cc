@@ -709,7 +709,7 @@ TEST_F(LowVerifyTest, StorageTrafficPassesWithOwnedStorage) {
       "low.storage<scratch>\n"
       "  %reload = low.reload %storage {offset = 0} : low.storage<scratch> "
       "-> reg<vm.i32>\n"
-      "  %addr = low.storage.address %storage {offset = 0} : "
+      "  %addr = low.storage.address %storage : "
       "low.storage<scratch> -> reg<vm.ptr>\n"
       "  low.return %reload : reg<vm.i32>\n"
       "}\n",

@@ -579,6 +579,10 @@ class AttrDef:
     enum_def: For enum attrs, the EnumDef describing valid values.
         Required when attr_type is "enum".
     optional: If True, this attribute may be absent.
+    elide_default: If True, inline AttrDict text printing omits this
+        zero/false scalar attribute when its value equals default, and parsing
+        restores the default when the attribute is omitted from that inline
+        dictionary.
     open_enum: If True, generic verification preserves future raw enum
         ordinals and leaves selected/supported-case policy to the op verifier.
     """
@@ -589,6 +593,7 @@ class AttrDef:
     default: Any = None
     enum_def: EnumDef | None = None
     optional: bool = False
+    elide_default: bool = False
     symbol_ref: SymbolReference | None = None
     open_enum: bool = False
 
@@ -614,6 +619,41 @@ class AttrDef:
             raise ValueError(
                 f"AttrDef '{self.name}': symbol_ref requires attr_type='symbol'"
             )
+        if self.elide_default:
+            if self.default is None:
+                raise ValueError(
+                    f"AttrDef '{self.name}': elide_default requires default"
+                )
+            if self.optional:
+                raise ValueError(
+                    f"AttrDef '{self.name}': elide_default attrs must be required"
+                )
+            if self.attr_type == ATTR_TYPE_I64:
+                if isinstance(self.default, bool) or not isinstance(self.default, int):
+                    raise ValueError(
+                        f"AttrDef '{self.name}': i64 elide_default requires int default"
+                    )
+                if self.default != 0:
+                    raise ValueError(
+                        f"AttrDef '{self.name}': i64 elide_default currently "
+                        "supports only zero defaults"
+                    )
+            elif self.attr_type == ATTR_TYPE_BOOL:
+                if not isinstance(self.default, bool):
+                    raise ValueError(
+                        f"AttrDef '{self.name}': bool elide_default "
+                        "requires bool default"
+                    )
+                if self.default:
+                    raise ValueError(
+                        f"AttrDef '{self.name}': bool elide_default currently "
+                        "supports only false defaults"
+                    )
+            else:
+                raise ValueError(
+                    f"AttrDef '{self.name}': elide_default currently supports "
+                    "only i64 and bool attrs"
+                )
 
 
 @dataclass(frozen=True, slots=True)

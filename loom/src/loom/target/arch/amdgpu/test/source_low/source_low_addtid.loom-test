@@ -21,7 +21,7 @@ low.kernel.def target(@target) @workgroup_memory_workitem_x_b32() {
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
   %11 = low.storage.reserve {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
-  %scratch_view = low.storage.address %11 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %scratch_view = low.storage.address %11 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
   %14 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %15 = low.op<amdgpu.s_mov_b32_m0>(%14) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>

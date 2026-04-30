@@ -23,7 +23,7 @@ low.kernel.def target(@target) @async_gather_dword() {
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
   %15 = low.storage.reserve {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
-  %dest = low.storage.address %15 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %dest = low.storage.address %15 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %17 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %18 = low.slice %source[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
   %19 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -57,7 +57,7 @@ low.kernel.def target(@target) @async_gather_b128() {
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 1024} : reg<amdgpu.sgpr>
   %15 = low.storage.reserve {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
-  %dest = low.storage.address %15 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %dest = low.storage.address %15 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %17 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %18 = low.slice %source[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
   %19 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -96,7 +96,7 @@ low.kernel.def target(@target) @async_gather_two_stage() {
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 2048} : reg<amdgpu.sgpr>
   %19 = low.storage.reserve {byte_alignment = 16, byte_length = 2048} : low.storage<workgroup>
-  %dest1 = low.storage.address %19 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %dest1 = low.storage.address %19 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %21 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %22 = low.slice %source[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
   %23 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -143,7 +143,7 @@ low.kernel.def target(@target) @async_gather_multi_packet_newer_group() {
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 3072} : reg<amdgpu.sgpr>
   %21 = low.storage.reserve {byte_alignment = 16, byte_length = 3072} : low.storage<workgroup>
-  %dest1b = low.storage.address %21 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %dest1b = low.storage.address %21 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %23 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %24 = low.slice %source[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
   %25 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -191,9 +191,9 @@ low.kernel.def target(@target) @async_gather_second_lds_slot() {
   %pad_bytes = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
   %scratch_bytes = low.const<amdgpu.s_mov_b32> {imm32 = 1024} : reg<amdgpu.sgpr>
   %18 = low.storage.reserve {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
-  %pad = low.storage.address %18 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %pad = low.storage.address %18 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %20 = low.storage.reserve {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
-  %dest = low.storage.address %20 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %dest = low.storage.address %20 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %22 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %23 = low.slice %source[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
   %24 = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>

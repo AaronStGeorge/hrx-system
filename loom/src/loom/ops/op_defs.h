@@ -675,6 +675,9 @@ enum loom_attr_flag_bits_e {
   // verification. Op-specific verifiers still own sentinel and consumer
   // support checks.
   LOOM_ATTR_OPEN_ENUM = 1u << 1,
+  // Text formats may omit this required scalar attribute when the present
+  // value equals the zero/false default. Parsers restore the explicit value.
+  LOOM_ATTR_ELIDE_DEFAULT = 1u << 2,
 };
 typedef uint8_t loom_attr_flags_t;
 
@@ -788,6 +791,31 @@ typedef struct loom_attr_descriptor_t {
 static inline iree_string_view_t loom_attr_descriptor_name(
     const loom_attr_descriptor_t* descriptor) {
   return loom_bstring_view(descriptor->name);
+}
+
+// Returns the explicit zero/false scalar value implied by ELIDE_DEFAULT.
+static inline loom_attribute_t loom_attr_descriptor_default_value(
+    const loom_attr_descriptor_t* descriptor) {
+  switch ((loom_attr_kind_t)descriptor->attr_kind) {
+    case LOOM_ATTR_I64:
+      return loom_attr_i64(0);
+    case LOOM_ATTR_BOOL:
+      return loom_attr_bool(false);
+    default:
+      return loom_attr_absent();
+  }
+}
+
+// Returns true when |attr| is the elidable text default for |descriptor|.
+static inline bool loom_attr_descriptor_elides_value(
+    const loom_attr_descriptor_t* descriptor, const loom_attribute_t* attr) {
+  if (!iree_any_bit_set(descriptor->flags, LOOM_ATTR_ELIDE_DEFAULT)) {
+    return false;
+  }
+  loom_attribute_t default_value =
+      loom_attr_descriptor_default_value(descriptor);
+  return !loom_attr_is_absent(default_value) &&
+         loom_attribute_equal(attr, &default_value);
 }
 
 // Per-region metadata in the op vtable.

@@ -31,10 +31,10 @@ low.kernel.def target(@target) @index_madd_global_b32() asm<amdgpu.gfx11.core> {
   %linear = v_add_u32 %21, %x
   %23 = v_lshlrev_b32_lit %linear, 2
   %24 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b32 %23, %24 {offset = 0}
+  %loaded = global_load_b32 %23, %24
   %26 = v_lshlrev_b32_lit %linear, 2
   %27 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %26, %loaded, %27 {offset = 0}
+  global_store_b32 %26, %loaded, %27
   return
 }
 
@@ -66,10 +66,10 @@ low.kernel.def target(@target) @index_madd_constant_addend_global_b32() asm<amdg
   %linear = v_add_u32_lit %17, 1
   %19 = v_lshlrev_b32_lit %linear, 2
   %20 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b32 %19, %20 {offset = 0}
+  %loaded = global_load_b32 %19, %20
   %22 = v_lshlrev_b32_lit %linear, 2
   %23 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %22, %loaded, %23 {offset = 0}
+  global_store_b32 %22, %loaded, %23
   return
 }
 
@@ -99,17 +99,17 @@ low.kernel.def target(@target) @workitem_y_lds_uses_explicit_vaddr() asm<amdgpu.
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
   %16 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
-  %scratch_view = storage_address %16 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %scratch_view = storage_address %16 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %value = v_mov_b32 7
   %19 = v_lshlrev_b32_lit %y, 2
   %20 = v_add_u32 %scratch_view, %19
-  ds_write_b32 %20, %value {offset = 0}
+  ds_write_b32 %20, %value
   %21 = v_lshlrev_b32_lit %y, 2
   %22 = v_add_u32 %scratch_view, %21
-  %loaded = ds_read_b32 %22 {offset = 0}
+  %loaded = ds_read_b32 %22
   %24 = v_lshlrev_b32_lit %y, 2
   %25 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %24, %loaded, %25 {offset = 0}
+  global_store_b32 %24, %loaded, %25
   return
 }
 
@@ -152,6 +152,6 @@ low.kernel.def target(@target) workgroup_size(8, 4, 1) @dispatch_id_xy_global_b3
   %one = v_mov_b32 1
   %29 = v_lshlrev_b32_lit %linear, 2
   %30 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %29, %one, %30 {offset = 0}
+  global_store_b32 %29, %one, %30
   return
 }

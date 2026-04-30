@@ -42,7 +42,7 @@ low.func.def target(@gfx11_target) @gfx11_storage_address() asm<amdgpu.gfx11.cor
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
 low.func.def target(@gfx11_target) @gfx11_scheduled_liveness_resource(%kernarg: reg<amdgpu.sgpr x2>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
-  %ptr = s_load_dwordx2 %kernarg, %soffset {offset = 0}
+  %ptr = s_load_dwordx2 %kernarg, %soffset
   %ptr_lo = slice %ptr[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %ptr_hi = slice %ptr[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %mask = s_mov_b32 65535
@@ -52,7 +52,7 @@ low.func.def target(@gfx11_target) @gfx11_scheduled_liveness_resource(%kernarg: 
   %flags = s_mov_b32 822243328
   %resource = concat(%base, %range, %flags) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
   %value = v_mov_b32 1
-  buffer_store_dword %value, %resource, %vaddr, %soffset {offset = 0}
+  buffer_store_dword %value, %resource, %vaddr, %soffset
   return
 }
 
@@ -105,7 +105,7 @@ low.func.def target(@gfx11_target) @gfx11_branch_args(%resource: reg<amdgpu.sgpr
   low.br ^join(%lhs: reg<amdgpu.vgpr>)
 ^join(%incoming: reg<amdgpu.vgpr>):
   %sum = v_add_u32 %incoming, %lhs
-  buffer_store_dword %sum, %resource, %vaddr, %soffset {offset = 0}
+  buffer_store_dword %sum, %resource, %vaddr, %soffset
   return
 }
 
@@ -127,7 +127,7 @@ low.func.def target(@gfx11_target) @gfx11_branch_arg_cycle(%resource: reg<amdgpu
   low.br ^join(%rhs: reg<amdgpu.vgpr>, %lhs: reg<amdgpu.vgpr>)
 ^join(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>):
   %sum = v_add_u32 %a, %b
-  buffer_store_dword %sum, %resource, %vaddr, %soffset {offset = 0}
+  buffer_store_dword %sum, %resource, %vaddr, %soffset
   return
 }
 
@@ -242,7 +242,7 @@ target.profile @gfx11_target preset("amdgpu-gfx11")
 low.func.def target(@gfx11_target) @gfx11_mask_select(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %true_value: reg<amdgpu.vgpr>, %false_value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>) asm<amdgpu.gfx11.core> {
   %mask = v_cmp_lt_i32 %lhs, %rhs
   %selected = v_cndmask_b32 %false_value, %true_value, %mask
-  buffer_store_dword %selected, %resource, %vaddr, %soffset {offset = 0}
+  buffer_store_dword %selected, %resource, %vaddr, %soffset
   return
 }
 
@@ -293,9 +293,9 @@ low.func.def target(@gfx11_target) @gfx11_global_saddr(%addr: reg<amdgpu.vgpr>, 
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
 low.func.def target(@gfx11_target) @gfx11_ds_load_u16_d16_pair(%addr: reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
-  %low = ds_load_u16_d16 %addr {offset = 0}
-  %full = ds_load_u16_d16_hi %low, %addr {offset = 0}
-  ds_write_b32 %addr, %full {offset = 0}
+  %low = ds_load_u16_d16 %addr
+  %full = ds_load_u16_d16_hi %low, %addr
+  ds_write_b32 %addr, %full
   return
 }
 
@@ -381,7 +381,7 @@ target.profile @gfx11_target preset("amdgpu-gfx11")
 low.func.def target(@gfx11_target) @gfx11_stress_fragment(%s0: reg<amdgpu.sgpr>, %s1: reg<amdgpu.sgpr>, %v0: reg<amdgpu.vgpr>, %v1: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr x8>, %b: reg<amdgpu.vgpr x8>, %acc: reg<amdgpu.vgpr x8>, %kernarg: reg<amdgpu.sgpr x2>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %s_sum = s_add_u32 %s0, %s1
   %v_sum = v_add_u32 %v0, %v1
-  %smem = s_buffer_load_dword %resource, %soffset {offset = 0}
+  %smem = s_buffer_load_dword %resource, %soffset
   %binding_ptr = s_load_dwordx2 %kernarg, %soffset {offset = 16}
   %vmem = buffer_load_dword %resource, %vaddr, %soffset {offset = 4}
   %vmem_b128 = buffer_load_b128 %resource, %vaddr, %soffset {offset = 16}
@@ -426,7 +426,7 @@ low.func.def target(@gfx11_target) @gfx11_stress_fragment(%s0: reg<amdgpu.sgpr>,
 target.profile @gfx_target preset("amdgpu-gfx950")
 
 low.func.def target(@gfx_target) @wait_fragment(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>) asm<amdgpu.gfx950.core> {
-  %loaded = buffer_load_dword %resource, %vaddr, %soffset {offset = 0}
+  %loaded = buffer_load_dword %resource, %vaddr, %soffset
   buffer_store_dword %loaded, %resource, %vaddr, %soffset {offset = 4}
   return
 }
@@ -445,7 +445,7 @@ low.func.def target(@gfx_target) @wait_fragment(%value: reg<amdgpu.vgpr>, %resou
 target.profile @gfx_target preset("amdgpu-gfx11")
 
 low.func.def target(@gfx_target) @wait_fragment(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
-  %loaded = buffer_load_dword %resource, %vaddr, %soffset {offset = 0}
+  %loaded = buffer_load_dword %resource, %vaddr, %soffset
   buffer_store_dword %loaded, %resource, %vaddr, %soffset {offset = 4}
   return
 }
@@ -464,7 +464,7 @@ low.func.def target(@gfx_target) @wait_fragment(%value: reg<amdgpu.vgpr>, %resou
 target.profile @gfx_target preset("amdgpu-gfx12")
 
 low.func.def target(@gfx_target) @wait_fragment(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>) asm<amdgpu.gfx12.core> {
-  %loaded = buffer_load_dword %resource, %vaddr, %soffset {offset = 0}
+  %loaded = buffer_load_dword %resource, %vaddr, %soffset
   buffer_store_dword %loaded, %resource, %vaddr, %soffset {offset = 4}
   return
 }
@@ -483,7 +483,7 @@ low.func.def target(@gfx_target) @wait_fragment(%value: reg<amdgpu.vgpr>, %resou
 target.profile @gfx_target preset("amdgpu-gfx1250")
 
 low.func.def target(@gfx_target) @wait_fragment(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>) asm<amdgpu.gfx1250.core> {
-  %loaded = buffer_load_dword %resource, %vaddr, %soffset {offset = 0}
+  %loaded = buffer_load_dword %resource, %vaddr, %soffset
   buffer_store_dword %loaded, %resource, %vaddr, %soffset {offset = 4}
   return
 }
@@ -509,7 +509,7 @@ low.func.def target(@gfx11_target) @gfx11_coalesced_copy(%s0: reg<amdgpu.sgpr>, 
   %matrix0 = v_wmma_f32_16x16x16_f16 %v_copy, %b, %acc
   %matrix1 = v_wmma_f32_16x16x16_f16 %a, %b, %matrix0
   %matrix_low = slice %matrix1[0] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr x4>
-  buffer_store_b128 %matrix_low, %resource, %vaddr, %s_second {offset = 0}
+  buffer_store_b128 %matrix_low, %resource, %vaddr, %s_second
   return
 }
 
@@ -530,7 +530,7 @@ target.profile @gfx11_target preset("amdgpu-gfx11")
 low.func.def target(@gfx11_target) @gfx11_overlapping_copy(%source: reg<amdgpu.sgpr x3>, %tail: reg<amdgpu.sgpr>, %value: reg<amdgpu.vgpr>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>) asm<amdgpu.gfx11.core> {
   %shifted = copy %source : reg<amdgpu.sgpr x3> -> reg<amdgpu.sgpr x3>
   %resource = concat(%shifted, %tail) : (reg<amdgpu.sgpr x3>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
-  buffer_store_dword %value, %resource, %vaddr, %soffset {offset = 0}
+  buffer_store_dword %value, %resource, %vaddr, %soffset
   return
 }
 
@@ -556,7 +556,7 @@ low.func.def target(@gfx11_target) @gfx11_concat(%r0: reg<amdgpu.sgpr>, %r1: reg
   %sum0 = s_add_u32 %r0, %r1
   %sum1 = s_add_u32 %r2, %r3
   %soffset = s_add_u32 %sum0, %sum1
-  buffer_store_dword %value, %resource, %vaddr, %soffset {offset = 0}
+  buffer_store_dword %value, %resource, %vaddr, %soffset
   return
 }
 

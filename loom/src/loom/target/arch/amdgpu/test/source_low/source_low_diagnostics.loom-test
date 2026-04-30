@@ -24,7 +24,7 @@ low.kernel.def target(@target) @lds_b32_diagnostics() {
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
   %14 = low.storage.reserve {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
-  %scratch_view = low.storage.address %14 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %scratch_view = low.storage.address %14 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
   %17 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %18 = low.op<amdgpu.s_mov_b32_m0>(%17) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
@@ -65,7 +65,7 @@ low.kernel.def target(@target) @lds_padded_diagnostics() asm<amdgpu.gfx11.core> 
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 2048
   %15 = storage {byte_alignment = 16, byte_length = 2048} : low.storage<workgroup>
-  %scratch_view = storage_address %15 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %scratch_view = storage_address %15 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %17 = v_mov_b32 1
   %18 = v_mov_b32 1
   %19 = v_mov_b32 1
@@ -74,14 +74,14 @@ low.kernel.def target(@target) @lds_padded_diagnostics() asm<amdgpu.gfx11.core> 
   %22 = v_mov_b32 20
   %23 = v_mul_lo_u32 %tid, %22
   %24 = v_add_u32 %scratch_view, %23
-  ds_write_b128 %24, %one {offset = 0}
+  ds_write_b128 %24, %one
   %25 = v_mov_b32 20
   %26 = v_mul_lo_u32 %tid, %25
   %27 = v_add_u32 %scratch_view, %26
-  %loaded = ds_read_b128 %27 {offset = 0}
+  %loaded = ds_read_b128 %27
   %29 = v_lshlrev_b32_lit %tid, 4
   %30 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %29, %loaded, %30 {offset = 0}
+  global_store_b128 %29, %loaded, %30
   return
 }
 
@@ -112,7 +112,7 @@ low.kernel.def target(@target) @lds_read2_write2_diagnostics() asm<amdgpu.gfx11.
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 2048
   %15 = storage {byte_alignment = 16, byte_length = 2048} : low.storage<workgroup>
-  %scratch_view = storage_address %15 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %scratch_view = storage_address %15 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %17 = v_mov_b32 1
   %18 = v_mov_b32 1
   %one = concat(%17, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
@@ -120,13 +120,13 @@ low.kernel.def target(@target) @lds_read2_write2_diagnostics() asm<amdgpu.gfx11.
   %21 = v_add_u32 %scratch_view, %20
   %22 = slice %one[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %23 = slice %one[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  ds_write2_b32 %21, %22, %23 {offset0 = 0, offset1 = 2}
+  ds_write2_b32 %21, %22, %23 {offset1 = 2}
   %24 = v_lshlrev_b32_lit %tid, 5
   %25 = v_add_u32 %scratch_view, %24
-  %loaded = ds_read2_b32 %25 {offset0 = 0, offset1 = 2}
+  %loaded = ds_read2_b32 %25 {offset1 = 2}
   %27 = v_lshlrev_b32_lit %tid, 3
   %28 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b64 %27, %loaded, %28 {offset = 0}
+  global_store_b64 %27, %loaded, %28
   return
 }
 
@@ -156,7 +156,7 @@ low.kernel.def target(@target) @lds_conflict_risk_diagnostics() asm<amdgpu.gfx11
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 1024
   %14 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
-  %scratch_view = storage_address %14 {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %scratch_view = storage_address %14 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %16 = v_mov_b32 1
   %17 = v_mov_b32 1
   %18 = v_mov_b32 1
@@ -164,13 +164,13 @@ low.kernel.def target(@target) @lds_conflict_risk_diagnostics() asm<amdgpu.gfx11
   %one = concat(%16, %17, %18, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   %21 = v_lshlrev_b32_lit %tid, 4
   %22 = v_add_u32 %scratch_view, %21
-  ds_write_b128 %22, %one {offset = 0}
+  ds_write_b128 %22, %one
   %23 = v_lshlrev_b32_lit %tid, 4
   %24 = v_add_u32 %scratch_view, %23
-  %loaded = ds_read_b128 %24 {offset = 0}
+  %loaded = ds_read_b128 %24
   %26 = v_lshlrev_b32_lit %tid, 4
   %27 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %26, %loaded, %27 {offset = 0}
+  global_store_b128 %26, %loaded, %27
   return
 }
 

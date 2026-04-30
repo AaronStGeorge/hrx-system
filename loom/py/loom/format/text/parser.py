@@ -1283,6 +1283,60 @@ class Parser:
             self._layouts[op_decl.name] = layout
         return layout
 
+    def _format_element_covers_attr(
+        self, element: FormatElement, attr_name: str, skip: FormatElement
+    ) -> bool:
+        """Returns whether a format element owns an attr's surface spelling."""
+        if element is skip:
+            return False
+        match element:
+            case Attr(field=name) | SymbolRef(field=name) | OpRef(field=name):
+                return name == attr_name
+            case TemplateParam(field=name) | PredicateList(field=name):
+                return name == attr_name
+            case DescriptorRef(key=key, stable_id=stable_id):
+                return key == attr_name or stable_id == attr_name
+            case IndexList(static=name):
+                return name == attr_name
+            case (
+                OperandDict(names=name) | AttrTable(keys=name) | RegionTable(keys=name)
+            ):
+                return name == attr_name
+            case AttrDict(field=name):
+                return bool(name) and name == attr_name
+            case (
+                Clause(elements=inner)
+                | OptionalGroup(elements=inner)
+                | Scope(elements=inner)
+            ):
+                return self._format_elements_cover_attr(inner, attr_name, skip)
+            case _:
+                return False
+
+    def _format_elements_cover_attr(
+        self,
+        elements: Sequence[FormatElement],
+        attr_name: str,
+        skip: FormatElement,
+    ) -> bool:
+        return any(
+            self._format_element_covers_attr(element, attr_name, skip)
+            for element in elements
+        )
+
+    def _apply_elided_attr_defaults(
+        self, op_decl: Op, inline_dict: AttrDict, parsed: ParsedFields
+    ) -> None:
+        """Restores required attrs omitted from an inline AttrDict."""
+        for attr_def in op_decl.attrs:
+            if not attr_def.elide_default or attr_def.name in parsed.attributes:
+                continue
+            if self._format_elements_cover_attr(
+                op_decl.format, attr_def.name, inline_dict
+            ):
+                continue
+            parsed.attributes[attr_def.name] = attr_def.default
+
     def _record_operand_id(
         self,
         parsed: ParsedFields,
@@ -1923,6 +1977,8 @@ class Parser:
                 case AttrDict(field=dict_field):
                     if tok.at(TokenKind.LBRACE):
                         self._parse_attr_dict(parsed, dict_field, op_decl)
+                    if not dict_field:
+                        self._apply_elided_attr_defaults(op_decl, element, parsed)
 
                 case AttrTable(keys=keys_field, values=values_field):
                     self._parse_attr_table(parsed, op_decl, keys_field, values_field)

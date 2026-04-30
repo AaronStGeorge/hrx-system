@@ -461,7 +461,7 @@ iree_status_t loom_low_storage_reserve_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_LOW_SPILL: Explicit spill store from a register value into low storage.
-// low.spill %value, %slot {offset = 0} : reg<amdgpu.vgpr x4>, low.storage<private>
+// low.spill %value, %slot : reg<amdgpu.vgpr x4>, low.storage<private>
 LOOM_DEFINE_ISA(loom_low_spill_isa, LOOM_OP_LOW_SPILL)
 LOOM_DEFINE_OPERAND(loom_low_spill_value, 0)
 LOOM_DEFINE_OPERAND(loom_low_spill_storage, 1)
@@ -478,7 +478,7 @@ iree_status_t loom_low_spill_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_LOW_RELOAD: Explicit reload from low storage into a register value.
-// %reload = low.reload %slot {offset = 0} : low.storage<private> -> reg<amdgpu.vgpr x4>
+// %reload = low.reload %slot : low.storage<private> -> reg<amdgpu.vgpr x4>
 LOOM_DEFINE_ISA(loom_low_reload_isa, LOOM_OP_LOW_RELOAD)
 LOOM_DEFINE_OPERAND(loom_low_reload_storage, 0)
 LOOM_DEFINE_RESULT(loom_low_reload_result, 0)
@@ -495,7 +495,7 @@ iree_status_t loom_low_reload_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_LOW_STORAGE_ADDRESS: Materialize a target address for function-local storage.
-// %addr = low.storage.address %slot {offset = 0} : low.storage<workgroup> -> reg<amdgpu.vgpr>
+// %addr = low.storage.address %slot : low.storage<workgroup> -> reg<amdgpu.vgpr>
 LOOM_DEFINE_ISA(loom_low_storage_address_isa, LOOM_OP_LOW_STORAGE_ADDRESS)
 LOOM_DEFINE_OPERAND(loom_low_storage_address_storage, 0)
 LOOM_DEFINE_RESULT(loom_low_storage_address_result, 0)

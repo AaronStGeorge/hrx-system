@@ -709,6 +709,8 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
                              LOOM_ATTR_DICT_FORMAT_INLINE_ATTRS)) {
           IREE_RETURN_IF_ERROR(
               loom_parse_format_inline_attr_dict(parser, vtable, parsed));
+          IREE_RETURN_IF_ERROR(loom_parse_format_apply_elided_attr_defaults(
+              parser, vtable, element, parsed));
         } else {
           loom_token_t start_token = loom_tokenizer_peek(&parser->tokenizer);
           loom_attribute_t attr = {0};

@@ -49,7 +49,7 @@ low.kernel.def target(@target) @i32_b128() asm<amdgpu.gfx11.core> {
   %zero = s_mov_b32 0
   %16 = v_lshlrev_b32_lit %tid, 4
   %17 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b128 %16, %17 {offset = 0}
+  %loaded = global_load_b128 %16, %17
   %19 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %20 = v_add_u32_lit %19, 9
   %21 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
@@ -79,7 +79,7 @@ low.kernel.def target(@target) @i32_b128() asm<amdgpu.gfx11.core> {
   %result = concat(%35, %38, %41, %44) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   %46 = v_lshlrev_b32_lit %tid, 4
   %47 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %46, %result, %47 {offset = 0}
+  global_store_b128 %46, %result, %47
   return
 }
 
@@ -111,12 +111,12 @@ low.kernel.def target(@target) @i32_scalar_2d_store() asm<amdgpu.gfx11.core> {
   %18 = v_lshlrev_b32_lit %x, 2
   %19 = v_add_u32 %17, %18
   %20 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b32 %19, %20 {offset = 0}
+  %loaded = global_load_b32 %19, %20
   %22 = v_lshlrev_b32_lit %y, 5
   %23 = v_lshlrev_b32_lit %x, 2
   %24 = v_add_u32 %22, %23
   %25 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %24, %loaded, %25 {offset = 0}
+  global_store_b32 %24, %loaded, %25
   return
 }
 
@@ -143,10 +143,10 @@ low.kernel.def target(@target) @i32_dynamic_constant_index() asm<amdgpu.gfx11.co
   %zero = s_mov_b32 0
   %14 = v_lshlrev_b32_lit %tid, 4
   %15 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b128 %14, %15 {offset = 0}
+  %loaded = global_load_b128 %14, %15
   %17 = v_lshlrev_b32_lit %tid, 4
   %18 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %17, %loaded, %18 {offset = 0}
+  global_store_b128 %17, %loaded, %18
   return
 }
 
@@ -171,10 +171,10 @@ low.kernel.def target(@target) @f16x2_b32() asm<amdgpu.gfx11.core> {
   %zero = s_mov_b32 0
   %12 = v_lshlrev_b32_lit %tid, 2
   %13 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b32 %12, %13 {offset = 0}
+  %loaded = global_load_b32 %12, %13
   %15 = v_lshlrev_b32_lit %tid, 2
   %16 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %15, %loaded, %16 {offset = 0}
+  global_store_b32 %15, %loaded, %16
   return
 }
 
@@ -199,10 +199,10 @@ low.kernel.def target(@target) @f16x4_b64() asm<amdgpu.gfx11.core> {
   %zero = s_mov_b32 0
   %12 = v_lshlrev_b32_lit %tid, 3
   %13 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b64 %12, %13 {offset = 0}
+  %loaded = global_load_b64 %12, %13
   %15 = v_lshlrev_b32_lit %tid, 3
   %16 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b64 %15, %loaded, %16 {offset = 0}
+  global_store_b64 %15, %loaded, %16
   return
 }
 
@@ -227,10 +227,10 @@ low.kernel.def target(@target) @bf16x2_b32() asm<amdgpu.gfx11.core> {
   %zero = s_mov_b32 0
   %12 = v_lshlrev_b32_lit %tid, 2
   %13 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b32 %12, %13 {offset = 0}
+  %loaded = global_load_b32 %12, %13
   %15 = v_lshlrev_b32_lit %tid, 2
   %16 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %15, %loaded, %16 {offset = 0}
+  global_store_b32 %15, %loaded, %16
   return
 }
 
@@ -255,9 +255,9 @@ low.kernel.def target(@target) @bf16x4_b64() asm<amdgpu.gfx11.core> {
   %zero = s_mov_b32 0
   %12 = v_lshlrev_b32_lit %tid, 3
   %13 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b64 %12, %13 {offset = 0}
+  %loaded = global_load_b64 %12, %13
   %15 = v_lshlrev_b32_lit %tid, 3
   %16 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b64 %15, %loaded, %16 {offset = 0}
+  global_store_b64 %15, %loaded, %16
   return
 }

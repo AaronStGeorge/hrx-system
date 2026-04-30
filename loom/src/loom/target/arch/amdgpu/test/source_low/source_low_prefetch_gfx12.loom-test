@@ -35,7 +35,7 @@ low.kernel.def target(@target) @prefetch_workgroup_id() asm<amdgpu.gfx12.core> {
   %zero = s_mov_b32 0
   %8 = s_mov_b32 2
   %9 = s_lshl_b32 %bounded_gid, %8
-  s_buffer_prefetch_data %input_view, %9 {offset = 0, count = 1}
+  s_buffer_prefetch_data %input_view, %9 {count = 1}
   return
 }
 

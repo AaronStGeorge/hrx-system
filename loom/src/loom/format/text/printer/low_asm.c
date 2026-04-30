@@ -104,6 +104,30 @@ static iree_status_t loom_print_low_asm_find_immediate_attr(
       (int)out_immediate->field_name.size, out_immediate->field_name.data);
 }
 
+static bool loom_print_low_asm_immediate_attr_is_default(
+    const loom_text_low_asm_immediate_descriptor_t* immediate,
+    const loom_named_attr_t* attr) {
+  if (!immediate->has_default_value || !attr) {
+    return false;
+  }
+  switch ((loom_attr_kind_t)attr->value.kind) {
+    case LOOM_ATTR_I64:
+      return attr->value.i64 == immediate->default_value;
+    case LOOM_ATTR_BOOL:
+    case LOOM_ATTR_ENUM:
+      return (int64_t)attr->value.raw == immediate->default_value;
+    default:
+      return false;
+  }
+}
+
+static bool loom_print_low_asm_should_print_immediate_attr(
+    const loom_text_low_asm_immediate_descriptor_t* immediate,
+    const loom_named_attr_t* attr) {
+  return attr != NULL &&
+         !loom_print_low_asm_immediate_attr_is_default(immediate, attr);
+}
+
 static iree_status_t loom_print_low_asm_result_types_require_annotation(
     loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement,
     bool* out_required) {
@@ -201,7 +225,7 @@ static iree_status_t loom_print_low_asm_named_immediates(
     const loom_named_attr_t* attr = NULL;
     IREE_RETURN_IF_ERROR(loom_print_low_asm_find_immediate_attr(
         ctx, statement, i, &immediate, &attr));
-    if (attr != NULL) {
+    if (loom_print_low_asm_should_print_immediate_attr(&immediate, attr)) {
       has_printed_immediate = true;
       break;
     }
@@ -219,7 +243,7 @@ static iree_status_t loom_print_low_asm_named_immediates(
     const loom_named_attr_t* attr = NULL;
     IREE_RETURN_IF_ERROR(loom_print_low_asm_find_immediate_attr(
         ctx, statement, i, &immediate, &attr));
-    if (attr == NULL) {
+    if (!loom_print_low_asm_should_print_immediate_attr(&immediate, attr)) {
       continue;
     }
     if (printed_count > 0) {
@@ -338,21 +362,30 @@ static iree_status_t loom_print_low_asm_structural_attr_dict(
   if (statement->structural_attribute_count == 0) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '{'));
+  bool wrote_dict = false;
   for (uint8_t i = 0; i < statement->structural_attribute_count; ++i) {
-    if (i > 0) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, ", "));
-    }
     const loom_text_low_asm_structural_attribute_t* attr =
         &statement->structural_attributes[i];
+    if (attr->descriptor &&
+        loom_attr_descriptor_elides_value(attr->descriptor, attr->value)) {
+      continue;
+    }
+    if (!wrote_dict) {
+      IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '{'));
+      wrote_dict = true;
+    } else {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, ", "));
+    }
     IREE_RETURN_IF_ERROR(loom_output_stream_write(ctx->stream, attr->name));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, " = "));
     IREE_RETURN_IF_ERROR(loom_print_attr(ctx->stream, attr->value, ctx->module,
                                          attr->descriptor));
   }
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '}'));
-  loom_print_did_write(ctx);
+  if (wrote_dict) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '}'));
+    loom_print_did_write(ctx);
+  }
   return iree_ok_status();
 }
 

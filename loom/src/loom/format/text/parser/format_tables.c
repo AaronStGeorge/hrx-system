@@ -81,6 +81,74 @@ static bool loom_parse_format_parsed_attr_present(
   return !loom_attr_is_absent(parsed->attributes[attr_index]);
 }
 
+static bool loom_parse_format_element_covers_attr(
+    const loom_format_element_t* element, uint16_t attr_index) {
+  switch (element->kind) {
+    case LOOM_FORMAT_KIND_ATTR_VALUE:
+    case LOOM_FORMAT_KIND_SYMBOL_REF:
+    case LOOM_FORMAT_KIND_OP_REF:
+    case LOOM_FORMAT_KIND_TEMPLATE_PARAM:
+    case LOOM_FORMAT_KIND_PREDICATE_LIST:
+      return element->field_index == attr_index;
+    case LOOM_FORMAT_KIND_DESCRIPTOR_REF:
+      return element->field_index == attr_index || element->data == attr_index;
+    case LOOM_FORMAT_KIND_INDEX_LIST:
+      return LOOM_FORMAT_INDEX_LIST_STATIC_ATTR_INDEX(element->data) ==
+             attr_index;
+    case LOOM_FORMAT_KIND_OPERAND_DICT:
+      return element->data == attr_index;
+    case LOOM_FORMAT_KIND_ATTR_TABLE:
+      return element->data == attr_index;
+    case LOOM_FORMAT_KIND_ATTR_DICT:
+      if (iree_any_bit_set(element->data, LOOM_ATTR_DICT_FORMAT_INLINE_ATTRS)) {
+        return false;
+      }
+      return element->field_index == attr_index;
+    default:
+      return false;
+  }
+}
+
+static bool loom_parse_format_inline_attr_covers_attr(
+    const loom_op_vtable_t* vtable, const loom_format_element_t* inline_element,
+    uint16_t attr_index) {
+  const loom_format_element_t* elements = vtable->format_elements;
+  for (uint16_t i = 0; i < vtable->format_element_count; ++i) {
+    const loom_format_element_t* element = &elements[i];
+    if (element == inline_element) {
+      continue;
+    }
+    if (loom_parse_format_element_covers_attr(element, attr_index)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+iree_status_t loom_parse_format_apply_elided_attr_defaults(
+    loom_parser_t* parser, const loom_op_vtable_t* vtable,
+    const loom_format_element_t* inline_element, loom_parsed_op_t* parsed) {
+  if (!vtable->attr_descriptors) {
+    return iree_ok_status();
+  }
+  for (uint8_t attr_index = 0; attr_index < vtable->attribute_count;
+       ++attr_index) {
+    const loom_attr_descriptor_t* descriptor =
+        &vtable->attr_descriptors[attr_index];
+    if (!iree_any_bit_set(descriptor->flags, LOOM_ATTR_ELIDE_DEFAULT) ||
+        loom_parse_format_parsed_attr_present(parsed, attr_index) ||
+        !loom_parse_format_inline_attr_covers_attr(vtable, inline_element,
+                                                   attr_index)) {
+      continue;
+    }
+    loom_attribute_t default_value =
+        loom_attr_descriptor_default_value(descriptor);
+    IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
+        parsed, &parser->parser_arena, attr_index, default_value));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_parse_format_emit_unknown_attr_name(
     loom_parser_t* parser, loom_token_t token) {
   loom_diagnostic_param_t params[] = {

@@ -8,9 +8,9 @@ low.func.def allocation(assigned) schedule(constrained) target(@vm_target) @vm_a
 
 low.func.def target(@vm_target) @vm_slot_roundtrip(%input: reg<vm.i32>) -> (reg<vm.i32>) {
   %storage = low.storage.reserve {byte_alignment = 4, byte_length = 4} : low.storage<scratch>
-  low.spill %input, %storage {offset = 0} : reg<vm.i32>, low.storage<scratch>
-  %reload = low.reload %storage {offset = 0} : low.storage<scratch> -> reg<vm.i32>
-  %addr = low.storage.address %storage {offset = 0} : low.storage<scratch> -> reg<vm.ptr>
+  low.spill %input, %storage : reg<vm.i32>, low.storage<scratch>
+  %reload = low.reload %storage : low.storage<scratch> -> reg<vm.i32>
+  %addr = low.storage.address %storage : low.storage<scratch> -> reg<vm.ptr>
   low.return %reload : reg<vm.i32>
 }
 
