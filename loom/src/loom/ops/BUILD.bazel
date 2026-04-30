@@ -61,6 +61,18 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "storage_facts",
+    srcs = ["storage_facts.c"],
+    hdrs = ["storage_facts.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/util:fact_table",
+        "//loom/src/loom/util:math",
+        "//runtime/src/iree/base",
+    ],
+)
+
 loom_cc_test(
     name = "func_symbol_facts_test",
     srcs = ["func_symbol_facts_test.cc"],
@@ -163,6 +175,7 @@ loom_cc_library(
     hdrs = ["type_registry.h"],
     deps = [
         ":op_defs",
+        ":storage_facts",
         "//loom/src/loom/ir",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",

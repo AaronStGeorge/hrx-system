@@ -61,6 +61,21 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    storage_facts
+  HDRS
+    "storage_facts.h"
+  SRCS
+    "storage_facts.c"
+  DEPS
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::util::fact_table
+    loom::src::loom::util::math
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     func_symbol_facts_test
@@ -191,6 +206,7 @@ loom_cc_library(
     "type_registry.c"
   DEPS
     ::op_defs
+    ::storage_facts
     iree::base
     loom::src::loom::ir
     loom::src::loom::util::fact_table

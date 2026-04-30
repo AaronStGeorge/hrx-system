@@ -67,6 +67,7 @@ from loom.dsl import (
     POISON_BOUNDARY,
     POOL,
     PURE,
+    STORAGE,
     SYMBOL_DEFINE,
     TENSOR,
     TERMINATOR,
@@ -693,6 +694,129 @@ test_fact_view_element_bytes = Op(
     facts="loom_test_fact_view_element_bytes_facts",
     format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
     examples=["%bytes = test.fact_view_element_bytes %view : view<4xf32, %layout> -> i64"],
+)
+
+test_fact_is_storage_reference = Op(
+    "test.fact_is_storage_reference",
+    group=test_ops,
+    doc="Returns 1 if the input has a storage reference analysis summary, 0 otherwise.",
+    operands=[Operand("value", STORAGE)],
+    results=[Result("result", I1)],
+    traits=[PURE],
+    facts="loom_test_fact_is_storage_reference_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%is = test.fact_is_storage_reference %storage : low.storage<workgroup> -> i1"],
+)
+
+test_fact_storage_same_backing = Op(
+    "test.fact_storage_same_backing",
+    group=test_ops,
+    doc="Returns 1 if two storage references share the same backing reservation.",
+    operands=[
+        Operand("lhs", STORAGE),
+        Operand("rhs", STORAGE),
+    ],
+    results=[Result("result", I1)],
+    traits=[PURE],
+    facts="loom_test_fact_storage_same_backing_facts",
+    format=[
+        Ref("lhs"),
+        COMMA,
+        Ref("rhs"),
+        COLON,
+        TypeOf("lhs"),
+        COMMA,
+        TypeOf("rhs"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%same = test.fact_storage_same_backing %lhs, %rhs : low.storage<workgroup>, low.storage<workgroup> -> i1",
+    ],
+)
+
+test_fact_storage_byte_offset_lo = Op(
+    "test.fact_storage_byte_offset_lo",
+    group=test_ops,
+    doc="Exposes a storage reference byte-offset lower bound as an i64 constant.",
+    operands=[Operand("value", STORAGE)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_storage_byte_offset_lo_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%lo = test.fact_storage_byte_offset_lo %storage : low.storage<workgroup> -> i64"],
+)
+
+test_fact_storage_byte_offset_hi = Op(
+    "test.fact_storage_byte_offset_hi",
+    group=test_ops,
+    doc="Exposes a storage reference byte-offset upper bound as an i64 constant.",
+    operands=[Operand("value", STORAGE)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_storage_byte_offset_hi_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%hi = test.fact_storage_byte_offset_hi %storage : low.storage<workgroup> -> i64"],
+)
+
+test_fact_storage_byte_offset_divisor = Op(
+    "test.fact_storage_byte_offset_divisor",
+    group=test_ops,
+    doc="Exposes a storage reference byte-offset divisor as an i64 constant.",
+    operands=[Operand("value", STORAGE)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_storage_byte_offset_divisor_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%div = test.fact_storage_byte_offset_divisor %storage : low.storage<workgroup> -> i64"],
+)
+
+test_fact_storage_byte_length_lo = Op(
+    "test.fact_storage_byte_length_lo",
+    group=test_ops,
+    doc="Exposes a storage reference byte-length lower bound as an i64 constant.",
+    operands=[Operand("value", STORAGE)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_storage_byte_length_lo_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%lo = test.fact_storage_byte_length_lo %storage : low.storage<workgroup> -> i64"],
+)
+
+test_fact_storage_byte_length_hi = Op(
+    "test.fact_storage_byte_length_hi",
+    group=test_ops,
+    doc="Exposes a storage reference byte-length upper bound as an i64 constant.",
+    operands=[Operand("value", STORAGE)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_storage_byte_length_hi_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%hi = test.fact_storage_byte_length_hi %storage : low.storage<workgroup> -> i64"],
+)
+
+test_fact_storage_min_alignment = Op(
+    "test.fact_storage_min_alignment",
+    group=test_ops,
+    doc="Exposes a storage reference minimum byte alignment as an i64 constant.",
+    operands=[Operand("value", STORAGE)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_storage_min_alignment_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%align = test.fact_storage_min_alignment %storage : low.storage<workgroup> -> i64"],
+)
+
+test_fact_storage_space = Op(
+    "test.fact_storage_space",
+    group=test_ops,
+    doc="Exposes a storage reference storage-space enum value as an i64 constant, or -1 when unknown.",
+    operands=[Operand("value", STORAGE)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_storage_space_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%space = test.fact_storage_space %storage : low.storage<workgroup> -> i64"],
 )
 
 # ============================================================================
@@ -1806,6 +1930,15 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_fact_buffer_min_alignment,
     test_fact_view_root_min_alignment,
     test_fact_view_element_bytes,
+    test_fact_is_storage_reference,
+    test_fact_storage_same_backing,
+    test_fact_storage_byte_offset_lo,
+    test_fact_storage_byte_offset_hi,
+    test_fact_storage_byte_offset_divisor,
+    test_fact_storage_byte_length_lo,
+    test_fact_storage_byte_length_hi,
+    test_fact_storage_min_alignment,
+    test_fact_storage_space,
     test_region_syntax,
     test_low_asm_region,
     test_clause_constant,

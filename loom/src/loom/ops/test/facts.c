@@ -14,8 +14,11 @@
 
 #include "loom/ir/facts.h"
 
+#include <stdint.h>
+
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
+#include "loom/ops/storage_facts.h"
 #include "loom/ops/test/ops.h"
 #include "loom/util/fact_table.h"
 
@@ -510,5 +513,125 @@ iree_status_t loom_test_fact_view_element_bytes_facts(
       loom_test_view_reference_or_empty(context, operand_facts[0]);
   result_facts[0] =
       loom_value_facts_exact_i64(reference.static_element_byte_count);
+  return iree_ok_status();
+}
+
+static loom_storage_reference_facts_t loom_test_storage_reference_or_empty(
+    const loom_fact_context_t* context, loom_value_facts_t facts) {
+  loom_storage_reference_facts_t reference = {
+      .byte_offset = loom_value_facts_exact_i64(INT64_MIN),
+      .target_byte_offset = loom_value_facts_exact_i64(INT64_MIN),
+      .valid_byte_length = loom_value_facts_exact_i64(INT64_MIN),
+      .minimum_alignment = 0,
+      .backing_value_id = LOOM_VALUE_ID_INVALID,
+      .storage_space = LOOM_STORAGE_SPACE_COUNT_,
+  };
+  (void)loom_storage_facts_query_reference(context, facts, &reference);
+  return reference;
+}
+
+iree_status_t loom_test_fact_is_storage_reference_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  result_facts[0] = loom_value_facts_exact_i64(
+      loom_storage_facts_query_reference(context, operand_facts[0], NULL) ? 1
+                                                                          : 0);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_storage_same_backing_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_storage_reference_facts_t lhs = {0};
+  loom_storage_reference_facts_t rhs = {0};
+  if (!loom_storage_facts_query_reference(context, operand_facts[0], &lhs) ||
+      !loom_storage_facts_query_reference(context, operand_facts[1], &rhs)) {
+    result_facts[0] = loom_value_facts_exact_i64(0);
+    return iree_ok_status();
+  }
+  result_facts[0] =
+      loom_value_facts_exact_i64(lhs.backing_value_id == rhs.backing_value_id &&
+                                         lhs.storage_space == rhs.storage_space
+                                     ? 1
+                                     : 0);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_storage_byte_offset_lo_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_storage_reference_facts_t reference =
+      loom_test_storage_reference_or_empty(context, operand_facts[0]);
+  result_facts[0] = loom_value_facts_exact_i64(reference.byte_offset.range_lo);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_storage_byte_offset_hi_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_storage_reference_facts_t reference =
+      loom_test_storage_reference_or_empty(context, operand_facts[0]);
+  result_facts[0] = loom_value_facts_exact_i64(reference.byte_offset.range_hi);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_storage_byte_offset_divisor_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_storage_reference_facts_t reference =
+      loom_test_storage_reference_or_empty(context, operand_facts[0]);
+  result_facts[0] =
+      loom_value_facts_exact_i64(reference.byte_offset.known_divisor);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_storage_byte_length_lo_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_storage_reference_facts_t reference =
+      loom_test_storage_reference_or_empty(context, operand_facts[0]);
+  result_facts[0] =
+      loom_value_facts_exact_i64(reference.valid_byte_length.range_lo);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_storage_byte_length_hi_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_storage_reference_facts_t reference =
+      loom_test_storage_reference_or_empty(context, operand_facts[0]);
+  result_facts[0] =
+      loom_value_facts_exact_i64(reference.valid_byte_length.range_hi);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_storage_min_alignment_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_storage_reference_facts_t reference =
+      loom_test_storage_reference_or_empty(context, operand_facts[0]);
+  result_facts[0] =
+      loom_value_facts_exact_i64((int64_t)reference.minimum_alignment);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_storage_space_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_storage_reference_facts_t reference =
+      loom_test_storage_reference_or_empty(context, operand_facts[0]);
+  int64_t storage_space = reference.storage_space == LOOM_STORAGE_SPACE_COUNT_
+                              ? -1
+                              : (int64_t)reference.storage_space;
+  result_facts[0] = loom_value_facts_exact_i64(storage_space);
   return iree_ok_status();
 }

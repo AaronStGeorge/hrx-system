@@ -76,6 +76,7 @@ from loom.dsl import (
     RegisterUnitsSumTo,
     Result,
     SameRegisterClass,
+    SameType,
     Successor,
     SymbolDefinition,
     SymbolReference,
@@ -864,6 +865,7 @@ low_storage_reserve = Op(
     ],
     results=[Result("storage", STORAGE, allocates=True)],
     verify="loom_low_storage_reserve_verify",
+    facts="loom_low_storage_reserve_facts",
     format=[
         AttrDict(),
         COLON,
@@ -871,6 +873,40 @@ low_storage_reserve = Op(
     ],
     examples=[
         "%slot = low.storage.reserve {byte_alignment = 4, byte_length = 16} : low.storage<private>",
+    ],
+)
+
+# ============================================================================
+# low.storage.view — project a byte subspan from low storage
+# ============================================================================
+
+low_storage_view = Op(
+    "low.storage.view",
+    group=low_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc="Project a byte subspan from function-local storage.",
+    operands=[Operand("source", STORAGE)],
+    attrs=[
+        AttrDef("offset", ATTR_TYPE_I64, default=0, elide_default=True),
+        AttrDef("byte_length", ATTR_TYPE_I64),
+    ],
+    results=[Result("result", STORAGE)],
+    traits=[PURE],
+    constraints=[
+        SameType("source", "result"),
+    ],
+    verify="loom_low_storage_view_verify",
+    facts="loom_low_storage_view_facts",
+    format=[
+        Ref("source"),
+        AttrDict(),
+        COLON,
+        TypeOf("source"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%tile = low.storage.view %scratch {offset = 128, byte_length = 64} : low.storage<workgroup> -> low.storage<workgroup>",
     ],
 )
 
@@ -1078,6 +1114,7 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     low_concat,
     low_invoke,
     low_storage_reserve,
+    low_storage_view,
     low_spill,
     low_reload,
     low_storage_address,

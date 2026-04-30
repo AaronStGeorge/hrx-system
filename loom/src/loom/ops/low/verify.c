@@ -652,13 +652,55 @@ static iree_status_t loom_low_verify_storage_type(
       emitter);
 }
 
-static const loom_op_t* loom_low_storage_defining_reserve(
-    const loom_module_t* module, loom_value_id_t storage_id) {
+typedef struct loom_low_static_storage_reference_t {
+  // Reserving op that owns the backing storage identity.
+  const loom_op_t* reserve_op;
+
+  // Static byte offset from reserve_op to this storage handle.
+  int64_t byte_offset;
+
+  // Static byte length valid from byte_offset.
+  int64_t byte_length;
+} loom_low_static_storage_reference_t;
+
+static bool loom_low_try_resolve_storage_reference(
+    const loom_module_t* module, loom_value_id_t storage_id,
+    loom_low_static_storage_reference_t* out_reference) {
   const loom_value_t* storage_value = loom_module_value(module, storage_id);
-  if (loom_value_is_block_arg(storage_value)) return NULL;
+  if (!storage_value || loom_value_is_block_arg(storage_value)) return false;
   const loom_op_t* defining_op = loom_value_def_op(storage_value);
-  if (!defining_op || !loom_low_storage_reserve_isa(defining_op)) return NULL;
-  return defining_op;
+  if (!defining_op) return false;
+  if (loom_low_storage_reserve_isa(defining_op)) {
+    int64_t byte_length = loom_low_storage_reserve_byte_length(defining_op);
+    if (byte_length <= 0) return false;
+    *out_reference = (loom_low_static_storage_reference_t){
+        .reserve_op = defining_op,
+        .byte_offset = 0,
+        .byte_length = byte_length,
+    };
+    return true;
+  }
+  if (!loom_low_storage_view_isa(defining_op)) return false;
+
+  loom_low_static_storage_reference_t source_reference = {0};
+  if (!loom_low_try_resolve_storage_reference(
+          module, loom_low_storage_view_source(defining_op),
+          &source_reference)) {
+    return false;
+  }
+  int64_t offset = loom_low_storage_view_offset(defining_op);
+  int64_t byte_length = loom_low_storage_view_byte_length(defining_op);
+  if (offset < 0 || byte_length <= 0 ||
+      offset >= source_reference.byte_length ||
+      byte_length > source_reference.byte_length - offset) {
+    return false;
+  }
+  *out_reference = (loom_low_static_storage_reference_t){
+      .reserve_op = source_reference.reserve_op,
+      .byte_offset = source_reference.byte_offset + offset,
+      .byte_length = byte_length,
+  };
+  return true;
 }
 
 static iree_status_t loom_low_verify_storage_use(
@@ -676,24 +718,24 @@ static iree_status_t loom_low_verify_storage_use(
               "kernel body"),
       emitter, &enclosing_func));
 
-  const loom_op_t* reserve_op =
-      loom_low_storage_defining_reserve(module, storage_id);
-  if (!reserve_op) {
+  loom_low_static_storage_reference_t reference = {0};
+  if (!loom_low_try_resolve_storage_reference(module, storage_id, &reference)) {
     return loom_low_emit_structural_storage_error(
         module, op,
         loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND,
                                   storage_operand_index),
         IREE_SV("storage"),
-        IREE_SV("storage traffic must use a low.storage.reserve result"), NULL,
-        0, emitter);
+        IREE_SV("storage traffic must use a low.storage.reserve result or "
+                "low.storage.view projection"),
+        NULL, 0, emitter);
   }
 
   const loom_op_t* reserve_func =
-      loom_low_find_enclosing_low_executable_def(module, reserve_op);
+      loom_low_find_enclosing_low_executable_def(module, reference.reserve_op);
   if (reserve_func != enclosing_func) {
     loom_diagnostic_related_op_t related[] = {{
         .label = IREE_SV("storage reserved here"),
-        .op = reserve_op,
+        .op = reference.reserve_op,
     }};
     return loom_low_emit_structural_storage_error(
         module, op,
@@ -710,11 +752,10 @@ static iree_status_t loom_low_verify_storage_use(
         IREE_SV("offset must be non-negative"), emitter);
   }
 
-  const int64_t byte_length = loom_low_storage_reserve_byte_length(reserve_op);
-  if (byte_length > 0 && offset >= byte_length) {
+  if (offset >= reference.byte_length) {
     loom_diagnostic_related_op_t related[] = {{
         .label = IREE_SV("storage reserved here"),
-        .op = reserve_op,
+        .op = reference.reserve_op,
     }};
     return loom_low_emit_structural_storage_error(
         module, op,
@@ -1326,6 +1367,43 @@ iree_status_t loom_low_storage_reserve_verify(
         IREE_SV("byte_alignment must be a positive power of two"), emitter));
   }
 
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_storage_view_verify(const loom_module_t* module,
+                                           const loom_op_t* op,
+                                           iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(loom_low_verify_storage_use(
+      module, op, loom_low_storage_view_source(op), 0,
+      loom_low_storage_view_offset(op), loom_low_storage_view_offset_ATTR_INDEX,
+      emitter));
+  IREE_RETURN_IF_ERROR(loom_low_verify_storage_type(
+      module, op, loom_low_storage_view_result(op),
+      LOOM_DIAGNOSTIC_FIELD_RESULT, 0, IREE_SV("result"), emitter));
+  if (loom_low_storage_view_byte_length(op) <= 0) {
+    return loom_low_emit_structural_storage_attr_error(
+        module, op, loom_low_storage_view_byte_length_ATTR_INDEX,
+        IREE_SV("byte_length"), IREE_SV("byte_length must be positive"),
+        emitter);
+  }
+
+  loom_low_static_storage_reference_t source_reference = {0};
+  if (loom_low_try_resolve_storage_reference(
+          module, loom_low_storage_view_source(op), &source_reference) &&
+      loom_low_storage_view_byte_length(op) >
+          source_reference.byte_length - loom_low_storage_view_offset(op)) {
+    loom_diagnostic_related_op_t related[] = {{
+        .label = IREE_SV("storage reserved here"),
+        .op = source_reference.reserve_op,
+    }};
+    return loom_low_emit_structural_storage_error(
+        module, op,
+        loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                  loom_low_storage_view_byte_length_ATTR_INDEX),
+        IREE_SV("byte_length"),
+        IREE_SV("byte_length must fit inside the source storage subspan"),
+        related, IREE_ARRAYSIZE(related), emitter);
+  }
   return iree_ok_status();
 }
 

@@ -187,6 +187,7 @@ storage_type = TypeDef(
     ir_kind="storage",
     params=[TypeParam("space", ANY)],
     format=[Attr("space")],
+    fact_domain="loom_storage_fact_domain",
 )
 
 # ============================================================================

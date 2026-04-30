@@ -22,18 +22,21 @@ static uint32_t loom_value_facts_compute_flags(int64_t lo, int64_t hi) {
   return flags;
 }
 
+static int64_t loom_value_facts_exact_i64_divisor(int64_t value) {
+  // llabs(INT64_MIN) is undefined behavior. Use 1 as the conservative
+  // divisor for the INT64_MIN and zero cases.
+  return (value != 0 && value != INT64_MIN) ? llabs(value) : 1;
+}
+
 //===----------------------------------------------------------------------===//
 // Constructors
 //===----------------------------------------------------------------------===//
 
 loom_value_facts_t loom_value_facts_exact_i64(int64_t value) {
-  // llabs(INT64_MIN) is undefined behavior. Use 1 as the conservative
-  // divisor for the INT64_MIN and zero cases.
-  int64_t divisor = (value != 0 && value != INT64_MIN) ? llabs(value) : 1;
   loom_value_facts_t facts = {0};
   facts.range_lo = value;
   facts.range_hi = value;
-  facts.known_divisor = divisor;
+  facts.known_divisor = loom_value_facts_exact_i64_divisor(value);
   facts.flags = loom_value_facts_compute_flags(value, value);
   return facts;
 }
@@ -52,6 +55,7 @@ loom_value_facts_t loom_value_facts_make(int64_t lo, int64_t hi,
   if (known_divisor < 1) known_divisor = 1;
   // Invalid range: fall back to unknown.
   if (lo > hi) return loom_value_facts_unknown();
+  if (lo == hi) known_divisor = loom_value_facts_exact_i64_divisor(lo);
   loom_value_facts_t facts = {0};
   facts.range_lo = lo;
   facts.range_hi = hi;

@@ -84,13 +84,22 @@ enum {
   LOOM_OP_TEST_FACT_BUFFER_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 62),
   LOOM_OP_TEST_FACT_VIEW_ROOT_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 63),
   LOOM_OP_TEST_FACT_VIEW_ELEMENT_BYTES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 64),
-  LOOM_OP_TEST_REGION_SYNTAX = LOOM_OP_KIND(LOOM_DIALECT_TEST, 65),
-  LOOM_OP_TEST_LOW_ASM_REGION = LOOM_OP_KIND(LOOM_DIALECT_TEST, 66),
-  LOOM_OP_TEST_CLAUSE_CONSTANT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 67),
-  LOOM_OP_TEST_CLAUSE_COPY = LOOM_OP_KIND(LOOM_DIALECT_TEST, 68),
-  LOOM_OP_TEST_TYPED_USE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 69),
-  LOOM_OP_TEST_SHAPE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 70),
-  LOOM_OP_TEST_COUNT_ = 71,
+  LOOM_OP_TEST_FACT_IS_STORAGE_REFERENCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 65),
+  LOOM_OP_TEST_FACT_STORAGE_SAME_BACKING = LOOM_OP_KIND(LOOM_DIALECT_TEST, 66),
+  LOOM_OP_TEST_FACT_STORAGE_BYTE_OFFSET_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 67),
+  LOOM_OP_TEST_FACT_STORAGE_BYTE_OFFSET_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 68),
+  LOOM_OP_TEST_FACT_STORAGE_BYTE_OFFSET_DIVISOR = LOOM_OP_KIND(LOOM_DIALECT_TEST, 69),
+  LOOM_OP_TEST_FACT_STORAGE_BYTE_LENGTH_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 70),
+  LOOM_OP_TEST_FACT_STORAGE_BYTE_LENGTH_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 71),
+  LOOM_OP_TEST_FACT_STORAGE_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 72),
+  LOOM_OP_TEST_FACT_STORAGE_SPACE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 73),
+  LOOM_OP_TEST_REGION_SYNTAX = LOOM_OP_KIND(LOOM_DIALECT_TEST, 74),
+  LOOM_OP_TEST_LOW_ASM_REGION = LOOM_OP_KIND(LOOM_DIALECT_TEST, 75),
+  LOOM_OP_TEST_CLAUSE_CONSTANT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 76),
+  LOOM_OP_TEST_CLAUSE_COPY = LOOM_OP_KIND(LOOM_DIALECT_TEST, 77),
+  LOOM_OP_TEST_TYPED_USE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 78),
+  LOOM_OP_TEST_SHAPE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 79),
+  LOOM_OP_TEST_COUNT_ = 80,
 };
 
 // Function visibility. Absent (0) means private.
@@ -1210,6 +1219,158 @@ iree_status_t loom_test_fact_view_element_bytes_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_test_fact_view_element_bytes_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_IS_STORAGE_REFERENCE: Returns 1 if the input has a storage reference analysis summary, 0 otherwise.
+// %is = test.fact_is_storage_reference %storage : low.storage<workgroup> -> i1
+LOOM_DEFINE_ISA(loom_test_fact_is_storage_reference_isa, LOOM_OP_TEST_FACT_IS_STORAGE_REFERENCE)
+LOOM_DEFINE_OPERAND(loom_test_fact_is_storage_reference_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_is_storage_reference_result, 0)
+iree_status_t loom_test_fact_is_storage_reference_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_is_storage_reference_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_STORAGE_SAME_BACKING: Returns 1 if two storage references share the same backing reservation.
+// %same = test.fact_storage_same_backing %lhs, %rhs : low.storage<workgroup>, low.storage<workgroup> -> i1
+LOOM_DEFINE_ISA(loom_test_fact_storage_same_backing_isa, LOOM_OP_TEST_FACT_STORAGE_SAME_BACKING)
+LOOM_DEFINE_OPERAND(loom_test_fact_storage_same_backing_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_test_fact_storage_same_backing_rhs, 1)
+LOOM_DEFINE_RESULT(loom_test_fact_storage_same_backing_result, 0)
+iree_status_t loom_test_fact_storage_same_backing_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_test_fact_storage_same_backing_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_STORAGE_BYTE_OFFSET_LO: Exposes a storage reference byte-offset lower bound as an i64 constant.
+// %lo = test.fact_storage_byte_offset_lo %storage : low.storage<workgroup> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_storage_byte_offset_lo_isa, LOOM_OP_TEST_FACT_STORAGE_BYTE_OFFSET_LO)
+LOOM_DEFINE_OPERAND(loom_test_fact_storage_byte_offset_lo_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_storage_byte_offset_lo_result, 0)
+iree_status_t loom_test_fact_storage_byte_offset_lo_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_storage_byte_offset_lo_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_STORAGE_BYTE_OFFSET_HI: Exposes a storage reference byte-offset upper bound as an i64 constant.
+// %hi = test.fact_storage_byte_offset_hi %storage : low.storage<workgroup> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_storage_byte_offset_hi_isa, LOOM_OP_TEST_FACT_STORAGE_BYTE_OFFSET_HI)
+LOOM_DEFINE_OPERAND(loom_test_fact_storage_byte_offset_hi_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_storage_byte_offset_hi_result, 0)
+iree_status_t loom_test_fact_storage_byte_offset_hi_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_storage_byte_offset_hi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_STORAGE_BYTE_OFFSET_DIVISOR: Exposes a storage reference byte-offset divisor as an i64 constant.
+// %div = test.fact_storage_byte_offset_divisor %storage : low.storage<workgroup> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_storage_byte_offset_divisor_isa, LOOM_OP_TEST_FACT_STORAGE_BYTE_OFFSET_DIVISOR)
+LOOM_DEFINE_OPERAND(loom_test_fact_storage_byte_offset_divisor_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_storage_byte_offset_divisor_result, 0)
+iree_status_t loom_test_fact_storage_byte_offset_divisor_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_storage_byte_offset_divisor_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_STORAGE_BYTE_LENGTH_LO: Exposes a storage reference byte-length lower bound as an i64 constant.
+// %lo = test.fact_storage_byte_length_lo %storage : low.storage<workgroup> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_storage_byte_length_lo_isa, LOOM_OP_TEST_FACT_STORAGE_BYTE_LENGTH_LO)
+LOOM_DEFINE_OPERAND(loom_test_fact_storage_byte_length_lo_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_storage_byte_length_lo_result, 0)
+iree_status_t loom_test_fact_storage_byte_length_lo_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_storage_byte_length_lo_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_STORAGE_BYTE_LENGTH_HI: Exposes a storage reference byte-length upper bound as an i64 constant.
+// %hi = test.fact_storage_byte_length_hi %storage : low.storage<workgroup> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_storage_byte_length_hi_isa, LOOM_OP_TEST_FACT_STORAGE_BYTE_LENGTH_HI)
+LOOM_DEFINE_OPERAND(loom_test_fact_storage_byte_length_hi_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_storage_byte_length_hi_result, 0)
+iree_status_t loom_test_fact_storage_byte_length_hi_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_storage_byte_length_hi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_STORAGE_MIN_ALIGNMENT: Exposes a storage reference minimum byte alignment as an i64 constant.
+// %align = test.fact_storage_min_alignment %storage : low.storage<workgroup> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_storage_min_alignment_isa, LOOM_OP_TEST_FACT_STORAGE_MIN_ALIGNMENT)
+LOOM_DEFINE_OPERAND(loom_test_fact_storage_min_alignment_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_storage_min_alignment_result, 0)
+iree_status_t loom_test_fact_storage_min_alignment_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_storage_min_alignment_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_STORAGE_SPACE: Exposes a storage reference storage-space enum value as an i64 constant, or -1 when unknown.
+// %space = test.fact_storage_space %storage : low.storage<workgroup> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_storage_space_isa, LOOM_OP_TEST_FACT_STORAGE_SPACE)
+LOOM_DEFINE_OPERAND(loom_test_fact_storage_space_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_storage_space_result, 0)
+iree_status_t loom_test_fact_storage_space_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_storage_space_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,

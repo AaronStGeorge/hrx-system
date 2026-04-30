@@ -32,14 +32,15 @@ enum {
   LOOM_OP_LOW_CONCAT = LOOM_OP_KIND(LOOM_DIALECT_LOW, 9),
   LOOM_OP_LOW_INVOKE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 10),
   LOOM_OP_LOW_STORAGE_RESERVE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 11),
-  LOOM_OP_LOW_SPILL = LOOM_OP_KIND(LOOM_DIALECT_LOW, 12),
-  LOOM_OP_LOW_RELOAD = LOOM_OP_KIND(LOOM_DIALECT_LOW, 13),
-  LOOM_OP_LOW_STORAGE_ADDRESS = LOOM_OP_KIND(LOOM_DIALECT_LOW, 14),
-  LOOM_OP_LOW_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 15),
-  LOOM_OP_LOW_COND_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 16),
-  LOOM_OP_LOW_RESOURCE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 17),
-  LOOM_OP_LOW_LIVE_IN = LOOM_OP_KIND(LOOM_DIALECT_LOW, 18),
-  LOOM_OP_LOW_COUNT_ = 19,
+  LOOM_OP_LOW_STORAGE_VIEW = LOOM_OP_KIND(LOOM_DIALECT_LOW, 12),
+  LOOM_OP_LOW_SPILL = LOOM_OP_KIND(LOOM_DIALECT_LOW, 13),
+  LOOM_OP_LOW_RELOAD = LOOM_OP_KIND(LOOM_DIALECT_LOW, 14),
+  LOOM_OP_LOW_STORAGE_ADDRESS = LOOM_OP_KIND(LOOM_DIALECT_LOW, 15),
+  LOOM_OP_LOW_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 16),
+  LOOM_OP_LOW_COND_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 17),
+  LOOM_OP_LOW_RESOURCE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 18),
+  LOOM_OP_LOW_LIVE_IN = LOOM_OP_KIND(LOOM_DIALECT_LOW, 19),
+  LOOM_OP_LOW_COUNT_ = 20,
 };
 
 // Function visibility. Absent (0) means private (module-internal).
@@ -456,7 +457,36 @@ iree_status_t loom_low_storage_reserve_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_low_storage_reserve_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 iree_status_t loom_low_storage_reserve_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_STORAGE_VIEW: Project a byte subspan from function-local storage.
+// %tile = low.storage.view %scratch {offset = 128, byte_length = 64} : low.storage<workgroup> -> low.storage<workgroup>
+LOOM_DEFINE_ISA(loom_low_storage_view_isa, LOOM_OP_LOW_STORAGE_VIEW)
+LOOM_DEFINE_OPERAND(loom_low_storage_view_source, 0)
+LOOM_DEFINE_RESULT(loom_low_storage_view_result, 0)
+LOOM_DEFINE_ATTR_I64(loom_low_storage_view_offset, 0)
+LOOM_DEFINE_ATTR_I64(loom_low_storage_view_byte_length, 1)
+iree_status_t loom_low_storage_view_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    int64_t offset,
+    int64_t byte_length,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_storage_view_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_low_storage_view_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

@@ -26,3 +26,38 @@ low.kernel.def target(@test_target) @kernel_return_rejects_values(%value: reg<te
   // ERROR@+1: LOWERING/017 "low.return" "values" "low kernel entries must return no values"
   low.return %value : reg<test.i32>
 }
+
+// ====
+
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @storage_view_passes(%value: reg<test.i32>) -> (reg<test.i32>) {
+  %storage = low.storage.reserve {byte_alignment = 16, byte_length = 64} : low.storage<scratch>
+  %view = low.storage.view %storage {offset = 16, byte_length = 16} : low.storage<scratch> -> low.storage<scratch>
+  low.spill %value, %view : reg<test.i32>, low.storage<scratch>
+  %reload = low.reload %view : low.storage<scratch> -> reg<test.i32>
+  low.return %reload : reg<test.i32>
+}
+
+// ====
+
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @storage_view_rejects_overflowing_length() {
+  %storage = low.storage.reserve {byte_alignment = 16, byte_length = 64} : low.storage<scratch>
+  // ERROR@+1: LOWERING/017 "low.storage.view" "byte_length" "byte_length must fit inside the source storage subspan"
+  %view = low.storage.view %storage {offset = 48, byte_length = 32} : low.storage<scratch> -> low.storage<scratch>
+  low.return
+}
+
+// ====
+
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @storage_view_bounds_storage_traffic(%value: reg<test.i32>) {
+  %storage = low.storage.reserve {byte_alignment = 16, byte_length = 64} : low.storage<scratch>
+  %view = low.storage.view %storage {offset = 16, byte_length = 16} : low.storage<scratch> -> low.storage<scratch>
+  // ERROR@+1: LOWERING/017 "low.spill" "offset" "offset must address a byte inside the referenced storage"
+  low.spill %value, %view {offset = 16} : reg<test.i32>, low.storage<scratch>
+  low.return
+}

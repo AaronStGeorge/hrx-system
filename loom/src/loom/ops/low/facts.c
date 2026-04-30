@@ -14,6 +14,7 @@
 #include "loom/ir/attribute.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/ops/storage_facts.h"
 #include "loom/util/fact_table.h"
 
 //===----------------------------------------------------------------------===//
@@ -147,4 +148,29 @@ iree_status_t loom_low_concat_facts(loom_fact_context_t* context,
   return loom_low_make_register_unit_facts(context, module,
                                            loom_low_concat_result(op),
                                            element_facts, &result_facts[0]);
+}
+
+iree_status_t loom_low_storage_reserve_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_id_t storage_id = loom_low_storage_reserve_storage(op);
+  loom_type_t storage_type = loom_module_value_type(module, storage_id);
+  if (!loom_type_is_storage(storage_type)) {
+    result_facts[0] = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+  return loom_storage_facts_make_reserve(
+      context, storage_id, loom_type_storage_space(storage_type),
+      loom_low_storage_reserve_byte_length(op),
+      loom_low_storage_reserve_byte_alignment(op), &result_facts[0]);
+}
+
+iree_status_t loom_low_storage_view_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  return loom_storage_facts_make_static_view(
+      context, operand_facts[0], loom_low_storage_view_offset(op),
+      loom_low_storage_view_byte_length(op), &result_facts[0]);
 }

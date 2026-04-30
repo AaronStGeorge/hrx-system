@@ -33,6 +33,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ir::facts
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::storage_facts
     loom::src::loom::rewrite::rewriter
     loom::src::loom::util::fact_table
   PUBLIC

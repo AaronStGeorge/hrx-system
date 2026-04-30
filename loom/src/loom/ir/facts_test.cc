@@ -175,6 +175,12 @@ TEST(FactsMake, SinglePoint) {
   EXPECT_EQ(f.known_divisor, 42);
 }
 
+TEST(FactsMake, SinglePointStrengthensDivisor) {
+  loom_value_facts_t f = loom_value_facts_make(42, 42, 1);
+  EXPECT_TRUE(loom_value_facts_is_exact(f));
+  EXPECT_EQ(f.known_divisor, 42);
+}
+
 TEST(FactsMake, DivisorClamped) {
   // Divisor < 1 gets clamped to 1.
   loom_value_facts_t f = loom_value_facts_make(0, 100, 0);
@@ -430,6 +436,7 @@ TEST(AddiTransfer, ExactPlusExact) {
   loom_value_facts_addi(&a, &b, &out);
   EXPECT_TRUE(loom_value_facts_is_exact(out));
   EXPECT_EQ(out.range_lo, 7);
+  EXPECT_EQ(out.known_divisor, 7);
 }
 
 TEST(AddiTransfer, RangePlusExact) {
@@ -467,6 +474,7 @@ TEST(AddiTransfer, InPlaceAccumulation) {
   loom_value_facts_addi(&accumulator, &increment, &accumulator);
   EXPECT_TRUE(loom_value_facts_is_exact(accumulator));
   EXPECT_EQ(accumulator.range_lo, 15);
+  EXPECT_EQ(accumulator.known_divisor, 15);
 }
 
 //===----------------------------------------------------------------------===//
@@ -480,6 +488,7 @@ TEST(SubiTransfer, ExactMinusExact) {
   loom_value_facts_subi(&a, &b, &out);
   EXPECT_TRUE(loom_value_facts_is_exact(out));
   EXPECT_EQ(out.range_lo, 7);
+  EXPECT_EQ(out.known_divisor, 7);
 }
 
 TEST(SubiTransfer, RangeBounds) {
@@ -503,6 +512,7 @@ TEST(MuliTransfer, ExactTimesExact) {
   loom_value_facts_muli(&a, &b, &out);
   EXPECT_TRUE(loom_value_facts_is_exact(out));
   EXPECT_EQ(out.range_lo, 42);
+  EXPECT_EQ(out.known_divisor, 42);
 }
 
 TEST(MuliTransfer, RangeTimesExact) {

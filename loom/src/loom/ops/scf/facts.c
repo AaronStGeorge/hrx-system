@@ -9,7 +9,9 @@
 #include "loom/ir/facts.h"
 
 #include "loom/ir/attribute.h"
+#include "loom/ir/module.h"
 #include "loom/ops/scf/ops.h"
+#include "loom/util/fact_table.h"
 #include "loom/util/math.h"
 
 //===----------------------------------------------------------------------===//
@@ -60,8 +62,20 @@ static bool loom_scf_lookup_default_row_may_match(
   return false;
 }
 
-static void loom_scf_lookup_meet_row_facts(
-    uint16_t result_count, iree_host_size_t row_index,
+static iree_status_t loom_scf_meet_result_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, uint16_t result_index, loom_value_facts_t lhs,
+    loom_value_facts_t rhs, loom_value_facts_t* out_facts) {
+  const loom_value_id_t* results = loom_op_const_results(op);
+  loom_value_id_t result_id = results[result_index];
+  return loom_value_fact_table_meet_for_type(
+      context->table, module, loom_module_value_type(module, result_id),
+      context->table, lhs, context->table, rhs, out_facts);
+}
+
+static iree_status_t loom_scf_lookup_meet_row_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, uint16_t result_count, iree_host_size_t row_index,
     const loom_value_facts_t* operand_facts, bool initialized_results,
     loom_value_facts_t* result_facts) {
   iree_host_size_t row_offset = 1 + row_index * result_count;
@@ -70,9 +84,12 @@ static void loom_scf_lookup_meet_row_facts(
     if (!initialized_results) {
       result_facts[i] = *candidate;
     } else {
-      loom_value_facts_meet(&result_facts[i], candidate, &result_facts[i]);
+      IREE_RETURN_IF_ERROR(
+          loom_scf_meet_result_facts(context, module, op, i, result_facts[i],
+                                     *candidate, &result_facts[i]));
     }
   }
+  return iree_ok_status();
 }
 
 iree_status_t loom_scf_select_facts(loom_fact_context_t* context,
@@ -89,8 +106,8 @@ iree_status_t loom_scf_select_facts(loom_fact_context_t* context,
     result_facts[0] = operand_facts[1];
     return iree_ok_status();
   }
-  loom_value_facts_meet(&operand_facts[1], &operand_facts[2], &result_facts[0]);
-  return iree_ok_status();
+  return loom_scf_meet_result_facts(context, module, op, 0, operand_facts[1],
+                                    operand_facts[2], &result_facts[0]);
 }
 
 iree_status_t loom_scf_lookup_facts(loom_fact_context_t* context,
@@ -98,8 +115,6 @@ iree_status_t loom_scf_lookup_facts(loom_fact_context_t* context,
                                     const loom_op_t* op,
                                     const loom_value_facts_t* operand_facts,
                                     loom_value_facts_t* result_facts) {
-  (void)context;
-  (void)module;
   loom_attribute_t case_keys = loom_scf_lookup_case_keys(op);
   loom_value_slice_t values = loom_scf_lookup_values(op);
   if (op->result_count == 0 || case_keys.kind != LOOM_ATTR_I64_ARRAY ||
@@ -142,14 +157,15 @@ iree_status_t loom_scf_lookup_facts(loom_fact_context_t* context,
                                                     case_keys.i64_array[i])) {
       continue;
     }
-    loom_scf_lookup_meet_row_facts(op->result_count, i, operand_facts,
-                                   initialized_results, result_facts);
+    IREE_RETURN_IF_ERROR(loom_scf_lookup_meet_row_facts(
+        context, module, op, op->result_count, i, operand_facts,
+        initialized_results, result_facts));
     initialized_results = true;
   }
   if (loom_scf_lookup_default_row_may_match(selector_facts, case_keys)) {
-    loom_scf_lookup_meet_row_facts(op->result_count, case_keys.count,
-                                   operand_facts, initialized_results,
-                                   result_facts);
+    IREE_RETURN_IF_ERROR(loom_scf_lookup_meet_row_facts(
+        context, module, op, op->result_count, case_keys.count, operand_facts,
+        initialized_results, result_facts));
     initialized_results = true;
   }
   if (!initialized_results) {

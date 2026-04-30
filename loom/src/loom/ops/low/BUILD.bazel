@@ -28,6 +28,7 @@ loom_cc_library(
         "//loom/src/loom/ops:func_symbol_facts",
         "//loom/src/loom/ops:function_contract_verify",
         "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops:storage_facts",
         "//loom/src/loom/ops:successor_verify",
         "//loom/src/loom/ops/target",
         "//loom/src/loom/target:types",
