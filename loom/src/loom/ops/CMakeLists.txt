@@ -123,6 +123,18 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    combining
+  HDRS
+    "combining.h"
+  SRCS
+    "combining.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     op_registry
   HDRS
     "op_registry.h"

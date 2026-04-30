@@ -41,6 +41,7 @@ loom_cc_library(
     hdrs = ["source_workload.h"],
     deps = [
         "//loom/src/loom/ir",
+        "//loom/src/loom/ops:combining",
         "//loom/src/loom/ops/buffer",
         "//loom/src/loom/ops/cfg",
         "//loom/src/loom/ops/encoding",

@@ -108,6 +108,13 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "combining",
+    srcs = ["combining.c"],
+    hdrs = ["combining.h"],
+    deps = ["//runtime/src/iree/base"],
+)
+
+loom_cc_library(
     name = "op_registry",
     srcs = ["op_registry.c"],
     hdrs = ["op_registry.h"],

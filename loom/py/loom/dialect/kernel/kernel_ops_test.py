@@ -8,6 +8,7 @@
 
 from loom.dialect.atomic import AtomicOrdering, AtomicScope
 from loom.dialect.cache import CacheScope, CacheTemporal
+from loom.dialect.combining import CombiningKind
 from loom.dialect.kernel import (
     ALL_KERNEL_OPS,
     ALL_KERNEL_TYPES,
@@ -15,7 +16,10 @@ from loom.dialect.kernel import (
     KernelDimension,
     KernelMemorySpace,
     KernelOrdering,
+    KernelScanDirection,
+    KernelScanMode,
     KernelScope,
+    KernelSubgroupShuffleMode,
     kernel_async_cluster_gather,
     kernel_async_cluster_gather_mask,
     kernel_async_copy,
@@ -32,13 +36,35 @@ from loom.dialect.kernel import (
     kernel_def,
     kernel_ops,
     kernel_return,
+    kernel_subgroup_active_mask,
+    kernel_subgroup_broadcast,
+    kernel_subgroup_broadcast_first,
+    kernel_subgroup_count,
+    kernel_subgroup_id,
+    kernel_subgroup_lane_id,
+    kernel_subgroup_match_all,
+    kernel_subgroup_match_any,
+    kernel_subgroup_reduce,
+    kernel_subgroup_scan,
+    kernel_subgroup_shuffle,
+    kernel_subgroup_size,
+    kernel_subgroup_vote_all,
+    kernel_subgroup_vote_any,
+    kernel_subgroup_vote_ballot,
     kernel_tensor_lds_descriptor,
     kernel_tensor_lds_descriptor_type,
+    kernel_workgroup_count,
     kernel_workgroup_id,
+    kernel_workgroup_reduce,
+    kernel_workgroup_size,
+    kernel_workgroup_vote_all,
+    kernel_workgroup_vote_any,
+    kernel_workgroup_vote_count,
+    kernel_workitem_dispatch_id,
     kernel_workitem_id,
 )
 from loom.dialect.memory import MemorySpace
-from loom.dsl import ANY, ATTR_TYPE_ENUM, ATTR_TYPE_I64, I1, INDEX, INTEGER, PURE, UNKNOWN_EFFECTS, VECTOR, VIEW, HasAncestor, Op
+from loom.dsl import ANY, ATTR_TYPE_ENUM, ATTR_TYPE_I64, I1, INDEX, INTEGER, PURE, SCALAR, UNKNOWN_EFFECTS, VECTOR, VIEW, HasAncestor, Op
 
 
 def _ops() -> dict[str, Op]:
@@ -72,6 +98,28 @@ class TestKernelDialect:
             "kernel.async.cluster.gather.mask",
             "kernel.workitem.id",
             "kernel.workgroup.id",
+            "kernel.workgroup.size",
+            "kernel.workgroup.count",
+            "kernel.workitem.dispatch.id",
+            "kernel.subgroup.id",
+            "kernel.subgroup.count",
+            "kernel.subgroup.size",
+            "kernel.subgroup.lane.id",
+            "kernel.subgroup.shuffle",
+            "kernel.subgroup.broadcast",
+            "kernel.subgroup.broadcast.first",
+            "kernel.subgroup.reduce",
+            "kernel.subgroup.scan",
+            "kernel.subgroup.vote.any",
+            "kernel.subgroup.vote.all",
+            "kernel.subgroup.vote.ballot",
+            "kernel.subgroup.active.mask",
+            "kernel.subgroup.match.any",
+            "kernel.subgroup.match.all",
+            "kernel.workgroup.reduce",
+            "kernel.workgroup.vote.any",
+            "kernel.workgroup.vote.all",
+            "kernel.workgroup.vote.count",
         ]
 
     def test_public_exports_match_registry(self) -> None:
@@ -90,7 +138,29 @@ class TestKernelDialect:
         assert kernel_async_tensor_store_from_lds in ALL_KERNEL_OPS
         assert kernel_async_wait in ALL_KERNEL_OPS
         assert kernel_tensor_lds_descriptor in ALL_KERNEL_OPS
+        assert kernel_workgroup_size in ALL_KERNEL_OPS
+        assert kernel_workgroup_count in ALL_KERNEL_OPS
+        assert kernel_workitem_dispatch_id in ALL_KERNEL_OPS
         assert kernel_workitem_id in ALL_KERNEL_OPS
+        assert kernel_subgroup_id in ALL_KERNEL_OPS
+        assert kernel_subgroup_count in ALL_KERNEL_OPS
+        assert kernel_subgroup_size in ALL_KERNEL_OPS
+        assert kernel_subgroup_lane_id in ALL_KERNEL_OPS
+        assert kernel_subgroup_shuffle in ALL_KERNEL_OPS
+        assert kernel_subgroup_broadcast in ALL_KERNEL_OPS
+        assert kernel_subgroup_broadcast_first in ALL_KERNEL_OPS
+        assert kernel_subgroup_reduce in ALL_KERNEL_OPS
+        assert kernel_subgroup_scan in ALL_KERNEL_OPS
+        assert kernel_subgroup_vote_any in ALL_KERNEL_OPS
+        assert kernel_subgroup_vote_all in ALL_KERNEL_OPS
+        assert kernel_subgroup_vote_ballot in ALL_KERNEL_OPS
+        assert kernel_subgroup_active_mask in ALL_KERNEL_OPS
+        assert kernel_subgroup_match_any in ALL_KERNEL_OPS
+        assert kernel_subgroup_match_all in ALL_KERNEL_OPS
+        assert kernel_workgroup_reduce in ALL_KERNEL_OPS
+        assert kernel_workgroup_vote_any in ALL_KERNEL_OPS
+        assert kernel_workgroup_vote_all in ALL_KERNEL_OPS
+        assert kernel_workgroup_vote_count in ALL_KERNEL_OPS
         assert kernel_async_group_type in ALL_KERNEL_TYPES
         assert kernel_async_token_type in ALL_KERNEL_TYPES
         assert kernel_tensor_lds_descriptor_type in ALL_KERNEL_TYPES
@@ -118,6 +188,157 @@ class TestKernelDialect:
         assert PURE in op.traits
         assert HasAncestor("kernel.def") in op.traits
         assert op.is_pure
+
+    def test_launch_query_shapes(self) -> None:
+        for name in [
+            "kernel.workgroup.size",
+            "kernel.workgroup.count",
+            "kernel.workitem.dispatch.id",
+        ]:
+            op = _ops()[name]
+            assert not op.operands
+            assert [result.name for result in op.results] == ["result"]
+            assert op.results[0].type_constraint == INDEX
+            assert [attr.name for attr in op.attrs] == ["dimension"]
+            assert op.attrs[0].attr_type == ATTR_TYPE_ENUM
+            assert op.attrs[0].enum_def is KernelDimension
+            assert PURE in op.traits
+            assert HasAncestor("kernel.def") in op.traits
+            assert op.facts is not None
+
+    def test_subgroup_query_shapes(self) -> None:
+        for name in [
+            "kernel.subgroup.id",
+            "kernel.subgroup.count",
+            "kernel.subgroup.size",
+            "kernel.subgroup.lane.id",
+        ]:
+            op = _ops()[name]
+            assert not op.operands
+            assert not op.attrs
+            assert [result.name for result in op.results] == ["result"]
+            assert op.results[0].type_constraint == INDEX
+            assert PURE in op.traits
+            assert HasAncestor("kernel.def") in op.traits
+            assert op.facts is not None
+
+    def test_subgroup_shuffle_shape(self) -> None:
+        op = _ops()["kernel.subgroup.shuffle"]
+        assert [operand.name for operand in op.operands] == [
+            "value",
+            "offset",
+            "width",
+        ]
+        assert [operand.type_constraint for operand in op.operands] == [
+            ANY,
+            INTEGER,
+            INTEGER,
+        ]
+        assert [result.name for result in op.results] == ["result", "valid"]
+        assert [result.type_constraint for result in op.results] == [ANY, I1]
+        assert [attr.name for attr in op.attrs] == ["mode"]
+        assert op.attrs[0].enum_def is KernelSubgroupShuffleMode
+        assert UNKNOWN_EFFECTS in op.traits
+        assert HasAncestor("kernel.def") in op.traits
+        assert op.verify == "loom_kernel_subgroup_shuffle_verify"
+
+    def test_subgroup_broadcast_shapes(self) -> None:
+        op = _ops()["kernel.subgroup.broadcast"]
+        assert [operand.name for operand in op.operands] == ["value", "lane"]
+        assert [operand.type_constraint for operand in op.operands] == [ANY, INTEGER]
+        assert [result.name for result in op.results] == ["result"]
+        assert op.results[0].type_constraint == ANY
+        assert UNKNOWN_EFFECTS in op.traits
+        assert op.verify == "loom_kernel_subgroup_broadcast_verify"
+
+        first = _ops()["kernel.subgroup.broadcast.first"]
+        assert [operand.name for operand in first.operands] == ["value"]
+        assert first.operands[0].type_constraint == ANY
+        assert [result.name for result in first.results] == ["result"]
+        assert first.results[0].type_constraint == ANY
+        assert UNKNOWN_EFFECTS in first.traits
+        assert first.verify == "loom_kernel_subgroup_value_result_verify"
+
+    def test_subgroup_reduce_and_scan_shapes(self) -> None:
+        reduce = _ops()["kernel.subgroup.reduce"]
+        assert [operand.name for operand in reduce.operands] == ["value"]
+        assert reduce.operands[0].type_constraint == ANY
+        assert [result.name for result in reduce.results] == ["result"]
+        assert [attr.name for attr in reduce.attrs] == [
+            "kind",
+            "cluster_size",
+            "cluster_stride",
+        ]
+        assert reduce.attrs[0].enum_def is CombiningKind
+        assert reduce.attrs[1].optional
+        assert reduce.attrs[2].optional
+        assert UNKNOWN_EFFECTS in reduce.traits
+        assert reduce.verify == "loom_kernel_subgroup_reduce_verify"
+
+        scan = _ops()["kernel.subgroup.scan"]
+        assert [operand.name for operand in scan.operands] == ["value"]
+        assert [result.name for result in scan.results] == ["result"]
+        assert [attr.name for attr in scan.attrs] == [
+            "kind",
+            "cluster_size",
+            "cluster_stride",
+            "mode",
+            "direction",
+        ]
+        assert scan.attrs[0].enum_def is CombiningKind
+        assert scan.attrs[3].enum_def is KernelScanMode
+        assert scan.attrs[4].enum_def is KernelScanDirection
+        assert UNKNOWN_EFFECTS in scan.traits
+        assert scan.verify == "loom_kernel_subgroup_scan_verify"
+
+    def test_vote_and_match_shapes(self) -> None:
+        for name in ["kernel.subgroup.vote.any", "kernel.subgroup.vote.all"]:
+            op = _ops()[name]
+            assert [operand.name for operand in op.operands] == ["predicate"]
+            assert op.operands[0].type_constraint == I1
+            assert [result.name for result in op.results] == ["result"]
+            assert op.results[0].type_constraint == I1
+            assert UNKNOWN_EFFECTS in op.traits
+
+        ballot = _ops()["kernel.subgroup.vote.ballot"]
+        assert ballot.operands[0].type_constraint == I1
+        assert ballot.results[0].type_constraint == INTEGER
+        assert ballot.verify == "loom_kernel_subgroup_mask_result_verify"
+
+        active = _ops()["kernel.subgroup.active.mask"]
+        assert not active.operands
+        assert active.results[0].type_constraint == INTEGER
+        assert active.verify == "loom_kernel_subgroup_mask_result_verify"
+
+        match_any = _ops()["kernel.subgroup.match.any"]
+        assert match_any.operands[0].type_constraint == SCALAR
+        assert match_any.results[0].type_constraint == INTEGER
+        assert match_any.verify == "loom_kernel_subgroup_mask_result_verify"
+
+        match_all = _ops()["kernel.subgroup.match.all"]
+        assert match_all.operands[0].type_constraint == SCALAR
+        assert [result.type_constraint for result in match_all.results] == [INTEGER, I1]
+        assert match_all.verify == "loom_kernel_subgroup_match_all_verify"
+
+    def test_workgroup_collective_shapes(self) -> None:
+        reduce = _ops()["kernel.workgroup.reduce"]
+        assert [operand.name for operand in reduce.operands] == ["value"]
+        assert reduce.operands[0].type_constraint == ANY
+        assert reduce.results[0].type_constraint == ANY
+        assert reduce.attrs[0].enum_def is CombiningKind
+        assert UNKNOWN_EFFECTS in reduce.traits
+        assert reduce.verify == "loom_kernel_workgroup_reduce_verify"
+
+        for name in ["kernel.workgroup.vote.any", "kernel.workgroup.vote.all"]:
+            op = _ops()[name]
+            assert op.operands[0].type_constraint == I1
+            assert op.results[0].type_constraint == I1
+            assert UNKNOWN_EFFECTS in op.traits
+
+        count = _ops()["kernel.workgroup.vote.count"]
+        assert count.operands[0].type_constraint == I1
+        assert count.results[0].type_constraint == INTEGER
+        assert count.verify == "loom_kernel_workgroup_vote_count_verify"
 
     def test_barrier_has_required_attrs(self) -> None:
         op = _ops()["kernel.barrier"]
@@ -358,6 +579,22 @@ class TestKernelDialect:
             ("x", 0),
             ("y", 1),
             ("z", 2),
+        ]
+
+    def test_collective_enum_values(self) -> None:
+        assert [(case.keyword, case.value) for case in KernelSubgroupShuffleMode.cases] == [
+            ("xor", 0),
+            ("up", 1),
+            ("down", 2),
+            ("index", 3),
+        ]
+        assert [(case.keyword, case.value) for case in KernelScanMode.cases] == [
+            ("inclusive", 0),
+            ("exclusive", 1),
+        ]
+        assert [(case.keyword, case.value) for case in KernelScanDirection.cases] == [
+            ("forward", 0),
+            ("reverse", 1),
         ]
 
     def test_async_cache_temporal_values(self) -> None:

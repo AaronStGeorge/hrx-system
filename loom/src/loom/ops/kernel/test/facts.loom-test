@@ -1,0 +1,63 @@
+// RUN: pass canonicalize
+
+kernel.def workgroup_size(64, 8, 1) @fixed_workgroup_query_facts() {
+  %tid_x = kernel.workitem.id<x> : index
+  %size_x = kernel.workgroup.size<x> : index
+  %lane = kernel.subgroup.lane.id : index
+  %subgroup_count = kernel.subgroup.count : index
+  %byte_count = index.constant 4 : index
+  %byte_offset = index.mul %tid_x, %byte_count : index
+  %tid_hi = test.fact_range_hi %tid_x : index -> i64
+  %size_lo = test.fact_range_lo %size_x : index -> i64
+  %size_hi = test.fact_range_hi %size_x : index -> i64
+  %lane_hi = test.fact_range_hi %lane : index -> i64
+  %subgroup_count_hi = test.fact_range_hi %subgroup_count : index -> i64
+  %byte_offset_hi = test.fact_range_hi %byte_offset : index -> i64
+  test.use %tid_hi, %size_lo, %size_hi, %lane_hi, %subgroup_count_hi, %byte_offset_hi : i64, i64, i64, i64, i64, i64
+  kernel.return
+}
+
+// ----
+kernel.def workgroup_size(64, 8, 1) @fixed_workgroup_query_facts() {
+  %tid_hi = scalar.constant 63 : i64
+  %size_lo = scalar.constant 64 : i64
+  %size_hi = scalar.constant 64 : i64
+  %lane_hi = scalar.constant 127 : i64
+  %subgroup_count_hi = scalar.constant 512 : i64
+  %byte_offset_hi = scalar.constant 252 : i64
+  test.use %tid_hi, %size_lo, %size_hi, %lane_hi, %subgroup_count_hi, %byte_offset_hi : i64, i64, i64, i64, i64, i64
+  kernel.return
+}
+
+// ====
+
+kernel.def @default_hal_query_facts() {
+  %workgroup_size = kernel.workgroup.size<y> : index
+  %workgroup_count = kernel.workgroup.count<z> : index
+  %dispatch_id = kernel.workitem.dispatch.id<x> : index
+  %subgroup_size = kernel.subgroup.size : index
+  %workgroup_size_lo = test.fact_range_lo %workgroup_size : index -> i64
+  %workgroup_size_hi = test.fact_range_hi %workgroup_size : index -> i64
+  %workgroup_count_lo = test.fact_range_lo %workgroup_count : index -> i64
+  %workgroup_count_hi = test.fact_range_hi %workgroup_count : index -> i64
+  %dispatch_id_lo = test.fact_range_lo %dispatch_id : index -> i64
+  %dispatch_id_hi = test.fact_range_hi %dispatch_id : index -> i64
+  %subgroup_size_lo = test.fact_range_lo %subgroup_size : index -> i64
+  %subgroup_size_hi = test.fact_range_hi %subgroup_size : index -> i64
+  test.use %workgroup_size_lo, %workgroup_size_hi, %workgroup_count_lo, %workgroup_count_hi, %dispatch_id_lo, %dispatch_id_hi, %subgroup_size_lo, %subgroup_size_hi : i64, i64, i64, i64, i64, i64, i64, i64
+  kernel.return
+}
+
+// ----
+kernel.def @default_hal_query_facts() {
+  %workgroup_size_lo = scalar.constant 1 : i64
+  %workgroup_size_hi = scalar.constant 4294967295 : i64
+  %workgroup_count_lo = scalar.constant 1 : i64
+  %workgroup_count_hi = scalar.constant 4294967295 : i64
+  %dispatch_id_lo = scalar.constant 0 : i64
+  %dispatch_id_hi = scalar.constant 4294967295 : i64
+  %subgroup_size_lo = scalar.constant 1 : i64
+  %subgroup_size_hi = scalar.constant 128 : i64
+  test.use %workgroup_size_lo, %workgroup_size_hi, %workgroup_count_lo, %workgroup_count_hi, %dispatch_id_lo, %dispatch_id_hi, %subgroup_size_lo, %subgroup_size_hi : i64, i64, i64, i64, i64, i64, i64, i64
+  kernel.return
+}

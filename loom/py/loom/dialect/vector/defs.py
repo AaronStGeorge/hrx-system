@@ -37,6 +37,7 @@ from loom.assembly import (
 )
 from loom.dialect.atomic import AtomicKind, AtomicOrdering, AtomicScope
 from loom.dialect.cache import CacheScope, CacheTemporal
+from loom.dialect.combining import CombiningKind
 from loom.dialect.scalar import IntOverflowFlags
 from loom.dialect.scalar.comparison import CmpFPredicate, CmpIPredicate
 from loom.dsl import (
@@ -211,28 +212,6 @@ VectorFragmentRole = EnumDef(
         EnumCase("init", 2, doc="Initial accumulator matrix fragment."),
         EnumCase("result", 3, doc="Result accumulator matrix fragment."),
     ],
-)
-
-CombiningKind = EnumDef(
-    "CombiningKind",
-    [
-        EnumCase("addi", 0, doc="Integer addition."),
-        EnumCase("addf", 1, doc="Floating-point addition."),
-        EnumCase("muli", 2, doc="Integer multiplication."),
-        EnumCase("mulf", 3, doc="Floating-point multiplication."),
-        EnumCase("minsi", 4, doc="Signed integer minimum."),
-        EnumCase("maxsi", 5, doc="Signed integer maximum."),
-        EnumCase("minui", 6, doc="Unsigned integer minimum."),
-        EnumCase("maxui", 7, doc="Unsigned integer maximum."),
-        EnumCase("andi", 8, doc="Bitwise AND."),
-        EnumCase("ori", 9, doc="Bitwise OR."),
-        EnumCase("xori", 10, doc="Bitwise XOR."),
-        EnumCase("minimumf", 11, doc="IEEE 754 floating-point minimum."),
-        EnumCase("maximumf", 12, doc="IEEE 754 floating-point maximum."),
-        EnumCase("minnumf", 13, doc="C99 fmin-style floating-point minimum."),
-        EnumCase("maxnumf", 14, doc="C99 fmax-style floating-point maximum."),
-    ],
-    doc="Combining operations for vector reductions.",
 )
 
 IntegerDot4Kind = EnumDef(

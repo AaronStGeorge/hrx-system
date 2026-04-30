@@ -23,6 +23,7 @@ from loom.assembly import (
     Refs,
     Region,
     ResultType,
+    ResultTypeList,
     Scope,
     SymbolRef,
     TemplateParam,
@@ -32,6 +33,7 @@ from loom.assembly import (
 )
 from loom.dialect.atomic import AtomicOrdering, AtomicScope
 from loom.dialect.cache import CacheScope, CacheTemporal
+from loom.dialect.combining import CombiningKind
 from loom.dialect.memory import MemorySpace
 from loom.dialect.target.defs import ExportLinkage
 from loom.dsl import (
@@ -43,6 +45,7 @@ from loom.dsl import (
     INTEGER,
     ISOLATED_FROM_ABOVE,
     PURE,
+    SCALAR,
     SYMBOL_DEFINE,
     TERMINATOR,
     UNKNOWN_EFFECTS,
@@ -61,6 +64,7 @@ from loom.dsl import (
     Reads,
     RegionDef,
     Result,
+    SameType,
     SymbolDefinition,
     SymbolReference,
     TypeDef,
@@ -142,6 +146,35 @@ KernelAsyncDirection = EnumDef(
         ),
     ],
     doc="Required async copy direction.",
+)
+
+KernelSubgroupShuffleMode = EnumDef(
+    "KernelSubgroupShuffleMode",
+    [
+        EnumCase("xor", 0, doc="Exchange with lane id xor offset."),
+        EnumCase("up", 1, doc="Read from a lower-numbered lane by offset."),
+        EnumCase("down", 2, doc="Read from a higher-numbered lane by offset."),
+        EnumCase("index", 3, doc="Read from the lane named by offset."),
+    ],
+    doc="Subgroup lane shuffle addressing mode.",
+)
+
+KernelScanMode = EnumDef(
+    "KernelScanMode",
+    [
+        EnumCase("inclusive", 0, doc="Include the current invocation value."),
+        EnumCase("exclusive", 1, doc="Exclude the current invocation value."),
+    ],
+    doc="Subgroup scan inclusivity.",
+)
+
+KernelScanDirection = EnumDef(
+    "KernelScanDirection",
+    [
+        EnumCase("forward", 0, doc="Scan from lower lane ids toward higher lane ids."),
+        EnumCase("reverse", 1, doc="Scan from higher lane ids toward lower lane ids."),
+    ],
+    doc="Subgroup scan lane order.",
 )
 
 # ============================================================================
@@ -374,6 +407,429 @@ kernel_workgroup_id = Op(
     examples=[
         "%bid = kernel.workgroup.id<x> : index",
     ],
+)
+
+
+# ============================================================================
+# Kernel launch query ops
+# ============================================================================
+
+kernel_workgroup_size = Op(
+    name="kernel.workgroup.size",
+    group=kernel_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=("Read the selected workgroup size dimension. A fixed kernel.def workgroup_size contract makes this an exact fact; otherwise target facts bound the dynamic launch value."),
+    results=[Result("result", INDEX, doc="Workgroup size in the selected dimension.")],
+    attrs=[
+        AttrDef(
+            "dimension",
+            ATTR_TYPE_ENUM,
+            enum_def=KernelDimension,
+            doc="Coordinate axis to read.",
+        ),
+    ],
+    traits=[PURE, HasAncestor("kernel.def")],
+    facts="loom_kernel_workgroup_size_facts",
+    format=[TemplateParam("dimension"), COLON, ResultType("result")],
+    examples=["%size = kernel.workgroup.size<x> : index"],
+)
+
+kernel_workgroup_count = Op(
+    name="kernel.workgroup.count",
+    group=kernel_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc="Read the dispatched workgroup count in one grid dimension.",
+    results=[Result("result", INDEX, doc="Dispatched workgroup count in the selected dimension.")],
+    attrs=[
+        AttrDef(
+            "dimension",
+            ATTR_TYPE_ENUM,
+            enum_def=KernelDimension,
+            doc="Coordinate axis to read.",
+        ),
+    ],
+    traits=[PURE, HasAncestor("kernel.def")],
+    facts="loom_kernel_workgroup_count_facts",
+    format=[TemplateParam("dimension"), COLON, ResultType("result")],
+    examples=["%count = kernel.workgroup.count<x> : index"],
+)
+
+kernel_workitem_dispatch_id = Op(
+    name="kernel.workitem.dispatch.id",
+    group=kernel_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Read one coordinate of the current invocation in the whole dispatch. "
+        "This is the logical coordinate formed from workgroup id, workgroup "
+        "size, and workitem id; target lowering may materialize it directly or "
+        "derive it from lower-level launch registers."
+    ),
+    results=[Result("result", INDEX, doc="Current workitem coordinate in the selected dispatch dimension.")],
+    attrs=[
+        AttrDef(
+            "dimension",
+            ATTR_TYPE_ENUM,
+            enum_def=KernelDimension,
+            doc="Coordinate axis to read.",
+        ),
+    ],
+    traits=[PURE, HasAncestor("kernel.def")],
+    facts="loom_kernel_workitem_dispatch_id_facts",
+    format=[TemplateParam("dimension"), COLON, ResultType("result")],
+    examples=["%gid = kernel.workitem.dispatch.id<x> : index"],
+)
+
+
+# ============================================================================
+# Kernel subgroup query ops
+# ============================================================================
+
+kernel_subgroup_id = Op(
+    name="kernel.subgroup.id",
+    group=kernel_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc="Read the current subgroup coordinate within the workgroup.",
+    results=[Result("result", INDEX, doc="Current subgroup id within the workgroup.")],
+    traits=[PURE, HasAncestor("kernel.def")],
+    facts="loom_kernel_subgroup_id_facts",
+    format=[COLON, ResultType("result")],
+    examples=["%sg = kernel.subgroup.id : index"],
+)
+
+kernel_subgroup_count = Op(
+    name="kernel.subgroup.count",
+    group=kernel_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc="Read the number of subgroups in the current workgroup.",
+    results=[Result("result", INDEX, doc="Subgroup count in the workgroup.")],
+    traits=[PURE, HasAncestor("kernel.def")],
+    facts="loom_kernel_subgroup_count_facts",
+    format=[COLON, ResultType("result")],
+    examples=["%count = kernel.subgroup.count : index"],
+)
+
+kernel_subgroup_size = Op(
+    name="kernel.subgroup.size",
+    group=kernel_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc="Read the invocation count of the current subgroup.",
+    results=[Result("result", INDEX, doc="Current subgroup size.")],
+    traits=[PURE, HasAncestor("kernel.def")],
+    facts="loom_kernel_subgroup_size_facts",
+    format=[COLON, ResultType("result")],
+    examples=["%size = kernel.subgroup.size : index"],
+)
+
+kernel_subgroup_lane_id = Op(
+    name="kernel.subgroup.lane.id",
+    group=kernel_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc="Read the current invocation coordinate within its subgroup.",
+    results=[Result("result", INDEX, doc="Current subgroup lane id.")],
+    traits=[PURE, HasAncestor("kernel.def")],
+    facts="loom_kernel_subgroup_lane_id_facts",
+    format=[COLON, ResultType("result")],
+    examples=["%lane = kernel.subgroup.lane.id : index"],
+)
+
+
+# ============================================================================
+# Kernel subgroup collectives
+# ============================================================================
+
+kernel_subgroup_shuffle = Op(
+    name="kernel.subgroup.shuffle",
+    group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Move a scalar or rank-1 vector value across lanes of the current "
+        "subgroup. The result value has the same type as the input value, and "
+        "the valid result reports whether the named source lane participated."
+    ),
+    operands=[
+        Operand("value", ANY, doc="Per-invocation value to move."),
+        Operand("offset", INTEGER, doc="i32 lane offset or lane index interpreted by mode."),
+        Operand("width", INTEGER, doc="i32 active subgroup width."),
+    ],
+    results=[
+        Result("result", ANY, doc="Value read from the selected source lane."),
+        Result("valid", I1, doc="True when the selected source lane is valid."),
+    ],
+    attrs=[
+        AttrDef("mode", ATTR_TYPE_ENUM, enum_def=KernelSubgroupShuffleMode, doc="Lane addressing mode."),
+    ],
+    constraints=[SameType("value", "result")],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    verify="loom_kernel_subgroup_shuffle_verify",
+    format=[
+        TemplateParam("mode"),
+        Ref("value"),
+        COMMA,
+        Ref("offset"),
+        COMMA,
+        Ref("width"),
+        COLON,
+        TypeOf("value"),
+        COMMA,
+        TypeOf("offset"),
+        COMMA,
+        TypeOf("width"),
+    ],
+    examples=["%r, %valid = kernel.subgroup.shuffle<xor> %v, %offset, %width : f32, i32, i32"],
+)
+
+kernel_subgroup_broadcast = Op(
+    name="kernel.subgroup.broadcast",
+    group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
+    phase=OpPhase.EXECUTABLE,
+    doc="Broadcast a scalar or rank-1 vector value from one named subgroup lane.",
+    operands=[
+        Operand("value", ANY, doc="Per-invocation source value."),
+        Operand("lane", INTEGER, doc="i32 lane id to broadcast from."),
+    ],
+    results=[Result("result", ANY, doc="Broadcast value.")],
+    constraints=[SameType("value", "result")],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    verify="loom_kernel_subgroup_broadcast_verify",
+    format=[
+        Ref("value"),
+        kw("from"),
+        Ref("lane"),
+        COLON,
+        TypeOf("value"),
+        COMMA,
+        TypeOf("lane"),
+    ],
+    examples=["%r = kernel.subgroup.broadcast %v from %lane : f32, i32"],
+)
+
+kernel_subgroup_broadcast_first = Op(
+    name="kernel.subgroup.broadcast.first",
+    group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
+    phase=OpPhase.EXECUTABLE,
+    doc="Broadcast a scalar or rank-1 vector value from the first active subgroup lane.",
+    operands=[Operand("value", ANY, doc="Per-invocation source value.")],
+    results=[Result("result", ANY, doc="Broadcast value.")],
+    constraints=[SameType("value", "result")],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    verify="loom_kernel_subgroup_value_result_verify",
+    format=[Ref("value"), COLON, TypeOf("value")],
+    examples=["%r = kernel.subgroup.broadcast.first %v : f32"],
+)
+
+
+def _collective_combining_attrs() -> list[AttrDef]:
+    return [AttrDef("kind", ATTR_TYPE_ENUM, enum_def=CombiningKind, doc="Combining operation.")]
+
+
+def _clustered_combining_attrs() -> list[AttrDef]:
+    return [
+        *_collective_combining_attrs(),
+        AttrDef("cluster_size", ATTR_TYPE_I64, optional=True, doc="Optional clustered subgroup size."),
+        AttrDef("cluster_stride", ATTR_TYPE_I64, optional=True, doc="Optional clustered subgroup stride."),
+    ]
+
+
+kernel_subgroup_reduce = Op(
+    name="kernel.subgroup.reduce",
+    group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
+    phase=OpPhase.EXECUTABLE,
+    doc="Reduce a scalar or rank-1 vector value across the current subgroup.",
+    operands=[Operand("value", ANY, doc="Per-invocation value to reduce.")],
+    results=[Result("result", ANY, doc="Reduced value.")],
+    attrs=_clustered_combining_attrs(),
+    constraints=[SameType("value", "result")],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    verify="loom_kernel_subgroup_reduce_verify",
+    format=[
+        TemplateParam("kind"),
+        Ref("value"),
+        AttrDict(),
+        COLON,
+        TypeOf("value"),
+    ],
+    examples=["%sum = kernel.subgroup.reduce<addf> %v : f32"],
+)
+
+kernel_subgroup_scan = Op(
+    name="kernel.subgroup.scan",
+    group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
+    phase=OpPhase.EXECUTABLE,
+    doc="Prefix-scan a scalar or rank-1 vector value across the current subgroup.",
+    operands=[Operand("value", ANY, doc="Per-invocation value to scan.")],
+    results=[Result("result", ANY, doc="Scanned value.")],
+    attrs=[
+        *_clustered_combining_attrs(),
+        AttrDef("mode", ATTR_TYPE_ENUM, enum_def=KernelScanMode, doc="Inclusive or exclusive scan."),
+        AttrDef("direction", ATTR_TYPE_ENUM, enum_def=KernelScanDirection, doc="Lane order to scan."),
+    ],
+    constraints=[SameType("value", "result")],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    verify="loom_kernel_subgroup_scan_verify",
+    format=[
+        TemplateParam("kind"),
+        Ref("value"),
+        AttrDict(),
+        COLON,
+        TypeOf("value"),
+    ],
+    examples=["%prefix = kernel.subgroup.scan<addf> %v {mode = inclusive, direction = forward} : f32"],
+)
+
+kernel_subgroup_vote_any = Op(
+    name="kernel.subgroup.vote.any",
+    group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
+    phase=OpPhase.EXECUTABLE,
+    doc="Return true when any active subgroup lane has a true predicate.",
+    operands=[Operand("predicate", I1, doc="Per-invocation predicate.")],
+    results=[Result("result", I1, doc="Subgroup-uniform vote result.")],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    format=[Ref("predicate"), COLON, TypeOf("predicate")],
+    examples=["%any = kernel.subgroup.vote.any %p : i1"],
+)
+
+kernel_subgroup_vote_all = Op(
+    name="kernel.subgroup.vote.all",
+    group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
+    phase=OpPhase.EXECUTABLE,
+    doc="Return true when all active subgroup lanes have a true predicate.",
+    operands=[Operand("predicate", I1, doc="Per-invocation predicate.")],
+    results=[Result("result", I1, doc="Subgroup-uniform vote result.")],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    format=[Ref("predicate"), COLON, TypeOf("predicate")],
+    examples=["%all = kernel.subgroup.vote.all %p : i1"],
+)
+
+kernel_subgroup_vote_ballot = Op(
+    name="kernel.subgroup.vote.ballot",
+    group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
+    phase=OpPhase.EXECUTABLE,
+    doc="Return an integer mask of active subgroup lanes whose predicate is true.",
+    operands=[Operand("predicate", I1, doc="Per-invocation predicate.")],
+    results=[Result("mask", INTEGER, doc="Integer subgroup lane mask.")],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    verify="loom_kernel_subgroup_mask_result_verify",
+    format=[Ref("predicate"), COLON, TypeOf("predicate"), ARROW, ResultType("mask")],
+    examples=["%mask = kernel.subgroup.vote.ballot %p : i1 -> i64"],
+)
+
+kernel_subgroup_active_mask = Op(
+    name="kernel.subgroup.active.mask",
+    group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
+    phase=OpPhase.EXECUTABLE,
+    doc="Return an integer mask of the currently active subgroup lanes.",
+    results=[Result("mask", INTEGER, doc="Integer active-lane mask.")],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    verify="loom_kernel_subgroup_mask_result_verify",
+    format=[COLON, ResultType("mask")],
+    examples=["%mask = kernel.subgroup.active.mask : i64"],
+)
+
+kernel_subgroup_match_any = Op(
+    name="kernel.subgroup.match.any",
+    group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
+    phase=OpPhase.EXECUTABLE,
+    doc="Return a lane mask of active subgroup invocations with the same scalar value.",
+    operands=[Operand("value", SCALAR, doc="Value to compare across active subgroup lanes.")],
+    results=[Result("mask", INTEGER, doc="Integer lane-equality mask.")],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    verify="loom_kernel_subgroup_mask_result_verify",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("mask")],
+    examples=["%mask = kernel.subgroup.match.any %v : i32 -> i64"],
+)
+
+kernel_subgroup_match_all = Op(
+    name="kernel.subgroup.match.all",
+    group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
+    phase=OpPhase.EXECUTABLE,
+    doc="Return a lane mask and predicate describing whether all active subgroup lanes hold the same scalar value.",
+    operands=[Operand("value", SCALAR, doc="Value to compare across active subgroup lanes.")],
+    results=[
+        Result("mask", INTEGER, doc="Integer lane-equality mask."),
+        Result("all_equal", I1, doc="True when all active lanes match."),
+    ],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    verify="loom_kernel_subgroup_match_all_verify",
+    format=[
+        Ref("value"),
+        COLON,
+        TypeOf("value"),
+        ARROW,
+        ResultTypeList("mask", parens=False),
+    ],
+    examples=["%mask, %all = kernel.subgroup.match.all %v : i32 -> i64, i1"],
+)
+
+
+# ============================================================================
+# Kernel workgroup collectives
+# ============================================================================
+
+kernel_workgroup_reduce = Op(
+    name="kernel.workgroup.reduce",
+    group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
+    phase=OpPhase.EXECUTABLE,
+    doc="Reduce a scalar or rank-1 vector value across the current workgroup.",
+    operands=[Operand("value", ANY, doc="Per-invocation value to reduce.")],
+    results=[Result("result", ANY, doc="Reduced value.")],
+    attrs=_collective_combining_attrs(),
+    constraints=[SameType("value", "result")],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    verify="loom_kernel_workgroup_reduce_verify",
+    format=[TemplateParam("kind"), Ref("value"), COLON, TypeOf("value")],
+    examples=["%sum = kernel.workgroup.reduce<addf> %v : f32"],
+)
+
+kernel_workgroup_vote_any = Op(
+    name="kernel.workgroup.vote.any",
+    group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
+    phase=OpPhase.EXECUTABLE,
+    doc="Return true when any workgroup invocation has a true predicate.",
+    operands=[Operand("predicate", I1, doc="Per-invocation predicate.")],
+    results=[Result("result", I1, doc="Workgroup-uniform vote result.")],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    format=[Ref("predicate"), COLON, TypeOf("predicate")],
+    examples=["%any = kernel.workgroup.vote.any %p : i1"],
+)
+
+kernel_workgroup_vote_all = Op(
+    name="kernel.workgroup.vote.all",
+    group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
+    phase=OpPhase.EXECUTABLE,
+    doc="Return true when all workgroup invocations have a true predicate.",
+    operands=[Operand("predicate", I1, doc="Per-invocation predicate.")],
+    results=[Result("result", I1, doc="Workgroup-uniform vote result.")],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    format=[Ref("predicate"), COLON, TypeOf("predicate")],
+    examples=["%all = kernel.workgroup.vote.all %p : i1"],
+)
+
+kernel_workgroup_vote_count = Op(
+    name="kernel.workgroup.vote.count",
+    group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
+    phase=OpPhase.EXECUTABLE,
+    doc="Count workgroup invocations with a true predicate.",
+    operands=[Operand("predicate", I1, doc="Per-invocation predicate.")],
+    results=[Result("result", INTEGER, doc="Integer true-predicate count.")],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    verify="loom_kernel_workgroup_vote_count_verify",
+    format=[Ref("predicate"), COLON, TypeOf("predicate"), ARROW, ResultType("result")],
+    examples=["%count = kernel.workgroup.vote.count %p : i1 -> i32"],
 )
 
 
@@ -982,4 +1438,26 @@ ALL_KERNEL_OPS: tuple[Op, ...] = (
     kernel_async_cluster_gather_mask,
     kernel_workitem_id,
     kernel_workgroup_id,
+    kernel_workgroup_size,
+    kernel_workgroup_count,
+    kernel_workitem_dispatch_id,
+    kernel_subgroup_id,
+    kernel_subgroup_count,
+    kernel_subgroup_size,
+    kernel_subgroup_lane_id,
+    kernel_subgroup_shuffle,
+    kernel_subgroup_broadcast,
+    kernel_subgroup_broadcast_first,
+    kernel_subgroup_reduce,
+    kernel_subgroup_scan,
+    kernel_subgroup_vote_any,
+    kernel_subgroup_vote_all,
+    kernel_subgroup_vote_ballot,
+    kernel_subgroup_active_mask,
+    kernel_subgroup_match_any,
+    kernel_subgroup_match_all,
+    kernel_workgroup_reduce,
+    kernel_workgroup_vote_any,
+    kernel_workgroup_vote_all,
+    kernel_workgroup_vote_count,
 )

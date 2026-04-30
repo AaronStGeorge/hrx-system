@@ -425,6 +425,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::ops::combining
     loom::src::loom::ops::encoding
     loom::src::loom::ops::index
     loom::src::loom::ops::op_defs

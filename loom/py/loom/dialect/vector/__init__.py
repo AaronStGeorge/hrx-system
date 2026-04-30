@@ -9,11 +9,11 @@
 from __future__ import annotations
 
 from loom.dialect.atomic import AtomicKind, AtomicOrdering, AtomicScope
+from loom.dialect.combining import CombiningKind
 from loom.dialect.vector.defs import (
     ALL_VECTOR_OPS,
     VECTOR_OP_CATEGORIES,
     VECTOR_OP_CATEGORY_GROUPS,
-    CombiningKind,
     FloatAssumptionFlags,
     FloatDot4F8Kind,
     IntegerDot4Kind,

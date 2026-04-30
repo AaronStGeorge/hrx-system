@@ -149,7 +149,7 @@
         },
         {
           "name": "meta.operation-name.loom",
-          "match": "\\b(kernel)\\.(async\\.tensor\\.store\\.from\\.lds|async\\.cluster\\.gather\\.mask|async\\.tensor\\.load\\.to\\.lds|tensor\\.lds\\.descriptor|async\\.cluster\\.gather|async\\.gather\\.mask|async\\.copy\\.mask|async\\.gather|workgroup\\.id|async\\.group|workitem\\.id|async\\.copy|async\\.wait|barrier|return|def)\\b",
+          "match": "\\b(kernel)\\.(async\\.tensor\\.store\\.from\\.lds|async\\.cluster\\.gather\\.mask|async\\.tensor\\.load\\.to\\.lds|subgroup\\.broadcast\\.first|tensor\\.lds\\.descriptor|async\\.cluster\\.gather|subgroup\\.active\\.mask|subgroup\\.vote\\.ballot|workgroup\\.vote\\.count|workitem\\.dispatch\\.id|subgroup\\.broadcast|subgroup\\.match\\.all|subgroup\\.match\\.any|workgroup\\.vote\\.all|workgroup\\.vote\\.any|async\\.gather\\.mask|subgroup\\.vote\\.all|subgroup\\.vote\\.any|subgroup\\.lane\\.id|subgroup\\.shuffle|workgroup\\.reduce|async\\.copy\\.mask|subgroup\\.reduce|workgroup\\.count|subgroup\\.count|workgroup\\.size|subgroup\\.scan|subgroup\\.size|async\\.gather|workgroup\\.id|async\\.group|subgroup\\.id|workitem\\.id|async\\.copy|async\\.wait|barrier|return|def)\\b",
           "captures": {
             "1": {
               "name": "support.namespace.dialect.loom"
@@ -317,7 +317,7 @@
       "patterns": [
         {
           "name": "keyword.other.loom",
-          "match": "\\b(?:workgroup_size|allocation|iter_args|artifact|expected|priority|schedule|default|dgroups|linkage|ordinal|actual|bounds|callee|device|export|import|inputs|layout|offset|preset|public|reason|source|target|values|attrs|count|range|shape|using|value|where|atol|base|case|else|host|into|mode|path|rtol|seed|step|abi|for|nan|as|do|to|x)\\b"
+          "match": "\\b(?:workgroup_size|allocation|iter_args|artifact|expected|priority|schedule|default|dgroups|linkage|ordinal|actual|bounds|callee|device|export|import|inputs|layout|offset|preset|public|reason|source|target|values|attrs|count|range|shape|using|value|where|atol|base|case|else|from|host|into|mode|path|rtol|seed|step|abi|for|nan|as|do|to|x)\\b"
         },
         {
           "name": "constant.language.boolean.loom",

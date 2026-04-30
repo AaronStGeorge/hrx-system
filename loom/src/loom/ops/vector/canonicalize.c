@@ -6,6 +6,7 @@
 
 #include "loom/ir/attribute.h"
 #include "loom/ir/module.h"
+#include "loom/ops/combining.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
@@ -606,30 +607,31 @@ static iree_status_t loom_vector_canonicalize_reduce(loom_op_t* op,
   loom_value_id_t init = loom_vector_reduce_init(op);
   loom_type_t input_type = loom_module_value_type(rewriter->module, input);
   int64_t identity = 0;
-  switch ((loom_vector_reduce_kind_t)loom_vector_reduce_kind(op)) {
-    case LOOM_VECTOR_REDUCE_KIND_ADDI:
-    case LOOM_VECTOR_REDUCE_KIND_ORI:
-    case LOOM_VECTOR_REDUCE_KIND_XORI:
+  loom_combining_kind_t kind = loom_vector_reduce_kind(op);
+  switch (kind) {
+    case LOOM_COMBINING_KIND_ADDI:
+    case LOOM_COMBINING_KIND_ORI:
+    case LOOM_COMBINING_KIND_XORI:
       identity = 0;
       break;
-    case LOOM_VECTOR_REDUCE_KIND_MULI:
+    case LOOM_COMBINING_KIND_MULI:
       identity = 1;
       break;
-    case LOOM_VECTOR_REDUCE_KIND_ANDI:
+    case LOOM_COMBINING_KIND_ANDI:
       identity =
           loom_vector_integer_all_ones(loom_type_element_type(input_type));
       break;
-    case LOOM_VECTOR_REDUCE_KIND_ADDF:
-    case LOOM_VECTOR_REDUCE_KIND_MULF:
-    case LOOM_VECTOR_REDUCE_KIND_MINSI:
-    case LOOM_VECTOR_REDUCE_KIND_MAXSI:
-    case LOOM_VECTOR_REDUCE_KIND_MINUI:
-    case LOOM_VECTOR_REDUCE_KIND_MAXUI:
-    case LOOM_VECTOR_REDUCE_KIND_MINIMUMF:
-    case LOOM_VECTOR_REDUCE_KIND_MAXIMUMF:
-    case LOOM_VECTOR_REDUCE_KIND_MINNUMF:
-    case LOOM_VECTOR_REDUCE_KIND_MAXNUMF:
-    case LOOM_VECTOR_REDUCE_KIND_COUNT_:
+    case LOOM_COMBINING_KIND_ADDF:
+    case LOOM_COMBINING_KIND_MULF:
+    case LOOM_COMBINING_KIND_MINSI:
+    case LOOM_COMBINING_KIND_MAXSI:
+    case LOOM_COMBINING_KIND_MINUI:
+    case LOOM_COMBINING_KIND_MAXUI:
+    case LOOM_COMBINING_KIND_MINIMUMF:
+    case LOOM_COMBINING_KIND_MAXIMUMF:
+    case LOOM_COMBINING_KIND_MINNUMF:
+    case LOOM_COMBINING_KIND_MAXNUMF:
+    case LOOM_COMBINING_KIND_COUNT_:
       return iree_ok_status();
   }
 

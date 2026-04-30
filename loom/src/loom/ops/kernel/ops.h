@@ -16,6 +16,7 @@
 #include "loom/ir/facts.h"
 #include "loom/ops/atomic.h"
 #include "loom/ops/cache.h"
+#include "loom/ops/combining.h"
 #include "loom/target/types.h"
 
 #ifdef __cplusplus
@@ -39,7 +40,29 @@ enum {
   LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER_MASK = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 13),
   LOOM_OP_KERNEL_WORKITEM_ID = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 14),
   LOOM_OP_KERNEL_WORKGROUP_ID = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 15),
-  LOOM_OP_KERNEL_COUNT_ = 16,
+  LOOM_OP_KERNEL_WORKGROUP_SIZE = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 16),
+  LOOM_OP_KERNEL_WORKGROUP_COUNT = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 17),
+  LOOM_OP_KERNEL_WORKITEM_DISPATCH_ID = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 18),
+  LOOM_OP_KERNEL_SUBGROUP_ID = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 19),
+  LOOM_OP_KERNEL_SUBGROUP_COUNT = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 20),
+  LOOM_OP_KERNEL_SUBGROUP_SIZE = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 21),
+  LOOM_OP_KERNEL_SUBGROUP_LANE_ID = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 22),
+  LOOM_OP_KERNEL_SUBGROUP_SHUFFLE = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 23),
+  LOOM_OP_KERNEL_SUBGROUP_BROADCAST = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 24),
+  LOOM_OP_KERNEL_SUBGROUP_BROADCAST_FIRST = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 25),
+  LOOM_OP_KERNEL_SUBGROUP_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 26),
+  LOOM_OP_KERNEL_SUBGROUP_SCAN = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 27),
+  LOOM_OP_KERNEL_SUBGROUP_VOTE_ANY = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 28),
+  LOOM_OP_KERNEL_SUBGROUP_VOTE_ALL = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 29),
+  LOOM_OP_KERNEL_SUBGROUP_VOTE_BALLOT = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 30),
+  LOOM_OP_KERNEL_SUBGROUP_ACTIVE_MASK = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 31),
+  LOOM_OP_KERNEL_SUBGROUP_MATCH_ANY = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 32),
+  LOOM_OP_KERNEL_SUBGROUP_MATCH_ALL = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 33),
+  LOOM_OP_KERNEL_WORKGROUP_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 34),
+  LOOM_OP_KERNEL_WORKGROUP_VOTE_ANY = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 35),
+  LOOM_OP_KERNEL_WORKGROUP_VOTE_ALL = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 36),
+  LOOM_OP_KERNEL_WORKGROUP_VOTE_COUNT = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 37),
+  LOOM_OP_KERNEL_COUNT_ = 38,
 };
 
 // Required async copy direction.
@@ -56,6 +79,29 @@ typedef enum loom_kernel_dimension_e {
   LOOM_KERNEL_DIMENSION_Z = 2,
   LOOM_KERNEL_DIMENSION_COUNT_ = 3,
 } loom_kernel_dimension_t;
+
+// Subgroup lane shuffle addressing mode.
+typedef enum loom_kernel_subgroup_shuffle_mode_e {
+  LOOM_KERNEL_SUBGROUP_SHUFFLE_MODE_XOR = 0,
+  LOOM_KERNEL_SUBGROUP_SHUFFLE_MODE_UP = 1,
+  LOOM_KERNEL_SUBGROUP_SHUFFLE_MODE_DOWN = 2,
+  LOOM_KERNEL_SUBGROUP_SHUFFLE_MODE_INDEX = 3,
+  LOOM_KERNEL_SUBGROUP_SHUFFLE_MODE_COUNT_ = 4,
+} loom_kernel_subgroup_shuffle_mode_t;
+
+// Subgroup scan inclusivity.
+typedef enum loom_kernel_subgroup_scan_mode_e {
+  LOOM_KERNEL_SUBGROUP_SCAN_MODE_INCLUSIVE = 0,
+  LOOM_KERNEL_SUBGROUP_SCAN_MODE_EXCLUSIVE = 1,
+  LOOM_KERNEL_SUBGROUP_SCAN_MODE_COUNT_ = 2,
+} loom_kernel_subgroup_scan_mode_t;
+
+// Subgroup scan lane order.
+typedef enum loom_kernel_subgroup_scan_direction_e {
+  LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_FORWARD = 0,
+  LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_REVERSE = 1,
+  LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_COUNT_ = 2,
+} loom_kernel_subgroup_scan_direction_t;
 
 // LOOM_OP_KERNEL_DEF: Dispatchable source-level kernel entry. Kernel entries own launch and export contracts; ordinary func.def bodies remain helper/callable code.
 // kernel.def @entry(%buffer: buffer) {
@@ -396,6 +442,370 @@ iree_status_t loom_kernel_workgroup_id_facts(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
+
+// LOOM_OP_KERNEL_WORKGROUP_SIZE: Read the selected workgroup size dimension. A fixed kernel.def workgroup_size contract makes this an exact fact; otherwise target facts bound the dynamic launch value.
+// %size = kernel.workgroup.size<x> : index
+LOOM_DEFINE_ISA(loom_kernel_workgroup_size_isa, LOOM_OP_KERNEL_WORKGROUP_SIZE)
+LOOM_DEFINE_RESULT(loom_kernel_workgroup_size_result, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_workgroup_size_dimension, 0, loom_kernel_dimension_t)
+iree_status_t loom_kernel_workgroup_size_build(
+    loom_builder_t* builder,
+    loom_kernel_dimension_t dimension,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_workgroup_size_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_KERNEL_WORKGROUP_COUNT: Read the dispatched workgroup count in one grid dimension.
+// %count = kernel.workgroup.count<x> : index
+LOOM_DEFINE_ISA(loom_kernel_workgroup_count_isa, LOOM_OP_KERNEL_WORKGROUP_COUNT)
+LOOM_DEFINE_RESULT(loom_kernel_workgroup_count_result, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_workgroup_count_dimension, 0, loom_kernel_dimension_t)
+iree_status_t loom_kernel_workgroup_count_build(
+    loom_builder_t* builder,
+    loom_kernel_dimension_t dimension,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_workgroup_count_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_KERNEL_WORKITEM_DISPATCH_ID: Read one coordinate of the current invocation in the whole dispatch. This is the logical coordinate formed from workgroup id, workgroup size, and workitem id; target lowering may materialize it directly or derive it from lower-level launch registers.
+// %gid = kernel.workitem.dispatch.id<x> : index
+LOOM_DEFINE_ISA(loom_kernel_workitem_dispatch_id_isa, LOOM_OP_KERNEL_WORKITEM_DISPATCH_ID)
+LOOM_DEFINE_RESULT(loom_kernel_workitem_dispatch_id_result, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_workitem_dispatch_id_dimension, 0, loom_kernel_dimension_t)
+iree_status_t loom_kernel_workitem_dispatch_id_build(
+    loom_builder_t* builder,
+    loom_kernel_dimension_t dimension,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_workitem_dispatch_id_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_KERNEL_SUBGROUP_ID: Read the current subgroup coordinate within the workgroup.
+// %sg = kernel.subgroup.id : index
+LOOM_DEFINE_ISA(loom_kernel_subgroup_id_isa, LOOM_OP_KERNEL_SUBGROUP_ID)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_id_result, 0)
+iree_status_t loom_kernel_subgroup_id_build(
+    loom_builder_t* builder,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_subgroup_id_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_KERNEL_SUBGROUP_COUNT: Read the number of subgroups in the current workgroup.
+// %count = kernel.subgroup.count : index
+LOOM_DEFINE_ISA(loom_kernel_subgroup_count_isa, LOOM_OP_KERNEL_SUBGROUP_COUNT)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_count_result, 0)
+iree_status_t loom_kernel_subgroup_count_build(
+    loom_builder_t* builder,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_subgroup_count_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_KERNEL_SUBGROUP_SIZE: Read the invocation count of the current subgroup.
+// %size = kernel.subgroup.size : index
+LOOM_DEFINE_ISA(loom_kernel_subgroup_size_isa, LOOM_OP_KERNEL_SUBGROUP_SIZE)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_size_result, 0)
+iree_status_t loom_kernel_subgroup_size_build(
+    loom_builder_t* builder,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_subgroup_size_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_KERNEL_SUBGROUP_LANE_ID: Read the current invocation coordinate within its subgroup.
+// %lane = kernel.subgroup.lane.id : index
+LOOM_DEFINE_ISA(loom_kernel_subgroup_lane_id_isa, LOOM_OP_KERNEL_SUBGROUP_LANE_ID)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_lane_id_result, 0)
+iree_status_t loom_kernel_subgroup_lane_id_build(
+    loom_builder_t* builder,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_subgroup_lane_id_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_KERNEL_SUBGROUP_SHUFFLE: Move a scalar or rank-1 vector value across lanes of the current subgroup. The result value has the same type as the input value, and the valid result reports whether the named source lane participated.
+// %r, %valid = kernel.subgroup.shuffle<xor> %v, %offset, %width : f32, i32, i32
+LOOM_DEFINE_ISA(loom_kernel_subgroup_shuffle_isa, LOOM_OP_KERNEL_SUBGROUP_SHUFFLE)
+LOOM_DEFINE_OPERAND(loom_kernel_subgroup_shuffle_value, 0)
+LOOM_DEFINE_OPERAND(loom_kernel_subgroup_shuffle_offset, 1)
+LOOM_DEFINE_OPERAND(loom_kernel_subgroup_shuffle_width, 2)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_shuffle_result, 0)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_shuffle_valid, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_subgroup_shuffle_mode, 0, loom_kernel_subgroup_shuffle_mode_t)
+iree_status_t loom_kernel_subgroup_shuffle_build(
+    loom_builder_t* builder,
+    loom_kernel_subgroup_shuffle_mode_t mode,
+    loom_value_id_t value,
+    loom_value_id_t offset,
+    loom_value_id_t width,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_subgroup_shuffle_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_SUBGROUP_BROADCAST: Broadcast a scalar or rank-1 vector value from one named subgroup lane.
+// %r = kernel.subgroup.broadcast %v from %lane : f32, i32
+LOOM_DEFINE_ISA(loom_kernel_subgroup_broadcast_isa, LOOM_OP_KERNEL_SUBGROUP_BROADCAST)
+LOOM_DEFINE_OPERAND(loom_kernel_subgroup_broadcast_value, 0)
+LOOM_DEFINE_OPERAND(loom_kernel_subgroup_broadcast_lane, 1)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_broadcast_result, 0)
+iree_status_t loom_kernel_subgroup_broadcast_build(
+    loom_builder_t* builder,
+    loom_value_id_t value,
+    loom_value_id_t lane,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_subgroup_broadcast_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_SUBGROUP_BROADCAST_FIRST: Broadcast a scalar or rank-1 vector value from the first active subgroup lane.
+// %r = kernel.subgroup.broadcast.first %v : f32
+LOOM_DEFINE_ISA(loom_kernel_subgroup_broadcast_first_isa, LOOM_OP_KERNEL_SUBGROUP_BROADCAST_FIRST)
+LOOM_DEFINE_OPERAND(loom_kernel_subgroup_broadcast_first_value, 0)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_broadcast_first_result, 0)
+iree_status_t loom_kernel_subgroup_broadcast_first_build(
+    loom_builder_t* builder,
+    loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_subgroup_value_result_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_SUBGROUP_REDUCE: Reduce a scalar or rank-1 vector value across the current subgroup.
+// %sum = kernel.subgroup.reduce<addf> %v : f32
+LOOM_DEFINE_ISA(loom_kernel_subgroup_reduce_isa, LOOM_OP_KERNEL_SUBGROUP_REDUCE)
+LOOM_DEFINE_OPERAND(loom_kernel_subgroup_reduce_value, 0)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_reduce_result, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_subgroup_reduce_kind, 0, loom_combining_kind_t)
+LOOM_DEFINE_ATTR_I64(loom_kernel_subgroup_reduce_cluster_size, 1)
+LOOM_DEFINE_ATTR_I64(loom_kernel_subgroup_reduce_cluster_stride, 2)
+enum loom_kernel_subgroup_reduce_build_flag_bits_e {
+  LOOM_KERNEL_SUBGROUP_REDUCE_BUILD_FLAG_HAS_CLUSTER_SIZE = 1u << 0,
+  LOOM_KERNEL_SUBGROUP_REDUCE_BUILD_FLAG_HAS_CLUSTER_STRIDE = 1u << 1,
+};
+typedef uint32_t loom_kernel_subgroup_reduce_build_flags_t;
+iree_status_t loom_kernel_subgroup_reduce_build(
+    loom_builder_t* builder,
+    loom_kernel_subgroup_reduce_build_flags_t build_flags,
+    loom_combining_kind_t kind,
+    loom_value_id_t value,
+    loom_optional int64_t cluster_size,
+    loom_optional int64_t cluster_stride,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_subgroup_reduce_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_SUBGROUP_SCAN: Prefix-scan a scalar or rank-1 vector value across the current subgroup.
+// %prefix = kernel.subgroup.scan<addf> %v {mode = inclusive, direction = forward} : f32
+LOOM_DEFINE_ISA(loom_kernel_subgroup_scan_isa, LOOM_OP_KERNEL_SUBGROUP_SCAN)
+LOOM_DEFINE_OPERAND(loom_kernel_subgroup_scan_value, 0)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_scan_result, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_subgroup_scan_kind, 0, loom_combining_kind_t)
+LOOM_DEFINE_ATTR_I64(loom_kernel_subgroup_scan_cluster_size, 1)
+LOOM_DEFINE_ATTR_I64(loom_kernel_subgroup_scan_cluster_stride, 2)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_subgroup_scan_mode, 3, loom_kernel_subgroup_scan_mode_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_subgroup_scan_direction, 4, loom_kernel_subgroup_scan_direction_t)
+enum loom_kernel_subgroup_scan_build_flag_bits_e {
+  LOOM_KERNEL_SUBGROUP_SCAN_BUILD_FLAG_HAS_CLUSTER_SIZE = 1u << 0,
+  LOOM_KERNEL_SUBGROUP_SCAN_BUILD_FLAG_HAS_CLUSTER_STRIDE = 1u << 1,
+};
+typedef uint32_t loom_kernel_subgroup_scan_build_flags_t;
+iree_status_t loom_kernel_subgroup_scan_build(
+    loom_builder_t* builder,
+    loom_kernel_subgroup_scan_build_flags_t build_flags,
+    loom_combining_kind_t kind,
+    loom_value_id_t value,
+    loom_optional int64_t cluster_size,
+    loom_optional int64_t cluster_stride,
+    loom_kernel_subgroup_scan_mode_t mode,
+    loom_kernel_subgroup_scan_direction_t direction,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_subgroup_scan_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_SUBGROUP_VOTE_ANY: Return true when any active subgroup lane has a true predicate.
+// %any = kernel.subgroup.vote.any %p : i1
+LOOM_DEFINE_ISA(loom_kernel_subgroup_vote_any_isa, LOOM_OP_KERNEL_SUBGROUP_VOTE_ANY)
+LOOM_DEFINE_OPERAND(loom_kernel_subgroup_vote_any_predicate, 0)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_vote_any_result, 0)
+iree_status_t loom_kernel_subgroup_vote_any_build(
+    loom_builder_t* builder,
+    loom_value_id_t predicate,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_KERNEL_SUBGROUP_VOTE_ALL: Return true when all active subgroup lanes have a true predicate.
+// %all = kernel.subgroup.vote.all %p : i1
+LOOM_DEFINE_ISA(loom_kernel_subgroup_vote_all_isa, LOOM_OP_KERNEL_SUBGROUP_VOTE_ALL)
+LOOM_DEFINE_OPERAND(loom_kernel_subgroup_vote_all_predicate, 0)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_vote_all_result, 0)
+iree_status_t loom_kernel_subgroup_vote_all_build(
+    loom_builder_t* builder,
+    loom_value_id_t predicate,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_KERNEL_SUBGROUP_VOTE_BALLOT: Return an integer mask of active subgroup lanes whose predicate is true.
+// %mask = kernel.subgroup.vote.ballot %p : i1 -> i64
+LOOM_DEFINE_ISA(loom_kernel_subgroup_vote_ballot_isa, LOOM_OP_KERNEL_SUBGROUP_VOTE_BALLOT)
+LOOM_DEFINE_OPERAND(loom_kernel_subgroup_vote_ballot_predicate, 0)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_vote_ballot_mask, 0)
+iree_status_t loom_kernel_subgroup_vote_ballot_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t predicate,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_subgroup_mask_result_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_SUBGROUP_ACTIVE_MASK: Return an integer mask of the currently active subgroup lanes.
+// %mask = kernel.subgroup.active.mask : i64
+LOOM_DEFINE_ISA(loom_kernel_subgroup_active_mask_isa, LOOM_OP_KERNEL_SUBGROUP_ACTIVE_MASK)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_active_mask_mask, 0)
+iree_status_t loom_kernel_subgroup_active_mask_build(
+    loom_builder_t* builder,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_subgroup_mask_result_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_SUBGROUP_MATCH_ANY: Return a lane mask of active subgroup invocations with the same scalar value.
+// %mask = kernel.subgroup.match.any %v : i32 -> i64
+LOOM_DEFINE_ISA(loom_kernel_subgroup_match_any_isa, LOOM_OP_KERNEL_SUBGROUP_MATCH_ANY)
+LOOM_DEFINE_OPERAND(loom_kernel_subgroup_match_any_value, 0)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_match_any_mask, 0)
+iree_status_t loom_kernel_subgroup_match_any_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_subgroup_mask_result_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_SUBGROUP_MATCH_ALL: Return a lane mask and predicate describing whether all active subgroup lanes hold the same scalar value.
+// %mask, %all = kernel.subgroup.match.all %v : i32 -> i64, i1
+LOOM_DEFINE_ISA(loom_kernel_subgroup_match_all_isa, LOOM_OP_KERNEL_SUBGROUP_MATCH_ALL)
+LOOM_DEFINE_OPERAND(loom_kernel_subgroup_match_all_value, 0)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_match_all_mask, 0)
+LOOM_DEFINE_RESULT(loom_kernel_subgroup_match_all_all_equal, 1)
+iree_status_t loom_kernel_subgroup_match_all_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    const loom_tied_result_t* tied_results,
+    iree_host_size_t tied_result_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_subgroup_match_all_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_WORKGROUP_REDUCE: Reduce a scalar or rank-1 vector value across the current workgroup.
+// %sum = kernel.workgroup.reduce<addf> %v : f32
+LOOM_DEFINE_ISA(loom_kernel_workgroup_reduce_isa, LOOM_OP_KERNEL_WORKGROUP_REDUCE)
+LOOM_DEFINE_OPERAND(loom_kernel_workgroup_reduce_value, 0)
+LOOM_DEFINE_RESULT(loom_kernel_workgroup_reduce_result, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_workgroup_reduce_kind, 0, loom_combining_kind_t)
+iree_status_t loom_kernel_workgroup_reduce_build(
+    loom_builder_t* builder,
+    loom_combining_kind_t kind,
+    loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_workgroup_reduce_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_WORKGROUP_VOTE_ANY: Return true when any workgroup invocation has a true predicate.
+// %any = kernel.workgroup.vote.any %p : i1
+LOOM_DEFINE_ISA(loom_kernel_workgroup_vote_any_isa, LOOM_OP_KERNEL_WORKGROUP_VOTE_ANY)
+LOOM_DEFINE_OPERAND(loom_kernel_workgroup_vote_any_predicate, 0)
+LOOM_DEFINE_RESULT(loom_kernel_workgroup_vote_any_result, 0)
+iree_status_t loom_kernel_workgroup_vote_any_build(
+    loom_builder_t* builder,
+    loom_value_id_t predicate,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_KERNEL_WORKGROUP_VOTE_ALL: Return true when all workgroup invocations have a true predicate.
+// %all = kernel.workgroup.vote.all %p : i1
+LOOM_DEFINE_ISA(loom_kernel_workgroup_vote_all_isa, LOOM_OP_KERNEL_WORKGROUP_VOTE_ALL)
+LOOM_DEFINE_OPERAND(loom_kernel_workgroup_vote_all_predicate, 0)
+LOOM_DEFINE_RESULT(loom_kernel_workgroup_vote_all_result, 0)
+iree_status_t loom_kernel_workgroup_vote_all_build(
+    loom_builder_t* builder,
+    loom_value_id_t predicate,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_KERNEL_WORKGROUP_VOTE_COUNT: Count workgroup invocations with a true predicate.
+// %count = kernel.workgroup.vote.count %p : i1 -> i32
+LOOM_DEFINE_ISA(loom_kernel_workgroup_vote_count_isa, LOOM_OP_KERNEL_WORKGROUP_VOTE_COUNT)
+LOOM_DEFINE_OPERAND(loom_kernel_workgroup_vote_count_predicate, 0)
+LOOM_DEFINE_RESULT(loom_kernel_workgroup_vote_count_result, 0)
+iree_status_t loom_kernel_workgroup_vote_count_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t predicate,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_workgroup_vote_count_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // Returns the vtable array for the kernel dialect.
 const loom_op_vtable_t* const* loom_kernel_dialect_vtables(

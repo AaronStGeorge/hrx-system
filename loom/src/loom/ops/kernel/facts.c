@@ -12,8 +12,14 @@
 #include "loom/target/types.h"
 #include "loom/util/fact_table.h"
 
+#define LOOM_KERNEL_DEFAULT_MAX_SUBGROUP_SIZE 128u
+
 static loom_value_facts_t loom_kernel_hal_coordinate_facts(void) {
   return loom_value_facts_make(0, (int64_t)UINT32_MAX, 1);
+}
+
+static loom_value_facts_t loom_kernel_hal_positive_u32_facts(void) {
+  return loom_value_facts_make(1, (int64_t)UINT32_MAX, 1);
 }
 
 static uint32_t loom_kernel_workgroup_size_dim(
@@ -60,6 +66,19 @@ static uint32_t loom_kernel_workgroup_count_dim(
   }
 }
 
+static bool loom_kernel_workgroup_size_flat_product(
+    const loom_target_workgroup_size_t* size, uint32_t* out_flat_size) {
+  if (size->x == 0 || size->y == 0 || size->z == 0) {
+    return false;
+  }
+  const uint64_t flat_size = (uint64_t)size->x * size->y * size->z;
+  if (flat_size > UINT32_MAX) {
+    return false;
+  }
+  *out_flat_size = (uint32_t)flat_size;
+  return true;
+}
+
 static uint32_t loom_kernel_max_workgroup_count(
     const loom_target_snapshot_t* snapshot,
     const loom_target_workgroup_size_t* required_workgroup_size,
@@ -88,7 +107,8 @@ static const loom_target_bundle_t* loom_kernel_target_bundle(
   if (!bundle) {
     return NULL;
   }
-  IREE_ASSERT_ARGUMENT(bundle && bundle->snapshot && bundle->export_plan);
+  IREE_ASSERT(bundle->snapshot != NULL);
+  IREE_ASSERT(bundle->export_plan != NULL);
   return bundle;
 }
 
@@ -112,6 +132,33 @@ static bool loom_kernel_context_required_workgroup_size(
   }
   *out_size = bundle->export_plan->hal_kernel.required_workgroup_size;
   return out_size->x != 0 || out_size->y != 0 || out_size->z != 0;
+}
+
+static uint32_t loom_kernel_context_max_flat_workgroup_size(
+    const loom_fact_context_t* context) {
+  loom_target_workgroup_size_t required_workgroup_size = {0};
+  if (loom_kernel_context_required_workgroup_size(context,
+                                                  &required_workgroup_size)) {
+    uint32_t flat_size = 0;
+    if (loom_kernel_workgroup_size_flat_product(&required_workgroup_size,
+                                                &flat_size)) {
+      return flat_size;
+    }
+  }
+
+  const loom_target_bundle_t* bundle = loom_kernel_target_bundle(context);
+  if (!bundle || bundle->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
+    return 0;
+  }
+  if (bundle->snapshot->max_flat_workgroup_size != 0) {
+    return bundle->snapshot->max_flat_workgroup_size;
+  }
+  uint32_t flat_size = 0;
+  if (loom_kernel_workgroup_size_flat_product(
+          &bundle->snapshot->max_workgroup_size, &flat_size)) {
+    return flat_size;
+  }
+  return 0;
 }
 
 static loom_value_facts_t loom_kernel_workitem_id_target_facts(
@@ -158,6 +205,97 @@ static loom_value_facts_t loom_kernel_workgroup_id_target_facts(
   return loom_value_facts_make(0, (int64_t)max_workgroup_count - 1, 1);
 }
 
+static loom_value_facts_t loom_kernel_workgroup_size_target_facts(
+    const loom_fact_context_t* context, loom_kernel_dimension_t dimension) {
+  loom_target_workgroup_size_t required_workgroup_size = {0};
+  if (loom_kernel_context_required_workgroup_size(context,
+                                                  &required_workgroup_size)) {
+    const uint32_t fixed_workgroup_size =
+        loom_kernel_workgroup_size_dim(&required_workgroup_size, dimension);
+    if (fixed_workgroup_size != 0) {
+      return loom_value_facts_make((int64_t)fixed_workgroup_size,
+                                   (int64_t)fixed_workgroup_size, 1);
+    }
+  }
+
+  const loom_target_bundle_t* bundle = loom_kernel_target_bundle(context);
+  if (!bundle || bundle->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
+    return loom_kernel_hal_positive_u32_facts();
+  }
+  const uint32_t max_workgroup_size = loom_kernel_workgroup_size_dim(
+      &bundle->snapshot->max_workgroup_size, dimension);
+  if (max_workgroup_size != 0) {
+    return loom_value_facts_make(1, (int64_t)max_workgroup_size, 1);
+  }
+  return loom_kernel_hal_positive_u32_facts();
+}
+
+static loom_value_facts_t loom_kernel_workgroup_count_target_facts(
+    const loom_fact_context_t* context, loom_kernel_dimension_t dimension) {
+  const loom_target_bundle_t* bundle = loom_kernel_target_bundle(context);
+  if (!bundle || bundle->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
+    return loom_kernel_hal_positive_u32_facts();
+  }
+  loom_target_workgroup_size_t required_workgroup_size = {0};
+  if (!loom_kernel_context_required_workgroup_size(context,
+                                                   &required_workgroup_size)) {
+    required_workgroup_size =
+        bundle->export_plan->hal_kernel.required_workgroup_size;
+  }
+  const uint32_t max_workgroup_count = loom_kernel_max_workgroup_count(
+      bundle->snapshot, &required_workgroup_size, dimension);
+  if (max_workgroup_count == 0) {
+    return loom_kernel_hal_positive_u32_facts();
+  }
+  return loom_value_facts_make(1, (int64_t)max_workgroup_count, 1);
+}
+
+static loom_value_facts_t loom_kernel_workitem_dispatch_id_target_facts(
+    const loom_fact_context_t* context, loom_kernel_dimension_t dimension) {
+  const loom_target_bundle_t* bundle = loom_kernel_target_bundle(context);
+  if (!bundle || bundle->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
+    return loom_kernel_hal_coordinate_facts();
+  }
+  const uint32_t max_grid_size =
+      loom_kernel_grid_size_dim(&bundle->snapshot->max_grid_size, dimension);
+  if (max_grid_size != 0) {
+    return loom_value_facts_make(0, (int64_t)max_grid_size - 1, 1);
+  }
+
+  loom_target_workgroup_size_t workgroup_size = {0};
+  if (!loom_kernel_context_required_workgroup_size(context, &workgroup_size)) {
+    workgroup_size = bundle->snapshot->max_workgroup_size;
+  }
+  const uint32_t size =
+      loom_kernel_workgroup_size_dim(&workgroup_size, dimension);
+  const uint32_t count = loom_kernel_workgroup_count_dim(
+      &bundle->snapshot->max_workgroup_count, dimension);
+  if (size == 0 || count == 0) {
+    return loom_kernel_hal_coordinate_facts();
+  }
+  const uint64_t max_dispatch_size = (uint64_t)size * count;
+  if (max_dispatch_size == 0 || max_dispatch_size > UINT32_MAX) {
+    return loom_kernel_hal_coordinate_facts();
+  }
+  return loom_value_facts_make(0, (int64_t)max_dispatch_size - 1, 1);
+}
+
+static uint32_t loom_kernel_max_subgroup_size(
+    const loom_fact_context_t* context) {
+  uint32_t max_subgroup_size = LOOM_KERNEL_DEFAULT_MAX_SUBGROUP_SIZE;
+  const uint32_t max_flat_workgroup_size =
+      loom_kernel_context_max_flat_workgroup_size(context);
+  if (max_flat_workgroup_size != 0) {
+    max_subgroup_size = iree_min(max_subgroup_size, max_flat_workgroup_size);
+  }
+  return max_subgroup_size;
+}
+
+static uint32_t loom_kernel_max_subgroup_count(
+    const loom_fact_context_t* context) {
+  return loom_kernel_context_max_flat_workgroup_size(context);
+}
+
 iree_status_t loom_kernel_workitem_id_facts(
     loom_fact_context_t* context, const loom_module_t* module,
     const loom_op_t* op, const loom_value_facts_t* operand_facts,
@@ -177,5 +315,95 @@ iree_status_t loom_kernel_workgroup_id_facts(
   (void)operand_facts;
   result_facts[0] = loom_kernel_workgroup_id_target_facts(
       context, loom_kernel_workgroup_id_dimension(op));
+  return iree_ok_status();
+}
+
+iree_status_t loom_kernel_workgroup_size_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)module;
+  (void)operand_facts;
+  result_facts[0] = loom_kernel_workgroup_size_target_facts(
+      context, loom_kernel_workgroup_size_dimension(op));
+  return iree_ok_status();
+}
+
+iree_status_t loom_kernel_workgroup_count_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)module;
+  (void)operand_facts;
+  result_facts[0] = loom_kernel_workgroup_count_target_facts(
+      context, loom_kernel_workgroup_count_dimension(op));
+  return iree_ok_status();
+}
+
+iree_status_t loom_kernel_workitem_dispatch_id_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)module;
+  (void)operand_facts;
+  result_facts[0] = loom_kernel_workitem_dispatch_id_target_facts(
+      context, loom_kernel_workitem_dispatch_id_dimension(op));
+  return iree_ok_status();
+}
+
+iree_status_t loom_kernel_subgroup_lane_id_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)module;
+  (void)op;
+  (void)operand_facts;
+  const uint32_t max_subgroup_size = loom_kernel_max_subgroup_size(context);
+  result_facts[0] = loom_value_facts_make(0, (int64_t)max_subgroup_size - 1, 1);
+  return iree_ok_status();
+}
+
+iree_status_t loom_kernel_subgroup_size_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)module;
+  (void)op;
+  (void)operand_facts;
+  const uint32_t max_subgroup_size = loom_kernel_max_subgroup_size(context);
+  result_facts[0] = loom_value_facts_make(1, (int64_t)max_subgroup_size, 1);
+  return iree_ok_status();
+}
+
+iree_status_t loom_kernel_subgroup_id_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)module;
+  (void)op;
+  (void)operand_facts;
+  const uint32_t max_subgroup_count = loom_kernel_max_subgroup_count(context);
+  if (max_subgroup_count == 0) {
+    result_facts[0] = loom_kernel_hal_coordinate_facts();
+  } else {
+    result_facts[0] =
+        loom_value_facts_make(0, (int64_t)max_subgroup_count - 1, 1);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_kernel_subgroup_count_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)module;
+  (void)op;
+  (void)operand_facts;
+  const uint32_t max_subgroup_count = loom_kernel_max_subgroup_count(context);
+  if (max_subgroup_count == 0) {
+    result_facts[0] = loom_kernel_hal_positive_u32_facts();
+  } else {
+    result_facts[0] = loom_value_facts_make(1, (int64_t)max_subgroup_count, 1);
+  }
   return iree_ok_status();
 }

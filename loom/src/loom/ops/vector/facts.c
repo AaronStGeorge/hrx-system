@@ -19,6 +19,7 @@
 
 #include "loom/ir/attribute.h"
 #include "loom/ir/module.h"
+#include "loom/ops/combining.h"
 #include "loom/ops/encoding/numeric_transform.h"
 #include "loom/ops/scalar/compare.h"
 #include "loom/ops/vector/fragment.h"
@@ -3146,34 +3147,34 @@ iree_status_t loom_vector_table_quantize_facts(
 //===----------------------------------------------------------------------===//
 
 static bool loom_vector_reduce_apply_integer(
-    uint8_t kind, const loom_value_facts_t* accumulator,
+    loom_combining_kind_t kind, const loom_value_facts_t* accumulator,
     const loom_value_facts_t* element, loom_value_facts_t* out) {
   switch (kind) {
-    case LOOM_VECTOR_REDUCE_KIND_ADDI:
+    case LOOM_COMBINING_KIND_ADDI:
       loom_value_facts_addi(accumulator, element, out);
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MULI:
+    case LOOM_COMBINING_KIND_MULI:
       loom_value_facts_muli(accumulator, element, out);
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MINSI:
+    case LOOM_COMBINING_KIND_MINSI:
       loom_value_facts_minsi(accumulator, element, out);
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MAXSI:
+    case LOOM_COMBINING_KIND_MAXSI:
       loom_value_facts_maxsi(accumulator, element, out);
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MINUI:
+    case LOOM_COMBINING_KIND_MINUI:
       loom_value_facts_minui(accumulator, element, out);
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MAXUI:
+    case LOOM_COMBINING_KIND_MAXUI:
       loom_value_facts_maxui(accumulator, element, out);
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_ANDI:
+    case LOOM_COMBINING_KIND_ANDI:
       loom_value_facts_andi(accumulator, element, out);
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_ORI:
+    case LOOM_COMBINING_KIND_ORI:
       loom_value_facts_ori(accumulator, element, out);
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_XORI:
+    case LOOM_COMBINING_KIND_XORI:
       loom_value_facts_xori(accumulator, element, out);
       return true;
     default:
@@ -3181,21 +3182,22 @@ static bool loom_vector_reduce_apply_integer(
   }
 }
 
-static bool loom_vector_reduce_apply_float(uint8_t kind, double accumulator,
-                                           double element, double* out) {
+static bool loom_vector_reduce_apply_float(loom_combining_kind_t kind,
+                                           double accumulator, double element,
+                                           double* out) {
   switch (kind) {
-    case LOOM_VECTOR_REDUCE_KIND_ADDF:
+    case LOOM_COMBINING_KIND_ADDF:
       *out = accumulator + element;
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MULF:
+    case LOOM_COMBINING_KIND_MULF:
       *out = accumulator * element;
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MINIMUMF:
-    case LOOM_VECTOR_REDUCE_KIND_MINNUMF:
+    case LOOM_COMBINING_KIND_MINIMUMF:
+    case LOOM_COMBINING_KIND_MINNUMF:
       *out = loom_vector_minimum_f64(accumulator, element);
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MAXIMUMF:
-    case LOOM_VECTOR_REDUCE_KIND_MAXNUMF:
+    case LOOM_COMBINING_KIND_MAXIMUMF:
+    case LOOM_COMBINING_KIND_MAXNUMF:
       *out = loom_vector_maximum_f64(accumulator, element);
       return true;
     default:
@@ -3203,20 +3205,20 @@ static bool loom_vector_reduce_apply_float(uint8_t kind, double accumulator,
   }
 }
 
-static bool loom_vector_reduce_dynamic_identity(uint8_t kind,
+static bool loom_vector_reduce_dynamic_identity(loom_combining_kind_t kind,
                                                 loom_value_facts_t element,
                                                 loom_value_facts_t init,
                                                 loom_value_facts_t* out) {
   switch (kind) {
-    case LOOM_VECTOR_REDUCE_KIND_ADDI:
-    case LOOM_VECTOR_REDUCE_KIND_ORI:
-    case LOOM_VECTOR_REDUCE_KIND_XORI:
+    case LOOM_COMBINING_KIND_ADDI:
+    case LOOM_COMBINING_KIND_ORI:
+    case LOOM_COMBINING_KIND_XORI:
       if (loom_vector_facts_exact_i64_is(element, 0)) {
         *out = init;
         return true;
       }
       return false;
-    case LOOM_VECTOR_REDUCE_KIND_MULI:
+    case LOOM_COMBINING_KIND_MULI:
       if (loom_vector_facts_exact_i64_is(element, 1)) {
         *out = init;
         return true;
@@ -3227,7 +3229,7 @@ static bool loom_vector_reduce_dynamic_identity(uint8_t kind,
   }
 }
 
-static bool loom_vector_reduce_static_uniform(uint8_t kind,
+static bool loom_vector_reduce_static_uniform(loom_combining_kind_t kind,
                                               uint64_t element_count,
                                               loom_value_facts_t element,
                                               loom_value_facts_t init,
@@ -3268,7 +3270,7 @@ static bool loom_vector_reduce_static_uniform(uint8_t kind,
 }
 
 static bool loom_vector_reduce_small_static_lanes(
-    uint8_t kind, loom_value_fact_small_static_lanes_t lanes,
+    loom_combining_kind_t kind, loom_value_fact_small_static_lanes_t lanes,
     loom_value_facts_t init, loom_value_facts_t* out) {
   if (lanes.count == 0) {
     *out = init;
@@ -3316,7 +3318,7 @@ iree_status_t loom_vector_reduce_facts(loom_fact_context_t* context,
     return iree_ok_status();
   }
 
-  uint8_t kind = loom_vector_reduce_kind(op);
+  loom_combining_kind_t kind = loom_vector_reduce_kind(op);
   loom_value_fact_small_static_lanes_t lanes = {0};
   if (loom_vector_facts_query_small_lanes(context, operand_facts[0], &lanes)) {
     if (loom_vector_reduce_small_static_lanes(kind, lanes, operand_facts[1],

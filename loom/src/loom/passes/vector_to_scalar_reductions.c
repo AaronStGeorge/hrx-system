@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/ir/module.h"
+#include "loom/ops/combining.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
@@ -15,51 +16,51 @@
 //===----------------------------------------------------------------------===//
 
 static bool loom_vector_to_scalar_reduce_scalar_kind(
-    uint8_t reduce_kind, loom_op_kind_t* out_scalar_kind) {
-  switch ((loom_vector_reduce_kind_t)reduce_kind) {
-    case LOOM_VECTOR_REDUCE_KIND_ADDI:
+    loom_combining_kind_t reduce_kind, loom_op_kind_t* out_scalar_kind) {
+  switch (reduce_kind) {
+    case LOOM_COMBINING_KIND_ADDI:
       *out_scalar_kind = LOOM_OP_SCALAR_ADDI;
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_ADDF:
+    case LOOM_COMBINING_KIND_ADDF:
       *out_scalar_kind = LOOM_OP_SCALAR_ADDF;
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MULI:
+    case LOOM_COMBINING_KIND_MULI:
       *out_scalar_kind = LOOM_OP_SCALAR_MULI;
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MULF:
+    case LOOM_COMBINING_KIND_MULF:
       *out_scalar_kind = LOOM_OP_SCALAR_MULF;
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MINSI:
+    case LOOM_COMBINING_KIND_MINSI:
       *out_scalar_kind = LOOM_OP_SCALAR_MINSI;
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MAXSI:
+    case LOOM_COMBINING_KIND_MAXSI:
       *out_scalar_kind = LOOM_OP_SCALAR_MAXSI;
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MINUI:
+    case LOOM_COMBINING_KIND_MINUI:
       *out_scalar_kind = LOOM_OP_SCALAR_MINUI;
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MAXUI:
+    case LOOM_COMBINING_KIND_MAXUI:
       *out_scalar_kind = LOOM_OP_SCALAR_MAXUI;
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_ANDI:
+    case LOOM_COMBINING_KIND_ANDI:
       *out_scalar_kind = LOOM_OP_SCALAR_ANDI;
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_ORI:
+    case LOOM_COMBINING_KIND_ORI:
       *out_scalar_kind = LOOM_OP_SCALAR_ORI;
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_XORI:
+    case LOOM_COMBINING_KIND_XORI:
       *out_scalar_kind = LOOM_OP_SCALAR_XORI;
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MINIMUMF:
+    case LOOM_COMBINING_KIND_MINIMUMF:
       *out_scalar_kind = LOOM_OP_SCALAR_MINIMUMF;
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MAXIMUMF:
+    case LOOM_COMBINING_KIND_MAXIMUMF:
       *out_scalar_kind = LOOM_OP_SCALAR_MAXIMUMF;
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MINNUMF:
+    case LOOM_COMBINING_KIND_MINNUMF:
       *out_scalar_kind = LOOM_OP_SCALAR_MINNUMF;
       return true;
-    case LOOM_VECTOR_REDUCE_KIND_MAXNUMF:
+    case LOOM_COMBINING_KIND_MAXNUMF:
       *out_scalar_kind = LOOM_OP_SCALAR_MAXNUMF;
       return true;
     default:

@@ -15,6 +15,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/cfg/ops.h"
+#include "loom/ops/combining.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
@@ -656,7 +657,7 @@ static iree_status_t loom_low_source_workload_gen_vector4xi32_reduce_addi(
 
   loom_op_t* op = NULL;
   IREE_RETURN_IF_ERROR(loom_vector_reduce_build(
-      context->builder, LOOM_VECTOR_REDUCE_KIND_ADDI, input, init, scalar_type,
+      context->builder, LOOM_COMBINING_KIND_ADDI, input, init, scalar_type,
       LOOM_LOCATION_UNKNOWN, &op));
   loom_low_source_workload_values_add(
       context->values, loom_vector_reduce_result(op), scalar_type);
@@ -680,7 +681,7 @@ static iree_status_t loom_low_source_workload_gen_vector4xf32_reduce_addf(
 
   loom_op_t* op = NULL;
   IREE_RETURN_IF_ERROR(loom_vector_reduce_build(
-      context->builder, LOOM_VECTOR_REDUCE_KIND_ADDF, input, init, scalar_type,
+      context->builder, LOOM_COMBINING_KIND_ADDF, input, init, scalar_type,
       LOOM_LOCATION_UNKNOWN, &op));
   loom_low_source_workload_values_add(
       context->values, loom_vector_reduce_result(op), scalar_type);
@@ -1547,7 +1548,7 @@ static void loom_low_source_workload_count_op(
       break;
     case LOOM_OP_VECTOR_REDUCE:
       ++counts->vector_reduce_op_count;
-      if (loom_vector_reduce_kind(op) == LOOM_VECTOR_REDUCE_KIND_ADDF) {
+      if (loom_vector_reduce_kind(op) == LOOM_COMBINING_KIND_ADDF) {
         ++counts->vector_float_reduce_op_count;
       }
       break;

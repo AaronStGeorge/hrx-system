@@ -7,6 +7,7 @@
 // x86 AVX512 source-to-low vector reduction rule tables.
 
 #include "loom/codegen/low/lower_rules.h"
+#include "loom/ops/combining.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/x86/avx512_descriptors.h"
 #include "loom/target/arch/x86/lower/internal.h"
@@ -381,7 +382,7 @@ static const loom_low_lower_guard_t loom_x86_avx512_reduce_guards[] = {
             .kind = LOOM_LOW_LOWER_GUARD_ATTR_ENUM_EQ,
             .attr_index = 0,
             .diagnostic_index = LOOM_X86_AVX512_REDUCE_DIAGNOSTIC_KIND,
-            .u64 = LOOM_VECTOR_REDUCE_KIND_ADDI,
+            .u64 = LOOM_COMBINING_KIND_ADDI,
         },
     [LOOM_X86_AVX512_REDUCE_GUARD_INPUT] =
         {
@@ -422,7 +423,7 @@ static const loom_low_lower_guard_t loom_x86_avx512_reduce_guards[] = {
             .kind = LOOM_LOW_LOWER_GUARD_ATTR_ENUM_EQ,
             .attr_index = 0,
             .diagnostic_index = LOOM_X86_AVX512_REDUCE_DIAGNOSTIC_KIND,
-            .u64 = LOOM_VECTOR_REDUCE_KIND_ADDF,
+            .u64 = LOOM_COMBINING_KIND_ADDF,
         },
     [LOOM_X86_AVX512_REDUCE_GUARD_F32_INPUT] =
         {
@@ -471,7 +472,7 @@ static const loom_low_lower_guard_t loom_x86_avx512_reduce_guards[] = {
             .kind = LOOM_LOW_LOWER_GUARD_ATTR_ENUM_EQ,
             .attr_index = 0,
             .diagnostic_index = LOOM_X86_AVX512_REDUCE_DIAGNOSTIC_KIND,
-            .u64 = LOOM_VECTOR_REDUCE_KIND_ADDF,
+            .u64 = LOOM_COMBINING_KIND_ADDF,
         },
     [LOOM_X86_AVX512_REDUCE_GUARD_F32X16_INPUT] =
         {

@@ -50,6 +50,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::atomic
     loom::src::loom::ops::cache
+    loom::src::loom::ops::combining
     loom::src::loom::ops::encoding
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar

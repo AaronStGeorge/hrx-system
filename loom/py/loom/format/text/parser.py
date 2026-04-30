@@ -1307,6 +1307,57 @@ class Parser:
                 operand_ids.append(field_values[0])
         return operand_ids
 
+    def _known_value_type(self, value_id: int) -> Type | None:
+        value_type = self._module.values[value_id].type
+        if value_type == NONE_TYPE or isinstance(value_type, PlaceholderType):
+            return None
+        return value_type
+
+    def _field_value_type(
+        self,
+        op_decl: Op,
+        parsed: ParsedFields,
+        field_name: str,
+        reserved_result_ids: Sequence[int],
+    ) -> Type | None:
+        for operand in op_decl.operands:
+            if operand.name != field_name:
+                continue
+            for value_id in parsed.operand_fields.get(field_name, ()):
+                value_type = self._known_value_type(value_id)
+                if value_type is not None:
+                    return value_type
+            return None
+
+        for result_index, result in enumerate(op_decl.results):
+            if result.name != field_name or result_index >= len(reserved_result_ids):
+                continue
+            return self._known_value_type(reserved_result_ids[result_index])
+        return None
+
+    def _infer_same_type_result(
+        self,
+        op_decl: Op,
+        parsed: ParsedFields,
+        result_index: int,
+        reserved_result_ids: Sequence[int],
+    ) -> Type | None:
+        if result_index >= len(op_decl.results):
+            return None
+        result_name = op_decl.results[result_index].name
+        for constraint in op_decl.constraints:
+            if constraint.name != "SameType" or result_name not in constraint.args:
+                continue
+            for field_name in constraint.args:
+                if field_name == result_name:
+                    continue
+                value_type = self._field_value_type(
+                    op_decl, parsed, field_name, reserved_result_ids
+                )
+                if value_type is not None:
+                    return value_type
+        return None
+
     def _scope_allows_symbolic_type_values(
         self, op_decl: Op, inner_elements: tuple[FormatElement, ...]
     ) -> bool:
@@ -1445,11 +1496,15 @@ class Parser:
                     result_decl = (
                         op_decl.results[i] if i < len(op_decl.results) else None
                     )
-                    inferred_type = (
-                        _concrete_type_for_constraint(result_decl.type_constraint)
-                        if result_decl is not None and not result_decl.variadic
-                        else None
+                    inferred_type = self._infer_same_type_result(
+                        op_decl, parsed, i, reserved_result_ids
                     )
+                    if inferred_type is None:
+                        inferred_type = (
+                            _concrete_type_for_constraint(result_decl.type_constraint)
+                            if result_decl is not None and not result_decl.variadic
+                            else None
+                        )
                     if inferred_type is not None:
                         value.type = inferred_type
                     elif isinstance(value.type, PlaceholderType):

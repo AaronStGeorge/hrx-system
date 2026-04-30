@@ -258,6 +258,87 @@ static iree_status_t loom_parser_resolve_pending_successor_refs(
   return iree_ok_status();
 }
 
+static bool loom_parser_type_is_known(loom_type_t type) {
+  return type.header != 0;
+}
+
+static bool loom_parser_resolve_field_type(const loom_module_t* module,
+                                           const loom_parsed_op_t* parsed,
+                                           loom_field_ref_t ref,
+                                           loom_type_t* out_type) {
+  const uint8_t index = LOOM_FIELD_REF_INDEX(ref);
+  loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+  switch (LOOM_FIELD_REF_CATEGORY(ref)) {
+    case LOOM_FIELD_OPERAND:
+      if (index >= parsed->operand_count) {
+        return false;
+      }
+      value_id = parsed->operand_ids[index];
+      break;
+    case LOOM_FIELD_RESULT:
+      if (index >= parsed->result_count) {
+        return false;
+      }
+      value_id = parsed->result_ids[index];
+      break;
+    default:
+      return false;
+  }
+  if (value_id == LOOM_VALUE_ID_INVALID || value_id >= module->values.count) {
+    return false;
+  }
+  loom_type_t type = loom_module_value_type(module, value_id);
+  if (!loom_parser_type_is_known(type)) {
+    return false;
+  }
+  *out_type = type;
+  return true;
+}
+
+static iree_status_t loom_parser_try_infer_same_type_result(
+    loom_parser_t* parser, const loom_op_vtable_t* vtable,
+    loom_parsed_op_t* parsed, uint16_t result_index) {
+  const loom_field_ref_t target_ref =
+      LOOM_FIELD_REF(LOOM_FIELD_RESULT, result_index);
+  for (uint16_t constraint_index = 0;
+       constraint_index < vtable->constraint_count; ++constraint_index) {
+    const loom_constraint_t* constraint =
+        &vtable->constraints[constraint_index];
+    if (constraint->relation != LOOM_RELATION_PAIRWISE_EQ ||
+        constraint->property != LOOM_PROPERTY_TYPE) {
+      continue;
+    }
+
+    bool mentions_target = false;
+    for (uint8_t arg_index = 0; arg_index < constraint->arg_count;
+         ++arg_index) {
+      if (constraint->args[arg_index] == target_ref) {
+        mentions_target = true;
+        break;
+      }
+    }
+    if (!mentions_target) {
+      continue;
+    }
+
+    for (uint8_t arg_index = 0; arg_index < constraint->arg_count;
+         ++arg_index) {
+      const loom_field_ref_t source_ref = constraint->args[arg_index];
+      if (source_ref == target_ref) {
+        continue;
+      }
+      loom_type_t inferred_type = {0};
+      if (!loom_parser_resolve_field_type(parser->module, parsed, source_ref,
+                                          &inferred_type)) {
+        continue;
+      }
+      return loom_module_set_value_type(
+          parser->module, parsed->result_ids[result_index], inferred_type);
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_finalize_op(
     loom_parser_t* parser, loom_op_kind_t kind, const loom_op_vtable_t* vtable,
     loom_parsed_op_t* parsed, loom_location_id_t location, loom_op_t** out_op) {
@@ -307,15 +388,21 @@ static iree_status_t loom_finalize_op(
     }
   }
 
-  // Fill in implicit result types from result descriptors. When the
-  // format doesn't include a RESULT_TYPE element for a result, the
-  // value's type is NONE. Fixed-type constraints (e.g., I1 for
-  // comparison results) provide the concrete type.
+  // Fill in implicit result types from result descriptors and equality
+  // constraints. When the format doesn't include a RESULT_TYPE element for a
+  // result, the value's type is NONE. SameType constraints can recover
+  // pass-through result types from typed operands, and fixed-type constraints
+  // (e.g., I1 for comparison results) provide concrete singleton types.
   if (vtable->result_descriptors) {
     for (uint16_t i = 0;
          i < parsed->result_count && i < vtable->fixed_result_count; ++i) {
       loom_value_t* value =
           &parser->module->values.entries[parsed->result_ids[i]];
+      if (value->type.header != 0) {
+        continue;
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_parser_try_infer_same_type_result(parser, vtable, parsed, i));
       if (value->type.header != 0) {
         continue;
       }

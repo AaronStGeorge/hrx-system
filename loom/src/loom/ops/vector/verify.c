@@ -14,6 +14,7 @@
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/atomic.h"
 #include "loom/ops/cache.h"
+#include "loom/ops/combining.h"
 #include "loom/ops/encoding/numeric_transform.h"
 #include "loom/ops/encoding/params.h"
 #include "loom/ops/encoding/roles.h"
@@ -295,37 +296,6 @@ static iree_status_t loom_vector_verify_subvalue_type(
   }
   return loom_vector_emit_shape_mismatch(emitter, op, value_name,
                                          expected_shape_name);
-}
-
-static bool loom_vector_reduce_kind_accepts_integer(uint8_t kind) {
-  switch (kind) {
-    case LOOM_VECTOR_REDUCE_KIND_ADDI:
-    case LOOM_VECTOR_REDUCE_KIND_MULI:
-    case LOOM_VECTOR_REDUCE_KIND_MINSI:
-    case LOOM_VECTOR_REDUCE_KIND_MAXSI:
-    case LOOM_VECTOR_REDUCE_KIND_MINUI:
-    case LOOM_VECTOR_REDUCE_KIND_MAXUI:
-    case LOOM_VECTOR_REDUCE_KIND_ANDI:
-    case LOOM_VECTOR_REDUCE_KIND_ORI:
-    case LOOM_VECTOR_REDUCE_KIND_XORI:
-      return true;
-    default:
-      return false;
-  }
-}
-
-static bool loom_vector_reduce_kind_accepts_float(uint8_t kind) {
-  switch (kind) {
-    case LOOM_VECTOR_REDUCE_KIND_ADDF:
-    case LOOM_VECTOR_REDUCE_KIND_MULF:
-    case LOOM_VECTOR_REDUCE_KIND_MINIMUMF:
-    case LOOM_VECTOR_REDUCE_KIND_MAXIMUMF:
-    case LOOM_VECTOR_REDUCE_KIND_MINNUMF:
-    case LOOM_VECTOR_REDUCE_KIND_MAXNUMF:
-      return true;
-    default:
-      return false;
-  }
 }
 
 static iree_status_t loom_vector_verify_atomic_kind(
@@ -2177,19 +2147,21 @@ iree_status_t loom_vector_reduce_verify(const loom_module_t* module,
       loom_module_value_type(module, loom_vector_reduce_input(op));
   if (!loom_type_is_vector(input_type)) return iree_ok_status();
 
-  uint8_t kind = loom_vector_reduce_kind(op);
+  loom_combining_kind_t kind = loom_vector_reduce_kind(op);
   loom_scalar_type_t element_type = loom_type_element_type(input_type);
   if (loom_scalar_type_is_integer(element_type) &&
-      loom_vector_reduce_kind_accepts_integer(kind)) {
+      loom_combining_kind_accepts_integer(kind)) {
     return iree_ok_status();
   }
   if (loom_scalar_type_is_float(element_type) &&
-      loom_vector_reduce_kind_accepts_float(kind)) {
+      loom_combining_kind_accepts_float(kind)) {
     return iree_ok_status();
   }
-  if (kind >= LOOM_VECTOR_REDUCE_KIND_COUNT_) return iree_ok_status();
+  if (!loom_combining_kind_is_valid(kind)) {
+    return iree_ok_status();
+  }
   iree_string_view_t expected_constraint =
-      loom_vector_reduce_kind_accepts_integer(kind)
+      loom_combining_kind_accepts_integer(kind)
           ? IREE_SV("integer element type for reduce kind")
           : IREE_SV("floating-point element type for reduce kind");
   return loom_vector_emit_operand_constraint(emitter, op, IREE_SV("input"),

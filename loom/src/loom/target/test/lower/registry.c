@@ -8,6 +8,7 @@
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
+#include "loom/ops/combining.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/scalar/ops.h"
@@ -792,7 +793,7 @@ static const loom_low_lower_guard_t kTestLowGuards[] = {
         .kind = LOOM_LOW_LOWER_GUARD_ATTR_ENUM_EQ,
         .attr_index = 0,
         .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_REDUCE_KIND,
-        .u64 = LOOM_VECTOR_REDUCE_KIND_ADDI,
+        .u64 = LOOM_COMBINING_KIND_ADDI,
     },
     {
         .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
@@ -816,7 +817,7 @@ static const loom_low_lower_guard_t kTestLowGuards[] = {
         .kind = LOOM_LOW_LOWER_GUARD_ATTR_ENUM_EQ,
         .attr_index = 0,
         .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_REDUCE_KIND,
-        .u64 = LOOM_VECTOR_REDUCE_KIND_ADDF,
+        .u64 = LOOM_COMBINING_KIND_ADDF,
     },
     {
         .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,

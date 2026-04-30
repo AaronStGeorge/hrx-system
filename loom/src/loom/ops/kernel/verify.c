@@ -11,6 +11,7 @@
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/cache.h"
+#include "loom/ops/combining.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/view/ops.h"
 
@@ -318,6 +319,91 @@ static iree_status_t loom_kernel_verify_operand_i32(
   }
   return loom_kernel_emit_operand_constraint(emitter, op, operand_name,
                                              operand_type, IREE_SV("i32"));
+}
+
+static bool loom_kernel_type_is_collective_value(loom_type_t type) {
+  return loom_type_is_scalar(type) ||
+         (loom_type_is_vector(type) && loom_type_rank(type) == 1);
+}
+
+static iree_status_t loom_kernel_verify_collective_operand(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, iree_string_view_t operand_name,
+    loom_value_id_t operand_id) {
+  loom_type_t operand_type = loom_module_value_type(module, operand_id);
+  if (loom_kernel_type_is_collective_value(operand_type)) {
+    return iree_ok_status();
+  }
+  return loom_kernel_emit_operand_constraint(
+      emitter, op, operand_name, operand_type,
+      IREE_SV("scalar or rank-1 vector"));
+}
+
+static iree_status_t loom_kernel_verify_first_result_i32_or_i64(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, iree_string_view_t result_name) {
+  if (op->result_count == 0) {
+    return iree_ok_status();
+  }
+  loom_value_id_t result_id = loom_op_const_results(op)[0];
+  loom_type_t result_type = loom_module_value_type(module, result_id);
+  if (loom_type_is_scalar(result_type)) {
+    loom_scalar_type_t scalar_type = loom_type_element_type(result_type);
+    if (scalar_type == LOOM_SCALAR_TYPE_I32 ||
+        scalar_type == LOOM_SCALAR_TYPE_I64) {
+      return iree_ok_status();
+    }
+  }
+  return loom_kernel_emit_result_constraint(emitter, op, result_name,
+                                            result_type, IREE_SV("i32 or i64"));
+}
+
+static iree_status_t loom_kernel_verify_combining_kind_for_value(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t value_id, loom_combining_kind_t kind) {
+  if (!loom_combining_kind_is_valid(kind)) {
+    return iree_ok_status();
+  }
+  loom_type_t value_type = loom_module_value_type(module, value_id);
+  if (!loom_kernel_type_is_collective_value(value_type)) {
+    return iree_ok_status();
+  }
+  loom_scalar_type_t element_type = loom_type_element_type(value_type);
+  if (loom_scalar_type_is_integer(element_type) &&
+      loom_combining_kind_accepts_integer(kind)) {
+    return iree_ok_status();
+  }
+  if (loom_scalar_type_is_float(element_type) &&
+      loom_combining_kind_accepts_float(kind)) {
+    return iree_ok_status();
+  }
+  iree_string_view_t expected_constraint =
+      loom_combining_kind_accepts_integer(kind)
+          ? IREE_SV("integer element type for combining kind")
+          : IREE_SV("floating-point element type for combining kind");
+  return loom_kernel_emit_operand_constraint(emitter, op, IREE_SV("value"),
+                                             value_type, expected_constraint);
+}
+
+static iree_status_t loom_kernel_verify_cluster_attrs(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    uint16_t cluster_size_attr_index, int64_t cluster_size,
+    uint16_t cluster_stride_attr_index, int64_t cluster_stride) {
+  const bool has_cluster_size =
+      loom_kernel_optional_attr_is_present(op, cluster_size_attr_index);
+  const bool has_cluster_stride =
+      loom_kernel_optional_attr_is_present(op, cluster_stride_attr_index);
+  if (has_cluster_stride && !has_cluster_size) {
+    return loom_kernel_verify_contract_attr_present(
+        emitter, op, cluster_size_attr_index, IREE_SV("cluster_size"),
+        IREE_SV("present when cluster_stride is present"));
+  }
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_positive_u32_attr(
+      emitter, op, cluster_size_attr_index, cluster_size,
+      IREE_SV("cluster_size")));
+  return loom_kernel_verify_positive_u32_attr(
+      emitter, op, cluster_stride_attr_index, cluster_stride,
+      IREE_SV("cluster_stride"));
 }
 
 static bool loom_kernel_try_get_local_buffer_memory_space(
@@ -866,6 +952,101 @@ iree_status_t loom_kernel_tensor_lds_descriptor_verify(
       loom_kernel_tensor_lds_descriptor_descriptor(op);
   return loom_kernel_verify_result_tensor_lds_descriptor(
       module, emitter, op, IREE_SV("descriptor"), descriptor_id);
+}
+
+iree_status_t loom_kernel_subgroup_shuffle_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_collective_operand(
+      module, emitter, op, IREE_SV("value"),
+      loom_kernel_subgroup_shuffle_value(op)));
+  IREE_RETURN_IF_ERROR(
+      loom_kernel_verify_operand_i32(module, emitter, op, IREE_SV("offset"),
+                                     loom_kernel_subgroup_shuffle_offset(op)));
+  return loom_kernel_verify_operand_i32(module, emitter, op, IREE_SV("width"),
+                                        loom_kernel_subgroup_shuffle_width(op));
+}
+
+iree_status_t loom_kernel_subgroup_broadcast_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_collective_operand(
+      module, emitter, op, IREE_SV("value"),
+      loom_kernel_subgroup_broadcast_value(op)));
+  return loom_kernel_verify_operand_i32(
+      module, emitter, op, IREE_SV("lane"),
+      loom_kernel_subgroup_broadcast_lane(op));
+}
+
+iree_status_t loom_kernel_subgroup_value_result_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  if (op->operand_count == 0) {
+    return iree_ok_status();
+  }
+  return loom_kernel_verify_collective_operand(
+      module, emitter, op, IREE_SV("value"), loom_op_const_operands(op)[0]);
+}
+
+iree_status_t loom_kernel_subgroup_reduce_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_value_id_t value_id = loom_kernel_subgroup_reduce_value(op);
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_collective_operand(
+      module, emitter, op, IREE_SV("value"), value_id));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_combining_kind_for_value(
+      module, emitter, op, value_id, loom_kernel_subgroup_reduce_kind(op)));
+  return loom_kernel_verify_cluster_attrs(
+      emitter, op, loom_kernel_subgroup_reduce_cluster_size_ATTR_INDEX,
+      loom_kernel_subgroup_reduce_cluster_size(op),
+      loom_kernel_subgroup_reduce_cluster_stride_ATTR_INDEX,
+      loom_kernel_subgroup_reduce_cluster_stride(op));
+}
+
+iree_status_t loom_kernel_subgroup_scan_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_value_id_t value_id = loom_kernel_subgroup_scan_value(op);
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_collective_operand(
+      module, emitter, op, IREE_SV("value"), value_id));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_combining_kind_for_value(
+      module, emitter, op, value_id, loom_kernel_subgroup_scan_kind(op)));
+  return loom_kernel_verify_cluster_attrs(
+      emitter, op, loom_kernel_subgroup_scan_cluster_size_ATTR_INDEX,
+      loom_kernel_subgroup_scan_cluster_size(op),
+      loom_kernel_subgroup_scan_cluster_stride_ATTR_INDEX,
+      loom_kernel_subgroup_scan_cluster_stride(op));
+}
+
+iree_status_t loom_kernel_subgroup_mask_result_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  return loom_kernel_verify_first_result_i32_or_i64(module, emitter, op,
+                                                    IREE_SV("mask"));
+}
+
+iree_status_t loom_kernel_subgroup_match_all_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  return loom_kernel_verify_first_result_i32_or_i64(module, emitter, op,
+                                                    IREE_SV("mask"));
+}
+
+iree_status_t loom_kernel_workgroup_reduce_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_value_id_t value_id = loom_kernel_workgroup_reduce_value(op);
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_collective_operand(
+      module, emitter, op, IREE_SV("value"), value_id));
+  return loom_kernel_verify_combining_kind_for_value(
+      module, emitter, op, value_id, loom_kernel_workgroup_reduce_kind(op));
+}
+
+iree_status_t loom_kernel_workgroup_vote_count_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  return loom_kernel_verify_first_result_i32_or_i64(module, emitter, op,
+                                                    IREE_SV("result"));
 }
 
 iree_status_t loom_kernel_async_copy_verify(const loom_module_t* module,

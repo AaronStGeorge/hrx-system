@@ -41,6 +41,61 @@ kernel.def @workgroup_coordinates() {
 
 // ====
 
+kernel.def @launch_queries() {
+  %wg_size_x = kernel.workgroup.size<x> : index
+  %wg_size_y = kernel.workgroup.size<y> : index
+  %wg_size_z = kernel.workgroup.size<z> : index
+  %wg_count_x = kernel.workgroup.count<x> : index
+  %wg_count_y = kernel.workgroup.count<y> : index
+  %wg_count_z = kernel.workgroup.count<z> : index
+  %dispatch_x = kernel.workitem.dispatch.id<x> : index
+  %dispatch_y = kernel.workitem.dispatch.id<y> : index
+  %dispatch_z = kernel.workitem.dispatch.id<z> : index
+  kernel.return
+}
+
+// ====
+
+kernel.def @subgroup_queries() {
+  %id = kernel.subgroup.id : index
+  %count = kernel.subgroup.count : index
+  %size = kernel.subgroup.size : index
+  %lane = kernel.subgroup.lane.id : index
+  kernel.return
+}
+
+// ====
+
+kernel.def @subgroup_collectives(%value: f32, %vector: vector<4xf32>, %predicate: i1, %lane: i32, %offset: i32, %width: i32) {
+  %shuffle, %valid = kernel.subgroup.shuffle<xor> %value, %offset, %width : f32, i32, i32
+  %shuffle_vector, %valid_vector = kernel.subgroup.shuffle<down> %vector, %offset, %width : vector<4xf32>, i32, i32
+  %broadcast = kernel.subgroup.broadcast %value from %lane : f32, i32
+  %first = kernel.subgroup.broadcast.first %value : f32
+  %sum = kernel.subgroup.reduce<addf> %value : f32
+  %clustered_sum = kernel.subgroup.reduce<addf> %value {cluster_size = 4, cluster_stride = 2} : f32
+  %prefix = kernel.subgroup.scan<addf> %value {direction = forward, mode = inclusive} : f32
+  %reverse_prefix = kernel.subgroup.scan<addf> %value {cluster_size = 4, direction = reverse, mode = exclusive} : f32
+  %any = kernel.subgroup.vote.any %predicate : i1
+  %all = kernel.subgroup.vote.all %predicate : i1
+  %ballot = kernel.subgroup.vote.ballot %predicate : i1 -> i64
+  %active = kernel.subgroup.active.mask : i64
+  %match_any = kernel.subgroup.match.any %lane : i32 -> i64
+  %match_mask, %match_all = kernel.subgroup.match.all %lane : i32 -> i64, i1
+  kernel.return
+}
+
+// ====
+
+kernel.def @workgroup_collectives(%value: f32, %predicate: i1) {
+  %sum = kernel.workgroup.reduce<addf> %value : f32
+  %any = kernel.workgroup.vote.any %predicate : i1
+  %all = kernel.workgroup.vote.all %predicate : i1
+  %count = kernel.workgroup.vote.count %predicate : i1 -> i32
+  kernel.return
+}
+
+// ====
+
 func.def @async_copy_global_to_workgroup(%source_buffer: buffer, %byte_offset: offset) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset

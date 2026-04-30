@@ -689,6 +689,7 @@ loom_cc_library(
         "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops:atomic",
         "//loom/src/loom/ops:cache",
+        "//loom/src/loom/ops:combining",
         "//loom/src/loom/ops/buffer",
         "//loom/src/loom/ops/cfg",
         "//loom/src/loom/ops/encoding",

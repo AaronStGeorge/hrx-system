@@ -10,6 +10,7 @@
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
+#include "loom/ops/combining.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
@@ -1275,8 +1276,9 @@ static iree_status_t loom_wasm_select_vector_reduce(
       loom_module_value_type(module, loom_vector_reduce_result(source_op));
   uint64_t extract_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
   uint64_t add_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
-  switch ((loom_vector_reduce_kind_t)loom_vector_reduce_kind(source_op)) {
-    case LOOM_VECTOR_REDUCE_KIND_ADDI:
+  loom_combining_kind_t reduce_kind = loom_vector_reduce_kind(source_op);
+  switch (reduce_kind) {
+    case LOOM_COMBINING_KIND_ADDI:
       if (!loom_wasm_type_is_vector_4xi32(input_type) ||
           !loom_wasm_type_is_address_i32(init_type) ||
           !loom_wasm_type_is_address_i32(result_type)) {
@@ -1288,7 +1290,7 @@ static iree_status_t loom_wasm_select_vector_reduce(
       IREE_RETURN_IF_ERROR(
           loom_wasm_make_i32_register_type(context, &out_plan->lane_type));
       break;
-    case LOOM_VECTOR_REDUCE_KIND_ADDF:
+    case LOOM_COMBINING_KIND_ADDF:
       if (!loom_wasm_type_is_vector_4xf32(input_type) ||
           !loom_wasm_type_is_scalar_f32(init_type) ||
           !loom_wasm_type_is_scalar_f32(result_type)) {

@@ -15,6 +15,7 @@
 #include "loom/ops/op_defs.h"
 #include "loom/ops/atomic.h"
 #include "loom/ops/cache.h"
+#include "loom/ops/combining.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -247,26 +248,6 @@ typedef enum loom_vector_dot4f8_kind_e {
   LOOM_VECTOR_DOT4F8_KIND_BF8BF8 = 3,
   LOOM_VECTOR_DOT4F8_KIND_COUNT_ = 4,
 } loom_vector_dot4f8_kind_t;
-
-// Combining operations for vector reductions.
-typedef enum loom_vector_reduce_kind_e {
-  LOOM_VECTOR_REDUCE_KIND_ADDI = 0,
-  LOOM_VECTOR_REDUCE_KIND_ADDF = 1,
-  LOOM_VECTOR_REDUCE_KIND_MULI = 2,
-  LOOM_VECTOR_REDUCE_KIND_MULF = 3,
-  LOOM_VECTOR_REDUCE_KIND_MINSI = 4,
-  LOOM_VECTOR_REDUCE_KIND_MAXSI = 5,
-  LOOM_VECTOR_REDUCE_KIND_MINUI = 6,
-  LOOM_VECTOR_REDUCE_KIND_MAXUI = 7,
-  LOOM_VECTOR_REDUCE_KIND_ANDI = 8,
-  LOOM_VECTOR_REDUCE_KIND_ORI = 9,
-  LOOM_VECTOR_REDUCE_KIND_XORI = 10,
-  LOOM_VECTOR_REDUCE_KIND_MINIMUMF = 11,
-  LOOM_VECTOR_REDUCE_KIND_MAXIMUMF = 12,
-  LOOM_VECTOR_REDUCE_KIND_MINNUMF = 13,
-  LOOM_VECTOR_REDUCE_KIND_MAXNUMF = 14,
-  LOOM_VECTOR_REDUCE_KIND_COUNT_ = 15,
-} loom_vector_reduce_kind_t;
 
 typedef enum loom_vector_fragment_role_e {
   LOOM_VECTOR_FRAGMENT_ROLE_LHS = 0,
@@ -2919,10 +2900,10 @@ LOOM_DEFINE_ISA(loom_vector_reduce_isa, LOOM_OP_VECTOR_REDUCE)
 LOOM_DEFINE_OPERAND(loom_vector_reduce_input, 0)
 LOOM_DEFINE_OPERAND(loom_vector_reduce_init, 1)
 LOOM_DEFINE_RESULT(loom_vector_reduce_result, 0)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_reduce_kind, 0, loom_vector_reduce_kind_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_reduce_kind, 0, loom_combining_kind_t)
 iree_status_t loom_vector_reduce_build(
     loom_builder_t* builder,
-    loom_vector_reduce_kind_t kind,
+    loom_combining_kind_t kind,
     loom_value_id_t input,
     loom_value_id_t init,
     loom_type_t result_type,
