@@ -801,6 +801,10 @@ POISON_BOUNDARY = Trait("PoisonBoundary")
 # value identity. Source-to-low lowering aliases each result to the lowered
 # operand at the same ordinal.
 FACT_IDENTITY = Trait("FactIdentity")
+# Op attaches metadata or facts to operand 0 and produces one result that
+# aliases the same physical value. Extra operands are interpretation data and do
+# not force target-low storage.
+VALUE_ALIAS = Trait("ValueAlias")
 
 
 # ============================================================================
@@ -2750,6 +2754,21 @@ def _validate_no_effect_conflicts(
         )
 
 
+def _validate_trait_field_contracts(
+    op_name: str,
+    operands: tuple[Operand, ...],
+    results: tuple[Result | TiedResult, ...],
+    traits: tuple[Trait, ...],
+) -> None:
+    """Validate trait contracts that depend on declared operand/result shape."""
+    trait_names = {t.name for t in traits}
+    if "ValueAlias" in trait_names and (len(operands) < 1 or len(results) != 1):
+        raise ValueError(
+            f"Op '{op_name}': VALUE_ALIAS requires at least one operand "
+            "and exactly one result"
+        )
+
+
 # ============================================================================
 # Interfaces
 # ============================================================================
@@ -3218,6 +3237,9 @@ class Op:
             _validate_effects(name, frozen_effects, frozen_operands, tuple(traits))
         else:
             _validate_no_effect_conflicts(name, tuple(traits))
+        _validate_trait_field_contracts(
+            name, frozen_operands, frozen_results, tuple(traits)
+        )
         # Validate that format elements reference declared fields.
         if frozen_format:
             _validate_format_fields(

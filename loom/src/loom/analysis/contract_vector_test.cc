@@ -295,9 +295,17 @@ func.def @dense_mma(%lhs_data: vector<8xf16>, %rhs_data: vector<8xf16>, %init_da
   EXPECT_EQ(request.shape.n, 16);
   EXPECT_EQ(request.shape.k, 16);
   EXPECT_EQ(request.lhs.numeric_type, LOOM_CONTRACT_NUMERIC_F16);
+  EXPECT_EQ(request.lhs.payload_register_count, 4);
+  EXPECT_EQ(request.lhs.payload_element_count, 8);
   EXPECT_EQ(request.rhs.numeric_type, LOOM_CONTRACT_NUMERIC_F16);
+  EXPECT_EQ(request.rhs.payload_register_count, 4);
+  EXPECT_EQ(request.rhs.payload_element_count, 8);
   EXPECT_EQ(request.accumulator.numeric_type, LOOM_CONTRACT_NUMERIC_F32);
+  EXPECT_EQ(request.accumulator.payload_register_count, 8);
+  EXPECT_EQ(request.accumulator.payload_element_count, 8);
   EXPECT_EQ(request.result.numeric_type, LOOM_CONTRACT_NUMERIC_F32);
+  EXPECT_EQ(request.result.payload_register_count, 8);
+  EXPECT_EQ(request.result.payload_element_count, 8);
   EXPECT_EQ(request.arithmetic, LOOM_CONTRACT_ARITHMETIC_MIXED_DOT);
   EXPECT_EQ(request.capability_class,
             LOOM_CONTRACT_CAPABILITY_CLASS_GPU_MATRIX);

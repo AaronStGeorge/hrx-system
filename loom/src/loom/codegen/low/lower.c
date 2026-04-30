@@ -283,14 +283,11 @@ static iree_status_t loom_low_lower_check_function_signature(
   return iree_ok_status();
 }
 
-static bool loom_low_lower_op_is_fact_identity(const loom_module_t* module,
-                                               const loom_op_t* op) {
-  return loom_traits_are_fact_identity(loom_op_effective_traits(module, op));
-}
-
 static bool loom_low_lower_op_is_structural(const loom_module_t* module,
                                             const loom_op_t* op) {
-  if (loom_low_lower_op_is_fact_identity(module, op)) {
+  const loom_trait_flags_t traits = loom_op_effective_traits(module, op);
+  if (loom_traits_are_fact_identity(traits) ||
+      loom_traits_are_value_alias(traits)) {
     return true;
   }
   switch (op->kind) {
@@ -414,11 +411,19 @@ static void loom_low_lower_mark_callback_plan_storage_demands(
 
 static void loom_low_lower_mark_structural_storage_demands(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
-  if (loom_low_lower_op_is_fact_identity(context->module, source_op)) {
+  const loom_trait_flags_t traits =
+      loom_op_effective_traits(context->module, source_op);
+  if (loom_traits_are_fact_identity(traits)) {
     const loom_value_id_t* operands = loom_op_const_operands(source_op);
     for (uint16_t i = 0; i < source_op->operand_count; ++i) {
       loom_low_lower_mark_value_storage_required(context, operands[i]);
     }
+    return;
+  }
+  if (loom_traits_are_value_alias(traits)) {
+    IREE_ASSERT(source_op->operand_count >= 1);
+    loom_low_lower_mark_value_storage_required(
+        context, loom_op_const_operands(source_op)[0]);
     return;
   }
   switch (source_op->kind) {
@@ -1118,8 +1123,19 @@ static iree_status_t loom_low_lower_structural_op(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     bool* out_handled) {
   *out_handled = true;
-  if (loom_low_lower_op_is_fact_identity(context->module, source_op)) {
+  const loom_trait_flags_t traits =
+      loom_op_effective_traits(context->module, source_op);
+  if (loom_traits_are_fact_identity(traits)) {
     return loom_low_lower_bind_identity_results(context, source_op);
+  }
+  if (loom_traits_are_value_alias(traits)) {
+    IREE_ASSERT(source_op->operand_count >= 1);
+    IREE_ASSERT(source_op->result_count == 1);
+    loom_value_id_t low_value = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+        context, loom_op_const_operands(source_op)[0], &low_value));
+    return loom_low_lower_bind_value(
+        context, loom_op_const_results(source_op)[0], low_value);
   }
   switch (source_op->kind) {
     case LOOM_OP_BUFFER_ASSUME_SAME_ROOT: {

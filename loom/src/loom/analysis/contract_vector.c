@@ -7,6 +7,7 @@
 #include "loom/analysis/contract_vector.h"
 
 #include "loom/analysis/contract_storage.h"
+#include "loom/ir/scalar_type.h"
 #include "loom/ops/vector/encoding_auxiliary.h"
 #include "loom/ops/vector/fragment.h"
 #include "loom/ops/vector/ops.h"
@@ -60,6 +61,38 @@ static bool loom_contract_vector_assign_scaled_uint16(uint64_t value,
     return false;
   }
   *out_value = (uint16_t)(value * multiplier);
+  return true;
+}
+
+static bool loom_contract_vector_assign_dense_payload(
+    loom_type_t type, loom_contract_operand_t* operand,
+    loom_contract_rejection_bits_t* out_rejection_bits) {
+  uint64_t element_count = 0;
+  if (!loom_contract_vector_static_element_count(type, &element_count) ||
+      element_count == 0 || element_count > UINT16_MAX) {
+    *out_rejection_bits = LOOM_CONTRACT_REJECTION_SHAPE;
+    return false;
+  }
+  const int32_t element_bit_count =
+      loom_scalar_type_bitwidth(loom_type_element_type(type));
+  if (element_bit_count <= 0) {
+    *out_rejection_bits = LOOM_CONTRACT_REJECTION_NUMERIC;
+    return false;
+  }
+  if (element_count > UINT64_MAX / (uint32_t)element_bit_count) {
+    *out_rejection_bits = LOOM_CONTRACT_REJECTION_SHAPE;
+    return false;
+  }
+  const uint64_t payload_bit_count =
+      element_count * (uint32_t)element_bit_count;
+  const uint64_t register_count =
+      payload_bit_count / 32u + (payload_bit_count % 32u != 0 ? 1u : 0u);
+  if (register_count == 0 || register_count > UINT16_MAX) {
+    *out_rejection_bits = LOOM_CONTRACT_REJECTION_SHAPE;
+    return false;
+  }
+  operand->payload_register_count = (uint16_t)register_count;
+  operand->payload_element_count = (uint16_t)element_count;
   return true;
 }
 
@@ -314,6 +347,10 @@ static bool loom_contract_vector_operand_from_fragment(
       !loom_contract_numeric_type_from_scalar(
           loom_type_element_type(type), false, &out_operand->numeric_type)) {
     *out_rejection_bits = LOOM_CONTRACT_REJECTION_NUMERIC;
+    return false;
+  }
+  if (!loom_contract_vector_assign_dense_payload(type, out_operand,
+                                                 out_rejection_bits)) {
     return false;
   }
   out_operand->role = role;

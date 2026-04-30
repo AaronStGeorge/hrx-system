@@ -62,6 +62,7 @@ from loom.dsl import (
     PURE,
     REFINABLE_RESULT_TYPE_REFS,
     SCALAR,
+    VALUE_ALIAS,
     VECTOR,
     VIEW,
     AttrDef,
@@ -1289,7 +1290,7 @@ vector_fragment = Op(
     constraints=[SameType("data", "result")],
     verify="loom_vector_fragment_verify",
     facts="loom_vector_fragment_facts",
-    traits=[PURE, REFINABLE_RESULT_TYPE_REFS],
+    traits=[PURE, REFINABLE_RESULT_TYPE_REFS, VALUE_ALIAS],
     format=[
         TemplateParam("role"),
         Ref("data"),

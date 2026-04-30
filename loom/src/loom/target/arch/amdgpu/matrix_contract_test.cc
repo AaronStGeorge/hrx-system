@@ -493,6 +493,14 @@ TEST(MatrixContractTest, Rdna3Wmmar3F32F16LayoutMapsFragments) {
   EXPECT_EQ(layout->tile_shape.result_row_count, 16);
   EXPECT_EQ(layout->tile_shape.result_column_count, 16);
   EXPECT_EQ(layout->tile_shape.reduction_count, 16);
+  EXPECT_EQ(descriptor->lhs_payload.register_count, 8);
+  EXPECT_EQ(descriptor->lhs_payload.element_count, 16);
+  EXPECT_EQ(descriptor->rhs_payload.register_count, 8);
+  EXPECT_EQ(descriptor->rhs_payload.element_count, 16);
+  EXPECT_EQ(descriptor->accumulator_payload.register_count, 8);
+  EXPECT_EQ(descriptor->accumulator_payload.element_count, 8);
+  EXPECT_EQ(descriptor->result_payload.register_count, 8);
+  EXPECT_EQ(descriptor->result_payload.element_count, 8);
 
   constexpr loom_amdgpu_matrix_fragment_coordinate_flags_t kLhsCoordinates =
       LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW |
@@ -570,6 +578,32 @@ TEST(MatrixContractTest, MatcherSelectedWmmar3DescriptorCarriesLayoutFacts) {
   ASSERT_NE(layout, nullptr);
   EXPECT_EQ(layout->kind,
             LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_F32_16X16X16_F16);
+}
+
+TEST(MatrixContractTest, MatcherRejectsWrongWmmar3PayloadShape) {
+  loom_amdgpu_matrix_contract_match_request_t request = MatchRequest(
+      LOOM_AMDGPU_MATRIX_FAMILY_WMMA, 16, 16, 16,
+      LOOM_AMDGPU_MATRIX_NUMERIC_F16, LOOM_AMDGPU_MATRIX_NUMERIC_F16,
+      LOOM_AMDGPU_MATRIX_NUMERIC_F32, LOOM_AMDGPU_MATRIX_NUMERIC_F32,
+      LOOM_AMDGPU_MATRIX_SCALE_NONE, LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11, 32,
+      0, 0);
+  request.lhs_payload.register_count = 4;
+  request.lhs_payload.element_count = 8;
+  request.rhs_payload.register_count = 4;
+  request.rhs_payload.element_count = 8;
+  request.accumulator_payload.register_count = 8;
+  request.accumulator_payload.element_count = 8;
+  request.result_payload.register_count = 8;
+  request.result_payload.element_count = 8;
+
+  loom_amdgpu_matrix_contract_match_diagnostic_t diagnostic = {};
+  const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+      loom_amdgpu_matrix_contract_select(&request, &diagnostic);
+  EXPECT_EQ(descriptor, nullptr);
+  EXPECT_TRUE(
+      iree_all_bits_set(diagnostic.rejection_bits,
+                        LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_LHS_PAYLOAD |
+                            LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_RHS_PAYLOAD));
 }
 
 TEST(MatrixContractTest, MatcherSelectsMatchingDescriptor) {

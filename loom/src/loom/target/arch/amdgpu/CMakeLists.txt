@@ -535,6 +535,7 @@ loom_cc_library(
     "lower/integer_rules.c"
     "lower/lds_layout.c"
     "lower/mask.c"
+    "lower/matrix.c"
     "lower/memory.c"
     "lower/memory_cache.c"
     "lower/memory_diagnostics.c"
@@ -555,9 +556,12 @@ loom_cc_library(
     ::descriptor_ids
     ::hal_kernel_abi
     ::lower_kinds
+    ::matrix_contract
+    ::matrix_contract_projection
     ::target_info
     ::wait_packets
     iree::base
+    loom::src::loom::analysis::contract_vector
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::lower
@@ -1208,6 +1212,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "source_low_mma"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_mma.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "source_low_numeric_f32"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_numeric_f32.loom-test"
@@ -1511,6 +1526,7 @@ loom_cc_library(
   DEPS
     ::descriptor_ids
     ::target_info
+    ::target_info_defs
     iree::base
   PUBLIC
 )

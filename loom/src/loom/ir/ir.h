@@ -671,6 +671,11 @@ enum loom_trait_bits_e {
   // lowering binds each result to the lowered operand instead of asking a
   // target policy to rediscover the identity op.
   LOOM_TRAIT_FACT_IDENTITY = 1u << 19,
+  // Op attaches metadata or facts to operand 0 and produces one result that
+  // aliases the same physical value. Extra operands are interpretation data
+  // and must not force target-low storage. Source-to-target-low lowering binds
+  // result 0 to lowered operand 0.
+  LOOM_TRAIT_VALUE_ALIAS = 1u << 20,
 };
 typedef uint32_t loom_trait_flags_t;
 
@@ -731,6 +736,12 @@ static inline bool loom_traits_have_refinable_result_type_refs(
 // same ordinal while carrying stronger facts or static type information.
 static inline bool loom_traits_are_fact_identity(loom_trait_flags_t traits) {
   return (traits & LOOM_TRAIT_FACT_IDENTITY) != 0;
+}
+
+// Returns true when result 0 aliases operand 0 and remaining operands carry
+// metadata or fact inputs that need not survive target-low lowering.
+static inline bool loom_traits_are_value_alias(loom_trait_flags_t traits) {
+  return (traits & LOOM_TRAIT_VALUE_ALIAS) != 0;
 }
 
 // Structural flags on the op vtable (shared by all instances of an op kind).

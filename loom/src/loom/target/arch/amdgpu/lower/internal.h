@@ -526,6 +526,22 @@ iree_status_t loom_amdgpu_lower_vector_select(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_select_plan_t* plan);
 
+// Selects a native AMDGPU matrix instruction for a source vector.mma op.
+iree_status_t loom_amdgpu_select_vector_mma_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_matrix_mma_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source vector.mma op from its selected AMDGPU matrix plan.
+iree_status_t loom_amdgpu_lower_vector_mma(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_matrix_mma_plan_t* plan);
+
+// Verifies source vector.mma legality for AMDGPU target-low selection.
+iree_status_t loom_amdgpu_low_legality_verify_vector_mma(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
 // Selects an AMDGPU register-table lookup plan.
 iree_status_t loom_amdgpu_select_vector_table_lookup_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,

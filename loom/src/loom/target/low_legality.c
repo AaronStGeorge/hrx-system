@@ -557,8 +557,12 @@ static iree_status_t loom_target_low_legality_reject_source_only_op(
 
 static iree_status_t loom_target_low_legality_verify_op_class(
     loom_target_low_legality_context_t* context, const loom_op_t* op) {
-  if (loom_traits_are_fact_identity(
-          loom_op_effective_traits(context->module, op))) {
+  const loom_trait_flags_t traits =
+      loom_op_effective_traits(context->module, op);
+  if (loom_traits_are_fact_identity(traits)) {
+    return iree_ok_status();
+  }
+  if (loom_traits_are_value_alias(traits)) {
     return iree_ok_status();
   }
   loom_op_semantics_t semantics = loom_op_semantics(context->module, op);

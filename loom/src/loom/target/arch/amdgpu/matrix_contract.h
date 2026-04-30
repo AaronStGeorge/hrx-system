@@ -17,6 +17,7 @@
 #define LOOM_TARGET_AMDGPU_MATRIX_CONTRACT_H_
 
 #include "iree/base/api.h"
+#include "loom/target/arch/amdgpu/target_info_defs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -446,6 +447,11 @@ bool loom_amdgpu_matrix_fragment_coordinate(
     loom_amdgpu_matrix_operand_role_t role, uint16_t lane,
     uint16_t register_index, uint16_t element_index,
     loom_amdgpu_matrix_fragment_coordinate_t* out_coordinate);
+
+// Maps a matrix feature profile to matrix feature bits.
+bool loom_amdgpu_matrix_feature_bits_for_profile(
+    loom_amdgpu_matrix_feature_profile_t profile,
+    loom_amdgpu_matrix_feature_bits_t* out_feature_bits);
 
 // Maps a processor name such as "gfx942" or "gfx1250" to matrix feature bits.
 iree_status_t loom_amdgpu_matrix_feature_bits_for_processor(
