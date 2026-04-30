@@ -216,7 +216,6 @@ static iree_status_t loom_opt_verify_module(
       .emitter = LOOM_EMITTER_VERIFIER,
   };
   loom_low_verify_options_t low_verify_options = {
-      .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
       .descriptor_registry = &low_registry->registry,
       .emitter = {.fn = loom_opt_diagnostic_emitter_emit,
                   .user_data = &low_emitter},
@@ -730,7 +729,6 @@ static iree_status_t loom_opt_print_module(
 
 static iree_status_t loom_opt_print_pass_list(
     const loom_pass_registry_t* registry) {
-  IREE_RETURN_IF_ERROR(loom_pass_registry_verify(registry));
   for (iree_host_size_t i = 0; i < registry->descriptor_count; ++i) {
     const loom_pass_descriptor_t* descriptor = &registry->descriptors[i];
     const loom_pass_info_t* info = descriptor->info();
@@ -782,7 +780,6 @@ static void loom_opt_print_pass_option_schema(
 
 static iree_status_t loom_opt_print_pass_help(
     const loom_pass_registry_t* registry, iree_string_view_t key) {
-  IREE_RETURN_IF_ERROR(loom_pass_registry_verify(registry));
   const loom_pass_descriptor_t* descriptor = NULL;
   IREE_RETURN_IF_ERROR(loom_pass_registry_lookup(registry, key, &descriptor));
   if (!descriptor) {

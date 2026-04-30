@@ -160,7 +160,6 @@ class SourceLoweringRuleEmissionTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     loom_test_low_descriptor_registry_initialize(&registry_);
     loom_test_low_lower_policy_registry_initialize(&policy_registry_);
-    IREE_ASSERT_OK(loom_low_lower_policy_registry_verify(&policy_registry_));
   }
 
   void TearDown() override {
@@ -222,8 +221,6 @@ class SourceLoweringRuleEmissionTest : public ::testing::Test {
         .target_ref = selection.target_ref,
         .bundle = selection.target_bundle,
         .descriptor_registry = &registry_.registry,
-        .descriptor_requirements =
-            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .policy = selection.policy,
         .fact_table = fact_table,
         .emitter = collector->emitter(),
@@ -247,7 +244,6 @@ class SourceLoweringRuleEmissionTest : public ::testing::Test {
                                 EmissionCollector* collector,
                                 loom_low_verify_result_t* out_result) {
     const loom_low_verify_options_t options = {
-        .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
         .descriptor_registry = &registry_.registry,
         .emitter = collector->emitter(),
         .max_errors = 20,
@@ -550,7 +546,6 @@ TEST_F(SourceLoweringRuleEmissionTest,
 
 TEST_F(SourceLoweringRuleEmissionTest, HybridPolicyUsesCallbackForUncoveredOp) {
   policy_registry_ = MakeTestHybridPolicyRegistry();
-  IREE_ASSERT_OK(loom_low_lower_policy_registry_verify(&policy_registry_));
 
   EmissionCollector lower_collector;
   loom_low_lower_result_t lower_result = {};
@@ -587,7 +582,6 @@ TEST_F(SourceLoweringRuleEmissionTest, HybridPolicyUsesCallbackForUncoveredOp) {
 TEST_F(SourceLoweringRuleEmissionTest,
        HybridPolicyKeepsRuleDiagnosticsForCoveredOps) {
   policy_registry_ = MakeTestHybridPolicyRegistry();
-  IREE_ASSERT_OK(loom_low_lower_policy_registry_verify(&policy_registry_));
 
   EmissionCollector lower_collector;
   loom_low_lower_result_t lower_result = {};

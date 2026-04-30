@@ -18,7 +18,6 @@
 
 #include "iree/base/api.h"
 #include "loom/codegen/low/descriptors.h"
-#include "loom/codegen/low/requirements.h"
 #include "loom/target/preset_registry.h"
 #include "loom/target/types.h"
 
@@ -72,14 +71,6 @@ loom_target_low_descriptor_registry_presets(
   };
 }
 
-// Verifies that the linked target-low registry package is internally
-// consistent. This checks the descriptor registry, bundle table, unique bundle
-// keys, required target payloads, and that each bundle selects a linked
-// descriptor set satisfying |requirements|.
-iree_status_t loom_target_low_descriptor_registry_verify(
-    const loom_target_low_descriptor_registry_t* registry,
-    loom_low_descriptor_requirement_flags_t requirements);
-
 // Looks up a target-low preset bundle by key in |registry|. Empty keys are not
 // defaulted because low target selection must be explicit and reproducible.
 iree_status_t loom_target_low_descriptor_registry_lookup_bundle(
@@ -87,13 +78,11 @@ iree_status_t loom_target_low_descriptor_registry_lookup_bundle(
     iree_string_view_t key, const loom_target_bundle_t** out_bundle);
 
 // Selects the descriptor set named by |bundle->config->contract_set_key| from
-// |registry| and verifies any requested payload requirements. This is an exact
-// key lookup; target triples and CPUs are descriptive facts, not fallback
-// descriptor-selection rules.
+// |registry|. This is an exact key lookup; target triples and CPUs are
+// descriptive facts, not fallback descriptor-selection rules.
 iree_status_t loom_target_low_descriptor_set_select_for_bundle(
     const loom_low_descriptor_registry_t* registry,
     const loom_target_bundle_t* bundle,
-    loom_low_descriptor_requirement_flags_t requirements,
     const loom_low_descriptor_set_t** out_descriptor_set);
 
 #ifdef __cplusplus

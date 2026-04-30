@@ -191,7 +191,10 @@ static iree_status_t loom_low_requirements_verify_descriptor(
 iree_status_t loom_low_descriptor_set_verify_requirements(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_low_descriptor_requirement_flags_t requirements) {
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_verify(descriptor_set));
+  if (descriptor_set == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor set is required");
+  }
 
   iree_string_view_t set_key = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_low_requirements_get_string(
@@ -212,7 +215,10 @@ iree_status_t loom_low_descriptor_set_verify_requirements(
 iree_status_t loom_low_descriptor_registry_verify_requirements(
     const loom_low_descriptor_registry_t* registry,
     loom_low_descriptor_requirement_flags_t requirements) {
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_registry_verify(registry));
+  if (registry == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor registry is required");
+  }
   iree_host_size_t descriptor_set_count =
       loom_low_descriptor_registry_descriptor_set_count(registry);
   for (iree_host_size_t i = 0; i < descriptor_set_count; ++i) {

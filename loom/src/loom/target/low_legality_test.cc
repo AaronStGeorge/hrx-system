@@ -160,8 +160,6 @@ class TargetLowLegalityTest : public ::testing::Test {
     const loom_target_low_legality_options_t options = {
         .bundle = bundle_,
         .descriptor_registry = &registry_.registry,
-        .descriptor_requirements =
-            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .emitter = collector->emitter(),
     };
     return VerifyWithOptions(module, options, result);
@@ -368,8 +366,6 @@ TEST_F(TargetLowLegalityTest, ProviderMayClaimProviderRequiredOp) {
   const loom_target_low_legality_options_t options = {
       .bundle = bundle_,
       .descriptor_registry = &registry_.registry,
-      .descriptor_requirements =
-          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
       .provider_list = provider_list,
       .emitter = collector.emitter(),
   };
@@ -424,8 +420,6 @@ TEST_F(TargetLowLegalityTest, ProviderMayClaimTensorAsyncContractValues) {
   const loom_target_low_legality_options_t options = {
       .bundle = bundle_,
       .descriptor_registry = &registry_.registry,
-      .descriptor_requirements =
-          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
       .provider_list = provider_list,
       .emitter = collector.emitter(),
   };
@@ -471,8 +465,6 @@ TEST_F(TargetLowLegalityTest, ProviderMayClaimCoreSourceOp) {
   const loom_target_low_legality_options_t options = {
       .bundle = bundle_,
       .descriptor_registry = &registry_.registry,
-      .descriptor_requirements =
-          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
       .provider_list = provider_list,
       .emitter = collector.emitter(),
   };
@@ -527,8 +519,6 @@ TEST_F(TargetLowLegalityTest, ProviderRecordsContractDecision) {
   const loom_target_low_legality_options_t options = {
       .bundle = bundle_,
       .descriptor_registry = &registry_.registry,
-      .descriptor_requirements =
-          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
       .provider_list = provider_list,
       .emitter = collector.emitter(),
   };

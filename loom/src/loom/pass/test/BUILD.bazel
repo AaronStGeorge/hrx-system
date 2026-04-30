@@ -71,6 +71,7 @@ loom_cc_test(
         ":harness",
         ":registry",
         "//loom/src/loom/pass:registry",
+        "//loom/src/loom/pass:registry_verify",
         "//loom/src/loom/pass:types",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",

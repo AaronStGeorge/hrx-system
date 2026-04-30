@@ -19,7 +19,6 @@ extern "C" {
 // instruction descriptor rows.
 iree_status_t loom_target_low_descriptor_registry_format_manifest_json(
     const loom_target_low_descriptor_registry_t* registry,
-    loom_low_descriptor_requirement_flags_t requirements,
     iree_string_builder_t* builder);
 
 #ifdef __cplusplus

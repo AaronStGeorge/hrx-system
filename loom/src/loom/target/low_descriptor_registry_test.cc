@@ -11,6 +11,7 @@
 #include "loom/codegen/low/requirements.h"
 #include "loom/target/low_descriptor_registry_core_test.h"
 #include "loom/target/low_descriptor_registry_manifest.h"
+#include "loom/target/low_descriptor_registry_verify.h"
 
 namespace loom {
 namespace {
@@ -186,8 +187,7 @@ TEST(LowDescriptorRegistryTest, TargetBundlesSelectFoundationDescriptorSets) {
 
     const loom_low_descriptor_set_t* descriptor_set = nullptr;
     IREE_ASSERT_OK(loom_target_low_descriptor_set_select_for_bundle(
-        &registry.registry, bundle,
-        LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &descriptor_set))
+        &registry.registry, bundle, &descriptor_set))
         << expected.bundle_key;
     ASSERT_NE(descriptor_set, nullptr) << expected.bundle_key;
 
@@ -209,8 +209,7 @@ TEST(LowDescriptorRegistryTest, FormatsRegistryManifestJson) {
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
   IREE_ASSERT_OK(loom_target_low_descriptor_registry_format_manifest_json(
-      &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-      &builder));
+      &registry, &builder));
   EXPECT_NE(iree_string_builder_size(&builder), 0u);
   iree_string_builder_deinitialize(&builder);
 }
@@ -220,9 +219,8 @@ TEST(LowDescriptorRegistryTest, FormatManifestRejectsMissingBuilder) {
   loom_target_core_test_low_descriptor_registry_initialize(&registry);
 
   iree_status_t status =
-      loom_target_low_descriptor_registry_format_manifest_json(
-          &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-          nullptr);
+      loom_target_low_descriptor_registry_format_manifest_json(&registry,
+                                                               nullptr);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
@@ -303,8 +301,7 @@ TEST(LowDescriptorRegistryTest, BundleSelectionRequiresExplicitLinkedSet) {
   };
   const loom_low_descriptor_set_t* descriptor_set = nullptr;
   iree_status_t status = loom_target_low_descriptor_set_select_for_bundle(
-      &registry.registry, &empty_bundle,
-      LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &descriptor_set);
+      &registry.registry, &empty_bundle, &descriptor_set);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
   EXPECT_EQ(descriptor_set, nullptr);
 
@@ -317,8 +314,7 @@ TEST(LowDescriptorRegistryTest, BundleSelectionRequiresExplicitLinkedSet) {
       .config = &missing_config,
   };
   status = loom_target_low_descriptor_set_select_for_bundle(
-      &registry.registry, &missing_bundle,
-      LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &descriptor_set);
+      &registry.registry, &missing_bundle, &descriptor_set);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
   EXPECT_EQ(descriptor_set, nullptr);
 }

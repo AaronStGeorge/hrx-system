@@ -49,8 +49,6 @@ iree_status_t loom_pass_invocation_resolve_run_op(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected pass.run op");
   }
-  IREE_RETURN_IF_ERROR(loom_pass_registry_verify(registry));
-
   iree_string_view_t key = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_pass_string_from_id(module, loom_pass_run_key(op),
                                                 "pass key", &key));

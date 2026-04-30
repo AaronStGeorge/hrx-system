@@ -11,6 +11,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/descriptors_manifest.h"
+#include "loom/codegen/low/descriptors_verify.h"
 
 namespace loom {
 namespace {

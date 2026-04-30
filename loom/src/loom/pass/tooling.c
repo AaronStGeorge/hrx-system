@@ -23,8 +23,7 @@ static iree_status_t loom_pass_tool_verify_options(
         IREE_STATUS_INVALID_ARGUMENT,
         "pass tool options with registry and block pool are required");
   }
-  IREE_RETURN_IF_ERROR(loom_pass_environment_verify(&options->environment));
-  return loom_pass_registry_verify(options->registry);
+  return loom_pass_environment_verify(&options->environment);
 }
 
 static iree_status_t loom_pass_tool_run_program(

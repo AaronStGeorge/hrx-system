@@ -108,10 +108,7 @@ class X86AssemblyTest : public ::testing::Test {
     ASSERT_NE(module_, nullptr);
 
     loom_low_verify_options_t verify_options = {
-        .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
         .descriptor_registry = &target_registry_.registry,
-        .descriptor_requirements =
-            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .max_errors = 20,
     };
     loom_low_verify_result_t verify_result = {};

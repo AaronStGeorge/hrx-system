@@ -90,7 +90,6 @@ loom_cc_library(
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::pass_environment
-    loom::src::loom::codegen::low::requirements
     loom::src::loom::codegen::low::source_selection
     loom::src::loom::ir
     loom::src::loom::pass::pipeline

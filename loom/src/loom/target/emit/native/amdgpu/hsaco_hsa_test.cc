@@ -679,9 +679,7 @@ class LowKernelCompiler {
     loom_target_bundle_storage_rebind(&bundle_storage);
     const loom_low_descriptor_set_t* descriptor_set = nullptr;
     IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
-        &target_registry_.registry, &bundle_storage.bundle,
-        LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-        &descriptor_set));
+        &target_registry_.registry, &bundle_storage.bundle, &descriptor_set));
     loom_amdgpu_hal_resource_materialization_result_t materialization = {};
     IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_materialize(
         module_, low_function, &bundle_storage.bundle, descriptor_set,
@@ -694,10 +692,7 @@ class LowKernelCompiler {
         &fixed_value_count, arena));
 
     loom_low_verify_options_t verify_options = {
-        .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
         .descriptor_registry = &target_registry_.registry,
-        .descriptor_requirements =
-            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .max_errors = 20,
     };
     loom_low_verify_result_t verify_result = {};

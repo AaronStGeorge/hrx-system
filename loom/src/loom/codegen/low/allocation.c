@@ -12,7 +12,6 @@
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/register_class_map.h"
-#include "loom/codegen/low/requirements.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
@@ -3607,9 +3606,6 @@ iree_status_t loom_low_allocate_function(
   IREE_RETURN_IF_ERROR(
       loom_low_allocation_validate_synthesis_mode(low_func_op));
 
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_registry_verify_requirements(
-      options->descriptor_registry,
-      LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
   IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
       module, low_func_op, options->descriptor_registry, options->emitter,
       &state.target));

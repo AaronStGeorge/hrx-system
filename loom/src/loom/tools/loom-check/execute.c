@@ -318,7 +318,6 @@ static iree_status_t loom_check_verify_pass_output(
       .emitter = LOOM_EMITTER_VERIFIER,
   };
   loom_low_verify_options_t low_verify_options = {
-      .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
       .descriptor_registry = &low_registry.registry,
       .emitter =
           {

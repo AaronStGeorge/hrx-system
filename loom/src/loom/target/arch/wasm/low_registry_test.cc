@@ -9,6 +9,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/requirements.h"
+#include "loom/target/low_descriptor_registry_verify.h"
 
 namespace loom {
 namespace {
@@ -36,8 +37,7 @@ TEST(WasmLowRegistryTest, VerifiesLinkedRegistryPackage) {
 
   const loom_low_descriptor_set_t* descriptor_set = nullptr;
   IREE_ASSERT_OK(loom_target_low_descriptor_set_select_for_bundle(
-      &registry.registry, bundle,
-      LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &descriptor_set));
+      &registry.registry, bundle, &descriptor_set));
   ASSERT_NE(descriptor_set, nullptr);
   iree_string_view_t descriptor_set_key = iree_string_view_empty();
   IREE_ASSERT_OK(loom_low_descriptor_set_string(

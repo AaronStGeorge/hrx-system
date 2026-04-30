@@ -224,7 +224,6 @@ iree_status_t LowFuncAsmRoundTripHarness::ParseModule(
 iree_status_t LowFuncAsmRoundTripHarness::VerifyModule(
     const loom_module_t* module) {
   loom_low_verify_options_t verify_options = {
-      .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
       .descriptor_registry = &descriptor_registry_,
       .max_errors = 20,
   };

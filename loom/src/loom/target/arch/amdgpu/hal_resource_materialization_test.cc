@@ -219,18 +219,13 @@ class AmdgpuHalResourceMaterializationTest : public ::testing::Test {
       const loom_target_bundle_t* bundle) {
     const loom_low_descriptor_set_t* descriptor_set = nullptr;
     IREE_CHECK_OK(loom_target_low_descriptor_set_select_for_bundle(
-        &target_registry_.registry, bundle,
-        LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-        &descriptor_set));
+        &target_registry_.registry, bundle, &descriptor_set));
     return descriptor_set;
   }
 
   void VerifyModule() {
     loom_low_verify_options_t verify_options = {
-        .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
         .descriptor_registry = &target_registry_.registry,
-        .descriptor_requirements =
-            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .max_errors = 20,
     };
     loom_low_verify_result_t verify_result = {};

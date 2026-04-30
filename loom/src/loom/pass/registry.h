@@ -149,9 +149,6 @@ typedef struct loom_pass_registry_t {
   iree_host_size_t descriptor_count;
 } loom_pass_registry_t;
 
-// Verifies registry ordering, key uniqueness, and descriptor shape.
-iree_status_t loom_pass_registry_verify(const loom_pass_registry_t* registry);
-
 // Looks up |key| by exact canonical spelling. Returns OK with
 // |*out_descriptor| NULL when the key is unknown.
 iree_status_t loom_pass_registry_lookup(

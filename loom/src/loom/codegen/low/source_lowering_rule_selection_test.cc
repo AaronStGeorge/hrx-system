@@ -190,7 +190,6 @@ class SourceLoweringRuleSelectionTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     loom_test_low_descriptor_registry_initialize(&registry_);
     policy_registry_ = MakeTestComposedPolicyRegistry();
-    IREE_ASSERT_OK(loom_low_lower_policy_registry_verify(&policy_registry_));
   }
 
   void TearDown() override {
@@ -252,8 +251,6 @@ class SourceLoweringRuleSelectionTest : public ::testing::Test {
         .target_ref = selection.target_ref,
         .bundle = selection.target_bundle,
         .descriptor_registry = &registry_.registry,
-        .descriptor_requirements =
-            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .policy = selection.policy,
         .fact_table = fact_table,
         .max_errors = 20,

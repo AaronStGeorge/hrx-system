@@ -28,6 +28,20 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    descriptors_verify
+  HDRS
+    "descriptors_verify.h"
+  SRCS
+    "descriptors_verify.c"
+  DEPS
+    ::descriptors
+    iree::base
+  TESTONLY
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     descriptors_manifest
   HDRS
     "descriptors_manifest.h"
@@ -79,6 +93,7 @@ loom_cc_library(
   DEPS
     ::descriptors
     iree::base
+  TESTONLY
   PUBLIC
 )
 
@@ -239,7 +254,6 @@ loom_cc_library(
     ::function
     ::placement
     ::register_class_map
-    ::requirements
     ::target_binding
     iree::base
     iree::base::internal::arena
@@ -415,10 +429,12 @@ loom_cc_library(
   NAME
     lower
   HDRS
+    "contract_query.h"
     "lower.h"
     "lower_internal.h"
     "lower_rules.h"
   SRCS
+    "contract_query.c"
     "lower.c"
     "lower_context.c"
     "lower_policy.c"
@@ -427,7 +443,6 @@ loom_cc_library(
     ::builder
     ::descriptors
     ::memory_access
-    ::requirements
     ::source_memory_plan
     iree::base
     iree::base::internal::arena
@@ -444,6 +459,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::target
+    loom::src::loom::target::contract
     loom::src::loom::target::low_legality
     loom::src::loom::target::types
     loom::src::loom::util::fact_table
@@ -557,7 +573,6 @@ loom_cc_library(
     "verify.c"
   DEPS
     ::register_class_map
-    ::requirements
     ::target_binding
     iree::base
     iree::base::internal::arena
@@ -755,6 +770,7 @@ loom_cc_test(
   DEPS
     ::descriptors
     ::descriptors_manifest
+    ::descriptors_verify
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -841,6 +857,7 @@ loom_cc_test(
   SRCS
     "target_binding_test.cc"
   DEPS
+    ::descriptors_verify
     ::target_binding
     iree::base::internal::arena
     loom::src::loom::error::error_defs
@@ -861,6 +878,7 @@ loom_cc_test(
   SRCS
     "verify_test.cc"
   DEPS
+    ::descriptors_verify
     ::text_asm
     ::verify
     iree::base::internal::arena

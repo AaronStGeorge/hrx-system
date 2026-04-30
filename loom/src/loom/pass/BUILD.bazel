@@ -90,6 +90,19 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "registry_verify",
+    testonly = True,
+    srcs = ["registry_verify.c"],
+    hdrs = ["registry_verify.h"],
+    deps = [
+        ":environment",
+        ":registry",
+        ":types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "invocation",
     srcs = ["invocation.c"],
     hdrs = ["invocation.h"],
@@ -222,6 +235,7 @@ loom_cc_test(
     deps = [
         ":environment",
         ":registry",
+        ":registry_verify",
         ":report",
         "//loom/src/loom/pass/test:registry",
         "//runtime/src/iree/base/internal:arena",
@@ -312,6 +326,7 @@ loom_cc_test(
     deps = [
         ":builtin_registry",
         ":registry",
+        ":registry_verify",
         "//loom/src/loom/codegen/low:pass_environment",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

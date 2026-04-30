@@ -6,12 +6,10 @@
 
 // Descriptor-set readiness checks for target-low consumers.
 //
-// Structural descriptor verification proves that a table is internally
-// well-formed. Requirement verification proves that the table carries the
-// semantic payloads a specific compiler phase family needs. This keeps the
-// low descriptor ABI permissive enough for early imports while giving target
-// registries a loud contract before lowering, scheduling, allocation, or
-// emission consume a selected descriptor set.
+// Requirement verification proves that a descriptor set carries the semantic
+// payloads a specific compiler phase family consumes. The descriptor tables
+// themselves are target-owned static data; requirement checks are explicit
+// target-package audits, not production preflight scans.
 
 #ifndef LOOM_CODEGEN_LOW_REQUIREMENTS_H_
 #define LOOM_CODEGEN_LOW_REQUIREMENTS_H_

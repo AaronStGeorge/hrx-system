@@ -428,6 +428,9 @@ typedef struct loom_low_lower_rule_set_t {
 typedef struct loom_low_lower_rule_selection_t {
   // Selected rule row, or NULL when no rule accepted the source op.
   const loom_low_lower_rule_t* rule;
+  // Selected rule row ordinal, or UINT16_MAX when no rule accepted the source
+  // op.
+  uint16_t rule_index;
   // True when the rule set had at least one rule span for the source op kind.
   bool has_source_op_span;
   // Diagnostic row describing the best failed guard when |rule| is NULL.

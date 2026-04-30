@@ -50,8 +50,6 @@ TEST_F(SourceLoweringStressTest, GeneratedSupportedSourceLowersAndPacketizes) {
       .pass_registry = loom_pass_builtin_registry(),
       .descriptor_registry = &descriptor_registry_.registry,
       .policy_registry = &policy_registry_,
-      .descriptor_requirements =
-          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE,
   };
 

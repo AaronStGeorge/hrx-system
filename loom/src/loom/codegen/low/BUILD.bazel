@@ -51,7 +51,6 @@ loom_assert_no_dependencies(
         ":preparation",
         ":pass_environment",
         ":register_class_map",
-        ":requirements",
         ":source_memory_plan",
         ":source_selection",
         ":text_asm",
@@ -99,6 +98,17 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "descriptors_verify",
+    testonly = True,
+    srcs = ["descriptors_verify.c"],
+    hdrs = ["descriptors_verify.h"],
+    deps = [
+        ":descriptors",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "descriptors_manifest",
     srcs = ["descriptors_manifest.c"],
     hdrs = ["descriptors_manifest.h"],
@@ -134,6 +144,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "requirements",
+    testonly = True,
     srcs = ["requirements.c"],
     hdrs = ["requirements.h"],
     deps = [
@@ -271,7 +282,6 @@ loom_cc_library(
         ":function",
         ":placement",
         ":register_class_map",
-        ":requirements",
         ":target_binding",
         "//loom/src/loom/analysis:liveness",
         "//loom/src/loom/error:emitter",
@@ -422,12 +432,14 @@ loom_cc_library(
 loom_cc_library(
     name = "lower",
     srcs = [
+        "contract_query.c",
         "lower.c",
         "lower_context.c",
         "lower_policy.c",
         "lower_rules.c",
     ],
     hdrs = [
+        "contract_query.h",
         "lower.h",
         "lower_internal.h",
         "lower_rules.h",
@@ -436,7 +448,6 @@ loom_cc_library(
         ":builder",
         ":descriptors",
         ":memory_access",
-        ":requirements",
         ":source_memory_plan",
         "//loom/src/loom/analysis:kernel_async_legality",
         "//loom/src/loom/analysis:vector_memory_footprint",
@@ -451,6 +462,7 @@ loom_cc_library(
         "//loom/src/loom/ops/kernel",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/target",
+        "//loom/src/loom/target:contract",
         "//loom/src/loom/target:low_legality",
         "//loom/src/loom/target:types",
         "//loom/src/loom/util:fact_table",
@@ -554,7 +566,6 @@ loom_cc_library(
     hdrs = ["verify.h"],
     deps = [
         ":register_class_map",
-        ":requirements",
         ":target_binding",
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
@@ -742,6 +753,7 @@ loom_cc_test(
     deps = [
         ":descriptors",
         ":descriptors_manifest",
+        ":descriptors_verify",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -822,6 +834,7 @@ loom_cc_test(
     name = "target_binding_test",
     srcs = ["target_binding_test.cc"],
     deps = [
+        ":descriptors_verify",
         ":target_binding",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/text:parser",
@@ -841,6 +854,7 @@ loom_cc_test(
     name = "verify_test",
     srcs = ["verify_test.cc"],
     deps = [
+        ":descriptors_verify",
         ":text_asm",
         ":verify",
         "//loom/src/loom/error:error_defs",

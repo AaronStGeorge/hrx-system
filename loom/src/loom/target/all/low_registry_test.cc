@@ -12,6 +12,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/requirements.h"
 #include "loom/target/low_descriptor_registry_manifest.h"
+#include "loom/target/low_descriptor_registry_verify.h"
 
 namespace loom {
 namespace {
@@ -48,8 +49,7 @@ TEST(AllLowRegistryTest, VerifiesEveryLinkedTargetPackage) {
 
     const loom_low_descriptor_set_t* descriptor_set = nullptr;
     IREE_ASSERT_OK(loom_target_low_descriptor_set_select_for_bundle(
-        &registry.registry, bundle,
-        LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &descriptor_set))
+        &registry.registry, bundle, &descriptor_set))
         << expected.bundle_key;
     ASSERT_NE(descriptor_set, nullptr) << expected.bundle_key;
     iree_string_view_t descriptor_set_key = iree_string_view_empty();
@@ -76,8 +76,7 @@ TEST(AllLowRegistryTest, FormatsRegistryManifest) {
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
   IREE_ASSERT_OK(loom_target_low_descriptor_registry_format_manifest_json(
-      &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-      &builder));
+      &registry, &builder));
   EXPECT_NE(iree_string_builder_size(&builder), 0u);
   iree_string_builder_deinitialize(&builder);
 }

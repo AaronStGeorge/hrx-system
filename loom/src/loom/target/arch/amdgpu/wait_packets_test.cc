@@ -110,7 +110,6 @@ class AmdgpuWaitPacketsTest : public ::testing::Test {
     }
 
     loom_low_verify_options_t low_verify_options = {
-        .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
         .descriptor_registry = &low_registry_.registry,
         .max_errors = 100,
     };

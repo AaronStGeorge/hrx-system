@@ -107,6 +107,22 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    registry_verify
+  HDRS
+    "registry_verify.h"
+  SRCS
+    "registry_verify.c"
+  DEPS
+    ::environment
+    ::registry
+    ::types
+    iree::base
+  TESTONLY
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     invocation
   HDRS
     "invocation.h"
@@ -261,6 +277,7 @@ loom_cc_test(
   DEPS
     ::environment
     ::registry
+    ::registry_verify
     ::report
     iree::base::internal::arena
     loom::src::loom::pass::test::registry
@@ -358,6 +375,7 @@ loom_cc_test(
   DEPS
     ::builtin_registry
     ::registry
+    ::registry_verify
     loom::src::loom::codegen::low::pass_environment
     iree::testing::gtest
     iree::testing::gtest_main

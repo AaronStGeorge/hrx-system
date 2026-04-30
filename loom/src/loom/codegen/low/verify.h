@@ -14,7 +14,6 @@
 #define LOOM_CODEGEN_LOW_VERIFY_H_
 
 #include "iree/base/api.h"
-#include "loom/codegen/low/requirements.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
@@ -23,27 +22,11 @@
 extern "C" {
 #endif
 
-typedef uint32_t loom_low_verify_flags_t;
-
-enum loom_low_verify_flag_bits_e {
-  // Validate descriptor registry/table integrity before walking IR. This is
-  // useful for tests and package bring-up; hot compiler paths should usually
-  // verify linked descriptor packages once when constructing the target
-  // configuration instead.
-  LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY = 1u << 0,
-};
-
 typedef struct loom_low_verify_options_t {
-  // Verification behavior flags.
-  loom_low_verify_flags_t flags;
-  // Descriptor registry available to this verification run. Unless
-  // LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY is set, callers must pass a
-  // registry already accepted by loom_low_descriptor_registry_verify.
+  // Descriptor registry available to this verification run. The registry is
+  // target-owned static data; IR verification only uses it to resolve selected
+  // descriptor sets and packet semantics.
   const loom_low_descriptor_registry_t* descriptor_registry;
-  // Optional descriptor payload requirements to verify before walking IR. When
-  // non-zero, this runs descriptor registry verification plus the requested
-  // consumer-readiness checks.
-  loom_low_descriptor_requirement_flags_t descriptor_requirements;
   // Structured diagnostic emitter for user IR failures.
   iree_diagnostic_emitter_t emitter;
   // Maximum number of errors to emit before aborting the walk. 0 means no

@@ -178,8 +178,6 @@ iree_status_t loom_low_select_source_funcs(
         "source-to-low selection requires descriptor and policy "
         "registries");
   }
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_policy_registry_verify(options->policy_registry));
 
   loom_symbol_fact_table_t fact_table = {0};
   IREE_RETURN_IF_ERROR(loom_low_source_selection_initialize_fact_table(
@@ -230,8 +228,6 @@ iree_status_t loom_low_select_source_func(
         "source-to-low selection requires descriptor and policy "
         "registries");
   }
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_policy_registry_verify(options->policy_registry));
 
   loom_symbol_fact_table_t fact_table = {0};
   IREE_RETURN_IF_ERROR(loom_low_source_selection_initialize_fact_table(

@@ -259,8 +259,6 @@ static iree_status_t loom_amdgpu_module_compile_lower_function(
       .target_ref = entry->target_ref,
       .bundle = &entry->bundle_storage.bundle,
       .descriptor_registry = &low_registry->registry,
-      .descriptor_requirements =
-          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
       .legality_provider_list =
           {
               .count = IREE_ARRAYSIZE(kLowLegalityProviders),
@@ -367,7 +365,7 @@ static iree_status_t loom_amdgpu_module_compile_materialize_kernel_resources(
   const loom_low_descriptor_set_t* descriptor_set = NULL;
   IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
       &low_registry->registry, &plan->entry->bundle_storage.bundle,
-      LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &descriptor_set));
+      &descriptor_set));
   return loom_amdgpu_hal_resource_materialize(
       module, plan->low_function_op, &plan->entry->bundle_storage.bundle,
       descriptor_set, &plan->materialization, table_arena);
@@ -381,7 +379,7 @@ static iree_status_t loom_amdgpu_module_compile_compute_kernel_fixed_values(
   const loom_low_descriptor_set_t* descriptor_set = NULL;
   IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
       &low_registry->registry, &plan->entry->bundle_storage.bundle,
-      LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &descriptor_set));
+      &descriptor_set));
   return loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
       module, plan->low_function_op, descriptor_set, &plan->fixed_values,
       &plan->fixed_value_count, table_arena);
@@ -403,7 +401,7 @@ static iree_status_t loom_amdgpu_module_compile_build_kernel_contribution(
   const loom_low_descriptor_set_t* descriptor_set = NULL;
   IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
       &low_registry->registry, &plan->entry->bundle_storage.bundle,
-      LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &descriptor_set));
+      &descriptor_set));
   loom_low_schedule_pressure_cliff_list_t schedule_pressure_cliffs =
       loom_low_schedule_pressure_cliff_list_empty();
   IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
@@ -522,9 +520,7 @@ static iree_status_t loom_amdgpu_module_compile_entries(
   IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_module(
       module, target_options, LOOM_AMDGPU_MODULE_COMPILE_DEFAULT_MAX_ERRORS));
   IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_low_module(
-      module, low_registry,
-      LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, diagnostic_emitter,
-      max_errors));
+      module, low_registry, diagnostic_emitter, max_errors));
 
   loom_amdgpu_kernel_hsaco_contribution_t* contributions = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(table_arena, entries.count,

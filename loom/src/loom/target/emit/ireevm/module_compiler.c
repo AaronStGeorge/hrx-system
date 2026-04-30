@@ -147,8 +147,6 @@ static iree_status_t loom_ireevm_module_compile_lower_function(
       .target_ref = entry->target_ref,
       .bundle = &entry->bundle_storage.bundle,
       .descriptor_registry = &registry->registry,
-      .descriptor_requirements =
-          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
       .policy = policy,
       .fact_table = fact_table,
       .emitter = loom_target_module_compile_emitter(diagnostic_emitter),
@@ -289,9 +287,7 @@ iree_status_t loom_ireevm_compile_module_archive(
   }
   if (iree_status_is_ok(status)) {
     status = loom_target_module_compile_verify_low_module(
-        module, &low_registry,
-        LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-        &diagnostic_emitter, max_errors);
+        module, &low_registry, &diagnostic_emitter, max_errors);
   }
   loom_low_emission_frame_t frame = {0};
   if (iree_status_is_ok(status)) {

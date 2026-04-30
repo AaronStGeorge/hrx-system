@@ -1250,7 +1250,6 @@ static iree_status_t loom_check_emit_write_source_low_text(
     loom_source_resolver_t source_resolver,
     loom_check_diagnostic_collector_t* diagnostic_collector,
     loom_check_result_t* result) {
-  IREE_RETURN_IF_ERROR(loom_low_lower_policy_registry_verify(policy_registry));
   IREE_RETURN_IF_ERROR(
       loom_check_emit_prepare_source_low_target_preset(module, request));
 
@@ -1305,8 +1304,6 @@ static iree_status_t loom_check_emit_write_source_low_text(
         .target_ref = selection->target_ref,
         .bundle = selection->target_bundle,
         .descriptor_registry = &low_registry->registry,
-        .descriptor_requirements =
-            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .legality_provider_list = legality_provider_list,
         .legality_diagnostic_flags = request->source_low_diagnostic_flags,
         .policy = selection->policy,
@@ -1341,9 +1338,7 @@ static iree_status_t loom_check_emit_write_source_low_text(
   loom_target_module_compile_diagnostic_emitter_initialize(
       module, &compile_options, LOOM_EMITTER_VERIFIER, &verifier_emitter);
   IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_low_module(
-      module, low_registry,
-      LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &verifier_emitter,
-      20));
+      module, low_registry, &verifier_emitter, 20));
 
   if (request->source_low_output == LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW) {
     if (has_multiple_descriptor_sets) {
@@ -1377,10 +1372,8 @@ static iree_status_t loom_check_emit_verify_provider_module(
   loom_target_module_compile_diagnostic_emitter_t verifier_emitter = {0};
   loom_target_module_compile_diagnostic_emitter_initialize(
       module, &compile_options, LOOM_EMITTER_VERIFIER, &verifier_emitter);
-  return loom_target_module_compile_verify_low_module(
-      module, low_registry,
-      LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &verifier_emitter,
-      20);
+  return loom_target_module_compile_verify_low_module(module, low_registry,
+                                                      &verifier_emitter, 20);
 }
 
 iree_status_t loom_check_execute_emit(
@@ -1452,8 +1445,7 @@ iree_status_t loom_check_execute_emit(
       }
     } else if (iree_status_is_ok(status)) {
       status = loom_target_low_descriptor_registry_format_manifest_json(
-          &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-          &result->actual_output);
+          &registry, &result->actual_output);
     }
     if (!iree_status_is_ok(status)) {
       status = loom_check_emit_finish_status_failure(
@@ -1716,10 +1708,7 @@ iree_status_t loom_check_execute_emit(
           .emitter = LOOM_EMITTER_VERIFIER,
       };
       loom_low_verify_options_t low_verify_options = {
-          .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
           .descriptor_registry = &low_registry.registry,
-          .descriptor_requirements =
-              LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
           .emitter =
               {
                   .fn = loom_check_diagnostic_emitter_capture_emit,

@@ -94,10 +94,7 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
                                  loom_low_emission_frame_t* out_frame) {
     ASSERT_NE(module_, nullptr);
     loom_low_verify_options_t verify_options = {
-        .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
         .descriptor_registry = &target_registry_.registry,
-        .descriptor_requirements =
-            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .max_errors = 20,
     };
     loom_low_verify_result_t verify_result = {};
@@ -160,9 +157,7 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
     ResolveFunctionTarget(low_function, &bundle_storage);
     const loom_low_descriptor_set_t* descriptor_set = nullptr;
     IREE_ASSERT_OK(loom_target_low_descriptor_set_select_for_bundle(
-        &target_registry_.registry, &bundle_storage.bundle,
-        LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-        &descriptor_set));
+        &target_registry_.registry, &bundle_storage.bundle, &descriptor_set));
 
     loom_amdgpu_hal_resource_materialization_result_t materialization = {};
     IREE_ASSERT_OK(loom_amdgpu_hal_resource_materialize(
@@ -183,10 +178,7 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
     ASSERT_EQ(fixed_value_count, expected_fixed_value_count);
 
     loom_low_verify_options_t verify_options = {
-        .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
         .descriptor_registry = &target_registry_.registry,
-        .descriptor_requirements =
-            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .max_errors = 20,
     };
     loom_low_verify_result_t verify_result = {};

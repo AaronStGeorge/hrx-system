@@ -56,9 +56,7 @@ static iree_status_t loom_low_source_workload_verify_low_module(
     const loom_module_t* module,
     const loom_low_source_workload_pipeline_options_t* options) {
   const loom_low_verify_options_t verify_options = {
-      .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
       .descriptor_registry = options->descriptor_registry,
-      .descriptor_requirements = options->descriptor_requirements,
       .max_errors = 20,
   };
   loom_low_verify_result_t result = {0};
@@ -150,7 +148,6 @@ iree_status_t loom_low_source_workload_run_pipeline(
           .target_ref = selection->target_ref,
           .bundle = selection->target_bundle,
           .descriptor_registry = options->descriptor_registry,
-          .descriptor_requirements = options->descriptor_requirements,
           .policy = selection->policy,
           .fact_table = fact_table,
           .max_errors = 20,

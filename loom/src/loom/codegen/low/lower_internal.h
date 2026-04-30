@@ -46,6 +46,8 @@ typedef struct loom_low_lower_selected_plan_t {
   loom_low_lower_selected_plan_flags_t flags;
   // Policy rule-set ordinal for table-driven selections.
   uint16_t rule_set_index;
+  // Rule-table ordinal for table-driven selections.
+  uint16_t rule_index;
   // Rule set owning |rule|, or NULL for target-owned callbacks.
   const loom_low_lower_rule_set_t* rule_set;
   // Table rule selected during planning, or NULL for target-owned callbacks.

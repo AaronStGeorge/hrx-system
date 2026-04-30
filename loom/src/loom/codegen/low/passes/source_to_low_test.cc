@@ -97,8 +97,6 @@ class LowLowerPassTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     loom_test_low_descriptor_registry_initialize(&registry_);
     invalid_preamble_policy_registry_ = MakeInvalidPreamblePolicyRegistry();
-    IREE_ASSERT_OK(loom_low_lower_policy_registry_verify(
-        &invalid_preamble_policy_registry_));
   }
 
   void TearDown() override {

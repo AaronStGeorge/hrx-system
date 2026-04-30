@@ -111,10 +111,6 @@ typedef struct loom_target_low_legality_options_t {
   const loom_target_bundle_t* bundle;
   // Low descriptor registry linked into the current compiler binary.
   const loom_low_descriptor_registry_t* descriptor_registry;
-  // Descriptor payload requirements needed by the upcoming lowering/emission
-  // stage. Zero verifies only descriptor structural integrity needed to select
-  // the set.
-  loom_low_descriptor_requirement_flags_t descriptor_requirements;
   // Optional target-specific source legality providers.
   loom_target_low_legality_provider_list_t provider_list;
   // Optional contract query over the selected target lowering policy. This is

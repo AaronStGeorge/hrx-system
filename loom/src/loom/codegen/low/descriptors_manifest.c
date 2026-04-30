@@ -674,7 +674,10 @@ iree_status_t loom_low_descriptor_set_format_manifest_json(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor manifest builder is required");
   }
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_verify(descriptor_set));
+  if (descriptor_set == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor set is required");
+  }
 
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "{"));
   IREE_RETURN_IF_ERROR(loom_low_descriptor_set_append_string_field(

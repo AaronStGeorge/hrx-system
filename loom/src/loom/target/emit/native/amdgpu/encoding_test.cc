@@ -66,7 +66,6 @@ class AmdgpuEncodingTest : public ::testing::Test {
     loom_amdgpu_low_descriptor_registry_initialize(&target_registry_);
     IREE_ASSERT_OK(loom_target_low_descriptor_set_select_for_bundle(
         &target_registry_.registry, &loom_amdgpu_low_target_bundle_gfx11_core,
-        LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         &gfx11_descriptor_set_));
   }
 
@@ -159,10 +158,7 @@ class AmdgpuEncodingTest : public ::testing::Test {
     ASSERT_NE(module_, nullptr);
 
     loom_low_verify_options_t verify_options = {
-        .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
         .descriptor_registry = &target_registry_.registry,
-        .descriptor_requirements =
-            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .max_errors = 20,
     };
     loom_low_verify_result_t verify_result = {};
@@ -211,10 +207,7 @@ class AmdgpuEncodingTest : public ::testing::Test {
     ASSERT_NE(module_, nullptr);
 
     loom_low_verify_options_t verify_options = {
-        .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
         .descriptor_registry = &target_registry_.registry,
-        .descriptor_requirements =
-            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .max_errors = 20,
     };
     loom_low_verify_result_t verify_result = {};

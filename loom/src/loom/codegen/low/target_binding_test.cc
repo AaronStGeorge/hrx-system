@@ -14,6 +14,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/descriptors_verify.h"
 #include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"

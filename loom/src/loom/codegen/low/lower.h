@@ -74,7 +74,7 @@ loom_low_lower_rule_mapped_value_register(uint16_t descriptor_register_class_id,
 
 typedef struct loom_low_lower_rule_set_list_t {
   // Total number of rule sets in the list.
-  iree_host_size_t count;
+  uint16_t count;
   // Rule set list or NULL if no rule sets.
   const loom_low_lower_rule_set_t* const* values;
 } loom_low_lower_rule_set_list_t;
@@ -338,12 +338,6 @@ typedef struct loom_low_lower_policy_t {
 iree_status_t loom_low_lower_policy_verify(
     const loom_low_lower_policy_t* policy);
 
-// Verifies generated/static rule-table invariants required by the lowering
-// interpreters. This is an O(table rows) target-authoring check intended for
-// registration tests and tooling diagnostics, not per-function lowering.
-iree_status_t loom_low_lower_policy_verify_static_tables(
-    const loom_low_lower_policy_t* policy);
-
 typedef struct loom_low_lower_policy_registry_entry_t {
   // Target contract-set key that selects |policy|.
   iree_string_view_t contract_set_key;
@@ -365,14 +359,10 @@ void loom_low_lower_policy_registry_initialize_from_entries(
     const loom_low_lower_policy_registry_entry_t* entries,
     iree_host_size_t entry_count);
 
-// Verifies that |registry| is a well-formed contract-key to policy table.
-// Registry validation is an infrastructure contract: malformed registries
-// return status failures instead of user IR diagnostics.
-iree_status_t loom_low_lower_policy_registry_verify(
-    const loom_low_lower_policy_registry_t* registry);
-
 // Looks up the lowering policy for |contract_set_key|. Empty keys are rejected
-// and missing keys return NOT_FOUND so target package omissions fail loud.
+// and missing keys return NOT_FOUND so target package omissions fail loud. The
+// registry table is target-owned static data; production lookup trusts its row
+// ordering and returns the first matching entry.
 iree_status_t loom_low_lower_policy_registry_lookup(
     const loom_low_lower_policy_registry_t* registry,
     iree_string_view_t contract_set_key,
@@ -397,8 +387,6 @@ typedef struct loom_low_lower_options_t {
   const loom_target_bundle_t* bundle;
   // Low descriptor registry linked into the current compiler binary.
   const loom_low_descriptor_registry_t* descriptor_registry;
-  // Descriptor payload requirements needed by the consumer after lowering.
-  loom_low_descriptor_requirement_flags_t descriptor_requirements;
   // Optional target-specific legality providers forwarded to source legality.
   loom_target_low_legality_provider_list_t legality_provider_list;
   // Optional source legality feedback diagnostics forwarded to providers.

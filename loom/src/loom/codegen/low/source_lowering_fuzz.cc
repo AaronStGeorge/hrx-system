@@ -77,8 +77,6 @@ static iree_status_t fuzz_one_input(const uint8_t* data, size_t size) {
         .pass_registry = loom_pass_builtin_registry(),
         .descriptor_registry = &g_descriptor_registry.registry,
         .policy_registry = &g_policy_registry,
-        .descriptor_requirements =
-            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE,
     };
     loom_low_source_workload_pipeline_counters_t counters = {};

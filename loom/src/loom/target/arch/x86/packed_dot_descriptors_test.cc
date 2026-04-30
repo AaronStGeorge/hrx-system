@@ -10,6 +10,7 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/descriptors_verify.h"
 #include "loom/target/arch/x86/packed_dot_contract.h"
 
 namespace loom {

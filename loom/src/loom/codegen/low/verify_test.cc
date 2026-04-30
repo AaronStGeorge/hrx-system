@@ -13,6 +13,7 @@
 #include "iree/io/vec_stream.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/descriptors_verify.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/error/error_defs.h"
 #include "loom/format/bytecode/reader.h"
@@ -147,7 +148,6 @@ class LowDescriptorVerifyTest : public ::testing::Test {
       loom_module_t* module, const loom_low_descriptor_registry_t* registry,
       EmissionCollector* collector) {
     loom_low_verify_options_t options = {
-        .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
         .descriptor_registry = registry,
         .emitter = collector->emitter(),
         .max_errors = 20,
@@ -336,8 +336,6 @@ TEST_F(LowDescriptorVerifyTest, ValidVmPacketsPassWithFoundationRequirements) {
   EmissionCollector collector;
   loom_low_verify_options_t options = {
       .descriptor_registry = &registry,
-      .descriptor_requirements =
-          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
       .emitter = collector.emitter(),
       .max_errors = 20,
   };
@@ -1031,35 +1029,6 @@ std::string FeatureEnumImmediateSource(const char* mode_value) {
          "} : (reg<test.gpr x1>, reg<test.gpr x1>) -> reg<test.gpr x1>\n"
          "  low.return %sum : reg<test.gpr x1>\n"
          "}\n";
-}
-
-TEST_F(LowDescriptorVerifyTest,
-       RejectsRegistryMissingRequestedFoundationRequirements) {
-  FeatureTestTables tables;
-  InitializeFeatureTestTables(&tables);
-  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
-  FeatureTestRegistryStorage registry_storage;
-  InitializeFeatureTestRegistry(&tables, &registry_storage);
-  loom_low_descriptor_registry_t registry = registry_storage.registry;
-
-  loom_module_t* module = ParseSource("func.def @unused() {\n}\n");
-  ASSERT_NE(module, nullptr);
-
-  EmissionCollector collector;
-  loom_low_verify_options_t options = {
-      .descriptor_registry = &registry,
-      .descriptor_requirements =
-          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-      .emitter = collector.emitter(),
-      .max_errors = 20,
-  };
-  loom_low_verify_result_t result = {};
-  iree_status_t status = loom_low_verify_module(module, &options, &result);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION, status);
-  EXPECT_EQ(result.error_count, 0u);
-  EXPECT_TRUE(collector.emissions.empty());
-
-  loom_module_free(module);
 }
 
 TEST_F(LowDescriptorVerifyTest, RejectsMissingFeatureBits) {

@@ -219,6 +219,7 @@ loom_cc_test(
   DEPS
     ::descriptors
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::descriptors_verify
     loom::src::loom::codegen::low::testing::text_asm_roundtrip_test_util
     loom::src::loom::codegen::low::testing::text_asm_test_util
     iree::testing::gtest
@@ -260,6 +261,7 @@ loom_cc_test(
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::requirements
     loom::src::loom::target::low_descriptor_registry
+    loom::src::loom::target::low_descriptor_registry_verify
     iree::testing::gtest
     iree::testing::gtest_main
 )

@@ -118,7 +118,6 @@ iree_status_t loom_target_module_compile_verify_module(
 iree_status_t loom_target_module_compile_verify_low_module(
     const loom_module_t* module,
     const loom_target_low_descriptor_registry_t* low_registry,
-    loom_low_descriptor_requirement_flags_t descriptor_requirements,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     uint32_t max_errors);
 

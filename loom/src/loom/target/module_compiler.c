@@ -180,13 +180,10 @@ iree_status_t loom_target_module_compile_verify_module(
 iree_status_t loom_target_module_compile_verify_low_module(
     const loom_module_t* module,
     const loom_target_low_descriptor_registry_t* low_registry,
-    loom_low_descriptor_requirement_flags_t descriptor_requirements,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     uint32_t max_errors) {
   const loom_low_verify_options_t low_verify_options = {
-      .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
       .descriptor_registry = &low_registry->registry,
-      .descriptor_requirements = descriptor_requirements,
       .emitter = loom_target_module_compile_emitter(diagnostic_emitter),
       .max_errors = max_errors,
   };

@@ -7,7 +7,6 @@
 #include <inttypes.h>
 #include <string.h>
 
-#include "loom/codegen/low/requirements.h"
 #include "loom/codegen/low/schedule/context.h"
 #include "loom/codegen/low/schedule/descriptor_rows.h"
 #include "loom/codegen/low/schedule/diagnostics.h"
@@ -1360,9 +1359,6 @@ iree_status_t loom_low_schedule_function(
     state.memory_access_records = options->memory_access_table.values;
     state.memory_access_record_count = options->memory_access_table.count;
   }
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_registry_verify_requirements(
-      options->descriptor_registry,
-      LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
   IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
       module, low_func_op, options->descriptor_registry, options->emitter,
       &state.target));

@@ -9,6 +9,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/pass/registry_verify.h"
 #include "loom/pass/test/harness.h"
 
 namespace loom {

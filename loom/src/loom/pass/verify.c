@@ -632,7 +632,6 @@ static iree_status_t loom_pass_verify_state_initialize(
                             "state are required");
   }
   IREE_RETURN_IF_ERROR(loom_pass_environment_verify(&options->environment));
-  IREE_RETURN_IF_ERROR(loom_pass_registry_verify(options->registry));
   *out_state = (loom_pass_verify_state_t){
       .module = module,
       .options = options,

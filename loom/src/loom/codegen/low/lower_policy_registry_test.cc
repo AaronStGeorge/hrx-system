@@ -7,8 +7,6 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/lower.h"
-#include "loom/codegen/low/lower_rules.h"
-#include "loom/ops/scalar/ops.h"
 #include "loom/target/test/lower.h"
 
 namespace loom {
@@ -22,13 +20,11 @@ static loom_low_lower_policy_registry_t MakeTestPolicyRegistry() {
 
 TEST(LowLowerPolicyRegistryTest, LooksUpPolicyByContractKey) {
   loom_low_lower_policy_registry_t registry = MakeTestPolicyRegistry();
-  IREE_ASSERT_OK(loom_low_lower_policy_registry_verify(&registry));
 
   const loom_low_lower_policy_t* policy = nullptr;
   IREE_ASSERT_OK(loom_low_lower_policy_registry_lookup(
       &registry, IREE_SV("test.low.core"), &policy));
   EXPECT_EQ(policy, loom_test_low_lower_policy());
-  IREE_EXPECT_OK(loom_low_lower_policy_verify_static_tables(policy));
 }
 
 TEST(LowLowerPolicyRegistryTest, LooksUpPolicyForTargetBundle) {
@@ -55,124 +51,18 @@ TEST(LowLowerPolicyRegistryTest, RejectsMissingContractKey) {
   EXPECT_EQ(policy, nullptr);
 }
 
-TEST(LowLowerPolicyRegistryTest, RejectsMalformedRegistries) {
+TEST(LowLowerPolicyRegistryTest, RejectsMissingEntries) {
   loom_low_lower_policy_registry_t missing_entries = {};
   missing_entries.entry_count = 1;
+  const loom_low_lower_policy_t* policy = nullptr;
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
-      loom_low_lower_policy_registry_verify(&missing_entries));
-
-  const loom_low_lower_policy_registry_entry_t empty_key_entries[] = {
-      {
-          .contract_set_key = IREE_SVL(""),
-          .policy = loom_test_low_lower_policy(),
-      },
-  };
-  loom_low_lower_policy_registry_t empty_key_registry = {};
-  loom_low_lower_policy_registry_initialize_from_entries(
-      &empty_key_registry, empty_key_entries,
-      IREE_ARRAYSIZE(empty_key_entries));
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_low_lower_policy_registry_verify(&empty_key_registry));
-
-  const loom_low_lower_policy_t incomplete_policy = {
-      .name = IREE_SVL("incomplete"),
-  };
-  const loom_low_lower_policy_registry_entry_t incomplete_entries[] = {
-      {
-          .contract_set_key = IREE_SVL("test.low.core"),
-          .policy = &incomplete_policy,
-      },
-  };
-  loom_low_lower_policy_registry_t incomplete_registry = {};
-  loom_low_lower_policy_registry_initialize_from_entries(
-      &incomplete_registry, incomplete_entries,
-      IREE_ARRAYSIZE(incomplete_entries));
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_low_lower_policy_registry_verify(&incomplete_registry));
+      loom_low_lower_policy_registry_lookup(&missing_entries,
+                                            IREE_SV("test.low.core"), &policy));
+  EXPECT_EQ(policy, nullptr);
 }
 
-TEST(LowLowerPolicyRegistryTest, RejectsMalformedRuleSpans) {
-  const loom_low_lower_rule_t duplicate_span_rules[] = {
-      {
-          .source_op_kind = LOOM_OP_SCALAR_ADDI,
-      },
-      {
-          .source_op_kind = LOOM_OP_SCALAR_ADDI,
-      },
-  };
-  const loom_low_lower_rule_span_t duplicate_spans[] = {
-      {
-          .source_op_kind = LOOM_OP_SCALAR_ADDI,
-          .rule_start = 0,
-          .rule_count = 1,
-      },
-      {
-          .source_op_kind = LOOM_OP_SCALAR_ADDI,
-          .rule_start = 1,
-          .rule_count = 1,
-      },
-  };
-  const loom_low_lower_rule_set_t duplicate_span_rule_set = {
-      .spans = duplicate_spans,
-      .span_count = IREE_ARRAYSIZE(duplicate_spans),
-      .rules = duplicate_span_rules,
-      .rule_count = IREE_ARRAYSIZE(duplicate_span_rules),
-  };
-  const loom_low_lower_rule_set_t* const duplicate_span_rule_sets[] = {
-      &duplicate_span_rule_set,
-  };
-  const loom_low_lower_policy_t duplicate_span_policy = {
-      .name = IREE_SVL("duplicate-span-policy"),
-      .map_type = {.fn = loom_test_low_lower_map_type, .user_data = nullptr},
-      .rule_sets =
-          {
-              .count = IREE_ARRAYSIZE(duplicate_span_rule_sets),
-              .values = duplicate_span_rule_sets,
-          },
-  };
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_low_lower_policy_verify_static_tables(&duplicate_span_policy));
-
-  const loom_low_lower_rule_t mismatched_rules[] = {
-      {
-          .source_op_kind = LOOM_OP_SCALAR_SUBI,
-      },
-  };
-  const loom_low_lower_rule_span_t mismatched_spans[] = {
-      {
-          .source_op_kind = LOOM_OP_SCALAR_ADDI,
-          .rule_start = 0,
-          .rule_count = 1,
-      },
-  };
-  const loom_low_lower_rule_set_t mismatched_rule_set = {
-      .spans = mismatched_spans,
-      .span_count = IREE_ARRAYSIZE(mismatched_spans),
-      .rules = mismatched_rules,
-      .rule_count = IREE_ARRAYSIZE(mismatched_rules),
-  };
-  const loom_low_lower_rule_set_t* const mismatched_rule_sets[] = {
-      &mismatched_rule_set,
-  };
-  const loom_low_lower_policy_t mismatched_policy = {
-      .name = IREE_SVL("mismatched-span-policy"),
-      .map_type = {.fn = loom_test_low_lower_map_type, .user_data = nullptr},
-      .rule_sets =
-          {
-              .count = IREE_ARRAYSIZE(mismatched_rule_sets),
-              .values = mismatched_rule_sets,
-          },
-  };
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_low_lower_policy_verify_static_tables(&mismatched_policy));
-}
-
-TEST(LowLowerPolicyRegistryTest, RejectsDuplicateContractKeys) {
+TEST(LowLowerPolicyRegistryTest, ReturnsFirstDuplicateContractKey) {
   const loom_low_lower_policy_registry_entry_t entries[] = {
       {
           .contract_set_key = IREE_SVL("test.low.core"),
@@ -187,14 +77,10 @@ TEST(LowLowerPolicyRegistryTest, RejectsDuplicateContractKeys) {
   loom_low_lower_policy_registry_initialize_from_entries(
       &registry, entries, IREE_ARRAYSIZE(entries));
 
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_ALREADY_EXISTS,
-                        loom_low_lower_policy_registry_verify(&registry));
-
   const loom_low_lower_policy_t* policy = nullptr;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_ALREADY_EXISTS,
-                        loom_low_lower_policy_registry_lookup(
-                            &registry, IREE_SV("test.low.core"), &policy));
-  EXPECT_EQ(policy, nullptr);
+  IREE_ASSERT_OK(loom_low_lower_policy_registry_lookup(
+      &registry, IREE_SV("test.low.core"), &policy));
+  EXPECT_EQ(policy, loom_test_low_lower_policy());
 }
 
 }  // namespace

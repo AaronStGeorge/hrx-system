@@ -789,11 +789,10 @@ typedef const loom_low_descriptor_set_t* (*loom_low_descriptor_set_provider_t)(
     void);
 
 // Borrowed descriptor-set registry available to low verification/emission runs.
-// Entries may be in any order; lookups reject duplicate matching keys so
-// callers do not need a separate normalization step for correctness. Registries
-// may provide descriptor sets directly or through provider functions; provider
-// tables let package-level registries stay static and grow without embedding a
-// fixed-capacity materialization buffer.
+// Entries may be in any order. Registries may provide descriptor sets directly
+// or through provider functions; provider tables let package-level registries
+// stay static and grow without embedding a fixed-capacity materialization
+// buffer.
 typedef struct loom_low_descriptor_registry_t {
   // Borrowed descriptor-set pointers linked into the current compiler binary.
   const loom_low_descriptor_set_t* const* descriptor_sets;
@@ -820,28 +819,16 @@ iree_host_size_t loom_low_descriptor_registry_descriptor_set_count(
 const loom_low_descriptor_set_t* loom_low_descriptor_registry_descriptor_set_at(
     const loom_low_descriptor_registry_t* registry, iree_host_size_t index);
 
-// Verifies structural integrity of a descriptor set. This checks table spans,
-// string offsets, descriptor key uniqueness, and cross-table references; it
-// does not perform full target legality.
-iree_status_t loom_low_descriptor_set_verify(
-    const loom_low_descriptor_set_t* descriptor_set);
-
-// Verifies descriptor registry integrity. Registry validation is an
-// infrastructure contract: malformed registries return status failures instead
-// of user IR diagnostics.
-iree_status_t loom_low_descriptor_registry_verify(
-    const loom_low_descriptor_registry_t* registry);
-
-// Looks up |key| in |registry|. Returns OK with NULL when no set matches.
-// Duplicate matching keys return ALREADY_EXISTS because target binding and
-// emission must be deterministic.
+// Looks up |key| in |registry|. Returns OK with NULL when no set matches. The
+// registry table is target-owned static data; production lookup trusts its row
+// ordering and returns the first matching entry.
 iree_status_t loom_low_descriptor_registry_lookup(
     const loom_low_descriptor_registry_t* registry, iree_string_view_t key,
     const loom_low_descriptor_set_t** out_descriptor_set);
 
 // Looks up |stable_id| in |registry|. Returns OK with NULL when no set matches.
-// Duplicate matching stable IDs return ALREADY_EXISTS because target binding
-// and emission must be deterministic.
+// The registry table is target-owned static data; production lookup trusts its
+// row ordering and returns the first matching entry.
 iree_status_t loom_low_descriptor_registry_lookup_by_id(
     const loom_low_descriptor_registry_t* registry, uint64_t stable_id,
     const loom_low_descriptor_set_t** out_descriptor_set);

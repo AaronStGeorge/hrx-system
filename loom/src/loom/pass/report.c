@@ -295,8 +295,6 @@ iree_status_t loom_pass_report_format_registry_json(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "pass registry and output stream are required");
   }
-  IREE_RETURN_IF_ERROR(loom_pass_registry_verify(registry));
-
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, "{\n  \"passes\": ["));
   for (iree_host_size_t i = 0; i < registry->descriptor_count; ++i) {

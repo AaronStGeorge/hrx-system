@@ -10,7 +10,6 @@
 #include <string.h>
 
 #include "loom/codegen/low/pass_environment.h"
-#include "loom/codegen/low/requirements.h"
 #include "loom/codegen/low/source_selection.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
@@ -164,7 +163,6 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
         "pass 'source-to-low' requires pass environment low descriptor and "
         "lowering policy registries");
   }
-  IREE_RETURN_IF_ERROR(loom_low_lower_policy_registry_verify(policy_registry));
 
   iree_arena_allocator_t selection_arena;
   iree_arena_initialize(module->arena.block_pool, &selection_arena);
@@ -193,8 +191,6 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
         .target_ref = selection->target_ref,
         .bundle = selection->target_bundle,
         .descriptor_registry = descriptor_registry,
-        .descriptor_requirements =
-            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .legality_provider_list =
             legality_provider_list
                 ? *legality_provider_list

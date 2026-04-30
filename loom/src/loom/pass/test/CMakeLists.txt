@@ -64,6 +64,7 @@ loom_cc_test(
     ::registry
     iree::base::internal::arena
     loom::src::loom::pass::registry
+    loom::src::loom::pass::registry_verify
     loom::src::loom::pass::types
     iree::testing::gtest
     iree::testing::gtest_main

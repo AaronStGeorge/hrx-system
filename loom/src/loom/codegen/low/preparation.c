@@ -121,7 +121,6 @@ iree_status_t loom_low_prepare_functions_for_packetization(
   }
   IREE_ASSERT_ARGUMENT(low_func_ops);
 
-  IREE_RETURN_IF_ERROR(loom_pass_registry_verify(options->pass_registry));
   for (iree_host_size_t i = 0; i < low_func_count; ++i) {
     IREE_RETURN_IF_ERROR(
         loom_low_preparation_validate_function(module, low_func_ops[i]));

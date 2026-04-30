@@ -34,8 +34,6 @@ typedef struct loom_low_source_workload_pipeline_options_t {
   const loom_low_descriptor_registry_t* descriptor_registry;
   // Target lowering policies linked into the caller.
   const loom_low_lower_policy_registry_t* policy_registry;
-  // Descriptor payload requirements needed after lowering.
-  loom_low_descriptor_requirement_flags_t descriptor_requirements;
   // Candidate selection strategy used by packetization.
   loom_low_schedule_strategy_t schedule_strategy;
 } loom_low_source_workload_pipeline_options_t;

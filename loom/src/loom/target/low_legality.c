@@ -331,8 +331,6 @@ static iree_status_t loom_target_low_legality_validate_options(
         "non-zero",
         (int)options->bundle->name.size, options->bundle->name.data);
   }
-  IREE_RETURN_IF_ERROR(
-      loom_target_low_legality_provider_list_verify(options->provider_list));
   if (iree_any_bit_set(options->diagnostic_flags,
                        ~LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_ALL)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -341,8 +339,7 @@ static iree_status_t loom_target_low_legality_validate_options(
                             (unsigned)options->diagnostic_flags);
   }
   return loom_target_low_descriptor_set_select_for_bundle(
-      options->descriptor_registry, options->bundle,
-      options->descriptor_requirements, out_descriptor_set);
+      options->descriptor_registry, options->bundle, out_descriptor_set);
 }
 
 static iree_status_t loom_target_low_legality_verify_scalar_type(

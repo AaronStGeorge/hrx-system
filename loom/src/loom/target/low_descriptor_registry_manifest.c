@@ -84,12 +84,10 @@ static iree_status_t loom_target_low_manifest_write_descriptor_set_summary(
 
 static iree_status_t loom_target_low_manifest_write_bundle_summary(
     const loom_low_descriptor_registry_t* descriptor_registry,
-    const loom_target_bundle_t* bundle,
-    loom_low_descriptor_requirement_flags_t requirements,
-    loom_output_stream_t* stream) {
+    const loom_target_bundle_t* bundle, loom_output_stream_t* stream) {
   const loom_low_descriptor_set_t* descriptor_set = NULL;
   IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
-      descriptor_registry, bundle, requirements, &descriptor_set));
+      descriptor_registry, bundle, &descriptor_set));
   iree_string_view_t descriptor_set_key = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
       descriptor_set, descriptor_set->key_string_offset, &descriptor_set_key));
@@ -166,14 +164,15 @@ static iree_status_t loom_target_low_manifest_write_bundle_summary(
 
 iree_status_t loom_target_low_descriptor_registry_format_manifest_json(
     const loom_target_low_descriptor_registry_t* registry,
-    loom_low_descriptor_requirement_flags_t requirements,
     iree_string_builder_t* builder) {
   if (builder == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "target-low registry manifest builder is required");
   }
-  IREE_RETURN_IF_ERROR(
-      loom_target_low_descriptor_registry_verify(registry, requirements));
+  if (registry == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target-low registry is required");
+  }
 
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
@@ -200,8 +199,7 @@ iree_status_t loom_target_low_descriptor_registry_format_manifest_json(
       IREE_RETURN_IF_ERROR(loom_output_stream_write_char(&stream, ','));
     }
     IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_bundle_summary(
-        &registry->registry, registry->target_bundles[i], requirements,
-        &stream));
+        &registry->registry, registry->target_bundles[i], &stream));
   }
   return loom_output_stream_write_cstring(&stream, "]}");
 }
