@@ -120,9 +120,6 @@ static const loom_target_bundle_t* loom_kernel_target_bundle(
 
 static uint32_t loom_kernel_context_fixed_subgroup_size(
     const loom_fact_context_t* context) {
-  if (!context) {
-    return 0;
-  }
   const loom_target_bundle_t* bundle = loom_kernel_target_bundle(context);
   if (!bundle || bundle->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
     return 0;
@@ -138,7 +135,8 @@ static bool loom_kernel_context_required_workgroup_size(
   uint32_t x = 0;
   uint32_t y = 0;
   uint32_t z = 0;
-  if (context && loom_kernel_def_isa(context->function.op) &&
+  if (loom_func_like_isa(context->function) &&
+      loom_kernel_def_isa(context->function.op) &&
       loom_func_like_workgroup_size(context->function, &x, &y, &z)) {
     *out_size = (loom_target_workgroup_size_t){.x = x, .y = y, .z = z};
     return true;
@@ -320,6 +318,17 @@ static uint32_t loom_kernel_max_subgroup_size(
   return max_subgroup_size;
 }
 
+static uint32_t loom_kernel_max_subgroup_lane_count(
+    const loom_fact_context_t* context) {
+  uint32_t max_lane_count = loom_kernel_max_subgroup_size(context);
+  const uint32_t max_flat_workgroup_size =
+      loom_kernel_context_max_flat_workgroup_size(context);
+  if (max_flat_workgroup_size != 0) {
+    max_lane_count = iree_min(max_lane_count, max_flat_workgroup_size);
+  }
+  return max_lane_count;
+}
+
 static uint32_t loom_kernel_max_subgroup_count(
     const loom_fact_context_t* context) {
   const uint32_t max_flat_workgroup_size =
@@ -433,8 +442,8 @@ iree_status_t loom_kernel_subgroup_lane_id_facts(
   (void)module;
   (void)op;
   (void)operand_facts;
-  const uint32_t max_subgroup_size = loom_kernel_max_subgroup_size(context);
-  result_facts[0] = loom_value_facts_make(0, (int64_t)max_subgroup_size - 1, 1);
+  const uint32_t max_lane_count = loom_kernel_max_subgroup_lane_count(context);
+  result_facts[0] = loom_value_facts_make(0, (int64_t)max_lane_count - 1, 1);
   return iree_ok_status();
 }
 

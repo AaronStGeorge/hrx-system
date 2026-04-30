@@ -41,6 +41,24 @@ kernel.def workgroup_size(64, 8, 1) @fixed_workgroup_query_facts() {
 
 // ====
 
+kernel.def workgroup_size(8, 1, 1) @small_workgroup_lane_facts() {
+  %lane = kernel.subgroup.lane.id : index
+  %lane_lo = test.fact_range_lo %lane : index -> i64
+  %lane_hi = test.fact_range_hi %lane : index -> i64
+  test.use %lane_lo, %lane_hi : i64, i64
+  kernel.return
+}
+
+// ----
+kernel.def workgroup_size(8, 1, 1) @small_workgroup_lane_facts() {
+  %lane_lo = scalar.constant 0 : i64
+  %lane_hi = scalar.constant 7 : i64
+  test.use %lane_lo, %lane_hi : i64, i64
+  kernel.return
+}
+
+// ====
+
 kernel.def @default_hal_query_facts() {
   %workgroup_size = kernel.workgroup.size<y> : index
   %workgroup_count = kernel.workgroup.count<z> : index

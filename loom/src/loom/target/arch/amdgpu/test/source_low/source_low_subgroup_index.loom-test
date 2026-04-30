@@ -1,0 +1,162 @@
+// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_id_x_wave32(%output: buffer) {
+  %subgroup_id = kernel.subgroup.id : index
+  %zero = index.constant 0 : offset
+  %output_view = buffer.view %output[%zero] : buffer -> view<2xi32, #dense>
+  %one = vector.constant 1 : vector<1xi32>
+  vector.store %one, %output_view[%subgroup_id] : vector<1xi32>, view<2xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_id_x_wave32() asm<amdgpu.gfx11.core> {
+  %5 = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 8} : reg<amdgpu.sgpr x4>
+  %subgroup_id = v_lshrrev_b32_lit %5, 5
+  %zero = s_mov_b32 0
+  %one = v_mov_b32 1
+  %10 = v_lshlrev_b32_lit %subgroup_id, 2
+  %11 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %10, %one, %11 {offset = 0}
+  return
+}
+
+// ====
+
+kernel.def workgroup_size(32, 1, 1) @subgroup_id_single_wave_gfx11(%output: buffer) {
+  %subgroup_id = kernel.subgroup.id : index
+  %zero = index.constant 0 : offset
+  %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
+  %one = vector.constant 1 : vector<1xi32>
+  vector.store %one, %output_view[%subgroup_id] : vector<1xi32>, view<1xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(32, 1, 1) @subgroup_id_single_wave_gfx11() asm<amdgpu.gfx11.core> {
+  %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
+  %subgroup_id = v_mov_b32 0
+  %zero = s_mov_b32 0
+  %one = v_mov_b32 1
+  %9 = v_mov_b32 0
+  %10 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %9, %one, %10 {offset = 0}
+  return
+}
+
+// ====
+
+kernel.def workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wave32(%output: buffer) {
+  %lane_id = kernel.subgroup.lane.id : index
+  %zero = index.constant 0 : offset
+  %output_view = buffer.view %output[%zero] : buffer -> view<32xi32, #dense>
+  %one = vector.constant 1 : vector<1xi32>
+  vector.store %one, %output_view[%lane_id] : vector<1xi32>, view<32xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wave32() asm<amdgpu.gfx11.core> {
+  %packed_tid = live_in<amdgpu.workitem_id.packed.xyz> : reg<amdgpu.vgpr>
+  %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x4>
+  %7 = v_and_b32_lit %packed_tid, 1023
+  %8 = v_lshrrev_b32_lit %packed_tid, 10
+  %9 = v_and_b32_lit %8, 1023
+  %10 = v_lshlrev_b32_lit %9, 3
+  %11 = v_add_u32 %7, %10
+  %12 = v_lshrrev_b32_lit %packed_tid, 20
+  %13 = v_and_b32_lit %12, 1023
+  %14 = v_lshlrev_b32_lit %13, 5
+  %15 = v_add_u32 %11, %14
+  %lane_id = v_and_b32_lit %15, 31
+  %zero = s_mov_b32 0
+  %one = v_mov_b32 1
+  %19 = v_lshlrev_b32_lit %lane_id, 2
+  %20 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %19, %one, %20 {offset = 0}
+  return
+}
+
+// ====
+// RUN: emit source-low target-preset=amdgpu-gfx12 output=low
+
+kernel.def workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wave32_gfx12(%output: buffer) {
+  %lane_id = kernel.subgroup.lane.id : index
+  %zero = index.constant 0 : offset
+  %output_view = buffer.view %output[%zero] : buffer -> view<32xi32, #dense>
+  %one = vector.constant 1 : vector<1xi32>
+  vector.store %one, %output_view[%lane_id] : vector<1xi32>, view<32xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wave32_gfx12() asm<amdgpu.gfx12.core> {
+  %packed_tid = live_in<amdgpu.workitem_id.packed.xyz> : reg<amdgpu.vgpr>
+  %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x4>
+  %7 = v_and_b32_lit %packed_tid, 1023
+  %8 = v_lshrrev_b32_lit %packed_tid, 10
+  %9 = v_and_b32_lit %8, 1023
+  %10 = v_lshlrev_b32_lit %9, 3
+  %11 = v_add_u32 %7, %10
+  %12 = v_lshrrev_b32_lit %packed_tid, 20
+  %13 = v_and_b32_lit %12, 1023
+  %14 = v_lshlrev_b32_lit %13, 5
+  %15 = v_add_u32 %11, %14
+  %lane_id = v_and_b32_lit %15, 31
+  %zero = s_mov_b32 0
+  %one = v_mov_b32 1
+  %19 = v_lshlrev_b32_lit %lane_id, 2
+  %20 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %19, %one, %20 {offset = 0}
+  return
+}
+
+// ====
+// RUN: emit source-low target-preset=amdgpu-gfx950 output=low
+
+kernel.def workgroup_size(128, 1, 1) @subgroup_id_x_wave64(%output: buffer) {
+  %subgroup_id = kernel.subgroup.id : index
+  %zero = index.constant 0 : offset
+  %output_view = buffer.view %output[%zero] : buffer -> view<2xi32, #dense>
+  %one = vector.constant 1 : vector<1xi32>
+  vector.store %one, %output_view[%subgroup_id] : vector<1xi32>, view<2xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(128, 1, 1) @subgroup_id_x_wave64() asm<amdgpu.gfx950.core> {
+  %5 = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 8} : reg<amdgpu.sgpr x4>
+  %subgroup_id = v_lshrrev_b32_lit %5, 6
+  %zero = s_mov_b32 0
+  %one = v_mov_b32 1
+  %10 = v_lshlrev_b32_lit %subgroup_id, 2
+  %11 = s_mov_b32 0
+  buffer_store_dword %one, %output_view, %10, %11 {offset = 0}
+  return
+}
+
+// ====
+// RUN: emit source-low target-preset=amdgpu-gfx950 output=low
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_lane_id_x_wave64(%output: buffer) {
+  %lane_id = kernel.subgroup.lane.id : index
+  %zero = index.constant 0 : offset
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
+  %one = vector.constant 1 : vector<1xi32>
+  vector.store %one, %output_view[%lane_id] : vector<1xi32>, view<64xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_lane_id_x_wave64() asm<amdgpu.gfx950.core> {
+  %lane_id = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %one = v_mov_b32 1
+  %9 = v_lshlrev_b32_lit %lane_id, 2
+  %10 = s_mov_b32 0
+  buffer_store_dword %one, %output_view, %9, %10 {offset = 0}
+  return
+}

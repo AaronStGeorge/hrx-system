@@ -293,7 +293,7 @@ kernel.def @workgroup_count_rejected() {
 // ====
 
 kernel.def @subgroup_id_rejected() {
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup.id lowering needs workitem linearization and wavefront division"
+  // ERROR@+1: BACKEND/001 "AMDGPU source-to-low currently requires a fixed workgroup size for subgroup index queries"
   %id = kernel.subgroup.id : index
   kernel.return
 }
@@ -301,7 +301,7 @@ kernel.def @subgroup_id_rejected() {
 // ====
 
 kernel.def @subgroup_lane_id_rejected() {
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup.lane.id lowering needs wave lane-id packet descriptors"
+  // ERROR@+1: BACKEND/001 "AMDGPU source-to-low currently requires a fixed workgroup size for subgroup index queries"
   %id = kernel.subgroup.lane.id : index
   kernel.return
 }

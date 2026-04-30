@@ -971,6 +971,7 @@ loom_check_test_suite(
         "test/source_low/source_low_scalar_i32.loom-test",
         "test/source_low/source_low_slice.loom-test",
         "test/source_low/source_low_slice_diagnostics.loom-test",
+        "test/source_low/source_low_subgroup_index.loom-test",
         "test/source_low/source_low_sync.loom-test",
         "test/source_low/source_low_table.loom-test",
         "test/source_low/source_low_table_diagnostics.loom-test",
