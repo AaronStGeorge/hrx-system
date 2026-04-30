@@ -1092,6 +1092,52 @@
     "fix_hint_template": "Keep the single parameter that defines the intended encoding behavior"
   },
   {
+    "error_id": "ERR_ENCODING_015",
+    "domain": 3,
+    "domain_name": "ENCODING",
+    "code": 15,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unknown encoded auxiliary operand key.",
+    "message_template": "{op_name} auxiliary operand key '{key_name}' is not supported",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "key_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Use one of the encoded auxiliary keys understood by vector lowering"
+  },
+  {
+    "error_id": "ERR_ENCODING_016",
+    "domain": 3,
+    "domain_name": "ENCODING",
+    "code": 16,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Required encoded auxiliary operand is missing.",
+    "message_template": "{op_name} auxiliary operands require key '{key_name}'",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "key_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Provide the required SSA operand in the keyed auxiliary dictionary"
+  },
+  {
     "error_id": "ERR_STRUCTURE_001",
     "domain": 4,
     "domain_name": "STRUCTURE",

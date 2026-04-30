@@ -14,11 +14,13 @@ loom_cc_library(
   NAME
     vector
   HDRS
+    "encoding_auxiliary.h"
     "memory.h"
     "ops.h"
   SRCS
     "builders.c"
     "canonicalize.c"
+    "encoding_auxiliary.c"
     "facts.c"
     "memory.c"
     "tables.c"
@@ -54,6 +56,19 @@ loom_cc_library(
     loom::src::loom::util::fact_table
     loom::src::loom::util::math
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    encoding_auxiliary_test
+  SRCS
+    "encoding_auxiliary_test.cc"
+  DEPS
+    ::vector
+    iree::base::internal::arena
+    loom::src::loom::ir
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

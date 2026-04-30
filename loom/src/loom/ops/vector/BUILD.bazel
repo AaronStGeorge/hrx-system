@@ -17,6 +17,7 @@ loom_cc_library(
     srcs = [
         "builders.c",
         "canonicalize.c",
+        "encoding_auxiliary.c",
         "facts.c",
         "memory.c",
         "tables.c",
@@ -39,6 +40,7 @@ loom_cc_library(
         "verify.c",
     ],
     hdrs = [
+        "encoding_auxiliary.h",
         "memory.h",
         "ops.h",
     ],
@@ -56,6 +58,18 @@ loom_cc_library(
         "//loom/src/loom/util:fact_table",
         "//loom/src/loom/util:math",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "encoding_auxiliary_test",
+    srcs = ["encoding_auxiliary_test.cc"],
+    deps = [
+        ":vector",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

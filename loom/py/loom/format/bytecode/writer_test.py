@@ -1597,6 +1597,47 @@ class TestCrossFormatRoundTrip:
 
         assert _roundtrip_text_through_bytecode(text, include_encoding=True) == expected
 
+    def test_vector_encode_decode_auxiliary_operands_survive_bytecode(self) -> None:
+        text = (
+            "func.def @vector_schema_aux(%payload: vector<4xi32>, "
+            "%scale: vector<1xf16>, %values: vector<32xf32>, "
+            "%amax: vector<1xf32>) -> (vector<32xf32>, vector<4xi32>) {\n"
+            "  %schema = encoding.define #ggml_q4_0<block_elems=32, "
+            "storage_bytes=18> : encoding<schema>\n"
+            "  %decoded = vector.decode %payload using %schema "
+            "{scale = %scale : vector<1xf16>} : vector<4xi32>, "
+            "encoding<schema> -> vector<32xf32>\n"
+            "  %encoded = vector.encode %values using %schema "
+            "{scale = %scale : vector<1xf16>, amax = %amax : vector<1xf32>} "
+            ": vector<32xf32>, encoding<schema> -> vector<4xi32>\n"
+            "  func.return %decoded, %encoded : vector<32xf32>, vector<4xi32>\n"
+            "}\n"
+        )
+        expected = (
+            "func.def @vector_schema_aux(%payload: vector<4xi32>, "
+            "%scale: vector<1xf16>, %values: vector<32xf32>, "
+            "%amax: vector<1xf32>) -> (vector<32xf32>, vector<4xi32>) {\n"
+            "  %schema = encoding.define #ggml_q4_0<block_elems=32, "
+            "storage_bytes=18> : encoding<schema>\n"
+            "  %decoded = vector.decode %payload using %schema "
+            "{scale = %scale : vector<1xf16>} : vector<4xi32>, "
+            "encoding<schema> -> vector<32xf32>\n"
+            "  %encoded = vector.encode %values using %schema "
+            "{amax = %amax : vector<1xf32>, scale = %scale : vector<1xf16>} "
+            ": vector<32xf32>, encoding<schema> -> vector<4xi32>\n"
+            "  func.return %decoded, %encoded : vector<32xf32>, vector<4xi32>\n"
+            "}\n"
+        )
+
+        assert (
+            _roundtrip_text_through_bytecode(
+                text,
+                include_encoding=True,
+                include_vector=True,
+            )
+            == expected
+        )
+
     def test_global_symbols_survive_bytecode(self) -> None:
         text = (
             "global.constant @answer : index = 42\n"

@@ -9,6 +9,7 @@
 #include "loom/error/emitter.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/attribute.h"
+#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/atomic.h"
@@ -16,9 +17,12 @@
 #include "loom/ops/encoding/numeric_transform.h"
 #include "loom/ops/encoding/params.h"
 #include "loom/ops/encoding/roles.h"
+#include "loom/ops/encoding/storage.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/vector/encoding_auxiliary.h"
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/util/fact_table.h"
 
 static iree_status_t loom_vector_emit(iree_diagnostic_emitter_t emitter,
                                       const loom_op_t* op,
@@ -1607,6 +1611,138 @@ static bool loom_vector_encoding_dynamic_param_value(
   if (ordinal < 0 || ordinal >= params->dynamic_values.count) return false;
   *out_value = params->dynamic_values.values[ordinal];
   return true;
+}
+
+static iree_status_t loom_vector_emit_auxiliary_key_error(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, const loom_error_def_t* error,
+    iree_string_view_t key_name) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_op_name(module, op)),
+      loom_param_string(key_name),
+  };
+  return loom_vector_emit(emitter, op, error, params, IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_vector_emit_unknown_auxiliary_key(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, iree_string_view_t key_name) {
+  return loom_vector_emit_auxiliary_key_error(
+      module, emitter, op,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 15), key_name);
+}
+
+static iree_status_t loom_vector_emit_missing_auxiliary_key(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, iree_string_view_t key_name) {
+  return loom_vector_emit_auxiliary_key_error(
+      module, emitter, op,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 16), key_name);
+}
+
+static bool loom_vector_query_static_storage_schema_for_schema_value(
+    const loom_module_t* module, loom_value_id_t schema_value,
+    loom_value_fact_storage_schema_t* out_schema) {
+  *out_schema = (loom_value_fact_storage_schema_t){0};
+  if (schema_value == LOOM_VALUE_ID_INVALID ||
+      schema_value >= module->values.count) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(module, schema_value);
+  if (loom_value_is_block_arg(value)) return false;
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  if (!defining_op) return false;
+  if (loom_encoding_define_isa(defining_op)) {
+    return loom_encoding_query_static_storage_schema(
+        module, loom_encoding_define_spec(defining_op), out_schema);
+  }
+  if (loom_encoding_assume_spec_isa(defining_op)) {
+    return loom_encoding_query_static_storage_schema(
+        module, loom_encoding_assume_spec_spec(defining_op), out_schema);
+  }
+  return false;
+}
+
+static iree_status_t loom_vector_verify_required_auxiliary_key(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op,
+    loom_vector_encoding_auxiliary_key_flags_t present_keys,
+    loom_vector_encoding_auxiliary_key_t key) {
+  loom_vector_encoding_auxiliary_key_flags_t required_key =
+      loom_vector_encoding_auxiliary_key_flag(key);
+  if (required_key != 0 && iree_any_bit_set(present_keys, required_key)) {
+    return iree_ok_status();
+  }
+  iree_string_view_t key_name = loom_vector_encoding_auxiliary_key_name(key);
+  return loom_vector_emit_missing_auxiliary_key(module, emitter, op, key_name);
+}
+
+static iree_status_t loom_vector_verify_required_auxiliary_keys(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op,
+    loom_vector_encoding_auxiliary_key_flags_t present_keys,
+    loom_vector_encoding_auxiliary_key_flags_t required_keys) {
+  for (uint8_t i = 0; i < LOOM_VECTOR_ENCODING_AUXILIARY_KEY_COUNT_; ++i) {
+    loom_vector_encoding_auxiliary_key_t key =
+        (loom_vector_encoding_auxiliary_key_t)i;
+    loom_vector_encoding_auxiliary_key_flags_t key_flag =
+        loom_vector_encoding_auxiliary_key_flag(key);
+    if (!iree_any_bit_set(required_keys, key_flag)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_vector_verify_required_auxiliary_key(
+        module, emitter, op, present_keys, key));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_verify_encoded_auxiliary(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter, loom_value_id_t schema_value,
+    loom_value_slice_t auxiliary_values,
+    loom_named_attr_slice_t auxiliary_names) {
+  loom_vector_encoding_auxiliary_view_t auxiliary_view;
+  iree_string_view_t unknown_key = iree_string_view_empty();
+  if (!loom_vector_encoding_auxiliary_view_resolve(
+          module, auxiliary_values, auxiliary_names, &auxiliary_view,
+          &unknown_key)) {
+    return loom_vector_emit_unknown_auxiliary_key(module, emitter, op,
+                                                  unknown_key);
+  }
+
+  loom_value_fact_storage_schema_t storage_schema = {0};
+  if (!loom_vector_query_static_storage_schema_for_schema_value(
+          module, schema_value, &storage_schema)) {
+    return iree_ok_status();
+  }
+  if (loom_value_fact_encoded_operand_schema_is_unknown(
+          storage_schema.encoded_operand)) {
+    return iree_ok_status();
+  }
+  loom_vector_encoding_auxiliary_key_flags_t required_keys = 0;
+  if (!loom_vector_encoding_auxiliary_required_keys_from_schema(
+          storage_schema.encoded_operand, &required_keys, NULL)) {
+    return loom_vector_emit_missing_auxiliary_key(module, emitter, op,
+                                                  IREE_SV("scale"));
+  }
+  return loom_vector_verify_required_auxiliary_keys(
+      module, emitter, op, auxiliary_view.present_keys, required_keys);
+}
+
+iree_status_t loom_vector_decode_verify(const loom_module_t* module,
+                                        const loom_op_t* op,
+                                        iree_diagnostic_emitter_t emitter) {
+  return loom_vector_verify_encoded_auxiliary(
+      module, op, emitter, loom_vector_decode_schema(op),
+      loom_vector_decode_auxiliary(op), loom_vector_decode_auxiliary_names(op));
+}
+
+iree_status_t loom_vector_encode_verify(const loom_module_t* module,
+                                        const loom_op_t* op,
+                                        iree_diagnostic_emitter_t emitter) {
+  return loom_vector_verify_encoded_auxiliary(
+      module, op, emitter, loom_vector_encode_schema(op),
+      loom_vector_encode_auxiliary(op), loom_vector_encode_auxiliary_names(op));
 }
 
 static iree_status_t loom_vector_emit_encoding_dynamic_type_error(

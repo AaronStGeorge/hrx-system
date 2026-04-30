@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from loom.assembly import OperandDict
 from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.vector import (
@@ -624,6 +625,7 @@ def test_vector_encode_decode_keep_schema_and_data_separate() -> None:
         data_operand = op.operand(data_operand_name)
         schema_operand = op.operand("schema")
         auxiliary_operand = op.operand("auxiliary")
+        auxiliary_names_attr = op.attr("auxiliary_names")
 
         assert data_operand is not None
         assert data_operand.type_constraint == VECTOR
@@ -632,6 +634,10 @@ def test_vector_encode_decode_keep_schema_and_data_separate() -> None:
         assert auxiliary_operand is not None
         assert auxiliary_operand.type_constraint == VECTOR
         assert auxiliary_operand.variadic
+        assert auxiliary_names_attr is not None
+        assert auxiliary_names_attr.attr_type == "dict"
+        assert auxiliary_names_attr.optional
+        assert any(isinstance(element, OperandDict) and element.operands == "auxiliary" and element.names == "auxiliary_names" for element in op.format)
         assert "Pure" in trait_names
         assert "Elementwise" not in trait_names
         assert op.effects == ()

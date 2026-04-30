@@ -239,6 +239,34 @@ ERR_ENCODING_014 = ErrorDef(
     fix_hint="Keep the single parameter that defines the intended encoding behavior",
 )
 
+# ERR_ENCODING_015: vector encoded auxiliary operand key is not supported.
+ERR_ENCODING_015 = ErrorDef(
+    domain=ErrorDomain.ENCODING,
+    code=15,
+    severity=Severity.ERROR,
+    summary="Unknown encoded auxiliary operand key.",
+    message="{op_name} auxiliary operand key '{key_name}' is not supported",
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("key_name", ParamKind.STRING),
+    ),
+    fix_hint="Use one of the encoded auxiliary keys understood by vector lowering",
+)
+
+# ERR_ENCODING_016: vector encoded auxiliary operand key is required.
+ERR_ENCODING_016 = ErrorDef(
+    domain=ErrorDomain.ENCODING,
+    code=16,
+    severity=Severity.ERROR,
+    summary="Required encoded auxiliary operand is missing.",
+    message="{op_name} auxiliary operands require key '{key_name}'",
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("key_name", ParamKind.STRING),
+    ),
+    fix_hint="Provide the required SSA operand in the keyed auxiliary dictionary",
+)
+
 ALL_ENCODING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_ENCODING_001,
     ERR_ENCODING_002,
@@ -254,4 +282,6 @@ ALL_ENCODING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_ENCODING_012,
     ERR_ENCODING_013,
     ERR_ENCODING_014,
+    ERR_ENCODING_015,
+    ERR_ENCODING_016,
 )
