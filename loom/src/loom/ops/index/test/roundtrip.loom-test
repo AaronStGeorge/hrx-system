@@ -15,6 +15,23 @@ func.def @index_arithmetic(%i: index, %j: index, %cond: i1) -> (index, index, i1
 
 // ====
 
+func.def @index_bitwise(%x: index, %y: index) -> (index, index, index, index, index, index, index, index, index, index, index) {
+  %and = index.andi %x, %y : index
+  %or = index.ori %x, %y : index
+  %xor = index.xori %x, %y : index
+  %shl = index.shli %x, %y : index
+  %shrs = index.shrsi %x, %y : index
+  %shru = index.shrui %x, %y : index
+  %rotl = index.rotli %x, %y : index
+  %rotr = index.rotri %x, %y : index
+  %clz = index.ctlzi %x : index
+  %ctz = index.cttzi %x : index
+  %pop = index.ctpopi %x : index
+  func.return %and, %or, %xor, %shl, %shrs, %shru, %rotl, %rotr, %clz, %ctz, %pop : index, index, index, index, index, index, index, index, index, index, index
+}
+
+// ====
+
 func.def @address_boundary(%raw: i64, %i: index, %byte_offset: offset) -> (index, offset, i64) {
   %base = index.constant 0 : offset
   %from_raw = index.cast %raw : i64 to index

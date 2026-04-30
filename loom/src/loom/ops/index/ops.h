@@ -28,8 +28,19 @@ enum {
   LOOM_OP_INDEX_DIV = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 6),
   LOOM_OP_INDEX_REM = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 7),
   LOOM_OP_INDEX_MADD = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 8),
-  LOOM_OP_INDEX_CMP = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 9),
-  LOOM_OP_INDEX_COUNT_ = 10,
+  LOOM_OP_INDEX_ANDI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 9),
+  LOOM_OP_INDEX_ORI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 10),
+  LOOM_OP_INDEX_XORI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 11),
+  LOOM_OP_INDEX_SHLI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 12),
+  LOOM_OP_INDEX_SHRSI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 13),
+  LOOM_OP_INDEX_SHRUI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 14),
+  LOOM_OP_INDEX_ROTLI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 15),
+  LOOM_OP_INDEX_ROTRI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 16),
+  LOOM_OP_INDEX_CTLZI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 17),
+  LOOM_OP_INDEX_CTTZI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 18),
+  LOOM_OP_INDEX_CTPOPI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 19),
+  LOOM_OP_INDEX_CMP = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 20),
+  LOOM_OP_INDEX_COUNT_ = 21,
 };
 
 // Address-domain comparison predicates.
@@ -209,6 +220,187 @@ iree_status_t loom_index_madd_build(
     loom_op_t** out_op);
 iree_status_t loom_index_madd_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_index_madd_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_INDEX_ANDI: Bitwise AND over logical coordinate values. Offsets are physical byte counts and cannot use this op.
+// %r = index.andi %lhs, %rhs : index
+LOOM_DEFINE_ISA(loom_index_andi_isa, LOOM_OP_INDEX_ANDI)
+LOOM_DEFINE_OPERAND(loom_index_andi_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_index_andi_rhs, 1)
+LOOM_DEFINE_RESULT(loom_index_andi_result, 0)
+iree_status_t loom_index_andi_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_andi_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_index_andi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_INDEX_ORI: Bitwise OR over logical coordinate values. Offsets are physical byte counts and cannot use this op.
+// %r = index.ori %lhs, %rhs : index
+LOOM_DEFINE_ISA(loom_index_ori_isa, LOOM_OP_INDEX_ORI)
+LOOM_DEFINE_OPERAND(loom_index_ori_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_index_ori_rhs, 1)
+LOOM_DEFINE_RESULT(loom_index_ori_result, 0)
+iree_status_t loom_index_ori_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_ori_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_index_ori_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_INDEX_XORI: Bitwise XOR over logical coordinate values. Offsets are physical byte counts and cannot use this op.
+// %r = index.xori %lhs, %rhs : index
+LOOM_DEFINE_ISA(loom_index_xori_isa, LOOM_OP_INDEX_XORI)
+LOOM_DEFINE_OPERAND(loom_index_xori_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_index_xori_rhs, 1)
+LOOM_DEFINE_RESULT(loom_index_xori_result, 0)
+iree_status_t loom_index_xori_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_xori_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_index_xori_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_INDEX_SHLI: Left shift over logical coordinate values. Offsets are physical byte counts and cannot use this op.
+// %r = index.shli %lhs, %rhs : index
+LOOM_DEFINE_ISA(loom_index_shli_isa, LOOM_OP_INDEX_SHLI)
+LOOM_DEFINE_OPERAND(loom_index_shli_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_index_shli_rhs, 1)
+LOOM_DEFINE_RESULT(loom_index_shli_result, 0)
+iree_status_t loom_index_shli_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_shli_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_index_shli_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_INDEX_SHRSI: Arithmetic right shift over logical coordinate values. Offsets are physical byte counts and cannot use this op.
+// %r = index.shrsi %lhs, %rhs : index
+LOOM_DEFINE_ISA(loom_index_shrsi_isa, LOOM_OP_INDEX_SHRSI)
+LOOM_DEFINE_OPERAND(loom_index_shrsi_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_index_shrsi_rhs, 1)
+LOOM_DEFINE_RESULT(loom_index_shrsi_result, 0)
+iree_status_t loom_index_shrsi_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_shrsi_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_index_shrsi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_INDEX_SHRUI: Logical right shift over logical coordinate values. Offsets are physical byte counts and cannot use this op.
+// %r = index.shrui %lhs, %rhs : index
+LOOM_DEFINE_ISA(loom_index_shrui_isa, LOOM_OP_INDEX_SHRUI)
+LOOM_DEFINE_OPERAND(loom_index_shrui_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_index_shrui_rhs, 1)
+LOOM_DEFINE_RESULT(loom_index_shrui_result, 0)
+iree_status_t loom_index_shrui_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_shrui_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_index_shrui_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_INDEX_ROTLI: Left rotate over logical coordinate values. Offsets are physical byte counts and cannot use this op.
+// %r = index.rotli %lhs, %rhs : index
+LOOM_DEFINE_ISA(loom_index_rotli_isa, LOOM_OP_INDEX_ROTLI)
+LOOM_DEFINE_OPERAND(loom_index_rotli_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_index_rotli_rhs, 1)
+LOOM_DEFINE_RESULT(loom_index_rotli_result, 0)
+iree_status_t loom_index_rotli_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_rotli_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_index_rotli_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_INDEX_ROTRI: Right rotate over logical coordinate values. Offsets are physical byte counts and cannot use this op.
+// %r = index.rotri %lhs, %rhs : index
+LOOM_DEFINE_ISA(loom_index_rotri_isa, LOOM_OP_INDEX_ROTRI)
+LOOM_DEFINE_OPERAND(loom_index_rotri_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_index_rotri_rhs, 1)
+LOOM_DEFINE_RESULT(loom_index_rotri_result, 0)
+iree_status_t loom_index_rotri_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_rotri_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_index_rotri_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_INDEX_CTLZI: Count leading zeros in a logical coordinate value.
+// %r = index.ctlzi %input : index
+LOOM_DEFINE_ISA(loom_index_ctlzi_isa, LOOM_OP_INDEX_CTLZI)
+LOOM_DEFINE_OPERAND(loom_index_ctlzi_input, 0)
+LOOM_DEFINE_RESULT(loom_index_ctlzi_result, 0)
+iree_status_t loom_index_ctlzi_build(
+    loom_builder_t* builder, loom_value_id_t input,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_index_ctlzi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_INDEX_CTTZI: Count trailing zeros in a logical coordinate value.
+// %r = index.cttzi %input : index
+LOOM_DEFINE_ISA(loom_index_cttzi_isa, LOOM_OP_INDEX_CTTZI)
+LOOM_DEFINE_OPERAND(loom_index_cttzi_input, 0)
+LOOM_DEFINE_RESULT(loom_index_cttzi_result, 0)
+iree_status_t loom_index_cttzi_build(
+    loom_builder_t* builder, loom_value_id_t input,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_index_cttzi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_INDEX_CTPOPI: Count set bits in a logical coordinate value.
+// %r = index.ctpopi %input : index
+LOOM_DEFINE_ISA(loom_index_ctpopi_isa, LOOM_OP_INDEX_CTPOPI)
+LOOM_DEFINE_OPERAND(loom_index_ctpopi_input, 0)
+LOOM_DEFINE_RESULT(loom_index_ctpopi_result, 0)
+iree_status_t loom_index_ctpopi_build(
+    loom_builder_t* builder, loom_value_id_t input,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_index_ctpopi_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,

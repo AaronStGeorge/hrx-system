@@ -373,6 +373,189 @@ func.def @rem_maybe_negative_is_preserved(%x: index) -> (index) {
 
 // ====
 
+// index-domain bitwise ops reuse integer fact transfer in the index dialect.
+func.def @bitwise_facts(%x: index) -> (i64, i64, i1, i64, i64) {
+  %mask_aligned = index.constant -4 : index
+  %mask_small = index.constant 15 : index
+  %one = index.constant 1 : index
+  %shift4 = index.constant 4 : index
+  %shift3 = index.constant 3 : index
+  %aligned = index.assume %x [range(%x, 0, 4096), mul(%x, 64)] : index
+  %and_aligned = index.andi %x, %mask_aligned : index
+  %and_small = index.andi %x, %mask_small : index
+  %or_one = index.ori %x, %one : index
+  %shifted_left = index.shli %x, %shift4 : index
+  %shifted_right = index.shrui %aligned, %shift3 : index
+  %and_div = test.fact_divisor %and_aligned : index -> i64
+  %and_hi = test.fact_range_hi %and_small : index -> i64
+  %or_nz = test.fact_non_zero %or_one : index -> i1
+  %shl_div = test.fact_divisor %shifted_left : index -> i64
+  %shr_div = test.fact_divisor %shifted_right : index -> i64
+  func.return %and_div, %and_hi, %or_nz, %shl_div, %shr_div : i64, i64, i1, i64, i64
+}
+// ----
+func.def @bitwise_facts(%x: index) -> (i64, i64, i1, i64, i64) {
+  %and_div = scalar.constant 4 : i64
+  %and_hi = scalar.constant 15 : i64
+  %or_nz = scalar.constant true : i1
+  %shl_div = scalar.constant 16 : i64
+  %shr_div = scalar.constant 8 : i64
+  func.return %and_div, %and_hi, %or_nz, %shl_div, %shr_div : i64, i64, i1, i64, i64
+}
+
+// ====
+
+// Bit counts use index's 64-bit value width.
+func.def @bit_count_facts() -> (index, index, index) {
+  %one = index.constant 1 : index
+  %zero = index.constant 0 : index
+  %ones = index.constant -1 : index
+  %clz = index.ctlzi %one : index
+  %ctz = index.cttzi %zero : index
+  %pop = index.ctpopi %ones : index
+  func.return %clz, %ctz, %pop : index, index, index
+}
+// ----
+func.def @bit_count_facts() -> (index, index, index) {
+  %clz = index.constant 63 : index
+  %ctz = index.constant 64 : index
+  %pop = index.constant 64 : index
+  func.return %clz, %ctz, %pop : index, index, index
+}
+
+// ====
+
+// Exact bitwise and rotate facts fold to index constants.
+func.def @bitwise_exact_folds() -> (index, index, index, index) {
+  %a = index.constant 255 : index
+  %b = index.constant 15 : index
+  %v = index.constant 1 : index
+  %amount = index.constant 8 : index
+  %and = index.andi %a, %b : index
+  %or = index.ori %a, %b : index
+  %xor = index.xori %a, %b : index
+  %rot = index.rotli %v, %amount : index
+  func.return %and, %or, %xor, %rot : index, index, index, index
+}
+// ----
+func.def @bitwise_exact_folds() -> (index, index, index, index) {
+  %and = index.constant 15 : index
+  %or = index.constant 255 : index
+  %xor = index.constant 240 : index
+  %rot = index.constant 256 : index
+  func.return %and, %or, %xor, %rot : index, index, index, index
+}
+
+// ====
+
+func.def @bitwise_identities(%x: index) -> (index, index, index, index, index, index, index, index) {
+  %zero = index.constant 0 : index
+  %ones = index.constant -1 : index
+  %and_self = index.andi %x, %x : index
+  %and_zero = index.andi %x, %zero : index
+  %and_ones = index.andi %x, %ones : index
+  %or_self = index.ori %x, %x : index
+  %or_zero = index.ori %x, %zero : index
+  %or_ones = index.ori %x, %ones : index
+  %xor_zero = index.xori %x, %zero : index
+  %xor_self = index.xori %x, %x : index
+  func.return %and_self, %and_zero, %and_ones, %or_self, %or_zero, %or_ones, %xor_zero, %xor_self : index, index, index, index, index, index, index, index
+}
+// ----
+func.def @bitwise_identities(%x: index) -> (index, index, index, index, index, index, index, index) {
+  %ones = index.constant -1 : index
+  %and_zero = index.constant 0 : index
+  %xor_self = index.constant 0 : index
+  func.return %x, %and_zero, %x, %x, %x, %ones, %x, %xor_self : index, index, index, index, index, index, index, index
+}
+
+// ====
+
+func.def @xori_cancels_nested_operand(%x: index, %y: index) -> (index, index) {
+  %lhs_nested = index.xori %x, %y : index
+  %lhs_cancel = index.xori %lhs_nested, %y : index
+  %rhs_nested = index.xori %y, %x : index
+  %rhs_cancel = index.xori %x, %rhs_nested : index
+  func.return %lhs_cancel, %rhs_cancel : index, index
+}
+// ----
+func.def @xori_cancels_nested_operand(%x: index, %y: index) -> (index, index) {
+  func.return %x, %y : index, index
+}
+
+// ====
+
+func.def @xori_cancels_duplicate_exact_constants(%x: index) -> (index) {
+  %c1 = index.constant 7 : index
+  %c2 = index.constant 7 : index
+  %nested = index.xori %x, %c1 : index
+  %r = index.xori %nested, %c2 : index
+  func.return %r : index
+}
+// ----
+func.def @xori_cancels_duplicate_exact_constants(%x: index) -> (index) {
+  func.return %x : index
+}
+
+// ====
+
+func.def @shift_identities_and_reassociation(%x: index) -> (index, index, index, index, index, index) {
+  %zero = index.constant 0 : index
+  %one = index.constant 1 : index
+  %two = index.constant 2 : index
+  %shl_zero_amount = index.shli %x, %zero : index
+  %shrsi_zero_amount = index.shrsi %x, %zero : index
+  %shrui_zero_amount = index.shrui %x, %zero : index
+  %shl_zero_value = index.shli %zero, %one : index
+  %inner_shl = index.shli %x, %one : index
+  %reassoc_shl = index.shli %inner_shl, %two : index
+  %inner_shr = index.shrui %x, %one : index
+  %reassoc_shr = index.shrui %inner_shr, %two : index
+  func.return %shl_zero_amount, %shrsi_zero_amount, %shrui_zero_amount, %shl_zero_value, %reassoc_shl, %reassoc_shr : index, index, index, index, index, index
+}
+// ----
+func.def @shift_identities_and_reassociation(%x: index) -> (index, index, index, index, index, index) {
+  %shl_zero_value = index.constant 0 : index
+  %20 = index.constant 3 : index
+  %reassoc_shl = index.shli %x, %20 : index
+  %18 = index.constant 3 : index
+  %reassoc_shr = index.shrui %x, %18 : index
+  func.return %x, %x, %x, %shl_zero_value, %reassoc_shl, %reassoc_shr : index, index, index, index, index, index
+}
+
+// ====
+
+func.def @shrsi_non_negative_becomes_shrui(%x: index, %amount: index) -> (index) {
+  %x2 = index.assume %x [range(%x, 0, 4096)] : index
+  %r = index.shrsi %x2, %amount : index
+  func.return %r : index
+}
+// ----
+func.def @shrsi_non_negative_becomes_shrui(%x: index, %amount: index) -> (index) {
+  %x2 = index.assume %x [range(%x, 0, 4096)] : index
+  %r = index.shrui %x2, %amount : index
+  func.return %r : index
+}
+
+// ====
+
+func.def @rotate_identities_and_direction(%x: index) -> (index, index, index) {
+  %zero = index.constant 0 : index
+  %eight = index.constant 8 : index
+  %rotl_zero = index.rotli %x, %zero : index
+  %rotr_zero = index.rotri %x, %zero : index
+  %rotr = index.rotri %x, %eight : index
+  func.return %rotl_zero, %rotr_zero, %rotr : index, index, index
+}
+// ----
+func.def @rotate_identities_and_direction(%x: index) -> (index, index, index) {
+  %9 = index.constant 56 : index
+  %rotr = index.rotli %x, %9 : index
+  func.return %x, %x, %rotr : index, index, index
+}
+
+// ====
+
 // index.cmp folds same-operand predicates and simple disjoint signed ranges.
 func.def @cmp_proven(%x: index, %y: index) -> (i1, i1) {
   %same = index.cmp sle, %x, %x : index

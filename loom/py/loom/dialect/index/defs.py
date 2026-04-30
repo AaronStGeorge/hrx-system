@@ -42,6 +42,7 @@ from loom.dsl import (
     binary_op,
     cast_op,
     comparison_op,
+    unary_op,
 )
 
 __all__ = [
@@ -247,6 +248,131 @@ index_madd = Op(
 )
 
 # ============================================================================
+# Logical coordinate bitwise operations
+# ============================================================================
+
+index_andi = binary_op(
+    "index.andi",
+    group=index_ops,
+    phase=OpPhase.EXECUTABLE,
+    type_constraint=INDEX,
+    doc="Bitwise AND over logical coordinate values. Offsets are physical byte counts and cannot use this op.",
+    commutative=True,
+    canonicalize="loom_index_andi_canonicalize",
+    facts="loom_index_andi_facts",
+    examples=["%r = index.andi %lhs, %rhs : index"],
+)
+
+index_ori = binary_op(
+    "index.ori",
+    group=index_ops,
+    phase=OpPhase.EXECUTABLE,
+    type_constraint=INDEX,
+    doc="Bitwise OR over logical coordinate values. Offsets are physical byte counts and cannot use this op.",
+    commutative=True,
+    canonicalize="loom_index_ori_canonicalize",
+    facts="loom_index_ori_facts",
+    examples=["%r = index.ori %lhs, %rhs : index"],
+)
+
+index_xori = binary_op(
+    "index.xori",
+    group=index_ops,
+    phase=OpPhase.EXECUTABLE,
+    type_constraint=INDEX,
+    doc="Bitwise XOR over logical coordinate values. Offsets are physical byte counts and cannot use this op.",
+    commutative=True,
+    canonicalize="loom_index_xori_canonicalize",
+    facts="loom_index_xori_facts",
+    examples=["%r = index.xori %lhs, %rhs : index"],
+)
+
+index_shli = binary_op(
+    "index.shli",
+    group=index_ops,
+    phase=OpPhase.EXECUTABLE,
+    type_constraint=INDEX,
+    doc="Left shift over logical coordinate values. Offsets are physical byte counts and cannot use this op.",
+    canonicalize="loom_index_shli_canonicalize",
+    facts="loom_index_shli_facts",
+    examples=["%r = index.shli %lhs, %rhs : index"],
+)
+
+index_shrsi = binary_op(
+    "index.shrsi",
+    group=index_ops,
+    phase=OpPhase.EXECUTABLE,
+    type_constraint=INDEX,
+    doc="Arithmetic right shift over logical coordinate values. Offsets are physical byte counts and cannot use this op.",
+    canonicalize="loom_index_shrsi_canonicalize",
+    facts="loom_index_shrsi_facts",
+    examples=["%r = index.shrsi %lhs, %rhs : index"],
+)
+
+index_shrui = binary_op(
+    "index.shrui",
+    group=index_ops,
+    phase=OpPhase.EXECUTABLE,
+    type_constraint=INDEX,
+    doc="Logical right shift over logical coordinate values. Offsets are physical byte counts and cannot use this op.",
+    canonicalize="loom_index_shrui_canonicalize",
+    facts="loom_index_shrui_facts",
+    examples=["%r = index.shrui %lhs, %rhs : index"],
+)
+
+index_rotli = binary_op(
+    "index.rotli",
+    group=index_ops,
+    phase=OpPhase.EXECUTABLE,
+    type_constraint=INDEX,
+    doc="Left rotate over logical coordinate values. Offsets are physical byte counts and cannot use this op.",
+    canonicalize="loom_index_rotli_canonicalize",
+    facts="loom_index_rotli_facts",
+    examples=["%r = index.rotli %lhs, %rhs : index"],
+)
+
+index_rotri = binary_op(
+    "index.rotri",
+    group=index_ops,
+    phase=OpPhase.EXECUTABLE,
+    type_constraint=INDEX,
+    doc="Right rotate over logical coordinate values. Offsets are physical byte counts and cannot use this op.",
+    canonicalize="loom_index_rotri_canonicalize",
+    facts="loom_index_rotri_facts",
+    examples=["%r = index.rotri %lhs, %rhs : index"],
+)
+
+index_ctlzi = unary_op(
+    "index.ctlzi",
+    group=index_ops,
+    phase=OpPhase.EXECUTABLE,
+    type_constraint=INDEX,
+    doc="Count leading zeros in a logical coordinate value.",
+    facts="loom_index_ctlzi_facts",
+    examples=["%r = index.ctlzi %input : index"],
+)
+
+index_cttzi = unary_op(
+    "index.cttzi",
+    group=index_ops,
+    phase=OpPhase.EXECUTABLE,
+    type_constraint=INDEX,
+    doc="Count trailing zeros in a logical coordinate value.",
+    facts="loom_index_cttzi_facts",
+    examples=["%r = index.cttzi %input : index"],
+)
+
+index_ctpopi = unary_op(
+    "index.ctpopi",
+    group=index_ops,
+    phase=OpPhase.EXECUTABLE,
+    type_constraint=INDEX,
+    doc="Count set bits in a logical coordinate value.",
+    facts="loom_index_ctpopi_facts",
+    examples=["%r = index.ctpopi %input : index"],
+)
+
+# ============================================================================
 # Predicates
 # ============================================================================
 
@@ -279,5 +405,16 @@ ALL_INDEX_OPS: tuple[Op, ...] = (
     index_div,
     index_rem,
     index_madd,
+    index_andi,
+    index_ori,
+    index_xori,
+    index_shli,
+    index_shrsi,
+    index_shrui,
+    index_rotli,
+    index_rotri,
+    index_ctlzi,
+    index_cttzi,
+    index_ctpopi,
     index_cmp,
 )

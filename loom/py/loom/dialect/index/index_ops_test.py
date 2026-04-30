@@ -33,6 +33,17 @@ class TestIndexDialect:
             "index.div",
             "index.rem",
             "index.madd",
+            "index.andi",
+            "index.ori",
+            "index.xori",
+            "index.shli",
+            "index.shrsi",
+            "index.shrui",
+            "index.rotli",
+            "index.rotri",
+            "index.ctlzi",
+            "index.cttzi",
+            "index.ctpopi",
             "index.cmp",
         ]
 
@@ -81,6 +92,28 @@ class TestIndexDialect:
             INDEX,
         ]
         assert op.results[0].type_constraint == INDEX
+
+    def test_bitwise_ops_are_index_typed(self) -> None:
+        for name in (
+            "index.andi",
+            "index.ori",
+            "index.xori",
+            "index.shli",
+            "index.shrsi",
+            "index.shrui",
+            "index.rotli",
+            "index.rotri",
+        ):
+            op = _ops()[name]
+            assert op.operands[0].type_constraint == INDEX
+            assert op.operands[1].type_constraint == INDEX
+            assert op.results[0].type_constraint == INDEX
+
+    def test_bit_count_ops_are_index_typed(self) -> None:
+        for name in ("index.ctlzi", "index.cttzi", "index.ctpopi"):
+            op = _ops()[name]
+            assert op.operands[0].type_constraint == INDEX
+            assert op.results[0].type_constraint == INDEX
 
     def test_cmp_uses_index_predicates(self) -> None:
         op = _ops()["index.cmp"]
