@@ -174,30 +174,107 @@ typedef enum loom_contract_capability_flag_bits_e {
 // Bitset of loom_contract_capability_flag_bits_t values.
 typedef uint32_t loom_contract_capability_flags_t;
 
+// Dense auxiliary operand key slots. Keep this enum in the same order as the
+// bit enum below so key -> bit conversion is a shift, not a lookup.
+typedef enum loom_contract_auxiliary_operand_key_e {
+  // Primary/local scale value.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_SCALE = 0,
+  // Secondary/global/super-scale value.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_SECONDARY_SCALE = 1,
+  // Affine zero-point value.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_ZERO_POINT = 2,
+  // Affine minimum/base value.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_MIN = 3,
+  // Sparse mask, index, or structured metadata value.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_SPARSE_METADATA = 4,
+  // Codebook or table lookup value.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_CODEBOOK_TABLE = 5,
+  // Residual/outlier correction value.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_RESIDUAL = 6,
+  // Sign-side-stream value.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_SIGN = 7,
+  // Runtime amax/statistics value.
+  LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_RUNTIME_AMAX = 8,
+  LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_COUNT_ = 9,
+} loom_contract_auxiliary_operand_key_t;
+
 typedef enum loom_contract_auxiliary_operand_flag_bits_e {
   // Primary/local scale values are provided as an auxiliary operand.
-  LOOM_CONTRACT_AUXILIARY_OPERAND_SCALE = 1u << 0,
+  LOOM_CONTRACT_AUXILIARY_OPERAND_SCALE =
+      1u << LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_SCALE,
   // Secondary/global/super-scale values are provided as an auxiliary operand.
-  LOOM_CONTRACT_AUXILIARY_OPERAND_SECONDARY_SCALE = 1u << 1,
+  LOOM_CONTRACT_AUXILIARY_OPERAND_SECONDARY_SCALE =
+      1u << LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_SECONDARY_SCALE,
   // Affine zero-point values are provided as an auxiliary operand.
-  LOOM_CONTRACT_AUXILIARY_OPERAND_ZERO_POINT = 1u << 2,
+  LOOM_CONTRACT_AUXILIARY_OPERAND_ZERO_POINT =
+      1u << LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_ZERO_POINT,
   // Affine minimum/base values are provided as an auxiliary operand.
-  LOOM_CONTRACT_AUXILIARY_OPERAND_MIN = 1u << 3,
+  LOOM_CONTRACT_AUXILIARY_OPERAND_MIN =
+      1u << LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_MIN,
   // Sparse mask, index, or structured metadata is provided as an auxiliary
   // operand.
-  LOOM_CONTRACT_AUXILIARY_OPERAND_SPARSE_METADATA = 1u << 4,
+  LOOM_CONTRACT_AUXILIARY_OPERAND_SPARSE_METADATA =
+      1u << LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_SPARSE_METADATA,
   // Codebook or table lookup data is provided as an auxiliary operand.
-  LOOM_CONTRACT_AUXILIARY_OPERAND_CODEBOOK_TABLE = 1u << 5,
+  LOOM_CONTRACT_AUXILIARY_OPERAND_CODEBOOK_TABLE =
+      1u << LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_CODEBOOK_TABLE,
   // Residual/outlier correction data is provided as an auxiliary operand.
-  LOOM_CONTRACT_AUXILIARY_OPERAND_RESIDUAL = 1u << 6,
+  LOOM_CONTRACT_AUXILIARY_OPERAND_RESIDUAL =
+      1u << LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_RESIDUAL,
   // Sign-side-stream data is provided as an auxiliary operand.
-  LOOM_CONTRACT_AUXILIARY_OPERAND_SIGN = 1u << 7,
+  LOOM_CONTRACT_AUXILIARY_OPERAND_SIGN =
+      1u << LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_SIGN,
   // Runtime amax/statistics data is provided as an auxiliary operand.
-  LOOM_CONTRACT_AUXILIARY_OPERAND_RUNTIME_AMAX = 1u << 8,
+  LOOM_CONTRACT_AUXILIARY_OPERAND_RUNTIME_AMAX =
+      1u << LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_RUNTIME_AMAX,
 } loom_contract_auxiliary_operand_flag_bits_t;
 
 // Bitset of loom_contract_auxiliary_operand_flag_bits_t values.
 typedef uint32_t loom_contract_auxiliary_operand_flags_t;
+
+static_assert(LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_COUNT_ <= 32,
+              "auxiliary operand flags must fit in one 32-bit word");
+
+// Optional SSA value reference. Zero is absent; present entries store the
+// referenced loom_value_id_t plus one so all-zero initialization means absent.
+typedef uint32_t loom_contract_value_ref_t;
+
+// Returns an absent optional value reference.
+static inline loom_contract_value_ref_t loom_contract_value_ref_absent(void) {
+  return 0;
+}
+
+// Returns true when |ref| names an SSA value.
+static inline bool loom_contract_value_ref_is_present(
+    loom_contract_value_ref_t ref) {
+  return ref != 0;
+}
+
+// Packs |value_id| into an optional value reference.
+static inline loom_contract_value_ref_t loom_contract_value_ref_from_value_id(
+    loom_value_id_t value_id) {
+  if (value_id == LOOM_VALUE_ID_INVALID) {
+    return loom_contract_value_ref_absent();
+  }
+  return value_id + 1u;
+}
+
+// Unpacks |ref| into an SSA value ID, or LOOM_VALUE_ID_INVALID when absent.
+static inline loom_value_id_t loom_contract_value_ref_value_id(
+    loom_contract_value_ref_t ref) {
+  return loom_contract_value_ref_is_present(ref) ? ref - 1u
+                                                 : LOOM_VALUE_ID_INVALID;
+}
+
+// Returns the flag bit corresponding to |key|, or zero for invalid values.
+static inline loom_contract_auxiliary_operand_flags_t
+loom_contract_auxiliary_operand_key_flag(
+    loom_contract_auxiliary_operand_key_t key) {
+  if (key >= LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_COUNT_) {
+    return 0;
+  }
+  return 1u << key;
+}
 
 typedef struct loom_contract_shape_t {
   // Exact M/result-row extent, or 0 when unknown.
@@ -220,6 +297,11 @@ typedef struct loom_contract_encoded_operand_t {
 
   // Bitset of auxiliary SSA operands currently attached to this role.
   loom_contract_auxiliary_operand_flags_t available_auxiliary_operands;
+
+  // Optional SSA value references indexed by contract auxiliary key.
+  // Entries are present iff the corresponding available bit is set.
+  loom_contract_value_ref_t
+      auxiliary_value_refs[LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_COUNT_];
 
   // Bitset of auxiliary SSA operands required by target_schema.
   loom_contract_auxiliary_operand_flags_t required_auxiliary_operands;

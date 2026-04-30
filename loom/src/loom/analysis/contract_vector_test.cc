@@ -15,6 +15,7 @@
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
+#include "loom/ops/vector/fragment.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/pass/value_facts.h"
 #include "loom/testing/module_ptr.h"
@@ -340,14 +341,38 @@ func.def @encoded_mma(%lhs_data: vector<6xi32>, %rhs_data: vector<6xi32>, %init_
   ASSERT_TRUE(loom_contract_request_from_vector_mma_op(
       module_ptr.get(), fact_table, op, &options, &request, &diagnostic));
   EXPECT_EQ(diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_NONE);
+  loom_vector_fragment_fact_t lhs_fragment = {};
+  ASSERT_TRUE(loom_vector_fragment_fact_query_value_facts(
+      &fact_table->context,
+      loom_value_fact_table_lookup(fact_table, loom_vector_mma_lhs(op)),
+      &lhs_fragment));
+  loom_vector_fragment_fact_t rhs_fragment = {};
+  ASSERT_TRUE(loom_vector_fragment_fact_query_value_facts(
+      &fact_table->context,
+      loom_value_fact_table_lookup(fact_table, loom_vector_mma_rhs(op)),
+      &rhs_fragment));
   EXPECT_EQ(request.lhs.numeric_type, LOOM_CONTRACT_NUMERIC_FP6);
   EXPECT_EQ(request.lhs.payload_register_count, 6);
   EXPECT_EQ(request.lhs.payload_element_count, 32);
   EXPECT_TRUE(iree_any_bit_set(request.lhs.encoded.available_auxiliary_operands,
                                LOOM_CONTRACT_AUXILIARY_OPERAND_SCALE));
+  EXPECT_EQ(
+      loom_contract_value_ref_value_id(
+          request.lhs.encoded
+              .auxiliary_value_refs[LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_SCALE]),
+      lhs_fragment.auxiliary.values[LOOM_VECTOR_ENCODING_AUXILIARY_KEY_SCALE]);
+  EXPECT_EQ(loom_contract_value_ref_value_id(
+                request.lhs.encoded.auxiliary_value_refs
+                    [LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_CODEBOOK_TABLE]),
+            LOOM_VALUE_ID_INVALID);
   EXPECT_TRUE(iree_any_bit_set(request.lhs.encoded.required_auxiliary_operands,
                                LOOM_CONTRACT_AUXILIARY_OPERAND_SCALE));
   EXPECT_EQ(request.rhs.numeric_type, LOOM_CONTRACT_NUMERIC_FP6);
+  EXPECT_EQ(
+      loom_contract_value_ref_value_id(
+          request.rhs.encoded
+              .auxiliary_value_refs[LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_SCALE]),
+      rhs_fragment.auxiliary.values[LOOM_VECTOR_ENCODING_AUXILIARY_KEY_SCALE]);
   EXPECT_EQ(request.shape.k, 128);
   loom_pass_value_fact_owner_deinitialize(&value_facts);
 }

@@ -48,6 +48,16 @@ void AttachEncodedSchema(loom_value_fact_storage_schema_t schema,
       loom_contract_required_auxiliary_operands_from_storage_schema(schema);
   operand->encoded.available_auxiliary_operands =
       operand->encoded.required_auxiliary_operands;
+  for (uint8_t i = 0; i < LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_COUNT_; ++i) {
+    loom_contract_auxiliary_operand_key_t key =
+        (loom_contract_auxiliary_operand_key_t)i;
+    if (!iree_any_bit_set(operand->encoded.required_auxiliary_operands,
+                          loom_contract_auxiliary_operand_key_flag(key))) {
+      continue;
+    }
+    operand->encoded.auxiliary_value_refs[key] =
+        loom_contract_value_ref_from_value_id(200 + i);
+  }
   operand->encoded.available_capability_flags =
       loom_contract_available_capability_flags_from_storage_schema(schema);
   operand->encoded.required_capability_flags =

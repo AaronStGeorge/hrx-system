@@ -76,7 +76,6 @@ loom_contract_view_payload_t BlockQuantPayload(
       .operand =
           (loom_contract_operand_t){
               .role = role,
-              .numeric_type = LOOM_CONTRACT_NUMERIC_UNKNOWN,
               .encoded =
                   (loom_contract_encoded_operand_t){
                       .source_schema = schema,

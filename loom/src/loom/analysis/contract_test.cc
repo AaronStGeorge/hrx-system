@@ -99,6 +99,9 @@ TEST(ContractTest, RejectsUnknownSchemaFactsSeparately) {
   loom_contract_request_t request = CompletePackedDotRequest();
   request.lhs.encoded.available_auxiliary_operands =
       LOOM_CONTRACT_AUXILIARY_OPERAND_SCALE;
+  request.lhs.encoded
+      .auxiliary_value_refs[LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_SCALE] =
+      loom_contract_value_ref_from_value_id(42);
   request.lhs.encoded.required_auxiliary_operands =
       LOOM_CONTRACT_AUXILIARY_OPERAND_SCALE;
   request.lhs.encoded.available_capability_flags =
@@ -109,6 +112,37 @@ TEST(ContractTest, RejectsUnknownSchemaFactsSeparately) {
   loom_contract_diagnostic_t diagnostic = {};
   EXPECT_FALSE(loom_contract_request_validate(&request, &diagnostic));
   EXPECT_EQ(diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_SCHEMA);
+}
+
+TEST(ContractTest, RejectsAvailableAuxiliaryOperandWithoutValueRef) {
+  loom_contract_request_t request = CompletePackedDotRequest();
+  request.lhs.encoded.target_schema = ScaledEncodedTargetSchema();
+  request.lhs.encoded.available_auxiliary_operands =
+      LOOM_CONTRACT_AUXILIARY_OPERAND_SCALE;
+  request.lhs.encoded.required_auxiliary_operands =
+      LOOM_CONTRACT_AUXILIARY_OPERAND_SCALE;
+  request.lhs.encoded.available_capability_flags =
+      LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS;
+  request.lhs.encoded.required_capability_flags =
+      LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS;
+
+  loom_contract_diagnostic_t diagnostic = {};
+  EXPECT_FALSE(loom_contract_request_validate(&request, &diagnostic));
+  EXPECT_EQ(diagnostic.rejection_bits,
+            LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND);
+}
+
+TEST(ContractTest, RejectsAuxiliaryValueRefWithoutAvailableOperand) {
+  loom_contract_request_t request = CompletePackedDotRequest();
+  request.lhs.encoded.target_schema = ScaledEncodedTargetSchema();
+  request.lhs.encoded
+      .auxiliary_value_refs[LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_SCALE] =
+      loom_contract_value_ref_from_value_id(42);
+
+  loom_contract_diagnostic_t diagnostic = {};
+  EXPECT_FALSE(loom_contract_request_validate(&request, &diagnostic));
+  EXPECT_EQ(diagnostic.rejection_bits,
+            LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND);
 }
 
 TEST(ContractTest, RejectsMissingShapeRoleAndCapability) {

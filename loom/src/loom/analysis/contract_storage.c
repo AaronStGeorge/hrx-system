@@ -233,21 +233,15 @@ bool loom_contract_operand_from_storage_schema(
   IREE_ASSERT_ARGUMENT(out_operand);
   *out_operand = (loom_contract_operand_t){
       .role = role,
-      .encoded =
-          (loom_contract_encoded_operand_t){
-              .source_schema = schema,
-              .target_schema = schema,
-              .required_auxiliary_operands =
-                  loom_contract_required_auxiliary_operands_from_storage_schema(
-                      schema),
-              .available_capability_flags =
-                  loom_contract_available_capability_flags_from_storage_schema(
-                      schema),
-              .required_capability_flags =
-                  loom_contract_required_capability_flags_from_storage_schema(
-                      schema),
-          },
   };
+  out_operand->encoded.source_schema = schema;
+  out_operand->encoded.target_schema = schema;
+  out_operand->encoded.required_auxiliary_operands =
+      loom_contract_required_auxiliary_operands_from_storage_schema(schema);
+  out_operand->encoded.available_capability_flags =
+      loom_contract_available_capability_flags_from_storage_schema(schema);
+  out_operand->encoded.required_capability_flags =
+      loom_contract_required_capability_flags_from_storage_schema(schema);
   loom_value_fact_encoded_operand_schema_t operand = schema.encoded_operand;
   if (!iree_any_bit_set(operand.payload_packing,
                         LOOM_VALUE_FACT_PAYLOAD_PACKING_TARGET_FRAGMENT) ||
@@ -276,7 +270,6 @@ bool loom_contract_view_payload_from_type(
       .operand =
           (loom_contract_operand_t){
               .role = role,
-              .numeric_type = LOOM_CONTRACT_NUMERIC_UNKNOWN,
           },
   };
   if (!loom_type_is_view(view_type)) {

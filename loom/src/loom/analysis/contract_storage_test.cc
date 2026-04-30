@@ -48,6 +48,20 @@ loom_contract_view_payload_t PlainPayload(
   };
 }
 
+void AttachAvailableAuxiliaryData(loom_contract_encoded_operand_t* encoded) {
+  encoded->available_auxiliary_operands = encoded->required_auxiliary_operands;
+  for (uint8_t i = 0; i < LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_COUNT_; ++i) {
+    loom_contract_auxiliary_operand_key_t key =
+        (loom_contract_auxiliary_operand_key_t)i;
+    if (!iree_any_bit_set(encoded->required_auxiliary_operands,
+                          loom_contract_auxiliary_operand_key_flag(key))) {
+      continue;
+    }
+    encoded->auxiliary_value_refs[key] =
+        loom_contract_value_ref_from_value_id(100 + i);
+  }
+}
+
 loom_contract_view_payload_t MatrixPayload(
     loom_contract_operand_role_t role,
     loom_value_fact_storage_schema_t schema) {
@@ -66,8 +80,7 @@ loom_contract_view_payload_t MatrixPayloadWithAuxiliaryData(
     loom_contract_operand_role_t role,
     loom_value_fact_storage_schema_t schema) {
   loom_contract_view_payload_t payload = MatrixPayload(role, schema);
-  payload.operand.encoded.available_auxiliary_operands =
-      payload.operand.encoded.required_auxiliary_operands;
+  AttachAvailableAuxiliaryData(&payload.operand.encoded);
   return payload;
 }
 

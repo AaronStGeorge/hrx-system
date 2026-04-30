@@ -6,6 +6,8 @@
 
 #include "loom/analysis/contract.h"
 
+#include <string.h>
+
 //===----------------------------------------------------------------------===//
 // Utilities
 //===----------------------------------------------------------------------===//
@@ -27,14 +29,45 @@ static bool loom_contract_storage_schema_is_known(
              schema.encoded_operand);
 }
 
+static bool loom_contract_encoded_operand_has_auxiliary_value_refs(
+    const loom_contract_encoded_operand_t* encoded) {
+  static const loom_contract_value_ref_t
+      zero_value_refs[LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_COUNT_] = {0};
+  return memcmp(encoded->auxiliary_value_refs, zero_value_refs,
+                sizeof(encoded->auxiliary_value_refs)) != 0;
+}
+
+static loom_contract_auxiliary_operand_flags_t
+loom_contract_auxiliary_operand_all_flags(void) {
+  return UINT32_MAX >> (32 - LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_COUNT_);
+}
+
 static bool loom_contract_encoded_operand_has_facts(
     const loom_contract_encoded_operand_t* encoded) {
   return loom_contract_storage_schema_is_known(encoded->source_schema) ||
          loom_contract_storage_schema_is_known(encoded->target_schema) ||
          encoded->available_auxiliary_operands != 0 ||
+         loom_contract_encoded_operand_has_auxiliary_value_refs(encoded) ||
          encoded->required_auxiliary_operands != 0 ||
          encoded->available_capability_flags != 0 ||
          encoded->required_capability_flags != 0;
+}
+
+static bool loom_contract_encoded_operand_auxiliary_values_are_consistent(
+    const loom_contract_encoded_operand_t* encoded) {
+  for (uint8_t i = 0; i < LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_COUNT_; ++i) {
+    loom_contract_auxiliary_operand_key_t key =
+        (loom_contract_auxiliary_operand_key_t)i;
+    const bool has_available_flag =
+        iree_any_bit_set(encoded->available_auxiliary_operands,
+                         loom_contract_auxiliary_operand_key_flag(key));
+    const bool has_value_ref =
+        loom_contract_value_ref_is_present(encoded->auxiliary_value_refs[key]);
+    if (has_available_flag != has_value_ref) {
+      return false;
+    }
+  }
+  return true;
 }
 
 static loom_contract_rejection_bits_t
@@ -53,6 +86,14 @@ loom_contract_encoded_operand_rejection_bits(
   }
   if (!iree_all_bits_set(encoded->available_auxiliary_operands,
                          encoded->required_auxiliary_operands)) {
+    rejection_bits |= LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND;
+  }
+  if (iree_any_bit_set(encoded->available_auxiliary_operands |
+                           encoded->required_auxiliary_operands,
+                       ~loom_contract_auxiliary_operand_all_flags())) {
+    rejection_bits |= LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND;
+  }
+  if (!loom_contract_encoded_operand_auxiliary_values_are_consistent(encoded)) {
     rejection_bits |= LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND;
   }
   if (!iree_all_bits_set(encoded->available_capability_flags,
