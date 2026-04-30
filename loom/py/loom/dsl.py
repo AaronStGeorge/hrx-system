@@ -3203,6 +3203,7 @@ class Op:
     facts: str = ""  # C function name for fact inference, or "".
     type_transfer: str = ""  # C function name for semantic type transfer, or "".
     verify: str = ""  # C function name for op-specific verification, or "".
+    builder_name: str | None = None  # Python builder method override, or None.
     phase: OpPhase | None = None
     contracts: tuple[ContractFamily, ...] = ()
     category: OpCategory | None = None
@@ -3232,6 +3233,7 @@ class Op:
         facts: str = "",
         type_transfer: str = "",
         verify: str = "",
+        builder_name: str | None = None,
         phase: OpPhase | None = None,
         contracts: list[ContractFamily] | tuple[ContractFamily, ...] = (),
         category: OpCategory | None = None,
@@ -3264,6 +3266,7 @@ class Op:
         object.__setattr__(self, "facts", facts)
         object.__setattr__(self, "type_transfer", type_transfer)
         object.__setattr__(self, "verify", verify)
+        object.__setattr__(self, "builder_name", builder_name)
         object.__setattr__(self, "phase", phase)
         object.__setattr__(self, "contracts", tuple(contracts))
         if (

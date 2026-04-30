@@ -317,3 +317,11 @@ kernel.def @workgroup_vote_count_rejected(%predicate: i1) {
   %count = kernel.workgroup.vote.count %predicate : i1 -> i32
   kernel.return
 }
+
+// ====
+
+func.def @reduce_axes_rejected(%v: vector<4xi32>, %init: i32) -> (i32) {
+  // ERROR@+1: BACKEND/001 "vector.reduce.axes" "descriptor mapping"
+  %r = vector.reduce.axes<addi> %v, %init axes [0] : vector<4xi32>, i32
+  func.return %r : i32
+}

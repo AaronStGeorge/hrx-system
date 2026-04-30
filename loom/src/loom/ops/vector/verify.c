@@ -2167,3 +2167,113 @@ iree_status_t loom_vector_reduce_verify(const loom_module_t* module,
   return loom_vector_emit_operand_constraint(emitter, op, IREE_SV("input"),
                                              input_type, expected_constraint);
 }
+
+static bool loom_vector_reduce_axes_contains(loom_attribute_t axes,
+                                             uint8_t axis) {
+  for (uint16_t i = 0; i < axes.count; ++i) {
+    if (axes.i64_array[i] == axis) return true;
+  }
+  return false;
+}
+
+static iree_status_t loom_vector_reduce_axes_verify_shape(
+    const loom_op_t* op, iree_diagnostic_emitter_t emitter,
+    loom_type_t input_type, loom_type_t result_type, loom_attribute_t axes) {
+  uint8_t input_rank = loom_type_rank(input_type);
+  uint8_t expected_result_rank = (uint8_t)(input_rank - axes.count);
+  if (expected_result_rank == 0) {
+    if (loom_type_is_scalar(result_type)) return iree_ok_status();
+    return loom_vector_emit_result_constraint(
+        emitter, op, IREE_SV("result"), result_type,
+        IREE_SV("scalar result when all axes are reduced"));
+  }
+
+  if (!loom_type_is_vector(result_type)) {
+    return loom_vector_emit_result_constraint(
+        emitter, op, IREE_SV("result"), result_type,
+        IREE_SV("vector result when unreduced axes remain"));
+  }
+  uint8_t result_rank = loom_type_rank(result_type);
+  if (result_rank != expected_result_rank) {
+    return loom_vector_emit_rank_mismatch(
+        emitter, op, IREE_SV("result"), result_rank,
+        IREE_SV("input rank minus axes"), expected_result_rank);
+  }
+
+  uint8_t result_axis = 0;
+  for (uint8_t input_axis = 0; input_axis < input_rank; ++input_axis) {
+    if (loom_vector_reduce_axes_contains(axes, input_axis)) continue;
+    if (!loom_vector_dim_equals(input_type, input_axis, result_type,
+                                result_axis)) {
+      return loom_vector_emit_shape_mismatch(emitter, op, IREE_SV("result"),
+                                             IREE_SV("input without axes"));
+    }
+    ++result_axis;
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_vector_reduce_axes_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_type_t input_type =
+      loom_module_value_type(module, loom_vector_reduce_axes_input(op));
+  if (!loom_type_is_vector(input_type)) return iree_ok_status();
+
+  loom_attribute_t axes = loom_vector_reduce_axes_axes(op);
+  if (axes.kind != LOOM_ATTR_I64_ARRAY) {
+    return loom_vector_emit_attribute_kind_mismatch(
+        emitter, op, IREE_SV("axes"), axes.kind, LOOM_ATTR_I64_ARRAY);
+  }
+  if (axes.count == 0) {
+    return loom_vector_emit_attribute_value_constraint(
+        emitter, op, IREE_SV("axes"), 0, IREE_SV("non-empty axes list"));
+  }
+
+  uint8_t input_rank = loom_type_rank(input_type);
+  if (axes.count > input_rank) {
+    return loom_vector_emit_count_mismatch(emitter, op, IREE_SV("axes"),
+                                           axes.count, IREE_SV("input rank"),
+                                           input_rank);
+  }
+  int64_t previous_axis = -1;
+  for (uint16_t i = 0; i < axes.count; ++i) {
+    int64_t axis = axes.i64_array[i];
+    if (axis < 0 || axis >= input_rank) {
+      return loom_vector_emit_attribute_value_constraint(
+          emitter, op, IREE_SV("axes"), axis,
+          IREE_SV("axis in input rank bounds"));
+    }
+    if (axis <= previous_axis) {
+      return loom_vector_emit_attribute_value_constraint(
+          emitter, op, IREE_SV("axes"), axis,
+          IREE_SV("strictly sorted unique axes"));
+    }
+    previous_axis = axis;
+  }
+
+  loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_reduce_axes_result(op));
+  IREE_RETURN_IF_ERROR(loom_vector_reduce_axes_verify_shape(
+      op, emitter, input_type, result_type, axes));
+
+  loom_combining_kind_t kind = loom_vector_reduce_axes_kind(op);
+  loom_scalar_type_t element_type = loom_type_element_type(input_type);
+  if (loom_scalar_type_is_integer(element_type) &&
+      loom_combining_kind_accepts_integer(kind)) {
+    return iree_ok_status();
+  }
+  if (loom_scalar_type_is_float(element_type) &&
+      loom_combining_kind_accepts_float(kind)) {
+    return iree_ok_status();
+  }
+  if (!loom_combining_kind_is_valid(kind)) {
+    return iree_ok_status();
+  }
+  iree_string_view_t expected_constraint =
+      loom_combining_kind_accepts_integer(kind)
+          ? IREE_SV("integer element type for reduce kind")
+          : IREE_SV("floating-point element type for reduce kind");
+  return loom_vector_emit_operand_constraint(emitter, op, IREE_SV("input"),
+                                             input_type, expected_constraint);
+}

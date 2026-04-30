@@ -16,6 +16,61 @@ func.def @reduce_uniform_constant_addi() -> (i32) {
 
 // ====
 
+// Uniform facts fold axis-preserving reductions while keeping unreduced lanes.
+func.def @reduce_axes_uniform_partial_addi() -> (vector<3xi32>) {
+  %v = vector.constant 2 : vector<2x3xi32>
+  %init = vector.constant 1 : vector<3xi32>
+  %r = vector.reduce.axes<addi> %v, %init axes [0] : vector<2x3xi32>, vector<3xi32>
+  func.return %r : vector<3xi32>
+}
+
+// ----
+func.def @reduce_axes_uniform_partial_addi() -> (vector<3xi32>) {
+  %r = vector.constant 5 : vector<3xi32>
+  func.return %r : vector<3xi32>
+}
+
+// ====
+
+// Reducing every axis uses the same all-lanes fact path as scalar vector.reduce.
+func.def @reduce_axes_uniform_all_axes_addi() -> (i32) {
+  %v = vector.constant 2 : vector<2x3xi32>
+  %init = scalar.constant 1 : i32
+  %r = vector.reduce.axes<addi> %v, %init axes [0, 1] : vector<2x3xi32>, i32
+  func.return %r : i32
+}
+
+// ----
+func.def @reduce_axes_uniform_all_axes_addi() -> (i32) {
+  %r = scalar.constant 13 : i32
+  func.return %r : i32
+}
+
+// ====
+
+// Small static lane facts preserve non-uniform per-lane reduction results.
+func.def @reduce_axes_from_elements_extract() -> (i32, i32) {
+  %c1 = scalar.constant 1 : i32
+  %c2 = scalar.constant 2 : i32
+  %c3 = scalar.constant 3 : i32
+  %c4 = scalar.constant 4 : i32
+  %v = vector.from_elements %c1, %c2, %c3, %c4 : vector<2x2xi32>
+  %init = vector.constant 10 : vector<2xi32>
+  %r = vector.reduce.axes<addi> %v, %init axes [0] : vector<2x2xi32>, vector<2xi32>
+  %x = vector.extract %r[0] : vector<2xi32> -> i32
+  %y = vector.extract %r[1] : vector<2xi32> -> i32
+  func.return %x, %y : i32, i32
+}
+
+// ----
+func.def @reduce_axes_from_elements_extract() -> (i32, i32) {
+  %x = scalar.constant 14 : i32
+  %y = scalar.constant 16 : i32
+  func.return %x, %y : i32, i32
+}
+
+// ====
+
 // Uniform facts survive vector.splat and mechanical lanewise integer ops.
 func.def @reduce_uniform_splat_addi() -> (i32) {
   %a = scalar.constant 3 : i32

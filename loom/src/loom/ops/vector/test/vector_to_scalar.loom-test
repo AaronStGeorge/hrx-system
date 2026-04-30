@@ -610,6 +610,83 @@ func.def @dynamic_reduce(%n: index, %v: vector<[%n]xi32>, %zero: i32) -> (i32) {
 
 // ====
 
+// Axis-preserving reductions materialize one scalar reduction per result lane.
+func.def @static_reduce_axes(%v: vector<2x3xi32>, %init: vector<3xi32>) -> (vector<3xi32>) {
+  %r = vector.reduce.axes<addi> %v, %init axes [0] : vector<2x3xi32>, vector<3xi32>
+  func.return %r : vector<3xi32>
+}
+
+// ----
+func.def @static_reduce_axes(%v: vector<2x3xi32>, %init: vector<3xi32>) -> (vector<3xi32>) {
+  %4 = vector.extract %init[0] : vector<3xi32> -> i32
+  %5 = vector.extract %v[0, 0] : vector<2x3xi32> -> i32
+  %6 = scalar.addi %4, %5 : i32
+  %7 = vector.extract %v[1, 0] : vector<2x3xi32> -> i32
+  %8 = scalar.addi %6, %7 : i32
+  %9 = vector.extract %init[1] : vector<3xi32> -> i32
+  %10 = vector.extract %v[0, 1] : vector<2x3xi32> -> i32
+  %11 = scalar.addi %9, %10 : i32
+  %12 = vector.extract %v[1, 1] : vector<2x3xi32> -> i32
+  %13 = scalar.addi %11, %12 : i32
+  %14 = vector.extract %init[2] : vector<3xi32> -> i32
+  %15 = vector.extract %v[0, 2] : vector<2x3xi32> -> i32
+  %16 = scalar.addi %14, %15 : i32
+  %17 = vector.extract %v[1, 2] : vector<2x3xi32> -> i32
+  %18 = scalar.addi %16, %17 : i32
+  %r = vector.from_elements %8, %13, %18 : vector<3xi32>
+  func.return %r : vector<3xi32>
+}
+
+// ====
+
+// Reducing every explicit axis is still legal through the reference scalar path.
+func.def @static_reduce_axes_scalar(%v: vector<2x2xf32>, %zero: f32) -> (f32) {
+  %r = vector.reduce.axes<addf> %v, %zero axes [0, 1] : vector<2x2xf32>, f32
+  func.return %r : f32
+}
+
+// ----
+func.def @static_reduce_axes_scalar(%v: vector<2x2xf32>, %zero: f32) -> (f32) {
+  %4 = vector.extract %v[0, 0] : vector<2x2xf32> -> f32
+  %5 = scalar.addf %zero, %4 : f32
+  %6 = vector.extract %v[0, 1] : vector<2x2xf32> -> f32
+  %7 = scalar.addf %5, %6 : f32
+  %8 = vector.extract %v[1, 0] : vector<2x2xf32> -> f32
+  %9 = scalar.addf %7, %8 : f32
+  %10 = vector.extract %v[1, 1] : vector<2x2xf32> -> f32
+  %r = scalar.addf %9, %10 : f32
+  func.return %r : f32
+}
+
+// ====
+
+// Dynamic reduced axes use nested scf.for loops carrying scalar accumulators.
+func.def @dynamic_reduce_axes(%m: index, %n: index, %v: vector<[%m]x[%n]xi32>, %init: vector<[%m]xi32>) -> (vector<[%m]xi32>) {
+  %r = vector.reduce.axes<addi> %v, %init axes [1] : vector<[%m]x[%n]xi32>, vector<[%m]xi32>
+  func.return %r : vector<[%m]xi32>
+}
+
+// ----
+func.def @dynamic_reduce_axes(%m: index, %n: index, %v: vector<[%m]x[%n]xi32>, %init: vector<[%m]xi32>) -> (vector<[%m]xi32>) {
+  %6 = index.constant 0 : index
+  %7 = index.constant 1 : index
+  %r = scf.for %8 = [%6 to %m step %7](%9 = %init : vector<[%m]xi32>) -> (vector<[%m]xi32>) {
+    %11 = vector.extract %init[%8] : vector<[%m]xi32> -> i32
+    %12 = index.constant 0 : index
+    %13 = index.constant 1 : index
+    %16 = scf.for %14 = [%12 to %n step %13](%15 = %11 : i32) -> (i32) {
+      %17 = vector.extract %v[%8, %14] : vector<[%m]x[%n]xi32> -> i32
+      %18 = scalar.addi %15, %17 : i32
+      scf.yield %18 : i32
+    }
+    %19 = vector.insert %16 into %9[%8] : i32, vector<[%m]xi32>
+    scf.yield %19 : vector<[%m]xi32>
+  }
+  func.return %r : vector<[%m]xi32>
+}
+
+// ====
+
 // vector.dotf lowers through scalar.fmaf so the fused dot semantics survive.
 func.def @dotf(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %acc: f32) -> (f32) {
   %r = vector.dotf %lhs, %rhs, %acc : vector<4xf32>, vector<4xf32>, f32

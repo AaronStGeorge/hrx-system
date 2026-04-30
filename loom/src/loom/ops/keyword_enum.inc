@@ -68,3 +68,4 @@
   LOOM_KW_LINKAGE = 59,  // "linkage"
   LOOM_KW_WORKGROUP_SIZE = 60,  // "workgroup_size"
   LOOM_KW_FROM = 61,  // "from"
+  LOOM_KW_AXES = 62,  // "axes"

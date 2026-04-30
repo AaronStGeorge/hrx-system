@@ -182,7 +182,9 @@ def builder_method_names(ops: tuple[Op, ...] | list[Op]) -> list[str]:
     method_names: list[str] = []
     used_by: dict[str, str] = {}
     for op in ops:
-        if short_name_counts[op.short_name] == 1:
+        if op.builder_name is not None:
+            method_name = op.builder_name
+        elif short_name_counts[op.short_name] == 1:
             method_name = op.short_name
         else:
             dialect_separator = op.name.find(".")

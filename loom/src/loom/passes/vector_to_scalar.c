@@ -499,6 +499,28 @@ static iree_status_t loom_vector_to_scalar_lower_op(loom_pass_t* pass,
     return loom_vector_to_scalar_replace_one_result(&state, replacement);
   }
 
+  if (loom_vector_reduce_axes_isa(op)) {
+    loom_type_t result_type = loom_module_value_type(
+        rewriter->module, loom_vector_reduce_axes_result(op));
+    loom_type_t input_type = loom_module_value_type(
+        rewriter->module, loom_vector_reduce_axes_input(op));
+    loom_vector_to_scalar_state_t state = {
+        .pass = pass,
+        .rewriter = rewriter,
+        .op = op,
+        .value_checkpoint = loom_rewriter_value_checkpoint(rewriter),
+        .vector_type =
+            loom_type_is_vector(result_type) ? result_type : input_type,
+        .result_scalar_type = loom_type_is_vector(result_type)
+                                  ? loom_vector_to_scalar_lane_type(result_type)
+                                  : result_type,
+        .location = op->location,
+    };
+    IREE_RETURN_IF_ERROR(
+        loom_vector_to_scalar_lower_reduce_axes(&state, &replacement));
+    return loom_vector_to_scalar_replace_one_result(&state, replacement);
+  }
+
   if (loom_vector_dotf_isa(op)) {
     loom_vector_to_scalar_state_t state = {
         .pass = pass,

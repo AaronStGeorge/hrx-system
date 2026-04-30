@@ -108,6 +108,20 @@ func.def @empty_reduce(%v: vector<0xf32>, %init: f32) -> (f32) {
 
 // ====
 
+// Reducing every source axis is the scalar horizontal reduction form.
+func.def @reduce_axes_all_axes_to_reduce(%v: vector<2x3xf32>, %init: f32) -> (f32) {
+  %r = vector.reduce.axes<addf> %v, %init axes [0, 1] : vector<2x3xf32>, f32
+  func.return %r : f32
+}
+
+// ----
+func.def @reduce_axes_all_axes_to_reduce(%v: vector<2x3xf32>, %init: f32) -> (f32) {
+  %r = vector.reduce<addf> %v, %init : vector<2x3xf32>, f32
+  func.return %r : f32
+}
+
+// ====
+
 // Dotting zero lanes observes no vector lanes and returns the explicit init.
 func.def @empty_dotf(%lhs: vector<0xf32>, %rhs: vector<0xf32>, %init: f32) -> (f32) {
   %r = vector.dotf %lhs, %rhs, %init : vector<0xf32>, vector<0xf32>, f32
@@ -284,6 +298,21 @@ func.def @reduce_dynamic_zero_to_init(%n: index, %init: i32) -> (i32) {
 // ----
 func.def @reduce_dynamic_zero_to_init(%n: index, %init: i32) -> (i32) {
   func.return %init : i32
+}
+
+// ====
+
+// Identity lanes preserve vector accumulators across dynamic reduced extents.
+func.def @reduce_axes_dynamic_zero_to_init(%n: index, %init: vector<2xi32>) -> (vector<2xi32>) {
+  %zero_scalar = scalar.constant 0 : i32
+  %zero = vector.splat %zero_scalar : vector<[%n]x2xi32>
+  %r = vector.reduce.axes<addi> %zero, %init axes [0] : vector<[%n]x2xi32>, vector<2xi32>
+  func.return %r : vector<2xi32>
+}
+
+// ----
+func.def @reduce_axes_dynamic_zero_to_init(%n: index, %init: vector<2xi32>) -> (vector<2xi32>) {
+  func.return %init : vector<2xi32>
 }
 
 // ====

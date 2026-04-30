@@ -24,3 +24,16 @@ class VectorReductionMixin:
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
     ) -> ValueRef: ...
+    def reduce_axes(
+        self,
+        *,
+        kind: str,
+        input: ValueRef,
+        init: ValueRef,
+        axes: list[int],
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> ValueRef: ...

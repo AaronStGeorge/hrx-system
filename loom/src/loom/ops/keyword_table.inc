@@ -68,3 +68,4 @@
     [LOOM_KW_LINKAGE] = (const uint8_t*)"\x07" "linkage",
     [LOOM_KW_WORKGROUP_SIZE] = (const uint8_t*)"\x0e" "workgroup_size",
     [LOOM_KW_FROM] = (const uint8_t*)"\x04" "from",
+    [LOOM_KW_AXES] = (const uint8_t*)"\x04" "axes",

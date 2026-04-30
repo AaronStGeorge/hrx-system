@@ -470,6 +470,9 @@ iree_status_t loom_vector_to_scalar_lower_splat(
 iree_status_t loom_vector_to_scalar_lower_reduce(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement);
 
+iree_status_t loom_vector_to_scalar_lower_reduce_axes(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement);
+
 iree_status_t loom_vector_to_scalar_lower_dotf(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement);
 

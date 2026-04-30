@@ -355,6 +355,17 @@ func.def @reduce(%v: vector<16xf32>, %zero: f32, %i: vector<16xi32>, %izero: i32
 
 // ====
 
+// Axis-preserving reductions keep unreduced dimensions in the accumulator and
+// result shape.
+func.def @reduce_axes(%src: vector<4x8xf32>, %init: vector<8xf32>, %zero: f32, %i: vector<2x3x4xi32>, %iinit: vector<2xi32>) -> (vector<8xf32>, f32, vector<2xi32>) {
+  %cols = vector.reduce.axes<addf> %src, %init axes [0] : vector<4x8xf32>, vector<8xf32>
+  %sum = vector.reduce.axes<addf> %src, %zero axes [0, 1] : vector<4x8xf32>, f32
+  %rows = vector.reduce.axes<maxsi> %i, %iinit axes [1, 2] : vector<2x3x4xi32>, vector<2xi32>
+  func.return %cols, %sum, %rows : vector<8xf32>, f32, vector<2xi32>
+}
+
+// ====
+
 // Register layout ops are pure vector-to-vector transforms with explicit
 // compile-time axis/lane maps.
 func.def @register_layout(%v: vector<8x16xf32>, %a: vector<4xf32>, %b: vector<4xf32>, %n: index, %half: index, %full: index, %dyn: vector<[%n]xf32>, %i: index, %dyn_lo: vector<[%half]xi8>, %dyn_hi: vector<[%half]xi8>, %dyn_paired: vector<[%full]xi8>) {

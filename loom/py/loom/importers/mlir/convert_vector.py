@@ -19,6 +19,7 @@ def register(registry: ConverterRegistry) -> None:
     registry.register("vector.broadcast", convert_broadcast)
     registry.register("vector.extract", convert_extract)
     registry.register("vector.insert", convert_insert)
+    registry.register("vector.multi_reduction", convert_multi_reduction)
     registry.register("vector.reduction", convert_reduction)
     registry.register("vector.transfer_read", convert_transfer_read)
     registry.register("vector.transfer_write", convert_transfer_write)
@@ -130,6 +131,36 @@ def convert_reduction(op: SourceOp, context: MlirConversionContext) -> bool:
     context.map_result(op.result(), result, result_type)
     context.record_converted(
         op.text, f"{context.ssa(result)} = vector.reduce<{kind}> ..."
+    )
+    return True
+
+
+def convert_multi_reduction(op: SourceOp, context: MlirConversionContext) -> bool:
+    if not context.require_top_level(op, "vector.reduce.axes"):
+        return True
+    mapped, missing = context.mapped_operands((op.operand(0), op.operand(1)))
+    if mapped is None:
+        context.record_blocked(
+            op.text, f"missing vector.multi_reduction operands: {', '.join(missing)}"
+        )
+        return True
+    result_type = op.result_type()
+    kind = _vector_reduction_kind(op.attr("kind"), result_type)
+    if kind is None:
+        context.record_blocked(op.text, "unsupported vector.multi_reduction kind")
+        return True
+    axes = context.attr_decoder.dense_i64_array(op.attr("reduction_dims"))
+    result = context.builder.vector.reduce_axes(
+        kind=kind,
+        input=mapped[0],
+        init=mapped[1],
+        axes=list(axes),
+        results=[context.type(result_type)],
+        name=context.result_name(op.result()),
+    )
+    context.map_result(op.result(), result, result_type)
+    context.record_converted(
+        op.text, f"{context.ssa(result)} = vector.reduce.axes<{kind}> ..."
     )
     return True
 
@@ -312,4 +343,11 @@ def _reduction_identity(
 
 
 def _is_float_type(value_type: str) -> bool:
-    return value_type.startswith(("f", "bf"))
+    return _element_type(value_type).startswith(("f", "bf"))
+
+
+def _element_type(value_type: str) -> str:
+    if not value_type.startswith("vector<") or not value_type.endswith(">"):
+        return value_type
+    body = value_type[len("vector<") : -1]
+    return body.rsplit("x", 1)[-1]

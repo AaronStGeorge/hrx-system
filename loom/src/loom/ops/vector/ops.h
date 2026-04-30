@@ -159,10 +159,11 @@ enum {
   LOOM_OP_VECTOR_DOT4F8 = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 134),
   LOOM_OP_VECTOR_MMA = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 135),
   LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 136),
-  LOOM_OP_VECTOR_DECODE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 137),
-  LOOM_OP_VECTOR_ENCODE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 138),
-  LOOM_OP_VECTOR_FRAGMENT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 139),
-  LOOM_OP_VECTOR_COUNT_ = 140,
+  LOOM_OP_VECTOR_REDUCE_AXES = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 137),
+  LOOM_OP_VECTOR_DECODE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 138),
+  LOOM_OP_VECTOR_ENCODE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 139),
+  LOOM_OP_VECTOR_FRAGMENT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 140),
+  LOOM_OP_VECTOR_COUNT_ = 141,
 };
 
 // Floating-point value-domain assumptions for vector operations.
@@ -2916,6 +2917,34 @@ iree_status_t loom_vector_reduce_facts(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 iree_status_t loom_vector_reduce_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_REDUCE_AXES: Reduce the explicit source axes of a vector while preserving the remaining axes in their original order. The init operand and result have the same type: scalar when every source axis is reduced, or a vector whose shape is the source shape with the reduced axes removed.
+// %cols = vector.reduce.axes<addf> %src, %init axes [0] : vector<4x8xf32>, vector<8xf32>
+LOOM_DEFINE_ISA(loom_vector_reduce_axes_isa, LOOM_OP_VECTOR_REDUCE_AXES)
+LOOM_DEFINE_OPERAND(loom_vector_reduce_axes_input, 0)
+LOOM_DEFINE_OPERAND(loom_vector_reduce_axes_init, 1)
+LOOM_DEFINE_RESULT(loom_vector_reduce_axes_result, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_reduce_axes_kind, 0, loom_combining_kind_t)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_reduce_axes_axes, 1)
+iree_status_t loom_vector_reduce_axes_build(
+    loom_builder_t* builder,
+    loom_combining_kind_t kind,
+    loom_may_consume loom_value_id_t input,
+    loom_may_consume loom_value_id_t init,
+    const int64_t* axes,
+    iree_host_size_t axes_count,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_reduce_axes_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_vector_reduce_axes_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_vector_reduce_axes_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

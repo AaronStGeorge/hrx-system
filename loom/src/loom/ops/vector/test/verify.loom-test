@@ -91,6 +91,76 @@ func.def @reduce_reject_arrow_result(%v: vector<4xf32>, %zero: f32) {
 
 // ====
 
+// Axis-preserving reductions require at least one reduced axis.
+func.def @reduce_axes_empty_axes(%v: vector<2x3xf32>, %init: vector<3xf32>) {
+  // ERROR@+1: STRUCTURE/014 "axes" "non-empty axes list"
+  %r = vector.reduce.axes<addf> %v, %init axes [] : vector<2x3xf32>, vector<3xf32>
+  func.return
+}
+
+// ====
+
+// Reduced axes are stored canonically as sorted unique source-rank dimensions.
+func.def @reduce_axes_unsorted(%v: vector<2x3xf32>, %init: vector<3xf32>) {
+  // ERROR@+1: STRUCTURE/014 "axes" "strictly sorted unique axes"
+  %r = vector.reduce.axes<addf> %v, %init axes [1, 0] : vector<2x3xf32>, vector<3xf32>
+  func.return
+}
+
+// ====
+
+func.def @reduce_axes_duplicate(%v: vector<2x3xf32>, %init: vector<3xf32>) {
+  // ERROR@+1: STRUCTURE/014 "axes" "strictly sorted unique axes"
+  %r = vector.reduce.axes<addf> %v, %init axes [0, 0] : vector<2x3xf32>, vector<3xf32>
+  func.return
+}
+
+// ====
+
+func.def @reduce_axes_out_of_bounds(%v: vector<2x3xf32>, %init: vector<3xf32>) {
+  // ERROR@+1: STRUCTURE/014 "axes" "axis in input rank bounds"
+  %r = vector.reduce.axes<addf> %v, %init axes [2] : vector<2x3xf32>, vector<3xf32>
+  func.return
+}
+
+// ====
+
+// Removing the reduced axes from the input shape must produce the result shape.
+func.def @reduce_axes_wrong_result_shape(%v: vector<2x3xf32>, %init: vector<2xf32>) {
+  // ERROR@+1: SHAPE/002
+  %r = vector.reduce.axes<addf> %v, %init axes [0] : vector<2x3xf32>, vector<2xf32>
+  func.return
+}
+
+// ====
+
+// All axes reduced means the accumulator/result must be scalar.
+func.def @reduce_axes_all_axes_vector_result(%v: vector<2x3xf32>, %init: vector<1xf32>) {
+  // ERROR@+1: TYPE/004 "scalar result when all axes are reduced"
+  %r = vector.reduce.axes<addf> %v, %init axes [0, 1] : vector<2x3xf32>, vector<1xf32>
+  func.return
+}
+
+// ====
+
+// The accumulator and result are the same logical value shape.
+func.def @reduce_axes_init_result_mismatch(%v: vector<2x3xf32>, %init: vector<3xf32>) {
+  // ERROR@+1: TYPE/001
+  %r = vector.reduce.axes<addf> %v, %init axes [0] : vector<2x3xf32>, vector<2xf32>
+  func.return
+}
+
+// ====
+
+// Combining kinds still live in the same element family as scalar reductions.
+func.def @reduce_axes_integer_with_float_kind(%v: vector<2x3xi32>, %init: vector<3xi32>) {
+  // ERROR@+1: TYPE/003 "floating-point element type for reduce kind"
+  %r = vector.reduce.axes<minimumf> %v, %init axes [0] : vector<2x3xi32>, vector<3xi32>
+  func.return
+}
+
+// ====
+
 // Vector constants use a scalar literal payload matching the vector element type.
 func.def @constant_payload_mismatch() {
   // ERROR@+1: TYPE/005 "value"

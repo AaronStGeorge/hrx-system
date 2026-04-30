@@ -3688,6 +3688,52 @@ vector_reduce = Op(
     examples=["%sum = vector.reduce<addf> %v, %zero : vector<16xf32>, f32"],
 )
 
+vector_reduce_axes = Op(
+    "vector.reduce.axes",
+    group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Reduce the explicit source axes of a vector while preserving the "
+        "remaining axes in their original order. The init operand and result "
+        "have the same type: scalar when every source axis is reduced, or a "
+        "vector whose shape is the source shape with the reduced axes removed."
+    ),
+    operands=[
+        Operand("input", VECTOR),
+        Operand("init", ANY),
+    ],
+    results=[Result("result", ANY)],
+    attrs=[
+        AttrDef("kind", ATTR_TYPE_ENUM, enum_def=CombiningKind),
+        AttrDef("axes", ATTR_TYPE_I64_ARRAY),
+    ],
+    constraints=[
+        SameType("init", "result"),
+        SameElementType("input", "init", "result"),
+    ],
+    verify="loom_vector_reduce_axes_verify",
+    facts="loom_vector_reduce_axes_facts",
+    canonicalize="loom_vector_reduce_axes_canonicalize",
+    builder_name="reduce_axes",
+    traits=[PURE],
+    format=[
+        TemplateParam("kind"),
+        Ref("input"),
+        COMMA,
+        Ref("init"),
+        kw("axes"),
+        Attr("axes"),
+        COLON,
+        TypeOf("input"),
+        COMMA,
+        ResultType("result"),
+    ],
+    examples=[
+        "%cols = vector.reduce.axes<addf> %src, %init axes [0] : vector<4x8xf32>, vector<8xf32>",
+        "%sum = vector.reduce.axes<addf> %src, %zero axes [0, 1] : vector<4x8xf32>, f32",
+    ],
+)
+
 
 # ============================================================================
 # Registry
@@ -3865,7 +3911,7 @@ VECTOR_CONTRACTION_OPS: tuple[Op, ...] = (
     vector_mma,
 )
 
-VECTOR_REDUCTION_OPS: tuple[Op, ...] = (vector_reduce,)
+VECTOR_REDUCTION_OPS: tuple[Op, ...] = (vector_reduce, vector_reduce_axes)
 
 VECTOR_ENCODING_OPS: tuple[Op, ...] = (
     vector_decode,

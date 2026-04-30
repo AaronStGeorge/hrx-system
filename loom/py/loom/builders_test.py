@@ -10,6 +10,8 @@ from typing import Any, cast
 
 import pytest
 
+# Keep the core builder tests on the synthetic test dialect. Real production
+# dialect imports belong in dialect-specific importer/builder coverage, not here.
 import loom
 from loom.builder import ValueRef, tied
 from loom.builders import LoomBuilder, module_builder
