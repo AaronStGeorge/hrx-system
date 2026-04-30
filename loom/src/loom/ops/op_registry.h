@@ -12,31 +12,10 @@
 
 #include "iree/base/api.h"
 #include "loom/ir/context.h"
-#include "loom/ops/op_defs.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-// Entry in the sorted op registry. Each entry maps a dotted name
-// (e.g., "func.def") to its op kind (enum value). The array is
-// sorted lexicographically by name at code generation time so
-// lookup is a binary search — no runtime sorting needed.
-typedef struct loom_op_registry_entry_t {
-  iree_string_view_t name;
-  loom_op_kind_t kind;
-} loom_op_registry_entry_t;
-
-// Returns the number of entries in the production op registry.
-iree_host_size_t loom_op_registry_count(void);
-
-// Returns the sorted registry array (for iteration/testing).
-const loom_op_registry_entry_t* loom_op_registry_entries(void);
-
-// Looks up an op kind by dotted name (e.g., "func.def").
-// Returns true and sets *out_kind on success, false if not found.
-bool loom_op_registry_lookup(iree_string_view_t name,
-                             loom_op_kind_t* out_kind);
 
 // Registers production dialect vtables and built-in encoding families.
 //

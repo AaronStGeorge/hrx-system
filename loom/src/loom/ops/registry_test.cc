@@ -23,68 +23,6 @@ namespace {
 // Op registry
 //===----------------------------------------------------------------------===//
 
-TEST(OpRegistry, LookupKnownOps) {
-  loom_op_kind_t kind = 0;
-  EXPECT_TRUE(
-      loom_op_registry_lookup(iree_make_cstring_view("func.def"), &kind));
-  EXPECT_EQ(kind, LOOM_OP_FUNC_DEF);
-
-  EXPECT_TRUE(
-      loom_op_registry_lookup(iree_make_cstring_view("index.constant"), &kind));
-  EXPECT_EQ(kind, LOOM_OP_INDEX_CONSTANT);
-}
-
-TEST(OpRegistry, TestDialectIsNotInProductionRegistry) {
-  loom_op_kind_t kind = 0xFFFF;
-  EXPECT_FALSE(
-      loom_op_registry_lookup(iree_make_cstring_view("test.addi"), &kind));
-  EXPECT_EQ(kind, 0xFFFF);
-}
-
-TEST(OpRegistry, LookupUnknownReturnsNull) {
-  loom_op_kind_t kind = 0xFFFF;
-  EXPECT_FALSE(
-      loom_op_registry_lookup(iree_make_cstring_view("nonexistent.op"), &kind));
-  // kind should be untouched on failure.
-  EXPECT_EQ(kind, 0xFFFF);
-}
-
-TEST(OpRegistry, LookupEmptyString) {
-  loom_op_kind_t kind = 0;
-  EXPECT_FALSE(loom_op_registry_lookup(iree_make_cstring_view(""), &kind));
-}
-
-TEST(OpRegistry, EntriesAreSorted) {
-  const loom_op_registry_entry_t* entries = loom_op_registry_entries();
-  iree_host_size_t count = loom_op_registry_count();
-  ASSERT_GT(count, 0u);
-  for (iree_host_size_t i = 1; i < count; ++i) {
-    EXPECT_LT(iree_string_view_compare(entries[i - 1].name, entries[i].name), 0)
-        << "entries[" << i - 1 << "] (\""
-        << std::string(entries[i - 1].name.data, entries[i - 1].name.size)
-        << "\") >= entries[" << i << "] (\""
-        << std::string(entries[i].name.data, entries[i].name.size) << "\")";
-  }
-}
-
-TEST(OpRegistry, AllEntriesValid) {
-  // Verify every entry has a non-empty name and a valid kind, and
-  // that lookup by name round-trips to the same kind.
-  const loom_op_registry_entry_t* entries = loom_op_registry_entries();
-  iree_host_size_t count = loom_op_registry_count();
-  ASSERT_GT(count, 0u);
-  for (iree_host_size_t i = 0; i < count; ++i) {
-    EXPECT_GT(entries[i].name.size, 0u) << "entry " << i << " has empty name";
-    loom_op_kind_t kind = 0;
-    EXPECT_TRUE(loom_op_registry_lookup(entries[i].name, &kind))
-        << "entry " << i << " (\""
-        << std::string(entries[i].name.data, entries[i].name.size)
-        << "\") not found by lookup";
-    EXPECT_EQ(kind, entries[i].kind)
-        << "entry " << i << " kind mismatch after round-trip lookup";
-  }
-}
-
 TEST(OpRegistry, RegistersProductionContextSurface) {
   loom_context_t context;
   IREE_ASSERT_OK(
@@ -95,6 +33,21 @@ TEST(OpRegistry, RegistersProductionContextSurface) {
       &context, iree_make_cstring_view("func.def"), &kind);
   ASSERT_NE(vtable, nullptr);
   EXPECT_EQ(kind, LOOM_OP_FUNC_DEF);
+
+  vtable = loom_context_lookup_op_by_name(
+      &context, iree_make_cstring_view("index.constant"), &kind);
+  ASSERT_NE(vtable, nullptr);
+  EXPECT_EQ(kind, LOOM_OP_INDEX_CONSTANT);
+
+  kind = 0xFFFF;
+  EXPECT_EQ(loom_context_lookup_op_by_name(
+                &context, iree_make_cstring_view("nonexistent.op"), &kind),
+            nullptr);
+  EXPECT_EQ(kind, 0xFFFF);
+
+  EXPECT_EQ(
+      loom_context_lookup_op_by_name(&context, iree_string_view_empty(), &kind),
+      nullptr);
 
   loom_op_semantics_t iota_semantics =
       loom_context_resolve_op_semantics(&context, LOOM_OP_VECTOR_IOTA);

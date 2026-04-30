@@ -3545,7 +3545,7 @@ def generate_builders_c(dialect_name: str, ops: Sequence[Op]) -> str:
 
 
 # ============================================================================
-# Op registry (cross-dialect sorted lookup table)
+# Op registry (production dialect registration)
 # ============================================================================
 
 
@@ -3556,16 +3556,9 @@ def generate_op_registry(
 
     Returns (header_content, source_content).
     """
-    # Collect all ops with their full dotted names and enum names.
-    # op.name is already the full dotted name (e.g., "test.addi").
-    entries: list[tuple[str, str]] = []  # (dotted_name, enum_name)
     dialect_names: set[str] = set()
-    for dialect, ops in dialects:
+    for dialect, _ops in dialects:
         dialect_names.add(dialect.name)
-        for op in ops:
-            enum = "LOOM_OP_" + op.name.replace(".", "_").upper()
-            entries.append((op.name, enum))
-    entries.sort(key=lambda e: e[0])
 
     # Header.
     header = [GENERATED_HEADER]
@@ -3574,31 +3567,10 @@ def generate_op_registry(
     header.append("")
     header.append('#include "iree/base/api.h"')
     header.append('#include "loom/ir/context.h"')
-    header.append('#include "loom/ops/op_defs.h"')
     header.append("")
     header.append("#ifdef __cplusplus")
     header.append('extern "C" {')
     header.append("#endif")
-    header.append("")
-    header.append("// Entry in the sorted op registry. Each entry maps a dotted name")
-    header.append('// (e.g., "func.def") to its op kind (enum value). The array is')
-    header.append("// sorted lexicographically by name at code generation time so")
-    header.append("// lookup is a binary search — no runtime sorting needed.")
-    header.append("typedef struct loom_op_registry_entry_t {")
-    header.append("  iree_string_view_t name;")
-    header.append("  loom_op_kind_t kind;")
-    header.append("} loom_op_registry_entry_t;")
-    header.append("")
-    header.append("// Returns the number of entries in the production op registry.")
-    header.append("iree_host_size_t loom_op_registry_count(void);")
-    header.append("")
-    header.append("// Returns the sorted registry array (for iteration/testing).")
-    header.append("const loom_op_registry_entry_t* loom_op_registry_entries(void);")
-    header.append("")
-    header.append('// Looks up an op kind by dotted name (e.g., "func.def").')
-    header.append("// Returns true and sets *out_kind on success, false if not found.")
-    header.append("bool loom_op_registry_lookup(iree_string_view_t name,")
-    header.append("                             loom_op_kind_t* out_kind);")
     header.append("")
     header.append("// Registers production dialect vtables and built-in encoding families.")
     header.append("//")
@@ -3647,40 +3619,6 @@ def generate_op_registry(
     for dialect, _ops in sorted(dialects, key=lambda item: item[0].dialect_id):
         source.append(f"    {{{_c_dialect_enum(dialect.name)}, loom_{dialect.name}_dialect_vtables, loom_{dialect.name}_dialect_op_semantics}},")
     source.append("};")
-    source.append("")
-    source.append("static const loom_op_registry_entry_t loom_op_registry[] = {")
-    for dotted, enum in entries:
-        source.append(f'    {{IREE_SVL("{dotted}"), {enum}}},')
-    source.append("};")
-    source.append("")
-    source.append(f"#define LOOM_OP_REGISTRY_COUNT {len(entries)}")
-    source.append("")
-    source.append("iree_host_size_t loom_op_registry_count(void) {")
-    source.append("  return LOOM_OP_REGISTRY_COUNT;")
-    source.append("}")
-    source.append("")
-    source.append("const loom_op_registry_entry_t* loom_op_registry_entries(void) {")
-    source.append("  return loom_op_registry;")
-    source.append("}")
-    source.append("")
-    source.append("bool loom_op_registry_lookup(iree_string_view_t name,")
-    source.append("                             loom_op_kind_t* out_kind) {")
-    source.append("  iree_host_size_t low = 0;")
-    source.append("  iree_host_size_t high = LOOM_OP_REGISTRY_COUNT;")
-    source.append("  while (low < high) {")
-    source.append("    iree_host_size_t mid = low + (high - low) / 2;")
-    source.append("    int cmp = iree_string_view_compare(loom_op_registry[mid].name, name);")
-    source.append("    if (cmp < 0) {")
-    source.append("      low = mid + 1;")
-    source.append("    } else if (cmp > 0) {")
-    source.append("      high = mid;")
-    source.append("    } else {")
-    source.append("      *out_kind = loom_op_registry[mid].kind;")
-    source.append("      return true;")
-    source.append("    }")
-    source.append("  }")
-    source.append("  return false;")
-    source.append("}")
     source.append("")
     source.append("static iree_status_t loom_op_registry_register_dialect(")
     source.append("    loom_context_t* context,")
@@ -4271,10 +4209,9 @@ def main() -> None:
             f.write(content)
 
     total_ops = sum(len(ops) for _, ops, _ in dialects)
-    op_registry_ops = sum(len(ops) for _, ops in production_dialects)
     total_types = len(all_types)
     print(f"  op tables: {total_ops} ops")
-    print(f"  op_registry: {op_registry_ops} production ops")
+    print(f"  op_registry: {len(production_dialects)} production dialects")
     print(f"  type_registry: {total_types} types")
     print(f"  keywords: {len(KEYWORD_MAP)} keywords")
 
