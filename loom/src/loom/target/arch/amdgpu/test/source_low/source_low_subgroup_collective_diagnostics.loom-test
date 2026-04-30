@@ -33,6 +33,15 @@ kernel.def workgroup_size(64, 1, 1) @subgroup_broadcast_payload_rejected() {
 
 // ====
 
+kernel.def workgroup_size(64, 1, 1) @subgroup_broadcast_first_payload_rejected() {
+  %value = vector.constant 1 : vector<4xi8>
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup broadcast.first requires an i32 or f32 scalar"
+  %broadcast = kernel.subgroup.broadcast.first %value : vector<4xi8>
+  kernel.return
+}
+
+// ====
+
 kernel.def workgroup_size(64, 1, 1) @subgroup_shuffle_dynamic_offset_rejected(%input: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<1xi32, #dense>
@@ -111,6 +120,60 @@ kernel.def workgroup_size(64, 1, 1) @subgroup_reduce_payload_rejected() {
   %value = vector.constant 1 : vector<4xi8>
   // ERROR@+1: BACKEND/001 "AMDGPU subgroup reduce requires an i32 or f32 scalar"
   %sum = kernel.subgroup.reduce<addi> %value : vector<4xi8>
+  kernel.return
+}
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_scan_cluster_rejected() {
+  %value = scalar.constant 1 : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup scan lowering requires full subgroup scans with cluster_size and cluster_stride absent"
+  %prefix = kernel.subgroup.scan<addi> %value {cluster_size = 16, direction = forward, mode = inclusive} : i32
+  kernel.return
+}
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_scan_kind_rejected() {
+  %value = scalar.constant 1 : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup scan requires an i32 add/mul/and/or/xor or f32 add/mul/minnum/maxnum combining kind"
+  %prefix = kernel.subgroup.scan<minsi> %value {direction = forward, mode = inclusive} : i32
+  kernel.return
+}
+
+// ====
+
+kernel.def workgroup_size(48, 1, 1) @subgroup_scan_partial_wave_rejected() {
+  %value = scalar.constant 1 : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup scan lowering requires a fixed workgroup size that is an exact multiple"
+  %prefix = kernel.subgroup.scan<addi> %value {direction = forward, mode = inclusive} : i32
+  kernel.return
+}
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_scan_payload_rejected() {
+  %value = vector.constant 1 : vector<4xi8>
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup scan requires an i32 or f32 scalar"
+  %prefix = kernel.subgroup.scan<addi> %value {direction = forward, mode = inclusive} : vector<4xi8>
+  kernel.return
+}
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_match_any_requires_legalization() {
+  %value = scalar.constant 1 : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup match requires target legalization before source-to-low"
+  %mask = kernel.subgroup.match.any %value : i32 -> i64
+  kernel.return
+}
+
+// ====
+
+kernel.def workgroup_size(64, 1, 1) @subgroup_match_all_requires_legalization() {
+  %value = scalar.constant 1 : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU subgroup match requires target legalization before source-to-low"
+  %mask, %all = kernel.subgroup.match.all %value : i32 -> i64, i1
   kernel.return
 }
 

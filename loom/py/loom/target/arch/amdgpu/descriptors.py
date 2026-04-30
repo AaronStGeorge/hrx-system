@@ -1646,6 +1646,22 @@ def _v_mul_lo_u32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_readfirstlane_b32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_readfirstlane_b32",
+        instruction_name="V_READFIRSTLANE_B32",
+        mnemonic="v_readfirstlane_b32",
+        encoding_name="ENC_VOP1",
+        semantic_tag="lane.readfirst.b32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _sgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("value")),
+        ),
+        effects=(_CONVERGENT_EFFECT,),
+    )
+
+
 def _s_and_b32_overlay() -> AmdgpuDescriptorOverlay:
     return _s_binary_u32_overlay(
         descriptor_key="amdgpu.s_and_b32",
@@ -5711,6 +5727,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
         _v_mul_lo_u32_overlay(),
+        _v_readfirstlane_b32_overlay(),
         *_i32_bitwise_shift_overlays(),
         _v_add_f32_overlay(),
         _v_sub_f32_overlay(),
@@ -5879,6 +5896,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
         _v_mul_lo_u32_overlay(),
+        _v_readfirstlane_b32_overlay(),
         *_i32_bitwise_shift_overlays(),
         _v_add_f32_overlay(),
         _v_sub_f32_overlay(),
@@ -6052,6 +6070,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
         _v_mul_lo_u32_overlay(),
+        _v_readfirstlane_b32_overlay(),
         *_i32_bitwise_shift_overlays(),
         _v_add_f32_overlay(),
         _v_sub_f32_overlay(),
@@ -6258,6 +6277,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
         _v_mul_lo_u32_overlay(),
+        _v_readfirstlane_b32_overlay(),
         *_i32_bitwise_shift_overlays(),
         _v_add_f32_overlay(),
         _v_sub_f32_overlay(),

@@ -172,6 +172,19 @@ typedef struct loom_amdgpu_subgroup_broadcast_plan_t {
   uint32_t source_lane;
 } loom_amdgpu_subgroup_broadcast_plan_t;
 
+typedef struct loom_amdgpu_subgroup_broadcast_first_plan_t {
+  // Descriptor row selected to read the first active lane into an SGPR.
+  loom_low_lower_resolved_descriptor_t descriptor;
+  // Source value broadcast from the first active subgroup lane.
+  loom_value_id_t value;
+  // Result value receiving the broadcast payload.
+  loom_value_id_t result;
+  // Source/result payload shape selected during planning.
+  loom_amdgpu_subgroup_payload_kind_t payload_kind;
+  // Number of 32-bit registers in the broadcast payload.
+  uint32_t register_count;
+} loom_amdgpu_subgroup_broadcast_first_plan_t;
+
 typedef struct loom_amdgpu_subgroup_shuffle_plan_t {
   // Descriptor row selected for the native cross-lane read.
   loom_low_lower_resolved_descriptor_t descriptor;
@@ -209,6 +222,33 @@ typedef struct loom_amdgpu_subgroup_reduce_plan_t {
   // Exact subgroup width selected by the active target bundle.
   uint32_t wavefront_size;
 } loom_amdgpu_subgroup_reduce_plan_t;
+
+typedef struct loom_amdgpu_subgroup_scan_plan_t {
+  // Descriptor row selected for each native cross-lane read.
+  loom_low_lower_resolved_descriptor_t bpermute_descriptor;
+  // Descriptor row selected for each native lane combine.
+  loom_low_lower_resolved_descriptor_t combine_descriptor;
+  // Descriptor row selected to guard each prefix step.
+  loom_low_lower_resolved_descriptor_t guard_descriptor;
+  // Descriptor row selected to merge guarded prefix-step results.
+  loom_low_lower_resolved_descriptor_t select_descriptor;
+  // Source value scanned across subgroup lanes.
+  loom_value_id_t value;
+  // Result value receiving the scanned payload.
+  loom_value_id_t result;
+  // Source/result payload shape selected during planning.
+  loom_amdgpu_subgroup_payload_kind_t payload_kind;
+  // Number of 32-bit registers in the scanned payload.
+  uint32_t register_count;
+  // Combining operation selected by the source op.
+  loom_combining_kind_t kind;
+  // Inclusive or exclusive scan mode selected by the source op.
+  loom_kernel_subgroup_scan_mode_t mode;
+  // Lane order selected by the source op.
+  loom_kernel_subgroup_scan_direction_t direction;
+  // Exact subgroup width selected by the active target bundle.
+  uint32_t wavefront_size;
+} loom_amdgpu_subgroup_scan_plan_t;
 
 typedef struct loom_amdgpu_subgroup_active_mask_plan_t {
   // Descriptor row selected to read the native EXEC lane mask.

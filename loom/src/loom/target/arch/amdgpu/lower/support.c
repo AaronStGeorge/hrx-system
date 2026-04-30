@@ -487,9 +487,7 @@ static bool loom_amdgpu_value_is_subgroup_lane_mask_result(
     return false;
   }
   return loom_kernel_subgroup_active_mask_isa(defining_op) ||
-         loom_kernel_subgroup_vote_ballot_isa(defining_op) ||
-         loom_kernel_subgroup_match_any_isa(defining_op) ||
-         loom_kernel_subgroup_match_all_isa(defining_op);
+         loom_kernel_subgroup_vote_ballot_isa(defining_op);
 }
 
 iree_status_t loom_amdgpu_map_type(void* user_data,

@@ -375,6 +375,23 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
 
+// Selects native AMDGPU cross-lane packets for a source subgroup scan.
+iree_status_t loom_amdgpu_select_kernel_subgroup_scan_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_subgroup_scan_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source subgroup scan using DS bpermute prefix steps, native VGPR
+// combining packets, and per-step lane-bound masks.
+iree_status_t loom_amdgpu_lower_kernel_subgroup_scan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_scan_plan_t* plan);
+
+// Verifies source subgroup scan legality for native AMDGPU lowering.
+iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_scan(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
 // Selects native AMDGPU EXEC-mask packets for source subgroup active.mask.
 iree_status_t loom_amdgpu_select_kernel_subgroup_active_mask_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
@@ -452,6 +469,31 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_broadcast(
 
 // Verifies source subgroup broadcast legality for native AMDGPU lowering.
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_broadcast(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
+// Selects a native AMDGPU first-active lane read for a source subgroup
+// broadcast.first.
+iree_status_t loom_amdgpu_select_kernel_subgroup_broadcast_first_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_subgroup_broadcast_first_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source subgroup broadcast.first using one V_READFIRSTLANE per
+// 32-bit payload register.
+iree_status_t loom_amdgpu_lower_kernel_subgroup_broadcast_first(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_broadcast_first_plan_t* plan);
+
+// Verifies source subgroup broadcast.first legality for native AMDGPU lowering.
+iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_broadcast_first(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
+// Rejects source subgroup match ops that require explicit target legalization
+// before AMDGPU source-to-low packet selection.
+iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_match(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
