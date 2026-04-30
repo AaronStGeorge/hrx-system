@@ -20,6 +20,7 @@ class VectorConstructionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def poison(
         self,
@@ -28,6 +29,7 @@ class VectorConstructionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def empty(
         self,
@@ -36,6 +38,7 @@ class VectorConstructionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def splat(
         self,
@@ -45,6 +48,7 @@ class VectorConstructionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def iota(
         self,
@@ -55,6 +59,7 @@ class VectorConstructionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def range(
         self,
@@ -66,6 +71,7 @@ class VectorConstructionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def broadcast(
         self,
@@ -75,6 +81,7 @@ class VectorConstructionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def from_elements(
         self,
@@ -84,4 +91,5 @@ class VectorConstructionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...

@@ -32,6 +32,7 @@ class FuncBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def decl(
         self,
@@ -53,6 +54,7 @@ class FuncBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def template(
         self,
@@ -70,6 +72,7 @@ class FuncBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def ukernel(
         self,
@@ -86,6 +89,7 @@ class FuncBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def call(
         self,
@@ -97,6 +101,7 @@ class FuncBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def apply(
         self,
@@ -108,9 +113,11 @@ class FuncBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def return_(
         self,
         *,
         operands: list[ValueRef] = ...,
+        location_id: int | None = ...,
     ) -> None: ...

@@ -24,6 +24,7 @@ class VectorAtomicMixin:
         scope: str,
         cache_scope: str | None = ...,
         cache_temporal: str | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def atomic_reduce_mask(
         self,
@@ -38,6 +39,7 @@ class VectorAtomicMixin:
         scope: str,
         cache_scope: str | None = ...,
         cache_temporal: str | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def rmw(
         self,
@@ -55,6 +57,7 @@ class VectorAtomicMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def atomic_rmw_mask(
         self,
@@ -74,6 +77,7 @@ class VectorAtomicMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def cmpxchg(
         self,
@@ -92,4 +96,5 @@ class VectorAtomicMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...

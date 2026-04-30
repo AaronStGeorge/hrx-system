@@ -20,6 +20,7 @@ class ScalarConversionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def uitofp(
         self,
@@ -29,6 +30,7 @@ class ScalarConversionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fptosi(
         self,
@@ -38,6 +40,7 @@ class ScalarConversionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fptoui(
         self,
@@ -47,6 +50,7 @@ class ScalarConversionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def extf(
         self,
@@ -56,6 +60,7 @@ class ScalarConversionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fptrunc(
         self,
@@ -65,6 +70,7 @@ class ScalarConversionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def extsi(
         self,
@@ -74,6 +80,7 @@ class ScalarConversionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def extui(
         self,
@@ -83,6 +90,7 @@ class ScalarConversionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def trunci(
         self,
@@ -92,6 +100,7 @@ class ScalarConversionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def bitcast(
         self,
@@ -101,6 +110,7 @@ class ScalarConversionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def constant(
         self,
@@ -110,6 +120,7 @@ class ScalarConversionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def poison(
         self,
@@ -118,4 +129,5 @@ class ScalarConversionMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...

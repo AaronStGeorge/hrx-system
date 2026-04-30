@@ -21,6 +21,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def exp2f(
         self,
@@ -31,6 +32,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def expm1f(
         self,
@@ -41,6 +43,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def logf(
         self,
@@ -51,6 +54,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def log2f(
         self,
@@ -61,6 +65,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def log10f(
         self,
@@ -71,6 +76,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def log1pf(
         self,
@@ -81,6 +87,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def powf(
         self,
@@ -92,6 +99,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def sqrtf(
         self,
@@ -102,6 +110,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def rsqrtf(
         self,
@@ -112,6 +121,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def cbrtf(
         self,
@@ -122,6 +132,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def sinf(
         self,
@@ -132,6 +143,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def cosf(
         self,
@@ -142,6 +154,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def tanf(
         self,
@@ -152,6 +165,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def asinf(
         self,
@@ -162,6 +176,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def acosf(
         self,
@@ -172,6 +187,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def atanf(
         self,
@@ -182,6 +198,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def atan2f(
         self,
@@ -193,6 +210,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def sinhf(
         self,
@@ -203,6 +221,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def coshf(
         self,
@@ -213,6 +232,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def tanhf(
         self,
@@ -223,6 +243,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def asinhf(
         self,
@@ -233,6 +254,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def acoshf(
         self,
@@ -243,6 +265,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def atanhf(
         self,
@@ -253,6 +276,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def erff(
         self,
@@ -263,6 +287,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def erfcf(
         self,
@@ -273,6 +298,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def ceilf(
         self,
@@ -283,6 +309,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def floorf(
         self,
@@ -293,6 +320,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def roundf(
         self,
@@ -303,6 +331,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def roundevenf(
         self,
@@ -313,6 +342,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def truncf(
         self,
@@ -323,6 +353,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def isnanf(
         self,
@@ -332,6 +363,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def isinff(
         self,
@@ -341,6 +373,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def isfinitef(
         self,
@@ -350,6 +383,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def signf(
         self,
@@ -359,6 +393,7 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def signi(
         self,
@@ -368,4 +403,5 @@ class VectorMathMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...

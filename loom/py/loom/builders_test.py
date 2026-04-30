@@ -19,7 +19,16 @@ from loom.dialect.pass_ import ALL_PASS_OPS
 from loom.dialect.scf import ALL_SCF_OPS
 from loom.dialect.test import ALL_TEST_OPS
 from loom.format.text.printer import Printer
-from loom.ir import F32, I32, INDEX, Block, ShapedType, StaticDim, TypeKind
+from loom.ir import (
+    F32,
+    I32,
+    INDEX,
+    Block,
+    OpaqueLocation,
+    ShapedType,
+    StaticDim,
+    TypeKind,
+)
 
 
 def _builder() -> tuple[Block, LoomBuilder]:
@@ -203,3 +212,43 @@ def test_dynamic_builder_constructs_region_bearing_scf_for() -> None:
         "  func.return\n"
         "}\n"
     )
+
+
+def test_dynamic_builder_location_context_applies_to_operations() -> None:
+    block, builder = _builder()
+    source_id = len(builder.module.sources)
+    builder.module.sources.append("mlir")
+    location_id = builder.module.add_location(
+        OpaqueLocation(source_id=source_id, data=b'loc("kernel.mlir":1:2)')
+    )
+    value = builder.value("value", I32)
+
+    with builder.location(location_id):
+        result = builder.test.neg(input=value, results=[I32], name="negated")
+    builder.test.neg(input=result, results=[I32], name="again")
+
+    assert block.ops[0].location_id == location_id
+    assert block.ops[1].location_id == 0
+
+
+def test_dynamic_builder_location_id_overrides_active_context() -> None:
+    block, builder = _builder()
+    source_id = len(builder.module.sources)
+    builder.module.sources.append("mlir")
+    active_location_id = builder.module.add_location(
+        OpaqueLocation(source_id=source_id, data=b'loc("active.mlir":1:2)')
+    )
+    override_location_id = builder.module.add_location(
+        OpaqueLocation(source_id=source_id, data=b'loc("override.mlir":3:4)')
+    )
+    value = builder.value("value", I32)
+
+    with builder.location(active_location_id):
+        builder.test.neg(
+            input=value,
+            results=[I32],
+            name="negated",
+            location_id=override_location_id,
+        )
+
+    assert block.ops[0].location_id == override_location_id

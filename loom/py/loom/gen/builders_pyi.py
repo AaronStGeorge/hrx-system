@@ -109,6 +109,7 @@ def _generate_root_builders_pyi(dialects: Sequence[_DialectStub]) -> str:
             "    def value(self, name: str, value_type: Type, **kwargs: Any) -> ValueRef: ...",
             "    def region(self, args: Sequence[tuple[str, Type]] = ...) -> Region: ...",
             "    def insertion_block(self, block: Block | None) -> Any: ...",
+            "    def location(self, location_id: int) -> Any: ...",
         ]
     )
     for dialect in dialects:
@@ -184,8 +185,7 @@ def _method_stub(signature: BuilderSignature) -> list[str]:
 def _method_params(signature: BuilderSignature) -> list[str]:
     keyword_params = [_format_param(param) for param in signature.params]
     params = ["self"]
-    if keyword_params or signature.op.results:
-        params.append("*")
+    params.append("*")
     params.extend(keyword_params)
     if signature.op.results:
         params.extend(
@@ -195,6 +195,7 @@ def _method_params(signature: BuilderSignature) -> list[str]:
                 "result_names: Sequence[str] | None = ...",
             ]
         )
+    params.append("location_id: int | None = ...")
     return params
 
 

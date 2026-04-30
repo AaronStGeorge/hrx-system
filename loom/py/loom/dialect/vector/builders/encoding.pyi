@@ -22,6 +22,7 @@ class VectorEncodingMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def encode(
         self,
@@ -33,6 +34,7 @@ class VectorEncodingMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fragment(
         self,
@@ -47,4 +49,5 @@ class VectorEncodingMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...

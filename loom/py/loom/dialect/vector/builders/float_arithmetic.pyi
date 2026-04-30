@@ -22,6 +22,7 @@ class VectorFloatArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def subf(
         self,
@@ -33,6 +34,7 @@ class VectorFloatArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def mulf(
         self,
@@ -44,6 +46,7 @@ class VectorFloatArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def divf(
         self,
@@ -55,6 +58,7 @@ class VectorFloatArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def remf(
         self,
@@ -66,6 +70,7 @@ class VectorFloatArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def negf(
         self,
@@ -76,6 +81,7 @@ class VectorFloatArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def absf(
         self,
@@ -86,6 +92,7 @@ class VectorFloatArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def minimumf(
         self,
@@ -97,6 +104,7 @@ class VectorFloatArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def maximumf(
         self,
@@ -108,6 +116,7 @@ class VectorFloatArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def minnumf(
         self,
@@ -119,6 +128,7 @@ class VectorFloatArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def maxnumf(
         self,
@@ -130,6 +140,7 @@ class VectorFloatArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def copysignf(
         self,
@@ -141,6 +152,7 @@ class VectorFloatArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fmaf(
         self,
@@ -153,4 +165,5 @@ class VectorFloatArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...

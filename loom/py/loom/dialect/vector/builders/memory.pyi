@@ -23,6 +23,7 @@ class VectorMemoryMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def store(
         self,
@@ -32,6 +33,7 @@ class VectorMemoryMixin:
         indices: list[int | ValueRef],
         cache_scope: str | None = ...,
         cache_temporal: str | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def load_mask(
         self,
@@ -46,6 +48,7 @@ class VectorMemoryMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def store_mask(
         self,
@@ -56,6 +59,7 @@ class VectorMemoryMixin:
         mask: ValueRef,
         cache_scope: str | None = ...,
         cache_temporal: str | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def expand(
         self,
@@ -70,6 +74,7 @@ class VectorMemoryMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def compress(
         self,
@@ -80,6 +85,7 @@ class VectorMemoryMixin:
         mask: ValueRef,
         cache_scope: str | None = ...,
         cache_temporal: str | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def gather(
         self,
@@ -93,6 +99,7 @@ class VectorMemoryMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def scatter(
         self,
@@ -103,6 +110,7 @@ class VectorMemoryMixin:
         offsets: ValueRef,
         cache_scope: str | None = ...,
         cache_temporal: str | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def gather_mask(
         self,
@@ -118,6 +126,7 @@ class VectorMemoryMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def scatter_mask(
         self,
@@ -129,4 +138,5 @@ class VectorMemoryMixin:
         mask: ValueRef,
         cache_scope: str | None = ...,
         cache_temporal: str | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...

@@ -36,13 +36,15 @@ Value references:
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
 from loom.dsl import FuncLikeInterface, Op, TypeDef
 from loom.fields import FieldLayout
 from loom.ir import (
+    LOCATION_UNKNOWN,
     VALUE_DEF_BLOCK_NONE,
     Block,
     Module,
@@ -234,6 +236,7 @@ class IRBuilder:
         self._op_registry: dict[str, Op] = {}
         self._type_registry: dict[str, TypeDef] = {}
         self._layouts: dict[str, FieldLayout] = {}
+        self._location_id = LOCATION_UNKNOWN
 
     @property
     def module(self) -> Module:
@@ -245,9 +248,24 @@ class IRBuilder:
         """The block where non-symbol ops are appended."""
         return self._insertion_block
 
+    @property
+    def location_id(self) -> int:
+        """Location assigned to subsequently built operations."""
+        return self._location_id
+
     def set_insertion_block(self, block: Block | None) -> None:
         """Set the insertion block for subsequent non-symbol ops."""
         self._insertion_block = block
+
+    @contextmanager
+    def location(self, location_id: int) -> Iterator[None]:
+        """Temporarily set the source location for subsequently built ops."""
+        old_location_id = self._location_id
+        self._location_id = location_id
+        try:
+            yield
+        finally:
+            self._location_id = old_location_id
 
     def register_ops(self, ops: Sequence[Op]) -> None:
         """Register op declarations."""
@@ -437,6 +455,7 @@ class IRBuilder:
         result_names: Sequence[str] | None = None,
         attributes: Mapping[str, Any] | None = None,
         regions: Sequence[Region] | None = None,
+        location_id: int | None = None,
     ) -> ValueRef | list[ValueRef] | None:
         """Build an operation and return the result ValueRef(s).
 
@@ -453,6 +472,8 @@ class IRBuilder:
           result_names: SSA names for results (auto-generated if None).
           attributes: Op attributes.
           regions: Nested regions.
+          location_id: Optional explicit operation location. When omitted,
+            the builder's current location context is used.
 
         Returns:
           Single fixed result: ValueRef.
@@ -507,6 +528,7 @@ class IRBuilder:
             successors=list(successors) if successors else [],
             attributes=attr_dict,
             regions=region_list,
+            location_id=self._location_id if location_id is None else location_id,
         )
         self._insert_operation(op_decl, operation)
 

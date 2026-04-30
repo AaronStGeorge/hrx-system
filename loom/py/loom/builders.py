@@ -127,6 +127,12 @@ class LoomBuilder:
         finally:
             self._ir.set_insertion_block(old_block)
 
+    @contextmanager
+    def location(self, location_id: int) -> Iterator[None]:
+        """Temporarily set the source location for subsequently built ops."""
+        with self._ir.location(location_id):
+            yield
+
     def __getattr__(self, name: str) -> DialectBuilder:
         registry = self._dialects.get(name)
         if registry is None:
@@ -286,6 +292,7 @@ class OpCallable:
             result_names=result_names,
             attributes=attributes,
             regions=regions,
+            location_id=values.get("location_id"),
         )
 
 
@@ -304,6 +311,7 @@ def _validate_and_normalize_kwargs(
     kwargs: Mapping[str, Any],
 ) -> dict[str, Any]:
     valid_names = {param.py_name for param in signature.params}
+    valid_names.add("location_id")
     if signature.op.results:
         valid_names.update(("name", "names", "result_names"))
     unexpected = sorted(set(kwargs) - valid_names)
@@ -327,6 +335,7 @@ def _validate_and_normalize_kwargs(
         values["name"] = kwargs.get("name")
         values["names"] = kwargs.get("names")
         values["result_names"] = kwargs.get("result_names")
+    values["location_id"] = kwargs.get("location_id")
     return values
 
 

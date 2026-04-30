@@ -19,15 +19,19 @@ class CheckBuilder(DialectBuilder):
         visibility: str | None = ...,
         case_symbol: str,
         body: Region | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def return_(
         self,
+        *,
+        location_id: int | None = ...,
     ) -> None: ...
     def requires(
         self,
         *,
         provider: str,
         attrs: Mapping[str, Any],
+        location_id: int | None = ...,
     ) -> None: ...
     def skip_if(
         self,
@@ -35,6 +39,7 @@ class CheckBuilder(DialectBuilder):
         provider: str,
         attrs: Mapping[str, Any],
         reason: str | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def range(
         self,
@@ -47,6 +52,7 @@ class CheckBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def choice(
         self,
@@ -56,6 +62,7 @@ class CheckBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def seed(
         self,
@@ -66,6 +73,7 @@ class CheckBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def literal(
         self,
@@ -75,6 +83,7 @@ class CheckBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def iota(
         self,
@@ -85,6 +94,7 @@ class CheckBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fill(
         self,
@@ -94,6 +104,7 @@ class CheckBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def uniform(
         self,
@@ -105,6 +116,7 @@ class CheckBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def file_read_npy(
         self,
@@ -114,6 +126,7 @@ class CheckBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def file_write_npy(
         self,
@@ -121,6 +134,7 @@ class CheckBuilder(DialectBuilder):
         value: ValueRef,
         path: str,
         mode: str | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def call(
         self,
@@ -132,18 +146,21 @@ class CheckBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def equal(
         self,
         *,
         actual: ValueRef,
         expected: ValueRef,
+        location_id: int | None = ...,
     ) -> None: ...
     def bitwise(
         self,
         *,
         actual: ValueRef,
         expected: ValueRef,
+        location_id: int | None = ...,
     ) -> None: ...
     def close(
         self,
@@ -153,12 +170,14 @@ class CheckBuilder(DialectBuilder):
         atol: float,
         rtol: float,
         nan: str,
+        location_id: int | None = ...,
     ) -> None: ...
     def shape(
         self,
         *,
         value: ValueRef,
         dims: list[int | ValueRef],
+        location_id: int | None = ...,
     ) -> None: ...
     def expect(
         self,
@@ -167,6 +186,7 @@ class CheckBuilder(DialectBuilder):
         actual: ValueRef,
         expected: ValueRef,
         attrs: Mapping[str, Any] | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def benchmark(
         self,
@@ -174,4 +194,5 @@ class CheckBuilder(DialectBuilder):
         benchmark: str,
         case_ref: str,
         attrs: Mapping[str, Any],
+        location_id: int | None = ...,
     ) -> None: ...

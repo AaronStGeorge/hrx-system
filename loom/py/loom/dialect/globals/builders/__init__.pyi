@@ -23,6 +23,7 @@ class GlobalBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def variable(
         self,
@@ -34,6 +35,7 @@ class GlobalBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def load(
         self,
@@ -43,10 +45,12 @@ class GlobalBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def store(
         self,
         *,
         value: ValueRef,
         global_: str,
+        location_id: int | None = ...,
     ) -> None: ...

@@ -23,6 +23,7 @@ class PoolBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def store(
         self,
@@ -32,18 +33,21 @@ class PoolBuilder(DialectBuilder):
         page_bytes: ValueRef,
         offset_in_page: ValueRef,
         data: ValueRef,
+        location_id: int | None = ...,
     ) -> None: ...
     def pin(
         self,
         *,
         pool: ValueRef,
         block_id: ValueRef,
+        location_id: int | None = ...,
     ) -> None: ...
     def unpin(
         self,
         *,
         pool: ValueRef,
         block_id: ValueRef,
+        location_id: int | None = ...,
     ) -> None: ...
     def buffer(
         self,
@@ -53,4 +57,5 @@ class PoolBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...

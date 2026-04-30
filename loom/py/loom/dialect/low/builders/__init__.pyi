@@ -34,6 +34,7 @@ class LowBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def kernel_def(
         self,
@@ -52,6 +53,7 @@ class LowBuilder(DialectBuilder):
         args: list[ValueRef] = ...,
         predicates: list[Predicate] = ...,
         body: Region | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def decl(
         self,
@@ -75,11 +77,13 @@ class LowBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def return_(
         self,
         *,
         values: list[ValueRef] = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def call(
         self,
@@ -91,6 +95,7 @@ class LowBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def op(
         self,
@@ -102,6 +107,7 @@ class LowBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def const(
         self,
@@ -112,6 +118,7 @@ class LowBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def copy(
         self,
@@ -121,6 +128,7 @@ class LowBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def slice(
         self,
@@ -131,6 +139,7 @@ class LowBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def concat(
         self,
@@ -140,6 +149,7 @@ class LowBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def invoke(
         self,
@@ -151,6 +161,7 @@ class LowBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def slot(
         self,
@@ -160,6 +171,7 @@ class LowBuilder(DialectBuilder):
         space: str,
         size: int,
         align: int,
+        location_id: int | None = ...,
     ) -> None: ...
     def spill(
         self,
@@ -167,6 +179,7 @@ class LowBuilder(DialectBuilder):
         value: ValueRef,
         slot: str,
         offset: int,
+        location_id: int | None = ...,
     ) -> None: ...
     def reload(
         self,
@@ -177,6 +190,7 @@ class LowBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def frame_index(
         self,
@@ -187,12 +201,14 @@ class LowBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def br(
         self,
         *,
         dest: Block,
         args: list[ValueRef] = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def cond_br(
         self,
@@ -200,6 +216,7 @@ class LowBuilder(DialectBuilder):
         condition: ValueRef,
         true_dest: Block,
         false_dest: Block,
+        location_id: int | None = ...,
     ) -> None: ...
     def resource(
         self,
@@ -213,6 +230,7 @@ class LowBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def live_in(
         self,
@@ -223,4 +241,5 @@ class LowBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...

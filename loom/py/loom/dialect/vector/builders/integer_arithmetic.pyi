@@ -22,6 +22,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def subi(
         self,
@@ -33,6 +34,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def muli(
         self,
@@ -44,6 +46,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def divsi(
         self,
@@ -54,6 +57,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def divui(
         self,
@@ -64,6 +68,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def remsi(
         self,
@@ -74,6 +79,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def remui(
         self,
@@ -84,6 +90,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def ceildivsi(
         self,
@@ -94,6 +101,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def ceildivui(
         self,
@@ -104,6 +112,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def floordivsi(
         self,
@@ -114,6 +123,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def negi(
         self,
@@ -123,6 +133,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def absi(
         self,
@@ -132,6 +143,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def minsi(
         self,
@@ -142,6 +154,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def maxsi(
         self,
@@ -152,6 +165,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def minui(
         self,
@@ -162,6 +176,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def maxui(
         self,
@@ -172,6 +187,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fmai(
         self,
@@ -184,6 +200,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def andi(
         self,
@@ -194,6 +211,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def ori(
         self,
@@ -204,6 +222,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def xori(
         self,
@@ -214,6 +233,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def shli(
         self,
@@ -225,6 +245,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def shrsi(
         self,
@@ -235,6 +256,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def shrui(
         self,
@@ -245,6 +267,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def rotli(
         self,
@@ -255,6 +278,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def rotri(
         self,
@@ -265,6 +289,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def ctlzi(
         self,
@@ -274,6 +299,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def cttzi(
         self,
@@ -283,6 +309,7 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def ctpopi(
         self,
@@ -292,4 +319,5 @@ class VectorIntegerArithmeticMixin:
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...

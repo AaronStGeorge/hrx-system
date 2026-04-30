@@ -19,12 +19,14 @@ class PassBuilder(DialectBuilder):
         anchor: str,
         symbol: str,
         body: Region | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def for_(
         self,
         *,
         anchor: str,
         body: Region | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def where(
         self,
@@ -32,6 +34,7 @@ class PassBuilder(DialectBuilder):
         predicate: str,
         attrs: Mapping[str, Any] | None = ...,
         body: Region | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def repeat(
         self,
@@ -40,28 +43,35 @@ class PassBuilder(DialectBuilder):
         count: int | None = ...,
         max_iterations: int | None = ...,
         body: Region | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def call(
         self,
         *,
         callee: str,
+        location_id: int | None = ...,
     ) -> None: ...
     def run(
         self,
         *,
         key: str,
         options: Mapping[str, Any] | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def fail(
         self,
         *,
         message: str,
+        location_id: int | None = ...,
     ) -> None: ...
     def halt(
         self,
         *,
         message: str,
+        location_id: int | None = ...,
     ) -> None: ...
     def yield_(
         self,
+        *,
+        location_id: int | None = ...,
     ) -> None: ...

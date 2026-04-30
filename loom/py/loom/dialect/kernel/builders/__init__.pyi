@@ -28,9 +28,12 @@ class KernelBuilder(DialectBuilder):
         args: list[ValueRef] = ...,
         predicates: list[Predicate] = ...,
         body: Region | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def return_(
         self,
+        *,
+        location_id: int | None = ...,
     ) -> None: ...
     def barrier(
         self,
@@ -38,6 +41,7 @@ class KernelBuilder(DialectBuilder):
         memory_space: str,
         ordering: str,
         scope: str,
+        location_id: int | None = ...,
     ) -> None: ...
     def copy(
         self,
@@ -51,6 +55,7 @@ class KernelBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def async_copy_mask(
         self,
@@ -65,6 +70,7 @@ class KernelBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def async_gather(
         self,
@@ -77,6 +83,7 @@ class KernelBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def async_gather_mask(
         self,
@@ -90,6 +97,7 @@ class KernelBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def group(
         self,
@@ -99,12 +107,14 @@ class KernelBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def wait(
         self,
         *,
         group: ValueRef,
         newer_groups: int,
+        location_id: int | None = ...,
     ) -> None: ...
     def descriptor(
         self,
@@ -114,6 +124,7 @@ class KernelBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def async_tensor_load_to_lds(
         self,
@@ -127,6 +138,7 @@ class KernelBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def async_tensor_store_from_lds(
         self,
@@ -140,6 +152,7 @@ class KernelBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def async_cluster_gather(
         self,
@@ -153,6 +166,7 @@ class KernelBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def async_cluster_gather_mask(
         self,
@@ -167,6 +181,7 @@ class KernelBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def workitem_id(
         self,
@@ -176,6 +191,7 @@ class KernelBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def workgroup_id(
         self,
@@ -185,4 +201,5 @@ class KernelBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...

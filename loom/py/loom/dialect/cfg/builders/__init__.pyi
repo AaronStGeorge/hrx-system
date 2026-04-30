@@ -18,6 +18,7 @@ class CfgBuilder(DialectBuilder):
         *,
         dest: Block,
         args: list[ValueRef] = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def cond_br(
         self,
@@ -25,4 +26,5 @@ class CfgBuilder(DialectBuilder):
         condition: ValueRef,
         true_dest: Block,
         false_dest: Block,
+        location_id: int | None = ...,
     ) -> None: ...

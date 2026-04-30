@@ -22,6 +22,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def neg(
         self,
@@ -31,6 +32,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def cast(
         self,
@@ -40,6 +42,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def constant(
         self,
@@ -49,11 +52,13 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def use(
         self,
         *,
         values: list[ValueRef] = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def cmp(
         self,
@@ -65,6 +70,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def map(
         self,
@@ -75,6 +81,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def update(
         self,
@@ -86,6 +93,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def invoke(
         self,
@@ -96,6 +104,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def low_call(
         self,
@@ -106,6 +115,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def low_invoke(
         self,
@@ -116,6 +126,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def slice(
         self,
@@ -126,6 +137,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def loop(
         self,
@@ -139,12 +151,14 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def block_args(
         self,
         *,
         inputs: list[ValueRef] = ...,
         body: Region | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def branch(
         self,
@@ -156,19 +170,24 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def implicit_yield(
         self,
+        *,
+        location_id: int | None = ...,
     ) -> None: ...
     def yield_(
         self,
         *,
         values: list[ValueRef] = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def br(
         self,
         *,
         dest: Block,
+        location_id: int | None = ...,
     ) -> None: ...
     def func(
         self,
@@ -183,6 +202,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def decl(
         self,
@@ -195,6 +215,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def record(
         self,
@@ -202,6 +223,7 @@ class TestBuilder(DialectBuilder):
         kind: str | None = ...,
         symbol: str,
         dict: Mapping[str, Any] | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def attrs(
         self,
@@ -212,6 +234,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def operand_dict(
         self,
@@ -222,6 +245,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def attr_table(
         self,
@@ -233,6 +257,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def region_table(
         self,
@@ -241,6 +266,7 @@ class TestBuilder(DialectBuilder):
         case_keys: list[int],
         default_region: Region,
         case_regions: list[Region],
+        location_id: int | None = ...,
     ) -> None: ...
     def deflate(
         self,
@@ -250,6 +276,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def assume(
         self,
@@ -260,6 +287,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def convert(
         self,
@@ -269,6 +297,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def reduce(
         self,
@@ -278,6 +307,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def read_resource(
         self,
@@ -287,12 +317,14 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def write_resource(
         self,
         *,
         target: ValueRef,
         data: ValueRef,
+        location_id: int | None = ...,
     ) -> None: ...
     def mutate_resource(
         self,
@@ -303,6 +335,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def alloc(
         self,
@@ -312,6 +345,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def isolated_region(
         self,
@@ -321,6 +355,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def counter(
         self,
@@ -330,6 +365,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def dim(
         self,
@@ -340,6 +376,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_range_lo(
         self,
@@ -349,6 +386,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_range_hi(
         self,
@@ -358,6 +396,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_all_equal_range_lo(
         self,
@@ -367,6 +406,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_all_equal_range_hi(
         self,
@@ -376,6 +416,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_divisor(
         self,
@@ -385,6 +426,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_non_negative(
         self,
@@ -394,6 +436,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_non_zero(
         self,
@@ -403,6 +446,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_positive(
         self,
@@ -412,6 +456,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_power_of_two(
         self,
@@ -421,6 +466,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_is_vector_iota(
         self,
@@ -430,6 +476,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_is_vector_prefix_mask(
         self,
@@ -439,6 +486,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_encoding_layout_kind(
         self,
@@ -448,6 +496,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_encoding_layout_stride_hi(
         self,
@@ -458,6 +507,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_encoding_matrix_field(
         self,
@@ -468,6 +518,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_is_buffer_reference(
         self,
@@ -477,6 +528,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_is_view_reference(
         self,
@@ -486,6 +538,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_buffer_memory_space(
         self,
@@ -495,6 +548,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_view_memory_space(
         self,
@@ -504,6 +558,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_view_root_matches(
         self,
@@ -514,6 +569,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_alias_scope_known(
         self,
@@ -523,6 +579,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_alias_scope_matches(
         self,
@@ -533,6 +590,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_view_byte_offset_lo(
         self,
@@ -542,6 +600,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_view_byte_offset_hi(
         self,
@@ -551,6 +610,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_view_byte_length_lo(
         self,
@@ -560,6 +620,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_view_byte_length_hi(
         self,
@@ -569,6 +630,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_view_min_alignment(
         self,
@@ -578,6 +640,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_buffer_min_alignment(
         self,
@@ -587,6 +650,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_view_root_min_alignment(
         self,
@@ -596,6 +660,7 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def fact_view_element_bytes(
         self,
@@ -605,16 +670,19 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def region_syntax(
         self,
         *,
         body: Region | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def low_asm_region(
         self,
         *,
         body: Region | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def clause_constant(
         self,
@@ -624,21 +692,25 @@ class TestBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def clause_copy(
         self,
         *,
         source: ValueRef,
         target: ValueRef,
+        location_id: int | None = ...,
     ) -> None: ...
     def typed_use(
         self,
         *,
         values: list[ValueRef] = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def shape(
         self,
         *,
         value: ValueRef,
         dims: list[int | ValueRef],
+        location_id: int | None = ...,
     ) -> None: ...

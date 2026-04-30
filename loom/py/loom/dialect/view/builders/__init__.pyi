@@ -22,6 +22,7 @@ class ViewBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def refine(
         self,
@@ -31,6 +32,7 @@ class ViewBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def load(
         self,
@@ -43,6 +45,7 @@ class ViewBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def store(
         self,
@@ -52,6 +55,7 @@ class ViewBuilder(DialectBuilder):
         indices: list[int | ValueRef],
         cache_scope: str | None = ...,
         cache_temporal: str | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def reduce(
         self,
@@ -64,6 +68,7 @@ class ViewBuilder(DialectBuilder):
         scope: str,
         cache_scope: str | None = ...,
         cache_temporal: str | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def rmw(
         self,
@@ -80,6 +85,7 @@ class ViewBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def cmpxchg(
         self,
@@ -97,6 +103,7 @@ class ViewBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def prefetch(
         self,
@@ -105,4 +112,5 @@ class ViewBuilder(DialectBuilder):
         indices: list[int | ValueRef],
         intent: str,
         locality: str,
+        location_id: int | None = ...,
     ) -> None: ...

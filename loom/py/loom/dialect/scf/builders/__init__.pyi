@@ -25,6 +25,7 @@ class ScfBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def if_(
         self,
@@ -36,6 +37,7 @@ class ScfBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def switch(
         self,
@@ -48,11 +50,13 @@ class ScfBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def yield_(
         self,
         *,
         values: list[ValueRef] = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def select(
         self,
@@ -64,6 +68,7 @@ class ScfBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> ValueRef: ...
     def lookup(
         self,
@@ -75,12 +80,14 @@ class ScfBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...
     def condition(
         self,
         *,
         condition: ValueRef,
         forwarded: list[ValueRef] = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def while_(
         self,
@@ -92,4 +99,5 @@ class ScfBuilder(DialectBuilder):
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
     ) -> list[ValueRef]: ...

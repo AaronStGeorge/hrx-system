@@ -20,6 +20,7 @@ class TargetBuilder(DialectBuilder):
         target: str,
         artifact_format: str | None = ...,
         abi: str | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
     def profile(
         self,
@@ -27,4 +28,5 @@ class TargetBuilder(DialectBuilder):
         symbol: str,
         preset: str,
         overrides: Mapping[str, Any] | None = ...,
+        location_id: int | None = ...,
     ) -> None: ...
