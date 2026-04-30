@@ -59,6 +59,7 @@ TEST(TargetLowLegalityProviderListTest, Empty) {
 TEST(TargetLowLegalityProviderListTest, VerifiesValues) {
   const loom_target_low_legality_provider_t provider = {
       .name = IREE_SVL("test-provider"),
+      .builtin_dialect_bits = 1u << LOOM_DIALECT_VECTOR,
       .try_verify_op = IgnoreProviderOp,
   };
   const loom_target_low_legality_provider_t* values[] = {&provider};
@@ -356,6 +357,7 @@ TEST_F(TargetLowLegalityTest, ProviderMayClaimProviderRequiredOp) {
 
   const loom_target_low_legality_provider_t provider = {
       .name = IREE_SVL("test-provider"),
+      .builtin_dialect_bits = 1u << LOOM_DIALECT_VECTOR,
       .try_verify_op = AcceptVectorIotaContract,
   };
   const loom_target_low_legality_provider_t* providers[] = {&provider};
@@ -410,6 +412,8 @@ TEST_F(TargetLowLegalityTest, ProviderMayClaimTensorAsyncContractValues) {
 
   const loom_target_low_legality_provider_t provider = {
       .name = IREE_SVL("test-provider"),
+      .builtin_dialect_bits =
+          (1u << LOOM_DIALECT_VECTOR) | (1u << LOOM_DIALECT_KERNEL),
       .try_verify_op = AcceptAnyContractOp,
   };
   const loom_target_low_legality_provider_t* providers[] = {&provider};
@@ -456,6 +460,7 @@ TEST_F(TargetLowLegalityTest, ProviderMayClaimCoreSourceOp) {
 
   const loom_target_low_legality_provider_t provider = {
       .name = IREE_SVL("test-provider"),
+      .builtin_dialect_bits = 1u << LOOM_DIALECT_SCALAR,
       .try_verify_op = RejectScalarAddiContract,
   };
   const loom_target_low_legality_provider_t* providers[] = {&provider};
@@ -511,6 +516,7 @@ TEST_F(TargetLowLegalityTest, ProviderRecordsContractDecision) {
 
   const loom_target_low_legality_provider_t provider = {
       .name = IREE_SVL("test-provider"),
+      .builtin_dialect_bits = 1u << LOOM_DIALECT_VECTOR,
       .try_verify_op = RecordDot4iContract,
   };
   const loom_target_low_legality_provider_t* providers[] = {&provider};

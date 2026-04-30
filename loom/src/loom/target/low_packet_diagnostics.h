@@ -28,14 +28,14 @@ typedef struct loom_target_low_packet_diagnostic_context_t
 typedef struct loom_target_low_packet_diagnostic_provider_t
     loom_target_low_packet_diagnostic_provider_t;
 
+typedef enum loom_target_low_packet_diagnostic_flag_bits_e {
+  // Emits target-owned packet selection and lowering remarks.
+  LOOM_TARGET_LOW_PACKET_DIAGNOSTIC_TARGET_PACKETS = 1u << 0,
+  // All target-low packet diagnostic flags known to this header.
+  LOOM_TARGET_LOW_PACKET_DIAGNOSTIC_ALL =
+      LOOM_TARGET_LOW_PACKET_DIAGNOSTIC_TARGET_PACKETS,
+} loom_target_low_packet_diagnostic_flag_bits_t;
 typedef uint32_t loom_target_low_packet_diagnostic_flags_t;
-
-// Emits target-owned packet selection and lowering remarks.
-#define LOOM_TARGET_LOW_PACKET_DIAGNOSTIC_TARGET_PACKETS ((uint32_t)1u << 0)
-
-// All target-low packet diagnostic flags known to this header.
-#define LOOM_TARGET_LOW_PACKET_DIAGNOSTIC_ALL \
-  LOOM_TARGET_LOW_PACKET_DIAGNOSTIC_TARGET_PACKETS
 
 typedef iree_status_t (*loom_target_low_packet_diagnostic_try_packet_fn_t)(
     const loom_target_low_packet_diagnostic_provider_t* provider,

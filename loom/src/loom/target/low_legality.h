@@ -35,14 +35,24 @@ typedef struct loom_target_low_legality_context_t
 typedef struct loom_target_low_legality_provider_t
     loom_target_low_legality_provider_t;
 
+typedef enum loom_target_low_legality_diagnostic_flag_bits_e {
+  // Emit target memory-access selection remarks from providers that support
+  // them.
+  LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS = 1u << 0,
+  // All target-low legality diagnostic flags known to this header.
+  LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_ALL =
+      LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS,
+} loom_target_low_legality_diagnostic_flag_bits_t;
 typedef uint32_t loom_target_low_legality_diagnostic_flags_t;
 
-// Emit target memory-access selection remarks from providers that support them.
-#define LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS ((uint32_t)1u << 0)
+// Bitset of built-in dialect ids a target-low legality provider can handle.
+typedef uint32_t loom_target_low_legality_builtin_dialect_bits_t;
 
-// All target-low legality diagnostic flags known to this header.
-#define LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_ALL \
-  LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS
+// Returns true if |bits| contains |dialect_id|.
+static inline bool loom_target_low_legality_builtin_dialect_bits_contain(
+    loom_target_low_legality_builtin_dialect_bits_t bits, uint8_t dialect_id) {
+  return dialect_id < 32 && iree_any_bit_set(bits, 1u << dialect_id);
+}
 
 typedef iree_status_t (*loom_target_low_legality_try_op_fn_t)(
     const loom_target_low_legality_provider_t* provider,
@@ -52,6 +62,8 @@ typedef iree_status_t (*loom_target_low_legality_try_op_fn_t)(
 struct loom_target_low_legality_provider_t {
   // Stable provider name available to callbacks when emitting diagnostics.
   iree_string_view_t name;
+  // Built-in source dialect ids this provider can answer.
+  loom_target_low_legality_builtin_dialect_bits_t builtin_dialect_bits;
   // Attempts to verify one source op. Sets |out_handled| false when the op does
   // not belong to this provider.
   loom_target_low_legality_try_op_fn_t try_verify_op;

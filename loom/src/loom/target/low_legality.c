@@ -119,6 +119,9 @@ iree_status_t loom_target_low_legality_provider_list_verify(
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "target-low legality provider is invalid");
     }
+    IREE_ASSERT_NE(provider->builtin_dialect_bits, 0u);
+    IREE_ASSERT(!iree_any_bit_set(provider->builtin_dialect_bits,
+                                  ~((1u << LOOM_DIALECT_BUILTIN_COUNT_) - 1u)));
   }
   return iree_ok_status();
 }
@@ -509,9 +512,14 @@ static iree_status_t loom_target_low_legality_try_provider_op(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled) {
   *out_handled = false;
+  const uint8_t dialect_id = loom_op_dialect_id(op->kind);
   for (iree_host_size_t i = 0; i < context->options->provider_list.count; ++i) {
     const loom_target_low_legality_provider_t* provider =
         context->options->provider_list.values[i];
+    if (!loom_target_low_legality_builtin_dialect_bits_contain(
+            provider->builtin_dialect_bits, dialect_id)) {
+      continue;
+    }
     bool handled = false;
     IREE_RETURN_IF_ERROR(
         provider->try_verify_op(provider, context, op, &handled));

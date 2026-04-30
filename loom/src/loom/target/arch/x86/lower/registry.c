@@ -321,6 +321,7 @@ static const loom_low_lower_policy_t kX86Avx512PackedDotLowLowerPolicy = {
 const loom_target_low_legality_provider_t
     loom_x86_low_legality_provider_storage = {
         .name = IREE_SVL("x86"),
+        .builtin_dialect_bits = 1u << LOOM_DIALECT_VECTOR,
         .try_verify_op = loom_x86_low_legality_try_verify_op,
 };
 
