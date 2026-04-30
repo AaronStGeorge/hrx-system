@@ -139,6 +139,49 @@ typedef enum loom_amdgpu_matrix_format_selector_e {
   LOOM_AMDGPU_MATRIX_FORMAT_SELECTOR_FP4 = 4,
 } loom_amdgpu_matrix_format_selector_t;
 
+typedef enum loom_amdgpu_matrix_operand_role_e {
+  // Unknown or uninitialized matrix operand role.
+  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_UNKNOWN = 0,
+  // Matrix A source operand.
+  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS = 1,
+  // Matrix B source operand.
+  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS = 2,
+  // Matrix C accumulator input operand.
+  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR = 3,
+  // Matrix D result operand.
+  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT = 4,
+} loom_amdgpu_matrix_operand_role_t;
+
+typedef enum loom_amdgpu_matrix_fragment_coordinate_flag_bits_e {
+  // Coordinate carries an M/result-row value.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW = 1u << 0,
+  // Coordinate carries an N/result-column value.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_COLUMN = 1u << 1,
+  // Coordinate carries a K/reduction value.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_REDUCTION = 1u << 2,
+} loom_amdgpu_matrix_fragment_coordinate_flag_bits_t;
+
+// Bitset of loom_amdgpu_matrix_fragment_coordinate_flag_bits_t values.
+typedef uint32_t loom_amdgpu_matrix_fragment_coordinate_flags_t;
+
+typedef enum loom_amdgpu_matrix_fragment_layout_kind_e {
+  // No target-owned fragment layout is attached.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_UNKNOWN = 0,
+  // RDNA3 WMMAR3 16x16x16 f16 input, f32 accumulator/result layout.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_F32_16X16X16_F16 = 1,
+} loom_amdgpu_matrix_fragment_layout_kind_t;
+
+typedef enum loom_amdgpu_matrix_fragment_map_kind_e {
+  // No lane/register coordinate formula is defined.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_UNKNOWN = 0,
+  // Row is lane mod M; reduction is packed by register element.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_PACKED_REDUCTION = 1,
+  // Column is lane mod N; reduction is packed by register element.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_PACKED_REDUCTION = 2,
+  // Row is register-interleaved by the lane group; column is lane mod N.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN = 3,
+} loom_amdgpu_matrix_fragment_map_kind_t;
+
 typedef enum loom_amdgpu_matrix_contract_flag_bits_e {
   // Contract consumes an explicit sparse index operand.
   LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE = 1u << 0,
@@ -191,6 +234,51 @@ typedef struct loom_amdgpu_matrix_payload_shape_t {
   uint16_t element_count;
 } loom_amdgpu_matrix_payload_shape_t;
 
+typedef struct loom_amdgpu_matrix_fragment_role_layout_t {
+  // Matrix operand role described by this role layout.
+  loom_amdgpu_matrix_operand_role_t role;
+  // Formula used to map lane/register elements into logical coordinates.
+  loom_amdgpu_matrix_fragment_map_kind_t map_kind;
+  // Number of 32-bit VGPR payload registers held by each participating lane.
+  uint16_t register_count;
+  // Number of logical scalar elements packed into each payload register.
+  uint16_t elements_per_register;
+  // Bit width of each logical scalar element.
+  uint16_t element_bit_count;
+  // Coordinate axes produced by this role layout.
+  loom_amdgpu_matrix_fragment_coordinate_flags_t coordinate_flags;
+} loom_amdgpu_matrix_fragment_role_layout_t;
+
+typedef struct loom_amdgpu_matrix_fragment_layout_t {
+  // Stable target-owned layout kind.
+  loom_amdgpu_matrix_fragment_layout_kind_t kind;
+  // Stable layout name used by diagnostics and tests.
+  iree_string_view_t name;
+  // Wave size for which lane formulas are defined.
+  uint16_t wave_size;
+  // Logical tile shape covered by the layout.
+  loom_amdgpu_matrix_tile_shape_t tile_shape;
+  // Matrix A source role layout.
+  loom_amdgpu_matrix_fragment_role_layout_t lhs;
+  // Matrix B source role layout.
+  loom_amdgpu_matrix_fragment_role_layout_t rhs;
+  // Matrix C accumulator input role layout.
+  loom_amdgpu_matrix_fragment_role_layout_t accumulator;
+  // Matrix D result role layout.
+  loom_amdgpu_matrix_fragment_role_layout_t result;
+} loom_amdgpu_matrix_fragment_layout_t;
+
+typedef struct loom_amdgpu_matrix_fragment_coordinate_t {
+  // Coordinate axes populated for this role.
+  loom_amdgpu_matrix_fragment_coordinate_flags_t coordinate_flags;
+  // M/result-row coordinate when ROW is set.
+  uint16_t row;
+  // N/result-column coordinate when COLUMN is set.
+  uint16_t column;
+  // K/reduction coordinate when REDUCTION is set.
+  uint16_t reduction;
+} loom_amdgpu_matrix_fragment_coordinate_t;
+
 typedef struct loom_amdgpu_matrix_contract_descriptor_t {
   // Stable Loom descriptor name used by tests, diagnostics, and target logs.
   iree_string_view_t name;
@@ -218,6 +306,8 @@ typedef struct loom_amdgpu_matrix_contract_descriptor_t {
   loom_amdgpu_matrix_payload_shape_t result_payload;
   // Explicit scale operand kind.
   loom_amdgpu_matrix_scale_kind_t scale_kind;
+  // Target-owned fragment lane/register layout kind.
+  loom_amdgpu_matrix_fragment_layout_kind_t fragment_layout_kind;
 } loom_amdgpu_matrix_contract_descriptor_t;
 
 enum loom_amdgpu_matrix_contract_rejection_bits_e {
@@ -331,6 +421,31 @@ iree_string_view_t loom_amdgpu_matrix_numeric_type_name(
 // Returns the stable display name for a scale kind.
 iree_string_view_t loom_amdgpu_matrix_scale_kind_name(
     loom_amdgpu_matrix_scale_kind_t scale_kind);
+
+// Returns a target-owned fragment layout by kind, or NULL when unknown.
+const loom_amdgpu_matrix_fragment_layout_t*
+loom_amdgpu_matrix_fragment_layout_for_kind(
+    loom_amdgpu_matrix_fragment_layout_kind_t kind);
+
+// Returns the target-owned fragment layout attached to |descriptor|, or NULL
+// when the descriptor has no reusable lane/register facts yet.
+const loom_amdgpu_matrix_fragment_layout_t*
+loom_amdgpu_matrix_contract_descriptor_fragment_layout(
+    const loom_amdgpu_matrix_contract_descriptor_t* descriptor);
+
+// Returns the role layout within |layout|, or NULL when the role is not
+// modeled.
+const loom_amdgpu_matrix_fragment_role_layout_t*
+loom_amdgpu_matrix_fragment_role_layout(
+    const loom_amdgpu_matrix_fragment_layout_t* layout,
+    loom_amdgpu_matrix_operand_role_t role);
+
+// Maps a lane-local payload register element to a logical matrix coordinate.
+bool loom_amdgpu_matrix_fragment_coordinate(
+    const loom_amdgpu_matrix_fragment_layout_t* layout,
+    loom_amdgpu_matrix_operand_role_t role, uint16_t lane,
+    uint16_t register_index, uint16_t element_index,
+    loom_amdgpu_matrix_fragment_coordinate_t* out_coordinate);
 
 // Maps a processor name such as "gfx942" or "gfx1250" to matrix feature bits.
 iree_status_t loom_amdgpu_matrix_feature_bits_for_processor(

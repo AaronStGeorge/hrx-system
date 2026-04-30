@@ -25,7 +25,18 @@
     .reduction_count = (reduction_count_value),                \
   }
 
-#define MATRIX_DESCRIPTOR_WITH_LOW_ID(                                        \
+#define MATRIX_ROLE_LAYOUT(role_value, map_kind_value, register_count_value, \
+                           elements_per_register_value,                      \
+                           element_bit_count_value, coordinate_flags_value)  \
+  (loom_amdgpu_matrix_fragment_role_layout_t) {                              \
+    .role = (role_value), .map_kind = (map_kind_value),                      \
+    .register_count = (register_count_value),                                \
+    .elements_per_register = (elements_per_register_value),                  \
+    .element_bit_count = (element_bit_count_value),                          \
+    .coordinate_flags = (coordinate_flags_value),                            \
+  }
+
+#define MATRIX_DESCRIPTOR_WITH_LOW_ID_AND_LAYOUT(                             \
     name_value, low_descriptor_id_value, intrinsic_name_value, family_value,  \
     feature_bits_value, wave_bits_value, flags_value, row_count_value,        \
     column_count_value, reduction_count_value, lhs_type_value,                \
@@ -33,7 +44,7 @@
     rhs_registers_value, rhs_elements_value, accumulator_type_value,          \
     accumulator_registers_value, accumulator_elements_value,                  \
     result_type_value, result_registers_value, result_elements_value,         \
-    scale_kind_value)                                                         \
+    scale_kind_value, fragment_layout_kind_value)                             \
   {                                                                           \
       .name = IREE_SVL(name_value),                                           \
       .low_descriptor_id = (low_descriptor_id_value),                         \
@@ -54,7 +65,62 @@
       .result_payload = MATRIX_PAYLOAD(                                       \
           result_type_value, result_registers_value, result_elements_value),  \
       .scale_kind = (scale_kind_value),                                       \
+      .fragment_layout_kind = (fragment_layout_kind_value),                   \
   }
+
+#define MATRIX_DESCRIPTOR_WITH_LOW_ID(                                         \
+    name_value, low_descriptor_id_value, intrinsic_name_value, family_value,   \
+    feature_bits_value, wave_bits_value, flags_value, row_count_value,         \
+    column_count_value, reduction_count_value, lhs_type_value,                 \
+    lhs_registers_value, lhs_elements_value, rhs_type_value,                   \
+    rhs_registers_value, rhs_elements_value, accumulator_type_value,           \
+    accumulator_registers_value, accumulator_elements_value,                   \
+    result_type_value, result_registers_value, result_elements_value,          \
+    scale_kind_value)                                                          \
+  MATRIX_DESCRIPTOR_WITH_LOW_ID_AND_LAYOUT(                                    \
+      name_value, low_descriptor_id_value, intrinsic_name_value, family_value, \
+      feature_bits_value, wave_bits_value, flags_value, row_count_value,       \
+      column_count_value, reduction_count_value, lhs_type_value,               \
+      lhs_registers_value, lhs_elements_value, rhs_type_value,                 \
+      rhs_registers_value, rhs_elements_value, accumulator_type_value,         \
+      accumulator_registers_value, accumulator_elements_value,                 \
+      result_type_value, result_registers_value, result_elements_value,        \
+      scale_kind_value, LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_UNKNOWN)
+
+static const loom_amdgpu_matrix_fragment_layout_t kMatrixFragmentLayouts[] = {
+    [LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_F32_16X16X16_F16] =
+        {
+            .kind =
+                LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_F32_16X16X16_F16,
+            .name = IREE_SVL("rdna3.wmmar3.f32.16x16x16.f16"),
+            .wave_size = 32,
+            .tile_shape = MATRIX_TILE_SHAPE(16, 16, 16),
+            .lhs = MATRIX_ROLE_LAYOUT(
+                LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS,
+                LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_PACKED_REDUCTION,
+                8, 2, 16,
+                LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW |
+                    LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_REDUCTION),
+            .rhs = MATRIX_ROLE_LAYOUT(
+                LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS,
+                LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_PACKED_REDUCTION,
+                8, 2, 16,
+                LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_COLUMN |
+                    LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_REDUCTION),
+            .accumulator = MATRIX_ROLE_LAYOUT(
+                LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR,
+                LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN,
+                8, 1, 32,
+                LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW |
+                    LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_COLUMN),
+            .result = MATRIX_ROLE_LAYOUT(
+                LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT,
+                LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN,
+                8, 1, 32,
+                LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW |
+                    LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_COLUMN),
+        },
+};
 
 #define MATRIX_DESCRIPTOR(                                                     \
     name_value, intrinsic_name_value, family_value, feature_bits_value,        \
@@ -1472,17 +1538,17 @@ static const loom_amdgpu_matrix_contract_descriptor_t
             LOOM_AMDGPU_MATRIX_NUMERIC_F32, 0, 0,
             LOOM_AMDGPU_MATRIX_NUMERIC_F32, 0, 0,
             LOOM_AMDGPU_MATRIX_SCALE_NONE),
-        MATRIX_DESCRIPTOR_WITH_LOW_ID(
+        MATRIX_DESCRIPTOR_WITH_LOW_ID_AND_LAYOUT(
             "wmma.f32.16x16x16.f16",
             LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_F32_16X16X16_F16,
             "llvm.amdgcn.wmma.f32.16x16x16.f16", LOOM_AMDGPU_MATRIX_FAMILY_WMMA,
             LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11,
-            LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY, 0, 16, 16, 16,
+            LOOM_AMDGPU_MATRIX_WAVE_SIZE_32, 0, 16, 16, 16,
             LOOM_AMDGPU_MATRIX_NUMERIC_F16, 0, 0,
             LOOM_AMDGPU_MATRIX_NUMERIC_F16, 0, 0,
             LOOM_AMDGPU_MATRIX_NUMERIC_F32, 0, 0,
-            LOOM_AMDGPU_MATRIX_NUMERIC_F32, 0, 0,
-            LOOM_AMDGPU_MATRIX_SCALE_NONE),
+            LOOM_AMDGPU_MATRIX_NUMERIC_F32, 0, 0, LOOM_AMDGPU_MATRIX_SCALE_NONE,
+            LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_F32_16X16X16_F16),
         MATRIX_DESCRIPTOR_WITH_LOW_ID(
             "wmma.i32.16x16x16.iu8",
             LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_I32_16X16X16_IU8,
@@ -1646,6 +1712,121 @@ iree_string_view_t loom_amdgpu_matrix_scale_kind_name(
       return IREE_SV("scale16");
   }
   return IREE_SV("unknown");
+}
+
+const loom_amdgpu_matrix_fragment_layout_t*
+loom_amdgpu_matrix_fragment_layout_for_kind(
+    loom_amdgpu_matrix_fragment_layout_kind_t kind) {
+  if (kind <= LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_UNKNOWN ||
+      (iree_host_size_t)kind >= IREE_ARRAYSIZE(kMatrixFragmentLayouts)) {
+    return NULL;
+  }
+  const loom_amdgpu_matrix_fragment_layout_t* layout =
+      &kMatrixFragmentLayouts[kind];
+  return layout->kind == kind ? layout : NULL;
+}
+
+const loom_amdgpu_matrix_fragment_layout_t*
+loom_amdgpu_matrix_contract_descriptor_fragment_layout(
+    const loom_amdgpu_matrix_contract_descriptor_t* descriptor) {
+  if (descriptor == NULL) {
+    return NULL;
+  }
+  return loom_amdgpu_matrix_fragment_layout_for_kind(
+      descriptor->fragment_layout_kind);
+}
+
+const loom_amdgpu_matrix_fragment_role_layout_t*
+loom_amdgpu_matrix_fragment_role_layout(
+    const loom_amdgpu_matrix_fragment_layout_t* layout,
+    loom_amdgpu_matrix_operand_role_t role) {
+  if (layout == NULL) {
+    return NULL;
+  }
+  switch (role) {
+    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS:
+      return &layout->lhs;
+    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS:
+      return &layout->rhs;
+    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR:
+      return &layout->accumulator;
+    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT:
+      return &layout->result;
+    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_UNKNOWN:
+    default:
+      return NULL;
+  }
+}
+
+static bool loom_amdgpu_matrix_fragment_coordinate_from_role_layout(
+    const loom_amdgpu_matrix_fragment_layout_t* layout,
+    const loom_amdgpu_matrix_fragment_role_layout_t* role_layout, uint16_t lane,
+    uint16_t register_index, uint16_t element_index,
+    loom_amdgpu_matrix_fragment_coordinate_t* out_coordinate) {
+  const loom_amdgpu_matrix_tile_shape_t tile_shape = layout->tile_shape;
+  if (tile_shape.result_row_count == 0 || tile_shape.result_column_count == 0 ||
+      tile_shape.reduction_count == 0) {
+    return false;
+  }
+
+  out_coordinate->coordinate_flags = role_layout->coordinate_flags;
+  switch (role_layout->map_kind) {
+    case LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_PACKED_REDUCTION: {
+      const uint32_t reduction =
+          (uint32_t)register_index * role_layout->elements_per_register +
+          element_index;
+      if (reduction >= tile_shape.reduction_count) {
+        return false;
+      }
+      out_coordinate->row = lane % tile_shape.result_row_count;
+      out_coordinate->reduction = (uint16_t)reduction;
+      return true;
+    }
+    case LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_PACKED_REDUCTION: {
+      const uint32_t reduction =
+          (uint32_t)register_index * role_layout->elements_per_register +
+          element_index;
+      if (reduction >= tile_shape.reduction_count) {
+        return false;
+      }
+      out_coordinate->column = lane % tile_shape.result_column_count;
+      out_coordinate->reduction = (uint16_t)reduction;
+      return true;
+    }
+    case LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN: {
+      const uint32_t row =
+          (uint32_t)register_index * 2u + lane / tile_shape.result_column_count;
+      if (row >= tile_shape.result_row_count) {
+        return false;
+      }
+      out_coordinate->row = (uint16_t)row;
+      out_coordinate->column = lane % tile_shape.result_column_count;
+      return true;
+    }
+    case LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_UNKNOWN:
+    default:
+      return false;
+  }
+}
+
+bool loom_amdgpu_matrix_fragment_coordinate(
+    const loom_amdgpu_matrix_fragment_layout_t* layout,
+    loom_amdgpu_matrix_operand_role_t role, uint16_t lane,
+    uint16_t register_index, uint16_t element_index,
+    loom_amdgpu_matrix_fragment_coordinate_t* out_coordinate) {
+  IREE_ASSERT_ARGUMENT(out_coordinate);
+  *out_coordinate = (loom_amdgpu_matrix_fragment_coordinate_t){0};
+  const loom_amdgpu_matrix_fragment_role_layout_t* role_layout =
+      loom_amdgpu_matrix_fragment_role_layout(layout, role);
+  if (layout == NULL || role_layout == NULL || layout->wave_size == 0 ||
+      lane >= layout->wave_size ||
+      register_index >= role_layout->register_count ||
+      element_index >= role_layout->elements_per_register) {
+    return false;
+  }
+
+  return loom_amdgpu_matrix_fragment_coordinate_from_role_layout(
+      layout, role_layout, lane, register_index, element_index, out_coordinate);
 }
 
 iree_status_t loom_amdgpu_matrix_feature_bits_for_processor(
