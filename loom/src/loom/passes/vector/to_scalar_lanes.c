@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/passes/vector/to_scalar_lanes.h"
+
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
@@ -11,7 +13,11 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
-#include "loom/passes/vector/to_scalar_internal.h"
+#include "loom/passes/vector/to_scalar_memory.h"
+#include "loom/passes/vector/to_scalar_quantized.h"
+#include "loom/passes/vector/to_scalar_structural.h"
+#include "loom/passes/vector/to_scalar_tables.h"
+#include "loom/passes/vector/to_scalar_transforms.h"
 #include "loom/util/math.h"
 
 bool loom_vector_to_scalar_indices_are_dynamic(
@@ -539,6 +545,111 @@ static iree_status_t loom_vector_to_scalar_build_generic_lane(
       state->result_scalar_type, out_lane);
 }
 
+typedef iree_status_t (*loom_vector_to_scalar_lane_lowerer_t)(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane);
+
+typedef struct loom_vector_to_scalar_lane_lowerer_def_t {
+  // Lane-program kind selected by the descriptor row.
+  loom_vector_to_scalar_lane_kind_t lane_kind;
+  // Emits the scalar program for one logical lane.
+  loom_vector_to_scalar_lane_lowerer_t lower;
+} loom_vector_to_scalar_lane_lowerer_def_t;
+
+static iree_status_t loom_vector_to_scalar_build_bitfield_extractu_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
+  return loom_vector_to_scalar_build_bitfield_extract_lane(
+      state, indices, /*signed_extract=*/false, out_lane);
+}
+
+static iree_status_t loom_vector_to_scalar_build_bitfield_extracts_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
+  return loom_vector_to_scalar_build_bitfield_extract_lane(
+      state, indices, /*signed_extract=*/true, out_lane);
+}
+
+static iree_status_t loom_vector_to_scalar_build_bitunpacku_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
+  return loom_vector_to_scalar_build_bitunpack_lane(
+      state, indices, /*signed_unpack=*/false, out_lane);
+}
+
+static iree_status_t loom_vector_to_scalar_build_bitunpacks_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
+  return loom_vector_to_scalar_build_bitunpack_lane(
+      state, indices, /*signed_unpack=*/true, out_lane);
+}
+
+static const loom_vector_to_scalar_lane_lowerer_def_t
+    kVectorToScalarLaneLowerers[] = {
+        {LOOM_VECTOR_TO_SCALAR_LANE_GENERIC,
+         loom_vector_to_scalar_build_generic_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_IOTA,
+         loom_vector_to_scalar_build_iota_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_MASK_RANGE,
+         loom_vector_to_scalar_build_mask_range_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_BROADCAST,
+         loom_vector_to_scalar_build_broadcast_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_EXTRACT,
+         loom_vector_to_scalar_build_extract_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_INSERT,
+         loom_vector_to_scalar_build_insert_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_SLICE,
+         loom_vector_to_scalar_build_slice_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_CONCAT,
+         loom_vector_to_scalar_build_concat_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_TRANSPOSE,
+         loom_vector_to_scalar_build_transpose_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_SHUFFLE,
+         loom_vector_to_scalar_build_shuffle_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_INTERLEAVE,
+         loom_vector_to_scalar_build_interleave_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_DEINTERLEAVE,
+         loom_vector_to_scalar_build_deinterleave_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_BITCAST,
+         loom_vector_to_scalar_build_bitcast_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_BITFIELD_EXTRACTU,
+         loom_vector_to_scalar_build_bitfield_extractu_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_BITFIELD_EXTRACTS,
+         loom_vector_to_scalar_build_bitfield_extracts_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_BITFIELD_INSERT,
+         loom_vector_to_scalar_build_bitfield_insert_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_DOT2F,
+         loom_vector_to_scalar_build_dot2f_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_DOT4I,
+         loom_vector_to_scalar_build_dot4i_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_DOT8I4,
+         loom_vector_to_scalar_build_dot8i4_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_DOT4F8,
+         loom_vector_to_scalar_build_dot4f8_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_BITPACK,
+         loom_vector_to_scalar_build_bitpack_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_BITUNPACKU,
+         loom_vector_to_scalar_build_bitunpacku_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_BITUNPACKS,
+         loom_vector_to_scalar_build_bitunpacks_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_TABLE_LOOKUP,
+         loom_vector_to_scalar_build_table_lookup_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_TABLE_QUANTIZE,
+         loom_vector_to_scalar_build_table_quantize_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_TRANSFORM,
+         loom_vector_to_scalar_build_transform_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_LOAD,
+         loom_vector_to_scalar_build_load_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_LOAD_MASK,
+         loom_vector_to_scalar_build_masked_load_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_GATHER,
+         loom_vector_to_scalar_build_gather_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_GATHER_MASK,
+         loom_vector_to_scalar_build_masked_gather_lane},
+        {LOOM_VECTOR_TO_SCALAR_LANE_LOAD_EXPAND,
+         loom_vector_to_scalar_build_load_expand_lane},
+};
+
 iree_status_t loom_vector_to_scalar_build_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
@@ -546,90 +657,17 @@ iree_status_t loom_vector_to_scalar_build_lane(
     loom_pass_statistic_add(state->pass,
                             LOOM_VECTOR_TO_SCALAR_STAT_LANES_MATERIALIZED, 1);
   }
-  switch (state->descriptor->lane_kind) {
-    case LOOM_VECTOR_TO_SCALAR_LANE_GENERIC:
-      return loom_vector_to_scalar_build_generic_lane(state, indices, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_IOTA:
-      return loom_vector_to_scalar_build_iota_lane(state, indices, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_MASK_RANGE:
-      return loom_vector_to_scalar_build_mask_range_lane(state, indices,
-                                                         out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_BROADCAST:
-      return loom_vector_to_scalar_build_broadcast_lane(state, indices,
-                                                        out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_EXTRACT:
-      return loom_vector_to_scalar_build_extract_lane(state, indices, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_INSERT:
-      return loom_vector_to_scalar_build_insert_lane(state, indices, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_SLICE:
-      return loom_vector_to_scalar_build_slice_lane(state, indices, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_CONCAT:
-      return loom_vector_to_scalar_build_concat_lane(state, indices, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_TRANSPOSE:
-      return loom_vector_to_scalar_build_transpose_lane(state, indices,
-                                                        out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_SHUFFLE:
-      return loom_vector_to_scalar_build_shuffle_lane(state, indices, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_INTERLEAVE:
-      return loom_vector_to_scalar_build_interleave_lane(state, indices,
-                                                         out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_DEINTERLEAVE:
-      return loom_vector_to_scalar_build_deinterleave_lane(state, indices,
-                                                           out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_BITCAST:
-      return loom_vector_to_scalar_build_bitcast_lane(state, indices, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_BITFIELD_EXTRACTU:
-      return loom_vector_to_scalar_build_bitfield_extract_lane(
-          state, indices, /*signed_extract=*/false, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_BITFIELD_EXTRACTS:
-      return loom_vector_to_scalar_build_bitfield_extract_lane(
-          state, indices, /*signed_extract=*/true, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_BITFIELD_INSERT:
-      return loom_vector_to_scalar_build_bitfield_insert_lane(state, indices,
-                                                              out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_DOT2F:
-      return loom_vector_to_scalar_build_dot2f_lane(state, indices, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_DOT4I:
-      return loom_vector_to_scalar_build_dot4i_lane(state, indices, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_DOT8I4:
-      return loom_vector_to_scalar_build_dot8i4_lane(state, indices, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_DOT4F8:
-      return loom_vector_to_scalar_build_dot4f8_lane(state, indices, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_BITPACK:
-      return loom_vector_to_scalar_build_bitpack_lane(state, indices, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_BITUNPACKU:
-      return loom_vector_to_scalar_build_bitunpack_lane(
-          state, indices, /*signed_unpack=*/false, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_BITUNPACKS:
-      return loom_vector_to_scalar_build_bitunpack_lane(
-          state, indices, /*signed_unpack=*/true, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_TABLE_LOOKUP:
-      return loom_vector_to_scalar_build_table_lookup_lane(state, indices,
-                                                           out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_TABLE_QUANTIZE:
-      return loom_vector_to_scalar_build_table_quantize_lane(state, indices,
-                                                             out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_TRANSFORM:
-      return loom_vector_to_scalar_build_transform_lane(state, indices,
-                                                        out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_LOAD:
-      return loom_vector_to_scalar_build_load_lane(state, indices, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_LOAD_MASK:
-      return loom_vector_to_scalar_build_masked_load_lane(state, indices,
-                                                          out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_GATHER:
-      return loom_vector_to_scalar_build_gather_lane(state, indices, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_GATHER_MASK:
-      return loom_vector_to_scalar_build_masked_gather_lane(state, indices,
-                                                            out_lane);
-    case LOOM_VECTOR_TO_SCALAR_LANE_LOAD_EXPAND:
-      return loom_vector_to_scalar_build_load_expand_lane(state, indices,
-                                                          out_lane);
-    default:
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "unknown vector-to-scalar lane kind %u",
-                              (unsigned)state->descriptor->lane_kind);
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kVectorToScalarLaneLowerers);
+       ++i) {
+    const loom_vector_to_scalar_lane_lowerer_def_t* lowerer =
+        &kVectorToScalarLaneLowerers[i];
+    if (lowerer->lane_kind == state->descriptor->lane_kind) {
+      return lowerer->lower(state, indices, out_lane);
+    }
   }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "unknown vector-to-scalar lane kind %u",
+                          (unsigned)state->descriptor->lane_kind);
 }
 
 static bool loom_vector_to_scalar_try_from_elements_lane(

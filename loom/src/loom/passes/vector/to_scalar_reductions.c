@@ -4,12 +4,13 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/passes/vector/to_scalar_reductions.h"
+
 #include "loom/ir/module.h"
 #include "loom/ops/combining.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
-#include "loom/passes/vector/to_scalar_internal.h"
 
 //===----------------------------------------------------------------------===//
 // Reduction lowering

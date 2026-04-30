@@ -60,19 +60,29 @@ loom_cc_library(
     to_scalar
   HDRS
     "to_scalar.h"
-    "to_scalar_internal.h"
   SRCS
     "to_scalar.c"
     "to_scalar_aggregates.c"
+    "to_scalar_aggregates.h"
+    "to_scalar_core.h"
     "to_scalar_descriptors.c"
+    "to_scalar_descriptors.h"
     "to_scalar_lanes.c"
+    "to_scalar_lanes.h"
     "to_scalar_memory.c"
+    "to_scalar_memory.h"
     "to_scalar_quantized.c"
+    "to_scalar_quantized.h"
     "to_scalar_reductions.c"
+    "to_scalar_reductions.h"
     "to_scalar_structural.c"
+    "to_scalar_structural.h"
     "to_scalar_tables.c"
+    "to_scalar_tables.h"
     "to_scalar_terms.c"
+    "to_scalar_terms.h"
     "to_scalar_transforms.c"
+    "to_scalar_transforms.h"
   DEPS
     iree::base
     loom::src::loom::error::error_defs
