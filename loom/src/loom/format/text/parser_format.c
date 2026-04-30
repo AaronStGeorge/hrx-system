@@ -30,6 +30,8 @@ iree_status_t loom_parse_format_add_field_span(loom_parser_t* parser,
 static iree_status_t loom_parse_format_index_list(
     loom_parser_t* parser, const loom_format_element_t* element,
     loom_parsed_op_t* parsed) {
+  uint16_t static_attr_index =
+      LOOM_FORMAT_INDEX_LIST_STATIC_ATTR_INDEX(element->data);
   loom_token_t list_start_token = loom_tokenizer_peek(&parser->tokenizer);
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LBRACKET)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
@@ -95,10 +97,10 @@ static iree_status_t loom_parse_format_index_list(
   memcpy(arena_values, static_values, value_count * sizeof(int64_t));
   loom_attribute_t attr = loom_attr_i64_array(arena_values, value_count);
   IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
-      parsed, &parser->parser_arena, element->data, attr));
+      parsed, &parser->parser_arena, static_attr_index, attr));
   return loom_parse_format_add_field_span(parser, parsed,
                                           LOOM_LOCATION_FIELD_ATTRIBUTE,
-                                          element->data, list_start_token);
+                                          static_attr_index, list_start_token);
 }
 
 static iree_status_t loom_parse_format_keyword_is_present(

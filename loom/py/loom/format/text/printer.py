@@ -384,8 +384,8 @@ class TokenStream:
       - Backward-glue punctuation (, ) ] }): always suppress space before.
       - Explicit Glue element: marks the next token to suppress space.
       - Composite elements with built-in glue (BindingList, BlockArgs,
-        FuncArgs, and non-leading IndexList): their output is emitted with
-        glue=True.
+        FuncArgs, and non-leading IndexList when requested): their output is
+        emitted with glue=True.
 
     The token joiner is trivial: check the glue flag, emit space or not.
     No character-level heuristics.
@@ -1425,12 +1425,12 @@ class Printer:
                         stream = TokenStream()
                         stream.emit("}")
 
-                case IndexList(dynamic=dynamic_field, static=static_field):
+                case IndexList(dynamic=dynamic_field, static=static_field, glue=glue):
                     assert isinstance(fields, ResolvedFields)
                     covered_attrs.add(static_field)
                     stream.emit(
                         self._format_index_list(fields, dynamic_field, static_field),
-                        glue=element_index != 0,
+                        glue=element_index != 0 and glue,
                     )
 
                 case BindingList(field=name):

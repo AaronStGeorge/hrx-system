@@ -332,18 +332,22 @@ iree_status_t loom_print_format_elements(loom_print_context_t* ctx,
         break;
       }
       case LOOM_FORMAT_KIND_INDEX_LIST: {
-        if (element->data >= op->attribute_count) {
+        uint16_t static_attr_index =
+            LOOM_FORMAT_INDEX_LIST_STATIC_ATTR_INDEX(element->data);
+        if (static_attr_index >= op->attribute_count) {
           return iree_make_status(
               IREE_STATUS_INVALID_ARGUMENT,
               "format INDEX_LIST attr index %u out of range (op has %u "
               "attributes)",
-              element->data, op->attribute_count);
+              static_attr_index, op->attribute_count);
         }
-        loom_attribute_t static_attr = loom_op_attrs(op)[element->data];
+        loom_attribute_t static_attr = loom_op_attrs(op)[static_attr_index];
         const loom_value_id_t* operands = loom_op_const_operands(op);
         uint16_t dynamic_start = element->field_index;
         uint16_t dynamic_index = 0;
-        IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "[", i > 0));
+        bool glue =
+            i > 0 && LOOM_FORMAT_INDEX_LIST_HAS_LEADING_GLUE(element->data);
+        IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "[", glue));
         for (uint16_t j = 0; j < static_attr.count; ++j) {
           if (j > 0) {
             IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ",", false));

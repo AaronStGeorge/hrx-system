@@ -898,6 +898,24 @@ class TestParseSliceOp:
         assert op.attributes["static_offsets"] == [0, sentinel]
 
 
+class TestParseShapeOp:
+    def test_unglued_index_list(self) -> None:
+        tile_type = ShapedType(
+            TypeKind.TILE,
+            ScalarType(ScalarTypeKind.F16),
+            (StaticDim(64), StaticDim(64)),
+        )
+        module, scope = _setup_scope(("src", tile_type), ("dim", INDEX))
+        sentinel = -(2**63)
+        op = _parse_op(
+            "test.shape %src shape [%dim, 4] : tile<64x64xf16>",
+            module=module,
+            scope=scope,
+        )
+        assert op.name == "test.shape"
+        assert op.attributes["static_dims"] == [sentinel, 4]
+
+
 class TestParseTiedResult:
     def test_update(self) -> None:
         tile_t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))

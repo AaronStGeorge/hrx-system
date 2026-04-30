@@ -1058,6 +1058,18 @@ class TestSpacing:
         assert "%src[0, 0]" in text
         assert "%src [" not in text
 
+    def test_index_list_can_leave_space_before_bracket(self) -> None:
+        sentinel = -(2**63)
+        module, [src, dim] = _module_with(("src", _tile_64x64xf16), ("dim", INDEX))
+        op = Operation(
+            name="test.shape",
+            operands=[src, dim],
+            attributes={"static_dims": [sentinel, 4]},
+        )
+        text = _printer().print_operation(op, module)
+        assert text == "test.shape %src shape [%dim, 4] : tile<64x64xf16>"
+        assert "shape[" not in text
+
     def test_parens_glue(self) -> None:
         module, [w, x, out] = _module_with(
             ("w", _tile_4xf32), ("x", INDEX), ("out", _tile_4xf32)

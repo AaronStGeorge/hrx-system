@@ -89,7 +89,8 @@ enum {
   LOOM_OP_TEST_CLAUSE_CONSTANT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 67),
   LOOM_OP_TEST_CLAUSE_COPY = LOOM_OP_KIND(LOOM_DIALECT_TEST, 68),
   LOOM_OP_TEST_TYPED_USE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 69),
-  LOOM_OP_TEST_COUNT_ = 70,
+  LOOM_OP_TEST_SHAPE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 70),
+  LOOM_OP_TEST_COUNT_ = 71,
 };
 
 // Function visibility. Absent (0) means private.
@@ -1268,6 +1269,22 @@ iree_status_t loom_test_typed_use_build(
     loom_builder_t* builder,
     const loom_value_id_t* values,
     iree_host_size_t values_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_SHAPE: Test named index-list clause that keeps a space before '['.
+// test.shape %value shape [%m, 4] : tile<[%m]x4xf32>
+LOOM_DEFINE_ISA(loom_test_shape_isa, LOOM_OP_TEST_SHAPE)
+LOOM_DEFINE_OPERAND(loom_test_shape_value, 0)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_test_shape_dims, 1)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_test_shape_static_dims, 0)
+iree_status_t loom_test_shape_build(
+    loom_builder_t* builder,
+    loom_value_id_t value,
+    const loom_value_id_t* dims,
+    iree_host_size_t dims_count,
+    const int64_t* static_dims,
+    iree_host_size_t static_dims_count,
     loom_location_id_t location,
     loom_op_t** out_op);
 

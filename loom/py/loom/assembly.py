@@ -445,7 +445,9 @@ class Region:
 class IndexList:
     """A mixed static/dynamic index list in bracket notation.
 
-    Prints/parses: [0, %x, 4] or [%i, %j] or [0, 0]
+    Prints/parses: [0, %x, 4] or [%i, %j] or [0, 0]. When used after
+    another format element, `glue` controls whether the opening bracket
+    attaches to the previous token.
 
     Static values come from the static attribute (an integer array).
     Dynamic values come from the dynamic operand list. The two are
@@ -459,6 +461,7 @@ class IndexList:
 
     dynamic: str  # Operand field for dynamic values.
     static: str  # Attribute field for static values.
+    glue: bool = True  # Suppress space before the list when non-leading.
 
 
 @dataclass(frozen=True, slots=True)

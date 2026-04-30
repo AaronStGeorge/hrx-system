@@ -156,7 +156,7 @@ enum loom_format_kind_e {
   // Nested region. data = loom_region_syntax_t selector.
   LOOM_FORMAT_KIND_REGION = 10,
   // Mixed static/dynamic index list: [0, %x, 4].
-  // field_index = dynamic operand index, data = static attr index.
+  // field_index = dynamic operand index, data = LOOM_FORMAT_INDEX_LIST_DATA.
   LOOM_FORMAT_KIND_INDEX_LIST = 11,
   // Named value bindings: (%a = %x : type, ...).
   // data = binding kind (CAPTURE or ELEMENT).
@@ -239,6 +239,22 @@ enum loom_format_kind_e {
 };
 typedef uint8_t loom_format_kind_t;
 
+// Individual flag bits packed into INDEX_LIST format element data.
+enum loom_format_index_list_data_bits_e {
+  LOOM_FORMAT_INDEX_LIST_DATA_NO_LEADING_GLUE = 1u << 15,
+};
+
+// Mask for the static attribute field index packed into INDEX_LIST data.
+#define LOOM_FORMAT_INDEX_LIST_ATTR_INDEX_MASK ((uint16_t)0x7FFFu)
+#define LOOM_FORMAT_INDEX_LIST_DATA(static_attr_index, leading_glue) \
+  ((uint16_t)((uint16_t)(static_attr_index) |                        \
+              ((leading_glue) ? 0u                                   \
+                              : LOOM_FORMAT_INDEX_LIST_DATA_NO_LEADING_GLUE)))
+#define LOOM_FORMAT_INDEX_LIST_STATIC_ATTR_INDEX(data) \
+  ((uint16_t)((data) & LOOM_FORMAT_INDEX_LIST_ATTR_INDEX_MASK))
+#define LOOM_FORMAT_INDEX_LIST_HAS_LEADING_GLUE(data) \
+  (!iree_any_bit_set((data), LOOM_FORMAT_INDEX_LIST_DATA_NO_LEADING_GLUE))
+
 // Surface syntax selected by a REGION format element. This affects only text
 // parsing/printing; the in-memory representation is always an ordinary
 // loom_region_t.
@@ -271,7 +287,7 @@ typedef enum loom_region_syntax_e {
 // operand, result, attribute, or region this element references. The data
 // field is kind-specific:
 //   KEYWORD:        keyword ID (loom_keyword_id_t).
-//   INDEX_LIST:     static attribute field index.
+//   INDEX_LIST:     LOOM_FORMAT_INDEX_LIST_DATA(static attr index, glue).
 //   OPERAND_DICT:   dict attribute field index storing key -> operand ordinal.
 //   ATTR_TABLE:     i64 array attr field index storing row keys.
 //   REGION_TABLE:   packed keys attr index and fixed default region index.

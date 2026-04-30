@@ -184,6 +184,13 @@ class TestIndexList:
         il = IndexList("offsets", "static_offsets")
         assert il.dynamic == "offsets"
         assert il.static == "static_offsets"
+        assert il.glue is True
+
+    def test_construct_without_leading_glue(self) -> None:
+        il = IndexList("dims", "static_dims", glue=False)
+        assert il.dynamic == "dims"
+        assert il.static == "static_dims"
+        assert il.glue is False
 
 
 class TestBindingList:

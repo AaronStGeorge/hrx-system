@@ -958,6 +958,35 @@ test_slice = Op(
 )
 
 # ============================================================================
+# test.shape — unglued named index list
+# ============================================================================
+
+test_shape = Op(
+    "test.shape",
+    group=test_ops,
+    doc="Test named index-list clause that keeps a space before '['.",
+    operands=[
+        Operand("value", TILE),
+        Operand("dims", INDEX, variadic=True),
+    ],
+    attrs=[
+        AttrDef("static_dims", "i64_array", doc="Static shape values."),
+    ],
+    constraints=[OffsetCountMatchesRank("value", "dims")],
+    traits=[PURE],
+    format=[
+        Ref("value"),
+        kw("shape"),
+        IndexList("dims", "static_dims", glue=False),
+        COLON,
+        TypeOf("value"),
+    ],
+    examples=[
+        "test.shape %value shape [%m, 4] : tile<[%m]x4xf32>",
+    ],
+)
+
+# ============================================================================
 # test.loop — for-loop with iter_args and tied results
 # ============================================================================
 
@@ -1782,4 +1811,5 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_clause_constant,
     test_clause_copy,
     test_typed_use,
+    test_shape,
 )

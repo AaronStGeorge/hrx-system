@@ -636,3 +636,9 @@ class TestBuilder(DialectBuilder):
         *,
         values: list[ValueRef] = ...,
     ) -> None: ...
+    def shape(
+        self,
+        *,
+        value: ValueRef,
+        dims: list[int | ValueRef],
+    ) -> None: ...

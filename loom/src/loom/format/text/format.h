@@ -425,7 +425,8 @@
 //                           key -> operand ordinal metadata.
 //   Region(field)         Nested { block+ } region.
 //   IndexList(d, s)       Bracket list [0, %x, 4] with static/dynamic
-//                           mix. Always glues to preceding token.
+//                           mix. Usually glues to preceding token; format
+//                           tables may opt out for named clauses.
 //   BindingList(field)    Parenthesized named bindings:
 //                           (%elem = %tile : type, ...).
 //                           Always glues to preceding token.

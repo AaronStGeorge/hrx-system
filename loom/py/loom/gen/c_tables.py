@@ -1382,10 +1382,13 @@ def _translate_format_elements(
                         raise ValueError(f"Op '{op.name}': variadic Region '{name}' must use RegionTable or another table format")
                     elements.append(("LOOM_FORMAT_KIND_REGION", index, _resolve_region_syntax(syntax)))
 
-                case IndexList(dynamic=dynamic_field, static=static_field):
+                case IndexList(dynamic=dynamic_field, static=static_field, glue=glue):
                     dyn_kind, dyn_index = _resolve_field(dynamic_field)
                     sta_kind, sta_index = _resolve_field(static_field)
-                    elements.append(("LOOM_FORMAT_KIND_INDEX_LIST", dyn_index, str(sta_index)))
+                    if sta_index > 0x7FFF:
+                        raise ValueError(f"Op '{op.name}': IndexList static attr index {sta_index} exceeds packed format limit")
+                    payload = str(sta_index) if glue else f"LOOM_FORMAT_INDEX_LIST_DATA({sta_index}, false)"
+                    elements.append(("LOOM_FORMAT_KIND_INDEX_LIST", dyn_index, payload))
 
                 case BindingList(field=name, kind=binding_kind):
                     fld_kind, index = _resolve_field(name)
