@@ -38,6 +38,7 @@ py_test(
         "testdata/scalar_calls.py",
         "testdata/tir_fakes.py",
         "testdata/topology.py",
+        "testdata/vector_arithmetic.py",
         "testdata/vector_memory.py",
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],

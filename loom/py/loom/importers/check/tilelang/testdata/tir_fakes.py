@@ -185,6 +185,27 @@ class Add:
         self.dtype = dtype
 
 
+class LT:
+    def __init__(self, lhs: object, rhs: object, dtype: str = "bool") -> None:
+        self.a = lhs
+        self.b = rhs
+        self.dtype = dtype
+
+
+class Select:
+    def __init__(
+        self,
+        condition: object,
+        true_value: object,
+        false_value: object,
+        dtype: str = "float32",
+    ) -> None:
+        self.condition = condition
+        self.true_value = true_value
+        self.false_value = false_value
+        self.dtype = dtype
+
+
 class Op:
     def __init__(self, name: str) -> None:
         self.name = name

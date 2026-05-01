@@ -1,0 +1,118 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+# ruff: noqa: E501, ERA001
+
+from loom.importers.check.tilelang import TileLangImportInput, tilelang_case
+from loom.importers.check.tilelang.testdata.tir_fakes import (
+    LT,
+    Add,
+    Broadcast,
+    Buffer,
+    BufferLoad,
+    BufferStore,
+    FloatImm,
+    IntImm,
+    PrimFunc,
+    Ramp,
+    Select,
+    Var,
+)
+
+
+# ====
+@tilelang_case(name="vector_add_store", category="op", tags=("vector",))
+def vector_add_store() -> TileLangImportInput:
+    src, dst = Var("src"), Var("dst")
+    src_buffer = Buffer("src", (16,), "float32")
+    dst_buffer = Buffer("dst", (16,), "float32")
+    body = BufferStore(
+        dst_buffer,
+        Add(
+            BufferLoad(src_buffer, [Ramp(IntImm(0), IntImm(1), 4)], "float32x4"),
+            Broadcast(FloatImm(2.0), 4),
+            "float32x4",
+        ),
+        [Ramp(IntImm(0), IntImm(1), 4)],
+    )
+    prim_func = PrimFunc(
+        [src, dst],
+        {src: src_buffer, dst: dst_buffer},
+        body,
+        attrs={"global_symbol": "vector_add_store"},
+    )
+    return TileLangImportInput(source=prim_func, target="hip", name="vector_add_store")
+
+
+# ----
+# target.profile @hip preset("hip")
+#
+# kernel.def target(@hip) export("vector_add_store") workgroup_size(1, 1, 1) @vector_add_store(%src: buffer, %dst: buffer) {
+#   %c0_bytes = index.constant 0 : offset
+#   %src = buffer.view %src[%c0_bytes] : buffer -> view<16xf32>
+#   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32>
+#   %c = index.constant 0 : index
+#   %load = vector.load %src[%c] : view<16xf32> -> vector<4xf32>
+#   %const = scalar.constant 2.0 : f32
+#   %splat = vector.splat %const : vector<4xf32>
+#   %addf = vector.addf %load, %splat : vector<4xf32>
+#   %c_2 = index.constant 0 : index
+#   vector.store %addf, %dst[%c_2] : vector<4xf32>, view<16xf32>
+#   kernel.return
+# }
+
+
+# ====
+@tilelang_case(name="vector_select_store", category="op", tags=("vector",))
+def vector_select_store() -> TileLangImportInput:
+    src, dst = Var("src"), Var("dst")
+    src_buffer = Buffer("src", (16,), "float32")
+    dst_buffer = Buffer("dst", (16,), "float32")
+    load = BufferLoad(src_buffer, [Ramp(IntImm(0), IntImm(1), 4)], "float32x4")
+    threshold = Broadcast(FloatImm(0.0), 4)
+    body = BufferStore(
+        dst_buffer,
+        Select(
+            LT(load, threshold, "boolx4"),
+            Broadcast(FloatImm(1.0), 4),
+            Broadcast(FloatImm(-1.0), 4),
+            "float32x4",
+        ),
+        [Ramp(IntImm(0), IntImm(1), 4)],
+    )
+    prim_func = PrimFunc(
+        [src, dst],
+        {src: src_buffer, dst: dst_buffer},
+        body,
+        attrs={"global_symbol": "vector_select_store"},
+    )
+    return TileLangImportInput(
+        source=prim_func,
+        target="hip",
+        name="vector_select_store",
+    )
+
+
+# ----
+# target.profile @hip preset("hip")
+#
+# kernel.def target(@hip) export("vector_select_store") workgroup_size(1, 1, 1) @vector_select_store(%src: buffer, %dst: buffer) {
+#   %c0_bytes = index.constant 0 : offset
+#   %src = buffer.view %src[%c0_bytes] : buffer -> view<16xf32>
+#   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32>
+#   %c = index.constant 0 : index
+#   %load = vector.load %src[%c] : view<16xf32> -> vector<4xf32>
+#   %const = scalar.constant 0.0 : f32
+#   %splat = vector.splat %const : vector<4xf32>
+#   %cmp = vector.cmpf olt, %load, %splat : vector<4xf32> -> vector<4xi1>
+#   %const_2 = scalar.constant 1.0 : f32
+#   %splat_2 = vector.splat %const_2 : vector<4xf32>
+#   %const_3 = scalar.constant -1.0 : f32
+#   %splat_3 = vector.splat %const_3 : vector<4xf32>
+#   %select = vector.select %cmp, %splat_2, %splat_3 : vector<4xf32>
+#   %c_2 = index.constant 0 : index
+#   vector.store %select, %dst[%c_2] : vector<4xf32>, view<16xf32>
+#   kernel.return
+# }

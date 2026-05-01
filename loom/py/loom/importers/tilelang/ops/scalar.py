@@ -18,7 +18,7 @@ from loom.importers.tilelang.converter import (
     TileLangConverterRegistry,
 )
 from loom.importers.tilelang.nodes import dtype, node_text
-from loom.ir import I1, INDEX, Type
+from loom.ir import I1, INDEX, ShapedType, Type, TypeKind
 
 
 def register(registry: TileLangConverterRegistry) -> None:
@@ -135,6 +135,8 @@ def convert_binary_expr(
     if lhs is None or rhs is None:
         context.record_blocked(node_text(expr), "binary operands are not mapped")
         return None
+    if _is_vector_type(lhs.type) or _is_vector_type(rhs.type):
+        return _convert_vector_binary_expr(expr, context, lhs, rhs)
     kind = type(expr).__name__
     if index_like:
         builder_name = _BINARY_INDEX_OPS.get(kind)
@@ -196,6 +198,8 @@ def convert_compare(
         context.record_blocked(node_text(expr), "comparison operands are not mapped")
         return None
     kind = type(expr).__name__
+    if _is_vector_type(lhs.type) or _is_vector_type(rhs.type):
+        return _convert_vector_compare(expr, context, kind, source_lhs, lhs, rhs)
     source_type = str(lhs.type)
     if source_type in ("index", "offset"):
         predicate = _index_predicate(kind)
@@ -221,6 +225,86 @@ def convert_compare(
     return result
 
 
+def _convert_vector_binary_expr(
+    expr: object,
+    context: TileLangConversionContext,
+    lhs: ValueRef,
+    rhs: ValueRef,
+) -> ValueRef | None:
+    kind = type(expr).__name__
+    if not _is_vector_type(lhs.type) or not _is_vector_type(rhs.type):
+        context.record_blocked(
+            node_text(expr),
+            "vector binary operands must both be vector-typed",
+        )
+        return None
+    result_type = context.type_converter.map_dtype(dtype(expr))
+    if not _is_vector_type(result_type):
+        context.record_blocked(
+            node_text(expr), "vector binary result is not vector-typed"
+        )
+        return None
+    vector_type = cast(ShapedType, result_type)
+    if _is_float_type(str(vector_type.element_type)):
+        builder_name = _BINARY_FLOAT_OPS.get(kind)
+    elif _is_unsigned_dtype(dtype(expr)):
+        builder_name = _BINARY_UNSIGNED_INTEGER_OPS.get(kind)
+    else:
+        builder_name = _BINARY_INTEGER_OPS.get(kind)
+    if builder_name is None:
+        context.record_blocked(node_text(expr), f"no vector builder for {kind}")
+        return None
+    builder = getattr(context.builder.vector, builder_name)
+    result = cast(
+        ValueRef,
+        builder(
+            lhs=lhs,
+            rhs=rhs,
+            results=[vector_type],
+            name=context.fresh_name(builder_name),
+        ),
+    )
+    context.map_value(expr, result, str(vector_type))
+    return result
+
+
+def _convert_vector_compare(
+    expr: object,
+    context: TileLangConversionContext,
+    kind: str,
+    source_lhs: object,
+    lhs: ValueRef,
+    rhs: ValueRef,
+) -> ValueRef | None:
+    if not _is_vector_type(lhs.type) or not _is_vector_type(rhs.type):
+        context.record_blocked(
+            node_text(expr),
+            "vector comparison operands must both be vector-typed",
+        )
+        return None
+    source_type = cast(ShapedType, lhs.type)
+    result_type = ShapedType(TypeKind.VECTOR, I1, source_type.dims)
+    element_type = str(source_type.element_type)
+    if _is_float_type(element_type):
+        predicate = _FLOAT_COMPARISON_PREDICATES[kind]
+        builder = context.builder.vector.cmpf
+        target = "vector.cmpf"
+    else:
+        predicate = _integer_predicate(kind, dtype(source_lhs))
+        builder = context.builder.vector.cmpi
+        target = "vector.cmpi"
+    result = builder(
+        predicate=predicate,
+        lhs=lhs,
+        rhs=rhs,
+        results=[result_type],
+        name=context.fresh_name("cmp"),
+    )
+    context.map_value(expr, result, str(result_type))
+    context.record_converted(node_text(expr), f"{context.ssa(result)} = {target}")
+    return result
+
+
 def convert_boolean_binary(
     expr: object,
     context: TileLangConversionContext,
@@ -235,6 +319,24 @@ def convert_boolean_binary(
         context.record_blocked(node_text(expr), "boolean operands are not mapped")
         return None
     builder_name = _BOOLEAN_BINARY_OPS[type(expr).__name__]
+    if _is_vector_type(lhs.type) or _is_vector_type(rhs.type):
+        if not _is_vector_type(lhs.type) or not _is_vector_type(rhs.type):
+            context.record_blocked(
+                node_text(expr),
+                "vector boolean operands must both be vector-typed",
+            )
+            return None
+        result = cast(
+            ValueRef,
+            getattr(context.builder.vector, builder_name)(
+                lhs=lhs,
+                rhs=rhs,
+                results=[lhs.type],
+                name=context.fresh_name(builder_name),
+            ),
+        )
+        context.map_value(expr, result, str(result.type))
+        return result
     result = cast(
         ValueRef,
         getattr(context.builder.scalar, builder_name)(
@@ -261,6 +363,20 @@ def convert_not(
         context.record_blocked(node_text(expr), "not operand is not mapped")
         return None
     true_value = context.ensure_constant("1", "bool", "true")
+    if _is_vector_type(value.type):
+        true_vector = context.builder.vector.splat(
+            scalar=true_value,
+            results=[value.type],
+            name=context.fresh_name("true"),
+        )
+        result = context.builder.vector.xori(
+            lhs=value,
+            rhs=true_vector,
+            results=[value.type],
+            name=context.fresh_name("not"),
+        )
+        context.map_value(expr, result, str(result.type))
+        return result
     result = context.builder.scalar.xori(
         lhs=value,
         rhs=true_value,
@@ -286,6 +402,31 @@ def convert_select(
         context.record_blocked(node_text(expr), "select operands are not mapped")
         return None
     result_type = context.type_converter.map_dtype(dtype(expr))
+    if (
+        _is_vector_type(condition.type)
+        or _is_vector_type(true_value.type)
+        or _is_vector_type(false_value.type)
+    ):
+        if (
+            not _is_vector_type(condition.type)
+            or not _is_vector_type(true_value.type)
+            or not _is_vector_type(false_value.type)
+            or not _is_vector_type(result_type)
+        ):
+            context.record_blocked(
+                node_text(expr),
+                "vector select operands and result must all be vector-typed",
+            )
+            return None
+        result = context.builder.vector.select(
+            condition=condition,
+            true_value=true_value,
+            false_value=false_value,
+            results=[result_type],
+            name=context.fresh_name("select"),
+        )
+        context.map_value(expr, result, str(result_type))
+        return result
     result = context.builder.scf.select(
         condition=condition,
         true_value=true_value,
@@ -303,6 +444,12 @@ def _source_is_index_like(
 ) -> bool:
     mapped = context.mapped(source)
     return mapped is not None and str(mapped.type) in ("index", "offset")
+
+
+def _is_vector_type(value_type: object) -> bool:
+    return (
+        isinstance(value_type, ShapedType) and value_type.type_kind == TypeKind.VECTOR
+    )
 
 
 def _is_float_type(value_type: str) -> bool:
