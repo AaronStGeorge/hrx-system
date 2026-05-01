@@ -39,7 +39,6 @@ typedef struct loom_testbench_plan_counts_t {
 
 void loom_testbench_plan_options_initialize(
     loom_testbench_plan_options_t* out_options) {
-  IREE_ASSERT_ARGUMENT(out_options);
   memset(out_options, 0, sizeof(*out_options));
   out_options->max_samples_per_case =
       LOOM_TESTBENCH_DEFAULT_MAX_SAMPLES_PER_CASE;
@@ -859,10 +858,6 @@ static iree_host_size_t loom_testbench_case_index_from_ref(
 iree_status_t loom_testbench_plan_module(
     const loom_module_t* module, const loom_testbench_plan_options_t* options,
     iree_arena_allocator_t* arena, loom_testbench_module_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_plan);
-
   loom_testbench_plan_options_t default_options = {0};
   if (!options) {
     loom_testbench_plan_options_initialize(&default_options);
@@ -989,7 +984,6 @@ iree_status_t loom_testbench_plan_module(
 iree_host_size_t loom_testbench_case_sample_parameter_ordinal(
     const loom_testbench_case_plan_t* case_plan,
     iree_host_size_t sample_ordinal, iree_host_size_t parameter_index) {
-  IREE_ASSERT_ARGUMENT(case_plan);
   IREE_ASSERT(parameter_index < case_plan->parameter_count);
   iree_host_size_t ordinal = sample_ordinal;
   for (iree_host_size_t i = 0; i < parameter_index; ++i) {
@@ -1066,8 +1060,6 @@ static iree_status_t loom_testbench_range_sample_value(
 iree_status_t loom_testbench_parameter_sample_value(
     const loom_testbench_parameter_plan_t* parameter,
     iree_host_size_t parameter_sample_ordinal, loom_attribute_t* out_value) {
-  IREE_ASSERT_ARGUMENT(parameter);
-  IREE_ASSERT_ARGUMENT(out_value);
   memset(out_value, 0, sizeof(*out_value));
   if (parameter_sample_ordinal >= parameter->sample_count) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,

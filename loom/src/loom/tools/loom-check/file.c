@@ -232,7 +232,6 @@ iree_status_t loom_check_read_and_process(
     iree_arena_block_pool_t* block_pool, iree_allocator_t host_allocator,
     iree_host_size_t* pass_count, iree_host_size_t* fail_count,
     iree_host_size_t* skip_count) {
-  IREE_ASSERT_ARGUMENT(options);
   const bool is_stdin = loom_tooling_file_path_is_stdio(path);
 
   iree_io_file_contents_t* contents = NULL;

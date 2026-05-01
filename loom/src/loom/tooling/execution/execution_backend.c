@@ -10,7 +10,6 @@ void loom_run_execution_backend_registry_initialize_from_entries(
     const loom_run_execution_backend_t* const* backends,
     iree_host_size_t backend_count,
     loom_run_execution_backend_registry_t* out_registry) {
-  IREE_ASSERT_ARGUMENT(out_registry);
   *out_registry = (loom_run_execution_backend_registry_t){
       .backends = backends,
       .backend_count = backend_count,
@@ -35,8 +34,6 @@ const loom_run_execution_backend_t* loom_run_execution_backend_registry_lookup(
 iree_status_t loom_run_execution_backend_registry_format_names(
     const loom_run_execution_backend_registry_t* registry,
     iree_string_builder_t* output) {
-  IREE_ASSERT_ARGUMENT(registry);
-  IREE_ASSERT_ARGUMENT(output);
   iree_host_size_t appended_count = 0;
   for (iree_host_size_t i = 0; i < registry->backend_count; ++i) {
     const loom_run_execution_backend_t* backend = registry->backends[i];

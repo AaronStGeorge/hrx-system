@@ -316,7 +316,6 @@ const char* loom_diff_hunk_line_kind_name(loom_diff_hunk_line_kind_t kind) {
 
 void loom_diff_result_deinitialize(iree_allocator_t allocator,
                                    loom_diff_result_t* result) {
-  IREE_ASSERT_ARGUMENT(result);
   iree_allocator_free(allocator, result->lines);
   iree_allocator_free(allocator, result->hunks);
   memset(result, 0, sizeof(*result));
@@ -327,7 +326,6 @@ iree_status_t loom_diff_compute(iree_string_view_t expected,
                                 iree_host_size_t context_lines,
                                 iree_allocator_t allocator,
                                 loom_diff_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(out_result);
   memset(out_result, 0, sizeof(*out_result));
 
   // Fast path: identical inputs produce no diff.
@@ -395,8 +393,6 @@ iree_status_t loom_diff_compute(iree_string_view_t expected,
 
 iree_status_t loom_diff_format_result(const loom_diff_result_t* result,
                                       iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(result);
-  IREE_ASSERT_ARGUMENT(builder);
   if (result->hunk_count == 0) return iree_ok_status();
 
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder,

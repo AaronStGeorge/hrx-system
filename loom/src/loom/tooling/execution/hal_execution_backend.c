@@ -34,9 +34,6 @@ static const loom_run_hal_backend_t* loom_run_hal_execution_backend_hal_backend(
 iree_status_t loom_run_hal_execution_backend_probe(
     const loom_run_execution_backend_t* backend,
     const loom_run_one_shot_probe_request_t* request) {
-  IREE_ASSERT_ARGUMENT(backend);
-  IREE_ASSERT_ARGUMENT(request && request->result);
-
   const loom_run_hal_backend_t* hal_backend =
       loom_run_hal_execution_backend_hal_backend(backend);
   if (hal_backend == NULL) {
@@ -95,11 +92,6 @@ iree_status_t loom_run_hal_execution_backend_probe(
 iree_status_t loom_run_hal_execution_backend_run_one_shot(
     const loom_run_execution_backend_t* backend,
     const loom_run_one_shot_request_t* request) {
-  IREE_ASSERT_ARGUMENT(backend);
-  IREE_ASSERT_ARGUMENT(request && request->run_module &&
-                       request->compile_options && request->options &&
-                       request->result);
-
   const loom_run_hal_backend_t* hal_backend =
       loom_run_hal_execution_backend_hal_backend(backend);
   if (hal_backend == NULL) {

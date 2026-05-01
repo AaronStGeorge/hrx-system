@@ -68,10 +68,6 @@ const loom_check_emit_provider_t* loom_check_environment_lookup_emit_provider(
 static iree_status_t loom_check_write_diff_hunk_json(
     const loom_diff_result_t* diff, const loom_diff_hunk_t* hunk,
     loom_output_stream_t* stream) {
-  IREE_ASSERT_ARGUMENT(diff);
-  IREE_ASSERT_ARGUMENT(hunk);
-  IREE_ASSERT_ARGUMENT(stream);
-
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream,
@@ -99,9 +95,6 @@ static iree_status_t loom_check_write_diff_hunk_json(
 
 static iree_status_t loom_check_write_diff_json_hunks(
     const loom_diff_result_t* diff, loom_check_result_t* result) {
-  IREE_ASSERT_ARGUMENT(diff);
-  IREE_ASSERT_ARGUMENT(result);
-
   loom_output_stream_t stream;
   loom_output_stream_for_builder(&result->diff_hunk_json, &stream);
   for (iree_host_size_t i = 0; i < diff->hunk_count; ++i) {
@@ -119,8 +112,6 @@ iree_status_t loom_check_result_record_diff(iree_string_view_t expected,
                                             iree_string_view_t actual,
                                             iree_allocator_t allocator,
                                             loom_check_result_t* result) {
-  IREE_ASSERT_ARGUMENT(result);
-
   loom_diff_result_t diff = {0};
   iree_status_t status = loom_diff_compute(
       expected, actual, LOOM_DIFF_DEFAULT_CONTEXT, allocator, &diff);
@@ -220,12 +211,6 @@ iree_status_t loom_check_execute_case(
     const loom_check_environment_t* environment, loom_context_t* context,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result) {
-  IREE_ASSERT_ARGUMENT(test_case);
-  IREE_ASSERT_ARGUMENT(report);
-  IREE_ASSERT_ARGUMENT(context);
-  IREE_ASSERT_ARGUMENT(block_pool);
-  IREE_ASSERT_ARGUMENT(result);
-
   bool continue_execution = true;
   IREE_RETURN_IF_ERROR(loom_check_preflight_requirements(
       test_case, environment, allocator, result, &continue_execution));

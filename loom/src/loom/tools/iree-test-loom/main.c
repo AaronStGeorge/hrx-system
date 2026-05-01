@@ -53,8 +53,6 @@ static bool iree_test_loom_case_matches_selection(
 static iree_status_t iree_test_loom_validate_sample_flag(
     iree_host_size_t sample_count, iree_host_size_t* out_sample_ordinal,
     bool* out_has_sample) {
-  IREE_ASSERT_ARGUMENT(out_sample_ordinal);
-  IREE_ASSERT_ARGUMENT(out_has_sample);
   *out_sample_ordinal = 0;
   *out_has_sample = false;
   if (FLAG_sample < 0) {
@@ -78,14 +76,6 @@ static iree_status_t iree_test_loom_run_case_samples(
     iree_arena_allocator_t* arena, iree_string_builder_t* sample_output,
     bool* inout_first_sample, iree_host_size_t* inout_sample_count,
     iree_host_size_t* inout_failed_sample_count) {
-  IREE_ASSERT_ARGUMENT(module_plan);
-  IREE_ASSERT_ARGUMENT(execution_options);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(sample_output);
-  IREE_ASSERT_ARGUMENT(inout_first_sample);
-  IREE_ASSERT_ARGUMENT(inout_sample_count);
-  IREE_ASSERT_ARGUMENT(inout_failed_sample_count);
-
   const loom_testbench_case_plan_t* case_plan = &module_plan->cases[case_index];
   iree_host_size_t selected_sample_ordinal = 0;
   bool has_selected_sample = false;
@@ -147,7 +137,6 @@ static iree_status_t iree_test_loom_write_report(
     iree_host_size_t case_count, iree_host_size_t sample_count,
     iree_host_size_t failed_sample_count, iree_string_view_t samples,
     iree_string_builder_t* output) {
-  IREE_ASSERT_ARGUMENT(output);
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
       output, "{\"format\":\"loom.test.v0\""));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
@@ -165,7 +154,6 @@ static iree_status_t iree_test_loom_write_report(
 
 int iree_test_loom_main(int argc, char** argv,
                         const iree_test_loom_configuration_t* configuration) {
-  IREE_ASSERT_ARGUMENT(configuration && configuration->tool_name);
   IREE_TRACE_APP_ENTER();
   IREE_TRACE_ZONE_BEGIN(z0);
 

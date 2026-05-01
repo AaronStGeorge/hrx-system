@@ -16,7 +16,6 @@ bool loom_tooling_file_path_is_stdio(iree_string_view_t path) {
 iree_status_t loom_tooling_read_input_file(
     iree_string_view_t path, iree_allocator_t allocator,
     iree_io_file_contents_t** out_contents) {
-  IREE_ASSERT_ARGUMENT(out_contents);
   if (loom_tooling_file_path_is_stdio(path)) {
     return iree_io_file_contents_read_stdin(allocator, out_contents);
   }
@@ -25,7 +24,6 @@ iree_status_t loom_tooling_read_input_file(
 
 iree_string_view_t loom_tooling_file_contents_string_view(
     const iree_io_file_contents_t* contents) {
-  IREE_ASSERT_ARGUMENT(contents);
   return iree_make_string_view((const char*)contents->const_buffer.data,
                                contents->const_buffer.data_length);
 }

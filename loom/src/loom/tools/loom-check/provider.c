@@ -136,8 +136,6 @@ static iree_status_t loom_check_provider_append_requirement_providers(
 static iree_status_t loom_check_provider_environment_state_initialize(
     const loom_check_provider_set_t* provider_set,
     loom_check_provider_environment_state_t* out_state) {
-  IREE_ASSERT_ARGUMENT(provider_set);
-  IREE_ASSERT_ARGUMENT(out_state);
   *out_state = (loom_check_provider_environment_state_t){
       .provider_set = provider_set,
   };
@@ -159,10 +157,8 @@ static iree_status_t loom_check_provider_environment_state_initialize(
 
 static iree_status_t loom_check_provider_initialize_low_descriptor_registry(
     void* user_data, loom_target_low_descriptor_registry_t* out_registry) {
-  IREE_ASSERT_ARGUMENT(out_registry);
   loom_check_provider_environment_state_t* state =
       (loom_check_provider_environment_state_t*)user_data;
-  IREE_ASSERT_ARGUMENT(state);
   state->descriptor_set_provider_count = 0;
   state->target_bundle_count = 0;
 
@@ -190,10 +186,8 @@ static iree_status_t loom_check_provider_initialize_low_descriptor_registry(
 
 static iree_status_t loom_check_provider_initialize_low_lower_policy_registry(
     void* user_data, loom_low_lower_policy_registry_t* out_registry) {
-  IREE_ASSERT_ARGUMENT(out_registry);
   loom_check_provider_environment_state_t* state =
       (loom_check_provider_environment_state_t*)user_data;
-  IREE_ASSERT_ARGUMENT(state);
   state->low_lower_policy_entry_count = 0;
 
   const loom_check_provider_set_t* provider_set = state->provider_set;

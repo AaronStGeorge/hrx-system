@@ -26,7 +26,6 @@ static iree_status_t loom_check_test_register_context(void* user_data,
 static iree_status_t loom_check_test_initialize_low_descriptor_registry(
     void* user_data, loom_target_low_descriptor_registry_t* out_registry) {
   (void)user_data;
-  IREE_ASSERT_ARGUMENT(out_registry);
   loom_target_core_test_low_descriptor_registry_initialize(out_registry);
   return iree_ok_status();
 }

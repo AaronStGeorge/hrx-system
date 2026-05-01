@@ -8,7 +8,6 @@
 
 void loom_run_compile_report_capture_options_initialize(
     loom_run_compile_report_capture_options_t* out_options) {
-  IREE_ASSERT_ARGUMENT(out_options);
   *out_options = (loom_run_compile_report_capture_options_t){
       .mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE,
       .row_limit = LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
@@ -18,14 +17,12 @@ void loom_run_compile_report_capture_options_initialize(
 iree_status_t loom_run_compile_report_capture_options_parse_mode(
     iree_string_view_t value,
     loom_run_compile_report_capture_options_t* options) {
-  IREE_ASSERT_ARGUMENT(options);
   return loom_target_compile_report_format_mode_parse(value, &options->mode);
 }
 
 iree_status_t loom_run_compile_report_capture_options_parse_row_limit(
     iree_string_view_t value,
     loom_run_compile_report_capture_options_t* options) {
-  IREE_ASSERT_ARGUMENT(options);
   uint64_t row_limit = 0;
   if (!iree_string_view_atoi_uint64(value, &row_limit) ||
       row_limit > IREE_HOST_SIZE_MAX) {
@@ -78,8 +75,6 @@ iree_status_t loom_run_compile_report_capture_initialize(
     const loom_run_compile_report_capture_options_t* options,
     iree_allocator_t host_allocator,
     loom_run_compile_report_capture_t* out_capture) {
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(out_capture);
   *out_capture = (loom_run_compile_report_capture_t){
       .options = *options,
       .host_allocator = host_allocator,
@@ -96,8 +91,6 @@ iree_status_t loom_run_compile_report_capture_initialize(
 void loom_run_compile_report_capture_configure_compile_options(
     loom_run_compile_report_capture_t* capture,
     loom_run_candidate_compile_options_t* compile_options) {
-  IREE_ASSERT_ARGUMENT(capture);
-  IREE_ASSERT_ARGUMENT(compile_options);
   if (capture->options.mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE) {
     return;
   }
@@ -132,8 +125,6 @@ static iree_status_t loom_run_compile_report_capture_append_separator(
 iree_status_t loom_run_compile_report_capture_append_text(
     const loom_run_compile_report_capture_t* capture,
     iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(capture);
-  IREE_ASSERT_ARGUMENT(builder);
   if (capture->options.mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE) {
     return iree_ok_status();
   }

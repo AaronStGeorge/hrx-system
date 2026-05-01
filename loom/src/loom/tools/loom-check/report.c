@@ -11,10 +11,6 @@
 iree_status_t loom_check_file_report_initialize(
     const loom_check_file_t* file, iree_arena_allocator_t* arena,
     loom_check_file_report_t* out_report) {
-  IREE_ASSERT_ARGUMENT(file);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_report);
-
   memset(out_report, 0, sizeof(*out_report));
 
   out_report->case_count = file->case_count;
@@ -47,16 +43,12 @@ iree_status_t loom_check_file_report_initialize(
 }
 
 void loom_check_file_report_reset_matches(loom_check_file_report_t* report) {
-  IREE_ASSERT_ARGUMENT(report);
   iree_bitmap_reset_all(report->matched_annotations);
 }
 
 static iree_status_t loom_check_file_report_annotation_ordinal(
     const loom_check_file_report_t* report, iree_host_size_t case_index,
     iree_host_size_t annotation_index, iree_host_size_t* out_ordinal) {
-  IREE_ASSERT_ARGUMENT(report);
-  IREE_ASSERT_ARGUMENT(out_ordinal);
-
   if (case_index >= report->case_count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "case index %zu out of bounds for %zu cases",
@@ -83,8 +75,6 @@ static iree_status_t loom_check_file_report_annotation_ordinal(
 iree_status_t loom_check_file_report_mark_annotation_matched(
     loom_check_file_report_t* report, iree_host_size_t case_index,
     iree_host_size_t annotation_index) {
-  IREE_ASSERT_ARGUMENT(report);
-
   iree_host_size_t ordinal = 0;
   IREE_RETURN_IF_ERROR(loom_check_file_report_annotation_ordinal(
       report, case_index, annotation_index, &ordinal));
@@ -95,9 +85,6 @@ iree_status_t loom_check_file_report_mark_annotation_matched(
 iree_status_t loom_check_file_report_annotation_matched(
     const loom_check_file_report_t* report, iree_host_size_t case_index,
     iree_host_size_t annotation_index, bool* out_matched) {
-  IREE_ASSERT_ARGUMENT(report);
-  IREE_ASSERT_ARGUMENT(out_matched);
-
   iree_host_size_t ordinal = 0;
   IREE_RETURN_IF_ERROR(loom_check_file_report_annotation_ordinal(
       report, case_index, annotation_index, &ordinal));

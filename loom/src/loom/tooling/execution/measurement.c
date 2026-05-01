@@ -15,14 +15,12 @@ enum {
 
 void loom_run_measurement_options_initialize(
     loom_run_measurement_options_t* out_options) {
-  IREE_ASSERT_ARGUMENT(out_options);
   *out_options = (loom_run_measurement_options_t){0};
 }
 
 void loom_run_measurement_result_initialize(
     loom_run_measurement_sample_t* samples, iree_host_size_t sample_capacity,
     loom_run_measurement_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(out_result);
   *out_result = (loom_run_measurement_result_t){
       .samples = samples,
       .sample_capacity = sample_capacity,
@@ -58,7 +56,6 @@ static bool loom_run_measurement_boundary_is_single(
 
 static iree_status_t loom_run_measurement_options_validate(
     const loom_run_measurement_options_t* options) {
-  IREE_ASSERT_ARGUMENT(options);
   if (options->kind_flags & ~LOOM_RUN_MEASUREMENT_KNOWN_KIND_FLAGS) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unknown measurement kind flags 0x%08X",
@@ -85,8 +82,6 @@ iree_status_t loom_run_measurement_scope_begin(
     loom_run_measurement_boundary_t boundary,
     loom_run_measurement_result_t* result,
     loom_run_measurement_scope_t* out_scope) {
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(out_scope);
   *out_scope = (loom_run_measurement_scope_t){0};
   IREE_RETURN_IF_ERROR(loom_run_measurement_options_validate(options));
   if (!loom_run_measurement_boundary_is_single(boundary)) {
@@ -132,7 +127,6 @@ iree_status_t loom_run_measurement_scope_begin(
 
 iree_status_t loom_run_measurement_scope_end(
     loom_run_measurement_scope_t* scope, iree_status_t operation_status) {
-  IREE_ASSERT_ARGUMENT(scope);
   if (!scope->is_recording) {
     return iree_ok_status();
   }
@@ -152,7 +146,6 @@ iree_status_t loom_run_measurement_run_step(
     loom_run_measurement_boundary_t boundary,
     loom_run_measurement_step_callback_t callback,
     loom_run_measurement_result_t* result) {
-  IREE_ASSERT_ARGUMENT(callback.fn);
   loom_run_measurement_scope_t scope = {0};
   IREE_RETURN_IF_ERROR(
       loom_run_measurement_scope_begin(options, boundary, result, &scope));

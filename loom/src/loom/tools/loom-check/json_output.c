@@ -34,7 +34,6 @@ static bool loom_check_json_output_mode_is_valid(
 static bool loom_check_json_should_write_case(
     loom_check_json_output_mode_t output_mode,
     const loom_check_result_t* result) {
-  IREE_ASSERT_ARGUMENT(result);
   switch (output_mode) {
     case LOOM_CHECK_JSON_OUTPUT_FAILURES:
       return result->final_outcome == LOOM_CHECK_FAIL;
@@ -48,7 +47,6 @@ static bool loom_check_json_should_write_case(
 
 static iree_status_t loom_check_json_write_source_range(
     loom_check_source_range_t source_range, loom_output_stream_t* stream) {
-  IREE_ASSERT_ARGUMENT(stream);
   return loom_output_stream_write_format(
       stream, "{\"start_byte\": %zu, \"end_byte\": %zu}",
       source_range.start_byte, source_range.end_byte);
@@ -56,7 +54,6 @@ static iree_status_t loom_check_json_write_source_range(
 
 static iree_status_t loom_check_json_write_optional_source_range(
     loom_check_source_range_t source_range, loom_output_stream_t* stream) {
-  IREE_ASSERT_ARGUMENT(stream);
   if (loom_check_source_range_is_empty(source_range)) {
     return loom_output_stream_write_cstring(stream, "null");
   }
@@ -65,7 +62,6 @@ static iree_status_t loom_check_json_write_optional_source_range(
 
 static iree_status_t loom_check_json_write_optional_string(
     iree_string_view_t string, loom_output_stream_t* stream) {
-  IREE_ASSERT_ARGUMENT(stream);
   if (iree_string_view_is_empty(string)) {
     return loom_output_stream_write_cstring(stream, "null");
   }
@@ -75,7 +71,6 @@ static iree_status_t loom_check_json_write_optional_string(
 static iree_status_t loom_check_json_write_string_array(
     const iree_string_view_t* strings, iree_host_size_t string_count,
     loom_output_stream_t* stream) {
-  IREE_ASSERT_ARGUMENT(stream);
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
   for (iree_host_size_t i = 0; i < string_count; ++i) {
     if (i > 0) {
@@ -89,9 +84,6 @@ static iree_status_t loom_check_json_write_string_array(
 
 static iree_status_t loom_check_json_write_update_edit(
     const loom_check_result_t* result, loom_output_stream_t* stream) {
-  IREE_ASSERT_ARGUMENT(result);
-  IREE_ASSERT_ARGUMENT(stream);
-
   if (!result->update_edit.present) {
     return loom_output_stream_write_cstring(stream, "null");
   }
@@ -117,9 +109,6 @@ static iree_status_t loom_check_json_write_update_edit(
 static iree_status_t loom_check_json_write_annotation(
     const loom_check_annotation_t* annotation, bool matched,
     iree_host_size_t annotation_index, loom_output_stream_t* stream) {
-  IREE_ASSERT_ARGUMENT(annotation);
-  IREE_ASSERT_ARGUMENT(stream);
-
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "        {\n"));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream, "          \"index\": %zu,\n", annotation_index + 1));
@@ -174,10 +163,6 @@ static iree_status_t loom_check_json_write_annotation(
 static iree_status_t loom_check_json_write_annotations(
     const loom_check_case_t* test_case, iree_host_size_t case_index,
     const loom_check_file_report_t* report, loom_output_stream_t* stream) {
-  IREE_ASSERT_ARGUMENT(test_case);
-  IREE_ASSERT_ARGUMENT(report);
-  IREE_ASSERT_ARGUMENT(stream);
-
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, "      \"annotations\": ["));
   if (test_case->annotation_count > 0) {
@@ -204,11 +189,6 @@ static iree_status_t loom_check_json_write_case(
     const loom_check_case_t* test_case, const loom_check_result_t* result,
     const loom_check_file_report_t* report, iree_host_size_t case_index,
     loom_output_stream_t* stream) {
-  IREE_ASSERT_ARGUMENT(test_case);
-  IREE_ASSERT_ARGUMENT(result);
-  IREE_ASSERT_ARGUMENT(report);
-  IREE_ASSERT_ARGUMENT(stream);
-
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "    {\n"));
 
   // "index": N (1-based for human readability)
@@ -391,12 +371,8 @@ iree_status_t loom_check_json_write_file_result(
     iree_host_size_t pass_count, iree_host_size_t fail_count,
     iree_host_size_t skip_count, loom_check_json_output_mode_t output_mode,
     loom_output_stream_t* stream) {
-  IREE_ASSERT_ARGUMENT(file);
-  IREE_ASSERT_ARGUMENT(report);
   if (file->case_count > 0) {
-    IREE_ASSERT_ARGUMENT(results);
   }
-  IREE_ASSERT_ARGUMENT(stream);
   if (!loom_check_json_output_mode_is_valid(output_mode)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "invalid loom-check JSON output mode %d",

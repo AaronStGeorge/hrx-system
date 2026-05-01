@@ -37,7 +37,6 @@ typedef struct loom_testbench_generator_state_t {
 
 void loom_testbench_value_materializer_options_initialize(
     loom_testbench_value_materializer_options_t* out_options) {
-  IREE_ASSERT_ARGUMENT(out_options);
   memset(out_options, 0, sizeof(*out_options));
   out_options->host_allocator = iree_allocator_system();
 }
@@ -64,7 +63,6 @@ typedef struct loom_testbench_case_value_callback_t {
 
 static iree_status_t loom_testbench_case_value_callback_invoke(
     loom_testbench_case_value_callback_t callback, loom_value_id_t value_id) {
-  IREE_ASSERT_ARGUMENT(callback.fn);
   return callback.fn(callback.user_data, value_id);
 }
 
@@ -242,9 +240,6 @@ static iree_status_t loom_testbench_value_table_populate_slots(
 iree_status_t loom_testbench_value_table_initialize(
     const loom_module_t* module, const loom_testbench_case_plan_t* case_plan,
     iree_allocator_t host_allocator, loom_testbench_value_table_t* out_table) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(case_plan);
-  IREE_ASSERT_ARGUMENT(out_table);
   memset(out_table, 0, sizeof(*out_table));
   out_table->module = module;
   out_table->case_plan = case_plan;
@@ -283,7 +278,6 @@ void loom_testbench_value_table_deinitialize(
 }
 
 void loom_testbench_value_table_reset(loom_testbench_value_table_t* table) {
-  IREE_ASSERT_ARGUMENT(table);
   if (!table->slots) {
     return;
   }
@@ -301,7 +295,6 @@ void loom_testbench_value_table_reset(loom_testbench_value_table_t* table) {
 
 bool loom_testbench_value_table_contains(
     const loom_testbench_value_table_t* table, loom_value_id_t value_id) {
-  IREE_ASSERT_ARGUMENT(table);
   const loom_testbench_value_slot_t* slot =
       loom_testbench_value_table_lookup_slot(table, value_id);
   return slot &&
@@ -311,8 +304,6 @@ bool loom_testbench_value_table_contains(
 iree_status_t loom_testbench_value_table_assign_move(
     loom_testbench_value_table_t* table, loom_value_id_t value_id,
     iree_vm_variant_t* variant) {
-  IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(variant);
   loom_testbench_value_slot_t* slot =
       loom_testbench_value_table_lookup_slot_mut(table, value_id);
   if (!slot) {
@@ -339,8 +330,6 @@ static iree_status_t loom_testbench_value_table_set_value(
 iree_status_t loom_testbench_value_table_lookup_borrow(
     const loom_testbench_value_table_t* table, loom_value_id_t value_id,
     const iree_vm_variant_t** out_variant) {
-  IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(out_variant);
   *out_variant = NULL;
   const loom_testbench_value_slot_t* slot =
       loom_testbench_value_table_lookup_slot(table, value_id);
@@ -357,8 +346,6 @@ iree_status_t loom_testbench_value_table_lookup_borrow(
 iree_status_t loom_testbench_value_table_lookup_retain(
     const loom_testbench_value_table_t* table, loom_value_id_t value_id,
     iree_vm_variant_t* out_variant) {
-  IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(out_variant);
   *out_variant = iree_vm_variant_empty();
   const iree_vm_variant_t* borrowed_variant = NULL;
   IREE_RETURN_IF_ERROR(loom_testbench_value_table_lookup_borrow(
@@ -1076,9 +1063,6 @@ iree_status_t loom_testbench_materialize_case_sample(
     const loom_testbench_value_materializer_options_t* options,
     const loom_testbench_case_plan_t* case_plan,
     iree_host_size_t sample_ordinal, loom_testbench_value_table_t* table) {
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(case_plan);
-  IREE_ASSERT_ARGUMENT(table);
   if (sample_ordinal >= case_plan->sample_count) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "sample ordinal %zu exceeds case sample count %zu",
@@ -1163,9 +1147,6 @@ iree_status_t loom_testbench_write_case_files(
     const loom_testbench_value_materializer_options_t* options,
     const loom_testbench_case_plan_t* case_plan,
     const loom_testbench_value_table_t* table, bool case_failed) {
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(case_plan);
-  IREE_ASSERT_ARGUMENT(table);
   for (iree_host_size_t file_write_index = 0;
        file_write_index < case_plan->file_write_count; ++file_write_index) {
     const loom_testbench_file_write_plan_t* file_write =

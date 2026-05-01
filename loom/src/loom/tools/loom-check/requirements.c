@@ -171,10 +171,6 @@ iree_status_t loom_check_preflight_requirements(
     const loom_check_case_t* test_case,
     const loom_check_environment_t* environment, iree_allocator_t allocator,
     loom_check_result_t* result, bool* out_continue_execution) {
-  IREE_ASSERT_ARGUMENT(test_case);
-  IREE_ASSERT_ARGUMENT(result);
-  IREE_ASSERT_ARGUMENT(out_continue_execution);
-
   *out_continue_execution = true;
   for (iree_host_size_t i = 0; i < test_case->requirement_count; ++i) {
     iree_string_view_t requirement = test_case->requirements[i];

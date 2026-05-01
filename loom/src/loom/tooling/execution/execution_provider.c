@@ -39,8 +39,6 @@ static iree_status_t loom_run_execution_environment_append_execution_backends(
 iree_status_t loom_run_execution_environment_initialize(
     const loom_run_execution_provider_set_t* provider_set,
     loom_run_execution_environment_t* out_environment) {
-  IREE_ASSERT_ARGUMENT(provider_set);
-  IREE_ASSERT_ARGUMENT(out_environment);
   *out_environment = (loom_run_execution_environment_t){
       .provider_set = provider_set,
   };
@@ -74,10 +72,8 @@ void loom_run_execution_environment_deinitialize(
 static iree_status_t
 loom_run_execution_environment_initialize_low_descriptor_registry(
     void* user_data, loom_target_low_descriptor_registry_t* out_registry) {
-  IREE_ASSERT_ARGUMENT(out_registry);
   loom_run_execution_environment_t* environment =
       (loom_run_execution_environment_t*)user_data;
-  IREE_ASSERT_ARGUMENT(environment);
   environment->descriptor_set_provider_count = 0;
   environment->target_bundle_count = 0;
 
@@ -118,13 +114,11 @@ loom_run_execution_environment_low_descriptor_registry_callback(
 const loom_run_hal_backend_registry_t*
 loom_run_execution_environment_hal_backend_registry(
     const loom_run_execution_environment_t* environment) {
-  IREE_ASSERT_ARGUMENT(environment);
   return &environment->hal_backend_registry;
 }
 
 const loom_run_execution_backend_registry_t*
 loom_run_execution_environment_execution_backend_registry(
     const loom_run_execution_environment_t* environment) {
-  IREE_ASSERT_ARGUMENT(environment);
   return &environment->execution_backend_registry;
 }

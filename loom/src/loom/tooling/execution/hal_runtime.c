@@ -16,8 +16,6 @@
 iree_status_t loom_run_hal_runtime_initialize(
     const loom_run_hal_backend_t* backend, iree_allocator_t allocator,
     loom_run_hal_runtime_t* out_runtime) {
-  IREE_ASSERT_ARGUMENT(backend);
-  IREE_ASSERT_ARGUMENT(out_runtime);
   *out_runtime = (loom_run_hal_runtime_t){0};
 
   iree_async_proactor_pool_t* proactor_pool = NULL;

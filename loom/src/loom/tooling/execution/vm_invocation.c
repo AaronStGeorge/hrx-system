@@ -23,7 +23,6 @@ enum {
 
 iree_status_t loom_run_vm_runtime_initialize(
     iree_allocator_t allocator, loom_run_vm_runtime_t* out_runtime) {
-  IREE_ASSERT_ARGUMENT(out_runtime);
   *out_runtime = (loom_run_vm_runtime_t){0};
   iree_status_t status =
       iree_tooling_create_instance(allocator, &out_runtime->instance);
@@ -43,7 +42,6 @@ void loom_run_vm_runtime_deinitialize(loom_run_vm_runtime_t* runtime) {
 
 void loom_run_vm_invocation_options_initialize(
     loom_run_vm_invocation_options_t* out_options) {
-  IREE_ASSERT_ARGUMENT(out_options);
   *out_options = (loom_run_vm_invocation_options_t){
       .max_output_element_count = LOOM_RUN_VM_DEFAULT_MAX_OUTPUT_ELEMENT_COUNT,
   };
@@ -51,7 +49,6 @@ void loom_run_vm_invocation_options_initialize(
 
 void loom_run_vm_invocation_plan_initialize(
     loom_run_vm_invocation_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_run_vm_invocation_plan_t){
       .output_mode = LOOM_RUN_VM_OUTPUT_PLAN_MODE_FORMAT_ALL,
       .max_output_element_count = LOOM_RUN_VM_DEFAULT_MAX_OUTPUT_ELEMENT_COUNT,
@@ -71,13 +68,11 @@ void loom_run_vm_invocation_plan_deinitialize(
 
 void loom_run_vm_prepared_candidate_options_initialize(
     loom_run_vm_prepared_candidate_options_t* out_options) {
-  IREE_ASSERT_ARGUMENT(out_options);
   *out_options = (loom_run_vm_prepared_candidate_options_t){0};
 }
 
 void loom_run_vm_prepared_candidate_initialize(
     loom_run_vm_prepared_candidate_t* out_candidate) {
-  IREE_ASSERT_ARGUMENT(out_candidate);
   *out_candidate = (loom_run_vm_prepared_candidate_t){0};
 }
 
@@ -96,7 +91,6 @@ void loom_run_vm_prepared_candidate_deinitialize(
 }
 
 void loom_run_vm_iteration_initialize(loom_run_vm_iteration_t* out_iteration) {
-  IREE_ASSERT_ARGUMENT(out_iteration);
   *out_iteration = (loom_run_vm_iteration_t){0};
 }
 
@@ -111,14 +105,12 @@ void loom_run_vm_iteration_deinitialize(loom_run_vm_iteration_t* iteration) {
 
 void loom_run_vm_invocation_request_initialize(
     loom_run_vm_invocation_request_t* out_request) {
-  IREE_ASSERT_ARGUMENT(out_request);
   *out_request = (loom_run_vm_invocation_request_t){0};
   loom_run_vm_invocation_options_initialize(&out_request->options);
 }
 
 void loom_run_vm_invocation_result_initialize(
     iree_allocator_t allocator, loom_run_vm_invocation_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(out_result);
   *out_result = (loom_run_vm_invocation_result_t){0};
   iree_string_builder_initialize(allocator, &out_result->output);
 }
@@ -134,7 +126,6 @@ void loom_run_vm_invocation_result_deinitialize(
 
 static iree_status_t loom_run_vm_value_specs_validate(
     const loom_run_vm_value_specs_t* specs, iree_string_view_t list_name) {
-  IREE_ASSERT_ARGUMENT(specs);
   if (specs->count > 0 && specs->values == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "%.*s specs require values", (int)list_name.size,
@@ -145,7 +136,6 @@ static iree_status_t loom_run_vm_value_specs_validate(
 
 static iree_string_view_list_t loom_run_vm_value_specs_list(
     const loom_run_vm_value_specs_t* specs) {
-  IREE_ASSERT_ARGUMENT(specs);
   return (iree_string_view_list_t){
       .count = specs->count,
       .values = specs->values,
@@ -155,8 +145,6 @@ static iree_string_view_list_t loom_run_vm_value_specs_list(
 iree_status_t loom_run_vm_invocation_plan_prepare_from_specs(
     const loom_run_vm_invocation_plan_prepare_request_t* request,
     iree_allocator_t allocator, loom_run_vm_invocation_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(request && request->options);
-  IREE_ASSERT_ARGUMENT(out_plan);
   loom_run_vm_invocation_plan_initialize(out_plan);
   IREE_RETURN_IF_ERROR(loom_run_vm_value_specs_validate(
       &request->options->inputs, IREE_SV("VM input")));
@@ -206,9 +194,6 @@ static iree_status_t loom_run_vm_load_archive_module(
     const loom_run_vm_runtime_t* runtime,
     const loom_ireevm_module_archive_t* archive, iree_allocator_t allocator,
     iree_vm_module_t** out_module) {
-  IREE_ASSERT_ARGUMENT(runtime);
-  IREE_ASSERT_ARGUMENT(archive);
-  IREE_ASSERT_ARGUMENT(out_module);
   *out_module = NULL;
   if (runtime->instance == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -229,11 +214,6 @@ static iree_status_t loom_run_vm_create_context(
     iree_string_view_t default_device_uri, iree_allocator_t allocator,
     iree_vm_context_t** out_context, iree_hal_device_t** out_device,
     iree_hal_allocator_t** out_device_allocator) {
-  IREE_ASSERT_ARGUMENT(runtime);
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_context);
-  IREE_ASSERT_ARGUMENT(out_device);
-  IREE_ASSERT_ARGUMENT(out_device_allocator);
   *out_context = NULL;
   *out_device = NULL;
   *out_device_allocator = NULL;
@@ -248,8 +228,6 @@ static iree_status_t loom_run_vm_create_context(
 static iree_status_t loom_run_vm_lookup_function(
     iree_vm_module_t* module, iree_string_view_t function_name,
     iree_vm_function_t* out_function) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_function);
   if (iree_string_view_is_empty(function_name)) {
     return iree_tooling_find_single_exported_function(module, out_function);
   }
@@ -260,8 +238,6 @@ static iree_status_t loom_run_vm_lookup_function(
 static iree_status_t loom_run_vm_clone_archive(
     const loom_ireevm_module_archive_t* archive, iree_allocator_t allocator,
     loom_ireevm_module_archive_t* out_archive) {
-  IREE_ASSERT_ARGUMENT(archive);
-  IREE_ASSERT_ARGUMENT(out_archive);
   *out_archive = (loom_ireevm_module_archive_t){0};
   if (archive->data == NULL || archive->data_length == 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -281,10 +257,6 @@ iree_status_t loom_run_vm_prepared_candidate_prepare(
     const loom_run_vm_prepared_candidate_options_t* options,
     iree_allocator_t allocator,
     loom_run_vm_prepared_candidate_t* out_candidate) {
-  IREE_ASSERT_ARGUMENT(runtime);
-  IREE_ASSERT_ARGUMENT(archive);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(out_candidate);
   loom_run_vm_prepared_candidate_initialize(out_candidate);
   out_candidate->host_allocator = allocator;
 
@@ -313,7 +285,6 @@ iree_status_t loom_run_vm_prepared_candidate_prepare(
 
 static iree_status_t loom_run_vm_prepared_candidate_validate(
     const loom_run_vm_prepared_candidate_t* candidate) {
-  IREE_ASSERT_ARGUMENT(candidate);
   if (candidate->context == NULL ||
       iree_vm_function_is_null(candidate->function)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -328,7 +299,6 @@ static iree_status_t loom_run_vm_prepared_candidate_validate(
 
 static iree_status_t loom_run_vm_invocation_plan_validate(
     const loom_run_vm_invocation_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
   if (plan->inputs == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "VM invocation plan requires inputs");
@@ -357,9 +327,6 @@ iree_status_t loom_run_vm_invocation_plan_prepare_from_prepared(
     const loom_run_vm_prepared_candidate_t* candidate,
     const loom_run_vm_invocation_options_t* options, iree_allocator_t allocator,
     loom_run_vm_invocation_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(candidate);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(out_plan);
   IREE_RETURN_IF_ERROR(loom_run_vm_prepared_candidate_validate(candidate));
   if (!iree_string_view_is_empty(options->function_name)) {
     iree_string_view_t function_name =
@@ -418,10 +385,6 @@ static iree_status_t loom_run_vm_write_outputs_to_result(
     iree_vm_list_t* outputs, const loom_run_vm_value_specs_t* output_specs,
     iree_host_size_t max_output_element_count, iree_allocator_t allocator,
     loom_run_vm_invocation_result_t* result) {
-  IREE_ASSERT_ARGUMENT(outputs);
-  IREE_ASSERT_ARGUMENT(output_specs);
-  IREE_ASSERT_ARGUMENT(result);
-
   iree_io_stream_t* output_stream = NULL;
   iree_status_t status = iree_io_vec_stream_create(
       IREE_IO_STREAM_MODE_WRITABLE, LOOM_RUN_VM_OUTPUT_STREAM_BLOCK_SIZE,
@@ -442,10 +405,6 @@ static iree_status_t loom_run_vm_write_outputs_to_result(
 static iree_status_t loom_run_vm_process_outputs(
     const loom_run_vm_invocation_plan_t* plan, iree_vm_list_t* outputs,
     iree_allocator_t allocator, loom_run_vm_invocation_result_t* result) {
-  IREE_ASSERT_ARGUMENT(plan);
-  IREE_ASSERT_ARGUMENT(outputs);
-  IREE_ASSERT_ARGUMENT(result);
-
   switch (plan->output_mode) {
     case LOOM_RUN_VM_OUTPUT_PLAN_MODE_FORMAT_ALL:
       return iree_tooling_format_variants(IREE_SV("result"), outputs,
@@ -483,9 +442,6 @@ iree_status_t loom_run_vm_invocation_invoke_plan(
     const loom_run_vm_prepared_candidate_t* candidate,
     const loom_run_vm_invocation_plan_t* plan, iree_allocator_t allocator,
     loom_run_vm_iteration_t* out_iteration) {
-  IREE_ASSERT_ARGUMENT(candidate);
-  IREE_ASSERT_ARGUMENT(plan);
-  IREE_ASSERT_ARGUMENT(out_iteration);
   loom_run_vm_iteration_initialize(out_iteration);
   IREE_RETURN_IF_ERROR(loom_run_vm_prepared_candidate_validate(candidate));
   IREE_RETURN_IF_ERROR(loom_run_vm_invocation_plan_validate(plan));
@@ -534,10 +490,6 @@ iree_status_t loom_run_vm_invocation_collect_results(
     const loom_run_vm_invocation_plan_t* plan,
     const loom_run_vm_iteration_t* iteration, iree_allocator_t allocator,
     loom_run_vm_invocation_result_t* result) {
-  IREE_ASSERT_ARGUMENT(candidate);
-  IREE_ASSERT_ARGUMENT(plan);
-  IREE_ASSERT_ARGUMENT(iteration);
-  IREE_ASSERT_ARGUMENT(result);
   iree_string_builder_reset(&result->output);
   result->exit_code = 0;
   IREE_RETURN_IF_ERROR(loom_run_vm_prepared_candidate_validate(candidate));
@@ -577,9 +529,6 @@ iree_status_t loom_run_vm_invocation_run_prepared(
     const loom_run_vm_prepared_candidate_t* candidate,
     const loom_run_vm_invocation_plan_t* plan, iree_allocator_t allocator,
     loom_run_vm_invocation_result_t* result) {
-  IREE_ASSERT_ARGUMENT(candidate);
-  IREE_ASSERT_ARGUMENT(plan);
-  IREE_ASSERT_ARGUMENT(result);
   iree_string_builder_reset(&result->output);
   result->exit_code = 0;
 
@@ -597,8 +546,6 @@ iree_status_t loom_run_vm_invocation_run_prepared(
 iree_status_t loom_run_vm_invocation_run(
     const loom_run_vm_invocation_request_t* request, iree_allocator_t allocator,
     loom_run_vm_invocation_result_t* result) {
-  IREE_ASSERT_ARGUMENT(request && request->runtime && request->archive);
-  IREE_ASSERT_ARGUMENT(result);
   iree_string_builder_reset(&result->output);
   result->exit_code = 0;
 

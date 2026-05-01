@@ -23,12 +23,6 @@ iree_status_t loom_check_execute_verify(
     const loom_check_environment_t* environment, loom_context_t* context,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result) {
-  IREE_ASSERT_ARGUMENT(test_case);
-  IREE_ASSERT_ARGUMENT(report);
-  IREE_ASSERT_ARGUMENT(context);
-  IREE_ASSERT_ARGUMENT(block_pool);
-  IREE_ASSERT_ARGUMENT(result);
-
   // Arena for collector storage. Entries and message copies are released
   // together at the end of this case.
   iree_arena_allocator_t collector_arena;

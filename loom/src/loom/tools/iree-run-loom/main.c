@@ -160,7 +160,6 @@ static iree_status_t iree_run_loom_register_context(void* user_data,
 
 static iree_status_t iree_run_loom_parse_workgroup_count(
     iree_string_view_t value, uint32_t* out_workgroup_count) {
-  IREE_ASSERT_ARGUMENT(out_workgroup_count);
   iree_string_view_t remaining = value;
   iree_string_view_t x;
   iree_string_view_split(remaining, ',', &x, &remaining);
@@ -181,8 +180,6 @@ static iree_status_t iree_run_loom_parse_workgroup_count(
 static iree_status_t iree_run_loom_one_shot_options_initialize(
     const loom_run_execution_backend_t* backend,
     loom_run_one_shot_options_t* out_options) {
-  IREE_ASSERT_ARGUMENT(backend);
-  IREE_ASSERT_ARGUMENT(out_options);
   loom_run_one_shot_options_initialize(out_options);
 
   if (iree_any_bit_set(backend->flags,
@@ -239,7 +236,6 @@ static iree_status_t iree_run_loom_one_shot_options_initialize(
 
 static iree_status_t iree_run_loom_compile_report_options_initialize(
     loom_run_compile_report_capture_options_t* out_options) {
-  IREE_ASSERT_ARGUMENT(out_options);
   loom_run_compile_report_capture_options_initialize(out_options);
   IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_options_parse_mode(
       iree_make_cstring_view(FLAG_compile_report), out_options));
@@ -277,7 +273,6 @@ static iree_status_t iree_run_loom_make_unknown_backend_status(
 
 int iree_run_loom_main(int argc, char** argv,
                        const iree_run_loom_configuration_t* configuration) {
-  IREE_ASSERT_ARGUMENT(configuration && configuration->tool_name);
   IREE_TRACE_APP_ENTER();
   IREE_TRACE_ZONE_BEGIN(z0);
 

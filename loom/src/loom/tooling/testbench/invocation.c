@@ -10,7 +10,6 @@
 
 void loom_testbench_invocation_options_initialize(
     loom_testbench_invocation_options_t* out_options) {
-  IREE_ASSERT_ARGUMENT(out_options);
   memset(out_options, 0, sizeof(*out_options));
   out_options->oracle_providers = loom_testbench_oracle_provider_list_empty();
 }
@@ -35,10 +34,6 @@ iree_status_t loom_testbench_prepare_case_invocations(
     const loom_testbench_invocation_options_t* options,
     const loom_testbench_case_plan_t* case_plan, iree_arena_allocator_t* arena,
     loom_testbench_invocation_schedule_t* out_schedule) {
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(case_plan);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_schedule);
   memset(out_schedule, 0, sizeof(*out_schedule));
 
   loom_testbench_prepared_invocation_t* prepared_invocations = NULL;
@@ -128,8 +123,6 @@ iree_status_t loom_testbench_invocation_executor_initialize(
     const loom_testbench_invocation_schedule_t* schedule,
     iree_allocator_t host_allocator,
     loom_testbench_invocation_executor_t* out_executor) {
-  IREE_ASSERT_ARGUMENT(schedule);
-  IREE_ASSERT_ARGUMENT(out_executor);
   memset(out_executor, 0, sizeof(*out_executor));
   if (iree_allocator_is_null(host_allocator)) {
     host_allocator = iree_allocator_system();
@@ -202,10 +195,6 @@ static iree_status_t loom_testbench_store_invocation_results(
 iree_status_t loom_testbench_run_case_invocations(
     loom_testbench_invocation_executor_t* executor,
     loom_testbench_value_table_t* table) {
-  IREE_ASSERT_ARGUMENT(executor);
-  IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(executor && executor->schedule);
-
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t invocation_index = 0;
        iree_status_is_ok(status) &&

@@ -49,7 +49,6 @@ static iree_status_t loom_check_parse_json_flag(iree_string_view_t flag_name,
                                                 iree_string_view_t value) {
   (void)flag_name;
   loom_check_json_flag_t* flag = (loom_check_json_flag_t*)storage;
-  IREE_ASSERT_ARGUMENT(flag);
 
   flag->enabled = true;
   if (iree_string_view_is_empty(value) ||
@@ -72,7 +71,6 @@ static iree_status_t loom_check_parse_json_flag(iree_string_view_t flag_name,
 static void loom_check_print_json_flag(iree_string_view_t flag_name,
                                        void* storage, FILE* file) {
   const loom_check_json_flag_t* flag = (const loom_check_json_flag_t*)storage;
-  IREE_ASSERT_ARGUMENT(flag);
   if (!flag->enabled) {
     fprintf(file, "# --%.*s[=failures|summary|all]\n", (int)flag_name.size,
             flag_name.data);

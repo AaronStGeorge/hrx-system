@@ -15,7 +15,6 @@
 iree_status_t loom_check_low_emit_parse_schedule_strategy(
     iree_string_view_t value, iree_string_view_t option_scope,
     loom_low_schedule_strategy_t* out_strategy) {
-  IREE_ASSERT_ARGUMENT(out_strategy);
   if (iree_string_view_equal(value, IREE_SV("source"))) {
     *out_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY;
     return iree_ok_status();
@@ -43,7 +42,6 @@ iree_status_t loom_check_low_emit_parse_allocation_budget(
     iree_string_view_t token, iree_string_view_t option_scope,
     loom_low_allocation_budget_t* budgets, iree_host_size_t budget_capacity,
     iree_host_size_t* budget_count) {
-  IREE_ASSERT_ARGUMENT(budget_count);
   if (*budget_count >= budget_capacity) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "too many %.*s allocation budgets",
@@ -78,7 +76,6 @@ iree_status_t loom_check_low_emit_parse_allocation_budget(
 static iree_status_t loom_check_low_emit_parse_location_kind(
     iree_string_view_t value, iree_string_view_t option_scope,
     loom_low_allocation_location_kind_t* out_location_kind) {
-  IREE_ASSERT_ARGUMENT(out_location_kind);
   if (iree_string_view_equal(value, IREE_SV("physical_register"))) {
     *out_location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
     return iree_ok_status();
@@ -98,7 +95,6 @@ iree_status_t loom_check_low_emit_parse_fixed_value_spec(
     iree_string_view_t value, iree_string_view_t option_scope,
     loom_check_low_emit_fixed_value_spec_t* fixed_specs,
     iree_host_size_t fixed_spec_capacity, iree_host_size_t* fixed_spec_count) {
-  IREE_ASSERT_ARGUMENT(fixed_spec_count);
   if (*fixed_spec_count >= fixed_spec_capacity) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "too many %.*s fixed allocation values",
@@ -192,8 +188,6 @@ iree_status_t loom_check_low_emit_parse_allocation_option(
 iree_status_t loom_check_low_emit_find_low_function_def(
     loom_module_t* module, iree_string_view_t symbol_name,
     loom_op_t** out_low_function) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_low_function);
   *out_low_function = NULL;
   loom_string_id_t name_id = loom_module_lookup_string(module, symbol_name);
   if (name_id == LOOM_STRING_ID_INVALID) {
@@ -285,7 +279,6 @@ static iree_status_t loom_check_low_emit_find_value_in_region(
 static iree_status_t loom_check_low_emit_find_value_in_low_function(
     const loom_module_t* module, const loom_op_t* low_function,
     iree_string_view_t value_name, loom_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(out_value_id);
   *out_value_id = LOOM_VALUE_ID_INVALID;
   const loom_region_t* body = loom_low_function_const_body(low_function);
   bool found = false;
@@ -305,17 +298,11 @@ iree_status_t loom_check_low_emit_resolve_fixed_value_specs(
     iree_host_size_t fixed_spec_count,
     const loom_low_allocation_fixed_value_t** out_fixed_values,
     iree_host_size_t* out_fixed_value_count, iree_arena_allocator_t* arena) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_fixed_values);
-  IREE_ASSERT_ARGUMENT(out_fixed_value_count);
   *out_fixed_values = NULL;
   *out_fixed_value_count = 0;
   if (fixed_spec_count == 0) {
     return iree_ok_status();
   }
-  IREE_ASSERT_ARGUMENT(fixed_specs);
-  IREE_ASSERT_ARGUMENT(low_function);
   if (!loom_low_function_def_isa(low_function) ||
       !loom_low_function_body(low_function)) {
     return iree_make_status(
@@ -351,8 +338,6 @@ iree_status_t loom_check_low_emit_packetize_function(
     const loom_check_low_emit_fixed_value_spec_t* allocation_fixed_specs,
     iree_host_size_t allocation_fixed_spec_count,
     loom_low_emission_frame_t* out_frame) {
-  IREE_ASSERT_ARGUMENT(request);
-  IREE_ASSERT_ARGUMENT(out_frame);
   if (request->low_registry == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low emit descriptor registry is required");

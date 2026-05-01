@@ -65,9 +65,6 @@ iree_status_t loom_check_build_update_edit(iree_string_view_t original_source,
                                            iree_string_view_t actual_output,
                                            iree_string_builder_t* new_text,
                                            loom_check_update_edit_t* out_edit) {
-  IREE_ASSERT_ARGUMENT(test_case);
-  IREE_ASSERT_ARGUMENT(new_text);
-  IREE_ASSERT_ARGUMENT(out_edit);
   memset(out_edit, 0, sizeof(*out_edit));
 
   iree_host_size_t cursor_offset = 0;

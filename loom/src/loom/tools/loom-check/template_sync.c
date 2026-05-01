@@ -136,7 +136,6 @@ static iree_string_view_t loom_check_template_sync_trim_trailing_blank_lines(
 static bool loom_check_template_sync_line_at(iree_string_view_t source,
                                              iree_host_size_t target_line,
                                              iree_string_view_t* out_line) {
-  IREE_ASSERT_ARGUMENT(out_line);
   if (target_line == 0) {
     return false;
   }
@@ -156,7 +155,6 @@ static bool loom_check_template_sync_line_at(iree_string_view_t source,
 static bool loom_check_template_sync_line_occurrence_at(
     iree_string_view_t source, iree_host_size_t target_line,
     iree_string_view_t target_line_text, iree_host_size_t* out_occurrence) {
-  IREE_ASSERT_ARGUMENT(out_occurrence);
   *out_occurrence = 0;
   if (target_line == 0) {
     return false;
@@ -184,7 +182,6 @@ static bool loom_check_template_sync_line_occurrence_at(
 static iree_status_t loom_check_template_sync_source_line_number(
     iree_string_view_t source, loom_check_source_range_t input_range,
     loom_check_source_range_t line_range, iree_host_size_t* out_line) {
-  IREE_ASSERT_ARGUMENT(out_line);
   *out_line = 0;
   if (line_range.start_byte < input_range.start_byte ||
       line_range.start_byte > input_range.end_byte ||
@@ -532,12 +529,6 @@ iree_status_t loom_check_template_sync_build_source(
     iree_arena_block_pool_t* block_pool, iree_arena_allocator_t* arena,
     iree_allocator_t host_allocator, iree_string_builder_t* new_source,
     bool* out_changed) {
-  IREE_ASSERT_ARGUMENT(target_file);
-  IREE_ASSERT_ARGUMENT(context);
-  IREE_ASSERT_ARGUMENT(block_pool);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(new_source);
-  IREE_ASSERT_ARGUMENT(out_changed);
   iree_string_builder_reset(new_source);
   *out_changed = false;
 

@@ -45,9 +45,6 @@ static const char* loom_check_scanner_end(iree_string_view_t scanner,
 
 static loom_check_source_range_t loom_check_source_range_from_pointers(
     const char* source_start, const char* start, const char* end) {
-  IREE_ASSERT_ARGUMENT(source_start);
-  IREE_ASSERT_ARGUMENT(start);
-  IREE_ASSERT_ARGUMENT(end);
   IREE_ASSERT(start <= end);
   return (loom_check_source_range_t){
       .start_byte = (iree_host_size_t)(start - source_start),

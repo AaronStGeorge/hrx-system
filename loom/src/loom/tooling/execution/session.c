@@ -17,7 +17,6 @@ enum {
 
 void loom_run_session_options_initialize(
     loom_run_session_options_t* out_options) {
-  IREE_ASSERT_ARGUMENT(out_options);
   *out_options = (loom_run_session_options_t){
       .host_allocator = iree_allocator_system(),
       .block_pool_block_size = LOOM_RUN_DEFAULT_BLOCK_POOL_BLOCK_SIZE,
@@ -27,8 +26,6 @@ void loom_run_session_options_initialize(
 iree_status_t loom_run_session_initialize(
     const loom_run_session_options_t* options,
     loom_run_session_t* out_session) {
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(out_session);
   *out_session = (loom_run_session_t){
       .host_allocator = options->host_allocator,
   };
@@ -83,25 +80,21 @@ void loom_run_session_deinitialize(loom_run_session_t* session) {
 }
 
 loom_context_t* loom_run_session_context(loom_run_session_t* session) {
-  IREE_ASSERT_ARGUMENT(session);
   return &session->context;
 }
 
 iree_arena_block_pool_t* loom_run_session_block_pool(
     loom_run_session_t* session) {
-  IREE_ASSERT_ARGUMENT(session);
   return &session->block_pool;
 }
 
 const loom_target_low_descriptor_registry_t*
 loom_run_session_low_descriptor_registry(const loom_run_session_t* session) {
-  IREE_ASSERT_ARGUMENT(session);
   return &session->low_descriptor_registry;
 }
 
 void loom_run_module_parse_options_initialize(
     loom_run_module_parse_options_t* out_options) {
-  IREE_ASSERT_ARGUMENT(out_options);
   *out_options = (loom_run_module_parse_options_t){
       .diagnostic_sink = {.fn = loom_diagnostic_stderr_sink},
       .max_errors = LOOM_RUN_DEFAULT_MAX_PARSE_ERRORS,
@@ -111,9 +104,6 @@ void loom_run_module_parse_options_initialize(
 iree_status_t loom_run_module_parse(
     loom_run_session_t* session, const loom_run_module_parse_options_t* options,
     loom_run_module_t* out_module) {
-  IREE_ASSERT_ARGUMENT(session);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(out_module);
   *out_module = (loom_run_module_t){
       .filename = options->filename,
       .source = options->source,
@@ -166,7 +156,6 @@ void loom_run_module_deinitialize(loom_run_module_t* run_module) {
 
 loom_source_resolver_t loom_run_module_source_resolver(
     loom_run_module_t* run_module) {
-  IREE_ASSERT_ARGUMENT(run_module);
   return (loom_source_resolver_t){
       .fn = loom_source_table_resolve,
       .user_data = &run_module->source_table_resolver,

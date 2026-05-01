@@ -8,7 +8,6 @@
 
 void loom_run_one_shot_options_initialize(
     loom_run_one_shot_options_t* out_options) {
-  IREE_ASSERT_ARGUMENT(out_options);
   *out_options = (loom_run_one_shot_options_t){0};
   out_options->hal_workgroup_count[0] = 1;
   out_options->hal_workgroup_count[1] = 1;
@@ -17,7 +16,6 @@ void loom_run_one_shot_options_initialize(
 
 void loom_run_one_shot_result_initialize(
     iree_allocator_t allocator, loom_run_one_shot_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(out_result);
   *out_result = (loom_run_one_shot_result_t){0};
   iree_string_builder_initialize(allocator, &out_result->output);
 }
