@@ -122,6 +122,13 @@ def convert_call(
         return _convert_ceildiv_call(expr, context, converter, op_name, options=options)
     if op_name in _REINTERPRET_CALLS:
         return _convert_reinterpret_call(expr, context, converter, op_name)
+    if op_name in _EFFECT_CALLS:
+        return _convert_effect_call(
+            expr,
+            context,
+            op_name,
+            options=options,
+        )
     if op_name in _SIGMOID_CALLS:
         return _convert_sigmoid_call(expr, context, converter, op_name)
     if op_name in _IDENTITY_CALLS:
@@ -583,6 +590,56 @@ def _convert_reinterpret_call(
     return result
 
 
+def _convert_effect_call(
+    expr: object,
+    context: TileLangConversionContext,
+    op_name: str,
+    *,
+    options: ExpressionOptions,
+) -> ValueRef | None:
+    if not options.effect:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` is effect-only and must appear under tir.Evaluate",
+        )
+        return None
+    if op_name in _STORAGE_SYNC_CALLS:
+        _convert_storage_sync_call(expr, context, op_name)
+        return None
+    _record_unsupported_call(expr, context, op_name)
+    return None
+
+
+def _convert_storage_sync_call(
+    expr: object,
+    context: TileLangConversionContext,
+    op_name: str,
+) -> None:
+    args = _args(expr)
+    if len(args) != 1:
+        context.record_blocked(
+            node_text(expr),
+            (
+                f"call `{op_name}` expects one storage scope; "
+                "TileLang barrier_id/arrive_count forms are not imported"
+            ),
+        )
+        return
+    storage_scope = _string_value(args[0])
+    if storage_scope not in _WORKGROUP_STORAGE_SCOPES:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` storage scope `{storage_scope}` is not mapped",
+        )
+        return
+    context.builder.kernel.barrier(
+        memory_space="workgroup",
+        ordering="acq_rel",
+        scope="workgroup",
+    )
+    context.record_converted(node_text(expr), "kernel.barrier")
+
+
 def _call_result_type(
     expr: object,
     context: TileLangConversionContext,
@@ -701,6 +758,11 @@ def _annotations(call: object) -> tuple[tuple[object, object], ...]:
     return mapping_items(getattr(call, "annotations", {}))
 
 
+def _string_value(value: object) -> str:
+    payload = getattr(value, "value", value)
+    return str(payload)
+
+
 _UNARY_FLOAT_CALLS = {
     "tir.acos": UnaryCallSpec("acosf"),
     "tir.acosh": UnaryCallSpec("acoshf"),
@@ -786,6 +848,17 @@ _CEILDIV_CALLS = {
 
 _REINTERPRET_CALLS = {
     "tir.reinterpret",
+}
+
+_STORAGE_SYNC_CALLS = {
+    "tir.tvm_storage_sync",
+}
+
+_EFFECT_CALLS = _STORAGE_SYNC_CALLS
+
+_WORKGROUP_STORAGE_SCOPES = {
+    "shared",
+    "shared.dyn",
 }
 
 _SIGMOID_CALLS = {

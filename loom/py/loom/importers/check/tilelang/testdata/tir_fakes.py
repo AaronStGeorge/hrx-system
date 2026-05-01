@@ -60,6 +60,11 @@ class SeqStmt:
         self.seq = tuple(seq)
 
 
+class Evaluate:
+    def __init__(self, value: object) -> None:
+        self.value = value
+
+
 class Block:
     def __init__(
         self,

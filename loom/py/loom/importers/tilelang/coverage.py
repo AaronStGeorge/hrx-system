@@ -650,6 +650,25 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "Scalar integer remainder with truncation semantics.",
     ),
     OpCoverage(
+        "tir.tvm_storage_sync",
+        OpFamily.TIR_OP,
+        CoverageState.SUPPORTED,
+        "Shared-memory workgroup barrier; shared/shared.dyn map to kernel.barrier.",
+    ),
+    OpCoverage(
+        "tl.sync_grid",
+        OpFamily.TILELANG_OP,
+        CoverageState.DEFERRED,
+        "Grid/cluster synchronization needs an explicit Loom cluster-sync "
+        "import policy.",
+    ),
+    OpCoverage(
+        "tl.sync_warp",
+        OpFamily.TILELANG_OP,
+        CoverageState.DEFERRED,
+        "Warp synchronization needs a reviewed subgroup barrier/fence representation.",
+    ),
+    OpCoverage(
         "tl.__ldg",
         OpFamily.TILELANG_OP,
         CoverageState.DEFERRED,

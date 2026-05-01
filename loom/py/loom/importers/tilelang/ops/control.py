@@ -163,4 +163,4 @@ def convert_evaluate(
 
     value = getattr(stmt, "value", None)
     if value is not None:
-        converter.convert_expr(value, context)
+        converter.convert_expr(value, context, effect=True)

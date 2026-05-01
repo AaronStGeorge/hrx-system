@@ -12,6 +12,8 @@ from loom.importers.check.tilelang.testdata.tir_fakes import (
     Buffer,
     BufferLoad,
     BufferStore,
+    Call,
+    Evaluate,
     For,
     IntImm,
     PrimFunc,
@@ -80,6 +82,49 @@ def launch_thread_attrs() -> TileLangImportInput:
 #   %add_4 = index.add %add_3, %c : index
 #   %load = view.load %src[%add_4] : view<1024xf32> -> f32
 #   view.store %load, %dst[%add_4] : f32, view<1024xf32>
+#   kernel.return
+# }
+
+
+# ====
+@tilelang_case(name="shared_storage_sync", category="op", tags=("topology",))
+def shared_storage_sync() -> TileLangImportInput:
+    src, dst = Var("src"), Var("dst")
+    src_buffer = Buffer("src", (4,), "float32")
+    dst_buffer = Buffer("dst", (4,), "float32")
+    body = SeqStmt(
+        [
+            Evaluate(Call("tir.tvm_storage_sync", ["shared"], "int32")),
+            BufferStore(
+                dst_buffer,
+                BufferLoad(src_buffer, [IntImm(0)]),
+                [IntImm(0)],
+            ),
+        ]
+    )
+    prim_func = PrimFunc(
+        [src, dst],
+        {src: src_buffer, dst: dst_buffer},
+        body,
+        attrs={"global_symbol": "shared_storage_sync"},
+    )
+    return TileLangImportInput(
+        source=prim_func, target="hip", name="shared_storage_sync"
+    )
+
+
+# ----
+# target.profile @hip preset("hip")
+#
+# kernel.def target(@hip) export("shared_storage_sync") workgroup_size(1, 1, 1) @shared_storage_sync(%src: buffer, %dst: buffer) {
+#   %c0_bytes = index.constant 0 : offset
+#   %src = buffer.view %src[%c0_bytes] : buffer -> view<4xf32>
+#   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<4xf32>
+#   kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+#   %c = index.constant 0 : index
+#   %load = view.load %src[%c] : view<4xf32> -> f32
+#   %c_2 = index.constant 0 : index
+#   view.store %load, %dst[%c_2] : f32, view<4xf32>
 #   kernel.return
 # }
 

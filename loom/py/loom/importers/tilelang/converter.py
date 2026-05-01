@@ -26,6 +26,7 @@ class ExpressionOptions:
     """Options for converting one expression node."""
 
     index_like: bool = False
+    effect: bool = False
 
 
 StatementHandler = Callable[
@@ -175,6 +176,7 @@ class TileLangConverter:
         context: TileLangConversionContext,
         *,
         index_like: bool = False,
+        effect: bool = False,
     ) -> ValueRef | None:
         if expr is None:
             return None
@@ -188,7 +190,12 @@ class TileLangConverter:
             self.record_unsupported(expr, context)
             return None
         handler = cast(ExpressionHandler, converter.handler)
-        return handler(expr, context, self, ExpressionOptions(index_like=index_like))
+        return handler(
+            expr,
+            context,
+            self,
+            ExpressionOptions(index_like=index_like, effect=effect),
+        )
 
     def record_unsupported(
         self,
