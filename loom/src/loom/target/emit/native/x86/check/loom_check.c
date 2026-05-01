@@ -39,7 +39,6 @@ static bool loom_x86_loom_check_emit_provider_matches(
 static iree_status_t loom_x86_loom_check_parse_key_value_option(
     iree_string_view_t token, loom_x86_loom_check_emit_options_t* options,
     bool* out_matched) {
-  IREE_ASSERT_ARGUMENT(out_matched);
   *out_matched = false;
   iree_string_view_t name = iree_string_view_empty();
   iree_string_view_t value = iree_string_view_empty();
@@ -78,7 +77,6 @@ static iree_status_t loom_x86_loom_check_parse_option(
 static iree_status_t loom_x86_loom_check_parse_emit_options(
     const loom_check_emit_provider_request_t* request,
     loom_x86_loom_check_emit_options_t* out_options) {
-  IREE_ASSERT_ARGUMENT(out_options);
   *out_options = (loom_x86_loom_check_emit_options_t){
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
   };

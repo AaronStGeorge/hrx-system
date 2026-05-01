@@ -355,8 +355,6 @@ static iree_status_t loom_wasm_map_assignment(
     const loom_low_allocation_table_t* allocation, loom_value_id_t value_id,
     const loom_low_allocation_assignment_t** out_assignment,
     loom_wasm_value_type_t* out_value_type) {
-  IREE_ASSERT_ARGUMENT(out_assignment);
-  IREE_ASSERT_ARGUMENT(out_value_type);
   const loom_low_allocation_assignment_t* assignment =
       loom_low_allocation_map_active_value_assignment(allocation, value_id,
                                                       NULL);
@@ -517,7 +515,6 @@ static iree_status_t loom_wasm_read_u8_attr(loom_named_attr_slice_t attrs,
                                             loom_string_id_t name_id,
                                             uint8_t maximum_value,
                                             uint8_t* out_value) {
-  IREE_ASSERT_ARGUMENT(out_value);
   int64_t value = 0;
   IREE_RETURN_IF_ERROR(loom_wasm_read_i64_attr(attrs, name, name_id, &value));
   if (value < 0 || value > maximum_value) {

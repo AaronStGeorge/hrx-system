@@ -95,7 +95,6 @@ static iree_status_t loom_wasm_module_write_value_type_list(
 static iree_status_t loom_wasm_module_find_return_values(
     const loom_low_schedule_table_t* schedule,
     loom_value_slice_t* out_return_values) {
-  IREE_ASSERT_ARGUMENT(out_return_values);
   *out_return_values = (loom_value_slice_t){0};
   for (iree_host_size_t i = 0; i < schedule->node_count; ++i) {
     const loom_op_t* op = schedule->nodes[i].op;

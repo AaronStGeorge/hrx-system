@@ -327,7 +327,6 @@ static iree_status_t loom_x86_read_packet_immediate(
     const loom_native_assembly_packet_context_t* context,
     const loom_low_descriptor_t* descriptor, uint16_t immediate_index,
     int64_t* out_value) {
-  IREE_ASSERT_ARGUMENT(out_value);
   const loom_low_descriptor_set_t* descriptor_set =
       context->schedule->target.descriptor_set;
   if (immediate_index >= descriptor->immediate_count) {
@@ -369,7 +368,6 @@ static iree_status_t loom_x86_read_packet_immediate(
 
 static iree_status_t loom_x86_read_packet_address_scale_attr(
     const loom_native_assembly_packet_context_t* context, int64_t* out_scale) {
-  IREE_ASSERT_ARGUMENT(out_scale);
   IREE_RETURN_IF_ERROR(
       loom_x86_read_packet_i64_attr(context, IREE_SV("scale"), out_scale));
   switch (*out_scale) {

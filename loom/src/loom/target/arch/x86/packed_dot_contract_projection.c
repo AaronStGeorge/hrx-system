@@ -62,8 +62,6 @@ bool loom_x86_packed_dot_match_request_from_contract(
     loom_x86_packed_dot_feature_bits_t feature_bits,
     loom_x86_packed_dot_match_request_t* out_request,
     loom_contract_diagnostic_t* out_diagnostic) {
-  IREE_ASSERT_ARGUMENT(contract_request);
-  IREE_ASSERT_ARGUMENT(out_request);
   *out_request = (loom_x86_packed_dot_match_request_t){0};
 
   loom_contract_diagnostic_t diagnostic = {0};
