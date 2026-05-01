@@ -56,11 +56,18 @@ class AttrProject:
         return cls(kind=AttrProjectKind.DIRECT, source_attr=source_attr)
 
     @classmethod
-    def i64_array_element(cls, source_attr: str, *, element: int) -> Self:
+    def i64_array_element(
+        cls,
+        source_attr: str,
+        *,
+        element: int,
+        target_bit_offset: int = 0,
+    ) -> Self:
         return cls(
             kind=AttrProjectKind.I64_ARRAY_ELEMENT,
             source_attr=source_attr,
             element=element,
+            target_bit_offset=target_bit_offset,
         )
 
     @classmethod

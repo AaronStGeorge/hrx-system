@@ -9,6 +9,7 @@
 #include "loom/ir/module.h"
 #include "loom/target/arch/x86/avx512_descriptors.h"
 #include "loom/target/arch/x86/avx512_packed_dot_descriptors.h"
+#include "loom/target/arch/x86/lower/avx512_rules.h"
 #include "loom/target/arch/x86/lower/internal.h"
 
 static bool loom_x86_type_is_vector_16xi32(loom_type_t type) {
@@ -248,8 +249,7 @@ static iree_status_t loom_x86_map_avx512_packed_dot_argument(
 }
 
 static const loom_low_lower_rule_set_t* const kX86Avx512RuleSets[] = {
-    &loom_x86_avx512_rule_set,
-    &loom_x86_avx512_reduce_rule_set,
+    &loom_x86_avx512_lower_rule_set,
 };
 
 static iree_status_t loom_x86_low_legality_try_verify_op(

@@ -95,6 +95,13 @@ CONTRACT_TABLE_REGISTRATIONS = (
         aliases=("wasm_core_simd128",),
     ),
     ContractTableRegistration(
+        key="x86.avx512",
+        module_name="loom.target.arch.x86.contracts.avx512",
+        symbol_name="X86_AVX512_CONTRACT_TABLE",
+        dialect_ops_symbol_name="X86_AVX512_CONTRACT_DIALECT_OPS",
+        aliases=("x86_avx512",),
+    ),
+    ContractTableRegistration(
         key="test.low.core",
         module_name="loom.target.test.contracts",
         symbol_name="TEST_LOW_CORE_CONTRACT_TABLE",

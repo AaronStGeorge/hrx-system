@@ -131,6 +131,31 @@ _WASM_CONTRACT_SHARD_SRCS = _TARGET_CONTRACT_GENERATOR_SRCS + [
     "target/emit/wasm/contracts.py",
 ]
 
+_X86_CONTRACT_SHARD_SRCS = _TARGET_CONTRACT_GENERATOR_SRCS + [
+    "dialect/__init__.py",
+    "dialect/atomic.py",
+    "dialect/cache.py",
+    "dialect/combining.py",
+    "dialect/index/__init__.py",
+    "dialect/index/defs.py",
+    "dialect/scalar/__init__.py",
+    "dialect/scalar/analysis.py",
+    "dialect/scalar/arithmetic.py",
+    "dialect/scalar/bitwise.py",
+    "dialect/scalar/comparison.py",
+    "dialect/scalar/conversion.py",
+    "dialect/scalar/defs.py",
+    "dialect/scalar/math.py",
+    "dialect/vector/__init__.py",
+    "dialect/vector/defs.py",
+    "target/arch/__init__.py",
+    "target/arch/x86/__init__.py",
+    "target/arch/x86/contracts/__init__.py",
+    "target/arch/x86/contracts/avx512.py",
+    "target/arch/x86/descriptors.py",
+    "target/arch/x86/packed_dot_data.py",
+]
+
 _TEST_LOW_CONTRACT_SHARD_SRCS = _TARGET_CONTRACT_GENERATOR_SRCS + [
     "dialect/__init__.py",
     "dialect/atomic.py",
@@ -297,6 +322,12 @@ py_binary(
 py_binary(
     name = "wasm_lower_rule_shard",
     srcs = _WASM_CONTRACT_SHARD_SRCS,
+    main = "gen/target_lower_rule_shard.py",
+)
+
+py_binary(
+    name = "x86_lower_rule_shard",
+    srcs = _X86_CONTRACT_SHARD_SRCS,
     main = "gen/target_lower_rule_shard.py",
 )
 
