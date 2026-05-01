@@ -16,6 +16,10 @@ from loom.importers.tilelang.converter import (
     TileLangConverterRegistry,
 )
 from loom.importers.tilelang.nodes import node_text, source_name
+from loom.importers.tilelang.ops.assumptions import (
+    ASSUME_ATTR_KEYS,
+    convert_assume_attr_stmt,
+)
 from loom.importers.tilelang.ops.memory import map_alloc_buffer
 from loom.importers.tilelang.ops.topology import (
     map_thread_axis,
@@ -95,6 +99,9 @@ def convert_attr_stmt(
     """Normalize known metadata-only AttrStmt wrappers."""
 
     attr_key = str(getattr(stmt, "attr_key", ""))
+    if attr_key in ASSUME_ATTR_KEYS:
+        convert_assume_attr_stmt(stmt, context, converter)
+        return
     if attr_key == "thread_extent":
         node = getattr(stmt, "node", None)
         thread_axis = thread_axis_from_binding(node)

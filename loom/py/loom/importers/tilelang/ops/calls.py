@@ -20,6 +20,7 @@ from loom.importers.tilelang.converter import (
 )
 from loom.importers.tilelang.coverage import OpCoverage, coverage_by_name
 from loom.importers.tilelang.nodes import dtype, mapping_items, node_kind, node_text
+from loom.importers.tilelang.ops.assumptions import convert_assume_call
 from loom.importers.tilelang.ops.topology import integer_value
 from loom.ir import I1, INDEX, ScalarType, ShapedType, StaticDim, Type, TypeKind
 
@@ -622,6 +623,9 @@ def _convert_effect_call(
             f"call `{op_name}` is effect-only and must appear under tir.Evaluate",
         )
         return None
+    if op_name in _ASSUME_CALLS:
+        convert_assume_call(expr, context)
+        return None
     if op_name in _STORAGE_SYNC_CALLS:
         _convert_storage_sync_call(expr, context, op_name)
         return None
@@ -1084,7 +1088,11 @@ _STORAGE_SYNC_CALLS = {
     "tir.tvm_storage_sync",
 }
 
-_EFFECT_CALLS = _STORAGE_SYNC_CALLS
+_ASSUME_CALLS = {
+    "tir.assume",
+}
+
+_EFFECT_CALLS = _STORAGE_SYNC_CALLS | _ASSUME_CALLS
 
 _WORKGROUP_STORAGE_SCOPES = {
     "shared",

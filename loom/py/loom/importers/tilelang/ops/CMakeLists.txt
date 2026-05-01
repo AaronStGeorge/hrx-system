@@ -15,6 +15,7 @@ iree_py_library(
     ops
   SRCS
     "__init__.py"
+    "assumptions.py"
     "calls.py"
     "control.py"
     "memory.py"

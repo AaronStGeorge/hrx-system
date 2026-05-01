@@ -190,7 +190,56 @@ class Add:
         self.dtype = dtype
 
 
+class FloorMod:
+    def __init__(self, lhs: object, rhs: object, dtype: str = "int32") -> None:
+        self.a = lhs
+        self.b = rhs
+        self.dtype = dtype
+
+
+class And:
+    def __init__(self, lhs: object, rhs: object, dtype: str = "bool") -> None:
+        self.a = lhs
+        self.b = rhs
+        self.dtype = dtype
+
+
+class EQ:
+    def __init__(self, lhs: object, rhs: object, dtype: str = "bool") -> None:
+        self.a = lhs
+        self.b = rhs
+        self.dtype = dtype
+
+
+class NE:
+    def __init__(self, lhs: object, rhs: object, dtype: str = "bool") -> None:
+        self.a = lhs
+        self.b = rhs
+        self.dtype = dtype
+
+
 class LT:
+    def __init__(self, lhs: object, rhs: object, dtype: str = "bool") -> None:
+        self.a = lhs
+        self.b = rhs
+        self.dtype = dtype
+
+
+class LE:
+    def __init__(self, lhs: object, rhs: object, dtype: str = "bool") -> None:
+        self.a = lhs
+        self.b = rhs
+        self.dtype = dtype
+
+
+class GT:
+    def __init__(self, lhs: object, rhs: object, dtype: str = "bool") -> None:
+        self.a = lhs
+        self.b = rhs
+        self.dtype = dtype
+
+
+class GE:
     def __init__(self, lhs: object, rhs: object, dtype: str = "bool") -> None:
         self.a = lhs
         self.b = rhs

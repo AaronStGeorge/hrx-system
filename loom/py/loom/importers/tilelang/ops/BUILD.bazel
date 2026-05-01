@@ -15,6 +15,7 @@ py_library(
     name = "ops",
     srcs = [
         "__init__.py",
+        "assumptions.py",
         "calls.py",
         "control.py",
         "memory.py",

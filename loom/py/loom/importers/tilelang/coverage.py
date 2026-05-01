@@ -125,7 +125,8 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "tir.AttrStmt",
         OpFamily.TIR_NODE,
         CoverageState.NORMALIZED,
-        "Thread extent and storage attributes are decoded into kernel facts.",
+        "Thread extent, assumptions, and storage attributes are decoded into "
+        "kernel facts.",
     ),
     OpCoverage(
         "tir.Var",
@@ -650,6 +651,12 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "Scalar integer remainder with truncation semantics.",
     ),
     OpCoverage(
+        "tir.assume",
+        OpFamily.TIR_OP,
+        CoverageState.SUPPORTED,
+        "Effect assumption call; simple integer predicates map to Loom assume.",
+    ),
+    OpCoverage(
         "tir.tvm_storage_sync",
         OpFamily.TIR_OP,
         CoverageState.SUPPORTED,
@@ -831,6 +838,18 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         OpFamily.ATTRIBUTE,
         CoverageState.NORMALIZED,
         "Launch topology fact; imports to kernel workgroup/subgroup metadata.",
+    ),
+    OpCoverage(
+        "tl.assume",
+        OpFamily.ATTRIBUTE,
+        CoverageState.SUPPORTED,
+        "TileLang scoped integer predicate; maps to index.assume/scalar.assume.",
+    ),
+    OpCoverage(
+        "tilelang_assume",
+        OpFamily.ATTRIBUTE,
+        CoverageState.SUPPORTED,
+        "TileLang scoped integer predicate alias; maps to Loom assume.",
     ),
     OpCoverage(
         "tir.kernel_launch_params",

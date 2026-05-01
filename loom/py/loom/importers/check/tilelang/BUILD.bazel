@@ -35,6 +35,7 @@ py_test(
         "runner_test.py",
         "testdata/__init__.py",
         "testdata/allocations.py",
+        "testdata/analysis.py",
         "testdata/memory_effects.py",
         "testdata/scalar_calls.py",
         "testdata/tir_fakes.py",
