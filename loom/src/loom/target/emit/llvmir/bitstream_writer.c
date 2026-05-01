@@ -135,10 +135,6 @@ iree_status_t loom_llvmir_bitstream_writer_write_bytes(
     loom_llvmir_bitstream_writer_t* writer, const void* data,
     iree_host_size_t length) {
   if (length == 0) return iree_ok_status();
-  if (data == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "non-empty LLVM bitstream byte payload is null");
-  }
   if (length > (UINT64_MAX - writer->bit_offset) / 8) {
     return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                             "LLVM bitstream offset overflow");
