@@ -106,6 +106,47 @@ class Add:
         self.dtype = dtype
 
 
+class LT:
+    def __init__(self, lhs: object, rhs: object, dtype: str = "bool") -> None:
+        self.a = lhs
+        self.b = rhs
+        self.dtype = dtype
+
+
+class Min:
+    def __init__(self, lhs: object, rhs: object, dtype: str = "float32") -> None:
+        self.a = lhs
+        self.b = rhs
+        self.dtype = dtype
+
+
+class Cast:
+    def __init__(self, value: object, dtype: str) -> None:
+        self.value = value
+        self.dtype = dtype
+
+
+class Select:
+    def __init__(
+        self,
+        condition: object,
+        true_value: object,
+        false_value: object,
+        dtype: str = "float32",
+    ) -> None:
+        self.condition = condition
+        self.true_value = true_value
+        self.false_value = false_value
+        self.dtype = dtype
+
+
+class IfThenElse:
+    def __init__(self, condition: object, then_case: object, else_case: object) -> None:
+        self.condition = condition
+        self.then_case = then_case
+        self.else_case = else_case
+
+
 def test_import_tilelang_builds_kernel_from_direct_primfunc() -> None:
     src, dst = Var("src"), Var("dst")
     src_buffer = Buffer("src", (4,), "float32")
@@ -170,3 +211,33 @@ def test_import_tilelang_builds_scf_for_from_loop() -> None:
     assert 'kernel.def target(@hip) export("copy") workgroup_size(64, 1, 1)' in text
     assert "scf.for" in text
     assert "view.store" in text
+
+
+def test_import_tilelang_builds_scalar_control_expressions() -> None:
+    dst = Var("dst")
+    dst_buffer = Buffer("dst", (4,), "float32")
+    select = Select(
+        LT(IntImm(0), IntImm(1)),
+        Cast(IntImm(4), "float32"),
+        Min(FloatImm(2.0), FloatImm(3.0)),
+    )
+    body = IfThenElse(
+        LT(IntImm(0), IntImm(1)),
+        BufferStore(dst_buffer, select, [IntImm(0)]),
+        BufferStore(dst_buffer, FloatImm(0.0), [IntImm(0)]),
+    )
+    prim_func = PrimFunc(
+        [dst],
+        {dst: dst_buffer},
+        body,
+        attrs={"global_symbol": "scalar_control"},
+    )
+
+    result = import_tilelang(prim_func, options=TileLangImportOptions())
+    text = print_loom_module(result.module)
+
+    assert "scalar.cmpi slt" in text
+    assert "scalar.sitofp" in text
+    assert "scalar.minimumf" in text
+    assert "scf.select" in text
+    assert "scf.if" in text

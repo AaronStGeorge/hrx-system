@@ -18,17 +18,24 @@ from loom.importers.tilelang.converter import (
     TileLangConverterRegistry,
 )
 from loom.importers.tilelang.nodes import dtype, node_text
-from loom.ir import INDEX
+from loom.ir import I1, INDEX, Type
 
 
 def register(registry: TileLangConverterRegistry) -> None:
     for node_name in ("IntImm", "FloatImm"):
         registry.register_expression(node_name, convert_immediate)
     registry.register_expression("Var", convert_var)
+    registry.register_expression("Cast", convert_cast)
+    registry.register_expression("Not", convert_not)
+    registry.register_expression("Select", convert_select)
     for node_name in sorted(
         set(_BINARY_INDEX_OPS) | set(_BINARY_INTEGER_OPS) | set(_BINARY_FLOAT_OPS)
     ):
         registry.register_expression(node_name, convert_binary_expr)
+    for node_name in _COMPARISON_PREDICATES:
+        registry.register_expression(node_name, convert_compare)
+    for node_name in _BOOLEAN_BINARY_OPS:
+        registry.register_expression(node_name, convert_boolean_binary)
 
 
 def convert_immediate(
@@ -61,6 +68,45 @@ def convert_var(
     return mapped_var
 
 
+def convert_cast(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    _options: ExpressionOptions,
+) -> ValueRef | None:
+    """Import a scalar cast expression."""
+
+    value = getattr(expr, "value", None)
+    input_value = converter.convert_expr(value, context)
+    if input_value is None:
+        context.record_blocked(node_text(expr), "cast operand is not mapped")
+        return None
+    result_type = context.type_converter.map_dtype(dtype(expr))
+    input_type = input_value.type
+    if str(input_type) == str(result_type):
+        context.map_value(expr, input_value, str(result_type))
+        return input_value
+    builder_name = _cast_builder_name(
+        dtype(value), input_type, dtype(expr), result_type
+    )
+    if builder_name is None:
+        context.record_blocked(
+            node_text(expr),
+            f"no scalar cast builder from {input_type} to {result_type}",
+        )
+        return None
+    result = cast(
+        ValueRef,
+        getattr(context.builder.scalar, builder_name)(
+            input=input_value,
+            results=[result_type],
+            name=context.fresh_name(builder_name),
+        ),
+    )
+    context.map_value(expr, result, str(result_type))
+    return result
+
+
 def convert_binary_expr(
     expr: object,
     context: TileLangConversionContext,
@@ -69,21 +115,28 @@ def convert_binary_expr(
 ) -> ValueRef | None:
     """Import a scalar or index binary expression."""
 
+    source_lhs = getattr(expr, "a", None)
+    source_rhs = getattr(expr, "b", None)
+    index_like = (
+        options.index_like
+        or _source_is_index_like(source_lhs, context)
+        or _source_is_index_like(source_rhs, context)
+    )
     lhs = converter.convert_expr(
-        getattr(expr, "a", None),
+        source_lhs,
         context,
-        index_like=options.index_like,
+        index_like=index_like,
     )
     rhs = converter.convert_expr(
-        getattr(expr, "b", None),
+        source_rhs,
         context,
-        index_like=options.index_like,
+        index_like=index_like,
     )
     if lhs is None or rhs is None:
         context.record_blocked(node_text(expr), "binary operands are not mapped")
         return None
     kind = type(expr).__name__
-    if options.index_like:
+    if index_like:
         builder_name = _BINARY_INDEX_OPS.get(kind)
         if builder_name is None:
             context.record_blocked(node_text(expr), f"no index builder for {kind}")
@@ -103,6 +156,8 @@ def convert_binary_expr(
     result_type = context.type_converter.map_dtype(dtype(expr))
     if str(result_type).startswith("f"):
         scalar_builder_name = _BINARY_FLOAT_OPS.get(kind)
+    elif _is_unsigned_dtype(dtype(expr)):
+        scalar_builder_name = _BINARY_UNSIGNED_INTEGER_OPS.get(kind)
     else:
         scalar_builder_name = _BINARY_INTEGER_OPS.get(kind)
     if scalar_builder_name is None:
@@ -122,6 +177,190 @@ def convert_binary_expr(
     return result
 
 
+def convert_compare(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    _options: ExpressionOptions,
+) -> ValueRef | None:
+    """Import a scalar comparison expression."""
+
+    source_lhs = getattr(expr, "a", None)
+    source_rhs = getattr(expr, "b", None)
+    index_like = _source_is_index_like(source_lhs, context) or _source_is_index_like(
+        source_rhs, context
+    )
+    lhs = converter.convert_expr(source_lhs, context, index_like=index_like)
+    rhs = converter.convert_expr(source_rhs, context, index_like=index_like)
+    if lhs is None or rhs is None:
+        context.record_blocked(node_text(expr), "comparison operands are not mapped")
+        return None
+    kind = type(expr).__name__
+    source_type = str(lhs.type)
+    if source_type in ("index", "offset"):
+        predicate = _index_predicate(kind)
+        builder = context.builder.index.cmp
+        target = "index.cmp"
+    elif _is_float_type(source_type):
+        predicate = _FLOAT_COMPARISON_PREDICATES[kind]
+        builder = context.builder.scalar.cmpf
+        target = "scalar.cmpf"
+    else:
+        predicate = _integer_predicate(kind, dtype(source_lhs))
+        builder = context.builder.scalar.cmpi
+        target = "scalar.cmpi"
+    result = builder(
+        predicate=predicate,
+        lhs=lhs,
+        rhs=rhs,
+        results=[I1],
+        name=context.fresh_name("cmp"),
+    )
+    context.map_value(expr, result, "i1")
+    context.record_converted(node_text(expr), f"{context.ssa(result)} = {target}")
+    return result
+
+
+def convert_boolean_binary(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    _options: ExpressionOptions,
+) -> ValueRef | None:
+    """Import scalar boolean and/or expressions."""
+
+    lhs = converter.convert_expr(getattr(expr, "a", None), context)
+    rhs = converter.convert_expr(getattr(expr, "b", None), context)
+    if lhs is None or rhs is None:
+        context.record_blocked(node_text(expr), "boolean operands are not mapped")
+        return None
+    builder_name = _BOOLEAN_BINARY_OPS[type(expr).__name__]
+    result = cast(
+        ValueRef,
+        getattr(context.builder.scalar, builder_name)(
+            lhs=lhs,
+            rhs=rhs,
+            results=[I1],
+            name=context.fresh_name(builder_name),
+        ),
+    )
+    context.map_value(expr, result, "i1")
+    return result
+
+
+def convert_not(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    _options: ExpressionOptions,
+) -> ValueRef | None:
+    """Import scalar boolean negation."""
+
+    value = converter.convert_expr(getattr(expr, "a", None), context)
+    if value is None:
+        context.record_blocked(node_text(expr), "not operand is not mapped")
+        return None
+    true_value = context.ensure_constant("1", "bool", "true")
+    result = context.builder.scalar.xori(
+        lhs=value,
+        rhs=true_value,
+        results=[I1],
+        name=context.fresh_name("not"),
+    )
+    context.map_value(expr, result, "i1")
+    return result
+
+
+def convert_select(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    _options: ExpressionOptions,
+) -> ValueRef | None:
+    """Import a scalar select expression as scf.select."""
+
+    condition = converter.convert_expr(getattr(expr, "condition", None), context)
+    true_value = converter.convert_expr(getattr(expr, "true_value", None), context)
+    false_value = converter.convert_expr(getattr(expr, "false_value", None), context)
+    if condition is None or true_value is None or false_value is None:
+        context.record_blocked(node_text(expr), "select operands are not mapped")
+        return None
+    result_type = context.type_converter.map_dtype(dtype(expr))
+    result = context.builder.scf.select(
+        condition=condition,
+        true_value=true_value,
+        false_value=false_value,
+        results=[result_type],
+        name=context.fresh_name("select"),
+    )
+    context.map_value(expr, result, str(result_type))
+    return result
+
+
+def _source_is_index_like(
+    source: object,
+    context: TileLangConversionContext,
+) -> bool:
+    mapped = context.mapped(source)
+    return mapped is not None and str(mapped.type) in ("index", "offset")
+
+
+def _is_float_type(value_type: str) -> bool:
+    return value_type in ("f16", "bf16", "f32", "f64")
+
+
+def _is_unsigned_dtype(source_dtype: object) -> bool:
+    return str(source_dtype).startswith("uint")
+
+
+def _integer_predicate(kind: str, source_dtype: object) -> str:
+    predicates = (
+        _UNSIGNED_COMPARISON_PREDICATES
+        if _is_unsigned_dtype(source_dtype)
+        else _SIGNED_COMPARISON_PREDICATES
+    )
+    return predicates[kind]
+
+
+def _index_predicate(kind: str) -> str:
+    return _SIGNED_COMPARISON_PREDICATES[kind]
+
+
+def _cast_builder_name(
+    source_dtype: object,
+    input_type: Type,
+    result_dtype: object,
+    result_type: Type,
+) -> str | None:
+    input_text = str(input_type)
+    result_text = str(result_type)
+    if _is_float_type(input_text) and _is_float_type(result_text):
+        return (
+            "extf"
+            if _type_bit_width(result_text) > _type_bit_width(input_text)
+            else "fptrunc"
+        )
+    if _is_float_type(input_text):
+        return "fptoui" if _is_unsigned_dtype(result_dtype) else "fptosi"
+    if _is_float_type(result_text):
+        return "uitofp" if _is_unsigned_dtype(source_dtype) else "sitofp"
+    if input_text in ("index", "offset") or result_text in ("index", "offset"):
+        return None
+    if _type_bit_width(result_text) > _type_bit_width(input_text):
+        return "extui" if _is_unsigned_dtype(source_dtype) else "extsi"
+    if _type_bit_width(result_text) < _type_bit_width(input_text):
+        return "trunci"
+    return "bitcast"
+
+
+def _type_bit_width(value_type: str) -> int:
+    if value_type == "bf16":
+        return 16
+    if len(value_type) >= 2 and value_type[1:].isdigit():
+        return int(value_type[1:])
+    return 0
+
+
 _BINARY_INDEX_OPS = {
     "Add": "add",
     "Sub": "sub",
@@ -137,6 +376,19 @@ _BINARY_INTEGER_OPS = {
     "FloorDiv": "floordivsi",
     "FloorMod": "remsi",
     "Div": "divsi",
+    "Min": "minsi",
+    "Max": "maxsi",
+}
+
+_BINARY_UNSIGNED_INTEGER_OPS = {
+    "Add": "addi",
+    "Sub": "subi",
+    "Mul": "muli",
+    "FloorDiv": "divui",
+    "FloorMod": "remui",
+    "Div": "divui",
+    "Min": "minui",
+    "Max": "maxui",
 }
 
 _BINARY_FLOAT_OPS = {
@@ -144,4 +396,47 @@ _BINARY_FLOAT_OPS = {
     "Sub": "subf",
     "Mul": "mulf",
     "Div": "divf",
+    "Min": "minimumf",
+    "Max": "maximumf",
+}
+
+_COMPARISON_PREDICATES = {
+    "EQ",
+    "NE",
+    "LT",
+    "LE",
+    "GT",
+    "GE",
+}
+
+_SIGNED_COMPARISON_PREDICATES = {
+    "EQ": "eq",
+    "NE": "ne",
+    "LT": "slt",
+    "LE": "sle",
+    "GT": "sgt",
+    "GE": "sge",
+}
+
+_UNSIGNED_COMPARISON_PREDICATES = {
+    "EQ": "eq",
+    "NE": "ne",
+    "LT": "ult",
+    "LE": "ule",
+    "GT": "ugt",
+    "GE": "uge",
+}
+
+_FLOAT_COMPARISON_PREDICATES = {
+    "EQ": "oeq",
+    "NE": "one",
+    "LT": "olt",
+    "LE": "ole",
+    "GT": "ogt",
+    "GE": "oge",
+}
+
+_BOOLEAN_BINARY_OPS = {
+    "And": "andi",
+    "Or": "ori",
 }
