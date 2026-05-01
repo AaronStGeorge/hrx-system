@@ -93,6 +93,8 @@ _TEST_LOW_CONTRACT_SHARD_SRCS = _TARGET_CONTRACT_GENERATOR_SRCS + [
     "dialect/__init__.py",
     "dialect/atomic.py",
     "dialect/combining.py",
+    "dialect/index/__init__.py",
+    "dialect/index/defs.py",
     "dialect/scalar/__init__.py",
     "dialect/scalar/analysis.py",
     "dialect/scalar/arithmetic.py",

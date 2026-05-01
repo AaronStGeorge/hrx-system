@@ -94,6 +94,8 @@ loom_target_table_cc_library(
     cmake_generator_deps = [
         "//loom/py/loom:dialect/atomic.py",
         "//loom/py/loom:dialect/combining.py",
+        "//loom/py/loom:dialect/index/__init__.py",
+        "//loom/py/loom:dialect/index/defs.py",
         "//loom/py/loom:dialect/scalar/__init__.py",
         "//loom/py/loom:dialect/scalar/analysis.py",
         "//loom/py/loom:dialect/scalar/arithmetic.py",
@@ -138,6 +140,8 @@ loom_target_table_cc_library(
     cmake_generator_deps = [
         "//loom/py/loom:dialect/atomic.py",
         "//loom/py/loom:dialect/combining.py",
+        "//loom/py/loom:dialect/index/__init__.py",
+        "//loom/py/loom:dialect/index/defs.py",
         "//loom/py/loom:dialect/scalar/__init__.py",
         "//loom/py/loom:dialect/scalar/analysis.py",
         "//loom/py/loom:dialect/scalar/arithmetic.py",
@@ -174,6 +178,7 @@ loom_target_table_cc_library(
     deps = [
         ":descriptors",
         "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/vector",
     ],

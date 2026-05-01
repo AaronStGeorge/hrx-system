@@ -25,6 +25,7 @@
 #include "loom/pass/value_facts.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/target/test/lower.h"
+#include "loom/target/test/lower_rules.h"
 #include "loom/testing/module_ptr.h"
 
 namespace loom {
@@ -80,7 +81,7 @@ static iree_status_t EmitInvalidPreamble(void* user_data,
 }
 
 static const loom_low_lower_rule_set_t* const kInvalidPreambleRuleSets[] = {
-    &loom_test_low_lower_rule_set,
+    &loom_test_low_core_lower_rule_set,
 };
 
 static const loom_low_lower_policy_t kInvalidPreamblePolicy = {
@@ -220,7 +221,8 @@ TEST_F(LowLowerPassTest, ContractTableDrivesRuleSelectionWithoutLegacySpans) {
       "  func.return %sum : i32\n"
       "}\n"));
 
-  loom_low_lower_rule_set_t no_span_rule_set = loom_test_low_lower_rule_set;
+  loom_low_lower_rule_set_t no_span_rule_set =
+      loom_test_low_core_lower_rule_set;
   no_span_rule_set.spans = nullptr;
   no_span_rule_set.span_count = 0;
   const loom_low_lower_rule_set_t* rule_sets[] = {

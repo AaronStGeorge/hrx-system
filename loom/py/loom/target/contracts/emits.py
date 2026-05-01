@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from enum import Enum, unique
 
 from loom.dsl import Op
 from loom.target.contracts.descriptors import (
@@ -24,8 +25,23 @@ from loom.target.contracts.descriptors import (
 )
 from loom.target.contracts.immediates import AttrProject
 from loom.target.contracts.kinds import SourceValueKind
+from loom.target.contracts.patterns import TypePattern
 from loom.target.contracts.source import ValueRef
 from loom.target.low_descriptors import Descriptor, DescriptorSet
+
+
+@unique
+class DescriptorEmitForm(Enum):
+    """Descriptor emission form used by the target-low lowering interpreter."""
+
+    AUTO = "auto"
+    OP = "op"
+    CONST = "const"
+    PER_LANE = "per_lane"
+    ACCUMULATE_LANES = "accumulate_lanes"
+
+
+type ResultTypeBinding = ValueRef | TypePattern
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,13 +51,32 @@ class EmitDescriptorOp:
     descriptor: Descriptor
     operands: Mapping[str, ValueRef] | None = None
     results: Mapping[str, ValueRef] | None = None
+    result_types: Mapping[str, ResultTypeBinding] | None = None
     immediates: Mapping[str, AttrProject | int] | Sequence[AttrProject] = ()
+    form: DescriptorEmitForm = DescriptorEmitForm.AUTO
+    swap_first_two_operands: bool = False
+    copy_operands: Sequence[str] = ()
+    accumulator: str | None = None
 
     def __post_init__(self) -> None:
         operand_bindings = self.operands if self.operands is not None else {}
         result_bindings = self.results if self.results is not None else {}
+        result_type_bindings = (
+            self.result_types if self.result_types is not None else None
+        )
         object.__setattr__(self, "operands", dict(operand_bindings))
         object.__setattr__(self, "results", dict(result_bindings))
+        object.__setattr__(
+            self,
+            "result_types",
+            None if result_type_bindings is None else dict(result_type_bindings),
+        )
+        object.__setattr__(self, "copy_operands", tuple(self.copy_operands))
+        for operand in self.copy_operands:
+            if not operand:
+                raise ValueError("copied descriptor operand name must be non-empty")
+        if self.accumulator is not None and not self.accumulator:
+            raise ValueError("descriptor accumulator field must be non-empty")
 
     def validate(
         self,
@@ -88,12 +123,50 @@ class EmitDescriptorOp:
                 produced_temporaries.append(value_ref.field)
             else:
                 value_ref.validate(source_op, f"descriptor result '{descriptor_field}'")
+        result_type_bindings = (
+            dict(self.result_types) if self.result_types is not None else {}
+        )
+        for descriptor_field, binding in result_type_bindings.items():
+            _require_descriptor_operand(
+                self.descriptor, descriptor_field, "descriptor result type binding"
+            )
+            if isinstance(binding, ValueRef):
+                binding.validate(
+                    source_op,
+                    f"descriptor result type '{descriptor_field}'",
+                    defined_temporaries=defined_temporaries,
+                )
         _validate_required_descriptor_operands(
             source_op,
             self.descriptor,
             operand_bindings.keys(),
             result_bindings.keys(),
         )
+        if self.swap_first_two_operands and len(operand_bindings) < 2:
+            raise ValueError(
+                f"{source_op.name}: descriptor operand swap needs at least two operands"
+            )
+        for descriptor_field in self.copy_operands:
+            if descriptor_field not in operand_bindings:
+                raise ValueError(
+                    f"{source_op.name}: copied descriptor operand "
+                    f"'{descriptor_field}' is not an operand binding"
+                )
+        if self.form == DescriptorEmitForm.ACCUMULATE_LANES:
+            if self.accumulator is None:
+                raise ValueError(
+                    f"{source_op.name}: accumulate-lanes emit needs an accumulator"
+                )
+            if self.accumulator not in operand_bindings:
+                raise ValueError(
+                    f"{source_op.name}: accumulator '{self.accumulator}' "
+                    "is not a descriptor operand binding"
+                )
+        elif self.accumulator is not None:
+            raise ValueError(
+                f"{source_op.name}: accumulator is only valid for "
+                "accumulate-lanes emits"
+            )
         self._validate_immediates(source_op)
         return tuple(produced_temporaries)
 

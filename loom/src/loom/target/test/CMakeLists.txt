@@ -64,6 +64,8 @@ loom_target_table_cc_library(
   INPUTS
     "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/atomic.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/combining.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/defs.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/__init__.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/analysis.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/arithmetic.py"
@@ -112,6 +114,8 @@ loom_target_table_cc_library(
   INPUTS
     "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/atomic.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/combining.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/defs.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/__init__.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/analysis.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/arithmetic.py"
@@ -144,6 +148,7 @@ loom_target_table_cc_library(
   DEPS
     ::descriptors
     loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::index
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector
 )

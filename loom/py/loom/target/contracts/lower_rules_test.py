@@ -20,6 +20,7 @@ from loom.target.contracts import (
     DirectDescriptorCase,
     EmitDescriptorOp,
     Guard,
+    LowerAttrCopyKind,
     LowerEmitKind,
     Scalar,
     TypePattern,
@@ -144,7 +145,7 @@ def test_compile_lower_rule_set_rejects_descriptor_rule_without_emit() -> None:
         compile_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
 
 
-def test_compile_lower_rule_set_rejects_immediate_emit_bindings() -> None:
+def test_compile_lower_rule_set_compiles_const_immediate_emit() -> None:
     table = ContractTable(
         name="test.immediate",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
@@ -164,9 +165,11 @@ def test_compile_lower_rule_set_rejects_immediate_emit_bindings() -> None:
         ],
     )
 
-    with pytest.raises(
-        ValueError,
-        match=r"scalar.constant: generated descriptor-rule emits do not "
-        r"support immediate",
-    ):
-        compile_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
+    compiled = compile_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
+
+    assert len(compiled.emits) == 1
+    assert compiled.emits[0].kind == LowerEmitKind.DESCRIPTOR_CONST
+    assert compiled.emits[0].attr_copy_count == 1
+    assert len(compiled.attr_copies) == 1
+    assert compiled.attr_copies[0].kind == LowerAttrCopyKind.I64_LITERAL
+    assert compiled.attr_copies[0].literal_i64 == 0

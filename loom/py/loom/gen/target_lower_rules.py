@@ -16,14 +16,19 @@ from pathlib import Path
 from loom.dsl import Op
 from loom.gen.generated_file import line_comment_header
 from loom.target.contracts import (
+    LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS,
+    LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN,
+    LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1,
     CompiledLowerRuleSet,
     ContractTable,
     GuardKind,
+    LowerAttrCopyKind,
     LowerEmitKind,
     SourceValueKind,
     TypePattern,
     compile_lower_rule_set,
 )
+from loom.target.low_descriptors import Descriptor
 
 _SCALAR_TYPE_C_NAMES = {
     "index": "LOOM_SCALAR_TYPE_INDEX",
@@ -47,14 +52,56 @@ _VALUE_REF_KIND_C_NAMES = {
     SourceValueKind.TEMPORARY: "LOOM_LOW_LOWER_VALUE_REF_TEMPORARY",
 }
 
+_ATTR_KIND_C_NAMES = {
+    "i64": "LOOM_ATTR_I64",
+    "f64": "LOOM_ATTR_F64",
+    "string": "LOOM_ATTR_STRING",
+    "bool": "LOOM_ATTR_BOOL",
+    "enum": "LOOM_ATTR_ENUM",
+    "type": "LOOM_ATTR_TYPE",
+    "i64_array": "LOOM_ATTR_I64_ARRAY",
+    "encoding": "LOOM_ATTR_ENCODING",
+    "symbol": "LOOM_ATTR_SYMBOL",
+    "flags": "LOOM_ATTR_FLAGS",
+    "predicate_list": "LOOM_ATTR_PREDICATE_LIST",
+    "dict": "LOOM_ATTR_DICT",
+}
+
 _GUARD_KIND_C_NAMES = {
     GuardKind.VALUE_TYPE: "LOOM_LOW_LOWER_GUARD_VALUE_TYPE",
+    GuardKind.ATTR_KIND: "LOOM_LOW_LOWER_GUARD_ATTR_KIND",
     GuardKind.ENUM_ATTR_EQUALS: "LOOM_LOW_LOWER_GUARD_ATTR_ENUM_EQ",
+    GuardKind.I64_RANGE: "LOOM_LOW_LOWER_GUARD_ATTR_I64_RANGE",
+    GuardKind.DESCRIPTOR_AVAILABLE: "LOOM_LOW_LOWER_GUARD_DESCRIPTOR_AVAILABLE",
+    GuardKind.LOW_VALUE_REGISTER_CLASS: "LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_CLASS",
+    GuardKind.VALUE_STATIC_DIM0_MULTIPLE: "LOOM_LOW_LOWER_GUARD_VALUE_STATIC_DIM0_MULTIPLE",
+    GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ: "LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT_EQ",
+    GuardKind.I64_ARRAY_COUNT: "LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_COUNT_EQ",
+    GuardKind.I64_ARRAY_ELEMENT_RANGE: "LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_ELEMENT_RANGE",
+    GuardKind.I64_ARRAY_ELEMENTS_RANGE: "LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_ELEMENTS_RANGE",
+    GuardKind.VALUE_SIGNED_BIT_COUNT: "LOOM_LOW_LOWER_GUARD_VALUE_SIGNED_BIT_COUNT",
+    GuardKind.VALUE_UNSIGNED_BIT_COUNT: "LOOM_LOW_LOWER_GUARD_VALUE_UNSIGNED_BIT_COUNT",
+    GuardKind.VALUE_EXACT_I64: "LOOM_LOW_LOWER_GUARD_VALUE_EXACT_I64",
+}
+
+_ATTR_COPY_KIND_C_NAMES = {
+    LowerAttrCopyKind.DIRECT: "LOOM_LOW_LOWER_ATTR_COPY_DIRECT",
+    LowerAttrCopyKind.I64_ARRAY_ELEMENT: "LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_ELEMENT",
+    LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS: "LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_PACK_ELEMENTS",
+    LowerAttrCopyKind.I64_LITERAL: "LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL",
 }
 
 _EMIT_KIND_C_NAMES = {
     LowerEmitKind.DESCRIPTOR_OP: "LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP",
+    LowerEmitKind.DESCRIPTOR_CONST: "LOOM_LOW_LOWER_EMIT_DESCRIPTOR_CONST",
     LowerEmitKind.DESCRIPTOR_OP_PER_LANE: "LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE",
+    LowerEmitKind.DESCRIPTOR_OP_ACCUMULATE_LANES: "LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_ACCUMULATE_LANES",
+}
+
+_EMIT_FLAG_C_NAMES = {
+    LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1: "LOOM_LOW_LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1",
+    LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS: "LOOM_LOW_LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS",
+    LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN: "LOOM_LOW_LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN",
 }
 
 
@@ -188,7 +235,6 @@ def _generate_source(
                 [
                     f".kind = {_VALUE_REF_KIND_C_NAMES[row.kind]}",
                     f".index = {row.index}",
-                    f".materializer_index = {row.materializer_index}",
                 ]
                 for row in table.value_refs
             ],
@@ -224,11 +270,52 @@ def _generate_source(
                     f".attr_index = {row.attr_index}",
                     f".type_pattern_index = {row.type_pattern_index}",
                     f".diagnostic_index = {_diagnostic_index(row.diagnostic_index)}",
+                    f".attr_kind = {_attr_kind_c_name(row.attr_kind)}",
                     f".u64 = {row.u64}",
+                    f".descriptor_id = {_guard_descriptor_id(source_contract, row.descriptor)}",
+                    f".register_class_id = {row.register_class_id}",
                     f".minimum_i64 = {row.minimum_i64}",
                     f".maximum_i64 = {row.maximum_i64}",
                 ]
                 for row in table.guards
+            ],
+        )
+    )
+
+    attr_copies_name = f"k{c_table_prefix}AttrCopies"
+    lines.extend(
+        _emit_optional_array(
+            attr_copies_name,
+            "loom_low_lower_attr_copy_t",
+            [
+                [
+                    f".kind = {_ATTR_COPY_KIND_C_NAMES[row.kind]}",
+                    f'.target_name = IREE_SVL("{_c_string_literal(row.target_name)}")',
+                    f".source_attr_index = {row.source_attr_index}",
+                    f".source_element_index = {row.source_element_index}",
+                    f".source_element_count = {row.source_element_count}",
+                    f".source_element_bit_width = {row.source_element_bit_width}",
+                    f".target_bit_offset = {row.target_bit_offset}",
+                    f".value_ref_index = {row.value_ref_index}",
+                    f".literal_i64 = {row.literal_i64}",
+                ]
+                for row in table.attr_copies
+            ],
+        )
+    )
+
+    tied_results_name = f"k{c_table_prefix}TiedResults"
+    lines.extend(
+        _emit_optional_array(
+            tied_results_name,
+            "loom_tied_result_t",
+            [
+                [
+                    f".result_index = {row.result_index}",
+                    f".operand_index = {row.operand_index}",
+                    f".has_type_change = {_c_bool(row.has_type_change)}",
+                ]
+                for row in table.tied_results
             ],
         )
     )
@@ -241,11 +328,20 @@ def _generate_source(
             [
                 [
                     f".kind = {_EMIT_KIND_C_NAMES[row.kind]}",
+                    f".flags = {_emit_flags(row.flags)}",
                     f".descriptor_id = {_descriptor_id_constant_name(source_contract, row.descriptor.key)}",
                     f".operand_ref_start = {row.operand_ref_start}",
                     f".operand_ref_count = {row.operand_ref_count}",
+                    f".copy_operand_mask = {row.copy_operand_mask}",
+                    f".accumulator_operand_index = {row.accumulator_operand_index}",
                     f".result_ref_start = {row.result_ref_start}",
+                    f".result_type_pattern_start = {row.result_type_pattern_start}",
                     f".result_ref_count = {row.result_ref_count}",
+                    f".result_bind_ref_start = {row.result_bind_ref_start}",
+                    f".attr_copy_start = {row.attr_copy_start}",
+                    f".attr_copy_count = {row.attr_copy_count}",
+                    f".tied_result_start = {row.tied_result_start}",
+                    f".tied_result_count = {row.tied_result_count}",
                 ]
                 for row in table.emits
             ],
@@ -260,10 +356,13 @@ def _generate_source(
             [
                 [
                     f".source_op_kind = {_op_c_name(row.source_op)}",
+                    f".temporary_count = {row.temporary_count}",
                     f".guard_start = {row.guard_start}",
                     f".guard_count = {row.guard_count}",
                     f".emit_start = {row.emit_start}",
                     f".emit_count = {row.emit_count}",
+                    f".elide_ref_start = {row.elide_ref_start}",
+                    f".elide_ref_count = {row.elide_ref_count}",
                 ]
                 for row in table.rules
             ],
@@ -298,14 +397,12 @@ def _generate_source(
             f"    .type_pattern_count = {_table_count(table.type_patterns, type_patterns_name)},",
             f"    .value_refs = {_table_value(table.value_refs, value_refs_name)},",
             f"    .value_ref_count = {_table_count(table.value_refs, value_refs_name)},",
-            "    .materializers = NULL,",
-            "    .materializer_count = 0,",
             f"    .guards = {_table_value(table.guards, guards_name)},",
             f"    .guard_count = {_table_count(table.guards, guards_name)},",
-            "    .attr_copies = NULL,",
-            "    .attr_copy_count = 0,",
-            "    .tied_results = NULL,",
-            "    .tied_result_count = 0,",
+            f"    .attr_copies = {_table_value(table.attr_copies, attr_copies_name)},",
+            f"    .attr_copy_count = {_table_count(table.attr_copies, attr_copies_name)},",
+            f"    .tied_results = {_table_value(table.tied_results, tied_results_name)},",
+            f"    .tied_result_count = {_table_count(table.tied_results, tied_results_name)},",
             f"    .emits = {_table_value(table.emits, emits_name)},",
             f"    .emit_count = {_table_count(table.emits, emits_name)},",
             f"    .diagnostics = {_table_value(table.diagnostics, diagnostics_name)},",
@@ -377,6 +474,35 @@ def _diagnostic_index(index: int) -> str:
     if index == 0xFFFF:
         return "LOOM_LOW_LOWER_DIAGNOSTIC_NONE"
     return str(index)
+
+
+def _attr_kind_c_name(attr_kind: str | None) -> str:
+    if attr_kind is None:
+        return "0"
+    c_name = _ATTR_KIND_C_NAMES.get(attr_kind)
+    if c_name is None:
+        raise ValueError(f"unknown attr kind '{attr_kind}'")
+    return c_name
+
+
+def _guard_descriptor_id(table: ContractTable, descriptor: Descriptor | None) -> str:
+    if descriptor is None:
+        return "LOOM_LOW_DESCRIPTOR_ID_NONE"
+    return _descriptor_id_constant_name(table, descriptor.key)
+
+
+def _emit_flags(flags: int) -> str:
+    if flags == 0:
+        return "0"
+    names = [c_name for bit, c_name in sorted(_EMIT_FLAG_C_NAMES.items()) if flags & bit]
+    unknown = flags & ~sum(_EMIT_FLAG_C_NAMES)
+    if unknown:
+        raise ValueError(f"unknown emit flags 0x{unknown:x}")
+    return " | ".join(names)
+
+
+def _c_bool(value: bool) -> str:
+    return "true" if value else "false"
 
 
 def _table_value(rows: tuple[object, ...], name: str) -> str:

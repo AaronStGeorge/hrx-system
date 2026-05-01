@@ -120,6 +120,7 @@ loom_cc_test(
     loom::src::loom::pass::value_facts
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
+    loom::src::loom::target::test::lower_rules
     loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main

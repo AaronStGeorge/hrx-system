@@ -23,7 +23,9 @@ from loom.target.low_descriptors import Descriptor
 class AttrProjectKind(Enum):
     """Projection from source op attributes to descriptor immediates."""
 
+    DIRECT = "direct"
     I64_ARRAY_ELEMENT = "i64_array_element"
+    I64_ARRAY_PACK_ELEMENTS = "i64_array_pack_elements"
     EXPAND_LANE_I64_ARRAY_TO_BYTE_LANES = "expand_lane_i64_array_to_byte_lanes"
 
 
@@ -34,9 +36,16 @@ class AttrProject:
     kind: AttrProjectKind
     source_attr: str
     element: int | None = None
+    count: int | None = None
+    bit_width: int | None = None
+    target_bit_offset: int = 0
     source_lane_count: int | None = None
     bytes_per_lane: int | None = None
     target_names: tuple[str, ...] = ()
+
+    @classmethod
+    def direct(cls, source_attr: str) -> Self:
+        return cls(kind=AttrProjectKind.DIRECT, source_attr=source_attr)
 
     @classmethod
     def i64_array_element(cls, source_attr: str, *, element: int) -> Self:
@@ -44,6 +53,25 @@ class AttrProject:
             kind=AttrProjectKind.I64_ARRAY_ELEMENT,
             source_attr=source_attr,
             element=element,
+        )
+
+    @classmethod
+    def i64_array_pack_elements(
+        cls,
+        source_attr: str,
+        *,
+        element: int,
+        count: int,
+        bit_width: int,
+        target_bit_offset: int = 0,
+    ) -> Self:
+        return cls(
+            kind=AttrProjectKind.I64_ARRAY_PACK_ELEMENTS,
+            source_attr=source_attr,
+            element=element,
+            count=count,
+            bit_width=bit_width,
+            target_bit_offset=target_bit_offset,
         )
 
     @classmethod
@@ -68,6 +96,14 @@ class AttrProject:
             raise ValueError(f"{self.kind.value} projection requires a source attr")
         if self.element is not None and self.element < 0:
             raise ValueError(f"{self.kind.value} element must be non-negative")
+        if self.count is not None and self.count <= 0:
+            raise ValueError(f"{self.kind.value} count must be positive")
+        if self.bit_width is not None and self.bit_width <= 0:
+            raise ValueError(f"{self.kind.value} bit width must be positive")
+        if self.target_bit_offset < 0:
+            raise ValueError(
+                f"{self.kind.value} target bit offset must be non-negative"
+            )
         if self.source_lane_count is not None and self.source_lane_count < 0:
             raise ValueError(
                 f"{self.kind.value} source lane count must be non-negative"
@@ -83,6 +119,13 @@ class AttrProject:
     ) -> None:
         subject = f"immediate projection {self.kind.value}"
         attr = _require_attr(source_op, self.source_attr, subject)
+        if self.kind == AttrProjectKind.DIRECT:
+            if bound_immediate_name is None:
+                raise ValueError(
+                    f"{source_op.name}: {subject} must bind one descriptor immediate"
+                )
+            _require_immediate(descriptor, bound_immediate_name, subject)
+            return
         if attr.attr_type != ATTR_TYPE_I64_ARRAY:
             raise ValueError(
                 f"{source_op.name}: {subject} source attr '{self.source_attr}' "
@@ -96,6 +139,17 @@ class AttrProject:
             _require_immediate(descriptor, bound_immediate_name, subject)
             if self.element is None:
                 raise ValueError(f"{source_op.name}: {subject} needs an element")
+            return
+        if self.kind == AttrProjectKind.I64_ARRAY_PACK_ELEMENTS:
+            if bound_immediate_name is None:
+                raise ValueError(
+                    f"{source_op.name}: {subject} must bind one descriptor immediate"
+                )
+            _require_immediate(descriptor, bound_immediate_name, subject)
+            if self.element is None or self.count is None or self.bit_width is None:
+                raise ValueError(
+                    f"{source_op.name}: {subject} needs element/count/bit_width"
+                )
             return
         if bound_immediate_name is not None:
             raise ValueError(

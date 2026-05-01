@@ -22,9 +22,6 @@
 extern "C" {
 #endif
 
-// Canonical table-driven lowering rules for the test.low.core contract set.
-extern const loom_low_lower_rule_set_t loom_test_low_lower_rule_set;
-
 // Maps source semantic types to test-low register types.
 iree_status_t loom_test_low_lower_map_type(void* user_data,
                                            loom_low_lower_context_t* context,
@@ -53,12 +50,6 @@ iree_status_t loom_test_low_lower_map_contract_value(
     const loom_target_contract_query_environment_t* environment,
     const loom_op_t* source_op, loom_value_id_t source_value_id,
     loom_low_lower_rule_mapped_value_t* out_mapped_value);
-
-// Accepts every source value as materializable for rule-table selection tests.
-bool loom_test_low_lower_rule_match_can_materialize(
-    void* user_data, const loom_low_lower_rule_match_context_t* context,
-    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
-    uint16_t value_ref_index, loom_value_id_t source_value_id);
 
 // Returns the canonical test-low lowering policy.
 const loom_low_lower_policy_t* loom_test_low_lower_policy(void);
