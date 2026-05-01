@@ -117,6 +117,13 @@ loom_target_table_cc_library(
 )
 
 loom_target_table_cc_library(
+    name = "matrix",
+    args = ["--contract-fragment=amdgpu.matrix"],
+    generator = _AMDGPU_CONTRACT_FRAGMENT_GENERATOR,
+    deps = ["//loom/src/loom/target:contract"],
+)
+
+loom_target_table_cc_library(
     name = "reduce",
     args = ["--contract-fragment=amdgpu.reduce"],
     generator = _AMDGPU_CONTRACT_FRAGMENT_GENERATOR,

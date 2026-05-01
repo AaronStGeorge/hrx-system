@@ -139,6 +139,17 @@ loom_target_table_cc_library(
 
 loom_target_table_cc_library(
   NAME
+    matrix
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_contract_fragment
+  ARGS
+    "--contract-fragment=amdgpu.matrix"
+  DEPS
+    loom::src::loom::target::contract
+)
+
+loom_target_table_cc_library(
+  NAME
     reduce
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_contract_fragment

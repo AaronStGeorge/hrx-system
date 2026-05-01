@@ -21,6 +21,7 @@ iree_py_library(
     "dot.py"
     "integer.py"
     "materializers.py"
+    "matrix.py"
     "reduce.py"
   DEPS
     iree::runtime::py::loom::core

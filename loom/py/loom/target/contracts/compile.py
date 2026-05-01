@@ -16,6 +16,7 @@ from loom.target.contracts.fragments import ContractFragment
 from loom.target.contracts.kinds import ContractSystem
 from loom.target.contracts.rules import (
     ContractCase,
+    CustomFamilyRule,
     DescriptorRule,
     ValueAliasRule,
     ValueElideRule,
@@ -66,6 +67,7 @@ class CompiledContractFragment:
     dialects: tuple[CompiledDialectTable, ...]
     cases: tuple[CompiledCase, ...]
     descriptor_rules: tuple[CompiledDescriptorRule, ...]
+    custom_families: tuple[str, ...]
 
 
 def compile_contract_fragment(
@@ -81,6 +83,8 @@ def compile_contract_fragment(
     cases_by_op: dict[int, list[tuple[int, ContractCase]]] = {}
     descriptor_rule_ordinals: dict[int, int] = {}
     descriptor_rules: list[CompiledDescriptorRule] = []
+    custom_family_ordinals: dict[str, int] = {}
+    custom_families: list[str] = []
     for authored_case_index, contract_case in enumerate(table.cases):
         _require_op_index(op_indexes, contract_case.source_op)
         if isinstance(contract_case, DescriptorRule):
@@ -90,6 +94,10 @@ def compile_contract_fragment(
             descriptor_rule_index = len(descriptor_rules)
             descriptor_rule_ordinals[authored_case_index] = descriptor_rule_index
             descriptor_rules.append(descriptor_rule)
+        elif isinstance(contract_case, CustomFamilyRule):
+            if contract_case.family not in custom_family_ordinals:
+                custom_family_ordinals[contract_case.family] = len(custom_families)
+                custom_families.append(contract_case.family)
         cases_by_op.setdefault(id(contract_case.source_op), []).append(
             (authored_case_index, contract_case)
         )
@@ -119,6 +127,11 @@ def compile_contract_fragment(
                     lower_rule_index=lower_rule_indices.get(
                         authored_case_index,
                         CONTRACT_ROW_NONE,
+                    ),
+                    custom_family_index=(
+                        custom_family_ordinals[contract_case.family]
+                        if isinstance(contract_case, CustomFamilyRule)
+                        else CONTRACT_ROW_NONE
                     ),
                 )
                 compiled_cases.append(compiled_case)
@@ -153,6 +166,7 @@ def compile_contract_fragment(
         dialects=dialect_tables,
         cases=tuple(compiled_cases),
         descriptor_rules=tuple(descriptor_rules),
+        custom_families=tuple(custom_families),
     )
 
 
@@ -161,6 +175,7 @@ def _compile_case(
     *,
     descriptor_rule_index: int,
     lower_rule_index: int,
+    custom_family_index: int,
 ) -> CompiledCase:
     if isinstance(contract_case, DescriptorRule):
         return CompiledCase(
@@ -186,6 +201,16 @@ def _compile_case(
         return CompiledCase(
             system=ContractSystem.VALUE_ELIDE,
             row_index=lower_rule_index,
+        )
+    if isinstance(contract_case, CustomFamilyRule):
+        if custom_family_index == CONTRACT_ROW_NONE:
+            raise ValueError(
+                f"{contract_case.source_op.name}: custom-family case has no "
+                "compiled family row"
+            )
+        return CompiledCase(
+            system=ContractSystem.CUSTOM_FAMILY,
+            row_index=custom_family_index,
         )
     raise TypeError(f"unsupported contract case {contract_case!r}")
 

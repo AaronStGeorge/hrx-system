@@ -17,6 +17,7 @@ from loom.target.contracts import (
     CompiledDescriptorRule,
     ContractFragment,
     ContractSystem,
+    CustomFamilyRule,
     DescriptorRule,
     EmitDescriptorOp,
     Guard,
@@ -158,6 +159,33 @@ def test_compile_contract_fragment_records_value_elide_cases() -> None:
     assert extract_entry.case_count == 1
     assert compiled.cases[0].system == ContractSystem.VALUE_ELIDE
     assert compiled.cases[0].row_index == 7
+
+
+def test_compile_contract_fragment_records_custom_family_cases() -> None:
+    table = ContractFragment(
+        name="test-low.custom",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            CustomFamilyRule(
+                source_op=vector.vector_mma,
+                family="matrix",
+            ),
+        ],
+    )
+
+    compiled = compile_contract_fragment(
+        table,
+        dialect_ops={"vector": ALL_VECTOR_OPS},
+        descriptor_rule_rows={},
+        lower_rule_indices={},
+    )
+
+    mma_entry = compiled.dialects[0].op_entries[ALL_VECTOR_OPS.index(vector.vector_mma)]
+    assert mma_entry.case_start == 0
+    assert mma_entry.case_count == 1
+    assert compiled.cases[0].system == ContractSystem.CUSTOM_FAMILY
+    assert compiled.cases[0].row_index == 0
+    assert compiled.custom_families == ("matrix",)
 
 
 def test_compile_contract_fragment_preserves_dense_dialect_gaps() -> None:

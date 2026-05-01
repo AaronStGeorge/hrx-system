@@ -76,6 +76,7 @@ def generate_contract_fragment(
     return GeneratedContractFragment(
         header=_generate_header(
             header_guard=header_guard,
+            table=compiled,
             symbol_name=symbol_name,
         ),
         source=_generate_source(
@@ -103,7 +104,12 @@ def write_contract_fragment_to_paths(
     source_path.write_text(generated.source, encoding="utf-8")
 
 
-def _generate_header(*, header_guard: str, symbol_name: str) -> str:
+def _generate_header(
+    *,
+    header_guard: str,
+    table: CompiledContractFragment,
+    symbol_name: str,
+) -> str:
     lines: list[str] = []
     lines.extend(
         line_comment_header(
@@ -122,7 +128,22 @@ def _generate_header(*, header_guard: str, symbol_name: str) -> str:
             "#ifdef __cplusplus",
             'extern "C" {',
             "#endif",
-            "",
+        ]
+    )
+    if table.custom_families:
+        table_name = _c_identifier(table.name)
+        family_enum_name = f"loom_{table_name.lower()}_contract_family_e"
+        family_type_name = f"loom_{table_name.lower()}_contract_family_t"
+        family_constant_prefix = f"LOOM_{table_name.upper()}_CONTRACT_FAMILY"
+        lines.append(f"typedef enum {family_enum_name} {{")
+        for family_index, family in enumerate(table.custom_families):
+            family_name = _c_identifier(family).upper()
+            lines.append(f"  {family_constant_prefix}_{family_name} = {family_index},")
+        lines.append(f"}} {family_type_name};")
+        lines.append("")
+
+    lines.extend(
+        [
             f"extern const loom_target_contract_fragment_t {symbol_name};",
             "",
             "#ifdef __cplusplus",
@@ -235,6 +256,8 @@ def _validate_c_shard_shape(table: CompiledContractFragment) -> None:
         raise ValueError(f"contract fragment '{table.name}' case count exceeds uint16_t")
     if len(table.descriptor_rules) > _UINT16_MAX:
         raise ValueError(f"contract fragment '{table.name}' descriptor-rule count exceeds uint16_t")
+    if len(table.custom_families) > _UINT16_MAX:
+        raise ValueError(f"contract fragment '{table.name}' custom-family count exceeds uint16_t")
     for dialect in table.dialects:
         if len(dialect.op_entries) > _UINT16_MAX:
             raise ValueError(f"contract fragment '{table.name}' dialect '{dialect.dialect_name}' op count exceeds uint16_t")

@@ -21,6 +21,7 @@ py_library(
         "dot.py",
         "integer.py",
         "materializers.py",
+        "matrix.py",
         "reduce.py",
     ],
     deps = [

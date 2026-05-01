@@ -35,6 +35,10 @@ typedef struct loom_low_lower_contract_query_options_t {
   loom_low_lower_rule_match_register_class_callback_t register_class;
   // Optional source value materializer predicate bridge.
   loom_low_lower_rule_match_can_materialize_value_callback_t can_materialize;
+  // Target-owned exceptional family rows referenced by custom-family cases.
+  const loom_low_lower_contract_family_t* contract_families;
+  // Number of target-owned exceptional family rows.
+  uint16_t contract_family_count;
 } loom_low_lower_contract_query_options_t;
 
 // Returns true and assigns the generated lower-rule row referenced by a

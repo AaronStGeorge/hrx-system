@@ -28,6 +28,37 @@ static iree_status_t loom_low_lower_contract_query_make_rejection(
   return iree_ok_status();
 }
 
+static void loom_low_lower_contract_query_adopt_case(
+    const loom_target_contract_case_t* contract_case, uint16_t case_index,
+    loom_target_contract_query_result_t* result) {
+  if (result->binding_index == UINT16_MAX) {
+    result->binding_index = contract_case->binding_index;
+  }
+  if (result->case_index == UINT16_MAX) {
+    result->case_index = case_index;
+  }
+  if (result->rule_index == UINT16_MAX) {
+    result->rule_index = contract_case->row_index;
+  }
+}
+
+static iree_status_t loom_low_lower_query_custom_family(
+    const loom_target_contract_query_environment_t* environment,
+    const loom_low_lower_contract_query_options_t* options,
+    const loom_target_contract_case_t* contract_case, uint16_t case_index,
+    const loom_op_t* source_op,
+    loom_target_contract_query_result_t* out_result) {
+  const loom_low_lower_contract_family_t* family =
+      &options->contract_families[contract_case->row_index];
+  IREE_RETURN_IF_ERROR(
+      family->query(family->user_data, environment, source_op, out_result));
+  if (out_result->outcome != LOOM_TARGET_CONTRACT_QUERY_UNHANDLED) {
+    loom_low_lower_contract_query_adopt_case(contract_case, case_index,
+                                             out_result);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_lower_query_target_contract_index(
     const loom_target_contract_query_environment_t* environment,
     const loom_low_lower_contract_query_options_t* options,
@@ -53,6 +84,15 @@ static iree_status_t loom_low_lower_query_target_contract_index(
     const loom_target_contract_binding_t* binding =
         &index->bindings[contract_case->binding_index];
     if (!loom_target_contract_fragment_queries_target(binding->fragment)) {
+      continue;
+    }
+    if (contract_case->system == LOOM_TARGET_CONTRACT_SYSTEM_CUSTOM_FAMILY) {
+      IREE_RETURN_IF_ERROR(loom_low_lower_query_custom_family(
+          environment, options, contract_case, case_index, source_op,
+          out_result));
+      if (out_result->outcome != LOOM_TARGET_CONTRACT_QUERY_UNHANDLED) {
+        return iree_ok_status();
+      }
       continue;
     }
     uint16_t rule_index = UINT16_MAX;
@@ -133,7 +173,8 @@ iree_status_t loom_low_lower_query_target_contract(
 
   if (options->contract_index == NULL ||
       options->contract_index->case_count == 0 ||
-      loom_low_lower_rule_set_list_is_empty(options->rule_sets)) {
+      (loom_low_lower_rule_set_list_is_empty(options->rule_sets) &&
+       options->contract_family_count == 0)) {
     return iree_ok_status();
   }
 

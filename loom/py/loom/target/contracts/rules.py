@@ -137,4 +137,30 @@ class ValueElideRule:
             value.validate(self.source_op, "elided value")
 
 
-type ContractCase = DescriptorRule | ValueAliasRule | ValueElideRule
+@dataclass(frozen=True, slots=True)
+class CustomFamilyRule:
+    """Contract case handled by a target-owned family table."""
+
+    source_op: Op
+    family: str
+
+    def __init__(
+        self,
+        *,
+        source_op: Op,
+        family: str,
+    ) -> None:
+        object.__setattr__(self, "source_op", source_op)
+        object.__setattr__(self, "family", family)
+        if not family:
+            raise ValueError(f"{source_op.name}: custom family must be non-empty")
+
+    @property
+    def system(self) -> ContractSystem:
+        return ContractSystem.CUSTOM_FAMILY
+
+    def validate(self, descriptor_set: DescriptorSet) -> None:
+        del descriptor_set
+
+
+type ContractCase = DescriptorRule | ValueAliasRule | ValueElideRule | CustomFamilyRule

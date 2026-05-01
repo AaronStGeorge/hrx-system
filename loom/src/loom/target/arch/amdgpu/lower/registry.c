@@ -22,6 +22,7 @@
 #include "loom/target/arch/amdgpu/contracts/dot_lower_rules.h"
 #include "loom/target/arch/amdgpu/contracts/integer.h"
 #include "loom/target/arch/amdgpu/contracts/integer_lower_rules.h"
+#include "loom/target/arch/amdgpu/contracts/matrix.h"
 #include "loom/target/arch/amdgpu/contracts/reduce.h"
 #include "loom/target/arch/amdgpu/contracts/reduce_lower_rules.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
@@ -283,10 +284,6 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_select_dispatch,
                              loom_amdgpu_vector_select_plan_t,
                              loom_amdgpu_lower_vector_select)
 
-LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_mma_dispatch,
-                               loom_amdgpu_matrix_mma_plan_t,
-                               loom_amdgpu_select_vector_mma_plan)
-
 LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_mma_dispatch,
                              loom_amdgpu_matrix_mma_plan_t,
                              loom_amdgpu_lower_vector_mma)
@@ -490,10 +487,8 @@ static const loom_amdgpu_lower_dispatch_row_t
             loom_amdgpu_select_vector_select_dispatch,
             loom_amdgpu_emit_vector_select_dispatch, NULL),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_MMA)] = LOOM_AMDGPU_DATA_ROW(
-            LOOM_OP_VECTOR_MMA, loom_amdgpu_matrix_mma_plan_t,
-            loom_amdgpu_select_vector_mma_dispatch,
-            loom_amdgpu_emit_vector_mma_dispatch,
-            loom_amdgpu_low_legality_verify_vector_mma),
+            LOOM_OP_VECTOR_MMA, loom_amdgpu_matrix_mma_plan_t, NULL,
+            loom_amdgpu_emit_vector_mma_dispatch, NULL),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_TABLE_LOOKUP)] =
             LOOM_AMDGPU_DATA_ROW(
                 LOOM_OP_VECTOR_TABLE_LOOKUP, loom_amdgpu_table_lookup_plan_t,
@@ -867,6 +862,15 @@ static const loom_target_contract_binding_t kAmdgpuContractBindings[] = {
   {&loom_amdgpu_dot_contract_fragment, 3},
   {&loom_amdgpu_reduce_contract_fragment, 4},
   {&loom_amdgpu_async_contract_fragment, 5},
+  {&loom_amdgpu_matrix_contract_fragment, UINT16_MAX},
+};
+
+static const loom_low_lower_contract_family_t kAmdgpuContractFamilies[] = {
+  [LOOM_AMDGPU_MATRIX_CONTRACT_FAMILY_VECTOR_MMA] = {
+    .select = loom_amdgpu_select_matrix_contract_family,
+    .query = loom_amdgpu_query_matrix_contract_family,
+    .user_data = NULL,
+  },
 };
 // clang-format on
 
@@ -886,6 +890,8 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
         },
     .contract_bindings = kAmdgpuContractBindings,
     .contract_binding_count = IREE_ARRAYSIZE(kAmdgpuContractBindings),
+    .contract_families = kAmdgpuContractFamilies,
+    .contract_family_count = IREE_ARRAYSIZE(kAmdgpuContractFamilies),
     .select_op = {.fn = loom_amdgpu_select_op, .user_data = NULL},
     .emit_op = {.fn = loom_amdgpu_emit_op, .user_data = NULL},
 };

@@ -74,6 +74,13 @@ CONTRACT_FRAGMENT_REGISTRATIONS = (
         aliases=("amdgpu_integer",),
     ),
     ContractFragmentRegistration(
+        key="amdgpu.matrix",
+        module_name="loom.target.arch.amdgpu.contracts.matrix",
+        symbol_name="AMDGPU_MATRIX_CONTRACT_FRAGMENT",
+        dialect_ops_symbol_name="AMDGPU_MATRIX_CONTRACT_DIALECT_OPS",
+        aliases=("amdgpu_matrix",),
+    ),
+    ContractFragmentRegistration(
         key="amdgpu.reduce",
         module_name="loom.target.arch.amdgpu.contracts.reduce",
         symbol_name="AMDGPU_REDUCE_CONTRACT_FRAGMENT",

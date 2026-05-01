@@ -58,6 +58,7 @@ from loom.target.contracts.materializers import ValueMaterializer
 from loom.target.contracts.patterns import Scalar, TypePattern, Vector
 from loom.target.contracts.rules import (
     ContractCase,
+    CustomFamilyRule,
     DescriptorRule,
     ValueAliasRule,
     ValueElideRule,
@@ -96,6 +97,7 @@ __all__ = [
     "ContractCase",
     "ContractSystem",
     "ContractFragment",
+    "CustomFamilyRule",
     "DescriptorEmitForm",
     "DescriptorRule",
     "DirectDescriptorCase",

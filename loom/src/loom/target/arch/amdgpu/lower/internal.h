@@ -676,16 +676,22 @@ iree_status_t loom_amdgpu_select_vector_mma_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_matrix_mma_plan_t* out_plan, bool* out_selected);
 
+// Selects a target-owned AMDGPU matrix contract-family plan.
+iree_status_t loom_amdgpu_select_matrix_contract_family(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, loom_low_lower_plan_t* out_plan);
+
+// Answers read-only target legality for the AMDGPU matrix contract family.
+iree_status_t loom_amdgpu_query_matrix_contract_family(
+    void* user_data,
+    const loom_target_contract_query_environment_t* environment,
+    const loom_op_t* source_op,
+    loom_target_contract_query_result_t* out_result);
+
 // Lowers a source vector.mma op from its selected AMDGPU matrix plan.
 iree_status_t loom_amdgpu_lower_vector_mma(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_matrix_mma_plan_t* plan);
-
-// Verifies source vector.mma legality for AMDGPU target-low selection.
-iree_status_t loom_amdgpu_low_legality_verify_vector_mma(
-    const loom_target_low_legality_provider_t* provider,
-    loom_target_low_legality_context_t* context, const loom_op_t* op,
-    bool* out_handled);
 
 // Selects an AMDGPU register-table lookup plan.
 iree_status_t loom_amdgpu_select_vector_table_lookup_plan(

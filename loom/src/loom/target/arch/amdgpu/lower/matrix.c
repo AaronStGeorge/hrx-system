@@ -39,7 +39,7 @@ static iree_status_t loom_amdgpu_matrix_target_facts_from_bundle(
   loom_amdgpu_matrix_feature_bits_t feature_bits = 0;
   (void)loom_amdgpu_matrix_feature_bits_for_profile(
       processor->matrix_feature_profile, &feature_bits);
-  IREE_ASSERT_LE(processor->default_wavefront_size, UINT16_MAX);
+  const uint16_t wavefront_size = (uint16_t)processor->default_wavefront_size;
 
   *out_facts = (loom_amdgpu_matrix_target_facts_t){
       .options =
@@ -48,14 +48,13 @@ static iree_status_t loom_amdgpu_matrix_target_facts_from_bundle(
               .fragment =
                   (loom_contract_fragment_t){
                       .atom_bits = LOOM_CONTRACT_FRAGMENT_SUBGROUP_LANE,
-                      .subgroup_size =
-                          (uint16_t)processor->default_wavefront_size,
+                      .subgroup_size = wavefront_size,
                   },
               .capability_class = LOOM_CONTRACT_CAPABILITY_CLASS_GPU_MATRIX,
               .policy = LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED,
           },
       .feature_bits = feature_bits,
-      .wave_size = processor->default_wavefront_size,
+      .wave_size = wavefront_size,
   };
   return iree_ok_status();
 }
@@ -195,6 +194,26 @@ static iree_string_view_t loom_amdgpu_matrix_contract_rejection_reason(
   return IREE_SV("no AMDGPU matrix descriptor matches vector.mma");
 }
 
+static iree_status_t loom_amdgpu_matrix_contract_query_reject(
+    const loom_target_contract_query_environment_t* environment,
+    loom_target_contract_query_outcome_t outcome,
+    iree_string_view_t subject_kind, iree_string_view_t subject_name,
+    iree_string_view_t reason,
+    loom_target_contract_query_result_t* out_result) {
+  loom_target_contract_rejection_t* rejection = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(
+      environment->arena, sizeof(*rejection), (void**)&rejection));
+  *rejection = (loom_target_contract_rejection_t){
+      .subject_kind = subject_kind,
+      .subject_name = subject_name,
+      .reason = reason,
+  };
+  *out_result = loom_target_contract_query_result_empty();
+  out_result->outcome = outcome;
+  out_result->rejection = rejection;
+  return iree_ok_status();
+}
+
 iree_status_t loom_amdgpu_select_vector_mma_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_matrix_mma_plan_t* out_plan, bool* out_selected) {
@@ -232,6 +251,85 @@ iree_status_t loom_amdgpu_select_vector_mma_plan(
   return iree_ok_status();
 }
 
+iree_status_t loom_amdgpu_select_matrix_contract_family(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, loom_low_lower_plan_t* out_plan) {
+  (void)user_data;
+  *out_plan = loom_low_lower_plan_empty();
+
+  loom_amdgpu_matrix_mma_plan_t plan = {0};
+  bool selected = false;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_select_vector_mma_plan(context, source_op, &plan, &selected));
+  if (!selected) {
+    return iree_ok_status();
+  }
+
+  loom_amdgpu_matrix_mma_plan_t* plan_data = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+      context, sizeof(*plan_data), (void**)&plan_data));
+  *plan_data = plan;
+  *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_query_matrix_contract_family(
+    void* user_data,
+    const loom_target_contract_query_environment_t* environment,
+    const loom_op_t* source_op,
+    loom_target_contract_query_result_t* out_result) {
+  (void)user_data;
+  *out_result = loom_target_contract_query_result_empty();
+  if (!loom_vector_mma_isa(source_op)) {
+    return iree_ok_status();
+  }
+
+  loom_amdgpu_matrix_target_facts_t target_facts = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_matrix_target_facts_from_bundle(
+      environment->bundle, &target_facts));
+  loom_contract_diagnostic_t contract_diagnostic = {0};
+  loom_amdgpu_matrix_contract_match_diagnostic_t match_diagnostic = {0};
+  const loom_amdgpu_matrix_contract_descriptor_t* contract_descriptor = NULL;
+  if (!loom_amdgpu_matrix_select_contract(
+          environment->module, environment->fact_table, source_op,
+          &target_facts, &contract_descriptor, &contract_diagnostic,
+          &match_diagnostic)) {
+    return loom_amdgpu_matrix_contract_query_reject(
+        environment, LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED, IREE_SV("op"),
+        loom_op_name(environment->module, source_op),
+        loom_amdgpu_matrix_contract_rejection_reason(contract_diagnostic,
+                                                     match_diagnostic),
+        out_result);
+  }
+  if (contract_descriptor->low_descriptor_id ==
+      LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_ID_NONE) {
+    return loom_amdgpu_matrix_contract_query_reject(
+        environment, LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED,
+        IREE_SV("contract"), contract_descriptor->name,
+        IREE_SV("selected AMDGPU matrix contract has no target-low "
+                "descriptor"),
+        out_result);
+  }
+  if (loom_low_descriptor_set_lookup_descriptor_by_id(
+          environment->descriptor_set,
+          contract_descriptor->low_descriptor_id) ==
+      LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return loom_amdgpu_matrix_contract_query_reject(
+        environment, LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED,
+        IREE_SV("descriptor"), contract_descriptor->name,
+        IREE_SV("the selected AMDGPU descriptor set does not contain the "
+                "matrix packet"),
+        out_result);
+  }
+
+  *out_result = loom_target_contract_query_result_empty();
+  out_result->outcome = LOOM_TARGET_CONTRACT_QUERY_LEGAL;
+  out_result->selected_descriptor_id = contract_descriptor->low_descriptor_id;
+  out_result->source_rejection_bits = contract_diagnostic.rejection_bits;
+  out_result->target_rejection_bits = match_diagnostic.rejection_bits;
+  return iree_ok_status();
+}
+
 iree_status_t loom_amdgpu_lower_vector_mma(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_matrix_mma_plan_t* plan) {
@@ -266,43 +364,4 @@ iree_status_t loom_amdgpu_lower_vector_mma(
   return loom_low_lower_bind_value(
       context, plan->result,
       loom_value_slice_get(loom_low_op_results(low_op), 0));
-}
-
-iree_status_t loom_amdgpu_low_legality_verify_vector_mma(
-    const loom_target_low_legality_provider_t* provider,
-    loom_target_low_legality_context_t* context, const loom_op_t* op,
-    bool* out_handled) {
-  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
-  if (!loom_amdgpu_low_legality_bundle_is_amdgpu(bundle) ||
-      !loom_vector_mma_isa(op)) {
-    return iree_ok_status();
-  }
-  *out_handled = true;
-
-  loom_amdgpu_matrix_target_facts_t target_facts = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_matrix_target_facts_from_bundle(bundle, &target_facts));
-  loom_contract_diagnostic_t contract_diagnostic = {0};
-  loom_amdgpu_matrix_contract_match_diagnostic_t match_diagnostic = {0};
-  const loom_amdgpu_matrix_contract_descriptor_t* contract_descriptor = NULL;
-  if (!loom_amdgpu_matrix_select_contract(
-          loom_target_low_legality_module(context),
-          loom_target_low_legality_fact_table(context), op, &target_facts,
-          &contract_descriptor, &contract_diagnostic, &match_diagnostic)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("op"),
-        loom_op_name(loom_target_low_legality_module(context), op),
-        loom_amdgpu_matrix_contract_rejection_reason(contract_diagnostic,
-                                                     match_diagnostic));
-  }
-  if (contract_descriptor->low_descriptor_id ==
-      LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_ID_NONE) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("contract"), contract_descriptor->name,
-        IREE_SV("selected AMDGPU matrix contract has no target-low "
-                "descriptor"));
-  }
-  return loom_target_low_legality_record_contract(
-      context, provider, op, contract_descriptor->name, IREE_SV("selected"),
-      IREE_SV("selected AMDGPU matrix contract descriptor"));
 }

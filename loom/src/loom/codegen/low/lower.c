@@ -549,6 +549,15 @@ static bool loom_low_lower_rule_selection_is_better_failure(
               failed_rule_selection.matched_guard_count);
 }
 
+static iree_status_t loom_low_lower_select_custom_family(
+    loom_low_lower_context_t* context,
+    const loom_target_contract_case_t* contract_case,
+    const loom_op_t* source_op, loom_low_lower_plan_t* out_plan) {
+  const loom_low_lower_contract_family_t* family =
+      &context->policy->contract_families[contract_case->row_index];
+  return family->select(family->user_data, context, source_op, out_plan);
+}
+
 static iree_status_t loom_low_lower_plan_op_from_contract_index(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_low_lower_rule_set_t** inout_failed_rule_set,
@@ -566,6 +575,25 @@ static iree_status_t loom_low_lower_plan_op_from_contract_index(
     const uint16_t case_index = (uint16_t)(op_entry.case_start + i);
     const loom_target_contract_case_t* contract_case =
         &index->cases[case_index];
+    if (contract_case->system == LOOM_TARGET_CONTRACT_SYSTEM_CUSTOM_FAMILY) {
+      loom_low_lower_plan_t plan = loom_low_lower_plan_empty();
+      IREE_RETURN_IF_ERROR(loom_low_lower_select_custom_family(
+          context, contract_case, source_op, &plan));
+      if (!loom_low_lower_plan_is_empty(plan)) {
+        loom_low_lower_record_selected_plan(
+            context, (loom_low_lower_selected_plan_t){
+                         .source_op = source_op,
+                         .rule_set_index = UINT16_MAX,
+                         .rule_index = contract_case->row_index,
+                         .rule_set = NULL,
+                         .rule = NULL,
+                         .plan = plan,
+                     });
+        *out_selected = true;
+        return iree_ok_status();
+      }
+      continue;
+    }
     uint16_t rule_index = UINT16_MAX;
     if (!loom_low_lower_contract_case_lower_rule_index(index, contract_case,
                                                        &rule_index)) {
@@ -662,6 +690,8 @@ static iree_status_t loom_low_lower_query_target_contract_from_context(
               .fn = loom_low_lower_contract_query_can_materialize,
               .user_data = &state,
           },
+      .contract_families = context->policy->contract_families,
+      .contract_family_count = context->policy->contract_family_count,
   };
 
   iree_status_t status = loom_low_lower_query_target_contract(

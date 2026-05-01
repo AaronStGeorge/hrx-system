@@ -394,6 +394,7 @@ loom_cc_library(
     loom::src::loom::target::arch::amdgpu::contracts::dot_lower_rules
     loom::src::loom::target::arch::amdgpu::contracts::integer
     loom::src::loom::target::arch::amdgpu::contracts::integer_lower_rules
+    loom::src::loom::target::arch::amdgpu::contracts::matrix
     loom::src::loom::target::arch::amdgpu::contracts::reduce
     loom::src::loom::target::arch::amdgpu::contracts::reduce_lower_rules
     loom::src::loom::target::low_legality
