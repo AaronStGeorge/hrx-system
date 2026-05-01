@@ -343,6 +343,7 @@ def reduction_descriptor_rules(
                     input_field=source_input,
                     init_field=source_init,
                     result_field=source_result,
+                    accumulator_type=case.accumulator_type,
                     extract_descriptor=case.extract_descriptor,
                     combine_descriptor=case.combine_descriptor,
                     extract_source=extract_source,
@@ -389,6 +390,7 @@ def _reduction_emit_chain(
     input_field: str,
     init_field: str,
     result_field: str,
+    accumulator_type: TypePattern,
     extract_descriptor: Descriptor,
     combine_descriptor: Descriptor,
     extract_source: str,
@@ -407,6 +409,7 @@ def _reduction_emit_chain(
                 descriptor=extract_descriptor,
                 operands={extract_source: ValueRef.operand(input_field)},
                 results={extract_result: lane_value},
+                result_types={extract_result: accumulator_type},
                 immediates={extract_lane: lane},
             )
         )
@@ -423,6 +426,7 @@ def _reduction_emit_chain(
                     combine_rhs: lane_value,
                 },
                 results={combine_result: next_accumulator},
+                result_types={combine_result: accumulator_type},
             )
         )
         accumulator = next_accumulator

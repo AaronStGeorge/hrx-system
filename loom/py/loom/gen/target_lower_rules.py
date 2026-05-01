@@ -84,6 +84,7 @@ _GUARD_KIND_C_NAMES = {
     GuardKind.LOW_VALUE_REGISTER_CLASS: "LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_CLASS",
     GuardKind.VALUE_STATIC_DIM0_MULTIPLE: "LOOM_LOW_LOWER_GUARD_VALUE_STATIC_DIM0_MULTIPLE",
     GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ: "LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT_EQ",
+    GuardKind.OPERAND_SEGMENT_COUNT: "LOOM_LOW_LOWER_GUARD_OPERAND_SEGMENT_COUNT_EQ",
     GuardKind.I64_ARRAY_COUNT: "LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_COUNT_EQ",
     GuardKind.I64_ARRAY_ELEMENT_RANGE: "LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_ELEMENT_RANGE",
     GuardKind.I64_ARRAY_ELEMENTS_RANGE: "LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_ELEMENTS_RANGE",
@@ -99,6 +100,7 @@ _ATTR_COPY_KIND_C_NAMES = {
     LowerAttrCopyKind.I64_LITERAL: "LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL",
     LowerAttrCopyKind.VALUE_EXACT_I64: "LOOM_LOW_LOWER_ATTR_COPY_VALUE_EXACT_I64",
     LowerAttrCopyKind.VALUE_I32_AS_U32_BITS: "LOOM_LOW_LOWER_ATTR_COPY_VALUE_I32_AS_U32_BITS",
+    LowerAttrCopyKind.I64_ARRAY_LANE_BYTE: "LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_LANE_BYTE",
 }
 
 _EMIT_KIND_C_NAMES = {
@@ -419,6 +421,7 @@ def _guard_row(table: ContractTable, row: LowerGuard) -> list[str]:
         GuardKind.ATTR_KIND,
         GuardKind.ENUM_ATTR_EQUALS,
         GuardKind.I64_RANGE,
+        GuardKind.OPERAND_SEGMENT_COUNT,
         GuardKind.I64_ARRAY_COUNT,
         GuardKind.I64_ARRAY_ELEMENT_RANGE,
         GuardKind.I64_ARRAY_ELEMENTS_RANGE,
@@ -438,6 +441,7 @@ def _guard_row(table: ContractTable, row: LowerGuard) -> list[str]:
         _append_field(fields, "attr_kind", _attr_kind_c_name(row.attr_kind), always=True)
     if row.kind in (
         GuardKind.ENUM_ATTR_EQUALS,
+        GuardKind.OPERAND_SEGMENT_COUNT,
         GuardKind.VALUE_STATIC_DIM0_MULTIPLE,
         GuardKind.I64_ARRAY_COUNT,
         GuardKind.I64_ARRAY_ELEMENT_RANGE,
@@ -477,11 +481,13 @@ def _attr_copy_row(row: LowerAttrCopy) -> list[str]:
         LowerAttrCopyKind.DIRECT,
         LowerAttrCopyKind.I64_ARRAY_ELEMENT,
         LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
+        LowerAttrCopyKind.I64_ARRAY_LANE_BYTE,
     ):
         _append_field(fields, "source_attr_index", row.source_attr_index, always=True)
     if row.kind in (
         LowerAttrCopyKind.I64_ARRAY_ELEMENT,
         LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
+        LowerAttrCopyKind.I64_ARRAY_LANE_BYTE,
     ):
         _append_field(
             fields,
@@ -489,13 +495,17 @@ def _attr_copy_row(row: LowerAttrCopy) -> list[str]:
             row.source_element_index,
             always=True,
         )
-    if row.kind == LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS:
+    if row.kind in (
+        LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
+        LowerAttrCopyKind.I64_ARRAY_LANE_BYTE,
+    ):
         _append_field(
             fields,
             "source_element_count",
             row.source_element_count,
             always=True,
         )
+    if row.kind == LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS:
         _append_field(
             fields,
             "source_element_bit_width",
@@ -508,7 +518,10 @@ def _attr_copy_row(row: LowerAttrCopy) -> list[str]:
         LowerAttrCopyKind.VALUE_I32_AS_U32_BITS,
     ):
         _append_field(fields, "value_ref_index", row.value_ref_index, always=True)
-    if row.kind == LowerAttrCopyKind.I64_LITERAL:
+    if row.kind in (
+        LowerAttrCopyKind.I64_LITERAL,
+        LowerAttrCopyKind.I64_ARRAY_LANE_BYTE,
+    ):
         _append_field(fields, "literal_i64", row.literal_i64, always=True)
     return fields
 

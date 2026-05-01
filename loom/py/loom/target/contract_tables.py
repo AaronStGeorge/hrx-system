@@ -88,6 +88,13 @@ CONTRACT_TABLE_REGISTRATIONS = (
         aliases=("ireevm_core",),
     ),
     ContractTableRegistration(
+        key="wasm.core.simd128",
+        module_name="loom.target.emit.wasm.contracts",
+        symbol_name="WASM_CORE_SIMD128_CONTRACT_TABLE",
+        dialect_ops_symbol_name="WASM_CORE_SIMD128_CONTRACT_DIALECT_OPS",
+        aliases=("wasm_core_simd128",),
+    ),
+    ContractTableRegistration(
         key="test.low.core",
         module_name="loom.target.test.contracts",
         symbol_name="TEST_LOW_CORE_CONTRACT_TABLE",

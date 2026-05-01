@@ -497,6 +497,27 @@ static iree_status_t loom_low_lower_rule_guard_matches(
           lhs_value.register_unit_count == rhs_value.register_unit_count;
       return iree_ok_status();
     }
+    case LOOM_LOW_LOWER_GUARD_OPERAND_SEGMENT_COUNT_EQ: {
+      if (guard->attr_index > source_op->operand_count) {
+        return iree_ok_status();
+      }
+      const loom_op_vtable_t* vtable = loom_context_resolve_op(
+          match_context->module->context, source_op->kind);
+      if (vtable == NULL) {
+        return iree_ok_status();
+      }
+      uint16_t segment_count = 0;
+      if (guard->attr_index < vtable->fixed_operand_count) {
+        segment_count = 1;
+      } else if (guard->attr_index == vtable->fixed_operand_count &&
+                 iree_any_bit_set(vtable->vtable_flags,
+                                  LOOM_OP_VTABLE_VARIADIC_OPERANDS)) {
+        segment_count =
+            (uint16_t)(source_op->operand_count - guard->attr_index);
+      }
+      *out_matches = segment_count == guard->u64;
+      return iree_ok_status();
+    }
     case LOOM_LOW_LOWER_GUARD_VALUE_SIGNED_BIT_COUNT:
       *out_matches = loom_low_lower_rule_value_facts_fit_bit_count(
           match_context, rule_set, source_op, guard->value_ref_index,
@@ -866,6 +887,23 @@ static iree_status_t loom_low_lower_rule_build_attrs(
         }
         packed_value <<= attr_copy->target_bit_offset;
         attrs[i].value = loom_attr_i64((int64_t)packed_value);
+        break;
+      }
+      case LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_LANE_BYTE: {
+        IREE_ASSERT_LT(attr_copy->source_attr_index,
+                       source_op->attribute_count);
+        loom_attribute_t source_attr =
+            source_attrs[attr_copy->source_attr_index];
+        IREE_ASSERT_EQ(source_attr.kind, LOOM_ATTR_I64_ARRAY);
+        IREE_ASSERT_LT(attr_copy->source_element_index, source_attr.count);
+        IREE_ASSERT_GT(attr_copy->source_element_count, 0);
+        const int64_t source_lane =
+            source_attr.i64_array[attr_copy->source_element_index];
+        IREE_ASSERT_GE(source_lane, 0);
+        const int64_t byte_lane =
+            source_lane * attr_copy->source_element_count +
+            attr_copy->literal_i64;
+        attrs[i].value = loom_attr_i64(byte_lane);
         break;
       }
       case LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL:

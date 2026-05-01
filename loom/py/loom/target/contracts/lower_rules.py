@@ -52,6 +52,7 @@ class LowerAttrCopyKind(Enum):
     I64_LITERAL = "i64_literal"
     VALUE_EXACT_I64 = "value_exact_i64"
     VALUE_I32_AS_U32_BITS = "value_i32_as_u32_bits"
+    I64_ARRAY_LANE_BYTE = "i64_array_lane_byte"
 
 
 LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1 = 1 << 0
@@ -574,6 +575,33 @@ class _LowerRuleSetCompiler:
             )
             return
 
+        if guard.kind == GuardKind.OPERAND_SEGMENT_COUNT:
+            if guard.count is None:
+                raise ValueError(
+                    f"{source_op.name}: operand-segment-count guard needs a count"
+                )
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    attr_index=_source_operand_index(source_op, guard.field),
+                    diagnostic_index=self._append_diagnostic(
+                        _guard_diagnostic(
+                            guard,
+                            LowerDiagnostic(
+                                subject_kind="operand",
+                                subject_name=guard.field,
+                                reason=(
+                                    "target contract requires a specific operand "
+                                    "segment count"
+                                ),
+                            ),
+                        )
+                    ),
+                    u64=guard.count,
+                )
+            )
+            return
+
         if guard.kind == GuardKind.I64_ARRAY_COUNT:
             if guard.count is None:
                 raise ValueError(f"{source_op.name}: array-count guard needs a count")
@@ -898,12 +926,11 @@ class _LowerRuleSetCompiler:
     ) -> tuple[LowerAttrCopy, ...]:
         if not emit.immediates:
             return ()
-        if not isinstance(emit.immediates, Mapping):
-            raise ValueError(
-                f"{source_op.name}: generated lower-rule emits do not support "
-                "multi-immediate expansion projections yet"
-            )
         attr_copies: list[LowerAttrCopy] = []
+        if not isinstance(emit.immediates, Mapping):
+            for projection in emit.immediates:
+                attr_copies.extend(self._lower_attr_expansion(source_op, projection))
+            return tuple(attr_copies)
         for target_name, binding in emit.immediates.items():
             if isinstance(binding, int):
                 attr_copies.append(
@@ -970,6 +997,34 @@ class _LowerRuleSetCompiler:
         raise ValueError(
             f"{source_op.name}: immediate projection '{project.kind.value}' is "
             "not representable by generated lower rules yet"
+        )
+
+    def _lower_attr_expansion(
+        self,
+        source_op: Op,
+        project: AttrProject,
+    ) -> tuple[LowerAttrCopy, ...]:
+        if project.kind != AttrProjectKind.EXPAND_LANE_I64_ARRAY_TO_BYTE_LANES:
+            raise ValueError(
+                f"{source_op.name}: immediate projection '{project.kind.value}' is "
+                "not representable by generated lower rules yet"
+            )
+        if project.source_lane_count is None or project.bytes_per_lane is None:
+            raise ValueError(
+                f"{source_op.name}: lane-byte projection needs source lane count "
+                "and bytes per lane"
+            )
+        source_attr_index = _source_attr_index(source_op, project.source_attr)
+        return tuple(
+            LowerAttrCopy(
+                kind=LowerAttrCopyKind.I64_ARRAY_LANE_BYTE,
+                target_name=target_name,
+                source_attr_index=source_attr_index,
+                source_element_index=index // project.bytes_per_lane,
+                source_element_count=project.bytes_per_lane,
+                literal_i64=index % project.bytes_per_lane,
+            )
+            for index, target_name in enumerate(project.target_names)
         )
 
     def _lower_value_project(
@@ -1182,6 +1237,13 @@ def _source_attr_index(source_op: Op, field: str) -> int:
     if attr is None:
         raise ValueError(f"{source_op.name}: source field '{field}' is not an attr")
     return source_op.attrs.index(attr)
+
+
+def _source_operand_index(source_op: Op, field: str) -> int:
+    operand = source_op.operand(field)
+    if operand is None:
+        raise ValueError(f"{source_op.name}: source field '{field}' is not an operand")
+    return source_op.operands.index(operand)
 
 
 def _type_diagnostic_reason(type_pattern: TypePattern) -> str:

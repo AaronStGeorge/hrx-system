@@ -168,6 +168,9 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   // Emits an exact signed i32 source value fact as a zero-extended u32 packet
   // attribute bit pattern.
   LOOM_LOW_LOWER_ATTR_COPY_VALUE_I32_AS_U32_BITS = 5,
+  // Expands one i64_array lane ordinal into one byte-lane immediate:
+  // source_attr[source_element_index] * source_element_count + literal_i64.
+  LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_LANE_BYTE = 6,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {
@@ -179,7 +182,8 @@ typedef struct loom_low_lower_attr_copy_t {
   uint16_t source_attr_index;
   // First source i64_array element ordinal consumed by array projection rows.
   uint16_t source_element_index;
-  // Number of source i64_array elements consumed by PACK_ELEMENTS rows.
+  // Number of source i64_array elements consumed by PACK_ELEMENTS rows or byte
+  // stride used by I64_ARRAY_LANE_BYTE rows.
   uint16_t source_element_count;
   // Bit width of each packed source element for PACK_ELEMENTS rows.
   uint8_t source_element_bit_width;
@@ -187,7 +191,8 @@ typedef struct loom_low_lower_attr_copy_t {
   uint8_t target_bit_offset;
   // Source value-ref table row consumed by VALUE_EXACT_I64 rows.
   uint16_t value_ref_index;
-  // Literal value emitted by I64_LITERAL rows.
+  // Literal value emitted by I64_LITERAL rows or byte offset used by
+  // I64_ARRAY_LANE_BYTE rows.
   int64_t literal_i64;
 } loom_low_lower_attr_copy_t;
 
@@ -237,6 +242,9 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_UNSIGNED_BIT_COUNT = 14,
   // Source value facts must be an exact non-floating integer.
   LOOM_LOW_LOWER_GUARD_VALUE_EXACT_I64 = 15,
+  // Source operand segment starting at attr_index must contain exactly u64
+  // operands.
+  LOOM_LOW_LOWER_GUARD_OPERAND_SEGMENT_COUNT_EQ = 16,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {
@@ -246,7 +254,8 @@ typedef struct loom_low_lower_guard_t {
   uint16_t value_ref_index;
   // Second source value-ref table index used by pairwise value guards.
   uint16_t other_value_ref_index;
-  // Source attribute ordinal used by attribute guards.
+  // Source attribute ordinal used by attribute guards or source operand ordinal
+  // used by operand-segment guards.
   uint16_t attr_index;
   // Type-pattern table index used by VALUE_TYPE guards.
   uint16_t type_pattern_index;

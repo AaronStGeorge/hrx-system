@@ -1,0 +1,425 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""Wasm source-to-low contract table."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable
+
+from loom.dialect.index import ALL_INDEX_OPS
+from loom.dialect.index import defs as index
+from loom.dialect.scalar import ALL_SCALAR_OPS
+from loom.dialect.scalar import arithmetic as scalar_arithmetic
+from loom.dialect.scalar import conversion as scalar_conversion
+from loom.dialect.vector import ALL_VECTOR_OPS
+from loom.dialect.vector import defs as vector
+from loom.dsl import Op
+from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
+from loom.target.contracts import (
+    AttrProject,
+    ContractTable,
+    DescriptorEmitForm,
+    DescriptorRule,
+    EmitDescriptorOp,
+    Guard,
+    GuardDiagnostic,
+    Scalar,
+    TypePattern,
+    ValueRef,
+    Vector,
+    descriptor_by_key,
+)
+from loom.target.contracts.templates import (
+    ReductionDescriptorCase,
+    reduction_descriptor_rules,
+)
+from loom.target.low_descriptors import Descriptor
+
+_I32 = Scalar("i32")
+_F32 = Scalar("f32")
+_INDEX = Scalar("index")
+_OFFSET = Scalar("offset")
+_V4I1 = Vector("i1", lanes=4)
+_V4I32 = Vector("i32", lanes=4)
+_V4F32 = Vector("f32", lanes=4)
+
+_I32_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="type",
+    subject_name="i32",
+    reason="Wasm lowering requires i32 scalar values",
+)
+_F32_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="type",
+    subject_name="f32",
+    reason="Wasm lowering requires f32 scalar values",
+)
+_ADDRESS_I32_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="type",
+    subject_name="index_or_offset",
+    reason="Wasm address lowering requires index or offset scalar values",
+)
+_V4I1_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="type",
+    subject_name="vector<4xi1>",
+    reason="Wasm SIMD mask lowering requires vector<4xi1> values",
+)
+_V4I32_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="type",
+    subject_name="vector<4xi32>",
+    reason="Wasm SIMD lowering requires vector<4xi32> values",
+)
+_V4F32_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="type",
+    subject_name="vector<4xf32>",
+    reason="Wasm SIMD lowering requires vector<4xf32> values",
+)
+_I64_ATTR_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="attr",
+    subject_name="value",
+    reason="Wasm constant lowering requires an i64 value",
+)
+_I32_CONSTANT_RANGE_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="attr",
+    subject_name="value",
+    reason="Wasm i32 constants must fit in signed i32",
+)
+
+
+def _descriptor(key: str) -> Descriptor:
+    return descriptor_by_key(WASM_CORE_SIMD128_DESCRIPTOR_SET, key)
+
+
+def _type_diagnostic(type_pattern: TypePattern) -> GuardDiagnostic:
+    if type_pattern == _I32:
+        return _I32_DIAGNOSTIC
+    if type_pattern == _F32:
+        return _F32_DIAGNOSTIC
+    if type_pattern in (_INDEX, _OFFSET):
+        return _ADDRESS_I32_DIAGNOSTIC
+    if type_pattern == _V4I1:
+        return _V4I1_DIAGNOSTIC
+    if type_pattern == _V4I32:
+        return _V4I32_DIAGNOSTIC
+    if type_pattern == _V4F32:
+        return _V4F32_DIAGNOSTIC
+    raise ValueError(f"unknown Wasm type pattern: {type_pattern!r}")
+
+
+def _value_type(field: str, type_pattern: TypePattern) -> Guard:
+    return Guard.value_type(
+        field,
+        type_pattern,
+        diagnostic=_type_diagnostic(type_pattern),
+    )
+
+
+def _typed_guards(
+    fields: Iterable[str],
+    type_pattern: TypePattern,
+) -> tuple[Guard, ...]:
+    return tuple(_value_type(field, type_pattern) for field in fields)
+
+
+def _const_i32_rule(source_op: Op, result_type: TypePattern) -> DescriptorRule:
+    descriptor = _descriptor("wasm.i32.const")
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            Guard.attr_kind("value", "i64", diagnostic=_I64_ATTR_DIAGNOSTIC),
+            _value_type("result", result_type),
+            Guard.i64_range(
+                "value",
+                -(2**31),
+                (2**31) - 1,
+                diagnostic=_I32_CONSTANT_RANGE_DIAGNOSTIC,
+            ),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                results={"dst": ValueRef.result("result")},
+                immediates={"i32_value": AttrProject.direct("value")},
+                form=DescriptorEmitForm.CONST,
+            ),
+        ),
+    )
+
+
+def _binary_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    descriptor_key: str,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=_typed_guards(("lhs", "rhs", "result"), type_pattern),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "lhs": ValueRef.operand("lhs"),
+                    "rhs": ValueRef.operand("rhs"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _splat_rule() -> DescriptorRule:
+    descriptor = _descriptor("wasm.i32x4.splat")
+    return DescriptorRule(
+        source_op=vector.vector_splat,
+        descriptor=descriptor,
+        guards=(
+            _value_type("scalar", _I32),
+            _value_type("result", _V4I32),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={"value": ValueRef.operand("scalar")},
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _select_rule(value_type: TypePattern) -> DescriptorRule:
+    descriptor = _descriptor("wasm.v128.bitselect")
+    return DescriptorRule(
+        source_op=vector.vector_select,
+        descriptor=descriptor,
+        guards=(
+            _value_type("condition", _V4I1),
+            _value_type("true_value", value_type),
+            _value_type("false_value", value_type),
+            _value_type("result", value_type),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "true_value": ValueRef.operand("true_value"),
+                    "false_value": ValueRef.operand("false_value"),
+                    "condition": ValueRef.operand("condition"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _compare_rule(
+    source_op: Op,
+    predicate: str,
+    operand_type: TypePattern,
+    descriptor_key: str,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            Guard.enum_attr_equals("predicate", predicate),
+            _value_type("lhs", operand_type),
+            _value_type("rhs", operand_type),
+            _value_type("result", _V4I1),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "lhs": ValueRef.operand("lhs"),
+                    "rhs": ValueRef.operand("rhs"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _extract_rule(
+    source_type: TypePattern,
+    result_type: TypePattern,
+    descriptor_key: str,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=vector.vector_extract,
+        descriptor=descriptor,
+        guards=(
+            _value_type("source", source_type),
+            _value_type("result", result_type),
+            Guard.operand_segment_count("indices", 0),
+            Guard.i64_array_count("static_indices", 1),
+            Guard.i64_array_element_range("static_indices", 0, 0, 3),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={"source": ValueRef.operand("source")},
+                results={"dst": ValueRef.result("result")},
+                immediates={
+                    "lane": AttrProject.i64_array_element(
+                        "static_indices",
+                        element=0,
+                    )
+                },
+            ),
+        ),
+    )
+
+
+def _insert_rule(
+    value_type: TypePattern,
+    dest_type: TypePattern,
+    descriptor_key: str,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=vector.vector_insert,
+        descriptor=descriptor,
+        guards=(
+            _value_type("value", value_type),
+            _value_type("dest", dest_type),
+            _value_type("result", dest_type),
+            Guard.operand_segment_count("indices", 0),
+            Guard.i64_array_count("static_indices", 1),
+            Guard.i64_array_element_range("static_indices", 0, 0, 3),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "dest": ValueRef.operand("dest"),
+                    "value": ValueRef.operand("value"),
+                },
+                results={"dst": ValueRef.result("result")},
+                immediates={
+                    "lane": AttrProject.i64_array_element(
+                        "static_indices",
+                        element=0,
+                    )
+                },
+            ),
+        ),
+    )
+
+
+_SHUFFLE_BYTE_NAMES = tuple(f"lane{i}" for i in range(16))
+
+
+def _shuffle_rule(type_pattern: TypePattern) -> DescriptorRule:
+    descriptor = _descriptor("wasm.i8x16.shuffle")
+    return DescriptorRule(
+        source_op=vector.vector_shuffle,
+        descriptor=descriptor,
+        guards=(
+            _value_type("source", type_pattern),
+            _value_type("result", type_pattern),
+            Guard.i64_array_count("source_lanes", 4),
+            Guard.i64_array_elements_range("source_lanes", 0, 3),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "lhs": ValueRef.operand("source"),
+                    "rhs": ValueRef.operand("source"),
+                },
+                results={"dst": ValueRef.result("result")},
+                immediates=(
+                    AttrProject.expand_lane_i64_array_to_byte_lanes(
+                        source_attr="source_lanes",
+                        source_lane_count=4,
+                        bytes_per_lane=4,
+                        target_names=_SHUFFLE_BYTE_NAMES,
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+WASM_CORE_SIMD128_CONTRACT_DIALECT_OPS = {
+    "index": ALL_INDEX_OPS,
+    "scalar": ALL_SCALAR_OPS,
+    "vector": ALL_VECTOR_OPS,
+}
+
+WASM_CORE_SIMD128_CONTRACT_TABLE = ContractTable(
+    name="wasm.core.simd128",
+    descriptor_set=WASM_CORE_SIMD128_DESCRIPTOR_SET,
+    public_header="loom/target/emit/wasm/lower/rules.h",
+    cases=(
+        _binary_rule(scalar_arithmetic.scalar_addi, _I32, "wasm.i32.add"),
+        _binary_rule(scalar_arithmetic.scalar_subi, _I32, "wasm.i32.sub"),
+        _binary_rule(scalar_arithmetic.scalar_addf, _F32, "wasm.f32.add"),
+        _const_i32_rule(scalar_conversion.scalar_constant, _I32),
+        _splat_rule(),
+        _select_rule(_V4I32),
+        _select_rule(_V4F32),
+        _compare_rule(vector.vector_cmpi, "eq", _V4I32, "wasm.i32x4.eq"),
+        _compare_rule(vector.vector_cmpi, "ne", _V4I32, "wasm.i32x4.ne"),
+        _compare_rule(vector.vector_cmpi, "slt", _V4I32, "wasm.i32x4.lt_s"),
+        _compare_rule(vector.vector_cmpi, "sle", _V4I32, "wasm.i32x4.le_s"),
+        _compare_rule(vector.vector_cmpi, "sgt", _V4I32, "wasm.i32x4.gt_s"),
+        _compare_rule(vector.vector_cmpi, "sge", _V4I32, "wasm.i32x4.ge_s"),
+        _compare_rule(vector.vector_cmpi, "ult", _V4I32, "wasm.i32x4.lt_u"),
+        _compare_rule(vector.vector_cmpi, "ule", _V4I32, "wasm.i32x4.le_u"),
+        _compare_rule(vector.vector_cmpi, "ugt", _V4I32, "wasm.i32x4.gt_u"),
+        _compare_rule(vector.vector_cmpi, "uge", _V4I32, "wasm.i32x4.ge_u"),
+        _compare_rule(vector.vector_cmpf, "oeq", _V4F32, "wasm.f32x4.eq"),
+        _compare_rule(vector.vector_cmpf, "ogt", _V4F32, "wasm.f32x4.gt"),
+        _compare_rule(vector.vector_cmpf, "oge", _V4F32, "wasm.f32x4.ge"),
+        _compare_rule(vector.vector_cmpf, "olt", _V4F32, "wasm.f32x4.lt"),
+        _compare_rule(vector.vector_cmpf, "ole", _V4F32, "wasm.f32x4.le"),
+        _binary_rule(vector.vector_addf, _V4F32, "wasm.f32x4.add"),
+        _binary_rule(vector.vector_mulf, _V4F32, "wasm.f32x4.mul"),
+        _binary_rule(vector.vector_addi, _V4I32, "wasm.i32x4.add"),
+        _binary_rule(vector.vector_subi, _V4I32, "wasm.i32x4.sub"),
+        _binary_rule(vector.vector_muli, _V4I32, "wasm.i32x4.mul"),
+        _const_i32_rule(index.index_constant, _INDEX),
+        _const_i32_rule(index.index_constant, _OFFSET),
+        _binary_rule(index.index_add, _INDEX, "wasm.i32.add"),
+        _binary_rule(index.index_add, _OFFSET, "wasm.i32.add"),
+        _binary_rule(index.index_sub, _INDEX, "wasm.i32.sub"),
+        _binary_rule(index.index_sub, _OFFSET, "wasm.i32.sub"),
+        _binary_rule(index.index_mul, _INDEX, "wasm.i32.mul"),
+        _extract_rule(_V4I32, _I32, "wasm.i32x4.extract_lane"),
+        _extract_rule(_V4F32, _F32, "wasm.f32x4.extract_lane"),
+        _insert_rule(_I32, _V4I32, "wasm.i32x4.replace_lane"),
+        _insert_rule(_F32, _V4F32, "wasm.f32x4.replace_lane"),
+        _shuffle_rule(_V4I32),
+        _shuffle_rule(_V4F32),
+        _shuffle_rule(_V4I1),
+        *reduction_descriptor_rules(
+            vector.vector_reduce,
+            (
+                ReductionDescriptorCase(
+                    kind="addi",
+                    input_type=_V4I32,
+                    accumulator_type=_I32,
+                    extract_descriptor=_descriptor("wasm.i32x4.extract_lane"),
+                    combine_descriptor=_descriptor("wasm.i32.add"),
+                ),
+                ReductionDescriptorCase(
+                    kind="addf",
+                    input_type=_V4F32,
+                    accumulator_type=_F32,
+                    extract_descriptor=_descriptor("wasm.f32x4.extract_lane"),
+                    combine_descriptor=_descriptor("wasm.f32.add"),
+                ),
+            ),
+            lane_count=4,
+        ),
+    ),
+)
