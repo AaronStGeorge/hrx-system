@@ -21,6 +21,7 @@ py_library(
         "scalar.py",
         "structure.py",
         "topology.py",
+        "vector.py",
     ],
     deps = [
         "//loom/py/loom:core",

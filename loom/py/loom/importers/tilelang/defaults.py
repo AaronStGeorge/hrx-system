@@ -9,7 +9,14 @@
 from __future__ import annotations
 
 from loom.importers.tilelang.converter import TileLangConverterRegistry
-from loom.importers.tilelang.ops import calls, control, memory, scalar, structure
+from loom.importers.tilelang.ops import (
+    calls,
+    control,
+    memory,
+    scalar,
+    structure,
+    vector,
+)
 
 
 def build_default_registry() -> TileLangConverterRegistry:
@@ -20,5 +27,6 @@ def build_default_registry() -> TileLangConverterRegistry:
     control.register(registry)
     memory.register(registry)
     scalar.register(registry)
+    vector.register(registry)
     calls.register(registry)
     return registry

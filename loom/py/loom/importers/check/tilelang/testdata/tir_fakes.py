@@ -126,6 +126,33 @@ class IntImm:
         self.dtype = dtype
 
 
+class FloatImm:
+    def __init__(self, value: float, dtype: str = "float32") -> None:
+        self.value = value
+        self.dtype = dtype
+
+
+class Ramp:
+    def __init__(
+        self,
+        base: object,
+        stride: object,
+        lanes: int,
+        dtype: str = "int32",
+    ) -> None:
+        self.base = base
+        self.stride = stride
+        self.lanes = lanes
+        self.dtype = f"{dtype}x{lanes}"
+
+
+class Broadcast:
+    def __init__(self, value: object, lanes: int, dtype: str = "float32") -> None:
+        self.value = value
+        self.lanes = lanes
+        self.dtype = f"{dtype}x{lanes}"
+
+
 class Add:
     def __init__(self, lhs: object, rhs: object, dtype: str = "float32") -> None:
         self.a = lhs

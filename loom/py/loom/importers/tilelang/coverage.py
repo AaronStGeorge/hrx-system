@@ -151,6 +151,18 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "Scalar cast.",
     ),
     OpCoverage(
+        "tir.Ramp",
+        OpFamily.TIR_NODE,
+        CoverageState.SUPPORTED,
+        "Vector lane ramp; maps to vector.iota or contiguous vector memory bases.",
+    ),
+    OpCoverage(
+        "tir.Broadcast",
+        OpFamily.TIR_NODE,
+        CoverageState.SUPPORTED,
+        "Vector broadcast; maps to vector.splat.",
+    ),
+    OpCoverage(
         "tir.Add",
         OpFamily.TIR_NODE,
         CoverageState.SUPPORTED,

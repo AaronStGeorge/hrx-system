@@ -41,8 +41,16 @@ class TileLangTypeConverter:
         text = str(dtype)
         mapped = _DTYPE_MAP.get(text)
         if mapped is None:
+            mapped = _parse_vector_dtype(text)
+        if mapped is None:
             raise ValueError(f"unsupported TileLang dtype `{text}`")
         return mapped
+
+    def vector_type(self, dtype: Any, lanes: int) -> ShapedType:
+        element_type = dtype if isinstance(dtype, ScalarType) else self.map_dtype(dtype)
+        if not isinstance(element_type, ScalarType):
+            raise ValueError(f"vector element dtype must be scalar, got {dtype!r}")
+        return ShapedType(TypeKind.VECTOR, element_type, (StaticDim(lanes),))
 
     def view_type(self, buffer: object) -> ShapedType:
         dtype = _attribute(buffer, "dtype")
@@ -72,6 +80,16 @@ def _shape_dim(value: object) -> StaticDim | DynamicDim:
 
 def _attribute(value: object, name: str, default: object | None = None) -> object:
     return getattr(value, name, default)
+
+
+def _parse_vector_dtype(text: str) -> ShapedType | None:
+    head, separator, tail = text.rpartition("x")
+    if not separator or not tail.isdecimal():
+        return None
+    element_type = _DTYPE_MAP.get(head)
+    if not isinstance(element_type, ScalarType):
+        return None
+    return ShapedType(TypeKind.VECTOR, element_type, (StaticDim(int(tail)),))
 
 
 _DTYPE_MAP: dict[str, Type] = {

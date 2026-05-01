@@ -103,6 +103,7 @@ def test_run_tilelang_check_verifies_checked_in_fixtures() -> None:
     expected_statuses = {
         "scalar_calls.py": ["passed", "passed"],
         "topology.py": ["passed", "passed"],
+        "vector_memory.py": ["passed", "passed"],
     }
 
     for filename, statuses in expected_statuses.items():

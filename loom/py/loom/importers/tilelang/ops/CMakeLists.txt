@@ -21,6 +21,7 @@ iree_py_library(
     "scalar.py"
     "structure.py"
     "topology.py"
+    "vector.py"
   DEPS
     iree::runtime::py::loom::core
     iree::runtime::py::loom::importers::core::core
