@@ -12,18 +12,32 @@ package(
 )
 
 py_library(
-    name = "tilelang",
+    name = "core",
     srcs = [
-        "__init__.py",
+        "context.py",
+        "converter.py",
         "coverage.py",
-        "importer.py",
         "model.py",
+        "nodes.py",
         "types.py",
     ],
     deps = [
         "//loom/py/loom:core",
         "//loom/py/loom:package",
         "//loom/py/loom/importers/core",
+    ],
+)
+
+py_library(
+    name = "tilelang",
+    srcs = [
+        "__init__.py",
+        "defaults.py",
+        "importer.py",
+    ],
+    deps = [
+        ":core",
+        "//loom/py/loom/importers/tilelang/ops",
     ],
 )
 
