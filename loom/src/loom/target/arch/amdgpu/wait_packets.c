@@ -732,12 +732,6 @@ static iree_status_t loom_amdgpu_wait_packet_json_write_counters(
 iree_status_t loom_amdgpu_wait_packet_plan_format_json(
     const loom_amdgpu_wait_packet_plan_t* plan,
     iree_string_builder_t* builder) {
-  if (plan == NULL || plan->wait_plan == NULL ||
-      plan->wait_plan->schedule == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU wait packet plan with schedule is required");
-  }
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
   const loom_low_schedule_table_t* schedule = plan->wait_plan->schedule;

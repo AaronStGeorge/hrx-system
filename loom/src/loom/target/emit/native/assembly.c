@@ -68,11 +68,6 @@ iree_status_t loom_native_assembly_read_i64_attr(const loom_module_t* module,
 iree_status_t loom_native_assembly_append_block_label(
     const loom_low_schedule_table_t* schedule, const loom_block_t* block,
     iree_string_builder_t* builder) {
-  if (schedule == NULL || block == NULL || builder == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "native assembly block label requires schedule, "
-                            "block, and builder");
-  }
   const uint32_t block_index = loom_low_packet_block_index(schedule, block);
   if (block_index == LOOM_LOW_PACKET_INDEX_NONE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -188,21 +183,6 @@ iree_status_t loom_native_assembly_format_fragment(
     const loom_low_allocation_table_t* allocation,
     const loom_native_assembly_format_options_t* options,
     iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
-  if (options == NULL || options->append_descriptor_packet.fn == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "native assembly descriptor packet formatter is "
-                            "required");
-  }
-  if (options->structural_packet_callback_count != 0 &&
-      options->structural_packet_callbacks == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "native assembly structural packet callback rows "
-                            "are required");
-  }
-  if (builder == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "native assembly output builder is required");
-  }
   IREE_RETURN_IF_ERROR(
       loom_native_fragment_validate_emission_inputs(schedule, allocation));
 

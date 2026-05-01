@@ -22,10 +22,6 @@ static iree_status_t loom_target_low_packet_diagnostics_verify_options(
     const loom_low_emission_frame_t* frame,
     const loom_target_low_packet_diagnostics_options_t* options,
     loom_target_low_packet_diagnostics_result_t* out_result) {
-  if (frame == NULL || options == NULL || out_result == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "frame, options, and output result are required");
-  }
   const loom_target_low_packet_diagnostic_flags_t unknown_flags =
       options->diagnostic_flags & ~LOOM_TARGET_LOW_PACKET_DIAGNOSTIC_ALL;
   if (unknown_flags != 0) {

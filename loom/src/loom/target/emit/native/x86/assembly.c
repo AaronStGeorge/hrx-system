@@ -1080,10 +1080,6 @@ iree_status_t loom_x86_emit_assembly_fragment(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
     iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
-  if (schedule == NULL || schedule->target.descriptor_set == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "x86 assembly schedule target is required");
-  }
   iree_string_view_t target_key = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
       schedule->target.descriptor_set,

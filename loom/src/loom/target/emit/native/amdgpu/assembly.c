@@ -1409,10 +1409,6 @@ static iree_status_t loom_amdgpu_append_cond_branch_packet(
 
 static iree_status_t loom_amdgpu_verify_assembly_target(
     const loom_low_schedule_table_t* schedule) {
-  if (schedule == NULL || schedule->target.descriptor_set == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU assembly schedule target is required");
-  }
   if (schedule->target.descriptor_set->target_stable_id !=
       LOOM_AMDGPU_TARGET_STABLE_ID) {
     iree_string_view_t target_key = iree_string_view_empty();
@@ -1430,21 +1426,11 @@ static iree_status_t loom_amdgpu_verify_assembly_target(
 static iree_status_t loom_amdgpu_verify_wait_packet_plan(
     const loom_low_schedule_table_t* schedule,
     const loom_amdgpu_wait_packet_plan_t* wait_packets) {
-  if (wait_packets == NULL || wait_packets->wait_plan == NULL ||
-      wait_packets->wait_plan->schedule != schedule) {
+  if (wait_packets->wait_plan->schedule != schedule) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU assembly wait packets must be derived from the emitted "
         "schedule");
-  }
-  if (wait_packets->packet_count != 0 && wait_packets->packets == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU assembly wait packet rows are required");
-  }
-  if (wait_packets->immediate_count != 0 && wait_packets->immediates == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU assembly wait packet immediate rows are required");
   }
   return iree_ok_status();
 }

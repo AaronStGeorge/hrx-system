@@ -1318,11 +1318,6 @@ static iree_status_t loom_amdgpu_resolve_encoding_target(
     const loom_low_schedule_table_t* schedule,
     const loom_amdgpu_descriptor_set_info_t** out_target) {
   *out_target = NULL;
-  if (schedule == NULL || schedule->target.descriptor_set == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU native encoding schedule target is "
-                            "required");
-  }
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_id(
       schedule->target.descriptor_set->stable_id, out_target));
   return iree_ok_status();
@@ -1331,22 +1326,11 @@ static iree_status_t loom_amdgpu_resolve_encoding_target(
 static iree_status_t loom_amdgpu_verify_wait_packet_plan(
     const loom_low_schedule_table_t* schedule,
     const loom_amdgpu_wait_packet_plan_t* wait_packets) {
-  if (wait_packets == NULL || wait_packets->wait_plan == NULL ||
-      wait_packets->wait_plan->schedule != schedule) {
+  if (wait_packets->wait_plan->schedule != schedule) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU native encoding wait packets must be derived from the encoded "
         "schedule");
-  }
-  if (wait_packets->packet_count != 0 && wait_packets->packets == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU native encoding wait packet rows are "
-                            "required");
-  }
-  if (wait_packets->immediate_count != 0 && wait_packets->immediates == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU native encoding wait packet immediate rows are required");
   }
   return iree_ok_status();
 }

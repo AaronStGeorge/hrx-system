@@ -241,15 +241,6 @@ iree_status_t loom_amdgpu_encoding_pack(
     iree_host_size_t field_value_count,
     loom_amdgpu_encoding_packet_t* out_packet) {
   *out_packet = (loom_amdgpu_encoding_packet_t){0};
-  if (table == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU encoding table is required");
-  }
-  if (field_value_count != 0 && field_values == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU encoding field values are required when "
-                            "field value count is non-zero");
-  }
 
   const loom_amdgpu_encoding_format_layout_t* format =
       loom_amdgpu_encoding_find_format(table, encoding_format);
