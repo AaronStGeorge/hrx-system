@@ -262,12 +262,6 @@ iree_status_t loom_dce_run(loom_pass_t* pass, loom_module_t* module,
 iree_status_t loom_dce_run_with_deadness_query(
     loom_pass_t* pass, loom_module_t* module, loom_func_like_t function,
     loom_dce_deadness_query_callback_t deadness_query) {
-  if (!pass || !pass->arena || !module || !deadness_query.fn) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "pass with arena, module, and deadness query are required");
-  }
-
   loom_region_t* body = loom_func_like_body(function);
   if (!body) {
     return iree_ok_status();

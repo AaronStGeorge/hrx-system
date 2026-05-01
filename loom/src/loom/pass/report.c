@@ -238,11 +238,6 @@ static iree_status_t loom_pass_report_format_descriptor_json(
 
 iree_status_t loom_pass_report_format_json(const loom_pass_report_t* report,
                                            loom_output_stream_t* stream) {
-  if (!report || !stream) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "pass report and output stream are required");
-  }
-
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, "{\n  \"invocations\": ["));
   for (iree_host_size_t i = 0; i < report->invocation_count; ++i) {
@@ -291,10 +286,6 @@ iree_status_t loom_pass_report_format_json(const loom_pass_report_t* report,
 
 iree_status_t loom_pass_report_format_registry_json(
     const loom_pass_registry_t* registry, loom_output_stream_t* stream) {
-  if (!registry || !stream) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "pass registry and output stream are required");
-  }
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, "{\n  \"passes\": ["));
   for (iree_host_size_t i = 0; i < registry->descriptor_count; ++i) {

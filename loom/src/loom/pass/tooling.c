@@ -18,11 +18,6 @@
 
 static iree_status_t loom_pass_tool_verify_options(
     const loom_pass_tool_run_options_t* options) {
-  if (!options || !options->registry || !options->block_pool) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "pass tool options with registry and block pool are required");
-  }
   return loom_pass_environment_verify(&options->environment);
 }
 
@@ -94,10 +89,6 @@ static iree_status_t loom_pass_tool_run_program(
 iree_status_t loom_pass_tool_run_pipeline_op(
     loom_module_t* module, const loom_op_t* pipeline_op,
     const loom_pass_tool_run_options_t* options) {
-  if (!module || !pipeline_op) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "module and pass pipeline op are required");
-  }
   IREE_RETURN_IF_ERROR(loom_pass_tool_verify_options(options));
 
   loom_pass_program_compile_options_t compile_options = {

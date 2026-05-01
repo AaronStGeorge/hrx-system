@@ -38,12 +38,6 @@ iree_status_t loom_pass_invocation_resolve_run_op(
     const loom_module_t* module, const loom_pass_registry_t* registry,
     const loom_op_t* op, loom_pass_kind_t required_kind,
     iree_arena_allocator_t* arena, loom_pass_invocation_t* out_invocation) {
-  if (!module || !registry || !op || !arena || !out_invocation) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "module, registry, pass.run op, arena, and output invocation are "
-        "required");
-  }
   memset(out_invocation, 0, sizeof(*out_invocation));
   if (!loom_pass_run_isa(op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

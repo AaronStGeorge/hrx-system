@@ -504,13 +504,6 @@ iree_status_t loom_pass_program_compile_pipeline(
     const loom_module_t* module, const loom_op_t* pipeline_op,
     const loom_pass_program_compile_options_t* options,
     iree_arena_block_pool_t* block_pool, loom_pass_program_t* out_program) {
-  if (!module || !pipeline_op || !options || !options->registry ||
-      !block_pool || !out_program) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "module, pass pipeline, compile options, block pool, and output "
-        "program are required");
-  }
   if (!loom_pass_pipeline_isa(pipeline_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected pass.pipeline op");

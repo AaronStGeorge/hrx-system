@@ -16,10 +16,6 @@
 iree_status_t loom_pass_registry_lookup(
     const loom_pass_registry_t* registry, iree_string_view_t key,
     const loom_pass_descriptor_t** out_descriptor) {
-  if (!registry || !out_descriptor) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "pass registry and output descriptor are required");
-  }
   *out_descriptor = NULL;
   iree_host_size_t low = 0;
   iree_host_size_t high = registry->descriptor_count;
@@ -330,11 +326,6 @@ static iree_status_t loom_pass_option_schema_validate_decoded_required(
 iree_status_t loom_pass_descriptor_decode_options(
     const loom_pass_descriptor_t* descriptor, iree_string_view_t options,
     iree_arena_allocator_t* arena, loom_pass_decoded_options_t* out_options) {
-  if (!descriptor || !descriptor->info || !arena || !out_options) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "pass descriptor, arena, and output options are required");
-  }
   memset(out_options, 0, sizeof(*out_options));
   const loom_pass_info_t* info = descriptor->info();
   if (!info) {
@@ -540,11 +531,6 @@ iree_status_t loom_pass_descriptor_decode_attr_options(
     const loom_pass_descriptor_t* descriptor, const loom_module_t* module,
     loom_named_attr_slice_t options, iree_arena_allocator_t* arena,
     loom_pass_decoded_options_t* out_options) {
-  if (!descriptor || !descriptor->info || !module || !arena || !out_options) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "pass descriptor, module, arena, and output options are required");
-  }
   memset(out_options, 0, sizeof(*out_options));
   const loom_pass_info_t* info = descriptor->info();
   if (!info) {
@@ -557,12 +543,6 @@ iree_status_t loom_pass_descriptor_decode_attr_options(
                             "pass '%.*s' does not accept options",
                             (int)descriptor->key.size, descriptor->key.data);
   }
-  if (options.count > 0 && !options.entries) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "pass '%.*s' option entries are required",
-                            (int)descriptor->key.size, descriptor->key.data);
-  }
-
   loom_pass_decoded_option_t* decoded_options = NULL;
   iree_status_t status = iree_ok_status();
   if (descriptor->option_schema_count > 0) {

@@ -1269,10 +1269,6 @@ iree_status_t loom_canonicalizer_run_function(
     loom_canonicalizer_t* canonicalizer, loom_func_like_t function,
     const loom_canonicalizer_options_t* options,
     loom_canonicalizer_result_t* out_result) {
-  if (!canonicalizer || !canonicalizer->module || !canonicalizer->state) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "initialized canonicalizer required");
-  }
   if (out_result) memset(out_result, 0, sizeof(*out_result));
   loom_canonicalizer_reset_run_state(canonicalizer);
   if (!loom_func_like_body(function)) return iree_ok_status();

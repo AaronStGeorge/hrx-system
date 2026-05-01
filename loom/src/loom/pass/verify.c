@@ -625,12 +625,6 @@ static iree_status_t loom_pass_verify_state_initialize(
     const loom_module_t* module, const loom_pass_verify_options_t* options,
     iree_arena_allocator_t* scratch_arena,
     loom_pass_verify_state_t* out_state) {
-  if (!module || !options || !options->registry || !scratch_arena ||
-      !out_state) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "module, pass registry, scratch arena, and output "
-                            "state are required");
-  }
   IREE_RETURN_IF_ERROR(loom_pass_environment_verify(&options->environment));
   *out_state = (loom_pass_verify_state_t){
       .module = module,

@@ -791,21 +791,12 @@ static iree_status_t loom_pass_interpreter_execute_range(
 
 static iree_status_t loom_pass_interpreter_options_verify(
     const loom_pass_interpreter_options_t* options) {
-  if (!options || !options->block_pool) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "pass interpreter options with block pool are "
-                            "required");
-  }
   return loom_pass_environment_verify(&options->environment);
 }
 
 iree_status_t loom_pass_interpreter_run_module(
     const loom_pass_program_t* program, loom_module_t* module,
     const loom_pass_interpreter_options_t* options) {
-  if (!program || !module) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "pass program and module are required");
-  }
   IREE_RETURN_IF_ERROR(loom_pass_interpreter_options_verify(options));
   if (program->root_kind != LOOM_PASS_MODULE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -831,11 +822,6 @@ iree_status_t loom_pass_interpreter_run_module(
 iree_status_t loom_pass_interpreter_run_function(
     const loom_pass_program_t* program, loom_module_t* module,
     loom_func_like_t function, const loom_pass_interpreter_options_t* options) {
-  if (!program || !module || !loom_func_like_isa(function)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "pass program, module, and current function are required");
-  }
   IREE_RETURN_IF_ERROR(loom_pass_interpreter_options_verify(options));
   if (program->root_kind != LOOM_PASS_FUNCTION) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
