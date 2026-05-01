@@ -5128,16 +5128,6 @@ iree_status_t loom_bytecode_read_metadata(
     loom_context_t* context, iree_arena_block_pool_t* block_pool,
     const loom_bytecode_read_options_t* options,
     loom_bytecode_read_result_t* out_result) {
-  if (!context) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "context is NULL");
-  }
-  if (!block_pool) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "block_pool is NULL");
-  }
-  if (!out_result) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "out_result is NULL");
-  }
-
   iree_arena_allocator_t arena;
   iree_arena_initialize(block_pool, &arena);
   loom_bytecode_reader_state_t reader = {
@@ -5191,18 +5181,6 @@ iree_status_t loom_bytecode_read_module(
     const loom_bytecode_read_options_t* options,
     loom_bytecode_read_result_t* out_result, loom_module_t** out_module,
     iree_allocator_t host_allocator) {
-  if (!context) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "context is NULL");
-  }
-  if (!block_pool) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "block_pool is NULL");
-  }
-  if (!out_result) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "out_result is NULL");
-  }
-  if (!out_module) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "out_module is NULL");
-  }
   *out_module = NULL;
 
   iree_arena_allocator_t arena;

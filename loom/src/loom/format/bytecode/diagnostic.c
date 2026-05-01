@@ -34,14 +34,6 @@ iree_status_t loom_bytecode_reader_emit_diagnostic(
     const loom_error_def_t* error, const loom_diagnostic_param_t* params,
     iree_host_size_t param_count,
     loom_bytecode_reader_byte_range_t byte_range) {
-  if (!error) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "error is NULL");
-  }
-  if (param_count > 0 && !params) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "param_count > 0 but params is NULL");
-  }
-
   loom_source_range_t source_range =
       loom_bytecode_reader_make_source_range(context, byte_range);
   loom_diagnostic_t diagnostic = {

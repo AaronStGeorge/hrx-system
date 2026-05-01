@@ -141,18 +141,5 @@ TEST(BytecodeDiagnostic, NullSinkDropsDiagnostic) {
       nullptr, IREE_SV("file"), 0, 16, 8));
 }
 
-TEST(BytecodeDiagnostic, InvalidArgumentsReturnStatus) {
-  loom_bytecode_reader_diagnostic_context_t context = {};
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        loom_bytecode_reader_emit_diagnostic(
-                            &context, nullptr, nullptr, 0,
-                            loom_bytecode_reader_byte_range(0, 0)));
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_bytecode_reader_emit_diagnostic(
-          &context, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 7),
-          nullptr, 1, loom_bytecode_reader_byte_range(0, 0)));
-}
-
 }  // namespace
 }  // namespace loom
