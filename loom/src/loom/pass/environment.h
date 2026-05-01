@@ -71,7 +71,6 @@ static inline loom_pass_environment_t loom_pass_environment_empty(void) {
 // Returns true when |environment| has no capabilities.
 static inline bool loom_pass_environment_is_empty(
     const loom_pass_environment_t* environment) {
-  IREE_ASSERT_ARGUMENT(environment);
   return environment->capability_count == 0;
 }
 

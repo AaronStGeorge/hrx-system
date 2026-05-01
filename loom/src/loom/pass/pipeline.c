@@ -12,10 +12,6 @@
 iree_status_t loom_pass_pipeline_consume_entry(
     iree_string_view_t* pipeline, loom_pass_pipeline_entry_spec_t* out_entry,
     bool* out_has_entry) {
-  IREE_ASSERT_ARGUMENT(pipeline);
-  IREE_ASSERT_ARGUMENT(out_entry);
-  IREE_ASSERT_ARGUMENT(out_has_entry);
-
   memset(out_entry, 0, sizeof(*out_entry));
   *out_has_entry = false;
 
@@ -107,7 +103,6 @@ iree_status_t loom_pass_options_parse(iree_string_view_t pass_name,
   if (iree_string_view_is_empty(iree_string_view_trim(options))) {
     return iree_ok_status();
   }
-  IREE_ASSERT_ARGUMENT(parse.fn);
 
   iree_string_view_t remaining = options;
   while (!iree_string_view_is_empty(iree_string_view_trim(remaining))) {
@@ -154,7 +149,6 @@ iree_status_t loom_pass_option_parse_uint32(iree_string_view_t pass_name,
                                             iree_string_view_t option_name,
                                             iree_string_view_t option_value,
                                             uint32_t* out_value) {
-  IREE_ASSERT_ARGUMENT(out_value);
   option_value = iree_string_view_trim(option_value);
   if (iree_string_view_is_empty(option_value)) {
     return iree_make_status(

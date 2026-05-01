@@ -120,7 +120,6 @@ loom_contract_operand_required_capability_flags(
 //===----------------------------------------------------------------------===//
 
 void loom_contract_request_initialize(loom_contract_request_t* out_request) {
-  IREE_ASSERT_ARGUMENT(out_request);
   *out_request = (loom_contract_request_t){
       .policy = LOOM_LOWERING_POLICY_REFERENCE_ALLOWED,
   };
@@ -129,7 +128,6 @@ void loom_contract_request_initialize(loom_contract_request_t* out_request) {
 bool loom_contract_request_validate(
     const loom_contract_request_t* request,
     loom_contract_diagnostic_t* out_diagnostic) {
-  IREE_ASSERT_ARGUMENT(request);
   if (out_diagnostic) {
     *out_diagnostic = (loom_contract_diagnostic_t){0};
   }
@@ -183,7 +181,6 @@ bool loom_contract_request_validate(
 loom_contract_capability_flags_t
 loom_contract_request_available_capability_flags(
     const loom_contract_request_t* request) {
-  IREE_ASSERT_ARGUMENT(request);
   return loom_contract_operand_available_capability_flags(request->lhs) |
          loom_contract_operand_available_capability_flags(request->rhs) |
          loom_contract_operand_available_capability_flags(
@@ -194,7 +191,6 @@ loom_contract_request_available_capability_flags(
 loom_contract_capability_flags_t
 loom_contract_request_required_capability_flags(
     const loom_contract_request_t* request) {
-  IREE_ASSERT_ARGUMENT(request);
   return loom_contract_operand_required_capability_flags(request->lhs) |
          loom_contract_operand_required_capability_flags(request->rhs) |
          loom_contract_operand_required_capability_flags(request->accumulator) |
@@ -204,7 +200,6 @@ loom_contract_request_required_capability_flags(
 bool loom_contract_numeric_type_from_scalar(
     loom_scalar_type_t scalar_type, bool unsigned_integer,
     loom_contract_numeric_type_t* out_numeric_type) {
-  IREE_ASSERT_ARGUMENT(out_numeric_type);
   *out_numeric_type = LOOM_CONTRACT_NUMERIC_UNKNOWN;
   switch (scalar_type) {
     case LOOM_SCALAR_TYPE_I8:

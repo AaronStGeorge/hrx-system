@@ -20,7 +20,6 @@ static bool loom_contract_storage_fail(
 bool loom_contract_numeric_type_from_encoded_format(
     loom_value_fact_numeric_format_flags_t format,
     loom_contract_numeric_type_t* out_numeric_type) {
-  IREE_ASSERT_ARGUMENT(out_numeric_type);
   *out_numeric_type = LOOM_CONTRACT_NUMERIC_UNKNOWN;
   switch (format) {
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3:
@@ -87,7 +86,6 @@ bool loom_contract_numeric_type_from_encoded_format(
 bool loom_contract_scale_kind_from_storage_schema(
     loom_value_fact_storage_schema_t schema,
     loom_contract_scale_kind_t* out_scale_kind) {
-  IREE_ASSERT_ARGUMENT(out_scale_kind);
   *out_scale_kind = LOOM_CONTRACT_SCALE_UNKNOWN;
   loom_value_fact_encoded_operand_schema_t operand = schema.encoded_operand;
   if (!loom_value_fact_encoded_operand_schema_has_scale(operand)) {
@@ -230,7 +228,6 @@ loom_contract_required_capability_flags_from_storage_schema(
 bool loom_contract_operand_from_storage_schema(
     loom_contract_operand_role_t role, loom_value_fact_storage_schema_t schema,
     loom_contract_operand_t* out_operand) {
-  IREE_ASSERT_ARGUMENT(out_operand);
   *out_operand = (loom_contract_operand_t){
       .role = role,
   };
@@ -264,7 +261,6 @@ bool loom_contract_view_payload_from_type(
     const loom_fact_context_t* context, const loom_module_t* module,
     loom_type_t view_type, loom_contract_operand_role_t role,
     bool plain_integer_is_unsigned, loom_contract_view_payload_t* out_payload) {
-  IREE_ASSERT_ARGUMENT(out_payload);
   *out_payload = (loom_contract_view_payload_t){
       .kind = LOOM_CONTRACT_VIEW_PAYLOAD_UNKNOWN,
       .operand =
@@ -309,8 +305,6 @@ bool loom_contract_request_from_matrix_payloads(
     const loom_contract_matrix_request_options_t* options,
     loom_contract_request_t* out_request,
     loom_contract_diagnostic_t* out_diagnostic) {
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(out_request);
   loom_contract_request_initialize(out_request);
   if (out_diagnostic) {
     *out_diagnostic = (loom_contract_diagnostic_t){0};

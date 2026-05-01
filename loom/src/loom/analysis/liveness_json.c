@@ -222,9 +222,6 @@ static iree_status_t loom_liveness_json_write_pressure_summary(
 
 iree_status_t loom_liveness_format_json(
     const loom_liveness_analysis_t* analysis, iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(analysis && analysis->module);
-  IREE_ASSERT_ARGUMENT(builder);
-
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(

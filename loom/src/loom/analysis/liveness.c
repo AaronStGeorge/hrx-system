@@ -1095,10 +1095,6 @@ iree_status_t loom_liveness_analyze_region_with_order(
     loom_module_t* module, const loom_region_t* region,
     loom_liveness_order_t order, iree_arena_allocator_t* arena,
     loom_liveness_analysis_t* out_analysis) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(region);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_analysis);
   memset(out_analysis, 0, sizeof(*out_analysis));
 
   loom_local_value_domain_t value_domain = {0};
@@ -1115,12 +1111,7 @@ iree_status_t loom_liveness_analyze_region_with_order(
 iree_status_t loom_liveness_analyze_local_value_domain(
     const loom_local_value_domain_t* value_domain, loom_liveness_order_t order,
     iree_arena_allocator_t* arena, loom_liveness_analysis_t* out_analysis) {
-  IREE_ASSERT_ARGUMENT(value_domain);
-  IREE_ASSERT_ARGUMENT(value_domain->module);
-  IREE_ASSERT_ARGUMENT(value_domain->region);
   IREE_ASSERT(loom_local_value_domain_is_acquired(value_domain));
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_analysis);
   memset(out_analysis, 0, sizeof(*out_analysis));
   loom_module_t* module = value_domain->module;
   const loom_region_t* region = value_domain->region;
@@ -1294,10 +1285,6 @@ iree_status_t loom_liveness_collect_pressure_budget_violations(
     iree_host_size_t budget_count, iree_arena_allocator_t* arena,
     const loom_liveness_pressure_budget_violation_t** out_violations,
     iree_host_size_t* out_violation_count) {
-  IREE_ASSERT_ARGUMENT(analysis);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_violations);
-  IREE_ASSERT_ARGUMENT(out_violation_count);
   *out_violations = NULL;
   *out_violation_count = 0;
   if (budget_count == 0) return iree_ok_status();

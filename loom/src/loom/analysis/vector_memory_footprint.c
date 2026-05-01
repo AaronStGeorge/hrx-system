@@ -1100,11 +1100,6 @@ iree_status_t loom_vector_memory_footprint_verify_function(
     loom_module_t* module, loom_func_like_t function,
     const loom_vector_memory_footprint_options_t* options,
     loom_vector_memory_footprint_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(options->arena);
-  IREE_ASSERT_ARGUMENT(options->fact_table);
-  IREE_ASSERT_ARGUMENT(out_result);
   *out_result = (loom_vector_memory_footprint_result_t){0};
 
   loom_region_t* body = loom_func_like_body(function);

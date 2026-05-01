@@ -141,7 +141,6 @@ iree_status_t loom_rewriter_enable_analysis(loom_rewriter_t* rewriter,
 iree_status_t loom_rewriter_enable_analysis_with_seed_facts(
     loom_rewriter_t* rewriter, loom_func_like_t function,
     loom_value_fact_table_t* facts, const loom_value_fact_table_t* seed_facts) {
-  IREE_ASSERT_ARGUMENT(facts);
   rewriter->fact_table = facts;
   if (seed_facts) {
     IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_defined_facts(

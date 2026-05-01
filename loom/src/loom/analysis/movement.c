@@ -771,10 +771,6 @@ iree_status_t loom_movement_analysis_initialize(
     loom_value_fact_table_t* fact_table,
     const loom_local_value_domain_t* value_domain,
     iree_arena_allocator_t* arena, loom_movement_analysis_t* out_analysis) {
-  IREE_ASSERT_ARGUMENT(fact_table);
-  IREE_ASSERT_ARGUMENT(value_domain);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_analysis);
   *out_analysis = (loom_movement_analysis_t){0};
   out_analysis->module = value_domain->module;
   out_analysis->fact_table = fact_table;
@@ -785,7 +781,6 @@ iree_status_t loom_movement_analysis_initialize(
 
 iree_status_t loom_movement_analysis_analyze(
     loom_movement_analysis_t* analysis) {
-  IREE_ASSERT_ARGUMENT(analysis);
   return loom_view_region_table_analyze(&analysis->view_regions);
 }
 
@@ -795,7 +790,6 @@ bool loom_movement_op_kind_is_async(loom_op_kind_t op_kind) {
 
 uint64_t loom_movement_endpoint_minimum_byte_alignment(
     const loom_movement_endpoint_t* endpoint) {
-  IREE_ASSERT_ARGUMENT(endpoint);
   if (endpoint->kind != LOOM_MOVEMENT_ENDPOINT_VIEW ||
       endpoint->root_minimum_alignment == 0) {
     return 0;
@@ -816,11 +810,6 @@ iree_status_t loom_movement_request_describe_op(
     loom_movement_analysis_t* analysis, const loom_op_t* op,
     loom_movement_request_t* out_request,
     loom_movement_diagnostic_t* out_diagnostic, bool* out_described) {
-  IREE_ASSERT_ARGUMENT(analysis);
-  IREE_ASSERT_ARGUMENT(op);
-  IREE_ASSERT_ARGUMENT(out_request);
-  IREE_ASSERT_ARGUMENT(out_diagnostic);
-  IREE_ASSERT_ARGUMENT(out_described);
   *out_described = false;
   loom_movement_request_initialize(op, out_request, out_diagnostic);
 

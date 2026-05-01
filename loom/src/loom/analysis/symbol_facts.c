@@ -34,8 +34,6 @@ void loom_symbol_fact_table_initialize_with_options(
     loom_symbol_fact_table_t* table,
     const loom_symbol_fact_table_options_t* options,
     iree_arena_allocator_t* arena) {
-  IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(arena);
   memset(table, 0, sizeof(*table));
   table->resources =
       options ? options->resources : loom_symbol_fact_resource_list_empty();
@@ -43,7 +41,6 @@ void loom_symbol_fact_table_initialize_with_options(
 }
 
 void loom_symbol_fact_table_reset(loom_symbol_fact_table_t* table) {
-  IREE_ASSERT_ARGUMENT(table);
   table->module = NULL;
   if (table->count == 0) return;
   memset(table->entries, 0, table->count * sizeof(*table->entries));
@@ -52,7 +49,6 @@ void loom_symbol_fact_table_reset(loom_symbol_fact_table_t* table) {
 
 static iree_status_t loom_symbol_fact_table_ensure_capacity(
     loom_symbol_fact_table_t* table, iree_host_size_t minimum_count) {
-  IREE_ASSERT_ARGUMENT(table && table->arena);
   if (minimum_count <= table->capacity) {
     if (minimum_count > table->count) table->count = minimum_count;
     return iree_ok_status();
@@ -110,9 +106,6 @@ static iree_status_t loom_symbol_fact_validate_computed(
 iree_status_t loom_symbol_fact_table_lookup(
     loom_symbol_fact_table_t* table, const loom_module_t* module,
     loom_symbol_id_t symbol_id, const loom_symbol_facts_base_t** out_facts) {
-  IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_facts);
   *out_facts = NULL;
 
   if (symbol_id == LOOM_SYMBOL_ID_INVALID ||
@@ -179,7 +172,6 @@ iree_status_t loom_symbol_fact_table_lookup(
 iree_status_t loom_symbol_fact_table_lookup_ref(
     loom_symbol_fact_table_t* table, const loom_module_t* module,
     loom_symbol_ref_t symbol_ref, const loom_symbol_facts_base_t** out_facts) {
-  IREE_ASSERT_ARGUMENT(out_facts);
   *out_facts = NULL;
   if (!loom_symbol_ref_is_valid(symbol_ref)) return iree_ok_status();
   if (symbol_ref.module_id != 0) {
@@ -193,17 +185,12 @@ iree_status_t loom_symbol_fact_table_lookup_ref(
 iree_status_t loom_symbol_fact_context_allocate(
     loom_symbol_fact_context_t* context, iree_host_size_t byte_length,
     void** out_ptr) {
-  IREE_ASSERT_ARGUMENT(context);
-  IREE_ASSERT_ARGUMENT(out_ptr);
   return iree_arena_allocate(context->table->arena, byte_length, out_ptr);
 }
 
 iree_status_t loom_symbol_fact_context_lookup_resource(
     loom_symbol_fact_context_t* context, const void* key,
     const void** out_value) {
-  IREE_ASSERT_ARGUMENT(context);
-  IREE_ASSERT_ARGUMENT(key);
-  IREE_ASSERT_ARGUMENT(out_value);
   *out_value = NULL;
 
   loom_symbol_fact_resource_list_t resources = context->table->resources;
@@ -227,7 +214,6 @@ iree_status_t loom_symbol_fact_context_lookup_resource(
 iree_status_t loom_symbol_fact_context_lookup(
     loom_symbol_fact_context_t* context, loom_symbol_id_t symbol_id,
     const loom_symbol_facts_base_t** out_facts) {
-  IREE_ASSERT_ARGUMENT(context);
   return loom_symbol_fact_table_lookup(context->table, context->module,
                                        symbol_id, out_facts);
 }
@@ -235,7 +221,6 @@ iree_status_t loom_symbol_fact_context_lookup(
 iree_status_t loom_symbol_fact_context_lookup_ref(
     loom_symbol_fact_context_t* context, loom_symbol_ref_t symbol_ref,
     const loom_symbol_facts_base_t** out_facts) {
-  IREE_ASSERT_ARGUMENT(context);
   return loom_symbol_fact_table_lookup_ref(context->table, context->module,
                                            symbol_ref, out_facts);
 }

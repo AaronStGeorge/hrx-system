@@ -1232,11 +1232,6 @@ iree_status_t loom_canonicalizer_initialize(
     loom_module_t* module, iree_arena_allocator_t* parent_arena,
     loom_pass_value_fact_owner_t* value_facts,
     loom_canonicalizer_t* out_canonicalizer) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(parent_arena);
-  IREE_ASSERT_ARGUMENT(parent_arena->block_pool);
-  IREE_ASSERT_ARGUMENT(value_facts);
-  IREE_ASSERT_ARGUMENT(out_canonicalizer);
   memset(out_canonicalizer, 0, sizeof(*out_canonicalizer));
   loom_canonicalizer_state_t* state = NULL;
   IREE_RETURN_IF_ERROR(

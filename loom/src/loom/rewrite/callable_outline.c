@@ -822,7 +822,6 @@ iree_status_t loom_callable_outline_range(
     loom_rewriter_t* rewriter, loom_op_t* first_op, loom_op_t* after_last_op,
     loom_symbol_ref_t outlined_ref,
     loom_callable_outline_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(out_result);
   *out_result = (loom_callable_outline_result_t){0};
 
   loom_callable_outline_range_state_t state = {0};

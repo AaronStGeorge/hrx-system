@@ -8,7 +8,6 @@
 
 iree_status_t loom_pass_environment_verify(
     const loom_pass_environment_t* environment) {
-  IREE_ASSERT_ARGUMENT(environment);
   if (environment->capability_count != 0 && !environment->capabilities) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -38,8 +37,6 @@ iree_status_t loom_pass_environment_verify(
 const loom_pass_environment_capability_t* loom_pass_environment_lookup(
     const loom_pass_environment_t* environment,
     const loom_pass_environment_capability_type_t* type) {
-  IREE_ASSERT_ARGUMENT(environment);
-  IREE_ASSERT_ARGUMENT(type);
   if (!environment->capabilities) {
     return NULL;
   }

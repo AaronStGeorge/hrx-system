@@ -162,7 +162,6 @@ static iree_status_t loom_type_propagator_grow_ordinal_list(
 static iree_status_t loom_type_propagator_register_value(
     loom_type_propagator_t* propagator, loom_value_id_t value_id,
     loom_value_ordinal_t* out_ordinal) {
-  IREE_ASSERT_ARGUMENT(out_ordinal);
   IREE_ASSERT(loom_local_value_domain_is_acquired(&propagator->value_domain));
   if (!loom_type_propagator_valid_value_id(propagator, value_id)) {
     *out_ordinal = LOOM_VALUE_ORDINAL_INVALID;
@@ -177,9 +176,6 @@ static iree_status_t loom_type_propagator_register_value(
 iree_status_t loom_type_propagator_allocate(
     loom_module_t* module, iree_arena_allocator_t* arena,
     loom_type_propagator_t** out_propagator) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_propagator);
   loom_type_propagator_t* propagator = NULL;
   IREE_RETURN_IF_ERROR(
       iree_arena_allocate(arena, sizeof(*propagator), (void**)&propagator));
@@ -266,8 +262,6 @@ static iree_status_t loom_type_propagator_record_region_tree_owners(
 
 iree_status_t loom_type_propagator_prepare_function(
     loom_type_propagator_t* propagator, loom_func_like_t function) {
-  IREE_ASSERT_ARGUMENT(propagator);
-  IREE_ASSERT_ARGUMENT(propagator->module);
   loom_local_value_domain_release(&propagator->value_domain);
   loom_region_t* body = loom_func_like_body(function);
   if (!body) {
@@ -1116,10 +1110,6 @@ static iree_status_t loom_type_propagator_commit(
 iree_status_t loom_type_propagator_apply_op(loom_type_propagator_t* propagator,
                                             loom_rewriter_t* rewriter,
                                             loom_op_t* op, bool* out_changed) {
-  IREE_ASSERT_ARGUMENT(propagator);
-  IREE_ASSERT_ARGUMENT(rewriter);
-  IREE_ASSERT_ARGUMENT(op);
-  IREE_ASSERT_ARGUMENT(out_changed);
   IREE_ASSERT(loom_local_value_domain_is_acquired(&propagator->value_domain));
   *out_changed = false;
   loom_type_propagator_next_transaction(propagator);

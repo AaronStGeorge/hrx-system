@@ -606,9 +606,6 @@ bool loom_contract_request_from_vector_dot_op(
     const loom_module_t* module, const loom_op_t* op,
     loom_lowering_policy_t policy, loom_contract_request_t* out_request,
     loom_contract_diagnostic_t* out_diagnostic) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(op);
-  IREE_ASSERT_ARGUMENT(out_request);
   loom_contract_request_initialize(out_request);
   if (out_diagnostic) {
     *out_diagnostic = (loom_contract_diagnostic_t){0};
@@ -631,9 +628,6 @@ bool loom_contract_request_from_vector_mma_op(
     const loom_op_t* op, const loom_contract_vector_mma_options_t* options,
     loom_contract_request_t* out_request,
     loom_contract_diagnostic_t* out_diagnostic) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(op);
-  IREE_ASSERT_ARGUMENT(out_request);
   loom_contract_request_initialize(out_request);
   if (out_diagnostic) {
     *out_diagnostic = (loom_contract_diagnostic_t){0};

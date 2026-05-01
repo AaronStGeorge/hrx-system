@@ -60,7 +60,6 @@ static const loom_pass_trait_name_t kLoomPassTraitNames[] = {
 
 bool loom_pass_predicate_lookup_trait(iree_string_view_t name,
                                       loom_trait_flags_t* out_trait_flags) {
-  IREE_ASSERT_ARGUMENT(out_trait_flags);
   *out_trait_flags = 0;
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kLoomPassTraitNames); ++i) {
     if (iree_string_view_equal(kLoomPassTraitNames[i].name, name)) {

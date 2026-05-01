@@ -114,11 +114,6 @@ iree_status_t loom_type_refine_with_value_facts(
     loom_type_t current_type, const loom_value_fact_table_t* fact_table,
     iree_arena_allocator_t* arena, loom_type_t* out_type,
     loom_type_refinement_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(fact_table);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_type);
-  IREE_ASSERT_ARGUMENT(out_result);
-
   loom_type_t refined_type = current_type;
   loom_type_refinement_result_t result = LOOM_TYPE_REFINEMENT_UNCHANGED;
 

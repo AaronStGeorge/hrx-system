@@ -48,11 +48,7 @@ iree_status_t loom_view_region_table_initialize(
     loom_value_fact_table_t* fact_table,
     const loom_local_value_domain_t* value_domain,
     iree_arena_allocator_t* arena, loom_view_region_table_t* out_table) {
-  IREE_ASSERT_ARGUMENT(fact_table);
-  IREE_ASSERT_ARGUMENT(value_domain);
   IREE_ASSERT(loom_local_value_domain_is_acquired(value_domain));
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_table);
   memset(out_table, 0, sizeof(*out_table));
   out_table->module = value_domain->module;
   out_table->fact_table = fact_table;
@@ -700,10 +696,6 @@ static iree_status_t loom_view_region_build_for_value(
 iree_status_t loom_view_region_table_get(
     loom_view_region_table_t* table, loom_value_id_t value_id,
     const loom_view_region_t** out_region) {
-  IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(out_region);
-  IREE_ASSERT_ARGUMENT(table->module);
-  IREE_ASSERT_ARGUMENT(table->value_domain);
   IREE_ASSERT(value_id < table->module->values.count);
   *out_region = NULL;
   const loom_value_ordinal_t value_ordinal =
@@ -826,8 +818,6 @@ static iree_status_t loom_view_region_table_analyze_region(
 }
 
 iree_status_t loom_view_region_table_analyze(loom_view_region_table_t* table) {
-  IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(table->value_domain);
   return loom_view_region_table_analyze_region(table,
                                                table->value_domain->region);
 }

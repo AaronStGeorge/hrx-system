@@ -108,8 +108,6 @@ bool loom_contract_operand_preparation_select(
     const loom_contract_operand_preparation_options_t* options,
     loom_contract_operand_preparation_t* out_preparation,
     loom_contract_preparation_diagnostic_t* out_diagnostic) {
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(out_preparation);
   *out_preparation = (loom_contract_operand_preparation_t){0};
   if (out_diagnostic) {
     *out_diagnostic = (loom_contract_preparation_diagnostic_t){0};
