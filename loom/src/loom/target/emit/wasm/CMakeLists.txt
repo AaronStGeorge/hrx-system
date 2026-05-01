@@ -89,14 +89,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::src::loom::codegen::low::lower
-    loom::src::loom::codegen::low::source_memory_plan
     loom::src::loom::ir
-    loom::src::loom::ops::buffer
-    loom::src::loom::ops::combining
-    loom::src::loom::ops::index
-    loom::src::loom::ops::low
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::vector
     loom::src::loom::target::arch::wasm::descriptors_ids
     loom::src::loom::target::emit::wasm::contracts::core_simd128
     loom::src::loom::target::emit::wasm::contracts::core_simd128_lower_rules

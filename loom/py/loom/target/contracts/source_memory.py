@@ -56,11 +56,20 @@ class SourceMemoryDynamicIndexSource(Enum):
     WORKGROUP_ID = "workgroup_id"
 
 
+@unique
+class SourceMemoryRootKind(Enum):
+    """Source provenance required for the root memory value."""
+
+    ANY = "any"
+    BLOCK_ARGUMENT = "block_argument"
+
+
 @dataclass(frozen=True, slots=True)
 class SourceMemoryConstraint:
     """Target-independent memory-access shape required by an emit row."""
 
     operation: SourceMemoryOperation
+    root_kind: SourceMemoryRootKind
     memory_spaces: tuple[str, ...]
     element_byte_count: int
     vector_lane_count: int
@@ -71,6 +80,7 @@ class SourceMemoryConstraint:
         SourceMemoryDynamicIndexSource.NONE
     )
     dynamic_byte_stride: int = 0
+    dynamic_offset_unsigned_bit_count: int = 0
     cache_policy_build_flags: int = 0
     diagnostic: GuardDiagnostic | None = None
 
@@ -78,6 +88,7 @@ class SourceMemoryConstraint:
         self,
         *,
         operation: SourceMemoryOperation,
+        root_kind: SourceMemoryRootKind = SourceMemoryRootKind.ANY,
         memory_spaces: Sequence[str],
         element_byte_count: int,
         vector_lane_count: int,
@@ -88,10 +99,12 @@ class SourceMemoryConstraint:
             SourceMemoryDynamicIndexSource.NONE
         ),
         dynamic_byte_stride: int = 0,
+        dynamic_offset_unsigned_bit_count: int = 0,
         cache_policy_build_flags: int = 0,
         diagnostic: GuardDiagnostic | None = None,
     ) -> None:
         object.__setattr__(self, "operation", operation)
+        object.__setattr__(self, "root_kind", root_kind)
         object.__setattr__(self, "memory_spaces", tuple(memory_spaces))
         object.__setattr__(self, "element_byte_count", element_byte_count)
         object.__setattr__(self, "vector_lane_count", vector_lane_count)
@@ -100,11 +113,18 @@ class SourceMemoryConstraint:
         object.__setattr__(self, "dynamic_term_count", dynamic_term_count)
         object.__setattr__(self, "dynamic_index_source", dynamic_index_source)
         object.__setattr__(self, "dynamic_byte_stride", dynamic_byte_stride)
+        object.__setattr__(
+            self,
+            "dynamic_offset_unsigned_bit_count",
+            dynamic_offset_unsigned_bit_count,
+        )
         object.__setattr__(self, "cache_policy_build_flags", cache_policy_build_flags)
         object.__setattr__(self, "diagnostic", diagnostic)
         self._validate_shape()
 
     def _validate_shape(self) -> None:
+        if not isinstance(self.root_kind, SourceMemoryRootKind):
+            raise ValueError("source memory root kind must be a SourceMemoryRootKind")
         if not self.memory_spaces:
             raise ValueError("source memory constraint needs a memory space")
         for memory_space in self.memory_spaces:
@@ -137,6 +157,10 @@ class SourceMemoryConstraint:
             raise ValueError("dynamic source memory stride must be non-zero")
         if not _I64_MIN <= self.dynamic_byte_stride <= _I64_MAX:
             raise ValueError("source memory dynamic byte stride must fit in i64")
+        if not 0 <= self.dynamic_offset_unsigned_bit_count <= 64:
+            raise ValueError(
+                "source memory dynamic offset unsigned bit count must fit in u8"
+            )
         if not 0 <= self.cache_policy_build_flags <= _U32_MAX:
             raise ValueError("source memory cache policy flags must fit in u32")
 

@@ -35,6 +35,7 @@ from loom.target.contracts import (
     LowerValueRef,
     SourceMemoryDynamicIndexSource,
     SourceMemoryOperation,
+    SourceMemoryRootKind,
     SourceValueKind,
     TypePattern,
     compile_lower_rule_set,
@@ -136,6 +137,11 @@ _SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_C_NAMES = {
     SourceMemoryDynamicIndexSource.VALUE: "LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE",
     SourceMemoryDynamicIndexSource.WORKITEM_ID: "LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID",
     SourceMemoryDynamicIndexSource.WORKGROUP_ID: "LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID",
+}
+
+_SOURCE_MEMORY_ROOT_KIND_C_NAMES = {
+    SourceMemoryRootKind.ANY: "LOOM_LOW_LOWER_SOURCE_MEMORY_ROOT_ANY",
+    SourceMemoryRootKind.BLOCK_ARGUMENT: "LOOM_LOW_LOWER_SOURCE_MEMORY_ROOT_BLOCK_ARGUMENT",
 }
 
 _SOURCE_MEMORY_SPACE_C_NAMES = {
@@ -448,6 +454,12 @@ def _source_memory_row(row: LowerSourceMemory) -> list[str]:
     )
     _append_field(
         fields,
+        "root_kind",
+        _SOURCE_MEMORY_ROOT_KIND_C_NAMES[constraint.root_kind],
+        default="LOOM_LOW_LOWER_SOURCE_MEMORY_ROOT_ANY",
+    )
+    _append_field(
+        fields,
         "memory_space_mask",
         _source_memory_space_mask(constraint.memory_spaces),
         always=True,
@@ -484,6 +496,11 @@ def _source_memory_row(row: LowerSourceMemory) -> list[str]:
         default="LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_NONE",
     )
     _append_field(fields, "dynamic_byte_stride", constraint.dynamic_byte_stride)
+    _append_field(
+        fields,
+        "dynamic_offset_unsigned_bit_count",
+        constraint.dynamic_offset_unsigned_bit_count,
+    )
     _append_field(
         fields,
         "cache_policy_build_flags",

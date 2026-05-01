@@ -210,6 +210,13 @@ typedef struct loom_low_lower_diagnostic_t {
 
 typedef uint16_t loom_low_lower_source_memory_space_mask_t;
 
+typedef enum loom_low_lower_source_memory_root_kind_e {
+  // Root memory value may have any source provenance.
+  LOOM_LOW_LOWER_SOURCE_MEMORY_ROOT_ANY = 0,
+  // Root memory value must be a source function block argument.
+  LOOM_LOW_LOWER_SOURCE_MEMORY_ROOT_BLOCK_ARGUMENT = 1,
+} loom_low_lower_source_memory_root_kind_t;
+
 #define LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_UNKNOWN \
   ((loom_low_lower_source_memory_space_mask_t)1u   \
    << LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN)
@@ -238,6 +245,8 @@ typedef uint16_t loom_low_lower_source_memory_space_mask_t;
 typedef struct loom_low_lower_source_memory_t {
   // Source memory operation category required by this row.
   loom_low_source_memory_operation_kind_t operation_kind;
+  // Source provenance required for the root memory value.
+  loom_low_lower_source_memory_root_kind_t root_kind;
   // Accepted target-independent source memory spaces.
   loom_low_lower_source_memory_space_mask_t memory_space_mask;
   // Required byte count of one addressed view element.
@@ -254,6 +263,8 @@ typedef struct loom_low_lower_source_memory_t {
   loom_low_source_memory_dynamic_index_source_t dynamic_index_source;
   // Required byte stride for each dynamic address term.
   int64_t dynamic_byte_stride;
+  // Required unsigned dynamic byte offset bit width, or zero if unconstrained.
+  uint8_t dynamic_offset_unsigned_bit_count;
   // Required source cache-policy build flags.
   uint32_t cache_policy_build_flags;
   // Diagnostic table row emitted when this source-memory row rejects.

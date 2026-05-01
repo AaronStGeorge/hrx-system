@@ -30,6 +30,7 @@ loom_target_table_cc_library(
     "--contract-fragment=wasm.core.simd128"
   DEPS
     loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::buffer
     loom::src::loom::ops::index
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector

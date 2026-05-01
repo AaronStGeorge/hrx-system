@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from loom.dialect.buffer import ALL_BUFFER_OPS
+from loom.dialect.buffer import defs as buffer
 from loom.dialect.index import ALL_INDEX_OPS
 from loom.dialect.index import defs as index
 from loom.dialect.scalar import ALL_SCALAR_OPS
@@ -28,7 +30,12 @@ from loom.target.contracts import (
     Guard,
     GuardDiagnostic,
     Scalar,
+    SourceMemoryConstraint,
+    SourceMemoryDynamicIndexSource,
+    SourceMemoryOperation,
+    SourceMemoryRootKind,
     TypePattern,
+    ValueAliasRule,
     ValueRef,
     Vector,
     descriptor_by_key,
@@ -86,6 +93,19 @@ _I32_CONSTANT_RANGE_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="attr",
     subject_name="value",
     reason="Wasm i32 constants must fit in signed i32",
+)
+_ZERO_BUFFER_VIEW_OFFSET_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="value",
+    subject_name="byte_offset",
+    reason="Wasm lowering requires zero-offset buffer views",
+)
+_SOURCE_MEMORY_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="source-memory",
+    subject_name="wasm",
+    reason=(
+        "Wasm SIMD memory lowering requires a contiguous 4-lane zero-offset "
+        "linear memory access with an ABI argument base"
+    ),
 )
 
 
@@ -349,7 +369,146 @@ def _shuffle_rule(type_pattern: TypePattern) -> DescriptorRule:
     )
 
 
+def _buffer_view_rule() -> ValueAliasRule:
+    return ValueAliasRule(
+        source_op=buffer.buffer_view,
+        source=ValueRef.operand("buffer"),
+        result=ValueRef.result("result"),
+        guards=(
+            Guard.value_i64_range(
+                "byte_offset",
+                0,
+                0,
+                diagnostic=_ZERO_BUFFER_VIEW_OFFSET_DIAGNOSTIC,
+            ),
+        ),
+    )
+
+
+def _source_memory_constraint(
+    operation: SourceMemoryOperation,
+    *,
+    dynamic: bool,
+) -> SourceMemoryConstraint:
+    return SourceMemoryConstraint(
+        operation=operation,
+        root_kind=SourceMemoryRootKind.BLOCK_ARGUMENT,
+        memory_spaces=("unknown", "generic", "global"),
+        element_byte_count=4,
+        vector_lane_count=4,
+        vector_lane_byte_stride=4,
+        static_byte_offset=0,
+        dynamic_term_count=1 if dynamic else 0,
+        dynamic_index_source=(
+            SourceMemoryDynamicIndexSource.VALUE
+            if dynamic
+            else SourceMemoryDynamicIndexSource.NONE
+        ),
+        dynamic_byte_stride=4 if dynamic else 0,
+        dynamic_offset_unsigned_bit_count=32 if dynamic else 0,
+        diagnostic=_SOURCE_MEMORY_DIAGNOSTIC,
+    )
+
+
+def _dynamic_address_emits() -> tuple[EmitDescriptorOp, ...]:
+    stride = ValueRef.temporary("stride")
+    offset = ValueRef.temporary("offset")
+    address = ValueRef.temporary("address")
+    return (
+        EmitDescriptorOp(
+            descriptor=_descriptor("wasm.i32.const"),
+            results={"dst": stride},
+            result_types={"dst": _I32},
+            immediates={"i32_value": 4},
+            form=DescriptorEmitForm.CONST,
+        ),
+        EmitDescriptorOp(
+            descriptor=_descriptor("wasm.i32.mul"),
+            operands={
+                "lhs": ValueRef.operand("indices"),
+                "rhs": stride,
+            },
+            results={"dst": offset},
+            result_types={"dst": _I32},
+        ),
+        EmitDescriptorOp(
+            descriptor=_descriptor("wasm.i32.add"),
+            operands={
+                "lhs": ValueRef.operand("view"),
+                "rhs": offset,
+            },
+            results={"dst": address},
+            result_types={"dst": _I32},
+        ),
+    )
+
+
+def _memory_address_ref(dynamic: bool) -> ValueRef:
+    if dynamic:
+        return ValueRef.temporary("address")
+    return ValueRef.operand("view")
+
+
+def _vector_load_rule(
+    result_type: TypePattern,
+    *,
+    dynamic: bool,
+) -> DescriptorRule:
+    descriptor = _descriptor("wasm.v128.load")
+    memory_emit = EmitDescriptorOp(
+        descriptor=descriptor,
+        operands={"address": _memory_address_ref(dynamic)},
+        results={"dst": ValueRef.result("result")},
+        source_memory=_source_memory_constraint(
+            SourceMemoryOperation.LOAD,
+            dynamic=dynamic,
+        ),
+        form=DescriptorEmitForm.OP,
+    )
+    emits = (*_dynamic_address_emits(), memory_emit) if dynamic else (memory_emit,)
+    return DescriptorRule(
+        source_op=vector.vector_load,
+        descriptor=descriptor,
+        guards=(
+            Guard.operand_segment_count("indices", 1 if dynamic else 0),
+            _value_type("result", result_type),
+        ),
+        emit=emits,
+    )
+
+
+def _vector_store_rule(
+    value_type: TypePattern,
+    *,
+    dynamic: bool,
+) -> DescriptorRule:
+    descriptor = _descriptor("wasm.v128.store")
+    memory_emit = EmitDescriptorOp(
+        descriptor=descriptor,
+        operands={
+            "address": _memory_address_ref(dynamic),
+            "value": ValueRef.operand("value"),
+        },
+        source_memory=_source_memory_constraint(
+            SourceMemoryOperation.STORE,
+            dynamic=dynamic,
+        ),
+        form=DescriptorEmitForm.OP,
+    )
+    emits = (*_dynamic_address_emits(), memory_emit) if dynamic else (memory_emit,)
+    return DescriptorRule(
+        source_op=vector.vector_store,
+        descriptor=descriptor,
+        guards=(
+            Guard.operand_segment_count("indices", 1 if dynamic else 0),
+            _value_type("value", value_type),
+        ),
+        emit=emits,
+    )
+
+
 WASM_CORE_SIMD128_CONTRACT_DIALECT_OPS = {
+    "buffer": ALL_BUFFER_OPS,
     "index": ALL_INDEX_OPS,
     "scalar": ALL_SCALAR_OPS,
     "vector": ALL_VECTOR_OPS,
@@ -359,6 +518,7 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
     name="wasm.core.simd128",
     descriptor_set=WASM_CORE_SIMD128_DESCRIPTOR_SET,
     cases=(
+        _buffer_view_rule(),
         _binary_rule(scalar_arithmetic.scalar_addi, _I32, "wasm.i32.add"),
         _binary_rule(scalar_arithmetic.scalar_subi, _I32, "wasm.i32.sub"),
         _binary_rule(scalar_arithmetic.scalar_addf, _F32, "wasm.f32.add"),
@@ -400,6 +560,14 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
         _shuffle_rule(_V4I32),
         _shuffle_rule(_V4F32),
         _shuffle_rule(_V4I1),
+        _vector_load_rule(_V4I32, dynamic=False),
+        _vector_load_rule(_V4F32, dynamic=False),
+        _vector_load_rule(_V4I32, dynamic=True),
+        _vector_load_rule(_V4F32, dynamic=True),
+        _vector_store_rule(_V4I32, dynamic=False),
+        _vector_store_rule(_V4F32, dynamic=False),
+        _vector_store_rule(_V4I32, dynamic=True),
+        _vector_store_rule(_V4F32, dynamic=True),
         *reduction_descriptor_rules(
             vector.vector_reduce,
             (

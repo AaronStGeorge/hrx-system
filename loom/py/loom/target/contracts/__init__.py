@@ -65,6 +65,7 @@ from loom.target.contracts.source_memory import (
     SourceMemoryConstraint,
     SourceMemoryDynamicIndexSource,
     SourceMemoryOperation,
+    SourceMemoryRootKind,
 )
 from loom.target.contracts.templates import (
     DirectDescriptorCase,
@@ -125,6 +126,7 @@ __all__ = [
     "SourceMemoryConstraint",
     "SourceMemoryDynamicIndexSource",
     "SourceMemoryOperation",
+    "SourceMemoryRootKind",
     "TypePattern",
     "ValueAliasRule",
     "ValueElideRule",
