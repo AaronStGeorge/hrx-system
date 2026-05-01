@@ -88,27 +88,12 @@ enum loom_amdgpu_arithmetic_materializer_e {
   LOOM_AMDGPU_ARITHMETIC_MATERIALIZER_ADDRESS_VGPR = 1,
 };
 
-static bool loom_amdgpu_arithmetic_can_materialize_address_vgpr(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t source_value_id) {
-  (void)source_op;
-  return loom_amdgpu_value_can_materialize_as_vgpr_address(context,
-                                                           source_value_id);
-}
-
-static iree_status_t loom_amdgpu_arithmetic_materialize_address_vgpr(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t source_value_id, loom_value_id_t* out_low_value_id) {
-  return loom_amdgpu_lookup_or_materialize_vgpr_address(
-      context, source_op, source_value_id, out_low_value_id);
-}
-
 static const loom_low_lower_value_materializer_t
     kAmdgpuArithmeticMaterializers[] = {
         {
             .can_materialize =
-                loom_amdgpu_arithmetic_can_materialize_address_vgpr,
-            .materialize = loom_amdgpu_arithmetic_materialize_address_vgpr,
+                loom_amdgpu_value_can_materialize_as_vgpr_address,
+            .materialize = loom_amdgpu_lookup_or_materialize_vgpr_address,
         },
 };
 

@@ -75,8 +75,7 @@ typedef enum loom_low_lower_value_ref_kind_e {
 // value without emitting IR. Selection uses this to keep diagnostics tied to
 // the same value-ref row consumed during emission.
 typedef bool (*loom_low_lower_can_materialize_value_fn_t)(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t source_value_id);
+    loom_low_lower_context_t* context, loom_value_id_t source_value_id);
 
 // Emits or returns the low value consumed by a descriptor operand for the
 // source value. The callback only runs when a value-ref row explicitly names

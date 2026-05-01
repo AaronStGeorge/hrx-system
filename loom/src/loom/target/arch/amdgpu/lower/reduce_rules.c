@@ -64,26 +64,11 @@ enum loom_amdgpu_reduce_materializer_e {
   LOOM_AMDGPU_REDUCE_MATERIALIZER_I32_VGPR = 1,
 };
 
-static bool loom_amdgpu_reduce_can_materialize_i32_vgpr(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t source_value_id) {
-  (void)source_op;
-  return loom_amdgpu_value_can_materialize_as_vgpr_i32(context,
-                                                       source_value_id);
-}
-
-static iree_status_t loom_amdgpu_reduce_materialize_i32_vgpr(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t source_value_id, loom_value_id_t* out_low_value_id) {
-  return loom_amdgpu_lookup_or_materialize_vgpr_i32(
-      context, source_op, source_value_id, out_low_value_id);
-}
-
 static const loom_low_lower_value_materializer_t kAmdgpuReduceMaterializers[] =
     {
         {
-            .can_materialize = loom_amdgpu_reduce_can_materialize_i32_vgpr,
-            .materialize = loom_amdgpu_reduce_materialize_i32_vgpr,
+            .can_materialize = loom_amdgpu_value_can_materialize_as_vgpr_i32,
+            .materialize = loom_amdgpu_lookup_or_materialize_vgpr_i32,
         },
 };
 

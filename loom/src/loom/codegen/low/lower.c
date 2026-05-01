@@ -674,8 +674,7 @@ static bool loom_low_lower_contract_query_can_materialize(
       (uint16_t)(value_ref->materializer_index - 1);
   const loom_low_lower_value_materializer_t* materializer =
       &rule_set->materializers[materializer_index];
-  return materializer->can_materialize(state->context, source_op,
-                                       source_value_id);
+  return materializer->can_materialize(state->context, source_value_id);
 }
 
 static iree_status_t loom_low_lower_query_target_contract_from_context(

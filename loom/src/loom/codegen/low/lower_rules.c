@@ -651,7 +651,7 @@ static bool loom_low_lower_rule_match_can_materialize_from_lowering(
       &rule_set->value_refs[value_ref_index];
   const loom_low_lower_value_materializer_t* materializer =
       loom_low_lower_rule_value_materializer(rule_set, value_ref);
-  return materializer->can_materialize(context, source_op, source_value_id);
+  return materializer->can_materialize(context, source_value_id);
 }
 
 static loom_low_lower_rule_match_context_t
