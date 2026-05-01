@@ -30,16 +30,6 @@ iree_status_t loom_run_session_initialize(
       .host_allocator = options->host_allocator,
   };
 
-  if (options->register_context.fn == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "loom run context registration is required");
-  }
-  if (options->initialize_low_descriptor_registry.fn == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "loom run low descriptor registry initialization is required");
-  }
-
   const iree_host_size_t block_pool_block_size =
       options->block_pool_block_size == 0
           ? LOOM_RUN_DEFAULT_BLOCK_POOL_BLOCK_SIZE

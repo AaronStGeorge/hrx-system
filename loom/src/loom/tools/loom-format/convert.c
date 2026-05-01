@@ -232,19 +232,7 @@ iree_status_t loom_format_convert(iree_const_byte_span_t input,
                                   const loom_format_convert_options_t* options,
                                   loom_format_output_t* out_output,
                                   iree_allocator_t allocator) {
-  if (out_output == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "output storage is required");
-  }
   *out_output = (loom_format_output_t){0};
-  if (context == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "context is required");
-  }
-  if (block_pool == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "block pool is required");
-  }
 
   loom_format_convert_options_t resolved_options = {
       .input_format = LOOM_MODULE_FORMAT_AUTO,

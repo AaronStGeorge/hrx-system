@@ -157,10 +157,6 @@ iree_status_t loom_check_diagnostic_capture_sink(
 
 iree_status_t loom_check_context_initialize(
     const loom_check_environment_t* environment, loom_context_t* context) {
-  if (environment == NULL || environment->register_context.fn == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "loom-check context registration is required");
-  }
   IREE_RETURN_IF_ERROR(environment->register_context.fn(
       environment->register_context.user_data, context));
   return loom_context_finalize(context);
@@ -169,16 +165,7 @@ iree_status_t loom_check_context_initialize(
 iree_status_t loom_check_environment_initialize_low_descriptor_registry(
     const loom_check_environment_t* environment,
     loom_target_low_descriptor_registry_t* out_registry) {
-  if (out_registry == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor registry output is required");
-  }
   *out_registry = (loom_target_low_descriptor_registry_t){0};
-  if (environment == NULL ||
-      environment->initialize_low_descriptor_registry.fn == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "loom-check low descriptor registry is required");
-  }
   return environment->initialize_low_descriptor_registry.fn(
       environment->initialize_low_descriptor_registry.user_data, out_registry);
 }
@@ -186,16 +173,7 @@ iree_status_t loom_check_environment_initialize_low_descriptor_registry(
 iree_status_t loom_check_environment_initialize_low_lower_policy_registry(
     const loom_check_environment_t* environment,
     loom_low_lower_policy_registry_t* out_registry) {
-  if (out_registry == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low lower policy registry output is required");
-  }
   *out_registry = (loom_low_lower_policy_registry_t){0};
-  if (environment == NULL ||
-      environment->initialize_low_lower_policy_registry.fn == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "loom-check low lower policy registry is required");
-  }
   return environment->initialize_low_lower_policy_registry.fn(
       environment->initialize_low_lower_policy_registry.user_data,
       out_registry);

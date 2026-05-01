@@ -127,9 +127,6 @@ static iree_string_view_t loom_pass_tool_trim_symbol_sigils(
 iree_status_t loom_pass_tool_run_pipeline_symbol(
     loom_module_t* module, iree_string_view_t pipeline_symbol,
     const loom_pass_tool_run_options_t* options) {
-  if (!module) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "module is required");
-  }
   IREE_RETURN_IF_ERROR(loom_pass_tool_verify_options(options));
 
   iree_string_view_t name = loom_pass_tool_trim_symbol_sigils(pipeline_symbol);
@@ -462,9 +459,6 @@ static iree_status_t loom_pass_tool_build_synthetic_pipeline(
 iree_status_t loom_pass_tool_run_flat_pipeline(
     loom_module_t* module, iree_string_view_t pipeline,
     const loom_pass_tool_run_options_t* options) {
-  if (!module) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "module is required");
-  }
   IREE_RETURN_IF_ERROR(loom_pass_tool_verify_options(options));
 
   loom_module_t* pipeline_module = NULL;

@@ -338,11 +338,6 @@ iree_status_t loom_check_low_emit_packetize_function(
     const loom_check_low_emit_fixed_value_spec_t* allocation_fixed_specs,
     iree_host_size_t allocation_fixed_spec_count,
     loom_low_emission_frame_t* out_frame) {
-  if (request->low_registry == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low emit descriptor registry is required");
-  }
-
   loom_op_t* low_function = NULL;
   IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
       request->module, function_symbol_name, &low_function));
