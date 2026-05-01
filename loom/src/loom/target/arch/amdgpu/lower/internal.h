@@ -245,24 +245,6 @@ bool loom_amdgpu_value_as_address_constant(loom_low_lower_context_t* context,
                                            loom_value_id_t value_id,
                                            int64_t* out_value);
 
-// Target-local rule table for regular arithmetic source ops.
-extern const loom_low_lower_rule_set_t loom_amdgpu_arithmetic_lower_rule_set;
-
-// Target-local rule table for scalar integer and index arithmetic source ops.
-extern const loom_low_lower_rule_set_t loom_amdgpu_integer_lower_rule_set;
-
-// Target-local rule table for scalar comparison source ops.
-extern const loom_low_lower_rule_set_t loom_amdgpu_compare_lower_rule_set;
-
-// Target-local rule table for vector dot source ops.
-extern const loom_low_lower_rule_set_t loom_amdgpu_dot_lower_rule_set;
-
-// Target-local rule table for vector reduce source ops.
-extern const loom_low_lower_rule_set_t loom_amdgpu_reduce_lower_rule_set;
-
-// Target-local rule table for source-level async group/wait sequencing ops.
-extern const loom_low_lower_rule_set_t loom_amdgpu_async_lower_rule_set;
-
 // Returns the exact wavefront size selected by the active target bundle.
 iree_status_t loom_amdgpu_target_wavefront_size(
     const loom_target_bundle_t* bundle, uint32_t* out_wavefront_size);
