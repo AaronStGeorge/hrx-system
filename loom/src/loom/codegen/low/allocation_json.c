@@ -305,8 +305,6 @@ static iree_status_t loom_low_allocation_json_write_copy_decision(
 
 iree_status_t loom_low_allocation_format_json(
     const loom_low_allocation_table_t* table, iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(builder);
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));

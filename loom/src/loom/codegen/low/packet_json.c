@@ -833,9 +833,6 @@ iree_status_t loom_low_packet_format_json(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
     iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(schedule);
-  IREE_ASSERT_ARGUMENT(allocation);
-  IREE_ASSERT_ARGUMENT(builder);
   IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(schedule, allocation));
 
   loom_low_allocation_value_scratch_t value_scratch = {0};

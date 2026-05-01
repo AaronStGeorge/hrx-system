@@ -111,7 +111,6 @@ loom_low_descriptor_registry_descriptor_set_at_trusted(
 
 const loom_low_descriptor_set_t* loom_low_descriptor_registry_lookup(
     const loom_low_descriptor_registry_t* registry, iree_string_view_t key) {
-  IREE_ASSERT_ARGUMENT(registry);
   iree_host_size_t descriptor_set_count =
       loom_low_descriptor_registry_descriptor_set_count(registry);
   for (iree_host_size_t i = 0; i < descriptor_set_count; ++i) {
@@ -129,7 +128,6 @@ const loom_low_descriptor_set_t* loom_low_descriptor_registry_lookup(
 
 const loom_low_descriptor_set_t* loom_low_descriptor_registry_lookup_by_id(
     const loom_low_descriptor_registry_t* registry, uint64_t stable_id) {
-  IREE_ASSERT_ARGUMENT(registry);
   iree_host_size_t descriptor_set_count =
       loom_low_descriptor_registry_descriptor_set_count(registry);
   for (iree_host_size_t i = 0; i < descriptor_set_count; ++i) {
@@ -146,7 +144,6 @@ const loom_low_descriptor_set_t* loom_low_descriptor_registry_lookup_by_id(
 iree_string_view_t loom_low_descriptor_set_string(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_bstring_table_offset_t string_offset) {
-  IREE_ASSERT_ARGUMENT(descriptor_set);
   return loom_low_descriptor_set_string_view(descriptor_set, string_offset);
 }
 
@@ -173,7 +170,6 @@ const loom_low_asm_form_t* loom_low_descriptor_set_asm_form_at(
 uint32_t loom_low_descriptor_set_lookup_canonical_asm_form(
     const loom_low_descriptor_set_t* descriptor_set,
     uint32_t descriptor_ordinal) {
-  IREE_ASSERT_ARGUMENT(descriptor_set);
   if (descriptor_ordinal >= descriptor_set->descriptor_count) {
     return LOOM_LOW_ASM_FORM_ORDINAL_NONE;
   }
@@ -188,7 +184,6 @@ uint32_t loom_low_descriptor_set_lookup_canonical_asm_form(
 
 uint32_t loom_low_descriptor_set_lookup_descriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
-  IREE_ASSERT_ARGUMENT(descriptor_set);
   uint32_t low = 0;
   uint32_t high = descriptor_set->descriptor_ref_count;
   while (low < high) {
@@ -212,8 +207,6 @@ uint32_t loom_low_descriptor_set_lookup_descriptor(
 
 uint32_t loom_low_descriptor_set_lookup_descriptor_by_id(
     const loom_low_descriptor_set_t* descriptor_set, uint64_t stable_id) {
-  IREE_ASSERT_ARGUMENT(descriptor_set);
-
   uint32_t low = 0;
   uint32_t high = descriptor_set->descriptor_id_ref_count;
   while (low < high) {
@@ -235,7 +228,6 @@ uint32_t loom_low_descriptor_set_lookup_descriptor_by_id(
 uint32_t loom_low_descriptor_set_lookup_asm_form(
     const loom_low_descriptor_set_t* descriptor_set,
     iree_string_view_t mnemonic) {
-  IREE_ASSERT_ARGUMENT(descriptor_set);
   uint32_t low = 0;
   uint32_t high = descriptor_set->asm_form_count;
   while (low < high) {

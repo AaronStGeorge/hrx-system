@@ -1053,7 +1053,6 @@ static iree_status_t loom_low_verify_descriptor_operand_part_mask(
 static iree_status_t loom_low_verify_format_resource_unit_count_reason(
     loom_low_function_verify_state_t* function_state, uint32_t unit_count,
     uint16_t physical_count, iree_string_view_t* out_reason) {
-  IREE_ASSERT_ARGUMENT(out_reason);
   char scratch[128];
   int length = iree_snprintf(scratch, sizeof(scratch),
                              "register class has %" PRIu16
@@ -1586,9 +1585,6 @@ static iree_status_t loom_low_verify_function(loom_low_verify_state_t* state,
 iree_status_t loom_low_verify_module(const loom_module_t* module,
                                      const loom_low_verify_options_t* options,
                                      loom_low_verify_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(out_result);
   if (options->descriptor_registry == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor registry is required");
