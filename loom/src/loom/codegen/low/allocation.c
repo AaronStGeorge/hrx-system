@@ -1098,8 +1098,6 @@ static bool loom_low_allocation_unit_storage_classes_equal(
 static iree_status_t loom_low_allocation_assignment_unit_location(
     const loom_low_allocation_assignment_t* assignment, uint32_t unit_index,
     loom_low_allocation_unit_location_t* out_location) {
-  IREE_ASSERT_ARGUMENT(assignment);
-  IREE_ASSERT_ARGUMENT(out_location);
   if (unit_index >= assignment->location_count) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "allocation unit index exceeds assignment range");
@@ -1141,7 +1139,6 @@ static bool loom_low_allocation_value_ordinal_for_value(
 static iree_status_t loom_low_allocation_assignment_index_for_value(
     const loom_low_allocation_build_state_t* state, loom_value_id_t value_id,
     uint32_t* out_assignment_index) {
-  IREE_ASSERT_ARGUMENT(out_assignment_index);
   loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
   if (loom_low_allocation_value_ordinal_for_value(state, value_id,
                                                   &value_ordinal)) {
@@ -1185,7 +1182,6 @@ static iree_status_t loom_low_allocation_value_ordinal_for_interval(
     const loom_low_allocation_build_state_t* state,
     const loom_liveness_interval_t* interval,
     loom_value_ordinal_t* out_value_ordinal) {
-  IREE_ASSERT_ARGUMENT(out_value_ordinal);
   loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
   if (!loom_low_allocation_value_ordinal_for_value(state, interval->value_id,
                                                    &value_ordinal)) {
@@ -1265,7 +1261,6 @@ static iree_status_t loom_low_allocation_append_assignment(
     loom_low_allocation_build_state_t* state,
     const loom_low_allocation_assignment_t* assignment,
     uint32_t* out_assignment_index) {
-  IREE_ASSERT_ARGUMENT(assignment);
   if (state->assignment_count >= UINT32_MAX) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "allocation table exceeds uint32_t range");
@@ -1813,8 +1808,6 @@ static iree_status_t loom_low_allocation_record_copy_decisions(
 static iree_status_t loom_low_allocation_count_edge_copy_groups(
     const loom_region_t* body, iree_host_size_t* out_group_count,
     iree_host_size_t* out_copy_count) {
-  IREE_ASSERT_ARGUMENT(out_group_count);
-  IREE_ASSERT_ARGUMENT(out_copy_count);
   *out_group_count = 0;
   *out_copy_count = 0;
   loom_block_t* block = NULL;
@@ -1843,7 +1836,6 @@ static iree_status_t loom_low_allocation_count_edge_copy_groups(
 static iree_status_t loom_low_allocation_op_program_point_in_liveness(
     const loom_liveness_analysis_t* liveness, const loom_op_t* op,
     uint32_t* out_program_point) {
-  IREE_ASSERT_ARGUMENT(out_program_point);
   *out_program_point = UINT32_MAX;
   const loom_liveness_block_info_t* block_info =
       loom_liveness_block_info_for_block(liveness, op->parent_block);
@@ -2030,7 +2022,6 @@ static iree_status_t loom_low_allocation_edge_copy_group_unit_count(
     const loom_low_allocation_build_state_t* state,
     const loom_low_allocation_edge_copy_group_t* group,
     uint32_t* out_unit_count) {
-  IREE_ASSERT_ARGUMENT(out_unit_count);
   *out_unit_count = 0;
   for (uint32_t i = 0; i < group->copy_count; ++i) {
     const loom_low_allocation_edge_copy_t* edge_copy =
@@ -2051,8 +2042,6 @@ static iree_status_t loom_low_allocation_edge_copy_group_find_destination(
     const loom_low_allocation_edge_copy_group_t* group,
     const loom_low_allocation_unit_location_t* destination, bool* out_found,
     loom_low_allocation_unit_location_t* out_source) {
-  IREE_ASSERT_ARGUMENT(out_found);
-  IREE_ASSERT_ARGUMENT(out_source);
   *out_found = false;
   *out_source = (loom_low_allocation_unit_location_t){0};
   for (uint32_t i = 0; i < group->copy_count; ++i) {
@@ -2096,7 +2085,6 @@ static iree_status_t loom_low_allocation_edge_copy_unit_starts_cycle(
     const loom_low_allocation_unit_location_t* destination,
     const loom_low_allocation_unit_location_t* source, uint32_t max_unit_count,
     bool* out_has_cycle) {
-  IREE_ASSERT_ARGUMENT(out_has_cycle);
   *out_has_cycle = false;
   loom_low_allocation_unit_location_t next_destination = *source;
   for (uint32_t step = 0; step < max_unit_count; ++step) {
@@ -2123,7 +2111,6 @@ static iree_status_t loom_low_allocation_edge_copy_class_seen_before(
     const loom_low_allocation_edge_copy_group_t* group,
     const loom_low_allocation_unit_location_t* storage_class,
     uint32_t stop_copy_index, uint32_t stop_unit_index, bool* out_seen) {
-  IREE_ASSERT_ARGUMENT(out_seen);
   *out_seen = false;
   for (uint32_t copy_index = 0; copy_index <= stop_copy_index; ++copy_index) {
     const loom_low_allocation_edge_copy_t* edge_copy =
@@ -2154,7 +2141,6 @@ static iree_status_t loom_low_allocation_edge_copy_class_has_cycle(
     const loom_low_allocation_edge_copy_group_t* group,
     const loom_low_allocation_unit_location_t* storage_class,
     bool* out_has_cycle) {
-  IREE_ASSERT_ARGUMENT(out_has_cycle);
   *out_has_cycle = false;
   uint32_t unit_count = 0;
   IREE_RETURN_IF_ERROR(loom_low_allocation_edge_copy_group_unit_count(
@@ -2253,7 +2239,6 @@ static iree_status_t loom_low_allocation_edge_copy_group_uses_location(
     const loom_low_allocation_build_state_t* state,
     const loom_low_allocation_edge_copy_group_t* group,
     const loom_low_allocation_unit_location_t* location, bool* out_uses) {
-  IREE_ASSERT_ARGUMENT(out_uses);
   *out_uses = false;
   for (uint32_t i = 0; i < group->copy_count; ++i) {
     const loom_low_allocation_edge_copy_t* edge_copy =
@@ -2306,7 +2291,6 @@ static iree_status_t loom_low_allocation_find_edge_copy_temporary(
     const loom_low_allocation_edge_copy_group_t* group,
     const loom_low_allocation_unit_location_t* storage_class,
     loom_low_allocation_unit_location_t* out_temporary) {
-  IREE_ASSERT_ARGUMENT(out_temporary);
   *out_temporary = (loom_low_allocation_unit_location_t){0};
   if (!loom_low_allocation_location_is_register_like(
           storage_class->location_kind)) {
@@ -2675,7 +2659,6 @@ static iree_status_t loom_low_allocation_assignment_value_ordinal(
     const loom_low_allocation_table_t* table,
     const loom_low_allocation_assignment_t* assignment,
     loom_value_ordinal_t* out_value_ordinal) {
-  IREE_ASSERT_ARGUMENT(out_value_ordinal);
   const loom_value_ordinal_t value_ordinal =
       loom_module_value_ordinal_scratch_lookup(table->module,
                                                assignment->value_id);
@@ -3089,7 +3072,6 @@ static iree_status_t loom_low_allocation_verify_edge_copy_temporary(
 
 static iree_status_t loom_low_allocation_verify_table_contents(
     const loom_low_allocation_table_t* table) {
-  IREE_ASSERT_ARGUMENT(table);
   if (!table->module) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "allocation table module is required");
@@ -3307,7 +3289,6 @@ static iree_status_t loom_low_allocation_verify_table_contents(
 
 iree_status_t loom_low_allocation_verify_table(
     const loom_low_allocation_table_t* table) {
-  IREE_ASSERT_ARGUMENT(table);
   loom_low_allocation_value_scratch_t scratch = {0};
   IREE_RETURN_IF_ERROR(
       loom_low_allocation_acquire_value_scratch(table, &scratch));
@@ -3319,8 +3300,6 @@ iree_status_t loom_low_allocation_verify_table(
 iree_status_t loom_low_allocation_acquire_value_scratch(
     const loom_low_allocation_table_t* table,
     loom_low_allocation_value_scratch_t* out_scratch) {
-  IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(out_scratch);
   *out_scratch = (loom_low_allocation_value_scratch_t){
       .module = table->module,
       .table = table,
@@ -3378,7 +3357,6 @@ const loom_low_allocation_assignment_t*
 loom_low_allocation_assignment_for_value_ordinal(
     const loom_low_allocation_table_t* table,
     loom_value_ordinal_t value_ordinal, uint32_t* out_assignment_index) {
-  IREE_ASSERT_ARGUMENT(table);
   if (out_assignment_index) {
     *out_assignment_index = UINT32_MAX;
   }
@@ -3406,7 +3384,6 @@ const loom_low_allocation_assignment_t*
 loom_low_allocation_try_map_active_value_assignment(
     const loom_low_allocation_table_t* table, loom_value_id_t value_id,
     uint32_t* out_assignment_index) {
-  IREE_ASSERT_ARGUMENT(table);
   const loom_value_ordinal_t value_ordinal =
       loom_module_value_ordinal_scratch_lookup(table->module, value_id);
   if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID) {
@@ -3433,7 +3410,6 @@ loom_low_allocation_map_active_value_assignment(
 const loom_low_allocation_edge_copy_group_t*
 loom_low_allocation_find_edge_copy_group_by_source_ordinal(
     const loom_low_allocation_table_t* table, uint32_t source_ordinal) {
-  IREE_ASSERT_ARGUMENT(table);
   iree_host_size_t lower = 0;
   iree_host_size_t upper = table->edge_copy_group_count;
   while (lower < upper) {
@@ -3455,9 +3431,6 @@ iree_status_t loom_low_allocation_assignment_register_class_name(
     const loom_low_allocation_table_t* table,
     const loom_low_allocation_assignment_t* assignment,
     iree_string_view_t* out_register_class_name) {
-  IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(assignment);
-  IREE_ASSERT_ARGUMENT(out_register_class_name);
   *out_register_class_name = iree_string_view_empty();
   if (assignment->descriptor_reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
       assignment->descriptor_reg_class_id >=
@@ -3580,11 +3553,6 @@ iree_status_t loom_low_allocate_function(
     loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_allocation_options_t* options, iree_arena_allocator_t* arena,
     loom_low_allocation_table_t* out_table) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(low_func_op);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_table);
   if (!loom_low_function_def_isa(low_func_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected low.func.def or low.kernel.def");
