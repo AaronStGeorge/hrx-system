@@ -45,10 +45,6 @@ static iree_status_t loom_callable_get_whole_call(const loom_module_t* module,
 iree_status_t loom_callable_resolve_direct_callee(
     const loom_module_t* module, const loom_op_t* call_op,
     loom_func_like_t* out_callee) {
-  if (!module || !call_op || !out_callee) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "module, call op, and callee output are required");
-  }
   *out_callee = (loom_func_like_t){0};
   loom_symbol_ref_t ref = loom_symbol_ref_null();
   if (!loom_callable_get_call_symbol_ref(module, call_op, &ref)) {
@@ -446,10 +442,6 @@ static iree_status_t loom_callable_preserve_consuming_call_result_names(
 iree_status_t loom_callable_inline_call(loom_rewriter_t* rewriter,
                                         loom_op_t* call_op,
                                         loom_func_like_t callee) {
-  if (!rewriter || !rewriter->module || !call_op) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "rewriter, module, and call op are required");
-  }
   if (!call_op->parent_block ||
       iree_any_bit_set(call_op->flags, LOOM_OP_FLAG_DEAD)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
@@ -505,10 +497,6 @@ iree_status_t loom_callable_inline_call(loom_rewriter_t* rewriter,
 iree_status_t loom_callable_inline_consuming_call(loom_rewriter_t* rewriter,
                                                   loom_op_t* call_op,
                                                   loom_func_like_t callee) {
-  if (!rewriter || !rewriter->module || !call_op) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "rewriter, module, and call op are required");
-  }
   if (!call_op->parent_block ||
       iree_any_bit_set(call_op->flags, LOOM_OP_FLAG_DEAD)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
@@ -609,12 +597,6 @@ iree_status_t loom_callable_import_definition(
     loom_builder_t* builder, const loom_module_t* source_module,
     loom_func_like_t source, const loom_callable_import_options_t* options,
     loom_func_like_t* out_imported, iree_arena_allocator_t* scratch_arena) {
-  if (!builder || !builder->module || !source_module || !scratch_arena ||
-      !out_imported) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "builder, modules, scratch arena, and output are "
-                            "required");
-  }
   *out_imported = (loom_func_like_t){0};
   if (!loom_func_like_isa(source) || !source.op ||
       iree_any_bit_set(source.op->flags, LOOM_OP_FLAG_DEAD)) {

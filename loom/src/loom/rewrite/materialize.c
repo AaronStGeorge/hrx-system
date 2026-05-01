@@ -223,11 +223,6 @@ iree_status_t loom_ir_clone_op(loom_builder_t* builder,
                                const loom_op_t* source_op,
                                loom_ir_remap_t* remap,
                                loom_op_t** out_cloned_op) {
-  if (!builder || !source_op || !remap || !out_cloned_op) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "builder, source op, remap, and cloned op output are required");
-  }
   *out_cloned_op = NULL;
   if (builder->module != remap->target_module) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -379,10 +374,6 @@ iree_status_t loom_ir_clone_op(loom_builder_t* builder,
 iree_status_t loom_ir_clone_block_ops(
     loom_builder_t* builder, const loom_block_t* source_block,
     loom_ir_remap_t* remap, const loom_ir_clone_block_options_t* options) {
-  if (!builder || !source_block || !remap) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "builder, source block, and remap are required");
-  }
   bool omit_terminators = options ? options->omit_terminators : false;
   for (const loom_op_t* source_op = source_block->first_op; source_op;
        source_op = source_op->next_op) {
@@ -403,11 +394,6 @@ iree_status_t loom_ir_clone_region(loom_builder_t* builder,
                                    const loom_region_t* source_region,
                                    loom_ir_remap_t* remap,
                                    loom_region_t** out_target_region) {
-  if (!builder || !source_region || !remap || !out_target_region) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "builder, source region, remap, and target region output are required");
-  }
   *out_target_region = NULL;
   loom_region_t* target_region = NULL;
   IREE_RETURN_IF_ERROR(
@@ -554,10 +540,6 @@ static iree_status_t loom_ir_remap_block_arg_types_in_place(
 iree_status_t loom_ir_remap_op_references(loom_rewriter_t* rewriter,
                                           loom_op_t* op,
                                           loom_ir_remap_t* remap) {
-  if (!rewriter || !rewriter->module || !op || !remap) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "rewriter, op, and remap are required");
-  }
   if (remap->source_module != rewriter->module ||
       remap->target_module != rewriter->module) {
     return iree_make_status(
@@ -918,11 +900,6 @@ static iree_status_t loom_ir_move_block_captures_are_available(
 iree_status_t loom_ir_move_block_ops_before(
     loom_rewriter_t* rewriter, loom_block_t* source_block, loom_op_t* before_op,
     loom_ir_remap_t* remap, const loom_ir_move_block_options_t* options) {
-  if (!rewriter || !rewriter->module || !source_block || !before_op || !remap) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "rewriter, source block, insertion op, and remap are required");
-  }
   if (remap->source_module != rewriter->module ||
       remap->target_module != rewriter->module) {
     return iree_make_status(

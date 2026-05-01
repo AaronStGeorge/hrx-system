@@ -129,12 +129,6 @@ iree_status_t loom_ir_remap_initialize(const loom_module_t* source_module,
                                        iree_arena_allocator_t* arena,
                                        const loom_ir_remap_options_t* options,
                                        loom_ir_remap_t* out_remap) {
-  if (!source_module || !target_module || !arena || !out_remap) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "source module, target module, arena, and output remap are required");
-  }
-
   loom_ir_remap_t remap = {
       .source_module = source_module,
       .target_module = target_module,
@@ -284,11 +278,6 @@ static iree_status_t loom_ir_remap_ensure_block_map_capacity(
 iree_status_t loom_ir_remap_map_block(loom_ir_remap_t* remap,
                                       const loom_block_t* source_block,
                                       loom_block_t* target_block) {
-  if (!loom_ir_remap_is_initialized(remap) || !source_block || !target_block) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "initialized remap and non-NULL source and target "
-                            "blocks are required");
-  }
   for (iree_host_size_t i = 0; i < remap->block_map_count; ++i) {
     if (remap->block_map_sources[i] != source_block) continue;
     remap->block_map_targets[i] = target_block;
@@ -318,11 +307,6 @@ bool loom_ir_remap_try_lookup_block(const loom_ir_remap_t* remap,
 iree_status_t loom_ir_remap_resolve_block(const loom_ir_remap_t* remap,
                                           const loom_block_t* source_block,
                                           loom_block_t** out_target_block) {
-  if (!loom_ir_remap_is_initialized(remap) || !out_target_block) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "initialized remap and target block output are "
-                            "required");
-  }
   *out_target_block = NULL;
   if (!source_block) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -343,11 +327,6 @@ iree_status_t loom_ir_remap_string_id(loom_ir_remap_t* remap,
                                       loom_string_id_t source_string_id,
                                       bool allow_invalid,
                                       loom_string_id_t* out_string_id) {
-  if (!loom_ir_remap_is_initialized(remap) || !out_string_id) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "initialized remap and target string output are "
-                            "required");
-  }
   *out_string_id = LOOM_STRING_ID_INVALID;
   if (source_string_id == LOOM_STRING_ID_INVALID) {
     if (allow_invalid) return iree_ok_status();
@@ -469,11 +448,6 @@ static iree_status_t loom_ir_remap_location_entry(
 iree_status_t loom_ir_remap_location_id(
     loom_ir_remap_t* remap, loom_location_id_t source_location_id,
     loom_location_id_t* out_target_location_id) {
-  if (!loom_ir_remap_is_initialized(remap) || !out_target_location_id) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "initialized remap and target location output are "
-                            "required");
-  }
   *out_target_location_id = LOOM_LOCATION_UNKNOWN;
   if (source_location_id == LOOM_LOCATION_UNKNOWN) return iree_ok_status();
   if (source_location_id >= remap->source_module->locations.count) {
@@ -577,11 +551,6 @@ static iree_status_t loom_ir_remap_type_id(loom_ir_remap_t* remap,
 iree_status_t loom_ir_remap_type(loom_ir_remap_t* remap,
                                  loom_type_t source_type,
                                  loom_type_t* out_target_type) {
-  if (!loom_ir_remap_is_initialized(remap) || !out_target_type) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "initialized remap and target type output are "
-                            "required");
-  }
   *out_target_type = source_type;
 
   loom_type_kind_t kind = loom_type_kind(source_type);
@@ -694,11 +663,6 @@ iree_status_t loom_ir_remap_value_types(loom_ir_remap_t* remap,
                                         const loom_value_id_t* source_values,
                                         iree_host_size_t value_count,
                                         loom_type_t** out_target_types) {
-  if (!loom_ir_remap_is_initialized(remap) || !out_target_types) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "initialized remap and target type array output are required");
-  }
   *out_target_types = NULL;
   if (value_count == 0) return iree_ok_status();
   if (!source_values) {
@@ -730,13 +694,6 @@ static iree_status_t loom_ir_remap_predicate_list_into(
     loom_ir_remap_t* remap, const loom_predicate_t* source_predicates,
     iree_host_size_t predicate_count, iree_arena_allocator_t* payload_arena,
     loom_predicate_t** out_target_predicates) {
-  if (!loom_ir_remap_is_initialized(remap) || !payload_arena ||
-      !out_target_predicates) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "initialized remap, payload arena, and target predicate list output "
-        "are required");
-  }
   *out_target_predicates = NULL;
   if (predicate_count == 0) return iree_ok_status();
   if (!source_predicates) {
@@ -805,12 +762,6 @@ static iree_status_t loom_ir_remap_attribute_impl(
     loom_ir_remap_t* remap, loom_attribute_t source_attr,
     iree_host_size_t dict_depth, iree_arena_allocator_t* payload_arena,
     loom_attribute_t* out_target_attr) {
-  if (!loom_ir_remap_is_initialized(remap) || !payload_arena ||
-      !out_target_attr) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "initialized remap, payload arena, and target "
-                            "attribute output are required");
-  }
   *out_target_attr = source_attr;
 
   switch ((loom_attr_kind_t)source_attr.kind) {
@@ -931,11 +882,6 @@ iree_status_t loom_ir_remap_attribute(loom_ir_remap_t* remap,
 iree_status_t loom_ir_remap_encoding_id(loom_ir_remap_t* remap,
                                         uint16_t source_encoding_id,
                                         uint16_t* out_target_encoding_id) {
-  if (!loom_ir_remap_is_initialized(remap) || !out_target_encoding_id) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "initialized remap and target encoding output are "
-                            "required");
-  }
   *out_target_encoding_id = 0;
   if (remap->encoding_depth >= LOOM_IR_REMAP_MAX_ENCODING_DEPTH) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

@@ -490,10 +490,6 @@ static iree_status_t loom_callable_outline_validate_range(
     loom_callable_outline_range_state_t* out_state,
     iree_host_size_t* out_root_count) {
   *out_root_count = 0;
-  if (!rewriter || !rewriter->module || !rewriter->arena || !first_op) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "rewriter and first op are required");
-  }
   if (iree_any_bit_set(first_op->flags, LOOM_OP_FLAG_DEAD) ||
       !first_op->parent_block) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
