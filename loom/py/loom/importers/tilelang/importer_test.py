@@ -140,6 +140,28 @@ class Select:
         self.dtype = dtype
 
 
+class Op:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+class Call:
+    def __init__(
+        self,
+        op_name: str,
+        args: Sequence[object],
+        dtype: str = "float32",
+        annotations: Mapping[str, object] | None = None,
+    ) -> None:
+        self.op = Op(op_name)
+        self.args = tuple(args)
+        self.dtype = dtype
+        self.annotations = {} if annotations is None else dict(annotations)
+
+    def __repr__(self) -> str:
+        return f"{self.op.name}(...)"
+
+
 class IfThenElse:
     def __init__(self, condition: object, then_case: object, else_case: object) -> None:
         self.condition = condition
@@ -275,6 +297,67 @@ def test_import_tilelang_builds_scalar_control_expressions() -> None:
     assert "scalar.minimumf" in text
     assert "scf.select" in text
     assert "scf.if" in text
+
+
+def test_import_tilelang_builds_tir_scalar_math_calls() -> None:
+    src, dst = Var("src"), Var("dst")
+    src_buffer = Buffer("src", (4,), "float32")
+    dst_buffer = Buffer("dst", (4,), "float32")
+    load = BufferLoad(src_buffer, [IntImm(0)])
+    body = IfThenElse(
+        Call("tir.isfinite", [load], "bool"),
+        BufferStore(
+            dst_buffer,
+            Add(
+                Call("tir.sqrt", [Call("tir.abs", [load])]),
+                Call("tir.sigmoid", [load]),
+            ),
+            [IntImm(0)],
+        ),
+        BufferStore(dst_buffer, Call("tir.exp", [load]), [IntImm(0)]),
+    )
+    prim_func = PrimFunc(
+        [src, dst],
+        {src: src_buffer, dst: dst_buffer},
+        body,
+        attrs={"global_symbol": "scalar_calls"},
+    )
+
+    result = import_tilelang(prim_func, options=TileLangImportOptions())
+    text = print_loom_module(result.module)
+
+    assert "scalar.isfinitef" in text
+    assert "scalar.absf" in text
+    assert "scalar.sqrtf" in text
+    assert "scalar.expf" in text
+    assert "scalar.divf" in text
+
+
+def test_import_tilelang_normalizes_index_ceildiv_call() -> None:
+    src, dst = Var("src"), Var("dst")
+    index = Var("i", "int32")
+    src_buffer = Buffer("src", (8,), "float32")
+    dst_buffer = Buffer("dst", (8,), "float32")
+    body = For(
+        index,
+        IntImm(0),
+        Call("tir.ceildiv", [IntImm(7), IntImm(4)], "int32"),
+        BufferStore(dst_buffer, BufferLoad(src_buffer, [index]), [index]),
+    )
+    prim_func = PrimFunc(
+        [src, dst],
+        {src: src_buffer, dst: dst_buffer},
+        body,
+        attrs={"global_symbol": "ceildiv_loop"},
+    )
+
+    result = import_tilelang(prim_func, options=TileLangImportOptions())
+    text = print_loom_module(result.module)
+
+    assert "index.sub" in text
+    assert "index.add" in text
+    assert "index.div" in text
+    assert "scf.for" in text
 
 
 def test_import_tilelang_normalizes_structural_wrappers() -> None:
