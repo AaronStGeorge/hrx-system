@@ -25,6 +25,7 @@ from loom.target.contracts import (
     Scalar,
     TypePattern,
     ValueAliasRule,
+    ValueElideRule,
     ValueProject,
     ValueRef,
     Vector,
@@ -125,6 +126,29 @@ def test_compile_lower_rule_set_skips_value_alias_cases() -> None:
     assert compiled.rules == ()
     assert compiled.spans == ()
     assert compiled.authored_case_indices == ()
+
+
+def test_compile_lower_rule_set_compiles_value_elide_cases() -> None:
+    table = ContractTable(
+        name="test.elide",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            ValueElideRule(
+                source_op=vector.vector_extract,
+                values=(ValueRef.result("result"),),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    assert compiled.authored_case_indices == (0,)
+    assert len(compiled.rules) == 1
+    assert compiled.rules[0].source_op is vector.vector_extract
+    assert compiled.rules[0].emit_count == 0
+    assert compiled.rules[0].elide_ref_count == 1
+    assert len(compiled.value_refs) == 1
+    assert compiled.spans[0].source_op is vector.vector_extract
 
 
 def test_compile_lower_rule_set_rejects_descriptor_rule_without_emit() -> None:

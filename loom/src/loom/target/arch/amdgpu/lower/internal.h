@@ -261,7 +261,7 @@ extern const loom_low_lower_rule_set_t loom_amdgpu_dot_lower_rule_set;
 extern const loom_low_lower_rule_set_t loom_amdgpu_reduce_lower_rule_set;
 
 // Target-local rule table for source-level async group/wait sequencing ops.
-extern const loom_low_lower_rule_set_t loom_amdgpu_async_rule_set;
+extern const loom_low_lower_rule_set_t loom_amdgpu_async_lower_rule_set;
 
 // Returns the exact wavefront size selected by the active target bundle.
 iree_status_t loom_amdgpu_target_wavefront_size(

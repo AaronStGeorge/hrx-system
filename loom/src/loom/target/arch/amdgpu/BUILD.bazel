@@ -383,6 +383,8 @@ _AMDGPU_LOWER_RULE_GENERATOR_DEPS = [
     "//loom/py/loom:dialect/combining.py",
     "//loom/py/loom:dialect/index/__init__.py",
     "//loom/py/loom:dialect/index/defs.py",
+    "//loom/py/loom:dialect/kernel/__init__.py",
+    "//loom/py/loom:dialect/kernel/defs.py",
     "//loom/py/loom:dialect/scalar/__init__.py",
     "//loom/py/loom:dialect/scalar/analysis.py",
     "//loom/py/loom:dialect/scalar/arithmetic.py",
@@ -397,6 +399,7 @@ _AMDGPU_LOWER_RULE_GENERATOR_DEPS = [
     "//loom/py/loom:gen/generated_file.py",
     "//loom/py/loom:gen/target_lower_rules.py",
     "//loom/py/loom:target/arch/amdgpu/contracts/__init__.py",
+    "//loom/py/loom:target/arch/amdgpu/contracts/async.py",
     "//loom/py/loom:target/arch/amdgpu/contracts/arithmetic.py",
     "//loom/py/loom:target/arch/amdgpu/contracts/compare.py",
     "//loom/py/loom:target/arch/amdgpu/contracts/dot.py",
@@ -424,6 +427,20 @@ _AMDGPU_LOWER_RULE_GENERATOR_DEPS = [
     "//loom/py/loom:target/contracts/templates.py",
     "//loom/py/loom:target/low_descriptors.py",
 ]
+
+loom_target_table_cc_library(
+    name = "lower_async_rules",
+    args = ["--contract-table=amdgpu.async"],
+    cmake_generator = _AMDGPU_LOWER_RULE_GENERATOR_SCRIPT,
+    cmake_generator_deps = _AMDGPU_LOWER_RULE_GENERATOR_DEPS,
+    generator = _AMDGPU_LOWER_RULE_GENERATOR,
+    header = "lower/async_rules.h",
+    source = "lower/async_rules.c",
+    deps = [
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/ops/kernel",
+    ],
+)
 
 loom_target_table_cc_library(
     name = "lower_arithmetic_rules",
@@ -778,7 +795,6 @@ loom_cc_library(
     srcs = [
         "lower/abi.c",
         "lower/async.c",
-        "lower/async_rules.c",
         "lower/atomic.c",
         "lower/bitfield.c",
         "lower/bitpack.c",
@@ -815,6 +831,7 @@ loom_cc_library(
         ":descriptor_ids",
         ":hal_kernel_abi",
         ":lower_arithmetic_rules",
+        ":lower_async_rules",
         ":lower_compare_rules",
         ":lower_dot_rules",
         ":lower_integer_rules",

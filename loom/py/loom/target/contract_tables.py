@@ -39,6 +39,13 @@ class ContractTableRegistration:
 
 CONTRACT_TABLE_REGISTRATIONS = (
     ContractTableRegistration(
+        key="amdgpu.async",
+        module_name="loom.target.arch.amdgpu.contracts.async",
+        symbol_name="AMDGPU_ASYNC_CONTRACT_TABLE",
+        dialect_ops_symbol_name="AMDGPU_ASYNC_CONTRACT_DIALECT_OPS",
+        aliases=("amdgpu_async",),
+    ),
+    ContractTableRegistration(
         key="amdgpu.arithmetic",
         module_name="loom.target.arch.amdgpu.contracts.arithmetic",
         symbol_name="AMDGPU_ARITHMETIC_CONTRACT_TABLE",

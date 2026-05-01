@@ -33,6 +33,7 @@ class ContractTable:
     symbol_name: str = ""
     c_table_prefix: str = ""
     c_source_includes: tuple[str, ...] = ()
+    target_contract_query: bool = True
     materializers: tuple[ValueMaterializer, ...] = ()
 
     def __init__(
@@ -49,6 +50,7 @@ class ContractTable:
         symbol_name: str = "",
         c_table_prefix: str = "",
         c_source_includes: Sequence[str] = (),
+        target_contract_query: bool = True,
         materializers: Sequence[ValueMaterializer] = (),
     ) -> None:
         object.__setattr__(self, "name", name)
@@ -62,6 +64,7 @@ class ContractTable:
         object.__setattr__(self, "symbol_name", symbol_name)
         object.__setattr__(self, "c_table_prefix", c_table_prefix)
         object.__setattr__(self, "c_source_includes", tuple(c_source_includes))
+        object.__setattr__(self, "target_contract_query", target_contract_query)
         object.__setattr__(self, "materializers", tuple(materializers))
         if not name:
             raise ValueError("contract table name must be non-empty")

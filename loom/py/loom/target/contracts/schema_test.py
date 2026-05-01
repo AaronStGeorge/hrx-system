@@ -20,6 +20,7 @@ from loom.target.contracts import (
     Guard,
     Scalar,
     ValueAliasRule,
+    ValueElideRule,
     ValueRef,
     Vector,
     descriptor_by_semantic_tag,
@@ -49,6 +50,38 @@ def test_alias_rule_validates_source_and_result() -> None:
     )
 
     assert table.cases[0].source_op == vector.vector_fragment
+
+
+def test_elide_rule_validates_source_results() -> None:
+    table = ContractTable(
+        name="value.elide",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            ValueElideRule(
+                source_op=vector.vector_extract,
+                values=(ValueRef.result("result"),),
+            )
+        ],
+    )
+
+    assert table.cases[0].source_op == vector.vector_extract
+
+
+def test_elide_rule_rejects_operands() -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"vector.extract: elided values must be results",
+    ):
+        ContractTable(
+            name="value.elide",
+            descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+            cases=[
+                ValueElideRule(
+                    source_op=vector.vector_extract,
+                    values=(ValueRef.operand("source"),),
+                )
+            ],
+        )
 
 
 def test_binary_descriptor_rule_validates_regular_operand_shape() -> None:

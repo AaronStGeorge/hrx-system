@@ -84,14 +84,16 @@ enum loom_target_contract_system_e {
   LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_RULE = 1,
   // Value-alias row with no emitted low descriptor.
   LOOM_TARGET_CONTRACT_SYSTEM_VALUE_ALIAS = 2,
+  // Value-elide row with no emitted low descriptor.
+  LOOM_TARGET_CONTRACT_SYSTEM_VALUE_ELIDE = 3,
   // Source-memory row selected from a generated source-memory pool.
-  LOOM_TARGET_CONTRACT_SYSTEM_SOURCE_MEMORY = 3,
+  LOOM_TARGET_CONTRACT_SYSTEM_SOURCE_MEMORY = 4,
   // Environment row selected from a generated environment pool.
-  LOOM_TARGET_CONTRACT_SYSTEM_ENVIRONMENT = 4,
+  LOOM_TARGET_CONTRACT_SYSTEM_ENVIRONMENT = 5,
   // Descriptor-matrix row selected from a generated matrix-contract pool.
-  LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_MATRIX = 5,
+  LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_MATRIX = 6,
   // Target-owned family row selected from a generated custom-family pool.
-  LOOM_TARGET_CONTRACT_SYSTEM_CUSTOM_FAMILY = 6,
+  LOOM_TARGET_CONTRACT_SYSTEM_CUSTOM_FAMILY = 7,
 };
 
 #define LOOM_TARGET_CONTRACT_ROW_NONE ((uint16_t)UINT16_MAX)

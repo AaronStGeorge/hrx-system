@@ -26,7 +26,7 @@ from loom.target.contracts.immediates import (
 )
 from loom.target.contracts.kinds import SourceValueKind
 from loom.target.contracts.patterns import TypePattern
-from loom.target.contracts.rules import DescriptorRule
+from loom.target.contracts.rules import DescriptorRule, ValueElideRule
 from loom.target.contracts.source import ValueRef
 from loom.target.contracts.tables import ContractTable
 from loom.target.low_descriptors import ConstraintKind, Descriptor, OperandRole
@@ -230,6 +230,8 @@ class _LowerRuleSetCompiler:
         for authored_case_index, contract_case in enumerate(self._table.cases):
             if isinstance(contract_case, DescriptorRule):
                 self._append_descriptor_rule(authored_case_index, contract_case)
+            elif isinstance(contract_case, ValueElideRule):
+                self._append_elide_rule(authored_case_index, contract_case)
 
         spans = _build_spans(self._rules, self._op_ordinals)
         return CompiledLowerRuleSet(
@@ -278,6 +280,31 @@ class _LowerRuleSetCompiler:
                 guard_count=len(self._guards) - guard_start,
                 emit_start=emit_start,
                 emit_count=len(self._emits) - emit_start,
+            )
+        )
+        self._authored_case_indices.append(authored_case_index)
+
+    def _append_elide_rule(
+        self,
+        authored_case_index: int,
+        rule: ValueElideRule,
+    ) -> None:
+        elide_ref_start = self._append_value_ref_sequence(
+            tuple(
+                self._lower_value_ref(rule.source_op, value, {})
+                for value in rule.values
+            )
+        )
+        self._rules.append(
+            LowerRule(
+                source_op=rule.source_op,
+                temporary_count=0,
+                guard_start=0,
+                guard_count=0,
+                emit_start=0,
+                emit_count=0,
+                elide_ref_start=elide_ref_start,
+                elide_ref_count=len(rule.values),
             )
         )
         self._authored_case_indices.append(authored_case_index)

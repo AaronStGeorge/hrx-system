@@ -13,7 +13,12 @@ from dataclasses import dataclass
 
 from loom.dsl import Dialect, Op
 from loom.target.contracts.kinds import ContractSystem
-from loom.target.contracts.rules import ContractCase, DescriptorRule, ValueAliasRule
+from loom.target.contracts.rules import (
+    ContractCase,
+    DescriptorRule,
+    ValueAliasRule,
+    ValueElideRule,
+)
 from loom.target.contracts.tables import ContractTable
 
 CONTRACT_ROW_NONE = 0xFFFF
@@ -160,6 +165,11 @@ def _compile_case(
     if isinstance(contract_case, ValueAliasRule):
         return CompiledCase(
             system=ContractSystem.VALUE_ALIAS,
+            row_index=CONTRACT_ROW_NONE,
+        )
+    if isinstance(contract_case, ValueElideRule):
+        return CompiledCase(
+            system=ContractSystem.VALUE_ELIDE,
             row_index=CONTRACT_ROW_NONE,
         )
     raise TypeError(f"unsupported contract case {contract_case!r}")

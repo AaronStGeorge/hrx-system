@@ -15,6 +15,7 @@ class ContractSystem(Enum):
 
     DESCRIPTOR_RULE = "descriptor_rule"
     VALUE_ALIAS = "value_alias"
+    VALUE_ELIDE = "value_elide"
     SOURCE_MEMORY = "source_memory"
     ENVIRONMENT = "environment"
     DESCRIPTOR_MATRIX = "descriptor_matrix"

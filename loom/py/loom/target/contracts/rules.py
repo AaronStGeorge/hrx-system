@@ -89,4 +89,36 @@ class ValueAliasRule:
         self.result.validate(self.source_op, "alias result")
 
 
-type ContractCase = DescriptorRule | ValueAliasRule
+@dataclass(frozen=True, slots=True)
+class ValueElideRule:
+    """Contract case that lowers away source results without emitted code."""
+
+    source_op: Op
+    values: tuple[ValueRef, ...]
+
+    def __init__(
+        self,
+        *,
+        source_op: Op,
+        values: Sequence[ValueRef],
+    ) -> None:
+        object.__setattr__(self, "source_op", source_op)
+        object.__setattr__(self, "values", tuple(values))
+        if not values:
+            raise ValueError(f"{source_op.name}: value-elide rule needs a result")
+
+    @property
+    def system(self) -> ContractSystem:
+        return ContractSystem.VALUE_ELIDE
+
+    def validate(self, descriptor_set: DescriptorSet) -> None:
+        del descriptor_set
+        for value in self.values:
+            if value.kind != SourceValueKind.RESULT:
+                raise ValueError(
+                    f"{self.source_op.name}: elided values must be results"
+                )
+            value.validate(self.source_op, "elided value")
+
+
+type ContractCase = DescriptorRule | ValueAliasRule | ValueElideRule

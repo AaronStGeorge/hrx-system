@@ -221,9 +221,10 @@ def _generate_source(
             "",
             "#include <stddef.h>",
             "",
-            f'#include "{source_contract.descriptor_set.public_header}"',
         ]
     )
+    if table.emits:
+        lines.append(f'#include "{source_contract.descriptor_set.public_header}"')
     lines.extend(f'#include "{include}"' for include in source_contract.c_source_includes)
     lines.extend(f'#include "{include}"' for include in _materializer_includes(source_contract))
     lines.extend(f'#include "{include}"' for include in _op_header_includes(table))
@@ -609,7 +610,9 @@ def _rule_set_row(
     emits_name: str,
     diagnostics_name: str,
 ) -> list[str]:
-    fields = [".flags = LOOM_LOW_LOWER_RULE_SET_FLAG_TARGET_CONTRACT_QUERY"]
+    fields: list[str] = []
+    if source_contract.target_contract_query:
+        fields.append(".flags = LOOM_LOW_LOWER_RULE_SET_FLAG_TARGET_CONTRACT_QUERY")
     _append_table_fields(fields, "spans", table.spans, spans_name)
     _append_table_fields(fields, "rules", table.rules, rules_name)
     _append_table_fields(

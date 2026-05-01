@@ -48,7 +48,12 @@ from loom.target.contracts.lower_rules import (
 )
 from loom.target.contracts.materializers import ValueMaterializer
 from loom.target.contracts.patterns import Scalar, TypePattern, Vector
-from loom.target.contracts.rules import ContractCase, DescriptorRule, ValueAliasRule
+from loom.target.contracts.rules import (
+    ContractCase,
+    DescriptorRule,
+    ValueAliasRule,
+    ValueElideRule,
+)
 from loom.target.contracts.source import ValueRef
 from loom.target.contracts.tables import ContractTable
 from loom.target.contracts.templates import (
@@ -107,6 +112,7 @@ __all__ = [
     "SourceValueKind",
     "TypePattern",
     "ValueAliasRule",
+    "ValueElideRule",
     "ValueMaterializer",
     "ValueProject",
     "ValueProjectKind",

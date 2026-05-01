@@ -22,6 +22,7 @@ from loom.target.contracts import (
     EmitDescriptorOp,
     Guard,
     ValueAliasRule,
+    ValueElideRule,
     ValueRef,
     Vector,
     compile_contract_table,
@@ -131,6 +132,33 @@ def test_compile_contract_table_uses_supplied_descriptor_rule_rows() -> None:
     assert compiled.cases[reduce_entry.case_start].row_index == 0
     assert compiled.descriptor_rules[0].rule_set_index == 3
     assert compiled.descriptor_rules[0].rule_index == 9
+
+
+def test_compile_contract_table_records_value_elide_cases() -> None:
+    table = ContractTable(
+        name="test-low.elide",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            ValueElideRule(
+                source_op=vector.vector_extract,
+                values=(ValueRef.result("result"),),
+            ),
+        ],
+    )
+
+    compiled = compile_contract_table(
+        table,
+        dialect_ops={"vector": ALL_VECTOR_OPS},
+        descriptor_rule_rows={},
+    )
+
+    extract_entry = compiled.dialects[0].op_entries[
+        ALL_VECTOR_OPS.index(vector.vector_extract)
+    ]
+    assert extract_entry.case_start == 0
+    assert extract_entry.case_count == 1
+    assert compiled.cases[0].system == ContractSystem.VALUE_ELIDE
+    assert compiled.cases[0].row_index == CONTRACT_ROW_NONE
 
 
 def test_compile_contract_table_preserves_dense_dialect_gaps() -> None:
