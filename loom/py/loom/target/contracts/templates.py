@@ -12,8 +12,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from loom.dsl import EnumCase, Op
-from loom.target.contracts.emits import EmitDescriptorOp
-from loom.target.contracts.guards import Guard
+from loom.target.contracts.emits import DescriptorEmitForm, EmitDescriptorOp
+from loom.target.contracts.guards import Guard, GuardDiagnostic
 from loom.target.contracts.patterns import TypePattern
 from loom.target.contracts.rules import DescriptorRule
 from loom.target.contracts.source import ValueRef
@@ -51,6 +51,21 @@ class PredicateDescriptorCase:
 
     predicate: str | EnumCase
     descriptor: Descriptor
+    semantic_tag: str | None = None
+    priority: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class DotDescriptorCase:
+    """One dot-like source op to descriptor mapping."""
+
+    source_op: Op
+    descriptor: Descriptor
+    lhs_type: TypePattern
+    rhs_type: TypePattern
+    accumulator_type: TypePattern
+    result_type: TypePattern
+    kind: str | EnumCase | None = None
     semantic_tag: str | None = None
     priority: int = 0
 
@@ -296,6 +311,86 @@ def compare_descriptor_rules(
     return tuple(rules)
 
 
+def dot_descriptor_rules(
+    cases: Sequence[DotDescriptorCase],
+    *,
+    kind_attr: str = "kind",
+    source_lhs: str = "lhs",
+    source_rhs: str = "rhs",
+    source_accumulator: str = "acc",
+    source_result: str = "result",
+    descriptor_lhs: str = "lhs",
+    descriptor_rhs: str = "rhs",
+    descriptor_accumulator: str = "acc",
+    descriptor_result: str = "dst",
+    kind_diagnostic: GuardDiagnostic | None = None,
+    type_diagnostics: Mapping[str, GuardDiagnostic] | None = None,
+    descriptor_diagnostic: GuardDiagnostic | None = None,
+    emit_form: DescriptorEmitForm = DescriptorEmitForm.OP,
+) -> tuple[DescriptorRule, ...]:
+    """Expands dot-like accumulator ops to descriptor rules."""
+
+    rules: list[DescriptorRule] = []
+    for case in cases:
+        _require_semantic_tag(
+            case.descriptor,
+            case.semantic_tag,
+            f"{case.source_op.name} dot descriptor case",
+        )
+        guards: list[Guard] = []
+        if case.kind is not None:
+            guards.append(
+                Guard.enum_attr_equals(
+                    kind_attr,
+                    case.kind,
+                    diagnostic=kind_diagnostic,
+                )
+            )
+        guards.extend(
+            (
+                _value_type_guard(
+                    source_lhs, case.lhs_type, diagnostics=type_diagnostics
+                ),
+                _value_type_guard(
+                    source_rhs, case.rhs_type, diagnostics=type_diagnostics
+                ),
+                _value_type_guard(
+                    source_accumulator,
+                    case.accumulator_type,
+                    diagnostics=type_diagnostics,
+                ),
+                _value_type_guard(
+                    source_result, case.result_type, diagnostics=type_diagnostics
+                ),
+                Guard.descriptor_available(
+                    case.descriptor,
+                    diagnostic=descriptor_diagnostic,
+                ),
+            )
+        )
+        rules.append(
+            DescriptorRule(
+                source_op=case.source_op,
+                descriptor=case.descriptor,
+                guards=tuple(guards),
+                emit=(
+                    _emit_descriptor_op(
+                        descriptor=case.descriptor,
+                        operands=(
+                            (descriptor_accumulator, source_accumulator),
+                            (descriptor_lhs, source_lhs),
+                            (descriptor_rhs, source_rhs),
+                        ),
+                        results=((descriptor_result, source_result),),
+                        form=emit_form,
+                    ),
+                ),
+                priority=case.priority,
+            )
+        )
+    return tuple(rules)
+
+
 def reduction_descriptor_rules(
     source_op: Op,
     cases: Sequence[ReductionDescriptorCase],
@@ -371,6 +466,16 @@ def _value_type_guards(
     )
 
 
+def _value_type_guard(
+    field: str,
+    type_pattern: TypePattern,
+    *,
+    diagnostics: Mapping[str, GuardDiagnostic] | None = None,
+) -> Guard:
+    diagnostic = None if diagnostics is None else diagnostics.get(field)
+    return Guard.value_type(field, type_pattern, diagnostic=diagnostic)
+
+
 def _type_pattern_for_field(
     patterns: DirectTypePatterns,
     field: str,
@@ -438,6 +543,7 @@ def _emit_descriptor_op(
     descriptor: Descriptor,
     operands: Sequence[tuple[str, str]],
     results: Sequence[tuple[str, str]],
+    form: DescriptorEmitForm = DescriptorEmitForm.AUTO,
 ) -> EmitDescriptorOp:
     return EmitDescriptorOp(
         descriptor=descriptor,
@@ -449,6 +555,7 @@ def _emit_descriptor_op(
             descriptor_field: ValueRef.result(source_field)
             for descriptor_field, source_field in results
         },
+        form=form,
     )
 
 
