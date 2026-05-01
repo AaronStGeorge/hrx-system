@@ -64,7 +64,6 @@ static bool loom_amdgpu_source_lds_layout_alloca_alignment(
 bool loom_amdgpu_source_lds_layout_lookup_root(
     const loom_value_fact_table_t* fact_table, loom_func_like_t source_function,
     loom_value_id_t root_value_id, uint64_t* out_byte_offset) {
-  IREE_ASSERT_ARGUMENT(fact_table);
   *out_byte_offset = 0;
   if (!loom_func_like_isa(source_function)) {
     return false;

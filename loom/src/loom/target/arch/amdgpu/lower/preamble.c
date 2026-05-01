@@ -870,7 +870,6 @@ static iree_status_t loom_amdgpu_emit_local_linear_workitem_id(
     uint32_t packed_dimension_count, loom_value_id_t packed_workitem_id,
     const loom_target_workgroup_size_t* workgroup_size, loom_type_t result_type,
     loom_value_id_t* out_linear_id) {
-  IREE_ASSERT_ARGUMENT(workgroup_size);
   *out_linear_id = LOOM_VALUE_ID_INVALID;
 
   loom_value_id_t linear_id = LOOM_VALUE_ID_INVALID;

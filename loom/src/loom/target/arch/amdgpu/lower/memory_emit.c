@@ -221,8 +221,6 @@ iree_status_t loom_amdgpu_make_memory_attrs(
     loom_low_lower_context_t* context,
     const loom_amdgpu_memory_access_t* access, loom_named_attr_t* attrs,
     iree_host_size_t attr_capacity, iree_host_size_t* out_attr_count) {
-  IREE_ASSERT_ARGUMENT(access);
-  IREE_ASSERT_ARGUMENT(attrs);
   *out_attr_count = 0;
   if (access->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_append_i64_attr(

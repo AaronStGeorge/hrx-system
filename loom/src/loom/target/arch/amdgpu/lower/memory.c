@@ -1414,7 +1414,6 @@ static iree_status_t loom_amdgpu_memory_access_plan_resolve(
     loom_low_lower_context_t* context,
     const loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_access_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(access);
   IREE_ASSERT(access->descriptor != NULL);
   loom_low_lower_resolved_descriptor_t descriptor = {0};
   IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_row(

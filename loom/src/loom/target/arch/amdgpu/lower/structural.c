@@ -216,7 +216,6 @@ static iree_status_t loom_amdgpu_lower_vector_slice_32bit_lanes(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_slice_plan_t* select, loom_value_id_t low_source,
     loom_type_t lane_type, loom_value_id_t* low_registers) {
-  IREE_ASSERT_ARGUMENT(low_registers);
   for (uint32_t i = 0; i < select->result_register_count; ++i) {
     const uint32_t source_lane = select->lane_offset + i;
     if (select->source_register_count == 1) {
@@ -234,7 +233,6 @@ static iree_status_t loom_amdgpu_lower_vector_slice_packed_register_bits(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_slice_plan_t* select, loom_value_id_t low_source,
     loom_type_t lane_type, loom_value_id_t* low_registers) {
-  IREE_ASSERT_ARGUMENT(low_registers);
   const uint32_t source_bit_offset =
       select->lane_offset * select->element_bit_count;
   for (uint32_t i = 0; i < select->result_register_count; ++i) {

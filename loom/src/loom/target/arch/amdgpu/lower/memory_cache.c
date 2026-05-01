@@ -231,11 +231,6 @@ iree_status_t loom_amdgpu_memory_cache_policy_format_rejection_detail(
     const loom_amdgpu_memory_access_t* access,
     const loom_vector_memory_cache_policy_t* policy,
     iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(descriptor_set);
-  IREE_ASSERT_ARGUMENT(access);
-  IREE_ASSERT_ARGUMENT(policy);
-  IREE_ASSERT_ARGUMENT(builder);
-
   if (!loom_amdgpu_memory_cache_policy_is_complete(policy)) {
     return iree_string_builder_append_cstring(
         builder,
@@ -279,10 +274,6 @@ iree_status_t loom_amdgpu_memory_cache_policy_rejected_status(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_memory_access_t* access,
     const loom_vector_memory_cache_policy_t* policy) {
-  IREE_ASSERT_ARGUMENT(descriptor_set);
-  IREE_ASSERT_ARGUMENT(access);
-  IREE_ASSERT_ARGUMENT(policy);
-
   const iree_status_code_t rejection_code =
       loom_amdgpu_memory_cache_policy_rejection_code(policy);
   iree_string_builder_t builder;

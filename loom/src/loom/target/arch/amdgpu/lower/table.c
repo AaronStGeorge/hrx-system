@@ -149,8 +149,6 @@ static iree_status_t loom_amdgpu_table_lookup_select_table_lane(
     const loom_value_id_t* table_lanes, const loom_value_id_t* ordinals,
     loom_value_id_t index_lane, loom_type_t lane_type,
     loom_type_t mask_lane_type, loom_value_id_t* out_selected_lane) {
-  IREE_ASSERT_ARGUMENT(table_lanes);
-  IREE_ASSERT_ARGUMENT(ordinals);
   *out_selected_lane = LOOM_VALUE_ID_INVALID;
   loom_value_id_t selected_lane = table_lanes[0];
   for (uint32_t i = 1; i < plan->table_lane_count; ++i) {

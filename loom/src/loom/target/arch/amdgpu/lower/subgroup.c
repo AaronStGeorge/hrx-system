@@ -1318,7 +1318,6 @@ static iree_status_t loom_amdgpu_emit_subgroup_exec_mask(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_low_lower_resolved_descriptor_t* descriptor,
     loom_value_id_t* out_mask) {
-  IREE_ASSERT_ARGUMENT(descriptor);
   *out_mask = LOOM_VALUE_ID_INVALID;
   loom_type_t mask_type = loom_type_none();
   IREE_RETURN_IF_ERROR(
@@ -1357,7 +1356,6 @@ static iree_status_t loom_amdgpu_emit_subgroup_zero_lane_mask(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_low_lower_resolved_descriptor_t* descriptor,
     loom_value_id_t* out_mask) {
-  IREE_ASSERT_ARGUMENT(descriptor);
   *out_mask = LOOM_VALUE_ID_INVALID;
 
   loom_type_t sgpr_type = loom_type_none();
@@ -1388,7 +1386,6 @@ static iree_status_t loom_amdgpu_emit_subgroup_resolved_mask_compare(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_low_lower_resolved_descriptor_t* descriptor, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_value_id_t* out_result) {
-  IREE_ASSERT_ARGUMENT(descriptor);
   *out_result = LOOM_VALUE_ID_INVALID;
   loom_type_t result_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_scc_type(context, &result_type));

@@ -397,7 +397,6 @@ static iree_status_t loom_amdgpu_bind_vgpr_u32_lane_constants(
     const loom_low_lower_resolved_descriptor_t* descriptor,
     loom_string_id_t imm32_attr_name_id, const uint32_t* lane_bit_patterns,
     uint32_t lane_count) {
-  IREE_ASSERT_ARGUMENT(lane_bit_patterns);
   IREE_ASSERT_GT(lane_count, 0);
   IREE_ASSERT_LE(lane_count, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);
 

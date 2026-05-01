@@ -23,8 +23,6 @@ iree_status_t loom_amdgpu_append_i64_attr(loom_low_lower_context_t* context,
                                           loom_named_attr_t* attrs,
                                           iree_host_size_t attr_capacity,
                                           iree_host_size_t* inout_attr_count) {
-  IREE_ASSERT_ARGUMENT(attrs);
-  IREE_ASSERT_ARGUMENT(inout_attr_count);
   if (*inout_attr_count >= attr_capacity) {
     return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                             "AMDGPU low attr capacity exceeded");
@@ -100,8 +98,6 @@ iree_status_t loom_amdgpu_emit_sgpr_byte_offset_terms(
     const loom_low_source_memory_access_plan_t* source,
     const loom_amdgpu_memory_dynamic_index_kind_t* dynamic_term_kinds,
     uint32_t static_byte_offset, loom_value_id_t* out_low_offset) {
-  IREE_ASSERT_ARGUMENT(source);
-  IREE_ASSERT_ARGUMENT(dynamic_term_kinds);
   *out_low_offset = LOOM_VALUE_ID_INVALID;
 
   loom_type_t sgpr_type = loom_type_none();
@@ -269,7 +265,6 @@ iree_status_t loom_amdgpu_emit_resolved_const_u32(
     const loom_low_lower_resolved_descriptor_t* descriptor,
     loom_string_id_t imm32_attr_name_id, uint32_t value,
     loom_type_t result_type, loom_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(descriptor);
   IREE_ASSERT(imm32_attr_name_id != LOOM_STRING_ID_INVALID);
   *out_value_id = LOOM_VALUE_ID_INVALID;
   loom_named_attr_t attrs[] = {
@@ -291,7 +286,6 @@ iree_status_t loom_amdgpu_emit_m0_u32(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_low_lower_resolved_descriptor_t* consumer_descriptor,
     uint32_t value, loom_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(consumer_descriptor);
   IREE_ASSERT(consumer_descriptor->descriptor != NULL);
   *out_value_id = LOOM_VALUE_ID_INVALID;
   loom_type_t sgpr_type = loom_type_none();

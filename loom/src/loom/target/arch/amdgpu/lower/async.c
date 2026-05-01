@@ -224,7 +224,6 @@ static bool loom_amdgpu_async_gather_select_dest(
     const loom_value_fact_table_t* fact_table, loom_func_like_t source_function,
     loom_value_id_t dest_view, loom_amdgpu_async_gather_selection_t* selection,
     loom_amdgpu_async_gather_diagnostic_t* diagnostic) {
-  IREE_ASSERT_ARGUMENT(fact_table);
   loom_value_fact_view_reference_t dest_reference = {0};
   if (!loom_value_facts_query_view_reference(
           &fact_table->context,

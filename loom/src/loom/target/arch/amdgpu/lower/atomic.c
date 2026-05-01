@@ -893,9 +893,6 @@ static bool loom_amdgpu_atomic_select(
     loom_low_source_memory_access_diagnostic_t* source_diagnostic,
     loom_amdgpu_memory_access_diagnostic_t* memory_diagnostic,
     loom_amdgpu_atomic_diagnostic_t* diagnostic) {
-  IREE_ASSERT_ARGUMENT(source_diagnostic);
-  IREE_ASSERT_ARGUMENT(memory_diagnostic);
-  IREE_ASSERT_ARGUMENT(diagnostic);
   *out_selection = (loom_amdgpu_atomic_selection_t){
       .descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
   };
