@@ -30,9 +30,9 @@ iree_py_library(
 
 iree_py_library(
   NAME
-    target_contract_tables
+    target_contract_fragments
   SRCS
-    "target_contract_tables.py"
+    "target_contract_fragments.py"
   DEPS
     iree::runtime::py::loom::gen::generated_file
     iree::runtime::py::loom::core
@@ -73,7 +73,7 @@ iree_py_library(
     "target_lower_rule_shard.py"
   DEPS
     iree::runtime::py::loom::gen::target_lower_rules
-    iree::runtime::py::loom::target::contract_tables
+    iree::runtime::py::loom::target::contract_fragments
     iree::runtime::py::loom::target::emit::ireevm::contracts
 )
 
@@ -99,7 +99,7 @@ iree_py_library(
     "target_lower_rule_shard.py"
   DEPS
     iree::runtime::py::loom::gen::target_lower_rules
-    iree::runtime::py::loom::target::contract_tables
+    iree::runtime::py::loom::target::contract_fragments
     iree::runtime::py::loom::target::emit::wasm::contracts
 )
 
@@ -125,7 +125,7 @@ iree_py_library(
     "target_lower_rule_shard.py"
   DEPS
     iree::runtime::py::loom::gen::target_lower_rules
-    iree::runtime::py::loom::target::contract_tables
+    iree::runtime::py::loom::target::contract_fragments
     iree::runtime::py::loom::target::arch::x86::contracts::contracts
 )
 
@@ -144,14 +144,14 @@ iree_py_library(
 
 iree_py_library(
   NAME
-    test_low_contract_shard
+    test_low_contract_fragment
   MAIN
-    "target_contract_shard.py"
+    "target_contract_fragment.py"
   SRCS
-    "target_contract_shard.py"
+    "target_contract_fragment.py"
   DEPS
-    iree::runtime::py::loom::gen::target_contract_tables
-    iree::runtime::py::loom::target::contract_tables
+    iree::runtime::py::loom::gen::target_contract_fragments
+    iree::runtime::py::loom::target::contract_fragments
     iree::runtime::py::loom::target::test::contracts
 )
 
@@ -164,7 +164,7 @@ iree_py_library(
     "target_lower_rule_shard.py"
   DEPS
     iree::runtime::py::loom::gen::target_lower_rules
-    iree::runtime::py::loom::target::contract_tables
+    iree::runtime::py::loom::target::contract_fragments
     iree::runtime::py::loom::target::test::contracts
 )
 
@@ -242,7 +242,7 @@ iree_py_library(
     "target_lower_rule_shard.py"
   DEPS
     iree::runtime::py::loom::gen::target_lower_rules
-    iree::runtime::py::loom::target::contract_tables
+    iree::runtime::py::loom::target::contract_fragments
     iree::runtime::py::loom::target::arch::amdgpu::contracts::contracts
 )
 

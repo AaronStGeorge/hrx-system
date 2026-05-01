@@ -17,6 +17,7 @@ from loom.target.contracts.emits import (
     DescriptorEmitForm,
     EmitDescriptorOp,
 )
+from loom.target.contracts.fragments import ContractFragment
 from loom.target.contracts.guards import Guard, GuardKind
 from loom.target.contracts.immediates import (
     AttrProject,
@@ -28,7 +29,6 @@ from loom.target.contracts.kinds import SourceValueKind
 from loom.target.contracts.patterns import TypePattern
 from loom.target.contracts.rules import DescriptorRule, ValueElideRule
 from loom.target.contracts.source import ValueRef
-from loom.target.contracts.tables import ContractTable
 from loom.target.low_descriptors import ConstraintKind, Descriptor, OperandRole
 
 
@@ -173,7 +173,7 @@ class LowerRuleSpan:
 
 @dataclass(frozen=True, slots=True)
 class CompiledLowerRuleSet:
-    """Lower-rule set rows generated from a contract table."""
+    """Lower-rule set rows generated from a contract fragment."""
 
     name: str
     authored_case_indices: tuple[int, ...]
@@ -189,7 +189,7 @@ class CompiledLowerRuleSet:
 
 
 def compile_lower_rule_set(
-    table: ContractTable,
+    table: ContractFragment,
     *,
     dialect_ops: Mapping[str, Sequence[Op]],
 ) -> CompiledLowerRuleSet:
@@ -202,7 +202,7 @@ def compile_lower_rule_set(
 class _LowerRuleSetCompiler:
     def __init__(
         self,
-        table: ContractTable,
+        table: ContractFragment,
         dialect_ops: Mapping[str, Sequence[Op]],
     ) -> None:
         self._table = table

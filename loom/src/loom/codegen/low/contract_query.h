@@ -25,9 +25,8 @@ extern "C" {
 #endif
 
 typedef struct loom_low_lower_contract_query_options_t {
-  // Optional compact contract table used for direct op-to-case lookup. When
-  // present, descriptor-rule cases reference rows in |rule_sets|.
-  const loom_target_contract_table_t* contract_table;
+  // Optional composed contract index used for direct op-to-case lookup.
+  const loom_target_contract_index_t* contract_index;
   // Rule sets to query in priority order.
   loom_low_lower_rule_set_list_t rule_sets;
   // Source-value to target-low register metadata mapper.

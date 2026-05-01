@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Generator: Python target contract tables -> compact C ABI tables."""
+"""Generator: Python target contract fragments -> compact C ABI shards."""
 
 from __future__ import annotations
 
@@ -17,11 +17,11 @@ from loom.dsl import Op
 from loom.gen.generated_file import line_comment_header
 from loom.target.contracts import (
     CONTRACT_ROW_NONE,
-    CompiledContractTable,
+    CompiledContractFragment,
     CompiledDescriptorRule,
+    ContractFragment,
     ContractSystem,
-    ContractTable,
-    compile_contract_table,
+    compile_contract_fragment,
     compile_lower_rule_set,
 )
 
@@ -40,39 +40,33 @@ _CONTRACT_SYSTEM_C_NAMES = {
 
 
 @dataclass(frozen=True, slots=True)
-class GeneratedContractTable:
-    """Generated C/H contents for one target contract table."""
+class GeneratedContractFragment:
+    """Generated C/H contents for one target contract fragment."""
 
     header: str
     source: str
 
 
-def generate_contract_table(
-    table: ContractTable,
+def generate_contract_fragment(
+    table: ContractFragment,
     *,
     dialect_ops: Mapping[str, Sequence[Op]],
-) -> GeneratedContractTable:
-    """Generates C/H text for a compact target contract table."""
+) -> GeneratedContractFragment:
+    """Generates C/H text for a compact target contract fragment."""
 
     lower_rules = compile_lower_rule_set(table, dialect_ops=dialect_ops)
-    descriptor_rule_rows = {
-        authored_case_index: CompiledDescriptorRule(
-            rule_set_index=0,
-            rule_index=rule_index,
-        )
-        for rule_index, authored_case_index in enumerate(lower_rules.authored_case_indices)
-    }
-    compiled = compile_contract_table(
+    descriptor_rule_rows = {authored_case_index: CompiledDescriptorRule(rule_index=rule_index) for rule_index, authored_case_index in enumerate(lower_rules.authored_case_indices)}
+    compiled = compile_contract_fragment(
         table,
         dialect_ops=dialect_ops,
         descriptor_rule_rows=descriptor_rule_rows,
     )
-    _validate_c_table_shape(compiled)
+    _validate_c_shard_shape(compiled)
     public_header = _require_table_field(table, "public_header")
     symbol_name = _require_table_field(table, "symbol_name")
     c_table_prefix = _require_table_field(table, "c_table_prefix")
     header_guard = table.header_guard or _header_guard_from_public_header(public_header)
-    return GeneratedContractTable(
+    return GeneratedContractFragment(
         header=_generate_header(
             header_guard=header_guard,
             symbol_name=symbol_name,
@@ -86,16 +80,16 @@ def generate_contract_table(
     )
 
 
-def write_contract_table_to_paths(
-    table: ContractTable,
+def write_contract_fragment_to_paths(
+    table: ContractFragment,
     *,
     dialect_ops: Mapping[str, Sequence[Op]],
     header_path: Path,
     source_path: Path,
 ) -> None:
-    """Writes generated C/H contents for one target contract table."""
+    """Writes generated C/H contents for one target contract fragment."""
 
-    generated = generate_contract_table(table, dialect_ops=dialect_ops)
+    generated = generate_contract_fragment(table, dialect_ops=dialect_ops)
     header_path.parent.mkdir(parents=True, exist_ok=True)
     source_path.parent.mkdir(parents=True, exist_ok=True)
     header_path.write_text(generated.header, encoding="utf-8")
@@ -107,7 +101,7 @@ def _generate_header(*, header_guard: str, symbol_name: str) -> str:
     lines.extend(
         line_comment_header(
             "//",
-            generator="loom/py/loom/gen/target_contract_tables.py",
+            generator="loom/py/loom/gen/target_contract_fragments.py",
         )
     )
     lines.extend(
@@ -122,7 +116,7 @@ def _generate_header(*, header_guard: str, symbol_name: str) -> str:
             'extern "C" {',
             "#endif",
             "",
-            f"extern const loom_target_contract_table_t {symbol_name};",
+            f"extern const loom_target_contract_fragment_t {symbol_name};",
             "",
             "#ifdef __cplusplus",
             '}  // extern "C"',
@@ -137,7 +131,7 @@ def _generate_header(*, header_guard: str, symbol_name: str) -> str:
 
 def _generate_source(
     *,
-    table: CompiledContractTable,
+    table: CompiledContractFragment,
     public_header: str,
     symbol_name: str,
     c_table_prefix: str,
@@ -146,7 +140,7 @@ def _generate_source(
     lines.extend(
         line_comment_header(
             "//",
-            generator="loom/py/loom/gen/target_contract_tables.py",
+            generator="loom/py/loom/gen/target_contract_fragments.py",
         )
     )
     lines.extend(
@@ -187,7 +181,7 @@ def _generate_source(
 
     cases_name = f"k{c_table_prefix}Cases"
     if table.cases:
-        lines.append(f"static const loom_target_contract_case_t {cases_name}[] = {{")
+        lines.append(f"static const loom_target_contract_fragment_case_t {cases_name}[] = {{")
         for contract_case in table.cases:
             system_name = _CONTRACT_SYSTEM_C_NAMES[contract_case.system]
             row_index = "LOOM_TARGET_CONTRACT_ROW_NONE" if contract_case.row_index == CONTRACT_ROW_NONE else str(contract_case.row_index)
@@ -200,7 +194,7 @@ def _generate_source(
     descriptor_rules_name = f"k{c_table_prefix}DescriptorRules"
     if table.descriptor_rules:
         lines.append(f"static const loom_target_contract_descriptor_rule_t {descriptor_rules_name}[] = {{")
-        lines.extend(f"    {{{descriptor_rule.rule_set_index}, {descriptor_rule.rule_index}}}," for descriptor_rule in table.descriptor_rules)
+        lines.extend(f"    {{{descriptor_rule.rule_index}}}," for descriptor_rule in table.descriptor_rules)
         lines.extend(["};", ""])
         descriptor_rules_value = descriptor_rules_name
     else:
@@ -208,8 +202,7 @@ def _generate_source(
 
     lines.extend(
         [
-            f"const loom_target_contract_table_t {symbol_name} = {{",
-            f"    {table.table_index},",
+            f"const loom_target_contract_fragment_t {symbol_name} = {{",
             f"    {table.dialect_base_id},",
             f"    {len(table.dialects)},",
             f"    {dialects_value},",
@@ -224,26 +217,24 @@ def _generate_source(
     return "\n".join(lines)
 
 
-def _validate_c_table_shape(table: CompiledContractTable) -> None:
-    if table.table_index > _UINT16_MAX:
-        raise ValueError(f"contract table '{table.name}' table index exceeds uint16_t")
+def _validate_c_shard_shape(table: CompiledContractFragment) -> None:
     if table.dialect_base_id > _UINT8_MAX:
-        raise ValueError(f"contract table '{table.name}' dialect base exceeds uint8_t")
+        raise ValueError(f"contract fragment '{table.name}' dialect base exceeds uint8_t")
     if len(table.dialects) > _UINT8_MAX:
-        raise ValueError(f"contract table '{table.name}' dialect count exceeds uint8_t")
+        raise ValueError(f"contract fragment '{table.name}' dialect count exceeds uint8_t")
     if len(table.cases) > _UINT16_MAX:
-        raise ValueError(f"contract table '{table.name}' case count exceeds uint16_t")
+        raise ValueError(f"contract fragment '{table.name}' case count exceeds uint16_t")
     if len(table.descriptor_rules) > _UINT16_MAX:
-        raise ValueError(f"contract table '{table.name}' descriptor-rule count exceeds uint16_t")
+        raise ValueError(f"contract fragment '{table.name}' descriptor-rule count exceeds uint16_t")
     for dialect in table.dialects:
         if len(dialect.op_entries) > _UINT16_MAX:
-            raise ValueError(f"contract table '{table.name}' dialect '{dialect.dialect_name}' op count exceeds uint16_t")
+            raise ValueError(f"contract fragment '{table.name}' dialect '{dialect.dialect_name}' op count exceeds uint16_t")
 
 
-def _require_table_field(table: ContractTable, field_name: str) -> str:
+def _require_table_field(table: ContractFragment, field_name: str) -> str:
     value = getattr(table, field_name)
     if not value:
-        raise ValueError(f"contract table '{table.name}' requires {field_name}")
+        raise ValueError(f"contract fragment '{table.name}' requires {field_name}")
     return str(value)
 
 

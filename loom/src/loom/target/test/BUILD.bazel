@@ -33,7 +33,7 @@ loom_assert_no_dependencies(
     ],
     targets = [
         ":alt_descriptors",
-        ":contract_table",
+        ":contract_core",
         ":descriptors",
         ":lower_rules",
         ":lower",
@@ -73,17 +73,17 @@ loom_low_descriptor_cc_library(
 )
 
 loom_target_table_cc_library(
-    name = "contract_table",
-    args = ["--contract-table=test_low_core"],
-    generator = "//loom/py/loom/gen:test_low_contract_shard",
-    header = "contract_table.h",
-    source = "contract_table.c",
+    name = "contract_core",
+    args = ["--contract-fragment=test_low_core"],
+    generator = "//loom/py/loom/gen:test_low_contract_fragment",
+    header = "contract_core.h",
+    source = "contract_core.c",
     deps = ["//loom/src/loom/target:contract"],
 )
 
 loom_target_table_cc_library(
     name = "lower_rules",
-    args = ["--contract-table=test_low_core"],
+    args = ["--contract-fragment=test_low_core"],
     generator = "//loom/py/loom/gen:test_low_lower_rule_shard",
     header = "lower_rules.h",
     source = "lower_rules.c",
@@ -114,7 +114,7 @@ loom_cc_library(
     srcs = ["lower/registry.c"],
     hdrs = ["lower.h"],
     deps = [
-        ":contract_table",
+        ":contract_core",
         ":descriptors",
         ":lower_rules",
         "//loom/src/loom/codegen/low:lower",

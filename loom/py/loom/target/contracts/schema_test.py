@@ -14,7 +14,7 @@ from loom.dialect.scalar import arithmetic as scalar_arithmetic
 from loom.dialect.vector import defs as vector
 from loom.target.contracts import (
     AttrProject,
-    ContractTable,
+    ContractFragment,
     DescriptorRule,
     EmitDescriptorOp,
     Guard,
@@ -37,7 +37,7 @@ from loom.target.test.descriptors import (
 
 
 def test_alias_rule_validates_source_and_result() -> None:
-    table = ContractTable(
+    table = ContractFragment(
         name="value.alias",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -53,7 +53,7 @@ def test_alias_rule_validates_source_and_result() -> None:
 
 
 def test_elide_rule_validates_source_results() -> None:
-    table = ContractTable(
+    table = ContractFragment(
         name="value.elide",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -72,7 +72,7 @@ def test_elide_rule_rejects_operands() -> None:
         ValueError,
         match=r"vector.extract: elided values must be results",
     ):
-        ContractTable(
+        ContractFragment(
             name="value.elide",
             descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
             cases=[
@@ -87,7 +87,7 @@ def test_elide_rule_rejects_operands() -> None:
 def test_binary_descriptor_rule_validates_regular_operand_shape() -> None:
     descriptor = TEST_LOW_ADD_V4I32_DESCRIPTOR
 
-    table = ContractTable(
+    table = ContractFragment(
         name="test-low.binary",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -117,7 +117,7 @@ def test_binary_descriptor_rule_validates_regular_operand_shape() -> None:
 
 
 def test_descriptor_rule_accepts_named_test_low_descriptor_object() -> None:
-    table = ContractTable(
+    table = ContractFragment(
         name="test-low.binary",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -149,7 +149,7 @@ def test_descriptor_rule_accepts_named_test_low_descriptor_object() -> None:
 def test_compare_descriptor_rule_validates_enum_guard() -> None:
     descriptor = TEST_LOW_CMP_EQ_V4I32_DESCRIPTOR
 
-    table = ContractTable(
+    table = ContractFragment(
         name="test-low.compare",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -184,7 +184,7 @@ def test_compare_descriptor_rule_validates_enum_guard() -> None:
 def test_descriptor_rule_validates_source_and_descriptor_fields() -> None:
     descriptor = TEST_LOW_EXTRACT_LANE_I32_DESCRIPTOR
 
-    table = ContractTable(
+    table = ContractFragment(
         name="test-low.extract",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -229,7 +229,7 @@ def test_descriptor_rule_rejects_unknown_source_value_field() -> None:
             r"operand or result"
         ),
     ):
-        ContractTable(
+        ContractFragment(
             name="bad.source.field",
             descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
             cases=[
@@ -252,7 +252,7 @@ def test_descriptor_rule_rejects_wrong_attr_kind() -> None:
             r"must be an i64_array attr"
         ),
     ):
-        ContractTable(
+        ContractFragment(
             name="bad.attr.kind",
             descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
             cases=[
@@ -275,7 +275,7 @@ def test_descriptor_rule_rejects_unknown_enum_case() -> None:
             r"has no enum case 'ordered'"
         ),
     ):
-        ContractTable(
+        ContractFragment(
             name="bad.enum.case",
             descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
             cases=[
@@ -298,7 +298,7 @@ def test_descriptor_rule_rejects_unknown_descriptor_operand_field() -> None:
             r"binding field 'missing' is not a descriptor operand"
         ),
     ):
-        ContractTable(
+        ContractFragment(
             name="bad.descriptor.field",
             descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
             cases=[
@@ -332,7 +332,7 @@ def test_descriptor_rule_rejects_unbound_required_immediate() -> None:
             r"immediate 'lane' is not bound"
         ),
     ):
-        ContractTable(
+        ContractFragment(
             name="bad.immediate",
             descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
             cases=[
@@ -354,7 +354,7 @@ def test_descriptor_rule_rejects_unbound_required_immediate() -> None:
 def test_shuffle_byte_expansion_validates_all_target_immediates() -> None:
     descriptor = TEST_LOW_SHUFFLE_BYTES_DESCRIPTOR
 
-    table = ContractTable(
+    table = ContractFragment(
         name="test-low.shuffle",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -396,7 +396,7 @@ def test_reduction_rule_validates_literal_immediates_and_temporaries() -> None:
     extract = TEST_LOW_EXTRACT_LANE_I32_DESCRIPTOR
     add = TEST_LOW_ADD_I32_DESCRIPTOR
 
-    table = ContractTable(
+    table = ContractFragment(
         name="test-low.reduce",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -484,7 +484,7 @@ def test_descriptor_rule_rejects_undefined_temporary() -> None:
             r"is not defined"
         ),
     ):
-        ContractTable(
+        ContractFragment(
             name="bad.temporary",
             descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
             cases=[
@@ -516,7 +516,7 @@ def test_descriptor_rule_rejects_immediate_literal_out_of_range() -> None:
             r"immediate 'lane' literal 4 is out of range"
         ),
     ):
-        ContractTable(
+        ContractFragment(
             name="bad.literal",
             descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
             cases=[
@@ -546,7 +546,7 @@ def test_shuffle_byte_expansion_rejects_wrong_target_count() -> None:
             r"expand_lane_i64_array_to_byte_lanes produces 16 immediates, got 15"
         ),
     ):
-        ContractTable(
+        ContractFragment(
             name="bad.shuffle",
             descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
             cases=[

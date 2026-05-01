@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Target contract tables for the backend-independent test-low target."""
+"""Target contract fragments for the backend-independent test-low target."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from loom.dialect.vector import defs as vector
 from loom.dsl import Op
 from loom.target.contracts import (
     AttrProject,
-    ContractTable,
+    ContractFragment,
     DescriptorEmitForm,
     DescriptorRule,
     DirectDescriptorCase,
@@ -184,15 +184,14 @@ def _vector_reduce_rule(
     )
 
 
-TEST_LOW_CORE_CONTRACT_TABLE = ContractTable(
+TEST_LOW_CORE_CONTRACT_FRAGMENT = ContractFragment(
     name="test.low.core",
     descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
-    table_index=0,
-    c_header_path=Path("loom/src/loom/target/test/contract_table.h"),
-    c_source_path=Path("loom/src/loom/target/test/contract_table.c"),
-    header_guard="LOOM_TARGET_TEST_CONTRACT_TABLE_H_",
-    public_header="loom/target/test/contract_table.h",
-    symbol_name="loom_test_low_core_contract_table",
+    c_header_path=Path("loom/src/loom/target/test/contract_core.h"),
+    c_source_path=Path("loom/src/loom/target/test/contract_core.c"),
+    header_guard="LOOM_TARGET_TEST_CONTRACT_CORE_H_",
+    public_header="loom/target/test/contract_core.h",
+    symbol_name="loom_test_low_core_contract_fragment",
     c_table_prefix="TestLowCoreContract",
     cases=[
         _binary_rule(

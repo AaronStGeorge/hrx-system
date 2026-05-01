@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""x86 AVX512 source-to-low contract table."""
+"""x86 AVX512 source-to-low contract fragment."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from loom.dsl import Op
 from loom.target.arch.x86.descriptors import X86_AVX512_CORE_DESCRIPTOR_SET
 from loom.target.contracts import (
     AttrProject,
-    ContractTable,
+    ContractFragment,
     DescriptorEmitForm,
     DescriptorRule,
     EmitDescriptorOp,
@@ -661,7 +661,7 @@ X86_AVX512_CONTRACT_DIALECT_OPS = {
     "vector": ALL_VECTOR_OPS,
 }
 
-X86_AVX512_CONTRACT_TABLE = ContractTable(
+X86_AVX512_CONTRACT_FRAGMENT = ContractFragment(
     name="x86.avx512",
     descriptor_set=X86_AVX512_CORE_DESCRIPTOR_SET,
     public_header="loom/target/arch/x86/lower/avx512_rules.h",

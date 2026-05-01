@@ -16,7 +16,7 @@ from loom.dialect.scalar.comparison import CmpIPredicate
 from loom.dialect.vector import defs as vector
 from loom.target.contracts import (
     ContractCase,
-    ContractTable,
+    ContractFragment,
     DescriptorRule,
     DirectDescriptorCase,
     PredicateDescriptorCase,
@@ -193,7 +193,7 @@ def test_unary_and_ternary_descriptor_templates_validate_direct_shapes() -> None
         ),
         descriptor_input="value",
     )
-    unary_table = ContractTable(
+    unary_table = ContractFragment(
         name="test-low.template.unary",
         descriptor_set=TEST_LOW_ALT_DESCRIPTOR_SET,
         cases=unary_rules,
@@ -220,7 +220,7 @@ def test_unary_and_ternary_descriptor_templates_validate_direct_shapes() -> None
         descriptor_b="rhs",
         descriptor_c="acc",
     )
-    ternary_table = ContractTable(
+    ternary_table = ContractFragment(
         name="test-low.template.ternary",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=ternary_rules,
@@ -365,8 +365,8 @@ def test_reduction_template_rejects_empty_lane_chain() -> None:
         )
 
 
-def _test_table(cases: Sequence[ContractCase]) -> ContractTable:
-    return ContractTable(
+def _test_table(cases: Sequence[ContractCase]) -> ContractFragment:
+    return ContractFragment(
         name="test-low.template.test",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=cases,

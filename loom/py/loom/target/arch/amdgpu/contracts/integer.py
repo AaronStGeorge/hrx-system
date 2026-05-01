@@ -20,7 +20,7 @@ from loom.target.arch.amdgpu.contracts.materializers import (
 )
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
 from loom.target.contracts import (
-    ContractTable,
+    ContractFragment,
     DescriptorRule,
     EmitDescriptorOp,
     Guard,
@@ -330,7 +330,7 @@ AMDGPU_INTEGER_CONTRACT_DIALECT_OPS = {
     "scalar": ALL_SCALAR_OPS,
 }
 
-AMDGPU_INTEGER_CONTRACT_TABLE = ContractTable(
+AMDGPU_INTEGER_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.integer",
     descriptor_set=_DESCRIPTOR_SET,
     materializers=(I32_VGPR_MATERIALIZER, ADDRESS_VGPR_MATERIALIZER),

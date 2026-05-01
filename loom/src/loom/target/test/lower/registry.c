@@ -10,7 +10,7 @@
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/vector/ops.h"
-#include "loom/target/test/contract_table.h"
+#include "loom/target/test/contract_core.h"
 #include "loom/target/test/descriptors.h"
 #include "loom/target/test/lower.h"
 #include "loom/target/test/lower_rules.h"
@@ -452,6 +452,13 @@ static const loom_low_lower_rule_set_t* const kTestLowRuleSets[] = {
     &loom_test_low_core_lower_rule_set,
 };
 
+static const loom_target_contract_binding_t kTestLowContractBindings[] = {
+    {
+        .fragment = &loom_test_low_core_contract_fragment,
+        .rule_set_index = 0,
+    },
+};
+
 static const loom_low_lower_policy_t kTestLowLowerPolicy = {
     .name = IREE_SVL("test-low-lower-policy"),
     .map_type = {.fn = loom_test_low_lower_map_type, .user_data = NULL},
@@ -463,7 +470,8 @@ static const loom_low_lower_policy_t kTestLowLowerPolicy = {
             .count = IREE_ARRAYSIZE(kTestLowRuleSets),
             .values = kTestLowRuleSets,
         },
-    .contract_table = &loom_test_low_core_contract_table,
+    .contract_bindings = kTestLowContractBindings,
+    .contract_binding_count = IREE_ARRAYSIZE(kTestLowContractBindings),
     .select_op = {.fn = loom_test_low_select_op, .user_data = NULL},
     .emit_op = {.fn = loom_test_low_emit_op, .user_data = NULL},
 };

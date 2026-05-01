@@ -20,7 +20,7 @@ from loom.dsl import Op
 from loom.target.arch.amdgpu.contracts.materializers import ADDRESS_VGPR_MATERIALIZER
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
 from loom.target.contracts import (
-    ContractTable,
+    ContractFragment,
     DescriptorEmitForm,
     DescriptorRule,
     EmitDescriptorOp,
@@ -582,7 +582,7 @@ AMDGPU_ARITHMETIC_CONTRACT_DIALECT_OPS = {
     "vector": ALL_VECTOR_OPS,
 }
 
-AMDGPU_ARITHMETIC_CONTRACT_TABLE = ContractTable(
+AMDGPU_ARITHMETIC_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.arithmetic",
     descriptor_set=_DESCRIPTOR_SET,
     c_source_includes=("loom/target/arch/amdgpu/lower/kinds.h",),

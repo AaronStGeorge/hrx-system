@@ -15,7 +15,7 @@ from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
 from loom.dsl import Op
 from loom.target.contracts import (
-    ContractTable,
+    ContractFragment,
     DescriptorRule,
     DirectDescriptorCase,
     EmitDescriptorOp,
@@ -56,7 +56,7 @@ def _binary_rule(
 
 
 def test_compile_lower_rule_set_compiles_direct_scalar_rule() -> None:
-    table = ContractTable(
+    table = ContractFragment(
         name="test.scalar",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -88,7 +88,7 @@ def test_compile_lower_rule_set_compiles_direct_scalar_rule() -> None:
 
 
 def test_compile_lower_rule_set_infers_vector_per_lane_emit() -> None:
-    table = ContractTable(
+    table = ContractFragment(
         name="test.vector",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -109,7 +109,7 @@ def test_compile_lower_rule_set_infers_vector_per_lane_emit() -> None:
 
 
 def test_compile_lower_rule_set_skips_value_alias_cases() -> None:
-    table = ContractTable(
+    table = ContractFragment(
         name="test.alias",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -129,7 +129,7 @@ def test_compile_lower_rule_set_skips_value_alias_cases() -> None:
 
 
 def test_compile_lower_rule_set_compiles_value_elide_cases() -> None:
-    table = ContractTable(
+    table = ContractFragment(
         name="test.elide",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -152,7 +152,7 @@ def test_compile_lower_rule_set_compiles_value_elide_cases() -> None:
 
 
 def test_compile_lower_rule_set_rejects_descriptor_rule_without_emit() -> None:
-    table = ContractTable(
+    table = ContractFragment(
         name="test.no-emit",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -171,7 +171,7 @@ def test_compile_lower_rule_set_rejects_descriptor_rule_without_emit() -> None:
 
 
 def test_compile_lower_rule_set_compiles_const_immediate_emit() -> None:
-    table = ContractTable(
+    table = ContractFragment(
         name="test.immediate",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -201,7 +201,7 @@ def test_compile_lower_rule_set_compiles_const_immediate_emit() -> None:
 
 
 def test_compile_lower_rule_set_compiles_value_fact_immediate_emit() -> None:
-    table = ContractTable(
+    table = ContractFragment(
         name="test.value-immediate",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[

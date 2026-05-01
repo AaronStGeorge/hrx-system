@@ -18,6 +18,7 @@ iree_py_library(
     "compile.py"
     "descriptors.py"
     "emits.py"
+    "fragments.py"
     "guards.py"
     "immediates.py"
     "kinds.py"
@@ -26,7 +27,6 @@ iree_py_library(
     "patterns.py"
     "rules.py"
     "source.py"
-    "tables.py"
     "templates.py"
   DEPS
     iree::runtime::py::loom::core

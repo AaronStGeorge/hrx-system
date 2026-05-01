@@ -326,9 +326,11 @@ typedef struct loom_low_lower_policy_t {
   // sets may overlap; the first matching rule wins and failed diagnostics use
   // the most-specific rejected candidate.
   loom_low_lower_rule_set_list_t rule_sets;
-  // Optional compact contract table whose descriptor-rule cases reference rows
-  // in |rule_sets| for direct source-op lookup and read-only legality queries.
-  const loom_target_contract_table_t* contract_table;
+  // Active contract fragments composed into a dense root index for direct
+  // source-op lookup and read-only legality queries.
+  const loom_target_contract_binding_t* contract_bindings;
+  // Number of active contract fragments.
+  uint16_t contract_binding_count;
   // Optional target-owned selector used before a target has table rules.
   loom_low_lower_select_op_callback_t select_op;
   // Optional target-owned emitter for plans selected by |select_op|.

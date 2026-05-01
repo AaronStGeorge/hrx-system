@@ -9,7 +9,9 @@
 #include <cstdint>
 
 #include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
 #include "loom/ir/ir.h"
 
 namespace {
@@ -35,7 +37,7 @@ const loom_target_contract_dialect_table_t kDialectTables[] = {
     },
 };
 
-const loom_target_contract_case_t kCases[] = {
+const loom_target_contract_fragment_case_t kFragmentCases[] = {
     {
         LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_RULE,
         0,
@@ -49,46 +51,92 @@ const loom_target_contract_descriptor_rule_t kDescriptorRules[] = {
     },
 };
 
-const loom_target_contract_table_t kContractTable = {
-    11,
-    kTestDialectId - 1,
-    IREE_ARRAYSIZE(kDialectTables),
-    kDialectTables,
-    IREE_ARRAYSIZE(kCases),
-    kCases,
-    IREE_ARRAYSIZE(kDescriptorRules),
+const loom_target_contract_fragment_t kContractFragment = {
+    kTestDialectId - 1, IREE_ARRAYSIZE(kDialectTables),
+    kDialectTables,     IREE_ARRAYSIZE(kFragmentCases),
+    kFragmentCases,     IREE_ARRAYSIZE(kDescriptorRules),
     kDescriptorRules,
 };
 
-TEST(TargetContractTableTest, LookupKindSelectsDescriptorRuleCase) {
+class TargetContractIndexTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    iree_arena_block_pool_initialize(4096, iree_allocator_system(),
+                                     &block_pool_);
+    iree_arena_initialize(&block_pool_, &arena_);
+  }
+
+  void TearDown() override {
+    iree_arena_deinitialize(&arena_);
+    iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  iree_arena_block_pool_t block_pool_;
+  iree_arena_allocator_t arena_;
+};
+
+TEST_F(TargetContractIndexTest, LookupKindSelectsDescriptorRuleCase) {
+  const loom_target_contract_binding_t bindings[] = {
+      {
+          &kContractFragment,
+          5,
+      },
+  };
+  loom_target_contract_index_t index = {};
+  IREE_ASSERT_OK(loom_target_contract_index_compose(
+      bindings, IREE_ARRAYSIZE(bindings), &index, &arena_));
+
   loom_target_contract_op_entry_t entry =
-      loom_target_contract_table_lookup_kind(
-          &kContractTable, LOOM_OP_KIND(kTestDialectId, kLegalOpIndex));
+      loom_target_contract_index_lookup_kind(
+          &index, LOOM_OP_KIND(kTestDialectId, kLegalOpIndex));
 
   ASSERT_FALSE(loom_target_contract_op_entry_is_empty(entry));
   EXPECT_EQ(entry.case_start, 0);
   EXPECT_EQ(entry.case_count, 1);
   const loom_target_contract_case_t* contract_case =
-      &kContractTable.cases[entry.case_start];
+      &index.cases[entry.case_start];
   EXPECT_EQ(contract_case->system, LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_RULE);
+  EXPECT_EQ(contract_case->binding_index, 0);
   ASSERT_NE(contract_case->row_index, LOOM_TARGET_CONTRACT_ROW_NONE);
+  const loom_target_contract_binding_t* binding =
+      &index.bindings[contract_case->binding_index];
+  EXPECT_EQ(binding->rule_set_index, 5);
   const loom_target_contract_descriptor_rule_t* descriptor_rule =
-      &kContractTable.descriptor_rules[contract_case->row_index];
-  EXPECT_EQ(descriptor_rule->rule_set_index, 0);
+      &binding->fragment->descriptor_rules[contract_case->row_index];
   EXPECT_EQ(descriptor_rule->rule_index, 0);
 }
 
-TEST(TargetContractTableTest, LookupKindIgnoresUncoveredDialectSlot) {
+TEST_F(TargetContractIndexTest, LookupKindIgnoresUncoveredDialectSlot) {
+  const loom_target_contract_binding_t bindings[] = {
+      {
+          &kContractFragment,
+          5,
+      },
+  };
+  loom_target_contract_index_t index = {};
+  IREE_ASSERT_OK(loom_target_contract_index_compose(
+      bindings, IREE_ARRAYSIZE(bindings), &index, &arena_));
+
   loom_target_contract_op_entry_t entry =
-      loom_target_contract_table_lookup_kind(
-          &kContractTable, LOOM_OP_KIND(kTestDialectId - 1, 0));
+      loom_target_contract_index_lookup_kind(
+          &index, LOOM_OP_KIND(kTestDialectId - 1, 0));
 
   EXPECT_TRUE(loom_target_contract_op_entry_is_empty(entry));
 }
 
-TEST(TargetContractTableTest, LookupKindIgnoresUncoveredOps) {
+TEST_F(TargetContractIndexTest, LookupKindIgnoresUncoveredOps) {
+  const loom_target_contract_binding_t bindings[] = {
+      {
+          &kContractFragment,
+          5,
+      },
+  };
+  loom_target_contract_index_t index = {};
+  IREE_ASSERT_OK(loom_target_contract_index_compose(
+      bindings, IREE_ARRAYSIZE(bindings), &index, &arena_));
+
   loom_target_contract_op_entry_t entry =
-      loom_target_contract_table_lookup_kind(&kContractTable,
+      loom_target_contract_index_lookup_kind(&index,
                                              LOOM_OP_KIND(kTestDialectId, 1));
 
   EXPECT_TRUE(loom_target_contract_op_entry_is_empty(entry));

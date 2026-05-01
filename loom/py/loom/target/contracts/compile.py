@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Compilation from authored target contracts to compact table rows."""
+"""Compilation from authored target contracts to compact fragment rows."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from loom.dsl import Dialect, Op
+from loom.target.contracts.fragments import ContractFragment
 from loom.target.contracts.kinds import ContractSystem
 from loom.target.contracts.rules import (
     ContractCase,
@@ -19,7 +20,6 @@ from loom.target.contracts.rules import (
     ValueAliasRule,
     ValueElideRule,
 )
-from loom.target.contracts.tables import ContractTable
 
 CONTRACT_ROW_NONE = 0xFFFF
 
@@ -51,31 +51,29 @@ class CompiledCase:
 
 @dataclass(frozen=True, slots=True)
 class CompiledDescriptorRule:
-    """Compiled descriptor-rule row."""
+    """Compiled fragment-local descriptor-rule row."""
 
-    rule_set_index: int
     rule_index: int
 
 
 @dataclass(frozen=True, slots=True)
-class CompiledContractTable:
-    """Compact contract table ready for C emission."""
+class CompiledContractFragment:
+    """Compact contract fragment ready for C emission."""
 
     name: str
-    table_index: int
     dialect_base_id: int
     dialects: tuple[CompiledDialectTable, ...]
     cases: tuple[CompiledCase, ...]
     descriptor_rules: tuple[CompiledDescriptorRule, ...]
 
 
-def compile_contract_table(
-    table: ContractTable,
+def compile_contract_fragment(
+    table: ContractFragment,
     *,
     dialect_ops: Mapping[str, Sequence[Op]],
     descriptor_rule_rows: Mapping[int, CompiledDescriptorRule],
-) -> CompiledContractTable:
-    """Compiles an authored contract table into dense target ABI rows."""
+) -> CompiledContractFragment:
+    """Compiles an authored contract fragment into dense target fragment rows."""
 
     op_indexes = _build_op_indexes(dialect_ops)
     cases_by_op: dict[int, list[tuple[int, ContractCase]]] = {}
@@ -142,9 +140,8 @@ def compile_contract_table(
         for dialect_id in range(dialect_base_id, dialect_limit)
     )
 
-    return CompiledContractTable(
+    return CompiledContractFragment(
         name=table.name,
-        table_index=table.table_index,
         dialect_base_id=dialect_base_id,
         dialects=dialect_tables,
         cases=tuple(compiled_cases),

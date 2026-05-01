@@ -213,7 +213,8 @@ TEST_F(LowLowerPassTest, VerifiesLoweredModuleBeforeReturningSuccess) {
       RunSourceToLow(&invalid_preamble_policy_registry_, module.get()));
 }
 
-TEST_F(LowLowerPassTest, ContractTableDrivesRuleSelectionWithoutLegacySpans) {
+TEST_F(LowLowerPassTest,
+       ContractFragmentDrivesRuleSelectionWithoutLegacySpans) {
   ModulePtr module = Parse(IREE_SV(
       "target.profile @test_target preset(\"test-low\")\n"
       "func.def target(@test_target) @add(%lhs: i32, %rhs: i32) -> (i32) {\n"

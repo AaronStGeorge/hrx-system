@@ -35,7 +35,7 @@ loom_target_table_cc_library(
   HEADER
     "lower/rules.h"
   ARGS
-    "--contract-table=iree.vm.core"
+    "--contract-fragment=iree.vm.core"
   DEPS
     ::descriptors_ids
     loom::src::loom::codegen::low::lower

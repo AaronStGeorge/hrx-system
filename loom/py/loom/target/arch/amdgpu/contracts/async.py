@@ -11,7 +11,7 @@ from __future__ import annotations
 from loom.dialect.kernel import ALL_KERNEL_OPS
 from loom.dialect.kernel import defs as kernel
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
-from loom.target.contracts import ContractTable, ValueElideRule, ValueRef
+from loom.target.contracts import ContractFragment, ValueElideRule, ValueRef
 
 _DESCRIPTOR_SET = build_amdgpu_contract_descriptor_set(
     key="amdgpu.async",
@@ -22,7 +22,7 @@ AMDGPU_ASYNC_CONTRACT_DIALECT_OPS = {
     "kernel": ALL_KERNEL_OPS,
 }
 
-AMDGPU_ASYNC_CONTRACT_TABLE = ContractTable(
+AMDGPU_ASYNC_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.async",
     descriptor_set=_DESCRIPTOR_SET,
     target_contract_query=False,

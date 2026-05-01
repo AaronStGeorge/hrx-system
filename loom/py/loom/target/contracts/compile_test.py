@@ -16,8 +16,8 @@ from loom.dsl import ANY, Dialect, Op, Operand, Result
 from loom.target.contracts import (
     CONTRACT_ROW_NONE,
     CompiledDescriptorRule,
+    ContractFragment,
     ContractSystem,
-    ContractTable,
     DescriptorRule,
     EmitDescriptorOp,
     Guard,
@@ -25,7 +25,7 @@ from loom.target.contracts import (
     ValueElideRule,
     ValueRef,
     Vector,
-    compile_contract_table,
+    compile_contract_fragment,
 )
 from loom.target.test.descriptors import (
     TEST_LOW_ADD_I32_DESCRIPTOR,
@@ -34,8 +34,8 @@ from loom.target.test.descriptors import (
 )
 
 
-def test_compile_contract_table_packs_dense_dialect_op_entries() -> None:
-    table = ContractTable(
+def test_compile_contract_fragment_packs_dense_dialect_op_entries() -> None:
+    table = ContractFragment(
         name="test-low.vector",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -66,10 +66,10 @@ def test_compile_contract_table_packs_dense_dialect_op_entries() -> None:
         ],
     )
 
-    compiled = compile_contract_table(
+    compiled = compile_contract_fragment(
         table,
         dialect_ops={"vector": ALL_VECTOR_OPS},
-        descriptor_rule_rows={0: CompiledDescriptorRule(0, 0)},
+        descriptor_rule_rows={0: CompiledDescriptorRule(0)},
     )
 
     assert len(compiled.dialects) == 1
@@ -84,7 +84,6 @@ def test_compile_contract_table_packs_dense_dialect_op_entries() -> None:
     assert addi_entry.case_count == 1
     assert compiled.cases[0].system == ContractSystem.DESCRIPTOR_RULE
     assert compiled.cases[0].row_index == 0
-    assert compiled.descriptor_rules[0].rule_set_index == 0
     assert compiled.descriptor_rules[0].rule_index == 0
 
     fragment_entry = vector_dialect.op_entries[
@@ -96,8 +95,8 @@ def test_compile_contract_table_packs_dense_dialect_op_entries() -> None:
     assert compiled.cases[1].row_index == CONTRACT_ROW_NONE
 
 
-def test_compile_contract_table_uses_supplied_descriptor_rule_rows() -> None:
-    table = ContractTable(
+def test_compile_contract_fragment_uses_supplied_descriptor_rule_rows() -> None:
+    table = ContractFragment(
         name="test-low.authored-order",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -112,12 +111,12 @@ def test_compile_contract_table_uses_supplied_descriptor_rule_rows() -> None:
         ],
     )
 
-    compiled = compile_contract_table(
+    compiled = compile_contract_fragment(
         table,
         dialect_ops={"vector": ALL_VECTOR_OPS},
         descriptor_rule_rows={
-            0: CompiledDescriptorRule(rule_set_index=3, rule_index=9),
-            1: CompiledDescriptorRule(rule_set_index=4, rule_index=2),
+            0: CompiledDescriptorRule(rule_index=9),
+            1: CompiledDescriptorRule(rule_index=2),
         },
     )
 
@@ -126,16 +125,14 @@ def test_compile_contract_table_uses_supplied_descriptor_rule_rows() -> None:
     reduce_entry = vector_dialect.op_entries[ALL_VECTOR_OPS.index(vector.vector_reduce)]
     assert addi_entry.case_start == 0
     assert compiled.cases[addi_entry.case_start].row_index == 1
-    assert compiled.descriptor_rules[1].rule_set_index == 4
     assert compiled.descriptor_rules[1].rule_index == 2
     assert reduce_entry.case_start == 1
     assert compiled.cases[reduce_entry.case_start].row_index == 0
-    assert compiled.descriptor_rules[0].rule_set_index == 3
     assert compiled.descriptor_rules[0].rule_index == 9
 
 
-def test_compile_contract_table_records_value_elide_cases() -> None:
-    table = ContractTable(
+def test_compile_contract_fragment_records_value_elide_cases() -> None:
+    table = ContractFragment(
         name="test-low.elide",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -146,7 +143,7 @@ def test_compile_contract_table_records_value_elide_cases() -> None:
         ],
     )
 
-    compiled = compile_contract_table(
+    compiled = compile_contract_fragment(
         table,
         dialect_ops={"vector": ALL_VECTOR_OPS},
         descriptor_rule_rows={},
@@ -161,7 +158,7 @@ def test_compile_contract_table_records_value_elide_cases() -> None:
     assert compiled.cases[0].row_index == CONTRACT_ROW_NONE
 
 
-def test_compile_contract_table_preserves_dense_dialect_gaps() -> None:
+def test_compile_contract_fragment_preserves_dense_dialect_gaps() -> None:
     low_dialect = Dialect("gap_low", dialect_id=3)
     high_dialect = Dialect("gap_high", dialect_id=5)
     low_op = Op(
@@ -176,7 +173,7 @@ def test_compile_contract_table_preserves_dense_dialect_gaps() -> None:
         operands=(Operand("input", ANY),),
         results=(Result("result", ANY),),
     )
-    table = ContractTable(
+    table = ContractFragment(
         name="dense.gap",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -193,7 +190,7 @@ def test_compile_contract_table_preserves_dense_dialect_gaps() -> None:
         ],
     )
 
-    compiled = compile_contract_table(
+    compiled = compile_contract_fragment(
         table,
         dialect_ops={
             "gap_low": (low_op,),
@@ -210,8 +207,8 @@ def test_compile_contract_table_preserves_dense_dialect_gaps() -> None:
     assert compiled.dialects[2].op_entries[0].case_count == 1
 
 
-def test_compile_contract_table_rejects_missing_dialect_ops() -> None:
-    table = ContractTable(
+def test_compile_contract_fragment_rejects_missing_dialect_ops() -> None:
+    table = ContractFragment(
         name="missing.scalar",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
@@ -227,20 +224,20 @@ def test_compile_contract_table_rejects_missing_dialect_ops() -> None:
         ValueError,
         match=r"op 'scalar.addi' is not present in dialect_ops",
     ):
-        compile_contract_table(
+        compile_contract_fragment(
             table,
             dialect_ops={"vector": ALL_VECTOR_OPS},
             descriptor_rule_rows={},
         )
 
 
-def test_compile_contract_table_rejects_mismatched_dialect_key() -> None:
+def test_compile_contract_fragment_rejects_mismatched_dialect_key() -> None:
     with pytest.raises(
         ValueError,
         match=r"dialect_ops key 'not_scalar' does not match dialect 'scalar'",
     ):
-        compile_contract_table(
-            ContractTable(
+        compile_contract_fragment(
+            ContractFragment(
                 name="empty",
                 descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
             ),

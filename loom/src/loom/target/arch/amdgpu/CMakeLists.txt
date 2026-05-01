@@ -151,7 +151,7 @@ loom_target_table_cc_library(
   HEADER
     "lower/async_rules.h"
   ARGS
-    "--contract-table=amdgpu.async"
+    "--contract-fragment=amdgpu.async"
   DEPS
     loom::src::loom::codegen::low::lower
     loom::src::loom::ops::kernel
@@ -167,7 +167,7 @@ loom_target_table_cc_library(
   HEADER
     "lower/arithmetic_rules.h"
   ARGS
-    "--contract-table=amdgpu.arithmetic"
+    "--contract-fragment=amdgpu.arithmetic"
   DEPS
     ::descriptor_ids
     ::lower_kinds
@@ -188,7 +188,7 @@ loom_target_table_cc_library(
   HEADER
     "lower/compare_rules.h"
   ARGS
-    "--contract-table=amdgpu.compare"
+    "--contract-fragment=amdgpu.compare"
   DEPS
     ::descriptor_ids
     ::lower_materializers
@@ -206,7 +206,7 @@ loom_target_table_cc_library(
   HEADER
     "lower/integer_rules.h"
   ARGS
-    "--contract-table=amdgpu.integer"
+    "--contract-fragment=amdgpu.integer"
   DEPS
     ::descriptor_ids
     ::lower_materializers
@@ -225,7 +225,7 @@ loom_target_table_cc_library(
   HEADER
     "lower/dot_rules.h"
   ARGS
-    "--contract-table=amdgpu.dot"
+    "--contract-fragment=amdgpu.dot"
   DEPS
     ::descriptor_ids
     ::lower_kinds
@@ -243,7 +243,7 @@ loom_target_table_cc_library(
   HEADER
     "lower/reduce_rules.h"
   ARGS
-    "--contract-table=amdgpu.reduce"
+    "--contract-fragment=amdgpu.reduce"
   DEPS
     ::descriptor_ids
     ::lower_kinds

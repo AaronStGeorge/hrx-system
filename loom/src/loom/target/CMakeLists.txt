@@ -176,6 +176,8 @@ loom_cc_library(
     contract
   HDRS
     "contract.h"
+  SRCS
+    "contract.c"
   DEPS
     ::types
     iree::base
@@ -195,6 +197,7 @@ loom_cc_test(
   DEPS
     ::contract
     iree::base
+    iree::base::internal::arena
     loom::src::loom::ir
     iree::testing::gtest
     iree::testing::gtest_main

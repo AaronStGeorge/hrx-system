@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Generator: Python target contract table -> C contract ABI table."""
+"""Generator: Python target contract fragment -> C contract ABI fragment."""
 
 from __future__ import annotations
 
@@ -23,37 +23,37 @@ def _ensure_runtime_py_on_path() -> None:
 
 _ensure_runtime_py_on_path()
 
-from loom.gen.target_contract_tables import write_contract_table_to_paths  # noqa: E402
-from loom.target.contract_tables import resolve_contract_table  # noqa: E402
+from loom.gen.target_contract_fragments import write_contract_fragment_to_paths  # noqa: E402
+from loom.target.contract_fragments import resolve_contract_fragment  # noqa: E402
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Generate target contract C tables from Python data.")
+    parser = argparse.ArgumentParser(description="Generate target contract C fragments from Python data.")
     parser.add_argument(
-        "--contract-table",
+        "--contract-fragment",
         required=True,
         metavar="KEY",
-        help="Contract table key or explicit shard alias to generate.",
+        help="Contract fragment key or alias to generate.",
     )
     parser.add_argument(
         "--header",
         required=True,
         type=Path,
-        help="Generated contract table header path.",
+        help="Generated contract fragment header path.",
     )
     parser.add_argument(
         "--source",
         required=True,
         type=Path,
-        help="Generated contract table source path.",
+        help="Generated contract fragment source path.",
     )
     args = parser.parse_args(argv)
 
     try:
-        registration = resolve_contract_table(args.contract_table)
+        registration = resolve_contract_fragment(args.contract_fragment)
     except ValueError as exc:
         parser.error(str(exc))
-    write_contract_table_to_paths(
+    write_contract_fragment_to_paths(
         registration.load(),
         dialect_ops=registration.load_dialect_ops(),
         header_path=args.header,

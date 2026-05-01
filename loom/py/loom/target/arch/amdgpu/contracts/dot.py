@@ -13,7 +13,7 @@ from loom.dialect.vector import defs as vector
 from loom.dsl import Op
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
 from loom.target.contracts import (
-    ContractTable,
+    ContractFragment,
     DescriptorEmitForm,
     DescriptorRule,
     EmitDescriptorOp,
@@ -518,7 +518,7 @@ AMDGPU_DOT_CONTRACT_DIALECT_OPS = {
     "vector": ALL_VECTOR_OPS,
 }
 
-AMDGPU_DOT_CONTRACT_TABLE = ContractTable(
+AMDGPU_DOT_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.dot",
     descriptor_set=_DESCRIPTOR_SET,
     c_source_includes=("loom/target/arch/amdgpu/lower/kinds.h",),

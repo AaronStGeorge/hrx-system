@@ -11,6 +11,11 @@
 // whether a source op is already in a form accepted by the selected target
 // bundle and descriptor set. Unsupported program forms are reported as compact
 // query results; non-OK status is reserved for infrastructure failures.
+//
+// Target packages provide generated contract fragments in rodata. A lowering
+// run composes the active fragment set into a small dense root index so hot
+// queries use direct dialect/op lookup without linking or scanning unrelated
+// targets.
 
 #ifndef LOOM_TARGET_CONTRACT_H_
 #define LOOM_TARGET_CONTRACT_H_
@@ -30,7 +35,7 @@ extern "C" {
 #endif
 
 typedef enum loom_target_contract_query_outcome_e {
-  // No linked contract table or provider has an opinion about the op.
+  // No linked contract fragment or provider has an opinion about the op.
   LOOM_TARGET_CONTRACT_QUERY_UNHANDLED = 0,
   // The op is already legal for the selected target contract.
   LOOM_TARGET_CONTRACT_QUERY_LEGAL = 1,
@@ -53,9 +58,13 @@ typedef struct loom_target_contract_rejection_t {
 typedef struct loom_target_contract_query_result_t {
   // Query outcome.
   loom_target_contract_query_outcome_t outcome;
-  // Target contract table ordinal selected or rejected by the query.
-  uint16_t table_index;
-  // Target contract rule ordinal selected or rejected by the query.
+  // Active binding ordinal selected or rejected by the query.
+  uint16_t binding_index;
+  // Composed case ordinal selected or rejected by the query.
+  uint16_t case_index;
+  // Policy rule-set ordinal selected or rejected by the query.
+  uint16_t rule_set_index;
+  // Rule row ordinal selected or rejected by the query.
   uint16_t rule_index;
   // Diagnostic row ordinal retained by the rejected rule.
   uint16_t diagnostic_index;
@@ -130,22 +139,27 @@ typedef struct loom_target_contract_dialect_table_t {
 typedef struct loom_target_contract_case_t {
   // Contract system that owns the selected row.
   loom_target_contract_system_t system;
-  // Reserved byte for future row flags while keeping the case 4 bytes.
-  uint8_t reserved;
+  // Active binding ordinal that owns the selected row.
+  uint8_t binding_index;
   // Index into the system-specific row pool, or LOOM_TARGET_CONTRACT_ROW_NONE.
   uint16_t row_index;
 } loom_target_contract_case_t;
 
+typedef struct loom_target_contract_fragment_case_t {
+  // Contract system that owns the selected row.
+  loom_target_contract_system_t system;
+  // Reserved byte for future row flags while keeping the case 4 bytes.
+  uint8_t reserved;
+  // Index into the fragment-local system row pool.
+  uint16_t row_index;
+} loom_target_contract_fragment_case_t;
+
 typedef struct loom_target_contract_descriptor_rule_t {
-  // Descriptor-rule set in the target-owned rule interpreter table list.
-  uint16_t rule_set_index;
   // Descriptor-rule row in the target-owned rule interpreter table.
   uint16_t rule_index;
 } loom_target_contract_descriptor_rule_t;
 
-typedef struct loom_target_contract_table_t {
-  // Stable ordinal for this table within a target bundle.
-  uint16_t table_index;
+typedef struct loom_target_contract_fragment_t {
   // First dialect id covered by dialects.
   uint8_t dialect_base_id;
   // Number of dense dialect slots.
@@ -154,41 +168,93 @@ typedef struct loom_target_contract_table_t {
   const loom_target_contract_dialect_table_t* dialects;
   // Number of generic case rows.
   uint16_t case_count;
-  // Generic case rows referenced by dense op entries.
-  const loom_target_contract_case_t* cases;
+  // Fragment-local generic case rows referenced by dense op entries.
+  const loom_target_contract_fragment_case_t* cases;
   // Number of descriptor-rule rows.
   uint16_t descriptor_rule_count;
   // Descriptor-rule row pool.
   const loom_target_contract_descriptor_rule_t* descriptor_rules;
-} loom_target_contract_table_t;
+} loom_target_contract_fragment_t;
 
-// Looks up the compact case span for an op kind.
+typedef struct loom_target_contract_binding_t {
+  // Generated fragment rodata linked into the active target package.
+  const loom_target_contract_fragment_t* fragment;
+  // Policy rule-set ordinal corresponding to |fragment|'s descriptor-rule rows.
+  uint16_t rule_set_index;
+} loom_target_contract_binding_t;
+
+typedef struct loom_target_contract_index_t {
+  // First dialect id covered by dialects.
+  uint8_t dialect_base_id;
+  // Number of dense dialect slots.
+  uint8_t dialect_count;
+  // Dense dialect slots indexed by dialect id minus dialect_base_id.
+  const loom_target_contract_dialect_table_t* dialects;
+  // Number of composed case rows.
+  uint16_t case_count;
+  // Composed case rows referenced by dense op entries.
+  const loom_target_contract_case_t* cases;
+  // Number of active fragment bindings.
+  uint8_t binding_count;
+  // Active fragment bindings referenced by composed case rows.
+  const loom_target_contract_binding_t* bindings;
+} loom_target_contract_index_t;
+
+// Looks up the compact case span for an op kind in a generated fragment.
 static inline loom_target_contract_op_entry_t
-loom_target_contract_table_lookup_kind(
-    const loom_target_contract_table_t* table, loom_op_kind_t op_kind) {
+loom_target_contract_fragment_lookup_kind(
+    const loom_target_contract_fragment_t* fragment, loom_op_kind_t op_kind) {
   const uint8_t dialect_id = loom_op_dialect_id(op_kind);
   const uint8_t op_index = loom_op_dialect_index(op_kind);
-  if (dialect_id < table->dialect_base_id) {
+  if (dialect_id < fragment->dialect_base_id) {
     return loom_target_contract_op_entry_empty();
   }
-  const uint8_t dialect_index = dialect_id - table->dialect_base_id;
-  if (dialect_index >= table->dialect_count) {
+  const uint8_t dialect_index = dialect_id - fragment->dialect_base_id;
+  if (dialect_index >= fragment->dialect_count) {
     return loom_target_contract_op_entry_empty();
   }
   const loom_target_contract_dialect_table_t* dialect_table =
-      &table->dialects[dialect_index];
+      &fragment->dialects[dialect_index];
   if (op_index >= dialect_table->op_count) {
     return loom_target_contract_op_entry_empty();
   }
   return dialect_table->op_entries[op_index];
 }
 
+// Looks up the compact case span for an op kind in a composed index.
+static inline loom_target_contract_op_entry_t
+loom_target_contract_index_lookup_kind(
+    const loom_target_contract_index_t* index, loom_op_kind_t op_kind) {
+  const uint8_t dialect_id = loom_op_dialect_id(op_kind);
+  const uint8_t op_index = loom_op_dialect_index(op_kind);
+  if (dialect_id < index->dialect_base_id) {
+    return loom_target_contract_op_entry_empty();
+  }
+  const uint8_t dialect_index = dialect_id - index->dialect_base_id;
+  if (dialect_index >= index->dialect_count) {
+    return loom_target_contract_op_entry_empty();
+  }
+  const loom_target_contract_dialect_table_t* dialect_table =
+      &index->dialects[dialect_index];
+  if (op_index >= dialect_table->op_count) {
+    return loom_target_contract_op_entry_empty();
+  }
+  return dialect_table->op_entries[op_index];
+}
+
+// Composes |bindings| into a dense root index allocated from |arena|.
+iree_status_t loom_target_contract_index_compose(
+    const loom_target_contract_binding_t* bindings, uint16_t binding_count,
+    loom_target_contract_index_t* out_index, iree_arena_allocator_t* arena);
+
 // Returns an empty target contract query result.
 static inline loom_target_contract_query_result_t
 loom_target_contract_query_result_empty(void) {
   return (loom_target_contract_query_result_t){
       /*.outcome=*/LOOM_TARGET_CONTRACT_QUERY_UNHANDLED,
-      /*.table_index=*/UINT16_MAX,
+      /*.binding_index=*/UINT16_MAX,
+      /*.case_index=*/UINT16_MAX,
+      /*.rule_set_index=*/UINT16_MAX,
       /*.rule_index=*/UINT16_MAX,
       /*.diagnostic_index=*/UINT16_MAX,
       /*.matched_guard_count=*/0,

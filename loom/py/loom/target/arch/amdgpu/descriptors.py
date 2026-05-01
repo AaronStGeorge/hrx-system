@@ -7394,13 +7394,13 @@ def build_amdgpu_contract_descriptor_set(
         header_guard="LOOM_TARGET_ARCH_AMDGPU_DESCRIPTOR_IDS_H_",
         public_header="loom/target/arch/amdgpu/descriptor_ids.h",
         function_name="loom_amdgpu_contract_descriptor_set",
-        c_table_prefix=_amdgpu_contract_table_prefix(key),
+        c_table_prefix=_amdgpu_contract_fragment_prefix(key),
         c_enum_prefix="LOOM_AMDGPU",
         descriptors=_categorize_amdgpu_descriptors(tuple(descriptors)),
     )
 
 
-def _amdgpu_contract_table_prefix(key: str) -> str:
+def _amdgpu_contract_fragment_prefix(key: str) -> str:
     parts = tuple(
         part for part in key.replace("_", ".").replace("-", ".").split(".") if part
     )

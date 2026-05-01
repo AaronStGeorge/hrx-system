@@ -35,8 +35,8 @@ py_library(
 )
 
 py_library(
-    name = "contract_tables",
-    srcs = ["contract_tables.py"],
+    name = "contract_fragments",
+    srcs = ["contract_fragments.py"],
     deps = [
         ":package",
         "//loom/py/loom:core",

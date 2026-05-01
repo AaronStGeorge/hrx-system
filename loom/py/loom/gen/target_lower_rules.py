@@ -20,7 +20,7 @@ from loom.target.contracts import (
     LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN,
     LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1,
     CompiledLowerRuleSet,
-    ContractTable,
+    ContractFragment,
     GuardKind,
     LowerAttrCopy,
     LowerAttrCopyKind,
@@ -126,7 +126,7 @@ class GeneratedLowerRuleSet:
 
 
 def generate_lower_rule_set(
-    table: ContractTable,
+    table: ContractFragment,
     *,
     dialect_ops: Mapping[str, Sequence[Op]],
 ) -> GeneratedLowerRuleSet:
@@ -153,7 +153,7 @@ def generate_lower_rule_set(
 
 
 def write_lower_rule_set_to_paths(
-    table: ContractTable,
+    table: ContractFragment,
     *,
     dialect_ops: Mapping[str, Sequence[Op]],
     header_path: Path,
@@ -204,7 +204,7 @@ def _generate_header(*, header_guard: str, symbol_name: str) -> str:
 def _generate_source(
     *,
     table: CompiledLowerRuleSet,
-    source_contract: ContractTable,
+    source_contract: ContractFragment,
     public_header: str,
     symbol_name: str,
     c_table_prefix: str,
@@ -394,7 +394,7 @@ def _value_ref_row(row: LowerValueRef) -> list[str]:
     return fields
 
 
-def _guard_row(table: ContractTable, row: LowerGuard) -> list[str]:
+def _guard_row(table: ContractFragment, row: LowerGuard) -> list[str]:
     fields: list[str] = []
     _append_field(fields, "kind", _GUARD_KIND_C_NAMES[row.kind], always=True)
 
@@ -535,7 +535,7 @@ def _tied_result_row(row: LowerTiedResult) -> list[str]:
     return fields
 
 
-def _emit_row(table: ContractTable, row: LowerEmit) -> list[str]:
+def _emit_row(table: ContractFragment, row: LowerEmit) -> list[str]:
     fields: list[str] = []
     flags = _emit_flags(row.flags)
     _append_field(fields, "kind", _EMIT_KIND_C_NAMES[row.kind], always=True)
@@ -611,7 +611,7 @@ def _span_row(row: LowerRuleSpan) -> list[str]:
 def _rule_set_row(
     *,
     table: CompiledLowerRuleSet,
-    source_contract: ContractTable,
+    source_contract: ContractFragment,
     spans_name: str,
     rules_name: str,
     type_patterns_name: str,
@@ -732,7 +732,7 @@ def _attr_kind_c_name(attr_kind: str | None) -> str:
     return c_name
 
 
-def _guard_descriptor_id(table: ContractTable, descriptor: Descriptor | None) -> str:
+def _guard_descriptor_id(table: ContractFragment, descriptor: Descriptor | None) -> str:
     if descriptor is None:
         return "LOOM_LOW_DESCRIPTOR_ID_NONE"
     return _descriptor_id_constant_name(table, descriptor.key)
@@ -757,7 +757,7 @@ def _op_header_includes(table: CompiledLowerRuleSet) -> tuple[str, ...]:
     return tuple(f"loom/ops/{name}/ops.h" for name in sorted(dialect_names))
 
 
-def _materializer_includes(table: ContractTable) -> tuple[str, ...]:
+def _materializer_includes(table: ContractFragment) -> tuple[str, ...]:
     return tuple(sorted({materializer.header for materializer in table.materializers}))
 
 
@@ -765,26 +765,27 @@ def _op_c_name(op: Op) -> str:
     return "LOOM_OP_" + _c_identifier(op.name).upper()
 
 
-def _descriptor_id_constant_name(table: ContractTable, descriptor_key: str) -> str:
+def _descriptor_id_constant_name(table: ContractFragment, descriptor_key: str) -> str:
     descriptor_name = descriptor_set_relative_name(table.descriptor_set, descriptor_key)
     return f"{table.descriptor_set.c_enum_prefix}_DESCRIPTOR_ID_{_c_identifier(descriptor_name).upper()}"
 
 
-def _generated_public_header(table: ContractTable) -> str:
+def _generated_public_header(table: ContractFragment) -> str:
     name_parts = _identifier_parts(table.name)
     if len(name_parts) == 2:
         target_name, family_name = name_parts
         return f"loom/target/arch/{target_name}/lower/{family_name}_rules.h"
     if not table.public_header:
-        raise ValueError(f"contract table '{table.name}' requires public_header")
-    return re.sub(r"contract_table\.h$", "lower_rules.h", table.public_header)
+        raise ValueError(f"contract fragment '{table.name}' requires public_header")
+    public_header = re.sub(r"contract(?:_[^/]+)?\.h$", "lower_rules.h", table.public_header)
+    return re.sub(r"contracts/[^/]+\.h$", "lower_rules.h", public_header)
 
 
-def _generated_symbol_name(table: ContractTable) -> str:
+def _generated_symbol_name(table: ContractFragment) -> str:
     return f"loom_{_c_identifier(table.name).lower()}_lower_rule_set"
 
 
-def _generated_table_prefix(table: ContractTable) -> str:
+def _generated_table_prefix(table: ContractFragment) -> str:
     return f"{_pascal_identifier(table.name)}Lower"
 
 

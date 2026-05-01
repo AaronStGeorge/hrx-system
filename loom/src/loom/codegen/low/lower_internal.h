@@ -113,6 +113,8 @@ struct loom_low_lower_context_t {
   iree_arena_allocator_t arena;
   // Function-local state for this source-to-low lowering run.
   loom_low_lowering_frame_t lowering;
+  // Dense root contract index composed from the active policy shards.
+  loom_target_contract_index_t contract_index;
   // Builder used while emitting the low function.
   loom_builder_t builder;
   // Emitted target-low function operation, or NULL before emission starts.

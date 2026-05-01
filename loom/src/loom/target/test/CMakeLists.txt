@@ -42,15 +42,15 @@ loom_low_descriptor_cc_library(
 
 loom_target_table_cc_library(
   NAME
-    contract_table
+    contract_core
   GENERATOR
-    iree::runtime::py::loom::gen::test_low_contract_shard
+    iree::runtime::py::loom::gen::test_low_contract_fragment
   SOURCE
-    "contract_table.c"
+    "contract_core.c"
   HEADER
-    "contract_table.h"
+    "contract_core.h"
   ARGS
-    "--contract-table=test_low_core"
+    "--contract-fragment=test_low_core"
   DEPS
     loom::src::loom::target::contract
 )
@@ -65,7 +65,7 @@ loom_target_table_cc_library(
   HEADER
     "lower_rules.h"
   ARGS
-    "--contract-table=test_low_core"
+    "--contract-fragment=test_low_core"
   DEPS
     ::descriptors
     loom::src::loom::codegen::low::lower
@@ -98,7 +98,7 @@ loom_cc_library(
   SRCS
     "lower/registry.c"
   DEPS
-    ::contract_table
+    ::contract_core
     ::descriptors
     ::lower_rules
     iree::base

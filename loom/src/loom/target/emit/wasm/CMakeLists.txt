@@ -89,7 +89,7 @@ loom_target_table_cc_library(
   HEADER
     "lower/rules.h"
   ARGS
-    "--contract-table=wasm.core.simd128"
+    "--contract-fragment=wasm.core.simd128"
   DEPS
     loom::src::loom::codegen::low::lower
     loom::src::loom::ops::index

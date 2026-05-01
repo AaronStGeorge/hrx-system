@@ -110,7 +110,7 @@ loom_cc_library(
 
 loom_target_table_cc_library(
     name = "lower_rules",
-    args = ["--contract-table=wasm.core.simd128"],
+    args = ["--contract-fragment=wasm.core.simd128"],
     generator = "//loom/py/loom/gen:wasm_lower_rule_shard",
     header = "lower/rules.h",
     source = "lower/rules.c",

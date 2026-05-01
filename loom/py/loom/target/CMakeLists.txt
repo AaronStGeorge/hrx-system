@@ -40,9 +40,9 @@ iree_py_library(
 
 iree_py_library(
   NAME
-    contract_tables
+    contract_fragments
   SRCS
-    "contract_tables.py"
+    "contract_fragments.py"
   DEPS
     iree::runtime::py::loom::target::package
     iree::runtime::py::loom::core

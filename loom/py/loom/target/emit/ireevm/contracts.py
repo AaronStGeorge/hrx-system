@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""IREE VM source-to-low contract table."""
+"""IREE VM source-to-low contract fragment."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from loom.dialect.scalar import conversion as scalar_conversion
 from loom.dsl import Op
 from loom.target.contracts import (
     AttrProject,
-    ContractTable,
+    ContractFragment,
     DescriptorEmitForm,
     DescriptorRule,
     EmitDescriptorOp,
@@ -156,7 +156,7 @@ IREEVM_CORE_CONTRACT_DIALECT_OPS = {
     "scalar": ALL_SCALAR_OPS,
 }
 
-IREEVM_CORE_CONTRACT_TABLE = ContractTable(
+IREEVM_CORE_CONTRACT_FRAGMENT = ContractFragment(
     name="iree.vm.core",
     descriptor_set=IREEVM_CORE_DESCRIPTOR_SET,
     public_header="loom/target/emit/ireevm/lower/rules.h",

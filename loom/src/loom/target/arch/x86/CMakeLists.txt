@@ -75,7 +75,7 @@ loom_target_table_cc_library(
   HEADER
     "lower/avx512_rules.h"
   ARGS
-    "--contract-table=x86.avx512"
+    "--contract-fragment=x86.avx512"
   DEPS
     ::avx512_descriptors_ids
     loom::src::loom::codegen::low::lower

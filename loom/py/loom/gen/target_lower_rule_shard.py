@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Generator: Python target contract table -> C lower-rule ABI table."""
+"""Generator: Python target contract fragment -> C lower-rule ABI table."""
 
 from __future__ import annotations
 
@@ -24,16 +24,16 @@ def _ensure_runtime_py_on_path() -> None:
 _ensure_runtime_py_on_path()
 
 from loom.gen.target_lower_rules import write_lower_rule_set_to_paths  # noqa: E402
-from loom.target.contract_tables import resolve_contract_table  # noqa: E402
+from loom.target.contract_fragments import resolve_contract_fragment  # noqa: E402
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate target-low lower-rule C tables from Python data.")
     parser.add_argument(
-        "--contract-table",
+        "--contract-fragment",
         required=True,
         metavar="KEY",
-        help="Contract table key or explicit shard alias to generate.",
+        help="Contract fragment key or alias to generate.",
     )
     parser.add_argument(
         "--header",
@@ -50,7 +50,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        registration = resolve_contract_table(args.contract_table)
+        registration = resolve_contract_fragment(args.contract_fragment)
     except ValueError as exc:
         parser.error(str(exc))
     write_lower_rule_set_to_paths(

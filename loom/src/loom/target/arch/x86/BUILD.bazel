@@ -123,7 +123,7 @@ loom_low_descriptor_cc_library(
 
 loom_target_table_cc_library(
     name = "avx512_lower_rules",
-    args = ["--contract-table=x86.avx512"],
+    args = ["--contract-fragment=x86.avx512"],
     generator = "//loom/py/loom/gen:x86_lower_rule_shard",
     header = "lower/avx512_rules.h",
     source = "lower/avx512_rules.c",

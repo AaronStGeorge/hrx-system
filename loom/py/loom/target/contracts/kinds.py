@@ -4,14 +4,14 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Contract table discriminants."""
+"""Contract fragment discriminants."""
 
 from enum import Enum, unique
 
 
 @unique
 class ContractSystem(Enum):
-    """Shared interpreter system used by a contract table case."""
+    """Shared interpreter system used by a contract fragment case."""
 
     DESCRIPTOR_RULE = "descriptor_rule"
     VALUE_ALIAS = "value_alias"

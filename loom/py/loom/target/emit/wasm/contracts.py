@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Wasm source-to-low contract table."""
+"""Wasm source-to-low contract fragment."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from loom.dsl import Op
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
 from loom.target.contracts import (
     AttrProject,
-    ContractTable,
+    ContractFragment,
     DescriptorEmitForm,
     DescriptorRule,
     EmitDescriptorOp,
@@ -355,7 +355,7 @@ WASM_CORE_SIMD128_CONTRACT_DIALECT_OPS = {
     "vector": ALL_VECTOR_OPS,
 }
 
-WASM_CORE_SIMD128_CONTRACT_TABLE = ContractTable(
+WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
     name="wasm.core.simd128",
     descriptor_set=WASM_CORE_SIMD128_DESCRIPTOR_SET,
     public_header="loom/target/emit/wasm/lower/rules.h",

@@ -110,7 +110,7 @@ loom_low_descriptor_cc_library(
 
 loom_target_table_cc_library(
     name = "lower_rules",
-    args = ["--contract-table=iree.vm.core"],
+    args = ["--contract-fragment=iree.vm.core"],
     generator = "//loom/py/loom/gen:ireevm_lower_rule_shard",
     header = "lower/rules.h",
     source = "lower/rules.c",

@@ -151,6 +151,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "contract",
+    srcs = ["contract.c"],
     hdrs = ["contract.h"],
     deps = [
         ":types",
@@ -170,6 +171,7 @@ loom_cc_test(
         ":contract",
         "//loom/src/loom/ir",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

@@ -13,7 +13,7 @@ from loom.dialect.scalar import comparison as scalar
 from loom.target.arch.amdgpu.contracts.materializers import I32_VGPR_MATERIALIZER
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
 from loom.target.contracts import (
-    ContractTable,
+    ContractFragment,
     DescriptorRule,
     EmitDescriptorOp,
     Guard,
@@ -127,7 +127,7 @@ AMDGPU_COMPARE_CONTRACT_DIALECT_OPS = {
     "scalar": ALL_SCALAR_OPS,
 }
 
-AMDGPU_COMPARE_CONTRACT_TABLE = ContractTable(
+AMDGPU_COMPARE_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.compare",
     descriptor_set=_DESCRIPTOR_SET,
     materializers=(I32_VGPR_MATERIALIZER,),

@@ -20,10 +20,10 @@ namespace {
 constexpr loom_op_kind_t kSourceOpKind = LOOM_OP_KIND(7, 3);
 constexpr uint64_t kDescriptorId = UINT64_C(0x123456789abcdef0);
 
-loom_target_contract_table_t MakeContractTable(
+loom_target_contract_fragment_t MakeContractFragment(
     loom_target_contract_op_entry_t* op_entries,
     loom_target_contract_dialect_table_t* dialects,
-    loom_target_contract_case_t* cases,
+    loom_target_contract_fragment_case_t* cases,
     loom_target_contract_descriptor_rule_t* descriptor_rules) {
   op_entries[loom_op_dialect_index(kSourceOpKind)].case_start = 0;
   op_entries[loom_op_dialect_index(kSourceOpKind)].case_count = 1;
@@ -31,22 +31,20 @@ loom_target_contract_table_t MakeContractTable(
   dialects[0].op_entries = op_entries;
   cases[0].system = LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_RULE;
   cases[0].row_index = 0;
-  descriptor_rules[0].rule_set_index = 0;
   descriptor_rules[0].rule_index = 0;
 
-  loom_target_contract_table_t table = {};
-  table.table_index = 9;
-  table.dialect_base_id = loom_op_dialect_id(kSourceOpKind);
-  table.dialect_count = 1;
-  table.dialects = dialects;
-  table.case_count = 1;
-  table.cases = cases;
-  table.descriptor_rule_count = 1;
-  table.descriptor_rules = descriptor_rules;
-  return table;
+  loom_target_contract_fragment_t fragment = {};
+  fragment.dialect_base_id = loom_op_dialect_id(kSourceOpKind);
+  fragment.dialect_count = 1;
+  fragment.dialects = dialects;
+  fragment.case_count = 1;
+  fragment.cases = cases;
+  fragment.descriptor_rule_count = 1;
+  fragment.descriptor_rules = descriptor_rules;
+  return fragment;
 }
 
-TEST(LowContractQueryTest, ContractTableDescriptorRuleSelectsLegalCase) {
+TEST(LowContractQueryTest, ContractIndexDescriptorRuleSelectsLegalCase) {
   loom_low_lower_emit_t emit = {};
   emit.kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP;
   emit.descriptor_id = kDescriptorId;
@@ -62,13 +60,27 @@ TEST(LowContractQueryTest, ContractTableDescriptorRuleSelectsLegalCase) {
 
   loom_target_contract_op_entry_t op_entries[4] = {};
   loom_target_contract_dialect_table_t dialects[1] = {};
-  loom_target_contract_case_t cases[1] = {};
+  loom_target_contract_fragment_case_t cases[1] = {};
   loom_target_contract_descriptor_rule_t descriptor_rules[1] = {};
-  loom_target_contract_table_t table =
-      MakeContractTable(op_entries, dialects, cases, descriptor_rules);
+  loom_target_contract_fragment_t fragment =
+      MakeContractFragment(op_entries, dialects, cases, descriptor_rules);
+  const loom_target_contract_binding_t bindings[] = {
+      {
+          &fragment,
+          0,
+      },
+  };
+
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool, &arena);
+  loom_target_contract_index_t index = {};
+  IREE_ASSERT_OK(loom_target_contract_index_compose(
+      bindings, IREE_ARRAYSIZE(bindings), &index, &arena));
 
   const loom_low_lower_contract_query_options_t options = {
-      /*.contract_table=*/&table,
+      /*.contract_index=*/&index,
       /*.rule_sets=*/
       {
           /*.count=*/IREE_ARRAYSIZE(rule_sets),
@@ -84,12 +96,17 @@ TEST(LowContractQueryTest, ContractTableDescriptorRuleSelectsLegalCase) {
                                                       &op, &result));
 
   EXPECT_EQ(result.outcome, LOOM_TARGET_CONTRACT_QUERY_LEGAL);
-  EXPECT_EQ(result.table_index, table.table_index);
+  EXPECT_EQ(result.binding_index, 0);
+  EXPECT_EQ(result.case_index, 0);
+  EXPECT_EQ(result.rule_set_index, 0);
   EXPECT_EQ(result.rule_index, 0);
   EXPECT_EQ(result.selected_descriptor_id, kDescriptorId);
+
+  iree_arena_deinitialize(&arena);
+  iree_arena_block_pool_deinitialize(&block_pool);
 }
 
-TEST(LowContractQueryTest, ContractTableDescriptorRuleReportsRejectedCase) {
+TEST(LowContractQueryTest, ContractIndexDescriptorRuleReportsRejectedCase) {
   loom_low_lower_guard_t guard = {};
   guard.kind = LOOM_LOW_LOWER_GUARD_ATTR_KIND;
   guard.attr_kind = LOOM_ATTR_I64;
@@ -112,18 +129,27 @@ TEST(LowContractQueryTest, ContractTableDescriptorRuleReportsRejectedCase) {
 
   loom_target_contract_op_entry_t op_entries[4] = {};
   loom_target_contract_dialect_table_t dialects[1] = {};
-  loom_target_contract_case_t cases[1] = {};
+  loom_target_contract_fragment_case_t cases[1] = {};
   loom_target_contract_descriptor_rule_t descriptor_rules[1] = {};
-  loom_target_contract_table_t table =
-      MakeContractTable(op_entries, dialects, cases, descriptor_rules);
+  loom_target_contract_fragment_t fragment =
+      MakeContractFragment(op_entries, dialects, cases, descriptor_rules);
+  const loom_target_contract_binding_t bindings[] = {
+      {
+          &fragment,
+          0,
+      },
+  };
 
   iree_arena_block_pool_t block_pool;
   iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool);
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool, &arena);
+  loom_target_contract_index_t index = {};
+  IREE_ASSERT_OK(loom_target_contract_index_compose(
+      bindings, IREE_ARRAYSIZE(bindings), &index, &arena));
 
   const loom_low_lower_contract_query_options_t options = {
-      /*.contract_table=*/&table,
+      /*.contract_index=*/&index,
       /*.rule_sets=*/
       {
           /*.count=*/IREE_ARRAYSIZE(rule_sets),
@@ -146,8 +172,10 @@ TEST(LowContractQueryTest, ContractTableDescriptorRuleReportsRejectedCase) {
                                                       &op, &result));
 
   EXPECT_EQ(result.outcome, LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED);
-  EXPECT_EQ(result.table_index, table.table_index);
-  EXPECT_EQ(result.rule_index, 0);
+  EXPECT_EQ(result.binding_index, 0);
+  EXPECT_EQ(result.case_index, 0);
+  EXPECT_EQ(result.rule_set_index, 0);
+  EXPECT_EQ(result.rule_index, UINT16_MAX);
   EXPECT_EQ(result.diagnostic_index, 0);
   ASSERT_NE(result.rejection, nullptr);
   EXPECT_TRUE(
