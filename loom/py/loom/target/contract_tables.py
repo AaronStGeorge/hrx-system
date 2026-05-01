@@ -53,6 +53,13 @@ CONTRACT_TABLE_REGISTRATIONS = (
         aliases=("amdgpu_compare",),
     ),
     ContractTableRegistration(
+        key="amdgpu.dot",
+        module_name="loom.target.arch.amdgpu.contracts.dot",
+        symbol_name="AMDGPU_DOT_CONTRACT_TABLE",
+        dialect_ops_symbol_name="AMDGPU_DOT_CONTRACT_DIALECT_OPS",
+        aliases=("amdgpu_dot",),
+    ),
+    ContractTableRegistration(
         key="amdgpu.integer",
         module_name="loom.target.arch.amdgpu.contracts.integer",
         symbol_name="AMDGPU_INTEGER_CONTRACT_TABLE",

@@ -224,6 +224,7 @@ def _generate_source(
             f'#include "{source_contract.descriptor_set.public_header}"',
         ]
     )
+    lines.extend(f'#include "{include}"' for include in source_contract.c_source_includes)
     lines.extend(f'#include "{include}"' for include in _materializer_includes(source_contract))
     lines.extend(f'#include "{include}"' for include in _op_header_includes(table))
     lines.append("")

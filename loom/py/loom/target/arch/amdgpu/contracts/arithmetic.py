@@ -585,6 +585,7 @@ AMDGPU_ARITHMETIC_CONTRACT_DIALECT_OPS = {
 AMDGPU_ARITHMETIC_CONTRACT_TABLE = ContractTable(
     name="amdgpu.arithmetic",
     descriptor_set=_DESCRIPTOR_SET,
+    c_source_includes=("loom/target/arch/amdgpu/lower/kinds.h",),
     materializers=(ADDRESS_VGPR_MATERIALIZER,),
     cases=_rules(),
 )

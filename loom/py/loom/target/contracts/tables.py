@@ -32,6 +32,7 @@ class ContractTable:
     public_header: str = ""
     symbol_name: str = ""
     c_table_prefix: str = ""
+    c_source_includes: tuple[str, ...] = ()
     materializers: tuple[ValueMaterializer, ...] = ()
 
     def __init__(
@@ -47,6 +48,7 @@ class ContractTable:
         public_header: str = "",
         symbol_name: str = "",
         c_table_prefix: str = "",
+        c_source_includes: Sequence[str] = (),
         materializers: Sequence[ValueMaterializer] = (),
     ) -> None:
         object.__setattr__(self, "name", name)
@@ -59,15 +61,23 @@ class ContractTable:
         object.__setattr__(self, "public_header", public_header)
         object.__setattr__(self, "symbol_name", symbol_name)
         object.__setattr__(self, "c_table_prefix", c_table_prefix)
+        object.__setattr__(self, "c_source_includes", tuple(c_source_includes))
         object.__setattr__(self, "materializers", tuple(materializers))
         if not name:
             raise ValueError("contract table name must be non-empty")
         if table_index < 0 or table_index > 0xFFFF:
             raise ValueError("contract table index must fit in uint16_t")
         _validate_descriptor_set_keys(descriptor_set)
+        _validate_c_source_includes(self.c_source_includes)
         _validate_materializer_names(self.materializers)
         for case in self.cases:
             case.validate(descriptor_set)
+
+
+def _validate_c_source_includes(includes: tuple[str, ...]) -> None:
+    for include in includes:
+        if not include:
+            raise ValueError("contract table C source include must be non-empty")
 
 
 def _validate_materializer_names(

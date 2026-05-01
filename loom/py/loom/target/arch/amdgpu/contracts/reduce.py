@@ -131,6 +131,7 @@ AMDGPU_REDUCE_CONTRACT_DIALECT_OPS = {
 AMDGPU_REDUCE_CONTRACT_TABLE = ContractTable(
     name="amdgpu.reduce",
     descriptor_set=_DESCRIPTOR_SET,
+    c_source_includes=("loom/target/arch/amdgpu/lower/kinds.h",),
     materializers=(I32_VGPR_MATERIALIZER,),
     cases=[
         _i32_rule("addi", "amdgpu.v_add_u32"),

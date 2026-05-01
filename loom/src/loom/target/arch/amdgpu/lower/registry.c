@@ -873,7 +873,7 @@ static const loom_low_lower_rule_set_t* const kAmdgpuRuleSets[] = {
   &loom_amdgpu_arithmetic_lower_rule_set,
   &loom_amdgpu_integer_lower_rule_set,
   &loom_amdgpu_compare_lower_rule_set,
-  &loom_amdgpu_dot_rule_set,
+  &loom_amdgpu_dot_lower_rule_set,
   &loom_amdgpu_reduce_lower_rule_set,
   &loom_amdgpu_async_rule_set,
 };

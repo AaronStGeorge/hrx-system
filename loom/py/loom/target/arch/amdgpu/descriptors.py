@@ -7303,7 +7303,10 @@ def _contract_overlay_builders_from_overlays(
     return {overlay.descriptor_key: _overlay_builder(overlay) for overlay in overlays}
 
 
-_AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS = {
+_AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS: dict[
+    str,
+    Callable[[], AmdgpuDescriptorOverlay],
+] = {
     "amdgpu.s_add_u32": _s_add_u32_overlay,
     "amdgpu.s_sub_u32": _s_sub_u32_overlay,
     "amdgpu.v_add_u32": lambda: _v_add_u32_overlay("V_ADD_NC_U32"),
@@ -7318,6 +7321,48 @@ _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS = {
     "amdgpu.v_fma_f32": _v_fma_f32_overlay,
     "amdgpu.v_cvt_f32_i32": _v_cvt_f32_i32_overlay,
     "amdgpu.v_cvt_f32_u32": _v_cvt_f32_u32_overlay,
+    "amdgpu.v_dot2_f32_f16": _v_dot2_f32_f16_overlay,
+    "amdgpu.v_dot2_f32_bf16": _v_dot2_f32_bf16_overlay,
+    "amdgpu.v_dot4_i32_i8": lambda: _v_dot4_i32_i8_overlay(
+        signedness_modifiers=False,
+    ),
+    "amdgpu.v_dot4_u32_u8": _v_dot4_u32_u8_overlay,
+    "amdgpu.v_dot4_i32_iu8.u8s8": lambda: _v_dot4_i32_iu8_overlay(
+        lhs_signed=False,
+        rhs_signed=True,
+    ),
+    "amdgpu.v_dot4_i32_iu8.s8u8": lambda: _v_dot4_i32_iu8_overlay(
+        lhs_signed=True,
+        rhs_signed=False,
+    ),
+    "amdgpu.v_dot8_i32_i4": lambda: _v_dot8_i32_i4_overlay(
+        signedness_modifiers=False,
+    ),
+    "amdgpu.v_dot8_u32_u4": _v_dot8_u32_u4_overlay,
+    "amdgpu.v_dot8_i32_iu4.s4u4": lambda: _v_dot8_i32_iu4_overlay(
+        lhs_signed=True,
+        rhs_signed=False,
+    ),
+    "amdgpu.v_dot8_i32_iu4.u4s4": lambda: _v_dot8_i32_iu4_overlay(
+        lhs_signed=False,
+        rhs_signed=True,
+    ),
+    "amdgpu.v_dot4_f32_fp8_bf8": lambda: _v_dot4_f32_packed8_overlay(
+        lhs_type="fp8",
+        rhs_type="bf8",
+    ),
+    "amdgpu.v_dot4_f32_bf8_fp8": lambda: _v_dot4_f32_packed8_overlay(
+        lhs_type="bf8",
+        rhs_type="fp8",
+    ),
+    "amdgpu.v_dot4_f32_fp8_fp8": lambda: _v_dot4_f32_packed8_overlay(
+        lhs_type="fp8",
+        rhs_type="fp8",
+    ),
+    "amdgpu.v_dot4_f32_bf8_bf8": lambda: _v_dot4_f32_packed8_overlay(
+        lhs_type="bf8",
+        rhs_type="bf8",
+    ),
     **_contract_overlay_builders_from_overlays(_i32_bitwise_shift_overlays()),
     **_contract_overlay_builders_from_overlays(_s_cmp_i32_overlays()),
     **_contract_overlay_builders_from_overlays(_v_cmp_overlays()),

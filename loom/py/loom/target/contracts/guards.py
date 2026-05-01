@@ -103,12 +103,19 @@ class Guard:
         )
 
     @classmethod
-    def enum_attr_equals(cls, field: str, enum_case: str | EnumCase) -> Self:
+    def enum_attr_equals(
+        cls,
+        field: str,
+        enum_case: str | EnumCase,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
         keyword = enum_case.keyword if isinstance(enum_case, EnumCase) else enum_case
         return cls(
             kind=GuardKind.ENUM_ATTR_EQUALS,
             field=field,
             enum_keyword=keyword,
+            diagnostic=diagnostic,
         )
 
     @classmethod
@@ -169,19 +176,33 @@ class Guard:
         )
 
     @classmethod
-    def value_static_dim0_multiple(cls, field: str, multiple: int) -> Self:
+    def value_static_dim0_multiple(
+        cls,
+        field: str,
+        multiple: int,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
         return cls(
             kind=GuardKind.VALUE_STATIC_DIM0_MULTIPLE,
             field=field,
             count=multiple,
+            diagnostic=diagnostic,
         )
 
     @classmethod
-    def low_value_register_unit_count_eq(cls, field: str, other_field: str) -> Self:
+    def low_value_register_unit_count_eq(
+        cls,
+        field: str,
+        other_field: str,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
         return cls(
             kind=GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
             field=field,
             other_field=other_field,
+            diagnostic=diagnostic,
         )
 
     @classmethod

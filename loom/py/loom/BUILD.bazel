@@ -133,6 +133,7 @@ _AMDGPU_CONTRACT_SHARD_SRCS = _TARGET_CONTRACT_GENERATOR_SRCS + [
     "target/arch/amdgpu/contracts/__init__.py",
     "target/arch/amdgpu/contracts/arithmetic.py",
     "target/arch/amdgpu/contracts/compare.py",
+    "target/arch/amdgpu/contracts/dot.py",
     "target/arch/amdgpu/contracts/integer.py",
     "target/arch/amdgpu/contracts/materializers.py",
     "target/arch/amdgpu/contracts/reduce.py",

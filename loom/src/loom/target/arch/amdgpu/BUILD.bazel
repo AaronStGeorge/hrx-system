@@ -399,6 +399,7 @@ _AMDGPU_LOWER_RULE_GENERATOR_DEPS = [
     "//loom/py/loom:target/arch/amdgpu/contracts/__init__.py",
     "//loom/py/loom:target/arch/amdgpu/contracts/arithmetic.py",
     "//loom/py/loom:target/arch/amdgpu/contracts/compare.py",
+    "//loom/py/loom:target/arch/amdgpu/contracts/dot.py",
     "//loom/py/loom:target/arch/amdgpu/contracts/integer.py",
     "//loom/py/loom:target/arch/amdgpu/contracts/materializers.py",
     "//loom/py/loom:target/arch/amdgpu/contracts/reduce.py",
@@ -434,6 +435,7 @@ loom_target_table_cc_library(
     source = "lower/arithmetic_rules.c",
     deps = [
         ":descriptor_ids",
+        ":lower_kinds",
         ":lower_materializers",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ops/index",
@@ -476,6 +478,22 @@ loom_target_table_cc_library(
 )
 
 loom_target_table_cc_library(
+    name = "lower_dot_rules",
+    args = ["--contract-table=amdgpu.dot"],
+    cmake_generator = _AMDGPU_LOWER_RULE_GENERATOR_SCRIPT,
+    cmake_generator_deps = _AMDGPU_LOWER_RULE_GENERATOR_DEPS,
+    generator = _AMDGPU_LOWER_RULE_GENERATOR,
+    header = "lower/dot_rules.h",
+    source = "lower/dot_rules.c",
+    deps = [
+        ":descriptor_ids",
+        ":lower_kinds",
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/ops/vector",
+    ],
+)
+
+loom_target_table_cc_library(
     name = "lower_reduce_rules",
     args = ["--contract-table=amdgpu.reduce"],
     cmake_generator = _AMDGPU_LOWER_RULE_GENERATOR_SCRIPT,
@@ -485,6 +503,7 @@ loom_target_table_cc_library(
     source = "lower/reduce_rules.c",
     deps = [
         ":descriptor_ids",
+        ":lower_kinds",
         ":lower_materializers",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ops/vector",
@@ -765,7 +784,6 @@ loom_cc_library(
         "lower/bitpack.c",
         "lower/buffer.c",
         "lower/control.c",
-        "lower/dot_rules.c",
         "lower/emit_support.c",
         "lower/lds_layout.c",
         "lower/mask.c",
@@ -798,6 +816,7 @@ loom_cc_library(
         ":hal_kernel_abi",
         ":lower_arithmetic_rules",
         ":lower_compare_rules",
+        ":lower_dot_rules",
         ":lower_integer_rules",
         ":lower_kinds",
         ":lower_materializers",
