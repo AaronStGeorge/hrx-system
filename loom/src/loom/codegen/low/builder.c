@@ -15,9 +15,6 @@
 iree_status_t loom_low_build_register_class_string_id(
     loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set,
     uint16_t reg_class_id, loom_string_id_t* out_string_id) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(descriptor_set);
-  IREE_ASSERT_ARGUMENT(out_string_id);
   *out_string_id = LOOM_STRING_ID_INVALID;
   if (reg_class_id >= descriptor_set->reg_class_count) {
     return iree_make_status(IREE_STATUS_NOT_FOUND,
@@ -42,7 +39,6 @@ iree_status_t loom_low_build_register_class_string_id(
 iree_status_t loom_low_build_register_type(
     loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set,
     uint16_t reg_class_id, uint32_t unit_count, loom_type_t* out_type) {
-  IREE_ASSERT_ARGUMENT(out_type);
   *out_type = loom_type_none();
   if (unit_count == 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -58,10 +54,6 @@ iree_status_t loom_low_build_register_type(
 static iree_status_t loom_low_build_resolved_descriptor_opcode_id(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor, loom_string_id_t* out_opcode_id) {
-  IREE_ASSERT_ARGUMENT(builder);
-  IREE_ASSERT_ARGUMENT(descriptor_set);
-  IREE_ASSERT_ARGUMENT(descriptor);
-  IREE_ASSERT_ARGUMENT(out_opcode_id);
   *out_opcode_id = LOOM_STRING_ID_INVALID;
   iree_string_view_t key = loom_low_descriptor_set_string(
       descriptor_set, descriptor->key_string_offset);
@@ -78,10 +70,6 @@ static iree_status_t loom_low_build_lookup_descriptor(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     uint64_t descriptor_id, const loom_low_descriptor_t** out_descriptor,
     loom_string_id_t* out_opcode_id) {
-  IREE_ASSERT_ARGUMENT(builder);
-  IREE_ASSERT_ARGUMENT(descriptor_set);
-  IREE_ASSERT_ARGUMENT(out_descriptor);
-  IREE_ASSERT_ARGUMENT(out_opcode_id);
   *out_descriptor = NULL;
   *out_opcode_id = LOOM_STRING_ID_INVALID;
   if (descriptor_id == LOOM_LOW_DESCRIPTOR_ID_NONE) {
@@ -121,14 +109,7 @@ iree_status_t loom_low_build_resolved_descriptor_op(
     iree_host_size_t result_count, const loom_tied_result_t* tied_results,
     iree_host_size_t tied_result_count, loom_location_id_t location,
     loom_op_t** out_op) {
-  IREE_ASSERT_ARGUMENT(builder);
-  IREE_ASSERT_ARGUMENT(descriptor_set);
-  IREE_ASSERT_ARGUMENT(descriptor);
   IREE_ASSERT(opcode_id != LOOM_STRING_ID_INVALID);
-  IREE_ASSERT_ARGUMENT(out_op);
-  IREE_ASSERT_ARGUMENT(operand_count == 0 || operands);
-  IREE_ASSERT_ARGUMENT(result_count == 0 || result_types);
-  IREE_ASSERT_ARGUMENT(tied_result_count == 0 || tied_results);
   *out_op = NULL;
   if (operand_count > UINT16_MAX) {
     return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
@@ -180,11 +161,7 @@ iree_status_t loom_low_build_resolved_descriptor_const(
     const loom_low_descriptor_t* descriptor, loom_string_id_t opcode_id,
     loom_named_attr_slice_t attrs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op) {
-  IREE_ASSERT_ARGUMENT(builder);
-  IREE_ASSERT_ARGUMENT(descriptor_set);
-  IREE_ASSERT_ARGUMENT(descriptor);
   IREE_ASSERT(opcode_id != LOOM_STRING_ID_INVALID);
-  IREE_ASSERT_ARGUMENT(out_op);
   *out_op = NULL;
 
   IREE_RETURN_IF_ERROR(loom_builder_allocate_op(
@@ -218,7 +195,6 @@ iree_status_t loom_low_build_descriptor_op(
     const loom_type_t* result_types, iree_host_size_t result_count,
     const loom_tied_result_t* tied_results, iree_host_size_t tied_result_count,
     loom_location_id_t location, loom_op_t** out_op) {
-  IREE_ASSERT_ARGUMENT(out_op);
   *out_op = NULL;
   loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
   const loom_low_descriptor_t* descriptor = NULL;
@@ -234,7 +210,6 @@ iree_status_t loom_low_build_descriptor_const(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     uint64_t descriptor_id, loom_named_attr_slice_t attrs,
     loom_type_t result_type, loom_location_id_t location, loom_op_t** out_op) {
-  IREE_ASSERT_ARGUMENT(out_op);
   *out_op = NULL;
   loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
   const loom_low_descriptor_t* descriptor = NULL;
