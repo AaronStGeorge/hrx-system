@@ -1,0 +1,436 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""Generator: Python target contracts -> target-low lower-rule C tables."""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+
+from loom.dsl import Op
+from loom.gen.generated_file import line_comment_header
+from loom.target.contracts import (
+    CompiledLowerRuleSet,
+    ContractTable,
+    GuardKind,
+    LowerEmitKind,
+    SourceValueKind,
+    TypePattern,
+    compile_lower_rule_set,
+)
+
+_SCALAR_TYPE_C_NAMES = {
+    "index": "LOOM_SCALAR_TYPE_INDEX",
+    "offset": "LOOM_SCALAR_TYPE_OFFSET",
+    "i1": "LOOM_SCALAR_TYPE_I1",
+    "i8": "LOOM_SCALAR_TYPE_I8",
+    "i16": "LOOM_SCALAR_TYPE_I16",
+    "i32": "LOOM_SCALAR_TYPE_I32",
+    "i64": "LOOM_SCALAR_TYPE_I64",
+    "f8E4M3": "LOOM_SCALAR_TYPE_F8E4M3",
+    "f8E5M2": "LOOM_SCALAR_TYPE_F8E5M2",
+    "f16": "LOOM_SCALAR_TYPE_F16",
+    "bf16": "LOOM_SCALAR_TYPE_BF16",
+    "f32": "LOOM_SCALAR_TYPE_F32",
+    "f64": "LOOM_SCALAR_TYPE_F64",
+}
+
+_VALUE_REF_KIND_C_NAMES = {
+    SourceValueKind.OPERAND: "LOOM_LOW_LOWER_VALUE_REF_OPERAND",
+    SourceValueKind.RESULT: "LOOM_LOW_LOWER_VALUE_REF_RESULT",
+    SourceValueKind.TEMPORARY: "LOOM_LOW_LOWER_VALUE_REF_TEMPORARY",
+}
+
+_GUARD_KIND_C_NAMES = {
+    GuardKind.VALUE_TYPE: "LOOM_LOW_LOWER_GUARD_VALUE_TYPE",
+    GuardKind.ENUM_ATTR_EQUALS: "LOOM_LOW_LOWER_GUARD_ATTR_ENUM_EQ",
+}
+
+_EMIT_KIND_C_NAMES = {
+    LowerEmitKind.DESCRIPTOR_OP: "LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP",
+    LowerEmitKind.DESCRIPTOR_OP_PER_LANE: "LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class GeneratedLowerRuleSet:
+    """Generated C/H contents for one lower-rule set."""
+
+    header: str
+    source: str
+
+
+def generate_lower_rule_set(
+    table: ContractTable,
+    *,
+    dialect_ops: Mapping[str, Sequence[Op]],
+) -> GeneratedLowerRuleSet:
+    """Generates C/H text for a generated target-low lower-rule set."""
+
+    compiled = compile_lower_rule_set(table, dialect_ops=dialect_ops)
+    public_header = _generated_public_header(table)
+    symbol_name = _generated_symbol_name(table)
+    c_table_prefix = _c_identifier(_generated_table_prefix(table))
+    header_guard = _header_guard_from_public_header(public_header)
+    return GeneratedLowerRuleSet(
+        header=_generate_header(
+            header_guard=header_guard,
+            symbol_name=symbol_name,
+        ),
+        source=_generate_source(
+            table=compiled,
+            source_contract=table,
+            public_header=public_header,
+            symbol_name=symbol_name,
+            c_table_prefix=c_table_prefix,
+        ),
+    )
+
+
+def write_lower_rule_set_to_paths(
+    table: ContractTable,
+    *,
+    dialect_ops: Mapping[str, Sequence[Op]],
+    header_path: Path,
+    source_path: Path,
+) -> None:
+    """Writes generated C/H contents for one generated lower-rule set."""
+
+    generated = generate_lower_rule_set(table, dialect_ops=dialect_ops)
+    header_path.parent.mkdir(parents=True, exist_ok=True)
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    header_path.write_text(generated.header, encoding="utf-8")
+    source_path.write_text(generated.source, encoding="utf-8")
+
+
+def _generate_header(*, header_guard: str, symbol_name: str) -> str:
+    lines: list[str] = []
+    lines.extend(
+        line_comment_header(
+            "//",
+            generator="loom/py/loom/gen/target_lower_rules.py",
+        )
+    )
+    lines.extend(
+        [
+            "",
+            f"#ifndef {header_guard}",
+            f"#define {header_guard}",
+            "",
+            '#include "loom/codegen/low/lower_rules.h"',
+            "",
+            "#ifdef __cplusplus",
+            'extern "C" {',
+            "#endif",
+            "",
+            f"extern const loom_low_lower_rule_set_t {symbol_name};",
+            "",
+            "#ifdef __cplusplus",
+            '}  // extern "C"',
+            "#endif",
+            "",
+            f"#endif  // {header_guard}",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _generate_source(
+    *,
+    table: CompiledLowerRuleSet,
+    source_contract: ContractTable,
+    public_header: str,
+    symbol_name: str,
+    c_table_prefix: str,
+) -> str:
+    lines: list[str] = []
+    lines.extend(
+        line_comment_header(
+            "//",
+            generator="loom/py/loom/gen/target_lower_rules.py",
+        )
+    )
+    lines.extend(
+        [
+            "",
+            f'#include "{public_header}"',
+            "",
+            "#include <stddef.h>",
+            "",
+            f'#include "{source_contract.descriptor_set.public_header}"',
+        ]
+    )
+    lines.extend(f'#include "{include}"' for include in _op_header_includes(table))
+    lines.append("")
+
+    type_patterns_name = f"k{c_table_prefix}TypePatterns"
+    lines.extend(
+        _emit_optional_array(
+            type_patterns_name,
+            "loom_low_lower_type_pattern_t",
+            [_type_pattern_row(row.type_pattern) for row in table.type_patterns],
+        )
+    )
+
+    value_refs_name = f"k{c_table_prefix}ValueRefs"
+    lines.extend(
+        _emit_optional_array(
+            value_refs_name,
+            "loom_low_lower_value_ref_t",
+            [
+                [
+                    f".kind = {_VALUE_REF_KIND_C_NAMES[row.kind]}",
+                    f".index = {row.index}",
+                    f".materializer_index = {row.materializer_index}",
+                ]
+                for row in table.value_refs
+            ],
+        )
+    )
+
+    diagnostics_name = f"k{c_table_prefix}Diagnostics"
+    lines.extend(
+        _emit_optional_array(
+            diagnostics_name,
+            "loom_low_lower_diagnostic_t",
+            [
+                [
+                    f'.subject_kind = IREE_SVL("{_c_string_literal(row.subject_kind)}")',
+                    f'.subject_name = IREE_SVL("{_c_string_literal(row.subject_name)}")',
+                    f'.reason = IREE_SVL("{_c_string_literal(row.reason)}")',
+                ]
+                for row in table.diagnostics
+            ],
+        )
+    )
+
+    guards_name = f"k{c_table_prefix}Guards"
+    lines.extend(
+        _emit_optional_array(
+            guards_name,
+            "loom_low_lower_guard_t",
+            [
+                [
+                    f".kind = {_GUARD_KIND_C_NAMES[row.kind]}",
+                    f".value_ref_index = {row.value_ref_index}",
+                    f".other_value_ref_index = {row.other_value_ref_index}",
+                    f".attr_index = {row.attr_index}",
+                    f".type_pattern_index = {row.type_pattern_index}",
+                    f".diagnostic_index = {_diagnostic_index(row.diagnostic_index)}",
+                    f".u64 = {row.u64}",
+                    f".minimum_i64 = {row.minimum_i64}",
+                    f".maximum_i64 = {row.maximum_i64}",
+                ]
+                for row in table.guards
+            ],
+        )
+    )
+
+    emits_name = f"k{c_table_prefix}Emits"
+    lines.extend(
+        _emit_optional_array(
+            emits_name,
+            "loom_low_lower_emit_t",
+            [
+                [
+                    f".kind = {_EMIT_KIND_C_NAMES[row.kind]}",
+                    f".descriptor_id = {_descriptor_id_constant_name(source_contract, row.descriptor.key)}",
+                    f".operand_ref_start = {row.operand_ref_start}",
+                    f".operand_ref_count = {row.operand_ref_count}",
+                    f".result_ref_start = {row.result_ref_start}",
+                    f".result_ref_count = {row.result_ref_count}",
+                ]
+                for row in table.emits
+            ],
+        )
+    )
+
+    rules_name = f"k{c_table_prefix}Rules"
+    lines.extend(
+        _emit_optional_array(
+            rules_name,
+            "loom_low_lower_rule_t",
+            [
+                [
+                    f".source_op_kind = {_op_c_name(row.source_op)}",
+                    f".guard_start = {row.guard_start}",
+                    f".guard_count = {row.guard_count}",
+                    f".emit_start = {row.emit_start}",
+                    f".emit_count = {row.emit_count}",
+                ]
+                for row in table.rules
+            ],
+        )
+    )
+
+    spans_name = f"k{c_table_prefix}Spans"
+    lines.extend(
+        _emit_optional_array(
+            spans_name,
+            "loom_low_lower_rule_span_t",
+            [
+                [
+                    f".source_op_kind = {_op_c_name(row.source_op)}",
+                    f".rule_start = {row.rule_start}",
+                    f".rule_count = {row.rule_count}",
+                ]
+                for row in table.spans
+            ],
+        )
+    )
+
+    lines.extend(
+        [
+            f"const loom_low_lower_rule_set_t {symbol_name} = {{",
+            "    .flags = LOOM_LOW_LOWER_RULE_SET_FLAG_TARGET_CONTRACT_QUERY,",
+            f"    .spans = {_table_value(table.spans, spans_name)},",
+            f"    .span_count = {_table_count(table.spans, spans_name)},",
+            f"    .rules = {_table_value(table.rules, rules_name)},",
+            f"    .rule_count = {_table_count(table.rules, rules_name)},",
+            f"    .type_patterns = {_table_value(table.type_patterns, type_patterns_name)},",
+            f"    .type_pattern_count = {_table_count(table.type_patterns, type_patterns_name)},",
+            f"    .value_refs = {_table_value(table.value_refs, value_refs_name)},",
+            f"    .value_ref_count = {_table_count(table.value_refs, value_refs_name)},",
+            "    .materializers = NULL,",
+            "    .materializer_count = 0,",
+            f"    .guards = {_table_value(table.guards, guards_name)},",
+            f"    .guard_count = {_table_count(table.guards, guards_name)},",
+            "    .attr_copies = NULL,",
+            "    .attr_copy_count = 0,",
+            "    .tied_results = NULL,",
+            "    .tied_result_count = 0,",
+            f"    .emits = {_table_value(table.emits, emits_name)},",
+            f"    .emit_count = {_table_count(table.emits, emits_name)},",
+            f"    .diagnostics = {_table_value(table.diagnostics, diagnostics_name)},",
+            f"    .diagnostic_count = {_table_count(table.diagnostics, diagnostics_name)},",
+            "};",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _emit_optional_array(
+    name: str,
+    c_type: str,
+    rows: list[list[str]],
+) -> list[str]:
+    if not rows:
+        return []
+    lines = [f"static const {c_type} {name}[] = {{"]
+    for row in rows:
+        lines.append("    {")
+        lines.extend(f"        {field}," for field in row)
+        lines.append("    },")
+    lines.extend(["};", ""])
+    return lines
+
+
+def _type_pattern_row(type_pattern: TypePattern) -> list[str]:
+    flags = [
+        "LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND",
+        "LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT",
+    ]
+    row = [
+        ".flags = " + " | ".join(flags),
+        f".type_kind = {_type_kind_c_name(type_pattern)}",
+        f".element_type_mask = LOOM_LOW_LOWER_SCALAR_TYPE_BIT({_scalar_type_c_name(type_pattern.element)})",
+    ]
+    if type_pattern.kind == "vector":
+        if type_pattern.lanes is None:
+            raise ValueError("generated vector type patterns require static lanes")
+        row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0"
+        row.extend(
+            [
+                ".rank = 1",
+                f".static_dim0 = {type_pattern.lanes}",
+            ]
+        )
+    return row
+
+
+def _type_kind_c_name(type_pattern: TypePattern) -> str:
+    if type_pattern.kind == "scalar":
+        return "LOOM_TYPE_SCALAR"
+    if type_pattern.kind == "vector":
+        return "LOOM_TYPE_VECTOR"
+    raise ValueError(f"unknown type pattern kind '{type_pattern.kind}'")
+
+
+def _scalar_type_c_name(element: str | None) -> str:
+    if element is None:
+        raise ValueError("type pattern element is required")
+    c_name = _SCALAR_TYPE_C_NAMES.get(element)
+    if c_name is None:
+        raise ValueError(f"unknown scalar type '{element}'")
+    return c_name
+
+
+def _diagnostic_index(index: int) -> str:
+    if index == 0xFFFF:
+        return "LOOM_LOW_LOWER_DIAGNOSTIC_NONE"
+    return str(index)
+
+
+def _table_value(rows: tuple[object, ...], name: str) -> str:
+    return name if rows else "NULL"
+
+
+def _table_count(rows: tuple[object, ...], name: str) -> str:
+    return f"IREE_ARRAYSIZE({name})" if rows else "0"
+
+
+def _op_header_includes(table: CompiledLowerRuleSet) -> tuple[str, ...]:
+    dialect_names = {rule.source_op.group.name for rule in table.rules if rule.source_op.group is not None}
+    return tuple(f"loom/ops/{name}/ops.h" for name in sorted(dialect_names))
+
+
+def _op_c_name(op: Op) -> str:
+    return "LOOM_OP_" + _c_identifier(op.name).upper()
+
+
+def _descriptor_id_constant_name(table: ContractTable, descriptor_key: str) -> str:
+    return f"{table.descriptor_set.c_enum_prefix}_DESCRIPTOR_ID_{_c_identifier(descriptor_key).upper()}"
+
+
+def _generated_public_header(table: ContractTable) -> str:
+    if not table.public_header:
+        raise ValueError(f"contract table '{table.name}' requires public_header")
+    return re.sub(r"contract_table\.h$", "lower_rules.h", table.public_header)
+
+
+def _generated_symbol_name(table: ContractTable) -> str:
+    if not table.symbol_name:
+        raise ValueError(f"contract table '{table.name}' requires symbol_name")
+    return re.sub(r"contract_table$", "lower_rule_set", table.symbol_name)
+
+
+def _generated_table_prefix(table: ContractTable) -> str:
+    if not table.c_table_prefix:
+        raise ValueError(f"contract table '{table.name}' requires c_table_prefix")
+    return f"{table.c_table_prefix}Lower"
+
+
+def _header_guard_from_public_header(public_header: str) -> str:
+    return _c_identifier(public_header).upper() + "_"
+
+
+def _c_string_literal(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+
+
+def _c_identifier(value: str) -> str:
+    parts = tuple(part for part in re.split(r"[^0-9A-Za-z]+", value) if part)
+    if not parts:
+        return "_"
+    identifier = "_".join(parts)
+    if identifier[0].isdigit():
+        return "_" + identifier
+    return identifier

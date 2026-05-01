@@ -15,6 +15,7 @@ from loom.dialect.vector import defs as vector
 from loom.dsl import ANY, Dialect, Op, Operand, Result
 from loom.target.contracts import (
     CONTRACT_ROW_NONE,
+    CompiledDescriptorRule,
     ContractSystem,
     ContractTable,
     DescriptorRule,
@@ -67,6 +68,7 @@ def test_compile_contract_table_packs_dense_dialect_op_entries() -> None:
     compiled = compile_contract_table(
         table,
         dialect_ops={"vector": ALL_VECTOR_OPS},
+        descriptor_rule_rows={0: CompiledDescriptorRule(0, 0)},
     )
 
     assert len(compiled.dialects) == 1
@@ -93,7 +95,7 @@ def test_compile_contract_table_packs_dense_dialect_op_entries() -> None:
     assert compiled.cases[1].row_index == CONTRACT_ROW_NONE
 
 
-def test_compile_contract_table_preserves_authored_descriptor_rule_rows() -> None:
+def test_compile_contract_table_uses_supplied_descriptor_rule_rows() -> None:
     table = ContractTable(
         name="test-low.authored-order",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
@@ -112,6 +114,10 @@ def test_compile_contract_table_preserves_authored_descriptor_rule_rows() -> Non
     compiled = compile_contract_table(
         table,
         dialect_ops={"vector": ALL_VECTOR_OPS},
+        descriptor_rule_rows={
+            0: CompiledDescriptorRule(rule_set_index=3, rule_index=9),
+            1: CompiledDescriptorRule(rule_set_index=4, rule_index=2),
+        },
     )
 
     vector_dialect = compiled.dialects[0]
@@ -119,10 +125,12 @@ def test_compile_contract_table_preserves_authored_descriptor_rule_rows() -> Non
     reduce_entry = vector_dialect.op_entries[ALL_VECTOR_OPS.index(vector.vector_reduce)]
     assert addi_entry.case_start == 0
     assert compiled.cases[addi_entry.case_start].row_index == 1
-    assert compiled.descriptor_rules[1].rule_index == 1
+    assert compiled.descriptor_rules[1].rule_set_index == 4
+    assert compiled.descriptor_rules[1].rule_index == 2
     assert reduce_entry.case_start == 1
     assert compiled.cases[reduce_entry.case_start].row_index == 0
-    assert compiled.descriptor_rules[0].rule_index == 0
+    assert compiled.descriptor_rules[0].rule_set_index == 3
+    assert compiled.descriptor_rules[0].rule_index == 9
 
 
 def test_compile_contract_table_preserves_dense_dialect_gaps() -> None:
@@ -163,6 +171,7 @@ def test_compile_contract_table_preserves_dense_dialect_gaps() -> None:
             "gap_low": (low_op,),
             "gap_high": (high_op,),
         },
+        descriptor_rule_rows={},
     )
 
     assert compiled.dialect_base_id == 3
@@ -190,7 +199,11 @@ def test_compile_contract_table_rejects_missing_dialect_ops() -> None:
         ValueError,
         match=r"op 'scalar.addi' is not present in dialect_ops",
     ):
-        compile_contract_table(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+        compile_contract_table(
+            table,
+            dialect_ops={"vector": ALL_VECTOR_OPS},
+            descriptor_rule_rows={},
+        )
 
 
 def test_compile_contract_table_rejects_mismatched_dialect_key() -> None:
@@ -204,4 +217,5 @@ def test_compile_contract_table_rejects_mismatched_dialect_key() -> None:
                 descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
             ),
             dialect_ops={"not_scalar": ALL_SCALAR_OPS},
+            descriptor_rule_rows={},
         )

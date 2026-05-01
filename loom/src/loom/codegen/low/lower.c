@@ -776,23 +776,23 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
     if (selected_rule) {
       return iree_ok_status();
     }
-  } else {
-    for (uint16_t i = 0; i < context->policy->rule_sets.count; ++i) {
-      const loom_low_lower_rule_set_t* rule_set =
-          context->policy->rule_sets.values[i];
-      loom_low_lower_rule_selection_t rule_selection = {0};
-      IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_select(
-          context, rule_set, source_op, &rule_selection));
-      if (rule_selection.rule != NULL) {
-        IREE_RETURN_IF_ERROR(loom_low_lower_record_selected_rule_plan(
-            context, source_op, i, rule_set, rule_selection));
-        return iree_ok_status();
-      }
-      if (loom_low_lower_rule_selection_is_better_failure(
-              failed_rule_set, failed_rule_selection, rule_selection)) {
-        failed_rule_set = rule_set;
-        failed_rule_selection = rule_selection;
-      }
+  }
+
+  for (uint16_t i = 0; i < context->policy->rule_sets.count; ++i) {
+    const loom_low_lower_rule_set_t* rule_set =
+        context->policy->rule_sets.values[i];
+    loom_low_lower_rule_selection_t rule_selection = {0};
+    IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_select(
+        context, rule_set, source_op, &rule_selection));
+    if (rule_selection.rule != NULL) {
+      IREE_RETURN_IF_ERROR(loom_low_lower_record_selected_rule_plan(
+          context, source_op, i, rule_set, rule_selection));
+      return iree_ok_status();
+    }
+    if (loom_low_lower_rule_selection_is_better_failure(
+            failed_rule_set, failed_rule_selection, rule_selection)) {
+      failed_rule_set = rule_set;
+      failed_rule_selection = rule_selection;
     }
   }
 

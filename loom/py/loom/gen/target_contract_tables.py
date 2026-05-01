@@ -18,9 +18,11 @@ from loom.gen.generated_file import line_comment_header
 from loom.target.contracts import (
     CONTRACT_ROW_NONE,
     CompiledContractTable,
+    CompiledDescriptorRule,
     ContractSystem,
     ContractTable,
     compile_contract_table,
+    compile_lower_rule_set,
 )
 
 _UINT8_MAX = 0xFF
@@ -51,7 +53,19 @@ def generate_contract_table(
 ) -> GeneratedContractTable:
     """Generates C/H text for a compact target contract table."""
 
-    compiled = compile_contract_table(table, dialect_ops=dialect_ops)
+    lower_rules = compile_lower_rule_set(table, dialect_ops=dialect_ops)
+    descriptor_rule_rows = {
+        authored_case_index: CompiledDescriptorRule(
+            rule_set_index=0,
+            rule_index=rule_index,
+        )
+        for rule_index, authored_case_index in enumerate(lower_rules.authored_case_indices)
+    }
+    compiled = compile_contract_table(
+        table,
+        dialect_ops=dialect_ops,
+        descriptor_rule_rows=descriptor_rule_rows,
+    )
     _validate_c_table_shape(compiled)
     public_header = _require_table_field(table, "public_header")
     symbol_name = _require_table_field(table, "symbol_name")

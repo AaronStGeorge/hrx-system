@@ -23,6 +23,18 @@ from loom.target.contracts.emits import EmitDescriptorOp
 from loom.target.contracts.guards import Guard, GuardKind
 from loom.target.contracts.immediates import AttrProject, AttrProjectKind
 from loom.target.contracts.kinds import ContractSystem, SourceValueKind
+from loom.target.contracts.lower_rules import (
+    CompiledLowerRuleSet,
+    LowerDiagnostic,
+    LowerEmit,
+    LowerEmitKind,
+    LowerGuard,
+    LowerRule,
+    LowerRuleSpan,
+    LowerTypePattern,
+    LowerValueRef,
+    compile_lower_rule_set,
+)
 from loom.target.contracts.patterns import Scalar, TypePattern, Vector
 from loom.target.contracts.rules import ContractCase, DescriptorRule, ValueAliasRule
 from loom.target.contracts.source import ValueRef
@@ -49,6 +61,7 @@ __all__ = [
     "CompiledContractTable",
     "CompiledDescriptorRule",
     "CompiledDialectTable",
+    "CompiledLowerRuleSet",
     "CompiledOpEntry",
     "ContractCase",
     "ContractSystem",
@@ -59,6 +72,14 @@ __all__ = [
     "EmitDescriptorOp",
     "Guard",
     "GuardKind",
+    "LowerDiagnostic",
+    "LowerEmit",
+    "LowerEmitKind",
+    "LowerGuard",
+    "LowerRule",
+    "LowerRuleSpan",
+    "LowerTypePattern",
+    "LowerValueRef",
     "PredicateDescriptorCase",
     "ReductionDescriptorCase",
     "Scalar",
@@ -70,6 +91,7 @@ __all__ = [
     "Vector",
     "binary_descriptor_rules",
     "compile_contract_table",
+    "compile_lower_rule_set",
     "compare_descriptor_rules",
     "descriptor_by_key",
     "descriptor_by_semantic_tag",

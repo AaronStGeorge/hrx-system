@@ -68,6 +68,7 @@ def compile_contract_table(
     table: ContractTable,
     *,
     dialect_ops: Mapping[str, Sequence[Op]],
+    descriptor_rule_rows: Mapping[int, CompiledDescriptorRule],
 ) -> CompiledContractTable:
     """Compiles an authored contract table into dense target ABI rows."""
 
@@ -77,18 +78,16 @@ def compile_contract_table(
     descriptor_rules: list[CompiledDescriptorRule] = []
     for authored_case_index, contract_case in enumerate(table.cases):
         _require_op_index(op_indexes, contract_case.source_op)
+        if isinstance(contract_case, DescriptorRule):
+            descriptor_rule = descriptor_rule_rows.get(authored_case_index)
+            if descriptor_rule is None:
+                continue
+            descriptor_rule_index = len(descriptor_rules)
+            descriptor_rule_ordinals[authored_case_index] = descriptor_rule_index
+            descriptor_rules.append(descriptor_rule)
         cases_by_op.setdefault(id(contract_case.source_op), []).append(
             (authored_case_index, contract_case)
         )
-        if isinstance(contract_case, DescriptorRule):
-            descriptor_rule_index = len(descriptor_rules)
-            descriptor_rule_ordinals[authored_case_index] = descriptor_rule_index
-            descriptor_rules.append(
-                CompiledDescriptorRule(
-                    rule_set_index=0,
-                    rule_index=descriptor_rule_index,
-                )
-            )
 
     compiled_cases: list[CompiledCase] = []
     sparse_dialect_tables: dict[int, CompiledDialectTable] = {}

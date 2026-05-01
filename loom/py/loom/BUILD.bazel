@@ -69,6 +69,8 @@ _TARGET_CONTRACT_GENERATOR_SRCS = [
     "gen/generated_file.py",
     "gen/target_contract_shard.py",
     "gen/target_contract_tables.py",
+    "gen/target_lower_rule_shard.py",
+    "gen/target_lower_rules.py",
     "target/__init__.py",
     "target/contract_tables.py",
     "target/contracts/__init__.py",
@@ -78,6 +80,7 @@ _TARGET_CONTRACT_GENERATOR_SRCS = [
     "target/contracts/guards.py",
     "target/contracts/immediates.py",
     "target/contracts/kinds.py",
+    "target/contracts/lower_rules.py",
     "target/contracts/patterns.py",
     "target/contracts/rules.py",
     "target/contracts/source.py",
@@ -90,8 +93,6 @@ _TEST_LOW_CONTRACT_SHARD_SRCS = _TARGET_CONTRACT_GENERATOR_SRCS + [
     "dialect/__init__.py",
     "dialect/atomic.py",
     "dialect/combining.py",
-    "dialect/index/__init__.py",
-    "dialect/index/defs.py",
     "dialect/scalar/__init__.py",
     "dialect/scalar/analysis.py",
     "dialect/scalar/arithmetic.py",
@@ -217,4 +218,10 @@ py_binary(
     name = "test_low_contract_shard",
     srcs = _TEST_LOW_CONTRACT_SHARD_SRCS,
     main = "gen/target_contract_shard.py",
+)
+
+py_binary(
+    name = "test_low_lower_rule_shard",
+    srcs = _TEST_LOW_CONTRACT_SHARD_SRCS,
+    main = "gen/target_lower_rule_shard.py",
 )

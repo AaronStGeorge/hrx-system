@@ -138,8 +138,11 @@ iree_status_t loom_low_lower_query_target_contract(
   };
 
   if (options->contract_table != NULL) {
-    return loom_low_lower_query_target_contract_table(
-        environment, options, source_op, &match_context, out_result);
+    IREE_RETURN_IF_ERROR(loom_low_lower_query_target_contract_table(
+        environment, options, source_op, &match_context, out_result));
+    if (out_result->outcome != LOOM_TARGET_CONTRACT_QUERY_UNHANDLED) {
+      return iree_ok_status();
+    }
   }
 
   const loom_low_lower_rule_set_t* failed_rule_set = NULL;
