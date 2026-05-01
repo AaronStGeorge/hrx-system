@@ -392,8 +392,6 @@ static bool loom_value_fact_extension_content_equal(
 static iree_status_t loom_value_fact_table_clone_fact_array(
     loom_value_fact_table_t* table, const loom_value_facts_t* facts,
     iree_host_size_t count, const loom_value_facts_t** out_facts) {
-  IREE_ASSERT_ARGUMENT(out_facts);
-  IREE_ASSERT_ARGUMENT(facts || count == 0);
   *out_facts = NULL;
   if (count == 0) return iree_ok_status();
   loom_value_facts_t* cloned_facts = NULL;
@@ -566,8 +564,6 @@ static iree_status_t loom_value_facts_make_extension(
     loom_fact_context_t* context,
     const loom_value_fact_extension_entry_t* candidate,
     loom_value_facts_t* out) {
-  IREE_ASSERT_ARGUMENT(candidate);
-  IREE_ASSERT_ARGUMENT(out);
   loom_value_fact_table_t* table = context->table;
   loom_value_fact_extension_id_t extension_id =
       LOOM_VALUE_FACT_EXTENSION_ID_NONE;
@@ -862,8 +858,6 @@ bool loom_value_facts_query_uniform_element(
 iree_status_t loom_value_facts_make_small_static_lanes(
     loom_fact_context_t* context, loom_value_fact_small_static_lanes_t lanes,
     loom_value_facts_t* out) {
-  IREE_ASSERT_ARGUMENT(out);
-  IREE_ASSERT_ARGUMENT(lanes.lanes || lanes.count == 0);
   if (lanes.count > LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT) {
     *out = loom_value_facts_unknown();
     return iree_ok_status();
@@ -889,7 +883,6 @@ bool loom_value_facts_query_small_static_lanes(
 bool loom_value_facts_query_all_equal_element(
     const loom_fact_context_t* context, loom_value_facts_t facts,
     loom_value_facts_t* out_element) {
-  IREE_ASSERT_ARGUMENT(out_element);
   loom_value_fact_uniform_element_t uniform = {0};
   if (loom_value_facts_query_uniform_element(context, facts, &uniform)) {
     if (loom_value_facts_is_unknown(uniform.element)) {
@@ -970,7 +963,6 @@ bool loom_value_facts_query_vector_prefix_mask(
 iree_status_t loom_value_facts_make_encoding_summary(
     loom_fact_context_t* context, loom_value_fact_encoding_summary_t summary,
     loom_value_facts_t* out) {
-  IREE_ASSERT_ARGUMENT(out);
   if (summary.role == LOOM_ENCODING_ROLE_UNKNOWN &&
       summary.static_spec_encoding_id == 0 &&
       summary.address_layout.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_UNKNOWN &&
@@ -980,9 +972,6 @@ iree_status_t loom_value_facts_make_encoding_summary(
     *out = loom_value_facts_unknown();
     return iree_ok_status();
   }
-  IREE_ASSERT_ARGUMENT(
-      summary.address_layout.kind != LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED ||
-      summary.address_layout.rank == 0 || summary.address_layout.strides);
   loom_value_fact_extension_entry_t entry = {0};
   entry.kind = LOOM_VALUE_FACT_EXTENSION_ENCODING_SUMMARY;
   entry.payload.encoding_summary = summary;
@@ -1046,8 +1035,6 @@ bool loom_value_facts_query_view_reference(
 iree_status_t loom_value_facts_make_extension_payload(
     loom_fact_context_t* context, uint8_t payload_tag, const void* payload,
     iree_host_size_t payload_length, loom_value_facts_t* out) {
-  IREE_ASSERT_ARGUMENT(out);
-  IREE_ASSERT_ARGUMENT(payload || payload_length == 0);
   if (payload_length > LOOM_VALUE_FACT_RAW_PAYLOAD_LENGTH_LIMIT) {
     *out = loom_value_facts_unknown();
     return iree_ok_status();
@@ -1092,9 +1079,6 @@ iree_status_t loom_value_fact_table_initialize_with_arenas(
     loom_value_fact_table_t* table, iree_arena_allocator_t* arena,
     iree_arena_allocator_t* transient_arena,
     iree_host_size_t initial_capacity) {
-  IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(transient_arena);
   memset(table, 0, sizeof(*table));
   table->arena = arena;
   table->transient_arena = transient_arena;
@@ -1104,7 +1088,6 @@ iree_status_t loom_value_fact_table_initialize_with_arenas(
 }
 
 void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table) {
-  IREE_ASSERT_ARGUMENT(table);
   for (iree_host_size_t i = 0; i < table->touched_count; ++i) {
     table->entries[table->touched_values[i]] = (loom_value_facts_t){0};
   }
@@ -1127,7 +1110,6 @@ void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table) {
 iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
                                            loom_value_id_t value_id,
                                            loom_value_facts_t facts) {
-  IREE_ASSERT_ARGUMENT(table);
   IREE_ASSERT_LT(value_id, table->capacity);
   IREE_ASSERT_NE(facts.known_divisor, 0);
   if (table->entries[value_id].known_divisor == 0) {
@@ -1145,8 +1127,6 @@ static iree_status_t loom_value_fact_table_clone_fact_array_between_tables(
     loom_value_fact_table_t* target, const loom_value_fact_table_t* source,
     const loom_value_facts_t* source_facts, iree_host_size_t count,
     const loom_value_facts_t** out_facts) {
-  IREE_ASSERT_ARGUMENT(out_facts);
-  IREE_ASSERT_ARGUMENT(source_facts || count == 0);
   *out_facts = NULL;
   if (count == 0) return iree_ok_status();
   loom_value_facts_t* cloned_facts = NULL;
@@ -1164,9 +1144,6 @@ static iree_status_t loom_value_fact_table_clone_fact_array_between_tables(
 iree_status_t loom_value_fact_table_clone_fact(
     loom_value_fact_table_t* target, const loom_value_fact_table_t* source,
     loom_value_facts_t facts, loom_value_facts_t* out_facts) {
-  IREE_ASSERT_ARGUMENT(target);
-  IREE_ASSERT_ARGUMENT(source);
-  IREE_ASSERT_ARGUMENT(out_facts);
   if (facts.extension_id == LOOM_VALUE_FACT_EXTENSION_ID_NONE) {
     *out_facts = facts;
     return iree_ok_status();
@@ -1280,9 +1257,6 @@ iree_status_t loom_value_fact_table_clone_fact_for_type(
     loom_value_fact_table_t* target, const loom_value_fact_table_t* source,
     const loom_module_t* module, loom_type_t type, loom_value_facts_t facts,
     loom_value_facts_t* out_facts) {
-  IREE_ASSERT_ARGUMENT(target);
-  IREE_ASSERT_ARGUMENT(source);
-  IREE_ASSERT_ARGUMENT(out_facts);
   *out_facts = facts;
   if (facts.extension_id == LOOM_VALUE_FACT_EXTENSION_ID_NONE) {
     return iree_ok_status();
@@ -1303,10 +1277,6 @@ iree_status_t loom_value_fact_table_meet_for_type(
     loom_type_t type, const loom_value_fact_table_t* lhs_table,
     loom_value_facts_t lhs, const loom_value_fact_table_t* rhs_table,
     loom_value_facts_t rhs, loom_value_facts_t* out_facts) {
-  IREE_ASSERT_ARGUMENT(target);
-  IREE_ASSERT_ARGUMENT(lhs_table);
-  IREE_ASSERT_ARGUMENT(rhs_table);
-  IREE_ASSERT_ARGUMENT(out_facts);
   if (loom_value_fact_table_facts_equal_for_type(module, type, lhs_table, lhs,
                                                  rhs_table, rhs)) {
     return loom_value_fact_table_clone_fact_for_type(target, lhs_table, module,
@@ -1346,10 +1316,6 @@ iree_status_t loom_value_fact_table_widen_for_type(
     loom_value_facts_t previous, const loom_value_fact_table_t* next_table,
     loom_value_facts_t next, uint32_t iteration,
     loom_value_facts_t* out_facts) {
-  IREE_ASSERT_ARGUMENT(target);
-  IREE_ASSERT_ARGUMENT(previous_table);
-  IREE_ASSERT_ARGUMENT(next_table);
-  IREE_ASSERT_ARGUMENT(out_facts);
   if (loom_value_fact_table_facts_equal_for_type(module, type, previous_table,
                                                  previous, next_table, next)) {
     return loom_value_fact_table_clone_fact_for_type(target, next_table, module,
@@ -1383,8 +1349,6 @@ iree_status_t loom_value_fact_table_widen_for_type(
 iree_status_t loom_value_fact_table_clone_defined_facts(
     loom_value_fact_table_t* target, const loom_value_fact_table_t* source,
     const loom_module_t* module) {
-  IREE_ASSERT_ARGUMENT(target);
-  IREE_ASSERT_ARGUMENT(source);
   for (iree_host_size_t i = 0; i < source->count; ++i) {
     if (source->entries[i].known_divisor == 0) continue;
     IREE_ASSERT_LT(i, (iree_host_size_t)LOOM_VALUE_ID_INVALID);

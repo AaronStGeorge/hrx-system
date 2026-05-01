@@ -800,7 +800,6 @@ static iree_status_t loom_parse_low_asm_region_body(
   *out_region_end_consumed = false;
   const loom_text_low_asm_descriptor_set_t* descriptor_set =
       (const loom_text_low_asm_descriptor_set_t*)user_data;
-  IREE_ASSERT_ARGUMENT(descriptor_set);
 
   IREE_RETURN_IF_ERROR(loom_parser_seed_region_entry_block(parser, region));
 

@@ -68,7 +68,6 @@ iree_status_t loom_local_value_domain_register_value(
 // Returns true while the domain owns the module ordinal scratch map.
 static inline bool loom_local_value_domain_is_acquired(
     const loom_local_value_domain_t* domain) {
-  IREE_ASSERT_ARGUMENT(domain);
   return iree_any_bit_set(domain->flags, LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED);
 }
 
@@ -76,7 +75,6 @@ static inline bool loom_local_value_domain_is_acquired(
 // covered by the acquired domain.
 static inline loom_value_ordinal_t loom_local_value_domain_try_ordinal(
     const loom_local_value_domain_t* domain, loom_value_id_t value_id) {
-  IREE_ASSERT_ARGUMENT(domain);
   IREE_ASSERT(
       iree_any_bit_set(domain->flags, LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED));
   if (value_id >= domain->module->value_ordinal_scratch.capacity) {

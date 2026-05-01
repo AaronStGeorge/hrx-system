@@ -40,7 +40,6 @@ iree_status_t loom_storage_facts_make_reference(
     loom_fact_context_t* context,
     const loom_storage_reference_facts_t* reference,
     loom_value_facts_t* out_facts) {
-  IREE_ASSERT_ARGUMENT(out_facts);
   if (!context || !reference ||
       reference->backing_value_id == LOOM_VALUE_ID_INVALID ||
       !loom_storage_space_is_valid(reference->storage_space) ||
@@ -57,7 +56,6 @@ iree_status_t loom_storage_facts_make_reserve(
     loom_fact_context_t* context, loom_value_id_t storage_value_id,
     loom_storage_space_t storage_space, int64_t byte_length,
     int64_t byte_alignment, loom_value_facts_t* out_facts) {
-  IREE_ASSERT_ARGUMENT(out_facts);
   if (storage_value_id == LOOM_VALUE_ID_INVALID ||
       !loom_storage_space_is_valid(storage_space) || byte_length <= 0 ||
       !loom_is_power_of_two_i64(byte_alignment)) {
@@ -98,7 +96,6 @@ static uint64_t loom_storage_offset_alignment(uint64_t base_alignment,
 iree_status_t loom_storage_facts_make_static_view(
     loom_fact_context_t* context, loom_value_facts_t source_facts,
     int64_t byte_offset, int64_t byte_length, loom_value_facts_t* out_facts) {
-  IREE_ASSERT_ARGUMENT(out_facts);
   loom_storage_reference_facts_t source = {0};
   if (byte_offset < 0 || byte_length <= 0 ||
       !loom_storage_facts_query_reference(context, source_facts, &source)) {

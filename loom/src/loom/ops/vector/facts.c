@@ -815,7 +815,6 @@ static bool loom_vector_transform_query_i64_lane(
 static bool loom_vector_transform_dynamic_value_facts(
     const loom_fact_context_t* context, loom_value_id_t value_id,
     loom_value_facts_t* out_facts) {
-  IREE_ASSERT_ARGUMENT(context);
   if (value_id == LOOM_VALUE_ID_INVALID) {
     return false;
   }

@@ -205,7 +205,6 @@ static inline bool loom_value_facts_is_float(loom_value_facts_t facts) {
 
 static inline bool loom_value_facts_as_exact_i64(loom_value_facts_t facts,
                                                  int64_t* out_value) {
-  IREE_ASSERT_ARGUMENT(out_value);
   if (!loom_value_facts_is_exact(facts) || loom_value_facts_is_float(facts)) {
     return false;
   }

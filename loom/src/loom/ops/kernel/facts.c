@@ -108,7 +108,6 @@ static uint32_t loom_kernel_max_workgroup_count(
 
 static const loom_target_bundle_t* loom_kernel_target_bundle(
     const loom_fact_context_t* context) {
-  IREE_ASSERT_ARGUMENT(context);
   const loom_target_bundle_t* bundle = context->target_bundle;
   if (!bundle) {
     return NULL;
@@ -152,7 +151,6 @@ static bool loom_kernel_context_required_workgroup_size(
 
 static bool loom_kernel_context_fixed_flat_workgroup_size(
     const loom_fact_context_t* context, uint32_t* out_flat_size) {
-  IREE_ASSERT_ARGUMENT(out_flat_size);
   *out_flat_size = 0;
   loom_target_workgroup_size_t required_workgroup_size = {0};
   if (!loom_kernel_context_required_workgroup_size(context,
@@ -347,7 +345,6 @@ static uint32_t loom_kernel_max_subgroup_count(
 
 static bool loom_kernel_exact_subgroup_count(const loom_fact_context_t* context,
                                              uint32_t* out_count) {
-  IREE_ASSERT_ARGUMENT(out_count);
   *out_count = 0;
   const uint32_t fixed_subgroup_size =
       loom_kernel_context_fixed_subgroup_size(context);

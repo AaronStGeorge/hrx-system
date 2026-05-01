@@ -240,7 +240,6 @@ iree_status_t loom_print_op(loom_print_context_t* ctx, const loom_op_t* op) {
 
 static bool loom_print_should_elide_implicit_terminator(
     const loom_region_descriptor_t* region_descriptor, const loom_op_t* op) {
-  IREE_ASSERT_ARGUMENT(region_descriptor);
   if (region_descriptor->implicit_terminator == LOOM_OP_KIND_UNKNOWN) {
     return false;
   }
@@ -288,7 +287,6 @@ iree_status_t loom_print_block_label_line(loom_print_context_t* ctx,
 iree_status_t loom_print_region_body(
     loom_print_context_t* ctx, const loom_region_t* region,
     const loom_region_descriptor_t* region_descriptor) {
-  IREE_ASSERT_ARGUMENT(region_descriptor);
   const bool needs_synthetic_labels =
       loom_print_region_needs_synthetic_labels(ctx, region);
   for (uint16_t block_index = 0; block_index < region->block_count;

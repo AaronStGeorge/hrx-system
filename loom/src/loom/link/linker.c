@@ -1233,8 +1233,6 @@ iree_status_t loom_link_materialized_modules(
     iree_host_size_t source_module_count, const loom_link_options_t* options,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_module_t** out_module) {
-  IREE_ASSERT_ARGUMENT(block_pool);
-  IREE_ASSERT_ARGUMENT(out_module);
   *out_module = NULL;
   IREE_RETURN_IF_ERROR(
       loom_link_validate_inputs(source_modules, source_module_count));

@@ -198,7 +198,6 @@ iree_status_t loom_parser_emit_related(loom_parser_t* parser,
 
 iree_status_t loom_parser_emit_tokenizer_error(loom_parser_t* parser,
                                                loom_token_t token) {
-  IREE_ASSERT_ARGUMENT(parser && parser->tokenizer.error.error);
   return loom_parser_emit(parser, parser->tokenizer.error.error,
                           parser->tokenizer.error.params,
                           parser->tokenizer.error.param_count, token);

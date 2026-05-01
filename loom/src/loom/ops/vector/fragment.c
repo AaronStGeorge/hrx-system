@@ -24,7 +24,6 @@ loom_vector_fragment_role_flags_t loom_vector_fragment_role_flag(
 
 void loom_vector_fragment_fact_initialize(
     loom_vector_fragment_fact_t* out_fact) {
-  IREE_ASSERT_ARGUMENT(out_fact);
   memset(out_fact, 0, sizeof(*out_fact));
 }
 
@@ -42,7 +41,6 @@ bool loom_vector_fragment_fact_is_unknown(loom_vector_fragment_fact_t fact) {
 iree_status_t loom_vector_fragment_fact_make_value_facts(
     loom_fact_context_t* context, loom_vector_fragment_fact_t fact,
     loom_value_facts_t* out_facts) {
-  IREE_ASSERT_ARGUMENT(out_facts);
   if (loom_vector_fragment_fact_is_unknown(fact)) {
     *out_facts = loom_value_facts_unknown();
     return iree_ok_status();
@@ -74,7 +72,6 @@ bool loom_vector_fragment_parameter_view_resolve(
     loom_named_attr_slice_t parameter_names,
     loom_vector_fragment_parameter_view_t* out_view,
     iree_string_view_t* out_unknown_key) {
-  IREE_ASSERT_ARGUMENT(out_view);
   memset(out_view, 0, sizeof(*out_view));
   out_view->schema_value_id = LOOM_VALUE_ID_INVALID;
   out_view->schema_parameter_ordinal = UINT16_MAX;

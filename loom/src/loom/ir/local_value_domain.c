@@ -53,9 +53,6 @@ static iree_status_t loom_local_value_domain_append_value_id(
 iree_status_t loom_local_value_domain_register_value(
     loom_local_value_domain_t* domain, iree_arena_allocator_t* arena,
     loom_value_id_t value_id, loom_value_ordinal_t* out_ordinal) {
-  IREE_ASSERT_ARGUMENT(domain);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_ordinal);
   IREE_ASSERT(
       iree_any_bit_set(domain->flags, LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED));
   if (value_id >= domain->module->values.count) {
@@ -289,10 +286,6 @@ static iree_status_t loom_local_value_domain_register_region_values(
 iree_status_t loom_local_value_domain_acquire_for_region(
     loom_module_t* module, const loom_region_t* region,
     iree_arena_allocator_t* arena, loom_local_value_domain_t* out_domain) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(region);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_domain);
   *out_domain = (loom_local_value_domain_t){
       .module = module,
       .region = region,

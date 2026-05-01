@@ -689,7 +689,6 @@ static bool loom_parser_block_has_explicit_terminator(
 iree_status_t loom_parser_append_implicit_terminator(
     loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
     loom_block_t* block) {
-  IREE_ASSERT_ARGUMENT(region_descriptor);
   if (region_descriptor->implicit_terminator == LOOM_OP_KIND_UNKNOWN ||
       loom_parser_block_has_explicit_terminator(parser, block)) {
     return iree_ok_status();
@@ -736,7 +735,6 @@ iree_status_t loom_parser_parse_optional_block_label(loom_parser_t* parser,
                                                      loom_region_t* region,
                                                      loom_block_t* block,
                                                      bool* out_present) {
-  IREE_ASSERT_ARGUMENT(out_present);
   *out_present = false;
   if (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_BLOCK_LABEL)) {
     return iree_ok_status();
@@ -845,8 +843,6 @@ static iree_status_t loom_parse_region_body(
 iree_status_t loom_parse_braced_region_with_body(
     loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
     loom_parse_region_body_callback_t body, loom_region_t** out_region) {
-  IREE_ASSERT_ARGUMENT(region_descriptor);
-  IREE_ASSERT_ARGUMENT(body.fn);
   uint32_t errors_before = parser->error_count;
 
   // Expect '{'.

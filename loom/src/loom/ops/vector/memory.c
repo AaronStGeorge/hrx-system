@@ -89,7 +89,6 @@ bool loom_vector_memory_access_describe(
 bool loom_vector_memory_cache_policy_from_attrs(
     loom_attribute_t cache_scope_attr, loom_attribute_t cache_temporal_attr,
     loom_vector_memory_cache_policy_t* out_policy) {
-  IREE_ASSERT_ARGUMENT(out_policy);
   *out_policy = (loom_vector_memory_cache_policy_t){0};
   if (!loom_attr_is_absent(cache_scope_attr)) {
     if (cache_scope_attr.kind != LOOM_ATTR_ENUM) return false;
@@ -108,7 +107,6 @@ bool loom_vector_memory_cache_policy_from_attrs(
 bool loom_vector_memory_cache_policy_from_op(
     const loom_module_t* module, const loom_op_t* op,
     loom_vector_memory_cache_policy_t* out_policy) {
-  IREE_ASSERT_ARGUMENT(out_policy);
   *out_policy = (loom_vector_memory_cache_policy_t){0};
   if (!module || !op) {
     return false;

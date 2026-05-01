@@ -14,8 +14,6 @@ static bool loom_test_record_dict_lookup(const loom_module_t* module,
                                          loom_named_attr_slice_t dict,
                                          iree_string_view_t name,
                                          const loom_attribute_t** out_attr) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_attr);
   *out_attr = NULL;
   for (iree_host_size_t i = 0; i < dict.count; ++i) {
     loom_string_id_t name_id = dict.entries[i].name_id;
@@ -33,10 +31,6 @@ static iree_status_t loom_test_record_symbol_fact_compute(
     loom_symbol_fact_context_t* context, const loom_module_t* module,
     loom_symbol_id_t symbol_id, const loom_symbol_t* symbol,
     const loom_symbol_facts_base_t** out_facts) {
-  IREE_ASSERT_ARGUMENT(domain);
-  IREE_ASSERT_ARGUMENT(context);
-  IREE_ASSERT_ARGUMENT(symbol);
-  IREE_ASSERT_ARGUMENT(out_facts);
   *out_facts = NULL;
 
   loom_test_record_symbol_facts_t* facts = NULL;
@@ -109,7 +103,6 @@ const uint8_t loom_test_record_symbol_fact_resource_key = 0;
 iree_status_t loom_test_record_symbol_fact_context_lookup_resource(
     loom_symbol_fact_context_t* context,
     const loom_test_record_symbol_fact_resource_t** out_resource) {
-  IREE_ASSERT_ARGUMENT(out_resource);
   *out_resource = NULL;
   const void* resource = NULL;
   IREE_RETURN_IF_ERROR(loom_symbol_fact_context_lookup_resource(

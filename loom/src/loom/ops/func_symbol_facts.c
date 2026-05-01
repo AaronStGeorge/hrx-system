@@ -198,11 +198,6 @@ static iree_status_t loom_func_symbol_fact_compute(
     loom_symbol_fact_context_t* context, const loom_module_t* module,
     loom_symbol_id_t symbol_id, const loom_symbol_t* symbol,
     const loom_symbol_facts_base_t** out_facts) {
-  IREE_ASSERT_ARGUMENT(domain);
-  IREE_ASSERT_ARGUMENT(context);
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(symbol);
-  IREE_ASSERT_ARGUMENT(out_facts);
   *out_facts = NULL;
 
   loom_func_like_t func = loom_func_like_cast(module, symbol->defining_op);

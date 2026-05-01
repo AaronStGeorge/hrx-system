@@ -280,14 +280,11 @@ const loom_region_descriptor_t* loom_op_vtable_region_descriptor(
 loom_trait_flags_t loom_op_effective_traits(const loom_module_t* module,
                                             const loom_op_t* op) {
   (void)module;
-  IREE_ASSERT_ARGUMENT(op);
   return op->traits;
 }
 
 void loom_op_refresh_effective_traits(const loom_module_t* module,
                                       loom_op_t* op) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(op);
   const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
   if (!vtable) {
     op->traits = LOOM_TRAIT_UNKNOWN_EFFECTS;
@@ -643,7 +640,6 @@ loom_symbol_ref_t loom_func_like_artifact(loom_func_like_t func) {
 
 bool loom_func_like_export_ordinal(loom_func_like_t func,
                                    int64_t* out_ordinal) {
-  IREE_ASSERT_ARGUMENT(out_ordinal);
   *out_ordinal = 0;
   if (!func.vtable ||
       func.vtable->export_ordinal_attr_index == LOOM_ATTR_INDEX_NONE) {
@@ -660,7 +656,6 @@ bool loom_func_like_export_ordinal(loom_func_like_t func,
 
 bool loom_func_like_export_linkage(loom_func_like_t func,
                                    uint8_t* out_linkage) {
-  IREE_ASSERT_ARGUMENT(out_linkage);
   *out_linkage = 0;
   if (!func.vtable ||
       func.vtable->export_linkage_attr_index == LOOM_ATTR_INDEX_NONE) {
@@ -690,9 +685,6 @@ static bool loom_func_like_i64_attr(loom_func_like_t func, uint8_t attr_index,
 
 bool loom_func_like_workgroup_size(loom_func_like_t func, uint32_t* out_x,
                                    uint32_t* out_y, uint32_t* out_z) {
-  IREE_ASSERT_ARGUMENT(out_x);
-  IREE_ASSERT_ARGUMENT(out_y);
-  IREE_ASSERT_ARGUMENT(out_z);
   *out_x = 0;
   *out_y = 0;
   *out_z = 0;

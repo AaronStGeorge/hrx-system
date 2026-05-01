@@ -204,9 +204,6 @@ static bool loom_print_static_encoding_param_as_bare_symbol(
 static iree_status_t loom_print_canonical_encoding(
     loom_output_stream_t* stream, const loom_module_t* module,
     const loom_encoding_t* encoding) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(encoding);
-
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '#'));
   if (encoding->name_id < module->strings.count) {
     IREE_RETURN_IF_ERROR(loom_output_stream_write(

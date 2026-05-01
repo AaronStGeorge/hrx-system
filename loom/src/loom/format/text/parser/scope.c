@@ -159,7 +159,6 @@ iree_status_t loom_parser_scope_push(loom_parser_t* parser,
 
 void loom_parser_scope_pop(loom_parser_t* parser) {
   loom_parser_scope_t* scope = parser->scope;
-  IREE_ASSERT_ARGUMENT(scope);
   parser->scope = scope->parent;
   scope->parent = NULL;
   scope->next_free = parser->scope_free_list;

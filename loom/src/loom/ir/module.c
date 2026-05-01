@@ -598,13 +598,11 @@ void loom_module_free(loom_module_t* module) {
 }
 
 void loom_module_value_ordinal_scratch_acquire(loom_module_t* module) {
-  IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT(!module->value_ordinal_scratch.is_active);
   module->value_ordinal_scratch.is_active = true;
 }
 
 void loom_module_value_ordinal_scratch_release(loom_module_t* module) {
-  IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT(module->value_ordinal_scratch.is_active);
   module->value_ordinal_scratch.is_active = false;
 }

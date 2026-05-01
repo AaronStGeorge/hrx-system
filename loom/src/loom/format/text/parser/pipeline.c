@@ -538,7 +538,6 @@ static iree_status_t loom_parse_pipeline_region_contents(
 iree_status_t loom_parse_pipeline_prefixed_region(
     loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
     loom_region_t** out_region) {
-  IREE_ASSERT_ARGUMENT(region_descriptor);
   uint32_t errors_before = parser->error_count;
 
   if (!loom_tokenizer_at_keyword(&parser->tokenizer, IREE_SV("pipeline"))) {

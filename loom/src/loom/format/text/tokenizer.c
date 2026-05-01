@@ -131,7 +131,6 @@ static iree_status_t loom_tokenizer_set_error(
     const loom_diagnostic_param_t* params, iree_host_size_t param_count,
     iree_host_size_t source_start, iree_host_size_t source_end, uint32_t line,
     uint32_t column, uint32_t end_column) {
-  IREE_ASSERT_ARGUMENT(error);
   IREE_ASSERT(param_count <= LOOM_TOKENIZER_MAX_ERROR_PARAMS);
   if (param_count > LOOM_TOKENIZER_MAX_ERROR_PARAMS) {
     return loom_tokenizer_error(tokenizer,
@@ -434,8 +433,6 @@ static iree_status_t loom_tokenizer_consume_hex4(loom_tokenizer_t* t,
 // and the string decoder so the accepted escape grammar cannot drift.
 static iree_status_t loom_tokenizer_consume_string_escape(
     loom_tokenizer_t* t, char* out_bytes, iree_host_size_t* out_length) {
-  IREE_ASSERT_ARGUMENT(out_bytes);
-  IREE_ASSERT_ARGUMENT(out_length);
   IREE_ASSERT(loom_tokenizer_char(t) == '\\');
 
   iree_host_size_t escape_start = t->position;
