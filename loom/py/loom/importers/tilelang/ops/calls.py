@@ -20,7 +20,7 @@ from loom.importers.tilelang.converter import (
 )
 from loom.importers.tilelang.coverage import OpCoverage, coverage_by_name
 from loom.importers.tilelang.nodes import dtype, mapping_items, node_text
-from loom.ir import I1, INDEX, Type
+from loom.ir import I1, INDEX, ScalarType, ShapedType, StaticDim, Type, TypeKind
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +120,8 @@ def convert_call(
         )
     if op_name in _CEILDIV_CALLS:
         return _convert_ceildiv_call(expr, context, converter, op_name, options=options)
+    if op_name in _REINTERPRET_CALLS:
+        return _convert_reinterpret_call(expr, context, converter, op_name)
     if op_name in _SIGMOID_CALLS:
         return _convert_sigmoid_call(expr, context, converter, op_name)
     if op_name in _IDENTITY_CALLS:
@@ -518,6 +520,69 @@ def _convert_identity_call(
     return result
 
 
+def _convert_reinterpret_call(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    op_name: str,
+) -> ValueRef | None:
+    args = _args(expr)
+    if len(args) != 1:
+        context.record_blocked(node_text(expr), f"call `{op_name}` expects 1 operand")
+        return None
+    input_value = converter.convert_expr(args[0], context)
+    if input_value is None:
+        context.record_blocked(
+            node_text(expr), f"call `{op_name}` operand is not mapped"
+        )
+        return None
+    result_type = context.type_converter.map_dtype(dtype(expr))
+    if str(input_value.type) == str(result_type):
+        context.map_value(expr, input_value, str(result_type))
+        context.record_converted(node_text(expr), f"{op_name} normalized to identity")
+        return input_value
+    input_is_vector = _is_vector_type(input_value.type)
+    result_is_vector = _is_vector_type(result_type)
+    if input_is_vector != result_is_vector:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` cannot cross scalar/vector type boundaries",
+        )
+        return None
+    input_bit_width = _total_bit_width(input_value.type)
+    result_bit_width = _total_bit_width(result_type)
+    if input_bit_width is None or result_bit_width is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` requires statically known bit widths",
+        )
+        return None
+    if input_bit_width != result_bit_width:
+        context.record_blocked(
+            node_text(expr),
+            (
+                f"call `{op_name}` bit widths differ: "
+                f"{input_value.type} has {input_bit_width} bits, "
+                f"{result_type} has {result_bit_width} bits"
+            ),
+        )
+        return None
+    if input_is_vector:
+        result = context.builder.vector.bitcast(
+            input=input_value,
+            results=[result_type],
+            name=context.fresh_name("bitcast"),
+        )
+    else:
+        result = context.builder.scalar.bitcast(
+            input=input_value,
+            results=[result_type],
+            name=context.fresh_name("bitcast"),
+        )
+    _map_call_result(expr, context, result, op_name)
+    return result
+
+
 def _call_result_type(
     expr: object,
     context: TileLangConversionContext,
@@ -599,6 +664,25 @@ def _source_is_index_like(
 ) -> bool:
     mapped = context.mapped(source)
     return mapped is not None and str(mapped.type) in ("index", "offset")
+
+
+def _is_vector_type(value_type: object) -> bool:
+    return (
+        isinstance(value_type, ShapedType) and value_type.type_kind == TypeKind.VECTOR
+    )
+
+
+def _total_bit_width(value_type: Type) -> int | None:
+    if isinstance(value_type, ScalarType):
+        return value_type.bitwidth
+    if not isinstance(value_type, ShapedType):
+        return None
+    total = value_type.element_type.bitwidth
+    for dim in value_type.dims:
+        if not isinstance(dim, StaticDim):
+            return None
+        total *= dim.size
+    return total
 
 
 def _is_float_type(value_type: str) -> bool:
@@ -698,6 +782,10 @@ _FORCED_INDEX_CALLS = {
 
 _CEILDIV_CALLS = {
     "tir.ceildiv",
+}
+
+_REINTERPRET_CALLS = {
+    "tir.reinterpret",
 }
 
 _SIGMOID_CALLS = {

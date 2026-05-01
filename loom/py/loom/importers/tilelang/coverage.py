@@ -566,6 +566,12 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "Scalar floating-point power.",
     ),
     OpCoverage(
+        "tir.reinterpret",
+        OpFamily.TIR_OP,
+        CoverageState.SUPPORTED,
+        "Scalar/vector bit reinterpretation; maps to Loom bitcast ops.",
+    ),
+    OpCoverage(
         "tir.round",
         OpFamily.TIR_OP,
         CoverageState.SUPPORTED,
