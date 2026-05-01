@@ -103,11 +103,7 @@ static iree_status_t loom_low_lower_map_argument(
         out_argument));
   }
 
-  if (!loom_low_lower_abi_argument_kind_is_known(out_argument->kind)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low argument ABI policy produced an "
-                            "unknown argument kind");
-  }
+  IREE_ASSERT(loom_low_lower_abi_argument_kind_is_known(out_argument->kind));
   if (loom_low_lower_type_is_none(out_argument->abi_type)) {
     if (context->result->error_count == previous_error_count) {
       IREE_RETURN_IF_ERROR(loom_low_lower_emit_reject(
@@ -118,26 +114,14 @@ static iree_status_t loom_low_lower_map_argument(
     }
     return iree_ok_status();
   }
-  if (!loom_type_is_register(out_argument->abi_type)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low argument ABI policy produced a "
-                            "non-register ABI type");
-  }
+  IREE_ASSERT(loom_type_is_register(out_argument->abi_type));
 
   if (out_argument->kind == LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT) {
     return iree_ok_status();
   }
-  if (!loom_low_lower_resource_import_kind_is_known(
-          out_argument->resource_import_kind)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low argument ABI policy produced an "
-                            "unknown resource import kind");
-  }
-  if (out_argument->resource_index < 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low argument ABI policy produced a "
-                            "negative resource index");
-  }
+  IREE_ASSERT(loom_low_lower_resource_import_kind_is_known(
+      out_argument->resource_import_kind));
+  IREE_ASSERT_GE(out_argument->resource_index, 0);
   if (loom_low_lower_type_is_none(out_argument->resource_semantic_type)) {
     out_argument->resource_semantic_type =
         loom_module_value_type(context->module, source_argument_id);
@@ -181,52 +165,29 @@ static uint16_t loom_low_lower_direct_argument_count(
   return direct_argument_count;
 }
 
-static iree_status_t loom_low_lower_validate_options(
-    loom_module_t* module, loom_func_like_t source_function,
-    const loom_low_lower_options_t* options,
-    loom_low_lower_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(loom_func_like_isa(source_function));
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(out_result);
-  if (source_function.op->kind != LOOM_OP_FUNC_DEF &&
-      source_function.op->kind != LOOM_OP_KERNEL_DEF) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "source-to-low lowering currently requires "
-                            "a func.def or kernel.def source function");
-  }
-  if (!loom_symbol_ref_is_valid(options->target_ref) ||
-      options->target_ref.module_id != 0 ||
-      options->target_ref.symbol_id >= module->symbols.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "module-local target profile symbol is required");
-  }
+static void loom_low_lower_assert_options(
+    const loom_module_t* module, loom_func_like_t source_function,
+    const loom_low_lower_options_t* options) {
+  IREE_ASSERT(module != NULL);
+  IREE_ASSERT(loom_func_like_isa(source_function));
+  IREE_ASSERT(options != NULL);
+  IREE_ASSERT(source_function.op->kind == LOOM_OP_FUNC_DEF ||
+              source_function.op->kind == LOOM_OP_KERNEL_DEF);
+  IREE_ASSERT(loom_symbol_ref_is_valid(options->target_ref));
+  IREE_ASSERT_EQ(options->target_ref.module_id, 0);
+  IREE_ASSERT_LT(options->target_ref.symbol_id, module->symbols.count);
   const loom_symbol_t* target_symbol =
       &module->symbols.entries[options->target_ref.symbol_id];
-  if (!target_symbol->defining_op ||
-      target_symbol->defining_op->kind != LOOM_OP_TARGET_PROFILE) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target symbol must define a target.profile op");
-  }
-  if (!options->bundle || !options->bundle->snapshot ||
-      !options->bundle->export_plan || !options->bundle->config) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "complete target bundle is required");
-  }
-  if (!options->fact_table) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "source value facts are required");
-  }
-  if (options->fact_table->context.target_bundle != options->bundle) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "source value facts must be scoped to the selected target bundle");
-  }
-  if (!options->descriptor_registry) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor registry is required");
-  }
-  return iree_ok_status();
+  IREE_ASSERT(target_symbol->defining_op != NULL);
+  IREE_ASSERT_EQ(target_symbol->defining_op->kind, LOOM_OP_TARGET_PROFILE);
+  IREE_ASSERT(options->bundle != NULL);
+  IREE_ASSERT(options->bundle->snapshot != NULL);
+  IREE_ASSERT(options->bundle->export_plan != NULL);
+  IREE_ASSERT(options->bundle->config != NULL);
+  IREE_ASSERT(options->fact_table != NULL);
+  IREE_ASSERT(options->fact_table->context.target_bundle == options->bundle);
+  IREE_ASSERT(options->descriptor_registry != NULL);
+  IREE_ASSERT(options->policy != NULL);
 }
 
 static iree_status_t loom_low_lower_intern_type_id(
@@ -348,7 +309,6 @@ static void loom_low_lower_mark_value_slice_storage_required(
 static bool loom_low_lower_rule_value_ref_source_value(
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     uint16_t value_ref_index, loom_value_id_t* out_source_value_id) {
-  IREE_ASSERT_ARGUMENT(out_source_value_id);
   *out_source_value_id = LOOM_VALUE_ID_INVALID;
   const loom_low_lower_value_ref_t* value_ref =
       &rule_set->value_refs[value_ref_index];
@@ -647,7 +607,6 @@ static iree_status_t loom_low_lower_contract_query_map_value(
     const loom_op_t* source_op, loom_value_id_t source_value_id,
     loom_low_lower_rule_mapped_value_t* out_mapped_value) {
   (void)match_context;
-  IREE_ASSERT_ARGUMENT(out_mapped_value);
   *out_mapped_value = loom_low_lower_rule_mapped_value_none();
   loom_low_lower_contract_query_state_t* state =
       (loom_low_lower_contract_query_state_t*)user_data;
@@ -681,8 +640,6 @@ static iree_status_t loom_low_lower_query_target_contract_from_context(
     const loom_target_contract_query_environment_t* environment,
     const loom_op_t* source_op,
     loom_target_contract_query_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(user_data);
-  IREE_ASSERT_ARGUMENT(environment);
   loom_low_lower_context_t* context = (loom_low_lower_context_t*)user_data;
   const loom_low_descriptor_set_t* saved_descriptor_set =
       context->descriptor_set;
@@ -1059,11 +1016,7 @@ static iree_status_t loom_low_lower_create_function_op(
       context, &arg_types, &arg_count, &result_types, &result_count));
 
   if (loom_low_lower_source_is_kernel_entry(context)) {
-    if (result_count != 0) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "kernel.def lowering cannot produce low "
-                              "function results");
-    }
+    IREE_ASSERT_EQ(result_count, 0);
     IREE_RETURN_IF_ERROR(loom_low_lower_create_kernel_op(
         context, source_body, low_func_ref, arg_types, arg_count));
   } else {
@@ -1436,17 +1389,14 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
                                       loom_func_like_t source_function,
                                       const loom_low_lower_options_t* options,
                                       loom_low_lower_result_t* out_result) {
-  IREE_RETURN_IF_ERROR(loom_low_lower_validate_options(module, source_function,
-                                                       options, out_result));
+  IREE_ASSERT(out_result != NULL);
+  loom_low_lower_assert_options(module, source_function, options);
   *out_result = (loom_low_lower_result_t){
       .low_func_ref = loom_symbol_ref_null(),
   };
 
   loom_region_t* source_body = loom_func_like_body(source_function);
-  if (!source_body) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "source function must have a body");
-  }
+  IREE_ASSERT(source_body != NULL);
 
   loom_low_lower_context_t context = {
       .module = module,
