@@ -507,10 +507,6 @@ iree_status_t loom_rewriter_replace_all_uses_with(loom_rewriter_t* rewriter,
 iree_status_t loom_rewriter_replace_results_with_materialized_values_and_erase(
     loom_rewriter_t* rewriter, loom_op_t* op,
     loom_materialize_value_fn_t materialize_value) {
-  if (!materialize_value) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "materialize value callback is required");
-  }
   if (op->result_count == 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "op has no results to replace");

@@ -207,10 +207,6 @@ static iree_status_t loom_pass_interpreter_invoke_module(
     bool* out_invocation_changed) {
   *out_invocation_changed = false;
   const loom_pass_program_invoke_t* invoke = &instruction->invoke;
-  if (!invoke->module_run) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "module pass callback is required");
-  }
   loom_pass_interpreter_epoch_t before =
       loom_pass_interpreter_epoch(state->module);
   iree_status_t status = invoke->module_run(pass, state->module);
@@ -231,10 +227,6 @@ static iree_status_t loom_pass_interpreter_invoke_function(
     bool* out_invocation_changed) {
   *out_invocation_changed = false;
   const loom_pass_program_invoke_t* invoke = &instruction->invoke;
-  if (!invoke->function_run) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "function pass callback is required");
-  }
   if (!loom_func_like_isa(frame->function)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "function pass requires current function");

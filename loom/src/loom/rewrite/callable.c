@@ -562,10 +562,6 @@ iree_status_t loom_callable_inline_consuming_call(loom_rewriter_t* rewriter,
 
 iree_status_t loom_callable_inline_direct_call(loom_rewriter_t* rewriter,
                                                loom_op_t* call_op) {
-  if (!rewriter || !rewriter->module) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "rewriter with module is required");
-  }
   loom_func_like_t callee = {0};
   IREE_RETURN_IF_ERROR(
       loom_callable_resolve_direct_callee(rewriter->module, call_op, &callee));
@@ -574,10 +570,6 @@ iree_status_t loom_callable_inline_direct_call(loom_rewriter_t* rewriter,
 
 iree_status_t loom_callable_inline_consuming_direct_call(
     loom_rewriter_t* rewriter, loom_op_t* call_op) {
-  if (!rewriter || !rewriter->module) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "rewriter with module is required");
-  }
   loom_func_like_t callee = {0};
   IREE_RETURN_IF_ERROR(
       loom_callable_resolve_direct_callee(rewriter->module, call_op, &callee));

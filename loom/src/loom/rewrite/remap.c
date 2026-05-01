@@ -152,10 +152,6 @@ iree_status_t loom_ir_remap_initialize(const loom_module_t* source_module,
 iree_status_t loom_ir_remap_map_value(loom_ir_remap_t* remap,
                                       loom_value_id_t source_value,
                                       loom_value_id_t target_value) {
-  if (!loom_ir_remap_is_initialized(remap)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "initialized remap is required");
-  }
   if (source_value >= remap->source_module->values.count) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -237,15 +233,7 @@ bool loom_ir_remap_try_lookup_value(const loom_ir_remap_t* remap,
 iree_status_t loom_ir_remap_resolve_value(const loom_ir_remap_t* remap,
                                           loom_value_id_t source_value,
                                           loom_value_id_t* out_target_value) {
-  if (!out_target_value) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target value output is NULL");
-  }
   *out_target_value = LOOM_VALUE_ID_INVALID;
-  if (!loom_ir_remap_is_initialized(remap)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "initialized remap is required");
-  }
   if (source_value >= remap->source_module->values.count) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,

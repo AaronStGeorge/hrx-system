@@ -30,15 +30,6 @@ static bool loom_pass_value_fact_scope_equal(loom_pass_value_fact_scope_t lhs,
 
 static iree_status_t loom_pass_value_fact_scope_validate(
     loom_pass_value_fact_scope_t scope) {
-  if (scope.kind == LOOM_PASS_VALUE_FACT_SCOPE_NONE) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "value fact scope is required");
-  }
-  if (scope.kind == LOOM_PASS_VALUE_FACT_SCOPE_FUNCTION &&
-      !loom_func_like_isa(scope.function)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "function value fact scope is required");
-  }
   if (scope.kind != LOOM_PASS_VALUE_FACT_SCOPE_FUNCTION &&
       scope.kind != LOOM_PASS_VALUE_FACT_SCOPE_MODULE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
