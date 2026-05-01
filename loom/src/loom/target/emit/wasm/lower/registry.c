@@ -11,6 +11,7 @@
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/wasm/descriptors.h"
+#include "loom/target/emit/wasm/contracts/core_simd128.h"
 #include "loom/target/emit/wasm/core_simd128_lower_rules.h"
 #include "loom/target/emit/wasm/lower.h"
 
@@ -131,6 +132,10 @@ static iree_status_t loom_wasm_map_argument(
 
 static const loom_low_lower_rule_set_t* const kWasmRuleSets[] = {
     &loom_wasm_core_simd128_lower_rule_set,
+};
+
+static const loom_target_contract_binding_t kWasmContractBindings[] = {
+    {&loom_wasm_core_simd128_contract_fragment, 0},
 };
 
 typedef struct loom_wasm_memory_access_plan_t {
@@ -445,6 +450,8 @@ static const loom_low_lower_policy_t kWasmLowLowerPolicy = {
             .count = IREE_ARRAYSIZE(kWasmRuleSets),
             .values = kWasmRuleSets,
         },
+    .contract_bindings = kWasmContractBindings,
+    .contract_binding_count = IREE_ARRAYSIZE(kWasmContractBindings),
     .select_op = {.fn = loom_wasm_select_op, .user_data = NULL},
     .emit_op = {.fn = loom_wasm_emit_op, .user_data = NULL},
 };

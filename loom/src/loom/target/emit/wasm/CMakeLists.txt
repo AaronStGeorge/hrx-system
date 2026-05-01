@@ -114,6 +114,7 @@ loom_cc_library(
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector
     loom::src::loom::target::arch::wasm::descriptors_ids
+    loom::src::loom::target::emit::wasm::contracts::core_simd128
   PUBLIC
 )
 

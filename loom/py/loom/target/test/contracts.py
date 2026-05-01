@@ -8,8 +8,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from loom.dialect.index import ALL_INDEX_OPS
 from loom.dialect.index import defs as index
 from loom.dialect.scalar import ALL_SCALAR_OPS
@@ -187,12 +185,6 @@ def _vector_reduce_rule(
 TEST_LOW_CORE_CONTRACT_FRAGMENT = ContractFragment(
     name="test.low.core",
     descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
-    c_header_path=Path("loom/src/loom/target/test/contracts/core.h"),
-    c_source_path=Path("loom/src/loom/target/test/contracts/core.c"),
-    header_guard="LOOM_TARGET_TEST_CONTRACTS_CORE_H_",
-    public_header="loom/target/test/contracts/core.h",
-    symbol_name="loom_test_low_core_contract_fragment",
-    c_table_prefix="TestLowCoreContract",
     cases=[
         _binary_rule(
             scalar_arithmetic.scalar_addi,

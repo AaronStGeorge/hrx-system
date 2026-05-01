@@ -92,6 +92,19 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    ireevm_contract_fragment
+  MAIN
+    "target_contract_fragment.py"
+  SRCS
+    "target_contract_fragment.py"
+  DEPS
+    iree::runtime::py::loom::gen::target_contract_fragments
+    iree::runtime::py::loom::target::contract_fragments
+    iree::runtime::py::loom::target::emit::ireevm::contracts
+)
+
+iree_py_library(
+  NAME
     wasm_lower_rule_shard
   MAIN
     "target_lower_rule_shard.py"
@@ -118,6 +131,19 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    wasm_contract_fragment
+  MAIN
+    "target_contract_fragment.py"
+  SRCS
+    "target_contract_fragment.py"
+  DEPS
+    iree::runtime::py::loom::gen::target_contract_fragments
+    iree::runtime::py::loom::target::contract_fragments
+    iree::runtime::py::loom::target::emit::wasm::contracts
+)
+
+iree_py_library(
+  NAME
     x86_lower_rule_shard
   MAIN
     "target_lower_rule_shard.py"
@@ -140,6 +166,19 @@ iree_py_library(
     iree::runtime::py::loom::gen::low_descriptors
     iree::runtime::py::loom::target::descriptor_sets
     iree::runtime::py::loom::target::test::descriptors
+)
+
+iree_py_library(
+  NAME
+    x86_contract_fragment
+  MAIN
+    "target_contract_fragment.py"
+  SRCS
+    "target_contract_fragment.py"
+  DEPS
+    iree::runtime::py::loom::gen::target_contract_fragments
+    iree::runtime::py::loom::target::contract_fragments
+    iree::runtime::py::loom::target::arch::x86::contracts::contracts
 )
 
 iree_py_library(
@@ -231,6 +270,19 @@ iree_py_library(
     iree::runtime::py::loom::target::low_descriptors
     iree::runtime::py::loom::target::arch::amdgpu::descriptors
     iree::runtime::py::loom::target::arch::amdgpu::target_info
+)
+
+iree_py_library(
+  NAME
+    amdgpu_contract_fragment
+  MAIN
+    "target_contract_fragment.py"
+  SRCS
+    "target_contract_fragment.py"
+  DEPS
+    iree::runtime::py::loom::gen::target_contract_fragments
+    iree::runtime::py::loom::target::contract_fragments
+    iree::runtime::py::loom::target::arch::amdgpu::contracts::contracts
 )
 
 iree_py_library(

@@ -159,7 +159,6 @@ IREEVM_CORE_CONTRACT_DIALECT_OPS = {
 IREEVM_CORE_CONTRACT_FRAGMENT = ContractFragment(
     name="iree.vm.core",
     descriptor_set=IREEVM_CORE_DESCRIPTOR_SET,
-    public_header="loom/target/emit/ireevm/core_lower_rules.h",
     cases=(
         _binary_i32_rule(scalar_arithmetic.scalar_addi, "iree.vm.add.i32"),
         _binary_i32_rule(scalar_arithmetic.scalar_subi, "iree.vm.sub.i32"),

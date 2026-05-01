@@ -115,6 +115,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector
+    loom::src::loom::target::arch::x86::contracts::avx512
     loom::src::loom::target::low_legality
   PUBLIC
 )

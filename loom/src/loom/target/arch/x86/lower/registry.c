@@ -10,6 +10,7 @@
 #include "loom/target/arch/x86/avx512_descriptors.h"
 #include "loom/target/arch/x86/avx512_lower_rules.h"
 #include "loom/target/arch/x86/avx512_packed_dot_descriptors.h"
+#include "loom/target/arch/x86/contracts/avx512.h"
 #include "loom/target/arch/x86/lower/internal.h"
 
 static bool loom_x86_type_is_vector_16xi32(loom_type_t type) {
@@ -250,6 +251,10 @@ static const loom_low_lower_rule_set_t* const kX86Avx512RuleSets[] = {
     &loom_x86_avx512_lower_rule_set,
 };
 
+static const loom_target_contract_binding_t kX86Avx512ContractBindings[] = {
+    {&loom_x86_avx512_contract_fragment, 0},
+};
+
 static iree_status_t loom_x86_low_legality_try_verify_op(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
@@ -290,6 +295,8 @@ static const loom_low_lower_policy_t kX86Avx512LowLowerPolicy = {
             .count = IREE_ARRAYSIZE(kX86Avx512RuleSets),
             .values = kX86Avx512RuleSets,
         },
+    .contract_bindings = kX86Avx512ContractBindings,
+    .contract_binding_count = IREE_ARRAYSIZE(kX86Avx512ContractBindings),
     .select_op = {.fn = loom_x86_select_avx512_op, .user_data = NULL},
     .emit_op = {.fn = loom_x86_emit_avx512_op, .user_data = NULL},
 };
@@ -311,6 +318,8 @@ static const loom_low_lower_policy_t kX86Avx512PackedDotLowLowerPolicy = {
             .count = IREE_ARRAYSIZE(kX86Avx512RuleSets),
             .values = kX86Avx512RuleSets,
         },
+    .contract_bindings = kX86Avx512ContractBindings,
+    .contract_binding_count = IREE_ARRAYSIZE(kX86Avx512ContractBindings),
     .select_op = {.fn = loom_x86_select_avx512_packed_dot_op,
                   .user_data = NULL},
     .emit_op = {.fn = loom_x86_emit_avx512_packed_dot_op, .user_data = NULL},

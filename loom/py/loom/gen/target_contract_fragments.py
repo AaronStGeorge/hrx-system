@@ -62,10 +62,10 @@ def generate_contract_fragment(
         descriptor_rule_rows=descriptor_rule_rows,
     )
     _validate_c_shard_shape(compiled)
-    public_header = _require_table_field(table, "public_header")
-    symbol_name = _require_table_field(table, "symbol_name")
-    c_table_prefix = _require_table_field(table, "c_table_prefix")
-    header_guard = table.header_guard or _header_guard_from_public_header(public_header)
+    public_header = _generated_public_header(table)
+    symbol_name = _generated_symbol_name(table)
+    c_table_prefix = _generated_table_prefix(table)
+    header_guard = _header_guard_from_public_header(public_header)
     return GeneratedContractFragment(
         header=_generate_header(
             header_guard=header_guard,
@@ -231,11 +231,28 @@ def _validate_c_shard_shape(table: CompiledContractFragment) -> None:
             raise ValueError(f"contract fragment '{table.name}' dialect '{dialect.dialect_name}' op count exceeds uint16_t")
 
 
-def _require_table_field(table: ContractFragment, field_name: str) -> str:
-    value = getattr(table, field_name)
-    if not value:
-        raise ValueError(f"contract fragment '{table.name}' requires {field_name}")
-    return str(value)
+def _generated_public_header(table: ContractFragment) -> str:
+    if table.public_header:
+        return table.public_header
+    name_parts = _identifier_parts(table.name)
+    if len(name_parts) == 2:
+        target_name, family_name = name_parts
+        return f"loom/target/arch/{target_name}/contracts/{family_name}.h"
+    if name_parts[:2] == ("iree", "vm"):
+        return f"loom/target/emit/ireevm/contracts/{'_'.join(name_parts[2:])}.h"
+    if name_parts[:1] == ("wasm",):
+        return f"loom/target/emit/wasm/contracts/{'_'.join(name_parts[1:])}.h"
+    if name_parts[:2] == ("test", "low"):
+        return f"loom/target/test/contracts/{'_'.join(name_parts[2:])}.h"
+    raise ValueError(f"contract fragment '{table.name}' requires public_header")
+
+
+def _generated_symbol_name(table: ContractFragment) -> str:
+    return f"loom_{_c_identifier(table.name).lower()}_contract_fragment"
+
+
+def _generated_table_prefix(table: ContractFragment) -> str:
+    return f"{_pascal_identifier(table.name)}Contract"
 
 
 def _header_guard_from_public_header(public_header: str) -> str:

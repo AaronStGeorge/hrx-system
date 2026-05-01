@@ -83,6 +83,17 @@ py_binary(
 )
 
 py_binary(
+    name = "ireevm_contract_fragment",
+    srcs = ["target_contract_fragment.py"],
+    main = "target_contract_fragment.py",
+    deps = [
+        ":target_contract_fragments",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/emit/ireevm:contracts",
+    ],
+)
+
+py_binary(
     name = "wasm_lower_rule_shard",
     srcs = ["target_lower_rule_shard.py"],
     main = "target_lower_rule_shard.py",
@@ -105,6 +116,17 @@ py_binary(
 )
 
 py_binary(
+    name = "wasm_contract_fragment",
+    srcs = ["target_contract_fragment.py"],
+    main = "target_contract_fragment.py",
+    deps = [
+        ":target_contract_fragments",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/emit/wasm:contracts",
+    ],
+)
+
+py_binary(
     name = "x86_lower_rule_shard",
     srcs = ["target_lower_rule_shard.py"],
     main = "target_lower_rule_shard.py",
@@ -123,6 +145,17 @@ py_binary(
         ":low_descriptors",
         "//loom/py/loom/target:descriptor_sets",
         "//loom/py/loom/target/test:descriptors",
+    ],
+)
+
+py_binary(
+    name = "x86_contract_fragment",
+    srcs = ["target_contract_fragment.py"],
+    main = "target_contract_fragment.py",
+    deps = [
+        ":target_contract_fragments",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/arch/x86/contracts",
     ],
 )
 
@@ -200,6 +233,17 @@ py_binary(
         "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/arch/amdgpu:descriptors",
         "//loom/py/loom/target/arch/amdgpu:target_info",
+    ],
+)
+
+py_binary(
+    name = "amdgpu_contract_fragment",
+    srcs = ["target_contract_fragment.py"],
+    main = "target_contract_fragment.py",
+    deps = [
+        ":target_contract_fragments",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/arch/amdgpu/contracts",
     ],
 )
 

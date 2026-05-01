@@ -775,6 +775,12 @@ def _generated_public_header(table: ContractFragment) -> str:
     if len(name_parts) == 2:
         target_name, family_name = name_parts
         return f"loom/target/arch/{target_name}/{family_name}_lower_rules.h"
+    if name_parts[:2] == ("iree", "vm"):
+        return f"loom/target/emit/ireevm/{'_'.join(name_parts[2:])}_lower_rules.h"
+    if name_parts[:1] == ("wasm",):
+        return f"loom/target/emit/wasm/{'_'.join(name_parts[1:])}_lower_rules.h"
+    if name_parts[:2] == ("test", "low"):
+        return "loom/target/test/lower_rules.h"
     if not table.public_header:
         raise ValueError(f"contract fragment '{table.name}' requires public_header")
     public_header = re.sub(r"contract(?:_[^/]+)?\.h$", "lower_rules.h", table.public_header)

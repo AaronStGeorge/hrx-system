@@ -15,6 +15,12 @@
 #include "loom/target/arch/amdgpu/arithmetic_lower_rules.h"
 #include "loom/target/arch/amdgpu/async_lower_rules.h"
 #include "loom/target/arch/amdgpu/compare_lower_rules.h"
+#include "loom/target/arch/amdgpu/contracts/arithmetic.h"
+#include "loom/target/arch/amdgpu/contracts/async.h"
+#include "loom/target/arch/amdgpu/contracts/compare.h"
+#include "loom/target/arch/amdgpu/contracts/dot.h"
+#include "loom/target/arch/amdgpu/contracts/integer.h"
+#include "loom/target/arch/amdgpu/contracts/reduce.h"
 #include "loom/target/arch/amdgpu/dot_lower_rules.h"
 #include "loom/target/arch/amdgpu/integer_lower_rules.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
@@ -853,6 +859,15 @@ static const loom_low_lower_rule_set_t* const kAmdgpuRuleSets[] = {
   &loom_amdgpu_reduce_lower_rule_set,
   &loom_amdgpu_async_lower_rule_set,
 };
+
+static const loom_target_contract_binding_t kAmdgpuContractBindings[] = {
+  {&loom_amdgpu_arithmetic_contract_fragment, 0},
+  {&loom_amdgpu_integer_contract_fragment, 1},
+  {&loom_amdgpu_compare_contract_fragment, 2},
+  {&loom_amdgpu_dot_contract_fragment, 3},
+  {&loom_amdgpu_reduce_contract_fragment, 4},
+  {&loom_amdgpu_async_contract_fragment, 5},
+};
 // clang-format on
 
 static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
@@ -869,6 +884,8 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
             .count = IREE_ARRAYSIZE(kAmdgpuRuleSets),
             .values = kAmdgpuRuleSets,
         },
+    .contract_bindings = kAmdgpuContractBindings,
+    .contract_binding_count = IREE_ARRAYSIZE(kAmdgpuContractBindings),
     .select_op = {.fn = loom_amdgpu_select_op, .user_data = NULL},
     .emit_op = {.fn = loom_amdgpu_emit_op, .user_data = NULL},
 };

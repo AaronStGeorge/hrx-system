@@ -212,6 +212,7 @@ loom_cc_library(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/target/emit/ireevm:descriptors_ids",
+        "//loom/src/loom/target/emit/ireevm/contracts:core",
         "//runtime/src/iree/base",
     ],
 )
