@@ -1,0 +1,250 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""Python importer check fixture runner."""
+
+from __future__ import annotations
+
+import hashlib
+import sys
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+from types import ModuleType
+from typing import Any
+
+from loom.importers.check.cases import (
+    CheckCase,
+    InlineCheckSyntax,
+    parse_inline_cases,
+)
+from loom.importers.check.results import CheckResult, unified_diff
+from loom.importers.check.updates import format_updated_source
+
+PYTHON_CHECK_SYNTAX = InlineCheckSyntax(
+    case_separator_prefix="# ====",
+    expected_separator="# ----",
+    comment_prefix="#",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class PythonCheckOptions:
+    """Options for Python importer check fixtures."""
+
+    update: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class PythonCheckCase:
+    """One executable Python check case mapped to an inline source segment."""
+
+    check_case: CheckCase
+    function: Callable[..., Any]
+
+
+class PythonCheckError(ValueError):
+    """Raised for structurally invalid Python importer check files."""
+
+
+def run_python_check(
+    path: Path,
+    *,
+    options: PythonCheckOptions,
+    is_case: Callable[[object], bool],
+    invoke: Callable[[PythonCheckCase], str],
+) -> tuple[CheckResult, ...]:
+    source = path.read_text()
+    check_cases = parse_python_check_cases(path, source)
+    try:
+        module = load_python_module(path, source)
+        python_cases = discover_python_cases(
+            module,
+            check_cases=check_cases,
+            is_case=is_case,
+        )
+    except Exception as exc:
+        return (
+            CheckResult(
+                path=path,
+                case_index=-1,
+                returncode=1,
+                stdout="",
+                stderr=f"{type(exc).__name__}: {exc}\n",
+            ),
+        )
+
+    results = tuple(
+        run_python_case(python_case, options=options, invoke=invoke)
+        for python_case in python_cases
+    )
+    if options.update:
+        updated_source = format_updated_source(
+            source,
+            check_cases,
+            results,
+            syntax=PYTHON_CHECK_SYNTAX,
+            expected_encoder=encode_python_expected,
+        )
+        if updated_source != source:
+            path.write_text(updated_source)
+    return results
+
+
+def parse_python_check_cases(path: Path, source: str) -> tuple[CheckCase, ...]:
+    raw_cases = parse_inline_cases(path, source, syntax=PYTHON_CHECK_SYNTAX)
+    return tuple(
+        CheckCase(
+            path=case.path,
+            index=case.index,
+            source=case.source,
+            input=case.input,
+            expected=decode_python_expected(case.expected),
+            run=case.run,
+            line_start=case.line_start,
+            line_end=case.line_end,
+        )
+        for case in raw_cases
+    )
+
+
+def load_python_module(path: Path, source: str) -> ModuleType:
+    module_name = _module_name(path)
+    module = ModuleType(module_name)
+    module.__file__ = str(path)
+    sys.modules[module_name] = module
+    try:
+        code = compile(source, str(path), "exec")
+        exec(code, module.__dict__)
+    finally:
+        sys.modules.pop(module_name, None)
+    return module
+
+
+def discover_python_cases(
+    module: ModuleType,
+    *,
+    check_cases: tuple[CheckCase, ...],
+    is_case: Callable[[object], bool],
+) -> tuple[PythonCheckCase, ...]:
+    case_by_index: dict[int, PythonCheckCase] = {}
+    for value in vars(module).values():
+        if not is_case(value):
+            continue
+        if not callable(value):
+            raise PythonCheckError("decorated Python check case is not callable")
+        code = getattr(value, "__code__", None)
+        if code is None:
+            raise PythonCheckError("decorated Python check case has no code object")
+        line_number = code.co_firstlineno
+        check_case = _check_case_for_line(check_cases, line_number)
+        if check_case.index in case_by_index:
+            raise PythonCheckError(
+                f"multiple decorated cases in case{check_case.index}"
+            )
+        case_by_index[check_case.index] = PythonCheckCase(
+            check_case=check_case,
+            function=value,
+        )
+    missing = [
+        f"case{case.index}" for case in check_cases if case.index not in case_by_index
+    ]
+    if missing:
+        raise PythonCheckError(
+            f"missing decorated Python check function for {', '.join(missing)}"
+        )
+    return tuple(case_by_index[index] for index in sorted(case_by_index))
+
+
+def run_python_case(
+    python_case: PythonCheckCase,
+    *,
+    options: PythonCheckOptions,
+    invoke: Callable[[PythonCheckCase], str],
+) -> CheckResult:
+    check_case = python_case.check_case
+    try:
+        stdout = invoke(python_case)
+    except Exception as exc:
+        return CheckResult(
+            path=check_case.path,
+            case_index=check_case.index,
+            returncode=1,
+            stdout="",
+            stderr=f"{type(exc).__name__}: {exc}\n",
+        )
+    if stdout == check_case.expected:
+        return CheckResult(
+            path=check_case.path,
+            case_index=check_case.index,
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+        )
+    if options.update:
+        return CheckResult(
+            path=check_case.path,
+            case_index=check_case.index,
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+            updated=True,
+        )
+    return CheckResult(
+        path=check_case.path,
+        case_index=check_case.index,
+        returncode=0,
+        stdout=stdout,
+        stderr="",
+        mismatch="output differs from expected output",
+        diff=unified_diff(
+            check_case.expected,
+            stdout,
+            fromfile=f"{check_case.path}:case{check_case.index}:expected",
+            tofile=f"{check_case.path}:case{check_case.index}:actual",
+        ),
+    )
+
+
+def encode_python_expected(text: str) -> str:
+    lines: list[str] = []
+    for line in text.splitlines(keepends=True):
+        if line.strip():
+            lines.append(f"# {line}")
+        else:
+            lines.append("#\n")
+    return "".join(lines)
+
+
+def decode_python_expected(text: str) -> str:
+    lines: list[str] = []
+    for line in text.splitlines(keepends=True):
+        if not line.strip():
+            lines.append(line)
+            continue
+        if line.startswith("# "):
+            lines.append(line[2:])
+            continue
+        if line.strip() == "#":
+            lines.append("\n")
+            continue
+        raise PythonCheckError("Python expected output lines must be comments")
+    return "".join(lines)
+
+
+def _check_case_for_line(
+    check_cases: tuple[CheckCase, ...],
+    line_number: int,
+) -> CheckCase:
+    for check_case in check_cases:
+        if check_case.line_start <= line_number <= check_case.line_end:
+            return check_case
+    raise PythonCheckError(f"decorated case at line {line_number} is outside a case")
+
+
+def _module_name(path: Path) -> str:
+    digest = hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:16]
+    return f"_loom_import_check_{digest}"

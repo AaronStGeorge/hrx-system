@@ -1,0 +1,93 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""TileLang/TIR type conversion helpers."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable
+from typing import Any
+
+from loom.ir import (
+    BF16,
+    F16,
+    F32,
+    F64,
+    I1,
+    I8,
+    I16,
+    I32,
+    I64,
+    INDEX,
+    OFFSET,
+    DynamicDim,
+    ScalarType,
+    ShapedType,
+    StaticDim,
+    Type,
+    TypeKind,
+)
+
+
+class TileLangTypeConverter:
+    """Maps TileLang/TIR dtypes and buffers to Loom types."""
+
+    def map_dtype(self, dtype: Any, *, index_like: bool = False) -> Type:
+        if index_like:
+            return INDEX
+        text = str(dtype)
+        mapped = _DTYPE_MAP.get(text)
+        if mapped is None:
+            raise ValueError(f"unsupported TileLang dtype `{text}`")
+        return mapped
+
+    def view_type(self, buffer: object) -> ShapedType:
+        dtype = _attribute(buffer, "dtype")
+        element_type = self.map_dtype(dtype)
+        if not isinstance(element_type, ScalarType):
+            raise ValueError(f"buffer element dtype must be scalar, got {dtype!r}")
+        shape = _attribute(buffer, "shape", ())
+        if shape is None:
+            shape = ()
+        if not isinstance(shape, Iterable) or isinstance(shape, str | bytes):
+            raise ValueError(f"buffer shape must be iterable, got {shape!r}")
+        dims = tuple(_shape_dim(dim) for dim in shape)
+        return ShapedType(TypeKind.VIEW, element_type, dims)
+
+
+def _shape_dim(value: object) -> StaticDim | DynamicDim:
+    if isinstance(value, int):
+        return StaticDim(value)
+    payload = getattr(value, "value", None)
+    if isinstance(payload, int):
+        return StaticDim(payload)
+    text = str(value)
+    if text.isdecimal():
+        return StaticDim(int(text))
+    return DynamicDim()
+
+
+def _attribute(value: object, name: str, default: object | None = None) -> object:
+    return getattr(value, name, default)
+
+
+_DTYPE_MAP: dict[str, Type] = {
+    "bool": I1,
+    "int8": I8,
+    "uint8": I8,
+    "int16": I16,
+    "uint16": I16,
+    "int32": I32,
+    "uint32": I32,
+    "int64": I64,
+    "uint64": I64,
+    "index": INDEX,
+    "offset": OFFSET,
+    "float16": F16,
+    "float32": F32,
+    "float64": F64,
+    "bfloat16": BF16,
+}

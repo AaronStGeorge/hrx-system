@@ -12,30 +12,20 @@ package(
 )
 
 py_library(
-    name = "package",
-    srcs = ["__init__.py"],
-    imports = [".."],
-    deps = [
-        ":core",
-        "//loom/py/loom/dialect:package",
-        "//loom/py/loom/error",
-    ],
-)
-
-py_library(
     name = "core",
     srcs = [
         "__init__.py",
-        "assembly.py",
-        "builder.py",
-        "builder_model.py",
-        "builders.py",
-        "builtin_types.py",
-        "dsl.py",
-        "errors.py",
-        "fields.py",
-        "ir.py",
-        "stable_id.py",
+        "diagnostics.py",
+        "kernel.py",
+        "names.py",
+        "options.py",
+        "printing.py",
+        "session.py",
+        "verify.py",
     ],
-    imports = [".."],
+    deps = [
+        "//loom/py/loom:core",
+        "//loom/py/loom:package",
+        "//loom/py/loom/format/text",
+    ],
 )

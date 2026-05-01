@@ -1,0 +1,107 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""TileLang importer check fixture declarations."""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import Any, ParamSpec, Protocol, TypeVar, overload
+
+TILELANG_CASE_ATTR = "__loom_tilelang_case__"
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+
+
+class TileLangT(Protocol):
+    """Structural type for TileLang's language module commonly imported as T."""
+
+    def __getattr__(self, name: str) -> Any: ...
+
+    def prim_func(self, func: Callable[..., Any]) -> Callable[..., Any]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class TileLangCaseMetadata:
+    """Metadata attached to one TileLang importer check case function."""
+
+    name: str | None = None
+    category: str = "composition"
+    tags: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class TileLangImportInput:
+    """Structured input returned by a TileLang check case."""
+
+    source: Any
+    args: tuple[Any, ...] = ()
+    kwargs: Mapping[str, Any] = field(default_factory=dict)
+    target: str | None = None
+    name: str | None = None
+    metadata: Mapping[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "kwargs", MappingProxyType(dict(self.kwargs)))
+        object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
+
+
+@overload
+def tilelang_case(
+    func: Callable[_P, _R],
+    *,
+    name: str | None = None,
+    category: str = "composition",
+    tags: Sequence[str] = (),
+) -> Callable[_P, _R]: ...
+
+
+@overload
+def tilelang_case(
+    func: None = None,
+    *,
+    name: str | None = None,
+    category: str = "composition",
+    tags: Sequence[str] = (),
+) -> Callable[[Callable[_P, _R]], Callable[_P, _R]]: ...
+
+
+def tilelang_case(
+    func: Callable[_P, _R] | None = None,
+    *,
+    name: str | None = None,
+    category: str = "composition",
+    tags: Sequence[str] = (),
+) -> Callable[[Callable[_P, _R]], Callable[_P, _R]] | Callable[_P, _R]:
+    """Marks a function as a TileLang importer check case."""
+
+    metadata = TileLangCaseMetadata(
+        name=name,
+        category=category,
+        tags=tuple(tags),
+    )
+
+    def decorate(case_func: Callable[_P, _R]) -> Callable[_P, _R]:
+        setattr(case_func, TILELANG_CASE_ATTR, metadata)
+        return case_func
+
+    if func is not None:
+        return decorate(func)
+    return decorate
+
+
+def is_tilelang_case(value: object) -> bool:
+    return isinstance(getattr(value, TILELANG_CASE_ATTR, None), TileLangCaseMetadata)
+
+
+def get_tilelang_case_metadata(value: object) -> TileLangCaseMetadata | None:
+    metadata = getattr(value, TILELANG_CASE_ATTR, None)
+    if isinstance(metadata, TileLangCaseMetadata):
+        return metadata
+    return None

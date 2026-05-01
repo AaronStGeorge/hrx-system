@@ -12,9 +12,38 @@ iree_add_all_subdirs()
 
 iree_py_library(
   NAME
-    shared
+    package
   SRCS
     "__init__.py"
+  DEPS
+    iree::runtime::py::loom::dialect::buffer::buffer
+    iree::runtime::py::loom::dialect::cfg::cfg
+    iree::runtime::py::loom::dialect::check::check
+    iree::runtime::py::loom::dialect::encoding::encoding
+    iree::runtime::py::loom::dialect::func::func
+    iree::runtime::py::loom::dialect::globals::globals
+    iree::runtime::py::loom::dialect::hal::hal
+    iree::runtime::py::loom::dialect::index::index
+    iree::runtime::py::loom::dialect::kernel::kernel
+    iree::runtime::py::loom::dialect::llvmir::llvmir
+    iree::runtime::py::loom::dialect::low::low
+    iree::runtime::py::loom::dialect::pass_::pass_
+    iree::runtime::py::loom::dialect::pool::pool
+    iree::runtime::py::loom::dialect::scalar::scalar
+    iree::runtime::py::loom::dialect::scf::scf
+    iree::runtime::py::loom::dialect::target::target
+    iree::runtime::py::loom::dialect::tensor::tensor
+    iree::runtime::py::loom::dialect::test::test
+    iree::runtime::py::loom::dialect::tile::tile
+    iree::runtime::py::loom::dialect::vector::vector
+    iree::runtime::py::loom::dialect::view::view
+    iree::runtime::py::loom::dialect::vm::vm
+)
+
+iree_py_library(
+  NAME
+    shared
+  SRCS
     "atomic.py"
     "cache.py"
     "combining.py"

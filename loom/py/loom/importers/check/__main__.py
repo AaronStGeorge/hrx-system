@@ -11,59 +11,69 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
-from pathlib import Path
 
-from loom.importers.check.runner import (
-    MlirCheckOptions,
+from loom.importers.check.registry import (
+    make_default_registry,
+    print_importers,
+    skip_unavailable_backend,
+)
+from loom.importers.check.results import (
+    CheckResult,
     results_to_json,
-    run_mlir_check,
     summarize_results,
 )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    registry = make_default_registry()
     parser = argparse.ArgumentParser(prog="loom-import-check")
-    subparsers = parser.add_subparsers(dest="importer", required=True)
-    mlir_parser = subparsers.add_parser("mlir", help="check MLIR kernel imports")
-    mlir_parser.add_argument("paths", nargs="+", type=Path)
-    mlir_parser.add_argument("--kernel")
-    mlir_parser.add_argument(
-        "--update",
+    parser.add_argument(
+        "--list-importers",
         action="store_true",
-        help="update inline expected output sections",
+        help="list enabled and disabled importer check backends",
     )
-    mlir_parser.add_argument(
-        "--prefer-abi3-extensions",
+    parser.add_argument(
+        "--skip-unavailable-importer",
         action="store_true",
-        help="prefer local .abi3.so IREE compiler bindings",
+        help="skip checks for unavailable optional importer backends",
     )
-    mlir_parser.add_argument(
-        "--json",
-        action="store_true",
-        help="emit machine-readable check results",
-    )
-
+    subparsers = parser.add_subparsers(dest="importer")
+    for candidate in registry.all():
+        help_text = candidate.backend.help
+        if not candidate.availability.available:
+            help_text = f"{help_text} (disabled: {candidate.availability.message()})"
+        subparser = subparsers.add_parser(candidate.backend.name, help=help_text)
+        candidate.backend.add_arguments(subparser)
     args = parser.parse_args(argv)
-    if args.importer != "mlir":
-        parser.error(f"unsupported importer: {args.importer}")
+    if args.list_importers:
+        sys.stdout.write(f"{print_importers(registry)}\n")
+        return 0
+    if args.importer is None:
+        parser.error("importer is required unless --list-importers is used")
+    selected = registry.by_name(args.importer)
+    if selected is None:
+        parser.error(f"unknown importer: {args.importer}")
+        raise AssertionError("argparse.error returned")
 
-    options = MlirCheckOptions(
-        kernel=args.kernel,
-        prefer_abi3_extensions=args.prefer_abi3_extensions,
-        update=args.update,
-    )
-    results = [
-        result
-        for path in args.paths
-        for result in run_mlir_check(path, options=options)
-    ]
+    availability = selected.availability
+    if availability.available:
+        availability = selected.backend.prepare(args)
+    if not availability.available:
+        if args.skip_unavailable_importer:
+            results = skip_unavailable_backend(selected, args, availability)
+        else:
+            parser.error(
+                f"importer {args.importer!r} is not available: {availability.message()}"
+            )
+            raise AssertionError("argparse.error returned")
+    else:
+        results = selected.backend.run(args)
+
     if args.json:
         sys.stdout.write(f"{results_to_json(results)}\n")
     else:
         for result in results:
-            sys.stdout.write(
-                f"{result.status}: {result.path}:case{result.case_index}\n"
-            )
+            sys.stdout.write(f"{result.status}: {_result_location(result)}\n")
             if result.mismatch:
                 sys.stdout.write(f"  {result.mismatch}\n")
                 if result.diff:
@@ -77,11 +87,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             "summary: "
             f"{summary['passed']} passed, "
             f"{summary['updated']} updated, "
+            f"{summary['skipped']} skipped, "
             f"{summary['failed']} failed, "
             f"{summary['crashed']} crashed"
             "\n"
         )
     return 0 if all(result.passed for result in results) else 1
+
+
+def _result_location(result: CheckResult) -> str:
+    if result.case_index < 0:
+        return str(result.path)
+    return f"{result.path}:case{result.case_index}"
 
 
 def _diagnostic_line(text: str) -> str | None:
