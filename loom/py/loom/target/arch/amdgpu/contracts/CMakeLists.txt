@@ -17,6 +17,7 @@ iree_py_library(
     "__init__.py"
     "arithmetic.py"
     "async.py"
+    "buffer.py"
     "compare.py"
     "dot.py"
     "integer.py"
@@ -25,6 +26,7 @@ iree_py_library(
     "reduce.py"
   DEPS
     iree::runtime::py::loom::core
+    iree::runtime::py::loom::dialect::buffer::buffer
     iree::runtime::py::loom::dialect::index::index
     iree::runtime::py::loom::dialect::kernel::kernel
     iree::runtime::py::loom::dialect::scalar::scalar

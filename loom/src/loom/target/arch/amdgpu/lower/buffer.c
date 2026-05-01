@@ -6,21 +6,9 @@
 
 #include <stdint.h>
 
-#include "loom/ir/context.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
 #include "loom/util/fact_table.h"
-
-static bool loom_amdgpu_can_lower_buffer_view(loom_low_lower_context_t* context,
-                                              const loom_op_t* source_op) {
-  int64_t unused_byte_offset = 0;
-  return loom_amdgpu_value_is_byte_addressable_view(
-             context, loom_buffer_view_result(source_op)) &&
-         loom_amdgpu_module_value_as_exact_index_constant(
-             loom_low_lower_context_module(context),
-             loom_buffer_view_byte_offset(source_op), &unused_byte_offset) &&
-         unused_byte_offset >= 0;
-}
 
 static bool loom_amdgpu_select_buffer_alloca_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
@@ -65,11 +53,6 @@ iree_status_t loom_amdgpu_select_buffer_plan(loom_low_lower_context_t* context,
       }
       return iree_ok_status();
     }
-    case LOOM_OP_BUFFER_VIEW:
-      if (loom_amdgpu_can_lower_buffer_view(context, source_op)) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, NULL);
-      }
-      return iree_ok_status();
     default:
       return iree_ok_status();
   }
@@ -104,41 +87,7 @@ iree_status_t loom_amdgpu_lower_buffer_op(loom_low_lower_context_t* context,
       return loom_amdgpu_lower_buffer_alloca(
           context, source_op,
           (const loom_amdgpu_buffer_alloca_plan_t*)plan.target_data);
-    case LOOM_OP_BUFFER_VIEW:
-      return loom_low_lower_bind_value_alias(
-          context, loom_buffer_view_buffer(source_op),
-          loom_buffer_view_result(source_op));
     default:
       IREE_CHECK_UNREACHABLE();
   }
-}
-
-iree_status_t loom_amdgpu_low_legality_verify_buffer(
-    const loom_target_low_legality_provider_t* provider,
-    loom_target_low_legality_context_t* context, const loom_op_t* op,
-    bool* out_handled) {
-  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
-  if (!loom_amdgpu_low_legality_bundle_is_amdgpu(bundle)) {
-    return iree_ok_status();
-  }
-  *out_handled = true;
-
-  const loom_module_t* module = loom_target_low_legality_module(context);
-  if (!loom_amdgpu_type_is_byte_addressable_view(
-          loom_module_value_type(module, loom_buffer_view_result(op)))) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("memory"), loom_op_name(module, op),
-        IREE_SV("AMDGPU buffer memory lowering currently requires typed views "
-                "over byte-addressable scalar elements"));
-  }
-  int64_t unused_byte_offset = 0;
-  if (!loom_amdgpu_module_value_as_exact_index_constant(
-          module, loom_buffer_view_byte_offset(op), &unused_byte_offset) ||
-      unused_byte_offset < 0) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("memory"), loom_op_name(module, op),
-        IREE_SV("AMDGPU HAL buffer views currently require exact non-negative "
-                "static byte offsets"));
-  }
-  return iree_ok_status();
 }

@@ -53,6 +53,13 @@ CONTRACT_FRAGMENT_REGISTRATIONS = (
         aliases=("amdgpu_arithmetic",),
     ),
     ContractFragmentRegistration(
+        key="amdgpu.buffer",
+        module_name="loom.target.arch.amdgpu.contracts.buffer",
+        symbol_name="AMDGPU_BUFFER_CONTRACT_FRAGMENT",
+        dialect_ops_symbol_name="AMDGPU_BUFFER_CONTRACT_DIALECT_OPS",
+        aliases=("amdgpu_buffer",),
+    ),
+    ContractFragmentRegistration(
         key="amdgpu.compare",
         module_name="loom.target.arch.amdgpu.contracts.compare",
         symbol_name="AMDGPU_COMPARE_CONTRACT_FRAGMENT",

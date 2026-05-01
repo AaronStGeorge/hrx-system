@@ -16,6 +16,8 @@
 #include "loom/target/arch/amdgpu/contracts/arithmetic_lower_rules.h"
 #include "loom/target/arch/amdgpu/contracts/async.h"
 #include "loom/target/arch/amdgpu/contracts/async_lower_rules.h"
+#include "loom/target/arch/amdgpu/contracts/buffer.h"
+#include "loom/target/arch/amdgpu/contracts/buffer_lower_rules.h"
 #include "loom/target/arch/amdgpu/contracts/compare.h"
 #include "loom/target/arch/amdgpu/contracts/compare_lower_rules.h"
 #include "loom/target/arch/amdgpu/contracts/dot.h"
@@ -427,10 +429,6 @@ static const loom_amdgpu_lower_dispatch_row_t
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_BUFFER_ALLOCA)] = LOOM_AMDGPU_DIRECT_ROW(
             LOOM_OP_BUFFER_ALLOCA, loom_amdgpu_select_buffer_dispatch,
             loom_amdgpu_emit_buffer_dispatch, NULL),
-        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_BUFFER_VIEW)] = LOOM_AMDGPU_DIRECT_ROW(
-            LOOM_OP_BUFFER_VIEW, loom_amdgpu_select_buffer_dispatch,
-            loom_amdgpu_emit_buffer_dispatch,
-            loom_amdgpu_low_legality_verify_buffer),
 };
 
 static const loom_amdgpu_lower_dispatch_row_t
@@ -841,6 +839,7 @@ static iree_status_t loom_amdgpu_low_legality_try_verify_op(
 // clang-format off
 static const loom_low_lower_rule_set_t* const kAmdgpuRuleSets[] = {
   &loom_amdgpu_arithmetic_lower_rule_set,
+  &loom_amdgpu_buffer_lower_rule_set,
   &loom_amdgpu_integer_lower_rule_set,
   &loom_amdgpu_compare_lower_rule_set,
   &loom_amdgpu_dot_lower_rule_set,
@@ -850,11 +849,12 @@ static const loom_low_lower_rule_set_t* const kAmdgpuRuleSets[] = {
 
 static const loom_target_contract_binding_t kAmdgpuContractBindings[] = {
   {&loom_amdgpu_arithmetic_contract_fragment, 0},
-  {&loom_amdgpu_integer_contract_fragment, 1},
-  {&loom_amdgpu_compare_contract_fragment, 2},
-  {&loom_amdgpu_dot_contract_fragment, 3},
-  {&loom_amdgpu_reduce_contract_fragment, 4},
-  {&loom_amdgpu_async_contract_fragment, 5},
+  {&loom_amdgpu_buffer_contract_fragment, 1},
+  {&loom_amdgpu_integer_contract_fragment, 2},
+  {&loom_amdgpu_compare_contract_fragment, 3},
+  {&loom_amdgpu_dot_contract_fragment, 4},
+  {&loom_amdgpu_reduce_contract_fragment, 5},
+  {&loom_amdgpu_async_contract_fragment, 6},
   {&loom_amdgpu_matrix_contract_fragment, UINT16_MAX},
 };
 

@@ -63,6 +63,29 @@ loom_target_table_cc_library(
 
 loom_target_table_cc_library(
   NAME
+    buffer
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_contract_fragment
+  ARGS
+    "--contract-fragment=amdgpu.buffer"
+  DEPS
+    loom::src::loom::target::contract
+)
+
+loom_target_table_cc_library(
+  NAME
+    buffer_lower_rules
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
+  ARGS
+    "--contract-fragment=amdgpu.buffer"
+  DEPS
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::buffer
+)
+
+loom_target_table_cc_library(
+  NAME
     compare
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_contract_fragment

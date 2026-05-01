@@ -521,6 +521,8 @@ loom_cc_library(
         "//loom/src/loom/target/arch/amdgpu/contracts:arithmetic_lower_rules",
         "//loom/src/loom/target/arch/amdgpu/contracts:async",
         "//loom/src/loom/target/arch/amdgpu/contracts:async_lower_rules",
+        "//loom/src/loom/target/arch/amdgpu/contracts:buffer",
+        "//loom/src/loom/target/arch/amdgpu/contracts:buffer_lower_rules",
         "//loom/src/loom/target/arch/amdgpu/contracts:compare",
         "//loom/src/loom/target/arch/amdgpu/contracts:compare_lower_rules",
         "//loom/src/loom/target/arch/amdgpu/contracts:dot",

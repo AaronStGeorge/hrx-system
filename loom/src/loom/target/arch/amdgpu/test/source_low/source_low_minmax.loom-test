@@ -71,31 +71,30 @@ func.def @f32_reduce_minnum_maxnum(%input: buffer, %output: buffer) {
 low.func.def target(@target) abi(hal_kernel) @f32_reduce_minnum_maxnum() asm<amdgpu.gfx11.core> {
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 8} : reg<amdgpu.sgpr x4>
-  %zero = s_mov_b32 0
-  %14 = v_mov_b32 0
-  %15 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b128 %14, %15
+  %13 = v_mov_b32 0
+  %14 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b128 %13, %14
   %min_init = v_mov_b32 1148846080
-  %18 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %19 = v_min_f32 %min_init, %18
-  %20 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %21 = v_min_f32 %19, %20
-  %22 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %23 = v_min_f32 %21, %22
-  %24 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %min = v_min_f32 %23, %24
+  %17 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %18 = v_min_f32 %min_init, %17
+  %19 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %20 = v_min_f32 %18, %19
+  %21 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %22 = v_min_f32 %20, %21
+  %23 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %min = v_min_f32 %22, %23
   %max_init = v_mov_b32 3296329728
-  %27 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %28 = v_max_f32 %max_init, %27
-  %29 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %30 = v_max_f32 %28, %29
-  %31 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %32 = v_max_f32 %30, %31
-  %33 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %max = v_max_f32 %32, %33
+  %26 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %27 = v_max_f32 %max_init, %26
+  %28 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %29 = v_max_f32 %27, %28
+  %30 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %31 = v_max_f32 %29, %30
+  %32 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %max = v_max_f32 %31, %32
   %stored = concat(%min, %max) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %36 = v_mov_b32 0
-  %37 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b64 %36, %stored, %37
+  %35 = v_mov_b32 0
+  %36 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b64 %35, %stored, %36
   return
 }

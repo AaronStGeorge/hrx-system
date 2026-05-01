@@ -59,6 +59,23 @@ loom_target_table_cc_library(
 )
 
 loom_target_table_cc_library(
+    name = "buffer",
+    args = ["--contract-fragment=amdgpu.buffer"],
+    generator = _AMDGPU_CONTRACT_FRAGMENT_GENERATOR,
+    deps = ["//loom/src/loom/target:contract"],
+)
+
+loom_target_table_cc_library(
+    name = "buffer_lower_rules",
+    args = ["--contract-fragment=amdgpu.buffer"],
+    generator = _AMDGPU_LOWER_RULE_GENERATOR,
+    deps = [
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/ops/buffer",
+    ],
+)
+
+loom_target_table_cc_library(
     name = "compare",
     args = ["--contract-fragment=amdgpu.compare"],
     generator = _AMDGPU_CONTRACT_FRAGMENT_GENERATOR,

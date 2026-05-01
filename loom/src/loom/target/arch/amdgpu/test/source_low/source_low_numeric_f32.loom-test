@@ -22,18 +22,17 @@ low.kernel.def target(@target) @f32_arith() asm<amdgpu.gfx11.core> {
   %lhs_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %rhs_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 2, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
-  %zero = s_mov_b32 0
-  %18 = v_lshlrev_b32_lit %tid, 2
-  %19 = slice %lhs_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %lhs = global_load_b32 %18, %19
-  %21 = v_lshlrev_b32_lit %tid, 2
-  %22 = slice %rhs_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %rhs = global_load_b32 %21, %22
+  %17 = v_lshlrev_b32_lit %tid, 2
+  %18 = slice %lhs_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %lhs = global_load_b32 %17, %18
+  %20 = v_lshlrev_b32_lit %tid, 2
+  %21 = slice %rhs_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %rhs = global_load_b32 %20, %21
   %sum = v_add_f32 %lhs, %rhs
   %product = v_mul_f32 %sum, %rhs
-  %26 = v_lshlrev_b32_lit %tid, 2
-  %27 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %26, %product, %27
+  %25 = v_lshlrev_b32_lit %tid, 2
+  %26 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %25, %product, %26
   return
 }
 
@@ -61,19 +60,18 @@ low.kernel.def target(@target) @f32_fma() asm<amdgpu.gfx11.core> {
   %lhs_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %rhs_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 2, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
-  %zero = s_mov_b32 0
-  %19 = v_lshlrev_b32_lit %tid, 2
-  %20 = slice %lhs_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %lhs = global_load_b32 %19, %20
-  %22 = v_lshlrev_b32_lit %tid, 2
-  %23 = slice %rhs_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %rhs = global_load_b32 %22, %23
+  %18 = v_lshlrev_b32_lit %tid, 2
+  %19 = slice %lhs_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %lhs = global_load_b32 %18, %19
+  %21 = v_lshlrev_b32_lit %tid, 2
+  %22 = slice %rhs_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %rhs = global_load_b32 %21, %22
   %bias = v_mov_b32 1056964608
   %fma = v_fma_f32 %lhs, %rhs, %bias
   %result = v_sub_f32 %fma, %bias
-  %28 = v_lshlrev_b32_lit %tid, 2
-  %29 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %28, %result, %29
+  %27 = v_lshlrev_b32_lit %tid, 2
+  %28 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %27, %result, %28
   return
 }
 
@@ -112,13 +110,12 @@ low.kernel.def target(@target) @f32_scalarized() asm<amdgpu.gfx11.core> {
   %lhs_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %rhs_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 2, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
-  %zero = s_mov_b32 0
-  %30 = v_lshlrev_b32_lit %tid, 4
-  %31 = slice %lhs_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %lhs = global_load_b128 %30, %31
-  %33 = v_lshlrev_b32_lit %tid, 4
-  %34 = slice %rhs_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %rhs = global_load_b128 %33, %34
+  %29 = v_lshlrev_b32_lit %tid, 4
+  %30 = slice %lhs_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %lhs = global_load_b128 %29, %30
+  %32 = v_lshlrev_b32_lit %tid, 4
+  %33 = slice %rhs_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %rhs = global_load_b128 %32, %33
   %lhs0 = slice %lhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %rhs0 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %lane0 = v_add_f32 %lhs0, %rhs0
@@ -133,8 +130,8 @@ low.kernel.def target(@target) @f32_scalarized() asm<amdgpu.gfx11.core> {
   %bias = v_mov_b32 1056964608
   %lane3 = v_fma_f32 %lhs3, %rhs3, %bias
   %result = concat(%lane0, %lane1, %lane2, %lane3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %50 = v_lshlrev_b32_lit %tid, 4
-  %51 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %50, %result, %51
+  %49 = v_lshlrev_b32_lit %tid, 4
+  %50 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b128 %49, %result, %50
   return
 }

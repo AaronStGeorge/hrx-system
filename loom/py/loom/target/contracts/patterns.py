@@ -8,10 +8,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Self
 
 type CTypeExpression = int | str
+type ScalarElementPattern = str | Sequence[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,18 +22,19 @@ class TypePattern:
 
     kind: str
     element: str | None = None
+    elements: tuple[str, ...] = ()
     lanes: int | None = None
     minimum_lanes: CTypeExpression | None = None
     maximum_lanes: CTypeExpression | None = None
 
     @classmethod
-    def scalar(cls, element: str) -> Self:
-        return cls(kind="scalar", element=element)
+    def scalar(cls, element: ScalarElementPattern) -> Self:
+        return cls(kind="scalar", elements=_normalize_elements(element))
 
     @classmethod
     def vector(
         cls,
-        element: str,
+        element: ScalarElementPattern,
         *,
         lanes: int | None = None,
         minimum_lanes: CTypeExpression | None = None,
@@ -39,17 +42,36 @@ class TypePattern:
     ) -> Self:
         return cls(
             kind="vector",
-            element=element,
+            elements=_normalize_elements(element),
             lanes=lanes,
             minimum_lanes=minimum_lanes,
             maximum_lanes=maximum_lanes,
         )
 
+    @classmethod
+    def view(cls, element: ScalarElementPattern) -> Self:
+        return cls(kind="view", elements=_normalize_elements(element))
+
     def __post_init__(self) -> None:
-        if self.kind not in {"scalar", "vector"}:
+        elements = tuple(self.elements)
+        if self.element is not None:
+            if elements and elements != (self.element,):
+                raise ValueError("type pattern element and elements disagree")
+            elements = (self.element,)
+        object.__setattr__(self, "elements", elements)
+        if len(elements) == 1:
+            object.__setattr__(self, "element", elements[0])
+        if self.kind not in {"scalar", "vector", "view"}:
             raise ValueError(f"unknown type pattern kind '{self.kind}'")
-        if not self.element:
+        if not elements:
             raise ValueError(f"{self.kind} type pattern requires an element")
+        if len(set(elements)) != len(elements):
+            raise ValueError(f"{self.kind} type pattern elements must be unique")
+        for element in elements:
+            if not isinstance(element, str):
+                raise ValueError(f"{self.kind} type pattern element must be a string")
+            if not element:
+                raise ValueError(f"{self.kind} type pattern element must be non-empty")
         if self.kind == "scalar":
             if (
                 self.lanes is not None
@@ -57,6 +79,14 @@ class TypePattern:
                 or self.maximum_lanes is not None
             ):
                 raise ValueError("scalar type patterns cannot constrain lanes")
+            return
+        if self.kind == "view":
+            if (
+                self.lanes is not None
+                or self.minimum_lanes is not None
+                or self.maximum_lanes is not None
+            ):
+                raise ValueError("view type patterns cannot constrain lanes")
             return
         if self.lanes is not None:
             if self.minimum_lanes is not None or self.maximum_lanes is not None:
@@ -72,14 +102,14 @@ class TypePattern:
             _validate_lane_bound(self.maximum_lanes, "maximum vector lane count")
 
 
-def Scalar(element: str) -> TypePattern:
+def Scalar(element: ScalarElementPattern) -> TypePattern:
     """Returns a scalar type pattern."""
 
     return TypePattern.scalar(element)
 
 
 def Vector(
-    element: str,
+    element: ScalarElementPattern,
     *,
     lanes: int | None = None,
     minimum_lanes: CTypeExpression | None = None,
@@ -93,6 +123,18 @@ def Vector(
         minimum_lanes=minimum_lanes,
         maximum_lanes=maximum_lanes,
     )
+
+
+def View(element: ScalarElementPattern) -> TypePattern:
+    """Returns a view type pattern."""
+
+    return TypePattern.view(element)
+
+
+def _normalize_elements(element: ScalarElementPattern) -> tuple[str, ...]:
+    if isinstance(element, str):
+        return (element,)
+    return tuple(element)
 
 
 def _validate_lane_bound(value: CTypeExpression, subject: str) -> None:

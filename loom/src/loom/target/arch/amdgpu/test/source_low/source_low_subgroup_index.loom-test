@@ -14,11 +14,10 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_id_x_wave32() 
   %5 = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 8} : reg<amdgpu.sgpr x4>
   %subgroup_id = v_lshrrev_b32_lit %5, 5
-  %zero = s_mov_b32 0
   %one = v_mov_b32 1
-  %10 = v_lshlrev_b32_lit %subgroup_id, 2
-  %11 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %10, %one, %11
+  %9 = v_lshlrev_b32_lit %subgroup_id, 2
+  %10 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %9, %one, %10
   return
 }
 
@@ -37,11 +36,10 @@ kernel.def workgroup_size(32, 1, 1) @subgroup_id_single_wave_gfx11(%output: buff
 low.kernel.def target(@target) workgroup_size(32, 1, 1) @subgroup_id_single_wave_gfx11() asm<amdgpu.gfx11.core> {
   %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
   %subgroup_id = v_mov_b32 0
-  %zero = s_mov_b32 0
   %one = v_mov_b32 1
-  %9 = v_mov_b32 0
-  %10 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %9, %one, %10
+  %8 = v_mov_b32 0
+  %9 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %8, %one, %9
   return
 }
 
@@ -70,11 +68,10 @@ low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wav
   %14 = v_lshlrev_b32_lit %13, 5
   %15 = v_add_u32 %11, %14
   %lane_id = v_and_b32_lit %15, 31
-  %zero = s_mov_b32 0
   %one = v_mov_b32 1
-  %19 = v_lshlrev_b32_lit %lane_id, 2
-  %20 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %19, %one, %20
+  %18 = v_lshlrev_b32_lit %lane_id, 2
+  %19 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %18, %one, %19
   return
 }
 
@@ -104,11 +101,10 @@ low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wav
   %14 = v_lshlrev_b32_lit %13, 5
   %15 = v_add_u32 %11, %14
   %lane_id = v_and_b32_lit %15, 31
-  %zero = s_mov_b32 0
   %one = v_mov_b32 1
-  %19 = v_lshlrev_b32_lit %lane_id, 2
-  %20 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %19, %one, %20
+  %18 = v_lshlrev_b32_lit %lane_id, 2
+  %19 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %18, %one, %19
   return
 }
 
@@ -129,11 +125,10 @@ low.kernel.def target(@target) workgroup_size(128, 1, 1) @subgroup_id_x_wave64()
   %5 = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 8} : reg<amdgpu.sgpr x4>
   %subgroup_id = v_lshrrev_b32_lit %5, 6
-  %zero = s_mov_b32 0
   %one = v_mov_b32 1
-  %10 = v_lshlrev_b32_lit %subgroup_id, 2
-  %11 = s_mov_b32 0
-  buffer_store_dword %one, %output_view, %10, %11
+  %9 = v_lshlrev_b32_lit %subgroup_id, 2
+  %10 = s_mov_b32 0
+  buffer_store_dword %one, %output_view, %9, %10
   return
 }
 
@@ -153,10 +148,9 @@ kernel.def workgroup_size(64, 1, 1) @subgroup_lane_id_x_wave64(%output: buffer) 
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_lane_id_x_wave64() asm<amdgpu.gfx950.core> {
   %lane_id = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
-  %zero = s_mov_b32 0
   %one = v_mov_b32 1
-  %9 = v_lshlrev_b32_lit %lane_id, 2
-  %10 = s_mov_b32 0
-  buffer_store_dword %one, %output_view, %9, %10
+  %8 = v_lshlrev_b32_lit %lane_id, 2
+  %9 = s_mov_b32 0
+  buffer_store_dword %one, %output_view, %8, %9
   return
 }

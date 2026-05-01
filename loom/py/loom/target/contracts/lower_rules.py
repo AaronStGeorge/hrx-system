@@ -852,6 +852,11 @@ class _LowerRuleSetCompiler:
                 if type_binding is None:
                     type_binding = value_ref
                 if isinstance(type_binding, TypePattern):
+                    _require_exact_result_type_pattern(
+                        source_op,
+                        descriptor_operand.field_name,
+                        type_binding,
+                    )
                     result_type_patterns.append(type_binding)
                 else:
                     result_type_refs.append(
@@ -1311,6 +1316,28 @@ def _require_type_pattern(
     return type_pattern
 
 
+def _require_exact_result_type_pattern(
+    source_op: Op,
+    descriptor_field: str,
+    type_pattern: TypePattern,
+) -> None:
+    if type_pattern.kind == "view":
+        raise ValueError(
+            f"{source_op.name}: descriptor emit result type pattern for "
+            f"'{descriptor_field}' cannot synthesize view types"
+        )
+    if len(type_pattern.elements) != 1:
+        raise ValueError(
+            f"{source_op.name}: descriptor emit result type pattern for "
+            f"'{descriptor_field}' must select exactly one scalar element"
+        )
+    if type_pattern.kind == "vector" and type_pattern.lanes is None:
+        raise ValueError(
+            f"{source_op.name}: descriptor emit result type pattern for "
+            f"'{descriptor_field}' must have an exact vector lane count"
+        )
+
+
 def _value_ref_for_source_field(source_op: Op, field: str) -> ValueRef:
     if source_op.operand(field) is not None:
         return ValueRef.operand(field)
@@ -1376,30 +1403,41 @@ def _source_operand_index(source_op: Op, field: str) -> int:
 
 
 def _type_diagnostic_reason(type_pattern: TypePattern) -> str:
+    element_text = _type_pattern_element_text(type_pattern)
     if type_pattern.kind == "scalar":
-        return f"target contract requires {type_pattern.element} scalar values"
+        return f"target contract requires {element_text} scalar values"
+    if type_pattern.kind == "view":
+        return f"target contract requires view<{element_text}> values"
     if (
         type_pattern.minimum_lanes is not None
         and type_pattern.maximum_lanes is not None
     ):
         return (
             "target contract requires "
-            f"vector<{type_pattern.element}> values in the supported lane range"
+            f"vector<{element_text}> values in the supported lane range"
         )
     if type_pattern.lanes is None:
-        return f"target contract requires vector<{type_pattern.element}> values"
+        return f"target contract requires vector<{element_text}> values"
     return (
-        "target contract requires "
-        f"vector<{type_pattern.lanes}x{type_pattern.element}> values"
+        f"target contract requires vector<{type_pattern.lanes}x{element_text}> values"
     )
 
 
 def _type_diagnostic_subject(type_pattern: TypePattern) -> str:
+    element_text = _type_pattern_element_text(type_pattern)
     if type_pattern.kind == "scalar":
-        return str(type_pattern.element)
+        return element_text
+    if type_pattern.kind == "view":
+        return f"view<{element_text}>"
     if type_pattern.lanes is not None:
-        return f"vector<{type_pattern.lanes}x{type_pattern.element}>"
-    return f"vector<{type_pattern.element}>"
+        return f"vector<{type_pattern.lanes}x{element_text}>"
+    return f"vector<{element_text}>"
+
+
+def _type_pattern_element_text(type_pattern: TypePattern) -> str:
+    if len(type_pattern.elements) == 1:
+        return type_pattern.elements[0]
+    return "{" + ", ".join(type_pattern.elements) + "}"
 
 
 def _source_memory_diagnostic(

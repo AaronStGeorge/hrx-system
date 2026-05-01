@@ -17,6 +17,7 @@ py_library(
         "__init__.py",
         "arithmetic.py",
         "async.py",
+        "buffer.py",
         "compare.py",
         "dot.py",
         "integer.py",
@@ -26,6 +27,7 @@ py_library(
     ],
     deps = [
         "//loom/py/loom:core",
+        "//loom/py/loom/dialect/buffer",
         "//loom/py/loom/dialect/index",
         "//loom/py/loom/dialect/kernel",
         "//loom/py/loom/dialect/scalar",

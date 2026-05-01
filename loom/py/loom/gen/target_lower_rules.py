@@ -832,7 +832,7 @@ def _type_pattern_row(type_pattern: TypePattern) -> list[str]:
     row = [
         ".flags = " + " | ".join(flags),
         f".type_kind = {_type_kind_c_name(type_pattern)}",
-        f".element_type_mask = LOOM_LOW_LOWER_SCALAR_TYPE_BIT({_scalar_type_c_name(type_pattern.element)})",
+        f".element_type_mask = {_scalar_type_mask_c_expr(type_pattern.elements)}",
     ]
     if type_pattern.kind == "vector":
         row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK"
@@ -862,7 +862,13 @@ def _type_kind_c_name(type_pattern: TypePattern) -> str:
         return "LOOM_TYPE_SCALAR"
     if type_pattern.kind == "vector":
         return "LOOM_TYPE_VECTOR"
+    if type_pattern.kind == "view":
+        return "LOOM_TYPE_VIEW"
     raise ValueError(f"unknown type pattern kind '{type_pattern.kind}'")
+
+
+def _scalar_type_mask_c_expr(elements: tuple[str, ...]) -> str:
+    return " | ".join(f"LOOM_LOW_LOWER_SCALAR_TYPE_BIT({_scalar_type_c_name(element)})" for element in elements)
 
 
 def _scalar_type_c_name(element: str | None) -> str:

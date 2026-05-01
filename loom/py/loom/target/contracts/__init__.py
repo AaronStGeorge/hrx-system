@@ -56,7 +56,7 @@ from loom.target.contracts.lower_rules import (
     compile_lower_rule_set,
 )
 from loom.target.contracts.materializers import ValueMaterializer
-from loom.target.contracts.patterns import Scalar, TypePattern, Vector
+from loom.target.contracts.patterns import Scalar, TypePattern, Vector, View
 from loom.target.contracts.rules import (
     ContractCase,
     DescriptorMatrixRule,
@@ -146,6 +146,7 @@ __all__ = [
     "ValueProjectKind",
     "ValueRef",
     "Vector",
+    "View",
     "binary_descriptor_rules",
     "compile_contract_fragment",
     "compile_lower_rule_set",

@@ -11,9 +11,8 @@ func.def @prefetch_static(%input: buffer) {
 // ----
 low.func.def target(@target) abi(hal_kernel) @prefetch_static() asm<amdgpu.gfx12.core> {
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 272} : reg<amdgpu.sgpr x4>
-  %base = s_mov_b32 16
-  %5 = s_mov_b32 0
-  s_buffer_prefetch_data %input_view, %5 {offset = 32, count = 1}
+  %4 = s_mov_b32 0
+  s_buffer_prefetch_data %input_view, %4 {offset = 32, count = 1}
   return
 }
 
@@ -32,10 +31,9 @@ kernel.def @prefetch_workgroup_id(%input: buffer) {
 low.kernel.def target(@target) @prefetch_workgroup_id() asm<amdgpu.gfx12.core> {
   %bounded_gid = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
-  %zero = s_mov_b32 0
-  %8 = s_mov_b32 2
-  %9 = s_lshl_b32 %bounded_gid, %8
-  s_buffer_prefetch_data %input_view, %9 {count = 1}
+  %7 = s_mov_b32 2
+  %8 = s_lshl_b32 %bounded_gid, %7
+  s_buffer_prefetch_data %input_view, %8 {count = 1}
   return
 }
 
@@ -65,8 +63,7 @@ low.kernel.def target(@target) workgroup_size(8, 4, 1) @prefetch_fixed_query_off
   %offset0 = s_add_u32 %workgroup_size_x, %workgroup_size_y
   %offset1 = s_add_u32 %offset0, %subgroup_size
   %offset = s_add_u32 %offset1, %subgroup_count
-  %zero = s_mov_b32 0
-  %19 = s_mov_b32 0
-  s_buffer_prefetch_data %input_view, %19 {offset = 180, count = 1}
+  %18 = s_mov_b32 0
+  s_buffer_prefetch_data %input_view, %18 {offset = 180, count = 1}
   return
 }

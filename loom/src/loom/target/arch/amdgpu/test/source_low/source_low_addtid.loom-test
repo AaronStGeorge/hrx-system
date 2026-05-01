@@ -18,19 +18,18 @@ kernel.def @workgroup_memory_workitem_x_b32() {
 // ----
 low.kernel.def target(@target) @workgroup_memory_workitem_x_b32() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
-  %11 = low.storage.reserve {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
-  %scratch_view = low.storage.address %11 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %10 = low.storage.reserve {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %scratch_view = low.storage.address %10 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  %14 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %15 = low.op<amdgpu.s_mov_b32_m0>(%14) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  low.op<amdgpu.ds_write_addtid_b32>(%one, %15) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
-  %16 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %17 = low.op<amdgpu.s_mov_b32_m0>(%16) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  %loaded = low.op<amdgpu.ds_read_addtid_b32>(%17) {offset = 0} : (reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
-  %19 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %20 = low.op<amdgpu.s_mov_b32_m0>(%19) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  low.op<amdgpu.ds_write_addtid_b32>(%loaded, %20) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
+  %13 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %14 = low.op<amdgpu.s_mov_b32_m0>(%13) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.ds_write_addtid_b32>(%one, %14) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
+  %15 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %16 = low.op<amdgpu.s_mov_b32_m0>(%15) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  %loaded = low.op<amdgpu.ds_read_addtid_b32>(%16) {offset = 0} : (reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
+  %18 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %19 = low.op<amdgpu.s_mov_b32_m0>(%18) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.ds_write_addtid_b32>(%loaded, %19) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
   low.return
 }
