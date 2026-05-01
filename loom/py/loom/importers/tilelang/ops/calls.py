@@ -19,7 +19,8 @@ from loom.importers.tilelang.converter import (
     TileLangConverterRegistry,
 )
 from loom.importers.tilelang.coverage import OpCoverage, coverage_by_name
-from loom.importers.tilelang.nodes import dtype, mapping_items, node_text
+from loom.importers.tilelang.nodes import dtype, mapping_items, node_kind, node_text
+from loom.importers.tilelang.ops.topology import integer_value
 from loom.ir import I1, INDEX, ScalarType, ShapedType, StaticDim, Type, TypeKind
 
 
@@ -43,6 +44,16 @@ class TernaryCallSpec:
     """Three-operand scalar call mapping."""
 
     builder_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class AccessPtrValue:
+    """Decoded TileLang pointer metadata for element-level memory effects."""
+
+    view: ValueRef
+    indices: tuple[int | ValueRef, ...]
+    buffer: object
+    rw_mask: int
 
 
 def register(registry: TileLangConverterRegistry) -> None:
@@ -122,6 +133,14 @@ def convert_call(
         return _convert_ceildiv_call(expr, context, converter, op_name, options=options)
     if op_name in _REINTERPRET_CALLS:
         return _convert_reinterpret_call(expr, context, converter, op_name)
+    if op_name in _ATOMIC_ADD_CALLS:
+        return _convert_atomic_add_call(
+            expr,
+            context,
+            converter,
+            op_name,
+            options=options,
+        )
     if op_name in _EFFECT_CALLS:
         return _convert_effect_call(
             expr,
@@ -610,6 +629,199 @@ def _convert_effect_call(
     return None
 
 
+def _convert_atomic_add_call(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    op_name: str,
+    *,
+    options: ExpressionOptions,
+) -> ValueRef | None:
+    returns_old_value = op_name in _ATOMIC_ADD_RETURNING_CALLS
+    if not returns_old_value and not options.effect:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` is effect-only and must appear under tir.Evaluate",
+        )
+        return None
+    args = _args(expr)
+    if len(args) not in (2, 3):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` expects destination, value, and optional ordering",
+        )
+        return None
+    value = converter.convert_expr(args[1], context)
+    if value is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` value operand is not mapped",
+        )
+        return None
+    if _is_vector_type(value.type):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` vector atomics are not imported by the scalar path",
+        )
+        return None
+    access = _decode_tilelang_access_ptr(args[0], expr, context, converter)
+    if access is None:
+        return None
+    if access.rw_mask != 3:
+        context.record_blocked(
+            node_text(expr),
+            (
+                f"call `{op_name}` requires an rw access pointer, "
+                f"got mask {access.rw_mask}"
+            ),
+        )
+        return None
+    ordering = _atomic_ordering(args, expr, context, op_name)
+    if ordering is None:
+        return None
+    scope = _atomic_scope_for_buffer(access.buffer)
+    if scope is None:
+        context.record_blocked(
+            node_text(expr),
+            (
+                f"call `{op_name}` buffer scope "
+                f"`{_buffer_scope(access.buffer)}` is not mapped"
+            ),
+        )
+        return None
+    kind = "addf" if _is_float_type(str(value.type)) else "addi"
+    if returns_old_value:
+        result_type = context.type_converter.map_dtype(dtype(expr))
+        result = context.builder.view.rmw(
+            kind=kind,
+            value=value,
+            view=access.view,
+            indices=list(access.indices),
+            ordering=ordering,
+            scope=scope,
+            results=[result_type],
+            name=context.fresh_name("atomic_add"),
+        )
+        _map_call_result(expr, context, result, op_name)
+        return result
+    context.builder.view.reduce(
+        kind=kind,
+        value=value,
+        view=access.view,
+        indices=list(access.indices),
+        ordering=ordering,
+        scope=scope,
+    )
+    context.record_converted(node_text(expr), f"view.atomic.reduce<{kind}>")
+    return None
+
+
+def _decode_tilelang_access_ptr(
+    expr: object,
+    owner: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> AccessPtrValue | None:
+    op_name = call_op_name(expr)
+    if op_name != "tl.access_ptr":
+        context.record_blocked(
+            node_text(owner),
+            f"atomic destination must be tl.access_ptr, got `{op_name}`",
+        )
+        return None
+    args = _args(expr)
+    if len(args) != 3:
+        context.record_blocked(
+            node_text(owner),
+            "tl.access_ptr expects base load, extent, and rw mask",
+        )
+        return None
+    extent = integer_value(args[1])
+    if extent != 1:
+        context.record_blocked(
+            node_text(owner),
+            f"tl.access_ptr extent `{extent}` is not a scalar element access",
+        )
+        return None
+    rw_mask = integer_value(args[2])
+    if rw_mask is None:
+        context.record_blocked(node_text(owner), "tl.access_ptr rw mask is not static")
+        return None
+    base_load = args[0]
+    if node_kind(base_load) != "BufferLoad":
+        context.record_blocked(
+            node_text(owner),
+            "tl.access_ptr base is not a BufferLoad",
+        )
+        return None
+    buffer = getattr(base_load, "buffer", None)
+    view = context.mapped(buffer)
+    if view is None:
+        context.record_blocked(
+            node_text(owner),
+            "tl.access_ptr buffer is not mapped",
+        )
+        return None
+    indices: list[int | ValueRef] = []
+    for source_index in tuple(getattr(base_load, "indices", ())):
+        index = converter.convert_expr(source_index, context, index_like=True)
+        if index is None:
+            context.record_blocked(
+                node_text(owner),
+                "tl.access_ptr index is not mapped",
+            )
+            return None
+        indices.append(index)
+    return AccessPtrValue(
+        view=view,
+        indices=tuple(indices),
+        buffer=buffer,
+        rw_mask=rw_mask,
+    )
+
+
+def _atomic_ordering(
+    args: tuple[object, ...],
+    owner: object,
+    context: TileLangConversionContext,
+    op_name: str,
+) -> str | None:
+    if len(args) == 2:
+        return "relaxed"
+    ordering_id = integer_value(args[2])
+    if ordering_id is None:
+        context.record_blocked(
+            node_text(owner), f"call `{op_name}` ordering is not static"
+        )
+        return None
+    ordering = _ATOMIC_ORDERING_BY_TILELANG_ID.get(ordering_id)
+    if ordering is None:
+        context.record_blocked(
+            node_text(owner),
+            f"call `{op_name}` memory order id {ordering_id} is not represented",
+        )
+        return None
+    return ordering
+
+
+def _atomic_scope_for_buffer(buffer: object) -> str | None:
+    scope = _buffer_scope(buffer)
+    if scope in ("shared", "shared.dyn"):
+        return "workgroup"
+    if scope in ("", "global"):
+        return "device"
+    return None
+
+
+def _buffer_scope(buffer: object) -> str:
+    scope = getattr(buffer, "scope", None)
+    if callable(scope):
+        return str(scope())
+    if scope is not None:
+        return str(scope)
+    return ""
+
+
 def _convert_storage_sync_call(
     expr: object,
     context: TileLangConversionContext,
@@ -848,6 +1060,24 @@ _CEILDIV_CALLS = {
 
 _REINTERPRET_CALLS = {
     "tir.reinterpret",
+}
+
+_ATOMIC_ADD_EFFECT_CALLS = {
+    "tl.atomic_add_elem_op",
+}
+
+_ATOMIC_ADD_RETURNING_CALLS = {
+    "tl.atomic_add_ret_elem_op",
+}
+
+_ATOMIC_ADD_CALLS = _ATOMIC_ADD_EFFECT_CALLS | _ATOMIC_ADD_RETURNING_CALLS
+
+_ATOMIC_ORDERING_BY_TILELANG_ID = {
+    0: "relaxed",
+    2: "acquire",
+    3: "release",
+    4: "acq_rel",
+    5: "seq_cst",
 }
 
 _STORAGE_SYNC_CALLS = {

@@ -102,6 +102,7 @@ def test_run_tilelang_check_verifies_checked_in_fixtures() -> None:
     testdata = Path(__file__).resolve().parent / "testdata"
     expected_statuses = {
         "allocations.py": ["passed", "passed"],
+        "memory_effects.py": ["passed", "passed"],
         "scalar_calls.py": ["passed", "passed"],
         "topology.py": ["passed", "passed", "passed"],
         "vector_arithmetic.py": ["passed", "passed"],

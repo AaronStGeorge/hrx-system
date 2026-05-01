@@ -669,6 +669,38 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "Warp synchronization needs a reviewed subgroup barrier/fence representation.",
     ),
     OpCoverage(
+        "tl.access_ptr",
+        OpFamily.TILELANG_OP,
+        CoverageState.NORMALIZED,
+        "Pointer metadata helper; atomic import recovers the referenced view "
+        "and indices.",
+    ),
+    OpCoverage(
+        "tl.atomic_add_elem_op",
+        OpFamily.TILELANG_OP,
+        CoverageState.SUPPORTED,
+        "Scalar element atomic add; maps to view.atomic.reduce<add*>.",
+    ),
+    OpCoverage(
+        "tl.atomic_add_ret_elem_op",
+        OpFamily.TILELANG_OP,
+        CoverageState.SUPPORTED,
+        "Scalar element atomic add returning the old value; maps to "
+        "view.atomic.rmw<add*>.",
+    ),
+    OpCoverage(
+        "tl.atomic_addx2_elem_op",
+        OpFamily.TILELANG_OP,
+        CoverageState.DEFERRED,
+        "Packed/vector atomic add requires vector atomic access import.",
+    ),
+    OpCoverage(
+        "tl.atomic_addx4_elem_op",
+        OpFamily.TILELANG_OP,
+        CoverageState.DEFERRED,
+        "Packed/vector atomic add requires vector atomic access import.",
+    ),
+    OpCoverage(
         "tl.__ldg",
         OpFamily.TILELANG_OP,
         CoverageState.DEFERRED,
