@@ -11,30 +11,25 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/testing/descriptors_verify.h"
-#include "loom/codegen/low/testing/text_asm_roundtrip_test_util.h"
 #include "loom/codegen/low/testing/text_asm_test_util.h"
-#include "loom/target/arch/x86/low_registry.h"
 
 namespace loom {
 namespace {
 
-using ::loom::testing::LowFuncAsmRoundTripHarness;
-using ::loom::testing::LowTextAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
 std::string ToString(const loom_low_descriptor_set_t* descriptor_set,
                      loom_bstring_table_offset_t string_offset) {
-  iree_string_view_t value = iree_string_view_empty();
-  IREE_EXPECT_OK(
-      loom_low_descriptor_set_string(descriptor_set, string_offset, &value));
+  iree_string_view_t value =
+      loom_low_descriptor_set_string(descriptor_set, string_offset);
   return std::string(value.data, value.size);
 }
 
 const loom_low_descriptor_t* LookupDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
-  uint32_t ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_EXPECT_OK(
-      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key, &ordinal));
+  uint32_t ordinal =
+      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key);
+  EXPECT_NE(ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
   return loom_low_descriptor_set_descriptor_at(descriptor_set, ordinal);
 }
 
@@ -44,9 +39,8 @@ TEST(X86DescriptorsTest, Avx512CoreDescriptorSetVerifies) {
   ASSERT_NE(descriptor_set, nullptr);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(descriptor_set));
 
-  iree_string_view_t set_key = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->key_string_offset, &set_key));
+  iree_string_view_t set_key = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset);
   EXPECT_TRUE(iree_string_view_equal(set_key, IREE_SV("x86.avx512.core")));
 
   EXPECT_GE(descriptor_set->descriptor_count, 7u);
@@ -259,9 +253,9 @@ TEST(X86DescriptorsTest, Avx512AsmFormsDisambiguateVectorWidthSuffixes) {
       loom_x86_avx512_core_descriptor_set();
   ASSERT_GE(descriptor_set->asm_form_count, 6u);
 
-  uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
-      descriptor_set, IREE_SV("vpaddd"), &asm_form_ordinal));
+  uint32_t asm_form_ordinal = loom_low_descriptor_set_lookup_asm_form(
+      descriptor_set, IREE_SV("vpaddd"));
+  ASSERT_NE(asm_form_ordinal, LOOM_LOW_ASM_FORM_ORDINAL_NONE);
   const loom_low_asm_form_t* asm_form =
       loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
   ASSERT_NE(asm_form, nullptr);
@@ -275,8 +269,9 @@ TEST(X86DescriptorsTest, Avx512AsmFormsDisambiguateVectorWidthSuffixes) {
   EXPECT_EQ(ToString(descriptor_set, descriptor->key_string_offset),
             "x86.avx512.vpaddd.zmm");
 
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
-      descriptor_set, IREE_SV("vpaddd.xmm"), &asm_form_ordinal));
+  asm_form_ordinal = loom_low_descriptor_set_lookup_asm_form(
+      descriptor_set, IREE_SV("vpaddd.xmm"));
+  ASSERT_NE(asm_form_ordinal, LOOM_LOW_ASM_FORM_ORDINAL_NONE);
   asm_form =
       loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
   ASSERT_NE(asm_form, nullptr);
@@ -330,39 +325,6 @@ TEST(X86DescriptorsTest, Avx512LowAsmInfersTiedAccumulatorResultType) {
   std::string detail(diagnostic_detail.data, diagnostic_detail.size);
   EXPECT_NE(detail.find("tied operand type"), std::string::npos);
   EXPECT_NE(detail.find("reg<x86.zmm>"), std::string::npos);
-}
-
-TEST(X86DescriptorsTest, Avx512LowAsmRegionRoundTrips) {
-  LowTextAsmRoundTripHarness harness;
-  IREE_ASSERT_OK(harness.Initialize(loom_x86_avx512_core_descriptor_set));
-
-  const char* source =
-      "test.low_asm_region asm<x86.avx512.core> {\n"
-      "  jmp 7\n"
-      "}\n";
-  std::string printed;
-  IREE_ASSERT_OK(
-      harness.RoundTrip(IREE_SV(source), IREE_SV("x86.avx512.core"), &printed));
-  EXPECT_EQ(printed, source);
-}
-
-TEST(X86DescriptorsTest, Avx512LowFuncAsmRoundTripsTiedDotArguments) {
-  LowFuncAsmRoundTripHarness harness;
-  IREE_ASSERT_OK(harness.Initialize(loom_x86_avx512_core_descriptor_set,
-                                    &loom_x86_low_target_bundle_avx512_core));
-
-  const char* source =
-      "target.profile @x86_target preset(\"x86-avx512\")\n\n"
-      "low.func.def target(@x86_target) @dot(%acc: reg<x86.zmm>, %lhs: "
-      "reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.zmm>) "
-      "asm<x86.avx512.core> {\n"
-      "  %out = vpdpbusd %acc, %lhs, %rhs\n"
-      "  return %out\n"
-      "}\n";
-  std::string printed;
-  IREE_ASSERT_OK(harness.RoundTripAndVerify(
-      IREE_SV(source), IREE_SV("x86.avx512.core"), &printed));
-  EXPECT_EQ(printed, source);
 }
 
 }  // namespace

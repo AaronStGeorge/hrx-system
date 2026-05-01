@@ -819,25 +819,24 @@ iree_host_size_t loom_low_descriptor_registry_descriptor_set_count(
 const loom_low_descriptor_set_t* loom_low_descriptor_registry_descriptor_set_at(
     const loom_low_descriptor_registry_t* registry, iree_host_size_t index);
 
-// Looks up |key| in |registry|. Returns OK with NULL when no set matches. The
+// Looks up |key| in |registry|, or returns NULL when no set matches. The
 // registry table is target-owned static data; production lookup trusts its row
 // ordering and returns the first matching entry.
-iree_status_t loom_low_descriptor_registry_lookup(
-    const loom_low_descriptor_registry_t* registry, iree_string_view_t key,
-    const loom_low_descriptor_set_t** out_descriptor_set);
+const loom_low_descriptor_set_t* loom_low_descriptor_registry_lookup(
+    const loom_low_descriptor_registry_t* registry, iree_string_view_t key);
 
-// Looks up |stable_id| in |registry|. Returns OK with NULL when no set matches.
-// The registry table is target-owned static data; production lookup trusts its
-// row ordering and returns the first matching entry.
-iree_status_t loom_low_descriptor_registry_lookup_by_id(
-    const loom_low_descriptor_registry_t* registry, uint64_t stable_id,
-    const loom_low_descriptor_set_t** out_descriptor_set);
+// Looks up |stable_id| in |registry|, or returns NULL when no set matches. The
+// registry table is target-owned static data; production lookup trusts its row
+// ordering and returns the first matching entry.
+const loom_low_descriptor_set_t* loom_low_descriptor_registry_lookup_by_id(
+    const loom_low_descriptor_registry_t* registry, uint64_t stable_id);
 
 // Returns the B-string view at |string_offset|. A NONE offset returns an empty
-// string.
-iree_status_t loom_low_descriptor_set_string(
+// string. The descriptor set and offset must have passed descriptor-table
+// verification.
+iree_string_view_t loom_low_descriptor_set_string(
     const loom_low_descriptor_set_t* descriptor_set,
-    loom_bstring_table_offset_t string_offset, iree_string_view_t* out_string);
+    loom_bstring_table_offset_t string_offset);
 
 // Returns a descriptor row by ordinal, or NULL when |descriptor_ordinal| is out
 // of bounds.
@@ -861,12 +860,12 @@ bool loom_low_descriptor_operands_are_tied(
 const loom_low_asm_form_t* loom_low_descriptor_set_asm_form_at(
     const loom_low_descriptor_set_t* descriptor_set, uint32_t asm_form_ordinal);
 
-// Resolves the unique canonical asm form for |descriptor_ordinal|. Descriptors
-// with zero or multiple asm forms may intentionally have no canonical form and
-// return FAILED_PRECONDITION.
-iree_status_t loom_low_descriptor_set_lookup_canonical_asm_form(
+// Resolves the unique canonical asm form for |descriptor_ordinal|, or returns
+// LOOM_LOW_ASM_FORM_ORDINAL_NONE when the descriptor intentionally has no
+// unique canonical form.
+uint32_t loom_low_descriptor_set_lookup_canonical_asm_form(
     const loom_low_descriptor_set_t* descriptor_set,
-    uint32_t descriptor_ordinal, uint32_t* out_asm_form_ordinal);
+    uint32_t descriptor_ordinal);
 
 // Returns the stable diagnostic spelling for an operand role.
 iree_string_view_t loom_low_operand_role_name(loom_low_operand_role_t role);
@@ -913,10 +912,10 @@ iree_string_view_t loom_low_hazard_kind_name(loom_low_hazard_kind_t kind);
 iree_string_view_t loom_low_hazard_reference_kind_name(
     loom_low_hazard_reference_kind_t kind);
 
-// Resolves a symbolic descriptor key to an ordinal in |descriptor_set|.
-iree_status_t loom_low_descriptor_set_lookup_descriptor(
-    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
-    uint32_t* out_descriptor_ordinal);
+// Resolves a symbolic descriptor key to an ordinal in |descriptor_set|, or
+// returns LOOM_LOW_DESCRIPTOR_ORDINAL_NONE when no descriptor matches.
+uint32_t loom_low_descriptor_set_lookup_descriptor(
+    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key);
 
 // Returns the descriptor ordinal for |stable_id| or
 // LOOM_LOW_DESCRIPTOR_ORDINAL_NONE when the selected target has no descriptor
@@ -926,12 +925,12 @@ uint32_t loom_low_descriptor_set_lookup_descriptor_by_id(
     const loom_low_descriptor_set_t* descriptor_set, uint64_t stable_id);
 
 // Resolves an unqualified asm mnemonic to an asm form ordinal in
-// |descriptor_set|. Returns OK with LOOM_LOW_ASM_FORM_ORDINAL_NONE when no
-// mnemonic matches. Descriptor sets verify that asm mnemonics are sorted and
+// |descriptor_set|, or returns LOOM_LOW_ASM_FORM_ORDINAL_NONE when no mnemonic
+// matches. Descriptor sets verify that asm mnemonics are sorted and
 // unambiguous.
-iree_status_t loom_low_descriptor_set_lookup_asm_form(
+uint32_t loom_low_descriptor_set_lookup_asm_form(
     const loom_low_descriptor_set_t* descriptor_set,
-    iree_string_view_t mnemonic, uint32_t* out_asm_form_ordinal);
+    iree_string_view_t mnemonic);
 
 #ifdef __cplusplus
 }

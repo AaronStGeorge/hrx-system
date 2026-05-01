@@ -37,16 +37,12 @@ static iree_status_t loom_target_low_manifest_write_memory_spaces(
 static iree_status_t loom_target_low_manifest_write_descriptor_set_summary(
     loom_output_stream_t* stream,
     const loom_low_descriptor_set_t* descriptor_set) {
-  iree_string_view_t key = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->key_string_offset, &key));
-  iree_string_view_t target = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->target_key_string_offset, &target));
-  iree_string_view_t feature_namespace = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->feature_key_string_offset,
-      &feature_namespace));
+  iree_string_view_t key = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset);
+  iree_string_view_t target = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->target_key_string_offset);
+  iree_string_view_t feature_namespace = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->feature_key_string_offset);
 
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '{'));
   IREE_RETURN_IF_ERROR(
@@ -88,9 +84,8 @@ static iree_status_t loom_target_low_manifest_write_bundle_summary(
   const loom_low_descriptor_set_t* descriptor_set = NULL;
   IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
       descriptor_registry, bundle, &descriptor_set));
-  iree_string_view_t descriptor_set_key = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->key_string_offset, &descriptor_set_key));
+  iree_string_view_t descriptor_set_key = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset);
 
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '{'));
   IREE_RETURN_IF_ERROR(

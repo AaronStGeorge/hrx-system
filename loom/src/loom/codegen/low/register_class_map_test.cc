@@ -19,9 +19,8 @@ namespace {
 
 std::string DescriptorString(const loom_low_descriptor_set_t* descriptor_set,
                              loom_bstring_table_offset_t string_offset) {
-  iree_string_view_t value = iree_string_view_empty();
-  IREE_EXPECT_OK(
-      loom_low_descriptor_set_string(descriptor_set, string_offset, &value));
+  iree_string_view_t value =
+      loom_low_descriptor_set_string(descriptor_set, string_offset);
   return std::string(value.data, value.size);
 }
 

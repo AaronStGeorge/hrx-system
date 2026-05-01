@@ -58,9 +58,8 @@ static iree_status_t loom_low_descriptor_set_append_string_field(
     const loom_low_descriptor_set_t* descriptor_set,
     iree_string_builder_t* builder, const char* field_name,
     loom_bstring_table_offset_t string_offset) {
-  iree_string_view_t value = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(
-      loom_low_descriptor_set_string(descriptor_set, string_offset, &value));
+  iree_string_view_t value =
+      loom_low_descriptor_set_string(descriptor_set, string_offset);
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_format(builder, "\"%s\":", field_name));
   return loom_low_append_json_string(builder, value);
@@ -140,9 +139,8 @@ static iree_status_t loom_low_append_manifest_flag_names(
 static iree_status_t loom_low_descriptor_set_append_string_value(
     const loom_low_descriptor_set_t* descriptor_set,
     iree_string_builder_t* builder, loom_bstring_table_offset_t string_offset) {
-  iree_string_view_t value = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(
-      loom_low_descriptor_set_string(descriptor_set, string_offset, &value));
+  iree_string_view_t value =
+      loom_low_descriptor_set_string(descriptor_set, string_offset);
   return loom_low_append_json_string(builder, value);
 }
 

@@ -334,57 +334,6 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
-    encoding_test
-  SRCS
-    "encoding_test.cc"
-  DEPS
-    ::encoding
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::builder
-    loom::src::loom::codegen::low::frame
-    loom::src::loom::codegen::low::target_binding
-    loom::src::loom::codegen::low::verify
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::target
-    loom::src::loom::target::arch::amdgpu::descriptor_ids
-    loom::src::loom::target::arch::amdgpu::encoding
-    loom::src::loom::target::arch::amdgpu::low_registry
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    kernel_assembly_test
-  SRCS
-    "kernel_assembly_test.cc"
-  DEPS
-    ::kernel_assembly
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::frame
-    loom::src::loom::codegen::low::function
-    loom::src::loom::codegen::low::target_binding
-    loom::src::loom::codegen::low::verify
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::target
-    loom::src::loom::target::arch::amdgpu::hal_kernel_abi
-    loom::src::loom::target::arch::amdgpu::hal_resource_materialization
-    loom::src::loom::target::arch::amdgpu::low_registry
-    loom::src::loom::target::arch::amdgpu::wait_packets
-    loom::src::loom::target::arch::amdgpu::wait_plan
-    loom::src::loom::target::low_descriptor_registry
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
     hsaco_test
   SRCS
     "hsaco_test.cc"
@@ -424,25 +373,6 @@ loom_cc_test(
     ::hal_executable
     iree::base
     iree::hal::utils::executable_header
-    iree::schemas::amdgpu_executable_def_c_fbs
-    iree::schemas::executable_debug_info_c_fbs
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    module_compiler_test
-  SRCS
-    "module_compiler_test.cc"
-  DEPS
-    ::module_compiler
-    iree::base
-    iree::base::internal::arena
-    iree::hal::utils::executable_header
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::op_registry
     iree::schemas::amdgpu_executable_def_c_fbs
     iree::schemas::executable_debug_info_c_fbs
     iree::testing::gtest

@@ -101,49 +101,4 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_test(
-  NAME
-    function_body_test
-  SRCS
-    "function_body_test.cc"
-  DEPS
-    ::function_body
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::frame
-    loom::src::loom::codegen::low::verify
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::target
-    loom::src::loom::target::arch::wasm::descriptors
-    loom::src::loom::target::arch::wasm::low_registry
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    module_binary_test
-  SRCS
-    "module_binary_test.cc"
-  DEPS
-    ::module_binary
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::frame
-    loom::src::loom::codegen::low::verify
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::target
-    loom::src::loom::target::arch::wasm::descriptors
-    loom::src::loom::target::arch::wasm::low_registry
-    loom::src::loom::target::tool::llvm
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

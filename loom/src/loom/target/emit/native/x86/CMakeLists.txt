@@ -58,25 +58,4 @@ iree_executable_test(
     "loom-check"
 )
 
-loom_cc_test(
-  NAME
-    assembly_test
-  SRCS
-    "assembly_test.cc"
-  DEPS
-    ::assembly
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::frame
-    loom::src::loom::codegen::low::verify
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::target
-    loom::src::loom::target::arch::x86::low_registry
-    loom::src::loom::target::tool::llvm
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -572,25 +572,6 @@ loom_cc_library(
 
 loom_cc_test(
   NAME
-    allocation_test
-  SRCS
-    "allocation_test.cc"
-  DEPS
-    ::allocation
-    ::verify
-    iree::base::internal::arena
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::ops::low
-    loom::src::loom::ops::target
-    loom::src::loom::target::test::low_registry
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
     lower_policy_registry_test
   SRCS
     "lower_policy_registry_test.cc"
@@ -598,140 +579,6 @@ loom_cc_test(
     ::lower
     loom::src::loom::ops::scalar
     loom::src::loom::target::test::lower
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    lower_rule_selection_test
-  SRCS
-    "lower_rule_selection_test.cc"
-  DEPS
-    ::lower
-    iree::base::internal::arena
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::ops::index
-    loom::src::loom::ops::vector
-    loom::src::loom::target::test::descriptors_ids
-    loom::src::loom::target::test::lower
-    loom::src::loom::testing::module_ptr
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    source_lowering_function_test
-  SRCS
-    "source_lowering_function_test.cc"
-  DEPS
-    ::frame
-    ::lower
-    ::source_selection
-    ::verify
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::testing::ir_match_test_util
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::buffer
-    loom::src::loom::ops::cfg
-    loom::src::loom::ops::encoding
-    loom::src::loom::ops::func
-    loom::src::loom::ops::index
-    loom::src::loom::ops::low
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::target
-    loom::src::loom::ops::vector
-    loom::src::loom::pass::value_facts
-    loom::src::loom::target::test::descriptors_ids
-    loom::src::loom::target::test::low_registry
-    loom::src::loom::target::test::lower
-    loom::src::loom::testing::diagnostic_matchers
-    loom::src::loom::testing::module_ptr
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    source_lowering_rule_emission_test
-  SRCS
-    "source_lowering_rule_emission_test.cc"
-  DEPS
-    ::lower
-    ::source_selection
-    ::verify
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::testing::ir_match_test_util
-    loom::src::loom::error::error_defs
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::ops::index
-    loom::src::loom::ops::low
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::target
-    loom::src::loom::ops::vector
-    loom::src::loom::pass::value_facts
-    loom::src::loom::target::test::descriptors_ids
-    loom::src::loom::target::test::low_registry
-    loom::src::loom::target::test::lower
-    loom::src::loom::testing::diagnostic_matchers
-    loom::src::loom::testing::module_ptr
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    source_lowering_rule_selection_test
-  SRCS
-    "source_lowering_rule_selection_test.cc"
-  DEPS
-    ::lower
-    ::source_selection
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::testing::ir_match_test_util
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::ops::low
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::target
-    loom::src::loom::pass::value_facts
-    loom::src::loom::target::test::descriptors_ids
-    loom::src::loom::target::test::low_registry
-    loom::src::loom::target::test::lower
-    loom::src::loom::testing::module_ptr
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    source_lowering_link_test
-  SRCS
-    "source_lowering_link_test.cc"
-  DEPS
-    ::lower
-    ::source_selection
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::testing::ir_match_test_util
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::link::linker
-    loom::src::loom::ops::func
-    loom::src::loom::ops::low
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::target
-    loom::src::loom::pass::value_facts
-    loom::src::loom::target::test::low_registry
-    loom::src::loom::target::test::lower
-    loom::src::loom::testing::diagnostic_matchers
-    loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -761,46 +608,6 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
-    packet_asm_test
-  SRCS
-    "packet_asm_test.cc"
-  DEPS
-    ::frame
-    ::packet_asm
-    ::verify
-    iree::base::internal::arena
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::ops::low
-    loom::src::loom::ops::target
-    loom::src::loom::target::test::low_registry
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    frame_test
-  SRCS
-    "frame_test.cc"
-  DEPS
-    ::frame
-    ::packet
-    ::verify
-    iree::base::internal::arena
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::ops::low
-    loom::src::loom::ops::target
-    loom::src::loom::target::test::low_registry
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
     requirements_test
   SRCS
     "requirements_test.cc"
@@ -820,55 +627,6 @@ loom_cc_test(
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::target::test::descriptors
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    target_binding_test
-  SRCS
-    "target_binding_test.cc"
-  DEPS
-    ::target_binding
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::testing::descriptors_verify
-    loom::src::loom::error::error_defs
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::target
-    loom::src::loom::ops::test
-    loom::src::loom::target::emit::ireevm::descriptors
-    loom::src::loom::testing::diagnostic_matchers
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    verify_test
-  SRCS
-    "verify_test.cc"
-  DEPS
-    ::text_asm
-    ::verify
-    iree::base::internal::arena
-    iree::io::stream
-    loom::src::loom::codegen::low::testing::descriptors_verify
-    loom::src::loom::error::error_defs
-    loom::src::loom::format::bytecode::reader
-    loom::src::loom::format::bytecode::writer
-    loom::src::loom::format::text::parser
-    loom::src::loom::format::text::printer
-    loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::ops::low
-    loom::src::loom::ops::target
-    loom::src::loom::ops::test
-    loom::src::loom::target::emit::ireevm::low_registry
-    loom::src::loom::target::types
-    loom::src::loom::testing::diagnostic_matchers
     iree::testing::gtest
     iree::testing::gtest_main
 )

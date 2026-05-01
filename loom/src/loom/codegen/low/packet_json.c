@@ -547,9 +547,8 @@ static iree_status_t loom_low_packet_json_write_generic_attrs(
 static iree_status_t loom_low_packet_json_write_descriptor_string_or_null(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_bstring_table_offset_t string_offset, loom_output_stream_t* stream) {
-  iree_string_view_t value = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(
-      loom_low_descriptor_set_string(descriptor_set, string_offset, &value));
+  iree_string_view_t value =
+      loom_low_descriptor_set_string(descriptor_set, string_offset);
   return loom_low_packet_json_write_string_view_or_null(value, stream);
 }
 
@@ -616,9 +615,8 @@ static iree_status_t loom_low_packet_json_write_low_packet_attrs(
     const uint32_t immediate_index = descriptor->immediate_start + i;
     const loom_low_immediate_t* immediate =
         &descriptor_set->immediates[immediate_index];
-    iree_string_view_t name = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        descriptor_set, immediate->field_name_string_offset, &name));
+    iree_string_view_t name = loom_low_descriptor_set_string(
+        descriptor_set, immediate->field_name_string_offset);
     IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
         stream, "{\"index\":%" PRIu16 ",\"name\":", i));
     IREE_RETURN_IF_ERROR(

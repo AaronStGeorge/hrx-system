@@ -227,9 +227,9 @@ static iree_status_t loom_low_schedule_node_diagnostic_label(
         loom_low_descriptor_set_descriptor_at(state->target.descriptor_set,
                                               node->descriptor_ordinal);
     if (descriptor != NULL) {
-      return loom_low_descriptor_set_string(state->target.descriptor_set,
-                                            descriptor->key_string_offset,
-                                            out_label);
+      *out_label = loom_low_descriptor_set_string(
+          state->target.descriptor_set, descriptor->key_string_offset);
+      return iree_ok_status();
     }
   }
   *out_label = loom_op_name(state->module, node->op);

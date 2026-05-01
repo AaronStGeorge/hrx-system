@@ -35,6 +35,7 @@
 #include "loom/tools/loom-check/check.h"
 #include "loom/tools/loom-check/report.h"
 #include "loom/tools/loom-check/update.h"
+#include "loom/verify/verify.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -189,6 +190,8 @@ typedef struct loom_check_emit_provider_request_t {
   const loom_check_environment_t* environment;
   // Parsed module after comment stripping.
   loom_module_t* module;
+  // Source resolver for source-backed operation locations in |module|.
+  loom_source_resolver_t source_resolver;
   // Linked target-low registry visible to this runner.
   const loom_target_low_descriptor_registry_t* low_registry;
   // Diagnostic collector for provider diagnostics.

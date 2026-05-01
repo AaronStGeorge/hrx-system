@@ -114,10 +114,8 @@ loom_cc_test(
     srcs = ["descriptors_test.cc"],
     deps = [
         ":descriptors",
-        ":low_registry",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low/testing:descriptors_verify",
-        "//loom/src/loom/codegen/low/testing:text_asm_roundtrip_test_util",
         "//loom/src/loom/codegen/low/testing:text_asm_test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

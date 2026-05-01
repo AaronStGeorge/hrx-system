@@ -293,9 +293,8 @@ iree_status_t loom_low_lower_resolve_descriptor_row(
       .opcode_id = LOOM_STRING_ID_INVALID,
   };
 
-  iree_string_view_t key = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      context->descriptor_set, descriptor->key_string_offset, &key));
+  iree_string_view_t key = loom_low_descriptor_set_string(
+      context->descriptor_set, descriptor->key_string_offset);
   if (iree_string_view_is_empty(key)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "target-low descriptor ID 0x%016" PRIx64

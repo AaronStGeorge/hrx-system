@@ -6,12 +6,9 @@
 
 #include "loom/target/arch/amdgpu/gfx12_descriptors.h"
 
-#include <string>
-
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/testing/descriptors_verify.h"
-#include "loom/codegen/low/testing/text_asm_roundtrip_test_util.h"
 #include "loom/target/arch/amdgpu/descriptor_test_util.h"
 #include "loom/target/arch/amdgpu/encoding.h"
 
@@ -29,13 +26,12 @@ using ::loom::testing::ExpectAmdgpuGlobalSaddrMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuPrefetchDescriptor;
 using ::loom::testing::ExpectAmdgpuRegisterClassForTest;
 using ::loom::testing::ExpectAmdgpuWmmaDescriptorForTest;
-using ::loom::testing::LowTextAsmRoundTripHarness;
 
 const loom_low_descriptor_t* LookupDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
-  uint32_t ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_EXPECT_OK(
-      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key, &ordinal));
+  uint32_t ordinal =
+      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key);
+  EXPECT_NE(ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
   return loom_low_descriptor_set_descriptor_at(descriptor_set, ordinal);
 }
 
@@ -45,9 +41,8 @@ TEST(AmdgpuDescriptorsTest, Gfx12CoreDescriptorSetVerifies) {
   ASSERT_NE(descriptor_set, nullptr);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(descriptor_set));
 
-  iree_string_view_t set_key = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->key_string_offset, &set_key));
+  iree_string_view_t set_key = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset);
   EXPECT_TRUE(iree_string_view_equal(set_key, IREE_SV("amdgpu.gfx12.core")));
 
   EXPECT_GE(descriptor_set->descriptor_count, 10u);
@@ -264,23 +259,6 @@ TEST(AmdgpuDescriptorsTest, Gfx12WmmaPacketMatchesRdnaRegisterShape) {
       descriptor_set, IREE_SV("amdgpu.v_wmma_i32_16x16x16_iu4"),
       /*expected_lhs_units=*/1u, /*expected_rhs_units=*/1u,
       /*expected_accumulator_units=*/8u);
-}
-
-TEST(AmdgpuDescriptorsTest, Gfx12LowAsmRegionRoundTripsPrefetch) {
-  LowTextAsmRoundTripHarness harness;
-  IREE_ASSERT_OK(harness.Initialize(loom_amdgpu_gfx12_core_descriptor_set));
-
-  const char* source =
-      "test.low_asm_region asm<amdgpu.gfx12.core> {\n"
-      "  %soffset = s_mov_b32 0\n"
-      "  s_prefetch_data_pc_rel %soffset {offset = 64, count = 1}\n"
-      "  s_prefetch_inst_pc_rel %soffset {offset = 128, count = 2}\n"
-      "  return %soffset\n"
-      "}\n";
-  std::string printed;
-  IREE_ASSERT_OK(harness.RoundTrip(IREE_SV(source),
-                                   IREE_SV("amdgpu.gfx12.core"), &printed));
-  EXPECT_EQ(printed, source);
 }
 
 }  // namespace

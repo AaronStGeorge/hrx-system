@@ -39,9 +39,8 @@ TEST(WasmLowRegistryTest, VerifiesLinkedRegistryPackage) {
   IREE_ASSERT_OK(loom_target_low_descriptor_set_select_for_bundle(
       &registry.registry, bundle, &descriptor_set));
   ASSERT_NE(descriptor_set, nullptr);
-  iree_string_view_t descriptor_set_key = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->key_string_offset, &descriptor_set_key));
+  iree_string_view_t descriptor_set_key = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset);
   EXPECT_TRUE(
       iree_string_view_equal(descriptor_set_key, IREE_SV("wasm.core.simd128")));
 }

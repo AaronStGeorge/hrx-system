@@ -199,7 +199,7 @@ TEST_F(LowAsmPrinterTest, RejectsDescriptorWithoutAsmFormInSelectedSet) {
       "  return %c0\n"
       "}\n");
   ASSERT_NE(module, nullptr);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
                         PrintModuleStatus(module, IREE_SV("test.low.alt"),
                                           /*configure_environment=*/true));
   loom_module_free(module);

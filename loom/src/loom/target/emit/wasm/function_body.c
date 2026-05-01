@@ -794,10 +794,9 @@ static iree_status_t loom_wasm_emit_descriptor_packet(
       return loom_wasm_emit_v128_store(state, packet->node->op,
                                        packet->descriptor);
     default: {
-      iree_string_view_t key = IREE_SV("<unknown>");
-      (void)loom_low_descriptor_set_string(
-          state->schedule->target.descriptor_set,
-          packet->descriptor->key_string_offset, &key);
+      iree_string_view_t key =
+          loom_low_descriptor_set_string(state->schedule->target.descriptor_set,
+                                         packet->descriptor->key_string_offset);
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                               "Wasm descriptor '%.*s' is unsupported",
                               (int)key.size, key.data);

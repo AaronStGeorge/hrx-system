@@ -25,10 +25,10 @@ extern "C" {
 void loom_target_core_test_low_descriptor_registry_initialize(
     loom_target_low_descriptor_registry_t* out_registry);
 
-// Looks up a descriptor set by key in the core test-low registry.
-iree_status_t loom_target_core_test_low_descriptor_set_lookup(
-    iree_string_view_t key,
-    const loom_low_descriptor_set_t** out_descriptor_set);
+// Looks up a descriptor set by key in the core test-low registry, or returns
+// NULL when no descriptor set matches.
+const loom_low_descriptor_set_t*
+loom_target_core_test_low_descriptor_set_lookup(iree_string_view_t key);
 
 // Looks up a target-low preset bundle by key in the core test-low registry.
 iree_status_t loom_target_core_test_low_bundle_lookup(

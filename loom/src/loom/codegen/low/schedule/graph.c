@@ -97,9 +97,8 @@ static iree_status_t loom_low_schedule_resolve_descriptor(
   node->model_quality = schedule_class->model_quality;
   node->issue_use_count = schedule_class->issue_use_count;
   node->hazard_count = schedule_class->hazard_count;
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      state->target.descriptor_set, schedule_class->name_string_offset,
-      &node->schedule_class_name));
+  node->schedule_class_name = loom_low_descriptor_set_string(
+      state->target.descriptor_set, schedule_class->name_string_offset);
   *out_descriptor = packet.descriptor;
   return iree_ok_status();
 }

@@ -52,10 +52,8 @@ iree_status_t loom_low_register_class_map_initialize(
     const loom_low_reg_class_t* register_class =
         &descriptor_set->reg_classes[i];
     iree_string_view_t descriptor_register_class_name =
-        iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        descriptor_set, register_class->name_string_offset,
-        &descriptor_register_class_name));
+        loom_low_descriptor_set_string(descriptor_set,
+                                       register_class->name_string_offset);
     for (iree_host_size_t string_id = 0; string_id < module->strings.count;
          ++string_id) {
       if (!iree_string_view_equal(module->strings.entries[string_id],
@@ -143,10 +141,8 @@ iree_status_t loom_low_register_class_try_lookup_name(
     const loom_low_reg_class_t* register_class =
         &descriptor_set->reg_classes[i];
     iree_string_view_t descriptor_register_class_name =
-        iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        descriptor_set, register_class->name_string_offset,
-        &descriptor_register_class_name));
+        loom_low_descriptor_set_string(descriptor_set,
+                                       register_class->name_string_offset);
     if (!iree_string_view_equal(register_class_name,
                                 descriptor_register_class_name)) {
       continue;

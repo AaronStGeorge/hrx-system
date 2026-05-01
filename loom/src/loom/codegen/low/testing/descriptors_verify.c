@@ -7,6 +7,7 @@
 #include "loom/codegen/low/testing/descriptors_verify.h"
 
 #include <inttypes.h>
+
 static iree_status_t loom_low_verify_pointer_for_count(const void* pointer,
                                                        uint32_t count,
                                                        const char* table_name) {
@@ -139,6 +140,7 @@ static iree_status_t loom_low_verify_non_empty_required_string(
   }
   return iree_ok_status();
 }
+
 static iree_status_t loom_low_verify_stable_id_field(uint64_t actual_id,
                                                      iree_string_view_t key,
                                                      const char* field_name) {
@@ -1585,8 +1587,9 @@ static iree_status_t loom_low_verify_enum_domain(
     const loom_low_enum_value_t* value =
         &descriptor_set->enum_values[value_index];
     iree_string_view_t token = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        descriptor_set, value->token_string_offset, &token));
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string_impl(
+        descriptor_set, value->token_string_offset, /*allow_none=*/false,
+        &token));
     if (i != 0 && iree_string_view_compare(previous_token, token) >= 0) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "low enum domain %" PRIu32
@@ -2032,8 +2035,9 @@ static iree_status_t loom_low_descriptor_set_key(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor set is required");
   }
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->key_string_offset, out_key));
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string_impl(
+      descriptor_set, descriptor_set->key_string_offset, /*allow_none=*/false,
+      out_key));
   if (iree_string_view_is_empty(*out_key)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor set key is empty");

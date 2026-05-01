@@ -98,14 +98,12 @@ TEST(LowDescriptorRegistryTest, RegistrySatisfiesTargetLowFoundation) {
 }
 
 TEST(LowDescriptorRegistryTest, LooksUpRepresentativeDescriptorSets) {
-  const loom_low_descriptor_set_t* descriptor_set = nullptr;
-  IREE_ASSERT_OK(loom_target_core_test_low_descriptor_set_lookup(
-      IREE_SV("test.low.core"), &descriptor_set));
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_target_core_test_low_descriptor_set_lookup(IREE_SV("test.low.core"));
   ASSERT_NE(descriptor_set, nullptr);
 
-  iree_string_view_t set_key = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->key_string_offset, &set_key));
+  iree_string_view_t set_key = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset);
   EXPECT_TRUE(iree_string_view_equal(set_key, IREE_SV("test.low.core")));
 }
 
@@ -130,16 +128,13 @@ TEST(LowDescriptorRegistryTest, LooksUpRepresentativeDescriptors) {
       1u);
 
   for (const ExpectedDescriptor& expected : expected_descriptors) {
-    const loom_low_descriptor_set_t* descriptor_set = nullptr;
-    IREE_ASSERT_OK(loom_target_core_test_low_descriptor_set_lookup(
-        iree_make_cstring_view(expected.set_key), &descriptor_set));
+    const loom_low_descriptor_set_t* descriptor_set =
+        loom_target_core_test_low_descriptor_set_lookup(
+            iree_make_cstring_view(expected.set_key));
     ASSERT_NE(descriptor_set, nullptr) << expected.set_key;
 
-    uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-    IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
-        descriptor_set, iree_make_cstring_view(expected.descriptor_key),
-        &descriptor_ordinal))
-        << expected.set_key << " :: " << expected.descriptor_key;
+    uint32_t descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor(
+        descriptor_set, iree_make_cstring_view(expected.descriptor_key));
     EXPECT_NE(descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE)
         << expected.set_key << " :: " << expected.descriptor_key;
   }
@@ -192,10 +187,8 @@ TEST(LowDescriptorRegistryTest, TargetBundlesSelectFoundationDescriptorSets) {
         << expected.bundle_key;
     ASSERT_NE(descriptor_set, nullptr) << expected.bundle_key;
 
-    iree_string_view_t descriptor_set_key = iree_string_view_empty();
-    IREE_ASSERT_OK(loom_low_descriptor_set_string(
-        descriptor_set, descriptor_set->key_string_offset,
-        &descriptor_set_key));
+    iree_string_view_t descriptor_set_key = loom_low_descriptor_set_string(
+        descriptor_set, descriptor_set->key_string_offset);
     EXPECT_TRUE(iree_string_view_equal(
         descriptor_set_key,
         iree_make_cstring_view(expected.descriptor_set_key)))
@@ -226,9 +219,9 @@ TEST(LowDescriptorRegistryTest, FormatManifestRejectsMissingBuilder) {
 }
 
 TEST(LowDescriptorRegistryTest, MissingKeyReturnsNullDescriptorSet) {
-  const loom_low_descriptor_set_t* descriptor_set = nullptr;
-  IREE_ASSERT_OK(loom_target_core_test_low_descriptor_set_lookup(
-      IREE_SV("target.missing"), &descriptor_set));
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_target_core_test_low_descriptor_set_lookup(
+          IREE_SV("target.missing"));
   EXPECT_EQ(descriptor_set, nullptr);
 }
 

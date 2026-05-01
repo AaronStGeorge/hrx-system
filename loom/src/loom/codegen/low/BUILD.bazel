@@ -567,159 +567,12 @@ loom_cc_library(
 )
 
 loom_cc_test(
-    name = "allocation_test",
-    srcs = ["allocation_test.cc"],
-    deps = [
-        ":allocation",
-        ":verify",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/target/test:low_registry",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
     name = "lower_policy_registry_test",
     srcs = ["lower_policy_registry_test.cc"],
     deps = [
         ":lower",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/target/test:lower",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "lower_rule_selection_test",
-    srcs = ["lower_rule_selection_test.cc"],
-    deps = [
-        ":lower",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/index",
-        "//loom/src/loom/ops/vector",
-        "//loom/src/loom/target/test:descriptors_ids",
-        "//loom/src/loom/target/test:lower",
-        "//loom/src/loom/testing:module_ptr",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "source_lowering_function_test",
-    srcs = ["source_lowering_function_test.cc"],
-    deps = [
-        ":frame",
-        ":lower",
-        ":source_selection",
-        ":verify",
-        "//loom/src/loom/codegen/low/testing:ir_match_test_util",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/buffer",
-        "//loom/src/loom/ops/cfg",
-        "//loom/src/loom/ops/encoding",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/index",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/ops/vector",
-        "//loom/src/loom/pass:value_facts",
-        "//loom/src/loom/target/test:descriptors_ids",
-        "//loom/src/loom/target/test:low_registry",
-        "//loom/src/loom/target/test:lower",
-        "//loom/src/loom/testing:diagnostic_matchers",
-        "//loom/src/loom/testing:module_ptr",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "source_lowering_rule_emission_test",
-    srcs = ["source_lowering_rule_emission_test.cc"],
-    deps = [
-        ":lower",
-        ":source_selection",
-        ":verify",
-        "//loom/src/loom/codegen/low/testing:ir_match_test_util",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/index",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/ops/vector",
-        "//loom/src/loom/pass:value_facts",
-        "//loom/src/loom/target/test:descriptors_ids",
-        "//loom/src/loom/target/test:low_registry",
-        "//loom/src/loom/target/test:lower",
-        "//loom/src/loom/testing:diagnostic_matchers",
-        "//loom/src/loom/testing:module_ptr",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "source_lowering_rule_selection_test",
-    srcs = ["source_lowering_rule_selection_test.cc"],
-    deps = [
-        ":lower",
-        ":source_selection",
-        "//loom/src/loom/codegen/low/testing:ir_match_test_util",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/pass:value_facts",
-        "//loom/src/loom/target/test:descriptors_ids",
-        "//loom/src/loom/target/test:low_registry",
-        "//loom/src/loom/target/test:lower",
-        "//loom/src/loom/testing:module_ptr",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "source_lowering_link_test",
-    srcs = ["source_lowering_link_test.cc"],
-    deps = [
-        ":lower",
-        ":source_selection",
-        "//loom/src/loom/codegen/low/testing:ir_match_test_util",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/link:linker",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/pass:value_facts",
-        "//loom/src/loom/target/test:low_registry",
-        "//loom/src/loom/target/test:lower",
-        "//loom/src/loom/testing:diagnostic_matchers",
-        "//loom/src/loom/testing:module_ptr",
-        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -747,44 +600,6 @@ loom_cc_test(
 )
 
 loom_cc_test(
-    name = "packet_asm_test",
-    srcs = ["packet_asm_test.cc"],
-    deps = [
-        ":frame",
-        ":packet_asm",
-        ":verify",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/target/test:low_registry",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "frame_test",
-    srcs = ["frame_test.cc"],
-    deps = [
-        ":frame",
-        ":packet",
-        ":verify",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/target/test:low_registry",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
     name = "requirements_test",
     srcs = ["requirements_test.cc"],
     deps = [
@@ -802,53 +617,6 @@ loom_cc_test(
         "//loom/src/loom/ir",
         "//loom/src/loom/target/test:descriptors",
         "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "target_binding_test",
-    srcs = ["target_binding_test.cc"],
-    deps = [
-        ":target_binding",
-        "//loom/src/loom/codegen/low/testing:descriptors_verify",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/ops/test",
-        "//loom/src/loom/target/emit/ireevm:descriptors",
-        "//loom/src/loom/testing:diagnostic_matchers",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "verify_test",
-    srcs = ["verify_test.cc"],
-    deps = [
-        ":text_asm",
-        ":verify",
-        "//loom/src/loom/codegen/low/testing:descriptors_verify",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/format/bytecode:reader",
-        "//loom/src/loom/format/bytecode:writer",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/format/text:printer",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/ops/test",
-        "//loom/src/loom/target:types",
-        "//loom/src/loom/target/emit/ireevm:low_registry",
-        "//loom/src/loom/testing:diagnostic_matchers",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/io:stream",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

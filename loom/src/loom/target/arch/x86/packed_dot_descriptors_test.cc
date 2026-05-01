@@ -18,17 +18,16 @@ namespace {
 
 const loom_low_descriptor_t* LookupDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
-  uint32_t ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_EXPECT_OK(
-      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key, &ordinal));
+  uint32_t ordinal =
+      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key);
+  EXPECT_NE(ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
   return loom_low_descriptor_set_descriptor_at(descriptor_set, ordinal);
 }
 
 std::string DescriptorString(const loom_low_descriptor_set_t* descriptor_set,
                              loom_bstring_table_offset_t string_offset) {
-  iree_string_view_t value = iree_string_view_empty();
-  IREE_EXPECT_OK(
-      loom_low_descriptor_set_string(descriptor_set, string_offset, &value));
+  iree_string_view_t value =
+      loom_low_descriptor_set_string(descriptor_set, string_offset);
   return std::string(value.data, value.size);
 }
 

@@ -11,10 +11,8 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/testing/descriptors_verify.h"
-#include "loom/codegen/low/testing/text_asm_roundtrip_test_util.h"
 #include "loom/target/arch/amdgpu/descriptor_test_util.h"
 #include "loom/target/arch/amdgpu/encoding.h"
-#include "loom/target/arch/amdgpu/low_registry.h"
 
 namespace loom {
 namespace {
@@ -30,22 +28,19 @@ using ::loom::testing::ExpectAmdgpuGlobalSaddrMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuInstructionPrefetchDistanceDescriptor;
 using ::loom::testing::ExpectAmdgpuRegisterClassForTest;
 using ::loom::testing::ExpectAmdgpuWmmaDescriptorForTest;
-using ::loom::testing::LowFuncAsmRoundTripHarness;
-using ::loom::testing::LowTextAsmRoundTripHarness;
 
 std::string ToString(const loom_low_descriptor_set_t* descriptor_set,
                      loom_bstring_table_offset_t string_offset) {
-  iree_string_view_t value = iree_string_view_empty();
-  IREE_EXPECT_OK(
-      loom_low_descriptor_set_string(descriptor_set, string_offset, &value));
+  iree_string_view_t value =
+      loom_low_descriptor_set_string(descriptor_set, string_offset);
   return std::string(value.data, value.size);
 }
 
 const loom_low_descriptor_t* LookupDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
-  uint32_t ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_EXPECT_OK(
-      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key, &ordinal));
+  uint32_t ordinal =
+      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key);
+  EXPECT_NE(ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
   return loom_low_descriptor_set_descriptor_at(descriptor_set, ordinal);
 }
 
@@ -55,9 +50,8 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorSetVerifies) {
   ASSERT_NE(descriptor_set, nullptr);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(descriptor_set));
 
-  iree_string_view_t set_key = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->key_string_offset, &set_key));
+  iree_string_view_t set_key = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset);
   EXPECT_TRUE(iree_string_view_equal(set_key, IREE_SV("amdgpu.gfx11.core")));
 
   EXPECT_GE(descriptor_set->descriptor_count, 10u);
@@ -324,9 +318,9 @@ TEST(AmdgpuDescriptorsTest, Gfx11AsmFormsExposeNamedWaitcntImmediates) {
       loom_amdgpu_gfx11_core_descriptor_set();
   ASSERT_GE(descriptor_set->asm_form_count, 10u);
 
-  uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
-      descriptor_set, IREE_SV("s_waitcnt"), &asm_form_ordinal));
+  uint32_t asm_form_ordinal = loom_low_descriptor_set_lookup_asm_form(
+      descriptor_set, IREE_SV("s_waitcnt"));
+  ASSERT_NE(asm_form_ordinal, LOOM_LOW_ASM_FORM_ORDINAL_NONE);
   const loom_low_asm_form_t* asm_form =
       loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
   ASSERT_NE(asm_form, nullptr);
@@ -342,8 +336,9 @@ TEST(AmdgpuDescriptorsTest, Gfx11AsmFormsExposeNamedWaitcntImmediates) {
   EXPECT_EQ(ToString(descriptor_set, second_immediate->name_string_offset),
             "lgkmcnt");
 
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
-      descriptor_set, IREE_SV("v_sub_nc_u32"), &asm_form_ordinal));
+  asm_form_ordinal = loom_low_descriptor_set_lookup_asm_form(
+      descriptor_set, IREE_SV("v_sub_nc_u32"));
+  ASSERT_NE(asm_form_ordinal, LOOM_LOW_ASM_FORM_ORDINAL_NONE);
   asm_form =
       loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
   ASSERT_NE(asm_form, nullptr);
@@ -355,55 +350,6 @@ TEST(AmdgpuDescriptorsTest, Gfx11AsmFormsExposeNamedWaitcntImmediates) {
   ASSERT_NE(descriptor, nullptr);
   EXPECT_EQ(ToString(descriptor_set, descriptor->key_string_offset),
             "amdgpu.v_sub_u32");
-}
-
-TEST(AmdgpuDescriptorsTest, Gfx11LowAsmRegionRoundTrips) {
-  LowTextAsmRoundTripHarness harness;
-  IREE_ASSERT_OK(harness.Initialize(loom_amdgpu_gfx11_core_descriptor_set));
-
-  const char* source =
-      "test.low_asm_region asm<amdgpu.gfx11.core> {\n"
-      "  %c0 = s_mov_b32 7\n"
-      "  %c1 = s_mov_b32 5\n"
-      "  %sum = s_add_u32 %c0, %c1\n"
-      "  %m0 = s_mov_b32_m0 %sum\n"
-      "  %v = v_mov_b32 42\n"
-      "  s_icache_inv\n"
-      "  s_set_inst_prefetch_distance {distance = 2}\n"
-      "  s_waitcnt {vmcnt = 0, lgkmcnt = 0}\n"
-      "  return %sum\n"
-      "}\n";
-  std::string printed;
-  IREE_ASSERT_OK(harness.RoundTrip(IREE_SV(source),
-                                   IREE_SV("amdgpu.gfx11.core"), &printed));
-  EXPECT_EQ(printed, source);
-}
-
-TEST(AmdgpuDescriptorsTest, Gfx11LowFuncAsmRoundTripsVectorMemoryAndMatrix) {
-  LowFuncAsmRoundTripHarness harness;
-  IREE_ASSERT_OK(harness.Initialize(loom_amdgpu_gfx11_core_descriptor_set,
-                                    &loom_amdgpu_low_target_bundle_gfx11_core));
-
-  const char* source =
-      "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n\n"
-      "low.func.def target(@gfx_target) @vector_memory_matrix(%lhs: "
-      "reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr x8>, "
-      "%b: reg<amdgpu.vgpr x8>, %acc: reg<amdgpu.vgpr x8>, "
-      "%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, "
-      "%soffset: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>, "
-      "reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {\n"
-      "  %sum = v_add_u32 %lhs, %rhs\n"
-      "  %product = v_mul_lo_u32 %sum, %rhs\n"
-      "  %loaded = buffer_load_b128 %resource, %vaddr, %soffset {offset = 16, "
-      "glc = 1}\n"
-      "  buffer_store_b128 %loaded, %resource, %vaddr, %soffset {offset = 32}\n"
-      "  %matrix = v_wmma_f32_16x16x16_f16 %a, %b, %acc\n"
-      "  return %product, %loaded, %matrix\n"
-      "}\n";
-  std::string printed;
-  IREE_ASSERT_OK(harness.RoundTripAndVerify(
-      IREE_SV(source), IREE_SV("amdgpu.gfx11.core"), &printed));
-  EXPECT_EQ(printed, source);
 }
 
 }  // namespace

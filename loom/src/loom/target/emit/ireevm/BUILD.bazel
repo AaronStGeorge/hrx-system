@@ -274,34 +274,9 @@ loom_cc_test(
         ":descriptors",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low/testing:descriptors_verify",
-        "//loom/src/loom/codegen/low/testing:text_asm_roundtrip_test_util",
         "//loom/src/loom/codegen/low/testing:text_asm_test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "function_bytecode_test",
-    srcs = ["function_bytecode_test.cc"],
-    deps = [
-        ":descriptors",
-        ":function_bytecode",
-        ":low_registry",
-        ":module_archive",
-        "//loom/src/loom/codegen/low:frame",
-        "//loom/src/loom/codegen/low:verify",
-        "//loom/src/loom/codegen/low/schedule",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/target",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-        "//runtime/src/iree/vm",
-        "//runtime/src/iree/vm/bytecode:module",
     ],
 )
 

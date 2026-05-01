@@ -226,9 +226,9 @@ iree_status_t loom_low_packet_lookup_asm_form(
       return iree_ok_status();
     }
   }
-  return loom_low_descriptor_set_lookup_canonical_asm_form(
-      schedule->target.descriptor_set, packet->node->descriptor_ordinal,
-      out_asm_form_ordinal);
+  *out_asm_form_ordinal = loom_low_descriptor_set_lookup_canonical_asm_form(
+      schedule->target.descriptor_set, packet->node->descriptor_ordinal);
+  return iree_ok_status();
 }
 
 uint32_t loom_low_packet_block_index(const loom_low_schedule_table_t* schedule,

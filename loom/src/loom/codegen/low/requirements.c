@@ -12,9 +12,7 @@ static iree_status_t loom_low_requirements_get_string(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_bstring_table_offset_t string_offset, const char* field_name,
     iree_string_view_t* out_string) {
-  IREE_RETURN_IF_ERROR(
-      loom_low_descriptor_set_string(descriptor_set, string_offset, out_string),
-      "while reading low descriptor %s", field_name);
+  *out_string = loom_low_descriptor_set_string(descriptor_set, string_offset);
   if (out_string->size == 0) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "low descriptor %s is required by the selected "

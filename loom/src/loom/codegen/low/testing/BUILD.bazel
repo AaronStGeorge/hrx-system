@@ -131,27 +131,3 @@ loom_cc_library(
         "//runtime/src/iree/base/internal:arena",
     ],
 )
-
-loom_cc_library(
-    name = "text_asm_roundtrip_test_util",
-    testonly = True,
-    srcs = ["text_asm_roundtrip_test_util.cc"],
-    hdrs = ["text_asm_roundtrip_test_util.h"],
-    deps = [
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low:text_asm",
-        "//loom/src/loom/codegen/low:verify",
-        "//loom/src/loom/format/bytecode:reader",
-        "//loom/src/loom/format/bytecode:writer",
-        "//loom/src/loom/format/text:low_asm",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/format/text:printer",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/ops/test",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/io:stream",
-    ],
-)

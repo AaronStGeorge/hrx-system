@@ -485,11 +485,8 @@ loom_cc_test(
         ":descriptor_test_util",
         ":encoding_defs",
         ":gfx11_descriptors",
-        ":low_registry",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low/testing:descriptors_verify",
-        "//loom/src/loom/codegen/low/testing:text_asm_roundtrip_test_util",
-        "//loom/src/loom/codegen/low/testing:text_asm_test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -520,7 +517,6 @@ loom_cc_test(
         ":gfx12_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low/testing:descriptors_verify",
-        "//loom/src/loom/codegen/low/testing:text_asm_roundtrip_test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -581,7 +577,6 @@ loom_cc_test(
         ":gfx950_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low/testing:descriptors_verify",
-        "//loom/src/loom/codegen/low/testing:text_asm_roundtrip_test_util",
         "//loom/src/loom/codegen/low/testing:text_asm_test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -743,13 +738,21 @@ loom_cc_test(
 
 loom_cc_library(
     name = "check_provider",
-    srcs = ["check/provider.c"],
-    hdrs = ["check/provider.h"],
+    srcs = [
+        "check/occupancy.c",
+        "check/provider.c",
+    ],
+    hdrs = [
+        "check/occupancy.h",
+        "check/provider.h",
+    ],
     deps = [
         ":low_registry",
         ":lower",
+        ":occupancy",
         ":packet_diagnostics",
         "//loom/src/loom/target/emit/native/amdgpu:loom_check",
+        "//loom/src/loom/tools/loom-check:execute",
         "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
     ],
@@ -867,52 +870,6 @@ loom_cc_library(
 )
 
 loom_cc_test(
-    name = "hal_kernel_abi_test",
-    srcs = ["hal_kernel_abi_test.cc"],
-    deps = [
-        ":gfx11_descriptors",
-        ":hal_kernel_abi",
-        ":low_registry",
-        "//loom/src/loom/codegen/low:function",
-        "//loom/src/loom/codegen/low:target_binding",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/target",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "hal_resource_materialization_test",
-    srcs = ["hal_resource_materialization_test.cc"],
-    deps = [
-        ":hal_kernel_abi",
-        ":hal_resource_materialization",
-        ":low_registry",
-        ":wait_packets",
-        ":wait_plan",
-        "//loom/src/loom/codegen/low:frame",
-        "//loom/src/loom/codegen/low:function",
-        "//loom/src/loom/codegen/low:target_binding",
-        "//loom/src/loom/codegen/low:verify",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target/emit/native/amdgpu:encoding",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
     name = "low_registry_test",
     srcs = ["low_registry_test.cc"],
     deps = [
@@ -930,6 +887,7 @@ loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
         "test/source_low/low_hal_structural.loom-test",
+        "test/source_low/low_occupancy.loom-test",
         "test/source_low/low_packet_diagnostics.loom-test",
         "test/source_low/low_partial_register.loom-test",
         "test/source_low/source_low_addtid.loom-test",
@@ -1077,73 +1035,6 @@ loom_cc_library(
     ],
 )
 
-loom_cc_test(
-    name = "wait_plan_test",
-    srcs = ["wait_plan_test.cc"],
-    deps = [
-        ":low_registry",
-        ":wait_plan",
-        "//loom/src/loom/codegen/low:text_asm",
-        "//loom/src/loom/codegen/low:verify",
-        "//loom/src/loom/codegen/low/schedule",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/testing:module_ptr",
-        "//loom/src/loom/verify",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "wait_packets_test",
-    srcs = ["wait_packets_test.cc"],
-    deps = [
-        ":low_registry",
-        ":wait_packets",
-        "//loom/src/loom/codegen/low:text_asm",
-        "//loom/src/loom/codegen/low:verify",
-        "//loom/src/loom/codegen/low/schedule",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/testing:module_ptr",
-        "//loom/src/loom/verify",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "occupancy_test",
-    srcs = ["occupancy_test.cc"],
-    deps = [
-        ":low_registry",
-        ":occupancy",
-        "//loom/src/loom/codegen/low:allocation",
-        "//loom/src/loom/codegen/low:text_asm",
-        "//loom/src/loom/codegen/low:verify",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/testing:module_ptr",
-        "//loom/src/loom/verify",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
 loom_low_descriptor_exclude_from_cmake_all(
     cc_libraries = ["low_registry"],
     targets = [
@@ -1151,11 +1042,7 @@ loom_low_descriptor_exclude_from_cmake_all(
         "gfx12_descriptors_test",
         "gfx1250_descriptors_test",
         "gfx950_descriptors_test",
-        "hal_resource_materialization_test",
         "low_registry_test",
-        "occupancy_test",
-        "wait_plan_test",
-        "wait_packets_test",
     ],
 )
 

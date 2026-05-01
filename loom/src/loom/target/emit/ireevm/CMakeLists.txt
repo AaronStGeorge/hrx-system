@@ -220,35 +220,9 @@ loom_cc_test(
     ::descriptors
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::testing::descriptors_verify
-    loom::src::loom::codegen::low::testing::text_asm_roundtrip_test_util
     loom::src::loom::codegen::low::testing::text_asm_test_util
     iree::testing::gtest
     iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    function_bytecode_test
-  SRCS
-    "function_bytecode_test.cc"
-  DEPS
-    ::descriptors
-    ::function_bytecode
-    ::low_registry
-    ::module_archive
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::frame
-    loom::src::loom::codegen::low::schedule
-    loom::src::loom::codegen::low::verify
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::target
-    iree::testing::gtest
-    iree::testing::gtest_main
-    iree::vm
-    iree::vm::bytecode::module
 )
 
 loom_cc_test(

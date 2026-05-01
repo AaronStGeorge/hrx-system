@@ -1429,9 +1429,8 @@ iree_status_t loom_check_execute_emit(
         environment, &registry);
     if (request.format == LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST) {
       if (iree_status_is_ok(status)) {
-        status = loom_low_descriptor_registry_lookup(
-            &registry.registry, request.low_descriptor_set_key,
-            &request.low_descriptor_set);
+        request.low_descriptor_set = loom_low_descriptor_registry_lookup(
+            &registry.registry, request.low_descriptor_set_key);
       }
       if (iree_status_is_ok(status) && request.low_descriptor_set == NULL) {
         status = iree_make_status(IREE_STATUS_NOT_FOUND,
@@ -1526,12 +1525,13 @@ iree_status_t loom_check_execute_emit(
     loom_source_table_resolver_t resolver_data = {0};
     status = loom_check_source_resolver_for_case(
         context, filename, stripped_view, &source_entry, &resolver_data);
+    const loom_source_resolver_t source_resolver = {
+        .fn = loom_source_table_resolve,
+        .user_data = &resolver_data,
+    };
     if (iree_status_is_ok(status)) {
       status = loom_check_emit_verify_provider_module(
-          module, &low_registry,
-          (loom_source_resolver_t){.fn = loom_source_table_resolve,
-                                   .user_data = &resolver_data},
-          &diagnostic_collector);
+          module, &low_registry, source_resolver, &diagnostic_collector);
     }
     if (!iree_status_is_ok(status)) {
       loom_module_free(module);
@@ -1566,6 +1566,7 @@ iree_status_t loom_check_execute_emit(
         .test_case = test_case,
         .environment = environment,
         .module = module,
+        .source_resolver = source_resolver,
         .low_registry = &low_registry,
         .diagnostic_collector = &diagnostic_collector,
         .case_arena = &diagnostic_arena,

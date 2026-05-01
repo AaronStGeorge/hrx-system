@@ -93,23 +93,3 @@ loom_check_test_suite(
         "test/assembly.loom-test",
     ],
 )
-
-loom_cc_test(
-    name = "assembly_test",
-    srcs = ["assembly_test.cc"],
-    deps = [
-        ":assembly",
-        "//loom/src/loom/codegen/low:frame",
-        "//loom/src/loom/codegen/low:verify",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/target/arch/x86:low_registry",
-        "//loom/src/loom/target/tool:llvm",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)

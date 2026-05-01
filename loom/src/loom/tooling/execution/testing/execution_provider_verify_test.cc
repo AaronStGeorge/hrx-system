@@ -121,9 +121,9 @@ TEST(ExecutionProviderTest, ComposesDescriptorRegistryAndHalBackends) {
       loom_run_execution_environment_low_descriptor_registry_callback(
           &environment);
   IREE_ASSERT_OK(callback.fn(callback.user_data, &low_registry));
-  const loom_low_descriptor_set_t* descriptor_set = nullptr;
-  IREE_EXPECT_OK(loom_low_descriptor_registry_lookup(
-      &low_registry.registry, IREE_SV("test.low.core"), &descriptor_set));
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_descriptor_registry_lookup(&low_registry.registry,
+                                          IREE_SV("test.low.core"));
   EXPECT_NE(descriptor_set, nullptr);
 
   loom_run_execution_environment_deinitialize(&environment);

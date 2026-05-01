@@ -69,9 +69,10 @@ static iree_status_t loom_target_low_packet_diagnostics_packet_key(
     *out_key = IREE_SV("<structural>");
     return iree_ok_status();
   }
-  return loom_low_descriptor_set_string(
+  *out_key = loom_low_descriptor_set_string(
       context->frame->schedule.target.descriptor_set,
-      packet->descriptor->key_string_offset, out_key);
+      packet->descriptor->key_string_offset);
+  return iree_ok_status();
 }
 
 iree_status_t loom_target_low_packet_diagnostics_record_packet(

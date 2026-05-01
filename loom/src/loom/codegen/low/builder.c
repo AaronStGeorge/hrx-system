@@ -28,9 +28,8 @@ iree_status_t loom_low_build_register_class_string_id(
 
   const loom_low_reg_class_t* reg_class =
       &descriptor_set->reg_classes[reg_class_id];
-  iree_string_view_t reg_class_name = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, reg_class->name_string_offset, &reg_class_name));
+  iree_string_view_t reg_class_name = loom_low_descriptor_set_string(
+      descriptor_set, reg_class->name_string_offset);
   if (iree_string_view_is_empty(reg_class_name)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "target-low register class ID %" PRIu16
@@ -64,9 +63,8 @@ static iree_status_t loom_low_build_resolved_descriptor_opcode_id(
   IREE_ASSERT_ARGUMENT(descriptor);
   IREE_ASSERT_ARGUMENT(out_opcode_id);
   *out_opcode_id = LOOM_STRING_ID_INVALID;
-  iree_string_view_t key = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, descriptor->key_string_offset, &key));
+  iree_string_view_t key = loom_low_descriptor_set_string(
+      descriptor_set, descriptor->key_string_offset);
   if (iree_string_view_is_empty(key)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "target-low descriptor ID 0x%016" PRIx64

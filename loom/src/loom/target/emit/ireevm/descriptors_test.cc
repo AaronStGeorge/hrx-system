@@ -6,18 +6,14 @@
 
 #include "loom/target/emit/ireevm/descriptors.h"
 
-#include <string>
-
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/testing/descriptors_verify.h"
-#include "loom/codegen/low/testing/text_asm_roundtrip_test_util.h"
 #include "loom/codegen/low/testing/text_asm_test_util.h"
 
 namespace loom {
 namespace {
 
-using ::loom::testing::LowTextAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
 constexpr uint16_t kVmOpcodeAddI32 = 0x22;
@@ -29,9 +25,8 @@ TEST(IreeVmDescriptorsTest, CoreDescriptorSetVerifies) {
   ASSERT_NE(descriptor_set, nullptr);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(descriptor_set));
 
-  iree_string_view_t set_key = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->key_string_offset, &set_key));
+  iree_string_view_t set_key = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset);
   EXPECT_TRUE(iree_string_view_equal(set_key, IREE_SV("iree.vm.core")));
 
   EXPECT_GE(descriptor_set->descriptor_count, 9u);
@@ -43,16 +38,14 @@ TEST(IreeVmDescriptorsTest, CoreDescriptorLookupUsesStableKeys) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_ireevm_core_descriptor_set();
 
-  uint32_t add_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
-      descriptor_set, IREE_SV("iree.vm.add.i32"), &add_ordinal));
+  uint32_t add_ordinal = loom_low_descriptor_set_lookup_descriptor(
+      descriptor_set, IREE_SV("iree.vm.add.i32"));
   EXPECT_NE(add_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
   const loom_low_descriptor_t* add_descriptor =
       loom_low_descriptor_set_descriptor_at(descriptor_set, add_ordinal);
   ASSERT_NE(add_descriptor, nullptr);
-  iree_string_view_t add_key = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
-      descriptor_set, add_descriptor->key_string_offset, &add_key));
+  iree_string_view_t add_key = loom_low_descriptor_set_string(
+      descriptor_set, add_descriptor->key_string_offset);
   EXPECT_TRUE(iree_string_view_equal(add_key, IREE_SV("iree.vm.add.i32")));
   EXPECT_EQ(add_descriptor->encoding_id, kVmOpcodeAddI32);
   EXPECT_EQ(add_descriptor->operand_count, 3u);
@@ -60,17 +53,14 @@ TEST(IreeVmDescriptorsTest, CoreDescriptorLookupUsesStableKeys) {
   ASSERT_NE(add_descriptor->schedule_class_id, LOOM_LOW_SCHEDULE_CLASS_NONE);
   ASSERT_LT(add_descriptor->schedule_class_id,
             descriptor_set->schedule_class_count);
-  iree_string_view_t add_schedule_name = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
+  iree_string_view_t add_schedule_name = loom_low_descriptor_set_string(
       descriptor_set,
       descriptor_set->schedule_classes[add_descriptor->schedule_class_id]
-          .name_string_offset,
-      &add_schedule_name));
+          .name_string_offset);
   EXPECT_TRUE(iree_string_view_equal(add_schedule_name, IREE_SV("vm.alu.i32")));
 
-  uint32_t branch_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
-      descriptor_set, IREE_SV("iree.vm.cond_br.i32"), &branch_ordinal));
+  uint32_t branch_ordinal = loom_low_descriptor_set_lookup_descriptor(
+      descriptor_set, IREE_SV("iree.vm.cond_br.i32"));
   const loom_low_descriptor_t* branch_descriptor =
       loom_low_descriptor_set_descriptor_at(descriptor_set, branch_ordinal);
   ASSERT_NE(branch_descriptor, nullptr);
@@ -95,22 +85,6 @@ TEST(IreeVmDescriptorsTest, LowAsmInfersScalarResultType) {
       &result_type, &diagnostic_detail));
   EXPECT_TRUE(iree_string_view_is_empty(diagnostic_detail));
   EXPECT_TRUE(harness.RegisterTypeEquals(result_type, IREE_SV("vm.i32"), 1));
-}
-
-TEST(IreeVmDescriptorsTest, LowAsmRegionRoundTrips) {
-  LowTextAsmRoundTripHarness harness;
-  IREE_ASSERT_OK(harness.Initialize(loom_ireevm_core_descriptor_set));
-
-  const char* source =
-      "test.low_asm_region asm<iree.vm.core> {\n"
-      "  %c0 = vm.const.i32 7\n"
-      "  %sum = vm.add.i32 %c0, %c0\n"
-      "  return %sum\n"
-      "}\n";
-  std::string printed;
-  IREE_ASSERT_OK(
-      harness.RoundTrip(IREE_SV(source), IREE_SV("iree.vm.core"), &printed));
-  EXPECT_EQ(printed, source);
 }
 
 }  // namespace

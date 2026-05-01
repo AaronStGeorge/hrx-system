@@ -39,9 +39,8 @@ static iree_string_view_t loom_low_packet_asm_module_string(
 static iree_status_t loom_low_packet_asm_append_descriptor_string(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_bstring_table_offset_t string_offset, iree_string_builder_t* builder) {
-  iree_string_view_t value = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(
-      loom_low_descriptor_set_string(descriptor_set, string_offset, &value));
+  iree_string_view_t value =
+      loom_low_descriptor_set_string(descriptor_set, string_offset);
   if (iree_string_view_is_empty(value)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low packet asm descriptor string is empty");
@@ -149,13 +148,12 @@ static iree_status_t loom_low_packet_asm_append_immediates(
     const loom_low_immediate_t* immediate =
         &descriptor_set->immediates[descriptor->immediate_start +
                                     asm_immediate->immediate_index];
-    iree_string_view_t field_name = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        descriptor_set, immediate->field_name_string_offset, &field_name));
+    iree_string_view_t field_name = loom_low_descriptor_set_string(
+        descriptor_set, immediate->field_name_string_offset);
     iree_string_view_t spelling = field_name;
     if (asm_immediate->name_string_offset != LOOM_LOW_STRING_OFFSET_NONE) {
-      IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-          descriptor_set, asm_immediate->name_string_offset, &spelling));
+      spelling = loom_low_descriptor_set_string(
+          descriptor_set, asm_immediate->name_string_offset);
     }
     if (iree_string_view_is_empty(spelling)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

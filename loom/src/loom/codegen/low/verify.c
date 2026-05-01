@@ -379,8 +379,8 @@ static iree_status_t loom_low_verify_descriptor_immediate_name(
       descriptor->immediate_start + descriptor_immediate_index;
   const loom_low_immediate_t* immediate =
       &descriptor_set->immediates[immediate_row];
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, immediate->field_name_string_offset, out_immediate_name));
+  *out_immediate_name = loom_low_descriptor_set_string(
+      descriptor_set, immediate->field_name_string_offset);
   *out_immediate = immediate;
   return iree_ok_status();
 }
@@ -473,8 +473,8 @@ static iree_status_t loom_low_verify_immediate_enum_domain(
   }
   const loom_low_enum_domain_t* domain =
       &descriptor_set->enum_domains[immediate->enum_domain_id];
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, domain->name_string_offset, out_domain_name));
+  *out_domain_name = loom_low_descriptor_set_string(descriptor_set,
+                                                    domain->name_string_offset);
   *out_domain = domain;
   return iree_ok_status();
 }
@@ -487,9 +487,8 @@ static iree_status_t loom_low_verify_enum_domain_contains_token(
   for (uint16_t i = 0; i < domain->value_count; ++i) {
     const loom_low_enum_value_t* value =
         &descriptor_set->enum_values[domain->value_start + i];
-    iree_string_view_t value_token = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        descriptor_set, value->token_string_offset, &value_token));
+    iree_string_view_t value_token = loom_low_descriptor_set_string(
+        descriptor_set, value->token_string_offset);
     if (iree_string_view_equal(token, value_token)) {
       *out_contains = true;
       return iree_ok_status();
@@ -797,9 +796,8 @@ static iree_status_t loom_low_verify_descriptor_packet_field(
   }
   const loom_low_operand_t* descriptor_operand =
       &descriptor_set->operands[operand_row];
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_operand->field_name_string_offset,
-      &out_field->field_name));
+  out_field->field_name = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_operand->field_name_string_offset);
 
   if (descriptor_operand_index < descriptor->result_count) {
     if (descriptor_operand_index >= op->result_count) {
@@ -874,9 +872,8 @@ static iree_status_t loom_low_verify_format_expected_register_classes(
     }
     const loom_low_reg_class_t* reg_class =
         &descriptor_set->reg_classes[alt->reg_class_id];
-    iree_string_view_t reg_class_name = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        descriptor_set, reg_class->name_string_offset, &reg_class_name));
+    iree_string_view_t reg_class_name = loom_low_descriptor_set_string(
+        descriptor_set, reg_class->name_string_offset);
     if (reg_class_count > 0) {
       byte_count += 3;
     }
@@ -902,9 +899,8 @@ static iree_status_t loom_low_verify_format_expected_register_classes(
     }
     const loom_low_reg_class_t* reg_class =
         &descriptor_set->reg_classes[alt->reg_class_id];
-    iree_string_view_t reg_class_name = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        descriptor_set, reg_class->name_string_offset, &reg_class_name));
+    iree_string_view_t reg_class_name = loom_low_descriptor_set_string(
+        descriptor_set, reg_class->name_string_offset);
     if (appended_count > 0) {
       memcpy(cursor, " | ", 3);
       cursor += 3;
@@ -1181,10 +1177,8 @@ static iree_status_t loom_low_verify_descriptor_register_field(
   IREE_RETURN_IF_ERROR(loom_low_verify_format_expected_register_classes(
       function_state, descriptor_set, descriptor_operand,
       &expected_reg_classes));
-  iree_string_view_t field_name = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_operand->field_name_string_offset,
-      &field_name));
+  iree_string_view_t field_name = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_operand->field_name_string_offset);
   const loom_diagnostic_field_ref_t field_ref = loom_diagnostic_field_ref(
       is_result ? LOOM_DIAGNOSTIC_FIELD_RESULT : LOOM_DIAGNOSTIC_FIELD_OPERAND,
       field_index);

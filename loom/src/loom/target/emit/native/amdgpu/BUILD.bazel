@@ -365,55 +365,6 @@ loom_cc_test(
 )
 
 loom_cc_test(
-    name = "encoding_test",
-    srcs = ["encoding_test.cc"],
-    deps = [
-        ":encoding",
-        "//loom/src/loom/codegen/low:builder",
-        "//loom/src/loom/codegen/low:frame",
-        "//loom/src/loom/codegen/low:target_binding",
-        "//loom/src/loom/codegen/low:verify",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/target/arch/amdgpu:descriptor_ids",
-        "//loom/src/loom/target/arch/amdgpu:encoding",
-        "//loom/src/loom/target/arch/amdgpu:low_registry",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "kernel_assembly_test",
-    srcs = ["kernel_assembly_test.cc"],
-    deps = [
-        ":kernel_assembly",
-        "//loom/src/loom/codegen/low:frame",
-        "//loom/src/loom/codegen/low:function",
-        "//loom/src/loom/codegen/low:target_binding",
-        "//loom/src/loom/codegen/low:verify",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
-        "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
-        "//loom/src/loom/target/arch/amdgpu:low_registry",
-        "//loom/src/loom/target/arch/amdgpu:wait_packets",
-        "//loom/src/loom/target/arch/amdgpu:wait_plan",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
     name = "hsaco_test",
     srcs = ["hsaco_test.cc"],
     deps = [
@@ -449,24 +400,6 @@ loom_cc_test(
     deps = [
         ":hal_executable",
         "//runtime/src/iree/base",
-        "//runtime/src/iree/hal/utils:executable_header",
-        "//runtime/src/iree/schemas:amdgpu_executable_def_c_fbs",
-        "//runtime/src/iree/schemas:executable_debug_info_c_fbs",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "module_compiler_test",
-    srcs = ["module_compiler_test.cc"],
-    deps = [
-        ":module_compiler",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_registry",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/hal/utils:executable_header",
         "//runtime/src/iree/schemas:amdgpu_executable_def_c_fbs",
         "//runtime/src/iree/schemas:executable_debug_info_c_fbs",

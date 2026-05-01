@@ -220,9 +220,8 @@ iree_status_t loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
   IREE_ASSERT_ARGUMENT(out_pressure_cliffs);
   *out_pressure_cliffs = loom_low_schedule_pressure_cliff_list_empty();
 
-  iree_string_view_t descriptor_set_key = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->key_string_offset, &descriptor_set_key));
+  iree_string_view_t descriptor_set_key = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset);
   const loom_amdgpu_occupancy_model_t* model = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_select_model(
       descriptor_set->stable_id, descriptor_set_key, &model));
@@ -314,10 +313,9 @@ static iree_status_t loom_amdgpu_occupancy_find_register_class(
   }
   const loom_low_reg_class_t* descriptor_reg_class =
       &allocation->target.descriptor_set->reg_classes[descriptor_reg_class_id];
-  iree_string_view_t register_class = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      allocation->target.descriptor_set,
-      descriptor_reg_class->name_string_offset, &register_class));
+  iree_string_view_t register_class =
+      loom_low_descriptor_set_string(allocation->target.descriptor_set,
+                                     descriptor_reg_class->name_string_offset);
   return iree_make_status(
       IREE_STATUS_FAILED_PRECONDITION,
       "AMDGPU occupancy model for descriptor set '%.*s' does not cover "

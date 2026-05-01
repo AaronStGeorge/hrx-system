@@ -25,9 +25,7 @@ iree_status_t loom_native_assembly_descriptor_string(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_bstring_table_offset_t string_offset, iree_string_view_t* out_string) {
   IREE_ASSERT_ARGUMENT(out_string);
-  *out_string = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, string_offset, out_string));
+  *out_string = loom_low_descriptor_set_string(descriptor_set, string_offset);
   if (iree_string_view_is_empty(*out_string)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "native assembly descriptor string is empty");

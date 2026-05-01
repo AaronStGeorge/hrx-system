@@ -11,27 +11,22 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/testing/descriptors_verify.h"
-#include "loom/codegen/low/testing/text_asm_roundtrip_test_util.h"
 #include "loom/target/test/alt_descriptors.h"
 
 namespace loom {
 namespace {
 
-using ::loom::testing::LowTextAsmRoundTripHarness;
-
 std::string ToString(const loom_low_descriptor_set_t* descriptor_set,
                      loom_bstring_table_offset_t string_offset) {
-  iree_string_view_t value = iree_string_view_empty();
-  IREE_EXPECT_OK(
-      loom_low_descriptor_set_string(descriptor_set, string_offset, &value));
+  iree_string_view_t value =
+      loom_low_descriptor_set_string(descriptor_set, string_offset);
   return std::string(value.data, value.size);
 }
 
 const loom_low_descriptor_t* LookupDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
-  uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_EXPECT_OK(loom_low_descriptor_set_lookup_descriptor(
-      descriptor_set, key, &descriptor_ordinal));
+  uint32_t descriptor_ordinal =
+      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key);
   EXPECT_NE(descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
   return loom_low_descriptor_set_descriptor_at(descriptor_set,
                                                descriptor_ordinal);
@@ -183,9 +178,9 @@ TEST(TestLowDescriptorsTest, AsmFormsExposeGenericAndSpirvLikePackets) {
       loom_test_low_core_descriptor_set();
   ASSERT_GE(descriptor_set->asm_form_count, 15u);
 
-  uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
-      descriptor_set, IREE_SV("OpIAdd"), &asm_form_ordinal));
+  uint32_t asm_form_ordinal = loom_low_descriptor_set_lookup_asm_form(
+      descriptor_set, IREE_SV("OpIAdd"));
+  ASSERT_NE(asm_form_ordinal, LOOM_LOW_ASM_FORM_ORDINAL_NONE);
   const loom_low_asm_form_t* asm_form =
       loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
   ASSERT_NE(asm_form, nullptr);
@@ -198,24 +193,6 @@ TEST(TestLowDescriptorsTest, AsmFormsExposeGenericAndSpirvLikePackets) {
   ASSERT_NE(descriptor, nullptr);
   EXPECT_EQ(ToString(descriptor_set, descriptor->key_string_offset),
             "test.spv.op_iadd.i32");
-}
-
-TEST(TestLowDescriptorsTest, SpirvLikeLowAsmRegionRoundTrips) {
-  LowTextAsmRoundTripHarness harness;
-  IREE_ASSERT_OK(harness.Initialize(loom_test_low_core_descriptor_set));
-
-  const char* source =
-      "test.low_asm_region asm<test.low.core> {\n"
-      "  %c0 = test.const.i32 7\n"
-      "  %sum = test.add.i32 %c0, %c0\n"
-      "  %spv = OpIAdd %sum, %c0\n"
-      "  %call = test.call.i32 %spv {callee = 4}\n"
-      "  return %call\n"
-      "}\n";
-  std::string printed;
-  IREE_ASSERT_OK(
-      harness.RoundTrip(IREE_SV(source), IREE_SV("test.low.core"), &printed));
-  EXPECT_EQ(printed, source);
 }
 
 }  // namespace

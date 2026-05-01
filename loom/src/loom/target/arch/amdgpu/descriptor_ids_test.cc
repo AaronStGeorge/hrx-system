@@ -45,9 +45,8 @@ void ExpectAddressImmediateEncoding(
       &descriptor_set->immediates[descriptor->immediate_start];
   bool found_address_offset = false;
   for (uint16_t i = 0; i < descriptor->immediate_count; ++i) {
-    iree_string_view_t field_name = iree_string_view_empty();
-    IREE_ASSERT_OK(loom_low_descriptor_set_string(
-        descriptor_set, immediates[i].field_name_string_offset, &field_name));
+    iree_string_view_t field_name = loom_low_descriptor_set_string(
+        descriptor_set, immediates[i].field_name_string_offset);
     if (!iree_string_view_equal(field_name, IREE_SV("offset")) &&
         !iree_string_view_equal(field_name, IREE_SV("offset0")) &&
         !iree_string_view_equal(field_name, IREE_SV("offset1"))) {
@@ -177,18 +176,14 @@ TEST(AmdgpuDescriptorIdsTest, CommonRegClassIdsMatchDescriptorSetContract) {
         loom_amdgpu_gfx950_core_descriptor_set()}) {
     ASSERT_GT(descriptor_set->reg_class_count, LOOM_AMDGPU_REG_CLASS_ID_SGPR);
     ASSERT_GT(descriptor_set->reg_class_count, LOOM_AMDGPU_REG_CLASS_ID_VGPR);
-    iree_string_view_t sgpr_name = iree_string_view_empty();
-    iree_string_view_t vgpr_name = iree_string_view_empty();
-    IREE_ASSERT_OK(loom_low_descriptor_set_string(
+    iree_string_view_t sgpr_name = loom_low_descriptor_set_string(
         descriptor_set,
         descriptor_set->reg_classes[LOOM_AMDGPU_REG_CLASS_ID_SGPR]
-            .name_string_offset,
-        &sgpr_name));
-    IREE_ASSERT_OK(loom_low_descriptor_set_string(
+            .name_string_offset);
+    iree_string_view_t vgpr_name = loom_low_descriptor_set_string(
         descriptor_set,
         descriptor_set->reg_classes[LOOM_AMDGPU_REG_CLASS_ID_VGPR]
-            .name_string_offset,
-        &vgpr_name));
+            .name_string_offset);
     EXPECT_TRUE(iree_string_view_equal(sgpr_name, IREE_SV("amdgpu.sgpr")));
     EXPECT_TRUE(iree_string_view_equal(vgpr_name, IREE_SV("amdgpu.vgpr")));
   }

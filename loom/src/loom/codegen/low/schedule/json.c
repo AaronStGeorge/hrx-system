@@ -120,8 +120,9 @@ static iree_status_t loom_low_schedule_json_descriptor_key(
         "schedule node references descriptor ordinal %" PRIu32,
         node->descriptor_ordinal);
   }
-  return loom_low_descriptor_set_string(table->target.descriptor_set,
-                                        descriptor->key_string_offset, out_key);
+  *out_key = loom_low_descriptor_set_string(table->target.descriptor_set,
+                                            descriptor->key_string_offset);
+  return iree_ok_status();
 }
 
 iree_status_t loom_low_schedule_format_json(

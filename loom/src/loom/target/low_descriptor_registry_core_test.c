@@ -13,13 +13,11 @@ void loom_target_core_test_low_descriptor_registry_initialize(
   loom_test_low_descriptor_registry_initialize(out_registry);
 }
 
-iree_status_t loom_target_core_test_low_descriptor_set_lookup(
-    iree_string_view_t key,
-    const loom_low_descriptor_set_t** out_descriptor_set) {
+const loom_low_descriptor_set_t*
+loom_target_core_test_low_descriptor_set_lookup(iree_string_view_t key) {
   loom_target_low_descriptor_registry_t registry;
   loom_target_core_test_low_descriptor_registry_initialize(&registry);
-  return loom_low_descriptor_registry_lookup(&registry.registry, key,
-                                             out_descriptor_set);
+  return loom_low_descriptor_registry_lookup(&registry.registry, key);
 }
 
 iree_status_t loom_target_core_test_low_bundle_lookup(

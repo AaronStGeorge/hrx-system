@@ -258,8 +258,9 @@ static iree_status_t loom_amdgpu_memory_access_descriptor_key(
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU memory access has no selected descriptor");
   }
-  return loom_low_descriptor_set_string(
-      descriptor_set, access->descriptor->key_string_offset, out_packet_key);
+  *out_packet_key = loom_low_descriptor_set_string(
+      descriptor_set, access->descriptor->key_string_offset);
+  return iree_ok_status();
 }
 
 iree_status_t loom_amdgpu_record_memory_access_diagnostic(

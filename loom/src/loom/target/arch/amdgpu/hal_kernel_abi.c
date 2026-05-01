@@ -233,10 +233,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_register_value(
       map, type, &actual_class_id, NULL, &found_actual_class));
   if (!found_actual_class || actual_class_id != expected_class_id ||
       loom_type_register_unit_count(type) != unit_count) {
-    iree_string_view_t expected_class_name = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        map->descriptor_set, expected_class->name_string_offset,
-        &expected_class_name));
+    iree_string_view_t expected_class_name = loom_low_descriptor_set_string(
+        map->descriptor_set, expected_class->name_string_offset);
     if (unit_count == 1) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,

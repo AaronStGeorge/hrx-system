@@ -20,9 +20,9 @@ namespace loom::testing {
 
 inline const loom_low_descriptor_t* LookupAmdgpuDescriptorForTest(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
-  uint32_t ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_EXPECT_OK(
-      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key, &ordinal));
+  uint32_t ordinal =
+      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key);
+  EXPECT_NE(ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
   return loom_low_descriptor_set_descriptor_at(descriptor_set, ordinal);
 }
 
@@ -32,9 +32,8 @@ inline void ExpectAmdgpuRegisterClassForTest(
   ASSERT_LT(reg_class_id, descriptor_set->reg_class_count);
   const loom_low_reg_class_t* reg_class =
       &descriptor_set->reg_classes[reg_class_id];
-  iree_string_view_t actual_name = iree_string_view_empty();
-  IREE_EXPECT_OK(loom_low_descriptor_set_string(
-      descriptor_set, reg_class->name_string_offset, &actual_name));
+  iree_string_view_t actual_name = loom_low_descriptor_set_string(
+      descriptor_set, reg_class->name_string_offset);
   EXPECT_TRUE(iree_string_view_equal(actual_name, expected_name));
   EXPECT_NE(reg_class->flags & LOOM_LOW_REG_CLASS_FLAG_PHYSICAL, 0u);
   EXPECT_GT(reg_class->physical_count, 0u);
@@ -52,9 +51,8 @@ inline void ExpectAmdgpuOperandRegisterClassForTest(
   ASSERT_LT(alt->reg_class_id, descriptor_set->reg_class_count);
   const loom_low_reg_class_t* reg_class =
       &descriptor_set->reg_classes[alt->reg_class_id];
-  iree_string_view_t actual_name = iree_string_view_empty();
-  IREE_EXPECT_OK(loom_low_descriptor_set_string(
-      descriptor_set, reg_class->name_string_offset, &actual_name));
+  iree_string_view_t actual_name = loom_low_descriptor_set_string(
+      descriptor_set, reg_class->name_string_offset);
   EXPECT_TRUE(iree_string_view_equal(actual_name, expected_name));
 }
 

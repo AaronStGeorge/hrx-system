@@ -11,7 +11,6 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/testing/descriptors_verify.h"
-#include "loom/codegen/low/testing/text_asm_roundtrip_test_util.h"
 #include "loom/codegen/low/testing/text_asm_test_util.h"
 #include "loom/target/arch/amdgpu/descriptor_test_util.h"
 #include "loom/target/arch/amdgpu/encoding.h"
@@ -31,14 +30,13 @@ using ::loom::testing::ExpectAmdgpuGlobalLoadLdsDescriptors;
 using ::loom::testing::ExpectAmdgpuGlobalMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuGlobalSaddrMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuRegisterClassForTest;
-using ::loom::testing::LowTextAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
 const loom_low_descriptor_t* LookupDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
-  uint32_t ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_EXPECT_OK(
-      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key, &ordinal));
+  uint32_t ordinal =
+      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key);
+  EXPECT_NE(ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
   return loom_low_descriptor_set_descriptor_at(descriptor_set, ordinal);
 }
 
@@ -48,9 +46,8 @@ TEST(AmdgpuDescriptorsTest, Gfx950CoreDescriptorSetVerifies) {
   ASSERT_NE(descriptor_set, nullptr);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(descriptor_set));
 
-  iree_string_view_t set_key = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->key_string_offset, &set_key));
+  iree_string_view_t set_key = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset);
   EXPECT_TRUE(iree_string_view_equal(set_key, IREE_SV("amdgpu.gfx950.core")));
 
   EXPECT_GE(descriptor_set->descriptor_count, 8u);
@@ -287,26 +284,6 @@ TEST(AmdgpuDescriptorsTest, Gfx950LowAsmRequiresExplicitMfmaResultType) {
       &packet, /*operands=*/nullptr, /*operand_count=*/0, /*result_index=*/0,
       agpr_type, &diagnostic_detail));
   EXPECT_TRUE(iree_string_view_is_empty(diagnostic_detail));
-}
-
-TEST(AmdgpuDescriptorsTest, Gfx950LowAsmRegionRoundTrips) {
-  LowTextAsmRoundTripHarness harness;
-  IREE_ASSERT_OK(harness.Initialize(loom_amdgpu_gfx950_core_descriptor_set));
-
-  const char* source =
-      "test.low_asm_region asm<amdgpu.gfx950.core> {\n"
-      "  %c0 = s_mov_b32 7\n"
-      "  %c1 = s_mov_b32 5\n"
-      "  %sum = s_add_u32 %c0, %c1\n"
-      "  %diff = s_sub_u32 %sum, %c1\n"
-      "  buffer_inv\n"
-      "  s_waitcnt {vmcnt = 0, lgkmcnt = 0}\n"
-      "  return %diff\n"
-      "}\n";
-  std::string printed;
-  IREE_ASSERT_OK(harness.RoundTrip(IREE_SV(source),
-                                   IREE_SV("amdgpu.gfx950.core"), &printed));
-  EXPECT_EQ(printed, source);
 }
 
 }  // namespace

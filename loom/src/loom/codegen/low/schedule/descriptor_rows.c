@@ -275,10 +275,8 @@ iree_status_t loom_low_schedule_note_descriptor_rows_for_node(
                               "low schedule model summary counters overflow");
     }
     if (model_summary->use_count == 0) {
-      iree_string_view_t schedule_class_name = iree_string_view_empty();
-      IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-          state->target.descriptor_set, schedule_class->name_string_offset,
-          &schedule_class_name));
+      iree_string_view_t schedule_class_name = loom_low_descriptor_set_string(
+          state->target.descriptor_set, schedule_class->name_string_offset);
       *model_summary = (loom_low_schedule_model_summary_t){
           .first_node = node_index,
           .schedule_class_id = node->schedule_class_id,
@@ -324,10 +322,8 @@ iree_status_t loom_low_schedule_note_descriptor_rows_for_node(
     }
     const loom_low_resource_t* resource =
         &state->target.descriptor_set->resources[issue_use->resource_id];
-    iree_string_view_t resource_name = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        state->target.descriptor_set, resource->name_string_offset,
-        &resource_name));
+    iree_string_view_t resource_name = loom_low_descriptor_set_string(
+        state->target.descriptor_set, resource->name_string_offset);
     IREE_RETURN_IF_ERROR(loom_low_schedule_append_resource_use(
         state, (loom_low_schedule_resource_use_t){
                    .node_index = node_index,
@@ -360,9 +356,8 @@ iree_status_t loom_low_schedule_note_descriptor_rows_for_node(
       }
       const loom_low_resource_t* resource =
           &state->target.descriptor_set->resources[hazard->reference_id];
-      IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-          state->target.descriptor_set, resource->name_string_offset,
-          &resource_name));
+      resource_name = loom_low_descriptor_set_string(
+          state->target.descriptor_set, resource->name_string_offset);
     }
     IREE_RETURN_IF_ERROR(loom_low_schedule_append_hazard_use(
         state, (loom_low_schedule_hazard_use_t){

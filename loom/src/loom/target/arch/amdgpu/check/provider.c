@@ -6,6 +6,7 @@
 
 #include "loom/target/arch/amdgpu/check/provider.h"
 
+#include "loom/target/arch/amdgpu/check/occupancy.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/lower.h"
 #include "loom/target/arch/amdgpu/packet_diagnostics.h"
@@ -13,6 +14,7 @@
 
 static const loom_check_emit_provider_t* const kLoomAmdgpuCheckEmitProviders[] =
     {
+        &loom_amdgpu_occupancy_loom_check_emit_provider,
         &loom_amdgpu_native_loom_check_emit_provider,
 };
 

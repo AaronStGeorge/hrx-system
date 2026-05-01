@@ -93,9 +93,8 @@ iree_status_t loom_target_low_descriptor_set_select_for_bundle(
   iree_string_view_t descriptor_set_key =
       iree_string_view_trim(bundle->config->contract_set_key);
 
-  const loom_low_descriptor_set_t* descriptor_set = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_registry_lookup(
-      registry, descriptor_set_key, &descriptor_set));
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_descriptor_registry_lookup(registry, descriptor_set_key);
   if (descriptor_set == NULL) {
     return iree_make_status(
         IREE_STATUS_NOT_FOUND,

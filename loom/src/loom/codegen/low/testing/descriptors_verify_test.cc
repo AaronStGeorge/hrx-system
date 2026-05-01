@@ -577,9 +577,8 @@ TEST(LowDescriptorsTest, VerifiesAndLooksUpDescriptors) {
   InitializeTestTables(&tables);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
 
-  uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
-      &tables.set, IREE_SV("test.add.i32"), &descriptor_ordinal));
+  uint32_t descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor(
+      &tables.set, IREE_SV("test.add.i32"));
   EXPECT_EQ(descriptor_ordinal, 1u);
 
   descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
@@ -592,17 +591,12 @@ TEST(LowDescriptorsTest, VerifiesAndLooksUpDescriptors) {
   EXPECT_EQ(descriptor->operand_count, 3u);
   EXPECT_EQ(descriptor->result_count, 1u);
 
-  uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_FAILED_PRECONDITION,
-      loom_low_descriptor_set_lookup_canonical_asm_form(
-          &tables.set, descriptor_ordinal, &asm_form_ordinal));
+  uint32_t asm_form_ordinal = loom_low_descriptor_set_lookup_canonical_asm_form(
+      &tables.set, descriptor_ordinal);
   EXPECT_EQ(asm_form_ordinal, LOOM_LOW_ASM_FORM_ORDINAL_NONE);
 
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_NOT_FOUND,
-      loom_low_descriptor_set_lookup_descriptor(
-          &tables.set, IREE_SV("test.missing"), &descriptor_ordinal));
+  descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor(
+      &tables.set, IREE_SV("test.missing"));
   EXPECT_EQ(descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
 
   descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
@@ -629,13 +623,11 @@ TEST(LowDescriptorsTest, ProviderBackedRegistryVerifiesAndLooksUpDescriptors) {
             nullptr);
   IREE_ASSERT_OK(loom_low_descriptor_registry_verify(&registry));
 
-  const loom_low_descriptor_set_t* descriptor_set = nullptr;
-  IREE_ASSERT_OK(loom_low_descriptor_registry_lookup(
-      &registry, IREE_SV("test.core"), &descriptor_set));
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_descriptor_registry_lookup(&registry, IREE_SV("test.core"));
   EXPECT_EQ(descriptor_set, &tables.set);
-  descriptor_set = nullptr;
-  IREE_ASSERT_OK(loom_low_descriptor_registry_lookup_by_id(
-      &registry, tables.set.stable_id, &descriptor_set));
+  descriptor_set = loom_low_descriptor_registry_lookup_by_id(
+      &registry, tables.set.stable_id);
   EXPECT_EQ(descriptor_set, &tables.set);
   gProvidedDescriptorSet = nullptr;
 }
@@ -1313,9 +1305,8 @@ TEST(LowDescriptorsTest, AcceptsAsmFormsAndLookup) {
 
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
 
-  uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
-      &tables.set, IREE_SV("add.i32"), &asm_form_ordinal));
+  uint32_t asm_form_ordinal =
+      loom_low_descriptor_set_lookup_asm_form(&tables.set, IREE_SV("add.i32"));
   EXPECT_EQ(asm_form_ordinal, 0u);
   const loom_low_asm_form_t* asm_form =
       loom_low_descriptor_set_asm_form_at(&tables.set, asm_form_ordinal);
@@ -1324,18 +1315,15 @@ TEST(LowDescriptorsTest, AcceptsAsmFormsAndLookup) {
   EXPECT_EQ(asm_form->result_operand_index_count, 1u);
   EXPECT_EQ(asm_form->operand_index_count, 2u);
 
-  asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_canonical_asm_form(
-      &tables.set, 1, &asm_form_ordinal));
+  asm_form_ordinal =
+      loom_low_descriptor_set_lookup_canonical_asm_form(&tables.set, 1);
   EXPECT_EQ(asm_form_ordinal, 0u);
-  asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_canonical_asm_form(
-      &tables.set, 0, &asm_form_ordinal));
+  asm_form_ordinal =
+      loom_low_descriptor_set_lookup_canonical_asm_form(&tables.set, 0);
   EXPECT_EQ(asm_form_ordinal, 1u);
 
-  asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
-  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
-      &tables.set, IREE_SV("missing"), &asm_form_ordinal));
+  asm_form_ordinal =
+      loom_low_descriptor_set_lookup_asm_form(&tables.set, IREE_SV("missing"));
   EXPECT_EQ(asm_form_ordinal, LOOM_LOW_ASM_FORM_ORDINAL_NONE);
 }
 

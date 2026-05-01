@@ -123,31 +123,4 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_library(
-  NAME
-    text_asm_roundtrip_test_util
-  HDRS
-    "text_asm_roundtrip_test_util.h"
-  SRCS
-    "text_asm_roundtrip_test_util.cc"
-  DEPS
-    iree::base
-    iree::base::internal::arena
-    iree::io::stream
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::text_asm
-    loom::src::loom::codegen::low::verify
-    loom::src::loom::format::bytecode::reader
-    loom::src::loom::format::bytecode::writer
-    loom::src::loom::format::text::low_asm
-    loom::src::loom::format::text::parser
-    loom::src::loom::format::text::printer
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::target
-    loom::src::loom::ops::test
-  TESTONLY
-  PUBLIC
-)
-
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

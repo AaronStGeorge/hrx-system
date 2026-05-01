@@ -174,10 +174,8 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
   const loom_low_descriptor_t* replacement_descriptor =
       &descriptor_set->descriptors[form->replacement_descriptor_ordinal];
 
-  iree_string_view_t replacement_key = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, replacement_descriptor->key_string_offset,
-      &replacement_key));
+  iree_string_view_t replacement_key = loom_low_descriptor_set_string(
+      descriptor_set, replacement_descriptor->key_string_offset);
   loom_string_id_t replacement_key_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_builder_intern_string(
       &rewriter->builder, replacement_key, &replacement_key_id));

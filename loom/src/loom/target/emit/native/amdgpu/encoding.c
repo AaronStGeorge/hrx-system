@@ -60,9 +60,8 @@ static iree_status_t loom_amdgpu_descriptor_string(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_bstring_table_offset_t string_offset, iree_string_view_t* out_string) {
   IREE_ASSERT_ARGUMENT(out_string);
-  *out_string = iree_string_view_empty();
-  return loom_low_descriptor_set_string(descriptor_set, string_offset,
-                                        out_string);
+  *out_string = loom_low_descriptor_set_string(descriptor_set, string_offset);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_append_u32(loom_amdgpu_encode_state_t* state,

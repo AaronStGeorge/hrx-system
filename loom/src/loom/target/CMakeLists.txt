@@ -346,34 +346,4 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
-loom_cc_test(
-  NAME
-    low_legality_test
-  SRCS
-    "low_legality_test.cc"
-  DEPS
-    ::low_legality
-    iree::base::internal::arena
-    loom::src::loom::error::error_defs
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::buffer
-    loom::src::loom::ops::cfg
-    loom::src::loom::ops::encoding
-    loom::src::loom::ops::func
-    loom::src::loom::ops::index
-    loom::src::loom::ops::kernel
-    loom::src::loom::ops::op_defs
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::scf
-    loom::src::loom::ops::type_registry
-    loom::src::loom::ops::vector
-    loom::src::loom::target::test::low_registry
-    loom::src::loom::testing::diagnostic_matchers
-    loom::src::loom::testing::module_ptr
-    loom::src::loom::util::fact_table
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

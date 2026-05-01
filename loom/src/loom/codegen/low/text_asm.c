@@ -53,8 +53,7 @@ static const loom_low_descriptor_t* loom_low_descriptor_text_asm_descriptor(
 static iree_status_t loom_low_descriptor_text_asm_string(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_bstring_table_offset_t string_offset, iree_string_view_t* out_string) {
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, string_offset, out_string));
+  *out_string = loom_low_descriptor_set_string(descriptor_set, string_offset);
   if (iree_string_view_is_empty(*out_string)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low asm descriptor table has an empty required "
@@ -102,9 +101,8 @@ static iree_status_t loom_low_descriptor_text_asm_lookup_descriptor_set(
   *out_descriptor_set = NULL;
   const loom_low_descriptor_registry_t* registry =
       loom_low_descriptor_text_asm_state_registry(state);
-  const loom_low_descriptor_set_t* descriptor_set = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_low_descriptor_registry_lookup(registry, key, &descriptor_set));
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_descriptor_registry_lookup(registry, key);
   if (descriptor_set == NULL) {
     return iree_ok_status();
   }
@@ -196,9 +194,8 @@ static iree_status_t loom_low_descriptor_text_asm_lookup_packet(
   const loom_low_descriptor_set_t* descriptor_set =
       loom_low_descriptor_text_asm_descriptor_set(descriptor_set_handle);
 
-  uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_lookup_asm_form(
-      descriptor_set, mnemonic, &asm_form_ordinal));
+  uint32_t asm_form_ordinal =
+      loom_low_descriptor_set_lookup_asm_form(descriptor_set, mnemonic);
   if (asm_form_ordinal == LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
     return iree_ok_status();
   }
@@ -225,9 +222,11 @@ static iree_status_t loom_low_descriptor_text_asm_lookup_packet_by_opcode(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t opcode,
     loom_text_low_asm_packet_descriptor_t* out_packet) {
   *out_packet = (loom_text_low_asm_packet_descriptor_t){0};
-  uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_lookup_descriptor(
-      descriptor_set, opcode, &descriptor_ordinal));
+  uint32_t descriptor_ordinal =
+      loom_low_descriptor_set_lookup_descriptor(descriptor_set, opcode);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return iree_ok_status();
+  }
   const loom_low_descriptor_t* descriptor =
       loom_low_descriptor_set_descriptor_at(descriptor_set, descriptor_ordinal);
   if (descriptor == NULL) {

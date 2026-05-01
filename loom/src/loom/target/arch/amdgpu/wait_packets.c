@@ -149,9 +149,8 @@ static iree_status_t loom_amdgpu_wait_packet_verify_target(
         "AMDGPU wait packet materialization requires a descriptor set");
   }
   if (descriptor_set->target_stable_id != LOOM_AMDGPU_TARGET_STABLE_ID) {
-    iree_string_view_t target_key = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        descriptor_set, descriptor_set->target_key_string_offset, &target_key));
+    iree_string_view_t target_key = loom_low_descriptor_set_string(
+        descriptor_set, descriptor_set->target_key_string_offset);
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU wait packet materialization received target '%.*s'",
@@ -240,9 +239,8 @@ static iree_status_t loom_amdgpu_wait_packet_append_target_descriptor(
     return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                             "AMDGPU wait descriptor has too many immediates");
   }
-  iree_string_view_t key = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      builder->descriptor_set, descriptor->key_string_offset, &key));
+  iree_string_view_t key = loom_low_descriptor_set_string(
+      builder->descriptor_set, descriptor->key_string_offset);
 
   loom_amdgpu_wait_packet_descriptor_t* target_descriptor =
       &builder->target.descriptors[builder->target.descriptor_count++];
@@ -271,9 +269,8 @@ static iree_status_t loom_amdgpu_wait_packet_append_target_descriptor(
                               " must be unsigned",
                               (int)key.size, key.data, i);
     }
-    iree_string_view_t name = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        builder->descriptor_set, immediate->field_name_string_offset, &name));
+    iree_string_view_t name = loom_low_descriptor_set_string(
+        builder->descriptor_set, immediate->field_name_string_offset);
     uint32_t immediate_counter_mask = 0;
     IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_immediate_counter_mask(
         immediate, &immediate_counter_mask));

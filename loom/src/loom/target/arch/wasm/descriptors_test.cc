@@ -6,27 +6,21 @@
 
 #include "loom/target/arch/wasm/descriptors.h"
 
-#include <string>
-
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/testing/descriptors_verify.h"
-#include "loom/codegen/low/testing/text_asm_roundtrip_test_util.h"
 #include "loom/codegen/low/testing/text_asm_test_util.h"
-#include "loom/target/arch/wasm/low_registry.h"
 
 namespace loom {
 namespace {
 
-using ::loom::testing::LowFuncAsmRoundTripHarness;
-using ::loom::testing::LowTextAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
 const loom_low_descriptor_t* LookupDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
-  uint32_t ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_EXPECT_OK(
-      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key, &ordinal));
+  uint32_t ordinal =
+      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key);
+  EXPECT_NE(ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
   return loom_low_descriptor_set_descriptor_at(descriptor_set, ordinal);
 }
 
@@ -36,9 +30,8 @@ TEST(WasmDescriptorsTest, CoreSimd128DescriptorSetVerifies) {
   ASSERT_NE(descriptor_set, nullptr);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(descriptor_set));
 
-  iree_string_view_t set_key = iree_string_view_empty();
-  IREE_ASSERT_OK(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->key_string_offset, &set_key));
+  iree_string_view_t set_key = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset);
   EXPECT_TRUE(iree_string_view_equal(set_key, IREE_SV("wasm.core.simd128")));
 
   EXPECT_GE(descriptor_set->descriptor_count, 12u);
@@ -102,57 +95,6 @@ TEST(WasmDescriptorsTest, LowAsmInfersV128ResultType) {
       &result_type, &diagnostic_detail));
   EXPECT_TRUE(iree_string_view_is_empty(diagnostic_detail));
   EXPECT_TRUE(harness.RegisterTypeEquals(result_type, IREE_SV("wasm.v128"), 1));
-}
-
-TEST(WasmDescriptorsTest, LowAsmRegionRoundTrips) {
-  LowTextAsmRoundTripHarness harness;
-  IREE_ASSERT_OK(harness.Initialize(loom_wasm_core_simd128_descriptor_set));
-
-  const char* source =
-      "test.low_asm_region asm<wasm.core.simd128> {\n"
-      "  %addr = i32.const 16\n"
-      "  %lhs = v128.const 1, 2\n"
-      "  %rhs = v128.const 3, 4\n"
-      "  %sum = i32x4.add %lhs, %rhs\n"
-      "  %diff = i32x4.sub %sum, %rhs\n"
-      "  %fsum = f32x4.add %lhs, %rhs\n"
-      "  %fproduct = f32x4.mul %fsum, %rhs\n"
-      "  %flane = f32x4.extract_lane %fproduct, 2\n"
-      "  %facc = f32.add %flane, %flane\n"
-      "  %loaded = v128.load %addr\n"
-      "  v128.store %addr, %loaded\n"
-      "  return %fproduct\n"
-      "}\n";
-  std::string printed;
-  IREE_ASSERT_OK(harness.RoundTrip(IREE_SV(source),
-                                   IREE_SV("wasm.core.simd128"), &printed));
-  EXPECT_EQ(printed, source);
-}
-
-TEST(WasmDescriptorsTest, LowFuncAsmRoundTripsMemoryPacketsWithArguments) {
-  LowFuncAsmRoundTripHarness harness;
-  IREE_ASSERT_OK(harness.Initialize(loom_wasm_core_simd128_descriptor_set,
-                                    &loom_wasm_low_target_bundle_core_simd128));
-
-  const char* source =
-      "target.profile @wasm_target preset(\"wasm-simd128\")\n\n"
-      "low.func.def target(@wasm_target) @memory(%addr: reg<wasm.i32>, "
-      "%lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) "
-      "asm<wasm.core.simd128> {\n"
-      "  %loaded = v128.load %addr\n"
-      "  %sum = i32x4.add %lhs, %rhs\n"
-      "  %diff = i32x4.sub %sum, %rhs\n"
-      "  %fsum = f32x4.add %lhs, %rhs\n"
-      "  %fproduct = f32x4.mul %fsum, %rhs\n"
-      "  %flane = f32x4.extract_lane %fproduct, 2\n"
-      "  %facc = f32.add %flane, %flane\n"
-      "  v128.store %addr, %loaded\n"
-      "  return %fproduct\n"
-      "}\n";
-  std::string printed;
-  IREE_ASSERT_OK(harness.RoundTripAndVerify(
-      IREE_SV(source), IREE_SV("wasm.core.simd128"), &printed));
-  EXPECT_EQ(printed, source);
 }
 
 }  // namespace

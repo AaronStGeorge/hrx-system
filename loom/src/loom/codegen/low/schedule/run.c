@@ -373,9 +373,8 @@ static iree_status_t loom_low_schedule_initialize_descriptor_tables(
             IREE_STATUS_FAILED_PRECONDITION,
             "low schedule resource summary cannot use zero capacity");
       }
-      iree_string_view_t resource_name = iree_string_view_empty();
-      IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-          descriptor_set, resource->name_string_offset, &resource_name));
+      iree_string_view_t resource_name = loom_low_descriptor_set_string(
+          descriptor_set, resource->name_string_offset);
       state->resource_summaries[i] = (loom_low_schedule_resource_summary_t){
           .resource_id = (uint16_t)i,
           .resource_name = resource_name,

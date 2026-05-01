@@ -2588,9 +2588,8 @@ static iree_status_t loom_low_allocation_assign_intervals(
           state->target.descriptor_set;
       const loom_low_reg_class_t* reg_class =
           &descriptor_set->reg_classes[capacity.descriptor_reg_class_id];
-      iree_string_view_t reg_class_name = iree_string_view_empty();
-      IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-          descriptor_set, reg_class->name_string_offset, &reg_class_name));
+      iree_string_view_t reg_class_name = loom_low_descriptor_set_string(
+          descriptor_set, reg_class->name_string_offset);
       return iree_make_status(
           IREE_STATUS_FAILED_PRECONDITION,
           "allocation exhausted unspillable register class '%.*s'",
@@ -3472,9 +3471,9 @@ iree_status_t loom_low_allocation_assignment_register_class_name(
   const loom_low_reg_class_t* reg_class =
       &table->target.descriptor_set
            ->reg_classes[assignment->descriptor_reg_class_id];
-  return loom_low_descriptor_set_string(table->target.descriptor_set,
-                                        reg_class->name_string_offset,
-                                        out_register_class_name);
+  *out_register_class_name = loom_low_descriptor_set_string(
+      table->target.descriptor_set, reg_class->name_string_offset);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_allocation_emit_predicted_spills(

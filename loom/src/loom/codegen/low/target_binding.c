@@ -241,9 +241,9 @@ static iree_status_t loom_low_resolve_func_target(
     return status;
   }
 
-  const loom_low_descriptor_set_t* descriptor_set = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_registry_lookup(
-      registry, out_target->descriptor_set_key, &descriptor_set));
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_descriptor_registry_lookup(registry,
+                                          out_target->descriptor_set_key);
   if (!descriptor_set) {
     return loom_low_emit_missing_descriptor_set(
         emitter, module, low_func_op, out_target->target_op, target_attr_index,

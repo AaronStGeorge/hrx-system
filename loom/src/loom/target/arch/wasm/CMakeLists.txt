@@ -68,10 +68,8 @@ loom_cc_test(
     "descriptors_test.cc"
   DEPS
     ::descriptors
-    ::low_registry
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::testing::descriptors_verify
-    loom::src::loom::codegen::low::testing::text_asm_roundtrip_test_util
     loom::src::loom::codegen::low::testing::text_asm_test_util
     iree::testing::gtest
     iree::testing::gtest_main

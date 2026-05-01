@@ -325,11 +325,8 @@ loom_cc_test(
     ::descriptor_test_util
     ::encoding_defs
     ::gfx11_descriptors
-    ::low_registry
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::testing::descriptors_verify
-    loom::src::loom::codegen::low::testing::text_asm_roundtrip_test_util
-    loom::src::loom::codegen::low::testing::text_asm_test_util
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -372,7 +369,6 @@ loom_cc_test(
     ::gfx12_descriptors
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::testing::descriptors_verify
-    loom::src::loom::codegen::low::testing::text_asm_roundtrip_test_util
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -457,7 +453,6 @@ loom_cc_test(
     ::gfx950_descriptors
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::testing::descriptors_verify
-    loom::src::loom::codegen::low::testing::text_asm_roundtrip_test_util
     loom::src::loom::codegen::low::testing::text_asm_test_util
     iree::testing::gtest
     iree::testing::gtest_main
@@ -630,15 +625,19 @@ loom_cc_library(
   NAME
     check_provider
   HDRS
+    "check/occupancy.h"
     "check/provider.h"
   SRCS
+    "check/occupancy.c"
     "check/provider.c"
   DEPS
     ::low_registry
     ::lower
+    ::occupancy
     ::packet_diagnostics
     iree::base
     loom::src::loom::target::emit::native::amdgpu::loom_check
+    loom::src::loom::tools::loom-check::execute
     loom::src::loom::tools::loom-check::provider
   PUBLIC
 )
@@ -770,54 +769,6 @@ loom_cc_library(
 
 loom_cc_test(
   NAME
-    hal_kernel_abi_test
-  SRCS
-    "hal_kernel_abi_test.cc"
-  DEPS
-    ::gfx11_descriptors
-    ::hal_kernel_abi
-    ::low_registry
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::function
-    loom::src::loom::codegen::low::target_binding
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::target
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    hal_resource_materialization_test
-  SRCS
-    "hal_resource_materialization_test.cc"
-  DEPS
-    ::hal_kernel_abi
-    ::hal_resource_materialization
-    ::low_registry
-    ::wait_packets
-    ::wait_plan
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::frame
-    loom::src::loom::codegen::low::function
-    loom::src::loom::codegen::low::target_binding
-    loom::src::loom::codegen::low::verify
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::target
-    loom::src::loom::target::emit::native::amdgpu::encoding
-    loom::src::loom::target::low_descriptor_registry
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
     low_registry_test
   SRCS
     "low_registry_test.cc"
@@ -836,6 +787,17 @@ iree_executable_test(
     "low_hal_structural"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_hal_structural.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "low_occupancy"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_occupancy.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1470,76 +1432,6 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_test(
-  NAME
-    wait_plan_test
-  SRCS
-    "wait_plan_test.cc"
-  DEPS
-    ::low_registry
-    ::wait_plan
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::schedule
-    loom::src::loom::codegen::low::text_asm
-    loom::src::loom::codegen::low::verify
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::op_registry
-    loom::src::loom::target::low_descriptor_registry
-    loom::src::loom::testing::module_ptr
-    loom::src::loom::verify
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    wait_packets_test
-  SRCS
-    "wait_packets_test.cc"
-  DEPS
-    ::low_registry
-    ::wait_packets
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::schedule
-    loom::src::loom::codegen::low::text_asm
-    loom::src::loom::codegen::low::verify
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::op_registry
-    loom::src::loom::target::low_descriptor_registry
-    loom::src::loom::testing::module_ptr
-    loom::src::loom::verify
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    occupancy_test
-  SRCS
-    "occupancy_test.cc"
-  DEPS
-    ::low_registry
-    ::occupancy
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::allocation
-    loom::src::loom::codegen::low::text_asm
-    loom::src::loom::codegen::low::verify
-    loom::src::loom::error::error_defs
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::op_registry
-    loom::src::loom::target::low_descriptor_registry
-    loom::src::loom::testing::module_ptr
-    loom::src::loom::verify
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 loom_low_descriptor_exclude_from_all(
   CC_LIBRARIES
     "low_registry"
@@ -1548,11 +1440,7 @@ loom_low_descriptor_exclude_from_all(
     "gfx1250_descriptors_test"
     "gfx12_descriptors_test"
     "gfx950_descriptors_test"
-    "hal_resource_materialization_test"
     "low_registry_test"
-    "occupancy_test"
-    "wait_packets_test"
-    "wait_plan_test"
 )
 
 loom_cc_library(
