@@ -15,10 +15,6 @@ loom_low_descriptor_cc_library(
     descriptors
   GENERATOR
     iree::runtime::py::loom::gen::test_low_descriptor_shard
-  SOURCE
-    "descriptors.c"
-  HEADER
-    "descriptors.h"
   ARGS
     "--descriptor-set=test_low_core"
   DEPS
@@ -30,10 +26,6 @@ loom_low_descriptor_cc_library(
     alt_descriptors
   GENERATOR
     iree::runtime::py::loom::gen::test_low_descriptor_shard
-  SOURCE
-    "alt_descriptors.c"
-  HEADER
-    "alt_descriptors.h"
   ARGS
     "--descriptor-set=test_low_alt"
   DEPS
@@ -42,28 +34,9 @@ loom_low_descriptor_cc_library(
 
 loom_target_table_cc_library(
   NAME
-    contract_core
-  GENERATOR
-    iree::runtime::py::loom::gen::test_low_contract_fragment
-  SOURCE
-    "contract_core.c"
-  HEADER
-    "contract_core.h"
-  ARGS
-    "--contract-fragment=test_low_core"
-  DEPS
-    loom::src::loom::target::contract
-)
-
-loom_target_table_cc_library(
-  NAME
     lower_rules
   GENERATOR
     iree::runtime::py::loom::gen::test_low_lower_rule_shard
-  SOURCE
-    "lower_rules.c"
-  HEADER
-    "lower_rules.h"
   ARGS
     "--contract-fragment=test_low_core"
   DEPS
@@ -98,7 +71,6 @@ loom_cc_library(
   SRCS
     "lower/registry.c"
   DEPS
-    ::contract_core
     ::descriptors
     ::lower_rules
     iree::base
@@ -112,6 +84,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector
+    loom::src::loom::target::test::contracts::core
     loom::src::loom::util::fact_table
   PUBLIC
 )

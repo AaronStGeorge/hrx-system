@@ -103,8 +103,6 @@ loom_low_descriptor_cc_library(
     name = "descriptors",
     args = ["--descriptor-set=ireevm_core"],
     generator = "//loom/py/loom/gen:ireevm_low_descriptor_shard",
-    header = "descriptors.h",
-    source = "descriptors.c",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 

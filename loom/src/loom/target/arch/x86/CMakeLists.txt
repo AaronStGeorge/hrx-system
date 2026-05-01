@@ -25,10 +25,6 @@ loom_low_descriptor_cc_library(
     avx512_descriptors
   GENERATOR
     iree::runtime::py::loom::gen::x86_low_descriptor_shard
-  SOURCE
-    "avx512_descriptors.c"
-  HEADER
-    "avx512_descriptors.h"
   ARGS
     "--descriptor-set=x86_avx512_core"
   DEPS
@@ -40,10 +36,6 @@ loom_low_descriptor_cc_library(
     packed_dot_descriptors
   GENERATOR
     iree::runtime::py::loom::gen::x86_low_descriptor_shard
-  SOURCE
-    "packed_dot_descriptors.c"
-  HEADER
-    "packed_dot_descriptors.h"
   ARGS
     "--descriptor-set=x86_packed_dot_core"
   DEPS
@@ -55,10 +47,6 @@ loom_low_descriptor_cc_library(
     avx512_packed_dot_descriptors
   GENERATOR
     iree::runtime::py::loom::gen::x86_low_descriptor_shard
-  SOURCE
-    "avx512_packed_dot_descriptors.c"
-  HEADER
-    "avx512_packed_dot_descriptors.h"
   ARGS
     "--descriptor-set=x86_avx512_packed_dot_core"
   DEPS

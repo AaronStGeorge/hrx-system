@@ -15,10 +15,6 @@ loom_low_descriptor_cc_library(
     descriptors
   GENERATOR
     iree::runtime::py::loom::gen::wasm_low_descriptor_shard
-  SOURCE
-    "descriptors.c"
-  HEADER
-    "descriptors.h"
   ARGS
     "--descriptor-set=wasm_core_simd128"
   DEPS

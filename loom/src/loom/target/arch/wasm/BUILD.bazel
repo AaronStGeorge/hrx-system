@@ -72,8 +72,6 @@ loom_low_descriptor_cc_library(
     name = "descriptors",
     args = ["--descriptor-set=wasm_core_simd128"],
     generator = "//loom/py/loom/gen:wasm_low_descriptor_shard",
-    header = "descriptors.h",
-    source = "descriptors.c",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 

@@ -214,13 +214,11 @@ loom_target_table_cc_library(
         "--isa-xml=cdna4:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna4.xml)",
     ],
     generator = _AMDGPU_TARGET_INFO_GENERATOR,
-    header = "target_info.h",
     inputs = [
         "@amdgpu_isa_xml//:amdgpu_isa_cdna4.xml",
         "@amdgpu_isa_xml//:amdgpu_isa_rdna3.xml",
         "@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml",
     ],
-    source = "target_info.c",
     deps = [
         ":target_info_defs",
         "//runtime/src/iree/base",
@@ -280,8 +278,6 @@ loom_target_table_cc_library(
         "--public-header=loom/target/arch/amdgpu/descriptor_ids.h",
     ],
     generator = _AMDGPU_DESCRIPTOR_ID_GENERATOR,
-    header = "descriptor_ids.h",
-    source = "descriptor_ids.c",
 )
 
 loom_target_table_cc_library(
@@ -400,9 +396,7 @@ loom_target_table_cc_library(
     ],
     exclude_from_cmake_all = True,
     generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
-    header = "gfx11_encoding_tables.h",
     inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna3.xml"],
-    source = "gfx11_encoding_tables.c",
     deps = [
         ":encoding_defs",
         "//runtime/src/iree/base",
@@ -419,9 +413,7 @@ loom_target_table_cc_library(
     ],
     exclude_from_cmake_all = True,
     generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
-    header = "gfx12_encoding_tables.h",
     inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
-    source = "gfx12_encoding_tables.c",
     deps = [
         ":encoding_defs",
         "//runtime/src/iree/base",
@@ -438,9 +430,7 @@ loom_target_table_cc_library(
     ],
     exclude_from_cmake_all = True,
     generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
-    header = "gfx1250_encoding_tables.h",
     inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
-    source = "gfx1250_encoding_tables.c",
     deps = [
         ":encoding_defs",
         "//runtime/src/iree/base",
@@ -457,9 +447,7 @@ loom_target_table_cc_library(
     ],
     exclude_from_cmake_all = True,
     generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
-    header = "gfx950_encoding_tables.h",
     inputs = ["@amdgpu_isa_xml//:amdgpu_isa_cdna4.xml"],
-    source = "gfx950_encoding_tables.c",
     deps = [
         ":encoding_defs",
         "//runtime/src/iree/base",
@@ -488,9 +476,7 @@ loom_low_descriptor_cc_library(
     ],
     exclude_from_cmake_all = True,
     generator = _AMDGPU_DESCRIPTOR_GENERATOR,
-    header = "gfx11_descriptors.h",
     inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna3.xml"],
-    source = "gfx11_descriptors.c",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
@@ -502,9 +488,7 @@ loom_low_descriptor_cc_library(
     ],
     exclude_from_cmake_all = True,
     generator = _AMDGPU_DESCRIPTOR_GENERATOR,
-    header = "gfx12_descriptors.h",
     inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
-    source = "gfx12_descriptors.c",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
@@ -516,9 +500,7 @@ loom_low_descriptor_cc_library(
     ],
     exclude_from_cmake_all = True,
     generator = _AMDGPU_DESCRIPTOR_GENERATOR,
-    header = "gfx1250_descriptors.h",
     inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
-    source = "gfx1250_descriptors.c",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
@@ -530,9 +512,7 @@ loom_low_descriptor_cc_library(
     ],
     exclude_from_cmake_all = True,
     generator = _AMDGPU_DESCRIPTOR_GENERATOR,
-    header = "gfx950_descriptors.h",
     inputs = ["@amdgpu_isa_xml//:amdgpu_isa_cdna4.xml"],
-    source = "gfx950_descriptors.c",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 

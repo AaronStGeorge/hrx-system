@@ -187,10 +187,10 @@ def _vector_reduce_rule(
 TEST_LOW_CORE_CONTRACT_FRAGMENT = ContractFragment(
     name="test.low.core",
     descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
-    c_header_path=Path("loom/src/loom/target/test/contract_core.h"),
-    c_source_path=Path("loom/src/loom/target/test/contract_core.c"),
-    header_guard="LOOM_TARGET_TEST_CONTRACT_CORE_H_",
-    public_header="loom/target/test/contract_core.h",
+    c_header_path=Path("loom/src/loom/target/test/contracts/core.h"),
+    c_source_path=Path("loom/src/loom/target/test/contracts/core.c"),
+    header_guard="LOOM_TARGET_TEST_CONTRACTS_CORE_H_",
+    public_header="loom/target/test/contracts/core.h",
     symbol_name="loom_test_low_core_contract_fragment",
     c_table_prefix="TestLowCoreContract",
     cases=[

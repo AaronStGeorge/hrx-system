@@ -109,8 +109,8 @@ def loom_low_descriptor_data_archive(
 def loom_target_table_cc_library(
         name,
         generator,
-        source,
-        header,
+        source = None,
+        header = None,
         args = [],
         inputs = [],
         deps = [],
@@ -131,8 +131,8 @@ def loom_target_table_cc_library(
       generator: Python executable label that writes C/H outputs. Bazel uses it
         as the genrule tool; bazel_to_cmake resolves the Python target's main
         script and transitive sources for generated CMake dependencies.
-      source: Generated C source filename.
-      header: Generated C header filename.
+      source: Generated C source filename. Defaults to <name>.c.
+      header: Generated C header filename. Defaults to <name>.h.
       args: Generator arguments before the output flags. Arguments may use
         $(rootpath <label>) for declared inputs; the Bazel action rewrites
         those to $(execpath <label>) while CMake conversion maps them to source
@@ -148,6 +148,9 @@ def loom_target_table_cc_library(
     genrule_kwargs = {}
     if visibility != None:
         genrule_kwargs["visibility"] = visibility
+
+    source = source or (name + ".c")
+    header = header or (name + ".h")
 
     # BUILD files use rootpath so the CMake converter can map external data
     # labels to their fetched source directories. Bazel genrules execute in the
@@ -190,8 +193,8 @@ def loom_target_table_cc_library(
 def loom_low_descriptor_cc_library(
         name,
         generator,
-        source,
-        header,
+        source = None,
+        header = None,
         args = [],
         inputs = [],
         deps = [],
@@ -201,6 +204,8 @@ def loom_low_descriptor_cc_library(
         visibility = None,
         **kwargs):
     """Generates a low descriptor C/H shard and wraps it in a runtime library."""
+    source = source or (name + ".c")
+    header = header or (name + ".h")
     loom_target_table_cc_library(
         name = name,
         generator = generator,

@@ -38,10 +38,6 @@ loom_target_table_cc_library(
     target_info
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_target_info
-  SOURCE
-    "target_info.c"
-  HEADER
-    "target_info.h"
   ARGS
     "--isa-xml=rdna3:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
     "--isa-xml=rdna4:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
@@ -114,10 +110,6 @@ loom_target_table_cc_library(
     descriptor_ids
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_descriptor_ids
-  SOURCE
-    "descriptor_ids.c"
-  HEADER
-    "descriptor_ids.h"
   ARGS
     "--public-header=loom/target/arch/amdgpu/descriptor_ids.h"
 )
@@ -257,10 +249,6 @@ loom_target_table_cc_library(
     gfx11_encoding_tables
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_encoding_tables
-  SOURCE
-    "gfx11_encoding_tables.c"
-  HEADER
-    "gfx11_encoding_tables.h"
   ARGS
     "--target=gfx11"
     "--descriptor-set-key=amdgpu.gfx11.core"
@@ -280,10 +268,6 @@ loom_target_table_cc_library(
     gfx12_encoding_tables
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_encoding_tables
-  SOURCE
-    "gfx12_encoding_tables.c"
-  HEADER
-    "gfx12_encoding_tables.h"
   ARGS
     "--target=gfx12"
     "--descriptor-set-key=amdgpu.gfx12.core"
@@ -303,10 +287,6 @@ loom_target_table_cc_library(
     gfx1250_encoding_tables
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_encoding_tables
-  SOURCE
-    "gfx1250_encoding_tables.c"
-  HEADER
-    "gfx1250_encoding_tables.h"
   ARGS
     "--target=gfx1250"
     "--descriptor-set-key=amdgpu.gfx1250.core"
@@ -326,10 +306,6 @@ loom_target_table_cc_library(
     gfx950_encoding_tables
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_encoding_tables
-  SOURCE
-    "gfx950_encoding_tables.c"
-  HEADER
-    "gfx950_encoding_tables.h"
   ARGS
     "--target=gfx950"
     "--descriptor-set-key=amdgpu.gfx950.core"
@@ -366,10 +342,6 @@ loom_low_descriptor_cc_library(
     gfx11_descriptors
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_descriptors
-  SOURCE
-    "gfx11_descriptors.c"
-  HEADER
-    "gfx11_descriptors.h"
   ARGS
     "--target=gfx11"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
@@ -386,10 +358,6 @@ loom_low_descriptor_cc_library(
     gfx12_descriptors
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_descriptors
-  SOURCE
-    "gfx12_descriptors.c"
-  HEADER
-    "gfx12_descriptors.h"
   ARGS
     "--target=gfx12"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
@@ -406,10 +374,6 @@ loom_low_descriptor_cc_library(
     gfx1250_descriptors
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_descriptors
-  SOURCE
-    "gfx1250_descriptors.c"
-  HEADER
-    "gfx1250_descriptors.h"
   ARGS
     "--target=gfx1250"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
@@ -426,10 +390,6 @@ loom_low_descriptor_cc_library(
     gfx950_descriptors
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_descriptors
-  SOURCE
-    "gfx950_descriptors.c"
-  HEADER
-    "gfx950_descriptors.h"
   ARGS
     "--target=gfx950"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"

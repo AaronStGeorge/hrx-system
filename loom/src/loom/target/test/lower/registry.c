@@ -10,7 +10,7 @@
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/vector/ops.h"
-#include "loom/target/test/contract_core.h"
+#include "loom/target/test/contracts/core.h"
 #include "loom/target/test/descriptors.h"
 #include "loom/target/test/lower.h"
 #include "loom/target/test/lower_rules.h"
