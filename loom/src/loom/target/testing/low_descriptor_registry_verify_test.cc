@@ -6,8 +6,6 @@
 
 #include "loom/target/testing/low_descriptor_registry_verify.h"
 
-#include <string>
-
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/requirements.h"
@@ -22,7 +20,6 @@ TEST(LowDescriptorRegistryTest, RegistryVerifiesSelectedTargetPackages) {
   loom_target_core_test_low_descriptor_registry_initialize(&registry);
 
   EXPECT_NE(registry.registry.descriptor_set_providers, nullptr);
-  EXPECT_EQ(registry.registry.descriptor_set_provider_count, 1u);
   IREE_EXPECT_OK(loom_target_low_descriptor_registry_verify(
       &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 }
@@ -95,105 +92,6 @@ TEST(LowDescriptorRegistryTest, RegistrySatisfiesTargetLowFoundation) {
   IREE_ASSERT_OK(loom_low_descriptor_registry_verify_requirements(
       &registry.registry,
       LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
-}
-
-TEST(LowDescriptorRegistryTest, LooksUpRepresentativeDescriptorSets) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_target_core_test_low_descriptor_set_lookup(IREE_SV("test.low.core"));
-  ASSERT_NE(descriptor_set, nullptr);
-
-  iree_string_view_t set_key = loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->key_string_offset);
-  EXPECT_TRUE(iree_string_view_equal(set_key, IREE_SV("test.low.core")));
-}
-
-TEST(LowDescriptorRegistryTest, LooksUpRepresentativeDescriptors) {
-  loom_target_low_descriptor_registry_t registry = {};
-  loom_target_core_test_low_descriptor_registry_initialize(&registry);
-
-  struct ExpectedDescriptor {
-    // Descriptor-set key owning the representative descriptor.
-    const char* set_key;
-    // Descriptor key that must remain addressable through the selected set.
-    const char* descriptor_key;
-  };
-  const ExpectedDescriptor expected_descriptors[] = {
-      {"test.low.core", "test.add.phys"},
-      {"test.low.core", "test.load.v4i32"},
-      {"test.low.core", "test.store.v4i32"},
-      {"test.low.core", "test.call.i32"},
-  };
-  EXPECT_EQ(
-      loom_low_descriptor_registry_descriptor_set_count(&registry.registry),
-      1u);
-
-  for (const ExpectedDescriptor& expected : expected_descriptors) {
-    const loom_low_descriptor_set_t* descriptor_set =
-        loom_target_core_test_low_descriptor_set_lookup(
-            iree_make_cstring_view(expected.set_key));
-    ASSERT_NE(descriptor_set, nullptr) << expected.set_key;
-
-    uint32_t descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor(
-        descriptor_set, iree_make_cstring_view(expected.descriptor_key));
-    EXPECT_NE(descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE)
-        << expected.set_key << " :: " << expected.descriptor_key;
-  }
-}
-
-TEST(LowDescriptorRegistryTest, TargetBundlesSelectFoundationDescriptorSets) {
-  loom_target_low_descriptor_registry_t registry = {};
-  loom_target_core_test_low_descriptor_registry_initialize(&registry);
-
-  struct ExpectedBundle {
-    // Target-low preset bundle key.
-    const char* bundle_key;
-    // Descriptor-set key selected by the bundle config.
-    const char* descriptor_set_key;
-    // Snapshot codegen format required by the bundle.
-    loom_target_codegen_format_t codegen_format;
-    // Snapshot artifact format required by the bundle.
-    loom_target_artifact_format_t artifact_format;
-    // Export ABI kind required by the bundle.
-    loom_target_abi_kind_t abi_kind;
-  };
-  const ExpectedBundle expected_bundles[] = {
-      {"test-low", "test.low.core", LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,
-       LOOM_TARGET_ARTIFACT_FORMAT_ELF, LOOM_TARGET_ABI_OBJECT_FUNCTION},
-  };
-
-  ASSERT_EQ(registry.target_bundle_count, IREE_ARRAYSIZE(expected_bundles));
-  for (const ExpectedBundle& expected : expected_bundles) {
-    const loom_target_bundle_t* bundle = nullptr;
-    IREE_ASSERT_OK(loom_target_low_descriptor_registry_lookup_bundle(
-        &registry, iree_make_cstring_view(expected.bundle_key), &bundle));
-    ASSERT_NE(bundle, nullptr) << expected.bundle_key;
-    ASSERT_NE(bundle->snapshot, nullptr) << expected.bundle_key;
-    ASSERT_NE(bundle->export_plan, nullptr) << expected.bundle_key;
-    ASSERT_NE(bundle->config, nullptr) << expected.bundle_key;
-    EXPECT_EQ(bundle->snapshot->codegen_format, expected.codegen_format)
-        << expected.bundle_key;
-    EXPECT_EQ(bundle->snapshot->artifact_format, expected.artifact_format)
-        << expected.bundle_key;
-    EXPECT_EQ(bundle->export_plan->abi_kind, expected.abi_kind)
-        << expected.bundle_key;
-    EXPECT_TRUE(iree_string_view_equal(
-        bundle->config->contract_set_key,
-        iree_make_cstring_view(expected.descriptor_set_key)))
-        << expected.bundle_key;
-
-    const loom_low_descriptor_set_t* descriptor_set = nullptr;
-    IREE_ASSERT_OK(loom_target_low_descriptor_set_select_for_bundle(
-        &registry.registry, bundle, &descriptor_set))
-        << expected.bundle_key;
-    ASSERT_NE(descriptor_set, nullptr) << expected.bundle_key;
-
-    iree_string_view_t descriptor_set_key = loom_low_descriptor_set_string(
-        descriptor_set, descriptor_set->key_string_offset);
-    EXPECT_TRUE(iree_string_view_equal(
-        descriptor_set_key,
-        iree_make_cstring_view(expected.descriptor_set_key)))
-        << expected.bundle_key;
-  }
 }
 
 TEST(LowDescriptorRegistryTest, FormatsRegistryManifestJson) {

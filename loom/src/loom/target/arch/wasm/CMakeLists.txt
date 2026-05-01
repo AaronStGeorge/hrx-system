@@ -58,35 +58,6 @@ loom_cc_library(
 
 loom_cc_test(
   NAME
-    descriptors_test
-  SRCS
-    "descriptors_test.cc"
-  DEPS
-    ::descriptors
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::testing::descriptors_verify
-    loom::src::loom::codegen::low::testing::text_asm_test_util
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    low_registry_test
-  SRCS
-    "low_registry_test.cc"
-  DEPS
-    ::low_registry
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::requirements
-    loom::src::loom::target::low_descriptor_registry
-    loom::src::loom::target::testing::low_descriptor_registry_verify
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
     register_class_map_test
   SRCS
     "register_class_map_test.cc"

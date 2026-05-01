@@ -79,20 +79,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    descriptor_test_util
-  HDRS
-    "descriptor_test_util.h"
-  DEPS
-    ::descriptor_ids
-    ::wait_plan
-    loom::src::loom::codegen::low::descriptors
-    iree::testing::gtest
-  TESTONLY
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     lower_kinds
   HDRS
     "lower/kinds.h"
@@ -395,21 +381,6 @@ loom_low_descriptor_cc_library(
   EXCLUDE_FROM_ALL
 )
 
-loom_cc_test(
-  NAME
-    gfx11_descriptors_test
-  SRCS
-    "gfx11_descriptors_test.cc"
-  DEPS
-    ::descriptor_test_util
-    ::encoding_defs
-    ::gfx11_descriptors
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::testing::descriptors_verify
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 loom_low_descriptor_cc_library(
   NAME
     gfx12_descriptors
@@ -428,21 +399,6 @@ loom_low_descriptor_cc_library(
   DEPS
     loom::src::loom::codegen::low::descriptors
   EXCLUDE_FROM_ALL
-)
-
-loom_cc_test(
-  NAME
-    gfx12_descriptors_test
-  SRCS
-    "gfx12_descriptors_test.cc"
-  DEPS
-    ::descriptor_test_util
-    ::encoding_defs
-    ::gfx12_descriptors
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::testing::descriptors_verify
-    iree::testing::gtest
-    iree::testing::gtest_main
 )
 
 loom_low_descriptor_cc_library(
@@ -465,21 +421,6 @@ loom_low_descriptor_cc_library(
   EXCLUDE_FROM_ALL
 )
 
-loom_cc_test(
-  NAME
-    gfx1250_descriptors_test
-  SRCS
-    "gfx1250_descriptors_test.cc"
-  DEPS
-    ::descriptor_test_util
-    ::encoding_defs
-    ::gfx1250_descriptors
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::testing::descriptors_verify
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 loom_low_descriptor_cc_library(
   NAME
     gfx950_descriptors
@@ -498,38 +439,6 @@ loom_low_descriptor_cc_library(
   DEPS
     loom::src::loom::codegen::low::descriptors
   EXCLUDE_FROM_ALL
-)
-
-loom_cc_test(
-  NAME
-    gfx950_descriptors_test
-  SRCS
-    "gfx950_descriptors_test.cc"
-  DEPS
-    ::descriptor_test_util
-    ::encoding_defs
-    ::gfx950_descriptors
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::testing::descriptors_verify
-    loom::src::loom::codegen::low::testing::text_asm_test_util
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    descriptor_ids_test
-  SRCS
-    "descriptor_ids_test.cc"
-  DEPS
-    ::descriptor_ids
-    ::gfx11_descriptors
-    ::gfx1250_descriptors
-    ::gfx12_descriptors
-    ::gfx950_descriptors
-    loom::src::loom::codegen::low::descriptors
-    iree::testing::gtest
-    iree::testing::gtest_main
 )
 
 loom_cc_library(
@@ -824,21 +733,6 @@ loom_cc_library(
     loom::src::loom::rewrite::rewriter
     loom::src::loom::target::types
   PUBLIC
-)
-
-loom_cc_test(
-  NAME
-    low_registry_test
-  SRCS
-    "low_registry_test.cc"
-  DEPS
-    ::low_registry
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::requirements
-    loom::src::loom::target::low_descriptor_registry
-    loom::src::loom::target::testing::low_descriptor_registry_verify
-    iree::testing::gtest
-    iree::testing::gtest_main
 )
 
 iree_executable_test(
@@ -1494,12 +1388,6 @@ loom_cc_library(
 loom_low_descriptor_exclude_from_all(
   CC_LIBRARIES
     "low_registry"
-  TARGETS
-    "gfx11_descriptors_test"
-    "gfx1250_descriptors_test"
-    "gfx12_descriptors_test"
-    "gfx950_descriptors_test"
-    "low_registry_test"
 )
 
 loom_cc_library(

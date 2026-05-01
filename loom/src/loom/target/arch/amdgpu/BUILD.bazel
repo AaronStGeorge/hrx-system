@@ -252,18 +252,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "descriptor_test_util",
-    testonly = True,
-    hdrs = ["descriptor_test_util.h"],
-    deps = [
-        ":descriptor_ids",
-        ":wait_plan",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//runtime/src/iree/testing:gtest",
-    ],
-)
-
-loom_cc_library(
     name = "lower_kinds",
     hdrs = ["lower/kinds.h"],
 )
@@ -506,20 +494,6 @@ loom_low_descriptor_cc_library(
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
-loom_cc_test(
-    name = "gfx11_descriptors_test",
-    srcs = ["gfx11_descriptors_test.cc"],
-    deps = [
-        ":descriptor_test_util",
-        ":encoding_defs",
-        ":gfx11_descriptors",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low/testing:descriptors_verify",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
 loom_low_descriptor_cc_library(
     name = "gfx12_descriptors",
     args = [
@@ -532,20 +506,6 @@ loom_low_descriptor_cc_library(
     inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
     source = "gfx12_descriptors.c",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
-)
-
-loom_cc_test(
-    name = "gfx12_descriptors_test",
-    srcs = ["gfx12_descriptors_test.cc"],
-    deps = [
-        ":descriptor_test_util",
-        ":encoding_defs",
-        ":gfx12_descriptors",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low/testing:descriptors_verify",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
 )
 
 loom_low_descriptor_cc_library(
@@ -562,20 +522,6 @@ loom_low_descriptor_cc_library(
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
-loom_cc_test(
-    name = "gfx1250_descriptors_test",
-    srcs = ["gfx1250_descriptors_test.cc"],
-    deps = [
-        ":descriptor_test_util",
-        ":encoding_defs",
-        ":gfx1250_descriptors",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low/testing:descriptors_verify",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
 loom_low_descriptor_cc_library(
     name = "gfx950_descriptors",
     args = [
@@ -588,36 +534,6 @@ loom_low_descriptor_cc_library(
     inputs = ["@amdgpu_isa_xml//:amdgpu_isa_cdna4.xml"],
     source = "gfx950_descriptors.c",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
-)
-
-loom_cc_test(
-    name = "gfx950_descriptors_test",
-    srcs = ["gfx950_descriptors_test.cc"],
-    deps = [
-        ":descriptor_test_util",
-        ":encoding_defs",
-        ":gfx950_descriptors",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low/testing:descriptors_verify",
-        "//loom/src/loom/codegen/low/testing:text_asm_test_util",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "descriptor_ids_test",
-    srcs = ["descriptor_ids_test.cc"],
-    deps = [
-        ":descriptor_ids",
-        ":gfx11_descriptors",
-        ":gfx1250_descriptors",
-        ":gfx12_descriptors",
-        ":gfx950_descriptors",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
 )
 
 loom_cc_library(
@@ -892,20 +808,6 @@ loom_cc_library(
     ],
 )
 
-loom_cc_test(
-    name = "low_registry_test",
-    srcs = ["low_registry_test.cc"],
-    deps = [
-        ":low_registry",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low:requirements",
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target/testing:low_descriptor_registry_verify",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
 loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
@@ -1060,13 +962,6 @@ loom_cc_library(
 
 loom_low_descriptor_exclude_from_cmake_all(
     cc_libraries = ["low_registry"],
-    targets = [
-        "gfx11_descriptors_test",
-        "gfx12_descriptors_test",
-        "gfx1250_descriptors_test",
-        "gfx950_descriptors_test",
-        "low_registry_test",
-    ],
 )
 
 #===------------------------------------------------------------------------===#

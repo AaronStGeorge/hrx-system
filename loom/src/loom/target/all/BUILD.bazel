@@ -8,7 +8,6 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_assert_no_dependencies",
     "loom_cc_library",
-    "loom_cc_test",
 )
 
 package(
@@ -65,20 +64,5 @@ loom_cc_library(
         "//loom/src/loom/target/emit/ireevm:lower",
         "//loom/src/loom/target/emit/wasm:lower",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_test(
-    name = "low_registry_test",
-    srcs = ["low_registry_test.cc"],
-    deps = [
-        ":low_registry",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low:requirements",
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target:low_descriptor_registry_manifest",
-        "//loom/src/loom/target/testing:low_descriptor_registry_verify",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )

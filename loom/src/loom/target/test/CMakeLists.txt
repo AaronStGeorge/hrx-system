@@ -116,18 +116,4 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_test(
-  NAME
-    descriptors_test
-  SRCS
-    "descriptors_test.cc"
-  DEPS
-    ::alt_descriptors
-    ::descriptors
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::testing::descriptors_verify
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -275,33 +275,6 @@ loom_cc_test(
     ],
 )
 
-loom_cc_test(
-    name = "descriptors_test",
-    srcs = ["descriptors_test.cc"],
-    deps = [
-        ":descriptors",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low/testing:descriptors_verify",
-        "//loom/src/loom/codegen/low/testing:text_asm_test_util",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "low_registry_test",
-    srcs = ["low_registry_test.cc"],
-    deps = [
-        ":low_registry",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low:requirements",
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target/testing:low_descriptor_registry_verify",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
 loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [

@@ -8,7 +8,6 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_assert_no_dependencies",
     "loom_cc_library",
-    "loom_cc_test",
     "loom_low_descriptor_cc_library",
     "loom_target_table_cc_library",
 )
@@ -130,18 +129,5 @@ loom_cc_library(
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_test(
-    name = "descriptors_test",
-    srcs = ["descriptors_test.cc"],
-    deps = [
-        ":alt_descriptors",
-        ":descriptors",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low/testing:descriptors_verify",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )

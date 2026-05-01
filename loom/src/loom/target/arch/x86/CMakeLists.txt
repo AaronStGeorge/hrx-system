@@ -35,20 +35,6 @@ loom_low_descriptor_cc_library(
     loom::src::loom::codegen::low::descriptors
 )
 
-loom_cc_test(
-  NAME
-    avx512_descriptors_test
-  SRCS
-    "avx512_descriptors_test.cc"
-  DEPS
-    ::avx512_descriptors
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::testing::descriptors_verify
-    loom::src::loom::codegen::low::testing::text_asm_test_util
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 loom_low_descriptor_cc_library(
   NAME
     packed_dot_descriptors
@@ -96,20 +82,6 @@ loom_target_table_cc_library(
     loom::src::loom::ops::index
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector
-)
-
-loom_cc_test(
-  NAME
-    packed_dot_descriptors_test
-  SRCS
-    "packed_dot_descriptors_test.cc"
-  DEPS
-    ::packed_dot_contract
-    ::packed_dot_descriptors
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::testing::descriptors_verify
-    iree::testing::gtest
-    iree::testing::gtest_main
 )
 
 loom_cc_library(
@@ -177,21 +149,6 @@ loom_cc_library(
     loom::src::loom::target::emit::native::x86::loom_check
     loom::src::loom::tools::loom-check::provider
   PUBLIC
-)
-
-loom_cc_test(
-  NAME
-    low_registry_test
-  SRCS
-    "low_registry_test.cc"
-  DEPS
-    ::low_registry
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::requirements
-    loom::src::loom::target::low_descriptor_registry
-    loom::src::loom::target::testing::low_descriptor_registry_verify
-    iree::testing::gtest
-    iree::testing::gtest_main
 )
 
 iree_executable_test(

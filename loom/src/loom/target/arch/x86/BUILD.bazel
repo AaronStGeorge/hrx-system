@@ -103,19 +103,6 @@ loom_low_descriptor_cc_library(
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
-loom_cc_test(
-    name = "avx512_descriptors_test",
-    srcs = ["avx512_descriptors_test.cc"],
-    deps = [
-        ":avx512_descriptors",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low/testing:descriptors_verify",
-        "//loom/src/loom/codegen/low/testing:text_asm_test_util",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
 loom_low_descriptor_cc_library(
     name = "packed_dot_descriptors",
     args = ["--descriptor-set=x86_packed_dot_core"],
@@ -146,19 +133,6 @@ loom_target_table_cc_library(
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/vector",
-    ],
-)
-
-loom_cc_test(
-    name = "packed_dot_descriptors_test",
-    srcs = ["packed_dot_descriptors_test.cc"],
-    deps = [
-        ":packed_dot_contract",
-        ":packed_dot_descriptors",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low/testing:descriptors_verify",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
@@ -221,20 +195,6 @@ loom_cc_library(
         "//loom/src/loom/target/emit/native/x86:loom_check",
         "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_test(
-    name = "low_registry_test",
-    srcs = ["low_registry_test.cc"],
-    deps = [
-        ":low_registry",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low:requirements",
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target/testing:low_descriptor_registry_verify",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

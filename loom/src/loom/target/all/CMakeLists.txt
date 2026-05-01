@@ -43,20 +43,4 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_test(
-  NAME
-    low_registry_test
-  SRCS
-    "low_registry_test.cc"
-  DEPS
-    ::low_registry
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::requirements
-    loom::src::loom::target::low_descriptor_registry
-    loom::src::loom::target::low_descriptor_registry_manifest
-    loom::src::loom::target::testing::low_descriptor_registry_verify
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
