@@ -3081,49 +3081,6 @@ static iree_status_t loom_low_allocation_verify_table_contents(
         IREE_STATUS_INVALID_ARGUMENT,
         "allocation table placement analysis must match liveness");
   }
-  if (table->placement.value_count > 0 &&
-      (!table->placement.ranges_by_result_ordinal ||
-       !table->placement.ranges_by_source_ordinal)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "allocation table placement relation ranges are required");
-  }
-  if (table->placement.relation_count > 0 &&
-      (!table->placement.relations ||
-       !table->placement.relation_indices_by_source_ordinal)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "allocation table placement relations are required");
-  }
-  if (table->assignment_count > 0 && !table->assignments) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation table assignments are required");
-  }
-  if (table->spill_plan_count > 0 && !table->spill_plans) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation table spill plans are required");
-  }
-  if (table->remark_count > 0 && !table->remarks) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation table remarks are required");
-  }
-  if (table->copy_decision_count > 0 && !table->copy_decisions) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation table copy decisions are required");
-  }
-  if (table->edge_copy_count > 0 && !table->edge_copies) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation table edge copies are required");
-  }
-  if (table->edge_copy_group_count > 0 && !table->edge_copy_groups) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation table edge-copy groups are required");
-  }
-  if (table->edge_copy_temporary_count > 0 && !table->edge_copy_temporaries) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "allocation table edge-copy temporaries are required");
-  }
   iree_host_size_t spill_count = 0;
   for (iree_host_size_t i = 0; i < table->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* assignment = &table->assignments[i];
