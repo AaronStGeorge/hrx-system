@@ -603,15 +603,8 @@ iree_status_t loom_amdgpu_map_contract_value(
     loom_low_lower_rule_mapped_value_t* out_mapped_value) {
   (void)user_data;
   (void)source_op;
-  IREE_ASSERT_ARGUMENT(environment);
-  IREE_ASSERT_ARGUMENT(environment->module);
-  IREE_ASSERT_ARGUMENT(environment->descriptor_set);
   IREE_ASSERT_ARGUMENT(out_mapped_value);
   *out_mapped_value = loom_low_lower_rule_mapped_value_none();
-  if (source_value_id >= environment->module->values.count) {
-    return iree_ok_status();
-  }
-
   const loom_type_t source_type =
       loom_module_value_type(environment->module, source_value_id);
   if (loom_amdgpu_type_is_i1(source_type) &&

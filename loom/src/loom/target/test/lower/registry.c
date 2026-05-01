@@ -166,7 +166,6 @@ iree_status_t loom_test_low_lower_rule_match_map_value(
   (void)user_data;
   (void)source_op;
   IREE_ASSERT_ARGUMENT(out_mapped_value);
-  IREE_ASSERT_LT(source_value_id, context->module->values.count);
   const loom_target_contract_query_environment_t environment = {
       .module = context->module,
       .descriptor_set = context->descriptor_set,
@@ -182,10 +181,7 @@ iree_status_t loom_test_low_lower_map_contract_value(
     loom_low_lower_rule_mapped_value_t* out_mapped_value) {
   (void)user_data;
   (void)source_op;
-  IREE_ASSERT_ARGUMENT(environment);
-  IREE_ASSERT_ARGUMENT(environment->module);
   IREE_ASSERT_ARGUMENT(out_mapped_value);
-  IREE_ASSERT_LT(source_value_id, environment->module->values.count);
   *out_mapped_value = loom_low_lower_rule_mapped_value_none();
   loom_type_t source_type =
       loom_module_value_type(environment->module, source_value_id);
