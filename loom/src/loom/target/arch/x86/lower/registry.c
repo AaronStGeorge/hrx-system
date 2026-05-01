@@ -8,8 +8,8 @@
 
 #include "loom/ir/module.h"
 #include "loom/target/arch/x86/avx512_descriptors.h"
+#include "loom/target/arch/x86/avx512_lower_rules.h"
 #include "loom/target/arch/x86/avx512_packed_dot_descriptors.h"
-#include "loom/target/arch/x86/lower/avx512_rules.h"
 #include "loom/target/arch/x86/lower/internal.h"
 
 static bool loom_x86_type_is_vector_16xi32(loom_type_t type) {

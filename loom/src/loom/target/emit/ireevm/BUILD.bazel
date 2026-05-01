@@ -107,11 +107,9 @@ loom_low_descriptor_cc_library(
 )
 
 loom_target_table_cc_library(
-    name = "lower_rules",
+    name = "core_lower_rules",
     args = ["--contract-fragment=iree.vm.core"],
     generator = "//loom/py/loom/gen:ireevm_lower_rule_shard",
-    header = "lower/rules.h",
-    source = "lower/rules.c",
     deps = [
         ":descriptors_ids",
         "//loom/src/loom/codegen/low:lower",
@@ -208,7 +206,7 @@ loom_cc_library(
     srcs = ["lower/registry.c"],
     hdrs = ["lower.h"],
     deps = [
-        ":lower_rules",
+        ":core_lower_rules",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",

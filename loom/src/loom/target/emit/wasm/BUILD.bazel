@@ -109,11 +109,9 @@ loom_cc_library(
 )
 
 loom_target_table_cc_library(
-    name = "lower_rules",
+    name = "core_simd128_lower_rules",
     args = ["--contract-fragment=wasm.core.simd128"],
     generator = "//loom/py/loom/gen:wasm_lower_rule_shard",
-    header = "lower/rules.h",
-    source = "lower/rules.c",
     deps = [
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ops/index",
@@ -128,7 +126,7 @@ loom_cc_library(
     srcs = ["lower/registry.c"],
     hdrs = ["lower.h"],
     deps = [
-        ":lower_rules",
+        ":core_simd128_lower_rules",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/codegen/low:source_memory_plan",
         "//loom/src/loom/ir",

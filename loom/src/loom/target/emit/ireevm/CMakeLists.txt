@@ -23,13 +23,9 @@ loom_low_descriptor_cc_library(
 
 loom_target_table_cc_library(
   NAME
-    lower_rules
+    core_lower_rules
   GENERATOR
     iree::runtime::py::loom::gen::ireevm_lower_rule_shard
-  SOURCE
-    "lower/rules.c"
-  HEADER
-    "lower/rules.h"
   ARGS
     "--contract-fragment=iree.vm.core"
   DEPS
@@ -145,7 +141,7 @@ loom_cc_library(
   SRCS
     "lower/registry.c"
   DEPS
-    ::lower_rules
+    ::core_lower_rules
     iree::base
     loom::src::loom::codegen::low::lower
     loom::src::loom::ir

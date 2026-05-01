@@ -58,10 +58,6 @@ loom_target_table_cc_library(
     avx512_lower_rules
   GENERATOR
     iree::runtime::py::loom::gen::x86_lower_rule_shard
-  SOURCE
-    "lower/avx512_rules.c"
-  HEADER
-    "lower/avx512_rules.h"
   ARGS
     "--contract-fragment=x86.avx512"
   DEPS

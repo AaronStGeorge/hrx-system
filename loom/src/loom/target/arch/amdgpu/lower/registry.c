@@ -12,13 +12,13 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
-#include "loom/target/arch/amdgpu/lower/arithmetic_rules.h"
-#include "loom/target/arch/amdgpu/lower/async_rules.h"
-#include "loom/target/arch/amdgpu/lower/compare_rules.h"
-#include "loom/target/arch/amdgpu/lower/dot_rules.h"
-#include "loom/target/arch/amdgpu/lower/integer_rules.h"
+#include "loom/target/arch/amdgpu/arithmetic_lower_rules.h"
+#include "loom/target/arch/amdgpu/async_lower_rules.h"
+#include "loom/target/arch/amdgpu/compare_lower_rules.h"
+#include "loom/target/arch/amdgpu/dot_lower_rules.h"
+#include "loom/target/arch/amdgpu/integer_lower_rules.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
-#include "loom/target/arch/amdgpu/lower/reduce_rules.h"
+#include "loom/target/arch/amdgpu/reduce_lower_rules.h"
 
 typedef struct loom_amdgpu_lower_dispatch_row_t
     loom_amdgpu_lower_dispatch_row_t;

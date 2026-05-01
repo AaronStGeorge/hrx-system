@@ -11,8 +11,8 @@
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/wasm/descriptors.h"
+#include "loom/target/emit/wasm/core_simd128_lower_rules.h"
 #include "loom/target/emit/wasm/lower.h"
-#include "loom/target/emit/wasm/lower/rules.h"
 
 static bool loom_wasm_type_is_address_i32(loom_type_t type) {
   if (!loom_type_is_scalar(type)) {

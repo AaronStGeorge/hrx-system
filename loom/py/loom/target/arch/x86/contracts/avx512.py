@@ -664,6 +664,5 @@ X86_AVX512_CONTRACT_DIALECT_OPS = {
 X86_AVX512_CONTRACT_FRAGMENT = ContractFragment(
     name="x86.avx512",
     descriptor_set=X86_AVX512_CORE_DESCRIPTOR_SET,
-    public_header="loom/target/arch/x86/lower/avx512_rules.h",
     cases=_cases(),
 )
