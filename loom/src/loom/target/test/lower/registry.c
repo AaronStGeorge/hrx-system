@@ -7,7 +7,6 @@
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
-#include "loom/ops/buffer/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/test/contracts/core.h"
@@ -210,25 +209,6 @@ iree_status_t loom_test_low_lower_map_contract_value(
 // Source memory lowering callbacks
 //===----------------------------------------------------------------------===//
 
-static bool loom_test_low_value_facts_are_exact_zero(
-    const loom_value_fact_table_t* fact_table, loom_value_id_t value_id) {
-  loom_value_facts_t facts = loom_value_fact_table_lookup(fact_table, value_id);
-  return loom_value_facts_is_exact(facts) &&
-         !loom_value_facts_is_float(facts) && facts.range_lo == 0;
-}
-
-static bool loom_test_low_can_lower_buffer_view(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
-  if (!loom_type_is_view(
-          loom_module_value_type(loom_low_lower_context_module(context),
-                                 loom_buffer_view_result(source_op)))) {
-    return false;
-  }
-  return loom_test_low_value_facts_are_exact_zero(
-      loom_low_lower_context_fact_table(context),
-      loom_buffer_view_byte_offset(source_op));
-}
-
 static bool loom_test_low_source_memory_access_is_supported(
     const loom_low_source_memory_access_plan_t* plan) {
   const bool supported_memory_space =
@@ -346,11 +326,6 @@ static iree_status_t loom_test_low_select_op(void* user_data,
   (void)user_data;
   *out_plan = loom_low_lower_plan_empty();
   switch (source_op->kind) {
-    case LOOM_OP_BUFFER_VIEW:
-      if (loom_test_low_can_lower_buffer_view(context, source_op)) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, NULL);
-      }
-      return iree_ok_status();
     case LOOM_OP_VECTOR_LOAD:
       return loom_test_low_select_memory_access(
           context, source_op, LOOM_LOW_SOURCE_MEMORY_OPERATION_LOAD, out_plan);
@@ -431,10 +406,6 @@ static iree_status_t loom_test_low_emit_op(void* user_data,
                                            loom_low_lower_plan_t plan) {
   (void)user_data;
   switch (plan.id) {
-    case LOOM_OP_BUFFER_VIEW:
-      return loom_low_lower_bind_value_alias(
-          context, loom_buffer_view_buffer(source_op),
-          loom_buffer_view_result(source_op));
     case LOOM_OP_VECTOR_LOAD:
       return loom_test_low_emit_vector_load(
           context, source_op,

@@ -42,6 +42,7 @@ loom_target_table_cc_library(
   DEPS
     ::descriptors
     loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::buffer
     loom::src::loom::ops::index
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector

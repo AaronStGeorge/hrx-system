@@ -29,6 +29,7 @@ py_library(
     deps = [
         ":descriptors",
         "//loom/py/loom:core",
+        "//loom/py/loom/dialect/buffer",
         "//loom/py/loom/dialect/index",
         "//loom/py/loom/dialect/scalar",
         "//loom/py/loom/dialect/vector",

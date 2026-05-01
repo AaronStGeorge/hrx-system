@@ -74,6 +74,20 @@ class ValueAliasRule:
     source_op: Op
     source: ValueRef
     result: ValueRef
+    guards: tuple[Guard, ...] = ()
+
+    def __init__(
+        self,
+        *,
+        source_op: Op,
+        source: ValueRef,
+        result: ValueRef,
+        guards: Sequence[Guard] = (),
+    ) -> None:
+        object.__setattr__(self, "source_op", source_op)
+        object.__setattr__(self, "source", source)
+        object.__setattr__(self, "result", result)
+        object.__setattr__(self, "guards", tuple(guards))
 
     @property
     def system(self) -> ContractSystem:
@@ -87,6 +101,8 @@ class ValueAliasRule:
             raise ValueError(f"{self.source_op.name}: alias result must be a result")
         self.source.validate(self.source_op, "alias source")
         self.result.validate(self.source_op, "alias result")
+        for guard in self.guards:
+            guard.validate(self.source_op)
 
 
 @dataclass(frozen=True, slots=True)

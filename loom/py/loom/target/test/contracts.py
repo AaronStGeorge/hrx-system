@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+from loom.dialect.buffer import ALL_BUFFER_OPS
+from loom.dialect.buffer import defs as buffer
 from loom.dialect.index import ALL_INDEX_OPS
 from loom.dialect.index import defs as index
 from loom.dialect.scalar import ALL_SCALAR_OPS
@@ -25,10 +27,12 @@ from loom.target.contracts import (
     DirectTypePatterns,
     EmitDescriptorOp,
     Guard,
+    GuardDiagnostic,
     PredicateDescriptorCase,
     Scalar,
     SelectDescriptorCase,
     TypePattern,
+    ValueAliasRule,
     ValueRef,
     Vector,
     binary_descriptor_rules,
@@ -126,6 +130,7 @@ _V4F32 = Vector("f32", lanes=4)
 
 
 TEST_LOW_CORE_CONTRACT_DIALECT_OPS = {
+    "buffer": ALL_BUFFER_OPS,
     "index": ALL_INDEX_OPS,
     "scalar": ALL_SCALAR_OPS,
     "vector": ALL_VECTOR_OPS,
@@ -186,6 +191,23 @@ TEST_LOW_CORE_CONTRACT_FRAGMENT = ContractFragment(
     name="test.low.core",
     descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
     cases=[
+        ValueAliasRule(
+            source_op=buffer.buffer_view,
+            source=ValueRef.operand("buffer"),
+            result=ValueRef.result("result"),
+            guards=(
+                Guard.value_i64_range(
+                    "byte_offset",
+                    0,
+                    0,
+                    diagnostic=GuardDiagnostic(
+                        subject_kind="value",
+                        subject_name="byte_offset",
+                        reason="test-low requires zero buffer view offset",
+                    ),
+                ),
+            ),
+        ),
         _binary_rule(
             scalar_arithmetic.scalar_addi,
             TEST_LOW_ADD_I32_DESCRIPTOR,

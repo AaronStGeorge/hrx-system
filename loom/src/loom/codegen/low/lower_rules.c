@@ -337,6 +337,20 @@ static bool loom_low_lower_rule_value_facts_exact_i64(
   return loom_value_facts_as_exact_i64(facts, &exact_value);
 }
 
+static bool loom_low_lower_rule_value_facts_i64_range(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t value_ref_index, int64_t minimum_i64, int64_t maximum_i64) {
+  const loom_value_id_t value_id =
+      loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  if (!loom_low_lower_rule_integer_immediate_facts(
+          match_context->module, match_context->fact_table, value_id, &facts)) {
+    return false;
+  }
+  return facts.range_lo >= minimum_i64 && facts.range_hi <= maximum_i64;
+}
+
 static iree_status_t loom_low_lower_rule_guard_matches(
     const loom_low_lower_rule_match_context_t* match_context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
@@ -508,6 +522,11 @@ static iree_status_t loom_low_lower_rule_guard_matches(
     case LOOM_LOW_LOWER_GUARD_VALUE_EXACT_I64:
       *out_matches = loom_low_lower_rule_value_facts_exact_i64(
           match_context, rule_set, source_op, guard->value_ref_index);
+      return iree_ok_status();
+    case LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE:
+      *out_matches = loom_low_lower_rule_value_facts_i64_range(
+          match_context, rule_set, source_op, guard->value_ref_index,
+          guard->minimum_i64, guard->maximum_i64);
       return iree_ok_status();
     default:
       IREE_CHECK_UNREACHABLE();
@@ -1089,6 +1108,29 @@ static iree_status_t loom_low_lower_rule_elide_results(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_lower_rule_bind_aliases(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    const loom_low_lower_rule_t* rule) {
+  for (uint16_t i = 0; i < rule->alias_ref_count; ++i) {
+    const uint16_t source_ref_index = (uint16_t)(rule->alias_ref_start + i * 2);
+    const uint16_t result_ref_index = (uint16_t)(source_ref_index + 1);
+    const loom_low_lower_value_ref_t* source_ref =
+        &rule_set->value_refs[source_ref_index];
+    const loom_low_lower_value_ref_t* result_ref =
+        &rule_set->value_refs[result_ref_index];
+    IREE_ASSERT_EQ(source_ref->kind, LOOM_LOW_LOWER_VALUE_REF_OPERAND);
+    IREE_ASSERT_EQ(result_ref->kind, LOOM_LOW_LOWER_VALUE_REF_RESULT);
+    loom_value_id_t source_value_id =
+        loom_low_lower_rule_source_value(rule_set, source_op, source_ref_index);
+    loom_value_id_t result_value_id =
+        loom_low_lower_rule_source_value(rule_set, source_op, result_ref_index);
+    IREE_RETURN_IF_ERROR(loom_low_lower_bind_value_alias(
+        context, source_value_id, result_value_id));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_lower_rule_emit_descriptor_const(
     loom_low_lower_context_t* context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
@@ -1380,5 +1422,7 @@ iree_status_t loom_low_lower_rule_set_emit_rule(
         IREE_CHECK_UNREACHABLE();
     }
   }
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_rule_bind_aliases(context, rule_set, source_op, rule));
   return loom_low_lower_rule_elide_results(context, rule_set, source_op, rule);
 }

@@ -49,6 +49,7 @@ class GuardKind(Enum):
     VALUE_SIGNED_BIT_COUNT = "value_signed_bit_count"
     VALUE_UNSIGNED_BIT_COUNT = "value_unsigned_bit_count"
     VALUE_EXACT_I64 = "value_exact_i64"
+    VALUE_I64_RANGE = "value_i64_range"
 
 
 @dataclass(frozen=True, slots=True)
@@ -305,6 +306,23 @@ class Guard:
             diagnostic=diagnostic,
         )
 
+    @classmethod
+    def value_i64_range(
+        cls,
+        field: str,
+        minimum: int,
+        maximum: int,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_I64_RANGE,
+            field=field,
+            minimum=minimum,
+            maximum=maximum,
+            diagnostic=diagnostic,
+        )
+
     def __post_init__(self) -> None:
         if not self.field:
             raise ValueError(f"{self.kind.value} guard requires a field")
@@ -419,24 +437,44 @@ class Guard:
                     f"{source_op.name}: {subject} needs a positive bit count"
                 )
             return
-        if self.kind == GuardKind.VALUE_EXACT_I64:
-            _require_value(source_op, self.field, subject)
+        if self.kind in (GuardKind.VALUE_EXACT_I64, GuardKind.VALUE_I64_RANGE):
+            _validate_value_i64_fact_guard(self, source_op, subject)
             return
-        attr = _require_attr(source_op, self.field, subject)
-        if attr.attr_type != ATTR_TYPE_I64_ARRAY:
+        _validate_i64_array_guard(self, source_op, subject)
+
+
+def _validate_value_i64_fact_guard(
+    guard: Guard,
+    source_op: Op,
+    subject: str,
+) -> None:
+    _require_value(source_op, guard.field, subject)
+    if guard.kind == GuardKind.VALUE_I64_RANGE and (
+        guard.minimum is None or guard.maximum is None
+    ):
+        raise ValueError(f"{source_op.name}: {subject} needs minimum/maximum")
+
+
+def _validate_i64_array_guard(
+    guard: Guard,
+    source_op: Op,
+    subject: str,
+) -> None:
+    attr = _require_attr(source_op, guard.field, subject)
+    if attr.attr_type != ATTR_TYPE_I64_ARRAY:
+        raise ValueError(
+            f"{source_op.name}: {subject} field '{guard.field}' "
+            "must be an i64_array attr"
+        )
+    if guard.kind == GuardKind.I64_ARRAY_COUNT:
+        if guard.count is None:
+            raise ValueError(f"{source_op.name}: {subject} needs a count")
+        return
+    if guard.kind == GuardKind.I64_ARRAY_ELEMENT_RANGE:
+        if guard.element is None or guard.minimum is None or guard.maximum is None:
             raise ValueError(
-                f"{source_op.name}: {subject} field '{self.field}' "
-                "must be an i64_array attr"
+                f"{source_op.name}: {subject} needs element/minimum/maximum"
             )
-        if self.kind == GuardKind.I64_ARRAY_COUNT:
-            if self.count is None:
-                raise ValueError(f"{source_op.name}: {subject} needs a count")
-            return
-        if self.kind == GuardKind.I64_ARRAY_ELEMENT_RANGE:
-            if self.element is None or self.minimum is None or self.maximum is None:
-                raise ValueError(
-                    f"{source_op.name}: {subject} needs element/minimum/maximum"
-                )
-            return
-        if self.minimum is None or self.maximum is None:
-            raise ValueError(f"{source_op.name}: {subject} needs minimum/maximum")
+        return
+    if guard.minimum is None or guard.maximum is None:
+        raise ValueError(f"{source_op.name}: {subject} needs minimum/maximum")

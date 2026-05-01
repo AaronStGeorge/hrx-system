@@ -168,9 +168,14 @@ def _compile_case(
             row_index=descriptor_rule_index,
         )
     if isinstance(contract_case, ValueAliasRule):
+        if lower_rule_index == CONTRACT_ROW_NONE:
+            raise ValueError(
+                f"{contract_case.source_op.name}: value-alias case has no "
+                "compiled lower rule"
+            )
         return CompiledCase(
             system=ContractSystem.VALUE_ALIAS,
-            row_index=CONTRACT_ROW_NONE,
+            row_index=lower_rule_index,
         )
     if isinstance(contract_case, ValueElideRule):
         if lower_rule_index == CONTRACT_ROW_NONE:

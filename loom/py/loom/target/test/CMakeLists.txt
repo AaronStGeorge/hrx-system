@@ -29,6 +29,7 @@ iree_py_library(
   DEPS
     iree::runtime::py::loom::target::test::descriptors
     iree::runtime::py::loom::core
+    iree::runtime::py::loom::dialect::buffer::buffer
     iree::runtime::py::loom::dialect::index::index
     iree::runtime::py::loom::dialect::scalar::scalar
     iree::runtime::py::loom::dialect::vector::vector

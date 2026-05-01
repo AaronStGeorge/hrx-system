@@ -14,7 +14,6 @@ from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
 from loom.dsl import ANY, Dialect, Op, Operand, Result
 from loom.target.contracts import (
-    CONTRACT_ROW_NONE,
     CompiledDescriptorRule,
     ContractFragment,
     ContractSystem,
@@ -70,7 +69,7 @@ def test_compile_contract_fragment_packs_dense_dialect_op_entries() -> None:
         table,
         dialect_ops={"vector": ALL_VECTOR_OPS},
         descriptor_rule_rows={0: CompiledDescriptorRule(0)},
-        lower_rule_indices={0: 0},
+        lower_rule_indices={0: 0, 1: 1},
     )
 
     assert len(compiled.dialects) == 1
@@ -93,7 +92,7 @@ def test_compile_contract_fragment_packs_dense_dialect_op_entries() -> None:
     assert fragment_entry.case_start == 1
     assert fragment_entry.case_count == 1
     assert compiled.cases[1].system == ContractSystem.VALUE_ALIAS
-    assert compiled.cases[1].row_index == CONTRACT_ROW_NONE
+    assert compiled.cases[1].row_index == 1
 
 
 def test_compile_contract_fragment_uses_supplied_descriptor_rule_rows() -> None:
@@ -200,7 +199,7 @@ def test_compile_contract_fragment_preserves_dense_dialect_gaps() -> None:
             "gap_high": (high_op,),
         },
         descriptor_rule_rows={},
-        lower_rule_indices={},
+        lower_rule_indices={0: 0, 1: 1},
     )
 
     assert compiled.dialect_base_id == 3

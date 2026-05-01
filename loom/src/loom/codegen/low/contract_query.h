@@ -53,6 +53,7 @@ static inline bool loom_low_lower_contract_case_lower_rule_index(
       *out_rule_index = descriptor_rule->rule_index;
       return true;
     }
+    case LOOM_TARGET_CONTRACT_SYSTEM_VALUE_ALIAS:
     case LOOM_TARGET_CONTRACT_SYSTEM_VALUE_ELIDE:
       *out_rule_index = contract_case->row_index;
       return *out_rule_index != LOOM_TARGET_CONTRACT_ROW_NONE;

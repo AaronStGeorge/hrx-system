@@ -27,7 +27,7 @@ from loom.target.contracts.immediates import (
 )
 from loom.target.contracts.kinds import SourceValueKind
 from loom.target.contracts.patterns import TypePattern
-from loom.target.contracts.rules import DescriptorRule, ValueElideRule
+from loom.target.contracts.rules import DescriptorRule, ValueAliasRule, ValueElideRule
 from loom.target.contracts.source import ValueRef
 from loom.target.low_descriptors import ConstraintKind, Descriptor, OperandRole
 
@@ -158,6 +158,8 @@ class LowerRule:
     guard_count: int
     emit_start: int
     emit_count: int
+    alias_ref_start: int = 0
+    alias_ref_count: int = 0
     elide_ref_start: int = 0
     elide_ref_count: int = 0
 
@@ -231,6 +233,8 @@ class _LowerRuleSetCompiler:
         for authored_case_index, contract_case in enumerate(self._table.cases):
             if isinstance(contract_case, DescriptorRule):
                 self._append_descriptor_rule(authored_case_index, contract_case)
+            elif isinstance(contract_case, ValueAliasRule):
+                self._append_alias_rule(authored_case_index, contract_case)
             elif isinstance(contract_case, ValueElideRule):
                 self._append_elide_rule(authored_case_index, contract_case)
 
@@ -281,6 +285,35 @@ class _LowerRuleSetCompiler:
                 guard_count=len(self._guards) - guard_start,
                 emit_start=emit_start,
                 emit_count=len(self._emits) - emit_start,
+            )
+        )
+        self._authored_case_indices.append(authored_case_index)
+
+    def _append_alias_rule(
+        self,
+        authored_case_index: int,
+        rule: ValueAliasRule,
+    ) -> None:
+        guard_start = len(self._guards)
+        type_patterns_by_field: dict[str, TypePattern] = {}
+        for guard in rule.guards:
+            self._append_guard(rule.source_op, guard, type_patterns_by_field)
+        alias_ref_start = self._append_value_ref_sequence(
+            (
+                self._lower_value_ref(rule.source_op, rule.source, {}),
+                self._lower_value_ref(rule.source_op, rule.result, {}),
+            )
+        )
+        self._rules.append(
+            LowerRule(
+                source_op=rule.source_op,
+                temporary_count=0,
+                guard_start=guard_start,
+                guard_count=len(self._guards) - guard_start,
+                emit_start=0,
+                emit_count=0,
+                alias_ref_start=alias_ref_start,
+                alias_ref_count=1,
             )
         )
         self._authored_case_indices.append(authored_case_index)
@@ -713,6 +746,34 @@ class _LowerRuleSetCompiler:
                             ),
                         )
                     ),
+                )
+            )
+            return
+
+        if guard.kind == GuardKind.VALUE_I64_RANGE:
+            if guard.minimum is None or guard.maximum is None:
+                raise ValueError(f"{source_op.name}: value range guard needs bounds")
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=self._append_value_ref(
+                        source_op,
+                        _value_ref_for_source_field(source_op, guard.field),
+                    ),
+                    diagnostic_index=self._append_diagnostic(
+                        _guard_diagnostic(
+                            guard,
+                            LowerDiagnostic(
+                                subject_kind="value",
+                                subject_name=guard.field,
+                                reason=(
+                                    "target contract requires an integer value in range"
+                                ),
+                            ),
+                        )
+                    ),
+                    minimum_i64=guard.minimum,
+                    maximum_i64=guard.maximum,
                 )
             )
             return

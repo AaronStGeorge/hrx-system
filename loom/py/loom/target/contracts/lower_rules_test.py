@@ -108,7 +108,7 @@ def test_compile_lower_rule_set_infers_vector_per_lane_emit() -> None:
     assert compiled.emits[0].descriptor is TEST_LOW_ADD_I32_DESCRIPTOR
 
 
-def test_compile_lower_rule_set_skips_value_alias_cases() -> None:
+def test_compile_lower_rule_set_compiles_value_alias_cases() -> None:
     table = ContractFragment(
         name="test.alias",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
@@ -117,15 +117,21 @@ def test_compile_lower_rule_set_skips_value_alias_cases() -> None:
                 source_op=vector.vector_fragment,
                 source=ValueRef.operand("data"),
                 result=ValueRef.result("result"),
+                guards=(Guard.value_i64_range("rows", 0, 0),),
             )
         ],
     )
 
     compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
 
-    assert compiled.rules == ()
-    assert compiled.spans == ()
-    assert compiled.authored_case_indices == ()
+    assert compiled.authored_case_indices == (0,)
+    assert len(compiled.rules) == 1
+    assert compiled.rules[0].source_op is vector.vector_fragment
+    assert compiled.rules[0].guard_count == 1
+    assert compiled.rules[0].emit_count == 0
+    assert compiled.rules[0].alias_ref_count == 1
+    assert len(compiled.value_refs) == 3
+    assert compiled.spans[0].source_op is vector.vector_fragment
 
 
 def test_compile_lower_rule_set_compiles_value_elide_cases() -> None:

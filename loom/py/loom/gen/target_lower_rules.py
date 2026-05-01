@@ -91,6 +91,7 @@ _GUARD_KIND_C_NAMES = {
     GuardKind.VALUE_SIGNED_BIT_COUNT: "LOOM_LOW_LOWER_GUARD_VALUE_SIGNED_BIT_COUNT",
     GuardKind.VALUE_UNSIGNED_BIT_COUNT: "LOOM_LOW_LOWER_GUARD_VALUE_UNSIGNED_BIT_COUNT",
     GuardKind.VALUE_EXACT_I64: "LOOM_LOW_LOWER_GUARD_VALUE_EXACT_I64",
+    GuardKind.VALUE_I64_RANGE: "LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE",
 }
 
 _ATTR_COPY_KIND_C_NAMES = {
@@ -407,6 +408,7 @@ def _guard_row(table: ContractFragment, row: LowerGuard) -> list[str]:
         GuardKind.VALUE_SIGNED_BIT_COUNT,
         GuardKind.VALUE_UNSIGNED_BIT_COUNT,
         GuardKind.VALUE_EXACT_I64,
+        GuardKind.VALUE_I64_RANGE,
     ):
         _append_field(fields, "value_ref_index", row.value_ref_index, always=True)
     if row.kind == GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ:
@@ -462,6 +464,7 @@ def _guard_row(table: ContractFragment, row: LowerGuard) -> list[str]:
         GuardKind.I64_RANGE,
         GuardKind.I64_ARRAY_ELEMENT_RANGE,
         GuardKind.I64_ARRAY_ELEMENTS_RANGE,
+        GuardKind.VALUE_I64_RANGE,
     ):
         _append_field(fields, "minimum_i64", row.minimum_i64, always=True)
         _append_field(fields, "maximum_i64", row.maximum_i64, always=True)
@@ -594,6 +597,9 @@ def _rule_row(row: LowerRule) -> list[str]:
     if row.emit_count:
         _append_field(fields, "emit_start", row.emit_start, always=True)
         _append_field(fields, "emit_count", row.emit_count, always=True)
+    if row.alias_ref_count:
+        _append_field(fields, "alias_ref_start", row.alias_ref_start, always=True)
+        _append_field(fields, "alias_ref_count", row.alias_ref_count, always=True)
     if row.elide_ref_count:
         _append_field(fields, "elide_ref_start", row.elide_ref_start, always=True)
         _append_field(fields, "elide_ref_count", row.elide_ref_count, always=True)

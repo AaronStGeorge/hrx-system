@@ -242,9 +242,12 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_UNSIGNED_BIT_COUNT = 14,
   // Source value facts must be an exact non-floating integer.
   LOOM_LOW_LOWER_GUARD_VALUE_EXACT_I64 = 15,
+  // Source value facts must be a non-floating integer range contained in
+  // [minimum_i64, maximum_i64].
+  LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE = 16,
   // Source operand segment starting at attr_index must contain exactly u64
   // operands.
-  LOOM_LOW_LOWER_GUARD_OPERAND_SEGMENT_COUNT_EQ = 16,
+  LOOM_LOW_LOWER_GUARD_OPERAND_SEGMENT_COUNT_EQ = 17,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {
@@ -365,6 +368,10 @@ typedef struct loom_low_lower_rule_t {
   uint16_t emit_start;
   // Number of emit-program rows for this rule.
   uint16_t emit_count;
+  // First value-ref pair whose source operand aliases a source result.
+  uint16_t alias_ref_start;
+  // Number of operand/result alias pairs consumed by this rule.
+  uint16_t alias_ref_count;
   // First value-ref table row whose source result is intentionally erased.
   uint16_t elide_ref_start;
   // Number of source result refs erased by this rule.
