@@ -379,7 +379,6 @@ static iree_status_t loom_amdgpu_async_gather_resolve_selection(
 iree_status_t loom_amdgpu_select_kernel_async_gather_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_async_gather_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_plan = (loom_amdgpu_async_gather_plan_t){0};
   *out_selected = false;
@@ -526,7 +525,6 @@ static bool loom_amdgpu_async_wait_stream_counts(
 iree_status_t loom_amdgpu_select_kernel_async_wait_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_async_wait_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_plan = (loom_amdgpu_async_wait_plan_t){0};
   *out_selected = false;
@@ -597,8 +595,6 @@ static iree_status_t loom_amdgpu_emit_m0_move(
 iree_status_t loom_amdgpu_lower_kernel_async_gather(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_async_gather_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
-
   loom_amdgpu_memory_access_t access = {
       .source = plan->source,
       .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
@@ -647,7 +643,6 @@ iree_status_t loom_amdgpu_lower_kernel_async_gather(
 iree_status_t loom_amdgpu_lower_kernel_async_wait(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_async_wait_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
   return loom_amdgpu_emit_explicit_packet_plan(context, source_op, &plan->wait);
 }
 

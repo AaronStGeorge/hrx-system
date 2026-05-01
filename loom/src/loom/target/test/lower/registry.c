@@ -350,7 +350,6 @@ static iree_status_t loom_test_low_select_op(void* user_data,
                                              const loom_op_t* source_op,
                                              loom_low_lower_plan_t* out_plan) {
   (void)user_data;
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = loom_low_lower_plan_empty();
   switch (source_op->kind) {
     case LOOM_OP_BUFFER_VIEW:
@@ -372,7 +371,6 @@ static iree_status_t loom_test_low_select_op(void* user_data,
 static iree_status_t loom_test_low_emit_vector_load(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_test_low_memory_access_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
       context, plan->access.view_value_id, &low_resource));
@@ -406,7 +404,6 @@ static iree_status_t loom_test_low_emit_vector_load(
 static iree_status_t loom_test_low_emit_vector_store(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_test_low_memory_access_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
       context, plan->access.view_value_id, &low_resource));

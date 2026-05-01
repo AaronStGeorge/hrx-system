@@ -13,7 +13,6 @@
 
 static bool loom_amdgpu_bitfield_extract_plan_from_op(
     const loom_op_t* source_op, loom_amdgpu_bitfield_extract_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_bitfield_extract_plan_t){0};
 
   int64_t offset = 0;
@@ -45,7 +44,6 @@ static bool loom_amdgpu_bitfield_extract_plan_from_op(
 
 static bool loom_amdgpu_bitfield_insert_plan_from_op(
     const loom_op_t* source_op, loom_amdgpu_bitfield_insert_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_bitfield_insert_plan_t){0};
   if (!loom_vector_bitfield_insert_isa(source_op)) {
     return false;
@@ -216,7 +214,6 @@ static iree_status_t loom_amdgpu_emit_insert_lane(
 iree_status_t loom_amdgpu_lower_vector_bitfield_extract(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_bitfield_extract_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_type_t source_type = loom_module_value_type(module, plan->source);
   const uint32_t lane_count = loom_amdgpu_vector_i32_lane_count(source_type);
@@ -259,7 +256,6 @@ iree_status_t loom_amdgpu_lower_vector_bitfield_extract(
 iree_status_t loom_amdgpu_lower_vector_bitfield_insert(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_bitfield_insert_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_type_t base_type = loom_module_value_type(module, plan->base);
   const uint32_t lane_count = loom_amdgpu_vector_i32_lane_count(base_type);

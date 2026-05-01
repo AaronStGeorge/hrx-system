@@ -141,7 +141,6 @@ static bool loom_amdgpu_bitpack_plan_from_op(
     const loom_module_t* module, const loom_op_t* source_op,
     loom_amdgpu_bitpack_plan_t* out_plan,
     loom_amdgpu_bitpack_rejection_t* out_rejection) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_bitpack_plan_t){0};
   if (out_rejection) {
     *out_rejection = LOOM_AMDGPU_BITPACK_REJECTION_NONE;
@@ -190,7 +189,6 @@ static bool loom_amdgpu_bitunpack_plan_from_op(
     const loom_module_t* module, const loom_op_t* source_op,
     loom_amdgpu_bitunpack_plan_t* out_plan,
     loom_amdgpu_bitunpack_rejection_t* out_rejection) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_bitunpack_plan_t){0};
   if (out_rejection) {
     *out_rejection = LOOM_AMDGPU_BITUNPACK_REJECTION_NONE;
@@ -275,7 +273,6 @@ iree_status_t loom_amdgpu_select_vector_bitunpack_plan(
 iree_status_t loom_amdgpu_lower_vector_bitpack(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_bitpack_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
   loom_value_id_t low_source = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, plan->source, &low_source));
@@ -395,7 +392,6 @@ static iree_status_t loom_amdgpu_emit_bitunpack_lane(
 iree_status_t loom_amdgpu_lower_vector_bitunpack(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_bitunpack_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
   loom_value_id_t low_source = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, plan->source, &low_source));

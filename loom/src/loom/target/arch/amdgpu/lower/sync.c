@@ -11,7 +11,6 @@
 iree_status_t loom_amdgpu_select_kernel_barrier_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = loom_low_lower_plan_empty();
   if (!loom_kernel_barrier_isa(source_op)) {
     return iree_ok_status();

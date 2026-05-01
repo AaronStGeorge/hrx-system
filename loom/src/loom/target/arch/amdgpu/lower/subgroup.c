@@ -241,7 +241,6 @@ static bool loom_amdgpu_subgroup_mask_covers_wavefront(
 iree_status_t loom_amdgpu_select_kernel_subgroup_broadcast_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_broadcast_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_subgroup_broadcast_plan_t){0};
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_selected = false;
@@ -294,7 +293,6 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_broadcast_plan(
 iree_status_t loom_amdgpu_select_kernel_subgroup_broadcast_first_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_broadcast_first_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_subgroup_broadcast_first_plan_t){0};
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_selected = false;
@@ -339,7 +337,6 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_broadcast_first_plan(
 iree_status_t loom_amdgpu_select_kernel_subgroup_shuffle_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_shuffle_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_subgroup_shuffle_plan_t){0};
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_selected = false;
@@ -403,7 +400,6 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_shuffle_plan(
 iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_reduce_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_subgroup_reduce_plan_t){0};
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_selected = false;
@@ -470,7 +466,6 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
 iree_status_t loom_amdgpu_select_kernel_subgroup_scan_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_scan_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_subgroup_scan_plan_t){0};
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_selected = false;
@@ -585,7 +580,6 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_scan_plan(
 iree_status_t loom_amdgpu_select_kernel_subgroup_active_mask_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_active_mask_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_subgroup_active_mask_plan_t){0};
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_selected = false;
@@ -626,7 +620,6 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_active_mask_plan(
 iree_status_t loom_amdgpu_select_kernel_subgroup_ballot_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_ballot_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_subgroup_ballot_plan_t){0};
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_selected = false;
@@ -666,7 +659,6 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_ballot_plan(
 iree_status_t loom_amdgpu_select_kernel_subgroup_vote_any_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_vote_any_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_subgroup_vote_any_plan_t){0};
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_selected = false;
@@ -713,7 +705,6 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_vote_any_plan(
 iree_status_t loom_amdgpu_select_kernel_subgroup_vote_all_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_vote_all_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_subgroup_vote_all_plan_t){0};
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_selected = false;
@@ -854,8 +845,6 @@ static iree_status_t loom_amdgpu_bind_subgroup_payload_result(
 iree_status_t loom_amdgpu_lower_kernel_subgroup_broadcast(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_broadcast_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
-
   loom_type_t lane_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
 
@@ -886,8 +875,6 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_broadcast(
 iree_status_t loom_amdgpu_lower_kernel_subgroup_broadcast_first(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_broadcast_first_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
-
   loom_type_t lane_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
   loom_type_t read_type = loom_type_none();
@@ -1033,8 +1020,6 @@ static iree_status_t loom_amdgpu_emit_subgroup_shuffle_source_byte_offset(
 iree_status_t loom_amdgpu_lower_kernel_subgroup_shuffle(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_shuffle_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
-
   loom_type_t lane_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
 
@@ -1191,8 +1176,6 @@ static iree_status_t loom_amdgpu_emit_subgroup_scan_source(
 iree_status_t loom_amdgpu_lower_kernel_subgroup_reduce(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_reduce_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
-
   loom_type_t lane_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
 
@@ -1259,8 +1242,6 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_reduce(
 iree_status_t loom_amdgpu_lower_kernel_subgroup_scan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_scan_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
-
   loom_type_t lane_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
   loom_type_t mask_type = loom_type_none();
@@ -1457,8 +1438,6 @@ static iree_status_t loom_amdgpu_emit_subgroup_resolved_mask_compare(
 iree_status_t loom_amdgpu_lower_kernel_subgroup_active_mask(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_active_mask_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
-
   loom_value_id_t low_mask = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_exec_mask(
       context, source_op, &plan->exec_read_descriptor, &low_mask));
@@ -1469,8 +1448,6 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_active_mask(
 iree_status_t loom_amdgpu_lower_kernel_subgroup_ballot(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_ballot_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
-
   loom_value_id_t low_predicate = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, plan->predicate, &low_predicate));
@@ -1481,8 +1458,6 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_ballot(
 iree_status_t loom_amdgpu_lower_kernel_subgroup_vote_any(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_vote_any_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
-
   loom_value_id_t low_predicate = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, plan->predicate, &low_predicate));
@@ -1499,8 +1474,6 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_vote_any(
 iree_status_t loom_amdgpu_lower_kernel_subgroup_vote_all(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_vote_all_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
-
   loom_value_id_t low_predicate = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, plan->predicate, &low_predicate));

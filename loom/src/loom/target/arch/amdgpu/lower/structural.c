@@ -35,7 +35,6 @@ static bool loom_amdgpu_vector_bitcast_storage_shape(
 static bool loom_amdgpu_vector_bitcast_plan_from_op(
     const loom_module_t* module, const loom_op_t* source_op,
     loom_amdgpu_vector_bitcast_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_vector_bitcast_plan_t){0};
   if (!loom_vector_bitcast_isa(source_op)) {
     return false;
@@ -104,7 +103,6 @@ static bool loom_amdgpu_packed_register_bit_slice_window_is_supported(
 static bool loom_amdgpu_vector_slice_plan_from_op(
     const loom_module_t* module, const loom_op_t* source_op,
     loom_amdgpu_vector_slice_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_vector_slice_plan_t){0};
   if (!loom_vector_slice_isa(source_op) ||
       loom_vector_slice_offsets(source_op).count != 0) {
@@ -196,7 +194,6 @@ iree_status_t loom_amdgpu_select_vector_bitcast_plan(
 iree_status_t loom_amdgpu_lower_vector_bitcast(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_bitcast_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
   loom_value_id_t low_input = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, plan->source, &low_input));
@@ -271,7 +268,6 @@ static iree_status_t loom_amdgpu_lower_vector_slice_packed_register_bits(
 iree_status_t loom_amdgpu_lower_vector_slice(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_slice_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
   loom_value_id_t low_source = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, plan->source, &low_source));

@@ -1109,7 +1109,6 @@ static iree_string_view_t loom_amdgpu_atomic_rejection_detail(
 iree_status_t loom_amdgpu_select_view_atomic_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_atomic_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_plan = (loom_amdgpu_atomic_plan_t){0};
   *out_selected = false;
@@ -1285,7 +1284,6 @@ static iree_status_t loom_amdgpu_emit_atomic_post_ordering(
 iree_status_t loom_amdgpu_lower_view_atomic(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_atomic_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
       context, plan->source.view_value_id, &low_resource));

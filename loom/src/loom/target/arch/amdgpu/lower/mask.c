@@ -164,7 +164,6 @@ static iree_status_t loom_amdgpu_select_vector_compare_plan(
     loom_value_id_t lhs, loom_value_id_t rhs, loom_value_id_t result,
     loom_scalar_type_t payload_element_type, uint8_t predicate,
     loom_amdgpu_vector_compare_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_plan = (loom_amdgpu_vector_compare_plan_t){0};
   *out_selected = false;
@@ -224,7 +223,6 @@ iree_status_t loom_amdgpu_select_vector_cmpf_plan(
 iree_status_t loom_amdgpu_select_vector_select_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_vector_select_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_plan = (loom_amdgpu_vector_select_plan_t){0};
   *out_selected = false;
@@ -272,7 +270,6 @@ static iree_status_t loom_amdgpu_slice_lane_if_needed(
 static iree_status_t loom_amdgpu_lower_vector_compare(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_compare_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
   const uint32_t lane_count = plan->lane_count;
   IREE_ASSERT_GT(lane_count, 0);
   IREE_ASSERT_LE(lane_count, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);
@@ -340,7 +337,6 @@ iree_status_t loom_amdgpu_lower_vector_cmpf(
 iree_status_t loom_amdgpu_lower_vector_select(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_select_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
   const uint32_t lane_count = plan->lane_count;
   IREE_ASSERT_GT(lane_count, 0);
   IREE_ASSERT_LE(lane_count, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);

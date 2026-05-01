@@ -110,7 +110,6 @@ static bool loom_amdgpu_prefetch_memory_space_is_buffer_backed(
 static iree_status_t loom_amdgpu_prefetch_select(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_prefetch_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_plan = (loom_amdgpu_prefetch_plan_t){0};
   *out_selected = false;
@@ -180,7 +179,6 @@ iree_status_t loom_amdgpu_select_view_prefetch_plan(
 iree_status_t loom_amdgpu_lower_view_prefetch(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_prefetch_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
       context, loom_view_prefetch_view(source_op), &low_resource));

@@ -186,7 +186,6 @@ iree_status_t loom_amdgpu_resolve_explicit_packet_plan(
     const loom_amdgpu_explicit_packet_immediate_template_t* immediates,
     iree_host_size_t immediate_count,
     loom_amdgpu_explicit_packet_plan_t* out_plan, bool* out_present) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   IREE_ASSERT_ARGUMENT(out_present);
   IREE_ASSERT(immediate_count <=
               LOOM_AMDGPU_EXPLICIT_PACKET_IMMEDIATE_CAPACITY);
@@ -236,7 +235,6 @@ iree_status_t loom_amdgpu_emit_low_op(
 iree_status_t loom_amdgpu_emit_explicit_packet_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_explicit_packet_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
   if (plan->descriptor.descriptor == NULL) {
     return iree_ok_status();
   }

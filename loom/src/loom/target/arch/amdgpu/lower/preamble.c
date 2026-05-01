@@ -224,7 +224,6 @@ static iree_status_t loom_amdgpu_can_lower_subgroup_linear_query(
 iree_status_t loom_amdgpu_select_preamble_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = loom_low_lower_plan_empty();
   bool selected = false;
   switch (source_op->kind) {

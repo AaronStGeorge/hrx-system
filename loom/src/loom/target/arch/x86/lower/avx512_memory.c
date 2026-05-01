@@ -137,7 +137,6 @@ static iree_status_t loom_x86_select_memory_load_result_type(
 static iree_status_t loom_x86_select_memory_access(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_x86_memory_access_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_plan = (loom_x86_memory_access_plan_t){
       .load_result_type = loom_type_none(),
@@ -198,7 +197,6 @@ iree_status_t loom_x86_select_avx512_op(void* user_data,
                                         const loom_op_t* source_op,
                                         loom_low_lower_plan_t* out_plan) {
   (void)user_data;
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = loom_low_lower_plan_empty();
   switch (source_op->kind) {
     case LOOM_OP_BUFFER_VIEW:

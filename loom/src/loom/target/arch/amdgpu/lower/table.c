@@ -14,7 +14,6 @@
 static bool loom_amdgpu_table_lookup_plan_from_op(
     const loom_module_t* module, const loom_op_t* source_op,
     loom_amdgpu_table_lookup_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_table_lookup_plan_t){0};
   if (!loom_vector_table_lookup_isa(source_op)) {
     return false;
@@ -187,7 +186,6 @@ static iree_status_t loom_amdgpu_table_lookup_select_table_lane(
 iree_status_t loom_amdgpu_lower_vector_table_lookup(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_table_lookup_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
   loom_value_id_t low_table = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, plan->table, &low_table));
