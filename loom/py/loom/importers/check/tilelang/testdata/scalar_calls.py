@@ -81,6 +81,45 @@ def scalar_calls() -> TileLangImportInput:
 
 
 # ====
+@tilelang_case(name="bitwise_not", category="op", tags=("call", "integer"))
+def bitwise_not() -> TileLangImportInput:
+    src, dst = Var("src"), Var("dst")
+    src_buffer = Buffer("src", (4,), "int32")
+    dst_buffer = Buffer("dst", (4,), "int32")
+    body = BufferStore(
+        dst_buffer,
+        Call(
+            "tir.bitwise_not", [BufferLoad(src_buffer, [IntImm(0)], "int32")], "int32"
+        ),
+        [IntImm(0)],
+    )
+    prim_func = PrimFunc(
+        [src, dst],
+        {src: src_buffer, dst: dst_buffer},
+        body,
+        attrs={"global_symbol": "bitwise_not"},
+    )
+    return TileLangImportInput(source=prim_func, target="hip", name="bitwise_not")
+
+
+# ----
+# target.profile @hip preset("hip")
+#
+# kernel.def target(@hip) export("bitwise_not") workgroup_size(1, 1, 1) @bitwise_not(%src: buffer, %dst: buffer) {
+#   %c0_bytes = index.constant 0 : offset
+#   %src = buffer.view %src[%c0_bytes] : buffer -> view<4xi32>
+#   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<4xi32>
+#   %c = index.constant 0 : index
+#   %load = view.load %src[%c] : view<4xi32> -> i32
+#   %all_ones = scalar.constant -1 : i32
+#   %noti = scalar.xori %load, %all_ones : i32
+#   %c_2 = index.constant 0 : index
+#   view.store %noti, %dst[%c_2] : i32, view<4xi32>
+#   kernel.return
+# }
+
+
+# ====
 @tilelang_case(name="ceildiv_loop", category="op", tags=("call", "index"))
 def ceildiv_loop() -> TileLangImportInput:
     src, dst = Var("src"), Var("dst")

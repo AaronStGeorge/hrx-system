@@ -121,6 +121,8 @@ def convert_call(
             op_name,
             _UNARY_INTEGER_CALLS[op_name],
         )
+    if op_name in _BITWISE_NOT_CALLS:
+        return _convert_bitwise_not_call(expr, context, converter, op_name)
     if op_name in _BINARY_INTEGER_CALLS:
         return _convert_binary_integer_call(
             expr,
@@ -365,6 +367,57 @@ def _convert_unary_integer_call(
             results=[result_type],
             name=context.fresh_name(builder_name),
         ),
+    )
+    _map_call_result(expr, context, result, op_name)
+    return result
+
+
+def _convert_bitwise_not_call(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    op_name: str,
+) -> ValueRef | None:
+    args = _args(expr)
+    if len(args) != 1:
+        context.record_blocked(node_text(expr), f"call `{op_name}` expects 1 operand")
+        return None
+    input_value = converter.convert_expr(args[0], context)
+    if input_value is None:
+        context.record_blocked(
+            node_text(expr), f"call `{op_name}` operand is not mapped"
+        )
+        return None
+    if _is_vector_type(input_value.type):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` vector operands are not imported by the scalar path",
+        )
+        return None
+    input_type = str(input_value.type)
+    if input_type in ("index", "offset"):
+        all_ones = context.ensure_constant("-1", input_type, "all_ones")
+        result = context.builder.index.xori(
+            lhs=input_value,
+            rhs=all_ones,
+            results=[input_value.type],
+            name=context.fresh_name("noti"),
+        )
+        _map_call_result(expr, context, result, op_name, value_type=input_type)
+        return result
+    result_type = context.type_converter.map_dtype(dtype(expr))
+    if not _is_integer_type(str(result_type)):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` result type {result_type} is not integer",
+        )
+        return None
+    all_ones = _ensure_integer_all_ones(context, dtype(expr))
+    result = context.builder.scalar.xori(
+        lhs=input_value,
+        rhs=all_ones,
+        results=[result_type],
+        name=context.fresh_name("noti"),
     )
     _map_call_result(expr, context, result, op_name)
     return result
@@ -931,6 +984,18 @@ def _ensure_float_one(
     return result
 
 
+def _ensure_integer_all_ones(
+    context: TileLangConversionContext,
+    value_type: str,
+) -> ValueRef:
+    existing = context.constants.get((value_type, "-1"))
+    if existing is not None:
+        return existing
+    result = context.build_constant(-1, value_type, context.reserve_name("all_ones"))
+    context.remember_constant("-1", value_type, result)
+    return result
+
+
 def _source_is_index_like(
     source: object,
     context: TileLangConversionContext,
@@ -960,6 +1025,10 @@ def _total_bit_width(value_type: Type) -> int | None:
 
 def _is_float_type(value_type: str) -> bool:
     return value_type in ("f16", "bf16", "f32", "f64")
+
+
+def _is_integer_type(value_type: str) -> bool:
+    return value_type != "i1" and value_type.startswith("i")
 
 
 def _is_unsigned_dtype(source_dtype: object) -> bool:
@@ -1036,6 +1105,10 @@ _ABS_CALLS = {
 _UNARY_INTEGER_CALLS = {
     "tir.clz": "ctlzi",
     "tir.popcount": "ctpopi",
+}
+
+_BITWISE_NOT_CALLS = {
+    "tir.bitwise_not",
 }
 
 _BINARY_INTEGER_CALLS = {

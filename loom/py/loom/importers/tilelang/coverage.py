@@ -347,8 +347,8 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
     OpCoverage(
         "tir.bitwise_not",
         OpFamily.TIR_OP,
-        CoverageState.DEFERRED,
-        "Needs scalar/index bitwise-not or a reviewed all-ones xor lowering.",
+        CoverageState.SUPPORTED,
+        "Scalar/index bitwise not; normalizes to xor with an all-ones constant.",
     ),
     OpCoverage(
         "tir.ceil",
