@@ -96,3 +96,14 @@ def copy():
     assert '# kernel.def target(@hip) export("copy")' in updated_source
     assert "view.load" in updated_source
     assert "view.store" in updated_source
+
+
+def test_run_tilelang_check_verifies_checked_in_scalar_fixture() -> None:
+    path = Path(__file__).resolve().parent / "testdata" / "scalar_calls.py"
+
+    results = run_tilelang_check(
+        path,
+        options=TileLangCheckOptions(),
+    )
+
+    assert [result.status for result in results] == ["passed", "passed"]

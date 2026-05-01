@@ -59,6 +59,49 @@ def test_parse_inline_cases_uses_configured_comment_syntax() -> None:
     assert cases[1].input == "case_1()\n"
 
 
+def test_parse_inline_cases_can_ignore_shared_preamble() -> None:
+    syntax = InlineCheckSyntax(
+        case_separator_prefix="# ====",
+        expected_separator="# ----",
+        comment_prefix="#",
+    )
+    cases = parse_inline_cases(
+        Path("kernels.py"),
+        "shared = 1\n\n# ====\ncase_0()\n# ----\nexpected 0\n",
+        syntax=syntax,
+        allow_preamble=True,
+    )
+
+    assert len(cases) == 1
+    assert cases[0] == CheckCase(
+        path=Path("kernels.py"),
+        index=0,
+        source="case_0()\n",
+        input="case_0()\n",
+        expected="expected 0\n",
+        line_start=4,
+        line_end=6,
+    )
+
+
+def test_parse_inline_cases_keeps_first_case_without_preamble_mode() -> None:
+    syntax = InlineCheckSyntax(
+        case_separator_prefix="# ====",
+        expected_separator="# ----",
+        comment_prefix="#",
+    )
+    cases = parse_inline_cases(
+        Path("kernels.py"),
+        "case_0()\n# ----\nexpected 0\n\n# ====\ncase_1()\n# ----\nexpected 1\n",
+        syntax=syntax,
+        allow_preamble=True,
+    )
+
+    assert len(cases) == 2
+    assert cases[0].input == "case_0()\n"
+    assert cases[1].input == "case_1()\n"
+
+
 def test_case_matches_filter_checks_path_case_run_and_labels() -> None:
     check_case = CheckCase(
         path=Path("kernels/vector.mlir"),

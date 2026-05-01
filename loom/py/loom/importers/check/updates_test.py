@@ -6,7 +6,7 @@
 
 from pathlib import Path
 
-from loom.importers.check.cases import parse_inline_cases
+from loom.importers.check.cases import InlineCheckSyntax, parse_inline_cases
 from loom.importers.check.results import CheckResult
 from loom.importers.check.updates import format_updated_case, format_updated_source
 
@@ -44,4 +44,31 @@ def test_format_updated_source_keeps_unselected_cases() -> None:
     assert (
         format_updated_source(source, cases, results)
         == "input\n// ----\nold\n\n// ====\ninput2\n// ----\nnew2\n"
+    )
+
+
+def test_format_updated_source_preserves_python_preamble() -> None:
+    syntax = InlineCheckSyntax(
+        case_separator_prefix="# ====",
+        expected_separator="# ----",
+        comment_prefix="#",
+    )
+    source = "shared = 1\n\n# ====\ncase_0()\n# ----\n# old\n"
+    cases = parse_inline_cases(
+        Path("kernels.py"),
+        source,
+        syntax=syntax,
+        allow_preamble=True,
+    )
+    results = [CheckResult(Path("kernels.py"), 0, 0, "new\n", "")]
+
+    assert (
+        format_updated_source(
+            source,
+            cases,
+            results,
+            syntax=syntax,
+            expected_encoder=lambda text: f"# {text}",
+        )
+        == "shared = 1\n\n# ====\ncase_0()\n# ----\n# new\n"
     )

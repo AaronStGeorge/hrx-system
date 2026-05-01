@@ -56,6 +56,46 @@ def second():
     assert [result.status for result in results] == ["passed", "passed"]
 
 
+def test_run_python_check_shares_preamble_across_cases() -> None:
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "cases.py"
+        path.write_text(
+            """
+def case(func):
+    func.__case__ = True
+    return func
+
+
+class Shared:
+    value = "shared"
+
+
+# ====
+@case
+def first():
+    return f"{Shared.value}:first\\n"
+# ----
+# shared:first
+
+# ====
+@case
+def second():
+    return f"{Shared.value}:second\\n"
+# ----
+# shared:second
+"""
+        )
+
+        results = run_python_check(
+            path,
+            options=PythonCheckOptions(),
+            is_case=lambda value: bool(getattr(value, "__case__", False)),
+            invoke=lambda case: case.function(),
+        )
+
+    assert [result.status for result in results] == ["passed", "passed"]
+
+
 def test_run_python_check_updates_commented_expected_blocks() -> None:
     with TemporaryDirectory() as directory:
         path = Path(directory) / "cases.py"

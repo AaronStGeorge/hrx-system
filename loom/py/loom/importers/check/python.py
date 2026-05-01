@@ -103,7 +103,12 @@ def run_python_check(
 
 
 def parse_python_check_cases(path: Path, source: str) -> tuple[CheckCase, ...]:
-    raw_cases = parse_inline_cases(path, source, syntax=PYTHON_CHECK_SYNTAX)
+    raw_cases = parse_inline_cases(
+        path,
+        source,
+        syntax=PYTHON_CHECK_SYNTAX,
+        allow_preamble=True,
+    )
     return tuple(
         CheckCase(
             path=case.path,
@@ -114,6 +119,7 @@ def parse_python_check_cases(path: Path, source: str) -> tuple[CheckCase, ...]:
             run=case.run,
             line_start=case.line_start,
             line_end=case.line_end,
+            raw_source=case.raw_source,
         )
         for case in raw_cases
     )

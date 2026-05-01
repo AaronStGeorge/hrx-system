@@ -33,6 +33,7 @@ py_test(
         "cases_test.py",
         "harness_test.py",
         "runner_test.py",
+        "testdata/scalar_calls.py",
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = [

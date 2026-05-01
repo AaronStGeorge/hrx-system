@@ -43,6 +43,7 @@ class CheckCase:
     run: str | None = None
     line_start: int = field(default=1, compare=False)
     line_end: int = field(default=1, compare=False)
+    raw_source: str = field(default="", compare=False)
 
 
 def parse_inline_cases(
@@ -51,10 +52,13 @@ def parse_inline_cases(
     *,
     syntax: InlineCheckSyntax = DEFAULT_CHECK_SYNTAX,
     default_run: str | None = None,
+    allow_preamble: bool = False,
 ) -> tuple[CheckCase, ...]:
     """Parses loom-check style inline cases from one source file."""
 
     raw_cases = tuple(_split_raw_case_spans(source, syntax=syntax))
+    if allow_preamble:
+        raw_cases = _strip_preamble_case(raw_cases, syntax=syntax)
     if not raw_cases:
         raise ValueError(f"{path} has no check cases")
 
@@ -77,6 +81,7 @@ def parse_inline_cases(
                 run=runs[index] or file_run,
                 line_start=raw_case.line_start,
                 line_end=raw_case.line_end,
+                raw_source=raw_case.source,
             )
         )
     return tuple(cases)
@@ -97,6 +102,25 @@ class _RawCheckCase:
     source: str
     line_start: int
     line_end: int
+    is_preamble: bool = False
+
+
+def _strip_preamble_case(
+    raw_cases: tuple[_RawCheckCase, ...],
+    *,
+    syntax: InlineCheckSyntax,
+) -> tuple[_RawCheckCase, ...]:
+    """Drops a non-case prefix before the first explicit case separator."""
+
+    if len(raw_cases) < 2 or not raw_cases[0].is_preamble:
+        return raw_cases
+    _case_source, _expected, has_expected = split_expected(
+        raw_cases[0].source,
+        syntax=syntax,
+    )
+    if has_expected:
+        return raw_cases
+    return raw_cases[1:]
 
 
 def _split_raw_case_spans(
@@ -108,6 +132,7 @@ def _split_raw_case_spans(
     lines: list[str] = []
     line_start = 1
     line_number = 1
+    before_first_separator = True
     for line in source.splitlines(keepends=True):
         if line.startswith(syntax.case_separator_prefix):
             trim_separator_spacer(lines)
@@ -118,11 +143,13 @@ def _split_raw_case_spans(
                         source=case_source,
                         line_start=line_start,
                         line_end=max(line_start, line_number - 1),
+                        is_preamble=before_first_separator,
                     )
                 )
             lines = []
             line_start = line_number + 1
             line_number += 1
+            before_first_separator = False
             continue
         lines.append(line)
         line_number += 1
@@ -134,6 +161,7 @@ def _split_raw_case_spans(
                 source=case_source,
                 line_start=line_start,
                 line_end=max(line_start, line_number - 1),
+                is_preamble=before_first_separator,
             )
         )
     return tuple(cases)

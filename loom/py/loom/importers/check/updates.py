@@ -15,7 +15,6 @@ from loom.importers.check.cases import (
     CheckCase,
     InlineCheckSyntax,
     split_expected,
-    split_raw_cases,
 )
 from loom.importers.check.results import CheckResult
 
@@ -34,7 +33,7 @@ def format_updated_source(
     for case in cases:
         result = result_by_index.get(case.index)
         if result is None:
-            updated_cases.append(_raw_case_source(original_source, case.index, syntax))
+            updated_cases.append(case.raw_source or case.source)
             continue
         if result.returncode == 0:
             updated_cases.append(
@@ -46,8 +45,12 @@ def format_updated_source(
                 )
             )
         else:
-            updated_cases.append(_raw_case_source(original_source, case.index, syntax))
-    return f"\n{syntax.case_separator_prefix}\n".join(updated_cases)
+            updated_cases.append(case.raw_source or case.source)
+    body = f"\n{syntax.case_separator_prefix}\n".join(updated_cases)
+    prefix = leading_case_separator_prefix(original_source, cases, syntax)
+    if prefix is None:
+        return body
+    return f"{prefix}{syntax.case_separator_prefix}\n{body}"
 
 
 def format_updated_case(
@@ -74,9 +77,20 @@ def _identity_expected(text: str) -> str:
     return text
 
 
-def _raw_case_source(
+def leading_case_separator_prefix(
     source: str,
-    case_index: int,
+    cases: Sequence[CheckCase],
     syntax: InlineCheckSyntax,
-) -> str:
-    return split_raw_cases(source, syntax=syntax)[case_index]
+) -> str | None:
+    """Returns source before a leading separator when one should be preserved."""
+
+    if not cases:
+        return None
+    lines = source.splitlines(keepends=True)
+    separator_index: int | None = None
+    for index, line in enumerate(lines[: max(cases[0].line_start - 1, 0)]):
+        if line.startswith(syntax.case_separator_prefix):
+            separator_index = index
+    if separator_index is None:
+        return None
+    return "".join(lines[:separator_index])
