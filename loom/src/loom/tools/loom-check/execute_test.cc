@@ -537,6 +537,46 @@ TEST_F(ExecuteTest, VerifySubstringMismatch) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, VerifyParamMatch) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: verify\n"
+                   "// ERROR@+1: PARSE/006 {op_name=\"bogus.nonexistent\"}\n"
+                   "bogus.nonexistent\n",
+                   &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS)
+      << "detail: " << DetailString(result);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, VerifyParamMismatch) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: verify\n"
+                   "// ERROR@+1: PARSE/006 {op_name=\"other.op\"}\n"
+                   "bogus.nonexistent\n",
+                   &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL)
+      << "detail: " << DetailString(result);
+  EXPECT_NE(DetailString(result).find("{op_name=\"other.op\"}"),
+            std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, VerifyUnknownParamMismatch) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: verify\n"
+                   "// ERROR@+1: PARSE/006 {missing=\"bogus.nonexistent\"}\n"
+                   "bogus.nonexistent\n",
+                   &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL)
+      << "detail: " << DetailString(result);
+  EXPECT_NE(DetailString(result).find("{missing=\"bogus.nonexistent\"}"),
+            std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(ExecuteTest, VerifyXfailMatchedIsPass) {
   // XFAIL + all diagnostics matched → raw PASS → XFAIL inverts to FAIL
   // (unexpected pass).

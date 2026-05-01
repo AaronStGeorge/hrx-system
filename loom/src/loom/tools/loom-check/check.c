@@ -526,24 +526,116 @@ static iree_status_t loom_check_parse_substring_list(
   return iree_ok_status();
 }
 
-// Parses the matcher part of an annotation: DOMAIN/CODE followed by
-// zero or more quoted substrings, OR just one or more quoted
-// substrings, OR a bare DOMAIN. All three components are independently
-// optional. Multiple substrings are AND-combined: every listed
-// substring must appear in the diagnostic message for the annotation
-// to match.
+static bool loom_check_is_param_name_start(char c) {
+  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
+}
+
+static bool loom_check_is_param_name_char(char c) {
+  return loom_check_is_param_name_start(c) || (c >= '0' && c <= '9');
+}
+
+static iree_status_t loom_check_parse_param_name(
+    iree_string_view_t text, iree_string_view_t* out_name,
+    iree_string_view_t* out_remainder) {
+  *out_name = iree_string_view_empty();
+  *out_remainder = text;
+  if (iree_string_view_is_empty(text) ||
+      !loom_check_is_param_name_start(text.data[0])) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "expected diagnostic param name at '%.*s'",
+                            (int)text.size, text.data);
+  }
+  iree_host_size_t length = 1;
+  while (length < text.size &&
+         loom_check_is_param_name_char(text.data[length])) {
+    ++length;
+  }
+  *out_name = iree_string_view_substr(text, 0, length);
+  *out_remainder = iree_string_view_trim(
+      iree_string_view_substr(text, length, IREE_HOST_SIZE_MAX));
+  return iree_ok_status();
+}
+
+// Consumes an optional structured parameter matcher object:
+//
+//   {field_a="lhs", type_a="i32"}
+//
+// Values are quoted string comparisons against the diagnostic's rendered
+// parameter values. The matcher is structured by parameter name; it is not a
+// diagnostic message substring.
+static iree_status_t loom_check_parse_param_matchers(
+    iree_string_view_t text, loom_check_annotation_t* out,
+    iree_string_view_t* out_remainder) {
+  text = iree_string_view_trim(text);
+  *out_remainder = text;
+  if (!iree_string_view_consume_prefix_char(&text, '{')) {
+    return iree_ok_status();
+  }
+  text = iree_string_view_trim(text);
+  while (true) {
+    if (iree_string_view_consume_prefix_char(&text, '}')) {
+      *out_remainder = iree_string_view_trim(text);
+      return iree_ok_status();
+    }
+    if (out->param_match_count >= LOOM_CHECK_MAX_ANNOTATION_PARAM_MATCHES) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "annotation has more than %d diagnostic param matchers; raise "
+          "LOOM_CHECK_MAX_ANNOTATION_PARAM_MATCHES if this is intentional",
+          (int)LOOM_CHECK_MAX_ANNOTATION_PARAM_MATCHES);
+    }
+
+    iree_string_view_t name;
+    IREE_RETURN_IF_ERROR(loom_check_parse_param_name(text, &name, &text));
+    if (!iree_string_view_consume_prefix_char(&text, '=')) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "diagnostic param matcher '%.*s' missing '='",
+                              (int)name.size, name.data);
+    }
+    text = iree_string_view_trim(text);
+
+    iree_string_view_t value;
+    IREE_RETURN_IF_ERROR(
+        loom_check_parse_quoted_substring(text, &value, &text));
+    out->param_matches[out->param_match_count++] =
+        (loom_check_annotation_param_match_t){
+            .name = name,
+            .value = value,
+        };
+
+    if (iree_string_view_consume_prefix_char(&text, ',')) {
+      text = iree_string_view_trim(text);
+      continue;
+    }
+    if (iree_string_view_starts_with_char(text, '}')) {
+      continue;
+    }
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "diagnostic param matcher expected ',' or '}' after value at '%.*s'",
+        (int)text.size, text.data);
+  }
+}
+
+// Parses the matcher part of an annotation: DOMAIN/CODE followed by an optional
+// structured param matcher and zero or more quoted substrings, OR just one or
+// more quoted substrings, OR a bare DOMAIN. All components are independently
+// optional. Multiple substrings are AND-combined against the rendered
+// diagnostic message. Multiple parameter matchers are AND-combined against
+// structured diagnostic params.
 //
 // Examples:
-//   TYPE/001                       — domain + code only
-//   TYPE/001 "field_a"             — domain + code + one substring
-//   TYPE/001 "operand 3" "result 0" — domain + code + two substrings
-//   "fragment"                     — substring only (any diagnostic)
-//   PARSE                          — domain only (any code, any message)
+//   TYPE/001                         — domain + code only
+//   TYPE/001 {field_a="lhs"}          — domain + code + param matcher
+//   TYPE/001 "operand 3" "result 0"  — domain + code + two substrings
+//   "fragment"                       — substring only (any diagnostic)
+//   PARSE                            — domain only (any code, any message)
 static iree_status_t loom_check_parse_matcher(iree_string_view_t text,
                                               loom_check_annotation_t* out) {
   out->domain = LOOM_ERROR_DOMAIN_COUNT_;  // Sentinel: match any domain.
   out->code = 0;
   out->message_substring_count = 0;
+  out->param_match_count = 0;
   text = iree_string_view_trim(text);
 
   if (iree_string_view_is_empty(text)) {
@@ -555,9 +647,9 @@ static iree_status_t loom_check_parse_matcher(iree_string_view_t text,
     return loom_check_parse_substring_list(text, out);
   }
 
-  // Otherwise expect DOMAIN or DOMAIN/CODE, optionally followed by
-  // quoted substrings. Isolate the DOMAIN/CODE token (ends at space or
-  // end of string).
+  // Otherwise expect DOMAIN or DOMAIN/CODE, optionally followed by structured
+  // param matchers and quoted substrings. Isolate the DOMAIN/CODE token (ends
+  // at space or end of string).
   iree_string_view_t domain_code = text;
   iree_string_view_t after_code = iree_string_view_empty();
   iree_host_size_t space = iree_string_view_find_char(text, ' ', 0);
@@ -603,6 +695,8 @@ static iree_status_t loom_check_parse_matcher(iree_string_view_t text,
     }
   }
 
+  IREE_RETURN_IF_ERROR(
+      loom_check_parse_param_matchers(after_code, out, &after_code));
   return loom_check_parse_substring_list(after_code, out);
 }
 

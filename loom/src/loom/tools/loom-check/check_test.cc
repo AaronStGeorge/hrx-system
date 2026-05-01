@@ -601,6 +601,28 @@ TEST_F(CheckParseTest, AnnotationWithMultipleSubstrings) {
                                      iree_make_cstring_view("result 0")));
 }
 
+TEST_F(CheckParseTest, AnnotationWithParamMatchers) {
+  IREE_ASSERT_OK(
+      Parse("// RUN: verify\n"
+            "// ERROR@+1: LOWERING/019 {op_name=\"test.add.i32\", "
+            "field_name=\"lhs\"}\n"
+            "  %x = test.bad : i32\n"));
+  ASSERT_EQ(file_.cases[0].annotation_count, 1);
+  const auto& ann = file_.cases[0].annotations[0];
+  EXPECT_EQ(ann.domain, LOOM_ERROR_DOMAIN_LOWERING);
+  EXPECT_EQ(ann.code, 19);
+  ASSERT_EQ(ann.param_match_count, 2);
+  EXPECT_TRUE(iree_string_view_equal(ann.param_matches[0].name,
+                                     iree_make_cstring_view("op_name")));
+  EXPECT_TRUE(iree_string_view_equal(ann.param_matches[0].value,
+                                     iree_make_cstring_view("test.add.i32")));
+  EXPECT_TRUE(iree_string_view_equal(ann.param_matches[1].name,
+                                     iree_make_cstring_view("field_name")));
+  EXPECT_TRUE(iree_string_view_equal(ann.param_matches[1].value,
+                                     iree_make_cstring_view("lhs")));
+  EXPECT_EQ(ann.message_substring_count, 0);
+}
+
 TEST_F(CheckParseTest, AnnotationMultipleSubstringsNoDomain) {
   // Substring-only annotations also accept multiple quoted matchers.
   IREE_ASSERT_OK(
@@ -1099,6 +1121,13 @@ TEST_F(CheckParseTest, AnnotationUnquotedTrailingText) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Parse("// RUN: verify\n"
                               "// ERROR: TYPE/001 extra\n"
+                              "  %x = test.bad : i32\n"));
+}
+
+TEST_F(CheckParseTest, AnnotationParamMatcherRequiresQuotedValue) {
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Parse("// RUN: verify\n"
+                              "// ERROR: LOWERING/019 {op_name=test.add.i32}\n"
                               "  %x = test.bad : i32\n"));
 }
 

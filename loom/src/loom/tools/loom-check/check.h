@@ -185,6 +185,19 @@ static inline bool loom_check_source_range_is_empty(
 // allocation per annotation.
 #define LOOM_CHECK_MAX_ANNOTATION_SUBSTRINGS 4
 
+// Maximum number of structured diagnostic parameter matchers declared by one
+// annotation. Param matchers compare against generated error parameter names
+// instead of the rendered diagnostic prose.
+#define LOOM_CHECK_MAX_ANNOTATION_PARAM_MATCHES 8
+
+// One structured diagnostic parameter expectation from an annotation.
+typedef struct loom_check_annotation_param_match_t {
+  // Generated diagnostic parameter name, such as "op_name".
+  iree_string_view_t name;
+  // Expected rendered parameter value.
+  iree_string_view_t value;
+} loom_check_annotation_param_match_t;
+
 // One expected diagnostic annotation extracted from a comment.
 typedef struct loom_check_annotation_t {
   // Number of populated entries in message_substrings. 0 means "match
@@ -192,6 +205,9 @@ typedef struct loom_check_annotation_t {
   // substring of the diagnostic message. Placed first so the matcher's
   // hot path can check it without touching the 64-byte substring array.
   uint8_t message_substring_count;
+  // Number of populated entries in param_matches. 0 means no structured
+  // parameter constraints.
+  uint8_t param_match_count;
   // Expected severity (error, warning, remark).
   loom_diagnostic_severity_t severity;
   // Error domain (TYPE, PARSE, etc.). LOOM_ERROR_DOMAIN_COUNT_ is the
@@ -206,6 +222,9 @@ typedef struct loom_check_annotation_t {
   iree_host_size_t target_line;
   // Substrings that must all appear in the diagnostic message.
   iree_string_view_t message_substrings[LOOM_CHECK_MAX_ANNOTATION_SUBSTRINGS];
+  // Structured diagnostic parameter constraints that must all match.
+  loom_check_annotation_param_match_t
+      param_matches[LOOM_CHECK_MAX_ANNOTATION_PARAM_MATCHES];
 } loom_check_annotation_t;
 
 //===----------------------------------------------------------------------===//

@@ -35,11 +35,20 @@ typedef struct loom_check_collected_diagnostic_t {
   // Structured error code to match against DOMAIN/CODE annotations.
   uint16_t code;
 
+  // Generated error definition carrying parameter names.
+  const loom_error_def_t* error;
+
   // One-based source line where the diagnostic was emitted, or 0 if unknown.
   uint32_t origin_line;
 
   // Rendered diagnostic message text, arena-allocated.
   iree_string_view_t message;
+
+  // Rendered parameter values in error->param_defs order, arena-allocated.
+  iree_string_view_t* param_values;
+
+  // Number of populated entries in param_values.
+  iree_host_size_t param_value_count;
 
   // Full source-rendered diagnostic text, arena-allocated.
   iree_string_view_t formatted_diagnostic;
