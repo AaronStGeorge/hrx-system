@@ -460,6 +460,19 @@ loom_cc_library(
     ],
 )
 
+loom_cc_test(
+    name = "contract_query_test",
+    srcs = ["contract_query_test.cc"],
+    deps = [
+        ":lower",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "source_memory_plan",
     srcs = ["source_memory_plan.c"],

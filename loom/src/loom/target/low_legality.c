@@ -12,7 +12,10 @@
 #include "loom/error/error_defs.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/buffer/ops.h"
+#include "loom/ops/cfg/ops.h"
 #include "loom/ops/func/ops.h"
+#include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/type_registry.h"
@@ -603,6 +606,16 @@ static iree_status_t loom_target_low_legality_verify_op_class(
   }
   if (loom_traits_are_value_alias(traits)) {
     return iree_ok_status();
+  }
+  switch (op->kind) {
+    case LOOM_OP_BUFFER_ASSUME_SAME_ROOT:
+    case LOOM_OP_CFG_BR:
+    case LOOM_OP_CFG_COND_BR:
+    case LOOM_OP_FUNC_RETURN:
+    case LOOM_OP_KERNEL_RETURN:
+      return iree_ok_status();
+    default:
+      break;
   }
   loom_op_semantics_t semantics = loom_op_semantics(context->module, op);
   loom_target_low_legality_t legality = LOOM_TARGET_LOW_LEGALITY_UNSUPPORTED;

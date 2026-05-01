@@ -452,6 +452,20 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_test(
+  NAME
+    contract_query_test
+  SRCS
+    "contract_query_test.cc"
+  DEPS
+    ::lower
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_library(
   NAME
     source_memory_plan

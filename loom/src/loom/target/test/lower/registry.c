@@ -13,6 +13,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/target/test/contract_table.h"
 #include "loom/target/test/descriptors.h"
 #include "loom/target/test/lower.h"
 
@@ -1757,6 +1758,7 @@ static const loom_low_lower_policy_t kTestLowLowerPolicy = {
             .count = IREE_ARRAYSIZE(kTestLowRuleSets),
             .values = kTestLowRuleSets,
         },
+    .contract_table = &loom_test_low_core_contract_table,
     .select_op = {.fn = loom_test_low_select_op, .user_data = NULL},
     .emit_op = {.fn = loom_test_low_emit_op, .user_data = NULL},
 };

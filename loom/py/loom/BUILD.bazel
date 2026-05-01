@@ -62,6 +62,50 @@ _TEST_LOW_DESCRIPTOR_SHARD_SRCS = _LOW_DESCRIPTOR_SHARD_GENERATOR_SRCS + [
     "target/test/descriptors.py",
 ]
 
+_TARGET_CONTRACT_GENERATOR_SRCS = [
+    "__init__.py",
+    "dsl.py",
+    "gen/__init__.py",
+    "gen/generated_file.py",
+    "gen/target_contract_shard.py",
+    "gen/target_contract_tables.py",
+    "target/__init__.py",
+    "target/contract_tables.py",
+    "target/contracts/__init__.py",
+    "target/contracts/compile.py",
+    "target/contracts/descriptors.py",
+    "target/contracts/emits.py",
+    "target/contracts/guards.py",
+    "target/contracts/immediates.py",
+    "target/contracts/kinds.py",
+    "target/contracts/patterns.py",
+    "target/contracts/rules.py",
+    "target/contracts/source.py",
+    "target/contracts/tables.py",
+    "target/low_descriptors.py",
+]
+
+_TEST_LOW_CONTRACT_SHARD_SRCS = _TARGET_CONTRACT_GENERATOR_SRCS + [
+    "dialect/__init__.py",
+    "dialect/atomic.py",
+    "dialect/combining.py",
+    "dialect/index/__init__.py",
+    "dialect/index/defs.py",
+    "dialect/scalar/__init__.py",
+    "dialect/scalar/analysis.py",
+    "dialect/scalar/arithmetic.py",
+    "dialect/scalar/bitwise.py",
+    "dialect/scalar/comparison.py",
+    "dialect/scalar/conversion.py",
+    "dialect/scalar/defs.py",
+    "dialect/scalar/math.py",
+    "dialect/vector/__init__.py",
+    "dialect/vector/defs.py",
+    "target/test/__init__.py",
+    "target/test/contracts.py",
+    "target/test/descriptors.py",
+]
+
 py_binary(
     name = "amdgpu_atomic_candidates",
     srcs = [
@@ -166,4 +210,10 @@ py_binary(
     name = "test_low_descriptor_shard",
     srcs = _TEST_LOW_DESCRIPTOR_SHARD_SRCS,
     main = "gen/low_descriptor_shard.py",
+)
+
+py_binary(
+    name = "test_low_contract_shard",
+    srcs = _TEST_LOW_CONTRACT_SHARD_SRCS,
+    main = "gen/target_contract_shard.py",
 )

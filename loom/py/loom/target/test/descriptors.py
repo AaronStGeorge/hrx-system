@@ -183,11 +183,28 @@ _I32_VALUE_IMMEDIATE = Immediate(
     unsigned_max=(2**31) - 1,
 )
 
+_LANE_I32X4_IMMEDIATE = Immediate(
+    "lane",
+    ImmediateKind.UNSIGNED,
+    bit_width=2,
+    unsigned_max=3,
+)
+
 _SHUFFLE_CONTROL_IMMEDIATE = Immediate(
     "shuffle_control",
     ImmediateKind.UNSIGNED,
     bit_width=8,
     unsigned_max=255,
+)
+
+_SHUFFLE_BYTE_IMMEDIATES = tuple(
+    Immediate(
+        f"lane{i}",
+        ImmediateKind.UNSIGNED,
+        bit_width=8,
+        unsigned_max=15,
+    )
+    for i in range(16)
 )
 
 _TARGET_BLOCK_IMMEDIATE = Immediate(
@@ -254,6 +271,479 @@ _CONVERGENT_EFFECT = Effect(
 _TIED_RESULT_CONSTRAINTS = (
     Constraint(ConstraintKind.TIED, 0, 1),
     Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
+)
+
+TEST_LOW_CONST_I32_DESCRIPTOR = Descriptor(
+    key="test.const.i32",
+    mnemonic="test.const.i32",
+    semantic_tag="integer.const.i32",
+    operands=(_i32_result(),),
+    immediates=(_I32_VALUE_IMMEDIATE,),
+    asm_forms=_asm(results=("dst",), immediates=("i32_value",)),
+    schedule_class=_SCHEDULE_CONST,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_ADD_I32_DESCRIPTOR = Descriptor(
+    key="test.add.i32",
+    mnemonic="test.add.i32",
+    semantic_tag="integer.add.i32",
+    operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
+    asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_MUL_I32_DESCRIPTOR = Descriptor(
+    key="test.mul.i32",
+    mnemonic="test.mul.i32",
+    semantic_tag="integer.mul.i32",
+    operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
+    asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_TIED_ANY_DESCRIPTOR = Descriptor(
+    key="test.tied.any",
+    mnemonic="test.tied.any",
+    semantic_tag="test.tied.any",
+    operands=(_i32_i64_result(), _i32_i64_operand("src")),
+    constraints=_TIED_RESULT_CONSTRAINTS,
+    asm_forms=_asm(results=("dst",), operands=("src",)),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_ADD_F32_DESCRIPTOR = Descriptor(
+    key="test.add.f32",
+    mnemonic="test.add.f32",
+    semantic_tag="float.add.f32",
+    operands=(_f32_result(), _f32_operand("lhs"), _f32_operand("rhs")),
+    asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_SUB_F32_DESCRIPTOR = Descriptor(
+    key="test.sub.f32",
+    mnemonic="test.sub.f32",
+    semantic_tag="float.sub.f32",
+    operands=(_f32_result(), _f32_operand("lhs"), _f32_operand("rhs")),
+    asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_MUL_F32_DESCRIPTOR = Descriptor(
+    key="test.mul.f32",
+    mnemonic="test.mul.f32",
+    semantic_tag="float.mul.f32",
+    operands=(_f32_result(), _f32_operand("lhs"), _f32_operand("rhs")),
+    asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_CMP_EQ_I32_DESCRIPTOR = Descriptor(
+    key="test.cmp.eq.i32",
+    mnemonic="test.cmp.eq.i32",
+    semantic_tag="integer.cmp.eq.i32",
+    operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
+    asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_SELECT_I32_DESCRIPTOR = Descriptor(
+    key="test.select.i32",
+    mnemonic="test.select.i32",
+    semantic_tag="integer.select.i32",
+    operands=(
+        _i32_result(),
+        _i32_predicate("condition"),
+        _i32_operand("true_value"),
+        _i32_operand("false_value"),
+    ),
+    asm_forms=_asm(
+        results=("dst",),
+        operands=("condition", "true_value", "false_value"),
+    ),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_ADD_V4I32_DESCRIPTOR = Descriptor(
+    key="test.add.v4i32",
+    mnemonic="test.add.v4i32",
+    semantic_tag="vector.add.i32x4",
+    operands=(
+        _v4i32_result(),
+        _v4i32_operand("lhs"),
+        _v4i32_operand("rhs"),
+    ),
+    asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+    schedule_class=_SCHEDULE_VECTOR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_DOT4I_S8S8_DESCRIPTOR = Descriptor(
+    key="test.dot4i.s8s8",
+    mnemonic="test.dot4i.s8s8",
+    semantic_tag="integer.dot4.s8s8",
+    operands=(
+        Operand("dst", OperandRole.RESULT, _I32_ALT, unit_count=4),
+        Operand("lhs", OperandRole.OPERAND, _I8_ALT, unit_count=16),
+        Operand("rhs", OperandRole.OPERAND, _I8_ALT, unit_count=16),
+        Operand("acc", OperandRole.OPERAND, _I32_ALT, unit_count=4),
+    ),
+    asm_forms=_asm(results=("dst",), operands=("lhs", "rhs", "acc")),
+    schedule_class=_SCHEDULE_VECTOR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_SHUFFLE_V4I32_DESCRIPTOR = Descriptor(
+    key="test.shuffle.v4i32",
+    mnemonic="test.shuffle.v4i32",
+    semantic_tag="vector.shuffle.i32x4",
+    operands=(
+        Operand("dst", OperandRole.RESULT, _I32_ALT, unit_count=4),
+        Operand("source", OperandRole.OPERAND, _I32_ALT, unit_count=4),
+    ),
+    immediates=(_SHUFFLE_CONTROL_IMMEDIATE,),
+    asm_forms=_asm(
+        results=("dst",),
+        operands=("source",),
+        immediates=("shuffle_control",),
+    ),
+    schedule_class=_SCHEDULE_VECTOR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_CMP_EQ_V4I32_DESCRIPTOR = Descriptor(
+    key="test.cmp.eq.v4i32",
+    mnemonic="test.cmp.eq.v4i32",
+    semantic_tag="vector.cmp.eq.i32x4",
+    operands=(
+        _v4i32_result(),
+        _v4i32_operand("lhs"),
+        _v4i32_operand("rhs"),
+    ),
+    asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+    schedule_class=_SCHEDULE_VECTOR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_EXTRACT_LANE_I32_DESCRIPTOR = Descriptor(
+    key="test.extract_lane.i32",
+    mnemonic="test.extract_lane.i32",
+    semantic_tag="vector.extract.i32x4",
+    operands=(_i32_result(), _v4i32_operand("source")),
+    immediates=(_LANE_I32X4_IMMEDIATE,),
+    asm_forms=_asm(results=("dst",), operands=("source",), immediates=("lane",)),
+    schedule_class=_SCHEDULE_VECTOR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_SHUFFLE_BYTES_DESCRIPTOR = Descriptor(
+    key="test.shuffle.bytes",
+    mnemonic="test.shuffle.bytes",
+    semantic_tag="vector.shuffle.i8x16",
+    operands=(
+        _v4i32_result(),
+        _v4i32_operand("lhs"),
+        _v4i32_operand("rhs"),
+    ),
+    immediates=_SHUFFLE_BYTE_IMMEDIATES,
+    asm_forms=_asm(
+        results=("dst",),
+        operands=("lhs", "rhs"),
+        immediates=tuple(
+            immediate.field_name for immediate in _SHUFFLE_BYTE_IMMEDIATES
+        ),
+    ),
+    schedule_class=_SCHEDULE_VECTOR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_CONVERGENT_I32_DESCRIPTOR = Descriptor(
+    key="test.convergent.i32",
+    mnemonic="test.convergent.i32",
+    semantic_tag="test.convergent.i32",
+    operands=(_i32_result(), _i32_operand("input")),
+    effects=(_CONVERGENT_EFFECT,),
+    asm_forms=_asm(results=("dst",), operands=("input",)),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+)
+
+TEST_LOW_AMBIGUOUS_DESCRIPTOR = Descriptor(
+    key="test.ambiguous",
+    mnemonic="test.ambiguous",
+    semantic_tag="test.ambiguous",
+    operands=(_i32_i64_result(),),
+    asm_forms=_asm(results=("dst",)),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_WRITE_LOW16_I32_DESCRIPTOR = Descriptor(
+    key="test.write.low16.i32",
+    mnemonic="test.write.low16.i32",
+    semantic_tag="test.write.low16.i32",
+    operands=(_i32_low16_result(), _ptr_resource("address")),
+    asm_forms=_asm(results=("dst",), operands=("address",)),
+    effects=(_LOAD_EFFECT,),
+    schedule_class=_SCHEDULE_LOAD,
+    flags=(DescriptorFlag.SIDE_EFFECTING,),
+)
+
+TEST_LOW_WRITE_HIGH16_I32_DESCRIPTOR = Descriptor(
+    key="test.write.high16.i32",
+    mnemonic="test.write.high16.i32",
+    semantic_tag="test.write.high16.i32",
+    operands=(
+        _i32_high16_result(),
+        _i32_low16_operand("src"),
+        _ptr_resource("address"),
+    ),
+    constraints=(Constraint(ConstraintKind.TIED, 0, 1),),
+    asm_forms=_asm(results=("dst",), operands=("src", "address")),
+    effects=(_LOAD_EFFECT,),
+    schedule_class=_SCHEDULE_LOAD,
+    flags=(DescriptorFlag.SIDE_EFFECTING,),
+)
+
+TEST_LOW_SPV_OP_IADD_I32_DESCRIPTOR = Descriptor(
+    key="test.spv.op_iadd.i32",
+    mnemonic="OpIAdd",
+    semantic_tag="spirv.op_iadd.i32",
+    operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
+    asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_ADD_PHYS_DESCRIPTOR = Descriptor(
+    key="test.add.phys",
+    mnemonic="test.add.phys",
+    semantic_tag="test.physical.add",
+    operands=(_phys_result(), _phys_operand("lhs"), _phys_operand("rhs")),
+    asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+    schedule_class=_SCHEDULE_VECTOR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_ADD_SPECIAL_DESCRIPTOR = Descriptor(
+    key="test.add.special",
+    mnemonic="test.add.special",
+    semantic_tag="test.special.add",
+    operands=(
+        _special_result(),
+        _special_operand("lhs"),
+        _special_operand("rhs"),
+    ),
+    asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_LOAD_V4I32_DESCRIPTOR = Descriptor(
+    key="test.load.v4i32",
+    mnemonic="test.load.v4i32",
+    semantic_tag="memory.load.v128",
+    operands=(
+        Operand("dst", OperandRole.RESULT, _I32_ALT, unit_count=4),
+        _ptr_resource("address"),
+    ),
+    asm_forms=_asm(results=("dst",), operands=("address",)),
+    effects=(_LOAD_EFFECT,),
+    schedule_class=_SCHEDULE_LOAD,
+    flags=(DescriptorFlag.SIDE_EFFECTING,),
+)
+
+TEST_LOW_LOAD_V4F32_DESCRIPTOR = Descriptor(
+    key="test.load.v4f32",
+    mnemonic="test.load.v4f32",
+    semantic_tag="memory.load.v128.f32",
+    operands=(
+        Operand("dst", OperandRole.RESULT, _F32_ALT, unit_count=4),
+        _ptr_resource("address"),
+    ),
+    asm_forms=_asm(results=("dst",), operands=("address",)),
+    effects=(_LOAD_EFFECT,),
+    schedule_class=_SCHEDULE_LOAD,
+    flags=(DescriptorFlag.SIDE_EFFECTING,),
+)
+
+TEST_LOW_LOAD_INDEX_V4I32_DESCRIPTOR = Descriptor(
+    key="test.load.index.v4i32",
+    mnemonic="test.load.index.v4i32",
+    semantic_tag="memory.load.index.v128",
+    operands=(
+        Operand("dst", OperandRole.RESULT, _I32_ALT, unit_count=4),
+        _ptr_resource("address"),
+        _i32_operand("index"),
+    ),
+    asm_forms=_asm(results=("dst",), operands=("address", "index")),
+    effects=(_LOAD_EFFECT,),
+    schedule_class=_SCHEDULE_LOAD,
+    flags=(DescriptorFlag.SIDE_EFFECTING,),
+)
+
+TEST_LOW_LOAD_INDEX_V4F32_DESCRIPTOR = Descriptor(
+    key="test.load.index.v4f32",
+    mnemonic="test.load.index.v4f32",
+    semantic_tag="memory.load.index.v128.f32",
+    operands=(
+        Operand("dst", OperandRole.RESULT, _F32_ALT, unit_count=4),
+        _ptr_resource("address"),
+        _i32_operand("index"),
+    ),
+    asm_forms=_asm(results=("dst",), operands=("address", "index")),
+    effects=(_LOAD_EFFECT,),
+    schedule_class=_SCHEDULE_LOAD,
+    flags=(DescriptorFlag.SIDE_EFFECTING,),
+)
+
+TEST_LOW_STORE_V4I32_DESCRIPTOR = Descriptor(
+    key="test.store.v4i32",
+    mnemonic="test.store.v4i32",
+    semantic_tag="memory.store.v128",
+    operands=(
+        _ptr_resource("address"),
+        Operand("value", OperandRole.OPERAND, _I32_ALT, unit_count=4),
+    ),
+    asm_forms=_asm(operands=("address", "value")),
+    effects=(_STORE_EFFECT,),
+    schedule_class=_SCHEDULE_STORE,
+    flags=(DescriptorFlag.SIDE_EFFECTING,),
+)
+
+TEST_LOW_STORE_V4F32_DESCRIPTOR = Descriptor(
+    key="test.store.v4f32",
+    mnemonic="test.store.v4f32",
+    semantic_tag="memory.store.v128.f32",
+    operands=(
+        _ptr_resource("address"),
+        Operand("value", OperandRole.OPERAND, _F32_ALT, unit_count=4),
+    ),
+    asm_forms=_asm(operands=("address", "value")),
+    effects=(_STORE_EFFECT,),
+    schedule_class=_SCHEDULE_STORE,
+    flags=(DescriptorFlag.SIDE_EFFECTING,),
+)
+
+TEST_LOW_STORE_INDEX_V4I32_DESCRIPTOR = Descriptor(
+    key="test.store.index.v4i32",
+    mnemonic="test.store.index.v4i32",
+    semantic_tag="memory.store.index.v128",
+    operands=(
+        _ptr_resource("address"),
+        _i32_operand("index"),
+        Operand("value", OperandRole.OPERAND, _I32_ALT, unit_count=4),
+    ),
+    asm_forms=_asm(operands=("address", "index", "value")),
+    effects=(_STORE_EFFECT,),
+    schedule_class=_SCHEDULE_STORE,
+    flags=(DescriptorFlag.SIDE_EFFECTING,),
+)
+
+TEST_LOW_STORE_INDEX_V4F32_DESCRIPTOR = Descriptor(
+    key="test.store.index.v4f32",
+    mnemonic="test.store.index.v4f32",
+    semantic_tag="memory.store.index.v128.f32",
+    operands=(
+        _ptr_resource("address"),
+        _i32_operand("index"),
+        Operand("value", OperandRole.OPERAND, _F32_ALT, unit_count=4),
+    ),
+    asm_forms=_asm(operands=("address", "index", "value")),
+    effects=(_STORE_EFFECT,),
+    schedule_class=_SCHEDULE_STORE,
+    flags=(DescriptorFlag.SIDE_EFFECTING,),
+)
+
+TEST_LOW_CALL_I32_DESCRIPTOR = Descriptor(
+    key="test.call.i32",
+    mnemonic="test.call.i32",
+    semantic_tag="call.import.i32",
+    operands=(_i32_result(), _i32_operand("arg0")),
+    immediates=(_CALLEE_IMMEDIATE,),
+    asm_forms=_asm(
+        results=("dst",),
+        operands=("arg0",),
+        immediates=(AsmImmediate("callee_ordinal", name="callee"),),
+    ),
+    effects=(_CALL_EFFECT,),
+    schedule_class=_SCHEDULE_CALL,
+    flags=(DescriptorFlag.SIDE_EFFECTING,),
+)
+
+TEST_LOW_BR_DESCRIPTOR = Descriptor(
+    key="test.br",
+    mnemonic="test.br",
+    semantic_tag="control.branch",
+    operands=(),
+    immediates=(_TARGET_BLOCK_IMMEDIATE,),
+    asm_forms=_asm(immediates=("target_block",)),
+    effects=(_CONTROL_EFFECT,),
+    schedule_class=_SCHEDULE_CONTROL,
+    flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
+)
+
+TEST_LOW_COND_BR_I32_DESCRIPTOR = Descriptor(
+    key="test.cond_br.i32",
+    mnemonic="test.cond_br.i32",
+    semantic_tag="control.cond_branch.i32",
+    operands=(_i32_predicate("cond"),),
+    immediates=(_TRUE_BLOCK_IMMEDIATE, _FALSE_BLOCK_IMMEDIATE),
+    asm_forms=_asm(operands=("cond",), immediates=("true_block", "false_block")),
+    effects=(_CONTROL_EFFECT,),
+    schedule_class=_SCHEDULE_CONTROL,
+    flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
+)
+
+TEST_LOW_RETURN_I32_DESCRIPTOR = Descriptor(
+    key="test.return.i32",
+    mnemonic="test.return.i32",
+    semantic_tag="control.return.i32",
+    operands=(_i32_operand("value"),),
+    asm_forms=_asm(operands=("value",)),
+    effects=(_CONTROL_EFFECT,),
+    schedule_class=_SCHEDULE_CONTROL,
+    flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
+)
+
+TEST_LOW_RETURN_VOID_DESCRIPTOR = Descriptor(
+    key="test.return.void",
+    mnemonic="test.return.void",
+    semantic_tag="control.return.void",
+    operands=(),
+    asm_forms=_asm(),
+    effects=(_CONTROL_EFFECT,),
+    schedule_class=_SCHEDULE_CONTROL,
+    flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
+)
+
+TEST_LOW_ALT_CONST_I32_DESCRIPTOR = Descriptor(
+    key="test.alt.const.i32",
+    mnemonic="test.alt.const.i32",
+    semantic_tag="test.alt.integer.const.i32",
+    operands=(_i32_result(),),
+    immediates=(_I32_VALUE_IMMEDIATE,),
+    asm_forms=_asm(results=("dst",), immediates=("i32_value",)),
+    schedule_class=_SCHEDULE_CONST,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_ALT_NEG_I32_DESCRIPTOR = Descriptor(
+    key="test.alt.neg.i32",
+    mnemonic="test.alt.neg.i32",
+    semantic_tag="test.alt.integer.neg.i32",
+    operands=(_i32_result(), _i32_operand("value")),
+    asm_forms=_asm(results=("dst",), operands=("value",)),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
 )
 
 TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
@@ -401,382 +891,41 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
         ),
     ),
     descriptors=(
-        Descriptor(
-            key="test.const.i32",
-            mnemonic="test.const.i32",
-            semantic_tag="integer.const.i32",
-            operands=(_i32_result(),),
-            immediates=(_I32_VALUE_IMMEDIATE,),
-            asm_forms=_asm(results=("dst",), immediates=("i32_value",)),
-            schedule_class=_SCHEDULE_CONST,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.add.i32",
-            mnemonic="test.add.i32",
-            semantic_tag="integer.add.i32",
-            operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
-            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
-            schedule_class=_SCHEDULE_SCALAR_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.convergent.i32",
-            mnemonic="test.convergent.i32",
-            semantic_tag="test.convergent.i32",
-            operands=(_i32_result(), _i32_operand("input")),
-            effects=(_CONVERGENT_EFFECT,),
-            asm_forms=_asm(results=("dst",), operands=("input",)),
-            schedule_class=_SCHEDULE_SCALAR_ALU,
-        ),
-        Descriptor(
-            key="test.mul.i32",
-            mnemonic="test.mul.i32",
-            semantic_tag="integer.mul.i32",
-            operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
-            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
-            schedule_class=_SCHEDULE_SCALAR_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.add.f32",
-            mnemonic="test.add.f32",
-            semantic_tag="float.add.f32",
-            operands=(_f32_result(), _f32_operand("lhs"), _f32_operand("rhs")),
-            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
-            schedule_class=_SCHEDULE_SCALAR_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.sub.f32",
-            mnemonic="test.sub.f32",
-            semantic_tag="float.sub.f32",
-            operands=(_f32_result(), _f32_operand("lhs"), _f32_operand("rhs")),
-            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
-            schedule_class=_SCHEDULE_SCALAR_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.mul.f32",
-            mnemonic="test.mul.f32",
-            semantic_tag="float.mul.f32",
-            operands=(_f32_result(), _f32_operand("lhs"), _f32_operand("rhs")),
-            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
-            schedule_class=_SCHEDULE_SCALAR_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.ambiguous",
-            mnemonic="test.ambiguous",
-            semantic_tag="test.ambiguous",
-            operands=(_i32_i64_result(),),
-            asm_forms=_asm(results=("dst",)),
-            schedule_class=_SCHEDULE_SCALAR_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.tied.any",
-            mnemonic="test.tied.any",
-            semantic_tag="test.tied.any",
-            operands=(_i32_i64_result(), _i32_i64_operand("src")),
-            constraints=_TIED_RESULT_CONSTRAINTS,
-            asm_forms=_asm(results=("dst",), operands=("src",)),
-            schedule_class=_SCHEDULE_SCALAR_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.write.low16.i32",
-            mnemonic="test.write.low16.i32",
-            semantic_tag="test.write.low16.i32",
-            operands=(_i32_low16_result(), _ptr_resource("address")),
-            asm_forms=_asm(results=("dst",), operands=("address",)),
-            effects=(_LOAD_EFFECT,),
-            schedule_class=_SCHEDULE_LOAD,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="test.write.high16.i32",
-            mnemonic="test.write.high16.i32",
-            semantic_tag="test.write.high16.i32",
-            operands=(
-                _i32_high16_result(),
-                _i32_low16_operand("src"),
-                _ptr_resource("address"),
-            ),
-            constraints=(Constraint(ConstraintKind.TIED, 0, 1),),
-            asm_forms=_asm(results=("dst",), operands=("src", "address")),
-            effects=(_LOAD_EFFECT,),
-            schedule_class=_SCHEDULE_LOAD,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="test.spv.op_iadd.i32",
-            mnemonic="OpIAdd",
-            semantic_tag="spirv.op_iadd.i32",
-            operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
-            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
-            schedule_class=_SCHEDULE_SCALAR_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.cmp.eq.i32",
-            mnemonic="test.cmp.eq.i32",
-            semantic_tag="integer.cmp.eq.i32",
-            operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
-            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
-            schedule_class=_SCHEDULE_SCALAR_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.select.i32",
-            mnemonic="test.select.i32",
-            semantic_tag="integer.select.i32",
-            operands=(
-                _i32_result(),
-                _i32_predicate("condition"),
-                _i32_operand("true_value"),
-                _i32_operand("false_value"),
-            ),
-            asm_forms=_asm(
-                results=("dst",),
-                operands=("condition", "true_value", "false_value"),
-            ),
-            schedule_class=_SCHEDULE_SCALAR_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.add.v4i32",
-            mnemonic="test.add.v4i32",
-            semantic_tag="vector.add.i32x4",
-            operands=(
-                _v4i32_result(),
-                _v4i32_operand("lhs"),
-                _v4i32_operand("rhs"),
-            ),
-            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
-            schedule_class=_SCHEDULE_VECTOR_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.dot4i.s8s8",
-            mnemonic="test.dot4i.s8s8",
-            semantic_tag="integer.dot4.s8s8",
-            operands=(
-                Operand("dst", OperandRole.RESULT, _I32_ALT, unit_count=4),
-                Operand("lhs", OperandRole.OPERAND, _I8_ALT, unit_count=16),
-                Operand("rhs", OperandRole.OPERAND, _I8_ALT, unit_count=16),
-                Operand("acc", OperandRole.OPERAND, _I32_ALT, unit_count=4),
-            ),
-            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs", "acc")),
-            schedule_class=_SCHEDULE_VECTOR_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.shuffle.v4i32",
-            mnemonic="test.shuffle.v4i32",
-            semantic_tag="vector.shuffle.i32x4",
-            operands=(
-                Operand("dst", OperandRole.RESULT, _I32_ALT, unit_count=4),
-                Operand("source", OperandRole.OPERAND, _I32_ALT, unit_count=4),
-            ),
-            immediates=(_SHUFFLE_CONTROL_IMMEDIATE,),
-            asm_forms=_asm(
-                results=("dst",),
-                operands=("source",),
-                immediates=("shuffle_control",),
-            ),
-            schedule_class=_SCHEDULE_VECTOR_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.add.phys",
-            mnemonic="test.add.phys",
-            semantic_tag="test.physical.add",
-            operands=(_phys_result(), _phys_operand("lhs"), _phys_operand("rhs")),
-            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
-            schedule_class=_SCHEDULE_VECTOR_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.add.special",
-            mnemonic="test.add.special",
-            semantic_tag="test.special.add",
-            operands=(
-                _special_result(),
-                _special_operand("lhs"),
-                _special_operand("rhs"),
-            ),
-            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
-            schedule_class=_SCHEDULE_SCALAR_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.load.v4i32",
-            mnemonic="test.load.v4i32",
-            semantic_tag="memory.load.v128",
-            operands=(
-                Operand("dst", OperandRole.RESULT, _I32_ALT, unit_count=4),
-                _ptr_resource("address"),
-            ),
-            asm_forms=_asm(results=("dst",), operands=("address",)),
-            effects=(_LOAD_EFFECT,),
-            schedule_class=_SCHEDULE_LOAD,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="test.load.v4f32",
-            mnemonic="test.load.v4f32",
-            semantic_tag="memory.load.v128.f32",
-            operands=(
-                Operand("dst", OperandRole.RESULT, _F32_ALT, unit_count=4),
-                _ptr_resource("address"),
-            ),
-            asm_forms=_asm(results=("dst",), operands=("address",)),
-            effects=(_LOAD_EFFECT,),
-            schedule_class=_SCHEDULE_LOAD,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="test.load.index.v4i32",
-            mnemonic="test.load.index.v4i32",
-            semantic_tag="memory.load.index.v128",
-            operands=(
-                Operand("dst", OperandRole.RESULT, _I32_ALT, unit_count=4),
-                _ptr_resource("address"),
-                _i32_operand("index"),
-            ),
-            asm_forms=_asm(results=("dst",), operands=("address", "index")),
-            effects=(_LOAD_EFFECT,),
-            schedule_class=_SCHEDULE_LOAD,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="test.load.index.v4f32",
-            mnemonic="test.load.index.v4f32",
-            semantic_tag="memory.load.index.v128.f32",
-            operands=(
-                Operand("dst", OperandRole.RESULT, _F32_ALT, unit_count=4),
-                _ptr_resource("address"),
-                _i32_operand("index"),
-            ),
-            asm_forms=_asm(results=("dst",), operands=("address", "index")),
-            effects=(_LOAD_EFFECT,),
-            schedule_class=_SCHEDULE_LOAD,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="test.store.v4i32",
-            mnemonic="test.store.v4i32",
-            semantic_tag="memory.store.v128",
-            operands=(
-                _ptr_resource("address"),
-                Operand("value", OperandRole.OPERAND, _I32_ALT, unit_count=4),
-            ),
-            asm_forms=_asm(operands=("address", "value")),
-            effects=(_STORE_EFFECT,),
-            schedule_class=_SCHEDULE_STORE,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="test.store.v4f32",
-            mnemonic="test.store.v4f32",
-            semantic_tag="memory.store.v128.f32",
-            operands=(
-                _ptr_resource("address"),
-                Operand("value", OperandRole.OPERAND, _F32_ALT, unit_count=4),
-            ),
-            asm_forms=_asm(operands=("address", "value")),
-            effects=(_STORE_EFFECT,),
-            schedule_class=_SCHEDULE_STORE,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="test.store.index.v4i32",
-            mnemonic="test.store.index.v4i32",
-            semantic_tag="memory.store.index.v128",
-            operands=(
-                _ptr_resource("address"),
-                _i32_operand("index"),
-                Operand("value", OperandRole.OPERAND, _I32_ALT, unit_count=4),
-            ),
-            asm_forms=_asm(operands=("address", "index", "value")),
-            effects=(_STORE_EFFECT,),
-            schedule_class=_SCHEDULE_STORE,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="test.store.index.v4f32",
-            mnemonic="test.store.index.v4f32",
-            semantic_tag="memory.store.index.v128.f32",
-            operands=(
-                _ptr_resource("address"),
-                _i32_operand("index"),
-                Operand("value", OperandRole.OPERAND, _F32_ALT, unit_count=4),
-            ),
-            asm_forms=_asm(operands=("address", "index", "value")),
-            effects=(_STORE_EFFECT,),
-            schedule_class=_SCHEDULE_STORE,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="test.call.i32",
-            mnemonic="test.call.i32",
-            semantic_tag="call.import.i32",
-            operands=(_i32_result(), _i32_operand("arg0")),
-            immediates=(_CALLEE_IMMEDIATE,),
-            asm_forms=_asm(
-                results=("dst",),
-                operands=("arg0",),
-                immediates=(AsmImmediate("callee_ordinal", name="callee"),),
-            ),
-            effects=(_CALL_EFFECT,),
-            schedule_class=_SCHEDULE_CALL,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="test.br",
-            mnemonic="test.br",
-            semantic_tag="control.branch",
-            operands=(),
-            immediates=(_TARGET_BLOCK_IMMEDIATE,),
-            asm_forms=_asm(immediates=("target_block",)),
-            effects=(_CONTROL_EFFECT,),
-            schedule_class=_SCHEDULE_CONTROL,
-            flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
-        ),
-        Descriptor(
-            key="test.cond_br.i32",
-            mnemonic="test.cond_br.i32",
-            semantic_tag="control.cond_branch.i32",
-            operands=(_i32_predicate("cond"),),
-            immediates=(_TRUE_BLOCK_IMMEDIATE, _FALSE_BLOCK_IMMEDIATE),
-            asm_forms=_asm(
-                operands=("cond",), immediates=("true_block", "false_block")
-            ),
-            effects=(_CONTROL_EFFECT,),
-            schedule_class=_SCHEDULE_CONTROL,
-            flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
-        ),
-        Descriptor(
-            key="test.return.i32",
-            mnemonic="test.return.i32",
-            semantic_tag="control.return.i32",
-            operands=(_i32_operand("value"),),
-            asm_forms=_asm(operands=("value",)),
-            effects=(_CONTROL_EFFECT,),
-            schedule_class=_SCHEDULE_CONTROL,
-            flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
-        ),
-        Descriptor(
-            key="test.return.void",
-            mnemonic="test.return.void",
-            semantic_tag="control.return.void",
-            operands=(),
-            asm_forms=_asm(),
-            effects=(_CONTROL_EFFECT,),
-            schedule_class=_SCHEDULE_CONTROL,
-            flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
-        ),
+        TEST_LOW_CONST_I32_DESCRIPTOR,
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        TEST_LOW_CONVERGENT_I32_DESCRIPTOR,
+        TEST_LOW_MUL_I32_DESCRIPTOR,
+        TEST_LOW_ADD_F32_DESCRIPTOR,
+        TEST_LOW_SUB_F32_DESCRIPTOR,
+        TEST_LOW_MUL_F32_DESCRIPTOR,
+        TEST_LOW_AMBIGUOUS_DESCRIPTOR,
+        TEST_LOW_TIED_ANY_DESCRIPTOR,
+        TEST_LOW_WRITE_LOW16_I32_DESCRIPTOR,
+        TEST_LOW_WRITE_HIGH16_I32_DESCRIPTOR,
+        TEST_LOW_SPV_OP_IADD_I32_DESCRIPTOR,
+        TEST_LOW_CMP_EQ_I32_DESCRIPTOR,
+        TEST_LOW_SELECT_I32_DESCRIPTOR,
+        TEST_LOW_ADD_V4I32_DESCRIPTOR,
+        TEST_LOW_DOT4I_S8S8_DESCRIPTOR,
+        TEST_LOW_SHUFFLE_V4I32_DESCRIPTOR,
+        TEST_LOW_CMP_EQ_V4I32_DESCRIPTOR,
+        TEST_LOW_EXTRACT_LANE_I32_DESCRIPTOR,
+        TEST_LOW_SHUFFLE_BYTES_DESCRIPTOR,
+        TEST_LOW_ADD_PHYS_DESCRIPTOR,
+        TEST_LOW_ADD_SPECIAL_DESCRIPTOR,
+        TEST_LOW_LOAD_V4I32_DESCRIPTOR,
+        TEST_LOW_LOAD_V4F32_DESCRIPTOR,
+        TEST_LOW_LOAD_INDEX_V4I32_DESCRIPTOR,
+        TEST_LOW_LOAD_INDEX_V4F32_DESCRIPTOR,
+        TEST_LOW_STORE_V4I32_DESCRIPTOR,
+        TEST_LOW_STORE_V4F32_DESCRIPTOR,
+        TEST_LOW_STORE_INDEX_V4I32_DESCRIPTOR,
+        TEST_LOW_STORE_INDEX_V4F32_DESCRIPTOR,
+        TEST_LOW_CALL_I32_DESCRIPTOR,
+        TEST_LOW_BR_DESCRIPTOR,
+        TEST_LOW_COND_BR_I32_DESCRIPTOR,
+        TEST_LOW_RETURN_I32_DESCRIPTOR,
+        TEST_LOW_RETURN_VOID_DESCRIPTOR,
     ),
 )
 
@@ -816,24 +965,7 @@ TEST_LOW_ALT_DESCRIPTOR_SET = DescriptorSet(
         ),
     ),
     descriptors=(
-        Descriptor(
-            key="test.alt.const.i32",
-            mnemonic="test.alt.const.i32",
-            semantic_tag="test.alt.integer.const.i32",
-            operands=(_i32_result(),),
-            immediates=(_I32_VALUE_IMMEDIATE,),
-            asm_forms=_asm(results=("dst",), immediates=("i32_value",)),
-            schedule_class=_SCHEDULE_CONST,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="test.alt.neg.i32",
-            mnemonic="test.alt.neg.i32",
-            semantic_tag="test.alt.integer.neg.i32",
-            operands=(_i32_result(), _i32_operand("value")),
-            asm_forms=_asm(results=("dst",), operands=("value",)),
-            schedule_class=_SCHEDULE_SCALAR_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
+        TEST_LOW_ALT_CONST_I32_DESCRIPTOR,
+        TEST_LOW_ALT_NEG_I32_DESCRIPTOR,
     ),
 )

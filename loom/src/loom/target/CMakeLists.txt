@@ -187,6 +187,19 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_test(
+  NAME
+    contract_test
+  SRCS
+    "contract_test.cc"
+  DEPS
+    ::contract
+    iree::base
+    loom::src::loom::ir
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_library(
   NAME
     low_legality
@@ -203,7 +216,10 @@ loom_cc_library(
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::ops::buffer
+    loom::src::loom::ops::cfg
     loom::src::loom::ops::func
+    loom::src::loom::ops::kernel
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scf
     loom::src::loom::ops::type_registry

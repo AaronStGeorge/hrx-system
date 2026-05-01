@@ -10,6 +10,7 @@ load(
     "loom_cc_library",
     "loom_cc_test",
     "loom_low_descriptor_cc_library",
+    "loom_target_table_cc_library",
 )
 
 package(
@@ -33,6 +34,7 @@ loom_assert_no_dependencies(
     ],
     targets = [
         ":alt_descriptors",
+        ":contract_table",
         ":descriptors",
         ":lower",
         ":low_registry",
@@ -84,6 +86,50 @@ loom_low_descriptor_cc_library(
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
+loom_target_table_cc_library(
+    name = "contract_table",
+    args = ["--contract-table=test_low_core"],
+    cmake_generator = "//loom/py/loom:gen/target_contract_shard.py",
+    cmake_generator_deps = [
+        "//loom/py/loom:dialect/atomic.py",
+        "//loom/py/loom:dialect/combining.py",
+        "//loom/py/loom:dialect/index/__init__.py",
+        "//loom/py/loom:dialect/index/defs.py",
+        "//loom/py/loom:dialect/scalar/__init__.py",
+        "//loom/py/loom:dialect/scalar/analysis.py",
+        "//loom/py/loom:dialect/scalar/arithmetic.py",
+        "//loom/py/loom:dialect/scalar/bitwise.py",
+        "//loom/py/loom:dialect/scalar/comparison.py",
+        "//loom/py/loom:dialect/scalar/conversion.py",
+        "//loom/py/loom:dialect/scalar/defs.py",
+        "//loom/py/loom:dialect/scalar/math.py",
+        "//loom/py/loom:dialect/vector/__init__.py",
+        "//loom/py/loom:dialect/vector/defs.py",
+        "//loom/py/loom:dsl.py",
+        "//loom/py/loom:gen/generated_file.py",
+        "//loom/py/loom:gen/target_contract_tables.py",
+        "//loom/py/loom:target/contract_tables.py",
+        "//loom/py/loom:target/contracts/__init__.py",
+        "//loom/py/loom:target/contracts/compile.py",
+        "//loom/py/loom:target/contracts/descriptors.py",
+        "//loom/py/loom:target/contracts/emits.py",
+        "//loom/py/loom:target/contracts/guards.py",
+        "//loom/py/loom:target/contracts/immediates.py",
+        "//loom/py/loom:target/contracts/kinds.py",
+        "//loom/py/loom:target/contracts/patterns.py",
+        "//loom/py/loom:target/contracts/rules.py",
+        "//loom/py/loom:target/contracts/source.py",
+        "//loom/py/loom:target/contracts/tables.py",
+        "//loom/py/loom:target/low_descriptors.py",
+        "//loom/py/loom:target/test/contracts.py",
+        "//loom/py/loom:target/test/descriptors.py",
+    ],
+    generator = "//loom/py/loom:test_low_contract_shard",
+    header = "contract_table.h",
+    source = "contract_table.c",
+    deps = ["//loom/src/loom/target:contract"],
+)
+
 loom_cc_library(
     name = "low_registry",
     srcs = ["low_registry.c"],
@@ -102,6 +148,7 @@ loom_cc_library(
     srcs = ["lower/registry.c"],
     hdrs = ["lower.h"],
     deps = [
+        ":contract_table",
         ":descriptors",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/codegen/low:source_memory_plan",
@@ -115,6 +162,20 @@ loom_cc_library(
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "contract_table_test",
+    srcs = ["contract_table_test.cc"],
+    deps = [
+        ":contract_table",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/target:contract",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

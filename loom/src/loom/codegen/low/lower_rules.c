@@ -544,9 +544,10 @@ static iree_status_t loom_low_lower_rule_matches(
   return iree_ok_status();
 }
 
-iree_status_t loom_low_lower_rule_set_select_with_match_context(
+iree_status_t loom_low_lower_rule_set_select_rule_range_with_match_context(
     const loom_low_lower_rule_match_context_t* match_context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t rule_start, uint16_t rule_count,
     loom_low_lower_rule_selection_t* out_selection) {
   IREE_ASSERT_ARGUMENT(match_context);
   IREE_ASSERT_ARGUMENT(rule_set);
@@ -560,17 +561,15 @@ iree_status_t loom_low_lower_rule_set_select_with_match_context(
       .matched_guard_count = 0,
   };
 
-  const loom_low_lower_rule_span_t* span =
-      loom_low_lower_rule_set_find_span(rule_set, source_op->kind);
-  if (span == NULL) {
+  if (rule_count == 0) {
     return iree_ok_status();
   }
   out_selection->has_source_op_span = true;
 
   uint16_t best_diagnostic_index = LOOM_LOW_LOWER_DIAGNOSTIC_NONE;
   uint16_t best_matched_guard_count = 0;
-  for (uint16_t i = 0; i < span->rule_count; ++i) {
-    uint16_t rule_index = (uint16_t)(span->rule_start + i);
+  for (uint16_t i = 0; i < rule_count; ++i) {
+    uint16_t rule_index = (uint16_t)(rule_start + i);
     const loom_low_lower_rule_t* rule = &rule_set->rules[rule_index];
     bool rule_matches = false;
     uint16_t diagnostic_index = LOOM_LOW_LOWER_DIAGNOSTIC_NONE;
@@ -593,6 +592,21 @@ iree_status_t loom_low_lower_rule_set_select_with_match_context(
   out_selection->diagnostic_index = best_diagnostic_index;
   out_selection->matched_guard_count = best_matched_guard_count;
   return iree_ok_status();
+}
+
+iree_status_t loom_low_lower_rule_set_select_with_match_context(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    loom_low_lower_rule_selection_t* out_selection) {
+  IREE_ASSERT_ARGUMENT(rule_set);
+  IREE_ASSERT_ARGUMENT(source_op);
+  const loom_low_lower_rule_span_t* span =
+      loom_low_lower_rule_set_find_span(rule_set, source_op->kind);
+  const uint16_t rule_start = span ? span->rule_start : 0;
+  const uint16_t rule_count = span ? span->rule_count : 0;
+  return loom_low_lower_rule_set_select_rule_range_with_match_context(
+      match_context, rule_set, source_op, rule_start, rule_count,
+      out_selection);
 }
 
 static iree_status_t loom_low_lower_rule_match_map_value_from_lowering(
@@ -640,12 +654,10 @@ static bool loom_low_lower_rule_match_can_materialize_from_lowering(
   return materializer->can_materialize(context, source_op, source_value_id);
 }
 
-iree_status_t loom_low_lower_rule_set_select(
-    loom_low_lower_context_t* context,
-    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
-    loom_low_lower_rule_selection_t* out_selection) {
-  IREE_ASSERT_ARGUMENT(context);
-  const loom_low_lower_rule_match_context_t match_context = {
+static loom_low_lower_rule_match_context_t
+loom_low_lower_rule_match_context_from_lowering(
+    loom_low_lower_context_t* context) {
+  return (loom_low_lower_rule_match_context_t){
       .module = loom_low_lower_context_module(context),
       .descriptor_set = loom_low_lower_context_descriptor_set(context),
       .map_value =
@@ -665,8 +677,30 @@ iree_status_t loom_low_lower_rule_set_select(
           },
       .fact_table = loom_low_lower_context_fact_table(context),
   };
+}
+
+iree_status_t loom_low_lower_rule_set_select(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    loom_low_lower_rule_selection_t* out_selection) {
+  IREE_ASSERT_ARGUMENT(context);
+  const loom_low_lower_rule_match_context_t match_context =
+      loom_low_lower_rule_match_context_from_lowering(context);
   return loom_low_lower_rule_set_select_with_match_context(
       &match_context, rule_set, source_op, out_selection);
+}
+
+iree_status_t loom_low_lower_rule_set_select_rule_range(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t rule_start, uint16_t rule_count,
+    loom_low_lower_rule_selection_t* out_selection) {
+  IREE_ASSERT_ARGUMENT(context);
+  const loom_low_lower_rule_match_context_t match_context =
+      loom_low_lower_rule_match_context_from_lowering(context);
+  return loom_low_lower_rule_set_select_rule_range_with_match_context(
+      &match_context, rule_set, source_op, rule_start, rule_count,
+      out_selection);
 }
 
 const loom_low_lower_diagnostic_t* loom_low_lower_rule_set_selection_diagnostic(

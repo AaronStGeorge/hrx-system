@@ -1,0 +1,84 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""Source op field references used by target contracts."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import Self
+
+from loom.dsl import AttrDef, Op, Operand, Result, TiedResult
+from loom.target.contracts.kinds import SourceValueKind
+
+
+@dataclass(frozen=True, slots=True)
+class ValueRef:
+    """Named source value consumed or produced by a contract row."""
+
+    kind: SourceValueKind
+    field: str
+
+    @classmethod
+    def operand(cls, field: str) -> Self:
+        return cls(kind=SourceValueKind.OPERAND, field=field)
+
+    @classmethod
+    def result(cls, field: str) -> Self:
+        return cls(kind=SourceValueKind.RESULT, field=field)
+
+    @classmethod
+    def temporary(cls, field: str) -> Self:
+        return cls(kind=SourceValueKind.TEMPORARY, field=field)
+
+    def validate(
+        self,
+        source_op: Op,
+        subject: str,
+        *,
+        defined_temporaries: Iterable[str] = (),
+    ) -> None:
+        if self.kind == SourceValueKind.OPERAND:
+            _require_operand(source_op, self.field, subject)
+            return
+        if self.kind == SourceValueKind.RESULT:
+            _require_result(source_op, self.field, subject)
+            return
+        if self.field not in set(defined_temporaries):
+            raise ValueError(
+                f"{source_op.name}: {subject} temporary '{self.field}' is not defined"
+            )
+
+
+def _require_operand(source_op: Op, field: str, subject: str) -> Operand:
+    operand = source_op.operand(field)
+    if operand is None:
+        raise ValueError(
+            f"{source_op.name}: {subject} field '{field}' is not an operand"
+        )
+    return operand
+
+
+def _require_result(source_op: Op, field: str, subject: str) -> Result | TiedResult:
+    result = source_op.result(field)
+    if result is None:
+        raise ValueError(f"{source_op.name}: {subject} field '{field}' is not a result")
+    return result
+
+
+def _require_attr(source_op: Op, field: str, subject: str) -> AttrDef:
+    attr = source_op.attr(field)
+    if attr is None:
+        raise ValueError(f"{source_op.name}: {subject} field '{field}' is not an attr")
+    return attr
+
+
+def _require_value(source_op: Op, field: str, subject: str) -> None:
+    if source_op.operand(field) is None and source_op.result(field) is None:
+        raise ValueError(
+            f"{source_op.name}: {subject} field '{field}' is not an operand or result"
+        )

@@ -50,6 +50,54 @@ loom_low_descriptor_cc_library(
     loom::src::loom::codegen::low::descriptors
 )
 
+loom_target_table_cc_library(
+  NAME
+    contract_table
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_contract_shard.py"
+  SOURCE
+    "contract_table.c"
+  HEADER
+    "contract_table.h"
+  ARGS
+    "--contract-table=test_low_core"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/atomic.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/combining.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/defs.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/analysis.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/arithmetic.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/bitwise.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/comparison.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/conversion.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/defs.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/math.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/defs.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dsl.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/generated_file.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_contract_tables.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contract_tables.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/compile.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/emits.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/guards.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/immediates.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/kinds.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/patterns.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/rules.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/source.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/tables.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/test/contracts.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/test/descriptors.py"
+  DEPS
+    loom::src::loom::target::contract
+)
+
 loom_cc_library(
   NAME
     low_registry
@@ -74,6 +122,7 @@ loom_cc_library(
   SRCS
     "lower/registry.c"
   DEPS
+    ::contract_table
     ::descriptors
     iree::base
     loom::src::loom::codegen::low::lower
@@ -88,6 +137,21 @@ loom_cc_library(
     loom::src::loom::ops::vector
     loom::src::loom::util::fact_table
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    contract_table_test
+  SRCS
+    "contract_table_test.cc"
+  DEPS
+    ::contract_table
+    loom::src::loom::ops::index
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::vector
+    loom::src::loom::target::contract
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

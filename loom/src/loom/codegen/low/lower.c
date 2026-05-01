@@ -560,6 +560,81 @@ static void loom_low_lower_record_selected_plan(
       selected_plan;
 }
 
+static iree_status_t loom_low_lower_record_selected_rule_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint16_t rule_set_index, const loom_low_lower_rule_set_t* rule_set,
+    loom_low_lower_rule_selection_t rule_selection) {
+  const loom_low_lower_resolved_emit_t* resolved_emits = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_resolve_emit_program(
+      context, rule_set, rule_selection.rule, &resolved_emits));
+  loom_low_lower_record_selected_plan(
+      context, (loom_low_lower_selected_plan_t){
+                   .source_op = source_op,
+                   .rule_set_index = rule_set_index,
+                   .rule_index = rule_selection.rule_index,
+                   .rule_set = rule_set,
+                   .rule = rule_selection.rule,
+                   .resolved_emits = resolved_emits,
+                   .plan = loom_low_lower_plan_empty(),
+               });
+  return iree_ok_status();
+}
+
+static bool loom_low_lower_rule_selection_is_better_failure(
+    const loom_low_lower_rule_set_t* failed_rule_set,
+    loom_low_lower_rule_selection_t failed_rule_selection,
+    loom_low_lower_rule_selection_t rule_selection) {
+  return rule_selection.has_source_op_span &&
+         (failed_rule_set == NULL ||
+          rule_selection.matched_guard_count >
+              failed_rule_selection.matched_guard_count);
+}
+
+static iree_status_t loom_low_lower_plan_op_from_contract_table(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_rule_set_t** inout_failed_rule_set,
+    loom_low_lower_rule_selection_t* inout_failed_rule_selection,
+    bool* out_selected) {
+  *out_selected = false;
+  const loom_target_contract_table_t* table = context->policy->contract_table;
+  const loom_target_contract_op_entry_t op_entry =
+      loom_target_contract_table_lookup_kind(table, source_op->kind);
+  if (loom_target_contract_op_entry_is_empty(op_entry)) {
+    return iree_ok_status();
+  }
+
+  for (uint16_t i = 0; i < op_entry.case_count; ++i) {
+    const uint16_t case_index = (uint16_t)(op_entry.case_start + i);
+    const loom_target_contract_case_t* contract_case =
+        &table->cases[case_index];
+    if (contract_case->system != LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_RULE) {
+      continue;
+    }
+    const loom_target_contract_descriptor_rule_t* descriptor_rule =
+        &table->descriptor_rules[contract_case->row_index];
+    const loom_low_lower_rule_set_t* rule_set =
+        context->policy->rule_sets.values[descriptor_rule->rule_set_index];
+    loom_low_lower_rule_selection_t rule_selection = {0};
+    IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_select_rule_range(
+        context, rule_set, source_op, descriptor_rule->rule_index, 1,
+        &rule_selection));
+    if (rule_selection.rule != NULL) {
+      IREE_RETURN_IF_ERROR(loom_low_lower_record_selected_rule_plan(
+          context, source_op, descriptor_rule->rule_set_index, rule_set,
+          rule_selection));
+      *out_selected = true;
+      return iree_ok_status();
+    }
+    if (loom_low_lower_rule_selection_is_better_failure(
+            *inout_failed_rule_set, *inout_failed_rule_selection,
+            rule_selection)) {
+      *inout_failed_rule_set = rule_set;
+      *inout_failed_rule_selection = rule_selection;
+    }
+  }
+  return iree_ok_status();
+}
+
 typedef struct loom_low_lower_contract_query_state_t {
   // Mutable lowering context whose scoped arena and target policy back the
   // read-only contract query.
@@ -619,6 +694,7 @@ static iree_status_t loom_low_lower_query_target_contract_from_context(
       .environment = environment,
   };
   const loom_low_lower_contract_query_options_t query_options = {
+      .contract_table = context->policy->contract_table,
       .rule_sets = context->policy->rule_sets,
       .map_value =
           {
@@ -692,34 +768,31 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
 
   const loom_low_lower_rule_set_t* failed_rule_set = NULL;
   loom_low_lower_rule_selection_t failed_rule_selection = {0};
-  for (uint16_t i = 0; i < context->policy->rule_sets.count; ++i) {
-    const loom_low_lower_rule_set_t* rule_set =
-        context->policy->rule_sets.values[i];
-    loom_low_lower_rule_selection_t rule_selection = {0};
-    IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_select(
-        context, rule_set, source_op, &rule_selection));
-    if (rule_selection.rule != NULL) {
-      const loom_low_lower_resolved_emit_t* resolved_emits = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_resolve_emit_program(
-          context, rule_set, rule_selection.rule, &resolved_emits));
-      loom_low_lower_record_selected_plan(
-          context, (loom_low_lower_selected_plan_t){
-                       .source_op = source_op,
-                       .rule_set_index = i,
-                       .rule_index = rule_selection.rule_index,
-                       .rule_set = rule_set,
-                       .rule = rule_selection.rule,
-                       .resolved_emits = resolved_emits,
-                       .plan = loom_low_lower_plan_empty(),
-                   });
+  bool selected_rule = false;
+  if (context->policy->contract_table != NULL) {
+    IREE_RETURN_IF_ERROR(loom_low_lower_plan_op_from_contract_table(
+        context, source_op, &failed_rule_set, &failed_rule_selection,
+        &selected_rule));
+    if (selected_rule) {
       return iree_ok_status();
     }
-    if (rule_selection.has_source_op_span &&
-        (failed_rule_set == NULL ||
-         rule_selection.matched_guard_count >
-             failed_rule_selection.matched_guard_count)) {
-      failed_rule_set = rule_set;
-      failed_rule_selection = rule_selection;
+  } else {
+    for (uint16_t i = 0; i < context->policy->rule_sets.count; ++i) {
+      const loom_low_lower_rule_set_t* rule_set =
+          context->policy->rule_sets.values[i];
+      loom_low_lower_rule_selection_t rule_selection = {0};
+      IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_select(
+          context, rule_set, source_op, &rule_selection));
+      if (rule_selection.rule != NULL) {
+        IREE_RETURN_IF_ERROR(loom_low_lower_record_selected_rule_plan(
+            context, source_op, i, rule_set, rule_selection));
+        return iree_ok_status();
+      }
+      if (loom_low_lower_rule_selection_is_better_failure(
+              failed_rule_set, failed_rule_selection, rule_selection)) {
+        failed_rule_set = rule_set;
+        failed_rule_selection = rule_selection;
+      }
     }
   }
 

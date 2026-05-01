@@ -6,17 +6,21 @@
 
 #include "loom/codegen/low/passes/source_to_low.h"
 
+#include <string>
 #include <vector>
 
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/lower_rules.h"
 #include "loom/codegen/low/pass_environment.h"
+#include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/low/ops.h"
+#include "loom/ops/scalar/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/pass/value_facts.h"
 #include "loom/target/test/low_registry.h"
@@ -27,6 +31,28 @@ namespace loom {
 namespace {
 
 using ModulePtr = ::loom::testing::ModulePtr;
+
+struct DiagnosticEmissionCollector {
+  int count = 0;
+  std::string subject_name;
+  std::string reason;
+};
+
+static std::string CopyString(iree_string_view_t value) {
+  return std::string(value.data, value.size);
+}
+
+static iree_status_t CollectDiagnosticEmission(
+    void* user_data, const loom_diagnostic_emission_t* emission) {
+  auto* collector = static_cast<DiagnosticEmissionCollector*>(user_data);
+  ++collector->count;
+  if (emission->error == loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 1) &&
+      emission->param_count >= 7) {
+    collector->subject_name = CopyString(emission->params[5].string);
+    collector->reason = CopyString(emission->params[6].string);
+  }
+  return iree_ok_status();
+}
 
 static iree_status_t MakeRegisterType(loom_low_lower_context_t* context,
                                       iree_string_view_t register_class,
@@ -94,6 +120,7 @@ class LowLowerPassTest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_TARGET, loom_target_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_LOW, loom_low_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     loom_test_low_descriptor_registry_initialize(&registry_);
     invalid_preamble_policy_registry_ = MakeInvalidPreamblePolicyRegistry();
@@ -127,6 +154,46 @@ class LowLowerPassTest : public ::testing::Test {
     return ModulePtr(module);
   }
 
+  iree_status_t RunSourceToLow(
+      loom_low_lower_policy_registry_t* policy_registry, loom_module_t* module,
+      DiagnosticEmissionCollector* collector = nullptr) {
+    iree_arena_allocator_t instance_arena;
+    iree_arena_initialize(&block_pool_, &instance_arena);
+    loom_pass_value_fact_owner_t value_facts = {};
+    loom_pass_value_fact_owner_initialize(&block_pool_, &value_facts);
+    const loom_pass_info_t* pass_info = loom_low_source_to_low_pass_info();
+    std::vector<int64_t> statistics(pass_info->statistic_count, 0);
+    loom_low_pass_environment_storage_t low_pass_environment_storage;
+    loom_pass_environment_t environment =
+        loom_low_pass_environment_storage_initialize(
+            &registry_.registry, policy_registry, nullptr,
+            &low_pass_environment_storage);
+    loom_pass_t pass = {
+        .info = pass_info,
+        .module_run = loom_low_source_to_low_run,
+        .instance_arena = &instance_arena,
+        .arena = &instance_arena,
+        .statistics = statistics.data(),
+        .environment = &environment,
+        .value_facts = &value_facts,
+    };
+    if (collector != nullptr) {
+      pass.diagnostic_emitter = {
+          .fn = CollectDiagnosticEmission,
+          .user_data = collector,
+      };
+    }
+
+    iree_status_t status =
+        loom_low_source_to_low_create(&pass, iree_string_view_empty());
+    if (iree_status_is_ok(status)) {
+      status = loom_low_source_to_low_run(&pass, module);
+    }
+    loom_pass_value_fact_owner_deinitialize(&value_facts);
+    iree_arena_deinitialize(&instance_arena);
+    return status;
+  }
+
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   loom_target_low_descriptor_registry_t registry_ = {};
@@ -140,33 +207,46 @@ TEST_F(LowLowerPassTest, VerifiesLoweredModuleBeforeReturningSuccess) {
       "  func.return %value : i32\n"
       "}\n"));
 
-  iree_arena_allocator_t instance_arena;
-  iree_arena_initialize(&block_pool_, &instance_arena);
-  loom_pass_value_fact_owner_t value_facts = {};
-  loom_pass_value_fact_owner_initialize(&block_pool_, &value_facts);
-  const loom_pass_info_t* pass_info = loom_low_source_to_low_pass_info();
-  std::vector<int64_t> statistics(pass_info->statistic_count, 0);
-  loom_low_pass_environment_storage_t low_pass_environment_storage;
-  loom_pass_environment_t environment =
-      loom_low_pass_environment_storage_initialize(
-          &registry_.registry, &invalid_preamble_policy_registry_, nullptr,
-          &low_pass_environment_storage);
-  loom_pass_t pass = {
-      .info = pass_info,
-      .module_run = loom_low_source_to_low_run,
-      .instance_arena = &instance_arena,
-      .arena = &instance_arena,
-      .statistics = statistics.data(),
-      .environment = &environment,
-      .value_facts = &value_facts,
-  };
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      RunSourceToLow(&invalid_preamble_policy_registry_, module.get()));
+}
 
-  IREE_ASSERT_OK(
-      loom_low_source_to_low_create(&pass, iree_string_view_empty()));
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        loom_low_source_to_low_run(&pass, module.get()));
-  loom_pass_value_fact_owner_deinitialize(&value_facts);
-  iree_arena_deinitialize(&instance_arena);
+TEST_F(LowLowerPassTest, ContractTableDrivesRuleSelectionWithoutLegacySpans) {
+  ModulePtr module = Parse(IREE_SV(
+      "target.profile @test_target preset(\"test-low\")\n"
+      "func.def target(@test_target) @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+      "  %sum = scalar.addi %lhs, %rhs : i32\n"
+      "  func.return %sum : i32\n"
+      "}\n"));
+
+  loom_low_lower_rule_set_t no_span_rule_set = loom_test_low_lower_rule_set;
+  no_span_rule_set.spans = nullptr;
+  no_span_rule_set.span_count = 0;
+  const loom_low_lower_rule_set_t* rule_sets[] = {
+      &no_span_rule_set,
+  };
+  loom_low_lower_policy_t policy = *loom_test_low_lower_policy();
+  policy.rule_sets = {
+      .count = IREE_ARRAYSIZE(rule_sets),
+      .values = rule_sets,
+  };
+  const loom_low_lower_policy_registry_entry_t entries[] = {
+      {
+          .contract_set_key = IREE_SVL("test.low.core"),
+          .policy = &policy,
+      },
+  };
+  loom_low_lower_policy_registry_t policy_registry = {};
+  loom_low_lower_policy_registry_initialize_from_entries(
+      &policy_registry, entries, IREE_ARRAYSIZE(entries));
+
+  DiagnosticEmissionCollector collector;
+  iree_status_t status =
+      RunSourceToLow(&policy_registry, module.get(), &collector);
+  EXPECT_EQ(collector.count, 0)
+      << collector.subject_name << ": " << collector.reason;
+  IREE_ASSERT_OK(status);
 }
 
 }  // namespace

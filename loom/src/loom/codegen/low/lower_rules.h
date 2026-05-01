@@ -447,12 +447,30 @@ iree_status_t loom_low_lower_rule_set_select(
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     loom_low_lower_rule_selection_t* out_selection);
 
+// Selects a lowering rule from a caller-selected rule range using the mutable
+// lowering context. Contract-table source lowering uses this after direct
+// op-kind lookup has selected the candidate row.
+iree_status_t loom_low_lower_rule_set_select_rule_range(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t rule_start, uint16_t rule_count,
+    loom_low_lower_rule_selection_t* out_selection);
+
 // Selects the exact lowering rule for |source_op| using a read-only match
 // context. This is the legality/checking sibling of
 // loom_low_lower_rule_set_select and performs no IR mutation or emission.
 iree_status_t loom_low_lower_rule_set_select_with_match_context(
     const loom_low_lower_rule_match_context_t* match_context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    loom_low_lower_rule_selection_t* out_selection);
+
+// Selects the exact lowering rule for |source_op| from a caller-selected rule
+// range using a read-only match context. Contract-table systems use this after
+// direct op-kind lookup has selected the candidate span.
+iree_status_t loom_low_lower_rule_set_select_rule_range_with_match_context(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t rule_start, uint16_t rule_count,
     loom_low_lower_rule_selection_t* out_selection);
 
 // Returns the diagnostic row for |selection|, or NULL when no table diagnostic

@@ -75,21 +75,127 @@ typedef struct loom_target_contract_query_result_t {
   const loom_target_contract_rejection_t* rejection;
 } loom_target_contract_query_result_t;
 
+typedef uint8_t loom_target_contract_system_t;
+
+enum loom_target_contract_system_e {
+  // No contract-system row is attached.
+  LOOM_TARGET_CONTRACT_SYSTEM_NONE = 0,
+  // Descriptor-rule row selected from a generated descriptor-rule pool.
+  LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_RULE = 1,
+  // Value-alias row with no emitted low descriptor.
+  LOOM_TARGET_CONTRACT_SYSTEM_VALUE_ALIAS = 2,
+  // Source-memory row selected from a generated source-memory pool.
+  LOOM_TARGET_CONTRACT_SYSTEM_SOURCE_MEMORY = 3,
+  // Environment row selected from a generated environment pool.
+  LOOM_TARGET_CONTRACT_SYSTEM_ENVIRONMENT = 4,
+  // Descriptor-matrix row selected from a generated matrix-contract pool.
+  LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_MATRIX = 5,
+  // Target-owned family row selected from a generated custom-family pool.
+  LOOM_TARGET_CONTRACT_SYSTEM_CUSTOM_FAMILY = 6,
+};
+
+#define LOOM_TARGET_CONTRACT_ROW_NONE ((uint16_t)UINT16_MAX)
+
+typedef struct loom_target_contract_op_entry_t {
+  // First case row for the dialect-local op index.
+  uint16_t case_start;
+  // Number of case rows available for the dialect-local op index.
+  uint16_t case_count;
+} loom_target_contract_op_entry_t;
+
+// Returns an empty target contract op entry.
+static inline loom_target_contract_op_entry_t
+loom_target_contract_op_entry_empty(void) {
+  return (loom_target_contract_op_entry_t){
+      /*.case_start=*/LOOM_TARGET_CONTRACT_ROW_NONE,
+      /*.case_count=*/0,
+  };
+}
+
+// Returns true when |entry| has no case rows.
+static inline bool loom_target_contract_op_entry_is_empty(
+    loom_target_contract_op_entry_t entry) {
+  return entry.case_count == 0;
+}
+
+typedef struct loom_target_contract_dialect_table_t {
+  // Number of dialect-local op entries.
+  uint16_t op_count;
+  // Dense op entries indexed by loom_op_dialect_index.
+  const loom_target_contract_op_entry_t* op_entries;
+} loom_target_contract_dialect_table_t;
+
+typedef struct loom_target_contract_case_t {
+  // Contract system that owns the selected row.
+  loom_target_contract_system_t system;
+  // Reserved byte for future row flags while keeping the case 4 bytes.
+  uint8_t reserved;
+  // Index into the system-specific row pool, or LOOM_TARGET_CONTRACT_ROW_NONE.
+  uint16_t row_index;
+} loom_target_contract_case_t;
+
+typedef struct loom_target_contract_descriptor_rule_t {
+  // Descriptor-rule set in the target-owned rule interpreter table list.
+  uint16_t rule_set_index;
+  // Descriptor-rule row in the target-owned rule interpreter table.
+  uint16_t rule_index;
+} loom_target_contract_descriptor_rule_t;
+
+typedef struct loom_target_contract_table_t {
+  // Stable ordinal for this table within a target bundle.
+  uint16_t table_index;
+  // First dialect id covered by dialects.
+  uint8_t dialect_base_id;
+  // Number of dense dialect slots.
+  uint8_t dialect_count;
+  // Dense dialect slots indexed by dialect id minus dialect_base_id.
+  const loom_target_contract_dialect_table_t* dialects;
+  // Number of generic case rows.
+  uint16_t case_count;
+  // Generic case rows referenced by dense op entries.
+  const loom_target_contract_case_t* cases;
+  // Number of descriptor-rule rows.
+  uint16_t descriptor_rule_count;
+  // Descriptor-rule row pool.
+  const loom_target_contract_descriptor_rule_t* descriptor_rules;
+} loom_target_contract_table_t;
+
+// Looks up the compact case span for an op kind.
+static inline loom_target_contract_op_entry_t
+loom_target_contract_table_lookup_kind(
+    const loom_target_contract_table_t* table, loom_op_kind_t op_kind) {
+  const uint8_t dialect_id = loom_op_dialect_id(op_kind);
+  const uint8_t op_index = loom_op_dialect_index(op_kind);
+  if (dialect_id < table->dialect_base_id) {
+    return loom_target_contract_op_entry_empty();
+  }
+  const uint8_t dialect_index = dialect_id - table->dialect_base_id;
+  if (dialect_index >= table->dialect_count) {
+    return loom_target_contract_op_entry_empty();
+  }
+  const loom_target_contract_dialect_table_t* dialect_table =
+      &table->dialects[dialect_index];
+  if (op_index >= dialect_table->op_count) {
+    return loom_target_contract_op_entry_empty();
+  }
+  return dialect_table->op_entries[op_index];
+}
+
 // Returns an empty target contract query result.
 static inline loom_target_contract_query_result_t
 loom_target_contract_query_result_empty(void) {
   return (loom_target_contract_query_result_t){
-      .outcome = LOOM_TARGET_CONTRACT_QUERY_UNHANDLED,
-      .table_index = UINT16_MAX,
-      .rule_index = UINT16_MAX,
-      .diagnostic_index = UINT16_MAX,
-      .matched_guard_count = 0,
-      .selected_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
-      .source_rejection_bits = 0,
-      .target_rejection_bits = 0,
-      .missing_feature_bits = 0,
-      .missing_fact_bits = 0,
-      .rejection = NULL,
+      /*.outcome=*/LOOM_TARGET_CONTRACT_QUERY_UNHANDLED,
+      /*.table_index=*/UINT16_MAX,
+      /*.rule_index=*/UINT16_MAX,
+      /*.diagnostic_index=*/UINT16_MAX,
+      /*.matched_guard_count=*/0,
+      /*.selected_descriptor_id=*/LOOM_LOW_DESCRIPTOR_ID_NONE,
+      /*.source_rejection_bits=*/0,
+      /*.target_rejection_bits=*/0,
+      /*.missing_feature_bits=*/0,
+      /*.missing_fact_bits=*/0,
+      /*.rejection=*/NULL,
   };
 }
 

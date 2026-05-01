@@ -163,6 +163,18 @@ loom_cc_library(
     ],
 )
 
+loom_cc_test(
+    name = "contract_test",
+    srcs = ["contract_test.cc"],
+    deps = [
+        ":contract",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "low_legality",
     srcs = ["low_legality.c"],
@@ -176,7 +188,10 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops:type_registry",
+        "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/cfg",
         "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/kernel",
         "//loom/src/loom/ops/scf",
         "//loom/src/loom/util:fact_table",
         "//loom/src/loom/util:walk",
