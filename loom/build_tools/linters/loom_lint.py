@@ -41,6 +41,7 @@ def _run(description: str, cmd: list[str], **kwargs: object) -> bool:
 
 
 def main() -> int:
+    os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     ok = True
 
     cwd = RUNTIME_PY
