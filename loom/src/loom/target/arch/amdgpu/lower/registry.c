@@ -56,7 +56,6 @@ typedef struct loom_amdgpu_lower_dispatch_row_t {
                             const loom_op_t* source_op,                        \
                             const loom_amdgpu_lower_dispatch_row_t* row,       \
                             loom_low_lower_plan_t* out_plan) {                 \
-    IREE_ASSERT_EQ(row->plan_data_size, sizeof(plan_type));                    \
     plan_type* plan_data = NULL;                                               \
     IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(                    \
         context, row->plan_data_size, (void**)&plan_data));                    \
@@ -73,7 +72,7 @@ typedef struct loom_amdgpu_lower_dispatch_row_t {
                             const loom_op_t* source_op,                     \
                             const loom_amdgpu_lower_dispatch_row_t* row,    \
                             loom_low_lower_plan_t plan) {                   \
-    IREE_ASSERT_EQ(row->plan_data_size, sizeof(plan_type));                 \
+    (void)row;                                                              \
     return emit_fn(context, source_op, (const plan_type*)plan.target_data); \
   }
 
@@ -246,22 +245,9 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_kernel_async_gather_dispatch,
                              loom_amdgpu_async_gather_plan_t,
                              loom_amdgpu_lower_kernel_async_gather)
 
-static iree_status_t loom_amdgpu_select_kernel_async_wait_dispatch(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_lower_dispatch_row_t* row,
-    loom_low_lower_plan_t* out_plan) {
-  IREE_ASSERT_EQ(row->plan_data_size, sizeof(loom_amdgpu_async_wait_plan_t));
-  loom_amdgpu_async_wait_plan_t* plan_data = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-      context, row->plan_data_size, (void**)&plan_data));
-  bool selected = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_select_kernel_async_wait_plan(
-      context, source_op, plan_data, &selected));
-  if (selected) {
-    *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
-  }
-  return iree_ok_status();
-}
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_kernel_async_wait_dispatch,
+                               loom_amdgpu_async_wait_plan_t,
+                               loom_amdgpu_select_kernel_async_wait_plan)
 
 LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_kernel_async_wait_dispatch,
                              loom_amdgpu_async_wait_plan_t,
@@ -832,7 +818,6 @@ static iree_status_t loom_amdgpu_select_op(void* user_data,
                                            const loom_op_t* source_op,
                                            loom_low_lower_plan_t* out_plan) {
   (void)user_data;
-  IREE_ASSERT_ARGUMENT(out_plan);
   return loom_amdgpu_select_plan_id(context, source_op, out_plan);
 }
 
@@ -843,21 +828,6 @@ static iree_status_t loom_amdgpu_emit_op(void* user_data,
   (void)user_data;
   const loom_amdgpu_lower_dispatch_row_t* row =
       loom_amdgpu_find_lower_dispatch_row(plan.id);
-  if (row == NULL) {
-    return loom_low_lower_emit_reject(
-        context, source_op, IREE_SV("plan"), IREE_SV("AMDGPU callback plan"),
-        IREE_SV("selected AMDGPU callback plan has no dispatch row"));
-  }
-  if (row->emit == NULL) {
-    return loom_low_lower_emit_reject(
-        context, source_op, IREE_SV("plan"), IREE_SV("AMDGPU callback plan"),
-        IREE_SV("selected AMDGPU callback plan has no emission hook"));
-  }
-  if (row->plan_data_size != 0 && plan.target_data == NULL) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "selected AMDGPU callback plan is missing plan data");
-  }
   return row->emit(context, source_op, row, plan);
 }
 
