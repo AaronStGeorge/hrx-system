@@ -225,7 +225,7 @@ target_artifact = Op(
     ],
     examples=[
         "target.artifact @gfx11_kernels target(@gfx11) {artifact_format = elf, abi = hal_executable}",
-        "target.artifact @wasm_module target(@wasm)",
+        "target.artifact @native_object target(@native) {artifact_format = elf, abi = object_file}",
     ],
 )
 

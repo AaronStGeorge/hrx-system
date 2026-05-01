@@ -180,19 +180,19 @@ low.func.decl target(@vm_target) @dead_add(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>)
 
 TEST_F(SymbolDCETest, FunctionExportRootsPrivateEntryAndClosure) {
   const char* source = R"(
-target.profile @wasm preset("test.profile")
-target.artifact @module target(@wasm)
+target.profile @test_target preset("test.profile")
+target.artifact @module target(@test_target)
 
-func.def target(@wasm) abi(wasm_function) export("entry", {artifact = @module}) @entry() {
+func.def target(@test_target) abi(object_function) export("entry", {artifact = @module}) @entry() {
   func.call @helper() : ()
   func.return
 }
 
-func.def target(@wasm) abi(wasm_function) @helper() {
+func.def target(@test_target) abi(object_function) @helper() {
   func.return
 }
 
-func.def target(@wasm) abi(wasm_function) @dead() {
+func.def target(@test_target) abi(object_function) @dead() {
   func.return
 }
 )";

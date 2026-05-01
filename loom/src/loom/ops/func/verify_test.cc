@@ -130,7 +130,7 @@ func.def @semantic() {
 TEST_F(FuncVerifyTest, ContractRequiresTargetProfile) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(R"(
-func.def abi(wasm_function) @semantic() {
+func.def abi(object_function) @semantic() {
   func.return
 }
 )",
@@ -151,9 +151,9 @@ func.def abi(wasm_function) @semantic() {
 TEST_F(FuncVerifyTest, TargetedContractIsValid) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(R"(
-target.profile @wasm preset("test.profile")
+target.profile @test_target preset("test.profile")
 
-func.def target(@wasm) abi(wasm_function) export("semantic") @semantic() {
+func.def target(@test_target) abi(object_function) export("semantic") @semantic() {
   func.return
 }
 )",

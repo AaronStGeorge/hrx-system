@@ -153,7 +153,7 @@ typedef uint8_t loom_field_ref_t;
 // 48 bits; the upper 16 bits carry the operand index. This gives direct
 // pointer access with no table indirection.
 //
-// On 32-bit (WASM): the natural struct layout is 8 bytes because
+// On 32-bit builds: the natural struct layout is 8 bytes because
 // pointers are 4 bytes. No packing needed.
 //
 // Both representations fit 3 uses inline in the value's 24-byte union,
@@ -227,7 +227,7 @@ typedef uint32_t loom_use_index_t;
 // Low 48 bits hold the pointer (same constraint as loom_use_t), high
 // 16 bits hold the result_index (op results) or arg_index (block args).
 //
-// On 32-bit (WASM): natural struct layout, 8 bytes.
+// On 32-bit builds: natural struct layout, 8 bytes.
 //
 // This enables O(1) pattern matching: given a value, follow the def
 // pointer to the defining op and inspect its kind, operands, or

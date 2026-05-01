@@ -19,20 +19,20 @@ from loom.target.descriptor_sets import (
 
 
 def test_resolve_descriptor_set_by_key_and_alias() -> None:
-    by_key = resolve_descriptor_set("wasm.core.simd128")
-    by_alias = resolve_descriptor_set("wasm_core_simd128")
+    by_key = resolve_descriptor_set("test.low.core")
+    by_alias = resolve_descriptor_set("test_low_core")
 
     assert by_key is by_alias
-    assert by_key.function_name == "loom_wasm_core_simd128_descriptor_set"
+    assert by_key.function_name == "loom_test_low_core_descriptor_set"
 
 
 def test_descriptor_set_names_include_keys_and_aliases() -> None:
     names = descriptor_set_names()
 
-    assert "iree.vm.core" in names
-    assert "ireevm_core" in names
     assert "test.low.core" in names
     assert "test_low_core" in names
+    assert "test.low.alt" in names
+    assert "test_low_alt" in names
 
 
 def test_checked_in_c_generation_excludes_build_generated_shards() -> None:
@@ -73,4 +73,4 @@ def test_main_reports_missing_descriptor_set(tmp_path: Path, capsys: pytest.Capt
     assert exc_info.value.code == 2
     captured = capsys.readouterr()
     assert "unknown low descriptor set 'missing.core'" in captured.err
-    assert "wasm.core.simd128" in captured.err
+    assert "test.low.core" in captured.err

@@ -128,13 +128,13 @@ static const char* kValidTargetRecords =
     "target.profile @vm preset(\"iree-vm\")\n"
     "target.profile @gfx11 preset(\"amdgpu-gfx11\") {target_cpu = "
     "\"gfx1100\", contract_feature_bits = 1}\n"
-    "target.profile @wasm preset(\"wasm-simd128\")\n"
+    "target.profile @test_low preset(\"test-low\")\n"
     "target.artifact @vm_module target(@vm) {artifact_format = vm_bytecode, "
     "abi = vm_module}\n"
     "target.artifact @gfx_hal target(@gfx11) {artifact_format = elf, "
     "abi = hal_executable}\n"
-    "target.artifact @wasm_module target(@wasm) {artifact_format = "
-    "wasm_binary, abi = wasm_module}\n";
+    "target.artifact @test_object target(@test_low) {artifact_format = elf, "
+    "abi = object_file}\n";
 
 TEST_F(TargetVerifyTest, ProfilesAndArtifactsVerify) {
   DiagnosticCapture capture;

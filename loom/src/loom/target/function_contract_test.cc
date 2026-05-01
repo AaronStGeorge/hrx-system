@@ -28,12 +28,12 @@ using ModulePtr = ::loom::testing::ModulePtr;
 
 static const loom_target_snapshot_t kPresetSnapshot = {
     .name = IREE_SVL("test.profile"),
-    .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_WASM,
-    .target_triple = IREE_SVL("wasm32-unknown-unknown"),
+    .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,
+    .target_triple = IREE_SVL("test-low-unknown"),
     .data_layout = IREE_SVL(""),
-    .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY,
+    .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
     .target_cpu = IREE_SVL("generic"),
-    .target_features = IREE_SVL("+simd128"),
+    .target_features = IREE_SVL("+test"),
     .default_pointer_bitwidth = 32,
     .index_bitwidth = 32,
     .offset_bitwidth = 32,
@@ -52,7 +52,7 @@ static const loom_target_snapshot_t kPresetSnapshot = {
 static const loom_target_export_plan_t kPresetExportPlan = {
     .name = IREE_SVL("test.profile"),
     .export_symbol = IREE_SVL("must_not_escape"),
-    .abi_kind = LOOM_TARGET_ABI_WASM_FUNCTION,
+    .abi_kind = LOOM_TARGET_ABI_OBJECT_FUNCTION,
     .linkage = LOOM_TARGET_LINKAGE_DEFAULT,
     .hal_kernel =
         {
@@ -66,7 +66,7 @@ static const loom_target_export_plan_t kPresetExportPlan = {
 
 static const loom_target_config_t kPresetConfig = {
     .name = IREE_SVL("test.profile"),
-    .contract_set_key = IREE_SVL("wasm.core.simd128"),
+    .contract_set_key = IREE_SVL("test.low.core"),
     .contract_feature_bits = 1,
 };
 
@@ -175,9 +175,9 @@ class TargetFunctionContractTest : public ::testing::Test {
 
 TEST_F(TargetFunctionContractTest, LowFuncResolvesTargetProfile) {
   ModulePtr module = ParseModule(R"(
-target.profile @wasm preset("test.profile")
+target.profile @test_target preset("test.profile")
 
-low.func.def target(@wasm) @kernel() {
+low.func.def target(@test_target) @kernel() {
   low.return
 }
 )");
@@ -186,11 +186,12 @@ low.func.def target(@wasm) @kernel() {
       LookupFunc(module.get(), IREE_SV("kernel"));
   loom_target_bundle_storage_t storage = {};
   ResolveContract(module.get(), facts, &storage);
-  EXPECT_TRUE(iree_string_view_equal(storage.bundle.name, IREE_SV("wasm")));
+  EXPECT_TRUE(
+      iree_string_view_equal(storage.bundle.name, IREE_SV("test_target")));
   EXPECT_EQ(storage.bundle.snapshot, &storage.snapshot);
   EXPECT_EQ(storage.bundle.export_plan, &storage.export_plan);
   EXPECT_EQ(storage.bundle.config, &storage.config);
-  EXPECT_EQ(storage.export_plan.abi_kind, LOOM_TARGET_ABI_WASM_FUNCTION);
+  EXPECT_EQ(storage.export_plan.abi_kind, LOOM_TARGET_ABI_OBJECT_FUNCTION);
   EXPECT_TRUE(
       iree_string_view_equal(storage.export_plan.name, IREE_SV("kernel")));
   EXPECT_TRUE(iree_string_view_is_empty(storage.export_plan.export_symbol));
@@ -198,13 +199,13 @@ low.func.def target(@wasm) @kernel() {
 
 TEST_F(TargetFunctionContractTest, KernelEntryContractOverlaysPreset) {
   ModulePtr module = ParseModule(R"(
-target.profile @wasm preset("test.profile") {
+target.profile @test_target preset("test.profile") {
   abi = hal_kernel,
   hal_binding_alignment = 16,
   hal_buffer_resource_flags = 7
 }
 
-low.kernel.def target(@wasm) export("dispatch") ordinal(5) linkage(dso_local) workgroup_size(8, 4, 2) @kernel() {
+low.kernel.def target(@test_target) export("dispatch") ordinal(5) linkage(dso_local) workgroup_size(8, 4, 2) @kernel() {
   low.return
 }
 )");

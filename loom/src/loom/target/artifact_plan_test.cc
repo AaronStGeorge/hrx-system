@@ -28,12 +28,12 @@ using ModulePtr = ::loom::testing::ModulePtr;
 
 static const loom_target_snapshot_t kPresetSnapshot = {
     .name = IREE_SVL("test.profile"),
-    .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_WASM,
-    .target_triple = IREE_SVL("wasm32-unknown-unknown"),
+    .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,
+    .target_triple = IREE_SVL("test-low-unknown"),
     .data_layout = IREE_SVL(""),
-    .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY,
+    .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
     .target_cpu = IREE_SVL("generic"),
-    .target_features = IREE_SVL("+simd128"),
+    .target_features = IREE_SVL("+test"),
     .default_pointer_bitwidth = 32,
     .index_bitwidth = 32,
     .offset_bitwidth = 32,
@@ -52,7 +52,7 @@ static const loom_target_snapshot_t kPresetSnapshot = {
 static const loom_target_export_plan_t kPresetExportPlan = {
     .name = IREE_SVL("test.profile"),
     .export_symbol = IREE_SVL(""),
-    .abi_kind = LOOM_TARGET_ABI_WASM_FUNCTION,
+    .abi_kind = LOOM_TARGET_ABI_OBJECT_FUNCTION,
     .linkage = LOOM_TARGET_LINKAGE_DEFAULT,
     .hal_kernel =
         {
@@ -66,7 +66,7 @@ static const loom_target_export_plan_t kPresetExportPlan = {
 
 static const loom_target_config_t kPresetConfig = {
     .name = IREE_SVL("test.profile"),
-    .contract_set_key = IREE_SVL("wasm.core.simd128"),
+    .contract_set_key = IREE_SVL("test.low.core"),
     .contract_feature_bits = 1,
 };
 
@@ -166,19 +166,19 @@ class ArtifactPlanTest : public ::testing::Test {
 
 TEST_F(ArtifactPlanTest, CollectsExportedEntryAndPrivateClosure) {
   ModulePtr module = ParseModule(R"(
-target.profile @wasm preset("test.profile")
-target.artifact @module target(@wasm)
+target.profile @test_target preset("test.profile")
+target.artifact @module target(@test_target)
 
-func.def target(@wasm) abi(wasm_function) export("entry", {artifact = @module}) @entry() {
+func.def target(@test_target) abi(object_function) export("entry", {artifact = @module}) @entry() {
   func.call @helper() : ()
   func.return
 }
 
-func.def target(@wasm) abi(wasm_function) @helper() {
+func.def target(@test_target) abi(object_function) @helper() {
   func.return
 }
 
-func.def target(@wasm) abi(wasm_function) @unused() {
+func.def target(@test_target) abi(object_function) @unused() {
   func.return
 }
 )");
@@ -204,14 +204,14 @@ func.def target(@wasm) abi(wasm_function) @unused() {
 
 TEST_F(ArtifactPlanTest, OrdersEntriesByDenseExportOrdinal) {
   ModulePtr module = ParseModule(R"(
-target.profile @wasm preset("test.profile")
-target.artifact @module target(@wasm)
+target.profile @test_target preset("test.profile")
+target.artifact @module target(@test_target)
 
-func.def target(@wasm) abi(wasm_function) export("second", {artifact = @module, ordinal = 1}) @second() {
+func.def target(@test_target) abi(object_function) export("second", {artifact = @module, ordinal = 1}) @second() {
   func.return
 }
 
-func.def target(@wasm) abi(wasm_function) export("first", {artifact = @module, ordinal = 0}) @first() {
+func.def target(@test_target) abi(object_function) export("first", {artifact = @module, ordinal = 0}) @first() {
   func.return
 }
 )");
@@ -234,14 +234,14 @@ func.def target(@wasm) abi(wasm_function) export("first", {artifact = @module, o
 
 TEST_F(ArtifactPlanTest, RejectsMixedExportOrdinalPolicy) {
   ModulePtr module = ParseModule(R"(
-target.profile @wasm preset("test.profile")
-target.artifact @module target(@wasm)
+target.profile @test_target preset("test.profile")
+target.artifact @module target(@test_target)
 
-func.def target(@wasm) abi(wasm_function) export("first", {artifact = @module, ordinal = 0}) @first() {
+func.def target(@test_target) abi(object_function) export("first", {artifact = @module, ordinal = 0}) @first() {
   func.return
 }
 
-func.def target(@wasm) abi(wasm_function) export("second", {artifact = @module}) @second() {
+func.def target(@test_target) abi(object_function) export("second", {artifact = @module}) @second() {
   func.return
 }
 )");
@@ -260,11 +260,11 @@ func.def target(@wasm) abi(wasm_function) export("second", {artifact = @module})
 
 TEST_F(ArtifactPlanTest, RejectsEntryTargetMismatchingArtifactTarget) {
   ModulePtr module = ParseModule(R"(
-target.profile @wasm preset("test.profile")
+target.profile @test_target preset("test.profile")
 target.profile @other preset("test.profile")
-target.artifact @module target(@wasm)
+target.artifact @module target(@test_target)
 
-func.def target(@other) abi(wasm_function) export("entry", {artifact = @module}) @entry() {
+func.def target(@other) abi(object_function) export("entry", {artifact = @module}) @entry() {
   func.return
 }
 )");
@@ -283,16 +283,16 @@ func.def target(@other) abi(wasm_function) export("entry", {artifact = @module})
 
 TEST_F(ArtifactPlanTest, RejectsClosureCrossingIntoAnotherArtifact) {
   ModulePtr module = ParseModule(R"(
-target.profile @wasm preset("test.profile")
-target.artifact @module target(@wasm)
-target.artifact @other_module target(@wasm)
+target.profile @test_target preset("test.profile")
+target.artifact @module target(@test_target)
+target.artifact @other_module target(@test_target)
 
-func.def target(@wasm) abi(wasm_function) export("entry", {artifact = @module}) @entry() {
+func.def target(@test_target) abi(object_function) export("entry", {artifact = @module}) @entry() {
   func.call @other() : ()
   func.return
 }
 
-func.def target(@wasm) abi(wasm_function) export("other", {artifact = @other_module}) @other() {
+func.def target(@test_target) abi(object_function) export("other", {artifact = @other_module}) @other() {
   func.return
 }
 )");
@@ -311,10 +311,10 @@ func.def target(@wasm) abi(wasm_function) export("other", {artifact = @other_mod
 
 TEST_F(ArtifactPlanTest, AllowsExternalDeclarationCalls) {
   ModulePtr module = ParseModule(R"(
-target.profile @wasm preset("test.profile")
-target.artifact @module target(@wasm)
+target.profile @test_target preset("test.profile")
+target.artifact @module target(@test_target)
 
-func.def target(@wasm) abi(wasm_function) export("entry", {artifact = @module}) @entry() {
+func.def target(@test_target) abi(object_function) export("entry", {artifact = @module}) @entry() {
   func.call @external() : ()
   func.return
 }
@@ -339,11 +339,11 @@ func.decl import("env") @external()
 
 TEST_F(ArtifactPlanTest, RejectsNonFunctionCallees) {
   ModulePtr module = ParseModule(R"(
-target.profile @wasm preset("test.profile")
-target.artifact @module target(@wasm)
+target.profile @test_target preset("test.profile")
+target.artifact @module target(@test_target)
 
-func.def target(@wasm) abi(wasm_function) export("entry", {artifact = @module}) @entry() {
-  func.call @wasm() : ()
+func.def target(@test_target) abi(object_function) export("entry", {artifact = @module}) @entry() {
+  func.call @test_target() : ()
   func.return
 }
 )");

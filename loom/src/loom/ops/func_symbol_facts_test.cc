@@ -178,7 +178,7 @@ kernel.def target(@profile) export("dispatch") artifact(@artifact) ordinal(5) li
 
 TEST_F(FuncSymbolFactsTest, ContractRequiresTargetProfile) {
   ModulePtr module = ParseModule(R"(
-func.def abi(wasm_function) @semantic() {
+func.def abi(object_function) @semantic() {
   func.return
 }
 )");

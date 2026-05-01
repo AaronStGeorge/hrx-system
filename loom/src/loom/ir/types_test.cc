@@ -115,7 +115,7 @@ TEST(TypesTest, RegisterTypeEqualAndHashAreStructural) {
 TEST(TypesTest, RegisterClassNamesMustBeNamespaceQualified) {
   EXPECT_TRUE(loom_register_class_name_is_qualified(IREE_SV("amdgpu.vgpr")));
   EXPECT_TRUE(
-      loom_register_class_name_is_qualified(IREE_SV("wasm.local.v128")));
+      loom_register_class_name_is_qualified(IREE_SV("test.local.v128")));
   EXPECT_FALSE(loom_register_class_name_is_qualified(IREE_SV("vgpr")));
   EXPECT_FALSE(loom_register_class_name_is_qualified(IREE_SV(".vgpr")));
   EXPECT_FALSE(loom_register_class_name_is_qualified(IREE_SV("amdgpu.")));

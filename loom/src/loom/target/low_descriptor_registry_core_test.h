@@ -8,9 +8,9 @@
 //
 // This package intentionally links only the synthetic test-low descriptor set
 // and preset bundle. Core compiler tests and developer tools use it when they
-// need a tiny deterministic target package instead of x86, AMDGPU, Wasm, VM, or
-// LLVMIR tables. Production tools that need real backend descriptor sets should
-// use backend-specific registry packages instead.
+// need a tiny deterministic target package instead of real backend tables.
+// Production tools that need real backend descriptor sets should use
+// backend-specific registry packages instead.
 
 #ifndef LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_CORE_TEST_H_
 #define LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_CORE_TEST_H_

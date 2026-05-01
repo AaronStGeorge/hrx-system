@@ -313,7 +313,7 @@
 // register-units ::= 'x' integer | 'x' digit+
 //
 // Register types are target-low allocation values. The class name is always
-// namespace-qualified (for example amdgpu.vgpr, x86.zmm, wasm.v128) and the
+// namespace-qualified (for example test.low.i32 or target.vgpr) and the
 // optional unit suffix gives the number of class units carried by one SSA
 // value.
 //

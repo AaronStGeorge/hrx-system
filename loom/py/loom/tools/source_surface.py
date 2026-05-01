@@ -138,8 +138,8 @@ NATIVE_AMDGPU_HSACO_SLICE = SourceSlice(
     description=(
         "Production Loom core plus native AMDGPU/HSACO target code. This keeps "
         "target root support, target/arch/amdgpu, target/emit/native common "
-        "code, and target/emit/native/amdgpu, while excluding LLVMIR, WASM, "
-        "IREEVM, x86, aggregate target registries, and test/tool targets."
+        "code, and target/emit/native/amdgpu, while excluding optional module "
+        "emitters, x86, aggregate target registries, and test/tool targets."
     ),
     includes=_is_native_amdgpu_hsaco_path,
 )

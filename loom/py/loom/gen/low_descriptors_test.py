@@ -13,16 +13,8 @@ from typing import cast
 import pytest
 
 from loom.gen.low_descriptors import DescriptorAllowlist, generate_descriptor_set
-from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
-from loom.target.arch.x86.descriptors import (
-    X86_AVX512_CORE_DESCRIPTOR_SET,
-    X86_AVX512_PACKED_DOT_DESCRIPTOR_SET,
-    X86_PACKED_DOT_DESCRIPTOR_SET,
-)
-from loom.target.emit.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
 from loom.target.low_descriptors import (
     LOW_DESCRIPTOR_ENCODING_ID_NONE,
-    LOW_DESCRIPTOR_SET_ABI_VERSION,
     AsmForm,
     AsmImmediate,
     Constraint,
@@ -43,28 +35,13 @@ from loom.target.low_descriptors import (
     OperandFormMatchKind,
     OperandRole,
 )
-from loom.target.test.descriptors import TEST_LOW_CORE_DESCRIPTOR_SET
-
-
-def test_generate_ireevm_core_descriptor_set() -> None:
-    generated = generate_descriptor_set(IREEVM_CORE_DESCRIPTOR_SET)
-
-    assert "loom_ireevm_core_descriptor_set" in generated.header
-    assert "IREE_VM_CORE_REG_CLASS_ID_VM_I32" in generated.header
-    assert 'LOOM_BSTRING_LITERAL(12, "iree.vm.core")' in generated.source
-    assert "iree.vm.add.i32" in generated.source
-    assert "fingerprint" not in generated.source
-    assert "fingerprint" not in generated.manifest_json
-
-    manifest = json.loads(generated.manifest_json)
-    assert manifest["key"] == "iree.vm.core"
-    assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
-    assert manifest["table_counts"]["descriptors"] >= 9
-    assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
-    assert manifest["table_counts"]["descriptor_id_refs"] == manifest["table_counts"]["descriptors"]
-    assert manifest["table_counts"]["asm_forms"] >= 9
-    assert any(descriptor["key"] == "iree.vm.call.import.i32" for descriptor in manifest["descriptors"])
-    assert any(form["mnemonic"] == "vm.add.i32" for form in manifest["asm_forms"])
+from loom.target.test.descriptors import (
+    TEST_LOW_ADD_I32_DESCRIPTOR,
+    TEST_LOW_COND_BR_I32_DESCRIPTOR,
+    TEST_LOW_CONST_I32_DESCRIPTOR,
+    TEST_LOW_CORE_DESCRIPTOR_SET,
+    TEST_LOW_MUL_I32_DESCRIPTOR,
+)
 
 
 def test_descriptor_category_validates_stable_key_spelling() -> None:
@@ -136,21 +113,21 @@ def test_descriptor_set_rejects_unknown_descriptor_category() -> None:
 
 def test_allowlist_closes_over_referenced_descriptor_tables() -> None:
     generated = generate_descriptor_set(
-        IREEVM_CORE_DESCRIPTOR_SET,
-        DescriptorAllowlist(keys=("iree.vm.add.i32",)),
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        DescriptorAllowlist(keys=("test.add.i32",)),
     )
     manifest = json.loads(generated.manifest_json)
 
-    assert [descriptor["key"] for descriptor in manifest["descriptors"]] == ["iree.vm.add.i32"]
+    assert [descriptor["key"] for descriptor in manifest["descriptors"]] == ["test.add.i32"]
     assert manifest["table_counts"]["descriptors"] == 1
     assert manifest["table_counts"]["descriptor_refs"] == 1
     assert manifest["table_counts"]["descriptor_id_refs"] == 1
     assert manifest["table_counts"]["asm_forms"] == 1
-    assert manifest["table_counts"]["reg_classes"] == 6
+    assert manifest["table_counts"]["reg_classes"] == len(TEST_LOW_CORE_DESCRIPTOR_SET.reg_classes)
     assert manifest["table_counts"]["reg_class_alts"] == 1
     assert manifest["table_counts"]["schedule_classes"] == 1
     assert manifest["table_counts"]["resources"] == 1
-    assert "iree.vm.call.import.i32" not in generated.source
+    assert "test.call.i32" not in generated.source
 
 
 def test_allowlist_closes_over_operand_form_replacements() -> None:
@@ -193,121 +170,6 @@ def test_allowlist_closes_over_operand_form_replacements() -> None:
     assert manifest["descriptors"][0]["operand_forms"] == 1
     assert manifest["descriptors"][1]["operand_forms"] == 0
     assert ".match_kind = LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_I64" in generated.source
-
-
-def test_generate_wasm_core_simd128_descriptor_set() -> None:
-    generated = generate_descriptor_set(WASM_CORE_SIMD128_DESCRIPTOR_SET)
-
-    assert "loom_wasm_core_simd128_descriptor_set" in generated.header
-    assert "WASM_CORE_SIMD128_REG_CLASS_ID_WASM_V128" in generated.header
-    assert 'LOOM_BSTRING_LITERAL(17, "wasm.core.simd128")' in generated.source
-    assert "wasm.i32x4.add" in generated.source
-    assert "fingerprint" not in generated.source
-    assert "fingerprint" not in generated.manifest_json
-
-    manifest = json.loads(generated.manifest_json)
-    assert manifest["key"] == "wasm.core.simd128"
-    assert manifest["target"] == "wasm"
-    assert manifest["feature_namespace"] == "wasm.simd128.v1"
-    assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
-    assert manifest["table_counts"]["descriptors"] >= 12
-    assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
-    assert manifest["table_counts"]["descriptor_id_refs"] == manifest["table_counts"]["descriptors"]
-    assert manifest["table_counts"]["asm_forms"] >= 12
-    assert any(descriptor["key"] == "wasm.v128.load" for descriptor in manifest["descriptors"])
-    assert any(form["mnemonic"] == "i32x4.add" for form in manifest["asm_forms"])
-
-
-def test_generate_x86_avx512_core_descriptor_set() -> None:
-    generated = generate_descriptor_set(X86_AVX512_CORE_DESCRIPTOR_SET)
-
-    assert "loom_x86_avx512_core_descriptor_set" in generated.header
-    assert 'LOOM_BSTRING_LITERAL(15, "x86.avx512.core")' in generated.source
-    assert "x86.avx512.vpaddd.zmm" in generated.source
-    assert "x86.avx512.vpdpbusd.zmm" in generated.source
-    assert "x86.avx512.vdpbf16ps.zmm" in generated.source
-    assert "x86.avx512.kandq" in generated.source
-    assert "x86.avx512.korq" in generated.source
-    assert "x86.avx512.kxorq" in generated.source
-    assert "x86.avx512.jmp" in generated.source
-    assert "X86_AVX512_CORE_REG_CLASS_ID_X86_GPR32" in generated.header
-    assert "X86_AVX512_CORE_REG_CLASS_ID_X86_GPR64" in generated.header
-    assert "X86_AVX512_CORE_REG_CLASS_ID_X86_XMM" in generated.header
-    assert "X86_AVX512_CORE_REG_CLASS_ID_X86_ZMM" in generated.header
-    assert "X86_AVX512_CORE_REG_CLASS_ID_X86_K" in generated.header
-    assert "fingerprint" not in generated.source
-    assert "fingerprint" not in generated.manifest_json
-
-    manifest = json.loads(generated.manifest_json)
-    assert manifest["key"] == "x86.avx512.core"
-    assert manifest["target"] == "x86"
-    assert manifest["feature_namespace"] == "x86.avx512.v1"
-    assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
-    assert manifest["table_counts"]["descriptors"] >= 7
-    assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
-    assert manifest["table_counts"]["descriptor_id_refs"] == manifest["table_counts"]["descriptors"]
-    assert manifest["table_counts"]["asm_forms"] >= 6
-    assert manifest["table_counts"]["resources"] >= 7
-    assert "x86.vector.i32.512" in generated.source
-    assert "x86.vector.dot.512" in generated.source
-    assert any(descriptor["key"] == "x86.avx512.vpdpbusd.zmm" for descriptor in manifest["descriptors"])
-    assert any(descriptor["key"] == "x86.avx512.kandq" for descriptor in manifest["descriptors"])
-    assert any(descriptor["key"] == "x86.avx512.korq" for descriptor in manifest["descriptors"])
-    assert any(descriptor["key"] == "x86.avx512.kxorq" for descriptor in manifest["descriptors"])
-    assert any(descriptor["key"] == "x86.avx512.jmp" for descriptor in manifest["descriptors"])
-    assert any(form["mnemonic"] == "vpaddd" for form in manifest["asm_forms"])
-    assert any(form["mnemonic"] == "korq" for form in manifest["asm_forms"])
-    assert any(form["mnemonic"] == "kxorq" for form in manifest["asm_forms"])
-
-
-def test_generate_x86_packed_dot_descriptor_set() -> None:
-    generated = generate_descriptor_set(X86_PACKED_DOT_DESCRIPTOR_SET)
-
-    assert "loom_x86_packed_dot_core_descriptor_set" in generated.header
-    assert "X86_PACKED_DOT_CORE_REG_CLASS_ID_X86_XMM" in generated.header
-    assert 'LOOM_BSTRING_LITERAL(19, "x86.packed_dot.core")' in generated.source
-    assert "x86.avx512_vnni.vpdpbusd.zmm" in generated.source
-    assert "x86.avx512_bf16.vdpbf16ps.zmm" in generated.source
-    assert "x86.avx_vnni_int8.vpdpbssd.ymm" in generated.source
-    assert "x86.avx10_2.vdpphps.zmm" in generated.source
-    assert "fingerprint" not in generated.source
-    assert "fingerprint" not in generated.manifest_json
-
-    manifest = json.loads(generated.manifest_json)
-    assert manifest["key"] == "x86.packed_dot.core"
-    assert manifest["target"] == "x86"
-    assert manifest["feature_namespace"] == "x86.packed_dot.v1"
-    assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
-    assert manifest["table_counts"]["descriptors"] >= 53
-    assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
-    assert manifest["table_counts"]["descriptor_id_refs"] == manifest["table_counts"]["descriptors"]
-    assert manifest["table_counts"]["reg_classes"] == 3
-    assert manifest["table_counts"]["schedule_classes"] >= 3
-    assert manifest["table_counts"]["feature_mask_words"] >= 53
-    assert "x86.vector.dot.128" in generated.source
-    assert "x86.vector.dot.256" in generated.source
-    assert "x86.vector.dot.512" in generated.source
-    assert any(descriptor["key"] == "x86.avx10_2.vdpphps.zmm" for descriptor in manifest["descriptors"])
-
-
-def test_generate_x86_avx512_packed_dot_descriptor_set() -> None:
-    generated = generate_descriptor_set(X86_AVX512_PACKED_DOT_DESCRIPTOR_SET)
-
-    assert "loom_x86_avx512_packed_dot_core_descriptor_set" in generated.header
-    assert "X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_GPR64" in generated.header
-    assert "X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_YMM" in generated.header
-    assert "x86.avx512.vmovdqu32.store.zmm" in generated.source
-    assert "x86.avx512_bf16.vdpbf16ps.zmm" in generated.source
-    assert "x86.avx_vnni.vpdpbusd.ymm" in generated.source
-    assert "x86.avx512.vdpbf16ps.zmm" not in generated.source
-
-    manifest = json.loads(generated.manifest_json)
-    assert manifest["key"] == "x86.avx512_packed_dot.core"
-    assert manifest["target"] == "x86"
-    assert manifest["feature_namespace"] == "x86.avx512_packed_dot.v1"
-    assert manifest["table_counts"]["reg_classes"] == 6
-    assert any(descriptor["key"] == "x86.avx512_bf16.vdpbf16ps.zmm" for descriptor in manifest["descriptors"])
-    assert any(descriptor["key"] == "x86.avx512.vmovdqu32.store.zmm" for descriptor in manifest["descriptors"])
 
 
 def test_generate_test_low_core_descriptor_set() -> None:
@@ -407,52 +269,52 @@ def test_generator_rejects_ambiguous_hazard_reference() -> None:
 
 def test_allowlist_accepts_semantic_tags() -> None:
     generated = generate_descriptor_set(
-        IREEVM_CORE_DESCRIPTOR_SET,
+        TEST_LOW_CORE_DESCRIPTOR_SET,
         DescriptorAllowlist(semantic_tags=("control.return.void",)),
     )
     manifest = json.loads(generated.manifest_json)
 
-    assert [descriptor["key"] for descriptor in manifest["descriptors"]] == ["iree.vm.return.void"]
+    assert [descriptor["key"] for descriptor in manifest["descriptors"]] == ["test.return.void"]
 
 
 def test_allowlist_rejects_unknown_descriptor_key() -> None:
     with pytest.raises(ValueError, match="allowlist references unknown descriptor key 'missing'"):
         generate_descriptor_set(
-            IREEVM_CORE_DESCRIPTOR_SET,
+            TEST_LOW_CORE_DESCRIPTOR_SET,
             DescriptorAllowlist(keys=("missing",)),
         )
 
 
 def test_generator_rejects_asm_form_unknown_operand_field() -> None:
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        TEST_LOW_ADD_I32_DESCRIPTOR,
         asm_forms=(AsmForm(results=("dst",), operands=("lhs", "missing")),),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.add.i32' asm form 'vm.add.i32' operand references unknown operand field 'missing'"),
+        match=("descriptor 'test.add.i32' asm form 'test.add.i32' operand references unknown operand field 'missing'"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_asm_form_result_with_operand_role() -> None:
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        TEST_LOW_ADD_I32_DESCRIPTOR,
         asm_forms=(AsmForm(results=("lhs",), operands=("rhs",)),),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.add.i32' asm form 'vm.add.i32' result field 'lhs' names a non-result operand"),
+        match=("descriptor 'test.add.i32' asm form 'test.add.i32' result field 'lhs' names a non-result operand"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_accepts_asm_form_implicit_packet_operand() -> None:
-    base_descriptor = IREEVM_CORE_DESCRIPTOR_SET.descriptors[1]
+    base_descriptor = TEST_LOW_ADD_I32_DESCRIPTOR
     descriptor = replace(
         base_descriptor,
         operands=(
@@ -462,7 +324,7 @@ def test_generator_accepts_asm_form_implicit_packet_operand() -> None:
         ),
         asm_forms=(AsmForm(results=("dst",), operands=("lhs", "rhs")),),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     generated = generate_descriptor_set(descriptor_set)
     manifest = json.loads(generated.manifest_json)
@@ -472,39 +334,39 @@ def test_generator_accepts_asm_form_implicit_packet_operand() -> None:
 
 def test_generator_rejects_ambiguous_asm_mnemonics() -> None:
     first = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        TEST_LOW_ADD_I32_DESCRIPTOR,
         asm_forms=(AsmForm(mnemonic="dup", results=("dst",), operands=("lhs", "rhs")),),
     )
     second = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[2],
+        TEST_LOW_MUL_I32_DESCRIPTOR,
         asm_forms=(AsmForm(mnemonic="dup", results=("dst",), operands=("lhs", "rhs")),),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(first, second))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(first, second))
 
     with pytest.raises(
         ValueError,
-        match=("asm mnemonic 'dup' is ambiguous between descriptors 'iree.vm.add.i32' and 'iree.vm.sub.i32'"),
+        match=("asm mnemonic 'dup' is ambiguous between descriptors 'test.add.i32' and 'test.mul.i32'"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_asm_form_unknown_immediate_field() -> None:
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR,
         asm_forms=(AsmForm(results=("dst",), immediates=(AsmImmediate("missing"),)),),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.const.i32' asm form 'vm.const.i32' immediate references unknown immediate field 'missing'"),
+        match=("descriptor 'test.const.i32' asm form 'test.const.i32' immediate references unknown immediate field 'missing'"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_duplicate_asm_immediate_name() -> None:
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[5],
+        TEST_LOW_COND_BR_I32_DESCRIPTOR,
         asm_forms=(
             AsmForm(
                 operands=("cond",),
@@ -515,73 +377,73 @@ def test_generator_rejects_duplicate_asm_immediate_name() -> None:
             ),
         ),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.cond_br.i32' asm form 'vm.cond_br.i32' uses immediate name 'target' more than once"),
+        match=("descriptor 'test.cond_br.i32' asm form 'test.cond_br.i32' uses immediate name 'target' more than once"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_asm_form_without_mnemonic() -> None:
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        TEST_LOW_ADD_I32_DESCRIPTOR,
         mnemonic=None,
         asm_forms=(AsmForm(results=("dst",), operands=("lhs", "rhs")),),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.add.i32' asm form must specify a mnemonic because the descriptor has no default mnemonic"),
+        match=("descriptor 'test.add.i32' asm form must specify a mnemonic because the descriptor has no default mnemonic"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_empty_asm_form_mnemonic() -> None:
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        TEST_LOW_ADD_I32_DESCRIPTOR,
         asm_forms=(AsmForm(mnemonic="", results=("dst",), operands=("lhs", "rhs")),),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.add.i32' asm form specifies an empty mnemonic"),
+        match=("descriptor 'test.add.i32' asm form specifies an empty mnemonic"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_missing_schedule_resource() -> None:
-    bad_resource_set = replace(IREEVM_CORE_DESCRIPTOR_SET, resources=())
+    bad_resource_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, resources=())
 
     with pytest.raises(
         ValueError,
-        match="schedule class 'vm.alu.i32' references unknown resource 'vm.alu'",
+        match="schedule class 'test.scalar.alu' references unknown resource 'test.scalar'",
     ):
         generate_descriptor_set(
             bad_resource_set,
-            DescriptorAllowlist(keys=("iree.vm.add.i32",)),
+            DescriptorAllowlist(keys=("test.add.i32",)),
         )
 
 
 def test_generator_emits_enum_immediate_domains() -> None:
     domain = EnumDomain(
-        "vm.condition",
+        "test.condition",
         values=(EnumValue("ne", 1), EnumValue("eq", 0)),
     )
     enum_immediate = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0].immediates[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR.immediates[0],
         kind=ImmediateKind.ENUM,
-        enum_domain="vm.condition",
+        enum_domain="test.condition",
     )
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR,
         immediates=(enum_immediate,),
     )
     descriptor_set = replace(
-        IREEVM_CORE_DESCRIPTOR_SET,
+        TEST_LOW_CORE_DESCRIPTOR_SET,
         enum_domains=(domain,),
         descriptors=(descriptor,),
     )
@@ -590,7 +452,7 @@ def test_generator_emits_enum_immediate_domains() -> None:
     manifest = json.loads(generated.manifest_json)
 
     assert "loom_low_enum_domain_t" in generated.source
-    assert "vm.condition" in generated.source
+    assert "test.condition" in generated.source
     assert "eq" in generated.source
     assert "ne" in generated.source
     assert manifest["table_counts"]["enum_domains"] == 1
@@ -599,71 +461,71 @@ def test_generator_emits_enum_immediate_domains() -> None:
 
 def test_generator_rejects_missing_enum_immediate_domain() -> None:
     enum_immediate = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0].immediates[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR.immediates[0],
         kind=ImmediateKind.ENUM,
         enum_domain=None,
     )
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR,
         immediates=(enum_immediate,),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.const.i32' enum immediate 'i32_value' has no enum domain"),
+        match=("descriptor 'test.const.i32' enum immediate 'i32_value' has no enum domain"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_unknown_enum_immediate_domain() -> None:
     enum_immediate = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0].immediates[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR.immediates[0],
         kind=ImmediateKind.ENUM,
         enum_domain="missing",
     )
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR,
         immediates=(enum_immediate,),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.const.i32' enum immediate 'i32_value' references unknown enum domain 'missing'"),
+        match=("descriptor 'test.const.i32' enum immediate 'i32_value' references unknown enum domain 'missing'"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_non_enum_immediate_domain() -> None:
     enum_immediate = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0].immediates[0],
-        enum_domain="vm.condition",
+        TEST_LOW_CONST_I32_DESCRIPTOR.immediates[0],
+        enum_domain="test.condition",
     )
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR,
         immediates=(enum_immediate,),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.const.i32' non-enum immediate 'i32_value' references enum domain 'vm.condition'"),
+        match=("descriptor 'test.const.i32' non-enum immediate 'i32_value' references enum domain 'test.condition'"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_emits_defaulted_immediate() -> None:
     immediate = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0].immediates[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR.immediates[0],
         flags=(ImmediateFlag.DEFAULT_VALUE,),
         default_value=7,
     )
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR,
         immediates=(immediate,),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     generated = generate_descriptor_set(descriptor_set)
 
@@ -673,155 +535,155 @@ def test_generator_emits_defaulted_immediate() -> None:
 
 def test_generator_rejects_default_without_default_flag() -> None:
     immediate = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0].immediates[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR.immediates[0],
         default_value=7,
     )
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR,
         immediates=(immediate,),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.const.i32' immediate 'i32_value' has a default value without the default-value flag"),
+        match=("descriptor 'test.const.i32' immediate 'i32_value' has a default value without the default-value flag"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_default_outside_unsigned_range() -> None:
     immediate = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0].immediates[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR.immediates[0],
         kind=ImmediateKind.UNSIGNED,
         flags=(ImmediateFlag.DEFAULT_VALUE,),
         unsigned_max=3,
         default_value=4,
     )
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR,
         immediates=(immediate,),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.const.i32' immediate 'i32_value' default value is out of unsigned range"),
+        match=("descriptor 'test.const.i32' immediate 'i32_value' default value is out of unsigned range"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_default_outside_enum_domain() -> None:
     domain = EnumDomain(
-        "vm.condition",
+        "test.condition",
         values=(EnumValue("ne", 1), EnumValue("eq", 0)),
     )
     immediate = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0].immediates[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR.immediates[0],
         kind=ImmediateKind.ENUM,
-        enum_domain="vm.condition",
+        enum_domain="test.condition",
         flags=(ImmediateFlag.DEFAULT_VALUE,),
         default_value=7,
     )
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR,
         immediates=(immediate,),
     )
     descriptor_set = replace(
-        IREEVM_CORE_DESCRIPTOR_SET,
+        TEST_LOW_CORE_DESCRIPTOR_SET,
         enum_domains=(domain,),
         descriptors=(descriptor,),
     )
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.const.i32' immediate 'i32_value' default value is not in enum domain 'vm.condition'"),
+        match=("descriptor 'test.const.i32' immediate 'i32_value' default value is not in enum domain 'test.condition'"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_missing_schedule_class() -> None:
     bad_descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        TEST_LOW_ADD_I32_DESCRIPTOR,
         schedule_class=cast(str, None),
     )
     bad_set = replace(
-        IREEVM_CORE_DESCRIPTOR_SET,
+        TEST_LOW_CORE_DESCRIPTOR_SET,
         descriptors=(bad_descriptor,),
     )
 
     with pytest.raises(
         ValueError,
-        match="descriptor 'iree.vm.add.i32' has no schedule class",
+        match="descriptor 'test.add.i32' has no schedule class",
     ):
         generate_descriptor_set(bad_set)
 
 
 def test_generator_rejects_result_after_operand() -> None:
     bad_descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        TEST_LOW_ADD_I32_DESCRIPTOR,
         operands=(
-            IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].operands[1],
-            IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].operands[0],
+            TEST_LOW_ADD_I32_DESCRIPTOR.operands[1],
+            TEST_LOW_ADD_I32_DESCRIPTOR.operands[0],
         ),
     )
     bad_set = replace(
-        IREEVM_CORE_DESCRIPTOR_SET,
+        TEST_LOW_CORE_DESCRIPTOR_SET,
         descriptors=(bad_descriptor,),
     )
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.add.i32' has result operand 'dst' after non-result operands"),
+        match=("descriptor 'test.add.i32' has result operand 'dst' after non-result operands"),
     ):
         generate_descriptor_set(bad_set)
 
 
 def test_generator_rejects_operand_result_role() -> None:
     destructive_result = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].operands[0],
+        TEST_LOW_ADD_I32_DESCRIPTOR.operands[0],
         role=OperandRole.OPERAND_RESULT,
     )
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        TEST_LOW_ADD_I32_DESCRIPTOR,
         operands=(
             destructive_result,
-            *IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].operands[1:],
+            *TEST_LOW_ADD_I32_DESCRIPTOR.operands[1:],
         ),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.add.i32' operand 'dst' uses OPERAND_RESULT; use separate result and operand rows plus an explicit constraint"),
+        match=("descriptor 'test.add.i32' operand 'dst' uses OPERAND_RESULT; use separate result and operand rows plus an explicit constraint"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_implicit_operand_without_implicit_flag() -> None:
     implicit_operand = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].operands[1],
+        TEST_LOW_ADD_I32_DESCRIPTOR.operands[1],
         role=OperandRole.IMPLICIT,
         flags=(),
     )
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        TEST_LOW_ADD_I32_DESCRIPTOR,
         operands=(
-            IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].operands[0],
+            TEST_LOW_ADD_I32_DESCRIPTOR.operands[0],
             implicit_operand,
-            *IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].operands[2:],
+            *TEST_LOW_ADD_I32_DESCRIPTOR.operands[2:],
         ),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.add.i32' implicit operand 'lhs' must set the implicit flag"),
+        match=("descriptor 'test.add.i32' implicit operand 'lhs' must set the implicit flag"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_accepts_tied_duplicate_operand_encoding_field() -> None:
-    base_descriptor = IREEVM_CORE_DESCRIPTOR_SET.descriptors[1]
+    base_descriptor = TEST_LOW_ADD_I32_DESCRIPTOR
     descriptor = replace(
         base_descriptor,
         operands=(
@@ -831,15 +693,15 @@ def test_generator_accepts_tied_duplicate_operand_encoding_field() -> None:
         ),
         constraints=(Constraint(ConstraintKind.TIED, 0, 1),),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     generated = generate_descriptor_set(descriptor_set)
 
-    assert "iree.vm.add.i32" in generated.source
+    assert "test.add.i32" in generated.source
 
 
 def test_generator_rejects_untied_duplicate_operand_encoding_field() -> None:
-    base_descriptor = IREEVM_CORE_DESCRIPTOR_SET.descriptors[1]
+    base_descriptor = TEST_LOW_ADD_I32_DESCRIPTOR
     descriptor = replace(
         base_descriptor,
         operands=(
@@ -848,17 +710,17 @@ def test_generator_rejects_untied_duplicate_operand_encoding_field() -> None:
             *base_descriptor.operands[2:],
         ),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.add.i32' operands 'dst' and 'lhs' share encoding field id 7 without a tied constraint"),
+        match=("descriptor 'test.add.i32' operands 'dst' and 'lhs' share encoding field id 7 without a tied constraint"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_operand_fixed_encoding_field_overlap() -> None:
-    base_descriptor = IREEVM_CORE_DESCRIPTOR_SET.descriptors[1]
+    base_descriptor = TEST_LOW_ADD_I32_DESCRIPTOR
     descriptor = replace(
         base_descriptor,
         operands=(
@@ -867,18 +729,18 @@ def test_generator_rejects_operand_fixed_encoding_field_overlap() -> None:
         ),
         encoding_field_values=(EncodingFieldValue(7, 0),),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.add.i32' operand 'dst' shares fixed encoding field id 7"),
+        match=("descriptor 'test.add.i32' operand 'dst' shares fixed encoding field id 7"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_emits_sliced_immediate_encoding_rows() -> None:
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        TEST_LOW_CONST_I32_DESCRIPTOR,
         immediates=(
             Immediate(
                 "i32_value",
@@ -893,7 +755,7 @@ def test_generator_emits_sliced_immediate_encoding_rows() -> None:
             ),
         ),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     generated = generate_descriptor_set(descriptor_set)
 
@@ -905,7 +767,7 @@ def test_generator_emits_sliced_immediate_encoding_rows() -> None:
 
 
 def test_generator_rejects_immediate_with_direct_and_sliced_encoding() -> None:
-    base_descriptor = IREEVM_CORE_DESCRIPTOR_SET.descriptors[0]
+    base_descriptor = TEST_LOW_CONST_I32_DESCRIPTOR
     descriptor = replace(
         base_descriptor,
         immediates=(
@@ -916,17 +778,17 @@ def test_generator_rejects_immediate_with_direct_and_sliced_encoding() -> None:
             ),
         ),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.const.i32' immediate 'i32_value' uses both direct and sliced encoding fields"),
+        match=("descriptor 'test.const.i32' immediate 'i32_value' uses both direct and sliced encoding fields"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_incomplete_sliced_immediate_encoding() -> None:
-    base_descriptor = IREEVM_CORE_DESCRIPTOR_SET.descriptors[0]
+    base_descriptor = TEST_LOW_CONST_I32_DESCRIPTOR
     descriptor = replace(
         base_descriptor,
         immediates=(
@@ -936,60 +798,60 @@ def test_generator_rejects_incomplete_sliced_immediate_encoding() -> None:
             ),
         ),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.const.i32' immediate 'i32_value' encoding slices cover 0xffff instead of 0xffffffff"),
+        match=("descriptor 'test.const.i32' immediate 'i32_value' encoding slices cover 0xffff instead of 0xffffffff"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_absent_encoding_without_pseudo_flag() -> None:
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        TEST_LOW_ADD_I32_DESCRIPTOR,
         encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.add.i32' uses absent encoding id without the pseudo flag"),
+        match=("descriptor 'test.add.i32' uses absent encoding id without the pseudo flag"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_pseudo_flag_with_target_encoding() -> None:
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        TEST_LOW_ADD_I32_DESCRIPTOR,
         flags=(
-            *IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].flags,
+            *TEST_LOW_ADD_I32_DESCRIPTOR.flags,
             DescriptorFlag.PSEUDO,
         ),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.add.i32' uses the pseudo flag with a target encoding id"),
+        match=("descriptor 'test.add.i32' uses the pseudo flag with a target encoding id"),
     ):
         generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_pseudo_flag_with_target_encoding_format() -> None:
     descriptor = replace(
-        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        TEST_LOW_ADD_I32_DESCRIPTOR,
         encoding_format_id=1,
         encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
         flags=(
-            *IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].flags,
+            *TEST_LOW_ADD_I32_DESCRIPTOR.flags,
             DescriptorFlag.PSEUDO,
         ),
     )
-    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'iree.vm.add.i32' uses the pseudo flag with a target encoding format id"),
+        match=("descriptor 'test.add.i32' uses the pseudo flag with a target encoding format id"),
     ):
         generate_descriptor_set(descriptor_set)

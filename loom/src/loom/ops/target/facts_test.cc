@@ -26,12 +26,12 @@ using ModulePtr = ::loom::testing::ModulePtr;
 
 static const loom_target_snapshot_t kPresetSnapshot = {
     .name = IREE_SVL("test.profile"),
-    .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_WASM,
-    .target_triple = IREE_SVL("wasm32-unknown-unknown"),
+    .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,
+    .target_triple = IREE_SVL("test-low-unknown"),
     .data_layout = IREE_SVL(""),
-    .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY,
+    .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
     .target_cpu = IREE_SVL("generic"),
-    .target_features = IREE_SVL("+simd128"),
+    .target_features = IREE_SVL("+test"),
     .default_pointer_bitwidth = 32,
     .index_bitwidth = 32,
     .offset_bitwidth = 32,
@@ -50,7 +50,7 @@ static const loom_target_snapshot_t kPresetSnapshot = {
 static const loom_target_export_plan_t kPresetExportPlan = {
     .name = IREE_SVL("test.profile"),
     .export_symbol = IREE_SVL("kernel"),
-    .abi_kind = LOOM_TARGET_ABI_WASM_FUNCTION,
+    .abi_kind = LOOM_TARGET_ABI_OBJECT_FUNCTION,
     .linkage = LOOM_TARGET_LINKAGE_DEFAULT,
     .hal_kernel =
         {
@@ -64,7 +64,7 @@ static const loom_target_export_plan_t kPresetExportPlan = {
 
 static const loom_target_config_t kPresetConfig = {
     .name = IREE_SVL("test.profile"),
-    .contract_set_key = IREE_SVL("wasm.core.simd128"),
+    .contract_set_key = IREE_SVL("test.low.core"),
     .contract_feature_bits = 1,
 };
 
@@ -187,57 +187,58 @@ class TargetProfileFactsTest : public ::testing::Test {
 
 TEST_F(TargetProfileFactsTest, ResolvesPresetIntoDenseBundleFacts) {
   ModulePtr module = ParseModule(R"(
-target.profile @wasm preset("test.profile")
+target.profile @test_target preset("test.profile")
 )");
 
   const loom_target_profile_symbol_facts_t* facts =
-      LookupProfile(module.get(), IREE_SV("wasm"));
+      LookupProfile(module.get(), IREE_SV("test_target"));
   EXPECT_EQ(facts->base.domain, &loom_target_profile_symbol_fact_domain);
   EXPECT_EQ(facts->base.symbol_kind, LOOM_SYMBOL_RECORD);
   EXPECT_EQ(facts->preset_bundle, &kPresetBundle);
   EXPECT_TRUE(
       iree_string_view_equal(facts->preset_key, IREE_SV("test.profile")));
-  EXPECT_TRUE(iree_string_view_equal(facts->name, IREE_SV("wasm")));
+  EXPECT_TRUE(iree_string_view_equal(facts->name, IREE_SV("test_target")));
   EXPECT_EQ(facts->bundle.snapshot, &facts->snapshot);
   EXPECT_EQ(facts->bundle.export_plan, &facts->export_plan);
   EXPECT_EQ(facts->bundle.config, &facts->config);
-  EXPECT_EQ(facts->snapshot.codegen_format, LOOM_TARGET_CODEGEN_FORMAT_WASM);
+  EXPECT_EQ(facts->snapshot.codegen_format,
+            LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE);
   EXPECT_EQ(facts->snapshot.default_pointer_bitwidth, 32u);
   EXPECT_TRUE(iree_string_view_equal(facts->snapshot.target_features,
-                                     IREE_SV("+simd128")));
+                                     IREE_SV("+test")));
   EXPECT_TRUE(iree_string_view_is_empty(facts->export_plan.export_symbol));
-  EXPECT_EQ(facts->export_plan.abi_kind, LOOM_TARGET_ABI_WASM_FUNCTION);
+  EXPECT_EQ(facts->export_plan.abi_kind, LOOM_TARGET_ABI_OBJECT_FUNCTION);
   EXPECT_TRUE(iree_string_view_equal(facts->config.contract_set_key,
-                                     IREE_SV("wasm.core.simd128")));
+                                     IREE_SV("test.low.core")));
 }
 
 TEST_F(TargetProfileFactsTest, PrintsCompactProfileSyntax) {
   ModulePtr module = ParseModule(R"(
-target.profile @wasm preset("test.profile") {index_bitwidth = 64}
+target.profile @test_target preset("test.profile") {index_bitwidth = 64}
 )");
 
   std::string printed = PrintModule(module.get());
-  EXPECT_NE(printed.find("target.profile @wasm preset(\"test.profile\") "
+  EXPECT_NE(printed.find("target.profile @test_target preset(\"test.profile\") "
                          "{index_bitwidth = 64}"),
             std::string::npos);
 }
 
 TEST_F(TargetProfileFactsTest, ArtifactFactsDefaultFromTargetProfile) {
   ModulePtr module = ParseModule(R"(
-target.profile @wasm preset("test.profile")
-target.artifact @module target(@wasm)
+target.profile @test_target preset("test.profile")
+target.artifact @module target(@test_target)
 )");
 
   const loom_target_profile_symbol_facts_t* profile =
-      LookupProfile(module.get(), IREE_SV("wasm"));
+      LookupProfile(module.get(), IREE_SV("test_target"));
   const loom_target_artifact_symbol_facts_t* artifact =
       LookupArtifact(module.get(), IREE_SV("module"));
   EXPECT_EQ(artifact->base.domain, &loom_target_artifact_symbol_fact_domain);
   EXPECT_EQ(artifact->base.symbol_kind, LOOM_SYMBOL_RECORD);
   EXPECT_TRUE(iree_string_view_equal(artifact->name, IREE_SV("module")));
   EXPECT_EQ(artifact->target_profile, profile);
-  EXPECT_EQ(artifact->format, LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY);
-  EXPECT_EQ(artifact->abi_kind, LOOM_TARGET_ARTIFACT_ABI_KIND_WASM_MODULE);
+  EXPECT_EQ(artifact->format, LOOM_TARGET_ARTIFACT_FORMAT_ELF);
+  EXPECT_EQ(artifact->abi_kind, LOOM_TARGET_ARTIFACT_ABI_KIND_OBJECT_FILE);
 }
 
 TEST_F(TargetProfileFactsTest, ArtifactFactsOverridePackagingAbi) {
@@ -355,10 +356,10 @@ target.artifact @bad target(@not_profile)
 
 TEST_F(TargetProfileFactsTest, ArtifactAbiMustMatchFormat) {
   ModulePtr module = ParseModule(R"(
-target.profile @wasm preset("test.profile")
-target.artifact @bad target(@wasm) {
+target.profile @test_target preset("test.profile")
+target.artifact @bad target(@test_target) {
   abi = hal_executable,
-  artifact_format = wasm_binary
+  artifact_format = vm_bytecode
 }
 )");
 
