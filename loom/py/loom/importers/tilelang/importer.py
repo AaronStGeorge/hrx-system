@@ -253,6 +253,9 @@ def _map_kernel_arguments(
         )
         context.map_value(binding.source, view, str(view_type))
         context.map_value(binding.buffer, view, str(view_type))
+        data = getattr(binding.buffer, "data", None)
+        if data is not None:
+            context.map_value(data, view, str(view_type))
         context.record_converted(
             f"param {binding.name}",
             f"{context.ssa(view)} = buffer.view",

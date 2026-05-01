@@ -65,6 +65,24 @@ class TileLangTypeConverter:
         dims = tuple(_shape_dim(dim) for dim in shape)
         return ShapedType(TypeKind.VIEW, element_type, dims)
 
+    def buffer_byte_length(self, buffer: object) -> int | None:
+        view_type = self.view_type(buffer)
+        if not view_type.is_all_static:
+            return None
+        element_size = _ELEMENT_BYTE_SIZES.get(str(view_type.element_type))
+        if element_size is None:
+            return None
+        byte_length = element_size
+        for dim in view_type.dims:
+            if not isinstance(dim, StaticDim):
+                return None
+            byte_length *= dim.size
+        return byte_length
+
+    def buffer_base_alignment(self, buffer: object) -> int:
+        element_type = self.view_type(buffer).element_type
+        return _ELEMENT_BYTE_SIZES.get(str(element_type), 1)
+
 
 def _shape_dim(value: object) -> StaticDim | DynamicDim:
     if isinstance(value, int):
@@ -108,4 +126,18 @@ _DTYPE_MAP: dict[str, Type] = {
     "float32": F32,
     "float64": F64,
     "bfloat16": BF16,
+}
+
+_ELEMENT_BYTE_SIZES: dict[str, int] = {
+    "i1": 1,
+    "i8": 1,
+    "i16": 2,
+    "i32": 4,
+    "i64": 8,
+    "index": 8,
+    "offset": 8,
+    "f16": 2,
+    "bf16": 2,
+    "f32": 4,
+    "f64": 8,
 }

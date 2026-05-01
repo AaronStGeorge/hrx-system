@@ -16,6 +16,7 @@ from loom.importers.tilelang.converter import (
     TileLangConverterRegistry,
 )
 from loom.importers.tilelang.nodes import node_text, source_name
+from loom.importers.tilelang.ops.memory import map_alloc_buffer
 from loom.importers.tilelang.ops.topology import (
     map_thread_axis,
     mapped_thread_axis_sources,
@@ -39,9 +40,9 @@ def convert_block(
 ) -> None:
     """Normalize a TIR block wrapper when it has no extra region semantics."""
 
-    if _has_items(getattr(stmt, "alloc_buffers", ())):
-        context.record_blocked(node_text(stmt), "block allocations are not mapped")
-        return
+    for buffer in tuple(getattr(stmt, "alloc_buffers", ()) or ()):
+        if not map_alloc_buffer(buffer, context):
+            return
     if _has_items(getattr(stmt, "match_buffers", ())):
         context.record_blocked(node_text(stmt), "block match buffers are not mapped")
         return

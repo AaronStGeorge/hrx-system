@@ -64,7 +64,8 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "tir.Block",
         OpFamily.TIR_NODE,
         CoverageState.SUPPORTED,
-        "Structured block wrapper; region contents are imported directly.",
+        "Structured block wrapper; static alloc_buffers become scratch views "
+        "and region contents import directly.",
     ),
     OpCoverage(
         "tir.BlockRealize",

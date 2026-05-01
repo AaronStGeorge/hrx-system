@@ -21,10 +21,21 @@ class Var:
 
 
 class Buffer:
-    def __init__(self, name: str, shape: tuple[int, ...], dtype: str) -> None:
+    def __init__(
+        self,
+        name: str,
+        shape: tuple[int, ...],
+        dtype: str,
+        scope: str = "",
+    ) -> None:
         self.name = name
         self.shape = shape
         self.dtype = dtype
+        self.data = Var(f"{name}_data", "handle")
+        self._scope = scope
+
+    def scope(self) -> str:
+        return self._scope
 
     def __repr__(self) -> str:
         return self.name
@@ -47,6 +58,20 @@ class PrimFunc:
 class SeqStmt:
     def __init__(self, seq: Sequence[object]) -> None:
         self.seq = tuple(seq)
+
+
+class Block:
+    def __init__(
+        self,
+        body: object,
+        alloc_buffers: Sequence[object] = (),
+        match_buffers: Sequence[object] = (),
+        init: object | None = None,
+    ) -> None:
+        self.body = body
+        self.alloc_buffers = tuple(alloc_buffers)
+        self.match_buffers = tuple(match_buffers)
+        self.init = init
 
 
 class For:

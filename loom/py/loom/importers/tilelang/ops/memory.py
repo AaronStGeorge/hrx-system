@@ -9,21 +9,74 @@
 from __future__ import annotations
 
 from loom.builder import ValueRef
+from loom.importers.core import sanitize_identifier
 from loom.importers.tilelang.context import TileLangConversionContext
 from loom.importers.tilelang.converter import (
     ExpressionOptions,
     TileLangConverter,
     TileLangConverterRegistry,
 )
-from loom.importers.tilelang.nodes import dtype, node_kind, node_text
+from loom.importers.tilelang.nodes import dtype, node_kind, node_text, source_name
 from loom.importers.tilelang.ops.topology import integer_value
 from loom.importers.tilelang.ops.vector import vector_lanes
-from loom.ir import ShapedType, TypeKind
+from loom.ir import BUFFER_TYPE, ShapedType, TypeKind
 
 
 def register(registry: TileLangConverterRegistry) -> None:
     registry.register_statement("BufferStore", convert_buffer_store)
     registry.register_expression("BufferLoad", convert_buffer_load)
+
+
+def map_alloc_buffer(
+    buffer: object,
+    context: TileLangConversionContext,
+) -> bool:
+    """Import a TIR block allocation as a Loom scratch buffer root."""
+
+    byte_length = context.type_converter.buffer_byte_length(buffer)
+    if byte_length is None:
+        context.record_blocked(
+            node_text(buffer),
+            "allocated buffer byte length is not statically known",
+        )
+        return False
+    memory_space = _buffer_memory_space(buffer)
+    if memory_space is None:
+        context.record_blocked(
+            node_text(buffer),
+            f"allocated buffer scope `{_buffer_scope(buffer)}` is not mapped",
+        )
+        return False
+    buffer_name = sanitize_identifier(source_name(buffer, fallback="scratch"))
+    root = context.builder.buffer.alloca(
+        byte_length=context.ensure_constant(
+            str(byte_length),
+            "offset",
+            f"{buffer_name}_bytes",
+        ),
+        base_alignment=context.type_converter.buffer_base_alignment(buffer),
+        memory_space=memory_space,
+        results=[BUFFER_TYPE],
+        name=context.fresh_name(f"{buffer_name}_buffer"),
+    )
+    view = context.builder.buffer.view(
+        buffer=root,
+        byte_offset=context.ensure_constant("0", "offset", "c0_bytes"),
+        results=[context.type_converter.view_type(buffer)],
+        name=context.fresh_name(buffer_name),
+    )
+    context.map_value(buffer, view, str(view.type))
+    data = getattr(buffer, "data", None)
+    if data is not None:
+        context.map_value(data, view, str(view.type))
+    context.record_converted(
+        node_text(buffer),
+        (
+            f"{context.ssa(root)} = buffer.alloca",
+            f"{context.ssa(view)} = buffer.view",
+        ),
+    )
+    return True
 
 
 def convert_buffer_store(
@@ -192,3 +245,21 @@ def _single_ramp_lanes(source_indices: tuple[object, ...]) -> int | None:
             return None
         lanes = vector_lanes(source_index)
     return lanes
+
+
+def _buffer_scope(buffer: object) -> str:
+    scope = getattr(buffer, "scope", None)
+    if callable(scope):
+        return str(scope())
+    if scope is not None:
+        return str(scope)
+    return ""
+
+
+def _buffer_memory_space(buffer: object) -> str | None:
+    scope = _buffer_scope(buffer)
+    if scope in ("", "local", "local.dyn", "local.fragment"):
+        return "private"
+    if scope in ("shared", "shared.dyn"):
+        return "workgroup"
+    return None
