@@ -22,7 +22,6 @@ import sys
 REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
-RUNTIME_PY = os.path.join(REPO_ROOT, "runtime", "py")
 
 
 def _run(description: str, cmd: list[str], **kwargs: object) -> bool:
@@ -41,10 +40,7 @@ def _run(description: str, cmd: list[str], **kwargs: object) -> bool:
 
 
 def main() -> int:
-    os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     ok = True
-
-    cwd = RUNTIME_PY
 
     print("loom-lint: generators")
     ok &= _run(
@@ -79,11 +75,21 @@ def main() -> int:
     )
 
     print("loom-lint: ruff")
-    ok &= _run("format", ["ruff", "format", "loom/"], cwd=cwd)
-    ok &= _run("lint", ["ruff", "check", "--fix", "loom/"], cwd=cwd)
+    ok &= _run(
+        "format",
+        ["ruff", "format", "--cache-dir", ".ruff_cache", "loom/py/loom/"],
+        cwd=REPO_ROOT,
+    )
+    ok &= _run(
+        "lint",
+        ["ruff", "check", "--fix", "--cache-dir", ".ruff_cache", "loom/py/loom/"],
+        cwd=REPO_ROOT,
+    )
 
     print("loom-lint: mypy")
-    ok &= _run("type-check", ["mypy", "loom/"], cwd=cwd)
+    ok &= _run(
+        "type-check", ["mypy", "loom/"], cwd=os.path.join(REPO_ROOT, "loom", "py")
+    )
 
     return 0 if ok else 1
 

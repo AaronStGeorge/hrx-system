@@ -25,4 +25,17 @@ iree_py_library(
     iree::runtime::py::loom::importers::core::core
 )
 
+iree_py_test(
+  NAME
+    tilelang_test
+  SRCS
+    "../../tools/pytest_style_runner.py"
+  ARGS
+    "loom.importers.tilelang.coverage_test"
+    "loom.importers.tilelang.importer_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

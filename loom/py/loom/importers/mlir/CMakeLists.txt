@@ -51,4 +51,20 @@ iree_py_library(
     iree::runtime::py::loom::importers::mlir::mlir
 )
 
+iree_py_test(
+  NAME
+    mlir_test
+  SRCS
+    "../../tools/pytest_style_runner.py"
+  ARGS
+    "loom.importers.mlir.attrs_test"
+    "loom.importers.mlir.importer_test"
+    "loom.importers.mlir.locations_test"
+    "loom.importers.mlir.names_test"
+    "loom.importers.mlir.types_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

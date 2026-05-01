@@ -4,8 +4,6 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-import pytest
-
 from loom.importers.mlir.attrs import MlirAttributeDecoder
 
 
@@ -37,5 +35,11 @@ def test_dense_i32_array_decodes_text_binding_gap() -> None:
 def test_dense_i64_array_rejects_unknown_spelling() -> None:
     decoder = MlirAttributeDecoder()
 
-    with pytest.raises(ValueError, match="DenseIntegerArrayAttr"):
+    error_message = None
+    try:
         decoder.dense_i64_array(_TextAttr("[0, 1]"))
+    except ValueError as exc:
+        error_message = str(exc)
+    if error_message is None:
+        raise AssertionError("expected dense_i64_array to reject unknown spelling")
+    assert "DenseIntegerArrayAttr" in error_message

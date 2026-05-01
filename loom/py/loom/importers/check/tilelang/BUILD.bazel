@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -25,4 +25,21 @@ py_library(
         "//loom/py/loom/importers/core",
         "//loom/py/loom/importers/tilelang",
     ],
+)
+
+py_test(
+    name = "tilelang_test",
+    srcs = [
+        "cases_test.py",
+        "harness_test.py",
+        "runner_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = [
+        "loom.importers.check.tilelang.cases_test",
+        "loom.importers.check.tilelang.harness_test",
+        "loom.importers.check.tilelang.runner_test",
+    ],
+    main = "pytest_style_runner.py",
+    deps = [":tilelang"],
 )
