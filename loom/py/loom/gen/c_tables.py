@@ -2026,6 +2026,7 @@ def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]])
                             "name": name,
                             "kind": "auto_region",
                             "region_index": layout.fields[name].index,
+                            "optional": (region_def.optional if region_def else False),
                             "binding": binding,
                             "arg_source": (region_def.arg_source if region_def else None),
                             "implicit_args": (region_def.implicit_args if region_def else ()),
@@ -2142,6 +2143,8 @@ def _optional_param_uses_build_flag(param: dict[str, object]) -> bool:
     if not param.get("optional"):
         return False
     if param["kind"] == "symbol":
+        return True
+    if param["kind"] == "auto_region":
         return True
     if param["kind"] != "attr":
         return False
@@ -2385,6 +2388,25 @@ def _generate_builder_implementation(
         if param["kind"] == "auto_region_table":
             region_count_expr = f"{layout.fixed_region_count} + (uint8_t){param['keys_field']}_count"
             break
+    optional_auto_regions = [param for param in params if param["kind"] == "auto_region" and param.get("optional")]
+    if optional_auto_regions:
+        optional_auto_regions.sort(key=lambda param: param["region_index"])
+        lines.append(f"  uint8_t region_count = {layout.required_region_count};")
+        previous_optional_flag = ""
+        for param in optional_auto_regions:
+            optional_flag = _build_flag_bit_name(prefix, param)
+            if previous_optional_flag:
+                lines.append(f"  if (iree_any_bit_set(build_flags, {optional_flag}) &&")
+                lines.append(f"      !iree_any_bit_set(build_flags, {previous_optional_flag})) {{")
+                lines.append("    return iree_make_status(")
+                lines.append("        IREE_STATUS_INVALID_ARGUMENT,")
+                lines.append(f'        "{op.name} optional region {param["name"]} requires preceding optional region");')
+                lines.append("  }")
+            lines.append(f"  if (iree_any_bit_set(build_flags, {optional_flag})) {{")
+            lines.append(f"    region_count = {param['region_index'] + 1};")
+            lines.append("  }")
+            previous_optional_flag = optional_flag
+        region_count_expr = "region_count"
     attr_count = len(_non_flags_attrs(op))
 
     # Compute tied result count expression.
@@ -2471,26 +2493,32 @@ def _generate_builder_implementation(
             continue
         idx = param["region_index"]
         name = param["name"]
+        optional_region = bool(param.get("optional"))
+        region_indent = "    " if optional_region else "  "
+        inner_indent = region_indent + "  "
+        if optional_region:
+            optional_flag = _build_flag_bit_name(prefix, param)
+            lines.append(f"  if (iree_any_bit_set(build_flags, {optional_flag})) {{")
         has_block_args = bool(param.get("implicit_args")) or bool(param.get("binding")) or bool(param.get("arg_source")) or bool(param.get("func_args"))
-        lines.append(f"  // Auto-create {name} region with entry block.")
-        lines.append("  {")
-        lines.append("    loom_region_t* _region = NULL;")
-        lines.append("    IREE_RETURN_IF_ERROR(")
-        lines.append("        loom_module_allocate_region(builder->module, 1, &_region));")
+        lines.append(f"{region_indent}// Auto-create {name} region with entry block.")
+        lines.append(f"{region_indent}{{")
+        lines.append(f"{inner_indent}loom_region_t* _region = NULL;")
+        lines.append(f"{inner_indent}IREE_RETURN_IF_ERROR(")
+        lines.append(f"{inner_indent}    loom_module_allocate_region(builder->module, 1, &_region));")
         if has_block_args:
-            lines.append("    loom_block_t* _block = loom_region_entry_block(_region);")
+            lines.append(f"{inner_indent}loom_block_t* _block = loom_region_entry_block(_region);")
 
         # Implicit args (e.g., loop IV).
         for _arg_name, arg_type_kw in param.get("implicit_args", ()):
             scalar_type = _IMPLICIT_ARG_TYPE_MAP.get(arg_type_kw)
             if scalar_type is None:
                 raise ValueError(f"Unknown implicit arg type: {arg_type_kw}")
-            lines.append("    {")
-            lines.append("      loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
-            lines.append("      IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
-            lines.append("          builder, _block,")
-            lines.append(f"          loom_type_scalar({scalar_type}), &_arg_id));")
-            lines.append("    }")
+            lines.append(f"{inner_indent}{{")
+            lines.append(f"{inner_indent}  loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
+            lines.append(f"{inner_indent}  IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
+            lines.append(f"{inner_indent}      builder, _block,")
+            lines.append(f"{inner_indent}      loom_type_scalar({scalar_type}), &_arg_id));")
+            lines.append(f"{inner_indent}}}")
 
         # Binding list args (capture or element).
         binding = param.get("binding")
@@ -2498,23 +2526,23 @@ def _generate_builder_implementation(
             binding_name = binding["name"]
             binding_kind = binding["binding_kind"]
             if binding_kind == "capture":
-                lines.append(f"    for (iree_host_size_t _i = 0; _i < {binding_name}_count; ++_i) {{")
-                lines.append("      loom_type_t _arg_type =")
-                lines.append(f"          loom_module_value_type(builder->module, {binding_name}[_i]);")
-                lines.append("      loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
-                lines.append("      IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
-                lines.append("          builder, _block, _arg_type, &_arg_id));")
-                lines.append("    }")
+                lines.append(f"{inner_indent}for (iree_host_size_t _i = 0; _i < {binding_name}_count; ++_i) {{")
+                lines.append(f"{inner_indent}  loom_type_t _arg_type =")
+                lines.append(f"{inner_indent}      loom_module_value_type(builder->module, {binding_name}[_i]);")
+                lines.append(f"{inner_indent}  loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
+                lines.append(f"{inner_indent}  IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
+                lines.append(f"{inner_indent}      builder, _block, _arg_type, &_arg_id));")
+                lines.append(f"{inner_indent}}}")
             elif binding_kind == "element":
-                lines.append(f"    for (iree_host_size_t _i = 0; _i < {binding_name}_count; ++_i) {{")
-                lines.append("      loom_type_t _operand_type =")
-                lines.append(f"          loom_module_value_type(builder->module, {binding_name}[_i]);")
-                lines.append("      loom_type_t _arg_type =")
-                lines.append("          loom_type_scalar(loom_type_element_type(_operand_type));")
-                lines.append("      loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
-                lines.append("      IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
-                lines.append("          builder, _block, _arg_type, &_arg_id));")
-                lines.append("    }")
+                lines.append(f"{inner_indent}for (iree_host_size_t _i = 0; _i < {binding_name}_count; ++_i) {{")
+                lines.append(f"{inner_indent}  loom_type_t _operand_type =")
+                lines.append(f"{inner_indent}      loom_module_value_type(builder->module, {binding_name}[_i]);")
+                lines.append(f"{inner_indent}  loom_type_t _arg_type =")
+                lines.append(f"{inner_indent}      loom_type_scalar(loom_type_element_type(_operand_type));")
+                lines.append(f"{inner_indent}  loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
+                lines.append(f"{inner_indent}  IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
+                lines.append(f"{inner_indent}      builder, _block, _arg_type, &_arg_id));")
+                lines.append(f"{inner_indent}}}")
 
         # Region args sourced from an existing value field. This is used for
         # regions whose entry args are semantically linked to a terminator or
@@ -2522,24 +2550,26 @@ def _generate_builder_implementation(
         # values before the body is populated.
         arg_source = param.get("arg_source")
         if arg_source and not binding:
-            lines.append(f"    for (iree_host_size_t _i = 0; _i < {arg_source}_count; ++_i) {{")
-            lines.append("      loom_type_t _arg_type =")
-            lines.append(f"          loom_module_value_type(builder->module, {arg_source}[_i]);")
-            lines.append("      loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
-            lines.append("      IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
-            lines.append("          builder, _block, _arg_type, &_arg_id));")
-            lines.append("    }")
+            lines.append(f"{inner_indent}for (iree_host_size_t _i = 0; _i < {arg_source}_count; ++_i) {{")
+            lines.append(f"{inner_indent}  loom_type_t _arg_type =")
+            lines.append(f"{inner_indent}      loom_module_value_type(builder->module, {arg_source}[_i]);")
+            lines.append(f"{inner_indent}  loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
+            lines.append(f"{inner_indent}  IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
+            lines.append(f"{inner_indent}      builder, _block, _arg_type, &_arg_id));")
+            lines.append(f"{inner_indent}}}")
 
         # FuncArgs: entry block args typed from the arg_types parameter.
         if param.get("func_args") and not binding:
-            lines.append("    for (iree_host_size_t _i = 0; _i < arg_types_count; ++_i) {")
-            lines.append("      loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
-            lines.append("      IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
-            lines.append("          builder, _block, arg_types[_i], &_arg_id));")
-            lines.append("    }")
+            lines.append(f"{inner_indent}for (iree_host_size_t _i = 0; _i < arg_types_count; ++_i) {{")
+            lines.append(f"{inner_indent}  loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
+            lines.append(f"{inner_indent}  IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
+            lines.append(f"{inner_indent}      builder, _block, arg_types[_i], &_arg_id));")
+            lines.append(f"{inner_indent}}}")
 
-        lines.append(f"    loom_op_regions(*out_op)[{idx}] = _region;")
-        lines.append("  }")
+        lines.append(f"{inner_indent}loom_op_regions(*out_op)[{idx}] = _region;")
+        lines.append(f"{region_indent}}}")
+        if optional_region:
+            lines.append("  }")
 
     for param in params:
         if param["kind"] != "auto_region_table":
@@ -2895,6 +2925,8 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
             desc = layout.fields[region_def.name]
             if region_def.variadic:
                 lines.append(f"LOOM_DEFINE_VARIADIC_REGIONS({prefix}_{region_def.name}, {desc.index})")
+            elif region_def.optional:
+                lines.append(f"LOOM_DEFINE_OPTIONAL_REGION({prefix}_{region_def.name}, {desc.index})")
             else:
                 lines.append(f"LOOM_DEFINE_REGION({prefix}_{region_def.name}, {desc.index})")
 
@@ -3175,7 +3207,12 @@ def generate_tables_c(
             implicit_terminator = _implicit_terminator_kind(op, ops_by_name)
             lines.append(f"static const loom_region_descriptor_t {prefix}_region_desc[] = {{")
             for region_def in op.regions:
-                flags = "LOOM_REGION_SINGLE_BLOCK" if region_def.single_block else "0"
+                region_flags = []
+                if region_def.single_block:
+                    region_flags.append("LOOM_REGION_SINGLE_BLOCK")
+                if region_def.optional:
+                    region_flags.append("LOOM_REGION_OPTIONAL")
+                flags = " | ".join(region_flags) if region_flags else "0"
                 terminator = _region_terminator_kind(op, region_def, ops_by_name)
                 lines.append(f"    {{{terminator}, {implicit_terminator}, {flags}}},")
             lines.append("};")
@@ -3238,11 +3275,18 @@ def generate_tables_c(
             lines.append("};")
 
         # Structural placement descriptor.
+        required_parent_kinds = _trait_op_kinds(op, ops_by_name, "HasParent")
         required_ancestor_kinds = _trait_op_kinds(op, ops_by_name, "HasAncestor")
         forbidden_ancestor_kinds = _trait_op_kinds(op, ops_by_name, "NoAncestor")
-        if required_ancestor_kinds or forbidden_ancestor_kinds:
+        if required_parent_kinds or required_ancestor_kinds or forbidden_ancestor_kinds:
+            required_parent_ptr = "NULL"
             required_ptr = "NULL"
             forbidden_ptr = "NULL"
+            if required_parent_kinds:
+                required_parent_ptr = f"{prefix}_required_parents"
+                lines.append(f"static const loom_op_kind_t {required_parent_ptr}[] = {{")
+                lines.extend(f"    {kind}," for kind in required_parent_kinds)
+                lines.append("};")
             if required_ancestor_kinds:
                 required_ptr = f"{prefix}_required_ancestors"
                 lines.append(f"static const loom_op_kind_t {required_ptr}[] = {{")
@@ -3254,6 +3298,9 @@ def generate_tables_c(
                 lines.extend(f"    {kind}," for kind in forbidden_ancestor_kinds)
                 lines.append("};")
             lines.append(f"static const loom_op_placement_descriptor_t {prefix}_placement = {{")
+            if required_parent_ptr != "NULL":
+                lines.append(f"    .required_parents = {required_parent_ptr},")
+                lines.append(f"    .required_parent_count = IREE_ARRAYSIZE({required_parent_ptr}),")
             if required_ptr != "NULL":
                 lines.append(f"    .required_ancestors = {required_ptr},")
                 lines.append(f"    .required_ancestor_count = IREE_ARRAYSIZE({required_ptr}),")
@@ -3283,7 +3330,7 @@ def generate_tables_c(
         eff_traits = op.effective_traits or "NULL"
         interface_ptrs = {spec.vtable_field: _interface_vtable_ptr(op, spec) for spec in _INTERFACES}
         symbol_def_ptr = f"&{prefix}_symbol_def" if op.symbol_def is not None else "NULL"
-        has_placement = any(trait.name in ("HasAncestor", "NoAncestor") for trait in op.traits)
+        has_placement = any(trait.name in ("HasParent", "HasAncestor", "NoAncestor") for trait in op.traits)
         placement_ptr = f"&{prefix}_placement" if has_placement else "NULL"
         attr_desc_ptr = f"{prefix}_attr_desc" if non_flags else "NULL"
         operand_desc_ptr = f"{prefix}_operand_desc" if op.operands or _func_args_are_operands(op) else "NULL"

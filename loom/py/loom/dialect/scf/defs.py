@@ -9,7 +9,7 @@
 Core ops:
 
   scf.for     — Bounded counted loop with bracketed range syntax.
-  scf.if      — Conditional execution with both regions required.
+  scf.if      — Conditional execution with optional else for resultless ops.
   scf.while   — Unbounded loop with explicit before/after regions.
   scf.lookup  — Keyed whole-value table selection.
   scf.select  — Scalar-condition whole-value selection.
@@ -394,19 +394,18 @@ scf_while = Op(
 )
 
 # ============================================================================
-# scf.if — conditional with required else
+# scf.if — conditional with optional else for resultless ops
 # ============================================================================
 #
-# Executes one of two regions based on a boolean condition. Both
-# regions are required, regardless of whether the op produces
-# results. Optional else (eliding the else region for void ifs)
-# requires a RegionDef(optional=True) DSL extension and is deferred
-# to a follow-up bead.
+# Executes one of two regions based on a boolean condition. The else region may
+# be omitted only for resultless conditionals; result-producing scf.if needs a
+# total false path to define its result tuple.
 
 scf_if = Op(
     "scf.if",
     group=scf_ops,
-    doc="Conditional execution with required else region.",
+    doc="Conditional execution with optional else region for resultless conditionals.",
+    verify="loom_scf_if_verify",
     canonicalize="loom_scf_if_canonicalize",
     type_transfer="loom_scf_region_branch_type_transfer",
     operands=[Operand("condition", I1)],
@@ -422,6 +421,7 @@ scf_if = Op(
             "else_region",
             doc="Executed when condition is false. Terminated by scf.yield.",
             single_block=True,
+            optional=True,
             terminator="scf.yield",
         ),
     ],
@@ -441,10 +441,13 @@ scf_if = Op(
             anchor="results",
         ),
         Region("then_region"),
-        kw("else"),
-        Region("else_region"),
+        OptionalGroup(
+            [kw("else"), Region("else_region")],
+            anchor="else_region",
+        ),
     ],
     examples=[
+        "scf.if %cond {\n  scf.yield\n}",
         "scf.if %cond {\n  scf.yield\n} else {\n  scf.yield\n}",
         "%result = scf.if %cond -> (f32) {\n  scf.yield %a : f32\n} else {\n  scf.yield %b : f32\n}",
     ],

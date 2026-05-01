@@ -185,6 +185,27 @@ class TestComputeLayout:
                 )
             )
 
+    def test_optional_region_cannot_precede_required_region(self) -> None:
+        with pytest.raises(ValueError, match="cannot follow an optional region"):
+            compute_layout(
+                Op(
+                    "test.bad",
+                    regions=[
+                        RegionDef("optional_region", optional=True),
+                        RegionDef("required_region"),
+                    ],
+                )
+            )
+
+    def test_optional_variadic_region_rejected(self) -> None:
+        with pytest.raises(ValueError, match="cannot be both optional and variadic"):
+            compute_layout(
+                Op(
+                    "test.bad",
+                    regions=[RegionDef("regions", optional=True, variadic=True)],
+                )
+            )
+
     def test_single_variadic_only_operand(self) -> None:
         """A single variadic operand (index 0) is valid."""
         op = Op(
@@ -286,6 +307,7 @@ class TestResolveSingular:
         )
         fields = resolve_fields(compute_layout(decl), op, module)
         resolved_region = fields.region("then_region")
+        assert resolved_region is not None
         assert len(resolved_region.blocks) == 1
 
     def test_successor(self) -> None:
@@ -323,6 +345,43 @@ class TestResolveSingular:
         fields = resolve_fields(layout, op, module)
         assert fields.region("default_region") is default
         assert fields.regions("case_regions") == [case0, case1]
+
+    def test_optional_region(self) -> None:
+        module = Module(name="test")
+        body = Region(blocks=[Block(ops=[Operation(kind=0, name="test.yield")])])
+        optional = Region(blocks=[Block(ops=[Operation(kind=0, name="test.yield")])])
+        decl = Op(
+            "test.optional_region",
+            regions=[
+                RegionDef("body"),
+                RegionDef("else_region", optional=True),
+            ],
+        )
+        layout = compute_layout(decl)
+        assert layout.required_region_count == 1
+        assert layout.fixed_region_count == 2
+        assert layout.fields["else_region"].optional
+
+        op_without_else = Operation(
+            kind=1,
+            name="test.optional_region",
+            regions=[body],
+        )
+        fields = resolve_fields(layout, op_without_else, module)
+        assert fields.region("body") is body
+        assert fields.region("else_region") is None
+        assert fields.regions("else_region") == []
+        assert not fields.is_present("else_region")
+
+        op_with_else = Operation(
+            kind=1,
+            name="test.optional_region",
+            regions=[body, optional],
+        )
+        fields = resolve_fields(layout, op_with_else, module)
+        assert fields.region("else_region") is optional
+        assert fields.regions("else_region") == [optional]
+        assert fields.is_present("else_region")
 
     def test_unknown_field_raises(self) -> None:
         module, [vid] = _make_module_with_values(("x", I32))

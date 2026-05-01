@@ -459,8 +459,9 @@ TEST_F(TypePropagationTest, RegionBranchNarrowsResultFromYieldedValues) {
 
   loom_op_t* if_op = NULL;
   IREE_ASSERT_OK(loom_scf_if_build(
-      &builder_, loom_test_constant_result(condition_op), &dynamic_vector, 1,
-      NULL, 0, LOOM_LOCATION_UNKNOWN, &if_op));
+      &builder_, LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION,
+      loom_test_constant_result(condition_op), &dynamic_vector, 1, NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &if_op));
 
   loom_builder_t then_builder;
   loom_builder_initialize(
@@ -574,8 +575,9 @@ TEST_F(TypePropagationTest, RegionBranchRejectsConflictingYieldedShapes) {
 
   loom_op_t* if_op = NULL;
   IREE_ASSERT_OK(loom_scf_if_build(
-      &builder_, loom_test_constant_result(condition_op), &dynamic_vector, 1,
-      NULL, 0, LOOM_LOCATION_UNKNOWN, &if_op));
+      &builder_, LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION,
+      loom_test_constant_result(condition_op), &dynamic_vector, 1, NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &if_op));
 
   loom_builder_t then_builder;
   loom_builder_initialize(

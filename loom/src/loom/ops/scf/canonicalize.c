@@ -22,23 +22,8 @@
 static bool loom_scf_value_facts_are_exact_i64(loom_rewriter_t* rewriter,
                                                loom_value_id_t value,
                                                int64_t* out_value) {
-  loom_value_facts_t facts = loom_rewriter_value_facts(rewriter, value);
-  if (!loom_value_facts_is_exact(facts) || loom_value_facts_is_float(facts)) {
-    return false;
-  }
-  *out_value = facts.range_lo;
-  return true;
-}
-
-static bool loom_scf_value_facts_are_exact_bool(loom_rewriter_t* rewriter,
-                                                loom_value_id_t value,
-                                                bool* out_value) {
-  int64_t integer_value = 0;
-  if (!loom_scf_value_facts_are_exact_i64(rewriter, value, &integer_value)) {
-    return false;
-  }
-  *out_value = integer_value != 0;
-  return true;
+  return loom_value_facts_as_exact_i64(
+      loom_rewriter_value_facts(rewriter, value), out_value);
 }
 
 static bool loom_scf_lookup_selected_row(loom_rewriter_t* rewriter,
@@ -235,8 +220,9 @@ iree_status_t loom_scf_select_canonicalize(loom_op_t* op,
   }
 
   bool condition = false;
-  if (!loom_scf_value_facts_are_exact_bool(
-          rewriter, loom_scf_select_condition(op), &condition)) {
+  if (!loom_value_facts_as_exact_bool(
+          loom_rewriter_value_facts(rewriter, loom_scf_select_condition(op)),
+          &condition)) {
     loom_value_id_t result = loom_scf_select_result(op);
     loom_type_t result_type = loom_module_value_type(rewriter->module, result);
     int64_t true_i64 = 0;
@@ -941,8 +927,9 @@ static iree_status_t loom_scf_if_fold_exact_boolean_yields(
 
   loom_op_t* then_yield =
       loom_scf_region_terminator(loom_scf_if_then_region(op));
-  loom_op_t* else_yield =
-      loom_scf_region_terminator(loom_scf_if_else_region(op));
+  loom_region_t* else_region = loom_scf_if_else_region(op);
+  if (!else_region) return iree_ok_status();
+  loom_op_t* else_yield = loom_scf_region_terminator(else_region);
   if (!then_yield || !else_yield) return iree_ok_status();
 
   loom_value_slice_t then_values = loom_scf_yield_values(then_yield);
@@ -953,10 +940,12 @@ static iree_status_t loom_scf_if_fold_exact_boolean_yields(
 
   bool then_value = false;
   bool else_value = false;
-  if (!loom_scf_value_facts_are_exact_bool(rewriter, then_values.values[0],
-                                           &then_value) ||
-      !loom_scf_value_facts_are_exact_bool(rewriter, else_values.values[0],
-                                           &else_value)) {
+  if (!loom_value_facts_as_exact_bool(
+          loom_rewriter_value_facts(rewriter, then_values.values[0]),
+          &then_value) ||
+      !loom_value_facts_as_exact_bool(
+          loom_rewriter_value_facts(rewriter, else_values.values[0]),
+          &else_value)) {
     return iree_ok_status();
   }
 
@@ -1011,8 +1000,9 @@ static iree_status_t loom_scf_if_compact_results(loom_op_t* op,
 
   loom_op_t* then_yield =
       loom_scf_region_terminator(loom_scf_if_then_region(op));
-  loom_op_t* else_yield =
-      loom_scf_region_terminator(loom_scf_if_else_region(op));
+  loom_region_t* else_region = loom_scf_if_else_region(op);
+  if (!else_region) return iree_ok_status();
+  loom_op_t* else_yield = loom_scf_region_terminator(else_region);
   if (!then_yield || !else_yield) return iree_ok_status();
 
   loom_value_slice_t then_values = loom_scf_yield_values(then_yield);
@@ -1086,10 +1076,10 @@ static iree_status_t loom_scf_if_compact_results(loom_op_t* op,
   loom_builder_set_before(&rewriter->builder, op);
   loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
   loom_op_t* new_if = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_scf_if_build(&rewriter->builder, loom_scf_if_condition(op),
-                        kept_result_types, kept_count, /*tied_results=*/NULL,
-                        /*tied_result_count=*/0, op->location, &new_if));
+  IREE_RETURN_IF_ERROR(loom_scf_if_build(
+      &rewriter->builder, LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION,
+      loom_scf_if_condition(op), kept_result_types, kept_count,
+      /*tied_results=*/NULL, /*tied_result_count=*/0, op->location, &new_if));
 
   loom_region_t* new_then_region = loom_scf_if_then_region(new_if);
   loom_builder_ip_t saved_ip =
@@ -1112,7 +1102,7 @@ static iree_status_t loom_scf_if_compact_results(loom_op_t* op,
   IREE_RETURN_IF_ERROR(loom_scf_move_region_body_before_op(
       rewriter, loom_scf_if_then_region(op), then_yield, new_then_yield));
   IREE_RETURN_IF_ERROR(loom_scf_move_region_body_before_op(
-      rewriter, loom_scf_if_else_region(op), else_yield, new_else_yield));
+      rewriter, else_region, else_yield, new_else_yield));
 
   kept_ordinal = 0;
   loom_value_slice_t new_results = loom_scf_if_results(new_if);
@@ -1153,6 +1143,7 @@ static iree_status_t loom_scf_if_selectify_yield_only(
 
   loom_region_t* then_region = loom_scf_if_then_region(op);
   loom_region_t* else_region = loom_scf_if_else_region(op);
+  if (!else_region) return iree_ok_status();
   loom_op_t* then_yield = loom_scf_region_terminator(then_region);
   loom_op_t* else_yield = loom_scf_region_terminator(else_region);
   if (!then_yield || !else_yield) return iree_ok_status();
@@ -1208,8 +1199,9 @@ static iree_status_t loom_scf_if_selectify_yield_only(
 iree_status_t loom_scf_if_canonicalize(loom_op_t* op,
                                        loom_rewriter_t* rewriter) {
   bool condition = false;
-  if (!loom_scf_value_facts_are_exact_bool(rewriter, loom_scf_if_condition(op),
-                                           &condition)) {
+  if (!loom_value_facts_as_exact_bool(
+          loom_rewriter_value_facts(rewriter, loom_scf_if_condition(op)),
+          &condition)) {
     bool erased = false;
     IREE_RETURN_IF_ERROR(
         loom_scf_if_erase_if_effect_free_resultless(op, rewriter, &erased));
@@ -1218,10 +1210,12 @@ iree_status_t loom_scf_if_canonicalize(loom_op_t* op,
     if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
       return iree_ok_status();
     }
-    IREE_RETURN_IF_ERROR(
-        loom_scf_region_branch_factor_common_tail(op, rewriter));
-    if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
-      return iree_ok_status();
+    if (loom_scf_if_else_region(op)) {
+      IREE_RETURN_IF_ERROR(
+          loom_scf_region_branch_factor_common_tail(op, rewriter));
+      if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
+        return iree_ok_status();
+      }
     }
     bool exact_boolean_folded = false;
     IREE_RETURN_IF_ERROR(loom_scf_if_fold_exact_boolean_yields(
@@ -1232,6 +1226,12 @@ iree_status_t loom_scf_if_canonicalize(loom_op_t* op,
 
   loom_region_t* selected_region =
       condition ? loom_scf_if_then_region(op) : loom_scf_if_else_region(op);
+  if (!selected_region) {
+    if (op->result_count == 0) {
+      return loom_rewriter_erase(rewriter, op);
+    }
+    return iree_ok_status();
+  }
   loom_op_t* yield = loom_scf_region_terminator(selected_region);
   if (!yield) return iree_ok_status();
 

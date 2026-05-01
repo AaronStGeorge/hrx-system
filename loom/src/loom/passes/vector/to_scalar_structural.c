@@ -246,8 +246,9 @@ static iree_status_t loom_vector_to_scalar_build_concat_dynamic_lane(
 
   loom_op_t* if_op = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_if_build(
-      &state->rewriter->builder, within_input, &state->result_scalar_type, 1,
-      NULL, 0, state->location, &if_op));
+      &state->rewriter->builder, LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION,
+      within_input, &state->result_scalar_type, 1, NULL, 0, state->location,
+      &if_op));
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->rewriter->builder, if_op, loom_scf_if_then_region(if_op));

@@ -68,7 +68,17 @@ func.def @count_while(%init: index, %limit: index, %one: index) -> (index) {
 
 // ====
 
-// scf.if without results (both branches required even when void).
+// scf.if without results and without an else region.
+func.def @void_if_no_else(%cond: i1) {
+  scf.if %cond {
+    scf.yield
+  }
+  func.return
+}
+
+// ====
+
+// scf.if without results and with both branches present.
 func.def @void_if(%cond: i1) {
   scf.if %cond {
     scf.yield

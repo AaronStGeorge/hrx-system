@@ -211,15 +211,6 @@ static iree_status_t loom_cfg_simplify_replace_cond_br_with_br(
   return iree_ok_status();
 }
 
-static bool loom_cfg_simplify_exact_bool(loom_value_facts_t facts,
-                                         bool* out_value) {
-  if (!loom_value_facts_is_exact(facts) || loom_value_facts_is_float(facts)) {
-    return false;
-  }
-  *out_value = facts.range_lo != 0;
-  return true;
-}
-
 static iree_status_t loom_cfg_simplify_fold_cond_br(
     loom_cfg_simplify_state_t* state, loom_op_t* op, bool* out_changed) {
   if (!loom_cfg_cond_br_isa(op)) return iree_ok_status();
@@ -235,7 +226,7 @@ static iree_status_t loom_cfg_simplify_fold_cond_br(
   bool condition = false;
   loom_value_facts_t facts = loom_value_fact_table_lookup(
       state->fact_table, loom_cfg_cond_br_condition(op));
-  if (!loom_cfg_simplify_exact_bool(facts, &condition)) {
+  if (!loom_value_facts_as_exact_bool(facts, &condition)) {
     return iree_ok_status();
   }
   loom_block_t* chosen_dest = condition ? true_dest : false_dest;

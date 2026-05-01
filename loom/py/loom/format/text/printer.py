@@ -1819,8 +1819,13 @@ class Printer:
 
         self._emit("default {")
         self._indent += 1
+        default_region = fields.region(default_region_field)
+        if default_region is None:
+            raise ValueError(
+                f"RegionTable default region field '{default_region_field}' is absent."
+            )
         self._print_region_body(
-            fields.region(default_region_field),
+            default_region,
             module,
             implicit_terminator_name=implicit_terminator_name,
         )

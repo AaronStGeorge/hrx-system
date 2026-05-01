@@ -17,6 +17,7 @@ loom_cc_library(
     "ops.h"
   SRCS
     "builders.c"
+    "canonicalize.c"
     "facts.c"
     "tables.c"
     "verify.c"
@@ -31,7 +32,9 @@ loom_cc_library(
     loom::src::loom::ops::combining
     loom::src::loom::ops::func_symbol_facts
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::scf
     loom::src::loom::ops::view
+    loom::src::loom::rewrite::rewriter
     loom::src::loom::target::types
     loom::src::loom::util::fact_table
   PUBLIC

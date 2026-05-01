@@ -32,6 +32,21 @@ kernel.def @workitem_coordinates() {
 
 // ====
 
+kernel.def @conditional_exit(%done: i1) {
+  kernel.exit %done : i1
+  kernel.return
+}
+
+// ====
+
+kernel.def @conditional_exit_with_body(%done: i1) {
+  kernel.exit %done : i1 {
+  }
+  kernel.return
+}
+
+// ====
+
 kernel.def @workgroup_coordinates() {
   %x = kernel.workgroup.id<x> : index
   %y = kernel.workgroup.id<y> : index

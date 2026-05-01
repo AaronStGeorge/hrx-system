@@ -1208,7 +1208,7 @@ test_block_args = Op(
 )
 
 # ============================================================================
-# test.branch — if/else with optional else region
+# test.branch — if/else with both regions present
 # ============================================================================
 
 test_branch = Op(
@@ -1244,6 +1244,45 @@ test_branch = Op(
     ],
     examples=[
         "%result = test.branch %condition -> (f32) {\n  test.yield %true_value : f32\n} else {\n  test.yield %false_value : f32\n}",
+    ],
+)
+
+# ============================================================================
+# test.optional_region — trailing optional region
+# ============================================================================
+
+test_optional_region = Op(
+    "test.optional_region",
+    group=test_ops,
+    doc="Test op with a required body and a trailing optional region.",
+    operands=[Operand("condition", INTEGER)],
+    regions=[
+        RegionDef(
+            "body",
+            doc="Required body.",
+            single_block=True,
+            terminator="test.yield",
+        ),
+        RegionDef(
+            "else_region",
+            doc="Optional else body.",
+            single_block=True,
+            optional=True,
+            terminator="test.yield",
+        ),
+    ],
+    traits=[ImplicitTerminator("test.implicit_yield")],
+    format=[
+        Ref("condition"),
+        Region("body"),
+        OptionalGroup(
+            [kw("else"), Region("else_region")],
+            anchor="else_region",
+        ),
+    ],
+    examples=[
+        "test.optional_region %condition {\n  test.yield\n}",
+        "test.optional_region %condition {\n  test.yield\n} else {\n  test.yield\n}",
     ],
 )
 
@@ -1894,6 +1933,7 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_loop,
     test_block_args,
     test_branch,
+    test_optional_region,
     test_implicit_yield,
     test_yield,
     test_br,

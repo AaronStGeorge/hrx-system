@@ -40,6 +40,7 @@ from loom.dsl import (
     ElementWidthGreaterThan,
     EnumCase,
     EnumDef,
+    HasParent,
     LiteralMatchesElementType,
     MemoryAccessInterface,
     Op,
@@ -412,6 +413,50 @@ def test_generate_builders_use_explicit_flags_for_optional_symbol_refs() -> None
     assert "loom_test_targeted_build_flags_t build_flags" in builders_c
     assert ("iree_any_bit_set(build_flags, LOOM_TEST_TARGETED_BUILD_FLAG_HAS_TARGET)") in builders_c
     assert "loom_op_attrs(*out_op)[0] = loom_attr_symbol(target);" in builders_c
+
+
+def test_generate_builders_use_explicit_flags_for_optional_regions() -> None:
+    op = Op(
+        "test.optional_region",
+        group=Dialect("test"),
+        regions=[
+            RegionDef("body"),
+            RegionDef("else_region", optional=True),
+        ],
+        format=[
+            Region("body"),
+            OptionalGroup([Region("else_region")], anchor="else_region"),
+        ],
+    )
+
+    ops_h = generate_ops_h("test", 0, [op])
+    builders_c = generate_builders_c("test", [op])
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "LOOM_DEFINE_REGION(loom_test_optional_region_body, 0)" in ops_h
+    assert ("LOOM_DEFINE_OPTIONAL_REGION(loom_test_optional_region_else_region, 1)") in ops_h
+    assert ("LOOM_TEST_OPTIONAL_REGION_BUILD_FLAG_HAS_ELSE_REGION = 1u << 0,") in ops_h
+    assert "uint8_t region_count = 1;" in builders_c
+    assert "region_count = 2;" in builders_c
+    assert "LOOM_REGION_OPTIONAL" in tables_c
+
+
+def test_has_parent_generates_direct_parent_placement() -> None:
+    parent = Op(
+        "test.parent",
+        group=Dialect("test"),
+    )
+    child = Op(
+        "test.child",
+        group=Dialect("test"),
+        traits=[HasParent("test.parent")],
+    )
+
+    tables_c = generate_tables_c("test", 0, [parent, child])
+
+    assert "loom_test_child_required_parents" in tables_c
+    assert ".required_parents = loom_test_child_required_parents," in tables_c
+    assert (".required_parent_count = IREE_ARRAYSIZE(loom_test_child_required_parents),") in tables_c
 
 
 def test_generate_builders_keep_count_guard_for_optional_aggregate_attrs() -> None:

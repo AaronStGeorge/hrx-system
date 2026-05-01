@@ -59,6 +59,8 @@ from loom.dsl import (
     EnumDef,
     FuncLikeInterface,
     HasAncestor,
+    HasParent,
+    ImplicitTerminator,
     Op,
     Operand,
     OpPhase,
@@ -317,6 +319,43 @@ kernel_return = Op(
     doc="Return from a dispatchable kernel entry.",
     traits=[TERMINATOR],
     examples=["kernel.return"],
+)
+
+
+kernel_exit = Op(
+    "kernel.exit",
+    group=kernel_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=("Conditionally leaves the current kernel before executing the following top-level kernel-body operations."),
+    operands=[Operand("condition", I1)],
+    regions=[
+        RegionDef(
+            "body",
+            doc="Optional work to run before leaving the kernel.",
+            single_block=True,
+            optional=True,
+            terminator="kernel.return",
+        ),
+    ],
+    traits=[
+        UNKNOWN_EFFECTS,
+        HasParent("kernel.def"),
+        ImplicitTerminator("kernel.return"),
+    ],
+    canonicalize="loom_kernel_exit_canonicalize",
+    format=[
+        Ref("condition"),
+        COLON,
+        TypeOf("condition"),
+        OptionalGroup(
+            [Region("body")],
+            anchor="body",
+        ),
+    ],
+    examples=[
+        "kernel.exit %done : i1",
+        "kernel.exit %done : i1 {\n  kernel.return\n}",
+    ],
 )
 
 
@@ -1427,6 +1466,7 @@ ALL_KERNEL_TYPES: tuple[TypeDef, ...] = (
 ALL_KERNEL_OPS: tuple[Op, ...] = (
     kernel_def,
     kernel_return,
+    kernel_exit,
     kernel_barrier,
     kernel_async_copy,
     kernel_async_copy_mask,

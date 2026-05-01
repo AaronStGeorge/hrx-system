@@ -498,9 +498,9 @@ static iree_status_t loom_branch_fusion_fuse_pair(
   loom_builder_ip_t saved_ip = loom_builder_save(builder);
   loom_builder_set_before(builder, first->op);
 
-  iree_status_t status =
-      loom_scf_if_build(builder, first->selector, placeholder_types,
-                        result_count, NULL, 0, first->op->location, &fused_if);
+  iree_status_t status = loom_scf_if_build(
+      builder, LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION, first->selector,
+      placeholder_types, result_count, NULL, 0, first->op->location, &fused_if);
   if (iree_status_is_ok(status)) {
     status = loom_branch_fusion_copy_result_names(context->module, first,
                                                   second, fused_if);

@@ -203,12 +203,36 @@ static inline bool loom_value_facts_is_float(loom_value_facts_t facts) {
   return (facts.flags & LOOM_VALUE_FACT_FLOAT) != 0;
 }
 
+// Returns true when the integer fact domain proves the value is exactly zero.
+static inline bool loom_value_facts_is_zero(loom_value_facts_t facts) {
+  return !loom_value_facts_is_float(facts) && facts.range_lo == 0 &&
+         facts.range_hi == 0;
+}
+
+// Returns true when the integer fact domain proves the value is false.
+static inline bool loom_value_facts_is_false(loom_value_facts_t facts) {
+  return loom_value_facts_is_zero(facts);
+}
+
+// Returns true when the integer fact domain proves the value is true.
+static inline bool loom_value_facts_is_true(loom_value_facts_t facts) {
+  return loom_value_facts_is_non_zero(facts);
+}
+
 static inline bool loom_value_facts_as_exact_i64(loom_value_facts_t facts,
                                                  int64_t* out_value) {
   if (!loom_value_facts_is_exact(facts) || loom_value_facts_is_float(facts)) {
     return false;
   }
   *out_value = facts.range_lo;
+  return true;
+}
+
+static inline bool loom_value_facts_as_exact_bool(loom_value_facts_t facts,
+                                                  bool* out_value) {
+  int64_t value = 0;
+  if (!loom_value_facts_as_exact_i64(facts, &value)) return false;
+  *out_value = value != 0;
   return true;
 }
 

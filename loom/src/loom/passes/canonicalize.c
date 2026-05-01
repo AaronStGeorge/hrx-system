@@ -1148,10 +1148,13 @@ static iree_status_t loom_canonicalize_try_materialize_branch_edge_facts(
             rewriter, op, loom_scf_if_then_region(op),
             loom_scf_if_condition(op), true, &then_changed));
     bool else_changed = false;
-    IREE_RETURN_IF_ERROR(
-        loom_canonicalize_materialize_condition_facts_in_region(
-            rewriter, op, loom_scf_if_else_region(op),
-            loom_scf_if_condition(op), false, &else_changed));
+    loom_region_t* else_region = loom_scf_if_else_region(op);
+    if (else_region) {
+      IREE_RETURN_IF_ERROR(
+          loom_canonicalize_materialize_condition_facts_in_region(
+              rewriter, op, else_region, loom_scf_if_condition(op), false,
+              &else_changed));
+    }
     *out_changed = then_changed || else_changed;
     return iree_ok_status();
   }

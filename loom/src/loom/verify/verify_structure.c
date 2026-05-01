@@ -249,6 +249,13 @@ void loom_verify_op_placement(loom_verify_state_t* state, const loom_op_t* op,
   const loom_op_placement_descriptor_t* placement = vtable->placement;
   if (!placement) return;
 
+  for (uint8_t i = 0; i < placement->required_parent_count; ++i) {
+    loom_op_kind_t parent_kind = placement->required_parents[i];
+    if (op->parent_op && op->parent_op->kind == parent_kind) continue;
+    loom_verify_emit_placement_diagnostic(
+        state, op, vtable, IREE_SV("parent"), parent_kind,
+        loom_verify_parent_context_name(state, op));
+  }
   for (uint8_t i = 0; i < placement->required_ancestor_count; ++i) {
     loom_op_kind_t ancestor_kind = placement->required_ancestors[i];
     if (loom_verify_find_ancestor(op, ancestor_kind)) continue;
@@ -264,6 +271,25 @@ void loom_verify_op_placement(loom_verify_state_t* state, const loom_op_t* op,
         state, op, vtable, IREE_SV("forbidden"), ancestor_kind,
         loom_verify_kind_name(state, ancestor->kind));
   }
+}
+
+static uint8_t loom_verify_required_region_count(
+    const loom_op_vtable_t* vtable) {
+  if (!vtable->region_descriptors) return vtable->region_count;
+  bool has_variadic_regions =
+      iree_any_bit_set(vtable->vtable_flags, LOOM_OP_VTABLE_VARIADIC_REGIONS);
+  uint8_t fixed_region_count = has_variadic_regions && vtable->region_count > 0
+                                   ? (uint8_t)(vtable->region_count - 1)
+                                   : vtable->region_count;
+  for (uint8_t i = 0; i < fixed_region_count; ++i) {
+    const loom_region_descriptor_t* region_descriptor =
+        loom_op_vtable_region_descriptor(vtable, i);
+    if (!region_descriptor) return fixed_region_count;
+    if (iree_any_bit_set(region_descriptor->flags, LOOM_REGION_OPTIONAL)) {
+      return i;
+    }
+  }
+  return fixed_region_count;
 }
 
 void loom_verify_func_purity_body_effects(loom_verify_state_t* state,
@@ -365,18 +391,19 @@ void loom_verify_op_structure(loom_verify_state_t* state, const loom_op_t* op,
   // Check region count.
   bool has_variadic_regions =
       iree_any_bit_set(vtable->vtable_flags, LOOM_OP_VTABLE_VARIADIC_REGIONS);
-  uint8_t minimum_region_count =
-      has_variadic_regions && vtable->region_count > 0
-          ? (uint8_t)(vtable->region_count - 1)
-          : vtable->region_count;
-  bool region_count_matches = has_variadic_regions
-                                  ? op->region_count >= minimum_region_count
-                                  : op->region_count == vtable->region_count;
+  uint8_t minimum_region_count = loom_verify_required_region_count(vtable);
+  bool region_count_matches =
+      has_variadic_regions ? op->region_count >= minimum_region_count
+                           : op->region_count >= minimum_region_count &&
+                                 op->region_count <= vtable->region_count;
   if (!region_count_matches) {
+    uint8_t expected_region_count = op->region_count < minimum_region_count
+                                        ? minimum_region_count
+                                        : vtable->region_count;
     loom_diagnostic_param_t params[] = {
         loom_param_string(op_name),
         loom_param_u32(op->region_count),
-        loom_param_u32(minimum_region_count),
+        loom_param_u32(expected_region_count),
     };
     loom_verify_emit_structured(
         state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 4),
@@ -1225,7 +1252,17 @@ void loom_verify_region_structure(loom_verify_state_t* state,
     if (!region_descriptor) return;
     loom_region_t* region = regions[i];
     if (!region) {
-      // NULL region is only valid for optional regions.
+      if (iree_any_bit_set(region_descriptor->flags, LOOM_REGION_OPTIONAL)) {
+        continue;
+      }
+      loom_diagnostic_param_t params[] = {
+          loom_param_string(op_name),
+          loom_param_u32(op->region_count),
+          loom_param_u32(vtable->region_count),
+      };
+      loom_verify_emit_structured(
+          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 4),
+          params, IREE_ARRAYSIZE(params));
       continue;
     }
     if ((region_descriptor->flags & LOOM_REGION_SINGLE_BLOCK) &&

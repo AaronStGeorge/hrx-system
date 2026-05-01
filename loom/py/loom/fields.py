@@ -118,11 +118,14 @@ class FieldDesc:
     index: Starting index in the relevant array.
     variadic: If True, this field spans from index to the end of the
         array (for the trailing variadic operand/result pattern).
+    optional: If True, this fixed field may be absent from the operation's
+        positional array. Optional fields must be trailing in their array.
     """
 
     kind: FieldKind
     index: int
     variadic: bool = False
+    optional: bool = False
 
 
 # ============================================================================
@@ -148,6 +151,7 @@ class FieldLayout:
     fixed_operand_count: int
     fixed_result_count: int
     fixed_successor_count: int
+    required_region_count: int
     fixed_region_count: int
     variadic_operand: str | None  # Name of the variadic operand, if any.
     variadic_result: str | None  # Name of the variadic result, if any.
@@ -165,6 +169,7 @@ def compute_layout(op_decl: Op) -> FieldLayout:
     fixed_operand_count = 0
     fixed_result_count = 0
     fixed_successor_count = 0
+    required_region_count = 0
     fixed_region_count = 0
     variadic_operand: str | None = None
     variadic_result: str | None = None
@@ -233,13 +238,26 @@ def compute_layout(op_decl: Op) -> FieldLayout:
             fields[successor.name] = FieldDesc(FieldKind.SUCCESSOR, i)
             fixed_successor_count += 1
 
-    # Regions: sequential indices, variadic must be last.
+    # Regions: sequential indices. Variadic regions and optional regions are
+    # both trailing forms: a region list may have a variadic tail or a bounded
+    # run of optional tail slots, but not both.
+    saw_optional_region = False
     for i, region in enumerate(op_decl.regions):
         if region.variadic:
             if variadic_region is not None:
                 raise ValueError(
                     f"Op '{op_decl.name}': multiple variadic regions "
                     f"('{variadic_region}' and '{region.name}')."
+                )
+            if region.optional:
+                raise ValueError(
+                    f"Op '{op_decl.name}': region '{region.name}' cannot be "
+                    f"both optional and variadic."
+                )
+            if saw_optional_region:
+                raise ValueError(
+                    f"Op '{op_decl.name}': variadic region '{region.name}' "
+                    f"cannot follow an optional region."
                 )
             if i != len(op_decl.regions) - 1:
                 raise ValueError(
@@ -249,7 +267,21 @@ def compute_layout(op_decl: Op) -> FieldLayout:
             variadic_region = region.name
             fields[region.name] = FieldDesc(FieldKind.REGION, i, variadic=True)
         else:
-            fields[region.name] = FieldDesc(FieldKind.REGION, i)
+            if region.optional:
+                saw_optional_region = True
+                fields[region.name] = FieldDesc(
+                    FieldKind.REGION,
+                    i,
+                    optional=True,
+                )
+            else:
+                if saw_optional_region:
+                    raise ValueError(
+                        f"Op '{op_decl.name}': required region "
+                        f"'{region.name}' cannot follow an optional region."
+                    )
+                fields[region.name] = FieldDesc(FieldKind.REGION, i)
+                required_region_count += 1
             fixed_region_count += 1
 
     return FieldLayout(
@@ -257,6 +289,7 @@ def compute_layout(op_decl: Op) -> FieldLayout:
         fixed_operand_count=fixed_operand_count,
         fixed_result_count=fixed_result_count,
         fixed_successor_count=fixed_successor_count,
+        required_region_count=required_region_count,
         fixed_region_count=fixed_region_count,
         variadic_operand=variadic_operand,
         variadic_result=variadic_result,
@@ -387,11 +420,18 @@ class ResolvedFields:
 
     # --- Regions ---
 
-    def region(self, name: str) -> Region:
+    def region(self, name: str) -> Region | None:
         """Get a region by name."""
         desc = self._desc(name)
         if desc.kind != FieldKind.REGION:
             raise TypeError(f"Field '{name}' is {desc.kind.name}, not a region.")
+        if desc.index >= len(self._op.regions):
+            if desc.optional:
+                return None
+            raise IndexError(
+                f"Region field '{name}' index {desc.index} is absent "
+                f"on op '{self._op.name}'."
+            )
         return self._op.regions[desc.index]
 
     def regions(self, name: str) -> list[Region]:
@@ -401,6 +441,13 @@ class ResolvedFields:
             raise TypeError(f"Field '{name}' is {desc.kind.name}, not a region.")
         if desc.variadic:
             return self._op.regions[desc.index :]
+        if desc.index >= len(self._op.regions):
+            if desc.optional:
+                return []
+            raise IndexError(
+                f"Region field '{name}' index {desc.index} is absent "
+                f"on op '{self._op.name}'."
+            )
         return [self._op.regions[desc.index]]
 
     # --- Tied results ---

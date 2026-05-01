@@ -107,6 +107,28 @@ func.def @branch(%cond: i1) -> (f32) {
 
 // ====
 
+// Optional-region op with only the required body.
+func.def @optional_region_without_else(%cond: i1) {
+  test.optional_region %cond {
+    test.yield
+  }
+  func.return
+}
+
+// ====
+
+// Optional-region op with the trailing region present.
+func.def @optional_region_with_else(%cond: i1) {
+  test.optional_region %cond {
+    test.yield
+  } else {
+    test.yield
+  }
+  func.return
+}
+
+// ====
+
 // Loop op with induction variable and iter_args.
 func.def @loop_sum(%lo: index, %hi: index, %step: index, %init: f32) -> (f32) {
   %r = test.loop %iv = %lo to %hi step %step iter_args(%acc = %init : f32) -> (f32) {

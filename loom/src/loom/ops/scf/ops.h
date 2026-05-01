@@ -56,19 +56,22 @@ iree_status_t loom_scf_for_build(
     loom_op_t** out_op);
 iree_status_t loom_scf_for_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 
-// LOOM_OP_SCF_IF: Conditional execution with required else region.
+// LOOM_OP_SCF_IF: Conditional execution with optional else region for resultless conditionals.
 // scf.if %cond {
-//   scf.yield
-// } else {
 //   scf.yield
 // }
 LOOM_DEFINE_ISA(loom_scf_if_isa, LOOM_OP_SCF_IF)
 LOOM_DEFINE_OPERAND(loom_scf_if_condition, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_scf_if_results, 0)
 LOOM_DEFINE_REGION(loom_scf_if_then_region, 0)
-LOOM_DEFINE_REGION(loom_scf_if_else_region, 1)
+LOOM_DEFINE_OPTIONAL_REGION(loom_scf_if_else_region, 1)
+enum loom_scf_if_build_flag_bits_e {
+  LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION = 1u << 0,
+};
+typedef uint32_t loom_scf_if_build_flags_t;
 iree_status_t loom_scf_if_build(
     loom_builder_t* builder,
+    loom_scf_if_build_flags_t build_flags,
     loom_may_consume loom_value_id_t condition,
     const loom_type_t* result_types,
     iree_host_size_t result_count,
@@ -80,6 +83,9 @@ iree_status_t loom_scf_if_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter)
 iree_status_t loom_scf_region_branch_type_transfer(
     loom_type_transfer_context_t* context,
     const loom_module_t* module, loom_op_t* op);
+iree_status_t loom_scf_if_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_SCF_SWITCH: Multi-way branch over an index selector. Case keys are sorted unique i64 literals. The default region is mandatory and is selected when the selector does not equal any explicit case key. Every region must terminate with scf.yield matching the switch result tuple.
 // scf.switch %selector {

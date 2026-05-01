@@ -183,13 +183,22 @@ class ModuleVerifier:
             layout.variadic_successor,
             path,
         )
-        ok &= self._verify_count(
-            "region",
+        ok &= self._verify_region_count(
             len(operation.regions),
-            layout.fixed_region_count,
-            layout.variadic_region,
+            layout,
             path,
         )
+        if (
+            op_decl.name == "scf.if"
+            and operation.results
+            and len(operation.regions) < 2
+        ):
+            self.diagnostics.error(
+                "missing required else region",
+                source=path,
+                details=("scf.if with results requires an else region",),
+            )
+            ok = False
         return ok
 
     def _verify_count(
@@ -219,6 +228,40 @@ class ModuleVerifier:
                 f"expected at least {fixed_count}, found {actual_count}",
                 f"trailing variadic field is '{variadic_field}'",
             ),
+        )
+        return False
+
+    def _verify_region_count(
+        self,
+        actual_count: int,
+        layout: FieldLayout,
+        path: str,
+    ) -> bool:
+        if layout.variadic_region is not None:
+            if actual_count >= layout.fixed_region_count:
+                return True
+            self.diagnostics.error(
+                "wrong region count",
+                source=path,
+                details=(
+                    f"expected at least {layout.fixed_region_count}, "
+                    f"found {actual_count}",
+                    f"trailing variadic field is '{layout.variadic_region}'",
+                ),
+            )
+            return False
+
+        if layout.required_region_count <= actual_count <= layout.fixed_region_count:
+            return True
+        expected = (
+            str(layout.fixed_region_count)
+            if layout.required_region_count == layout.fixed_region_count
+            else (f"{layout.required_region_count}..{layout.fixed_region_count}")
+        )
+        self.diagnostics.error(
+            "wrong region count",
+            source=path,
+            details=(f"expected {expected}, found {actual_count}",),
         )
         return False
 

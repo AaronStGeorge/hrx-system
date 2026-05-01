@@ -234,9 +234,25 @@ static iree_status_t loom_parse_format_optional_group(
       }
       break;
     }
-    case LOOM_ANCHOR_REGION:
-      present = loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_LBRACE);
+    case LOOM_ANCHOR_REGION: {
+      uint16_t first_inner_index = element_index + 1;
+      while (first_inner_index < vtable->format_element_count &&
+             vtable->format_elements[first_inner_index].kind ==
+                 LOOM_FORMAT_KIND_GLUE) {
+        ++first_inner_index;
+      }
+      const loom_format_element_t* first_inner =
+          first_inner_index < vtable->format_element_count
+              ? &vtable->format_elements[first_inner_index]
+              : NULL;
+      if (first_inner && first_inner->kind == LOOM_FORMAT_KIND_KEYWORD) {
+        IREE_RETURN_IF_ERROR(loom_parse_format_keyword_is_present(
+            parser, first_inner, &present));
+      } else {
+        present = loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_LBRACE);
+      }
       break;
+    }
     case LOOM_ANCHOR_RESULTS:
       present = parsed->result_count > 0 ||
                 loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_ARROW);

@@ -27,6 +27,29 @@ func.def @lowers_if_result(%cond: i1, %a: i32, %b: i32) -> (i32) {
 
 // ====
 
+func.def @lowers_if_without_else(%cond: i1, %a: i32, %b: i32) {
+  scf.if %cond {
+    %then = test.addi %a, %b : i32
+    test.use %then : i32
+    scf.yield
+  }
+  func.return
+}
+
+// ----
+func.def @lowers_if_without_else(%cond: i1, %a: i32, %b: i32) {
+^_bb0(%cond: i1, %a: i32, %b: i32):
+  cfg.cond_br %cond, ^_bb1, ^_bb2 : i1
+^_bb1:
+  %then = test.addi %a, %b : i32
+  test.use %then : i32
+  cfg.br ^_bb2
+^_bb2:
+  func.return
+}
+
+// ====
+
 func.def @lowers_counted_for(%n: index, %seed: i32, %x: i32) -> (i32) {
   %zero = index.constant 0 : index
   %one = index.constant 1 : index

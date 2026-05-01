@@ -682,7 +682,10 @@ enum loom_attr_flag_bits_e {
 typedef uint8_t loom_attr_flags_t;
 
 enum loom_region_flag_bits_e {
+  // Region must contain exactly one block.
   LOOM_REGION_SINGLE_BLOCK = 1u << 0,
+  // Region may be absent when it is part of a trailing optional suffix.
+  LOOM_REGION_OPTIONAL = 1u << 1,
 };
 typedef uint8_t loom_region_flags_t;
 
@@ -838,10 +841,14 @@ static_assert(sizeof(loom_region_descriptor_t) == 6,
 
 // Generated structural placement metadata for an op kind.
 typedef struct loom_op_placement_descriptor_t {
+  // Op kinds that must be the direct parent op.
+  const loom_op_kind_t* required_parents;
   // Op kinds that must appear somewhere in the parent-op chain.
   const loom_op_kind_t* required_ancestors;
   // Op kinds that must not appear anywhere in the parent-op chain.
   const loom_op_kind_t* forbidden_ancestors;
+  // Number of entries in |required_parents|.
+  uint8_t required_parent_count;
   // Number of entries in |required_ancestors|.
   uint8_t required_ancestor_count;
   // Number of entries in |forbidden_ancestors|.
@@ -1324,6 +1331,12 @@ loom_attribute_t loom_memory_access_atomic_scope(loom_memory_access_t access);
 #define LOOM_DEFINE_REGION(func_name, index)                    \
   static inline loom_region_t* func_name(const loom_op_t* op) { \
     return loom_op_regions(op)[(index)];                        \
+  }
+
+// Defines a function that reads an optional region by index.
+#define LOOM_DEFINE_OPTIONAL_REGION(func_name, index)                        \
+  static inline loom_region_t* func_name(const loom_op_t* op) {              \
+    return (index) < op->region_count ? loom_op_regions(op)[(index)] : NULL; \
   }
 
 // Defines a function that reads a successor block by index.

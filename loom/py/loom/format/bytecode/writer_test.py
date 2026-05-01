@@ -1291,6 +1291,22 @@ class TestCrossFormatRoundTrip:
         assert func_op.regions
         assert len(func_op.regions[0].blocks[0].ops) == 2
 
+    def test_optional_region_count_survives_bytecode(self) -> None:
+        text = (
+            "func.def @optional_region(%cond: i1) {\n"
+            "  test.optional_region %cond {\n"
+            "    test.yield\n"
+            "  }\n"
+            "  test.optional_region %cond {\n"
+            "    test.yield\n"
+            "  } else {\n"
+            "    test.yield\n"
+            "  }\n"
+            "  func.return\n"
+            "}\n"
+        )
+        assert _roundtrip_text_through_bytecode(text) == text
+
     def test_record_symbol_survives_bytecode(self) -> None:
         text = 'test.record @target {arch = "gfx1100", lanes = 64}\n'
         loaded = _parse_write_read(text)

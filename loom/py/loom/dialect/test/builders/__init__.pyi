@@ -182,6 +182,14 @@ class TestBuilder(DialectBuilder):
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
     ) -> list[ValueRef]: ...
+    def optional_region(
+        self,
+        *,
+        condition: ValueRef,
+        body: Region | None = ...,
+        else_region: Region | None = ...,
+        location_id: int | None = ...,
+    ) -> None: ...
     def implicit_yield(
         self,
         *,

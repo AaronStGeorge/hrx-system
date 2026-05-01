@@ -1612,6 +1612,32 @@ class TestParseBranchOp:
         assert len(op.regions[0].blocks[0].ops) == 1  # yield in then
         assert len(op.regions[1].blocks[0].ops) == 1  # yield in else
 
+    def test_optional_region_absent(self) -> None:
+        module, scope = _setup_scope(("cond", I32))
+        op = _parse_op(
+            "test.optional_region %cond {\n}",
+            module=module,
+            scope=scope,
+        )
+        assert op.name == "test.optional_region"
+        assert len(op.regions) == 1
+        assert _op_printer().print_operation(op, module) == (
+            "test.optional_region %cond {\n}"
+        )
+
+    def test_optional_region_present(self) -> None:
+        module, scope = _setup_scope(("cond", I32))
+        op = _parse_op(
+            "test.optional_region %cond {\n} else {\n}",
+            module=module,
+            scope=scope,
+        )
+        assert op.name == "test.optional_region"
+        assert len(op.regions) == 2
+        assert _op_printer().print_operation(op, module) == (
+            "test.optional_region %cond {\n} else {\n}"
+        )
+
 
 # ============================================================================
 # Encoding type and dynamic encoding parsing

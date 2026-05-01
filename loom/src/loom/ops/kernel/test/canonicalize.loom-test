@@ -1,0 +1,54 @@
+// RUN: pass canonicalize
+
+kernel.def @exit_moves_tail_to_false_path(%done: i1, %value: i32) {
+  kernel.exit %done : i1
+  test.use %value : i32
+  kernel.return
+}
+
+// ----
+kernel.def @exit_moves_tail_to_false_path(%done: i1, %value: i32) {
+  scf.if %done {
+    scf.yield
+  } else {
+    test.use %value : i32
+    scf.yield
+  }
+  kernel.return
+}
+
+// ====
+
+kernel.def @exit_body_moves_to_true_path(%done: i1, %value: i32) {
+  kernel.exit %done : i1 {
+    test.use %value : i32
+    kernel.return
+  }
+  kernel.return
+}
+
+// ----
+kernel.def @exit_body_moves_to_true_path(%done: i1, %value: i32) {
+  scf.if %done {
+    test.use %value : i32
+    scf.yield
+  } else {
+    scf.yield
+  }
+  kernel.return
+}
+
+// ====
+
+kernel.def @false_exit_erases(%value: i32) {
+  %done = scalar.constant false : i1
+  kernel.exit %done : i1
+  test.use %value : i32
+  kernel.return
+}
+
+// ----
+kernel.def @false_exit_erases(%value: i32) {
+  test.use %value : i32
+  kernel.return
+}

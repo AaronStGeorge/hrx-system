@@ -249,8 +249,9 @@ TEST_F(InterfaceTest, LoopLikeCastReturnsNullForScfIf) {
   loom_op_t* condition = build_i1(true);
   loom_value_id_t condition_id = loom_op_results(condition)[0];
   loom_op_t* if_op = nullptr;
-  IREE_ASSERT_OK(loom_scf_if_build(&builder_, condition_id, nullptr, 0, nullptr,
-                                   0, LOOM_LOCATION_UNKNOWN, &if_op));
+  IREE_ASSERT_OK(loom_scf_if_build(
+      &builder_, LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION, condition_id, nullptr,
+      0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &if_op));
 
   loom_loop_like_t loop = loom_loop_like_cast(module_, if_op);
   EXPECT_FALSE(loom_loop_like_isa(loop));
@@ -339,8 +340,9 @@ TEST_F(InterfaceTest, RegionBranchCastReturnsValidForScfIf) {
   loom_op_t* condition = build_i1(true);
   loom_value_id_t condition_id = loom_op_results(condition)[0];
   loom_op_t* if_op = nullptr;
-  IREE_ASSERT_OK(loom_scf_if_build(&builder_, condition_id, nullptr, 0, nullptr,
-                                   0, LOOM_LOCATION_UNKNOWN, &if_op));
+  IREE_ASSERT_OK(loom_scf_if_build(
+      &builder_, LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION, condition_id, nullptr,
+      0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &if_op));
 
   loom_region_branch_t branch = loom_region_branch_cast(module_, if_op);
   EXPECT_TRUE(loom_region_branch_isa(branch));
@@ -380,8 +382,9 @@ TEST_F(InterfaceTest, RegionBranchSelectorForScfIf) {
   loom_op_t* condition = build_i1(false);
   loom_value_id_t condition_id = loom_op_results(condition)[0];
   loom_op_t* if_op = nullptr;
-  IREE_ASSERT_OK(loom_scf_if_build(&builder_, condition_id, nullptr, 0, nullptr,
-                                   0, LOOM_LOCATION_UNKNOWN, &if_op));
+  IREE_ASSERT_OK(loom_scf_if_build(
+      &builder_, LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION, condition_id, nullptr,
+      0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &if_op));
 
   loom_region_branch_t branch = loom_region_branch_cast(module_, if_op);
   ASSERT_TRUE(loom_region_branch_isa(branch));
@@ -397,9 +400,10 @@ TEST_F(InterfaceTest, RegionBranchYieldOnlyOperandsForScfIf) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_op_t* if_op = nullptr;
-  IREE_ASSERT_OK(loom_scf_if_build(&builder_, loom_op_results(condition)[0],
-                                   &i32, 1, nullptr, 0, LOOM_LOCATION_UNKNOWN,
-                                   &if_op));
+  IREE_ASSERT_OK(loom_scf_if_build(&builder_,
+                                   LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION,
+                                   loom_op_results(condition)[0], &i32, 1,
+                                   nullptr, 0, LOOM_LOCATION_UNKNOWN, &if_op));
   build_region_branch_yield(if_op, 0, &then_id, 1);
   build_region_branch_yield(if_op, 1, &else_id, 1);
 
@@ -432,9 +436,10 @@ TEST_F(InterfaceTest, RegionBranchYieldOnlyRejectsBranchBody) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_op_t* if_op = nullptr;
-  IREE_ASSERT_OK(loom_scf_if_build(&builder_, loom_op_results(condition)[0],
-                                   &i32, 1, nullptr, 0, LOOM_LOCATION_UNKNOWN,
-                                   &if_op));
+  IREE_ASSERT_OK(loom_scf_if_build(&builder_,
+                                   LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION,
+                                   loom_op_results(condition)[0], &i32, 1,
+                                   nullptr, 0, LOOM_LOCATION_UNKNOWN, &if_op));
 
   loom_builder_ip_t saved_ip = loom_builder_enter_region(
       &builder_, if_op, loom_scf_if_then_region(if_op));

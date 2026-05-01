@@ -248,6 +248,17 @@ iree_status_t loom_scf_while_verify(const loom_module_t* module,
   return iree_ok_status();
 }
 
+iree_status_t loom_scf_if_verify(const loom_module_t* module,
+                                 const loom_op_t* op,
+                                 iree_diagnostic_emitter_t emitter) {
+  if (op->result_count == 0 || loom_scf_if_else_region(op)) {
+    return iree_ok_status();
+  }
+  return loom_scf_emit_count_mismatch(
+      emitter, op, IREE_SV("else_region"), 0,
+      IREE_SV("present when scf.if has results"), 1);
+}
+
 static iree_status_t loom_scf_emit_switch_type_mismatch(
     const loom_module_t* module, iree_diagnostic_emitter_t emitter,
     const loom_op_t* op, iree_string_view_t yield_field_name,

@@ -356,9 +356,10 @@ static iree_status_t loom_vector_to_scalar_build_masked_view_load_lane(
       state, mask_vector, lane_indices, &condition));
 
   loom_op_t* if_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_if_build(&state->rewriter->builder, condition,
-                                         &state->result_scalar_type, 1, NULL, 0,
-                                         state->location, &if_op));
+  IREE_RETURN_IF_ERROR(loom_scf_if_build(&state->rewriter->builder,
+                                         LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION,
+                                         condition, &state->result_scalar_type,
+                                         1, NULL, 0, state->location, &if_op));
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->rewriter->builder, if_op, loom_scf_if_then_region(if_op));
@@ -436,9 +437,10 @@ iree_status_t loom_vector_to_scalar_build_load_expand_lane(
       loom_vector_to_scalar_materialize_lane(state, mask, indices, &condition));
 
   loom_op_t* if_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_if_build(&state->rewriter->builder, condition,
-                                         &state->result_scalar_type, 1, NULL, 0,
-                                         state->location, &if_op));
+  IREE_RETURN_IF_ERROR(loom_scf_if_build(&state->rewriter->builder,
+                                         LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION,
+                                         condition, &state->result_scalar_type,
+                                         1, NULL, 0, state->location, &if_op));
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->rewriter->builder, if_op, loom_scf_if_then_region(if_op));
@@ -544,9 +546,9 @@ static iree_status_t loom_vector_to_scalar_emit_masked_view_store_lane(
       &condition));
 
   loom_op_t* if_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_if_build(&state->rewriter->builder, condition,
-                                         NULL, 0, NULL, 0, state->location,
-                                         &if_op));
+  IREE_RETURN_IF_ERROR(loom_scf_if_build(
+      &state->rewriter->builder, LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION,
+      condition, NULL, 0, NULL, 0, state->location, &if_op));
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->rewriter->builder, if_op, loom_scf_if_then_region(if_op));
@@ -588,9 +590,9 @@ static iree_status_t loom_vector_to_scalar_emit_store_compress_lane(
       loom_vector_to_scalar_materialize_lane(state, mask, indices, &condition));
 
   loom_op_t* if_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_if_build(&state->rewriter->builder, condition,
-                                         NULL, 0, NULL, 0, state->location,
-                                         &if_op));
+  IREE_RETURN_IF_ERROR(loom_scf_if_build(
+      &state->rewriter->builder, LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION,
+      condition, NULL, 0, NULL, 0, state->location, &if_op));
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->rewriter->builder, if_op, loom_scf_if_then_region(if_op));
@@ -872,9 +874,9 @@ static iree_status_t loom_vector_to_scalar_emit_masked_view_atomic_reduce_lane(
       &condition));
 
   loom_op_t* if_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_if_build(&state->rewriter->builder, condition,
-                                         NULL, 0, NULL, 0, state->location,
-                                         &if_op));
+  IREE_RETURN_IF_ERROR(loom_scf_if_build(
+      &state->rewriter->builder, LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION,
+      condition, NULL, 0, NULL, 0, state->location, &if_op));
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->rewriter->builder, if_op, loom_scf_if_then_region(if_op));
@@ -1087,9 +1089,10 @@ static iree_status_t loom_vector_to_scalar_build_masked_view_atomic_rmw_lane(
       &condition));
 
   loom_op_t* if_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_if_build(&state->rewriter->builder, condition,
-                                         &state->result_scalar_type, 1, NULL, 0,
-                                         state->location, &if_op));
+  IREE_RETURN_IF_ERROR(loom_scf_if_build(&state->rewriter->builder,
+                                         LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION,
+                                         condition, &state->result_scalar_type,
+                                         1, NULL, 0, state->location, &if_op));
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->rewriter->builder, if_op, loom_scf_if_then_region(if_op));

@@ -73,6 +73,18 @@ func.def @if_yield_type_refs_forwarded_results(%cond: i1, %buffer: buffer, %offs
 
 // ====
 
+// Result-producing scf.if requires an else region so every result has a total
+// definition.
+func.def @if_result_missing_else(%cond: i1, %a: i32) -> (i32) {
+  // ERROR@+1: STRUCTURE/013 "else_region" "0" "present when scf.if has results" "1"
+  %r = scf.if %cond -> (i32) {
+    scf.yield %a : i32
+  }
+  func.return %r : i32
+}
+
+// ====
+
 // Loop-carried iter_arg/result type matching uses the same result-to-yield
 // forwarding rule as scf.yield. The init view is tied to the init layout, while
 // the loop result view is tied to the sibling loop result layout.

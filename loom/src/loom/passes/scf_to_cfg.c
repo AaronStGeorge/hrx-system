@@ -390,12 +390,19 @@ static iree_status_t loom_scf_to_cfg_lower_if(loom_scf_to_cfg_state_t* state,
       &then_source_block, &then_yield));
   loom_block_t* else_source_block = NULL;
   loom_op_t* else_yield = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_read_single_block_region(
-      state, op, loom_scf_if_else_region(op), LOOM_OP_SCF_YIELD,
-      IREE_SV("scf.if else region must be a single block ending in scf.yield"),
-      &else_source_block, &else_yield));
+  loom_region_t* else_region = loom_scf_if_else_region(op);
+  if (else_region) {
+    IREE_RETURN_IF_ERROR(loom_scf_to_cfg_read_single_block_region(
+        state, op, else_region, LOOM_OP_SCF_YIELD,
+        IREE_SV(
+            "scf.if else region must be a single block ending in scf.yield"),
+        &else_source_block, &else_yield));
+  } else if (op->result_count != 0) {
+    return loom_scf_to_cfg_fail(
+        state, op, IREE_SV("scf.if with results requires an else region"));
+  }
   if (then_yield->operand_count != op->result_count ||
-      else_yield->operand_count != op->result_count) {
+      (else_yield && else_yield->operand_count != op->result_count)) {
     return loom_scf_to_cfg_fail(
         state, op,
         IREE_SV("scf.if yield operand counts must match result count"));
@@ -410,8 +417,10 @@ static iree_status_t loom_scf_to_cfg_lower_if(loom_scf_to_cfg_state_t* state,
   IREE_RETURN_IF_ERROR(
       loom_scf_to_cfg_append_block(state, parent_region, &then_block));
   loom_block_t* else_block = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_scf_to_cfg_append_block(state, parent_region, &else_block));
+  if (else_region) {
+    IREE_RETURN_IF_ERROR(
+        loom_scf_to_cfg_append_block(state, parent_region, &else_block));
+  }
   loom_block_t* join_block = NULL;
   IREE_RETURN_IF_ERROR(
       loom_scf_to_cfg_append_block(state, parent_region, &join_block));
@@ -441,31 +450,33 @@ static iree_status_t loom_scf_to_cfg_lower_if(loom_scf_to_cfg_state_t* state,
       state, then_block, op->parent_op, join_block, then_yield_values,
       op->result_count, then_yield->location));
 
-  loom_ir_remap_t else_remap = {0};
-  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_initialize_remap(state, &else_remap));
-  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_move_block_body_to_end(
-      state, else_source_block, else_yield, else_block, op->parent_op,
-      &else_remap));
-  loom_value_id_t* else_yield_values = NULL;
-  if (op->result_count > 0) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        state->lowering_arena, op->result_count, sizeof(*else_yield_values),
-        (void**)&else_yield_values));
-    IREE_RETURN_IF_ERROR(loom_scf_to_cfg_resolve_values(
-        &else_remap, loom_op_const_operands(else_yield), op->result_count,
-        else_yield_values));
+  if (else_region) {
+    loom_ir_remap_t else_remap = {0};
+    IREE_RETURN_IF_ERROR(loom_scf_to_cfg_initialize_remap(state, &else_remap));
+    IREE_RETURN_IF_ERROR(loom_scf_to_cfg_move_block_body_to_end(
+        state, else_source_block, else_yield, else_block, op->parent_op,
+        &else_remap));
+    loom_value_id_t* else_yield_values = NULL;
+    if (op->result_count > 0) {
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+          state->lowering_arena, op->result_count, sizeof(*else_yield_values),
+          (void**)&else_yield_values));
+      IREE_RETURN_IF_ERROR(loom_scf_to_cfg_resolve_values(
+          &else_remap, loom_op_const_operands(else_yield), op->result_count,
+          else_yield_values));
+    }
+    IREE_RETURN_IF_ERROR(loom_scf_to_cfg_build_br(
+        state, else_block, op->parent_op, join_block, else_yield_values,
+        op->result_count, else_yield->location));
   }
-  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_build_br(
-      state, else_block, op->parent_op, join_block, else_yield_values,
-      op->result_count, else_yield->location));
 
   loom_builder_t* builder = &state->rewriter->builder;
   loom_builder_ip_t saved_ip = loom_builder_save(builder);
   loom_builder_set_before(builder, op);
   loom_op_t* cond_br_op = NULL;
-  iree_status_t status =
-      loom_cfg_cond_br_build(builder, loom_scf_if_condition(op), then_block,
-                             else_block, op->location, &cond_br_op);
+  iree_status_t status = loom_cfg_cond_br_build(
+      builder, loom_scf_if_condition(op), then_block,
+      else_block ? else_block : join_block, op->location, &cond_br_op);
   loom_builder_restore(builder, saved_ip);
   IREE_RETURN_IF_ERROR(status);
 

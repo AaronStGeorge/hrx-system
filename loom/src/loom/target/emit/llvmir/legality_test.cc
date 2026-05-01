@@ -171,8 +171,9 @@ class LlvmIrLegalityTest : public ::testing::Test {
 
     loom_builder_t body_builder = BodyBuilder(func_op);
     loom_op_t* if_op = NULL;
-    IREE_ASSERT_OK(loom_scf_if_build(&body_builder, args[0], NULL, 0, NULL, 0,
-                                     LOOM_LOCATION_UNKNOWN, &if_op));
+    IREE_ASSERT_OK(loom_scf_if_build(
+        &body_builder, LOOM_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION, args[0], NULL, 0,
+        NULL, 0, LOOM_LOCATION_UNKNOWN, &if_op));
     loom_builder_t then_builder;
     loom_builder_initialize(
         module_, &module_->arena,

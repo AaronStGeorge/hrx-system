@@ -132,6 +132,60 @@ TEST(FactsExactF64, NegativeZeroDiffersFromPositive) {
   EXPECT_FALSE(loom_value_facts_equal(pos, neg));
 }
 
+TEST(FactsPredicates, IntegerTruthiness) {
+  bool value = true;
+  loom_value_facts_t unknown = loom_value_facts_unknown();
+  EXPECT_FALSE(loom_value_facts_is_zero(unknown));
+  EXPECT_FALSE(loom_value_facts_is_false(unknown));
+  EXPECT_FALSE(loom_value_facts_is_true(unknown));
+  EXPECT_FALSE(loom_value_facts_as_exact_bool(unknown, &value));
+
+  loom_value_facts_t zero = loom_value_facts_exact_i64(0);
+  EXPECT_TRUE(loom_value_facts_is_zero(zero));
+  EXPECT_TRUE(loom_value_facts_is_false(zero));
+  EXPECT_FALSE(loom_value_facts_is_true(zero));
+  EXPECT_TRUE(loom_value_facts_as_exact_bool(zero, &value));
+  EXPECT_FALSE(value);
+
+  loom_value_facts_t one = loom_value_facts_exact_i64(1);
+  EXPECT_FALSE(loom_value_facts_is_zero(one));
+  EXPECT_FALSE(loom_value_facts_is_false(one));
+  EXPECT_TRUE(loom_value_facts_is_true(one));
+  EXPECT_TRUE(loom_value_facts_as_exact_bool(one, &value));
+  EXPECT_TRUE(value);
+
+  loom_value_facts_t negative = loom_value_facts_exact_i64(-7);
+  EXPECT_FALSE(loom_value_facts_is_zero(negative));
+  EXPECT_TRUE(loom_value_facts_is_true(negative));
+  EXPECT_TRUE(loom_value_facts_as_exact_bool(negative, &value));
+  EXPECT_TRUE(value);
+}
+
+TEST(FactsPredicates, NonExactTruthiness) {
+  bool value = false;
+  loom_value_facts_t positive_range = loom_value_facts_make(1, 10, 1);
+  EXPECT_TRUE(loom_value_facts_is_true(positive_range));
+  EXPECT_FALSE(loom_value_facts_as_exact_bool(positive_range, &value));
+
+  loom_value_facts_t negative_range = loom_value_facts_make(-10, -1, 1);
+  EXPECT_TRUE(loom_value_facts_is_true(negative_range));
+  EXPECT_FALSE(loom_value_facts_as_exact_bool(negative_range, &value));
+
+  loom_value_facts_t maybe_zero = loom_value_facts_make(0, 10, 1);
+  EXPECT_FALSE(loom_value_facts_is_zero(maybe_zero));
+  EXPECT_FALSE(loom_value_facts_is_false(maybe_zero));
+  EXPECT_FALSE(loom_value_facts_is_true(maybe_zero));
+}
+
+TEST(FactsPredicates, FloatFactsAreNotIntegerTruthiness) {
+  bool value = true;
+  loom_value_facts_t zero = loom_value_facts_exact_f64(0.0);
+  EXPECT_FALSE(loom_value_facts_is_zero(zero));
+  EXPECT_FALSE(loom_value_facts_is_false(zero));
+  EXPECT_FALSE(loom_value_facts_is_true(zero));
+  EXPECT_FALSE(loom_value_facts_as_exact_bool(zero, &value));
+}
+
 //===----------------------------------------------------------------------===//
 // General constructor: make
 //===----------------------------------------------------------------------===//
