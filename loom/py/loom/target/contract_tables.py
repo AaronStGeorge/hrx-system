@@ -81,6 +81,13 @@ CONTRACT_TABLE_REGISTRATIONS = (
         aliases=("amdgpu_reduce",),
     ),
     ContractTableRegistration(
+        key="iree.vm.core",
+        module_name="loom.target.emit.ireevm.contracts",
+        symbol_name="IREEVM_CORE_CONTRACT_TABLE",
+        dialect_ops_symbol_name="IREEVM_CORE_CONTRACT_DIALECT_OPS",
+        aliases=("ireevm_core",),
+    ),
+    ContractTableRegistration(
         key="test.low.core",
         module_name="loom.target.test.contracts",
         symbol_name="TEST_LOW_CORE_CONTRACT_TABLE",

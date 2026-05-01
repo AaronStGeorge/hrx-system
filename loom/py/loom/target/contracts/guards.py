@@ -119,16 +119,35 @@ class Guard:
         )
 
     @classmethod
-    def attr_kind(cls, field: str, attr_type: str) -> Self:
-        return cls(kind=GuardKind.ATTR_KIND, field=field, attr_type=attr_type)
+    def attr_kind(
+        cls,
+        field: str,
+        attr_type: str,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.ATTR_KIND,
+            field=field,
+            attr_type=attr_type,
+            diagnostic=diagnostic,
+        )
 
     @classmethod
-    def i64_range(cls, field: str, minimum: int, maximum: int) -> Self:
+    def i64_range(
+        cls,
+        field: str,
+        minimum: int,
+        maximum: int,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
         return cls(
             kind=GuardKind.I64_RANGE,
             field=field,
             minimum=minimum,
             maximum=maximum,
+            diagnostic=diagnostic,
         )
 
     @classmethod

@@ -30,6 +30,52 @@ loom_low_descriptor_cc_library(
     loom::src::loom::codegen::low::descriptors
 )
 
+loom_target_table_cc_library(
+  NAME
+    lower_rules
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rule_shard.py"
+  SOURCE
+    "lower/rules.c"
+  HEADER
+    "lower/rules.h"
+  ARGS
+    "--contract-table=iree.vm.core"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/analysis.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/arithmetic.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/bitwise.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/comparison.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/conversion.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/defs.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/math.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dsl.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/generated_file.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rules.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contract_tables.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/emits.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/guards.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/immediates.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/kinds.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/lower_rules.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/materializers.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/patterns.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/rules.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/source.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/tables.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/templates.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/emit/ireevm/contracts.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/emit/ireevm/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
+  DEPS
+    ::descriptors_ids
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::scalar
+)
+
 loom_cc_library(
   NAME
     low_registry
@@ -137,6 +183,7 @@ loom_cc_library(
   SRCS
     "lower/registry.c"
   DEPS
+    ::lower_rules
     iree::base
     loom::src::loom::codegen::low::lower
     loom::src::loom::ir

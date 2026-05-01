@@ -90,14 +90,28 @@ _TARGET_CONTRACT_GENERATOR_SRCS = [
     "target/low_descriptors.py",
 ]
 
+_IREEVM_CONTRACT_SHARD_SRCS = _TARGET_CONTRACT_GENERATOR_SRCS + [
+    "dialect/__init__.py",
+    "dialect/scalar/__init__.py",
+    "dialect/scalar/analysis.py",
+    "dialect/scalar/arithmetic.py",
+    "dialect/scalar/bitwise.py",
+    "dialect/scalar/comparison.py",
+    "dialect/scalar/conversion.py",
+    "dialect/scalar/defs.py",
+    "dialect/scalar/math.py",
+    "target/emit/__init__.py",
+    "target/emit/ireevm/__init__.py",
+    "target/emit/ireevm/contracts.py",
+    "target/emit/ireevm/descriptors.py",
+]
+
 _TEST_LOW_CONTRACT_SHARD_SRCS = _TARGET_CONTRACT_GENERATOR_SRCS + [
     "dialect/__init__.py",
     "dialect/atomic.py",
     "dialect/combining.py",
     "dialect/index/__init__.py",
     "dialect/index/defs.py",
-    "dialect/kernel/__init__.py",
-    "dialect/kernel/defs.py",
     "dialect/scalar/__init__.py",
     "dialect/scalar/analysis.py",
     "dialect/scalar/arithmetic.py",
@@ -120,6 +134,8 @@ _AMDGPU_CONTRACT_SHARD_SRCS = _TARGET_CONTRACT_GENERATOR_SRCS + [
     "dialect/combining.py",
     "dialect/index/__init__.py",
     "dialect/index/defs.py",
+    "dialect/kernel/__init__.py",
+    "dialect/kernel/defs.py",
     "dialect/scalar/__init__.py",
     "dialect/scalar/analysis.py",
     "dialect/scalar/arithmetic.py",
@@ -245,6 +261,12 @@ py_binary(
     name = "ireevm_low_descriptor_shard",
     srcs = _IREEVM_LOW_DESCRIPTOR_SHARD_SRCS,
     main = "gen/low_descriptor_shard.py",
+)
+
+py_binary(
+    name = "ireevm_lower_rule_shard",
+    srcs = _IREEVM_CONTRACT_SHARD_SRCS,
+    main = "gen/target_lower_rule_shard.py",
 )
 
 py_binary(
