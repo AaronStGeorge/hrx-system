@@ -30,9 +30,9 @@ TEST(TargetPresetRegistryTest, RejectsEmptyKey) {
   loom_target_preset_registry_t registry = {};
 
   const loom_target_bundle_t* bundle = nullptr;
-  iree_status_t status = loom_target_preset_registry_lookup_bundle(
-      &registry, IREE_SV(""), &bundle);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_target_preset_registry_lookup_bundle(
+                            &registry, IREE_SV(""), &bundle));
   EXPECT_EQ(bundle, nullptr);
 }
 
@@ -45,9 +45,9 @@ TEST(TargetPresetRegistryTest, RejectsUnknownKey) {
   registry.target_bundle_count = 1;
 
   const loom_target_bundle_t* bundle = nullptr;
-  iree_status_t status = loom_target_preset_registry_lookup_bundle(
-      &registry, IREE_SV("missing-target"), &bundle);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
+                        loom_target_preset_registry_lookup_bundle(
+                            &registry, IREE_SV("missing-target"), &bundle));
   EXPECT_EQ(bundle, nullptr);
 }
 

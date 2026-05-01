@@ -2294,8 +2294,8 @@ TEST_F(VerifyTest, DeepNestingExceedsLimit) {
 
   TerminateFunc();
   loom_verify_result_t result = {};
-  iree_status_t status = loom_verify_module(module_, &options_, &result);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        loom_verify_module(module_, &options_, &result));
 }
 
 TEST_F(VerifyTest, DefinedStackGrowsPastInitialCapacity) {

@@ -189,8 +189,8 @@ TEST_F(LowTargetBindingTest, RegistryRejectsDuplicateKeys) {
       .descriptor_sets = descriptor_sets,
       .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
   };
-  iree_status_t status = loom_low_descriptor_registry_verify(&registry);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_ALREADY_EXISTS, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_ALREADY_EXISTS,
+                        loom_low_descriptor_registry_verify(&registry));
 }
 
 TEST_F(LowTargetBindingTest, RegistryRejectsNullEntries) {
@@ -202,8 +202,8 @@ TEST_F(LowTargetBindingTest, RegistryRejectsNullEntries) {
       .descriptor_sets = descriptor_sets,
       .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
   };
-  iree_status_t status = loom_low_descriptor_registry_verify(&registry);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_descriptor_registry_verify(&registry));
 }
 
 TEST_F(LowTargetBindingTest, ResolvesProfilePresetAndDescriptorSet) {

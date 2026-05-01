@@ -286,8 +286,8 @@ TEST_F(LlvmIrLegalityTest, RejectsStructuredScfBeforeLowering) {
   BuildStructuredIfFunction();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  iree_status_t status = VerifyTestObject(&diagnostic);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
+                        VerifyTestObject(&diagnostic));
   EXPECT_EQ(diagnostic.code,
             LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_CONTROL_FLOW);
   EXPECT_EQ(ToString(diagnostic.op_name), "scf.if");
@@ -299,8 +299,8 @@ TEST_F(LlvmIrLegalityTest, RejectsUnknownIntrinsicKind) {
   BuildUnknownIntrinsicFunction();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  iree_status_t status = VerifyTestObject(&diagnostic);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
+                        VerifyTestObject(&diagnostic));
   EXPECT_EQ(diagnostic.code, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC);
   EXPECT_EQ(ToString(diagnostic.target_detail), "llvm.imaginary");
 }
@@ -309,8 +309,8 @@ TEST_F(LlvmIrLegalityTest, RejectsFp8TypeBeforeLowering) {
   BuildF8Function();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  iree_status_t status = VerifyTestObject(&diagnostic);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
+                        VerifyTestObject(&diagnostic));
   EXPECT_EQ(diagnostic.code, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TYPE);
   EXPECT_EQ(ToString(diagnostic.target_detail), "fp8");
 }
@@ -319,8 +319,8 @@ TEST_F(LlvmIrLegalityTest, RejectsTargetContractWithoutProvider) {
   BuildDot4S8S8Function();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  iree_status_t status = VerifyTestObject(&diagnostic);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
+                        VerifyTestObject(&diagnostic));
   EXPECT_EQ(diagnostic.code,
             LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TARGET_CONTRACT);
   EXPECT_NE(ToString(diagnostic.detail).find("target legality provider"),

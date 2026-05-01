@@ -167,9 +167,9 @@ TEST(LowPacketTest, RejectsSelectedAsmFormCountMismatch) {
   InitializePacketTestState(&state);
   state.asm_form_table.asm_form_ordinal_count = 1;
 
-  iree_status_t status = loom_low_packet_validate_asm_form_table(
-      &state.schedule, &state.asm_form_table);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_packet_validate_asm_form_table(
+                            &state.schedule, &state.asm_form_table));
 }
 
 TEST(LowPacketTest, RejectsSelectedAsmFormForStructuralPacket) {
@@ -177,9 +177,9 @@ TEST(LowPacketTest, RejectsSelectedAsmFormForStructuralPacket) {
   InitializePacketTestState(&state);
   state.selected_asm_form_ordinals[0] = 0;
 
-  iree_status_t status = loom_low_packet_validate_asm_form_table(
-      &state.schedule, &state.asm_form_table);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_packet_validate_asm_form_table(
+                            &state.schedule, &state.asm_form_table));
 }
 
 TEST(LowPacketTest, RejectsSelectedAsmFormDescriptorMismatch) {
@@ -187,9 +187,9 @@ TEST(LowPacketTest, RejectsSelectedAsmFormDescriptorMismatch) {
   InitializePacketTestState(&state);
   state.selected_asm_form_ordinals[1] = 1;
 
-  iree_status_t status = loom_low_packet_validate_asm_form_table(
-      &state.schedule, &state.asm_form_table);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_packet_validate_asm_form_table(
+                            &state.schedule, &state.asm_form_table));
 }
 
 TEST(LowPacketTest, RejectsMismatchedTables) {
@@ -198,9 +198,9 @@ TEST(LowPacketTest, RejectsMismatchedTables) {
   loom_op_t other_function_op = {};
   state.allocation.function_op = &other_function_op;
 
-  iree_status_t status =
-      loom_low_packet_validate_tables(&state.schedule, &state.allocation);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_low_packet_validate_tables(&state.schedule, &state.allocation));
 }
 
 TEST(LowPacketTest, RejectsUnnamedTableFunction) {
@@ -209,9 +209,9 @@ TEST(LowPacketTest, RejectsUnnamedTableFunction) {
   state.schedule.function_op = nullptr;
   state.allocation.function_op = nullptr;
 
-  iree_status_t status =
-      loom_low_packet_validate_tables(&state.schedule, &state.allocation);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_low_packet_validate_tables(&state.schedule, &state.allocation));
 }
 
 TEST(LowPacketTest, RejectsOutOfRangePacketIndex) {
@@ -219,9 +219,9 @@ TEST(LowPacketTest, RejectsOutOfRangePacketIndex) {
   InitializePacketTestState(&state);
 
   uint32_t node_index = LOOM_LOW_SCHEDULE_NODE_NONE;
-  iree_status_t status =
-      loom_low_packet_node_index_at(&state.schedule, 2, &node_index);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_OUT_OF_RANGE,
+      loom_low_packet_node_index_at(&state.schedule, 2, &node_index));
   EXPECT_EQ(node_index, LOOM_LOW_SCHEDULE_NODE_NONE);
 }
 

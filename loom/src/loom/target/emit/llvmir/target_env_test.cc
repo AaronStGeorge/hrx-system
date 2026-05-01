@@ -345,10 +345,10 @@ TEST(LlvmIrTargetEnvTest, RejectsMalformedDerivedAmdgpuHalProfile) {
   broken_bundle.config = &config;
 
   loom_llvmir_target_profile_storage_t storage = {};
-  iree_status_t status =
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
       loom_llvmir_target_profile_storage_initialize_from_bundle(&broken_bundle,
-                                                                &storage);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+                                                                &storage));
 }
 
 TEST(LlvmIrTargetEnvTest, RejectsDerivedAmdgpuHalProfileWithoutFlatLimit) {
@@ -366,10 +366,10 @@ TEST(LlvmIrTargetEnvTest, RejectsDerivedAmdgpuHalProfileWithoutFlatLimit) {
   broken_bundle.config = &config;
 
   loom_llvmir_target_profile_storage_t storage = {};
-  iree_status_t status =
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
       loom_llvmir_target_profile_storage_initialize_from_bundle(&broken_bundle,
-                                                                &storage);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+                                                                &storage));
 }
 
 TEST(LlvmIrTargetEnvTest, RejectsUnsupportedDerivedProfileArtifactFormat) {
@@ -387,10 +387,10 @@ TEST(LlvmIrTargetEnvTest, RejectsUnsupportedDerivedProfileArtifactFormat) {
   broken_bundle.config = &config;
 
   loom_llvmir_target_profile_storage_t storage = {};
-  iree_status_t status =
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
       loom_llvmir_target_profile_storage_initialize_from_bundle(&broken_bundle,
-                                                                &storage);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+                                                                &storage));
 }
 
 TEST(LlvmIrTargetEnvTest, RejectsUnsupportedDerivedProfileAbiKind) {
@@ -408,10 +408,10 @@ TEST(LlvmIrTargetEnvTest, RejectsUnsupportedDerivedProfileAbiKind) {
   broken_bundle.config = &config;
 
   loom_llvmir_target_profile_storage_t storage = {};
-  iree_status_t status =
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNIMPLEMENTED,
       loom_llvmir_target_profile_storage_initialize_from_bundle(&broken_bundle,
-                                                                &storage);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
+                                                                &storage));
 }
 
 TEST(LlvmIrTargetEnvTest, LooksUpRegisteredProfilesByName) {
@@ -430,9 +430,9 @@ TEST(LlvmIrTargetEnvTest, LooksUpRegisteredProfilesByName) {
 
 TEST(LlvmIrTargetEnvTest, RejectsUnknownRegisteredProfileName) {
   const loom_llvmir_target_profile_t* profile = nullptr;
-  iree_status_t status =
-      LookupRegisteredProfile(IREE_SV("spirv-vulkan"), &profile);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      LookupRegisteredProfile(IREE_SV("spirv-vulkan"), &profile));
   EXPECT_EQ(profile, nullptr);
 }
 
@@ -451,9 +451,9 @@ TEST(LlvmIrTargetEnvTest, RegistryOnlySeesExplicitProviders) {
   EXPECT_EQ(profile, loom_llvmir_target_profile_x86_64_object());
 
   profile = nullptr;
-  iree_status_t status = loom_llvmir_target_profile_registry_lookup(
-      &registry, IREE_SV("amdgpu-hal"), &profile);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_llvmir_target_profile_registry_lookup(
+                            &registry, IREE_SV("amdgpu-hal"), &profile));
   EXPECT_EQ(profile, nullptr);
 }
 

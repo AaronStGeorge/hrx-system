@@ -162,8 +162,8 @@ TEST_F(LlvmIrAmdgpuLegalityTest, RejectsHalViewParameter) {
   BuildViewParameterKernel();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  iree_status_t status = VerifyAmdgpuHal(&diagnostic);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
+                        VerifyAmdgpuHal(&diagnostic));
   EXPECT_EQ(diagnostic.code, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_ABI);
   EXPECT_NE(ToString(diagnostic.detail).find("view parameters"),
             std::string::npos);

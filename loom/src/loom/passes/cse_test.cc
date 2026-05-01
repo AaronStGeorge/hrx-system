@@ -299,10 +299,11 @@ TEST_F(CSETest, RewriterSetAttrRejectsMalformedDictAttr) {
   iree_arena_initialize(&block_pool_, &pass_arena);
   loom_rewriter_t rewriter;
   IREE_ASSERT_OK(loom_rewriter_initialize(&rewriter, module_, &pass_arena));
-  iree_status_t status = loom_rewriter_set_attr(
-      &rewriter, attrs_op, loom_test_attrs_dict_ATTR_INDEX,
-      loom_make_canonical_attr_dict(/*entries=*/NULL, /*count=*/1));
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_rewriter_set_attr(
+          &rewriter, attrs_op, loom_test_attrs_dict_ATTR_INDEX,
+          loom_make_canonical_attr_dict(/*entries=*/NULL, /*count=*/1)));
   loom_rewriter_deinitialize(&rewriter);
   iree_arena_deinitialize(&pass_arena);
 }
@@ -336,11 +337,12 @@ TEST_F(CSETest, RewriterSetAttrRejectsNonCanonicalDictAttrOrder) {
   iree_arena_initialize(&block_pool_, &pass_arena);
   loom_rewriter_t rewriter;
   IREE_ASSERT_OK(loom_rewriter_initialize(&rewriter, module_, &pass_arena));
-  iree_status_t status = loom_rewriter_set_attr(
-      &rewriter, attrs_op, loom_test_attrs_dict_ATTR_INDEX,
-      loom_make_canonical_attr_dict(unsorted_entries,
-                                    IREE_ARRAYSIZE(unsorted_entries)));
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_rewriter_set_attr(
+          &rewriter, attrs_op, loom_test_attrs_dict_ATTR_INDEX,
+          loom_make_canonical_attr_dict(unsorted_entries,
+                                        IREE_ARRAYSIZE(unsorted_entries))));
   loom_rewriter_deinitialize(&rewriter);
   iree_arena_deinitialize(&pass_arena);
 }
@@ -369,11 +371,12 @@ TEST_F(CSETest, RewriterSetAttrRejectsDuplicateDictAttrKeys) {
   iree_arena_initialize(&block_pool_, &pass_arena);
   loom_rewriter_t rewriter;
   IREE_ASSERT_OK(loom_rewriter_initialize(&rewriter, module_, &pass_arena));
-  iree_status_t status = loom_rewriter_set_attr(
-      &rewriter, attrs_op, loom_test_attrs_dict_ATTR_INDEX,
-      loom_make_canonical_attr_dict(duplicate_entries,
-                                    IREE_ARRAYSIZE(duplicate_entries)));
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_rewriter_set_attr(
+          &rewriter, attrs_op, loom_test_attrs_dict_ATTR_INDEX,
+          loom_make_canonical_attr_dict(duplicate_entries,
+                                        IREE_ARRAYSIZE(duplicate_entries))));
   loom_rewriter_deinitialize(&rewriter);
   iree_arena_deinitialize(&pass_arena);
 }

@@ -211,9 +211,10 @@ TEST(LowDescriptorRequirementsTest, RejectsMissingMnemonic) {
   InitializeRequirementTables(&tables);
   tables.descriptors[0].mnemonic_string_offset = LOOM_LOW_STRING_OFFSET_NONE;
 
-  iree_status_t status = loom_low_descriptor_set_verify_requirements(
-      &tables.set, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_low_descriptor_set_verify_requirements(
+          &tables.set, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 }
 
 TEST(LowDescriptorRequirementsTest, RejectsMissingSemanticTag) {
@@ -222,9 +223,10 @@ TEST(LowDescriptorRequirementsTest, RejectsMissingSemanticTag) {
   tables.descriptors[0].semantic_tag_string_offset =
       LOOM_LOW_STRING_OFFSET_NONE;
 
-  iree_status_t status = loom_low_descriptor_set_verify_requirements(
-      &tables.set, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_low_descriptor_set_verify_requirements(
+          &tables.set, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 }
 
 TEST(LowDescriptorRequirementsTest, RejectsOperandWithoutRegClassAlternative) {
@@ -232,9 +234,10 @@ TEST(LowDescriptorRequirementsTest, RejectsOperandWithoutRegClassAlternative) {
   InitializeRequirementTables(&tables);
   tables.operands[1].reg_class_alt_count = 0;
 
-  iree_status_t status = loom_low_descriptor_set_verify_requirements(
-      &tables.set, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_low_descriptor_set_verify_requirements(
+          &tables.set, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 }
 
 TEST(LowDescriptorRequirementsTest,
@@ -256,9 +259,10 @@ TEST(LowDescriptorRequirementsTest,
   tables.schedule_classes[0].issue_use_count = 0;
   tables.set.issue_use_count = 0;
 
-  iree_status_t status = loom_low_descriptor_set_verify_requirements(
-      &tables.set, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_low_descriptor_set_verify_requirements(
+          &tables.set, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 }
 
 }  // namespace

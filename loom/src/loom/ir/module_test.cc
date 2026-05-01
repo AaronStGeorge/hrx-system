@@ -408,8 +408,8 @@ TEST_F(ModuleTest, BlockRemoveArgRejectsLiveUses) {
   IREE_ASSERT_OK(loom_test_addi_build(&builder, arg, arg, i32_type,
                                       LOOM_LOCATION_UNKNOWN, &add));
 
-  iree_status_t status = loom_block_remove_arg(module, block, 0);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
+                        loom_block_remove_arg(module, block, 0));
 
   loom_module_free(module);
 }
@@ -581,9 +581,10 @@ TEST_F(ModuleTest, DefineValueRejectsInvalidSentinelId) {
   module->values.count = LOOM_VALUE_ID_INVALID;
 
   loom_value_id_t id = LOOM_VALUE_ID_INVALID;
-  iree_status_t status = loom_module_define_value(
-      module, loom_type_scalar(LOOM_SCALAR_TYPE_F32), &id);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_module_define_value(module, loom_type_scalar(LOOM_SCALAR_TYPE_F32),
+                               &id));
 
   loom_module_free(module);
 }
@@ -981,10 +982,11 @@ TEST_F(ModuleTest, MakeCanonicalAttrDictRejectsDuplicateKeys) {
   };
 
   loom_attribute_t attr = {0};
-  iree_status_t status = loom_module_make_canonical_attr_dict(
-      module, loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)),
-      &attr);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_module_make_canonical_attr_dict(
+          module, loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)),
+          &attr));
 
   loom_module_free(module);
 }
@@ -995,9 +997,11 @@ TEST_F(ModuleTest, MakeCanonicalAttrDictRejectsNonEmptyNullEntries) {
                                       NULL, iree_allocator_system(), &module));
 
   loom_attribute_t attr = {0};
-  iree_status_t status = loom_module_make_canonical_attr_dict(
-      module, loom_make_named_attr_slice(/*entries=*/NULL, /*count=*/1), &attr);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_module_make_canonical_attr_dict(
+          module, loom_make_named_attr_slice(/*entries=*/NULL, /*count=*/1),
+          &attr));
 
   loom_module_free(module);
 }
@@ -1053,10 +1057,11 @@ TEST_F(ModuleTest, MakeCanonicalAttrDictRejectsUnknownKeyStringId) {
   }};
 
   loom_attribute_t attr = {0};
-  iree_status_t status = loom_module_make_canonical_attr_dict(
-      module, loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)),
-      &attr);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_module_make_canonical_attr_dict(
+          module, loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)),
+          &attr));
 
   loom_module_free(module);
 }
@@ -1122,12 +1127,14 @@ TEST_F(ModuleTest, ReplaceCanonicalAttrDictRejectsDuplicateUpdateKeysByNameId) {
   };
 
   loom_attribute_t attr = {0};
-  iree_status_t status = loom_module_replace_canonical_attr_dict(
-      module,
-      loom_make_named_attr_slice(base_entries, IREE_ARRAYSIZE(base_entries)),
-      loom_make_named_attr_update_slice(updates, IREE_ARRAYSIZE(updates)),
-      &attr);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_module_replace_canonical_attr_dict(
+          module,
+          loom_make_named_attr_slice(base_entries,
+                                     IREE_ARRAYSIZE(base_entries)),
+          loom_make_named_attr_update_slice(updates, IREE_ARRAYSIZE(updates)),
+          &attr));
 
   loom_module_free(module);
 }
@@ -1202,8 +1209,8 @@ TEST_F(ModuleTest, VerifyCanonicalAttrDictRejectsUnsortedInput) {
   loom_attribute_t attr =
       loom_make_canonical_attr_dict(entries, IREE_ARRAYSIZE(entries));
 
-  iree_status_t status = loom_module_verify_canonical_attr_dict(module, attr);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_module_verify_canonical_attr_dict(module, attr));
 
   loom_module_free(module);
 }
@@ -1223,8 +1230,8 @@ TEST_F(ModuleTest, VerifyCanonicalAttrDictRejectsDuplicateKeys) {
   loom_attribute_t attr =
       loom_make_canonical_attr_dict(entries, IREE_ARRAYSIZE(entries));
 
-  iree_status_t status = loom_module_verify_canonical_attr_dict(module, attr);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_module_verify_canonical_attr_dict(module, attr));
 
   loom_module_free(module);
 }
@@ -1237,8 +1244,8 @@ TEST_F(ModuleTest, VerifyCanonicalAttrDictRejectsNonEmptyNullEntries) {
   loom_attribute_t attr =
       loom_make_canonical_attr_dict(/*entries=*/NULL, /*count=*/1);
 
-  iree_status_t status = loom_module_verify_canonical_attr_dict(module, attr);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_module_verify_canonical_attr_dict(module, attr));
 
   loom_module_free(module);
 }
@@ -1260,8 +1267,8 @@ TEST_F(ModuleTest, VerifyCanonicalAttrDictRejectsEmptyDictWithNonNullEntries) {
       .dict_entries = entries,
   };
 
-  iree_status_t status = loom_module_verify_canonical_attr_dict(module, attr);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_module_verify_canonical_attr_dict(module, attr));
 
   loom_module_free(module);
 }
@@ -1283,9 +1290,9 @@ TEST_F(ModuleTest, InternStringRejectsInvalidSentinelIdButKeepsDedupWorking) {
   EXPECT_EQ(duplicate_id, existing_id);
 
   loom_string_id_t new_id = LOOM_STRING_ID_INVALID;
-  iree_status_t status =
-      loom_module_intern_string(module, IREE_SV("world"), &new_id);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_module_intern_string(module, IREE_SV("world"), &new_id));
 
   loom_module_free(module);
 }
@@ -1524,8 +1531,8 @@ TEST_F(ModuleTest, InternTypeRejectsInvalidSentinelIdButKeepsDedupWorking) {
 
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
   loom_type_t new_i32 = {0};
-  iree_status_t status = loom_module_intern_type(module, i32, &new_i32);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        loom_module_intern_type(module, i32, &new_i32));
 
   loom_module_free(module);
 }
@@ -1702,13 +1709,14 @@ TEST_F(ModuleTest, AddLocationRejectsWrappedIdZero) {
   module->locations.count = (iree_host_size_t)UINT32_MAX + 1;
 
   loom_location_id_t id = LOOM_LOCATION_UNKNOWN;
-  iree_status_t status = loom_module_add_location(
-      module,
-      loom_location_file_range(/*source_id=*/0, /*start_line=*/1,
-                               /*start_col=*/1, /*end_line=*/1,
-                               /*end_col=*/2),
-      &id);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_module_add_location(
+          module,
+          loom_location_file_range(/*source_id=*/0, /*start_line=*/1,
+                                   /*start_col=*/1, /*end_line=*/1,
+                                   /*end_col=*/2),
+          &id));
 
   loom_module_free(module);
 }
@@ -1864,9 +1872,9 @@ TEST_F(ModuleTest, AddEncodingRejectsDuplicateAliasForDifferentEncodings) {
       .alias_id = alias_id,
   };
   uint16_t dense_encoding_id = 0;
-  iree_status_t status =
-      loom_module_add_encoding(module, &dense_encoding, &dense_encoding_id);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_module_add_encoding(module, &dense_encoding, &dense_encoding_id));
   EXPECT_EQ(module->encodings.count, 1u);
 
   loom_module_free(module);
@@ -1922,9 +1930,9 @@ TEST_F(ModuleTest, AddEncodingRejectsUnknownFamilyWhenRegistryIsPopulated) {
       .alias_id = LOOM_STRING_ID_INVALID,
   };
   uint16_t encoding_id = 0;
-  iree_status_t status =
-      loom_module_add_encoding(module, &encoding, &encoding_id);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_module_add_encoding(module, &encoding, &encoding_id));
   EXPECT_EQ(module->encodings.count, 0u);
 
   loom_module_free(module);

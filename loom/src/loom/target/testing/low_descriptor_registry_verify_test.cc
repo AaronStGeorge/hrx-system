@@ -219,10 +219,10 @@ TEST(LowDescriptorRegistryTest, FormatManifestRejectsMissingBuilder) {
   loom_target_low_descriptor_registry_t registry = {};
   loom_target_core_test_low_descriptor_registry_initialize(&registry);
 
-  iree_status_t status =
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
       loom_target_low_descriptor_registry_format_manifest_json(&registry,
-                                                               nullptr);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+                                                               nullptr));
 }
 
 TEST(LowDescriptorRegistryTest, MissingKeyReturnsNullDescriptorSet) {
@@ -250,9 +250,10 @@ TEST(LowDescriptorRegistryTest, RegistryRejectsMissingBundleTable) {
   loom_target_core_test_low_descriptor_registry_initialize(&registry);
   registry.target_bundles = nullptr;
 
-  iree_status_t status = loom_target_low_descriptor_registry_verify(
-      &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_target_low_descriptor_registry_verify(
+          &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 }
 
 TEST(LowDescriptorRegistryTest, RegistryRejectsMismatchedDescriptorView) {
@@ -260,9 +261,10 @@ TEST(LowDescriptorRegistryTest, RegistryRejectsMismatchedDescriptorView) {
   loom_target_core_test_low_descriptor_registry_initialize(&registry);
   registry.registry.descriptor_set_provider_count = 0;
 
-  iree_status_t status = loom_target_low_descriptor_registry_verify(
-      &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_target_low_descriptor_registry_verify(
+          &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 }
 
 TEST(LowDescriptorRegistryTest, RegistryRejectsDuplicateBundleKeys) {
@@ -278,9 +280,10 @@ TEST(LowDescriptorRegistryTest, RegistryRejectsDuplicateBundleKeys) {
   registry.target_bundles = duplicate_bundles;
   registry.target_bundle_count = IREE_ARRAYSIZE(duplicate_bundles);
 
-  iree_status_t status = loom_target_low_descriptor_registry_verify(
-      &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_target_low_descriptor_registry_verify(
+          &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 }
 
 TEST(LowDescriptorRegistryTest, RegistryRejectsBundleWithoutDescriptorSetKey) {
@@ -304,9 +307,10 @@ TEST(LowDescriptorRegistryTest, RegistryRejectsBundleWithoutDescriptorSetKey) {
   registry.target_bundles = bundles;
   registry.target_bundle_count = IREE_ARRAYSIZE(bundles);
 
-  iree_status_t status = loom_target_low_descriptor_registry_verify(
-      &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_target_low_descriptor_registry_verify(
+          &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 }
 
 TEST(LowDescriptorRegistryTest, BundleSelectionFailsWhenLinkedSetIsMissing) {
@@ -322,9 +326,10 @@ TEST(LowDescriptorRegistryTest, BundleSelectionFailsWhenLinkedSetIsMissing) {
       .config = &missing_config,
   };
   const loom_low_descriptor_set_t* descriptor_set = nullptr;
-  iree_status_t status = loom_target_low_descriptor_set_select_for_bundle(
-      &registry.registry, &missing_bundle, &descriptor_set);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_NOT_FOUND,
+      loom_target_low_descriptor_set_select_for_bundle(
+          &registry.registry, &missing_bundle, &descriptor_set));
   EXPECT_EQ(descriptor_set, nullptr);
 }
 
@@ -351,9 +356,10 @@ TEST(LowDescriptorRegistryTest, RegistryRejectsBundleSelectingMissingSet) {
   registry.target_bundles = bundles;
   registry.target_bundle_count = IREE_ARRAYSIZE(bundles);
 
-  iree_status_t status = loom_target_low_descriptor_registry_verify(
-      &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_NOT_FOUND,
+      loom_target_low_descriptor_registry_verify(
+          &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 }
 
 }  // namespace

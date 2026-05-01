@@ -831,11 +831,12 @@ TEST_F(BuilderTest, AttrsBuilderRejectsDuplicateDictKeys) {
       {.name_id = axis_id, .value = loom_attr_i64(1)},
   };
   loom_op_t* op = NULL;
-  iree_status_t status = loom_test_attrs_build(
-      &builder_, 42,
-      loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)), f32,
-      LOOM_LOCATION_UNKNOWN, &op);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_test_attrs_build(
+          &builder_, 42,
+          loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)), f32,
+          LOOM_LOCATION_UNKNOWN, &op));
 }
 
 TEST_F(BuilderTest, DeflateBuilder) {

@@ -156,9 +156,9 @@ TEST_F(ContextTest, RegisterSourceRejectsInvalidSentinelId) {
   context_.sources.count = LOOM_SOURCE_ID_INVALID;
 
   loom_source_id_t source_id = 0;
-  iree_status_t status =
-      loom_context_register_source(&context_, IREE_SV("overflow"), &source_id);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_context_register_source(&context_, IREE_SV("overflow"), &source_id));
 }
 
 TEST_F(ContextTest, RegisterEncodingVtableAndLookupByName) {
@@ -178,9 +178,9 @@ TEST_F(ContextTest, RegisterEncodingVtableRejectsDuplicateName) {
   static const loom_encoding_vtable_t kDuplicate = {
       .name = IREE_SV("q8_0"),
   };
-  iree_status_t status =
-      loom_context_register_encoding_vtable(&context_, &kDuplicate);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_ALREADY_EXISTS, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_ALREADY_EXISTS,
+      loom_context_register_encoding_vtable(&context_, &kDuplicate));
 }
 
 TEST_F(ContextTest, RegisterEncodingVtableRejectsMissingName) {

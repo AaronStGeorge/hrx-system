@@ -277,53 +277,53 @@ TEST_F(TemplateSyncTest, ReportsUnchangedWhenConcreteFileIsCurrent) {
 TEST_F(TemplateSyncTest, RejectsTargetCaseRunDirectives) {
   std::string result;
   bool changed = false;
-  iree_status_t status = Build(
-      "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
-      "// RUN: emit source-low target-preset=test-low output=module\n"
-      "\n"
-      "// RUN: verify\n"
-      "func.def @alpha() {\n"
-      "}\n",
-      "// RUN: roundtrip\n"
-      "\n"
-      "func.def @alpha() {\n"
-      "}\n",
-      &result, &changed);
-
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      Build("// TEMPLATE: "
+            "loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
+            "// RUN: emit source-low target-preset=test-low output=module\n"
+            "\n"
+            "// RUN: verify\n"
+            "func.def @alpha() {\n"
+            "}\n",
+            "// RUN: roundtrip\n"
+            "\n"
+            "func.def @alpha() {\n"
+            "}\n",
+            &result, &changed));
 }
 
 TEST_F(TemplateSyncTest, RejectsEmptyTemplate) {
   std::string result;
   bool changed = false;
-  iree_status_t status = Build(
-      "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
-      "// RUN: emit source-low target-preset=test-low output=module\n"
-      "\n",
-      "// RUN: roundtrip\n", &result, &changed);
-
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      Build("// TEMPLATE: "
+            "loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
+            "// RUN: emit source-low target-preset=test-low output=module\n"
+            "\n",
+            "// RUN: roundtrip\n", &result, &changed));
 }
 
 TEST_F(TemplateSyncTest, RejectsDuplicateTemplateFunctions) {
   std::string result;
   bool changed = false;
-  iree_status_t status = Build(
-      "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
-      "// RUN: emit source-low target-preset=test-low output=module\n"
-      "\n",
-      "// RUN: roundtrip\n"
-      "\n"
-      "func.def @alpha() {\n"
-      "}\n"
-      "\n"
-      "// ====\n"
-      "\n"
-      "func.def @alpha() {\n"
-      "}\n",
-      &result, &changed);
-
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      Build("// TEMPLATE: "
+            "loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
+            "// RUN: emit source-low target-preset=test-low output=module\n"
+            "\n",
+            "// RUN: roundtrip\n"
+            "\n"
+            "func.def @alpha() {\n"
+            "}\n"
+            "\n"
+            "// ====\n"
+            "\n"
+            "func.def @alpha() {\n"
+            "}\n",
+            &result, &changed));
 }
 
 }  // namespace

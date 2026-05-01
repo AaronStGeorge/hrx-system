@@ -356,9 +356,10 @@ TEST_F(LowPacketAsmTest, RejectsMissingValueFormatter) {
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
   loom_low_packet_asm_options_t asm_options = {};
-  iree_status_t status = loom_low_packet_asm_format(
-      &frame.schedule, &frame.allocation, &asm_options, &builder);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_low_packet_asm_format(&frame.schedule, &frame.allocation,
+                                 &asm_options, &builder));
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&table_arena);
 }
@@ -400,9 +401,10 @@ TEST_F(LowPacketAsmTest, RejectsInvalidSelectedAsmForms) {
               .user_data = nullptr,
           },
   };
-  iree_status_t status = loom_low_packet_asm_format(
-      &frame.schedule, &frame.allocation, &asm_options, &builder);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_low_packet_asm_format(&frame.schedule, &frame.allocation,
+                                 &asm_options, &builder));
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&table_arena);
 }

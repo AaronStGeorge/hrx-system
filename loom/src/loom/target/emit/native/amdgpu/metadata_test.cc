@@ -359,9 +359,9 @@ TEST(AmdgpuMetadataTest, RejectsInvalidArgumentRange) {
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
-  iree_status_t status =
-      loom_amdgpu_metadata_append_msgpack(&metadata, &builder);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_amdgpu_metadata_append_msgpack(&metadata, &builder));
   iree_string_builder_deinitialize(&builder);
 }
 

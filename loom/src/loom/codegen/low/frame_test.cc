@@ -163,9 +163,10 @@ TEST_F(LowPacketizationTest, RejectsNonLowFunction) {
   loom_low_emission_frame_options_t options = {
       .descriptor_registry = &target_registry_.registry,
   };
-  iree_status_t status = loom_low_emission_frame_build(
-      module_, ordinary_function, &options, &table_arena, &frame);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_low_emission_frame_build(module_, ordinary_function, &options,
+                                    &table_arena, &frame));
   iree_arena_deinitialize(&table_arena);
 }
 

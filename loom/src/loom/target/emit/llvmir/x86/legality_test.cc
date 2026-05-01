@@ -140,9 +140,9 @@ TEST_F(LlvmIrX86LegalityTest, ReportsPackedDotFeatureRejection) {
   BuildDot4S8S8Function();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  iree_status_t status =
-      VerifyBundle(loom_llvmir_target_bundle_x86_64_object(), &diagnostic);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNIMPLEMENTED,
+      VerifyBundle(loom_llvmir_target_bundle_x86_64_object(), &diagnostic));
   EXPECT_EQ(diagnostic.code,
             LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TARGET_CONTRACT);
   EXPECT_EQ(ToString(diagnostic.provider_name), "x86");

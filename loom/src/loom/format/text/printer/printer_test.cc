@@ -332,8 +332,8 @@ TEST(PrintType, UnknownTypeKindErrors) {
   iree_string_builder_initialize(iree_allocator_system(), &builder);
   loom_output_stream_t stream;
   loom_output_stream_for_builder(&builder, &stream);
-  iree_status_t status = loom_text_print_type(type, nullptr, &stream);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_text_print_type(type, nullptr, &stream));
   iree_string_builder_deinitialize(&builder);
 }
 
