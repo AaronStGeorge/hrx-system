@@ -91,16 +91,21 @@ static iree_status_t loom_low_source_selection_try_func(
   IREE_RETURN_IF_ERROR(loom_target_function_contract_resolve(
       module, fact_table, func_facts, &out_selection->target_bundle_storage));
   out_selection->target_bundle = &out_selection->target_bundle_storage.bundle;
-  const loom_low_lower_policy_t* policy = NULL;
-  iree_status_t status = loom_low_lower_policy_registry_lookup_for_bundle(
-      options->policy_registry, out_selection->target_bundle, &policy);
-  if (!iree_status_is_ok(status)) {
-    if (!require_compatible &&
-        iree_status_code(status) == IREE_STATUS_NOT_FOUND) {
-      iree_status_free(status);
+  const loom_low_lower_policy_t* policy =
+      loom_low_lower_policy_registry_lookup_for_bundle(
+          options->policy_registry, out_selection->target_bundle);
+  if (policy == NULL) {
+    if (!require_compatible) {
       return iree_ok_status();
     }
-    return status;
+    const iree_string_view_t contract_set_key =
+        out_selection->target_bundle->config->contract_set_key;
+    return iree_make_status(
+        IREE_STATUS_NOT_FOUND,
+        "source func @%.*s target contract set '%.*s' has no target-low "
+        "lowering policy",
+        (int)func_facts->name.size, func_facts->name.data,
+        (int)contract_set_key.size, contract_set_key.data);
   }
 
   out_selection->func = loom_func_like_cast(module, func_facts->func_op);

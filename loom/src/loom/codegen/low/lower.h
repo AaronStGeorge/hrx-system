@@ -356,24 +356,16 @@ void loom_low_lower_policy_registry_initialize_from_entries(
     const loom_low_lower_policy_registry_entry_t* entries,
     iree_host_size_t entry_count);
 
-// Looks up the lowering policy for |contract_set_key|. Empty keys are rejected
-// and missing keys return NOT_FOUND so target package omissions fail loud. The
-// registry table is target-owned static data; production lookup trusts its row
-// ordering and returns the first matching entry.
-iree_status_t loom_low_lower_policy_registry_lookup(
+// Looks up the lowering policy for |contract_set_key|, or returns NULL when no
+// row matches. The registry table is target-owned static data; production
+// lookup trusts its row ordering and returns the first matching entry.
+const loom_low_lower_policy_t* loom_low_lower_policy_registry_lookup(
     const loom_low_lower_policy_registry_t* registry,
-    iree_string_view_t contract_set_key,
-    const loom_low_lower_policy_t** out_policy);
+    iree_string_view_t contract_set_key);
 
-// Looks up the lowering policy for |bundle|'s target-contract key.
-iree_status_t loom_low_lower_policy_registry_lookup_for_bundle(
-    const loom_low_lower_policy_registry_t* registry,
-    const loom_target_bundle_t* bundle,
-    const loom_low_lower_policy_t** out_policy);
-
-// Returns true when |registry| has a lowering policy for |bundle|'s target
-// contract set. This is a selection predicate, not full registry validation.
-bool loom_low_lower_policy_registry_has_bundle(
+// Looks up the lowering policy for |bundle|'s target-contract key, or returns
+// NULL when no row matches.
+const loom_low_lower_policy_t* loom_low_lower_policy_registry_lookup_for_bundle(
     const loom_low_lower_policy_registry_t* registry,
     const loom_target_bundle_t* bundle);
 

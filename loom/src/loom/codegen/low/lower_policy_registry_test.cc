@@ -5,7 +5,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "iree/testing/gtest.h"
-#include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/target/test/lower.h"
 
@@ -21,9 +20,8 @@ static loom_low_lower_policy_registry_t MakeTestPolicyRegistry() {
 TEST(LowLowerPolicyRegistryTest, LooksUpPolicyByContractKey) {
   loom_low_lower_policy_registry_t registry = MakeTestPolicyRegistry();
 
-  const loom_low_lower_policy_t* policy = nullptr;
-  IREE_ASSERT_OK(loom_low_lower_policy_registry_lookup(
-      &registry, IREE_SV("test.low.core"), &policy));
+  const loom_low_lower_policy_t* policy = loom_low_lower_policy_registry_lookup(
+      &registry, IREE_SV("test.low.core"));
   EXPECT_EQ(policy, loom_test_low_lower_policy());
 }
 
@@ -35,20 +33,17 @@ TEST(LowLowerPolicyRegistryTest, LooksUpPolicyForTargetBundle) {
   bundle.name = IREE_SV("test-low");
   bundle.config = &config;
 
-  const loom_low_lower_policy_t* policy = nullptr;
-  IREE_ASSERT_OK(loom_low_lower_policy_registry_lookup_for_bundle(
-      &registry, &bundle, &policy));
+  const loom_low_lower_policy_t* policy =
+      loom_low_lower_policy_registry_lookup_for_bundle(&registry, &bundle);
   EXPECT_EQ(policy, loom_test_low_lower_policy());
 }
 
 TEST(LowLowerPolicyRegistryTest, RejectsMissingContractKey) {
   loom_low_lower_policy_registry_t registry = MakeTestPolicyRegistry();
 
-  const loom_low_lower_policy_t* policy = nullptr;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
-                        loom_low_lower_policy_registry_lookup(
-                            &registry, IREE_SV("missing-target"), &policy));
-  EXPECT_EQ(policy, nullptr);
+  EXPECT_EQ(loom_low_lower_policy_registry_lookup(&registry,
+                                                  IREE_SV("missing-target")),
+            nullptr);
 }
 
 TEST(LowLowerPolicyRegistryTest, ReturnsFirstDuplicateContractKey) {
@@ -66,9 +61,8 @@ TEST(LowLowerPolicyRegistryTest, ReturnsFirstDuplicateContractKey) {
   loom_low_lower_policy_registry_initialize_from_entries(
       &registry, entries, IREE_ARRAYSIZE(entries));
 
-  const loom_low_lower_policy_t* policy = nullptr;
-  IREE_ASSERT_OK(loom_low_lower_policy_registry_lookup(
-      &registry, IREE_SV("test.low.core"), &policy));
+  const loom_low_lower_policy_t* policy = loom_low_lower_policy_registry_lookup(
+      &registry, IREE_SV("test.low.core"));
   EXPECT_EQ(policy, loom_test_low_lower_policy());
 }
 

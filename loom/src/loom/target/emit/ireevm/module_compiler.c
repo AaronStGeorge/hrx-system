@@ -130,9 +130,17 @@ static iree_status_t loom_ireevm_module_compile_lower_function(
     loom_target_compile_report_t* report, loom_low_lower_result_t* out_result) {
   loom_low_lower_policy_registry_t policy_registry = {0};
   loom_ireevm_low_lower_policy_registry_initialize(&policy_registry);
-  const loom_low_lower_policy_t* policy = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_policy_registry_lookup_for_bundle(
-      &policy_registry, &entry->bundle_storage.bundle, &policy));
+  const loom_low_lower_policy_t* policy =
+      loom_low_lower_policy_registry_lookup_for_bundle(
+          &policy_registry, &entry->bundle_storage.bundle);
+  if (policy == NULL) {
+    return iree_make_status(
+        IREE_STATUS_NOT_FOUND,
+        "IREE VM compiler has no target-low lowering policy for contract set "
+        "'%.*s'",
+        (int)entry->bundle_storage.bundle.config->contract_set_key.size,
+        entry->bundle_storage.bundle.config->contract_set_key.data);
+  }
 
   loom_low_lower_report_storage_t report_storage = {0};
   IREE_RETURN_IF_ERROR(loom_target_compile_report_allocate_low_lowering_rows(
