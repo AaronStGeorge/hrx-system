@@ -17,7 +17,7 @@ from loom.importers.tilelang.converter import (
     TileLangConverter,
     TileLangConverterRegistry,
 )
-from loom.importers.tilelang.nodes import dtype, node_text
+from loom.importers.tilelang.nodes import dtype, node_text, source_name
 from loom.ir import I1, INDEX, ShapedType, Type, TypeKind
 
 
@@ -58,14 +58,45 @@ def convert_var(
     expr: object,
     context: TileLangConversionContext,
     _converter: TileLangConverter,
-    _options: ExpressionOptions,
+    options: ExpressionOptions,
 ) -> ValueRef | None:
     """Resolve a mapped TIR variable."""
 
     mapped_var = context.mapped(expr)
     if mapped_var is None:
         context.record_blocked(node_text(expr), "variable is not mapped")
+        return None
+    if options.index_like:
+        return _coerce_index_like_var(expr, mapped_var, context)
     return mapped_var
+
+
+def _coerce_index_like_var(
+    expr: object,
+    mapped_var: ValueRef,
+    context: TileLangConversionContext,
+) -> ValueRef | None:
+    value_type = str(mapped_var.type)
+    if value_type in ("index", "offset"):
+        return mapped_var
+    if not _is_integer_type(value_type):
+        context.record_blocked(
+            node_text(expr),
+            f"variable of type {value_type} cannot be used as an index",
+        )
+        return None
+    existing = context.mapped_index_value(expr)
+    if existing is not None:
+        return existing
+    name = context.fresh_name(f"{source_name(expr, fallback='idx')}_idx")
+    result = context.builder.index.cast(
+        input=mapped_var,
+        results=[INDEX],
+        name=name,
+    )
+    context.map_index_value(expr, result)
+    context.record_converted(node_text(expr), f"{context.ssa(result)} = index.cast")
+    return result
 
 
 def convert_cast(
@@ -509,6 +540,10 @@ def _is_vector_type(value_type: object) -> bool:
 
 def _is_float_type(value_type: str) -> bool:
     return value_type in ("f16", "bf16", "f32", "f64")
+
+
+def _is_integer_type(value_type: str) -> bool:
+    return value_type != "i1" and value_type.startswith("i")
 
 
 def _is_unsigned_dtype(source_dtype: object) -> bool:

@@ -22,6 +22,7 @@ class TileLangConversionContext(SourceImportSession):
     """TileLang-specialized import session using Loom dynamic builders."""
 
     type_converter: TileLangTypeConverter = field(default_factory=TileLangTypeConverter)
+    index_values: dict[object, ValueRef] = field(default_factory=dict)
 
     def type(self, value_type: str) -> Type:
         return self.type_converter.map_dtype(value_type)
@@ -43,6 +44,14 @@ class TileLangConversionContext(SourceImportSession):
             name=name,
         )
 
+    def mapped_index_value(self, source: object) -> ValueRef | None:
+        return self.index_values.get(source)
+
+    def map_index_value(self, source: object, ref: ValueRef) -> None:
+        self.index_values[source] = ref
+        if ref.name:
+            self.names.capture(ref.name)
+
     def fork(self, *, preview_block: object | None = None) -> TileLangConversionContext:
         return TileLangConversionContext(
             builder=self.builder,
@@ -54,4 +63,5 @@ class TileLangConversionContext(SourceImportSession):
             registry=self.registry,
             names=self.names,
             type_converter=self.type_converter,
+            index_values=dict(self.index_values),
         )

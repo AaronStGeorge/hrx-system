@@ -120,6 +120,52 @@ def bitwise_not() -> TileLangImportInput:
 
 
 # ====
+@tilelang_case(name="dynamic_loop_bound", category="op", tags=("index", "loop"))
+def dynamic_loop_bound() -> TileLangImportInput:
+    n, src, dst = Var("n"), Var("src"), Var("dst")
+    index = Var("i", "int32")
+    src_buffer = Buffer("src", (8,), "float32")
+    dst_buffer = Buffer("dst", (8,), "float32")
+    body = For(
+        index,
+        IntImm(0),
+        n,
+        BufferStore(dst_buffer, BufferLoad(src_buffer, [index]), [index]),
+    )
+    prim_func = PrimFunc(
+        [n, src, dst],
+        {src: src_buffer, dst: dst_buffer},
+        body,
+        attrs={"global_symbol": "dynamic_loop_bound"},
+    )
+    return TileLangImportInput(
+        source=prim_func,
+        target="hip",
+        name="dynamic_loop_bound",
+    )
+
+
+# ----
+# target.profile @hip preset("hip")
+#
+# kernel.def target(@hip) export("dynamic_loop_bound") workgroup_size(1, 1, 1) @dynamic_loop_bound(%n: i32, %src: buffer, %dst: buffer) {
+#   %c0_bytes = index.constant 0 : offset
+#   %src = buffer.view %src[%c0_bytes] : buffer -> view<8xf32>
+#   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<8xf32>
+#   %c = index.constant 0 : index
+#   %n_idx = index.cast %n : i32 to index
+#   %i_ub = index.add %c, %n_idx : index
+#   %c1 = index.constant 1 : index
+#   scf.for %i = [%c to %i_ub step %c1] {
+#     %load = view.load %src[%i] : view<8xf32> -> f32
+#     view.store %load, %dst[%i] : f32, view<8xf32>
+#     scf.yield
+#   }
+#   kernel.return
+# }
+
+
+# ====
 @tilelang_case(name="ceildiv_loop", category="op", tags=("call", "index"))
 def ceildiv_loop() -> TileLangImportInput:
     src, dst = Var("src"), Var("dst")

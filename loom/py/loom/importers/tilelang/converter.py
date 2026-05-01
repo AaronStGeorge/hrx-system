@@ -181,7 +181,9 @@ class TileLangConverter:
         if expr is None:
             return None
         mapped = context.mapped(expr)
-        if mapped is not None:
+        if mapped is not None and (
+            not index_like or str(mapped.type) in ("index", "offset")
+        ):
             return mapped
         kind = node_kind(expr)
         self.operation_counts[kind] += 1
