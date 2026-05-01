@@ -315,10 +315,6 @@ iree_status_t loom_wasm_emit_single_function_module(
     const loom_low_allocation_table_t* allocation,
     iree_string_view_t export_name, iree_allocator_t allocator,
     loom_wasm_module_binary_t* out_module) {
-  if (!out_module) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "Wasm module output is required");
-  }
   *out_module = (loom_wasm_module_binary_t){0};
   if (iree_string_view_is_empty(export_name)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

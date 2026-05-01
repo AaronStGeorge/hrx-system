@@ -552,10 +552,6 @@ static iree_status_t loom_ireevm_emit_packet(
 static iree_status_t loom_ireevm_validate_tables(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation) {
-  if (!schedule || !allocation) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "schedule and allocation tables are required");
-  }
   IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(schedule, allocation));
   if (schedule->target.descriptor_set != loom_ireevm_core_descriptor_set()) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -618,10 +614,6 @@ iree_status_t loom_ireevm_emit_function_bytecode(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation, iree_allocator_t allocator,
     loom_ireevm_function_bytecode_t* out_bytecode) {
-  if (!out_bytecode) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "VM bytecode output is required");
-  }
   *out_bytecode = (loom_ireevm_function_bytecode_t){0};
   IREE_RETURN_IF_ERROR(loom_ireevm_validate_tables(schedule, allocation));
 

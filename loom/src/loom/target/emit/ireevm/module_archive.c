@@ -272,10 +272,6 @@ iree_status_t loom_ireevm_emit_module_archive(
     const loom_ireevm_module_archive_function_t* functions,
     iree_host_size_t function_count, iree_allocator_t allocator,
     loom_ireevm_module_archive_t* out_archive) {
-  if (!out_archive) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "VM module archive output is required");
-  }
   *out_archive = (loom_ireevm_module_archive_t){0};
 
   loom_ireevm_module_build_t build = {0};

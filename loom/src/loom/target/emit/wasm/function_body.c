@@ -886,10 +886,6 @@ static iree_status_t loom_wasm_emit_function_body_payload(
 static iree_status_t loom_wasm_validate_tables(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation) {
-  if (!schedule || !allocation) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "schedule and allocation tables are required");
-  }
   IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(schedule, allocation));
   if (schedule->target.descriptor_set !=
       loom_wasm_core_simd128_descriptor_set()) {
@@ -922,10 +918,6 @@ iree_status_t loom_wasm_emit_function_body(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation, iree_allocator_t allocator,
     loom_wasm_function_body_t* out_body) {
-  if (!out_body) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "Wasm function-body output is required");
-  }
   *out_body = (loom_wasm_function_body_t){0};
   IREE_RETURN_IF_ERROR(loom_wasm_validate_tables(schedule, allocation));
 
