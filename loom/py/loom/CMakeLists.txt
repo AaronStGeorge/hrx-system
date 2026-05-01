@@ -31,11 +31,26 @@ iree_py_library(
     "builder_model.py"
     "builders.py"
     "builtin_types.py"
+    "diagnostics.py"
     "dsl.py"
     "errors.py"
     "fields.py"
     "ir.py"
     "stable_id.py"
+    "verify.py"
+)
+
+iree_py_test(
+  NAME
+    core_test
+  SRCS
+    "tools/pytest_style_runner.py"
+  ARGS
+    "loom.diagnostics_test"
+    "loom.verify_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Any, cast
 
 from loom.builder import ValueRef
+from loom.diagnostics import DiagnosticEngine
 from loom.importers.core import (
-    DiagnosticEngine,
     ImportBodyReport,
     ImportOptions,
     ImportResult,
@@ -24,7 +24,6 @@ from loom.importers.core import (
     KernelModuleShell,
     KernelModuleSpec,
     SourceImportSession,
-    StructuralVerifier,
     create_kernel_module,
     sanitize_identifier,
     sanitize_symbol,
@@ -33,6 +32,7 @@ from loom.importers.tilelang.coverage import CoverageState, coverage_by_name
 from loom.importers.tilelang.model import TileLangBinding, TileLangKernelFacts
 from loom.importers.tilelang.types import TileLangTypeConverter
 from loom.ir import BUFFER_TYPE, INDEX, OFFSET, Module, Type, rebuild_value_metadata
+from loom.verify import verify_module
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,7 +122,7 @@ def import_tilelang(
     )
     diagnostics.raise_if_errors()
     if options.verify_structure:
-        StructuralVerifier(loom_module, diagnostics).verify()
+        verify_module(loom_module, diagnostics=diagnostics)
         diagnostics.raise_if_errors()
     facts = TileLangKernelFacts(
         function_name=function_name,

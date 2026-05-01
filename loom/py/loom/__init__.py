@@ -14,12 +14,26 @@ from loom.builders import (
     default_types,
     module_builder,
 )
+from loom.diagnostics import (
+    Diagnostic,
+    DiagnosticEngine,
+    DiagnosticSeverity,
+    LoomDiagnosticError,
+)
+from loom.verify import ModuleVerifier, VerifierRegistry, verify_module
 
 __all__ = [
     "DialectBuilder",
+    "Diagnostic",
+    "DiagnosticEngine",
+    "DiagnosticSeverity",
+    "LoomDiagnosticError",
     "LoomBuilder",
+    "ModuleVerifier",
     "OpCallable",
+    "VerifierRegistry",
     "default_ops",
     "default_types",
     "module_builder",
+    "verify_module",
 ]

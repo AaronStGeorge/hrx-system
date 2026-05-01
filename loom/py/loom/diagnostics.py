@@ -4,17 +4,28 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Diagnostics for whole-module import attempts."""
+"""Diagnostics shared by Python Loom APIs."""
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from loom.errors import ErrorDef
+
+__all__ = [
+    "Diagnostic",
+    "DiagnosticEngine",
+    "DiagnosticSeverity",
+    "LoomDiagnosticError",
+]
 
 
 class DiagnosticSeverity(StrEnum):
-    """Severity for importer diagnostics."""
+    """Severity for Python diagnostics."""
 
     NOTE = "note"
     WARNING = "warning"
@@ -23,33 +34,37 @@ class DiagnosticSeverity(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Diagnostic:
-    """A diagnostic attached to a source importer step."""
+    """A diagnostic attached to a Python API step."""
 
     severity: DiagnosticSeverity
     message: str
     source: str | None = None
     details: tuple[str, ...] = ()
+    error_def: ErrorDef | None = None
 
     def __str__(self) -> str:
-        pieces = [f"{self.severity.value}: {self.message}"]
+        prefix = self.severity.value
+        if self.error_def is not None:
+            prefix = f"{prefix} {self.error_def}"
+        pieces = [f"{prefix}: {self.message}"]
         if self.source:
             pieces.append(f"  source: {self.source}")
         pieces.extend(f"  {detail}" for detail in self.details)
         return "\n".join(pieces)
 
 
-class LoomImportError(RuntimeError):
-    """Raised when an importer cannot produce a complete Loom module."""
+class LoomDiagnosticError(RuntimeError):
+    """Raised when diagnostics contain errors at a fail-loud API boundary."""
 
     def __init__(self, diagnostics: Iterable[Diagnostic]) -> None:
         self.diagnostics = tuple(diagnostics)
         message = "\n".join(str(diagnostic) for diagnostic in self.diagnostics)
-        super().__init__(message or "Loom import failed")
+        super().__init__(message or "Loom operation failed")
 
 
 @dataclass(slots=True)
 class DiagnosticEngine:
-    """Collects diagnostics and owns the fail-loud import boundary."""
+    """Collects diagnostics and owns fail-loud API boundaries."""
 
     _diagnostics: list[Diagnostic] = field(default_factory=list)
 
@@ -70,9 +85,14 @@ class DiagnosticEngine:
         *,
         source: str | None = None,
         details: Iterable[str] = (),
+        error_def: ErrorDef | None = None,
     ) -> Diagnostic:
         return self.emit(
-            DiagnosticSeverity.NOTE, message, source=source, details=details
+            DiagnosticSeverity.NOTE,
+            message,
+            source=source,
+            details=details,
+            error_def=error_def,
         )
 
     def warning(
@@ -81,12 +101,14 @@ class DiagnosticEngine:
         *,
         source: str | None = None,
         details: Iterable[str] = (),
+        error_def: ErrorDef | None = None,
     ) -> Diagnostic:
         return self.emit(
             DiagnosticSeverity.WARNING,
             message,
             source=source,
             details=details,
+            error_def=error_def,
         )
 
     def error(
@@ -95,12 +117,14 @@ class DiagnosticEngine:
         *,
         source: str | None = None,
         details: Iterable[str] = (),
+        error_def: ErrorDef | None = None,
     ) -> Diagnostic:
         return self.emit(
             DiagnosticSeverity.ERROR,
             message,
             source=source,
             details=details,
+            error_def=error_def,
         )
 
     def unsupported(
@@ -109,11 +133,13 @@ class DiagnosticEngine:
         reason: str,
         *,
         details: Iterable[str] = (),
+        error_def: ErrorDef | None = None,
     ) -> Diagnostic:
         return self.error(
             f"unsupported source operation: {reason}",
             source=operation,
             details=details,
+            error_def=error_def,
         )
 
     def emit(
@@ -123,12 +149,14 @@ class DiagnosticEngine:
         *,
         source: str | None = None,
         details: Iterable[str] = (),
+        error_def: ErrorDef | None = None,
     ) -> Diagnostic:
         diagnostic = Diagnostic(
             severity=severity,
             message=message,
             source=source,
             details=tuple(details),
+            error_def=error_def,
         )
         self._diagnostics.append(diagnostic)
         return diagnostic
@@ -138,4 +166,4 @@ class DiagnosticEngine:
 
     def raise_if_errors(self) -> None:
         if self.has_errors:
-            raise LoomImportError(self._diagnostics)
+            raise LoomDiagnosticError(self._diagnostics)

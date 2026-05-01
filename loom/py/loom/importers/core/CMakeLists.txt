@@ -15,13 +15,11 @@ iree_py_library(
     core
   SRCS
     "__init__.py"
-    "diagnostics.py"
     "kernel.py"
     "names.py"
     "options.py"
     "printing.py"
     "session.py"
-    "verify.py"
   DEPS
     iree::runtime::py::loom::core
     iree::runtime::py::loom::package
@@ -34,9 +32,7 @@ iree_py_test(
   SRCS
     "../../tools/pytest_style_runner.py"
   ARGS
-    "loom.importers.core.diagnostics_test"
     "loom.importers.core.names_test"
-    "loom.importers.core.verify_test"
   PACKAGE_DIRS
     "${IREE_SOURCE_DIR}/runtime/py"
     "${IREE_BINARY_DIR}/runtime/py"

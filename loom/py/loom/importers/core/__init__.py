@@ -6,11 +6,11 @@
 
 """Core infrastructure shared by Loom foreign IR importers."""
 
-from loom.importers.core.diagnostics import (
+from loom.diagnostics import (
     Diagnostic,
     DiagnosticEngine,
     DiagnosticSeverity,
-    LoomImportError,
+    LoomDiagnosticError,
 )
 from loom.importers.core.kernel import (
     KernelArgumentSpec,
@@ -32,7 +32,6 @@ from loom.importers.core.session import (
     ImportBodyReport,
     SourceImportSession,
 )
-from loom.importers.core.verify import StructuralVerifier
 
 __all__ = [
     "ConversionRecord",
@@ -45,10 +44,9 @@ __all__ = [
     "KernelArgumentSpec",
     "KernelModuleShell",
     "KernelModuleSpec",
-    "LoomImportError",
+    "LoomDiagnosticError",
     "NameAllocator",
     "SourceImportSession",
-    "StructuralVerifier",
     "create_kernel_module",
     "normalize_workgroup_size",
     "print_loom_module",

@@ -15,11 +15,11 @@ from typing import Any, cast
 
 import loom
 from loom.builder import ValueRef
+from loom.diagnostics import DiagnosticEngine
 from loom.format.text.printer import Printer
-from loom.importers.core.diagnostics import DiagnosticEngine
 from loom.importers.core.names import NameAllocator, source_name
-from loom.importers.core.verify import StructuralVerifier
 from loom.ir import Module, Type
+from loom.verify import verify_module
 
 
 @dataclass(frozen=True, slots=True)
@@ -243,7 +243,7 @@ class SourceImportSession:
         )
 
     def verify_structure(self) -> None:
-        StructuralVerifier(self.module, self.diagnostics).verify()
+        verify_module(self.module, diagnostics=self.diagnostics)
         self.diagnostics.raise_if_errors()
 
     def preview_lines(self) -> list[str]:

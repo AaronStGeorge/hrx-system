@@ -14,14 +14,13 @@ from pathlib import Path
 from typing import Any
 
 from loom.builder import ValueRef
+from loom.diagnostics import DiagnosticEngine
 from loom.importers.core import (
-    DiagnosticEngine,
     ImportBodyReport,
     ImportOptions,
     ImportResult,
     KernelArgumentSpec,
     KernelModuleSpec,
-    StructuralVerifier,
     create_kernel_module,
     sanitize_symbol,
 )
@@ -33,6 +32,7 @@ from loom.importers.mlir.model import Binding, KernelFacts, MlirConversionContex
 from loom.importers.mlir.names import build_source_name_overrides
 from loom.importers.mlir.types import MlirTypeConverter
 from loom.ir import INDEX, Module, rebuild_value_metadata
+from loom.verify import verify_module
 
 AXIS_BY_INDEX = {
     0: "x",
@@ -81,7 +81,7 @@ def import_mlir_module(
 
     diagnostics.raise_if_errors()
     if options.verify_structure:
-        StructuralVerifier(loom_module, diagnostics).verify()
+        verify_module(loom_module, diagnostics=diagnostics)
         diagnostics.raise_if_errors()
     return ImportResult(
         module=loom_module,

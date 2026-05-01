@@ -16,7 +16,8 @@ from typing import Any
 
 import loom
 from loom.builder import ValueRef
-from loom.importers.core import DiagnosticEngine, ImportBodyReport, SourceImportSession
+from loom.diagnostics import DiagnosticEngine
+from loom.importers.core import ImportBodyReport, SourceImportSession
 from loom.importers.mlir.attrs import MlirAttributeDecoder
 from loom.importers.mlir.locations import MlirLocationConverter
 from loom.importers.mlir.types import MlirTypeConverter

@@ -1529,9 +1529,21 @@ class BytecodeReader:
             raise BytecodeError(str(err)) from err
 
 
-def read_module(data: bytes, *, op_decls: Iterable[Any] | None = None) -> Module:
+def read_module(
+    data: bytes,
+    *,
+    op_decls: Iterable[Any] | None = None,
+    verify: bool = False,
+) -> Module:
     """Read a module from .loombc bytes."""
+    op_decl_tuple = tuple(op_decls) if op_decls is not None else None
     try:
-        return BytecodeReader(data, op_decls=op_decls).read()
+        module = BytecodeReader(data, op_decls=op_decl_tuple).read()
     except ValueError as err:
         raise BytecodeError(str(err)) from err
+    if verify:
+        from loom.verify import verify_module
+
+        diagnostics = verify_module(module, ops=op_decl_tuple)
+        diagnostics.raise_if_errors()
+    return module

@@ -1135,7 +1135,13 @@ class Parser:
 
     # --- Top-level parsing ---
 
-    def parse(self, source: str, filename: str = "<input>") -> Module:
+    def parse(
+        self,
+        source: str,
+        filename: str = "<input>",
+        *,
+        verify: bool = False,
+    ) -> Module:
         """Parse a complete .loom file into a Module.
 
         Handles:
@@ -1177,6 +1183,14 @@ class Parser:
         _CURRENT_ALIASES = None
         _CURRENT_KNOWN_ENCODINGS = None
         rebuild_value_metadata(self._module)
+        if verify:
+            from loom.verify import verify_module
+
+            diagnostics = verify_module(
+                self._module,
+                ops=self._op_registry.values(),
+            )
+            diagnostics.raise_if_errors()
         return self._module
 
     def _parse_attribute_alias(self) -> None:

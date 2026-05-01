@@ -30,12 +30,12 @@ class MlirBackend:
         )
 
     def prepare(self, args: argparse.Namespace) -> Availability:
-        from loom.importers.core import LoomImportError
+        from loom.diagnostics import LoomDiagnosticError
         from loom.importers.mlir.api import import_iree_ir
 
         try:
             import_iree_ir(prefer_abi3_extensions=args.prefer_abi3_extensions)
-        except LoomImportError as exc:
+        except LoomDiagnosticError as exc:
             return Availability.unavailable(reason=str(exc).strip())
         return Availability.yes()
 

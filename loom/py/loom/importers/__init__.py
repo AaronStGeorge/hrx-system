@@ -11,10 +11,9 @@ from loom.importers.core import (
     DiagnosticEngine,
     ImportOptions,
     ImportResult,
-    LoomImportError,
+    LoomDiagnosticError,
     NameAllocator,
     SourceImportSession,
-    StructuralVerifier,
 )
 
 __all__ = [
@@ -22,8 +21,7 @@ __all__ = [
     "DiagnosticEngine",
     "ImportOptions",
     "ImportResult",
-    "LoomImportError",
+    "LoomDiagnosticError",
     "NameAllocator",
     "SourceImportSession",
-    "StructuralVerifier",
 ]

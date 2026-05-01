@@ -12,7 +12,11 @@ import importlib.machinery
 import sys
 from typing import Any
 
-from loom.importers.core import Diagnostic, DiagnosticSeverity, LoomImportError
+from loom.diagnostics import (
+    Diagnostic,
+    DiagnosticSeverity,
+    LoomDiagnosticError,
+)
 
 
 def import_iree_ir(*, prefer_abi3_extensions: bool = False) -> Any:
@@ -47,7 +51,7 @@ def import_iree_ir(*, prefer_abi3_extensions: bool = False) -> Any:
                 f"import error: {exc!r}",
             ),
         )
-        raise LoomImportError((diagnostic,)) from exc
+        raise LoomDiagnosticError((diagnostic,)) from exc
 
 
 def _prefer_abi3_extensions() -> None:

@@ -12,7 +12,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from loom.importers.core import LoomImportError, print_loom_module
+from loom.diagnostics import LoomDiagnosticError
+from loom.importers.core import print_loom_module
 from loom.importers.mlir.importer import (
     MlirImportOptions,
     format_import_report,
@@ -29,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         result = import_mlir_file(args.input, options=options)
-    except LoomImportError as exc:
+    except LoomDiagnosticError as exc:
         sys.stderr.write(f"{exc}\n")
         return 1
 

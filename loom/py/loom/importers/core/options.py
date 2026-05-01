@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from loom.importers.core.diagnostics import DiagnosticEngine
+from loom.diagnostics import DiagnosticEngine
 from loom.ir import Module
 
 

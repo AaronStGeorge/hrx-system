@@ -108,7 +108,8 @@ def import_mlir_case(
     *,
     options: MlirCheckOptions,
 ) -> CheckResult:
-    from loom.importers.core import LoomImportError, print_loom_module
+    from loom.diagnostics import LoomDiagnosticError
+    from loom.importers.core import print_loom_module
     from loom.importers.mlir.importer import (
         MlirImportOptions,
         import_mlir_module,
@@ -124,7 +125,7 @@ def import_mlir_case(
             ),
         )
         stdout = print_loom_module(result.module)
-    except LoomImportError as exc:
+    except LoomDiagnosticError as exc:
         return CheckResult(
             path=case.path,
             case_index=case.index,

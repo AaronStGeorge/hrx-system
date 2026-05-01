@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -31,11 +31,33 @@ py_library(
         "builder_model.py",
         "builders.py",
         "builtin_types.py",
+        "diagnostics.py",
         "dsl.py",
         "errors.py",
         "fields.py",
         "ir.py",
         "stable_id.py",
+        "verify.py",
     ],
     imports = [".."],
+)
+
+py_test(
+    name = "core_test",
+    srcs = [
+        "diagnostics_test.py",
+        "verify_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = [
+        "loom.diagnostics_test",
+        "loom.verify_test",
+    ],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":package",
+        "//loom/py/loom/dialect/test",
+        "//loom/py/loom/format/bytecode",
+        "//loom/py/loom/format/text",
+    ],
 )
