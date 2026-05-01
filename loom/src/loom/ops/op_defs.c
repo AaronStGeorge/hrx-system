@@ -385,11 +385,6 @@ bool loom_op_is_trivially_dead(const loom_module_t* module,
 iree_status_t loom_op_walk_subtree_type_refs(
     const loom_module_t* module, const loom_op_t* op,
     loom_type_value_ref_callback_t callback, void* user_data) {
-  if (!module || !op || !callback) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "module, op, and callback are required");
-  }
-
   const loom_value_id_t* results = loom_op_const_results(op);
   for (uint16_t i = 0; i < op->result_count; ++i) {
     if (results[i] == LOOM_VALUE_ID_INVALID ||
@@ -1439,13 +1434,6 @@ iree_status_t loom_op_remove_results(loom_module_t* module, loom_op_t* op,
                                      const bool* remove_results,
                                      iree_arena_allocator_t* scratch_arena,
                                      uint16_t* out_removed_count) {
-  if (!module || !op || !remove_results || !scratch_arena ||
-      !out_removed_count) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "module, op, remove_results, scratch arena, and removed count output "
-        "are required");
-  }
   *out_removed_count = 0;
   uint16_t old_result_count = op->result_count;
   if (old_result_count == 0) return iree_ok_status();
@@ -1896,12 +1884,6 @@ iree_status_t loom_region_remove_blocks(loom_module_t* module,
                                         const bool* remove_blocks,
                                         uint16_t remove_block_count,
                                         uint16_t* out_removed_count) {
-  if (!module || !region || !remove_blocks || !out_removed_count) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "module, region, remove block mask, and removed count output are "
-        "required");
-  }
   *out_removed_count = 0;
   if (remove_block_count != region->block_count) {
     return iree_make_status(
