@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -7289,16 +7289,33 @@ def amdgpu_atomic_descriptor_candidates() -> tuple[
     )
 
 
+def _contract_overlay_builders_from_overlays(
+    overlays: Sequence[AmdgpuDescriptorOverlay],
+) -> dict[str, Callable[[], AmdgpuDescriptorOverlay]]:
+    def _overlay_builder(
+        overlay: AmdgpuDescriptorOverlay,
+    ) -> Callable[[], AmdgpuDescriptorOverlay]:
+        def build() -> AmdgpuDescriptorOverlay:
+            return overlay
+
+        return build
+
+    return {overlay.descriptor_key: _overlay_builder(overlay) for overlay in overlays}
+
+
 _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS = {
+    "amdgpu.s_add_u32": _s_add_u32_overlay,
+    "amdgpu.s_sub_u32": _s_sub_u32_overlay,
     "amdgpu.v_add_u32": lambda: _v_add_u32_overlay("V_ADD_NC_U32"),
+    "amdgpu.v_sub_u32": lambda: _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
     "amdgpu.v_mul_lo_u32": _v_mul_lo_u32_overlay,
-    "amdgpu.v_and_b32": _v_and_b32_overlay,
-    "amdgpu.v_or_b32": _v_or_b32_overlay,
-    "amdgpu.v_xor_b32": _v_xor_b32_overlay,
     "amdgpu.v_add_f32": _v_add_f32_overlay,
     "amdgpu.v_mul_f32": _v_mul_f32_overlay,
     "amdgpu.v_min_f32": _v_min_f32_overlay,
     "amdgpu.v_max_f32": _v_max_f32_overlay,
+    **_contract_overlay_builders_from_overlays(_i32_bitwise_shift_overlays()),
+    **_contract_overlay_builders_from_overlays(_s_cmp_i32_overlays()),
+    **_contract_overlay_builders_from_overlays(_v_cmp_overlays()),
 }
 
 

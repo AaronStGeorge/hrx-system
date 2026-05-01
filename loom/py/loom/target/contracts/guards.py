@@ -52,6 +52,23 @@ class GuardKind(Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class GuardDiagnostic:
+    """Authored diagnostic text for a guard failure."""
+
+    subject_kind: str
+    subject_name: str
+    reason: str
+
+    def __post_init__(self) -> None:
+        if not self.subject_kind:
+            raise ValueError("guard diagnostic subject kind must be non-empty")
+        if not self.subject_name:
+            raise ValueError("guard diagnostic subject name must be non-empty")
+        if not self.reason:
+            raise ValueError("guard diagnostic reason must be non-empty")
+
+
+@dataclass(frozen=True, slots=True)
 class Guard:
     """Selection predicate evaluated before a contract row can match."""
 
@@ -68,6 +85,7 @@ class Guard:
     descriptor: Descriptor | None = None
     register_class: str | None = None
     materializer: str | None = None
+    diagnostic: GuardDiagnostic | None = None
 
     @classmethod
     def value_type(cls, field: str, type_pattern: TypePattern) -> Self:
@@ -178,15 +196,33 @@ class Guard:
         )
 
     @classmethod
-    def value_signed_bit_count(cls, field: str, bit_count: int) -> Self:
-        return cls(kind=GuardKind.VALUE_SIGNED_BIT_COUNT, field=field, count=bit_count)
+    def value_signed_bit_count(
+        cls,
+        field: str,
+        bit_count: int,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_SIGNED_BIT_COUNT,
+            field=field,
+            count=bit_count,
+            diagnostic=diagnostic,
+        )
 
     @classmethod
-    def value_unsigned_bit_count(cls, field: str, bit_count: int) -> Self:
+    def value_unsigned_bit_count(
+        cls,
+        field: str,
+        bit_count: int,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
         return cls(
             kind=GuardKind.VALUE_UNSIGNED_BIT_COUNT,
             field=field,
             count=bit_count,
+            diagnostic=diagnostic,
         )
 
     @classmethod

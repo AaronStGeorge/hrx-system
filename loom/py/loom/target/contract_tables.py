@@ -39,6 +39,20 @@ class ContractTableRegistration:
 
 CONTRACT_TABLE_REGISTRATIONS = (
     ContractTableRegistration(
+        key="amdgpu.compare",
+        module_name="loom.target.arch.amdgpu.contracts.compare",
+        symbol_name="AMDGPU_COMPARE_CONTRACT_TABLE",
+        dialect_ops_symbol_name="AMDGPU_COMPARE_CONTRACT_DIALECT_OPS",
+        aliases=("amdgpu_compare",),
+    ),
+    ContractTableRegistration(
+        key="amdgpu.integer",
+        module_name="loom.target.arch.amdgpu.contracts.integer",
+        symbol_name="AMDGPU_INTEGER_CONTRACT_TABLE",
+        dialect_ops_symbol_name="AMDGPU_INTEGER_CONTRACT_DIALECT_OPS",
+        aliases=("amdgpu_integer",),
+    ),
+    ContractTableRegistration(
         key="amdgpu.reduce",
         module_name="loom.target.arch.amdgpu.contracts.reduce",
         symbol_name="AMDGPU_REDUCE_CONTRACT_TABLE",

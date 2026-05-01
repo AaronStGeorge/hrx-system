@@ -20,7 +20,7 @@ from loom.target.contracts.descriptors import (
     descriptor_by_semantic_tag,
 )
 from loom.target.contracts.emits import DescriptorEmitForm, EmitDescriptorOp
-from loom.target.contracts.guards import Guard, GuardKind
+from loom.target.contracts.guards import Guard, GuardDiagnostic, GuardKind
 from loom.target.contracts.immediates import AttrProject, AttrProjectKind
 from loom.target.contracts.kinds import ContractSystem, SourceValueKind
 from loom.target.contracts.lower_rules import (
@@ -36,6 +36,7 @@ from loom.target.contracts.lower_rules import (
     LowerGuard,
     LowerRule,
     LowerRuleSpan,
+    LowerTiedResult,
     LowerTypePattern,
     LowerValueRef,
     compile_lower_rule_set,
@@ -78,6 +79,7 @@ __all__ = [
     "DirectTypePatterns",
     "EmitDescriptorOp",
     "Guard",
+    "GuardDiagnostic",
     "GuardKind",
     "LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS",
     "LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN",
@@ -90,6 +92,7 @@ __all__ = [
     "LowerGuard",
     "LowerRule",
     "LowerRuleSpan",
+    "LowerTiedResult",
     "LowerTypePattern",
     "LowerValueRef",
     "PredicateDescriptorCase",

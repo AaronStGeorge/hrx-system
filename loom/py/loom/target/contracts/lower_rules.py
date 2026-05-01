@@ -294,10 +294,15 @@ class _LowerRuleSetCompiler:
                     ),
                     type_pattern_index=self._append_type_pattern(guard.type_pattern),
                     diagnostic_index=self._append_diagnostic(
-                        LowerDiagnostic(
-                            subject_kind="type",
-                            subject_name=guard.field,
-                            reason=_type_diagnostic_reason(guard.type_pattern),
+                        _guard_diagnostic(
+                            guard,
+                            LowerDiagnostic(
+                                subject_kind="type",
+                                subject_name=_type_diagnostic_subject(
+                                    guard.type_pattern
+                                ),
+                                reason=_type_diagnostic_reason(guard.type_pattern),
+                            ),
                         )
                     ),
                 )
@@ -325,11 +330,12 @@ class _LowerRuleSetCompiler:
                     kind=guard.kind,
                     attr_index=attr_index,
                     diagnostic_index=self._append_diagnostic(
-                        LowerDiagnostic(
-                            subject_kind="attr",
-                            subject_name=guard.field,
-                            reason=(
-                                f"target contract requires enum case '{enum_keyword}'"
+                        _guard_diagnostic(
+                            guard,
+                            LowerDiagnostic(
+                                subject_kind="attr",
+                                subject_name=guard.field,
+                                reason="target contract requires a supported enum case",
                             ),
                         )
                     ),
@@ -346,7 +352,10 @@ class _LowerRuleSetCompiler:
                     kind=guard.kind,
                     attr_index=_source_attr_index(source_op, guard.field),
                     diagnostic_index=self._append_diagnostic(
-                        _attr_diagnostic(guard.field, guard.attr_type)
+                        _guard_diagnostic(
+                            guard,
+                            _attr_diagnostic(guard.field, guard.attr_type),
+                        )
                     ),
                     attr_kind=guard.attr_type,
                 )
@@ -361,10 +370,15 @@ class _LowerRuleSetCompiler:
                     kind=guard.kind,
                     attr_index=_source_attr_index(source_op, guard.field),
                     diagnostic_index=self._append_diagnostic(
-                        LowerDiagnostic(
-                            subject_kind="attr",
-                            subject_name=guard.field,
-                            reason="target contract requires an i64 attribute in range",
+                        _guard_diagnostic(
+                            guard,
+                            LowerDiagnostic(
+                                subject_kind="attr",
+                                subject_name=guard.field,
+                                reason=(
+                                    "target contract requires an i64 attribute in range"
+                                ),
+                            ),
                         )
                     ),
                     minimum_i64=guard.minimum,
@@ -383,10 +397,15 @@ class _LowerRuleSetCompiler:
                     kind=guard.kind,
                     descriptor=guard.descriptor,
                     diagnostic_index=self._append_diagnostic(
-                        LowerDiagnostic(
-                            subject_kind="descriptor",
-                            subject_name=guard.descriptor.key,
-                            reason="target contract requires descriptor availability",
+                        _guard_diagnostic(
+                            guard,
+                            LowerDiagnostic(
+                                subject_kind="descriptor",
+                                subject_name=self._table.name,
+                                reason=(
+                                    "target contract requires descriptor availability"
+                                ),
+                            ),
                         )
                     ),
                 )
@@ -407,11 +426,15 @@ class _LowerRuleSetCompiler:
                         ),
                     ),
                     diagnostic_index=self._append_diagnostic(
-                        LowerDiagnostic(
-                            subject_kind="materializer",
-                            subject_name=guard.materializer,
-                            reason=(
-                                "target contract requires a materializable source value"
+                        _guard_diagnostic(
+                            guard,
+                            LowerDiagnostic(
+                                subject_kind="materializer",
+                                subject_name=guard.materializer,
+                                reason=(
+                                    "target contract requires a materializable source "
+                                    "value"
+                                ),
                             ),
                         )
                     ),
@@ -439,11 +462,15 @@ class _LowerRuleSetCompiler:
                     ),
                     register_class_id=register_class_id,
                     diagnostic_index=self._append_diagnostic(
-                        LowerDiagnostic(
-                            subject_kind="register",
-                            subject_name=guard.field,
-                            reason=(
-                                "target contract requires a specific low register class"
+                        _guard_diagnostic(
+                            guard,
+                            LowerDiagnostic(
+                                subject_kind="register-class",
+                                subject_name=guard.register_class,
+                                reason=(
+                                    "target contract requires a specific low register "
+                                    "class"
+                                ),
                             ),
                         )
                     ),
@@ -464,10 +491,15 @@ class _LowerRuleSetCompiler:
                         _value_ref_for_source_field(source_op, guard.field),
                     ),
                     diagnostic_index=self._append_diagnostic(
-                        LowerDiagnostic(
-                            subject_kind="type",
-                            subject_name=guard.field,
-                            reason="target contract requires a divisible static dim0",
+                        _guard_diagnostic(
+                            guard,
+                            LowerDiagnostic(
+                                subject_kind="type",
+                                subject_name=guard.field,
+                                reason=(
+                                    "target contract requires a divisible static dim0"
+                                ),
+                            ),
                         )
                     ),
                     u64=guard.count,
@@ -492,12 +524,15 @@ class _LowerRuleSetCompiler:
                         _value_ref_for_source_field(source_op, guard.other_field),
                     ),
                     diagnostic_index=self._append_diagnostic(
-                        LowerDiagnostic(
-                            subject_kind="register",
-                            subject_name=guard.field,
-                            reason=(
-                                "target contract requires equal low register "
-                                "unit counts"
+                        _guard_diagnostic(
+                            guard,
+                            LowerDiagnostic(
+                                subject_kind="register",
+                                subject_name=guard.field,
+                                reason=(
+                                    "target contract requires equal low register "
+                                    "unit counts"
+                                ),
                             ),
                         )
                     ),
@@ -513,7 +548,10 @@ class _LowerRuleSetCompiler:
                     kind=guard.kind,
                     attr_index=_source_attr_index(source_op, guard.field),
                     diagnostic_index=self._append_diagnostic(
-                        _attr_diagnostic(guard.field, "i64_array")
+                        _guard_diagnostic(
+                            guard,
+                            _attr_diagnostic(guard.field, "i64_array"),
+                        )
                     ),
                     u64=guard.count,
                 )
@@ -530,7 +568,10 @@ class _LowerRuleSetCompiler:
                     kind=guard.kind,
                     attr_index=_source_attr_index(source_op, guard.field),
                     diagnostic_index=self._append_diagnostic(
-                        _attr_diagnostic(guard.field, "i64_array")
+                        _guard_diagnostic(
+                            guard,
+                            _attr_diagnostic(guard.field, "i64_array"),
+                        )
                     ),
                     u64=guard.element,
                     minimum_i64=guard.minimum,
@@ -549,7 +590,10 @@ class _LowerRuleSetCompiler:
                     kind=guard.kind,
                     attr_index=_source_attr_index(source_op, guard.field),
                     diagnostic_index=self._append_diagnostic(
-                        _attr_diagnostic(guard.field, "i64_array")
+                        _guard_diagnostic(
+                            guard,
+                            _attr_diagnostic(guard.field, "i64_array"),
+                        )
                     ),
                     minimum_i64=guard.minimum,
                     maximum_i64=guard.maximum,
@@ -571,10 +615,15 @@ class _LowerRuleSetCompiler:
                         _value_ref_for_source_field(source_op, guard.field),
                     ),
                     diagnostic_index=self._append_diagnostic(
-                        LowerDiagnostic(
-                            subject_kind="value",
-                            subject_name=guard.field,
-                            reason="target contract requires a bounded integer value",
+                        _guard_diagnostic(
+                            guard,
+                            LowerDiagnostic(
+                                subject_kind="value",
+                                subject_name=guard.field,
+                                reason=(
+                                    "target contract requires a bounded integer value"
+                                ),
+                            ),
                         )
                     ),
                     u64=guard.count,
@@ -591,10 +640,15 @@ class _LowerRuleSetCompiler:
                         _value_ref_for_source_field(source_op, guard.field),
                     ),
                     diagnostic_index=self._append_diagnostic(
-                        LowerDiagnostic(
-                            subject_kind="value",
-                            subject_name=guard.field,
-                            reason="target contract requires an exact integer value",
+                        _guard_diagnostic(
+                            guard,
+                            LowerDiagnostic(
+                                subject_kind="value",
+                                subject_name=guard.field,
+                                reason=(
+                                    "target contract requires an exact integer value"
+                                ),
+                            ),
                         )
                     ),
                 )
@@ -1085,11 +1139,32 @@ def _type_diagnostic_reason(type_pattern: TypePattern) -> str:
     )
 
 
+def _type_diagnostic_subject(type_pattern: TypePattern) -> str:
+    if type_pattern.kind == "scalar":
+        return str(type_pattern.element)
+    if type_pattern.lanes is not None:
+        return f"vector<{type_pattern.lanes}x{type_pattern.element}>"
+    return f"vector<{type_pattern.element}>"
+
+
 def _attr_diagnostic(field: str, attr_type: str) -> LowerDiagnostic:
     return LowerDiagnostic(
         subject_kind="attr",
         subject_name=field,
         reason=f"target contract requires a {attr_type} attribute",
+    )
+
+
+def _guard_diagnostic(
+    guard: Guard,
+    default_diagnostic: LowerDiagnostic,
+) -> LowerDiagnostic:
+    if guard.diagnostic is None:
+        return default_diagnostic
+    return LowerDiagnostic(
+        subject_kind=guard.diagnostic.subject_kind,
+        subject_name=guard.diagnostic.subject_name,
+        reason=guard.diagnostic.reason,
     )
 
 

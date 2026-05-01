@@ -177,19 +177,21 @@ loom_target_table_cc_library(
 
 loom_target_table_cc_library(
   NAME
-    lower_reduce_rules
+    lower_compare_rules
   GENERATOR
     "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rule_shard.py"
   SOURCE
-    "lower/reduce_rules.c"
+    "lower/compare_rules.c"
   HEADER
-    "lower/reduce_rules.h"
+    "lower/compare_rules.h"
   ARGS
-    "--contract-table=amdgpu.reduce"
+    "--contract-table=amdgpu.compare"
   INPUTS
     "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/atomic.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/cache.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/combining.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/defs.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/__init__.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/analysis.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/arithmetic.py"
@@ -204,6 +206,133 @@ loom_target_table_cc_library(
     "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/generated_file.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rules.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/compare.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/integer.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/materializers.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/reduce.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contract_tables.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/emits.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/guards.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/immediates.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/kinds.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/lower_rules.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/materializers.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/patterns.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/rules.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/source.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/tables.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/templates.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
+  DEPS
+    ::descriptor_ids
+    ::lower_materializers
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::scalar
+)
+
+loom_target_table_cc_library(
+  NAME
+    lower_integer_rules
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rule_shard.py"
+  SOURCE
+    "lower/integer_rules.c"
+  HEADER
+    "lower/integer_rules.h"
+  ARGS
+    "--contract-table=amdgpu.integer"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/atomic.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/cache.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/combining.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/defs.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/analysis.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/arithmetic.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/bitwise.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/comparison.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/conversion.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/defs.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/math.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/defs.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dsl.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/generated_file.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rules.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/compare.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/integer.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/materializers.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/reduce.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contract_tables.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/emits.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/guards.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/immediates.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/kinds.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/lower_rules.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/materializers.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/patterns.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/rules.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/source.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/tables.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/templates.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
+  DEPS
+    ::descriptor_ids
+    ::lower_materializers
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::index
+    loom::src::loom::ops::scalar
+)
+
+loom_target_table_cc_library(
+  NAME
+    lower_reduce_rules
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rule_shard.py"
+  SOURCE
+    "lower/reduce_rules.c"
+  HEADER
+    "lower/reduce_rules.h"
+  ARGS
+    "--contract-table=amdgpu.reduce"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/atomic.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/cache.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/combining.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/defs.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/analysis.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/arithmetic.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/bitwise.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/comparison.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/conversion.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/defs.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/math.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/defs.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/dsl.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/generated_file.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rules.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/__init__.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/compare.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/integer.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/materializers.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/reduce.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
@@ -595,11 +724,9 @@ loom_cc_library(
     "lower/bitfield.c"
     "lower/bitpack.c"
     "lower/buffer.c"
-    "lower/compare_rules.c"
     "lower/control.c"
     "lower/dot_rules.c"
     "lower/emit_support.c"
-    "lower/integer_rules.c"
     "lower/lds_layout.c"
     "lower/mask.c"
     "lower/matrix.c"
@@ -622,6 +749,8 @@ loom_cc_library(
     ::atomic_candidates
     ::descriptor_ids
     ::hal_kernel_abi
+    ::lower_compare_rules
+    ::lower_integer_rules
     ::lower_kinds
     ::lower_materializers
     ::lower_reduce_rules

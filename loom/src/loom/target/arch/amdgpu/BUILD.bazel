@@ -381,6 +381,8 @@ _AMDGPU_LOWER_RULE_GENERATOR_DEPS = [
     "//loom/py/loom:dialect/atomic.py",
     "//loom/py/loom:dialect/cache.py",
     "//loom/py/loom:dialect/combining.py",
+    "//loom/py/loom:dialect/index/__init__.py",
+    "//loom/py/loom:dialect/index/defs.py",
     "//loom/py/loom:dialect/scalar/__init__.py",
     "//loom/py/loom:dialect/scalar/analysis.py",
     "//loom/py/loom:dialect/scalar/arithmetic.py",
@@ -395,6 +397,8 @@ _AMDGPU_LOWER_RULE_GENERATOR_DEPS = [
     "//loom/py/loom:gen/generated_file.py",
     "//loom/py/loom:gen/target_lower_rules.py",
     "//loom/py/loom:target/arch/amdgpu/contracts/__init__.py",
+    "//loom/py/loom:target/arch/amdgpu/contracts/compare.py",
+    "//loom/py/loom:target/arch/amdgpu/contracts/integer.py",
     "//loom/py/loom:target/arch/amdgpu/contracts/materializers.py",
     "//loom/py/loom:target/arch/amdgpu/contracts/reduce.py",
     "//loom/py/loom:target/arch/amdgpu/descriptor_overlay.py",
@@ -418,6 +422,39 @@ _AMDGPU_LOWER_RULE_GENERATOR_DEPS = [
     "//loom/py/loom:target/contracts/templates.py",
     "//loom/py/loom:target/low_descriptors.py",
 ]
+
+loom_target_table_cc_library(
+    name = "lower_compare_rules",
+    args = ["--contract-table=amdgpu.compare"],
+    cmake_generator = _AMDGPU_LOWER_RULE_GENERATOR_SCRIPT,
+    cmake_generator_deps = _AMDGPU_LOWER_RULE_GENERATOR_DEPS,
+    generator = _AMDGPU_LOWER_RULE_GENERATOR,
+    header = "lower/compare_rules.h",
+    source = "lower/compare_rules.c",
+    deps = [
+        ":descriptor_ids",
+        ":lower_materializers",
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/ops/scalar",
+    ],
+)
+
+loom_target_table_cc_library(
+    name = "lower_integer_rules",
+    args = ["--contract-table=amdgpu.integer"],
+    cmake_generator = _AMDGPU_LOWER_RULE_GENERATOR_SCRIPT,
+    cmake_generator_deps = _AMDGPU_LOWER_RULE_GENERATOR_DEPS,
+    generator = _AMDGPU_LOWER_RULE_GENERATOR,
+    header = "lower/integer_rules.h",
+    source = "lower/integer_rules.c",
+    deps = [
+        ":descriptor_ids",
+        ":lower_materializers",
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/scalar",
+    ],
+)
 
 loom_target_table_cc_library(
     name = "lower_reduce_rules",
@@ -709,11 +746,9 @@ loom_cc_library(
         "lower/bitfield.c",
         "lower/bitpack.c",
         "lower/buffer.c",
-        "lower/compare_rules.c",
         "lower/control.c",
         "lower/dot_rules.c",
         "lower/emit_support.c",
-        "lower/integer_rules.c",
         "lower/lds_layout.c",
         "lower/mask.c",
         "lower/matrix.c",
@@ -743,6 +778,8 @@ loom_cc_library(
         ":atomic_candidates",
         ":descriptor_ids",
         ":hal_kernel_abi",
+        ":lower_compare_rules",
+        ":lower_integer_rules",
         ":lower_kinds",
         ":lower_materializers",
         ":lower_reduce_rules",

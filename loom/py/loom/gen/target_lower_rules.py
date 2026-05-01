@@ -22,8 +22,15 @@ from loom.target.contracts import (
     CompiledLowerRuleSet,
     ContractTable,
     GuardKind,
+    LowerAttrCopy,
     LowerAttrCopyKind,
+    LowerEmit,
     LowerEmitKind,
+    LowerGuard,
+    LowerRule,
+    LowerRuleSpan,
+    LowerTiedResult,
+    LowerValueRef,
     SourceValueKind,
     TypePattern,
     compile_lower_rule_set,
@@ -233,14 +240,7 @@ def _generate_source(
         _emit_optional_array(
             value_refs_name,
             "loom_low_lower_value_ref_t",
-            [
-                [
-                    f".kind = {_VALUE_REF_KIND_C_NAMES[row.kind]}",
-                    f".index = {row.index}",
-                    f".materializer_index = {row.materializer_index}",
-                ]
-                for row in table.value_refs
-            ],
+            [_value_ref_row(row) for row in table.value_refs],
         )
     )
 
@@ -280,23 +280,7 @@ def _generate_source(
         _emit_optional_array(
             guards_name,
             "loom_low_lower_guard_t",
-            [
-                [
-                    f".kind = {_GUARD_KIND_C_NAMES[row.kind]}",
-                    f".value_ref_index = {row.value_ref_index}",
-                    f".other_value_ref_index = {row.other_value_ref_index}",
-                    f".attr_index = {row.attr_index}",
-                    f".type_pattern_index = {row.type_pattern_index}",
-                    f".diagnostic_index = {_diagnostic_index(row.diagnostic_index)}",
-                    f".attr_kind = {_attr_kind_c_name(row.attr_kind)}",
-                    f".u64 = {row.u64}",
-                    f".descriptor_id = {_guard_descriptor_id(source_contract, row.descriptor)}",
-                    f".register_class_id = {row.register_class_id}",
-                    f".minimum_i64 = {row.minimum_i64}",
-                    f".maximum_i64 = {row.maximum_i64}",
-                ]
-                for row in table.guards
-            ],
+            [_guard_row(source_contract, row) for row in table.guards],
         )
     )
 
@@ -305,20 +289,7 @@ def _generate_source(
         _emit_optional_array(
             attr_copies_name,
             "loom_low_lower_attr_copy_t",
-            [
-                [
-                    f".kind = {_ATTR_COPY_KIND_C_NAMES[row.kind]}",
-                    f'.target_name = IREE_SVL("{_c_string_literal(row.target_name)}")',
-                    f".source_attr_index = {row.source_attr_index}",
-                    f".source_element_index = {row.source_element_index}",
-                    f".source_element_count = {row.source_element_count}",
-                    f".source_element_bit_width = {row.source_element_bit_width}",
-                    f".target_bit_offset = {row.target_bit_offset}",
-                    f".value_ref_index = {row.value_ref_index}",
-                    f".literal_i64 = {row.literal_i64}",
-                ]
-                for row in table.attr_copies
-            ],
+            [_attr_copy_row(row) for row in table.attr_copies],
         )
     )
 
@@ -327,14 +298,7 @@ def _generate_source(
         _emit_optional_array(
             tied_results_name,
             "loom_tied_result_t",
-            [
-                [
-                    f".result_index = {row.result_index}",
-                    f".operand_index = {row.operand_index}",
-                    f".has_type_change = {_c_bool(row.has_type_change)}",
-                ]
-                for row in table.tied_results
-            ],
+            [_tied_result_row(row) for row in table.tied_results],
         )
     )
 
@@ -343,26 +307,7 @@ def _generate_source(
         _emit_optional_array(
             emits_name,
             "loom_low_lower_emit_t",
-            [
-                [
-                    f".kind = {_EMIT_KIND_C_NAMES[row.kind]}",
-                    f".flags = {_emit_flags(row.flags)}",
-                    f".descriptor_id = {_descriptor_id_constant_name(source_contract, row.descriptor.key)}",
-                    f".operand_ref_start = {row.operand_ref_start}",
-                    f".operand_ref_count = {row.operand_ref_count}",
-                    f".copy_operand_mask = {row.copy_operand_mask}",
-                    f".accumulator_operand_index = {row.accumulator_operand_index}",
-                    f".result_ref_start = {row.result_ref_start}",
-                    f".result_type_pattern_start = {row.result_type_pattern_start}",
-                    f".result_ref_count = {row.result_ref_count}",
-                    f".result_bind_ref_start = {row.result_bind_ref_start}",
-                    f".attr_copy_start = {row.attr_copy_start}",
-                    f".attr_copy_count = {row.attr_copy_count}",
-                    f".tied_result_start = {row.tied_result_start}",
-                    f".tied_result_count = {row.tied_result_count}",
-                ]
-                for row in table.emits
-            ],
+            [_emit_row(source_contract, row) for row in table.emits],
         )
     )
 
@@ -371,19 +316,7 @@ def _generate_source(
         _emit_optional_array(
             rules_name,
             "loom_low_lower_rule_t",
-            [
-                [
-                    f".source_op_kind = {_op_c_name(row.source_op)}",
-                    f".temporary_count = {row.temporary_count}",
-                    f".guard_start = {row.guard_start}",
-                    f".guard_count = {row.guard_count}",
-                    f".emit_start = {row.emit_start}",
-                    f".emit_count = {row.emit_count}",
-                    f".elide_ref_start = {row.elide_ref_start}",
-                    f".elide_ref_count = {row.elide_ref_count}",
-                ]
-                for row in table.rules
-            ],
+            [_rule_row(row) for row in table.rules],
         )
     )
 
@@ -392,45 +325,29 @@ def _generate_source(
         _emit_optional_array(
             spans_name,
             "loom_low_lower_rule_span_t",
-            [
-                [
-                    f".source_op_kind = {_op_c_name(row.source_op)}",
-                    f".rule_start = {row.rule_start}",
-                    f".rule_count = {row.rule_count}",
-                ]
-                for row in table.spans
-            ],
+            [_span_row(row) for row in table.spans],
         )
     )
 
+    lines.append(f"const loom_low_lower_rule_set_t {symbol_name} = {{")
     lines.extend(
-        [
-            f"const loom_low_lower_rule_set_t {symbol_name} = {{",
-            "    .flags = LOOM_LOW_LOWER_RULE_SET_FLAG_TARGET_CONTRACT_QUERY,",
-            f"    .spans = {_table_value(table.spans, spans_name)},",
-            f"    .span_count = {_table_count(table.spans, spans_name)},",
-            f"    .rules = {_table_value(table.rules, rules_name)},",
-            f"    .rule_count = {_table_count(table.rules, rules_name)},",
-            f"    .type_patterns = {_table_value(table.type_patterns, type_patterns_name)},",
-            f"    .type_pattern_count = {_table_count(table.type_patterns, type_patterns_name)},",
-            f"    .value_refs = {_table_value(table.value_refs, value_refs_name)},",
-            f"    .value_ref_count = {_table_count(table.value_refs, value_refs_name)},",
-            f"    .materializers = {_table_value(source_contract.materializers, materializers_name)},",
-            f"    .materializer_count = {_table_count(source_contract.materializers, materializers_name)},",
-            f"    .guards = {_table_value(table.guards, guards_name)},",
-            f"    .guard_count = {_table_count(table.guards, guards_name)},",
-            f"    .attr_copies = {_table_value(table.attr_copies, attr_copies_name)},",
-            f"    .attr_copy_count = {_table_count(table.attr_copies, attr_copies_name)},",
-            f"    .tied_results = {_table_value(table.tied_results, tied_results_name)},",
-            f"    .tied_result_count = {_table_count(table.tied_results, tied_results_name)},",
-            f"    .emits = {_table_value(table.emits, emits_name)},",
-            f"    .emit_count = {_table_count(table.emits, emits_name)},",
-            f"    .diagnostics = {_table_value(table.diagnostics, diagnostics_name)},",
-            f"    .diagnostic_count = {_table_count(table.diagnostics, diagnostics_name)},",
-            "};",
-            "",
-        ]
+        f"    {field},"
+        for field in _rule_set_row(
+            table=table,
+            source_contract=source_contract,
+            spans_name=spans_name,
+            rules_name=rules_name,
+            type_patterns_name=type_patterns_name,
+            value_refs_name=value_refs_name,
+            materializers_name=materializers_name,
+            guards_name=guards_name,
+            attr_copies_name=attr_copies_name,
+            tied_results_name=tied_results_name,
+            emits_name=emits_name,
+            diagnostics_name=diagnostics_name,
+        )
     )
+    lines.extend(["};", ""])
     return "\n".join(lines)
 
 
@@ -448,6 +365,283 @@ def _emit_optional_array(
         lines.append("    },")
     lines.extend(["};", ""])
     return lines
+
+
+def _append_field(
+    fields: list[str],
+    name: str,
+    value: str | int,
+    *,
+    always: bool = False,
+    default: str = "0",
+) -> None:
+    value_string = str(value)
+    if always or value_string != default:
+        fields.append(f".{name} = {value_string}")
+
+
+def _value_ref_row(row: LowerValueRef) -> list[str]:
+    fields: list[str] = []
+    _append_field(fields, "kind", _VALUE_REF_KIND_C_NAMES[row.kind], always=True)
+    _append_field(fields, "index", row.index, always=True)
+    _append_field(fields, "materializer_index", row.materializer_index)
+    return fields
+
+
+def _guard_row(table: ContractTable, row: LowerGuard) -> list[str]:
+    fields: list[str] = []
+    _append_field(fields, "kind", _GUARD_KIND_C_NAMES[row.kind], always=True)
+
+    if row.kind in (
+        GuardKind.VALUE_TYPE,
+        GuardKind.VALUE_MATERIALIZABLE,
+        GuardKind.LOW_VALUE_REGISTER_CLASS,
+        GuardKind.VALUE_STATIC_DIM0_MULTIPLE,
+        GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
+        GuardKind.VALUE_SIGNED_BIT_COUNT,
+        GuardKind.VALUE_UNSIGNED_BIT_COUNT,
+        GuardKind.VALUE_EXACT_I64,
+    ):
+        _append_field(fields, "value_ref_index", row.value_ref_index, always=True)
+    if row.kind == GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ:
+        _append_field(
+            fields,
+            "other_value_ref_index",
+            row.other_value_ref_index,
+            always=True,
+        )
+
+    if row.kind in (
+        GuardKind.ATTR_KIND,
+        GuardKind.ENUM_ATTR_EQUALS,
+        GuardKind.I64_RANGE,
+        GuardKind.I64_ARRAY_COUNT,
+        GuardKind.I64_ARRAY_ELEMENT_RANGE,
+        GuardKind.I64_ARRAY_ELEMENTS_RANGE,
+    ):
+        _append_field(fields, "attr_index", row.attr_index, always=True)
+
+    if row.kind == GuardKind.VALUE_TYPE:
+        _append_field(fields, "type_pattern_index", row.type_pattern_index, always=True)
+    if row.diagnostic_index != 0xFFFF:
+        _append_field(
+            fields,
+            "diagnostic_index",
+            _diagnostic_index(row.diagnostic_index),
+            always=True,
+        )
+    if row.kind == GuardKind.ATTR_KIND:
+        _append_field(fields, "attr_kind", _attr_kind_c_name(row.attr_kind), always=True)
+    if row.kind in (
+        GuardKind.ENUM_ATTR_EQUALS,
+        GuardKind.VALUE_STATIC_DIM0_MULTIPLE,
+        GuardKind.I64_ARRAY_COUNT,
+        GuardKind.I64_ARRAY_ELEMENT_RANGE,
+        GuardKind.VALUE_SIGNED_BIT_COUNT,
+        GuardKind.VALUE_UNSIGNED_BIT_COUNT,
+    ):
+        _append_field(fields, "u64", row.u64, always=True)
+    if row.kind == GuardKind.DESCRIPTOR_AVAILABLE:
+        _append_field(
+            fields,
+            "descriptor_id",
+            _guard_descriptor_id(table, row.descriptor),
+            always=True,
+        )
+    if row.kind == GuardKind.LOW_VALUE_REGISTER_CLASS:
+        _append_field(fields, "register_class_id", row.register_class_id, always=True)
+    if row.kind in (
+        GuardKind.I64_RANGE,
+        GuardKind.I64_ARRAY_ELEMENT_RANGE,
+        GuardKind.I64_ARRAY_ELEMENTS_RANGE,
+    ):
+        _append_field(fields, "minimum_i64", row.minimum_i64, always=True)
+        _append_field(fields, "maximum_i64", row.maximum_i64, always=True)
+    return fields
+
+
+def _attr_copy_row(row: LowerAttrCopy) -> list[str]:
+    fields: list[str] = []
+    _append_field(fields, "kind", _ATTR_COPY_KIND_C_NAMES[row.kind], always=True)
+    _append_field(
+        fields,
+        "target_name",
+        f'IREE_SVL("{_c_string_literal(row.target_name)}")',
+        always=True,
+    )
+    if row.kind in (
+        LowerAttrCopyKind.DIRECT,
+        LowerAttrCopyKind.I64_ARRAY_ELEMENT,
+        LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
+    ):
+        _append_field(fields, "source_attr_index", row.source_attr_index, always=True)
+    if row.kind in (
+        LowerAttrCopyKind.I64_ARRAY_ELEMENT,
+        LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
+    ):
+        _append_field(
+            fields,
+            "source_element_index",
+            row.source_element_index,
+            always=True,
+        )
+    if row.kind == LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS:
+        _append_field(
+            fields,
+            "source_element_count",
+            row.source_element_count,
+            always=True,
+        )
+        _append_field(
+            fields,
+            "source_element_bit_width",
+            row.source_element_bit_width,
+            always=True,
+        )
+    _append_field(fields, "target_bit_offset", row.target_bit_offset)
+    _append_field(fields, "value_ref_index", row.value_ref_index)
+    if row.kind == LowerAttrCopyKind.I64_LITERAL:
+        _append_field(fields, "literal_i64", row.literal_i64, always=True)
+    return fields
+
+
+def _tied_result_row(row: LowerTiedResult) -> list[str]:
+    fields: list[str] = []
+    _append_field(fields, "result_index", row.result_index, always=True)
+    _append_field(fields, "operand_index", row.operand_index, always=True)
+    if row.has_type_change:
+        _append_field(fields, "has_type_change", _c_bool(row.has_type_change))
+    return fields
+
+
+def _emit_row(table: ContractTable, row: LowerEmit) -> list[str]:
+    fields: list[str] = []
+    flags = _emit_flags(row.flags)
+    _append_field(fields, "kind", _EMIT_KIND_C_NAMES[row.kind], always=True)
+    _append_field(fields, "flags", flags)
+    _append_field(
+        fields,
+        "descriptor_id",
+        _descriptor_id_constant_name(table, row.descriptor.key),
+        always=True,
+    )
+    if row.operand_ref_count:
+        _append_field(fields, "operand_ref_start", row.operand_ref_start, always=True)
+        _append_field(fields, "operand_ref_count", row.operand_ref_count, always=True)
+    _append_field(fields, "copy_operand_mask", row.copy_operand_mask)
+    if row.kind == LowerEmitKind.DESCRIPTOR_OP_ACCUMULATE_LANES:
+        _append_field(
+            fields,
+            "accumulator_operand_index",
+            row.accumulator_operand_index,
+            always=True,
+        )
+    if row.result_ref_count:
+        if row.flags & LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN:
+            _append_field(
+                fields,
+                "result_type_pattern_start",
+                row.result_type_pattern_start,
+                always=True,
+            )
+        else:
+            _append_field(fields, "result_ref_start", row.result_ref_start, always=True)
+        _append_field(fields, "result_ref_count", row.result_ref_count, always=True)
+    if row.flags & LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS:
+        _append_field(
+            fields,
+            "result_bind_ref_start",
+            row.result_bind_ref_start,
+            always=True,
+        )
+    if row.attr_copy_count:
+        _append_field(fields, "attr_copy_start", row.attr_copy_start, always=True)
+        _append_field(fields, "attr_copy_count", row.attr_copy_count, always=True)
+    if row.tied_result_count:
+        _append_field(fields, "tied_result_start", row.tied_result_start, always=True)
+        _append_field(fields, "tied_result_count", row.tied_result_count, always=True)
+    return fields
+
+
+def _rule_row(row: LowerRule) -> list[str]:
+    fields: list[str] = []
+    _append_field(fields, "source_op_kind", _op_c_name(row.source_op), always=True)
+    _append_field(fields, "temporary_count", row.temporary_count)
+    if row.guard_count:
+        _append_field(fields, "guard_start", row.guard_start, always=True)
+        _append_field(fields, "guard_count", row.guard_count, always=True)
+    if row.emit_count:
+        _append_field(fields, "emit_start", row.emit_start, always=True)
+        _append_field(fields, "emit_count", row.emit_count, always=True)
+    if row.elide_ref_count:
+        _append_field(fields, "elide_ref_start", row.elide_ref_start, always=True)
+        _append_field(fields, "elide_ref_count", row.elide_ref_count, always=True)
+    return fields
+
+
+def _span_row(row: LowerRuleSpan) -> list[str]:
+    fields: list[str] = []
+    _append_field(fields, "source_op_kind", _op_c_name(row.source_op), always=True)
+    _append_field(fields, "rule_start", row.rule_start, always=True)
+    _append_field(fields, "rule_count", row.rule_count, always=True)
+    return fields
+
+
+def _rule_set_row(
+    *,
+    table: CompiledLowerRuleSet,
+    source_contract: ContractTable,
+    spans_name: str,
+    rules_name: str,
+    type_patterns_name: str,
+    value_refs_name: str,
+    materializers_name: str,
+    guards_name: str,
+    attr_copies_name: str,
+    tied_results_name: str,
+    emits_name: str,
+    diagnostics_name: str,
+) -> list[str]:
+    fields = [".flags = LOOM_LOW_LOWER_RULE_SET_FLAG_TARGET_CONTRACT_QUERY"]
+    _append_table_fields(fields, "spans", table.spans, spans_name)
+    _append_table_fields(fields, "rules", table.rules, rules_name)
+    _append_table_fields(
+        fields,
+        "type_patterns",
+        table.type_patterns,
+        type_patterns_name,
+    )
+    _append_table_fields(fields, "value_refs", table.value_refs, value_refs_name)
+    _append_table_fields(
+        fields,
+        "materializers",
+        source_contract.materializers,
+        materializers_name,
+    )
+    _append_table_fields(fields, "guards", table.guards, guards_name)
+    _append_table_fields(fields, "attr_copies", table.attr_copies, attr_copies_name)
+    _append_table_fields(fields, "tied_results", table.tied_results, tied_results_name)
+    _append_table_fields(fields, "emits", table.emits, emits_name)
+    _append_table_fields(fields, "diagnostics", table.diagnostics, diagnostics_name)
+    return fields
+
+
+def _append_table_fields(
+    fields: list[str],
+    field_name: str,
+    rows: tuple[object, ...],
+    table_name: str,
+) -> None:
+    if not rows:
+        return
+    fields.append(f".{field_name} = {table_name}")
+    fields.append(f".{_table_count_field_name(field_name)} = IREE_ARRAYSIZE({table_name})")
+
+
+def _table_count_field_name(field_name: str) -> str:
+    if field_name == "attr_copies":
+        return "attr_copy_count"
+    return f"{field_name[:-1]}_count"
 
 
 def _type_pattern_row(type_pattern: TypePattern) -> list[str]:
@@ -533,14 +727,6 @@ def _emit_flags(flags: int) -> str:
 
 def _c_bool(value: bool) -> str:
     return "true" if value else "false"
-
-
-def _table_value(rows: tuple[object, ...], name: str) -> str:
-    return name if rows else "NULL"
-
-
-def _table_count(rows: tuple[object, ...], name: str) -> str:
-    return f"IREE_ARRAYSIZE({name})" if rows else "0"
 
 
 def _op_header_includes(table: CompiledLowerRuleSet) -> tuple[str, ...]:
