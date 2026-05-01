@@ -79,7 +79,6 @@ loom_cc_library(
     "lower.h"
     "lower/internal.h"
   SRCS
-    "lower/avx512_memory.c"
     "lower/packed_dot.c"
     "lower/registry.c"
   DEPS
@@ -91,13 +90,8 @@ loom_cc_library(
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::lower
-    loom::src::loom::codegen::low::source_memory_plan
     loom::src::loom::ir
-    loom::src::loom::ops::buffer
-    loom::src::loom::ops::combining
-    loom::src::loom::ops::index
     loom::src::loom::ops::low
-    loom::src::loom::ops::scalar
     loom::src::loom::ops::vector
     loom::src::loom::target::arch::x86::contracts::avx512
     loom::src::loom::target::arch::x86::contracts::avx512_lower_rules

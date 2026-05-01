@@ -133,7 +133,6 @@ loom_cc_library(
 loom_cc_library(
     name = "lower",
     srcs = [
-        "lower/avx512_memory.c",
         "lower/packed_dot.c",
         "lower/registry.c",
     ],
@@ -149,13 +148,8 @@ loom_cc_library(
         ":packed_dot_vector",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:lower",
-        "//loom/src/loom/codegen/low:source_memory_plan",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops:combining",
-        "//loom/src/loom/ops/buffer",
-        "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/target:low_legality",
         "//loom/src/loom/target/arch/x86/contracts:avx512",

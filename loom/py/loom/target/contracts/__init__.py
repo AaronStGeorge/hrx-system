@@ -28,6 +28,8 @@ from loom.target.contracts.guards import Guard, GuardDiagnostic, GuardKind
 from loom.target.contracts.immediates import (
     AttrProject,
     AttrProjectKind,
+    SourceMemoryProject,
+    SourceMemoryProjectKind,
     ValueProject,
     ValueProjectKind,
 )
@@ -122,6 +124,8 @@ __all__ = [
     "ReductionDescriptorCase",
     "Scalar",
     "SelectDescriptorCase",
+    "SourceMemoryProject",
+    "SourceMemoryProjectKind",
     "SourceValueKind",
     "SourceMemoryConstraint",
     "SourceMemoryDynamicIndexSource",

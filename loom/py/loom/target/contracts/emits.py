@@ -23,7 +23,12 @@ from loom.target.contracts.descriptors import (
     _validate_immediate_literal,
     _validate_required_descriptor_operands,
 )
-from loom.target.contracts.immediates import AttrProject, ValueProject
+from loom.target.contracts.immediates import (
+    AttrProject,
+    SourceMemoryProject,
+    SourceMemoryProjectKind,
+    ValueProject,
+)
 from loom.target.contracts.kinds import SourceValueKind
 from loom.target.contracts.patterns import TypePattern
 from loom.target.contracts.source import ValueRef
@@ -54,7 +59,8 @@ class EmitDescriptorOp:
     results: Mapping[str, ValueRef] | None = None
     result_types: Mapping[str, ResultTypeBinding] | None = None
     immediates: (
-        Mapping[str, AttrProject | ValueProject | int] | Sequence[AttrProject]
+        Mapping[str, AttrProject | ValueProject | SourceMemoryProject | int]
+        | Sequence[AttrProject]
     ) = ()
     form: DescriptorEmitForm = DescriptorEmitForm.AUTO
     swap_first_two_operands: bool = False
@@ -171,6 +177,11 @@ class EmitDescriptorOp:
                 f"{source_op.name}: accumulator is only valid for "
                 "accumulate-lanes emits"
             )
+        if self.source_memory is not None and self.form not in (
+            DescriptorEmitForm.AUTO,
+            DescriptorEmitForm.OP,
+        ):
+            raise ValueError(f"{source_op.name}: source memory requires an op emit")
         if self.source_memory is not None:
             self.source_memory.validate(source_op)
         self._validate_immediates(source_op)
@@ -187,6 +198,25 @@ class EmitDescriptorOp:
                 )
                 if isinstance(binding, AttrProject | ValueProject):
                     binding.validate(source_op, self.descriptor, immediate_name)
+                elif isinstance(binding, SourceMemoryProject):
+                    if self.source_memory is None:
+                        raise ValueError(
+                            f"{source_op.name}: source-memory immediate "
+                            f"'{immediate_name}' needs a source-memory emit"
+                        )
+                    binding.validate(source_op, self.descriptor, immediate_name)
+                    if (
+                        binding.kind == SourceMemoryProjectKind.DYNAMIC_BYTE_STRIDE
+                        and binding.dynamic_term_index
+                        >= self.source_memory.dynamic_term_count
+                    ):
+                        raise ValueError(
+                            f"{source_op.name}: source-memory immediate "
+                            f"'{immediate_name}' references dynamic term "
+                            f"{binding.dynamic_term_index}, but the source-memory "
+                            "constraint only selects "
+                            f"{self.source_memory.dynamic_term_count}"
+                        )
                 else:
                     _validate_immediate_literal(
                         source_op, self.descriptor, immediate, binding

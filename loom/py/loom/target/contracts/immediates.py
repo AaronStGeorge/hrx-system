@@ -37,6 +37,14 @@ class ValueProjectKind(Enum):
     I32_AS_U32_BITS = "i32_as_u32_bits"
 
 
+@unique
+class SourceMemoryProjectKind(Enum):
+    """Projection from a selected source-memory access to descriptor immediates."""
+
+    STATIC_BYTE_OFFSET = "static_byte_offset"
+    DYNAMIC_BYTE_STRIDE = "dynamic_byte_stride"
+
+
 @dataclass(frozen=True, slots=True)
 class AttrProject:
     """Descriptor immediate projection from a source attribute."""
@@ -226,6 +234,49 @@ class ValueProject:
     ) -> None:
         subject = f"immediate projection {self.kind.value}"
         _require_value(source_op, self.source_value, subject)
+        if bound_immediate_name is None:
+            raise ValueError(
+                f"{source_op.name}: {subject} must bind one descriptor immediate"
+            )
+        _require_immediate(descriptor, bound_immediate_name, subject)
+
+
+@dataclass(frozen=True, slots=True)
+class SourceMemoryProject:
+    """Descriptor immediate projection from the selected source-memory access."""
+
+    kind: SourceMemoryProjectKind
+    dynamic_term_index: int = 0
+
+    @classmethod
+    def static_byte_offset(cls) -> Self:
+        return cls(kind=SourceMemoryProjectKind.STATIC_BYTE_OFFSET)
+
+    @classmethod
+    def dynamic_byte_stride(cls, *, term: int = 0) -> Self:
+        return cls(
+            kind=SourceMemoryProjectKind.DYNAMIC_BYTE_STRIDE,
+            dynamic_term_index=term,
+        )
+
+    def __post_init__(self) -> None:
+        if self.dynamic_term_index < 0:
+            raise ValueError(
+                f"{self.kind.value} dynamic term index must be non-negative"
+            )
+        if (
+            self.kind == SourceMemoryProjectKind.STATIC_BYTE_OFFSET
+            and self.dynamic_term_index != 0
+        ):
+            raise ValueError("static byte offset projection must not name a term")
+
+    def validate(
+        self,
+        source_op: Op,
+        descriptor: Descriptor,
+        bound_immediate_name: str | None,
+    ) -> None:
+        subject = f"immediate projection {self.kind.value}"
         if bound_immediate_name is None:
             raise ValueError(
                 f"{source_op.name}: {subject} must bind one descriptor immediate"

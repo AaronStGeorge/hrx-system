@@ -172,6 +172,11 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   // Expands one i64_array lane ordinal into one byte-lane immediate:
   // source_attr[source_element_index] * source_element_count + literal_i64.
   LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_LANE_BYTE = 6,
+  // Emits the selected source-memory static byte offset as an i64 attribute.
+  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_STATIC_BYTE_OFFSET = 7,
+  // Emits one selected source-memory dynamic term byte stride as an i64
+  // attribute.
+  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE = 8,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {
@@ -192,6 +197,8 @@ typedef struct loom_low_lower_attr_copy_t {
   uint8_t target_bit_offset;
   // Source value-ref table row consumed by VALUE_EXACT_I64 rows.
   uint16_t value_ref_index;
+  // Dynamic source-memory term ordinal consumed by SOURCE_MEMORY rows.
+  uint8_t dynamic_term_index;
   // Literal value emitted by I64_LITERAL rows or byte offset used by
   // I64_ARRAY_LANE_BYTE rows.
   int64_t literal_i64;
@@ -255,8 +262,10 @@ typedef struct loom_low_lower_source_memory_t {
   uint32_t vector_lane_count;
   // Required byte stride between adjacent vector lanes.
   int64_t vector_lane_byte_stride;
-  // Required static byte offset from the storage root.
-  int64_t static_byte_offset;
+  // Minimum accepted static byte offset from the storage root.
+  int64_t static_byte_offset_minimum;
+  // Maximum accepted static byte offset from the storage root.
+  int64_t static_byte_offset_maximum;
   // Required number of dynamic address terms.
   uint8_t dynamic_term_count;
   // Required provenance for each dynamic address term.

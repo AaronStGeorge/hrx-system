@@ -74,7 +74,8 @@ class SourceMemoryConstraint:
     element_byte_count: int
     vector_lane_count: int
     vector_lane_byte_stride: int
-    static_byte_offset: int
+    static_byte_offset_minimum: int
+    static_byte_offset_maximum: int
     dynamic_term_count: int = 0
     dynamic_index_source: SourceMemoryDynamicIndexSource = (
         SourceMemoryDynamicIndexSource.NONE
@@ -93,7 +94,9 @@ class SourceMemoryConstraint:
         element_byte_count: int,
         vector_lane_count: int,
         vector_lane_byte_stride: int,
-        static_byte_offset: int,
+        static_byte_offset: int | None = None,
+        static_byte_offset_minimum: int | None = None,
+        static_byte_offset_maximum: int | None = None,
         dynamic_term_count: int = 0,
         dynamic_index_source: SourceMemoryDynamicIndexSource = (
             SourceMemoryDynamicIndexSource.NONE
@@ -109,7 +112,13 @@ class SourceMemoryConstraint:
         object.__setattr__(self, "element_byte_count", element_byte_count)
         object.__setattr__(self, "vector_lane_count", vector_lane_count)
         object.__setattr__(self, "vector_lane_byte_stride", vector_lane_byte_stride)
-        object.__setattr__(self, "static_byte_offset", static_byte_offset)
+        minimum, maximum = _resolve_static_byte_offset_range(
+            static_byte_offset,
+            static_byte_offset_minimum,
+            static_byte_offset_maximum,
+        )
+        object.__setattr__(self, "static_byte_offset_minimum", minimum)
+        object.__setattr__(self, "static_byte_offset_maximum", maximum)
         object.__setattr__(self, "dynamic_term_count", dynamic_term_count)
         object.__setattr__(self, "dynamic_index_source", dynamic_index_source)
         object.__setattr__(self, "dynamic_byte_stride", dynamic_byte_stride)
@@ -142,8 +151,12 @@ class SourceMemoryConstraint:
             raise ValueError("source memory vector lane byte stride must fit in i64")
         if self.vector_lane_byte_stride == 0:
             raise ValueError("source memory vector lane byte stride must be non-zero")
-        if not _I64_MIN <= self.static_byte_offset <= _I64_MAX:
-            raise ValueError("source memory static byte offset must fit in i64")
+        if not _I64_MIN <= self.static_byte_offset_minimum <= _I64_MAX:
+            raise ValueError("source memory minimum static byte offset must fit in i64")
+        if not _I64_MIN <= self.static_byte_offset_maximum <= _I64_MAX:
+            raise ValueError("source memory maximum static byte offset must fit in i64")
+        if self.static_byte_offset_minimum > self.static_byte_offset_maximum:
+            raise ValueError("source memory static byte offset range is empty")
         if not 0 <= self.dynamic_term_count <= _U8_MAX:
             raise ValueError("source memory dynamic term count must be non-negative")
         if self.dynamic_term_count == 0:
@@ -166,3 +179,19 @@ class SourceMemoryConstraint:
 
     def validate(self, source_op: Op) -> None:
         del source_op
+
+
+def _resolve_static_byte_offset_range(
+    exact: int | None,
+    minimum: int | None,
+    maximum: int | None,
+) -> tuple[int, int]:
+    if exact is not None:
+        if minimum is not None or maximum is not None:
+            raise ValueError(
+                "source memory static byte offset cannot mix exact and range"
+            )
+        return exact, exact
+    if minimum is None or maximum is None:
+        raise ValueError("source memory static byte offset needs exact or range")
+    return minimum, maximum

@@ -108,6 +108,8 @@ _ATTR_COPY_KIND_C_NAMES = {
     LowerAttrCopyKind.VALUE_EXACT_I64: "LOOM_LOW_LOWER_ATTR_COPY_VALUE_EXACT_I64",
     LowerAttrCopyKind.VALUE_I32_AS_U32_BITS: "LOOM_LOW_LOWER_ATTR_COPY_VALUE_I32_AS_U32_BITS",
     LowerAttrCopyKind.I64_ARRAY_LANE_BYTE: "LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_LANE_BYTE",
+    LowerAttrCopyKind.SOURCE_MEMORY_STATIC_BYTE_OFFSET: "LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_STATIC_BYTE_OFFSET",
+    LowerAttrCopyKind.SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE: "LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE",
 }
 
 _EMIT_KIND_C_NAMES = {
@@ -484,8 +486,14 @@ def _source_memory_row(row: LowerSourceMemory) -> list[str]:
     )
     _append_field(
         fields,
-        "static_byte_offset",
-        constraint.static_byte_offset,
+        "static_byte_offset_minimum",
+        constraint.static_byte_offset_minimum,
+        always=True,
+    )
+    _append_field(
+        fields,
+        "static_byte_offset_maximum",
+        constraint.static_byte_offset_maximum,
         always=True,
     )
     _append_field(fields, "dynamic_term_count", constraint.dynamic_term_count)
@@ -646,6 +654,13 @@ def _attr_copy_row(row: LowerAttrCopy) -> list[str]:
         LowerAttrCopyKind.I64_ARRAY_LANE_BYTE,
     ):
         _append_field(fields, "literal_i64", row.literal_i64, always=True)
+    if row.kind == LowerAttrCopyKind.SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE:
+        _append_field(
+            fields,
+            "dynamic_term_index",
+            row.dynamic_term_index,
+            always=True,
+        )
     return fields
 
 

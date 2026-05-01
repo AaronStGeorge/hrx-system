@@ -22,6 +22,8 @@ from loom.target.contracts.guards import Guard, GuardKind
 from loom.target.contracts.immediates import (
     AttrProject,
     AttrProjectKind,
+    SourceMemoryProject,
+    SourceMemoryProjectKind,
     ValueProject,
     ValueProjectKind,
 )
@@ -54,6 +56,8 @@ class LowerAttrCopyKind(Enum):
     VALUE_EXACT_I64 = "value_exact_i64"
     VALUE_I32_AS_U32_BITS = "value_i32_as_u32_bits"
     I64_ARRAY_LANE_BYTE = "i64_array_lane_byte"
+    SOURCE_MEMORY_STATIC_BYTE_OFFSET = "source_memory_static_byte_offset"
+    SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE = "source_memory_dynamic_byte_stride"
 
 
 LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1 = 1 << 0
@@ -126,6 +130,7 @@ class LowerAttrCopy:
     target_bit_offset: int = 0
     value_ref_index: int = 0
     literal_i64: int = 0
+    dynamic_term_index: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -1043,6 +1048,11 @@ class _LowerRuleSetCompiler:
                     self._lower_attr_project(source_op, target_name, binding)
                 )
                 continue
+            if isinstance(binding, SourceMemoryProject):
+                attr_copies.append(
+                    self._lower_source_memory_project(target_name, binding)
+                )
+                continue
             attr_copies.append(
                 self._lower_value_project(source_op, target_name, binding)
             )
@@ -1147,6 +1157,27 @@ class _LowerRuleSetCompiler:
                 _value_ref_for_source_field(source_op, project.source_value),
             ),
             target_bit_offset=project.target_bit_offset,
+        )
+
+    def _lower_source_memory_project(
+        self,
+        target_name: str,
+        project: SourceMemoryProject,
+    ) -> LowerAttrCopy:
+        if project.kind == SourceMemoryProjectKind.STATIC_BYTE_OFFSET:
+            kind = LowerAttrCopyKind.SOURCE_MEMORY_STATIC_BYTE_OFFSET
+        elif project.kind == SourceMemoryProjectKind.DYNAMIC_BYTE_STRIDE:
+            kind = LowerAttrCopyKind.SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE
+        else:
+            raise ValueError(
+                "source-memory immediate projection "
+                f"'{project.kind.value}' is not representable by generated "
+                "lower rules yet"
+            )
+        return LowerAttrCopy(
+            kind=kind,
+            target_name=target_name,
+            dynamic_term_index=project.dynamic_term_index,
         )
 
     def _append_attr_copy_sequence(self, sequence: tuple[LowerAttrCopy, ...]) -> int:

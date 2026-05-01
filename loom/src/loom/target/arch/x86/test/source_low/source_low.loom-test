@@ -205,8 +205,6 @@ func.def @f32x16_static_memory(%input: buffer, %output: buffer) {
 
 // ----
 low.func.def target(@target) abi(object_function) @f32x16_static_memory(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>) asm<x86.avx512.core> {
-  %input_base = mov.imm64 16
-  %output_base = mov.imm64 32
   %loaded = vmovdqu32.load %input_view {disp32 = 32}
   vmovdqu32.store %loaded, %output_view {disp32 = 64}
   return
@@ -227,8 +225,6 @@ func.def @f32x16_dynamic_memory(%input: buffer, %output: buffer, %i: index) {
 
 // ----
 low.func.def target(@target) abi(object_function) @f32x16_dynamic_memory(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>, %bounded_i: reg<x86.gpr64>) asm<x86.avx512.core> {
-  %input_base = mov.imm64 16
-  %output_base = mov.imm64 32
   %loaded = vmovdqu32.load.indexed %input_view, %bounded_i {disp32 = 16, scale = 4}
   vmovdqu32.store.indexed %loaded, %output_view, %bounded_i {disp32 = 32, scale = 4}
   return
@@ -249,7 +245,6 @@ func.def @f32x16_index_add_memory(%input: buffer, %output: buffer, %i: index, %j
 
 // ----
 low.func.def target(@target) abi(object_function) @f32x16_index_add_memory(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>, %i: reg<x86.gpr64>, %j: reg<x86.gpr64>) asm<x86.avx512.core> {
-  %zero = mov.imm64 0
   %bounded_sum = lea %i, %j
   %loaded = vmovdqu32.load.indexed %input_view, %bounded_sum {disp32 = 0, scale = 4}
   vmovdqu32.store.indexed %loaded, %output_view, %bounded_sum {disp32 = 0, scale = 4}
@@ -271,10 +266,9 @@ func.def @f32x16_index_madd_memory(%input: buffer, %output: buffer, %row: index,
 
 // ----
 low.func.def target(@target) abi(object_function) @f32x16_index_madd_memory(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>, %row: reg<x86.gpr64>, %stride: reg<x86.gpr64>, %col: reg<x86.gpr64>) asm<x86.avx512.core> {
-  %zero = mov.imm64 0
-  %17 = copy %row : reg<x86.gpr64> -> reg<x86.gpr64>
-  %18 = imul %17, %stride
-  %bounded_linear = lea %18, %col
+  %16 = copy %row : reg<x86.gpr64> -> reg<x86.gpr64>
+  %17 = imul %16, %stride
+  %bounded_linear = lea %17, %col
   %loaded = vmovdqu32.load.indexed %input_view, %bounded_linear {disp32 = 0, scale = 4}
   vmovdqu32.store.indexed %loaded, %output_view, %bounded_linear {disp32 = 0, scale = 4}
   return

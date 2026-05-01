@@ -274,7 +274,8 @@ static iree_status_t loom_x86_select_avx512_packed_dot_op(
     return loom_x86_select_packed_dot_op(user_data, context, source_op,
                                          out_plan);
   }
-  return loom_x86_select_avx512_op(user_data, context, source_op, out_plan);
+  *out_plan = loom_low_lower_plan_empty();
+  return iree_ok_status();
 }
 
 static iree_status_t loom_x86_emit_avx512_packed_dot_op(
@@ -283,7 +284,7 @@ static iree_status_t loom_x86_emit_avx512_packed_dot_op(
   if (loom_x86_op_is_vector_dot(source_op->kind)) {
     return loom_x86_emit_packed_dot_op(user_data, context, source_op, plan);
   }
-  return loom_x86_emit_avx512_op(user_data, context, source_op, plan);
+  IREE_CHECK_UNREACHABLE();
 }
 
 static const loom_low_lower_policy_t kX86Avx512LowLowerPolicy = {
@@ -297,8 +298,6 @@ static const loom_low_lower_policy_t kX86Avx512LowLowerPolicy = {
         },
     .contract_bindings = kX86Avx512ContractBindings,
     .contract_binding_count = IREE_ARRAYSIZE(kX86Avx512ContractBindings),
-    .select_op = {.fn = loom_x86_select_avx512_op, .user_data = NULL},
-    .emit_op = {.fn = loom_x86_emit_avx512_op, .user_data = NULL},
 };
 
 static const loom_low_lower_policy_t kX86PackedDotLowLowerPolicy = {

@@ -28,6 +28,7 @@ loom_target_table_cc_library(
     generator = "//loom/py/loom/gen:x86_lower_rule_shard",
     deps = [
         "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/ops/buffer",
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/vector",
