@@ -3072,25 +3072,7 @@ static iree_status_t loom_low_allocation_verify_edge_copy_temporary(
 
 static iree_status_t loom_low_allocation_verify_table_contents(
     const loom_low_allocation_table_t* table) {
-  if (!table->module) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation table module is required");
-  }
-  if (!table->function_op || !loom_low_function_def_isa(table->function_op)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "allocation table low function definition is required");
-  }
-  if (!table->target.descriptor_set) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation table target descriptor set is "
-                            "required");
-  }
   loom_region_t* body = loom_low_function_body((loom_op_t*)table->function_op);
-  if (!body) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation table low function body is required");
-  }
   if (table->placement.module != table->module ||
       table->placement.region != body ||
       table->placement.value_ids != table->liveness.value_ids ||
@@ -3566,10 +3548,6 @@ iree_status_t loom_low_allocate_function(
       .body = loom_low_function_body((loom_op_t*)low_func_op),
       .function_op = low_func_op,
   };
-  if (!state.body) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low function body is required");
-  }
   IREE_RETURN_IF_ERROR(
       loom_low_allocation_validate_synthesis_mode(low_func_op));
 

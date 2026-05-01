@@ -668,15 +668,6 @@ static iree_status_t loom_low_append_manifest_descriptor_rows(
 iree_status_t loom_low_descriptor_set_format_manifest_json(
     const loom_low_descriptor_set_t* descriptor_set,
     iree_string_builder_t* builder) {
-  if (builder == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor manifest builder is required");
-  }
-  if (descriptor_set == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor set is required");
-  }
-
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "{"));
   IREE_RETURN_IF_ERROR(loom_low_descriptor_set_append_string_field(
       descriptor_set, builder, "key", descriptor_set->key_string_offset));

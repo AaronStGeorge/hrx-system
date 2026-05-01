@@ -17,10 +17,6 @@ static iree_status_t loom_low_emission_frame_liveness_order_from_schedule(
   *out_order = loom_liveness_order_empty();
 
   loom_region_t* body = loom_low_function_body(low_func_op);
-  if (!body) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low function body is required");
-  }
   if (schedule->function_op != low_func_op ||
       schedule->block_count != body->block_count) {
     return iree_make_status(

@@ -119,10 +119,6 @@ iree_status_t loom_low_move_location_from_assignment_unit(
     const loom_low_allocation_assignment_t* assignment, uint32_t unit_index,
     loom_low_move_location_t* out_location) {
   *out_location = (loom_low_move_location_t){0};
-  if (assignment == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "move location assignment is required");
-  }
   if (unit_index >= assignment->location_count) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "move location unit %" PRIu32

@@ -464,14 +464,6 @@ iree_status_t loom_low_packet_asm_format(
     const loom_low_allocation_table_t* allocation,
     const loom_low_packet_asm_options_t* options,
     iree_string_builder_t* builder) {
-  if (options == NULL || options->format_value.fn == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low packet asm value formatter is required");
-  }
-  if (builder == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low packet asm output builder is required");
-  }
   IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(schedule, allocation));
   if (options->selected_asm_forms != NULL) {
     IREE_RETURN_IF_ERROR(loom_low_packet_validate_asm_form_table(
