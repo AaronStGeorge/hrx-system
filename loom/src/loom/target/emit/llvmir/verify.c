@@ -1237,7 +1237,6 @@ static iree_status_t loom_llvmir_verify_global(
 }
 
 iree_status_t loom_llvmir_verify_module(const loom_llvmir_module_t* module) {
-  IREE_ASSERT_ARGUMENT(module);
   for (iree_host_size_t i = 0; i < module->global_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_llvmir_verify_global(module, module->globals[i]));
   }

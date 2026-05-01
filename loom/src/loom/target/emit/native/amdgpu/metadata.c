@@ -261,7 +261,6 @@ static iree_status_t loom_amdgpu_metadata_append_kernel_assembly(
 iree_status_t loom_amdgpu_metadata_append_assembly(
     const loom_amdgpu_code_object_metadata_t* metadata,
     iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(builder);
   IREE_RETURN_IF_ERROR(loom_amdgpu_metadata_validate(metadata));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(builder, "\n.amdgpu_metadata\n"));
@@ -509,7 +508,6 @@ static iree_status_t loom_amdgpu_metadata_append_kernel_msgpack(
 iree_status_t loom_amdgpu_metadata_append_msgpack(
     const loom_amdgpu_code_object_metadata_t* metadata,
     iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(builder);
   IREE_RETURN_IF_ERROR(loom_amdgpu_metadata_validate(metadata));
   IREE_RETURN_IF_ERROR(loom_amdgpu_msgpack_append_map(builder, 3));
   IREE_RETURN_IF_ERROR(
@@ -567,8 +565,6 @@ static iree_status_t loom_amdgpu_metadata_append_align4_padding(
 iree_status_t loom_amdgpu_metadata_append_elf_note(
     const loom_amdgpu_code_object_metadata_t* metadata,
     iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(builder);
-
   iree_string_builder_t payload_builder;
   iree_string_builder_initialize(iree_allocator_system(), &payload_builder);
   iree_status_t status =

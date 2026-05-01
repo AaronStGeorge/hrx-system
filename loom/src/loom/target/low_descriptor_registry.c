@@ -12,7 +12,6 @@ void loom_target_low_descriptor_registry_initialize_from_tables(
     iree_host_size_t descriptor_set_provider_count,
     const loom_target_bundle_t* const* target_bundles,
     iree_host_size_t target_bundle_count) {
-  IREE_ASSERT_ARGUMENT(out_registry);
   *out_registry = (loom_target_low_descriptor_registry_t){
       .descriptor_set_providers = descriptor_set_providers,
       .descriptor_set_provider_count = descriptor_set_provider_count,
@@ -36,11 +35,6 @@ iree_status_t loom_target_low_descriptor_registry_append_to_tables(
     const loom_target_bundle_t** target_bundles,
     iree_host_size_t target_bundle_capacity,
     iree_host_size_t* target_bundle_count) {
-  IREE_ASSERT_ARGUMENT(source);
-  IREE_ASSERT_ARGUMENT(descriptor_set_providers);
-  IREE_ASSERT_ARGUMENT(descriptor_set_provider_count);
-  IREE_ASSERT_ARGUMENT(target_bundles);
-  IREE_ASSERT_ARGUMENT(target_bundle_count);
   if (*descriptor_set_provider_count > descriptor_set_provider_capacity ||
       *target_bundle_count > target_bundle_capacity) {
     return iree_make_status(
@@ -75,7 +69,6 @@ iree_status_t loom_target_low_descriptor_registry_append_to_tables(
 iree_status_t loom_target_low_descriptor_registry_lookup_bundle(
     const loom_target_low_descriptor_registry_t* registry,
     iree_string_view_t key, const loom_target_bundle_t** out_bundle) {
-  IREE_ASSERT_ARGUMENT(registry);
   const loom_target_preset_registry_t preset_registry =
       loom_target_low_descriptor_registry_presets(registry);
   return loom_target_preset_registry_lookup_bundle(&preset_registry, key,
@@ -86,9 +79,6 @@ iree_status_t loom_target_low_descriptor_set_select_for_bundle(
     const loom_low_descriptor_registry_t* registry,
     const loom_target_bundle_t* bundle,
     const loom_low_descriptor_set_t** out_descriptor_set) {
-  IREE_ASSERT_ARGUMENT(registry);
-  IREE_ASSERT_ARGUMENT(bundle);
-  IREE_ASSERT_ARGUMENT(out_descriptor_set);
   *out_descriptor_set = NULL;
   iree_string_view_t descriptor_set_key =
       iree_string_view_trim(bundle->config->contract_set_key);

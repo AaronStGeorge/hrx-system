@@ -58,7 +58,6 @@ static bool loom_amdgpu_kernel_record_symbol_ref_equal(loom_symbol_ref_t lhs,
 static iree_status_t loom_amdgpu_kernel_record_concat3(
     iree_string_view_t a, iree_string_view_t b, iree_string_view_t c,
     iree_string_view_t* out_value, iree_arena_allocator_t* arena) {
-  IREE_ASSERT_ARGUMENT(out_value);
   *out_value = iree_string_view_empty();
   iree_host_size_t prefix_length = 0;
   iree_host_size_t length = 0;
@@ -136,7 +135,6 @@ static iree_status_t loom_amdgpu_kernel_record_validate_target_id_component(
 static iree_status_t loom_amdgpu_kernel_record_symbol_name(
     const loom_module_t* module, const loom_op_t* function_op,
     iree_string_view_t* out_symbol) {
-  IREE_ASSERT_ARGUMENT(out_symbol);
   *out_symbol = iree_string_view_empty();
   loom_symbol_ref_t symbol_ref = loom_low_function_callee(function_op);
   if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
@@ -159,7 +157,6 @@ static iree_status_t loom_amdgpu_kernel_record_symbol_name(
 static iree_status_t loom_amdgpu_kernel_record_export_symbol(
     const loom_low_resolved_target_t* target, const loom_module_t* module,
     const loom_op_t* function_op, iree_string_view_t* out_symbol) {
-  IREE_ASSERT_ARGUMENT(out_symbol);
   if (!iree_string_view_is_empty(
           target->bundle_storage.export_plan.export_symbol)) {
     *out_symbol = target->bundle_storage.export_plan.export_symbol;
@@ -237,7 +234,6 @@ static iree_status_t loom_amdgpu_kernel_record_validate_function_shape(
 static iree_status_t loom_amdgpu_kernel_record_collect_segment_usage(
     const loom_module_t* module, const loom_op_t* function_op,
     loom_amdgpu_storage_layout_segment_sizes_t* out_usage) {
-  IREE_ASSERT_ARGUMENT(out_usage);
   *out_usage = (loom_amdgpu_storage_layout_segment_sizes_t){0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_storage_layout_collect_segment_sizes(
       module, function_op, out_usage));
@@ -293,7 +289,6 @@ static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
     const loom_low_allocation_table_t* allocation, uint32_t system_sgpr_base,
     bool target_has_packed_workitem_id,
     loom_amdgpu_kernel_descriptor_flags_t* out_flags) {
-  IREE_ASSERT_ARGUMENT(out_flags);
   *out_flags = 0;
   static const loom_amdgpu_kernel_record_workgroup_id_t workgroup_ids[] = {
       {
@@ -503,7 +498,6 @@ static iree_status_t loom_amdgpu_kernel_record_build_metadata_arguments(
     const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout,
     const loom_amdgpu_metadata_argument_t** out_arguments,
     iree_arena_allocator_t* arena) {
-  IREE_ASSERT_ARGUMENT(out_arguments);
   *out_arguments = NULL;
   if (abi_layout->resource_count == 0) {
     return iree_ok_status();
@@ -534,7 +528,6 @@ iree_status_t loom_amdgpu_kernel_record_build(
     const loom_amdgpu_kernel_record_options_t* options,
     loom_amdgpu_kernel_record_t* out_record,
     iree_arena_allocator_t* scratch_arena) {
-  IREE_ASSERT_ARGUMENT(out_record);
   *out_record = (loom_amdgpu_kernel_record_t){0};
   if (scratch_arena == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

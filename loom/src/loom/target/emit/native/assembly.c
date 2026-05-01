@@ -24,7 +24,6 @@ iree_string_view_t loom_native_assembly_module_string(
 iree_status_t loom_native_assembly_descriptor_string(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_bstring_table_offset_t string_offset, iree_string_view_t* out_string) {
-  IREE_ASSERT_ARGUMENT(out_string);
   *out_string = loom_low_descriptor_set_string(descriptor_set, string_offset);
   if (iree_string_view_is_empty(*out_string)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -50,7 +49,6 @@ iree_status_t loom_native_assembly_read_i64_attr(const loom_module_t* module,
                                                  loom_named_attr_slice_t attrs,
                                                  iree_string_view_t name,
                                                  int64_t* out_value) {
-  IREE_ASSERT_ARGUMENT(out_value);
   const loom_named_attr_t* attr =
       loom_native_assembly_find_attr(module, attrs, name);
   if (attr == NULL) {
@@ -205,7 +203,6 @@ iree_status_t loom_native_assembly_format_fragment(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "native assembly output builder is required");
   }
-  IREE_ASSERT_ARGUMENT(scratch_arena);
   IREE_RETURN_IF_ERROR(
       loom_native_fragment_validate_emission_inputs(schedule, allocation));
 

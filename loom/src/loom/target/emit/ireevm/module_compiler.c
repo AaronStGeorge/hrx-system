@@ -102,7 +102,6 @@ static iree_string_view_t loom_ireevm_module_compile_export_name(
 static iree_status_t loom_ireevm_module_compile_symbol_name(
     const loom_module_t* module, loom_symbol_ref_t symbol_ref,
     iree_string_view_t* out_name) {
-  IREE_ASSERT_ARGUMENT(out_name);
   *out_name = iree_string_view_empty();
   if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
       symbol_ref.symbol_id >= module->symbols.count) {
@@ -182,7 +181,6 @@ static iree_status_t loom_ireevm_module_compile_lower_function(
 iree_status_t loom_ireevm_compile_module_archive(
     loom_module_t* module, const loom_ireevm_module_compile_options_t* options,
     iree_allocator_t allocator, loom_ireevm_module_archive_t* out_archive) {
-  IREE_ASSERT_ARGUMENT(out_archive);
   *out_archive = (loom_ireevm_module_archive_t){0};
   loom_target_compile_report_t* report = options ? options->report : NULL;
   if (report != NULL) {

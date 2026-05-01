@@ -8,8 +8,6 @@
 
 iree_status_t loom_llvmir_declare_x86_rdtsc(
     loom_llvmir_module_t* module, loom_llvmir_function_t** out_function) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_function);
   loom_llvmir_type_id_t i64_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_module_get_integer_type(module, 64, &i64_type));
@@ -28,8 +26,6 @@ iree_status_t loom_llvmir_declare_x86_rdtsc(
 
 iree_status_t loom_llvmir_declare_x86_sse2_pause(
     loom_llvmir_module_t* module, loom_llvmir_function_t** out_function) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_function);
   loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_llvmir_module_get_void_type(module, &void_type));
   return loom_llvmir_module_add_function(

@@ -151,8 +151,6 @@ static iree_status_t loom_llvmir_module_check_global_linkage(
 static iree_status_t loom_llvmir_module_get_type(
     loom_llvmir_module_t* module, const loom_llvmir_type_t* type,
     loom_llvmir_type_id_t* out_type_id) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_type_id);
   for (iree_host_size_t i = 0; i < module->type_count; ++i) {
     if (loom_llvmir_type_equal(&module->types[i], type)) {
       *out_type_id = (loom_llvmir_type_id_t)i;
@@ -171,7 +169,6 @@ static iree_status_t loom_llvmir_module_get_type(
 iree_status_t loom_llvmir_module_allocate(
     const loom_llvmir_target_config_t* target_config,
     iree_allocator_t allocator, loom_llvmir_module_t** out_module) {
-  IREE_ASSERT_ARGUMENT(out_module);
   *out_module = NULL;
 
   loom_llvmir_module_t* module = NULL;
@@ -303,7 +300,6 @@ iree_status_t loom_llvmir_module_add_integer_vector_constant(
     loom_llvmir_module_t* module, loom_llvmir_type_id_t vector_type_id,
     const uint64_t* values, iree_host_size_t value_count,
     loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(module);
   if (vector_type_id >= module->type_count) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -375,8 +371,6 @@ iree_status_t loom_llvmir_module_add_poison_constant(
 iree_status_t loom_llvmir_module_add_attr_group(
     loom_llvmir_module_t* module, const loom_llvmir_attr_t* attrs,
     iree_host_size_t attr_count, loom_llvmir_attr_group_id_t* out_group_id) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_group_id);
   if (attr_count > 0 && attrs == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "non-empty LLVM attr group has null storage");
@@ -396,9 +390,6 @@ iree_status_t loom_llvmir_module_add_metadata_i32_tuple(
     loom_llvmir_module_t* module,
     const loom_llvmir_metadata_i32_tuple_t* metadata,
     loom_llvmir_metadata_id_t* out_metadata_id) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(metadata);
-  IREE_ASSERT_ARGUMENT(out_metadata_id);
   if (metadata->value_count > 0 && metadata->values == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "LLVM metadata tuple has null value storage");
@@ -435,9 +426,6 @@ iree_status_t loom_llvmir_module_add_metadata_i32_tuple(
 iree_status_t loom_llvmir_module_add_global(
     loom_llvmir_module_t* module, const loom_llvmir_global_desc_t* desc,
     loom_llvmir_global_t** out_global) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(desc);
-  IREE_ASSERT_ARGUMENT(out_global);
   *out_global = NULL;
   if (iree_string_view_is_empty(desc->name)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -516,9 +504,6 @@ loom_llvmir_value_id_t loom_llvmir_global_value_id(
 iree_status_t loom_llvmir_module_add_function(
     loom_llvmir_module_t* module, const loom_llvmir_function_desc_t* desc,
     loom_llvmir_function_t** out_function) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(desc);
-  IREE_ASSERT_ARGUMENT(out_function);
   *out_function = NULL;
   if (iree_string_view_is_empty(desc->name)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -576,9 +561,6 @@ loom_llvmir_module_t* loom_llvmir_function_module(
 iree_status_t loom_llvmir_function_add_parameter(
     loom_llvmir_function_t* function, const loom_llvmir_parameter_desc_t* desc,
     loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(function);
-  IREE_ASSERT_ARGUMENT(desc);
-  IREE_ASSERT_ARGUMENT(out_value_id);
   if (function->kind != LOOM_LLVMIR_FUNCTION_DEFINITION &&
       function->kind != LOOM_LLVMIR_FUNCTION_DECLARATION) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -616,8 +598,6 @@ iree_status_t loom_llvmir_function_add_parameter(
 iree_status_t loom_llvmir_function_add_metadata_attachment(
     loom_llvmir_function_t* function,
     const loom_llvmir_metadata_attachment_t* attachment) {
-  IREE_ASSERT_ARGUMENT(function);
-  IREE_ASSERT_ARGUMENT(attachment);
   if (iree_string_view_is_empty(attachment->name)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "LLVM metadata attachment name must not be empty");
@@ -640,8 +620,6 @@ iree_status_t loom_llvmir_function_add_metadata_attachment(
 iree_status_t loom_llvmir_function_add_block(loom_llvmir_function_t* function,
                                              iree_string_view_t name,
                                              loom_llvmir_block_t** out_block) {
-  IREE_ASSERT_ARGUMENT(function);
-  IREE_ASSERT_ARGUMENT(out_block);
   *out_block = NULL;
   if (function->kind != LOOM_LLVMIR_FUNCTION_DEFINITION) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

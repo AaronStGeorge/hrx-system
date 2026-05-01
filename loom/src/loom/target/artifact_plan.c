@@ -195,11 +195,6 @@ iree_status_t loom_target_artifact_plan_build(
     const loom_module_t* module, loom_symbol_ref_t artifact_symbol,
     loom_symbol_fact_table_t* fact_table, const loom_call_graph_t* call_graph,
     iree_arena_allocator_t* arena, loom_target_artifact_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(fact_table);
-  IREE_ASSERT_ARGUMENT(call_graph);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_plan);
   memset(out_plan, 0, sizeof(*out_plan));
   if (call_graph->module != module) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,

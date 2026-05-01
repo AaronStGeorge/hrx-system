@@ -195,9 +195,6 @@ static iree_status_t loom_llvmir_define_instruction_value(
 iree_status_t loom_llvmir_build_phi(loom_llvmir_block_t* block,
                                     const loom_llvmir_phi_desc_t* desc,
                                     loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(block);
-  IREE_ASSERT_ARGUMENT(desc);
-  IREE_ASSERT_ARGUMENT(out_value_id);
   loom_llvmir_module_t* module = block->function->module;
   if (desc->incoming_count > 0 && desc->incoming == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -231,7 +228,6 @@ iree_status_t loom_llvmir_set_phi_incoming(
     loom_llvmir_block_t* block, loom_llvmir_value_id_t phi_value_id,
     const loom_llvmir_phi_incoming_t* incoming,
     iree_host_size_t incoming_count) {
-  IREE_ASSERT_ARGUMENT(block);
   loom_llvmir_module_t* module = block->function->module;
   if (incoming_count > 0 && incoming == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -286,9 +282,6 @@ iree_status_t loom_llvmir_set_phi_incoming(
 iree_status_t loom_llvmir_build_binop(loom_llvmir_block_t* block,
                                       const loom_llvmir_binop_desc_t* desc,
                                       loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(block);
-  IREE_ASSERT_ARGUMENT(desc);
-  IREE_ASSERT_ARGUMENT(out_value_id);
   loom_llvmir_module_t* module = block->function->module;
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->lhs));
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->rhs));
@@ -313,9 +306,6 @@ iree_status_t loom_llvmir_build_binop(loom_llvmir_block_t* block,
 iree_status_t loom_llvmir_build_unop(loom_llvmir_block_t* block,
                                      const loom_llvmir_unop_desc_t* desc,
                                      loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(block);
-  IREE_ASSERT_ARGUMENT(desc);
-  IREE_ASSERT_ARGUMENT(out_value_id);
   loom_llvmir_module_t* module = block->function->module;
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->value));
   loom_llvmir_instruction_t instruction = {
@@ -337,9 +327,6 @@ iree_status_t loom_llvmir_build_unop(loom_llvmir_block_t* block,
 iree_status_t loom_llvmir_build_icmp(loom_llvmir_block_t* block,
                                      const loom_llvmir_icmp_desc_t* desc,
                                      loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(block);
-  IREE_ASSERT_ARGUMENT(desc);
-  IREE_ASSERT_ARGUMENT(out_value_id);
   loom_llvmir_module_t* module = block->function->module;
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->lhs));
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->rhs));
@@ -362,9 +349,6 @@ iree_status_t loom_llvmir_build_icmp(loom_llvmir_block_t* block,
 iree_status_t loom_llvmir_build_fcmp(loom_llvmir_block_t* block,
                                      const loom_llvmir_fcmp_desc_t* desc,
                                      loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(block);
-  IREE_ASSERT_ARGUMENT(desc);
-  IREE_ASSERT_ARGUMENT(out_value_id);
   loom_llvmir_module_t* module = block->function->module;
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->lhs));
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->rhs));
@@ -387,9 +371,6 @@ iree_status_t loom_llvmir_build_fcmp(loom_llvmir_block_t* block,
 iree_status_t loom_llvmir_build_cast(loom_llvmir_block_t* block,
                                      const loom_llvmir_cast_desc_t* desc,
                                      loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(block);
-  IREE_ASSERT_ARGUMENT(desc);
-  IREE_ASSERT_ARGUMENT(out_value_id);
   loom_llvmir_module_t* module = block->function->module;
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->value));
   loom_llvmir_instruction_t instruction = {
@@ -410,9 +391,6 @@ iree_status_t loom_llvmir_build_cast(loom_llvmir_block_t* block,
 iree_status_t loom_llvmir_build_gep(loom_llvmir_block_t* block,
                                     const loom_llvmir_gep_desc_t* desc,
                                     loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(block);
-  IREE_ASSERT_ARGUMENT(desc);
-  IREE_ASSERT_ARGUMENT(out_value_id);
   loom_llvmir_module_t* module = block->function->module;
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->base));
   if (desc->index_count == 0) {
@@ -452,9 +430,6 @@ iree_status_t loom_llvmir_build_gep(loom_llvmir_block_t* block,
 iree_status_t loom_llvmir_build_alloca(loom_llvmir_block_t* block,
                                        const loom_llvmir_alloca_desc_t* desc,
                                        loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(block);
-  IREE_ASSERT_ARGUMENT(desc);
-  IREE_ASSERT_ARGUMENT(out_value_id);
   loom_llvmir_module_t* module = block->function->module;
   if (desc->element_type >= module->type_count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -494,9 +469,6 @@ iree_status_t loom_llvmir_build_alloca(loom_llvmir_block_t* block,
 iree_status_t loom_llvmir_build_load(loom_llvmir_block_t* block,
                                      const loom_llvmir_load_desc_t* desc,
                                      loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(block);
-  IREE_ASSERT_ARGUMENT(desc);
-  IREE_ASSERT_ARGUMENT(out_value_id);
   loom_llvmir_module_t* module = block->function->module;
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->pointer));
   loom_llvmir_instruction_t instruction = {
@@ -522,8 +494,6 @@ iree_status_t loom_llvmir_build_load(loom_llvmir_block_t* block,
 
 iree_status_t loom_llvmir_build_store(loom_llvmir_block_t* block,
                                       const loom_llvmir_store_desc_t* desc) {
-  IREE_ASSERT_ARGUMENT(block);
-  IREE_ASSERT_ARGUMENT(desc);
   loom_llvmir_module_t* module = block->function->module;
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->value));
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->pointer));
@@ -548,8 +518,6 @@ iree_status_t loom_llvmir_build_store(loom_llvmir_block_t* block,
 iree_status_t loom_llvmir_build_call(loom_llvmir_block_t* block,
                                      const loom_llvmir_call_desc_t* desc,
                                      loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(block);
-  IREE_ASSERT_ARGUMENT(desc);
   loom_llvmir_module_t* module = block->function->module;
   loom_llvmir_function_t* callee = desc->callee < module->function_count
                                        ? module->functions[desc->callee]
@@ -608,8 +576,6 @@ iree_status_t loom_llvmir_build_call(loom_llvmir_block_t* block,
 iree_status_t loom_llvmir_build_inline_asm(
     loom_llvmir_block_t* block, const loom_llvmir_inline_asm_desc_t* desc,
     loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(block);
-  IREE_ASSERT_ARGUMENT(desc);
   loom_llvmir_module_t* module = block->function->module;
   if (iree_string_view_is_empty(desc->asm_template)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -666,9 +632,6 @@ iree_status_t loom_llvmir_build_inline_asm(
 iree_status_t loom_llvmir_build_select(loom_llvmir_block_t* block,
                                        const loom_llvmir_select_desc_t* desc,
                                        loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(block);
-  IREE_ASSERT_ARGUMENT(desc);
-  IREE_ASSERT_ARGUMENT(out_value_id);
   loom_llvmir_module_t* module = block->function->module;
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->condition));
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->true_value));
@@ -692,9 +655,6 @@ iree_status_t loom_llvmir_build_select(loom_llvmir_block_t* block,
 iree_status_t loom_llvmir_build_extract_element(
     loom_llvmir_block_t* block, const loom_llvmir_extract_element_desc_t* desc,
     loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(block);
-  IREE_ASSERT_ARGUMENT(desc);
-  IREE_ASSERT_ARGUMENT(out_value_id);
   loom_llvmir_module_t* module = block->function->module;
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->vector));
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->index));
@@ -716,9 +676,6 @@ iree_status_t loom_llvmir_build_extract_element(
 iree_status_t loom_llvmir_build_insert_element(
     loom_llvmir_block_t* block, const loom_llvmir_insert_element_desc_t* desc,
     loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(block);
-  IREE_ASSERT_ARGUMENT(desc);
-  IREE_ASSERT_ARGUMENT(out_value_id);
   loom_llvmir_module_t* module = block->function->module;
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->vector));
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->element));
@@ -742,9 +699,6 @@ iree_status_t loom_llvmir_build_insert_element(
 iree_status_t loom_llvmir_build_shuffle_vector(
     loom_llvmir_block_t* block, const loom_llvmir_shuffle_vector_desc_t* desc,
     loom_llvmir_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(block);
-  IREE_ASSERT_ARGUMENT(desc);
-  IREE_ASSERT_ARGUMENT(out_value_id);
   loom_llvmir_module_t* module = block->function->module;
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->lhs));
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->rhs));
@@ -766,7 +720,6 @@ iree_status_t loom_llvmir_build_shuffle_vector(
 }
 
 iree_status_t loom_llvmir_build_ret_void(loom_llvmir_block_t* block) {
-  IREE_ASSERT_ARGUMENT(block);
   loom_llvmir_instruction_t instruction = {
       .kind = LOOM_LLVMIR_INST_RET,
       .result_value_id = LOOM_LLVMIR_VALUE_ID_INVALID,
@@ -777,7 +730,6 @@ iree_status_t loom_llvmir_build_ret_void(loom_llvmir_block_t* block) {
 
 iree_status_t loom_llvmir_build_ret(loom_llvmir_block_t* block,
                                     loom_llvmir_value_id_t value) {
-  IREE_ASSERT_ARGUMENT(block);
   IREE_RETURN_IF_ERROR(loom_llvmir_check_value(block->function->module, value));
   loom_llvmir_instruction_t instruction = {
       .kind = LOOM_LLVMIR_INST_RET,
@@ -789,7 +741,6 @@ iree_status_t loom_llvmir_build_ret(loom_llvmir_block_t* block,
 
 iree_status_t loom_llvmir_build_br(loom_llvmir_block_t* block,
                                    loom_llvmir_block_id_t target) {
-  IREE_ASSERT_ARGUMENT(block);
   IREE_RETURN_IF_ERROR(loom_llvmir_check_block(block->function, target));
   loom_llvmir_instruction_t instruction = {
       .kind = LOOM_LLVMIR_INST_BR,
@@ -803,7 +754,6 @@ iree_status_t loom_llvmir_build_cond_br(loom_llvmir_block_t* block,
                                         loom_llvmir_value_id_t condition,
                                         loom_llvmir_block_id_t true_block,
                                         loom_llvmir_block_id_t false_block) {
-  IREE_ASSERT_ARGUMENT(block);
   IREE_RETURN_IF_ERROR(
       loom_llvmir_check_value(block->function->module, condition));
   IREE_RETURN_IF_ERROR(loom_llvmir_check_block(block->function, true_block));
@@ -822,7 +772,6 @@ iree_status_t loom_llvmir_build_cond_br(loom_llvmir_block_t* block,
 }
 
 iree_status_t loom_llvmir_build_unreachable(loom_llvmir_block_t* block) {
-  IREE_ASSERT_ARGUMENT(block);
   loom_llvmir_instruction_t instruction = {
       .kind = LOOM_LLVMIR_INST_UNREACHABLE,
       .result_value_id = LOOM_LLVMIR_VALUE_ID_INVALID,

@@ -9,8 +9,6 @@
 iree_status_t loom_target_preset_registry_lookup_bundle(
     const loom_target_preset_registry_t* registry, iree_string_view_t key,
     const loom_target_bundle_t** out_bundle) {
-  IREE_ASSERT_ARGUMENT(registry);
-  IREE_ASSERT_ARGUMENT(out_bundle);
   *out_bundle = NULL;
   key = iree_string_view_trim(key);
   if (iree_string_view_is_empty(key)) {

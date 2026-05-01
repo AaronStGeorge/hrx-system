@@ -75,7 +75,6 @@ typedef struct loom_amdgpu_module_compile_kernel_plan_t {
 static iree_status_t loom_amdgpu_module_compile_symbol_name(
     const loom_module_t* module, loom_symbol_ref_t symbol_ref,
     iree_string_view_t* out_name) {
-  IREE_ASSERT_ARGUMENT(out_name);
   *out_name = iree_string_view_empty();
   if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
       symbol_ref.symbol_id >= module->symbols.count) {
@@ -157,7 +156,6 @@ static iree_status_t loom_amdgpu_module_compile_apply_target_cpu(
 static iree_status_t loom_amdgpu_module_compile_read_stream_contents(
     iree_io_stream_t* stream, iree_allocator_t allocator,
     iree_const_byte_span_t* out_contents) {
-  IREE_ASSERT_ARGUMENT(out_contents);
   *out_contents = iree_const_byte_span_empty();
   const iree_io_stream_pos_t stream_length = iree_io_stream_length(stream);
   if (stream_length < 0 || (uint64_t)stream_length > IREE_HOST_SIZE_MAX) {
@@ -209,7 +207,6 @@ static iree_status_t loom_amdgpu_module_compile_write_hsaco(
     const loom_amdgpu_kernel_hsaco_contribution_t* contributions,
     iree_host_size_t contribution_count, iree_const_byte_span_t* out_hsaco,
     iree_arena_allocator_t* table_arena, iree_allocator_t allocator) {
-  IREE_ASSERT_ARGUMENT(out_hsaco);
   *out_hsaco = iree_const_byte_span_empty();
 
   iree_io_stream_t* stream = NULL;
@@ -306,8 +303,6 @@ static iree_status_t loom_amdgpu_module_compile_select_low_function(
     loom_pass_value_fact_owner_t* value_facts,
     loom_target_compile_report_t* report, loom_op_t** out_low_function_op,
     loom_low_memory_access_table_t* out_memory_access_table) {
-  IREE_ASSERT_ARGUMENT(out_low_function_op);
-  IREE_ASSERT_ARGUMENT(out_memory_access_table);
   *out_low_function_op = NULL;
   *out_memory_access_table = loom_low_memory_access_table_empty();
 
@@ -341,7 +336,6 @@ static iree_status_t loom_amdgpu_module_compile_prepare_kernel_plan(
     loom_pass_value_fact_owner_t* value_facts,
     loom_target_compile_report_t* report,
     loom_amdgpu_module_compile_kernel_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_module_compile_kernel_plan_t){
       .entry = entry,
   };
@@ -401,8 +395,6 @@ static iree_status_t loom_amdgpu_module_compile_build_kernel_contribution(
     iree_arena_allocator_t* table_arena, loom_target_compile_report_t* report,
     loom_amdgpu_kernel_hsaco_contribution_t* out_contribution,
     loom_amdgpu_hal_executable_export_t* out_export) {
-  IREE_ASSERT_ARGUMENT(out_contribution);
-  IREE_ASSERT_ARGUMENT(out_export);
   *out_contribution = (loom_amdgpu_kernel_hsaco_contribution_t){0};
   *out_export = (loom_amdgpu_hal_executable_export_t){0};
 
@@ -558,7 +550,6 @@ static iree_status_t loom_amdgpu_module_compile_entries(
 iree_status_t loom_amdgpu_compile_hal_executable(
     loom_module_t* module, const loom_amdgpu_module_compile_options_t* options,
     iree_allocator_t allocator, loom_amdgpu_hal_executable_t* out_executable) {
-  IREE_ASSERT_ARGUMENT(out_executable);
   *out_executable = (loom_amdgpu_hal_executable_t){0};
   loom_target_compile_report_t* report = options ? options->report : NULL;
   if (report != NULL) {

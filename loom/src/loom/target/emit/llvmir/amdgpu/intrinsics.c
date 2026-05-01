@@ -11,8 +11,6 @@
 static iree_status_t loom_llvmir_declare_amdgcn_workitem_id(
     loom_llvmir_module_t* module, iree_string_view_t name,
     loom_llvmir_function_t** out_function) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_function);
   loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_module_get_integer_type(module, 32, &i32_type));
@@ -48,8 +46,6 @@ iree_status_t loom_llvmir_declare_amdgcn_workitem_id_z(
 iree_status_t loom_llvmir_declare_amdgcn_make_buffer_rsrc(
     loom_llvmir_module_t* module, uint32_t result_address_space,
     uint32_t base_address_space, loom_llvmir_function_t** out_function) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_function);
   loom_llvmir_type_id_t result_ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t base_ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i16_type = LOOM_LLVMIR_TYPE_ID_INVALID;

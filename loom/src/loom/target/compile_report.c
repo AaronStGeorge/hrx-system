@@ -8,7 +8,6 @@
 
 void loom_target_compile_report_initialize(
     loom_target_compile_report_t* out_report) {
-  IREE_ASSERT_ARGUMENT(out_report);
   *out_report = (loom_target_compile_report_t){
       .status_code = IREE_STATUS_OK,
   };
@@ -17,7 +16,6 @@ void loom_target_compile_report_initialize(
 void loom_target_compile_report_set_row_storage(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_row_storage_t* row_storage) {
-  IREE_ASSERT_ARGUMENT(report);
   report->pressure_rows = row_storage ? row_storage->pressure_rows : NULL;
   report->pressure_row_capacity =
       report->pressure_rows != NULL ? row_storage->pressure_row_capacity : 0;
@@ -38,13 +36,11 @@ void loom_target_compile_report_set_row_storage(
 
 void loom_target_compile_report_record_status(
     loom_target_compile_report_t* report, iree_status_t status) {
-  IREE_ASSERT_ARGUMENT(report);
   report->status_code = iree_status_code(status);
 }
 
 void loom_target_compile_report_record_target_bundle(
     loom_target_compile_report_t* report, const loom_target_bundle_t* bundle) {
-  IREE_ASSERT_ARGUMENT(report);
   if (bundle == NULL) {
     return;
   }
@@ -62,7 +58,6 @@ void loom_target_compile_report_record_target_bundle(
 
 void loom_target_compile_report_record_artifact_size(
     loom_target_compile_report_t* report, uint64_t artifact_size) {
-  IREE_ASSERT_ARGUMENT(report);
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_ARTIFACT_SIZE;
   report->artifact_size = artifact_size;
 }
@@ -73,7 +68,6 @@ void loom_target_compile_report_record_schedule(
     uint64_t resource_use_count, uint64_t hazard_gap_count,
     uint64_t model_summary_count, uint64_t pressure_summary_count,
     uint64_t peak_live_units) {
-  IREE_ASSERT_ARGUMENT(report);
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE;
   report->schedule_node_count = node_count;
   report->scheduled_node_count = scheduled_node_count;
@@ -89,7 +83,6 @@ void loom_target_compile_report_record_allocation(
     loom_target_compile_report_t* report, uint64_t assignment_count,
     uint64_t spill_count, uint64_t spill_plan_count,
     uint64_t coalesced_copy_count, uint64_t materialized_copy_count) {
-  IREE_ASSERT_ARGUMENT(report);
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION;
   report->allocation_assignment_count = assignment_count;
   report->allocation_spill_count = spill_count;
@@ -102,7 +95,6 @@ void loom_target_compile_report_record_move_cause(
     loom_target_compile_report_t* report,
     loom_target_compile_report_move_cause_t cause, uint64_t packet_count,
     uint64_t unit_count) {
-  IREE_ASSERT_ARGUMENT(report);
   if (packet_count == 0 && unit_count == 0) {
     return;
   }
@@ -119,7 +111,6 @@ void loom_target_compile_report_record_move_cause(
 void loom_target_compile_report_record_emission(
     loom_target_compile_report_t* report, uint64_t instruction_count,
     uint64_t code_byte_count, uint64_t code_storage_byte_count) {
-  IREE_ASSERT_ARGUMENT(report);
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_EMISSION;
   report->emitted_instruction_count = instruction_count;
   report->emitted_code_byte_count = code_byte_count;
@@ -129,7 +120,6 @@ void loom_target_compile_report_record_emission(
 void loom_target_compile_report_record_memory(
     loom_target_compile_report_t* report, uint64_t private_memory_bytes,
     uint64_t local_memory_bytes) {
-  IREE_ASSERT_ARGUMENT(report);
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_MEMORY;
   report->private_memory_bytes = private_memory_bytes;
   report->local_memory_bytes = local_memory_bytes;
@@ -138,8 +128,6 @@ void loom_target_compile_report_record_memory(
 void loom_target_compile_report_record_pressure_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_pressure_row_t* row) {
-  IREE_ASSERT_ARGUMENT(report);
-  IREE_ASSERT_ARGUMENT(row);
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS;
   ++report->pressure_row_total_count;
   if (report->pressure_rows != NULL &&
@@ -151,8 +139,6 @@ void loom_target_compile_report_record_pressure_row(
 void loom_target_compile_report_record_spill_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_spill_row_t* row) {
-  IREE_ASSERT_ARGUMENT(report);
-  IREE_ASSERT_ARGUMENT(row);
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS;
   ++report->spill_row_total_count;
   if (report->spill_rows != NULL &&
@@ -164,8 +150,6 @@ void loom_target_compile_report_record_spill_row(
 void loom_target_compile_report_record_source_low_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_source_low_row_t* row) {
-  IREE_ASSERT_ARGUMENT(report);
-  IREE_ASSERT_ARGUMENT(row);
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
   ++report->source_low_row_total_count;
   if (report->source_low_rows != NULL &&

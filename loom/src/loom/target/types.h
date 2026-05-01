@@ -223,7 +223,6 @@ typedef struct loom_target_bundle_storage_t {
 // its pointers must refer to the same enclosing storage object.
 static inline void loom_target_bundle_storage_rebind(
     loom_target_bundle_storage_t* storage) {
-  IREE_ASSERT_ARGUMENT(storage);
   storage->bundle.snapshot = &storage->snapshot;
   storage->bundle.export_plan = &storage->export_plan;
   storage->bundle.config = &storage->config;

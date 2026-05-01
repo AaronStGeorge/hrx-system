@@ -10,19 +10,16 @@
 
 bool loom_target_workgroup_size_is_empty(
     const loom_target_workgroup_size_t* size) {
-  IREE_ASSERT_ARGUMENT(size);
   return size->x == 0 && size->y == 0 && size->z == 0;
 }
 
 bool loom_target_workgroup_size_is_concrete(
     const loom_target_workgroup_size_t* size) {
-  IREE_ASSERT_ARGUMENT(size);
   return size->x != 0 && size->y != 0 && size->z != 0;
 }
 
 bool loom_target_workgroup_size_is_partial(
     const loom_target_workgroup_size_t* size) {
-  IREE_ASSERT_ARGUMENT(size);
   return !loom_target_workgroup_size_is_empty(size) &&
          !loom_target_workgroup_size_is_concrete(size);
 }
@@ -53,7 +50,6 @@ static iree_status_t loom_target_validate_required_workgroup_size(
 
 static bool loom_target_mul_u64_overflows(uint64_t lhs, uint64_t rhs,
                                           uint64_t* out_result) {
-  IREE_ASSERT_ARGUMENT(out_result);
   if (lhs != 0 && rhs > UINT64_MAX / lhs) {
     *out_result = 0;
     return true;
@@ -64,8 +60,6 @@ static bool loom_target_mul_u64_overflows(uint64_t lhs, uint64_t rhs,
 
 static iree_status_t loom_target_workgroup_size_flat_product_checked(
     const loom_target_workgroup_size_t* size, uint64_t* out_flat_size) {
-  IREE_ASSERT_ARGUMENT(size);
-  IREE_ASSERT_ARGUMENT(out_flat_size);
   uint64_t flat_size = 1;
   const uint64_t factors[] = {
       size->x,
@@ -87,8 +81,6 @@ static iree_status_t loom_target_workgroup_size_flat_product_checked(
 iree_status_t loom_target_validate_hal_kernel_launch(
     const loom_target_snapshot_t* snapshot,
     const loom_target_hal_kernel_abi_t* hal_kernel) {
-  IREE_ASSERT_ARGUMENT(snapshot);
-  IREE_ASSERT_ARGUMENT(hal_kernel);
   const loom_target_workgroup_size_t* required =
       &hal_kernel->required_workgroup_size;
   if (loom_target_workgroup_size_is_partial(required)) {
@@ -148,7 +140,6 @@ iree_status_t loom_target_validate_hal_kernel_launch(
 iree_status_t loom_target_require_concrete_hal_kernel_launch(
     const loom_target_hal_kernel_abi_t* hal_kernel,
     iree_string_view_t consumer_name) {
-  IREE_ASSERT_ARGUMENT(hal_kernel);
   if (loom_target_workgroup_size_is_partial(
           &hal_kernel->required_workgroup_size)) {
     return iree_make_status(
@@ -166,7 +157,6 @@ iree_status_t loom_target_require_concrete_hal_kernel_launch(
 
 static bool loom_target_dispatch_workgroup_count_is_concrete(
     const loom_target_dispatch_workgroup_count_t* count) {
-  IREE_ASSERT_ARGUMENT(count);
   return count->x != 0 && count->y != 0 && count->z != 0;
 }
 
@@ -226,9 +216,6 @@ static iree_status_t loom_target_dispatch_flat_grid_size(
     const loom_target_workgroup_size_t* workgroup_size,
     const loom_target_dispatch_workgroup_count_t* workgroup_count,
     uint64_t* out_flat_grid_size) {
-  IREE_ASSERT_ARGUMENT(workgroup_size);
-  IREE_ASSERT_ARGUMENT(workgroup_count);
-  IREE_ASSERT_ARGUMENT(out_flat_grid_size);
   uint64_t flat_grid_size = 1;
   const uint64_t factors[] = {
       workgroup_size->x,  workgroup_count->x, workgroup_size->y,
@@ -250,9 +237,6 @@ iree_status_t loom_target_validate_hal_dispatch_workgroup_count(
     const loom_target_snapshot_t* snapshot,
     const loom_target_hal_kernel_abi_t* hal_kernel,
     const loom_target_dispatch_workgroup_count_t* workgroup_count) {
-  IREE_ASSERT_ARGUMENT(snapshot);
-  IREE_ASSERT_ARGUMENT(hal_kernel);
-  IREE_ASSERT_ARGUMENT(workgroup_count);
   if (!loom_target_dispatch_workgroup_count_is_concrete(workgroup_count)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,

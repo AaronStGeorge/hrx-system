@@ -45,7 +45,6 @@ extern char** environ;
 
 void loom_llvm_toolchain_initialize_from_environment(
     loom_llvm_toolchain_t* out_toolchain) {
-  IREE_ASSERT_ARGUMENT(out_toolchain);
   const char* root_path = getenv("LOOM_LLVM_TOOLCHAIN_ROOT");
   if (root_path == NULL || root_path[0] == '\0') {
     root_path = getenv("LOOM_LLVM_TOOLCHAIN_BIN");
@@ -849,7 +848,6 @@ iree_status_t loom_llvm_tool_run(const loom_llvm_toolchain_t* toolchain,
                                  iree_host_size_t argument_count,
                                  iree_allocator_t allocator,
                                  loom_llvm_tool_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(out_result);
   *out_result = (loom_llvm_tool_result_t){0};
   if (arguments == NULL && argument_count != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -893,7 +891,6 @@ static iree_status_t loom_llvm_tool_run_checked(
 iree_status_t loom_llvm_tool_query_version(
     const loom_llvm_toolchain_t* toolchain, loom_llvm_tool_kind_t tool_kind,
     iree_allocator_t allocator, loom_llvm_tool_output_t* out_version_text) {
-  IREE_ASSERT_ARGUMENT(out_version_text);
   *out_version_text = (loom_llvm_tool_output_t){0};
   iree_string_view_t arguments[] = {IREE_SV("--version")};
   loom_llvm_tool_result_t result = {0};
@@ -929,7 +926,6 @@ iree_status_t loom_llvm_tool_assemble_ir_text_file(
 iree_status_t loom_llvm_tool_disassemble_bitcode_file(
     const loom_llvm_toolchain_t* toolchain, iree_string_view_t input_path,
     iree_allocator_t allocator, loom_llvm_tool_output_t* out_text) {
-  IREE_ASSERT_ARGUMENT(out_text);
   *out_text = (loom_llvm_tool_output_t){0};
   iree_string_view_t arguments[] = {
       input_path,
@@ -957,7 +953,6 @@ iree_status_t loom_llvm_tool_disassemble_bitcode_file(
 iree_status_t loom_llvm_tool_disassemble_bitcode(
     const loom_llvm_toolchain_t* toolchain, iree_const_byte_span_t bitcode,
     iree_allocator_t allocator, loom_llvm_tool_output_t* out_text) {
-  IREE_ASSERT_ARGUMENT(out_text);
   *out_text = (loom_llvm_tool_output_t){0};
   if (bitcode.data == NULL && bitcode.data_length != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1070,7 +1065,6 @@ static iree_status_t loom_llvm_tool_run_bytes_to_file_output(
     iree_string_view_t action, const iree_string_view_t* extra_arguments,
     iree_host_size_t extra_argument_count, iree_allocator_t allocator,
     loom_llvm_tool_output_t* out_output) {
-  IREE_ASSERT_ARGUMENT(out_output);
   *out_output = (loom_llvm_tool_output_t){0};
   if (input_data.data == NULL && input_data.data_length != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1149,7 +1143,6 @@ static iree_status_t loom_llvm_tool_run_file_to_stdout(
     const iree_string_view_t* extra_arguments,
     iree_host_size_t extra_argument_count, iree_allocator_t allocator,
     loom_llvm_tool_output_t* out_text) {
-  IREE_ASSERT_ARGUMENT(out_text);
   *out_text = (loom_llvm_tool_output_t){0};
   if (extra_arguments == NULL && extra_argument_count != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1208,7 +1201,6 @@ iree_status_t loom_llvm_tool_disassemble_object(
     const iree_string_view_t* extra_arguments,
     iree_host_size_t extra_argument_count, iree_allocator_t allocator,
     loom_llvm_tool_output_t* out_text) {
-  IREE_ASSERT_ARGUMENT(out_text);
   *out_text = (loom_llvm_tool_output_t){0};
   if (object.data == NULL && object.data_length != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

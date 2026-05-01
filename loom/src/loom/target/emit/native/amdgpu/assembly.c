@@ -173,7 +173,6 @@ static iree_status_t loom_amdgpu_read_packet_i64_attr(
 static iree_status_t loom_amdgpu_read_packet_immediate_i64(
     const loom_native_assembly_packet_context_t* context,
     const loom_low_immediate_t* immediate, int64_t* out_value) {
-  IREE_ASSERT_ARGUMENT(out_value);
   const loom_low_descriptor_set_t* descriptor_set =
       context->schedule->target.descriptor_set;
   iree_string_view_t name = iree_string_view_empty();

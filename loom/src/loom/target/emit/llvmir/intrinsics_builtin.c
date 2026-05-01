@@ -36,8 +36,6 @@ iree_status_t loom_llvmir_declare_memcpy(
     loom_llvmir_module_t* module, uint32_t target_address_space,
     uint32_t source_address_space, uint32_t length_bit_width,
     loom_llvmir_function_t** out_function) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_function);
   loom_llvmir_type_id_t target_ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t source_ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t length_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -109,8 +107,6 @@ iree_status_t loom_llvmir_declare_memcpy(
 iree_status_t loom_llvmir_declare_memset(
     loom_llvmir_module_t* module, uint32_t target_address_space,
     uint32_t length_bit_width, loom_llvmir_function_t** out_function) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_function);
   loom_llvmir_type_id_t target_ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i8_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t length_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -171,8 +167,6 @@ iree_status_t loom_llvmir_declare_memset(
 iree_status_t loom_llvmir_declare_prefetch(
     loom_llvmir_module_t* module, uint32_t pointer_address_space,
     loom_llvmir_function_t** out_function) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_function);
   loom_llvmir_type_id_t pointer_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_llvmir_module_get_pointer_type(
@@ -270,8 +264,6 @@ static iree_status_t loom_llvmir_declare_lifetime_marker(
 iree_status_t loom_llvmir_declare_lifetime_start(
     loom_llvmir_module_t* module, uint32_t pointer_address_space,
     loom_llvmir_function_t** out_function) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_function);
   return loom_llvmir_declare_lifetime_marker(
       module, IREE_SV("start"), pointer_address_space, out_function);
 }
@@ -279,8 +271,6 @@ iree_status_t loom_llvmir_declare_lifetime_start(
 iree_status_t loom_llvmir_declare_lifetime_end(
     loom_llvmir_module_t* module, uint32_t pointer_address_space,
     loom_llvmir_function_t** out_function) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_function);
   return loom_llvmir_declare_lifetime_marker(
       module, IREE_SV("end"), pointer_address_space, out_function);
 }

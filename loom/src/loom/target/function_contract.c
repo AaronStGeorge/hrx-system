@@ -77,10 +77,6 @@ iree_status_t loom_target_function_contract_resolve(
     const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
     const loom_func_symbol_facts_t* func_facts,
     loom_target_bundle_storage_t* out_bundle_storage) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(fact_table);
-  IREE_ASSERT_ARGUMENT(func_facts);
-  IREE_ASSERT_ARGUMENT(out_bundle_storage);
   memset(out_bundle_storage, 0, sizeof(*out_bundle_storage));
 
   const loom_target_profile_symbol_facts_t* target_profile = NULL;

@@ -78,9 +78,6 @@ static iree_status_t loom_amdgpu_hal_executable_build_flatbuffer(
     const loom_amdgpu_hal_executable_export_t* exports,
     iree_host_size_t export_count, iree_allocator_t allocator,
     uint8_t** out_flatbuffer_data, iree_host_size_t* out_flatbuffer_length) {
-  IREE_ASSERT_ARGUMENT(builder);
-  IREE_ASSERT_ARGUMENT(out_flatbuffer_data);
-  IREE_ASSERT_ARGUMENT(out_flatbuffer_length);
   *out_flatbuffer_data = NULL;
   *out_flatbuffer_length = 0;
 
@@ -226,7 +223,6 @@ iree_status_t loom_amdgpu_emit_hal_executable(
     const loom_amdgpu_hal_executable_export_t* exports,
     iree_host_size_t export_count, iree_allocator_t allocator,
     loom_amdgpu_hal_executable_t* out_executable) {
-  IREE_ASSERT_ARGUMENT(out_executable);
   *out_executable = (loom_amdgpu_hal_executable_t){0};
 
   iree_status_t status =

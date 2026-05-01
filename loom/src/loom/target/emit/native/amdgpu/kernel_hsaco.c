@@ -18,7 +18,6 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
     const loom_amdgpu_kernel_hsaco_options_t* options,
     loom_amdgpu_kernel_hsaco_contribution_t* out_contribution,
     iree_arena_allocator_t* scratch_arena) {
-  IREE_ASSERT_ARGUMENT(out_contribution);
   *out_contribution = (loom_amdgpu_kernel_hsaco_contribution_t){0};
   if (options != NULL && options->summary != NULL) {
     *options->summary = (loom_amdgpu_kernel_hsaco_summary_t){0};

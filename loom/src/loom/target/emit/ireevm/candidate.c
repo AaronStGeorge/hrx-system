@@ -11,8 +11,6 @@
 static void loom_ireevm_run_candidate_publish_compile_report(
     const loom_run_candidate_compile_options_t* options,
     const loom_ireevm_run_candidate_t* candidate) {
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(candidate);
   if (options->report == NULL) {
     return;
   }
@@ -23,9 +21,6 @@ iree_status_t loom_ireevm_run_candidate_compile(
     loom_run_module_t* run_module,
     const loom_run_candidate_compile_options_t* options,
     iree_allocator_t allocator, loom_ireevm_run_candidate_t* out_candidate) {
-  IREE_ASSERT_ARGUMENT(run_module && run_module->module);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(out_candidate);
   *out_candidate = (loom_ireevm_run_candidate_t){
       .host_allocator = allocator,
   };

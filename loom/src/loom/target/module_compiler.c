@@ -49,7 +49,6 @@ void loom_target_module_compile_diagnostic_emitter_initialize(
     const loom_module_t* module,
     const loom_target_module_compile_options_t* options, loom_emitter_t emitter,
     loom_target_module_compile_diagnostic_emitter_t* out_emitter) {
-  IREE_ASSERT_ARGUMENT(out_emitter);
   *out_emitter = (loom_target_module_compile_diagnostic_emitter_t){
       .module = module,
       .source_resolver =
@@ -202,7 +201,6 @@ iree_status_t loom_target_module_compile_verify_low_module(
 iree_status_t loom_target_module_compile_find_symbol_by_name(
     const loom_module_t* module, iree_string_view_t symbol_name,
     uint16_t* out_symbol_id) {
-  IREE_ASSERT_ARGUMENT(out_symbol_id);
   *out_symbol_id = LOOM_SYMBOL_ID_INVALID;
   const loom_string_id_t symbol_name_id =
       loom_module_lookup_string(module, symbol_name);
@@ -385,10 +383,6 @@ iree_status_t loom_target_module_compile_select_entry(
     loom_target_module_compile_entry_predicate_t predicate,
     iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
     loom_target_module_compile_entry_t* out_entry) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(predicate.fn);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_entry);
   *out_entry = (loom_target_module_compile_entry_t){0};
 
   loom_symbol_fact_table_t fact_table = {0};
@@ -411,10 +405,6 @@ iree_status_t loom_target_module_compile_select_artifact_entries(
     loom_target_module_compile_entry_predicate_t predicate,
     iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
     loom_target_module_compile_entry_list_t* out_entries) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(predicate.fn);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_entries);
   *out_entries = (loom_target_module_compile_entry_list_t){0};
 
   artifact_symbol =

@@ -28,7 +28,6 @@ static iree_status_t loom_native_object_validate_symbol_name(
 
 static bool loom_native_object_checked_add_uint64(uint64_t lhs, uint64_t rhs,
                                                   uint64_t* out_result) {
-  IREE_ASSERT_ARGUMENT(out_result);
   *out_result = lhs + rhs;
   return *out_result >= lhs;
 }
@@ -86,7 +85,6 @@ iree_status_t loom_native_object_resolve_symbol_layouts(
   if (symbol_count == 0) {
     return iree_ok_status();
   }
-  IREE_ASSERT_ARGUMENT(out_symbol_layouts);
   if (symbols == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "native object symbols are required");
@@ -153,7 +151,6 @@ iree_status_t loom_native_object_resolve_fixup_layouts(
   if (fixup_count == 0) {
     return iree_ok_status();
   }
-  IREE_ASSERT_ARGUMENT(out_fixup_layouts);
   if (fixups == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "native object fixups are required");

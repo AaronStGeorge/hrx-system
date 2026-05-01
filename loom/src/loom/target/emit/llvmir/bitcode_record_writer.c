@@ -13,8 +13,6 @@
 void loom_llvmir_bitcode_record_writer_initialize(
     loom_llvmir_bitstream_writer_t* bitstream,
     loom_llvmir_bitcode_record_writer_t* out_writer) {
-  IREE_ASSERT_ARGUMENT(bitstream);
-  IREE_ASSERT_ARGUMENT(out_writer);
   memset(out_writer, 0, sizeof(*out_writer));
   out_writer->bitstream = bitstream;
   out_writer->abbrev_width = 2;
@@ -23,7 +21,6 @@ void loom_llvmir_bitcode_record_writer_initialize(
 iree_status_t loom_llvmir_bitcode_record_writer_enter_subblock(
     loom_llvmir_bitcode_record_writer_t* writer, uint32_t block_id,
     uint32_t child_abbrev_width) {
-  IREE_ASSERT_ARGUMENT(writer);
   if (child_abbrev_width == 0 || child_abbrev_width > 32) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "LLVM bitcode child abbrev width is invalid");
@@ -62,7 +59,6 @@ iree_status_t loom_llvmir_bitcode_record_writer_enter_subblock(
 
 iree_status_t loom_llvmir_bitcode_record_writer_exit_block(
     loom_llvmir_bitcode_record_writer_t* writer) {
-  IREE_ASSERT_ARGUMENT(writer);
   if (writer->block_depth == 0) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "LLVM bitcode block stack is empty");
@@ -100,7 +96,6 @@ iree_status_t loom_llvmir_bitcode_record_writer_exit_block(
 iree_status_t loom_llvmir_bitcode_record_writer_write_unabbrev_record(
     loom_llvmir_bitcode_record_writer_t* writer, uint64_t code,
     const uint64_t* operands, iree_host_size_t operand_count) {
-  IREE_ASSERT_ARGUMENT(writer);
   if (operand_count != 0 && operands == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "non-empty LLVM bitcode operand list is null");
@@ -124,8 +119,6 @@ iree_status_t loom_llvmir_bitcode_record_writer_write_unabbrev_record(
 iree_status_t loom_llvmir_bitcode_record_writer_define_blob_abbrev(
     loom_llvmir_bitcode_record_writer_t* writer, uint64_t code,
     uint32_t* out_abbrev_id) {
-  IREE_ASSERT_ARGUMENT(writer);
-  IREE_ASSERT_ARGUMENT(out_abbrev_id);
   uint32_t abbrev_id = LOOM_LLVMIR_BITCODE_ABBREV_FIRST_APPLICATION +
                        writer->application_abbrev_count;
   if (writer->abbrev_width < 32 && (abbrev_id >> writer->abbrev_width) != 0) {
@@ -156,7 +149,6 @@ iree_status_t loom_llvmir_bitcode_record_writer_define_blob_abbrev(
 iree_status_t loom_llvmir_bitcode_record_writer_write_blob_record(
     loom_llvmir_bitcode_record_writer_t* writer, uint32_t abbrev_id,
     iree_string_view_t value) {
-  IREE_ASSERT_ARGUMENT(writer);
   if (value.size != 0 && value.data == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "non-empty LLVM bitcode blob is null");
@@ -182,7 +174,6 @@ iree_status_t loom_llvmir_bitcode_record_writer_write_blob_record(
 iree_status_t loom_llvmir_bitcode_record_writer_write_string_record(
     loom_llvmir_bitcode_record_writer_t* writer, uint64_t code,
     iree_string_view_t value) {
-  IREE_ASSERT_ARGUMENT(writer);
   if (value.size != 0 && value.data == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "non-empty LLVM bitcode string is null");

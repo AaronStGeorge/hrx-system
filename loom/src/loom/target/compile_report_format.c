@@ -13,7 +13,6 @@
 
 void loom_target_compile_report_format_options_initialize(
     loom_target_compile_report_format_options_t* out_options) {
-  IREE_ASSERT_ARGUMENT(out_options);
   *out_options = (loom_target_compile_report_format_options_t){
       .mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE,
   };
@@ -22,7 +21,6 @@ void loom_target_compile_report_format_options_initialize(
 iree_status_t loom_target_compile_report_format_mode_parse(
     iree_string_view_t value,
     loom_target_compile_report_format_mode_t* out_mode) {
-  IREE_ASSERT_ARGUMENT(out_mode);
   if (iree_string_view_is_empty(value) ||
       iree_string_view_equal(value, IREE_SV("none"))) {
     *out_mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE;
@@ -439,9 +437,6 @@ iree_status_t loom_target_compile_report_format_text(
     const loom_target_compile_report_t* report,
     const loom_target_compile_report_format_options_t* options,
     iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(report);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(builder);
   if (options->mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE) {
     return iree_ok_status();
   }

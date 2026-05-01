@@ -167,7 +167,6 @@ static bool loom_llvmir_loom_check_emit_provider_matches(
 static iree_status_t loom_llvmir_loom_check_parse_emit_format(
     iree_string_view_t target_name,
     loom_llvmir_loom_check_emit_format_t* out_format) {
-  IREE_ASSERT_ARGUMENT(out_format);
   if (iree_string_view_equal(target_name, IREE_SV("llvmir")) ||
       iree_string_view_equal(target_name, IREE_SV("llvmir-text"))) {
     *out_format = LOOM_LLVMIR_LOOM_CHECK_EMIT_TEXT;

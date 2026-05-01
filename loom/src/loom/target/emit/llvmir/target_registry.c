@@ -16,7 +16,6 @@
 
 void loom_llvmir_target_registry_initialize(
     loom_llvmir_target_registry_t* out_registry) {
-  IREE_ASSERT_ARGUMENT(out_registry);
   *out_registry = (loom_llvmir_target_registry_t){0};
   out_registry->profile_providers[0] =
       loom_llvmir_x86_target_profile_provider();

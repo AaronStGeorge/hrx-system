@@ -3686,8 +3686,6 @@ static iree_status_t loom_llvmir_bitcode_write_strtab_block(
 
 iree_status_t loom_llvmir_bitcode_write_module(
     const loom_llvmir_module_t* module, iree_io_stream_t* stream) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(stream);
   IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_check_module(module));
 
   char* string_table_storage = NULL;

@@ -19,14 +19,12 @@ typedef struct loom_native_section_accumulator_t {
 static bool loom_native_contribution_checked_add_uint64(uint64_t lhs,
                                                         uint64_t rhs,
                                                         uint64_t* out_result) {
-  IREE_ASSERT_ARGUMENT(out_result);
   *out_result = lhs + rhs;
   return *out_result >= lhs;
 }
 
 static bool loom_native_contribution_checked_align_uint64(
     uint64_t value, uint64_t alignment, uint64_t* out_result) {
-  IREE_ASSERT_ARGUMENT(out_result);
   if (!loom_native_contribution_checked_add_uint64(value, alignment - 1u,
                                                    out_result)) {
     return false;
@@ -100,8 +98,6 @@ static iree_status_t loom_native_contribution_find_or_add_section(
     iree_host_size_t* inout_section_count,
     const loom_native_section_contribution_t* contribution,
     iree_host_size_t contribution_index, iree_host_size_t* out_section_index) {
-  IREE_ASSERT_ARGUMENT(inout_section_count);
-  IREE_ASSERT_ARGUMENT(out_section_index);
   *out_section_index = 0;
   for (iree_host_size_t i = 0; i < *inout_section_count; ++i) {
     loom_native_section_accumulator_t* accumulator = &accumulators[i];
@@ -152,7 +148,6 @@ static iree_status_t loom_native_contribution_plan_layout(
     loom_native_section_accumulator_t* accumulators,
     iree_host_size_t* out_section_count,
     loom_native_section_contribution_layout_t* contribution_layouts) {
-  IREE_ASSERT_ARGUMENT(out_section_count);
   *out_section_count = 0;
   for (iree_host_size_t i = 0; i < contribution_count; ++i) {
     const loom_native_section_contribution_t* contribution = &contributions[i];
@@ -197,8 +192,6 @@ static iree_status_t loom_native_contribution_allocate_output(
     iree_host_size_t section_count,
     loom_native_elf64le_section_t** out_sections,
     uint8_t*** out_section_contents, iree_arena_allocator_t* arena) {
-  IREE_ASSERT_ARGUMENT(out_sections);
-  IREE_ASSERT_ARGUMENT(out_section_contents);
   *out_sections = NULL;
   *out_section_contents = NULL;
   if (section_count == 0) {
@@ -293,8 +286,6 @@ iree_status_t loom_native_assemble_section_contributions(
     iree_host_size_t contribution_count,
     loom_native_section_contribution_assembly_t* out_assembly,
     iree_arena_allocator_t* arena) {
-  IREE_ASSERT_ARGUMENT(out_assembly);
-  IREE_ASSERT_ARGUMENT(arena);
   *out_assembly = (loom_native_section_contribution_assembly_t){0};
   if (contributions == NULL && contribution_count != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

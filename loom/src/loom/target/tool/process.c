@@ -51,7 +51,6 @@ static bool loom_tool_string_view_contains_nul(iree_string_view_t value) {
 static iree_status_t loom_tool_dup_cstring(iree_string_view_t value,
                                            iree_allocator_t allocator,
                                            char** out_string) {
-  IREE_ASSERT_ARGUMENT(out_string);
   *out_string = NULL;
   if (value.data == NULL && value.size != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -91,7 +90,6 @@ static iree_status_t loom_tool_argv_allocate(
     iree_string_view_t executable_path, const iree_string_view_t* arguments,
     iree_host_size_t argument_count, iree_allocator_t allocator,
     char*** out_argv) {
-  IREE_ASSERT_ARGUMENT(out_argv);
   *out_argv = NULL;
   if (iree_string_view_is_empty(executable_path)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -631,7 +629,6 @@ iree_status_t loom_tool_process_run(iree_string_view_t executable_path,
                                     iree_host_size_t argument_count,
                                     iree_allocator_t allocator,
                                     loom_tool_process_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(out_result);
   *out_result = (loom_tool_process_result_t){0};
 
   char** argv = NULL;
@@ -675,7 +672,6 @@ static iree_status_t loom_tool_temp_file_copy_stem(iree_string_view_t stem,
 }
 
 iree_string_view_t loom_tool_temp_file_path(const loom_tool_temp_file_t* file) {
-  IREE_ASSERT_ARGUMENT(file);
   return iree_make_cstring_view(file->path);
 }
 
@@ -683,7 +679,6 @@ iree_string_view_t loom_tool_temp_file_path(const loom_tool_temp_file_t* file) {
 
 iree_status_t loom_tool_temp_file_allocate(iree_string_view_t stem,
                                            loom_tool_temp_file_t* out_file) {
-  IREE_ASSERT_ARGUMENT(out_file);
   memset(out_file, 0, sizeof(*out_file));
 
   char stem_buffer[32] = {0};
@@ -721,7 +716,6 @@ void loom_tool_temp_file_deinitialize(loom_tool_temp_file_t* file) {
 
 iree_status_t loom_tool_temp_file_allocate(iree_string_view_t stem,
                                            loom_tool_temp_file_t* out_file) {
-  IREE_ASSERT_ARGUMENT(out_file);
   memset(out_file, 0, sizeof(*out_file));
 
   char stem_buffer[32] = {0};
@@ -768,7 +762,6 @@ void loom_tool_temp_file_deinitialize(loom_tool_temp_file_t* file) {
 iree_status_t loom_tool_temp_file_allocate(iree_string_view_t stem,
                                            loom_tool_temp_file_t* out_file) {
   (void)stem;
-  IREE_ASSERT_ARGUMENT(out_file);
   memset(out_file, 0, sizeof(*out_file));
   return iree_make_status(
       IREE_STATUS_UNIMPLEMENTED,

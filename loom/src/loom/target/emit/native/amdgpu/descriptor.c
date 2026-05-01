@@ -71,7 +71,6 @@ static const loom_amdgpu_kernel_descriptor_flags_t
 static iree_status_t loom_amdgpu_kernel_descriptor_resolve_target(
     iree_string_view_t target_cpu,
     const loom_amdgpu_processor_info_t** out_target) {
-  IREE_ASSERT_ARGUMENT(out_target);
   *out_target = NULL;
   const loom_amdgpu_processor_info_t* target = NULL;
   IREE_RETURN_IF_ERROR(
@@ -123,7 +122,6 @@ static void loom_amdgpu_kernel_descriptor_set_bit_u16(uint16_t* inout_value,
 static iree_status_t loom_amdgpu_kernel_descriptor_granulated_blocks(
     uint32_t register_count, uint32_t granule, uint32_t field_width,
     uint32_t* out_block_count) {
-  IREE_ASSERT_ARGUMENT(out_block_count);
   *out_block_count = 0;
   uint64_t normalized_count = register_count == 0 ? 1u : register_count;
   if (normalized_count > UINT64_MAX - (granule - 1u)) {
@@ -188,7 +186,6 @@ static uint32_t loom_amdgpu_kernel_descriptor_implied_user_sgpr_count(
 
 iree_status_t loom_amdgpu_kernel_descriptor_workitem_id_mode_from_flags(
     loom_amdgpu_kernel_descriptor_flags_t flags, uint32_t* out_mode) {
-  IREE_ASSERT_ARGUMENT(out_mode);
   *out_mode = 0;
   const loom_amdgpu_kernel_descriptor_flags_t workitem_id_flags =
       flags & (LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X |
@@ -306,7 +303,6 @@ iree_status_t loom_amdgpu_kernel_descriptor_initialize_from_metadata(
     const loom_amdgpu_metadata_kernel_t* metadata_kernel,
     int64_t kernel_code_entry_byte_offset,
     loom_amdgpu_kernel_descriptor_t* out_descriptor) {
-  IREE_ASSERT_ARGUMENT(out_descriptor);
   *out_descriptor = (loom_amdgpu_kernel_descriptor_t){0};
   const loom_amdgpu_processor_info_t* target = NULL;
   IREE_RETURN_IF_ERROR(

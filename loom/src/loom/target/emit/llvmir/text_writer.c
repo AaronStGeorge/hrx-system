@@ -1104,9 +1104,6 @@ static iree_status_t loom_llvmir_write_function(
 
 iree_status_t loom_llvmir_text_write_module(const loom_llvmir_module_t* module,
                                             loom_output_stream_t* stream) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(stream);
-
   bool wrote_header = false;
   if (!iree_string_view_is_empty(module->target_config.source_name)) {
     IREE_RETURN_IF_ERROR(

@@ -29,7 +29,6 @@ static bool loom_amdgpu_native_preflight_metadata_free_register_class(
 
 static iree_status_t loom_amdgpu_native_preflight_update_high_water(
     uint32_t location_base, uint32_t location_count, uint32_t* inout_value) {
-  IREE_ASSERT_ARGUMENT(inout_value);
   const uint64_t next_free = (uint64_t)location_base + location_count;
   if (next_free > UINT32_MAX) {
     return iree_make_status(
@@ -96,7 +95,6 @@ iree_status_t loom_amdgpu_native_preflight_analyze(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
     loom_amdgpu_native_preflight_t* out_preflight) {
-  IREE_ASSERT_ARGUMENT(out_preflight);
   *out_preflight = (loom_amdgpu_native_preflight_t){0};
   IREE_RETURN_IF_ERROR(
       loom_native_fragment_validate_emission_inputs(schedule, allocation));

@@ -2263,7 +2263,6 @@ static iree_status_t loom_llvmir_test_module_populate(
 iree_status_t loom_llvmir_test_module_build(
     loom_llvmir_test_module_scenario_t scenario, iree_allocator_t allocator,
     loom_llvmir_module_t** out_module) {
-  IREE_ASSERT_ARGUMENT(out_module);
   *out_module = NULL;
 
   loom_llvmir_target_config_t target_config = {0};

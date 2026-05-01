@@ -282,7 +282,6 @@ static iree_status_t loom_ireevm_analyze_register_metadata(
 static iree_status_t loom_ireevm_lookup_i32_register(
     loom_ireevm_emit_state_t* state, loom_value_id_t value_id,
     uint16_t* out_register) {
-  IREE_ASSERT_ARGUMENT(out_register);
   const loom_low_allocation_assignment_t* assignment =
       loom_low_allocation_map_active_value_assignment(state->allocation,
                                                       value_id, NULL);

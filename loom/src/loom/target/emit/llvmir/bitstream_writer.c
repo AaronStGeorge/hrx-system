@@ -46,8 +46,6 @@ static iree_status_t loom_llvmir_bitstream_writer_emit_complete_bytes(
 
 void loom_llvmir_bitstream_writer_initialize(
     iree_io_stream_t* stream, loom_llvmir_bitstream_writer_t* out_writer) {
-  IREE_ASSERT_ARGUMENT(stream);
-  IREE_ASSERT_ARGUMENT(out_writer);
   memset(out_writer, 0, sizeof(*out_writer));
   out_writer->stream = stream;
   out_writer->base_offset = iree_io_stream_offset(stream);
@@ -55,14 +53,12 @@ void loom_llvmir_bitstream_writer_initialize(
 
 uint64_t loom_llvmir_bitstream_writer_bit_offset(
     const loom_llvmir_bitstream_writer_t* writer) {
-  IREE_ASSERT_ARGUMENT(writer);
   return writer->bit_offset;
 }
 
 iree_status_t loom_llvmir_bitstream_writer_write_bits(
     loom_llvmir_bitstream_writer_t* writer, uint64_t value,
     uint32_t bit_count) {
-  IREE_ASSERT_ARGUMENT(writer);
   if (bit_count > 64) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "LLVM bit field width exceeds 64 bits");
@@ -108,7 +104,6 @@ iree_status_t loom_llvmir_bitstream_writer_write_bits(
 
 iree_status_t loom_llvmir_bitstream_writer_write_vbr(
     loom_llvmir_bitstream_writer_t* writer, uint64_t value, uint32_t width) {
-  IREE_ASSERT_ARGUMENT(writer);
   if (width < 2 || width > 64) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "LLVM VBR width must be in [2, 64]");
@@ -131,7 +126,6 @@ iree_status_t loom_llvmir_bitstream_writer_write_vbr(
 
 iree_status_t loom_llvmir_bitstream_writer_align32(
     loom_llvmir_bitstream_writer_t* writer) {
-  IREE_ASSERT_ARGUMENT(writer);
   uint32_t misalignment = (uint32_t)(writer->bit_offset & 31);
   if (misalignment == 0) return iree_ok_status();
   return loom_llvmir_bitstream_writer_write_bits(writer, 0, 32 - misalignment);
@@ -140,7 +134,6 @@ iree_status_t loom_llvmir_bitstream_writer_align32(
 iree_status_t loom_llvmir_bitstream_writer_write_bytes(
     loom_llvmir_bitstream_writer_t* writer, const void* data,
     iree_host_size_t length) {
-  IREE_ASSERT_ARGUMENT(writer);
   if (length == 0) return iree_ok_status();
   if (data == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -168,7 +161,6 @@ iree_status_t loom_llvmir_bitstream_writer_write_bytes(
 iree_status_t loom_llvmir_bitstream_writer_patch_u32(
     loom_llvmir_bitstream_writer_t* writer, uint64_t bit_offset,
     uint32_t value) {
-  IREE_ASSERT_ARGUMENT(writer);
   if ((bit_offset & 7) != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "LLVM bitstream patch offset is not byte-aligned");
@@ -202,7 +194,6 @@ iree_status_t loom_llvmir_bitstream_writer_patch_u32(
 
 iree_status_t loom_llvmir_bitstream_writer_flush(
     loom_llvmir_bitstream_writer_t* writer) {
-  IREE_ASSERT_ARGUMENT(writer);
   if (writer->page_position == 0) return iree_ok_status();
   IREE_RETURN_IF_ERROR(iree_io_stream_write(
       writer->stream, writer->page_position, writer->page));
@@ -212,7 +203,6 @@ iree_status_t loom_llvmir_bitstream_writer_flush(
 
 iree_status_t loom_llvmir_bitstream_writer_finish(
     loom_llvmir_bitstream_writer_t* writer) {
-  IREE_ASSERT_ARGUMENT(writer);
   if (writer->pending_bit_count != 0) {
     uint32_t padding_bit_count = 8 - writer->pending_bit_count;
     IREE_RETURN_IF_ERROR(

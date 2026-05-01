@@ -270,11 +270,6 @@ static iree_status_t loom_target_low_legality_validate_options(
     const loom_target_low_legality_options_t* options,
     loom_target_low_legality_result_t* out_result,
     const loom_low_descriptor_set_t** out_descriptor_set) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(options->fact_table);
-  IREE_ASSERT_ARGUMENT(out_result);
-  IREE_ASSERT_ARGUMENT(out_descriptor_set);
   if (!loom_func_like_isa(function)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "target-low legality function is required");
@@ -743,7 +738,6 @@ iree_status_t loom_target_low_verify_function_legality(
     const loom_module_t* module, loom_func_like_t function,
     const loom_target_low_legality_options_t* options,
     loom_target_low_legality_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(out_result);
   *out_result = (loom_target_low_legality_result_t){0};
   const loom_low_descriptor_set_t* descriptor_set = NULL;
   IREE_RETURN_IF_ERROR(loom_target_low_legality_validate_options(

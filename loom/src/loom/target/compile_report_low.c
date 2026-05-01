@@ -288,8 +288,6 @@ loom_target_compile_report_source_low_selection_kind(
 void loom_target_compile_report_record_low_lowering(
     loom_target_compile_report_t* report,
     const loom_low_lower_result_t* lower_result) {
-  IREE_ASSERT_ARGUMENT(report);
-  IREE_ASSERT_ARGUMENT(lower_result);
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
   report->source_low_selected_op_count +=
       lower_result->selected_source_op_count;
@@ -320,8 +318,6 @@ void loom_target_compile_report_record_low_lowering(
 iree_status_t loom_target_compile_report_allocate_low_lowering_rows(
     const loom_target_compile_report_t* report, iree_arena_allocator_t* arena,
     loom_low_lower_report_storage_t* out_storage) {
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_storage);
   *out_storage = (loom_low_lower_report_storage_t){0};
   if (report == NULL || report->source_low_rows == NULL ||
       report->source_low_row_count >= report->source_low_row_capacity) {
@@ -394,9 +390,6 @@ static void loom_target_compile_report_record_spill_rows(
 iree_status_t loom_target_compile_report_record_low_emission_frame(
     loom_target_compile_report_t* report,
     const loom_low_emission_frame_t* frame) {
-  IREE_ASSERT_ARGUMENT(report);
-  IREE_ASSERT_ARGUMENT(frame);
-
   loom_low_allocation_value_scratch_t value_scratch = {0};
   IREE_RETURN_IF_ERROR(loom_low_allocation_acquire_value_scratch(
       &frame->allocation, &value_scratch));

@@ -14,7 +14,6 @@
 iree_status_t loom_llvmir_target_env_module_config(
     const loom_llvmir_target_env_t* target_env, iree_string_view_t source_name,
     loom_llvmir_target_config_t* out_config) {
-  IREE_ASSERT_ARGUMENT(out_config);
   *out_config = (loom_llvmir_target_config_t){0};
   if (target_env == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -116,10 +115,6 @@ static iree_status_t loom_llvmir_resolve_hal_kernel_flat_workgroup_range(
     const loom_target_snapshot_t* snapshot,
     const loom_target_hal_kernel_abi_t* hal_kernel, uint32_t* out_min,
     uint32_t* out_max) {
-  IREE_ASSERT_ARGUMENT(snapshot);
-  IREE_ASSERT_ARGUMENT(hal_kernel);
-  IREE_ASSERT_ARGUMENT(out_min);
-  IREE_ASSERT_ARGUMENT(out_max);
   *out_min = 0;
   *out_max = 0;
 
@@ -154,7 +149,6 @@ static iree_status_t loom_llvmir_resolve_hal_kernel_flat_workgroup_range(
 iree_status_t loom_llvmir_target_profile_storage_initialize_from_bundle(
     const loom_target_bundle_t* bundle,
     loom_llvmir_target_profile_storage_t* out_storage) {
-  IREE_ASSERT_ARGUMENT(out_storage);
   *out_storage = (loom_llvmir_target_profile_storage_t){0};
   if (bundle == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -273,7 +267,6 @@ static iree_status_t loom_llvmir_target_profile_append_llc_argument(
 iree_status_t loom_llvmir_target_profile_llc_arguments(
     const loom_llvmir_target_profile_t* profile,
     loom_llvmir_target_profile_llc_arguments_t* out_arguments) {
-  IREE_ASSERT_ARGUMENT(out_arguments);
   *out_arguments = (loom_llvmir_target_profile_llc_arguments_t){0};
   if (profile == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -295,7 +288,6 @@ iree_status_t loom_llvmir_target_profile_llc_arguments(
 iree_status_t loom_llvmir_target_profile_kernel_binding_attrs(
     const loom_llvmir_target_profile_t* profile, loom_llvmir_attr_t* attrs,
     iree_host_size_t attr_capacity, iree_host_size_t* out_attr_count) {
-  IREE_ASSERT_ARGUMENT(out_attr_count);
   *out_attr_count = 0;
   if (profile == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -369,8 +361,6 @@ static iree_status_t loom_llvmir_target_profile_flat_workgroup_size_attr(
 iree_status_t loom_llvmir_target_profile_add_kernel_attr_group(
     loom_llvmir_module_t* module, const loom_llvmir_target_profile_t* profile,
     loom_llvmir_attr_group_id_t* out_group_id) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_group_id);
   *out_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
   if (profile == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -409,7 +399,6 @@ iree_status_t loom_llvmir_target_profile_add_kernel_attr_group(
 iree_status_t loom_llvmir_target_profile_attach_kernel_metadata(
     loom_llvmir_function_t* function,
     const loom_llvmir_target_profile_t* profile) {
-  IREE_ASSERT_ARGUMENT(function);
   if (profile == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "LLVM target profile is required");
