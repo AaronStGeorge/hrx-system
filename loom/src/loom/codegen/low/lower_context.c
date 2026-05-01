@@ -4,8 +4,6 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include <inttypes.h>
-
 #include "loom/codegen/low/lower_internal.h"
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/error/error_defs.h"
@@ -226,11 +224,11 @@ iree_status_t loom_low_lower_lookup_block(loom_low_lower_context_t* context,
   *out_low_block = NULL;
   loom_region_t* source_body = loom_func_like_body(context->source_function);
   uint16_t source_index = 0;
-  if (!source_body ||
-      !loom_region_try_block_index(source_body, source_block, &source_index)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "branch target block is outside the source region");
-  }
+  IREE_ASSERT(source_body != NULL);
+  const bool found_source_index =
+      loom_region_try_block_index(source_body, source_block, &source_index);
+  IREE_ASSERT(found_source_index);
+  (void)found_source_index;
   IREE_ASSERT(context->lowering.block_map[source_index] != NULL);
   *out_low_block = context->lowering.block_map[source_index];
   return iree_ok_status();
@@ -256,12 +254,8 @@ iree_status_t loom_low_lower_resolve_descriptor(
   bool present = false;
   IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
       context, descriptor_id, out_descriptor, &present));
-  if (!present) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low descriptor ID 0x%016" PRIx64
-                            " is not present in the selected descriptor set",
-                            descriptor_id);
-  }
+  IREE_ASSERT(present);
+  (void)present;
   return iree_ok_status();
 }
 
@@ -275,12 +269,7 @@ iree_status_t loom_low_lower_resolve_descriptor_row(
 
   iree_string_view_t key = loom_low_descriptor_set_string(
       context->descriptor_set, descriptor->key_string_offset);
-  if (iree_string_view_is_empty(key)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low descriptor ID 0x%016" PRIx64
-                            " has no descriptor key",
-                            descriptor->stable_id);
-  }
+  IREE_ASSERT_FALSE(iree_string_view_is_empty(key));
   loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_module_intern_string(context->module, key, &opcode_id));
@@ -299,10 +288,7 @@ iree_status_t loom_low_lower_resolve_descriptor_if_present(
       .opcode_id = LOOM_STRING_ID_INVALID,
   };
   *out_present = false;
-  if (descriptor_id == LOOM_LOW_DESCRIPTOR_ID_NONE) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low descriptor ID is required");
-  }
+  IREE_ASSERT_NE(descriptor_id, LOOM_LOW_DESCRIPTOR_ID_NONE);
 
   const uint32_t descriptor_ordinal =
       loom_low_descriptor_set_lookup_descriptor_by_id(context->descriptor_set,
@@ -373,12 +359,8 @@ iree_status_t loom_low_lower_record_memory_access_summary(
   if (context->options->table_arena == NULL) {
     return iree_ok_status();
   }
-  if (context->lowering.memory_access_record_count >=
-      context->lowering.memory_access_record_capacity) {
-    return iree_make_status(
-        IREE_STATUS_INTERNAL,
-        "source-to-low memory access table exceeded planned capacity");
-  }
+  IREE_ASSERT_LT(context->lowering.memory_access_record_count,
+                 context->lowering.memory_access_record_capacity);
 
   loom_low_memory_access_record_t* record =
       &context->lowering.memory_access_records
@@ -508,11 +490,8 @@ static iree_status_t loom_low_lower_create_derived_symbol(
     iree_string_view_t suffix, bool append_index, uint32_t index,
     loom_symbol_ref_t* out_symbol_ref) {
   *out_symbol_ref = loom_symbol_ref_null();
-  if (iree_string_view_is_empty(base_name) ||
-      iree_string_view_equal(base_name, IREE_SV("<unnamed>"))) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "base symbol name is required");
-  }
+  IREE_ASSERT_FALSE(iree_string_view_is_empty(base_name));
+  IREE_ASSERT_FALSE(iree_string_view_equal(base_name, IREE_SV("<unnamed>")));
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
