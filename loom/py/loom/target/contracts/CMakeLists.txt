@@ -27,6 +27,7 @@ iree_py_library(
     "patterns.py"
     "rules.py"
     "source.py"
+    "source_memory.py"
     "templates.py"
   DEPS
     iree::runtime::py::loom::core

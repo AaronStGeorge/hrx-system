@@ -19,6 +19,7 @@ from loom.target.contracts import (
     LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS,
     LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN,
     LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1,
+    LOWER_SOURCE_MEMORY_NONE,
     CompiledLowerRuleSet,
     ContractFragment,
     GuardKind,
@@ -29,8 +30,11 @@ from loom.target.contracts import (
     LowerGuard,
     LowerRule,
     LowerRuleSpan,
+    LowerSourceMemory,
     LowerTiedResult,
     LowerValueRef,
+    SourceMemoryDynamicIndexSource,
+    SourceMemoryOperation,
     SourceValueKind,
     TypePattern,
     compile_lower_rule_set,
@@ -115,6 +119,33 @@ _EMIT_FLAG_C_NAMES = {
     LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1: "LOOM_LOW_LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1",
     LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS: "LOOM_LOW_LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS",
     LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN: "LOOM_LOW_LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN",
+}
+
+_SOURCE_MEMORY_OPERATION_C_NAMES = {
+    SourceMemoryOperation.LOAD: "LOOM_LOW_SOURCE_MEMORY_OPERATION_LOAD",
+    SourceMemoryOperation.STORE: "LOOM_LOW_SOURCE_MEMORY_OPERATION_STORE",
+    SourceMemoryOperation.PREFETCH: "LOOM_LOW_SOURCE_MEMORY_OPERATION_PREFETCH",
+    SourceMemoryOperation.ATOMIC_REDUCE: "LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_REDUCE",
+    SourceMemoryOperation.ATOMIC_RMW: "LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_RMW",
+    SourceMemoryOperation.ATOMIC_CMPXCHG: "LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_CMPXCHG",
+}
+
+_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_C_NAMES = {
+    SourceMemoryDynamicIndexSource.NONE: "LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_NONE",
+    SourceMemoryDynamicIndexSource.VALUE: "LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE",
+    SourceMemoryDynamicIndexSource.WORKITEM_ID: "LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID",
+    SourceMemoryDynamicIndexSource.WORKGROUP_ID: "LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID",
+}
+
+_SOURCE_MEMORY_SPACE_C_NAMES = {
+    "unknown": "LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_UNKNOWN",
+    "global": "LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_GLOBAL",
+    "workgroup": "LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_WORKGROUP",
+    "private": "LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_PRIVATE",
+    "constant": "LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_CONSTANT",
+    "host": "LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_HOST",
+    "descriptor": "LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_DESCRIPTOR",
+    "generic": "LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_GENERIC",
 }
 
 
@@ -266,6 +297,15 @@ def _generate_source(
         )
     )
 
+    source_memories_name = f"k{c_table_prefix}SourceMemories"
+    lines.extend(
+        _emit_optional_array(
+            source_memories_name,
+            "loom_low_lower_source_memory_t",
+            [_source_memory_row(row) for row in table.source_memories],
+        )
+    )
+
     diagnostics_name = f"k{c_table_prefix}Diagnostics"
     lines.extend(
         _emit_optional_array(
@@ -347,6 +387,7 @@ def _generate_source(
             type_patterns_name=type_patterns_name,
             value_refs_name=value_refs_name,
             materializers_name=materializers_name,
+            source_memories_name=source_memories_name,
             guards_name=guards_name,
             attr_copies_name=attr_copies_name,
             tied_results_name=tied_results_name,
@@ -392,6 +433,67 @@ def _value_ref_row(row: LowerValueRef) -> list[str]:
     _append_field(fields, "kind", _VALUE_REF_KIND_C_NAMES[row.kind], always=True)
     _append_field(fields, "index", row.index, always=True)
     _append_field(fields, "materializer_index", row.materializer_index)
+    return fields
+
+
+def _source_memory_row(row: LowerSourceMemory) -> list[str]:
+    constraint = row.constraint
+    fields: list[str] = []
+    _append_field(
+        fields,
+        "operation_kind",
+        _SOURCE_MEMORY_OPERATION_C_NAMES[constraint.operation],
+        always=True,
+    )
+    _append_field(
+        fields,
+        "memory_space_mask",
+        _source_memory_space_mask(constraint.memory_spaces),
+        always=True,
+    )
+    _append_field(
+        fields,
+        "element_byte_count",
+        constraint.element_byte_count,
+        always=True,
+    )
+    _append_field(
+        fields,
+        "vector_lane_count",
+        constraint.vector_lane_count,
+        always=True,
+    )
+    _append_field(
+        fields,
+        "vector_lane_byte_stride",
+        constraint.vector_lane_byte_stride,
+        always=True,
+    )
+    _append_field(
+        fields,
+        "static_byte_offset",
+        constraint.static_byte_offset,
+        always=True,
+    )
+    _append_field(fields, "dynamic_term_count", constraint.dynamic_term_count)
+    _append_field(
+        fields,
+        "dynamic_index_source",
+        _SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_C_NAMES[constraint.dynamic_index_source],
+        default="LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_NONE",
+    )
+    _append_field(fields, "dynamic_byte_stride", constraint.dynamic_byte_stride)
+    _append_field(
+        fields,
+        "cache_policy_build_flags",
+        constraint.cache_policy_build_flags,
+    )
+    _append_field(
+        fields,
+        "diagnostic_index",
+        _diagnostic_index(row.diagnostic_index),
+        always=True,
+    )
     return fields
 
 
@@ -584,6 +686,13 @@ def _emit_row(table: ContractFragment, row: LowerEmit) -> list[str]:
     if row.tied_result_count:
         _append_field(fields, "tied_result_start", row.tied_result_start, always=True)
         _append_field(fields, "tied_result_count", row.tied_result_count, always=True)
+    if row.source_memory_ordinal != LOWER_SOURCE_MEMORY_NONE:
+        _append_field(
+            fields,
+            "source_memory_ordinal",
+            row.source_memory_ordinal,
+            always=True,
+        )
     return fields
 
 
@@ -623,6 +732,7 @@ def _rule_set_row(
     type_patterns_name: str,
     value_refs_name: str,
     materializers_name: str,
+    source_memories_name: str,
     guards_name: str,
     attr_copies_name: str,
     tied_results_name: str,
@@ -647,6 +757,12 @@ def _rule_set_row(
         source_contract.materializers,
         materializers_name,
     )
+    _append_table_fields(
+        fields,
+        "source_memories",
+        table.source_memories,
+        source_memories_name,
+    )
     _append_table_fields(fields, "guards", table.guards, guards_name)
     _append_table_fields(fields, "attr_copies", table.attr_copies, attr_copies_name)
     _append_table_fields(fields, "tied_results", table.tied_results, tied_results_name)
@@ -670,6 +786,8 @@ def _append_table_fields(
 def _table_count_field_name(field_name: str) -> str:
     if field_name == "attr_copies":
         return "attr_copy_count"
+    if field_name == "source_memories":
+        return "source_memory_count"
     return f"{field_name[:-1]}_count"
 
 
@@ -727,6 +845,16 @@ def _diagnostic_index(index: int) -> str:
     if index == 0xFFFF:
         return "LOOM_LOW_LOWER_DIAGNOSTIC_NONE"
     return str(index)
+
+
+def _source_memory_space_mask(memory_spaces: tuple[str, ...]) -> str:
+    c_names: list[str] = []
+    for memory_space in memory_spaces:
+        c_name = _SOURCE_MEMORY_SPACE_C_NAMES.get(memory_space)
+        if c_name is None:
+            raise ValueError(f"unknown source memory space '{memory_space}'")
+        c_names.append(c_name)
+    return " | ".join(c_names)
 
 
 def _attr_kind_c_name(attr_kind: str | None) -> str:

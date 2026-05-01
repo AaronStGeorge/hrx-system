@@ -33,6 +33,7 @@ from loom.target.contracts.lower_rules import (
     LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS,
     LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN,
     LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1,
+    LOWER_SOURCE_MEMORY_NONE,
     CompiledLowerRuleSet,
     LowerAttrCopy,
     LowerAttrCopyKind,
@@ -42,6 +43,7 @@ from loom.target.contracts.lower_rules import (
     LowerGuard,
     LowerRule,
     LowerRuleSpan,
+    LowerSourceMemory,
     LowerTiedResult,
     LowerTypePattern,
     LowerValueRef,
@@ -56,6 +58,11 @@ from loom.target.contracts.rules import (
     ValueElideRule,
 )
 from loom.target.contracts.source import ValueRef
+from loom.target.contracts.source_memory import (
+    SourceMemoryConstraint,
+    SourceMemoryDynamicIndexSource,
+    SourceMemoryOperation,
+)
 from loom.target.contracts.templates import (
     DirectDescriptorCase,
     DirectTypePatterns,
@@ -94,6 +101,7 @@ __all__ = [
     "LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS",
     "LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN",
     "LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1",
+    "LOWER_SOURCE_MEMORY_NONE",
     "LowerAttrCopy",
     "LowerAttrCopyKind",
     "LowerDiagnostic",
@@ -102,6 +110,7 @@ __all__ = [
     "LowerGuard",
     "LowerRule",
     "LowerRuleSpan",
+    "LowerSourceMemory",
     "LowerTiedResult",
     "LowerTypePattern",
     "LowerValueRef",
@@ -110,6 +119,9 @@ __all__ = [
     "Scalar",
     "SelectDescriptorCase",
     "SourceValueKind",
+    "SourceMemoryConstraint",
+    "SourceMemoryDynamicIndexSource",
+    "SourceMemoryOperation",
     "TypePattern",
     "ValueAliasRule",
     "ValueElideRule",

@@ -31,6 +31,9 @@ from loom.target.contracts import (
     PredicateDescriptorCase,
     Scalar,
     SelectDescriptorCase,
+    SourceMemoryConstraint,
+    SourceMemoryDynamicIndexSource,
+    SourceMemoryOperation,
     TypePattern,
     ValueAliasRule,
     ValueRef,
@@ -47,10 +50,18 @@ from loom.target.test.descriptors import (
     TEST_LOW_CONST_I32_DESCRIPTOR,
     TEST_LOW_CORE_DESCRIPTOR_SET,
     TEST_LOW_DOT4I_S8S8_DESCRIPTOR,
+    TEST_LOW_LOAD_INDEX_V4F32_DESCRIPTOR,
+    TEST_LOW_LOAD_INDEX_V4I32_DESCRIPTOR,
+    TEST_LOW_LOAD_V4F32_DESCRIPTOR,
+    TEST_LOW_LOAD_V4I32_DESCRIPTOR,
     TEST_LOW_MUL_F32_DESCRIPTOR,
     TEST_LOW_MUL_I32_DESCRIPTOR,
     TEST_LOW_SELECT_I32_DESCRIPTOR,
     TEST_LOW_SHUFFLE_V4I32_DESCRIPTOR,
+    TEST_LOW_STORE_INDEX_V4F32_DESCRIPTOR,
+    TEST_LOW_STORE_INDEX_V4I32_DESCRIPTOR,
+    TEST_LOW_STORE_V4F32_DESCRIPTOR,
+    TEST_LOW_STORE_V4I32_DESCRIPTOR,
     TEST_LOW_SUB_F32_DESCRIPTOR,
     TEST_LOW_TIED_ANY_DESCRIPTOR,
 )
@@ -187,6 +198,101 @@ def _vector_reduce_rule(
     )
 
 
+_TEST_LOW_SOURCE_MEMORY_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="source-memory",
+    subject_name="test-low",
+    reason=(
+        "test-low requires a contiguous 4-lane zero-offset global or generic "
+        "source memory access"
+    ),
+)
+
+
+def _source_memory_constraint(
+    operation: SourceMemoryOperation,
+    *,
+    dynamic: bool,
+) -> SourceMemoryConstraint:
+    return SourceMemoryConstraint(
+        operation=operation,
+        memory_spaces=("unknown", "generic", "global"),
+        element_byte_count=4,
+        vector_lane_count=4,
+        vector_lane_byte_stride=4,
+        static_byte_offset=0,
+        dynamic_term_count=1 if dynamic else 0,
+        dynamic_index_source=(
+            SourceMemoryDynamicIndexSource.VALUE
+            if dynamic
+            else SourceMemoryDynamicIndexSource.NONE
+        ),
+        dynamic_byte_stride=4 if dynamic else 0,
+        diagnostic=_TEST_LOW_SOURCE_MEMORY_DIAGNOSTIC,
+    )
+
+
+def _vector_load_rule(
+    descriptor: Descriptor,
+    result_type: TypePattern,
+    *,
+    dynamic: bool,
+) -> DescriptorRule:
+    operands = {"address": ValueRef.operand("view")}
+    if dynamic:
+        operands["index"] = ValueRef.operand("indices")
+    return DescriptorRule(
+        source_op=vector.vector_load,
+        descriptor=descriptor,
+        guards=(
+            Guard.operand_segment_count("indices", 1 if dynamic else 0),
+            Guard.value_type("result", result_type),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands=operands,
+                results={"dst": ValueRef.result("result")},
+                source_memory=_source_memory_constraint(
+                    SourceMemoryOperation.LOAD,
+                    dynamic=dynamic,
+                ),
+            ),
+        ),
+    )
+
+
+def _vector_store_rule(
+    descriptor: Descriptor,
+    value_type: TypePattern,
+    *,
+    dynamic: bool,
+) -> DescriptorRule:
+    operands = {
+        "address": ValueRef.operand("view"),
+        "value": ValueRef.operand("value"),
+    }
+    if dynamic:
+        operands["index"] = ValueRef.operand("indices")
+    return DescriptorRule(
+        source_op=vector.vector_store,
+        descriptor=descriptor,
+        guards=(
+            Guard.operand_segment_count("indices", 1 if dynamic else 0),
+            Guard.value_type("value", value_type),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands=operands,
+                source_memory=_source_memory_constraint(
+                    SourceMemoryOperation.STORE,
+                    dynamic=dynamic,
+                ),
+            ),
+        ),
+    )
+
+
 TEST_LOW_CORE_CONTRACT_FRAGMENT = ContractFragment(
     name="test.low.core",
     descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
@@ -282,6 +388,46 @@ TEST_LOW_CORE_CONTRACT_FRAGMENT = ContractFragment(
             TEST_LOW_MUL_I32_DESCRIPTOR,
             _V4I32,
             semantic_tag="integer.mul.i32",
+        ),
+        _vector_load_rule(
+            TEST_LOW_LOAD_V4I32_DESCRIPTOR,
+            _V4I32,
+            dynamic=False,
+        ),
+        _vector_load_rule(
+            TEST_LOW_LOAD_V4F32_DESCRIPTOR,
+            _V4F32,
+            dynamic=False,
+        ),
+        _vector_load_rule(
+            TEST_LOW_LOAD_INDEX_V4I32_DESCRIPTOR,
+            _V4I32,
+            dynamic=True,
+        ),
+        _vector_load_rule(
+            TEST_LOW_LOAD_INDEX_V4F32_DESCRIPTOR,
+            _V4F32,
+            dynamic=True,
+        ),
+        _vector_store_rule(
+            TEST_LOW_STORE_V4I32_DESCRIPTOR,
+            _V4I32,
+            dynamic=False,
+        ),
+        _vector_store_rule(
+            TEST_LOW_STORE_V4F32_DESCRIPTOR,
+            _V4F32,
+            dynamic=False,
+        ),
+        _vector_store_rule(
+            TEST_LOW_STORE_INDEX_V4I32_DESCRIPTOR,
+            _V4I32,
+            dynamic=True,
+        ),
+        _vector_store_rule(
+            TEST_LOW_STORE_INDEX_V4F32_DESCRIPTOR,
+            _V4F32,
+            dynamic=True,
         ),
         DescriptorRule(
             source_op=scalar_arithmetic.scalar_subi,

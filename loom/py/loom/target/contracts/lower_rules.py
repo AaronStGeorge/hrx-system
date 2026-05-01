@@ -29,6 +29,7 @@ from loom.target.contracts.kinds import SourceValueKind
 from loom.target.contracts.patterns import TypePattern
 from loom.target.contracts.rules import DescriptorRule, ValueAliasRule, ValueElideRule
 from loom.target.contracts.source import ValueRef
+from loom.target.contracts.source_memory import SourceMemoryConstraint
 from loom.target.low_descriptors import ConstraintKind, Descriptor, OperandRole
 
 
@@ -58,6 +59,7 @@ class LowerAttrCopyKind(Enum):
 LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1 = 1 << 0
 LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS = 1 << 1
 LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN = 1 << 2
+LOWER_SOURCE_MEMORY_NONE = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +85,14 @@ class LowerDiagnostic:
     subject_kind: str
     subject_name: str
     reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class LowerSourceMemory:
+    """Compiled source-memory constraint row."""
+
+    constraint: SourceMemoryConstraint
+    diagnostic_index: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,6 +156,7 @@ class LowerEmit:
     attr_copy_count: int = 0
     tied_result_start: int = 0
     tied_result_count: int = 0
+    source_memory_ordinal: int = LOWER_SOURCE_MEMORY_NONE
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,6 +194,7 @@ class CompiledLowerRuleSet:
     spans: tuple[LowerRuleSpan, ...]
     type_patterns: tuple[LowerTypePattern, ...]
     value_refs: tuple[LowerValueRef, ...]
+    source_memories: tuple[LowerSourceMemory, ...]
     guards: tuple[LowerGuard, ...]
     attr_copies: tuple[LowerAttrCopy, ...]
     tied_results: tuple[LowerTiedResult, ...]
@@ -212,6 +224,7 @@ class _LowerRuleSetCompiler:
         self._rules: list[LowerRule] = []
         self._type_patterns: list[LowerTypePattern] = []
         self._value_refs: list[LowerValueRef] = []
+        self._source_memories: list[LowerSourceMemory] = []
         self._guards: list[LowerGuard] = []
         self._attr_copies: list[LowerAttrCopy] = []
         self._tied_results: list[LowerTiedResult] = []
@@ -246,6 +259,7 @@ class _LowerRuleSetCompiler:
             spans=spans,
             type_patterns=tuple(self._type_patterns),
             value_refs=tuple(self._value_refs),
+            source_memories=tuple(self._source_memories),
             guards=tuple(self._guards),
             attr_copies=tuple(self._attr_copies),
             tied_results=tuple(self._tied_results),
@@ -905,6 +919,14 @@ class _LowerRuleSetCompiler:
                     "is not an emitted operand"
                 ) from exc
 
+        source_memory_ordinal = LOWER_SOURCE_MEMORY_NONE
+        if emit.source_memory is not None:
+            if emit_kind != LowerEmitKind.DESCRIPTOR_OP:
+                raise ValueError(
+                    f"{source_op.name}: source-memory emits must use descriptor-op form"
+                )
+            source_memory_ordinal = self._append_source_memory(emit.source_memory)
+
         self._emits.append(
             LowerEmit(
                 kind=emit_kind,
@@ -922,8 +944,22 @@ class _LowerRuleSetCompiler:
                 attr_copy_count=len(attr_copies),
                 tied_result_start=tied_result_start,
                 tied_result_count=len(tied_results),
+                source_memory_ordinal=source_memory_ordinal,
             )
         )
+
+    def _append_source_memory(self, constraint: SourceMemoryConstraint) -> int:
+        row = LowerSourceMemory(
+            constraint,
+            diagnostic_index=self._append_diagnostic(
+                _source_memory_diagnostic(constraint)
+            ),
+        )
+        for index, existing in enumerate(self._source_memories):
+            if existing == row:
+                return index + 1
+        self._source_memories.append(row)
+        return len(self._source_memories)
 
     def _append_type_pattern(self, type_pattern: TypePattern) -> int:
         ordinal = self._type_pattern_ordinals.get(type_pattern)
@@ -1332,6 +1368,22 @@ def _type_diagnostic_subject(type_pattern: TypePattern) -> str:
     if type_pattern.lanes is not None:
         return f"vector<{type_pattern.lanes}x{type_pattern.element}>"
     return f"vector<{type_pattern.element}>"
+
+
+def _source_memory_diagnostic(
+    constraint: SourceMemoryConstraint,
+) -> LowerDiagnostic:
+    if constraint.diagnostic is not None:
+        return LowerDiagnostic(
+            subject_kind=constraint.diagnostic.subject_kind,
+            subject_name=constraint.diagnostic.subject_name,
+            reason=constraint.diagnostic.reason,
+        )
+    return LowerDiagnostic(
+        subject_kind="source-memory",
+        subject_name=constraint.operation.value,
+        reason="target contract requires a supported source memory access",
+    )
 
 
 def _attr_diagnostic(field: str, attr_type: str) -> LowerDiagnostic:

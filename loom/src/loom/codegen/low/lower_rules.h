@@ -17,6 +17,7 @@
 
 #include "iree/base/api.h"
 #include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/ir.h"
 
 #ifdef __cplusplus
@@ -207,6 +208,58 @@ typedef struct loom_low_lower_diagnostic_t {
 
 #define LOOM_LOW_LOWER_DIAGNOSTIC_NONE UINT16_MAX
 
+typedef uint16_t loom_low_lower_source_memory_space_mask_t;
+
+#define LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_UNKNOWN \
+  ((loom_low_lower_source_memory_space_mask_t)1u   \
+   << LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN)
+#define LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_GLOBAL \
+  ((loom_low_lower_source_memory_space_mask_t)1u  \
+   << LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL)
+#define LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_WORKGROUP \
+  ((loom_low_lower_source_memory_space_mask_t)1u     \
+   << LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP)
+#define LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_PRIVATE \
+  ((loom_low_lower_source_memory_space_mask_t)1u   \
+   << LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE)
+#define LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_CONSTANT \
+  ((loom_low_lower_source_memory_space_mask_t)1u    \
+   << LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT)
+#define LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_HOST  \
+  ((loom_low_lower_source_memory_space_mask_t)1u \
+   << LOOM_VALUE_FACT_MEMORY_SPACE_HOST)
+#define LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_DESCRIPTOR \
+  ((loom_low_lower_source_memory_space_mask_t)1u      \
+   << LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR)
+#define LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_GENERIC \
+  ((loom_low_lower_source_memory_space_mask_t)1u   \
+   << LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC)
+
+typedef struct loom_low_lower_source_memory_t {
+  // Source memory operation category required by this row.
+  loom_low_source_memory_operation_kind_t operation_kind;
+  // Accepted target-independent source memory spaces.
+  loom_low_lower_source_memory_space_mask_t memory_space_mask;
+  // Required byte count of one addressed view element.
+  uint32_t element_byte_count;
+  // Required static number of vector lanes addressed by the operation.
+  uint32_t vector_lane_count;
+  // Required byte stride between adjacent vector lanes.
+  int64_t vector_lane_byte_stride;
+  // Required static byte offset from the storage root.
+  int64_t static_byte_offset;
+  // Required number of dynamic address terms.
+  uint8_t dynamic_term_count;
+  // Required provenance for each dynamic address term.
+  loom_low_source_memory_dynamic_index_source_t dynamic_index_source;
+  // Required byte stride for each dynamic address term.
+  int64_t dynamic_byte_stride;
+  // Required source cache-policy build flags.
+  uint32_t cache_policy_build_flags;
+  // Diagnostic table row emitted when this source-memory row rejects.
+  uint16_t diagnostic_index;
+} loom_low_lower_source_memory_t;
+
 typedef enum loom_low_lower_guard_kind_e {
   // Invalid or uninitialized guard.
   LOOM_LOW_LOWER_GUARD_INVALID = 0,
@@ -345,6 +398,9 @@ typedef struct loom_low_lower_emit_t {
   uint16_t tied_result_start;
   // Number of tied-result rows forwarded to the low packet builder.
   uint16_t tied_result_count;
+  // One-based source-memory row recorded by this descriptor emit. Zero means
+  // the emit is not a source memory access.
+  uint16_t source_memory_ordinal;
 } loom_low_lower_emit_t;
 
 typedef struct loom_low_lower_resolved_emit_t {
@@ -418,6 +474,10 @@ typedef struct loom_low_lower_rule_set_t {
   const loom_low_lower_value_materializer_t* materializers;
   // Number of rows in materializers.
   uint16_t materializer_count;
+  // Source-memory rows referenced by emits.
+  const loom_low_lower_source_memory_t* source_memories;
+  // Number of rows in source_memories.
+  uint16_t source_memory_count;
   // Guard rows referenced by rules.
   const loom_low_lower_guard_t* guards;
   // Number of rows in guards.

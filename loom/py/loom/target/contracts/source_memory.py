@@ -1,0 +1,144 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""Source-memory constraints attached to generated descriptor emits."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+from enum import Enum, unique
+
+from loom.dsl import Op
+from loom.target.contracts.guards import GuardDiagnostic
+
+_MEMORY_SPACE_NAMES = frozenset(
+    (
+        "unknown",
+        "global",
+        "workgroup",
+        "private",
+        "constant",
+        "host",
+        "descriptor",
+        "generic",
+    )
+)
+
+_I64_MIN = -(2**63)
+_I64_MAX = 2**63 - 1
+_U32_MAX = 2**32 - 1
+_U8_MAX = 2**8 - 1
+
+
+@unique
+class SourceMemoryOperation(Enum):
+    """Target-independent source memory operation kind."""
+
+    LOAD = "load"
+    STORE = "store"
+    PREFETCH = "prefetch"
+    ATOMIC_REDUCE = "atomic_reduce"
+    ATOMIC_RMW = "atomic_rmw"
+    ATOMIC_CMPXCHG = "atomic_cmpxchg"
+
+
+@unique
+class SourceMemoryDynamicIndexSource(Enum):
+    """Source provenance required for a dynamic memory index term."""
+
+    NONE = "none"
+    VALUE = "value"
+    WORKITEM_ID = "workitem_id"
+    WORKGROUP_ID = "workgroup_id"
+
+
+@dataclass(frozen=True, slots=True)
+class SourceMemoryConstraint:
+    """Target-independent memory-access shape required by an emit row."""
+
+    operation: SourceMemoryOperation
+    memory_spaces: tuple[str, ...]
+    element_byte_count: int
+    vector_lane_count: int
+    vector_lane_byte_stride: int
+    static_byte_offset: int
+    dynamic_term_count: int = 0
+    dynamic_index_source: SourceMemoryDynamicIndexSource = (
+        SourceMemoryDynamicIndexSource.NONE
+    )
+    dynamic_byte_stride: int = 0
+    cache_policy_build_flags: int = 0
+    diagnostic: GuardDiagnostic | None = None
+
+    def __init__(
+        self,
+        *,
+        operation: SourceMemoryOperation,
+        memory_spaces: Sequence[str],
+        element_byte_count: int,
+        vector_lane_count: int,
+        vector_lane_byte_stride: int,
+        static_byte_offset: int,
+        dynamic_term_count: int = 0,
+        dynamic_index_source: SourceMemoryDynamicIndexSource = (
+            SourceMemoryDynamicIndexSource.NONE
+        ),
+        dynamic_byte_stride: int = 0,
+        cache_policy_build_flags: int = 0,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> None:
+        object.__setattr__(self, "operation", operation)
+        object.__setattr__(self, "memory_spaces", tuple(memory_spaces))
+        object.__setattr__(self, "element_byte_count", element_byte_count)
+        object.__setattr__(self, "vector_lane_count", vector_lane_count)
+        object.__setattr__(self, "vector_lane_byte_stride", vector_lane_byte_stride)
+        object.__setattr__(self, "static_byte_offset", static_byte_offset)
+        object.__setattr__(self, "dynamic_term_count", dynamic_term_count)
+        object.__setattr__(self, "dynamic_index_source", dynamic_index_source)
+        object.__setattr__(self, "dynamic_byte_stride", dynamic_byte_stride)
+        object.__setattr__(self, "cache_policy_build_flags", cache_policy_build_flags)
+        object.__setattr__(self, "diagnostic", diagnostic)
+        self._validate_shape()
+
+    def _validate_shape(self) -> None:
+        if not self.memory_spaces:
+            raise ValueError("source memory constraint needs a memory space")
+        for memory_space in self.memory_spaces:
+            if memory_space not in _MEMORY_SPACE_NAMES:
+                raise ValueError(f"unknown source memory space '{memory_space}'")
+        if not 0 < self.element_byte_count <= _U32_MAX:
+            raise ValueError(
+                "source memory element byte count must fit in a positive u32"
+            )
+        if not 0 < self.vector_lane_count <= _U32_MAX:
+            raise ValueError(
+                "source memory vector lane count must fit in a positive u32"
+            )
+        if not _I64_MIN <= self.vector_lane_byte_stride <= _I64_MAX:
+            raise ValueError("source memory vector lane byte stride must fit in i64")
+        if self.vector_lane_byte_stride == 0:
+            raise ValueError("source memory vector lane byte stride must be non-zero")
+        if not _I64_MIN <= self.static_byte_offset <= _I64_MAX:
+            raise ValueError("source memory static byte offset must fit in i64")
+        if not 0 <= self.dynamic_term_count <= _U8_MAX:
+            raise ValueError("source memory dynamic term count must be non-negative")
+        if self.dynamic_term_count == 0:
+            if self.dynamic_index_source != SourceMemoryDynamicIndexSource.NONE:
+                raise ValueError("static source memory cannot require a dynamic index")
+            if self.dynamic_byte_stride != 0:
+                raise ValueError("static source memory cannot require a dynamic stride")
+        elif self.dynamic_index_source == SourceMemoryDynamicIndexSource.NONE:
+            raise ValueError("dynamic source memory needs an index source")
+        elif self.dynamic_byte_stride == 0:
+            raise ValueError("dynamic source memory stride must be non-zero")
+        if not _I64_MIN <= self.dynamic_byte_stride <= _I64_MAX:
+            raise ValueError("source memory dynamic byte stride must fit in i64")
+        if not 0 <= self.cache_policy_build_flags <= _U32_MAX:
+            raise ValueError("source memory cache policy flags must fit in u32")
+
+    def validate(self, source_op: Op) -> None:
+        del source_op

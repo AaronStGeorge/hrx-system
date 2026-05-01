@@ -27,6 +27,7 @@ from loom.target.contracts.immediates import AttrProject, ValueProject
 from loom.target.contracts.kinds import SourceValueKind
 from loom.target.contracts.patterns import TypePattern
 from loom.target.contracts.source import ValueRef
+from loom.target.contracts.source_memory import SourceMemoryConstraint
 from loom.target.low_descriptors import Descriptor, DescriptorSet
 
 
@@ -59,6 +60,7 @@ class EmitDescriptorOp:
     swap_first_two_operands: bool = False
     copy_operands: Sequence[str] = ()
     accumulator: str | None = None
+    source_memory: SourceMemoryConstraint | None = None
 
     def __post_init__(self) -> None:
         operand_bindings = self.operands if self.operands is not None else {}
@@ -169,6 +171,8 @@ class EmitDescriptorOp:
                 f"{source_op.name}: accumulator is only valid for "
                 "accumulate-lanes emits"
             )
+        if self.source_memory is not None:
+            self.source_memory.validate(source_op)
         self._validate_immediates(source_op)
         return tuple(produced_temporaries)
 
