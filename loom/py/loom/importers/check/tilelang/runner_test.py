@@ -105,6 +105,7 @@ def test_run_tilelang_check_verifies_checked_in_fixtures() -> None:
         "scalar_calls.py": ["passed", "passed"],
         "topology.py": ["passed", "passed"],
         "vector_arithmetic.py": ["passed", "passed"],
+        "vector_casts.py": ["passed", "passed"],
         "vector_memory.py": ["passed", "passed"],
     }
 

@@ -192,6 +192,12 @@ class LT:
         self.dtype = dtype
 
 
+class Cast:
+    def __init__(self, value: object, dtype: str) -> None:
+        self.value = value
+        self.dtype = dtype
+
+
 class Select:
     def __init__(
         self,

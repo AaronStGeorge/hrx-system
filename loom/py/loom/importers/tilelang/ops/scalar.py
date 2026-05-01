@@ -86,6 +86,15 @@ def convert_cast(
     if str(input_type) == str(result_type):
         context.map_value(expr, input_value, str(result_type))
         return input_value
+    if _is_vector_type(input_type) or _is_vector_type(result_type):
+        return _convert_vector_cast(
+            expr,
+            context,
+            input_value,
+            input_type,
+            result_type,
+            value,
+        )
     builder_name = _cast_builder_name(
         dtype(value), input_type, dtype(expr), result_type
     )
@@ -104,6 +113,52 @@ def convert_cast(
         ),
     )
     context.map_value(expr, result, str(result_type))
+    return result
+
+
+def _convert_vector_cast(
+    expr: object,
+    context: TileLangConversionContext,
+    input_value: ValueRef,
+    input_type: Type,
+    result_type: Type,
+    source_value: object,
+) -> ValueRef | None:
+    if not _is_vector_type(input_type) or not _is_vector_type(result_type):
+        context.record_blocked(
+            node_text(expr),
+            "vector cast input and result must both be vector-typed",
+        )
+        return None
+    input_vector_type = cast(ShapedType, input_type)
+    result_vector_type = cast(ShapedType, result_type)
+    if input_vector_type.dims != result_vector_type.dims:
+        context.record_blocked(
+            node_text(expr),
+            "vector cast input and result shapes must match",
+        )
+        return None
+    builder_name = _cast_builder_name(
+        dtype(source_value),
+        input_vector_type.element_type,
+        dtype(expr),
+        result_vector_type.element_type,
+    )
+    if builder_name is None:
+        context.record_blocked(
+            node_text(expr),
+            f"no vector cast builder from {input_type} to {result_type}",
+        )
+        return None
+    result = cast(
+        ValueRef,
+        getattr(context.builder.vector, builder_name)(
+            input=input_value,
+            results=[result_vector_type],
+            name=context.fresh_name(builder_name),
+        ),
+    )
+    context.map_value(expr, result, str(result_vector_type))
     return result
 
 

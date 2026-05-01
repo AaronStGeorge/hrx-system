@@ -149,7 +149,7 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "tir.Cast",
         OpFamily.TIR_NODE,
         CoverageState.SUPPORTED,
-        "Scalar cast.",
+        "Scalar or same-shape vector cast.",
     ),
     OpCoverage(
         "tir.Ramp",
