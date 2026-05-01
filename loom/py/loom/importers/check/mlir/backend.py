@@ -52,11 +52,6 @@ class MlirBackend:
             action="store_true",
             help="prefer local .abi3.so IREE compiler bindings",
         )
-        parser.add_argument(
-            "--json",
-            action="store_true",
-            help="emit machine-readable check results",
-        )
 
     def run(self, args: argparse.Namespace) -> tuple[CheckResult, ...]:
         from loom.importers.check.mlir.runner import MlirCheckOptions, run_mlir_check
@@ -65,6 +60,7 @@ class MlirBackend:
             kernel=args.kernel,
             prefer_abi3_extensions=args.prefer_abi3_extensions,
             update=args.update,
+            case_filter=args.case_filter,
         )
         return tuple(
             result

@@ -16,6 +16,7 @@ py_library(
     srcs = [
         "__init__.py",
         "cases.py",
+        "main.py",
         "python.py",
         "registry.py",
         "results.py",
@@ -39,6 +40,7 @@ py_test(
     name = "check_test",
     srcs = [
         "cases_test.py",
+        "main_test.py",
         "python_test.py",
         "registry_test.py",
         "results_test.py",
@@ -47,6 +49,7 @@ py_test(
     ],
     args = [
         "loom.importers.check.cases_test",
+        "loom.importers.check.main_test",
         "loom.importers.check.python_test",
         "loom.importers.check.registry_test",
         "loom.importers.check.results_test",

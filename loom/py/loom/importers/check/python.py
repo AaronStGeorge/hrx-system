@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -19,6 +19,7 @@ from typing import Any
 from loom.importers.check.cases import (
     CheckCase,
     InlineCheckSyntax,
+    case_matches_filter,
     parse_inline_cases,
 )
 from loom.importers.check.results import CheckResult, unified_diff
@@ -36,6 +37,7 @@ class PythonCheckOptions:
     """Options for Python importer check fixtures."""
 
     update: bool = False
+    case_filter: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +58,7 @@ def run_python_check(
     options: PythonCheckOptions,
     is_case: Callable[[object], bool],
     invoke: Callable[[PythonCheckCase], str],
+    case_labels: Callable[[PythonCheckCase], Sequence[str]] | None = None,
 ) -> tuple[CheckResult, ...]:
     source = path.read_text()
     check_cases = parse_python_check_cases(path, source)
@@ -77,9 +80,14 @@ def run_python_check(
             ),
         )
 
+    selected_cases = _filter_python_cases(
+        python_cases,
+        options.case_filter,
+        case_labels=case_labels,
+    )
     results = tuple(
         run_python_case(python_case, options=options, invoke=invoke)
-        for python_case in python_cases
+        for python_case in selected_cases
     )
     if options.update:
         updated_source = format_updated_source(
@@ -175,6 +183,8 @@ def run_python_case(
             returncode=1,
             stdout="",
             stderr=f"{type(exc).__name__}: {exc}\n",
+            input=check_case.input,
+            expected=check_case.expected,
         )
     if stdout == check_case.expected:
         return CheckResult(
@@ -183,6 +193,8 @@ def run_python_case(
             returncode=0,
             stdout=stdout,
             stderr="",
+            input=check_case.input,
+            expected=check_case.expected,
         )
     if options.update:
         return CheckResult(
@@ -191,6 +203,8 @@ def run_python_case(
             returncode=0,
             stdout=stdout,
             stderr="",
+            input=check_case.input,
+            expected=check_case.expected,
             updated=True,
         )
     return CheckResult(
@@ -199,6 +213,8 @@ def run_python_case(
         returncode=0,
         stdout=stdout,
         stderr="",
+        input=check_case.input,
+        expected=check_case.expected,
         mismatch="output differs from expected output",
         diff=unified_diff(
             check_case.expected,
@@ -207,6 +223,28 @@ def run_python_case(
             tofile=f"{check_case.path}:case{check_case.index}:actual",
         ),
     )
+
+
+def _filter_python_cases(
+    python_cases: tuple[PythonCheckCase, ...],
+    case_filter: str | None,
+    *,
+    case_labels: Callable[[PythonCheckCase], Sequence[str]] | None,
+) -> tuple[PythonCheckCase, ...]:
+    if not case_filter:
+        return python_cases
+    filtered_cases: list[PythonCheckCase] = []
+    for python_case in python_cases:
+        labels = [python_case.function.__name__]
+        if case_labels is not None:
+            labels.extend(case_labels(python_case))
+        if case_matches_filter(
+            python_case.check_case,
+            case_filter,
+            labels=labels,
+        ):
+            filtered_cases.append(python_case)
+    return tuple(filtered_cases)
 
 
 def encode_python_expected(text: str) -> str:

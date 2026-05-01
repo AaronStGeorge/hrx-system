@@ -36,6 +36,7 @@ class TileLangCheckOptions:
 
     update: bool = False
     target_preset: str | None = None
+    case_filter: str | None = None
     verify_structure: bool = True
 
 
@@ -46,9 +47,13 @@ def run_tilelang_check(
 ) -> tuple[CheckResult, ...]:
     return run_python_check(
         path,
-        options=PythonCheckOptions(update=options.update),
+        options=PythonCheckOptions(
+            update=options.update,
+            case_filter=options.case_filter,
+        ),
         is_case=is_tilelang_case,
         invoke=lambda case: _invoke_tilelang_case(case, options),
+        case_labels=_tilelang_case_labels,
     )
 
 
@@ -96,3 +101,13 @@ def _case_kwargs(function: Callable[..., Any]) -> dict[str, Any]:
         else:
             raise TypeError(f"unsupported TileLang fixture parameter `{name}`")
     return kwargs
+
+
+def _tilelang_case_labels(case: PythonCheckCase) -> tuple[str, ...]:
+    metadata = get_tilelang_case_metadata(case.function)
+    if metadata is None:
+        return ()
+    labels = [metadata.category, *metadata.tags]
+    if metadata.name:
+        labels.append(metadata.name)
+    return tuple(labels)

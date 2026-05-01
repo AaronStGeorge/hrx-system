@@ -32,7 +32,10 @@ def format_updated_source(
     updated_cases: list[str] = []
     result_by_index = {result.case_index: result for result in results}
     for case in cases:
-        result = result_by_index[case.index]
+        result = result_by_index.get(case.index)
+        if result is None:
+            updated_cases.append(_raw_case_source(original_source, case.index, syntax))
+            continue
         if result.returncode == 0:
             updated_cases.append(
                 format_updated_case(

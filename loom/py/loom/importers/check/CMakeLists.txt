@@ -16,6 +16,7 @@ iree_py_library(
   SRCS
     "__init__.py"
     "cases.py"
+    "main.py"
     "python.py"
     "registry.py"
     "results.py"
@@ -44,6 +45,7 @@ iree_py_test(
     "../../tools/pytest_style_runner.py"
   ARGS
     "loom.importers.check.cases_test"
+    "loom.importers.check.main_test"
     "loom.importers.check.python_test"
     "loom.importers.check.registry_test"
     "loom.importers.check.results_test"

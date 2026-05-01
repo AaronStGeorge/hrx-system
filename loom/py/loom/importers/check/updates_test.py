@@ -31,3 +31,17 @@ def test_format_updated_source_puts_blank_line_before_case_separator() -> None:
         format_updated_source("", cases, results)
         == "input\n// ----\nnew\n\n// ====\ninput2\n// ----\nnew2\n"
     )
+
+
+def test_format_updated_source_keeps_unselected_cases() -> None:
+    source = "input\n// ----\nold\n\n// ====\ninput2\n// ----\nold2\n"
+    cases = parse_inline_cases(
+        Path("kernels.mlir"),
+        source,
+    )
+    results = [CheckResult(Path("kernels.mlir"), 1, 0, "new2\n", "")]
+
+    assert (
+        format_updated_source(source, cases, results)
+        == "input\n// ----\nold\n\n// ====\ninput2\n// ----\nnew2\n"
+    )

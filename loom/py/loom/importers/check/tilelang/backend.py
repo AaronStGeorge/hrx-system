@@ -57,11 +57,6 @@ class TileLangBackend:
             action="store_true",
             help="update inline expected output sections",
         )
-        parser.add_argument(
-            "--json",
-            action="store_true",
-            help="emit machine-readable check results",
-        )
 
     def run(self, args: argparse.Namespace) -> tuple[CheckResult, ...]:
         from loom.importers.check.tilelang.runner import (
@@ -72,6 +67,7 @@ class TileLangBackend:
         options = TileLangCheckOptions(
             update=args.update,
             target_preset=args.target_preset,
+            case_filter=args.case_filter,
         )
         return tuple(
             result

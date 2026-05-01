@@ -146,11 +146,6 @@ class DeferredPackageBackend:
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("paths", nargs="*", type=Path)
-        parser.add_argument(
-            "--json",
-            action="store_true",
-            help="emit machine-readable check results",
-        )
 
     def run(self, _args: argparse.Namespace) -> tuple[CheckResult, ...]:
         raise AssertionError(f"disabled backend {self.name!r} cannot run")

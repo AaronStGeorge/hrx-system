@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -182,6 +183,28 @@ def strip_case_directives(
             continue
         lines.append(line)
     return "".join(lines)
+
+
+def case_matches_filter(
+    check_case: CheckCase,
+    case_filter: str | None,
+    *,
+    labels: Sequence[str] = (),
+) -> bool:
+    """Returns whether a parsed case should run under a substring filter."""
+
+    if not case_filter:
+        return True
+    candidates = [
+        str(check_case.path),
+        check_case.path.name,
+        f"{check_case.path}:case{check_case.index}",
+        f"case{check_case.index}",
+    ]
+    if check_case.run:
+        candidates.append(check_case.run)
+    candidates.extend(label for label in labels if label)
+    return any(case_filter in candidate for candidate in candidates)
 
 
 def _run_directive(

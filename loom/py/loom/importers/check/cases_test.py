@@ -9,6 +9,7 @@ from pathlib import Path
 from loom.importers.check.cases import (
     CheckCase,
     InlineCheckSyntax,
+    case_matches_filter,
     parse_inline_cases,
     split_expected,
     split_raw_cases,
@@ -56,3 +57,20 @@ def test_parse_inline_cases_uses_configured_comment_syntax() -> None:
         expected="expected 0\n",
     )
     assert cases[1].input == "case_1()\n"
+
+
+def test_case_matches_filter_checks_path_case_run_and_labels() -> None:
+    check_case = CheckCase(
+        path=Path("kernels/vector.mlir"),
+        index=2,
+        source="",
+        input="",
+        expected="",
+        run="mlir --kernel reduce",
+    )
+
+    assert case_matches_filter(check_case, "vector.mlir")
+    assert case_matches_filter(check_case, "case2")
+    assert case_matches_filter(check_case, "reduce")
+    assert case_matches_filter(check_case, "arith", labels=("arith",))
+    assert not case_matches_filter(check_case, "missing")

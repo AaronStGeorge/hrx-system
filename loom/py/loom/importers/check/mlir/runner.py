@@ -14,6 +14,7 @@ from pathlib import Path
 from loom.importers.check.cases import (
     DEFAULT_CHECK_SYNTAX,
     CheckCase,
+    case_matches_filter,
     parse_inline_cases,
 )
 from loom.importers.check.results import CheckResult, unified_diff
@@ -27,6 +28,7 @@ class MlirCheckOptions:
     kernel: str | None = None
     prefer_abi3_extensions: bool = False
     update: bool = False
+    case_filter: str | None = None
 
 
 def run_mlir_check(
@@ -36,7 +38,10 @@ def run_mlir_check(
 ) -> tuple[CheckResult, ...]:
     source = path.read_text()
     cases = parse_check_cases(path, source, default_kernel=options.kernel)
-    results = tuple(import_mlir_case(case, options=options) for case in cases)
+    selected_cases = tuple(
+        case for case in cases if case_matches_filter(case, options.case_filter)
+    )
+    results = tuple(import_mlir_case(case, options=options) for case in selected_cases)
     if options.update:
         updated_source = format_updated_source(source, cases, results)
         if updated_source != source:
@@ -70,6 +75,8 @@ def parse_check_cases(
                 input=raw_case.input,
                 expected=raw_case.expected,
                 run=effective_run,
+                line_start=raw_case.line_start,
+                line_end=raw_case.line_end,
             )
         )
     return tuple(cases)
@@ -132,6 +139,8 @@ def import_mlir_case(
             returncode=1,
             stdout="",
             stderr=f"{exc}\n",
+            input=case.input,
+            expected=case.expected,
         )
     except Exception as exc:
         return CheckResult(
@@ -140,6 +149,8 @@ def import_mlir_case(
             returncode=1,
             stdout="",
             stderr=f"{type(exc).__name__}: {exc}\n",
+            input=case.input,
+            expected=case.expected,
         )
 
     if stdout == case.expected:
@@ -149,6 +160,8 @@ def import_mlir_case(
             returncode=0,
             stdout=stdout,
             stderr="",
+            input=case.input,
+            expected=case.expected,
         )
     if options.update:
         return CheckResult(
@@ -157,6 +170,8 @@ def import_mlir_case(
             returncode=0,
             stdout=stdout,
             stderr="",
+            input=case.input,
+            expected=case.expected,
             updated=True,
         )
     return CheckResult(
@@ -165,6 +180,8 @@ def import_mlir_case(
         returncode=0,
         stdout=stdout,
         stderr="",
+        input=case.input,
+        expected=case.expected,
         mismatch="output differs from expected output",
         diff=unified_diff(
             case.expected,

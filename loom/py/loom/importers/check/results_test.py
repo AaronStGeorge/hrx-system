@@ -5,8 +5,13 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from loom.importers.check.results import CheckResult, summarize_results
+from loom.importers.check.results import (
+    CheckResult,
+    dump_check_results,
+    summarize_results,
+)
 
 
 def test_summarize_results_classifies_failures_crashes_and_skips() -> None:
@@ -26,3 +31,25 @@ def test_summarize_results_classifies_failures_crashes_and_skips() -> None:
         "failed": 2,
         "crashed": 1,
     }
+
+
+def test_dump_check_results_writes_case_artifacts() -> None:
+    with TemporaryDirectory() as directory:
+        result = CheckResult(
+            Path("kernels.mlir"),
+            0,
+            0,
+            "actual\n",
+            "",
+            input="input\n",
+            expected="expected\n",
+            diff="diff\n",
+        )
+        dump_check_results([result], Path(directory))
+        case_dirs = list(Path(directory).glob("*/case0"))
+
+        assert len(case_dirs) == 1
+        assert (case_dirs[0] / "input.txt").read_text() == "input\n"
+        assert (case_dirs[0] / "expected.txt").read_text() == "expected\n"
+        assert (case_dirs[0] / "stdout.txt").read_text() == "actual\n"
+        assert (case_dirs[0] / "diff.patch").read_text() == "diff\n"

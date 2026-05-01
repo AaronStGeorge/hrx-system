@@ -86,6 +86,42 @@ def first():
     assert "# old\n" not in updated_source
 
 
+def test_run_python_check_filters_by_function_name() -> None:
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "cases.py"
+        path.write_text(
+            """
+def case(func):
+    func.__case__ = True
+    return func
+
+@case
+def first():
+    return "first\\n"
+# ----
+# first
+
+# ====
+@case
+def second():
+    return "second\\n"
+# ----
+# second
+"""
+        )
+
+        results = run_python_check(
+            path,
+            options=PythonCheckOptions(case_filter="second"),
+            is_case=lambda value: bool(getattr(value, "__case__", False)),
+            invoke=lambda case: case.function(),
+        )
+
+    assert len(results) == 1
+    assert results[0].case_index == 1
+    assert results[0].passed
+
+
 def test_invoke_receives_python_check_case() -> None:
     with TemporaryDirectory() as directory:
         path = Path(directory) / "cases.py"

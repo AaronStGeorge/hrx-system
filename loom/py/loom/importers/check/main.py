@@ -1,0 +1,145 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""Command line implementation for importer checks."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+
+from loom.importers.check.registry import (
+    BackendRegistry,
+    make_default_registry,
+    print_importers,
+    skip_unavailable_backend,
+)
+from loom.importers.check.results import (
+    CheckResult,
+    dump_check_results,
+    results_to_json,
+    summarize_results,
+)
+
+
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    registry: BackendRegistry | None = None,
+) -> int:
+    registry = registry or make_default_registry()
+    parser = argparse.ArgumentParser(prog="loom-import-check")
+    parser.add_argument(
+        "--list-importers",
+        action="store_true",
+        help="list enabled and disabled importer check backends",
+    )
+    subparsers = parser.add_subparsers(dest="importer")
+    for candidate in registry.all():
+        help_text = candidate.backend.help
+        if not candidate.availability.available:
+            help_text = f"{help_text} (disabled: {candidate.availability.message()})"
+        subparser = subparsers.add_parser(candidate.backend.name, help=help_text)
+        candidate.backend.add_arguments(subparser)
+        _add_common_check_arguments(subparser)
+    args = parser.parse_args(argv)
+    if args.list_importers:
+        sys.stdout.write(f"{print_importers(registry)}\n")
+        return 0
+    if args.importer is None:
+        parser.error("importer is required unless --list-importers is used")
+    selected = registry.by_name(args.importer)
+    if selected is None:
+        parser.error(f"unknown importer: {args.importer}")
+        raise AssertionError("argparse.error returned")
+
+    availability = selected.availability
+    if availability.available:
+        availability = selected.backend.prepare(args)
+    if not availability.available:
+        results = skip_unavailable_backend(selected, args, availability)
+    else:
+        results = selected.backend.run(args)
+
+    if args.dump_temp_dir is not None:
+        dump_check_results(results, args.dump_temp_dir)
+
+    if args.json:
+        sys.stdout.write(f"{results_to_json(results)}\n")
+    else:
+        for result in results:
+            sys.stdout.write(f"{result.status}: {_result_location(result)}\n")
+            if result.mismatch:
+                sys.stdout.write(f"  {result.mismatch}\n")
+                if result.diff:
+                    sys.stdout.write(result.diff)
+            if not result.passed:
+                first_line = _diagnostic_line(result.stderr or result.stdout)
+                if first_line:
+                    sys.stdout.write(f"  {first_line}\n")
+        summary = summarize_results(results)
+        sys.stdout.write(
+            "summary: "
+            f"{summary['passed']} passed, "
+            f"{summary['updated']} updated, "
+            f"{summary['skipped']} skipped, "
+            f"{summary['failed']} failed, "
+            f"{summary['crashed']} crashed"
+            "\n"
+        )
+    if not results:
+        sys.stderr.write("error: no importer check cases matched\n")
+        return 1
+    if args.fail_on_skip and any(result.skipped for result in results):
+        return 1
+    return 0 if all(result.passed for result in results) else 1
+
+
+def _add_common_check_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--filter",
+        dest="case_filter",
+        help=(
+            "only run cases whose path, case index, run directive, or "
+            "frontend-specific labels contain this substring"
+        ),
+    )
+    parser.add_argument(
+        "--fail-on-skip",
+        action="store_true",
+        help="return a failing exit code when optional importer checks are skipped",
+    )
+    parser.add_argument(
+        "--dump-temp-dir",
+        type=Path,
+        help="write per-case importer check artifacts under this directory",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="emit machine-readable check results",
+    )
+
+
+def _result_location(result: CheckResult) -> str:
+    if result.case_index < 0:
+        return str(result.path)
+    return f"{result.path}:case{result.case_index}"
+
+
+def _diagnostic_line(text: str) -> str | None:
+    fallback: str | None = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if fallback is None and "RuntimeWarning:" not in stripped:
+            fallback = stripped
+        if stripped.startswith(("error:", "fatal:", "Traceback ")):
+            return stripped
+    return fallback
