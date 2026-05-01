@@ -520,6 +520,15 @@ iree_status_t loom_low_lower_bind_value(loom_low_lower_context_t* context,
   return loom_low_lower_copy_value_name(context, source_value_id, low_value_id);
 }
 
+iree_status_t loom_low_lower_bind_value_alias(loom_low_lower_context_t* context,
+                                              loom_value_id_t source_value_id,
+                                              loom_value_id_t result_value_id) {
+  loom_value_id_t low_value_id = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_lookup_value(context, source_value_id, &low_value_id));
+  return loom_low_lower_bind_value(context, result_value_id, low_value_id);
+}
+
 iree_status_t loom_low_lower_elide_value(loom_low_lower_context_t* context,
                                          loom_value_id_t source_value_id) {
   const loom_value_ordinal_t source_ordinal =

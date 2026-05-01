@@ -373,15 +373,6 @@ static iree_status_t loom_test_low_select_op(void* user_data,
   }
 }
 
-static iree_status_t loom_test_low_emit_buffer_view(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
-  loom_value_id_t low_buffer = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, loom_buffer_view_buffer(source_op), &low_buffer));
-  return loom_low_lower_bind_value(context, loom_buffer_view_result(source_op),
-                                   low_buffer);
-}
-
 static iree_status_t loom_test_low_emit_vector_load(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_test_low_memory_access_plan_t* plan) {
@@ -454,7 +445,9 @@ static iree_status_t loom_test_low_emit_op(void* user_data,
   (void)user_data;
   switch (plan.id) {
     case LOOM_OP_BUFFER_VIEW:
-      return loom_test_low_emit_buffer_view(context, source_op);
+      return loom_low_lower_bind_value_alias(
+          context, loom_buffer_view_buffer(source_op),
+          loom_buffer_view_result(source_op));
     case LOOM_OP_VECTOR_LOAD:
       return loom_test_low_emit_vector_load(
           context, source_op,

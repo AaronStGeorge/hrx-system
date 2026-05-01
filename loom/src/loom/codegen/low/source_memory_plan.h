@@ -144,6 +144,16 @@ loom_low_source_memory_access_single_dynamic_term(
   return plan->dynamic_term_count == 1 ? &plan->dynamic_terms[0] : NULL;
 }
 
+// Returns true when |value_id| names a block argument in |module|. Targets use
+// this to recognize source roots already materialized by ABI lowering.
+static inline bool loom_low_source_memory_value_is_block_argument(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  if (value_id >= module->values.count) {
+    return false;
+  }
+  return loom_value_is_block_arg(loom_module_value(module, value_id));
+}
+
 // Returns true when |term|'s dynamic byte offset is proven to fit in an
 // unsigned integer with |bit_count| bits.
 static inline bool loom_low_source_memory_dynamic_term_fits_unsigned_bit_count(

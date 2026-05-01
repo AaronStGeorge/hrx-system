@@ -570,6 +570,13 @@ iree_status_t loom_low_lower_bind_value(loom_low_lower_context_t* context,
                                         loom_value_id_t source_value_id,
                                         loom_value_id_t low_value_id);
 
+// Binds |result_value_id| to the low SSA value already selected for
+// |source_value_id|. This is for target callbacks that preserve a source-level
+// alias while relying on facts to carry view or offset semantics separately.
+iree_status_t loom_low_lower_bind_value_alias(loom_low_lower_context_t* context,
+                                              loom_value_id_t source_value_id,
+                                              loom_value_id_t result_value_id);
+
 // Marks one source SSA value as intentionally erased by the selected lowering
 // rule. This is only for source-level sequencing/control values whose users are
 // also lowered away, such as async tokens and groups. Elided values must never

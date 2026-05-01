@@ -100,15 +100,6 @@ static iree_status_t loom_amdgpu_lower_buffer_alloca(
                                    loom_low_storage_address_result(address_op));
 }
 
-static iree_status_t loom_amdgpu_lower_buffer_view(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
-  loom_value_id_t low_buffer = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, loom_buffer_view_buffer(source_op), &low_buffer));
-  return loom_low_lower_bind_value(context, loom_buffer_view_result(source_op),
-                                   low_buffer);
-}
-
 iree_status_t loom_amdgpu_lower_buffer_op(loom_low_lower_context_t* context,
                                           const loom_op_t* source_op,
                                           loom_low_lower_plan_t plan) {
@@ -118,7 +109,9 @@ iree_status_t loom_amdgpu_lower_buffer_op(loom_low_lower_context_t* context,
           context, source_op,
           (const loom_amdgpu_buffer_alloca_plan_t*)plan.target_data);
     case LOOM_OP_BUFFER_VIEW:
-      return loom_amdgpu_lower_buffer_view(context, source_op);
+      return loom_low_lower_bind_value_alias(
+          context, loom_buffer_view_buffer(source_op),
+          loom_buffer_view_result(source_op));
     default:
       IREE_CHECK_UNREACHABLE();
   }

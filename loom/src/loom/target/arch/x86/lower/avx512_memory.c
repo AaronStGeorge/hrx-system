@@ -77,14 +77,6 @@ typedef struct loom_x86_memory_access_plan_t {
   uint8_t index_scale;
 } loom_x86_memory_access_plan_t;
 
-static bool loom_x86_source_value_is_block_argument(const loom_module_t* module,
-                                                    loom_value_id_t value_id) {
-  if (value_id >= module->values.count) {
-    return false;
-  }
-  return loom_value_is_block_arg(loom_module_value(module, value_id));
-}
-
 static bool loom_x86_dynamic_stride_as_address_scale(int64_t byte_stride,
                                                      uint8_t* out_scale) {
   IREE_ASSERT_ARGUMENT(out_scale);
@@ -165,7 +157,7 @@ static iree_status_t loom_x86_select_memory_access(
   if (out_plan->value_kind == LOOM_X86_MEMORY_VALUE_NONE ||
       !loom_x86_memory_space_is_object_memory(out_plan->source.memory_space) ||
       !loom_x86_i64_fits_disp32(out_plan->source.static_byte_offset) ||
-      !loom_x86_source_value_is_block_argument(
+      !loom_low_source_memory_value_is_block_argument(
           module, out_plan->source.root_value_id)) {
     return iree_ok_status();
   }
@@ -252,15 +244,6 @@ static loom_named_attr_t loom_x86_make_scale_attr(loom_string_id_t name_id,
   };
 }
 
-static iree_status_t loom_x86_lower_buffer_alias(
-    loom_low_lower_context_t* context, loom_value_id_t source_value_id,
-    loom_value_id_t result_value_id) {
-  loom_value_id_t low_value_id = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, source_value_id, &low_value_id));
-  return loom_low_lower_bind_value(context, result_value_id, low_value_id);
-}
-
 static iree_status_t loom_x86_lower_vector_load(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_x86_memory_access_plan_t* plan) {
@@ -342,9 +325,9 @@ iree_status_t loom_x86_emit_avx512_op(void* user_data,
   (void)user_data;
   switch (plan.id) {
     case LOOM_OP_BUFFER_VIEW:
-      return loom_x86_lower_buffer_alias(context,
-                                         loom_buffer_view_buffer(source_op),
-                                         loom_buffer_view_result(source_op));
+      return loom_low_lower_bind_value_alias(
+          context, loom_buffer_view_buffer(source_op),
+          loom_buffer_view_result(source_op));
     case LOOM_OP_VECTOR_LOAD:
       return loom_x86_lower_vector_load(
           context, source_op,

@@ -1250,11 +1250,8 @@ static iree_status_t loom_low_lower_bind_identity_results(
   const loom_value_id_t* source_operands = loom_op_const_operands(source_op);
   const loom_value_id_t* source_results = loom_op_const_results(source_op);
   for (uint16_t i = 0; i < source_op->result_count; ++i) {
-    loom_value_id_t low_value = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(
-        loom_low_lower_lookup_value(context, source_operands[i], &low_value));
-    IREE_RETURN_IF_ERROR(
-        loom_low_lower_bind_value(context, source_results[i], low_value));
+    IREE_RETURN_IF_ERROR(loom_low_lower_bind_value_alias(
+        context, source_operands[i], source_results[i]));
   }
   return iree_ok_status();
 }
@@ -1271,19 +1268,15 @@ static iree_status_t loom_low_lower_structural_op(
   if (loom_traits_are_value_alias(traits)) {
     IREE_ASSERT(source_op->operand_count >= 1);
     IREE_ASSERT(source_op->result_count == 1);
-    loom_value_id_t low_value = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-        context, loom_op_const_operands(source_op)[0], &low_value));
-    return loom_low_lower_bind_value(
-        context, loom_op_const_results(source_op)[0], low_value);
+    return loom_low_lower_bind_value_alias(context,
+                                           loom_op_const_operands(source_op)[0],
+                                           loom_op_const_results(source_op)[0]);
   }
   switch (source_op->kind) {
     case LOOM_OP_BUFFER_ASSUME_SAME_ROOT: {
-      loom_value_id_t low_value = LOOM_VALUE_ID_INVALID;
-      IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-          context, loom_buffer_assume_same_root_buffer(source_op), &low_value));
-      return loom_low_lower_bind_value(
-          context, loom_buffer_assume_same_root_result(source_op), low_value);
+      return loom_low_lower_bind_value_alias(
+          context, loom_buffer_assume_same_root_buffer(source_op),
+          loom_buffer_assume_same_root_result(source_op));
     }
     case LOOM_OP_FUNC_RETURN: {
       loom_value_slice_t values = loom_func_return_operands(source_op);

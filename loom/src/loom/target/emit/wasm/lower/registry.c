@@ -175,14 +175,6 @@ static bool loom_wasm_memory_access_shape_is_v128(
          plan->vector_lane_byte_stride == 4;
 }
 
-static bool loom_wasm_source_value_is_block_argument(
-    const loom_module_t* module, loom_value_id_t value_id) {
-  if (value_id >= module->values.count) {
-    return false;
-  }
-  return loom_value_is_block_arg(loom_module_value(module, value_id));
-}
-
 static iree_status_t loom_wasm_select_memory_access(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_source_memory_operation_kind_t operation_kind,
@@ -208,7 +200,7 @@ static iree_status_t loom_wasm_select_memory_access(
       !loom_wasm_memory_access_shape_is_v128(&out_plan->source) ||
       !loom_wasm_memory_space_is_linear(out_plan->source.memory_space) ||
       !loom_wasm_i64_fits_i32(out_plan->source.static_byte_offset) ||
-      !loom_wasm_source_value_is_block_argument(
+      !loom_low_source_memory_value_is_block_argument(
           module, out_plan->source.root_value_id)) {
     return iree_ok_status();
   }
@@ -391,15 +383,6 @@ static iree_status_t loom_wasm_emit_memory_address(
   return loom_wasm_emit_address_offset(context, plan, location, out_address);
 }
 
-static iree_status_t loom_wasm_lower_buffer_alias(
-    loom_low_lower_context_t* context, loom_value_id_t source_value_id,
-    loom_value_id_t result_value_id) {
-  loom_value_id_t low_value_id = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, source_value_id, &low_value_id));
-  return loom_low_lower_bind_value(context, result_value_id, low_value_id);
-}
-
 static iree_status_t loom_wasm_lower_vector_load(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_wasm_memory_access_plan_t* plan) {
@@ -444,9 +427,9 @@ static iree_status_t loom_wasm_emit_op(void* user_data,
   (void)user_data;
   switch (plan.id) {
     case LOOM_OP_BUFFER_VIEW:
-      return loom_wasm_lower_buffer_alias(context,
-                                          loom_buffer_view_buffer(source_op),
-                                          loom_buffer_view_result(source_op));
+      return loom_low_lower_bind_value_alias(
+          context, loom_buffer_view_buffer(source_op),
+          loom_buffer_view_result(source_op));
     case LOOM_OP_VECTOR_LOAD:
       return loom_wasm_lower_vector_load(
           context, source_op,
