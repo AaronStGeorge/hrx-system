@@ -38,8 +38,6 @@ static iree_status_t loom_low_source_workload_verify_general_module(
 static void loom_low_source_workload_count_module_source_ops(
     const loom_module_t* module,
     loom_low_source_workload_counts_t* out_counts) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(out_counts);
   memset(out_counts, 0, sizeof(*out_counts));
   for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
     const loom_op_t* op = module->symbols.entries[i].defining_op;
@@ -91,12 +89,6 @@ iree_status_t loom_low_source_workload_run_pipeline(
     const loom_low_source_workload_pipeline_options_t* options,
     iree_arena_block_pool_t* block_pool,
     loom_low_source_workload_pipeline_counters_t* out_counters) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(options && options->pass_registry &&
-                       options->descriptor_registry &&
-                       options->policy_registry);
-  IREE_ASSERT_ARGUMENT(block_pool);
-  IREE_ASSERT_ARGUMENT(out_counters);
   memset(out_counters, 0, sizeof(*out_counters));
 
   loom_low_source_workload_count_module_source_ops(

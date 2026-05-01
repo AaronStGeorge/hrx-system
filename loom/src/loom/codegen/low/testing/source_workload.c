@@ -172,7 +172,6 @@ static iree_status_t loom_low_source_workload_register_dialect(
 
 iree_status_t loom_low_source_workload_register_dialects(
     loom_context_t* context) {
-  IREE_ASSERT_ARGUMENT(context);
   IREE_RETURN_IF_ERROR(loom_low_source_workload_register_dialect(
       context, LOOM_DIALECT_TARGET, loom_target_dialect_vtables,
       loom_target_dialect_op_semantics));
@@ -209,7 +208,6 @@ iree_status_t loom_low_source_workload_register_dialects(
 static iree_status_t loom_low_source_workload_add_symbol(
     loom_builder_t* builder, iree_string_view_t name,
     loom_symbol_ref_t* out_ref) {
-  IREE_ASSERT_ARGUMENT(out_ref);
   loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_builder_intern_string(builder, name, &name_id));
   uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
@@ -800,7 +798,6 @@ static iree_status_t loom_low_source_workload_gen_vector4xi32_select(
 
 static iree_status_t loom_low_source_workload_allocate_static_zero_index(
     loom_builder_t* builder, int64_t** out_static_indices) {
-  IREE_ASSERT_ARGUMENT(out_static_indices);
   *out_static_indices = NULL;
   int64_t* static_indices = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -812,7 +809,6 @@ static iree_status_t loom_low_source_workload_allocate_static_zero_index(
 
 static iree_status_t loom_low_source_workload_allocate_dynamic_index_sentinel(
     loom_builder_t* builder, int64_t** out_static_indices) {
-  IREE_ASSERT_ARGUMENT(out_static_indices);
   *out_static_indices = NULL;
   int64_t* static_indices = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -825,7 +821,6 @@ static iree_status_t loom_low_source_workload_allocate_dynamic_index_sentinel(
 static iree_status_t loom_low_source_workload_assume_index_range(
     loom_builder_t* builder, loom_value_id_t source, int64_t minimum_value,
     int64_t maximum_value, loom_value_id_t* out_bounded_index) {
-  IREE_ASSERT_ARGUMENT(out_bounded_index);
   *out_bounded_index = LOOM_VALUE_ID_INVALID;
   loom_predicate_t* predicate = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -1156,7 +1151,6 @@ static iree_status_t loom_low_source_workload_generate_body(
 static iree_status_t loom_low_source_workload_clone_values(
     loom_builder_t* builder, const loom_low_source_workload_values_t* values,
     loom_low_source_workload_values_t** out_values) {
-  IREE_ASSERT_ARGUMENT(out_values);
   *out_values = NULL;
   loom_low_source_workload_values_t* clone = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -1467,11 +1461,6 @@ static iree_status_t loom_low_source_workload_generate_module(
     loom_low_source_workload_random_t* random,
     const loom_low_source_workload_config_t* config, loom_context_t* context,
     iree_arena_block_pool_t* block_pool, loom_module_t** out_module) {
-  IREE_ASSERT_ARGUMENT(random);
-  IREE_ASSERT_ARGUMENT(config);
-  IREE_ASSERT_ARGUMENT(context);
-  IREE_ASSERT_ARGUMENT(block_pool);
-  IREE_ASSERT_ARGUMENT(out_module);
   *out_module = NULL;
   if (iree_string_view_is_empty(config->target_preset)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1604,9 +1593,6 @@ static void loom_low_source_workload_count_op(
 void loom_low_source_workload_count_func_ops(
     const loom_module_t* module, const loom_op_t* func_op,
     loom_low_source_workload_counts_t* out_counts) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(func_op);
-  IREE_ASSERT_ARGUMENT(out_counts);
   memset(out_counts, 0, sizeof(*out_counts));
   const loom_region_t* body = loom_func_def_body(func_op);
   for (uint16_t block_index = 0; block_index < body->block_count;
@@ -1622,8 +1608,6 @@ void loom_low_source_workload_count_func_ops(
 void loom_low_source_workload_counts_accumulate(
     loom_low_source_workload_counts_t* target_counts,
     const loom_low_source_workload_counts_t* source_counts) {
-  IREE_ASSERT_ARGUMENT(target_counts);
-  IREE_ASSERT_ARGUMENT(source_counts);
   target_counts->scalar_integer_op_count +=
       source_counts->scalar_integer_op_count;
   target_counts->scalar_float_op_count += source_counts->scalar_float_op_count;
