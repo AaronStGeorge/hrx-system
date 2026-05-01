@@ -27,6 +27,8 @@
 #include "loom/target/arch/amdgpu/contracts/matrix.h"
 #include "loom/target/arch/amdgpu/contracts/reduce.h"
 #include "loom/target/arch/amdgpu/contracts/reduce_lower_rules.h"
+#include "loom/target/arch/amdgpu/contracts/view.h"
+#include "loom/target/arch/amdgpu/contracts/view_lower_rules.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
 
 typedef struct loom_amdgpu_lower_dispatch_row_t
@@ -113,22 +115,6 @@ static iree_status_t loom_amdgpu_emit_buffer_dispatch(
     const loom_amdgpu_lower_dispatch_row_t* row, loom_low_lower_plan_t plan) {
   (void)row;
   return loom_amdgpu_lower_buffer_op(context, source_op, plan);
-}
-
-static iree_status_t loom_amdgpu_select_view_dispatch(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_lower_dispatch_row_t* row,
-    loom_low_lower_plan_t* out_plan) {
-  (void)row;
-  return loom_amdgpu_select_view_plan(context, source_op, out_plan);
-}
-
-static iree_status_t loom_amdgpu_emit_view_dispatch(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_lower_dispatch_row_t* row, loom_low_lower_plan_t plan) {
-  (void)row;
-  (void)plan;
-  return loom_amdgpu_lower_view_op(context, source_op);
 }
 
 static iree_status_t loom_amdgpu_select_preamble_dispatch(
@@ -433,9 +419,6 @@ static const loom_amdgpu_lower_dispatch_row_t
 
 static const loom_amdgpu_lower_dispatch_row_t
     kAmdgpuViewDispatchRows[LOOM_OP_VIEW_COUNT_] = {
-        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VIEW_SUBVIEW)] = LOOM_AMDGPU_DIRECT_ROW(
-            LOOM_OP_VIEW_SUBVIEW, loom_amdgpu_select_view_dispatch,
-            loom_amdgpu_emit_view_dispatch, NULL),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VIEW_ATOMIC_REDUCE)] =
             LOOM_AMDGPU_DATA_ROW(LOOM_OP_VIEW_ATOMIC_REDUCE,
                                  loom_amdgpu_atomic_plan_t,
@@ -836,29 +819,49 @@ static iree_status_t loom_amdgpu_low_legality_try_verify_op(
   return row->verify(provider, context, op, out_handled);
 }
 
+#define LOOM_AMDGPU_RULE_SET_FRAGMENTS(F)                                   \
+  F(ARITHMETIC, loom_amdgpu_arithmetic_contract_fragment,                   \
+    loom_amdgpu_arithmetic_lower_rule_set)                                  \
+  F(BUFFER, loom_amdgpu_buffer_contract_fragment,                           \
+    loom_amdgpu_buffer_lower_rule_set)                                      \
+  F(INTEGER, loom_amdgpu_integer_contract_fragment,                         \
+    loom_amdgpu_integer_lower_rule_set)                                     \
+  F(COMPARE, loom_amdgpu_compare_contract_fragment,                         \
+    loom_amdgpu_compare_lower_rule_set)                                     \
+  F(DOT, loom_amdgpu_dot_contract_fragment, loom_amdgpu_dot_lower_rule_set) \
+  F(REDUCE, loom_amdgpu_reduce_contract_fragment,                           \
+    loom_amdgpu_reduce_lower_rule_set)                                      \
+  F(ASYNC, loom_amdgpu_async_contract_fragment,                             \
+    loom_amdgpu_async_lower_rule_set)                                       \
+  F(VIEW, loom_amdgpu_view_contract_fragment, loom_amdgpu_view_lower_rule_set)
+
 // clang-format off
+typedef enum loom_amdgpu_rule_set_index_e {
+#define LOOM_AMDGPU_RULE_SET_ENUM(name, fragment, rule_set) \
+  LOOM_AMDGPU_RULE_SET_INDEX_##name,
+  LOOM_AMDGPU_RULE_SET_FRAGMENTS(LOOM_AMDGPU_RULE_SET_ENUM)
+#undef LOOM_AMDGPU_RULE_SET_ENUM
+  LOOM_AMDGPU_RULE_SET_INDEX_COUNT_,
+} loom_amdgpu_rule_set_index_t;
+
 static const loom_low_lower_rule_set_t* const kAmdgpuRuleSets[] = {
-  &loom_amdgpu_arithmetic_lower_rule_set,
-  &loom_amdgpu_buffer_lower_rule_set,
-  &loom_amdgpu_integer_lower_rule_set,
-  &loom_amdgpu_compare_lower_rule_set,
-  &loom_amdgpu_dot_lower_rule_set,
-  &loom_amdgpu_reduce_lower_rule_set,
-  &loom_amdgpu_async_lower_rule_set,
+#define LOOM_AMDGPU_RULE_SET_ROW(name, fragment, rule_set) &rule_set,
+  LOOM_AMDGPU_RULE_SET_FRAGMENTS(LOOM_AMDGPU_RULE_SET_ROW)
+#undef LOOM_AMDGPU_RULE_SET_ROW
 };
 
 static const loom_target_contract_binding_t kAmdgpuContractBindings[] = {
-  {&loom_amdgpu_arithmetic_contract_fragment, 0},
-  {&loom_amdgpu_buffer_contract_fragment, 1},
-  {&loom_amdgpu_integer_contract_fragment, 2},
-  {&loom_amdgpu_compare_contract_fragment, 3},
-  {&loom_amdgpu_dot_contract_fragment, 4},
-  {&loom_amdgpu_reduce_contract_fragment, 5},
-  {&loom_amdgpu_async_contract_fragment, 6},
+#define LOOM_AMDGPU_CONTRACT_BINDING_ROW(name, fragment, rule_set) \
+  {&fragment, LOOM_AMDGPU_RULE_SET_INDEX_##name},
+  LOOM_AMDGPU_RULE_SET_FRAGMENTS(LOOM_AMDGPU_CONTRACT_BINDING_ROW)
+#undef LOOM_AMDGPU_CONTRACT_BINDING_ROW
   {&loom_amdgpu_matrix_contract_fragment, UINT16_MAX},
 };
-
 // clang-format on
+
+static_assert(IREE_ARRAYSIZE(kAmdgpuRuleSets) ==
+                  LOOM_AMDGPU_RULE_SET_INDEX_COUNT_,
+              "AMDGPU rule-set index enum must match the rule-set table");
 
 static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
     .name = IREE_SVL("amdgpu-register-lower"),

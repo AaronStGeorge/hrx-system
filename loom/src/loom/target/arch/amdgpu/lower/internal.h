@@ -507,15 +507,6 @@ iree_status_t loom_amdgpu_lower_buffer_op(loom_low_lower_context_t* context,
                                           const loom_op_t* source_op,
                                           loom_low_lower_plan_t plan);
 
-// Selects a plan for view projection source ops.
-iree_status_t loom_amdgpu_select_view_plan(loom_low_lower_context_t* context,
-                                           const loom_op_t* source_op,
-                                           loom_low_lower_plan_t* out_plan);
-
-// Lowers a view projection source op by preserving its storage root mapping.
-iree_status_t loom_amdgpu_lower_view_op(loom_low_lower_context_t* context,
-                                        const loom_op_t* source_op);
-
 // Returns true when value is a non-zero power of two.
 bool loom_amdgpu_u32_is_power_of_two(uint32_t value);
 

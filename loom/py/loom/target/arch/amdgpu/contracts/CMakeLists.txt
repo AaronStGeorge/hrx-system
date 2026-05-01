@@ -23,7 +23,9 @@ iree_py_library(
     "integer.py"
     "materializers.py"
     "matrix.py"
+    "memory.py"
     "reduce.py"
+    "view.py"
   DEPS
     iree::runtime::py::loom::core
     iree::runtime::py::loom::dialect::buffer::buffer
@@ -31,6 +33,7 @@ iree_py_library(
     iree::runtime::py::loom::dialect::kernel::kernel
     iree::runtime::py::loom::dialect::scalar::scalar
     iree::runtime::py::loom::dialect::vector::vector
+    iree::runtime::py::loom::dialect::view::view
     iree::runtime::py::loom::target::arch::amdgpu::descriptors
     iree::runtime::py::loom::target::contracts::contracts
 )

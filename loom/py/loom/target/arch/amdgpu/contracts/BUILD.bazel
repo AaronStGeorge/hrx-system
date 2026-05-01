@@ -23,7 +23,9 @@ py_library(
         "integer.py",
         "materializers.py",
         "matrix.py",
+        "memory.py",
         "reduce.py",
+        "view.py",
     ],
     deps = [
         "//loom/py/loom:core",
@@ -32,6 +34,7 @@ py_library(
         "//loom/py/loom/dialect/kernel",
         "//loom/py/loom/dialect/scalar",
         "//loom/py/loom/dialect/vector",
+        "//loom/py/loom/dialect/view",
         "//loom/py/loom/target/arch/amdgpu:descriptors",
         "//loom/py/loom/target/contracts",
     ],

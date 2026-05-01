@@ -353,7 +353,6 @@ loom_cc_library(
     "lower/sync.c"
     "lower/table.c"
     "lower/values.c"
-    "lower/view.c"
   DEPS
     ::atomic_candidates
     ::descriptor_ids
@@ -399,6 +398,8 @@ loom_cc_library(
     loom::src::loom::target::arch::amdgpu::contracts::matrix
     loom::src::loom::target::arch::amdgpu::contracts::reduce
     loom::src::loom::target::arch::amdgpu::contracts::reduce_lower_rules
+    loom::src::loom::target::arch::amdgpu::contracts::view
+    loom::src::loom::target::arch::amdgpu::contracts::view_lower_rules
     loom::src::loom::target::low_legality
     loom::src::loom::util::fact_table
   PUBLIC

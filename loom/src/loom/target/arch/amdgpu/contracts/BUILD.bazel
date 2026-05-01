@@ -159,3 +159,20 @@ loom_target_table_cc_library(
         "//loom/src/loom/target/arch/amdgpu:lower_materializers",
     ],
 )
+
+loom_target_table_cc_library(
+    name = "view",
+    args = ["--contract-fragment=amdgpu.view"],
+    generator = _AMDGPU_CONTRACT_FRAGMENT_GENERATOR,
+    deps = ["//loom/src/loom/target:contract"],
+)
+
+loom_target_table_cc_library(
+    name = "view_lower_rules",
+    args = ["--contract-fragment=amdgpu.view"],
+    generator = _AMDGPU_LOWER_RULE_GENERATOR,
+    deps = [
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/ops/view",
+    ],
+)

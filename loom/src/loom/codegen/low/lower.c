@@ -361,6 +361,34 @@ static void loom_low_lower_mark_rule_storage_demands(
       }
     }
   }
+  for (uint16_t alias_ordinal = 0; alias_ordinal < rule->alias_ref_count;
+       ++alias_ordinal) {
+    const uint16_t value_ref_index =
+        (uint16_t)(rule->alias_ref_start + alias_ordinal * 2);
+    loom_value_id_t source_value_id = LOOM_VALUE_ID_INVALID;
+    if (loom_low_lower_rule_value_ref_source_value(
+            rule_set, selected_plan->source_op, value_ref_index,
+            &source_value_id)) {
+      loom_low_lower_mark_value_storage_required(context, source_value_id);
+    }
+  }
+  if (rule->alias_ref_count == 0) {
+    return;
+  }
+  // Alias rules can erase projection ops whose trailing variadic operands are
+  // still referenced by facts consumed by later plans, such as dynamic subview
+  // offsets used during source-memory address emission.
+  const loom_op_t* source_op = selected_plan->source_op;
+  const loom_op_vtable_t* vtable = loom_op_vtable(context->module, source_op);
+  if (vtable == NULL || !iree_any_bit_set(vtable->vtable_flags,
+                                          LOOM_OP_VTABLE_VARIADIC_OPERANDS)) {
+    return;
+  }
+  const loom_value_id_t* operands = loom_op_const_operands(source_op);
+  for (uint16_t i = vtable->fixed_operand_count; i < source_op->operand_count;
+       ++i) {
+    loom_low_lower_mark_value_storage_required(context, operands[i]);
+  }
 }
 
 static void loom_low_lower_mark_callback_plan_storage_demands(

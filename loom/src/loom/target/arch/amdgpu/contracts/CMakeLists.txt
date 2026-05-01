@@ -197,4 +197,27 @@ loom_target_table_cc_library(
     loom::src::loom::target::arch::amdgpu::lower_materializers
 )
 
+loom_target_table_cc_library(
+  NAME
+    view
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_contract_fragment
+  ARGS
+    "--contract-fragment=amdgpu.view"
+  DEPS
+    loom::src::loom::target::contract
+)
+
+loom_target_table_cc_library(
+  NAME
+    view_lower_rules
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
+  ARGS
+    "--contract-fragment=amdgpu.view"
+  DEPS
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::view
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
