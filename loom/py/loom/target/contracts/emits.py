@@ -23,7 +23,7 @@ from loom.target.contracts.descriptors import (
     _validate_immediate_literal,
     _validate_required_descriptor_operands,
 )
-from loom.target.contracts.immediates import AttrProject
+from loom.target.contracts.immediates import AttrProject, ValueProject
 from loom.target.contracts.kinds import SourceValueKind
 from loom.target.contracts.patterns import TypePattern
 from loom.target.contracts.source import ValueRef
@@ -52,7 +52,9 @@ class EmitDescriptorOp:
     operands: Mapping[str, ValueRef] | None = None
     results: Mapping[str, ValueRef] | None = None
     result_types: Mapping[str, ResultTypeBinding] | None = None
-    immediates: Mapping[str, AttrProject | int] | Sequence[AttrProject] = ()
+    immediates: (
+        Mapping[str, AttrProject | ValueProject | int] | Sequence[AttrProject]
+    ) = ()
     form: DescriptorEmitForm = DescriptorEmitForm.AUTO
     swap_first_two_operands: bool = False
     copy_operands: Sequence[str] = ()
@@ -179,7 +181,7 @@ class EmitDescriptorOp:
                     immediate_name,
                     "descriptor immediate binding",
                 )
-                if isinstance(binding, AttrProject):
+                if isinstance(binding, AttrProject | ValueProject):
                     binding.validate(source_op, self.descriptor, immediate_name)
                 else:
                     _validate_immediate_literal(

@@ -397,6 +397,7 @@ _AMDGPU_LOWER_RULE_GENERATOR_DEPS = [
     "//loom/py/loom:gen/generated_file.py",
     "//loom/py/loom:gen/target_lower_rules.py",
     "//loom/py/loom:target/arch/amdgpu/contracts/__init__.py",
+    "//loom/py/loom:target/arch/amdgpu/contracts/arithmetic.py",
     "//loom/py/loom:target/arch/amdgpu/contracts/compare.py",
     "//loom/py/loom:target/arch/amdgpu/contracts/integer.py",
     "//loom/py/loom:target/arch/amdgpu/contracts/materializers.py",
@@ -422,6 +423,24 @@ _AMDGPU_LOWER_RULE_GENERATOR_DEPS = [
     "//loom/py/loom:target/contracts/templates.py",
     "//loom/py/loom:target/low_descriptors.py",
 ]
+
+loom_target_table_cc_library(
+    name = "lower_arithmetic_rules",
+    args = ["--contract-table=amdgpu.arithmetic"],
+    cmake_generator = _AMDGPU_LOWER_RULE_GENERATOR_SCRIPT,
+    cmake_generator_deps = _AMDGPU_LOWER_RULE_GENERATOR_DEPS,
+    generator = _AMDGPU_LOWER_RULE_GENERATOR,
+    header = "lower/arithmetic_rules.h",
+    source = "lower/arithmetic_rules.c",
+    deps = [
+        ":descriptor_ids",
+        ":lower_materializers",
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/vector",
+    ],
+)
 
 loom_target_table_cc_library(
     name = "lower_compare_rules",
@@ -739,7 +758,6 @@ loom_cc_library(
     name = "lower",
     srcs = [
         "lower/abi.c",
-        "lower/arithmetic_rules.c",
         "lower/async.c",
         "lower/async_rules.c",
         "lower/atomic.c",
@@ -778,6 +796,7 @@ loom_cc_library(
         ":atomic_candidates",
         ":descriptor_ids",
         ":hal_kernel_abi",
+        ":lower_arithmetic_rules",
         ":lower_compare_rules",
         ":lower_integer_rules",
         ":lower_kinds",

@@ -15,7 +15,7 @@ from typing import Self
 
 from loom.dsl import ATTR_TYPE_I64_ARRAY, Op
 from loom.target.contracts.descriptors import _require_immediate
-from loom.target.contracts.source import _require_attr
+from loom.target.contracts.source import _require_attr, _require_value
 from loom.target.low_descriptors import Descriptor
 
 
@@ -27,6 +27,14 @@ class AttrProjectKind(Enum):
     I64_ARRAY_ELEMENT = "i64_array_element"
     I64_ARRAY_PACK_ELEMENTS = "i64_array_pack_elements"
     EXPAND_LANE_I64_ARRAY_TO_BYTE_LANES = "expand_lane_i64_array_to_byte_lanes"
+
+
+@unique
+class ValueProjectKind(Enum):
+    """Projection from source value facts to descriptor immediates."""
+
+    EXACT_I64 = "exact_i64"
+    I32_AS_U32_BITS = "i32_as_u32_bits"
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,3 +177,50 @@ class AttrProject:
             )
         for name in self.target_names:
             _require_immediate(descriptor, name, subject)
+
+
+@dataclass(frozen=True, slots=True)
+class ValueProject:
+    """Descriptor immediate projection from source value facts."""
+
+    kind: ValueProjectKind
+    source_value: str
+    target_bit_offset: int = 0
+
+    @classmethod
+    def exact_i64(cls, source_value: str, *, target_bit_offset: int = 0) -> Self:
+        return cls(
+            kind=ValueProjectKind.EXACT_I64,
+            source_value=source_value,
+            target_bit_offset=target_bit_offset,
+        )
+
+    @classmethod
+    def i32_as_u32_bits(cls, source_value: str, *, target_bit_offset: int = 0) -> Self:
+        return cls(
+            kind=ValueProjectKind.I32_AS_U32_BITS,
+            source_value=source_value,
+            target_bit_offset=target_bit_offset,
+        )
+
+    def __post_init__(self) -> None:
+        if not self.source_value:
+            raise ValueError(f"{self.kind.value} projection requires a source value")
+        if self.target_bit_offset < 0:
+            raise ValueError(
+                f"{self.kind.value} target bit offset must be non-negative"
+            )
+
+    def validate(
+        self,
+        source_op: Op,
+        descriptor: Descriptor,
+        bound_immediate_name: str | None,
+    ) -> None:
+        subject = f"immediate projection {self.kind.value}"
+        _require_value(source_op, self.source_value, subject)
+        if bound_immediate_name is None:
+            raise ValueError(
+                f"{source_op.name}: {subject} must bind one descriptor immediate"
+            )
+        _require_immediate(descriptor, bound_immediate_name, subject)

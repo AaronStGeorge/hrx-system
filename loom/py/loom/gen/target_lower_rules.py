@@ -97,6 +97,8 @@ _ATTR_COPY_KIND_C_NAMES = {
     LowerAttrCopyKind.I64_ARRAY_ELEMENT: "LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_ELEMENT",
     LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS: "LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_PACK_ELEMENTS",
     LowerAttrCopyKind.I64_LITERAL: "LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL",
+    LowerAttrCopyKind.VALUE_EXACT_I64: "LOOM_LOW_LOWER_ATTR_COPY_VALUE_EXACT_I64",
+    LowerAttrCopyKind.VALUE_I32_AS_U32_BITS: "LOOM_LOW_LOWER_ATTR_COPY_VALUE_I32_AS_U32_BITS",
 }
 
 _EMIT_KIND_C_NAMES = {
@@ -499,7 +501,11 @@ def _attr_copy_row(row: LowerAttrCopy) -> list[str]:
             always=True,
         )
     _append_field(fields, "target_bit_offset", row.target_bit_offset)
-    _append_field(fields, "value_ref_index", row.value_ref_index)
+    if row.kind in (
+        LowerAttrCopyKind.VALUE_EXACT_I64,
+        LowerAttrCopyKind.VALUE_I32_AS_U32_BITS,
+    ):
+        _append_field(fields, "value_ref_index", row.value_ref_index, always=True)
     if row.kind == LowerAttrCopyKind.I64_LITERAL:
         _append_field(fields, "literal_i64", row.literal_i64, always=True)
     return fields

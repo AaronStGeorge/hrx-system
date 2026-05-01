@@ -21,7 +21,12 @@ from loom.target.contracts.descriptors import (
 )
 from loom.target.contracts.emits import DescriptorEmitForm, EmitDescriptorOp
 from loom.target.contracts.guards import Guard, GuardDiagnostic, GuardKind
-from loom.target.contracts.immediates import AttrProject, AttrProjectKind
+from loom.target.contracts.immediates import (
+    AttrProject,
+    AttrProjectKind,
+    ValueProject,
+    ValueProjectKind,
+)
 from loom.target.contracts.kinds import ContractSystem, SourceValueKind
 from loom.target.contracts.lower_rules import (
     LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS,
@@ -103,6 +108,8 @@ __all__ = [
     "TypePattern",
     "ValueAliasRule",
     "ValueMaterializer",
+    "ValueProject",
+    "ValueProjectKind",
     "ValueRef",
     "Vector",
     "binary_descriptor_rules",

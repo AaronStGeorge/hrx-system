@@ -88,11 +88,18 @@ class Guard:
     diagnostic: GuardDiagnostic | None = None
 
     @classmethod
-    def value_type(cls, field: str, type_pattern: TypePattern) -> Self:
+    def value_type(
+        cls,
+        field: str,
+        type_pattern: TypePattern,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
         return cls(
             kind=GuardKind.VALUE_TYPE,
             field=field,
             type_pattern=type_pattern,
+            diagnostic=diagnostic,
         )
 
     @classmethod
@@ -118,27 +125,47 @@ class Guard:
         )
 
     @classmethod
-    def descriptor_available(cls, descriptor: Descriptor) -> Self:
+    def descriptor_available(
+        cls,
+        descriptor: Descriptor,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
         return cls(
             kind=GuardKind.DESCRIPTOR_AVAILABLE,
             field=descriptor.key,
             descriptor=descriptor,
+            diagnostic=diagnostic,
         )
 
     @classmethod
-    def value_materializable(cls, field: str, materializer: str) -> Self:
+    def value_materializable(
+        cls,
+        field: str,
+        materializer: str,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
         return cls(
             kind=GuardKind.VALUE_MATERIALIZABLE,
             field=field,
             materializer=materializer,
+            diagnostic=diagnostic,
         )
 
     @classmethod
-    def low_value_register_class(cls, field: str, register_class: str) -> Self:
+    def low_value_register_class(
+        cls,
+        field: str,
+        register_class: str,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
         return cls(
             kind=GuardKind.LOW_VALUE_REGISTER_CLASS,
             field=field,
             register_class=register_class,
+            diagnostic=diagnostic,
         )
 
     @classmethod
@@ -226,8 +253,17 @@ class Guard:
         )
 
     @classmethod
-    def value_exact_i64(cls, field: str) -> Self:
-        return cls(kind=GuardKind.VALUE_EXACT_I64, field=field)
+    def value_exact_i64(
+        cls,
+        field: str,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_EXACT_I64,
+            field=field,
+            diagnostic=diagnostic,
+        )
 
     def __post_init__(self) -> None:
         if not self.field:

@@ -25,6 +25,7 @@ from loom.target.contracts import (
     Scalar,
     TypePattern,
     ValueAliasRule,
+    ValueProject,
     ValueRef,
     Vector,
     binary_descriptor_rules,
@@ -173,3 +174,33 @@ def test_compile_lower_rule_set_compiles_const_immediate_emit() -> None:
     assert len(compiled.attr_copies) == 1
     assert compiled.attr_copies[0].kind == LowerAttrCopyKind.I64_LITERAL
     assert compiled.attr_copies[0].literal_i64 == 0
+
+
+def test_compile_lower_rule_set_compiles_value_fact_immediate_emit() -> None:
+    table = ContractTable(
+        name="test.value-immediate",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            DescriptorRule(
+                source_op=scalar_arithmetic.scalar_addi,
+                descriptor=TEST_LOW_CONST_I32_DESCRIPTOR,
+                guards=(Guard.value_type("result", Scalar("i32")),),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_CONST_I32_DESCRIPTOR,
+                        results={"dst": ValueRef.result("result")},
+                        immediates={
+                            "i32_value": ValueProject.i32_as_u32_bits("lhs"),
+                        },
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
+
+    assert len(compiled.attr_copies) == 1
+    assert compiled.attr_copies[0].kind == LowerAttrCopyKind.VALUE_I32_AS_U32_BITS
+    value_ref = compiled.value_refs[compiled.attr_copies[0].value_ref_index]
+    assert value_ref.index == 0

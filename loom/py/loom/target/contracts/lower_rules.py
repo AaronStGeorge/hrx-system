@@ -18,7 +18,12 @@ from loom.target.contracts.emits import (
     EmitDescriptorOp,
 )
 from loom.target.contracts.guards import Guard, GuardKind
-from loom.target.contracts.immediates import AttrProject, AttrProjectKind
+from loom.target.contracts.immediates import (
+    AttrProject,
+    AttrProjectKind,
+    ValueProject,
+    ValueProjectKind,
+)
 from loom.target.contracts.kinds import SourceValueKind
 from loom.target.contracts.patterns import TypePattern
 from loom.target.contracts.rules import DescriptorRule
@@ -45,6 +50,8 @@ class LowerAttrCopyKind(Enum):
     I64_ARRAY_ELEMENT = "i64_array_element"
     I64_ARRAY_PACK_ELEMENTS = "i64_array_pack_elements"
     I64_LITERAL = "i64_literal"
+    VALUE_EXACT_I64 = "value_exact_i64"
+    VALUE_I32_AS_U32_BITS = "value_i32_as_u32_bits"
 
 
 LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1 = 1 << 0
@@ -880,8 +887,13 @@ class _LowerRuleSetCompiler:
                     )
                 )
                 continue
+            if isinstance(binding, AttrProject):
+                attr_copies.append(
+                    self._lower_attr_project(source_op, target_name, binding)
+                )
+                continue
             attr_copies.append(
-                self._lower_attr_project(source_op, target_name, binding)
+                self._lower_value_project(source_op, target_name, binding)
             )
         return tuple(attr_copies)
 
@@ -931,6 +943,31 @@ class _LowerRuleSetCompiler:
         raise ValueError(
             f"{source_op.name}: immediate projection '{project.kind.value}' is "
             "not representable by generated lower rules yet"
+        )
+
+    def _lower_value_project(
+        self,
+        source_op: Op,
+        target_name: str,
+        project: ValueProject,
+    ) -> LowerAttrCopy:
+        if project.kind == ValueProjectKind.EXACT_I64:
+            kind = LowerAttrCopyKind.VALUE_EXACT_I64
+        elif project.kind == ValueProjectKind.I32_AS_U32_BITS:
+            kind = LowerAttrCopyKind.VALUE_I32_AS_U32_BITS
+        else:
+            raise ValueError(
+                f"{source_op.name}: immediate projection '{project.kind.value}' is "
+                "not representable by generated lower rules yet"
+            )
+        return LowerAttrCopy(
+            kind=kind,
+            target_name=target_name,
+            value_ref_index=self._append_value_ref(
+                source_op,
+                _value_ref_for_source_field(source_op, project.source_value),
+            ),
+            target_bit_offset=project.target_bit_offset,
         )
 
     def _append_attr_copy_sequence(self, sequence: tuple[LowerAttrCopy, ...]) -> int:

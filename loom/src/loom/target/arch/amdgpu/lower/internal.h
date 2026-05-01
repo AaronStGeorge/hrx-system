@@ -246,7 +246,7 @@ bool loom_amdgpu_value_as_address_constant(loom_low_lower_context_t* context,
                                            int64_t* out_value);
 
 // Target-local rule table for regular arithmetic source ops.
-extern const loom_low_lower_rule_set_t loom_amdgpu_arithmetic_rule_set;
+extern const loom_low_lower_rule_set_t loom_amdgpu_arithmetic_lower_rule_set;
 
 // Target-local rule table for scalar integer and index arithmetic source ops.
 extern const loom_low_lower_rule_set_t loom_amdgpu_integer_lower_rule_set;
