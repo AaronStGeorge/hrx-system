@@ -153,18 +153,11 @@ static iree_string_view_t loom_x86_packed_dot_rejection_detail(
   return IREE_SV("no x86 packed-dot descriptor matches this vector dot op");
 }
 
-static iree_status_t loom_x86_select_packed_dot_descriptor(
+static void loom_x86_select_packed_dot_descriptor(
     const loom_module_t* module, const loom_target_bundle_t* bundle,
-    const loom_low_descriptor_set_t* descriptor_set, const loom_op_t* op,
-    loom_x86_packed_dot_match_diagnostic_t* out_diagnostic,
-    const loom_x86_packed_dot_descriptor_t** out_descriptor,
-    const loom_low_descriptor_t** out_low_descriptor) {
-  if (out_descriptor != NULL) {
-    *out_descriptor = NULL;
-  }
-  if (out_low_descriptor != NULL) {
-    *out_low_descriptor = NULL;
-  }
+    const loom_op_t* op, loom_x86_packed_dot_match_diagnostic_t* out_diagnostic,
+    const loom_x86_packed_dot_descriptor_t** out_descriptor) {
+  *out_descriptor = NULL;
   loom_x86_packed_dot_match_request_t request = {0};
   if (!loom_x86_packed_dot_match_request_from_vector_op(module, op, &request)) {
     if (out_diagnostic != NULL) {
@@ -172,12 +165,7 @@ static iree_status_t loom_x86_select_packed_dot_descriptor(
           .rejection_bits = LOOM_X86_PACKED_DOT_REJECTION_INVALID_REQUEST,
       };
     }
-    return iree_ok_status();
-  }
-  if (bundle == NULL || bundle->config == NULL || descriptor_set == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "x86 packed-dot selection requires a target bundle "
-                            "and descriptor set");
+    return;
   }
   request.feature_bits =
       (loom_x86_packed_dot_feature_bits_t)bundle->config->contract_feature_bits;
@@ -189,25 +177,9 @@ static iree_status_t loom_x86_select_packed_dot_descriptor(
     *out_diagnostic = diagnostic;
   }
   if (descriptor == NULL) {
-    return iree_ok_status();
+    return;
   }
-
-  uint32_t descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
-      descriptor_set, descriptor->stable_id);
-  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "x86 packed-dot descriptor '%.*s' is missing",
-                            (int)descriptor->name.size, descriptor->name.data);
-  }
-  if (out_descriptor != NULL) {
-    *out_descriptor = descriptor;
-  }
-  if (out_low_descriptor != NULL) {
-    *out_low_descriptor = loom_low_descriptor_set_descriptor_at(
-        descriptor_set, descriptor_ordinal);
-    IREE_ASSERT(*out_low_descriptor != NULL);
-  }
-  return iree_ok_status();
+  *out_descriptor = descriptor;
 }
 
 bool loom_x86_op_is_vector_dot(loom_op_kind_t kind) {
@@ -225,80 +197,41 @@ bool loom_x86_op_is_vector_dot(loom_op_kind_t kind) {
 typedef struct loom_x86_packed_dot_plan_t {
   // Descriptor row selected for the packed-dot instruction.
   loom_low_lower_resolved_descriptor_t descriptor;
-  // Left-hand payload vector value.
-  loom_value_id_t lhs;
-  // Right-hand payload vector value.
-  loom_value_id_t rhs;
-  // Accumulator vector value.
-  loom_value_id_t accumulator;
-  // Result vector value.
-  loom_value_id_t result;
 } loom_x86_packed_dot_plan_t;
-
-static bool loom_x86_init_packed_dot_plan(
-    const loom_op_t* source_op,
-    const loom_low_lower_resolved_descriptor_t* descriptor,
-    loom_x86_packed_dot_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(descriptor);
-  IREE_ASSERT_ARGUMENT(out_plan);
-  *out_plan = (loom_x86_packed_dot_plan_t){0};
-  switch (source_op->kind) {
-    case LOOM_OP_VECTOR_DOT2F:
-      *out_plan = (loom_x86_packed_dot_plan_t){
-          .descriptor = *descriptor,
-          .lhs = loom_vector_dot2f_lhs(source_op),
-          .rhs = loom_vector_dot2f_rhs(source_op),
-          .accumulator = loom_vector_dot2f_acc(source_op),
-          .result = loom_vector_dot2f_result(source_op),
-      };
-      return true;
-    case LOOM_OP_VECTOR_DOT4I:
-      *out_plan = (loom_x86_packed_dot_plan_t){
-          .descriptor = *descriptor,
-          .lhs = loom_vector_dot4i_lhs(source_op),
-          .rhs = loom_vector_dot4i_rhs(source_op),
-          .accumulator = loom_vector_dot4i_acc(source_op),
-          .result = loom_vector_dot4i_result(source_op),
-      };
-      return true;
-    default:
-      return false;
-  }
-}
 
 iree_status_t loom_x86_select_packed_dot_op(void* user_data,
                                             loom_low_lower_context_t* context,
                                             const loom_op_t* source_op,
                                             loom_low_lower_plan_t* out_plan) {
   (void)user_data;
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = loom_low_lower_plan_empty();
-  switch (source_op->kind) {
-    case LOOM_OP_VECTOR_DOT2F:
-    case LOOM_OP_VECTOR_DOT4I: {
-      const loom_low_descriptor_t* descriptor = NULL;
-      IREE_RETURN_IF_ERROR(loom_x86_select_packed_dot_descriptor(
-          loom_low_lower_context_module(context),
-          loom_low_lower_context_bundle(context),
-          loom_low_lower_context_descriptor_set(context), source_op,
-          /*out_diagnostic=*/NULL, /*out_descriptor=*/NULL, &descriptor));
-      if (descriptor != NULL) {
-        loom_low_lower_resolved_descriptor_t resolved_descriptor = {0};
-        IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_row(
-            context, descriptor, &resolved_descriptor));
-        loom_x86_packed_dot_plan_t* plan_data = NULL;
-        IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-            context, sizeof(*plan_data), (void**)&plan_data));
-        if (loom_x86_init_packed_dot_plan(source_op, &resolved_descriptor,
-                                          plan_data)) {
-          *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
-        }
-      }
-      return iree_ok_status();
-    }
-    default:
-      return iree_ok_status();
+  const loom_x86_packed_dot_descriptor_t* contract_descriptor = NULL;
+  loom_x86_select_packed_dot_descriptor(loom_low_lower_context_module(context),
+                                        loom_low_lower_context_bundle(context),
+                                        source_op, /*out_diagnostic=*/NULL,
+                                        &contract_descriptor);
+  if (contract_descriptor == NULL) {
+    return iree_ok_status();
   }
+
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_lower_context_descriptor_set(context);
+  uint32_t descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
+      descriptor_set, contract_descriptor->stable_id);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return iree_make_status(
+        IREE_STATUS_NOT_FOUND, "x86 packed-dot descriptor '%.*s' is missing",
+        (int)contract_descriptor->name.size, contract_descriptor->name.data);
+  }
+  loom_x86_packed_dot_plan_t* plan_data = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+      context, sizeof(*plan_data), (void**)&plan_data));
+  const loom_low_descriptor_t* descriptor =
+      loom_low_descriptor_set_descriptor_at(descriptor_set, descriptor_ordinal);
+  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_row(
+      context, descriptor, &plan_data->descriptor));
+  *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_x86_lower_tied_ternary_op(
@@ -306,7 +239,6 @@ static iree_status_t loom_x86_lower_tied_ternary_op(
     const loom_low_lower_resolved_descriptor_t* descriptor,
     loom_value_id_t source_lhs, loom_value_id_t source_rhs,
     loom_value_id_t source_accumulator, loom_value_id_t source_result) {
-  IREE_ASSERT_ARGUMENT(descriptor);
   loom_value_id_t low_lhs = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, source_lhs, &low_lhs));
@@ -348,10 +280,22 @@ static iree_status_t loom_x86_lower_tied_ternary_op(
 static iree_status_t loom_x86_lower_packed_dot_op(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_x86_packed_dot_plan_t* plan) {
-  IREE_ASSERT_ARGUMENT(plan);
-  return loom_x86_lower_tied_ternary_op(context, source_op, &plan->descriptor,
-                                        plan->lhs, plan->rhs, plan->accumulator,
-                                        plan->result);
+  switch (source_op->kind) {
+    case LOOM_OP_VECTOR_DOT2F:
+      return loom_x86_lower_tied_ternary_op(
+          context, source_op, &plan->descriptor,
+          loom_vector_dot2f_lhs(source_op), loom_vector_dot2f_rhs(source_op),
+          loom_vector_dot2f_acc(source_op),
+          loom_vector_dot2f_result(source_op));
+    case LOOM_OP_VECTOR_DOT4I:
+      return loom_x86_lower_tied_ternary_op(
+          context, source_op, &plan->descriptor,
+          loom_vector_dot4i_lhs(source_op), loom_vector_dot4i_rhs(source_op),
+          loom_vector_dot4i_acc(source_op),
+          loom_vector_dot4i_result(source_op));
+    default:
+      IREE_CHECK_UNREACHABLE();
+  }
 }
 
 iree_status_t loom_x86_emit_packed_dot_op(void* user_data,
@@ -372,11 +316,7 @@ iree_status_t loom_x86_emit_packed_dot_op(void* user_data,
 
 static iree_string_view_t loom_x86_legality_contract_set_key(
     const loom_target_low_legality_context_t* context) {
-  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
-  if (bundle == NULL || bundle->config == NULL) {
-    return iree_string_view_empty();
-  }
-  return bundle->config->contract_set_key;
+  return loom_target_low_legality_bundle(context)->config->contract_set_key;
 }
 
 iree_status_t loom_x86_low_legality_verify_packed_dot(
@@ -400,11 +340,9 @@ iree_status_t loom_x86_low_legality_verify_packed_dot(
 
   loom_x86_packed_dot_match_diagnostic_t diagnostic = {0};
   const loom_x86_packed_dot_descriptor_t* descriptor = NULL;
-  IREE_RETURN_IF_ERROR(loom_x86_select_packed_dot_descriptor(
+  loom_x86_select_packed_dot_descriptor(
       loom_target_low_legality_module(context),
-      loom_target_low_legality_bundle(context),
-      loom_target_low_legality_descriptor_set(context), op, &diagnostic,
-      &descriptor, /*out_low_descriptor=*/NULL));
+      loom_target_low_legality_bundle(context), op, &diagnostic, &descriptor);
   if (descriptor == NULL) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("contract"),
