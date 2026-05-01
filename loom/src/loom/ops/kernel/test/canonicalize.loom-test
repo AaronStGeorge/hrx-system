@@ -52,3 +52,35 @@ kernel.def @false_exit_erases(%value: i32) {
   test.use %value : i32
   kernel.return
 }
+
+// ====
+
+kernel.def @true_exit_erases(%value: i32) {
+  %done = scalar.constant true : i1
+  kernel.exit %done : i1
+  test.use %value : i32
+  kernel.return
+}
+
+// ----
+kernel.def @true_exit_erases(%value: i32) {
+  kernel.return
+}
+
+// ====
+
+kernel.def @true_exit_inlines_body(%value: i32, %dead: i32) {
+  %done = scalar.constant true : i1
+  kernel.exit %done : i1 {
+    test.use %value : i32
+    kernel.return
+  }
+  test.use %dead : i32
+  kernel.return
+}
+
+// ----
+kernel.def @true_exit_inlines_body(%value: i32, %dead: i32) {
+  test.use %value : i32
+  kernel.return
+}
