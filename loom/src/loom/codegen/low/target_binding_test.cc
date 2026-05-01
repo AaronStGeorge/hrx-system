@@ -204,12 +204,6 @@ TEST_F(LowTargetBindingTest, RegistryRejectsNullEntries) {
   };
   iree_status_t status = loom_low_descriptor_registry_verify(&registry);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
-
-  const loom_low_descriptor_set_t* descriptor_set = nullptr;
-  status = loom_low_descriptor_registry_lookup(&registry, IREE_SV("missing"),
-                                               &descriptor_set);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
-  EXPECT_EQ(descriptor_set, nullptr);
 }
 
 TEST_F(LowTargetBindingTest, ResolvesProfilePresetAndDescriptorSet) {

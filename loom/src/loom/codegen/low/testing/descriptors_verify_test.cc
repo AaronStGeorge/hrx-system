@@ -1296,16 +1296,13 @@ TEST(LowDescriptorsTest, RejectsUnsortedDescriptorIdReferences) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
-TEST(LowDescriptorsTest, LookupRejectsIncompleteDescriptorReferences) {
+TEST(LowDescriptorsTest, RejectsIncompleteDescriptorReferences) {
   TestTables tables;
   InitializeTestTables(&tables);
   tables.set.descriptor_ref_count = 0;
 
-  uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  iree_status_t status = loom_low_descriptor_set_lookup_descriptor(
-      &tables.set, IREE_SV("test.add.i32"), &descriptor_ordinal);
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
-  EXPECT_EQ(descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
 }
 
 TEST(LowDescriptorsTest, AcceptsAsmFormsAndLookup) {

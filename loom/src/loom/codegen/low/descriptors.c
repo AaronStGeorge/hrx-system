@@ -19,12 +19,12 @@ static iree_status_t loom_low_descriptor_set_string_impl(
     if (allow_none) {
       return iree_ok_status();
     }
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "required low descriptor string offset is NONE");
   }
   if (descriptor_set->string_table.data == NULL ||
       descriptor_set->string_table.data_length == 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "low descriptor string table is empty");
   }
   if (string_offset >= descriptor_set->string_table.data_length) {
@@ -87,15 +87,13 @@ bool loom_low_descriptor_operands_are_tied(
 static iree_status_t loom_low_descriptor_set_key(
     const loom_low_descriptor_set_t* descriptor_set,
     iree_string_view_t* out_key) {
+  IREE_ASSERT_ARGUMENT(descriptor_set);
+  IREE_ASSERT_ARGUMENT(out_key);
   *out_key = iree_string_view_empty();
-  if (descriptor_set == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor set is required");
-  }
   IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
       descriptor_set, descriptor_set->key_string_offset, out_key));
   if (iree_string_view_is_empty(*out_key)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "low descriptor set key is empty");
   }
   return iree_ok_status();
@@ -136,25 +134,9 @@ const loom_low_descriptor_set_t* loom_low_descriptor_registry_descriptor_set_at(
 iree_status_t loom_low_descriptor_registry_lookup(
     const loom_low_descriptor_registry_t* registry, iree_string_view_t key,
     const loom_low_descriptor_set_t** out_descriptor_set) {
-  if (out_descriptor_set == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor lookup output is required");
-  }
+  IREE_ASSERT_ARGUMENT(registry);
+  IREE_ASSERT_ARGUMENT(out_descriptor_set);
   *out_descriptor_set = NULL;
-  if (registry == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor registry is required");
-  }
-  if (registry->descriptor_set_count != 0 &&
-      registry->descriptor_sets == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor registry entries are required");
-  }
-  if (registry->descriptor_set_provider_count != 0 &&
-      registry->descriptor_set_providers == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor registry providers are required");
-  }
   iree_host_size_t descriptor_set_count =
       loom_low_descriptor_registry_descriptor_set_count(registry);
   for (iree_host_size_t i = 0; i < descriptor_set_count; ++i) {
@@ -175,35 +157,14 @@ iree_status_t loom_low_descriptor_registry_lookup(
 iree_status_t loom_low_descriptor_registry_lookup_by_id(
     const loom_low_descriptor_registry_t* registry, uint64_t stable_id,
     const loom_low_descriptor_set_t** out_descriptor_set) {
+  IREE_ASSERT_ARGUMENT(registry);
   IREE_ASSERT_ARGUMENT(out_descriptor_set);
   *out_descriptor_set = NULL;
-  if (registry == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor registry is required");
-  }
-  if (stable_id == LOOM_LOW_STABLE_ID_NONE) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor set stable ID is required");
-  }
-  if (registry->descriptor_set_count != 0 &&
-      registry->descriptor_sets == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor registry entries are required");
-  }
-  if (registry->descriptor_set_provider_count != 0 &&
-      registry->descriptor_set_providers == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor registry providers are required");
-  }
   iree_host_size_t descriptor_set_count =
       loom_low_descriptor_registry_descriptor_set_count(registry);
   for (iree_host_size_t i = 0; i < descriptor_set_count; ++i) {
     const loom_low_descriptor_set_t* descriptor_set =
         loom_low_descriptor_registry_descriptor_set_at(registry, i);
-    if (descriptor_set == NULL) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "low descriptor registry entry is required");
-    }
     if (descriptor_set->stable_id != stable_id) {
       continue;
     }
@@ -216,15 +177,9 @@ iree_status_t loom_low_descriptor_registry_lookup_by_id(
 iree_status_t loom_low_descriptor_set_string(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_bstring_table_offset_t string_offset, iree_string_view_t* out_string) {
-  if (out_string == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor string output is required");
-  }
+  IREE_ASSERT_ARGUMENT(descriptor_set);
+  IREE_ASSERT_ARGUMENT(out_string);
   *out_string = iree_string_view_empty();
-  if (descriptor_set == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor set is required");
-  }
   return loom_low_descriptor_set_string_impl(descriptor_set, string_offset,
                                              /*allow_none=*/true, out_string);
 }
@@ -252,15 +207,9 @@ const loom_low_asm_form_t* loom_low_descriptor_set_asm_form_at(
 iree_status_t loom_low_descriptor_set_lookup_canonical_asm_form(
     const loom_low_descriptor_set_t* descriptor_set,
     uint32_t descriptor_ordinal, uint32_t* out_asm_form_ordinal) {
-  if (out_asm_form_ordinal == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low canonical asm form output is required");
-  }
+  IREE_ASSERT_ARGUMENT(descriptor_set);
+  IREE_ASSERT_ARGUMENT(out_asm_form_ordinal);
   *out_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
-  if (descriptor_set == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor set is required");
-  }
   const loom_low_descriptor_t* descriptor =
       loom_low_descriptor_set_descriptor_at(descriptor_set, descriptor_ordinal);
   if (descriptor == NULL) {
@@ -288,7 +237,7 @@ iree_status_t loom_low_descriptor_set_lookup_canonical_asm_form(
                             "of range");
   }
   if (asm_form->descriptor_ordinal != descriptor_ordinal) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "low descriptor canonical asm form references a "
                             "different descriptor");
   }
@@ -299,28 +248,9 @@ iree_status_t loom_low_descriptor_set_lookup_canonical_asm_form(
 iree_status_t loom_low_descriptor_set_lookup_descriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
     uint32_t* out_descriptor_ordinal) {
-  if (out_descriptor_ordinal == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor lookup output is required");
-  }
+  IREE_ASSERT_ARGUMENT(descriptor_set);
+  IREE_ASSERT_ARGUMENT(out_descriptor_ordinal);
   *out_descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  if (descriptor_set == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor set is required");
-  }
-  if (descriptor_set->descriptor_ref_count !=
-      descriptor_set->descriptor_count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor reference map count %" PRIu32
-                            " does not match descriptor count %" PRIu32,
-                            descriptor_set->descriptor_ref_count,
-                            descriptor_set->descriptor_count);
-  }
-  if (descriptor_set->descriptor_ref_count != 0 &&
-      descriptor_set->descriptor_refs == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor reference map is required");
-  }
   uint32_t low = 0;
   uint32_t high = descriptor_set->descriptor_ref_count;
   while (low < high) {
@@ -385,20 +315,9 @@ uint32_t loom_low_descriptor_set_lookup_descriptor_by_id(
 iree_status_t loom_low_descriptor_set_lookup_asm_form(
     const loom_low_descriptor_set_t* descriptor_set,
     iree_string_view_t mnemonic, uint32_t* out_asm_form_ordinal) {
-  if (out_asm_form_ordinal == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low asm form lookup output is required");
-  }
+  IREE_ASSERT_ARGUMENT(descriptor_set);
+  IREE_ASSERT_ARGUMENT(out_asm_form_ordinal);
   *out_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
-  if (descriptor_set == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor set is required");
-  }
-  if (descriptor_set->asm_form_count != 0 &&
-      descriptor_set->asm_forms == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low asm form table is required");
-  }
   uint32_t low = 0;
   uint32_t high = descriptor_set->asm_form_count;
   while (low < high) {

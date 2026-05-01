@@ -283,22 +283,35 @@ TEST(LowDescriptorRegistryTest, RegistryRejectsDuplicateBundleKeys) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
-TEST(LowDescriptorRegistryTest, BundleSelectionRequiresExplicitLinkedSet) {
+TEST(LowDescriptorRegistryTest, RegistryRejectsBundleWithoutDescriptorSetKey) {
   loom_target_low_descriptor_registry_t registry = {};
   loom_target_core_test_low_descriptor_registry_initialize(&registry);
+  const loom_target_bundle_t* source_bundle = nullptr;
+  IREE_ASSERT_OK(loom_target_low_descriptor_registry_lookup_bundle(
+      &registry, IREE_SV("test-low"), &source_bundle));
+  ASSERT_NE(source_bundle, nullptr);
 
   const loom_target_config_t empty_config = {
       .name = IREE_SVL("empty"),
   };
   const loom_target_bundle_t empty_bundle = {
       .name = IREE_SVL("empty-bundle"),
+      .snapshot = source_bundle->snapshot,
+      .export_plan = source_bundle->export_plan,
       .config = &empty_config,
   };
-  const loom_low_descriptor_set_t* descriptor_set = nullptr;
-  iree_status_t status = loom_target_low_descriptor_set_select_for_bundle(
-      &registry.registry, &empty_bundle, &descriptor_set);
+  const loom_target_bundle_t* bundles[] = {&empty_bundle};
+  registry.target_bundles = bundles;
+  registry.target_bundle_count = IREE_ARRAYSIZE(bundles);
+
+  iree_status_t status = loom_target_low_descriptor_registry_verify(
+      &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
-  EXPECT_EQ(descriptor_set, nullptr);
+}
+
+TEST(LowDescriptorRegistryTest, BundleSelectionFailsWhenLinkedSetIsMissing) {
+  loom_target_low_descriptor_registry_t registry = {};
+  loom_target_core_test_low_descriptor_registry_initialize(&registry);
 
   const loom_target_config_t missing_config = {
       .name = IREE_SVL("missing"),
@@ -308,7 +321,8 @@ TEST(LowDescriptorRegistryTest, BundleSelectionRequiresExplicitLinkedSet) {
       .name = IREE_SVL("missing-bundle"),
       .config = &missing_config,
   };
-  status = loom_target_low_descriptor_set_select_for_bundle(
+  const loom_low_descriptor_set_t* descriptor_set = nullptr;
+  iree_status_t status = loom_target_low_descriptor_set_select_for_bundle(
       &registry.registry, &missing_bundle, &descriptor_set);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
   EXPECT_EQ(descriptor_set, nullptr);
