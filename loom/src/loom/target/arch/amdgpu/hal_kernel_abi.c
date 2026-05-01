@@ -35,7 +35,6 @@ static const loom_symbol_t* loom_amdgpu_hal_kernel_abi_lookup_defined_symbol(
 static iree_status_t loom_amdgpu_hal_kernel_abi_symbol_name(
     const loom_module_t* module, loom_symbol_ref_t symbol_ref,
     iree_string_view_t field_name, iree_string_view_t* out_name) {
-  IREE_ASSERT_ARGUMENT(out_name);
   *out_name = iree_string_view_empty();
   const loom_symbol_t* symbol =
       loom_amdgpu_hal_kernel_abi_lookup_defined_symbol(module, symbol_ref);
@@ -168,8 +167,6 @@ typedef enum loom_amdgpu_hal_kernel_abi_reg_class_e {
 static iree_status_t loom_amdgpu_hal_kernel_abi_reg_class_id(
     loom_amdgpu_hal_kernel_abi_reg_class_t reg_class,
     uint16_t* out_descriptor_reg_class_id) {
-  IREE_ASSERT_ARGUMENT(out_descriptor_reg_class_id);
-
   switch (reg_class) {
     case LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR:
       *out_descriptor_reg_class_id = LOOM_AMDGPU_REG_CLASS_ID_SGPR;
@@ -189,7 +186,6 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_descriptor_reg_class(
     loom_amdgpu_hal_kernel_abi_reg_class_t reg_class,
     uint16_t* out_descriptor_reg_class_id,
     const loom_low_reg_class_t** out_descriptor_reg_class) {
-  IREE_ASSERT_ARGUMENT(out_descriptor_reg_class_id);
   *out_descriptor_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
   if (out_descriptor_reg_class) {
     *out_descriptor_reg_class = NULL;
@@ -390,7 +386,6 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_validate_abi_type(
 static iree_status_t loom_amdgpu_hal_kernel_abi_format_resource_name(
     uint32_t binding_index, iree_string_view_t* out_name,
     iree_arena_allocator_t* arena) {
-  IREE_ASSERT_ARGUMENT(out_name);
   char scratch[32];
   int length =
       iree_snprintf(scratch, sizeof(scratch), "binding%" PRIu32, binding_index);
@@ -437,7 +432,6 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_resource_from_import(
     const loom_op_t* resource_op,
     loom_amdgpu_hal_kernarg_resource_t* out_resource,
     iree_arena_allocator_t* arena) {
-  IREE_ASSERT_ARGUMENT(out_resource);
   *out_resource = (loom_amdgpu_hal_kernarg_resource_t){0};
 
   iree_string_view_t resource_name = iree_string_view_empty();
@@ -485,7 +479,6 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_hal_kernel_abi_layout_t* out_layout,
     iree_arena_allocator_t* arena) {
-  IREE_ASSERT_ARGUMENT(out_layout);
   *out_layout = (loom_amdgpu_hal_kernel_abi_layout_t){0};
   if (module == NULL || function_op == NULL || descriptor_set == NULL ||
       arena == NULL) {
@@ -612,8 +605,6 @@ iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_allocation_fixed_value_t** out_fixed_values,
     iree_host_size_t* out_fixed_value_count, iree_arena_allocator_t* arena) {
-  IREE_ASSERT_ARGUMENT(out_fixed_values);
-  IREE_ASSERT_ARGUMENT(out_fixed_value_count);
   *out_fixed_values = NULL;
   *out_fixed_value_count = 0;
   if (module == NULL || function_op == NULL || descriptor_set == NULL ||

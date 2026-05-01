@@ -106,7 +106,6 @@ static const loom_amdgpu_occupancy_model_t kAmdgpuOccupancyModels[] = {
 
 static iree_status_t loom_amdgpu_occupancy_round_up_u32(
     uint32_t value, uint32_t multiple, uint32_t* out_rounded_value) {
-  IREE_ASSERT_ARGUMENT(out_rounded_value);
   if (value == 0 || multiple <= 1) {
     *out_rounded_value = value;
     return iree_ok_status();
@@ -130,10 +129,6 @@ static iree_status_t loom_amdgpu_occupancy_wave_limit(
     const loom_amdgpu_occupancy_register_class_model_t* model,
     uint32_t max_waves_per_simd, uint32_t allocated_units,
     uint32_t* out_rounded_units, uint32_t* out_wave_limit) {
-  IREE_ASSERT_ARGUMENT(model);
-  IREE_ASSERT_ARGUMENT(out_rounded_units);
-  IREE_ASSERT_ARGUMENT(out_wave_limit);
-
   if (allocated_units == 0) {
     *out_rounded_units = 0;
     *out_wave_limit = max_waves_per_simd;
@@ -159,7 +154,6 @@ static iree_status_t loom_amdgpu_occupancy_next_cliff_units(
     const loom_amdgpu_occupancy_register_class_model_t* model,
     uint32_t max_waves_per_simd, uint32_t allocated_units,
     uint32_t current_wave_limit, uint32_t* out_next_cliff_units) {
-  IREE_ASSERT_ARGUMENT(out_next_cliff_units);
   *out_next_cliff_units = 0;
   if (current_wave_limit == 0) {
     return iree_ok_status();
@@ -188,7 +182,6 @@ static iree_status_t loom_amdgpu_occupancy_next_cliff_units(
 static iree_status_t loom_amdgpu_occupancy_select_model(
     uint64_t descriptor_set_stable_id, iree_string_view_t descriptor_set_key,
     const loom_amdgpu_occupancy_model_t** out_model) {
-  IREE_ASSERT_ARGUMENT(out_model);
   *out_model = NULL;
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kAmdgpuOccupancyModels);
        ++i) {
@@ -210,9 +203,6 @@ iree_status_t loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
     const loom_low_descriptor_set_t* descriptor_set,
     iree_arena_allocator_t* arena,
     loom_low_schedule_pressure_cliff_list_t* out_pressure_cliffs) {
-  IREE_ASSERT_ARGUMENT(descriptor_set);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_pressure_cliffs);
   *out_pressure_cliffs = loom_low_schedule_pressure_cliff_list_empty();
 
   iree_string_view_t descriptor_set_key = loom_low_descriptor_set_string(
@@ -286,7 +276,6 @@ static iree_status_t loom_amdgpu_occupancy_find_register_class(
     const loom_amdgpu_occupancy_register_class_t* register_classes,
     iree_host_size_t register_class_count, uint16_t descriptor_reg_class_id,
     uint32_t* out_index) {
-  IREE_ASSERT_ARGUMENT(out_index);
   for (iree_host_size_t i = 0; i < register_class_count; ++i) {
     if (register_classes[i].descriptor_reg_class_id ==
         descriptor_reg_class_id) {
@@ -355,7 +344,6 @@ static iree_status_t loom_amdgpu_occupancy_collect_allocations(
 
 static iree_status_t loom_amdgpu_occupancy_add_u32(uint32_t lhs, uint32_t rhs,
                                                    uint32_t* out_value) {
-  IREE_ASSERT_ARGUMENT(out_value);
   uint64_t value = (uint64_t)lhs + rhs;
   if (value > UINT32_MAX) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -427,7 +415,6 @@ static iree_status_t loom_amdgpu_occupancy_collect_spills(
 
 static iree_status_t loom_amdgpu_occupancy_flat_workgroup_size(
     const loom_target_export_plan_t* export_plan, uint32_t* out_flat_size) {
-  IREE_ASSERT_ARGUMENT(out_flat_size);
   *out_flat_size = 0;
   if (!export_plan || export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
     return iree_ok_status();
@@ -528,9 +515,6 @@ iree_status_t loom_amdgpu_occupancy_build(
     const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_occupancy_options_t* options,
     iree_arena_allocator_t* arena, loom_amdgpu_occupancy_table_t* out_table) {
-  IREE_ASSERT_ARGUMENT(allocation);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_table);
   *out_table = (loom_amdgpu_occupancy_table_t){0};
 
   const loom_amdgpu_occupancy_model_t* model = NULL;
@@ -633,8 +617,6 @@ static iree_status_t loom_amdgpu_occupancy_write_register_class(
 iree_status_t loom_amdgpu_occupancy_format_json(
     const loom_amdgpu_occupancy_table_t* table,
     iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(table && table->allocation);
-  IREE_ASSERT_ARGUMENT(builder);
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));

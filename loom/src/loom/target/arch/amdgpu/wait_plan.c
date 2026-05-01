@@ -134,7 +134,6 @@ iree_string_view_t loom_amdgpu_wait_plan_reason_name(
 
 iree_status_t loom_amdgpu_wait_counter_mask(uint16_t counter_id,
                                             uint32_t* out_mask) {
-  IREE_ASSERT_ARGUMENT(out_mask);
   switch (counter_id) {
     case LOOM_AMDGPU_WAIT_COUNTER_VMEM_LOAD:
       *out_mask = LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_LOAD;
@@ -184,7 +183,6 @@ static bool loom_amdgpu_wait_effect_is_dependency_memory(
 
 static iree_status_t loom_amdgpu_wait_effect_counter_mask(
     const loom_low_schedule_effect_use_t* effect, uint32_t* out_counter_mask) {
-  IREE_ASSERT_ARGUMENT(out_counter_mask);
   if (effect->counter_id == LOOM_AMDGPU_WAIT_COUNTER_NONE) {
     *out_counter_mask = 0;
     return iree_ok_status();
@@ -735,9 +733,6 @@ static iree_status_t loom_amdgpu_wait_plan_build_actions(
 iree_status_t loom_amdgpu_wait_plan_build(
     const loom_low_schedule_table_t* schedule, iree_arena_allocator_t* arena,
     loom_amdgpu_wait_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(schedule);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_wait_plan_t){0};
   loom_amdgpu_wait_plan_builder_t builder = {
       .schedule = schedule,
@@ -778,8 +773,6 @@ static iree_string_view_t loom_amdgpu_wait_plan_json_function_name(
 
 iree_status_t loom_amdgpu_wait_plan_format_json(
     const loom_amdgpu_wait_plan_t* plan, iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(plan && plan->schedule);
-  IREE_ASSERT_ARGUMENT(builder);
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
   const loom_low_schedule_table_t* schedule = plan->schedule;

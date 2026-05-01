@@ -1814,7 +1814,6 @@ bool loom_amdgpu_matrix_fragment_coordinate(
     loom_amdgpu_matrix_operand_role_t role, uint16_t lane,
     uint16_t register_index, uint16_t element_index,
     loom_amdgpu_matrix_fragment_coordinate_t* out_coordinate) {
-  IREE_ASSERT_ARGUMENT(out_coordinate);
   *out_coordinate = (loom_amdgpu_matrix_fragment_coordinate_t){0};
   const loom_amdgpu_matrix_fragment_role_layout_t* role_layout =
       loom_amdgpu_matrix_fragment_role_layout(layout, role);
@@ -1832,7 +1831,6 @@ bool loom_amdgpu_matrix_fragment_coordinate(
 bool loom_amdgpu_matrix_feature_bits_for_profile(
     loom_amdgpu_matrix_feature_profile_t profile,
     loom_amdgpu_matrix_feature_bits_t* out_feature_bits) {
-  IREE_ASSERT_ARGUMENT(out_feature_bits);
   *out_feature_bits = 0;
   switch (profile) {
     case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908:
@@ -1882,7 +1880,6 @@ bool loom_amdgpu_matrix_feature_bits_for_profile(
 iree_status_t loom_amdgpu_matrix_feature_bits_for_processor(
     iree_string_view_t processor,
     loom_amdgpu_matrix_feature_bits_t* out_feature_bits) {
-  IREE_ASSERT_ARGUMENT(out_feature_bits);
   processor = iree_string_view_trim(processor);
   const loom_amdgpu_processor_info_t* processor_info = NULL;
   IREE_RETURN_IF_ERROR(

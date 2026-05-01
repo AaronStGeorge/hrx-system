@@ -104,7 +104,6 @@ static uint16_t loom_amdgpu_wait_packet_counter_id_from_slot(uint32_t slot) {
 
 static iree_status_t loom_amdgpu_wait_packet_counter_slot(uint16_t counter_id,
                                                           uint32_t* out_slot) {
-  IREE_ASSERT_ARGUMENT(out_slot);
   if (counter_id < LOOM_AMDGPU_WAIT_COUNTER_VMEM_LOAD ||
       counter_id > LOOM_AMDGPU_WAIT_COUNTER_ALU) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -118,7 +117,6 @@ static iree_status_t loom_amdgpu_wait_packet_counter_slot(uint16_t counter_id,
 static iree_status_t loom_amdgpu_wait_packet_target_count(
     const loom_amdgpu_wait_packet_group_t* group, uint32_t counter_mask,
     uint16_t* out_target_count) {
-  IREE_ASSERT_ARGUMENT(out_target_count);
   uint16_t target_count = LOOM_AMDGPU_WAIT_PACKET_TARGET_COUNT_NONE;
   for (uint32_t slot = 0; slot < IREE_ARRAYSIZE(group->target_counts); ++slot) {
     const uint32_t slot_mask = 1u << slot;
@@ -162,7 +160,6 @@ static iree_status_t loom_amdgpu_wait_packet_verify_target(
 static iree_status_t loom_amdgpu_wait_packet_descriptor_counter_mask(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor, uint32_t* out_counter_mask) {
-  IREE_ASSERT_ARGUMENT(out_counter_mask);
   *out_counter_mask = 0;
   if (descriptor->effect_count == 0) {
     return iree_ok_status();
@@ -193,7 +190,6 @@ static iree_status_t loom_amdgpu_wait_packet_descriptor_counter_mask(
 
 static iree_status_t loom_amdgpu_wait_packet_immediate_counter_mask(
     const loom_low_immediate_t* immediate, uint32_t* out_counter_mask) {
-  IREE_ASSERT_ARGUMENT(out_counter_mask);
   switch (immediate->encoding_id) {
     case LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_WAIT_COUNTER_VMEM:
       *out_counter_mask = LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM;
@@ -455,7 +451,6 @@ static const loom_amdgpu_wait_packet_descriptor_t*
 loom_amdgpu_wait_packet_select_descriptor(
     loom_amdgpu_wait_packet_builder_t* builder, uint32_t remaining_counter_mask,
     uint32_t* out_covered_counter_mask) {
-  IREE_ASSERT_ARGUMENT(out_covered_counter_mask);
   const loom_amdgpu_wait_packet_descriptor_t* best_descriptor = NULL;
   uint32_t best_covered_counter_mask = 0;
   uint32_t best_covered_count = 0;
@@ -493,7 +488,6 @@ loom_amdgpu_wait_packet_select_descriptor(
 iree_status_t loom_amdgpu_wait_packet_select_counter_mask(
     const loom_low_descriptor_set_t* descriptor_set, uint32_t counter_mask,
     uint16_t target_count, loom_amdgpu_wait_packet_selection_t* out_selection) {
-  IREE_ASSERT_ARGUMENT(out_selection);
   *out_selection = (loom_amdgpu_wait_packet_selection_t){0};
   if (counter_mask == 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -601,7 +595,6 @@ static bool loom_amdgpu_wait_packet_same_insertion_point(
 static void loom_amdgpu_wait_packet_group_initialize(
     const loom_amdgpu_wait_plan_t* wait_plan, iree_host_size_t action_index,
     loom_amdgpu_wait_packet_group_t* out_group) {
-  IREE_ASSERT_ARGUMENT(out_group);
   const loom_amdgpu_wait_plan_action_t* action =
       &wait_plan->actions[action_index];
   *out_group = (loom_amdgpu_wait_packet_group_t){
@@ -665,7 +658,6 @@ static iree_status_t loom_amdgpu_wait_packet_build_packets(
 iree_status_t loom_amdgpu_wait_packet_plan_build(
     const loom_amdgpu_wait_plan_t* wait_plan, iree_arena_allocator_t* arena,
     loom_amdgpu_wait_packet_plan_t* out_plan) {
-  IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_wait_packet_plan_t){0};
   if (wait_plan == NULL || wait_plan->schedule == NULL || arena == NULL) {
     return iree_make_status(
@@ -740,7 +732,6 @@ static iree_status_t loom_amdgpu_wait_packet_json_write_counters(
 iree_status_t loom_amdgpu_wait_packet_plan_format_json(
     const loom_amdgpu_wait_packet_plan_t* plan,
     iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(builder);
   if (plan == NULL || plan->wait_plan == NULL ||
       plan->wait_plan->schedule == NULL) {
     return iree_make_status(

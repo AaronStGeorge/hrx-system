@@ -210,7 +210,6 @@ bool loom_amdgpu_encoding_field_uses_unified_source(uint16_t field_id) {
 static bool loom_amdgpu_encoding_sisrc_inline_u32(
     const loom_amdgpu_encoding_table_t* table, uint32_t value,
     uint16_t* out_sisrc) {
-  IREE_ASSERT_ARGUMENT(out_sisrc);
   if (value < table->scalar_inline_u32_count) {
     *out_sisrc = (uint16_t)(table->scalar_inline_u32_zero + value);
     return true;
@@ -241,7 +240,6 @@ iree_status_t loom_amdgpu_encoding_pack(
     uint16_t opcode, const loom_amdgpu_encoding_field_value_t* field_values,
     iree_host_size_t field_value_count,
     loom_amdgpu_encoding_packet_t* out_packet) {
-  IREE_ASSERT_ARGUMENT(out_packet);
   *out_packet = (loom_amdgpu_encoding_packet_t){0};
   if (table == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
