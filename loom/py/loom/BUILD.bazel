@@ -82,6 +82,7 @@ _TARGET_CONTRACT_GENERATOR_SRCS = [
     "target/contracts/rules.py",
     "target/contracts/source.py",
     "target/contracts/tables.py",
+    "target/contracts/templates.py",
     "target/low_descriptors.py",
 ]
 

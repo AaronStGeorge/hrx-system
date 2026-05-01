@@ -27,6 +27,19 @@ from loom.target.contracts.patterns import Scalar, TypePattern, Vector
 from loom.target.contracts.rules import ContractCase, DescriptorRule, ValueAliasRule
 from loom.target.contracts.source import ValueRef
 from loom.target.contracts.tables import ContractTable
+from loom.target.contracts.templates import (
+    DirectDescriptorCase,
+    DirectTypePatterns,
+    PredicateDescriptorCase,
+    ReductionDescriptorCase,
+    SelectDescriptorCase,
+    binary_descriptor_rules,
+    compare_descriptor_rules,
+    reduction_descriptor_rules,
+    select_descriptor_rules,
+    ternary_descriptor_rules,
+    unary_descriptor_rules,
+)
 
 __all__ = [
     "AttrProject",
@@ -41,16 +54,27 @@ __all__ = [
     "ContractSystem",
     "ContractTable",
     "DescriptorRule",
+    "DirectDescriptorCase",
+    "DirectTypePatterns",
     "EmitDescriptorOp",
     "Guard",
     "GuardKind",
+    "PredicateDescriptorCase",
+    "ReductionDescriptorCase",
     "Scalar",
+    "SelectDescriptorCase",
     "SourceValueKind",
     "TypePattern",
     "ValueAliasRule",
     "ValueRef",
     "Vector",
+    "binary_descriptor_rules",
     "compile_contract_table",
+    "compare_descriptor_rules",
     "descriptor_by_key",
     "descriptor_by_semantic_tag",
+    "reduction_descriptor_rules",
+    "select_descriptor_rules",
+    "ternary_descriptor_rules",
+    "unary_descriptor_rules",
 ]
