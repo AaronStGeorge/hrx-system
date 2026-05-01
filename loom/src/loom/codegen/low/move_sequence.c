@@ -57,8 +57,6 @@ struct loom_low_move_sequence_location_entry_t {
 void loom_low_move_sequence_scratch_initialize(
     iree_arena_allocator_t* arena,
     loom_low_move_sequence_scratch_t* out_scratch) {
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_scratch);
   *out_scratch = (loom_low_move_sequence_scratch_t){
       .arena = arena,
   };
@@ -68,10 +66,6 @@ static iree_status_t loom_low_move_sequence_scratch_reserve_array(
     loom_low_move_sequence_scratch_t* scratch,
     iree_host_size_t minimum_capacity, iree_host_size_t element_size,
     iree_host_size_t* inout_capacity, void** inout_ptr) {
-  IREE_ASSERT_ARGUMENT(scratch);
-  IREE_ASSERT_ARGUMENT(scratch->arena);
-  IREE_ASSERT_ARGUMENT(inout_capacity);
-  IREE_ASSERT_ARGUMENT(inout_ptr);
   if (*inout_capacity >= minimum_capacity) {
     return iree_ok_status();
   }
@@ -94,8 +88,6 @@ static iree_status_t loom_low_move_sequence_scratch_reserve_array(
 iree_status_t loom_low_move_sequence_scratch_reserve_moves(
     loom_low_move_sequence_scratch_t* scratch, iree_host_size_t move_count,
     loom_low_move_t** out_moves) {
-  IREE_ASSERT_ARGUMENT(scratch);
-  IREE_ASSERT_ARGUMENT(out_moves);
   *out_moves = NULL;
   if (move_count == 0) {
     return iree_ok_status();
@@ -111,8 +103,6 @@ iree_status_t loom_low_move_sequence_scratch_reserve_temporaries(
     loom_low_move_sequence_scratch_t* scratch,
     iree_host_size_t temporary_location_count,
     loom_low_move_location_t** out_temporary_locations) {
-  IREE_ASSERT_ARGUMENT(scratch);
-  IREE_ASSERT_ARGUMENT(out_temporary_locations);
   *out_temporary_locations = NULL;
   if (temporary_location_count == 0) {
     return iree_ok_status();
@@ -128,7 +118,6 @@ iree_status_t loom_low_move_sequence_scratch_reserve_temporaries(
 iree_status_t loom_low_move_location_from_assignment_unit(
     const loom_low_allocation_assignment_t* assignment, uint32_t unit_index,
     loom_low_move_location_t* out_location) {
-  IREE_ASSERT_ARGUMENT(out_location);
   *out_location = (loom_low_move_location_t){0};
   if (assignment == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -156,8 +145,6 @@ iree_status_t loom_low_move_location_from_assignment_unit(
 static void loom_low_move_location_from_edge_copy_temporary(
     const loom_low_allocation_edge_copy_temporary_t* temporary,
     loom_low_move_location_t* out_location) {
-  IREE_ASSERT_ARGUMENT(temporary);
-  IREE_ASSERT_ARGUMENT(out_location);
   *out_location = (loom_low_move_location_t){
       .location_kind = temporary->location_kind,
       .value_class = temporary->value_class,
@@ -190,9 +177,6 @@ iree_status_t loom_low_move_sequence_count_edge_copy_units(
     const loom_low_allocation_table_t* allocation,
     const loom_low_allocation_edge_copy_group_t* group,
     iree_host_size_t* out_move_count) {
-  IREE_ASSERT_ARGUMENT(allocation);
-  IREE_ASSERT_ARGUMENT(group);
-  IREE_ASSERT_ARGUMENT(out_move_count);
   *out_move_count = 0;
   if (group->copy_start > allocation->edge_copy_count ||
       group->copy_count > allocation->edge_copy_count - group->copy_start) {
@@ -233,11 +217,6 @@ iree_status_t loom_low_move_sequence_populate_edge_copy_units(
     const loom_low_allocation_table_t* allocation,
     const loom_low_allocation_edge_copy_group_t* group, loom_low_move_t* moves,
     iree_host_size_t move_count) {
-  IREE_ASSERT_ARGUMENT(allocation);
-  IREE_ASSERT_ARGUMENT(group);
-  if (move_count != 0) {
-    IREE_ASSERT_ARGUMENT(moves);
-  }
   iree_host_size_t expected_move_count = 0;
   IREE_RETURN_IF_ERROR(loom_low_move_sequence_count_edge_copy_units(
       allocation, group, &expected_move_count));
@@ -272,11 +251,6 @@ iree_status_t loom_low_move_sequence_populate_edge_copy_temporaries(
     const loom_low_allocation_edge_copy_group_t* group,
     loom_low_move_location_t* temporary_locations,
     iree_host_size_t temporary_location_count) {
-  IREE_ASSERT_ARGUMENT(allocation);
-  IREE_ASSERT_ARGUMENT(group);
-  if (temporary_location_count != 0) {
-    IREE_ASSERT_ARGUMENT(temporary_locations);
-  }
   if (temporary_location_count != group->temporary_count) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -303,9 +277,6 @@ static iree_status_t loom_low_move_sequence_slice_assignments(
     const loom_low_allocation_assignment_t** out_source_assignment,
     const loom_low_allocation_assignment_t** out_result_assignment,
     uint32_t* out_source_offset) {
-  IREE_ASSERT_ARGUMENT(out_source_assignment);
-  IREE_ASSERT_ARGUMENT(out_result_assignment);
-  IREE_ASSERT_ARGUMENT(out_source_offset);
   *out_source_assignment = NULL;
   *out_result_assignment = NULL;
   *out_source_offset = 0;
@@ -338,9 +309,6 @@ static iree_status_t loom_low_move_sequence_slice_assignments(
 iree_status_t loom_low_move_sequence_count_slice_units(
     const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     iree_host_size_t* out_move_count) {
-  IREE_ASSERT_ARGUMENT(allocation);
-  IREE_ASSERT_ARGUMENT(op);
-  IREE_ASSERT_ARGUMENT(out_move_count);
   *out_move_count = 0;
   const loom_low_allocation_assignment_t* source_assignment = NULL;
   const loom_low_allocation_assignment_t* result_assignment = NULL;
@@ -359,11 +327,6 @@ iree_status_t loom_low_move_sequence_count_slice_units(
 iree_status_t loom_low_move_sequence_populate_slice_units(
     const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     loom_low_move_t* moves, iree_host_size_t move_count) {
-  IREE_ASSERT_ARGUMENT(allocation);
-  IREE_ASSERT_ARGUMENT(op);
-  if (move_count != 0) {
-    IREE_ASSERT_ARGUMENT(moves);
-  }
   const loom_low_allocation_assignment_t* source_assignment = NULL;
   const loom_low_allocation_assignment_t* result_assignment = NULL;
   uint32_t source_offset = 0;
@@ -396,9 +359,6 @@ static iree_status_t loom_low_move_sequence_concat_assignments(
     const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     const loom_low_allocation_assignment_t** out_result_assignment,
     bool* out_coalesced, iree_host_size_t* out_move_count) {
-  IREE_ASSERT_ARGUMENT(out_result_assignment);
-  IREE_ASSERT_ARGUMENT(out_coalesced);
-  IREE_ASSERT_ARGUMENT(out_move_count);
   *out_result_assignment = NULL;
   *out_coalesced = true;
   *out_move_count = 0;
@@ -447,9 +407,6 @@ static iree_status_t loom_low_move_sequence_concat_assignments(
 iree_status_t loom_low_move_sequence_count_concat_units(
     const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     iree_host_size_t* out_move_count) {
-  IREE_ASSERT_ARGUMENT(allocation);
-  IREE_ASSERT_ARGUMENT(op);
-  IREE_ASSERT_ARGUMENT(out_move_count);
   const loom_low_allocation_assignment_t* result_assignment = NULL;
   bool coalesced = false;
   IREE_RETURN_IF_ERROR(loom_low_move_sequence_concat_assignments(
@@ -463,11 +420,6 @@ iree_status_t loom_low_move_sequence_count_concat_units(
 iree_status_t loom_low_move_sequence_populate_concat_units(
     const loom_low_allocation_table_t* allocation, const loom_op_t* op,
     loom_low_move_t* moves, iree_host_size_t move_count) {
-  IREE_ASSERT_ARGUMENT(allocation);
-  IREE_ASSERT_ARGUMENT(op);
-  if (move_count != 0) {
-    IREE_ASSERT_ARGUMENT(moves);
-  }
   const loom_low_allocation_assignment_t* result_assignment = NULL;
   bool coalesced = false;
   iree_host_size_t expected_move_count = 0;
@@ -543,7 +495,6 @@ static uint64_t loom_low_move_sequence_location_hash(
 
 static iree_status_t loom_low_move_sequence_next_power_of_two(
     iree_host_size_t minimum_capacity, iree_host_size_t* out_capacity) {
-  IREE_ASSERT_ARGUMENT(out_capacity);
   iree_host_size_t capacity = 16;
   while (capacity < minimum_capacity) {
     if (capacity > IREE_HOST_SIZE_MAX / 2) {
@@ -560,7 +511,6 @@ static iree_status_t loom_low_move_sequence_reserve_solver_scratch(
     loom_low_move_sequence_scratch_t* scratch, iree_host_size_t move_count,
     iree_host_size_t temporary_location_count,
     iree_host_size_t* out_location_entry_count) {
-  IREE_ASSERT_ARGUMENT(out_location_entry_count);
   IREE_RETURN_IF_ERROR(loom_low_move_sequence_scratch_reserve_array(
       scratch, move_count, sizeof(*scratch->nodes), &scratch->node_capacity,
       (void**)&scratch->nodes));
@@ -692,7 +642,6 @@ static iree_status_t loom_low_move_sequence_find_temporary(
     const loom_low_move_sequence_options_t* options,
     const loom_low_move_location_t* storage_class,
     const loom_low_move_location_t** out_temporary_location) {
-  IREE_ASSERT_ARGUMENT(out_temporary_location);
   *out_temporary_location = NULL;
   for (iree_host_size_t i = 0; i < options->temporary_location_count; ++i) {
     const loom_low_move_location_t* temporary =
@@ -807,7 +756,6 @@ static iree_status_t loom_low_move_sequence_emit_ready_move(
 
 static iree_status_t loom_low_move_sequence_next_active_move(
     loom_low_move_sequence_state_t* state, iree_host_size_t* out_move_index) {
-  IREE_ASSERT_ARGUMENT(out_move_index);
   while (state->active_cursor < state->move_count) {
     const iree_host_size_t move_index = state->active_cursor++;
     if (loom_low_move_sequence_node_is_active(state, move_index)) {
@@ -872,12 +820,6 @@ static iree_status_t loom_low_move_sequence_emit_cycle(
 iree_status_t loom_low_move_sequence_emit(
     loom_low_move_sequence_scratch_t* scratch, iree_host_size_t move_count,
     const loom_low_move_sequence_options_t* options) {
-  IREE_ASSERT_ARGUMENT(scratch);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(options->emit_move.fn);
-  if (options->temporary_location_count != 0) {
-    IREE_ASSERT_ARGUMENT(options->temporary_locations);
-  }
   loom_low_move_sequence_state_t state = {
       .scratch = scratch,
       .options = options,
