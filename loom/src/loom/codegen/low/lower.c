@@ -21,6 +21,14 @@
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
+#include "loom/ops/vector/ops.h"
+
+typedef struct loom_low_lower_descriptor_matrix_plan_t {
+  // Shared source adapter used by this matrix descriptor plan.
+  loom_target_contract_descriptor_matrix_source_t source;
+  // Descriptor row selected by the target matrix projection.
+  loom_low_lower_resolved_descriptor_t descriptor;
+} loom_low_lower_descriptor_matrix_plan_t;
 
 static bool loom_low_lower_type_is_none(loom_type_t type) {
   return loom_type_kind(type) == LOOM_TYPE_NONE;
@@ -450,10 +458,15 @@ static void loom_low_lower_analyze_storage_demands(
   for (iree_host_size_t i = 0; i < context->lowering.selected_plan_count; ++i) {
     loom_low_lower_selected_plan_t* selected_plan =
         &context->lowering.selected_plans[i];
-    if (selected_plan->rule != NULL) {
-      loom_low_lower_mark_rule_storage_demands(context, selected_plan);
-    } else {
-      loom_low_lower_mark_callback_plan_storage_demands(context, selected_plan);
+    switch (selected_plan->kind) {
+      case LOOM_LOW_LOWER_SELECTED_PLAN_RULE:
+        loom_low_lower_mark_rule_storage_demands(context, selected_plan);
+        break;
+      case LOOM_LOW_LOWER_SELECTED_PLAN_DESCRIPTOR_MATRIX:
+      case LOOM_LOW_LOWER_SELECTED_PLAN_CALLBACK:
+        loom_low_lower_mark_callback_plan_storage_demands(context,
+                                                          selected_plan);
+        break;
     }
   }
   for (iree_host_size_t i = 0; i < context->lowering.selected_plan_count; ++i) {
@@ -529,6 +542,7 @@ static iree_status_t loom_low_lower_record_selected_rule_plan(
   loom_low_lower_record_selected_plan(
       context, (loom_low_lower_selected_plan_t){
                    .source_op = source_op,
+                   .kind = LOOM_LOW_LOWER_SELECTED_PLAN_RULE,
                    .rule_set_index = rule_set_index,
                    .rule_index = rule_selection.rule_index,
                    .rule_set = rule_set,
@@ -549,13 +563,56 @@ static bool loom_low_lower_rule_selection_is_better_failure(
               failed_rule_selection.matched_guard_count);
 }
 
-static iree_status_t loom_low_lower_select_custom_family(
+static loom_target_contract_query_environment_t
+loom_low_lower_query_environment_from_context(
     loom_low_lower_context_t* context,
-    const loom_target_contract_case_t* contract_case,
-    const loom_op_t* source_op, loom_low_lower_plan_t* out_plan) {
-  const loom_low_lower_contract_family_t* family =
-      &context->policy->contract_families[contract_case->row_index];
-  return family->select(family->user_data, context, source_op, out_plan);
+    const loom_low_descriptor_set_t* descriptor_set) {
+  return (loom_target_contract_query_environment_t){
+      .module = context->module,
+      .function = context->source_function,
+      .bundle = context->options->bundle,
+      .descriptor_set = descriptor_set,
+      .fact_table = context->lowering.fact_table,
+      .arena = &context->arena,
+  };
+}
+
+static iree_status_t loom_low_lower_emit_contract_query_rejection(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_target_contract_query_result_t* result) {
+  if (result->rejection != NULL) {
+    return loom_low_lower_emit_reject(
+        context, source_op, result->rejection->subject_kind,
+        result->rejection->subject_name, result->rejection->reason);
+  }
+  return loom_low_lower_emit_reject(
+      context, source_op, IREE_SV("op"),
+      loom_op_name(context->module, source_op),
+      IREE_SV("the selected target contract rejected this op"));
+}
+
+static iree_status_t loom_low_lower_record_descriptor_matrix_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_target_contract_descriptor_matrix_rule_t* matrix_rule,
+    const loom_target_contract_query_result_t* query_result) {
+  loom_low_lower_descriptor_matrix_plan_t* plan_data = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+      context, sizeof(*plan_data), (void**)&plan_data));
+  plan_data->source = matrix_rule->source;
+  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor(
+      context, query_result->selected_descriptor_id, &plan_data->descriptor));
+  loom_low_lower_record_selected_plan(
+      context, (loom_low_lower_selected_plan_t){
+                   .source_op = source_op,
+                   .kind = LOOM_LOW_LOWER_SELECTED_PLAN_DESCRIPTOR_MATRIX,
+                   .rule_set_index = UINT16_MAX,
+                   .rule_index = query_result->rule_index,
+                   .rule_set = NULL,
+                   .rule = NULL,
+                   .resolved_emits = NULL,
+                   .plan = loom_low_lower_plan_make(source_op->kind, plan_data),
+               });
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_lower_plan_op_from_contract_index(
@@ -575,20 +632,31 @@ static iree_status_t loom_low_lower_plan_op_from_contract_index(
     const uint16_t case_index = (uint16_t)(op_entry.case_start + i);
     const loom_target_contract_case_t* contract_case =
         &index->cases[case_index];
-    if (contract_case->system == LOOM_TARGET_CONTRACT_SYSTEM_CUSTOM_FAMILY) {
-      loom_low_lower_plan_t plan = loom_low_lower_plan_empty();
-      IREE_RETURN_IF_ERROR(loom_low_lower_select_custom_family(
-          context, contract_case, source_op, &plan));
-      if (!loom_low_lower_plan_is_empty(plan)) {
-        loom_low_lower_record_selected_plan(
-            context, (loom_low_lower_selected_plan_t){
-                         .source_op = source_op,
-                         .rule_set_index = UINT16_MAX,
-                         .rule_index = contract_case->row_index,
-                         .rule_set = NULL,
-                         .rule = NULL,
-                         .plan = plan,
-                     });
+    const loom_target_contract_binding_t* binding =
+        &index->bindings[contract_case->binding_index];
+    if (contract_case->system ==
+        LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_MATRIX) {
+      const loom_target_contract_descriptor_matrix_rule_t* matrix_rule =
+          &binding->fragment->descriptor_matrices[contract_case->row_index];
+      loom_target_contract_query_result_t query_result =
+          loom_target_contract_query_result_empty();
+      const loom_target_contract_query_environment_t environment =
+          loom_low_lower_query_environment_from_context(
+              context, context->descriptor_set);
+      IREE_RETURN_IF_ERROR(loom_low_lower_query_descriptor_matrix_contract(
+          &environment, &context->policy->descriptor_matrix, matrix_rule,
+          source_op, &query_result));
+      if (query_result.outcome == LOOM_TARGET_CONTRACT_QUERY_LEGAL) {
+        query_result.rule_index = contract_case->row_index;
+        IREE_RETURN_IF_ERROR(loom_low_lower_record_descriptor_matrix_plan(
+            context, source_op, matrix_rule, &query_result));
+        *out_selected = true;
+        return iree_ok_status();
+      }
+      if (query_result.outcome == LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED ||
+          query_result.outcome == LOOM_TARGET_CONTRACT_QUERY_INVALID_IR) {
+        IREE_RETURN_IF_ERROR(loom_low_lower_emit_contract_query_rejection(
+            context, source_op, &query_result));
         *out_selected = true;
         return iree_ok_status();
       }
@@ -599,8 +667,6 @@ static iree_status_t loom_low_lower_plan_op_from_contract_index(
                                                        &rule_index)) {
       continue;
     }
-    const loom_target_contract_binding_t* binding =
-        &index->bindings[contract_case->binding_index];
     const loom_low_lower_rule_set_t* rule_set =
         context->policy->rule_sets.values[binding->rule_set_index];
     loom_low_lower_rule_selection_t rule_selection = {0};
@@ -690,8 +756,7 @@ static iree_status_t loom_low_lower_query_target_contract_from_context(
               .fn = loom_low_lower_contract_query_can_materialize,
               .user_data = &state,
           },
-      .contract_families = context->policy->contract_families,
-      .contract_family_count = context->policy->contract_family_count,
+      .descriptor_matrix = context->policy->descriptor_matrix,
   };
 
   iree_status_t status = loom_low_lower_query_target_contract(
@@ -733,6 +798,12 @@ static void loom_low_lower_record_report_row(
     row->plan_id = LOOM_LOW_LOWER_PLAN_ID_NONE;
     row->descriptor_id = loom_low_lower_rule_first_descriptor_id(
         selected_plan->rule_set, selected_plan->rule);
+  } else if (selected_plan->kind ==
+             LOOM_LOW_LOWER_SELECTED_PLAN_DESCRIPTOR_MATRIX) {
+    const loom_low_lower_descriptor_matrix_plan_t* plan =
+        (const loom_low_lower_descriptor_matrix_plan_t*)
+            selected_plan->plan.target_data;
+    row->descriptor_id = plan->descriptor.descriptor->stable_id;
   }
 }
 
@@ -773,15 +844,16 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
     IREE_RETURN_IF_ERROR(context->policy->select_op.fn(
         context->policy->select_op.user_data, context, source_op, &plan));
     if (!loom_low_lower_plan_is_empty(plan)) {
-      loom_low_lower_record_selected_plan(context,
-                                          (loom_low_lower_selected_plan_t){
-                                              .source_op = source_op,
-                                              .rule_set_index = UINT16_MAX,
-                                              .rule_index = UINT16_MAX,
-                                              .rule_set = NULL,
-                                              .rule = NULL,
-                                              .plan = plan,
-                                          });
+      loom_low_lower_record_selected_plan(
+          context, (loom_low_lower_selected_plan_t){
+                       .source_op = source_op,
+                       .kind = LOOM_LOW_LOWER_SELECTED_PLAN_CALLBACK,
+                       .rule_set_index = UINT16_MAX,
+                       .rule_index = UINT16_MAX,
+                       .rule_set = NULL,
+                       .rule = NULL,
+                       .plan = plan,
+                   });
       return iree_ok_status();
     }
   }
@@ -1316,6 +1388,55 @@ static iree_status_t loom_low_lower_emit_elided_selected_plan(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_lower_emit_descriptor_matrix_vector_mma(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_descriptor_matrix_plan_t* plan) {
+  loom_value_id_t low_lhs = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+      context, loom_vector_mma_lhs(source_op), &low_lhs));
+  loom_value_id_t low_rhs = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+      context, loom_vector_mma_rhs(source_op), &low_rhs));
+  loom_value_id_t low_init = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+      context, loom_vector_mma_init(source_op), &low_init));
+
+  const loom_value_id_t result = loom_vector_mma_result(source_op);
+  loom_type_t result_low_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_map_value(context, source_op, result, &result_low_type));
+  IREE_ASSERT(loom_type_is_register(result_low_type));
+  const loom_value_id_t operands[] = {low_lhs, low_rhs, low_init};
+  const loom_tied_result_t tied_results[] = {
+      {
+          .result_index = 0,
+          .operand_index = 2,
+          .has_type_change = false,
+      },
+  };
+  loom_op_t* low_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+      context, &plan->descriptor, operands, IREE_ARRAYSIZE(operands),
+      loom_make_named_attr_slice(NULL, 0), &result_low_type, 1, tied_results,
+      IREE_ARRAYSIZE(tied_results), source_op->location, &low_op));
+  return loom_low_lower_bind_value(
+      context, result, loom_value_slice_get(loom_low_op_results(low_op), 0));
+}
+
+static iree_status_t loom_low_lower_emit_descriptor_matrix_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_descriptor_matrix_plan_t* plan) {
+  switch (plan->source) {
+    case LOOM_TARGET_CONTRACT_DESCRIPTOR_MATRIX_SOURCE_VECTOR_MMA:
+      return loom_low_lower_emit_descriptor_matrix_vector_mma(context,
+                                                              source_op, plan);
+    case LOOM_TARGET_CONTRACT_DESCRIPTOR_MATRIX_SOURCE_NONE:
+    default:
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "unknown descriptor-matrix source");
+  }
+}
+
 static iree_status_t loom_low_lower_emit_selected_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
   IREE_ASSERT_LT(context->lowering.selected_plan_emit_index,
@@ -1335,11 +1456,19 @@ static iree_status_t loom_low_lower_emit_selected_plan(
     IREE_ASSERT(insertion_block != NULL);
     before_op_count = insertion_block->op_count;
   }
-  if (selected_plan.rule != NULL) {
+  if (selected_plan.kind == LOOM_LOW_LOWER_SELECTED_PLAN_RULE) {
     IREE_ASSERT(selected_plan.rule_set != NULL);
+    IREE_ASSERT(selected_plan.rule != NULL);
     IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_emit_rule(
         context, selected_plan.rule_set, source_op, selected_plan.rule,
         selected_plan.resolved_emits));
+  } else if (selected_plan.kind ==
+             LOOM_LOW_LOWER_SELECTED_PLAN_DESCRIPTOR_MATRIX) {
+    IREE_ASSERT_FALSE(loom_low_lower_plan_is_empty(selected_plan.plan));
+    IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_matrix_plan(
+        context, source_op,
+        (const loom_low_lower_descriptor_matrix_plan_t*)
+            selected_plan.plan.target_data));
   } else {
     IREE_ASSERT_FALSE(loom_low_lower_plan_is_empty(selected_plan.plan));
     IREE_ASSERT(context->policy->emit_op.fn != NULL);

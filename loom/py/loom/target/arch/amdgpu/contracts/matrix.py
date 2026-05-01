@@ -11,7 +11,7 @@ from __future__ import annotations
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
-from loom.target.contracts import ContractFragment, CustomFamilyRule
+from loom.target.contracts import ContractFragment, DescriptorMatrixRule
 
 _DESCRIPTOR_SET = build_amdgpu_contract_descriptor_set(
     key="amdgpu.matrix",
@@ -22,9 +22,9 @@ AMDGPU_MATRIX_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.matrix",
     descriptor_set=_DESCRIPTOR_SET,
     cases=[
-        CustomFamilyRule(
+        DescriptorMatrixRule(
             source_op=vector.vector_mma,
-            family="vector_mma",
+            source="vector_mma",
         ),
     ],
 )

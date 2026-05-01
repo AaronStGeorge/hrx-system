@@ -19,7 +19,6 @@ class ContractSystem(Enum):
     SOURCE_MEMORY = "source_memory"
     ENVIRONMENT = "environment"
     DESCRIPTOR_MATRIX = "descriptor_matrix"
-    CUSTOM_FAMILY = "custom_family"
 
 
 @unique

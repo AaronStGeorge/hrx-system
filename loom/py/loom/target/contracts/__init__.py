@@ -10,6 +10,7 @@ from loom.target.contracts.compile import (
     CONTRACT_ROW_NONE,
     CompiledCase,
     CompiledContractFragment,
+    CompiledDescriptorMatrix,
     CompiledDescriptorRule,
     CompiledDialectTable,
     CompiledOpEntry,
@@ -58,7 +59,7 @@ from loom.target.contracts.materializers import ValueMaterializer
 from loom.target.contracts.patterns import Scalar, TypePattern, Vector
 from loom.target.contracts.rules import (
     ContractCase,
-    CustomFamilyRule,
+    DescriptorMatrixRule,
     DescriptorRule,
     ValueAliasRule,
     ValueElideRule,
@@ -92,6 +93,7 @@ __all__ = [
     "CONTRACT_ROW_NONE",
     "CompiledCase",
     "CompiledContractFragment",
+    "CompiledDescriptorMatrix",
     "CompiledDescriptorRule",
     "CompiledDialectTable",
     "CompiledLowerRuleSet",
@@ -99,7 +101,7 @@ __all__ = [
     "ContractCase",
     "ContractSystem",
     "ContractFragment",
-    "CustomFamilyRule",
+    "DescriptorMatrixRule",
     "DescriptorEmitForm",
     "DescriptorRule",
     "DirectDescriptorCase",

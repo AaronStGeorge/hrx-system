@@ -7,8 +7,6 @@
 #include <stdint.h>
 
 #include "loom/analysis/contract_vector.h"
-#include "loom/ir/context.h"
-#include "loom/ops/vector/ops.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
 #include "loom/target/arch/amdgpu/matrix_contract.h"
 #include "loom/target/arch/amdgpu/matrix_contract_projection.h"
@@ -60,8 +58,8 @@ static iree_status_t loom_amdgpu_matrix_target_facts_from_bundle(
 }
 
 static bool loom_amdgpu_matrix_select_contract(
-    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
-    const loom_op_t* op, const loom_amdgpu_matrix_target_facts_t* target_facts,
+    const loom_contract_request_t* contract_request,
+    const loom_amdgpu_matrix_target_facts_t* target_facts,
     const loom_amdgpu_matrix_contract_descriptor_t** out_descriptor,
     loom_contract_diagnostic_t* out_contract_diagnostic,
     loom_amdgpu_matrix_contract_match_diagnostic_t* out_match_diagnostic) {
@@ -73,17 +71,10 @@ static bool loom_amdgpu_matrix_select_contract(
     *out_match_diagnostic = (loom_amdgpu_matrix_contract_match_diagnostic_t){0};
   }
 
-  loom_contract_request_t contract_request = {0};
-  if (!loom_contract_request_from_vector_mma_op(
-          module, fact_table, op, &target_facts->options, &contract_request,
-          out_contract_diagnostic)) {
-    return false;
-  }
-
   loom_amdgpu_matrix_contract_match_request_t match_request = {0};
   if (!loom_amdgpu_matrix_contract_match_request_from_contract(
-          &contract_request, target_facts->feature_bits,
-          target_facts->wave_size, &match_request, out_contract_diagnostic)) {
+          contract_request, target_facts->feature_bits, target_facts->wave_size,
+          &match_request, out_contract_diagnostic)) {
     return false;
   }
 
@@ -214,75 +205,30 @@ static iree_status_t loom_amdgpu_matrix_contract_query_reject(
   return iree_ok_status();
 }
 
-iree_status_t loom_amdgpu_select_vector_mma_plan(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_matrix_mma_plan_t* out_plan, bool* out_selected) {
-  *out_plan = (loom_amdgpu_matrix_mma_plan_t){0};
-  *out_selected = false;
-  if (!loom_vector_mma_isa(source_op)) {
-    return iree_ok_status();
-  }
-
-  loom_amdgpu_matrix_target_facts_t target_facts = {0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_matrix_target_facts_from_bundle(
-      loom_low_lower_context_bundle(context), &target_facts));
-
-  const loom_amdgpu_matrix_contract_descriptor_t* contract_descriptor = NULL;
-  if (!loom_amdgpu_matrix_select_contract(
-          loom_low_lower_context_module(context),
-          loom_low_lower_context_fact_table(context), source_op, &target_facts,
-          &contract_descriptor, NULL, NULL) ||
-      contract_descriptor->low_descriptor_id ==
-          LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_ID_NONE) {
-    return iree_ok_status();
-  }
-
-  loom_low_lower_resolved_descriptor_t low_descriptor = {0};
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor(
-      context, contract_descriptor->low_descriptor_id, &low_descriptor));
-  *out_plan = (loom_amdgpu_matrix_mma_plan_t){
-      .descriptor = low_descriptor,
-      .lhs = loom_vector_mma_lhs(source_op),
-      .rhs = loom_vector_mma_rhs(source_op),
-      .init = loom_vector_mma_init(source_op),
-      .result = loom_vector_mma_result(source_op),
-  };
-  *out_selected = true;
-  return iree_ok_status();
-}
-
-iree_status_t loom_amdgpu_select_matrix_contract_family(
-    void* user_data, loom_low_lower_context_t* context,
-    const loom_op_t* source_op, loom_low_lower_plan_t* out_plan) {
-  (void)user_data;
-  *out_plan = loom_low_lower_plan_empty();
-
-  loom_amdgpu_matrix_mma_plan_t plan = {0};
-  bool selected = false;
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_select_vector_mma_plan(context, source_op, &plan, &selected));
-  if (!selected) {
-    return iree_ok_status();
-  }
-
-  loom_amdgpu_matrix_mma_plan_t* plan_data = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
-      context, sizeof(*plan_data), (void**)&plan_data));
-  *plan_data = plan;
-  *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
-  return iree_ok_status();
-}
-
-iree_status_t loom_amdgpu_query_matrix_contract_family(
+iree_status_t loom_amdgpu_descriptor_matrix_options(
     void* user_data,
     const loom_target_contract_query_environment_t* environment,
-    const loom_op_t* source_op,
+    const loom_target_contract_descriptor_matrix_rule_t* rule,
+    loom_contract_vector_mma_options_t* out_options) {
+  (void)user_data;
+  (void)rule;
+  *out_options = (loom_contract_vector_mma_options_t){0};
+  loom_amdgpu_matrix_target_facts_t target_facts = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_matrix_target_facts_from_bundle(
+      environment->bundle, &target_facts));
+  *out_options = target_facts.options;
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_descriptor_matrix_query(
+    void* user_data,
+    const loom_target_contract_query_environment_t* environment,
+    const loom_target_contract_descriptor_matrix_rule_t* rule,
+    const loom_contract_request_t* contract_request,
     loom_target_contract_query_result_t* out_result) {
   (void)user_data;
+  (void)rule;
   *out_result = loom_target_contract_query_result_empty();
-  if (!loom_vector_mma_isa(source_op)) {
-    return iree_ok_status();
-  }
 
   loom_amdgpu_matrix_target_facts_t target_facts = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_matrix_target_facts_from_bundle(
@@ -291,12 +237,11 @@ iree_status_t loom_amdgpu_query_matrix_contract_family(
   loom_amdgpu_matrix_contract_match_diagnostic_t match_diagnostic = {0};
   const loom_amdgpu_matrix_contract_descriptor_t* contract_descriptor = NULL;
   if (!loom_amdgpu_matrix_select_contract(
-          environment->module, environment->fact_table, source_op,
-          &target_facts, &contract_descriptor, &contract_diagnostic,
-          &match_diagnostic)) {
+          contract_request, &target_facts, &contract_descriptor,
+          &contract_diagnostic, &match_diagnostic)) {
     return loom_amdgpu_matrix_contract_query_reject(
         environment, LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED, IREE_SV("op"),
-        loom_op_name(environment->module, source_op),
+        IREE_SV("vector.mma"),
         loom_amdgpu_matrix_contract_rejection_reason(contract_diagnostic,
                                                      match_diagnostic),
         out_result);
@@ -328,40 +273,4 @@ iree_status_t loom_amdgpu_query_matrix_contract_family(
   out_result->source_rejection_bits = contract_diagnostic.rejection_bits;
   out_result->target_rejection_bits = match_diagnostic.rejection_bits;
   return iree_ok_status();
-}
-
-iree_status_t loom_amdgpu_lower_vector_mma(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_matrix_mma_plan_t* plan) {
-  IREE_ASSERT(plan->descriptor.descriptor != NULL);
-
-  loom_value_id_t low_lhs = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, plan->lhs, &low_lhs));
-  loom_value_id_t low_rhs = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, plan->rhs, &low_rhs));
-  loom_value_id_t low_init = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, plan->init, &low_init));
-
-  loom_type_t result_low_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
-      context, source_op, plan->result, &result_low_type));
-  const loom_value_id_t operands[] = {low_lhs, low_rhs, low_init};
-  const loom_tied_result_t tied_results[] = {
-      {
-          .result_index = 0,
-          .operand_index = 2,
-          .has_type_change = false,
-      },
-  };
-  loom_op_t* low_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
-      context, &plan->descriptor, operands, IREE_ARRAYSIZE(operands),
-      loom_make_named_attr_slice(NULL, 0), &result_low_type, 1, tied_results,
-      IREE_ARRAYSIZE(tied_results), source_op->location, &low_op));
-  return loom_low_lower_bind_value(
-      context, plan->result,
-      loom_value_slice_get(loom_low_op_results(low_op), 0));
 }

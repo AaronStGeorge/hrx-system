@@ -7,6 +7,7 @@
 #include "loom/codegen/low/contract_query.h"
 
 #include "iree/base/internal/arena.h"
+#include "loom/ops/vector/ops.h"
 
 static iree_status_t loom_low_lower_contract_query_make_rejection(
     const loom_target_contract_query_environment_t* environment,
@@ -28,6 +29,24 @@ static iree_status_t loom_low_lower_contract_query_make_rejection(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_lower_contract_query_make_direct_rejection(
+    const loom_target_contract_query_environment_t* environment,
+    iree_string_view_t subject_kind, iree_string_view_t subject_name,
+    iree_string_view_t reason,
+    const loom_target_contract_rejection_t** out_rejection) {
+  *out_rejection = NULL;
+  loom_target_contract_rejection_t* rejection = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(
+      environment->arena, sizeof(*rejection), (void**)&rejection));
+  *rejection = (loom_target_contract_rejection_t){
+      .subject_kind = subject_kind,
+      .subject_name = subject_name,
+      .reason = reason,
+  };
+  *out_rejection = rejection;
+  return iree_ok_status();
+}
+
 static void loom_low_lower_contract_query_adopt_case(
     const loom_target_contract_case_t* contract_case, uint16_t case_index,
     loom_target_contract_query_result_t* result) {
@@ -42,21 +61,111 @@ static void loom_low_lower_contract_query_adopt_case(
   }
 }
 
-static iree_status_t loom_low_lower_query_custom_family(
+static iree_string_view_t loom_low_lower_descriptor_matrix_source_name(
+    loom_target_contract_descriptor_matrix_source_t source) {
+  switch (source) {
+    case LOOM_TARGET_CONTRACT_DESCRIPTOR_MATRIX_SOURCE_VECTOR_MMA:
+      return IREE_SV("vector.mma");
+    case LOOM_TARGET_CONTRACT_DESCRIPTOR_MATRIX_SOURCE_NONE:
+    default:
+      return IREE_SV("<unknown>");
+  }
+}
+
+static iree_string_view_t loom_low_lower_descriptor_matrix_rejection_reason(
+    loom_target_contract_descriptor_matrix_source_t source,
+    loom_contract_diagnostic_t diagnostic) {
+  const loom_contract_rejection_bits_t bits = diagnostic.rejection_bits;
+  if (source == LOOM_TARGET_CONTRACT_DESCRIPTOR_MATRIX_SOURCE_VECTOR_MMA) {
+    if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_ROLE)) {
+      return IREE_SV(
+          "vector.mma operands must carry lhs, rhs, and init fragment facts");
+    }
+    if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_SHAPE)) {
+      return IREE_SV(
+          "vector.mma fragment shapes must resolve to exact compatible M/N/K "
+          "values");
+    }
+    if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_SCHEMA)) {
+      return IREE_SV(
+          "encoded vector.mma fragments need a resolved target fragment "
+          "schema");
+    }
+    if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_NUMERIC)) {
+      return IREE_SV("vector.mma operands use unsupported numeric types");
+    }
+    if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_FRAGMENT)) {
+      return IREE_SV(
+          "vector.mma lowering requires compatible fragment ownership facts");
+    }
+    if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_CAPABILITY)) {
+      return IREE_SV(
+          "vector.mma requires matrix capabilities unavailable in the target "
+          "projection");
+    }
+    if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_INVALID_REQUEST)) {
+      return IREE_SV("vector.mma did not form a valid matrix contract request");
+    }
+  }
+  return IREE_SV("source op did not form a valid matrix contract request");
+}
+
+static iree_status_t loom_low_lower_descriptor_matrix_make_unsupported(
     const loom_target_contract_query_environment_t* environment,
-    const loom_low_lower_contract_query_options_t* options,
-    const loom_target_contract_case_t* contract_case, uint16_t case_index,
+    const loom_target_contract_descriptor_matrix_rule_t* rule,
+    const loom_contract_diagnostic_t* diagnostic,
+    loom_target_contract_query_result_t* out_result) {
+  const loom_target_contract_rejection_t* rejection = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_contract_query_make_direct_rejection(
+      environment, IREE_SV("op"),
+      loom_low_lower_descriptor_matrix_source_name(rule->source),
+      loom_low_lower_descriptor_matrix_rejection_reason(rule->source,
+                                                        *diagnostic),
+      &rejection));
+  *out_result = loom_target_contract_query_result_empty();
+  out_result->outcome = LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED;
+  out_result->source_rejection_bits = diagnostic->rejection_bits;
+  out_result->rejection = rejection;
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_lower_query_descriptor_matrix_contract(
+    const loom_target_contract_query_environment_t* environment,
+    const loom_low_lower_descriptor_matrix_t* descriptor_matrix,
+    const loom_target_contract_descriptor_matrix_rule_t* rule,
     const loom_op_t* source_op,
     loom_target_contract_query_result_t* out_result) {
-  const loom_low_lower_contract_family_t* family =
-      &options->contract_families[contract_case->row_index];
-  IREE_RETURN_IF_ERROR(
-      family->query(family->user_data, environment, source_op, out_result));
-  if (out_result->outcome != LOOM_TARGET_CONTRACT_QUERY_UNHANDLED) {
-    loom_low_lower_contract_query_adopt_case(contract_case, case_index,
-                                             out_result);
+  *out_result = loom_target_contract_query_result_empty();
+  if (descriptor_matrix->options == NULL || descriptor_matrix->query == NULL) {
+    return iree_ok_status();
   }
-  return iree_ok_status();
+
+  loom_contract_request_t request = {0};
+  loom_contract_diagnostic_t diagnostic = {0};
+  switch (rule->source) {
+    case LOOM_TARGET_CONTRACT_DESCRIPTOR_MATRIX_SOURCE_VECTOR_MMA: {
+      if (!loom_vector_mma_isa(source_op)) {
+        return iree_ok_status();
+      }
+      loom_contract_vector_mma_options_t options = {0};
+      IREE_RETURN_IF_ERROR(descriptor_matrix->options(
+          descriptor_matrix->user_data, environment, rule, &options));
+      if (!loom_contract_request_from_vector_mma_op(
+              environment->module, environment->fact_table, source_op, &options,
+              &request, &diagnostic)) {
+        return loom_low_lower_descriptor_matrix_make_unsupported(
+            environment, rule, &diagnostic, out_result);
+      }
+      break;
+    }
+    case LOOM_TARGET_CONTRACT_DESCRIPTOR_MATRIX_SOURCE_NONE:
+    default:
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "unknown descriptor-matrix source");
+  }
+
+  return descriptor_matrix->query(descriptor_matrix->user_data, environment,
+                                  rule, &request, out_result);
 }
 
 static iree_status_t loom_low_lower_query_target_contract_index(
@@ -86,11 +195,16 @@ static iree_status_t loom_low_lower_query_target_contract_index(
     if (!loom_target_contract_fragment_queries_target(binding->fragment)) {
       continue;
     }
-    if (contract_case->system == LOOM_TARGET_CONTRACT_SYSTEM_CUSTOM_FAMILY) {
-      IREE_RETURN_IF_ERROR(loom_low_lower_query_custom_family(
-          environment, options, contract_case, case_index, source_op,
+    if (contract_case->system ==
+        LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_MATRIX) {
+      const loom_target_contract_descriptor_matrix_rule_t* matrix_rule =
+          &binding->fragment->descriptor_matrices[contract_case->row_index];
+      IREE_RETURN_IF_ERROR(loom_low_lower_query_descriptor_matrix_contract(
+          environment, &options->descriptor_matrix, matrix_rule, source_op,
           out_result));
       if (out_result->outcome != LOOM_TARGET_CONTRACT_QUERY_UNHANDLED) {
+        loom_low_lower_contract_query_adopt_case(contract_case, case_index,
+                                                 out_result);
         return iree_ok_status();
       }
       continue;
@@ -174,7 +288,7 @@ iree_status_t loom_low_lower_query_target_contract(
   if (options->contract_index == NULL ||
       options->contract_index->case_count == 0 ||
       (loom_low_lower_rule_set_list_is_empty(options->rule_sets) &&
-       options->contract_family_count == 0)) {
+       options->descriptor_matrix.query == NULL)) {
     return iree_ok_status();
   }
 

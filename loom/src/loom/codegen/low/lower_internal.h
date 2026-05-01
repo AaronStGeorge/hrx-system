@@ -39,9 +39,20 @@ enum loom_low_lower_selected_plan_flag_bits_e {
 };
 typedef uint8_t loom_low_lower_selected_plan_flags_t;
 
+typedef enum loom_low_lower_selected_plan_kind_e {
+  // Selection came from a table-driven source-to-low rule.
+  LOOM_LOW_LOWER_SELECTED_PLAN_RULE = 0,
+  // Selection came from a shared descriptor-matrix contract row.
+  LOOM_LOW_LOWER_SELECTED_PLAN_DESCRIPTOR_MATRIX = 1,
+  // Selection came from a target-owned callback plan.
+  LOOM_LOW_LOWER_SELECTED_PLAN_CALLBACK = 2,
+} loom_low_lower_selected_plan_kind_t;
+
 typedef struct loom_low_lower_selected_plan_t {
   // Source op this selected plan lowers.
   const loom_op_t* source_op;
+  // Selected plan representation.
+  loom_low_lower_selected_plan_kind_t kind;
   // Selection lifecycle flags.
   loom_low_lower_selected_plan_flags_t flags;
   // Policy rule-set ordinal for table-driven selections.

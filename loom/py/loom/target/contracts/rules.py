@@ -138,29 +138,33 @@ class ValueElideRule:
 
 
 @dataclass(frozen=True, slots=True)
-class CustomFamilyRule:
-    """Contract case handled by a target-owned family table."""
+class DescriptorMatrixRule:
+    """Contract case handled by the shared descriptor-matrix system."""
 
     source_op: Op
-    family: str
+    source: str
 
     def __init__(
         self,
         *,
         source_op: Op,
-        family: str,
+        source: str,
     ) -> None:
         object.__setattr__(self, "source_op", source_op)
-        object.__setattr__(self, "family", family)
-        if not family:
-            raise ValueError(f"{source_op.name}: custom family must be non-empty")
+        object.__setattr__(self, "source", source)
+        if not source:
+            raise ValueError(
+                f"{source_op.name}: descriptor-matrix source must be non-empty"
+            )
 
     @property
     def system(self) -> ContractSystem:
-        return ContractSystem.CUSTOM_FAMILY
+        return ContractSystem.DESCRIPTOR_MATRIX
 
     def validate(self, descriptor_set: DescriptorSet) -> None:
         del descriptor_set
 
 
-type ContractCase = DescriptorRule | ValueAliasRule | ValueElideRule | CustomFamilyRule
+type ContractCase = (
+    DescriptorRule | ValueAliasRule | ValueElideRule | DescriptorMatrixRule
+)

@@ -101,8 +101,6 @@ enum loom_target_contract_system_e {
   LOOM_TARGET_CONTRACT_SYSTEM_ENVIRONMENT = 5,
   // Descriptor-matrix row selected from a generated matrix-contract pool.
   LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_MATRIX = 6,
-  // Target-owned family row selected from a generated custom-family pool.
-  LOOM_TARGET_CONTRACT_SYSTEM_CUSTOM_FAMILY = 7,
 };
 
 #define LOOM_TARGET_CONTRACT_ROW_NONE ((uint16_t)UINT16_MAX)
@@ -159,6 +157,24 @@ typedef struct loom_target_contract_descriptor_rule_t {
   uint16_t rule_index;
 } loom_target_contract_descriptor_rule_t;
 
+typedef uint8_t loom_target_contract_descriptor_matrix_source_t;
+
+enum loom_target_contract_descriptor_matrix_source_e {
+  // No descriptor-matrix source adapter is selected.
+  LOOM_TARGET_CONTRACT_DESCRIPTOR_MATRIX_SOURCE_NONE = 0,
+  // Source vector.mma op adapted through the generic matrix contract request.
+  LOOM_TARGET_CONTRACT_DESCRIPTOR_MATRIX_SOURCE_VECTOR_MMA = 1,
+};
+
+typedef struct loom_target_contract_descriptor_matrix_rule_t {
+  // Shared source adapter used to build a generic matrix contract request.
+  loom_target_contract_descriptor_matrix_source_t source;
+  // Reserved byte for future per-row behavior flags.
+  uint8_t reserved;
+  // Reserved halfword for future row-local descriptor ranges.
+  uint16_t reserved0;
+} loom_target_contract_descriptor_matrix_rule_t;
+
 typedef uint8_t loom_target_contract_fragment_flags_t;
 
 enum loom_target_contract_fragment_flag_bits_e {
@@ -184,6 +200,10 @@ typedef struct loom_target_contract_fragment_t {
   uint16_t descriptor_rule_count;
   // Descriptor-rule row pool.
   const loom_target_contract_descriptor_rule_t* descriptor_rules;
+  // Number of descriptor-matrix rows.
+  uint16_t descriptor_matrix_count;
+  // Descriptor-matrix row pool.
+  const loom_target_contract_descriptor_matrix_rule_t* descriptor_matrices;
 } loom_target_contract_fragment_t;
 
 // Returns true when |fragment| participates in read-only target contract

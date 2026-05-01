@@ -432,6 +432,7 @@ loom_cc_library(
     ::source_memory_plan
     iree::base
     iree::base::internal::arena
+    loom::src::loom::analysis::contract_vector
     loom::src::loom::analysis::kernel_async_legality
     loom::src::loom::analysis::vector_memory_footprint
     loom::src::loom::error::emitter
@@ -445,6 +446,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::target
+    loom::src::loom::ops::vector
     loom::src::loom::target::contract
     loom::src::loom::target::low_legality
     loom::src::loom::target::types

@@ -35,10 +35,8 @@ typedef struct loom_low_lower_contract_query_options_t {
   loom_low_lower_rule_match_register_class_callback_t register_class;
   // Optional source value materializer predicate bridge.
   loom_low_lower_rule_match_can_materialize_value_callback_t can_materialize;
-  // Target-owned exceptional family rows referenced by custom-family cases.
-  const loom_low_lower_contract_family_t* contract_families;
-  // Number of target-owned exceptional family rows.
-  uint16_t contract_family_count;
+  // Optional target-owned descriptor-matrix projection.
+  loom_low_lower_descriptor_matrix_t descriptor_matrix;
 } loom_low_lower_contract_query_options_t;
 
 // Returns true and assigns the generated lower-rule row referenced by a
@@ -61,10 +59,20 @@ static inline bool loom_low_lower_contract_case_lower_rule_index(
     case LOOM_TARGET_CONTRACT_SYSTEM_VALUE_ELIDE:
       *out_rule_index = contract_case->row_index;
       return *out_rule_index != LOOM_TARGET_CONTRACT_ROW_NONE;
+    case LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_MATRIX:
     default:
       return false;
   }
 }
+
+// Queries one generated descriptor-matrix case through the shared matrix
+// source adapter and target-owned descriptor projection.
+iree_status_t loom_low_lower_query_descriptor_matrix_contract(
+    const loom_target_contract_query_environment_t* environment,
+    const loom_low_lower_descriptor_matrix_t* descriptor_matrix,
+    const loom_target_contract_descriptor_matrix_rule_t* rule,
+    const loom_op_t* source_op,
+    loom_target_contract_query_result_t* out_result);
 
 // Queries source-to-target-low rule tables for one source op.
 //

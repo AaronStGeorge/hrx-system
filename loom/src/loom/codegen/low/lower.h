@@ -17,6 +17,7 @@
 #define LOOM_CODEGEN_LOW_LOWER_H_
 
 #include "iree/base/api.h"
+#include "loom/analysis/contract_vector.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/memory_access.h"
 #include "loom/error/emitter.h"
@@ -231,24 +232,27 @@ static inline bool loom_low_lower_plan_is_empty(loom_low_lower_plan_t plan) {
   return plan.id == LOOM_LOW_LOWER_PLAN_ID_NONE;
 }
 
-typedef iree_status_t (*loom_low_lower_contract_family_select_fn_t)(
-    void* user_data, loom_low_lower_context_t* context,
-    const loom_op_t* source_op, loom_low_lower_plan_t* out_plan);
-
-typedef iree_status_t (*loom_low_lower_contract_family_query_fn_t)(
+typedef iree_status_t (*loom_low_lower_descriptor_matrix_options_fn_t)(
     void* user_data,
     const loom_target_contract_query_environment_t* environment,
-    const loom_op_t* source_op,
+    const loom_target_contract_descriptor_matrix_rule_t* rule,
+    loom_contract_vector_mma_options_t* out_options);
+
+typedef iree_status_t (*loom_low_lower_descriptor_matrix_query_fn_t)(
+    void* user_data,
+    const loom_target_contract_query_environment_t* environment,
+    const loom_target_contract_descriptor_matrix_rule_t* rule,
+    const loom_contract_request_t* request,
     loom_target_contract_query_result_t* out_result);
 
-typedef struct loom_low_lower_contract_family_t {
-  // Selects the target-owned source-to-low plan for this generated family row.
-  loom_low_lower_contract_family_select_fn_t select;
-  // Answers read-only target legality for this generated family row.
-  loom_low_lower_contract_family_query_fn_t query;
-  // Caller-owned payload passed to select and query.
+typedef struct loom_low_lower_descriptor_matrix_t {
+  // Supplies target-specific options for shared source-to-matrix adapters.
+  loom_low_lower_descriptor_matrix_options_fn_t options;
+  // Projects a generic matrix contract request to a target descriptor.
+  loom_low_lower_descriptor_matrix_query_fn_t query;
+  // Caller-owned payload passed to descriptor-matrix callbacks.
   void* user_data;
-} loom_low_lower_contract_family_t;
+} loom_low_lower_descriptor_matrix_t;
 
 typedef struct loom_low_lower_selected_plan_view_t {
   // Source op this selected plan lowers.
@@ -350,11 +354,9 @@ typedef struct loom_low_lower_policy_t {
   const loom_target_contract_binding_t* contract_bindings;
   // Number of active contract fragments.
   uint16_t contract_binding_count;
-  // Target-owned exceptional family rows referenced by generated custom-family
-  // contract cases.
-  const loom_low_lower_contract_family_t* contract_families;
-  // Number of target-owned exceptional family rows.
-  uint16_t contract_family_count;
+  // Optional target-owned descriptor-matrix projection used by generated
+  // descriptor-matrix contract cases.
+  loom_low_lower_descriptor_matrix_t descriptor_matrix;
   // Optional target-owned selector used before a target has table rules.
   loom_low_lower_select_op_callback_t select_op;
   // Optional target-owned emitter for plans selected by |select_op|.

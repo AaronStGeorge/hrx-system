@@ -18,6 +18,7 @@ from loom.gen.generated_file import line_comment_header
 from loom.target.contracts import (
     CONTRACT_ROW_NONE,
     CompiledContractFragment,
+    CompiledDescriptorMatrix,
     CompiledDescriptorRule,
     ContractFragment,
     ContractSystem,
@@ -36,7 +37,10 @@ _CONTRACT_SYSTEM_C_NAMES = {
     ContractSystem.SOURCE_MEMORY: "LOOM_TARGET_CONTRACT_SYSTEM_SOURCE_MEMORY",
     ContractSystem.ENVIRONMENT: "LOOM_TARGET_CONTRACT_SYSTEM_ENVIRONMENT",
     ContractSystem.DESCRIPTOR_MATRIX: "LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_MATRIX",
-    ContractSystem.CUSTOM_FAMILY: "LOOM_TARGET_CONTRACT_SYSTEM_CUSTOM_FAMILY",
+}
+
+_DESCRIPTOR_MATRIX_SOURCE_C_NAMES = {
+    "vector_mma": "LOOM_TARGET_CONTRACT_DESCRIPTOR_MATRIX_SOURCE_VECTOR_MMA",
 }
 
 
@@ -130,18 +134,6 @@ def _generate_header(
             "#endif",
         ]
     )
-    if table.custom_families:
-        table_name = _c_identifier(table.name)
-        family_enum_name = f"loom_{table_name.lower()}_contract_family_e"
-        family_type_name = f"loom_{table_name.lower()}_contract_family_t"
-        family_constant_prefix = f"LOOM_{table_name.upper()}_CONTRACT_FAMILY"
-        lines.append(f"typedef enum {family_enum_name} {{")
-        for family_index, family in enumerate(table.custom_families):
-            family_name = _c_identifier(family).upper()
-            lines.append(f"  {family_constant_prefix}_{family_name} = {family_index},")
-        lines.append(f"}} {family_type_name};")
-        lines.append("")
-
     lines.extend(
         [
             f"extern const loom_target_contract_fragment_t {symbol_name};",
@@ -227,6 +219,15 @@ def _generate_source(
         descriptor_rules_value = descriptor_rules_name
     else:
         descriptor_rules_value = "NULL"
+
+    descriptor_matrices_name = f"k{c_table_prefix}DescriptorMatrices"
+    if table.descriptor_matrices:
+        lines.append(f"static const loom_target_contract_descriptor_matrix_rule_t {descriptor_matrices_name}[] = {{")
+        lines.extend(_descriptor_matrix_rule_initializer(descriptor_matrix) for descriptor_matrix in table.descriptor_matrices)
+        lines.extend(["};", ""])
+        descriptor_matrices_value = descriptor_matrices_name
+    else:
+        descriptor_matrices_value = "NULL"
     flags_value = "LOOM_TARGET_CONTRACT_FRAGMENT_FLAG_TARGET_QUERY" if table.target_contract_query else "0"
 
     lines.extend(
@@ -240,6 +241,8 @@ def _generate_source(
             f"    {cases_value},",
             f"    {len(table.descriptor_rules)},",
             f"    {descriptor_rules_value},",
+            f"    {len(table.descriptor_matrices)},",
+            f"    {descriptor_matrices_value},",
             "};",
             "",
         ]
@@ -256,11 +259,20 @@ def _validate_c_shard_shape(table: CompiledContractFragment) -> None:
         raise ValueError(f"contract fragment '{table.name}' case count exceeds uint16_t")
     if len(table.descriptor_rules) > _UINT16_MAX:
         raise ValueError(f"contract fragment '{table.name}' descriptor-rule count exceeds uint16_t")
-    if len(table.custom_families) > _UINT16_MAX:
-        raise ValueError(f"contract fragment '{table.name}' custom-family count exceeds uint16_t")
+    if len(table.descriptor_matrices) > _UINT16_MAX:
+        raise ValueError(f"contract fragment '{table.name}' descriptor-matrix count exceeds uint16_t")
     for dialect in table.dialects:
         if len(dialect.op_entries) > _UINT16_MAX:
             raise ValueError(f"contract fragment '{table.name}' dialect '{dialect.dialect_name}' op count exceeds uint16_t")
+
+
+def _descriptor_matrix_rule_initializer(
+    descriptor_matrix: CompiledDescriptorMatrix,
+) -> str:
+    source_name = _DESCRIPTOR_MATRIX_SOURCE_C_NAMES.get(descriptor_matrix.source)
+    if source_name is None:
+        raise ValueError(f"unknown descriptor-matrix source '{descriptor_matrix.source}'")
+    return f"    {{{source_name}, 0, 0}},"
 
 
 def _generated_public_header(table: ContractFragment) -> str:

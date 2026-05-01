@@ -17,7 +17,7 @@ from loom.target.contracts import (
     CompiledDescriptorRule,
     ContractFragment,
     ContractSystem,
-    CustomFamilyRule,
+    DescriptorMatrixRule,
     DescriptorRule,
     EmitDescriptorOp,
     Guard,
@@ -161,14 +161,14 @@ def test_compile_contract_fragment_records_value_elide_cases() -> None:
     assert compiled.cases[0].row_index == 7
 
 
-def test_compile_contract_fragment_records_custom_family_cases() -> None:
+def test_compile_contract_fragment_records_descriptor_matrix_cases() -> None:
     table = ContractFragment(
-        name="test-low.custom",
+        name="test-low.matrix",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
-            CustomFamilyRule(
+            DescriptorMatrixRule(
                 source_op=vector.vector_mma,
-                family="matrix",
+                source="vector_mma",
             ),
         ],
     )
@@ -183,9 +183,9 @@ def test_compile_contract_fragment_records_custom_family_cases() -> None:
     mma_entry = compiled.dialects[0].op_entries[ALL_VECTOR_OPS.index(vector.vector_mma)]
     assert mma_entry.case_start == 0
     assert mma_entry.case_count == 1
-    assert compiled.cases[0].system == ContractSystem.CUSTOM_FAMILY
+    assert compiled.cases[0].system == ContractSystem.DESCRIPTOR_MATRIX
     assert compiled.cases[0].row_index == 0
-    assert compiled.custom_families == ("matrix",)
+    assert tuple(row.source for row in compiled.descriptor_matrices) == ("vector_mma",)
 
 
 def test_compile_contract_fragment_preserves_dense_dialect_gaps() -> None:

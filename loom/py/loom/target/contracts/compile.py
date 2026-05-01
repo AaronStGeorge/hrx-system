@@ -16,7 +16,7 @@ from loom.target.contracts.fragments import ContractFragment
 from loom.target.contracts.kinds import ContractSystem
 from loom.target.contracts.rules import (
     ContractCase,
-    CustomFamilyRule,
+    DescriptorMatrixRule,
     DescriptorRule,
     ValueAliasRule,
     ValueElideRule,
@@ -58,6 +58,13 @@ class CompiledDescriptorRule:
 
 
 @dataclass(frozen=True, slots=True)
+class CompiledDescriptorMatrix:
+    """Compiled fragment-local descriptor-matrix row."""
+
+    source: str
+
+
+@dataclass(frozen=True, slots=True)
 class CompiledContractFragment:
     """Compact contract fragment ready for C emission."""
 
@@ -67,7 +74,7 @@ class CompiledContractFragment:
     dialects: tuple[CompiledDialectTable, ...]
     cases: tuple[CompiledCase, ...]
     descriptor_rules: tuple[CompiledDescriptorRule, ...]
-    custom_families: tuple[str, ...]
+    descriptor_matrices: tuple[CompiledDescriptorMatrix, ...]
 
 
 def compile_contract_fragment(
@@ -83,8 +90,8 @@ def compile_contract_fragment(
     cases_by_op: dict[int, list[tuple[int, ContractCase]]] = {}
     descriptor_rule_ordinals: dict[int, int] = {}
     descriptor_rules: list[CompiledDescriptorRule] = []
-    custom_family_ordinals: dict[str, int] = {}
-    custom_families: list[str] = []
+    descriptor_matrix_ordinals: dict[str, int] = {}
+    descriptor_matrices: list[CompiledDescriptorMatrix] = []
     for authored_case_index, contract_case in enumerate(table.cases):
         _require_op_index(op_indexes, contract_case.source_op)
         if isinstance(contract_case, DescriptorRule):
@@ -94,10 +101,14 @@ def compile_contract_fragment(
             descriptor_rule_index = len(descriptor_rules)
             descriptor_rule_ordinals[authored_case_index] = descriptor_rule_index
             descriptor_rules.append(descriptor_rule)
-        elif isinstance(contract_case, CustomFamilyRule):
-            if contract_case.family not in custom_family_ordinals:
-                custom_family_ordinals[contract_case.family] = len(custom_families)
-                custom_families.append(contract_case.family)
+        elif isinstance(contract_case, DescriptorMatrixRule):
+            if contract_case.source not in descriptor_matrix_ordinals:
+                descriptor_matrix_ordinals[contract_case.source] = len(
+                    descriptor_matrices
+                )
+                descriptor_matrices.append(
+                    CompiledDescriptorMatrix(source=contract_case.source)
+                )
         cases_by_op.setdefault(id(contract_case.source_op), []).append(
             (authored_case_index, contract_case)
         )
@@ -128,9 +139,9 @@ def compile_contract_fragment(
                         authored_case_index,
                         CONTRACT_ROW_NONE,
                     ),
-                    custom_family_index=(
-                        custom_family_ordinals[contract_case.family]
-                        if isinstance(contract_case, CustomFamilyRule)
+                    descriptor_matrix_index=(
+                        descriptor_matrix_ordinals[contract_case.source]
+                        if isinstance(contract_case, DescriptorMatrixRule)
                         else CONTRACT_ROW_NONE
                     ),
                 )
@@ -166,7 +177,7 @@ def compile_contract_fragment(
         dialects=dialect_tables,
         cases=tuple(compiled_cases),
         descriptor_rules=tuple(descriptor_rules),
-        custom_families=tuple(custom_families),
+        descriptor_matrices=tuple(descriptor_matrices),
     )
 
 
@@ -175,7 +186,7 @@ def _compile_case(
     *,
     descriptor_rule_index: int,
     lower_rule_index: int,
-    custom_family_index: int,
+    descriptor_matrix_index: int,
 ) -> CompiledCase:
     if isinstance(contract_case, DescriptorRule):
         return CompiledCase(
@@ -202,15 +213,15 @@ def _compile_case(
             system=ContractSystem.VALUE_ELIDE,
             row_index=lower_rule_index,
         )
-    if isinstance(contract_case, CustomFamilyRule):
-        if custom_family_index == CONTRACT_ROW_NONE:
+    if isinstance(contract_case, DescriptorMatrixRule):
+        if descriptor_matrix_index == CONTRACT_ROW_NONE:
             raise ValueError(
-                f"{contract_case.source_op.name}: custom-family case has no "
-                "compiled family row"
+                f"{contract_case.source_op.name}: descriptor-matrix case has "
+                "no compiled row"
             )
         return CompiledCase(
-            system=ContractSystem.CUSTOM_FAMILY,
-            row_index=custom_family_index,
+            system=ContractSystem.DESCRIPTOR_MATRIX,
+            row_index=descriptor_matrix_index,
         )
     raise TypeError(f"unsupported contract case {contract_case!r}")
 

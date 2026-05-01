@@ -60,6 +60,8 @@ const loom_target_contract_fragment_t kContractFragment = {
     kFragmentCases,
     IREE_ARRAYSIZE(kDescriptorRules),
     kDescriptorRules,
+    0,
+    nullptr,
 };
 
 class TargetContractIndexTest : public ::testing::Test {

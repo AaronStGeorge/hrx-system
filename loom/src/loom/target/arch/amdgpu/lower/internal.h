@@ -671,27 +671,20 @@ iree_status_t loom_amdgpu_lower_vector_select(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_select_plan_t* plan);
 
-// Selects a native AMDGPU matrix instruction for a source vector.mma op.
-iree_status_t loom_amdgpu_select_vector_mma_plan(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_matrix_mma_plan_t* out_plan, bool* out_selected);
-
-// Selects a target-owned AMDGPU matrix contract-family plan.
-iree_status_t loom_amdgpu_select_matrix_contract_family(
-    void* user_data, loom_low_lower_context_t* context,
-    const loom_op_t* source_op, loom_low_lower_plan_t* out_plan);
-
-// Answers read-only target legality for the AMDGPU matrix contract family.
-iree_status_t loom_amdgpu_query_matrix_contract_family(
+// Supplies AMDGPU options for shared descriptor-matrix source adapters.
+iree_status_t loom_amdgpu_descriptor_matrix_options(
     void* user_data,
     const loom_target_contract_query_environment_t* environment,
-    const loom_op_t* source_op,
-    loom_target_contract_query_result_t* out_result);
+    const loom_target_contract_descriptor_matrix_rule_t* rule,
+    loom_contract_vector_mma_options_t* out_options);
 
-// Lowers a source vector.mma op from its selected AMDGPU matrix plan.
-iree_status_t loom_amdgpu_lower_vector_mma(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_matrix_mma_plan_t* plan);
+// Projects generic matrix contracts to AMDGPU matrix descriptors.
+iree_status_t loom_amdgpu_descriptor_matrix_query(
+    void* user_data,
+    const loom_target_contract_query_environment_t* environment,
+    const loom_target_contract_descriptor_matrix_rule_t* rule,
+    const loom_contract_request_t* contract_request,
+    loom_target_contract_query_result_t* out_result);
 
 // Selects an AMDGPU register-table lookup plan.
 iree_status_t loom_amdgpu_select_vector_table_lookup_plan(

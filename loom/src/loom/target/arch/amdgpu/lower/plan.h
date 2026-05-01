@@ -290,19 +290,6 @@ typedef struct loom_amdgpu_subgroup_vote_all_plan_t {
   loom_value_id_t result;
 } loom_amdgpu_subgroup_vote_all_plan_t;
 
-typedef struct loom_amdgpu_matrix_mma_plan_t {
-  // Descriptor row selected for the native matrix instruction.
-  loom_low_lower_resolved_descriptor_t descriptor;
-  // Source matrix A fragment value.
-  loom_value_id_t lhs;
-  // Source matrix B fragment value.
-  loom_value_id_t rhs;
-  // Source matrix C accumulator fragment value.
-  loom_value_id_t init;
-  // Source matrix D result value.
-  loom_value_id_t result;
-} loom_amdgpu_matrix_mma_plan_t;
-
 typedef enum loom_amdgpu_vector_slice_kind_e {
   LOOM_AMDGPU_VECTOR_SLICE_KIND_NONE = 0,
   LOOM_AMDGPU_VECTOR_SLICE_KIND_32BIT_LANES = 1,
