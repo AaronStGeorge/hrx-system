@@ -79,7 +79,6 @@ typedef struct loom_x86_memory_access_plan_t {
 
 static bool loom_x86_dynamic_stride_as_address_scale(int64_t byte_stride,
                                                      uint8_t* out_scale) {
-  IREE_ASSERT_ARGUMENT(out_scale);
   switch (byte_stride) {
     case 1:
     case 2:
@@ -123,7 +122,6 @@ static uint64_t loom_x86_memory_access_descriptor_id(
 static iree_status_t loom_x86_select_memory_load_result_type(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_x86_memory_access_plan_t* plan, loom_type_t* out_type) {
-  IREE_ASSERT_ARGUMENT(out_type);
   *out_type = loom_type_none();
   if (source_op->kind != LOOM_OP_VECTOR_LOAD) {
     return iree_ok_status();
@@ -137,7 +135,6 @@ static iree_status_t loom_x86_select_memory_load_result_type(
 static iree_status_t loom_x86_select_memory_access(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_x86_memory_access_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_selected);
   *out_plan = (loom_x86_memory_access_plan_t){
       .load_result_type = loom_type_none(),
       .disp32_attr_name_id = LOOM_STRING_ID_INVALID,

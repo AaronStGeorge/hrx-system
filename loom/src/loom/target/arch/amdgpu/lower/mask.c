@@ -145,7 +145,6 @@ static const loom_amdgpu_vector_compare_descriptor_t
 
 static bool loom_amdgpu_vector_compare_descriptor_id(
     loom_op_kind_t op_kind, uint8_t predicate, uint64_t* out_descriptor_id) {
-  IREE_ASSERT_ARGUMENT(out_descriptor_id);
   *out_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
   for (iree_host_size_t i = 0;
        i < IREE_ARRAYSIZE(kAmdgpuVectorCompareDescriptors); ++i) {
@@ -164,7 +163,6 @@ static iree_status_t loom_amdgpu_select_vector_compare_plan(
     loom_value_id_t lhs, loom_value_id_t rhs, loom_value_id_t result,
     loom_scalar_type_t payload_element_type, uint8_t predicate,
     loom_amdgpu_vector_compare_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_selected);
   *out_plan = (loom_amdgpu_vector_compare_plan_t){0};
   *out_selected = false;
   uint64_t descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
@@ -223,7 +221,6 @@ iree_status_t loom_amdgpu_select_vector_cmpf_plan(
 iree_status_t loom_amdgpu_select_vector_select_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_vector_select_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_selected);
   *out_plan = (loom_amdgpu_vector_select_plan_t){0};
   *out_selected = false;
   const loom_module_t* module = loom_low_lower_context_module(context);
@@ -257,7 +254,6 @@ static iree_status_t loom_amdgpu_slice_lane_if_needed(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t low_source, uint32_t lane_count, uint32_t unit_offset,
     loom_type_t lane_type, loom_value_id_t* out_lane) {
-  IREE_ASSERT_ARGUMENT(out_lane);
   *out_lane = LOOM_VALUE_ID_INVALID;
   if (lane_count == 1) {
     *out_lane = low_source;

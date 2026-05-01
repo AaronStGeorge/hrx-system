@@ -106,7 +106,6 @@ static iree_status_t loom_wasm_map_argument(
     loom_value_id_t source_argument_id,
     loom_low_lower_abi_argument_t* out_argument) {
   (void)source_argument_index;
-  IREE_ASSERT_ARGUMENT(out_argument);
   loom_type_t source_type = loom_module_value_type(
       loom_low_lower_context_module(context), source_argument_id);
   if (loom_type_is_buffer(source_type)) {
@@ -180,7 +179,6 @@ static iree_status_t loom_wasm_select_memory_access(
     loom_low_source_memory_operation_kind_t operation_kind,
     uint64_t memory_descriptor_id, loom_wasm_memory_access_plan_t* out_plan,
     bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_selected);
   *out_plan = (loom_wasm_memory_access_plan_t){
       .i32_type = loom_type_none(),
       .load_result_type = loom_type_none(),
@@ -294,7 +292,6 @@ static iree_status_t loom_wasm_emit_resolved_i32_const(
     const loom_low_lower_resolved_descriptor_t* descriptor,
     loom_string_id_t value_attr_name_id, loom_type_t result_type, int64_t value,
     loom_location_id_t location, loom_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(out_value_id);
   *out_value_id = LOOM_VALUE_ID_INVALID;
   loom_named_attr_t attr =
       loom_wasm_make_i32_value_attr(value_attr_name_id, value);
@@ -311,7 +308,6 @@ static iree_status_t loom_wasm_emit_resolved_typed_binary(
     const loom_low_lower_resolved_descriptor_t* descriptor, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type, loom_location_id_t location,
     loom_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(out_value_id);
   *out_value_id = LOOM_VALUE_ID_INVALID;
   loom_value_id_t operands[] = {lhs, rhs};
   loom_op_t* op = NULL;
@@ -372,7 +368,6 @@ static iree_status_t loom_wasm_emit_memory_address(
     loom_low_lower_context_t* context,
     const loom_wasm_memory_access_plan_t* plan, loom_location_id_t location,
     loom_value_id_t* out_address) {
-  IREE_ASSERT_ARGUMENT(out_address);
   *out_address = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
       context, plan->source.root_value_id, out_address));

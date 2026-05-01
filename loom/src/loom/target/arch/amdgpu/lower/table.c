@@ -67,7 +67,6 @@ static bool loom_amdgpu_table_lookup_plan_from_op(
 iree_status_t loom_amdgpu_select_vector_table_lookup_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_table_lookup_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_selected);
   *out_selected = loom_amdgpu_table_lookup_plan_from_op(
       loom_low_lower_context_module(context), source_op, out_plan);
   return iree_ok_status();
@@ -77,7 +76,6 @@ static iree_status_t loom_amdgpu_table_lookup_slice_if_needed(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t source, uint32_t register_count, uint32_t register_offset,
     loom_type_t lane_type, loom_value_id_t* out_lane) {
-  IREE_ASSERT_ARGUMENT(out_lane);
   *out_lane = LOOM_VALUE_ID_INVALID;
   if (register_count == 1) {
     *out_lane = source;
@@ -102,7 +100,6 @@ static iree_status_t loom_amdgpu_table_lookup_extract_i8_index_lane(
     const loom_amdgpu_table_lookup_plan_t* plan, loom_value_id_t low_indices,
     uint32_t result_lane, loom_type_t lane_type,
     loom_value_id_t* out_index_lane) {
-  IREE_ASSERT_ARGUMENT(out_index_lane);
   *out_index_lane = LOOM_VALUE_ID_INVALID;
   const uint32_t register_offset = result_lane / 4u;
   const uint32_t byte_offset = result_lane & 3u;
@@ -154,7 +151,6 @@ static iree_status_t loom_amdgpu_table_lookup_select_table_lane(
     loom_type_t mask_lane_type, loom_value_id_t* out_selected_lane) {
   IREE_ASSERT_ARGUMENT(table_lanes);
   IREE_ASSERT_ARGUMENT(ordinals);
-  IREE_ASSERT_ARGUMENT(out_selected_lane);
   *out_selected_lane = LOOM_VALUE_ID_INVALID;
   loom_value_id_t selected_lane = table_lanes[0];
   for (uint32_t i = 1; i < plan->table_lane_count; ++i) {

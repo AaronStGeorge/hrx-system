@@ -252,7 +252,6 @@ static iree_status_t loom_amdgpu_memory_access_descriptor_key(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_memory_access_t* access,
     iree_string_view_t* out_packet_key) {
-  IREE_ASSERT_ARGUMENT(out_packet_key);
   *out_packet_key = IREE_SV("<missing>");
   if (access->descriptor == NULL) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,

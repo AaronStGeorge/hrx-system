@@ -26,7 +26,6 @@ typedef struct loom_amdgpu_matrix_target_facts_t {
 static iree_status_t loom_amdgpu_matrix_target_facts_from_bundle(
     const loom_target_bundle_t* bundle,
     loom_amdgpu_matrix_target_facts_t* out_facts) {
-  IREE_ASSERT_ARGUMENT(out_facts);
   *out_facts = (loom_amdgpu_matrix_target_facts_t){0};
   if (bundle == NULL || bundle->snapshot == NULL) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
@@ -67,7 +66,6 @@ static bool loom_amdgpu_matrix_select_contract(
     const loom_amdgpu_matrix_contract_descriptor_t** out_descriptor,
     loom_contract_diagnostic_t* out_contract_diagnostic,
     loom_amdgpu_matrix_contract_match_diagnostic_t* out_match_diagnostic) {
-  IREE_ASSERT_ARGUMENT(out_descriptor);
   *out_descriptor = NULL;
   if (out_contract_diagnostic != NULL) {
     *out_contract_diagnostic = (loom_contract_diagnostic_t){0};
@@ -200,7 +198,6 @@ static iree_string_view_t loom_amdgpu_matrix_contract_rejection_reason(
 iree_status_t loom_amdgpu_select_vector_mma_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_matrix_mma_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_selected);
   *out_plan = (loom_amdgpu_matrix_mma_plan_t){0};
   *out_selected = false;
   if (!loom_vector_mma_isa(source_op)) {

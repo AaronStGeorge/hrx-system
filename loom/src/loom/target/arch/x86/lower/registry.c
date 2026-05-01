@@ -168,7 +168,6 @@ static iree_status_t loom_x86_map_avx512_argument(
     loom_value_id_t source_argument_id,
     loom_low_lower_abi_argument_t* out_argument) {
   (void)source_argument_index;
-  IREE_ASSERT_ARGUMENT(out_argument);
   const loom_type_t source_type = loom_module_value_type(
       loom_low_lower_context_module(context), source_argument_id);
   if (loom_type_is_buffer(source_type)) {
@@ -223,7 +222,6 @@ static iree_status_t loom_x86_map_avx512_packed_dot_argument(
     loom_value_id_t source_argument_id,
     loom_low_lower_abi_argument_t* out_argument) {
   (void)source_argument_index;
-  IREE_ASSERT_ARGUMENT(out_argument);
   const loom_type_t source_type = loom_module_value_type(
       loom_low_lower_context_module(context), source_argument_id);
   if (loom_type_is_buffer(source_type)) {

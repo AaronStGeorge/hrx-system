@@ -98,8 +98,6 @@ uint32_t loom_amdgpu_vector_i8_lane_count(loom_type_t type) {
 bool loom_amdgpu_type_packed_integer_storage(loom_type_t type,
                                              uint32_t* out_payload_bit_count,
                                              uint32_t* out_register_count) {
-  IREE_ASSERT_ARGUMENT(out_payload_bit_count);
-  IREE_ASSERT_ARGUMENT(out_register_count);
   *out_payload_bit_count = 0;
   *out_register_count = 0;
   if (!loom_type_is_vector(type) || loom_type_rank(type) != 1 ||
@@ -136,8 +134,6 @@ bool loom_amdgpu_type_packed_integer_storage(loom_type_t type,
 bool loom_amdgpu_type_packed_16bit_float_storage(
     loom_type_t type, uint32_t* out_payload_bit_count,
     uint32_t* out_register_count) {
-  IREE_ASSERT_ARGUMENT(out_payload_bit_count);
-  IREE_ASSERT_ARGUMENT(out_register_count);
   *out_payload_bit_count = 0;
   *out_register_count = 0;
   if (!loom_type_is_vector(type) || loom_type_rank(type) != 1 ||
@@ -235,7 +231,6 @@ iree_status_t loom_amdgpu_make_vgpr_range_type(
 iree_status_t loom_amdgpu_make_descriptor_row_implicit_resource_type(
     loom_low_lower_context_t* context, const loom_low_descriptor_t* descriptor,
     loom_type_t* out_type) {
-  IREE_ASSERT_ARGUMENT(out_type);
   *out_type = loom_type_none();
   IREE_ASSERT(descriptor != NULL);
   const loom_low_descriptor_set_t* descriptor_set =
@@ -279,7 +274,6 @@ iree_status_t loom_amdgpu_make_descriptor_row_implicit_resource_type(
 iree_status_t loom_amdgpu_low_type_register_class_is(
     loom_low_lower_context_t* context, loom_type_t type, uint16_t reg_class_id,
     bool* out_match) {
-  IREE_ASSERT_ARGUMENT(out_match);
   *out_match = false;
   if (!loom_type_is_register(type)) {
     return iree_ok_status();
@@ -583,7 +577,6 @@ static iree_status_t loom_amdgpu_map_contract_register(
     const loom_target_contract_query_environment_t* environment,
     uint16_t descriptor_register_class_id, uint32_t register_unit_count,
     loom_low_lower_rule_mapped_value_t* out_mapped_value) {
-  IREE_ASSERT_ARGUMENT(out_mapped_value);
   if (descriptor_register_class_id >=
       environment->descriptor_set->reg_class_count) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
@@ -603,7 +596,6 @@ iree_status_t loom_amdgpu_map_contract_value(
     loom_low_lower_rule_mapped_value_t* out_mapped_value) {
   (void)user_data;
   (void)source_op;
-  IREE_ASSERT_ARGUMENT(out_mapped_value);
   *out_mapped_value = loom_low_lower_rule_mapped_value_none();
   const loom_type_t source_type =
       loom_module_value_type(environment->module, source_value_id);
@@ -673,7 +665,6 @@ iree_status_t loom_amdgpu_map_contract_value(
 
 bool loom_amdgpu_module_value_as_exact_index_constant(
     const loom_module_t* module, loom_value_id_t value_id, int64_t* out_value) {
-  IREE_ASSERT_ARGUMENT(out_value);
   *out_value = 0;
   const loom_value_t* value = loom_module_value(module, value_id);
   if (loom_value_is_block_arg(value)) {
@@ -694,7 +685,6 @@ bool loom_amdgpu_module_value_as_exact_index_constant(
 bool loom_amdgpu_module_value_as_i32_constant(const loom_module_t* module,
                                               loom_value_id_t value_id,
                                               int64_t* out_value) {
-  IREE_ASSERT_ARGUMENT(out_value);
   *out_value = 0;
   if (!loom_amdgpu_type_is_i32(loom_module_value_type(module, value_id))) {
     return false;
@@ -718,7 +708,6 @@ bool loom_amdgpu_module_value_as_i32_constant(const loom_module_t* module,
 bool loom_amdgpu_module_value_as_f32_constant(const loom_module_t* module,
                                               loom_value_id_t value_id,
                                               uint32_t* out_bit_pattern) {
-  IREE_ASSERT_ARGUMENT(out_bit_pattern);
   *out_bit_pattern = 0;
   if (!loom_amdgpu_type_is_f32(loom_module_value_type(module, value_id))) {
     return false;
@@ -741,7 +730,6 @@ bool loom_amdgpu_module_value_as_f32_constant(const loom_module_t* module,
 
 bool loom_amdgpu_value_facts_as_exact_non_negative_i64(loom_value_facts_t facts,
                                                        int64_t* out_value) {
-  IREE_ASSERT_ARGUMENT(out_value);
   *out_value = 0;
   if (!loom_value_facts_is_exact(facts) || loom_value_facts_is_float(facts) ||
       facts.range_lo < 0) {
@@ -793,7 +781,6 @@ bool loom_amdgpu_value_as_f32_constant(loom_low_lower_context_t* context,
 bool loom_amdgpu_value_as_address_constant(loom_low_lower_context_t* context,
                                            loom_value_id_t value_id,
                                            int64_t* out_value) {
-  IREE_ASSERT_ARGUMENT(out_value);
   *out_value = 0;
   if (!loom_amdgpu_value_is_address_scalar(context, value_id)) {
     return false;

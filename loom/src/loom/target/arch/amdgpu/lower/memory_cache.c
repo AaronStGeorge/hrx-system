@@ -163,7 +163,6 @@ bool loom_amdgpu_memory_cache_policy_encode(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_cache_policy_attrs_t* out_attrs) {
-  IREE_ASSERT_ARGUMENT(out_attrs);
   *out_attrs = (loom_amdgpu_memory_cache_policy_attrs_t){0};
 
   const loom_vector_memory_cache_policy_t* policy =

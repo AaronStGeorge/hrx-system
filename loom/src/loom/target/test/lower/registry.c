@@ -76,7 +76,6 @@ static bool loom_test_low_is_vector_16xi8(loom_type_t type) {
 static iree_status_t loom_test_low_make_register_type(
     loom_low_lower_context_t* context, iree_string_view_t register_class,
     uint32_t unit_count, loom_type_t* out_type) {
-  IREE_ASSERT_ARGUMENT(out_type);
   loom_string_id_t register_class_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_module_intern_string(loom_low_lower_context_module(context),
@@ -91,7 +90,6 @@ iree_status_t loom_test_low_lower_map_type(void* user_data,
                                            loom_type_t source_type,
                                            loom_type_t* out_low_type) {
   (void)user_data;
-  IREE_ASSERT_ARGUMENT(out_low_type);
   if (loom_test_low_is_i32(source_type) || loom_test_low_is_i1(source_type) ||
       loom_test_low_is_index_like(source_type)) {
     return loom_test_low_make_register_type(context, IREE_SV("test.i32"), 1,
@@ -133,7 +131,6 @@ iree_status_t loom_test_low_lower_map_argument(
     const loom_op_t* source_function_op, uint16_t source_argument_index,
     loom_value_id_t source_argument_id,
     loom_low_lower_abi_argument_t* out_argument) {
-  IREE_ASSERT_ARGUMENT(out_argument);
   loom_type_t source_type = loom_module_value_type(
       loom_low_lower_context_module(context), source_argument_id);
   if (loom_type_is_buffer(source_type)) {
@@ -165,7 +162,6 @@ iree_status_t loom_test_low_lower_rule_match_map_value(
     loom_low_lower_rule_mapped_value_t* out_mapped_value) {
   (void)user_data;
   (void)source_op;
-  IREE_ASSERT_ARGUMENT(out_mapped_value);
   const loom_target_contract_query_environment_t environment = {
       .module = context->module,
       .descriptor_set = context->descriptor_set,
@@ -181,7 +177,6 @@ iree_status_t loom_test_low_lower_map_contract_value(
     loom_low_lower_rule_mapped_value_t* out_mapped_value) {
   (void)user_data;
   (void)source_op;
-  IREE_ASSERT_ARGUMENT(out_mapped_value);
   *out_mapped_value = loom_low_lower_rule_mapped_value_none();
   loom_type_t source_type =
       loom_module_value_type(environment->module, source_value_id);
@@ -267,7 +262,6 @@ static bool loom_test_low_memory_access_descriptor_id(
     const loom_module_t* module,
     const loom_low_source_memory_access_plan_t* access,
     const loom_op_t* source_op, uint64_t* out_descriptor_id) {
-  IREE_ASSERT_ARGUMENT(out_descriptor_id);
   *out_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
   const bool dynamic = loom_low_source_memory_access_is_dynamic(access);
   switch (source_op->kind) {
@@ -480,7 +474,6 @@ const loom_low_lower_policy_t* loom_test_low_lower_policy(void) {
 
 void loom_test_low_lower_policy_registry_initialize(
     loom_low_lower_policy_registry_t* out_registry) {
-  IREE_ASSERT_ARGUMENT(out_registry);
   static const loom_low_lower_policy_registry_entry_t kEntries[] = {
       {
           .contract_set_key = IREE_SVL("test.low.core"),

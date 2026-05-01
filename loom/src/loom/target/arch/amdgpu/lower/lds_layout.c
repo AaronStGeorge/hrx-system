@@ -21,7 +21,6 @@
 
 static bool loom_amdgpu_source_lds_layout_checked_align(
     uint64_t value, uint64_t alignment, uint64_t* out_aligned_value) {
-  IREE_ASSERT_ARGUMENT(out_aligned_value);
   *out_aligned_value = 0;
   if (alignment == 0 || (alignment & (alignment - 1)) != 0) {
     return false;
@@ -37,7 +36,6 @@ static bool loom_amdgpu_source_lds_layout_checked_align(
 static bool loom_amdgpu_source_lds_layout_alloca_size(
     const loom_value_fact_table_t* fact_table, const loom_op_t* alloca_op,
     uint64_t* out_byte_length) {
-  IREE_ASSERT_ARGUMENT(out_byte_length);
   *out_byte_length = 0;
   int64_t byte_length = 0;
   if (!loom_amdgpu_value_facts_as_exact_non_negative_i64(
@@ -53,7 +51,6 @@ static bool loom_amdgpu_source_lds_layout_alloca_size(
 
 static bool loom_amdgpu_source_lds_layout_alloca_alignment(
     const loom_op_t* alloca_op, uint64_t* out_byte_alignment) {
-  IREE_ASSERT_ARGUMENT(out_byte_alignment);
   *out_byte_alignment = 0;
   const int64_t base_alignment = loom_buffer_alloca_base_alignment(alloca_op);
   if (base_alignment <= 0 || base_alignment > UINT32_MAX ||
@@ -68,7 +65,6 @@ bool loom_amdgpu_source_lds_layout_lookup_root(
     const loom_value_fact_table_t* fact_table, loom_func_like_t source_function,
     loom_value_id_t root_value_id, uint64_t* out_byte_offset) {
   IREE_ASSERT_ARGUMENT(fact_table);
-  IREE_ASSERT_ARGUMENT(out_byte_offset);
   *out_byte_offset = 0;
   if (!loom_func_like_isa(source_function)) {
     return false;

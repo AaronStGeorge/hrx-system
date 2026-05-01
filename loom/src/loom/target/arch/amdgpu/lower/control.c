@@ -28,7 +28,6 @@ static iree_status_t loom_amdgpu_emit_cond_branch_reject(
 static iree_status_t loom_amdgpu_condition_is_reg_class(
     loom_low_lower_context_t* context, loom_type_t low_type,
     uint16_t reg_class_id, uint32_t unit_count, bool* out_match) {
-  IREE_ASSERT_ARGUMENT(out_match);
   *out_match = false;
   bool is_class = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(

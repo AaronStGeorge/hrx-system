@@ -66,7 +66,6 @@ static bool loom_amdgpu_bitfield_insert_plan_from_op(
 iree_status_t loom_amdgpu_select_vector_bitfield_extract_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_bitfield_extract_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_selected);
   *out_selected = false;
   if (!loom_amdgpu_bitfield_extract_plan_from_op(source_op, out_plan)) {
     return iree_ok_status();
@@ -88,7 +87,6 @@ iree_status_t loom_amdgpu_select_vector_bitfield_extract_plan(
 iree_status_t loom_amdgpu_select_vector_bitfield_insert_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_bitfield_insert_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_selected);
   *out_selected = false;
   if (!loom_amdgpu_bitfield_insert_plan_from_op(source_op, out_plan)) {
     return iree_ok_status();
@@ -117,7 +115,6 @@ static iree_status_t loom_amdgpu_emit_extractu_lane(
     const loom_amdgpu_bitfield_extract_plan_t* plan,
     loom_value_id_t source_lane, loom_type_t lane_type,
     loom_value_id_t* out_lane) {
-  IREE_ASSERT_ARGUMENT(out_lane);
   *out_lane = LOOM_VALUE_ID_INVALID;
 
   loom_value_id_t shifted = LOOM_VALUE_ID_INVALID;
@@ -140,7 +137,6 @@ static iree_status_t loom_amdgpu_emit_extracts_lane(
     const loom_amdgpu_bitfield_extract_plan_t* plan,
     loom_value_id_t source_lane, loom_type_t lane_type,
     loom_value_id_t* out_lane) {
-  IREE_ASSERT_ARGUMENT(out_lane);
   *out_lane = LOOM_VALUE_ID_INVALID;
   if (plan->offset == 0 && plan->width == 32) {
     *out_lane = source_lane;
@@ -174,7 +170,6 @@ static iree_status_t loom_amdgpu_emit_insert_lane(
     const loom_amdgpu_bitfield_insert_plan_t* plan, loom_value_id_t field_lane,
     loom_value_id_t base_lane, loom_type_t lane_type,
     loom_value_id_t* out_lane) {
-  IREE_ASSERT_ARGUMENT(out_lane);
   *out_lane = LOOM_VALUE_ID_INVALID;
   if (plan->offset == 0 && plan->width == 32) {
     *out_lane = field_lane;

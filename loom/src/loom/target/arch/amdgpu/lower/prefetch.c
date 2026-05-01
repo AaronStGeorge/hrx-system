@@ -71,7 +71,6 @@ static bool loom_amdgpu_prefetch_select_dynamic_index(
 
 static bool loom_amdgpu_view_prefetch_count(const loom_op_t* source_op,
                                             uint32_t* out_count) {
-  IREE_ASSERT_ARGUMENT(out_count);
   *out_count = 0;
   switch (
       (loom_view_prefetch_locality_t)loom_view_prefetch_locality(source_op)) {
@@ -110,7 +109,6 @@ static bool loom_amdgpu_prefetch_memory_space_is_buffer_backed(
 static iree_status_t loom_amdgpu_prefetch_select(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_prefetch_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_selected);
   *out_plan = (loom_amdgpu_prefetch_plan_t){0};
   *out_selected = false;
   if (!loom_view_prefetch_isa(source_op)) {
@@ -171,7 +169,6 @@ static iree_status_t loom_amdgpu_prefetch_select(
 iree_status_t loom_amdgpu_select_view_prefetch_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_prefetch_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_selected);
   return loom_amdgpu_prefetch_select(context, source_op, out_plan,
                                      out_selected);
 }

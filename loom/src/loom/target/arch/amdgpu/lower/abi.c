@@ -13,7 +13,6 @@
 
 static iree_status_t loom_amdgpu_make_hal_buffer_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
-  IREE_ASSERT_ARGUMENT(out_type);
   *out_type = loom_type_none();
   loom_string_id_t hal_buffer_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
@@ -53,7 +52,6 @@ typedef struct loom_amdgpu_buffer_argument_extent_t {
 static bool loom_amdgpu_view_static_dense_byte_extent(
     const loom_module_t* module, loom_type_t view_type,
     int64_t* out_byte_extent) {
-  IREE_ASSERT_ARGUMENT(out_byte_extent);
   *out_byte_extent = 0;
   if (!loom_type_is_view(view_type)) {
     return false;
@@ -123,7 +121,6 @@ static void loom_amdgpu_buffer_argument_extent_include_view(
 static bool loom_amdgpu_source_buffer_argument_valid_byte_count(
     loom_low_lower_context_t* context, loom_value_id_t source_argument_id,
     int64_t* out_valid_byte_count) {
-  IREE_ASSERT_ARGUMENT(out_valid_byte_count);
   *out_valid_byte_count = 0;
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_value_t* source_argument =
@@ -153,7 +150,6 @@ iree_status_t loom_amdgpu_map_argument(
     loom_value_id_t source_argument_id,
     loom_low_lower_abi_argument_t* out_argument) {
   (void)user_data;
-  IREE_ASSERT_ARGUMENT(out_argument);
   loom_type_t source_type = loom_module_value_type(
       loom_low_lower_context_module(context), source_argument_id);
   const loom_target_bundle_t* bundle = loom_low_lower_context_bundle(context);

@@ -255,7 +255,6 @@ static bool loom_amdgpu_bitunpack_plan_from_op(
 iree_status_t loom_amdgpu_select_vector_bitpack_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_bitpack_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_selected);
   *out_selected = loom_amdgpu_bitpack_plan_from_op(
       loom_low_lower_context_module(context), source_op, out_plan, NULL);
   return iree_ok_status();
@@ -264,7 +263,6 @@ iree_status_t loom_amdgpu_select_vector_bitpack_plan(
 iree_status_t loom_amdgpu_select_vector_bitunpack_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_bitunpack_plan_t* out_plan, bool* out_selected) {
-  IREE_ASSERT_ARGUMENT(out_selected);
   *out_selected = loom_amdgpu_bitunpack_plan_from_op(
       loom_low_lower_context_module(context), source_op, out_plan, NULL);
   return iree_ok_status();
@@ -335,7 +333,6 @@ static iree_status_t loom_amdgpu_emit_bitunpacku_lane(
     const loom_amdgpu_bitunpack_plan_t* plan, loom_value_id_t low_source,
     uint32_t source_bit_offset, loom_type_t lane_type,
     loom_value_id_t* out_lane) {
-  IREE_ASSERT_ARGUMENT(out_lane);
   *out_lane = LOOM_VALUE_ID_INVALID;
 
   loom_value_id_t shifted = LOOM_VALUE_ID_INVALID;
@@ -357,7 +354,6 @@ static iree_status_t loom_amdgpu_emit_bitunpacks_lane(
     const loom_amdgpu_bitunpack_plan_t* plan, loom_value_id_t low_source,
     uint32_t source_bit_offset, loom_type_t lane_type,
     loom_value_id_t* out_lane) {
-  IREE_ASSERT_ARGUMENT(out_lane);
   *out_lane = LOOM_VALUE_ID_INVALID;
   if (source_bit_offset == 0 && plan->width == 32) {
     *out_lane = low_source;
