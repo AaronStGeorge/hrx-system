@@ -226,7 +226,6 @@ static iree_status_t loom_low_lower_validate_options(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor registry is required");
   }
-  IREE_RETURN_IF_ERROR(loom_low_lower_policy_verify(options->policy));
   return iree_ok_status();
 }
 

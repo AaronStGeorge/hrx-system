@@ -7,39 +7,6 @@
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/lower_rules.h"
 
-iree_status_t loom_low_lower_policy_verify(
-    const loom_low_lower_policy_t* policy) {
-  if (policy == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low lowering policy is required");
-  }
-  if (iree_string_view_is_empty(iree_string_view_trim(policy->name))) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low lowering policy name is required");
-  }
-  if (policy->rule_sets.count != 0 && policy->rule_sets.values == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "target-low lowering policy rule set list is required");
-  }
-  const bool has_rule_sets =
-      !loom_low_lower_rule_set_list_is_empty(policy->rule_sets);
-  const bool has_select_op = policy->select_op.fn != NULL;
-  const bool has_emit_op = policy->emit_op.fn != NULL;
-  if (has_select_op != has_emit_op) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low lowering policy must provide both "
-                            "select_op and emit_op callbacks or neither");
-  }
-  const bool has_callback_lowering = has_select_op && has_emit_op;
-  if (policy->map_type.fn == NULL ||
-      (!has_rule_sets && !has_callback_lowering)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "complete target-low lowering policy is required");
-  }
-  return iree_ok_status();
-}
-
 void loom_low_lower_policy_registry_initialize_from_entries(
     loom_low_lower_policy_registry_t* out_registry,
     const loom_low_lower_policy_registry_entry_t* entries,
