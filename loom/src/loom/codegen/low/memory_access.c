@@ -34,7 +34,6 @@ bool loom_low_memory_access_spaces_may_alias(loom_low_memory_space_t left,
 
 loom_low_memory_access_summary_t loom_low_memory_access_summary_from_effect(
     const loom_low_effect_t* effect) {
-  IREE_ASSERT_ARGUMENT(effect);
   const loom_low_memory_space_t memory_space =
       loom_low_memory_access_normalize_space(effect->memory_space);
   loom_low_memory_access_precision_flags_t precision_flags = 0;
@@ -80,8 +79,6 @@ static bool loom_low_byte_interval_envelopes_are_disjoint(
 bool loom_low_memory_access_summaries_may_alias(
     const loom_low_memory_access_summary_t* left,
     const loom_low_memory_access_summary_t* right) {
-  IREE_ASSERT_ARGUMENT(left);
-  IREE_ASSERT_ARGUMENT(right);
   if (!loom_low_memory_access_spaces_may_alias(left->memory_space,
                                                right->memory_space)) {
     return false;
@@ -115,8 +112,6 @@ bool loom_low_memory_access_summaries_may_alias(
 bool loom_low_memory_access_write_subsumes_read(
     const loom_low_memory_access_summary_t* write_summary,
     const loom_low_memory_access_summary_t* read_summary) {
-  IREE_ASSERT_ARGUMENT(write_summary);
-  IREE_ASSERT_ARGUMENT(read_summary);
   if (!loom_low_memory_access_summaries_may_alias(write_summary,
                                                   read_summary)) {
     return false;

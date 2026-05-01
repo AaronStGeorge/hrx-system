@@ -716,7 +716,6 @@ static void loom_low_schedule_note_candidate_pressure_delta(
 static iree_status_t loom_low_schedule_project_reg_class_live_units(
     uint64_t current_live_units, int64_t delta_units,
     uint64_t* out_projected_live_units) {
-  IREE_ASSERT_ARGUMENT(out_projected_live_units);
   if (delta_units < 0) {
     const uint64_t removed_units = (uint64_t)(-delta_units);
     if (removed_units > current_live_units) {
@@ -1328,11 +1327,6 @@ iree_status_t loom_low_schedule_function(
     loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_schedule_options_t* options, iree_arena_allocator_t* arena,
     loom_low_schedule_table_t* out_table) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(low_func_op);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_table);
   if (!loom_low_function_def_isa(low_func_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected low.func.def or low.kernel.def");

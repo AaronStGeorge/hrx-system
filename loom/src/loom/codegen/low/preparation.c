@@ -51,8 +51,6 @@ static iree_status_t loom_low_preparation_build_run(
 
 static iree_status_t loom_low_preparation_build_pipeline(
     loom_module_t* pipeline_module, const loom_op_t** out_pipeline_op) {
-  IREE_ASSERT_ARGUMENT(pipeline_module);
-  IREE_ASSERT_ARGUMENT(out_pipeline_op);
   *out_pipeline_op = NULL;
 
   loom_builder_t builder;
@@ -95,7 +93,6 @@ static iree_status_t loom_low_preparation_build_pipeline(
 
 static iree_status_t loom_low_preparation_validate_function(
     loom_module_t* module, loom_op_t* low_func_op) {
-  IREE_ASSERT_ARGUMENT(module);
   if (!low_func_op || !loom_low_function_def_isa(low_func_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low preparation expected a low function");
@@ -112,14 +109,9 @@ iree_status_t loom_low_prepare_functions_for_packetization(
     iree_host_size_t low_func_count,
     const loom_low_preparation_options_t* options,
     iree_arena_block_pool_t* block_pool) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(options && options->pass_registry &&
-                       options->descriptor_registry);
-  IREE_ASSERT_ARGUMENT(block_pool);
   if (low_func_count == 0) {
     return iree_ok_status();
   }
-  IREE_ASSERT_ARGUMENT(low_func_ops);
 
   for (iree_host_size_t i = 0; i < low_func_count; ++i) {
     IREE_RETURN_IF_ERROR(

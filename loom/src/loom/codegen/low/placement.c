@@ -40,7 +40,6 @@ typedef struct loom_low_placement_build_state_t {
 static iree_status_t loom_low_placement_value_ordinal(
     const loom_low_placement_build_state_t* state, loom_value_id_t value_id,
     loom_value_ordinal_t* out_value_ordinal) {
-  IREE_ASSERT_ARGUMENT(out_value_ordinal);
   const loom_value_ordinal_t value_ordinal =
       loom_local_value_domain_try_ordinal(state->value_domain, value_id);
   if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID) {
@@ -57,7 +56,6 @@ static iree_status_t loom_low_placement_interval_for_ordinal(
     const loom_low_placement_build_state_t* state,
     loom_value_ordinal_t value_ordinal,
     const loom_liveness_interval_t** out_interval) {
-  IREE_ASSERT_ARGUMENT(out_interval);
   const loom_liveness_interval_t* interval =
       loom_liveness_interval_for_value_ordinal(state->liveness, value_ordinal);
   if (!interval) {
@@ -157,8 +155,6 @@ static iree_status_t loom_low_placement_relation_unit_counts(
     const loom_low_placement_build_state_t* state,
     loom_value_ordinal_t result_ordinal, loom_value_ordinal_t source_ordinal,
     uint32_t* out_result_unit_count, uint32_t* out_source_unit_count) {
-  IREE_ASSERT_ARGUMENT(out_result_unit_count);
-  IREE_ASSERT_ARGUMENT(out_source_unit_count);
   const loom_liveness_interval_t* result_interval = NULL;
   IREE_RETURN_IF_ERROR(loom_low_placement_interval_for_ordinal(
       state, result_ordinal, &result_interval));
@@ -433,13 +429,7 @@ iree_status_t loom_low_placement_analyze_region(
     const loom_local_value_domain_t* value_domain,
     const loom_liveness_analysis_t* liveness, iree_arena_allocator_t* arena,
     loom_low_placement_table_t* out_table) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(region);
-  IREE_ASSERT_ARGUMENT(value_domain);
   IREE_ASSERT(loom_local_value_domain_is_acquired(value_domain));
-  IREE_ASSERT_ARGUMENT(liveness);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_table);
   *out_table = (loom_low_placement_table_t){0};
   if (value_domain->value_count != liveness->value_count ||
       value_domain->value_ids != liveness->value_ids) {
@@ -510,7 +500,6 @@ loom_low_placement_relation_range_t
 loom_low_placement_relation_range_for_value_ordinal(
     const loom_low_placement_table_t* table,
     loom_value_ordinal_t result_ordinal) {
-  IREE_ASSERT_ARGUMENT(table);
   IREE_ASSERT_LT(result_ordinal, table->value_count);
   IREE_ASSERT(table->ranges_by_result_ordinal != NULL);
   return table->ranges_by_result_ordinal[result_ordinal];
@@ -520,7 +509,6 @@ loom_low_placement_relation_range_t
 loom_low_placement_relation_range_for_source_value_ordinal(
     const loom_low_placement_table_t* table,
     loom_value_ordinal_t source_ordinal) {
-  IREE_ASSERT_ARGUMENT(table);
   IREE_ASSERT_LT(source_ordinal, table->value_count);
   IREE_ASSERT(table->ranges_by_source_ordinal != NULL);
   return table->ranges_by_source_ordinal[source_ordinal];
@@ -529,7 +517,6 @@ loom_low_placement_relation_range_for_source_value_ordinal(
 loom_value_id_t loom_low_placement_value_id(
     const loom_low_placement_table_t* table,
     loom_value_ordinal_t value_ordinal) {
-  IREE_ASSERT_ARGUMENT(table);
   IREE_ASSERT_LT(value_ordinal, table->value_count);
   return table->value_ids[value_ordinal];
 }

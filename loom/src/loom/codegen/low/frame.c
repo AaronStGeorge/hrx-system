@@ -14,10 +14,6 @@
 static iree_status_t loom_low_emission_frame_liveness_order_from_schedule(
     loom_op_t* low_func_op, const loom_low_schedule_table_t* schedule,
     iree_arena_allocator_t* arena, loom_liveness_order_t* out_order) {
-  IREE_ASSERT_ARGUMENT(low_func_op);
-  IREE_ASSERT_ARGUMENT(schedule);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_order);
   *out_order = loom_liveness_order_empty();
 
   loom_region_t* body = loom_low_function_body(low_func_op);
@@ -115,11 +111,6 @@ iree_status_t loom_low_emission_frame_build(
     loom_module_t* module, loom_op_t* low_func_op,
     const loom_low_emission_frame_options_t* options,
     iree_arena_allocator_t* arena, loom_low_emission_frame_t* out_frame) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(low_func_op);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_frame);
   if (!loom_low_function_def_isa(low_func_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected low.func.def or low.kernel.def");

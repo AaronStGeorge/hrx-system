@@ -180,7 +180,6 @@ static iree_status_t loom_low_schedule_descriptor_operand_reg_class_id(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor, uint16_t descriptor_operand_index,
     uint16_t* out_reg_class_id) {
-  IREE_ASSERT_ARGUMENT(out_reg_class_id);
   *out_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
   const uint32_t operand_row =
       descriptor->operand_start + descriptor_operand_index;

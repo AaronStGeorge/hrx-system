@@ -26,10 +26,6 @@ iree_status_t loom_low_register_class_map_initialize(
     const loom_module_t* module,
     const loom_low_descriptor_set_t* descriptor_set,
     iree_arena_allocator_t* arena, loom_low_register_class_map_t* out_map) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(descriptor_set);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_map);
   *out_map = (loom_low_register_class_map_t){
       .module = module,
       .descriptor_set = descriptor_set,
@@ -73,9 +69,6 @@ iree_status_t loom_low_register_class_map_try_resolve_string_id(
     uint16_t* out_descriptor_register_class_id,
     const loom_low_reg_class_t** out_descriptor_register_class,
     bool* out_found) {
-  IREE_ASSERT_ARGUMENT(map);
-  IREE_ASSERT_ARGUMENT(out_descriptor_register_class_id);
-  IREE_ASSERT_ARGUMENT(out_found);
   *out_descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
   if (out_descriptor_register_class) {
     *out_descriptor_register_class = NULL;
@@ -105,9 +98,6 @@ iree_status_t loom_low_register_class_map_try_resolve_type(
     uint16_t* out_descriptor_register_class_id,
     const loom_low_reg_class_t** out_descriptor_register_class,
     bool* out_found) {
-  IREE_ASSERT_ARGUMENT(map);
-  IREE_ASSERT_ARGUMENT(out_descriptor_register_class_id);
-  IREE_ASSERT_ARGUMENT(out_found);
   *out_descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
   if (out_descriptor_register_class) {
     *out_descriptor_register_class = NULL;
@@ -127,9 +117,6 @@ iree_status_t loom_low_register_class_try_lookup_name(
     uint16_t* out_descriptor_register_class_id,
     const loom_low_reg_class_t** out_descriptor_register_class,
     bool* out_found) {
-  IREE_ASSERT_ARGUMENT(descriptor_set);
-  IREE_ASSERT_ARGUMENT(out_descriptor_register_class_id);
-  IREE_ASSERT_ARGUMENT(out_found);
   *out_descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
   if (out_descriptor_register_class) {
     *out_descriptor_register_class = NULL;

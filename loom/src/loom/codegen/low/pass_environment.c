@@ -52,7 +52,6 @@ loom_pass_environment_t loom_low_pass_environment_storage_initialize(
     const loom_low_lower_policy_registry_t* lower_policy_registry,
     const loom_target_low_legality_provider_list_t* legality_provider_list,
     loom_low_pass_environment_storage_t* out_storage) {
-  IREE_ASSERT_ARGUMENT(out_storage);
   out_storage->low_capability = loom_low_pass_capability_make(
       descriptor_registry, lower_policy_registry, legality_provider_list);
   out_storage->capabilities[0] = &out_storage->low_capability.base;

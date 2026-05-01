@@ -171,10 +171,6 @@ iree_status_t loom_low_select_source_funcs(
     const loom_low_source_selection_options_t* options,
     iree_arena_allocator_t* arena,
     loom_low_source_selection_list_t* out_selection_list) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_selection_list);
   *out_selection_list = (loom_low_source_selection_list_t){0};
   if (options->descriptor_registry == NULL ||
       options->policy_registry == NULL) {
@@ -221,10 +217,6 @@ iree_status_t loom_low_select_source_func(
     const loom_module_t* module,
     const loom_low_source_selection_options_t* options,
     iree_arena_allocator_t* arena, loom_low_source_selection_t* out_selection) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_selection);
   memset(out_selection, 0, sizeof(*out_selection));
   if (options->descriptor_registry == NULL ||
       options->policy_registry == NULL) {

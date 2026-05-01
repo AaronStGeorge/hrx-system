@@ -65,7 +65,6 @@ static bool loom_low_schedule_interval_contains_point(
 static bool loom_low_schedule_first_pressure_cliff_for_reg_class(
     const loom_low_schedule_build_state_t* state, uint16_t reg_class_id,
     const loom_low_schedule_pressure_cliff_t** out_cliff) {
-  IREE_ASSERT_ARGUMENT(out_cliff);
   *out_cliff = NULL;
   if (state->pressure_cliff_ranges == NULL ||
       reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
@@ -217,7 +216,6 @@ iree_status_t loom_low_schedule_emit_pressure_diagnostics(
 static iree_status_t loom_low_schedule_node_diagnostic_label(
     const loom_low_schedule_build_state_t* state,
     const loom_low_schedule_node_t* node, iree_string_view_t* out_label) {
-  IREE_ASSERT_ARGUMENT(out_label);
   *out_label = IREE_SV("<unknown>");
   if (node == NULL) {
     return iree_ok_status();

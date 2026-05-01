@@ -379,8 +379,6 @@ iree_status_t loom_low_allocation_materialize_spills(
     const loom_low_allocation_materialization_options_t* options,
     iree_arena_allocator_t* arena,
     loom_low_allocation_materialization_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(arena);
   loom_low_allocation_materialization_result_t result = {0};
   if (out_result) *out_result = result;
 

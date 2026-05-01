@@ -12,7 +12,6 @@ static iree_status_t loom_low_lower_contract_query_make_rejection(
     const loom_target_contract_query_environment_t* environment,
     const loom_low_lower_diagnostic_t* diagnostic,
     const loom_target_contract_rejection_t** out_rejection) {
-  IREE_ASSERT_ARGUMENT(out_rejection);
   *out_rejection = NULL;
   if (diagnostic == NULL) {
     return iree_ok_status();
@@ -118,10 +117,6 @@ iree_status_t loom_low_lower_query_target_contract(
     const loom_low_lower_contract_query_options_t* options,
     const loom_op_t* source_op,
     loom_target_contract_query_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(environment);
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(source_op);
-  IREE_ASSERT_ARGUMENT(out_result);
   *out_result = loom_target_contract_query_result_empty();
 
   if (loom_low_lower_rule_set_list_is_empty(options->rule_sets)) {

@@ -106,7 +106,6 @@ static iree_status_t loom_low_schedule_json_write_hazard_reference(
 static iree_status_t loom_low_schedule_json_descriptor_key(
     const loom_low_schedule_table_t* table,
     const loom_low_schedule_node_t* node, iree_string_view_t* out_key) {
-  IREE_ASSERT_ARGUMENT(out_key);
   *out_key = iree_string_view_empty();
   if (node->descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
     return iree_ok_status();
@@ -127,8 +126,6 @@ static iree_status_t loom_low_schedule_json_descriptor_key(
 
 iree_status_t loom_low_schedule_format_json(
     const loom_low_schedule_table_t* table, iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(table);
-  IREE_ASSERT_ARGUMENT(builder);
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));
