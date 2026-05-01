@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -7285,6 +7286,89 @@ def amdgpu_atomic_descriptor_candidates() -> tuple[
             candidates_by_key.setdefault(candidate.descriptor_key, candidate)
     return tuple(
         sorted(candidates_by_key.values(), key=_amdgpu_atomic_candidate_sort_key)
+    )
+
+
+_AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS = {
+    "amdgpu.v_add_u32": lambda: _v_add_u32_overlay("V_ADD_NC_U32"),
+    "amdgpu.v_mul_lo_u32": _v_mul_lo_u32_overlay,
+    "amdgpu.v_and_b32": _v_and_b32_overlay,
+    "amdgpu.v_or_b32": _v_or_b32_overlay,
+    "amdgpu.v_xor_b32": _v_xor_b32_overlay,
+    "amdgpu.v_add_f32": _v_add_f32_overlay,
+    "amdgpu.v_mul_f32": _v_mul_f32_overlay,
+    "amdgpu.v_min_f32": _v_min_f32_overlay,
+    "amdgpu.v_max_f32": _v_max_f32_overlay,
+}
+
+
+def build_amdgpu_contract_descriptor_set(
+    *,
+    key: str,
+    descriptor_keys: Sequence[str],
+) -> DescriptorSet:
+    """Builds an XML-free descriptor projection for source-to-low contracts."""
+
+    descriptors = []
+    for descriptor_key in descriptor_keys:
+        try:
+            overlay = _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS[descriptor_key]()
+        except KeyError as exc:
+            raise ValueError(
+                f"AMDGPU contract descriptor '{descriptor_key}' is not registered"
+            ) from exc
+        descriptors.append(_amdgpu_contract_descriptor_from_overlay(overlay))
+    return replace(
+        _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE,
+        key=key,
+        feature_key=None,
+        c_header_path=Path("loom/src/loom/target/arch/amdgpu/descriptor_ids.h"),
+        c_source_path=Path("loom/src/loom/target/arch/amdgpu/descriptor_ids.c"),
+        header_guard="LOOM_TARGET_ARCH_AMDGPU_DESCRIPTOR_IDS_H_",
+        public_header="loom/target/arch/amdgpu/descriptor_ids.h",
+        function_name="loom_amdgpu_contract_descriptor_set",
+        c_table_prefix=_amdgpu_contract_table_prefix(key),
+        c_enum_prefix="LOOM_AMDGPU",
+        descriptors=_categorize_amdgpu_descriptors(tuple(descriptors)),
+    )
+
+
+def _amdgpu_contract_table_prefix(key: str) -> str:
+    parts = tuple(
+        part for part in key.replace("_", ".").replace("-", ".").split(".") if part
+    )
+    if not parts:
+        raise ValueError("AMDGPU contract descriptor set key must be non-empty")
+    return "".join(part[:1].upper() + part[1:] for part in parts)
+
+
+def _amdgpu_contract_descriptor_from_overlay(
+    overlay: AmdgpuDescriptorOverlay,
+) -> Descriptor:
+    operands = tuple(
+        operand_overlay.descriptor_operand for operand_overlay in overlay.operands
+    ) + tuple(
+        implicit_overlay.descriptor_operand
+        for implicit_overlay in overlay.implicit_operands
+        if implicit_overlay.descriptor_operand is not None
+    )
+    return Descriptor(
+        key=overlay.descriptor_key,
+        mnemonic=overlay.mnemonic or overlay.instruction_name.lower(),
+        semantic_tag=overlay.semantic_tag,
+        operands=tuple(
+            operand for operand in operands if operand.role is OperandRole.RESULT
+        )
+        + tuple(
+            operand for operand in operands if operand.role is not OperandRole.RESULT
+        ),
+        immediates=overlay.immediates,
+        effects=overlay.effects,
+        constraints=overlay.constraints,
+        operand_forms=overlay.operand_forms,
+        feature_mask_words=overlay.feature_mask_words,
+        schedule_class=overlay.schedule_class,
+        flags=overlay.flags,
     )
 
 

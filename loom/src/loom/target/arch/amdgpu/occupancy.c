@@ -46,36 +46,31 @@ typedef struct loom_amdgpu_occupancy_model_t {
 
 static const loom_amdgpu_occupancy_register_class_model_t
     kAmdgpuGfx950RegisterClasses[] = {
-        {IREE_SVL("amdgpu.sgpr"), AMDGPU_GFX950_CORE_REG_CLASS_ID_AMDGPU_SGPR,
-         800, 16},
-        {IREE_SVL("amdgpu.vgpr"), AMDGPU_GFX950_CORE_REG_CLASS_ID_AMDGPU_VGPR,
-         1024, 4},
-        {IREE_SVL("amdgpu.agpr"), AMDGPU_GFX950_CORE_REG_CLASS_ID_AMDGPU_AGPR,
-         256, 4},
+        {IREE_SVL("amdgpu.sgpr"), AMDGPU_GFX950_CORE_REG_CLASS_ID_SGPR, 800,
+         16},
+        {IREE_SVL("amdgpu.vgpr"), AMDGPU_GFX950_CORE_REG_CLASS_ID_VGPR, 1024,
+         4},
+        {IREE_SVL("amdgpu.agpr"), AMDGPU_GFX950_CORE_REG_CLASS_ID_AGPR, 256, 4},
 };
 
 static const loom_amdgpu_occupancy_register_class_model_t
     kAmdgpuGfx11RegisterClasses[] = {
-        {IREE_SVL("amdgpu.sgpr"), AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR,
-         800, 16},
-        {IREE_SVL("amdgpu.vgpr"), AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR,
-         1024, 4},
+        {IREE_SVL("amdgpu.sgpr"), AMDGPU_GFX11_CORE_REG_CLASS_ID_SGPR, 800, 16},
+        {IREE_SVL("amdgpu.vgpr"), AMDGPU_GFX11_CORE_REG_CLASS_ID_VGPR, 1024, 4},
 };
 
 static const loom_amdgpu_occupancy_register_class_model_t
     kAmdgpuGfx12RegisterClasses[] = {
-        {IREE_SVL("amdgpu.sgpr"), AMDGPU_GFX12_CORE_REG_CLASS_ID_AMDGPU_SGPR,
-         800, 16},
-        {IREE_SVL("amdgpu.vgpr"), AMDGPU_GFX12_CORE_REG_CLASS_ID_AMDGPU_VGPR,
-         1024, 4},
+        {IREE_SVL("amdgpu.sgpr"), AMDGPU_GFX12_CORE_REG_CLASS_ID_SGPR, 800, 16},
+        {IREE_SVL("amdgpu.vgpr"), AMDGPU_GFX12_CORE_REG_CLASS_ID_VGPR, 1024, 4},
 };
 
 static const loom_amdgpu_occupancy_register_class_model_t
     kAmdgpuGfx1250RegisterClasses[] = {
-        {IREE_SVL("amdgpu.sgpr"), AMDGPU_GFX1250_CORE_REG_CLASS_ID_AMDGPU_SGPR,
-         800, 16},
-        {IREE_SVL("amdgpu.vgpr"), AMDGPU_GFX1250_CORE_REG_CLASS_ID_AMDGPU_VGPR,
-         1024, 4},
+        {IREE_SVL("amdgpu.sgpr"), AMDGPU_GFX1250_CORE_REG_CLASS_ID_SGPR, 800,
+         16},
+        {IREE_SVL("amdgpu.vgpr"), AMDGPU_GFX1250_CORE_REG_CLASS_ID_VGPR, 1024,
+         4},
 };
 
 static const loom_amdgpu_occupancy_model_t kAmdgpuOccupancyModels[] = {

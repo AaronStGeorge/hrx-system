@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from loom.target.contracts.descriptors import _validate_descriptor_set_keys
+from loom.target.contracts.materializers import ValueMaterializer
 from loom.target.contracts.rules import ContractCase
 from loom.target.low_descriptors import DescriptorSet
 
@@ -31,6 +32,7 @@ class ContractTable:
     public_header: str = ""
     symbol_name: str = ""
     c_table_prefix: str = ""
+    materializers: tuple[ValueMaterializer, ...] = ()
 
     def __init__(
         self,
@@ -45,6 +47,7 @@ class ContractTable:
         public_header: str = "",
         symbol_name: str = "",
         c_table_prefix: str = "",
+        materializers: Sequence[ValueMaterializer] = (),
     ) -> None:
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "descriptor_set", descriptor_set)
@@ -56,10 +59,24 @@ class ContractTable:
         object.__setattr__(self, "public_header", public_header)
         object.__setattr__(self, "symbol_name", symbol_name)
         object.__setattr__(self, "c_table_prefix", c_table_prefix)
+        object.__setattr__(self, "materializers", tuple(materializers))
         if not name:
             raise ValueError("contract table name must be non-empty")
         if table_index < 0 or table_index > 0xFFFF:
             raise ValueError("contract table index must fit in uint16_t")
         _validate_descriptor_set_keys(descriptor_set)
+        _validate_materializer_names(self.materializers)
         for case in self.cases:
             case.validate(descriptor_set)
+
+
+def _validate_materializer_names(
+    materializers: tuple[ValueMaterializer, ...],
+) -> None:
+    seen = set[str]()
+    for materializer in materializers:
+        if materializer.name in seen:
+            raise ValueError(
+                f"contract table materializer '{materializer.name}' is duplicated"
+            )
+        seen.add(materializer.name)

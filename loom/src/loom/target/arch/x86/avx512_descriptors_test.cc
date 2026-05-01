@@ -55,18 +55,18 @@ TEST(X86DescriptorsTest, Avx512CoreDescriptorSetVerifies) {
         0u);
     EXPECT_GT(descriptor_set->reg_classes[i].physical_count, 0u);
   }
-  EXPECT_EQ(descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_X86_GPR32]
+  EXPECT_EQ(descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_GPR32]
                 .alias_set_id,
-            descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_X86_GPR64]
+            descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_GPR64]
                 .alias_set_id);
-  EXPECT_NE(descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_X86_GPR32]
+  EXPECT_NE(descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_GPR32]
                 .alias_set_id,
             0u);
-  EXPECT_EQ(descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_X86_XMM]
+  EXPECT_EQ(descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_XMM]
                 .alias_set_id,
-            descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_X86_ZMM]
+            descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_ZMM]
                 .alias_set_id);
-  EXPECT_NE(descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_X86_XMM]
+  EXPECT_NE(descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_XMM]
                 .alias_set_id,
             0u);
 }

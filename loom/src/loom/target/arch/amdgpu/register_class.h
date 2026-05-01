@@ -25,7 +25,7 @@ static inline bool loom_amdgpu_register_class_is_agpr(
     const loom_low_descriptor_set_t* descriptor_set, uint16_t reg_class_id) {
   return descriptor_set != NULL &&
          descriptor_set->stable_id == AMDGPU_GFX950_CORE_DESCRIPTOR_SET_ID &&
-         reg_class_id == AMDGPU_GFX950_CORE_REG_CLASS_ID_AMDGPU_AGPR;
+         reg_class_id == AMDGPU_GFX950_CORE_REG_CLASS_ID_AGPR;
 }
 
 #ifdef __cplusplus

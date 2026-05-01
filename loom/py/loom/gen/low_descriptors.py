@@ -55,6 +55,7 @@ from loom.target.low_descriptors import (
     RegisterPart,
     Resource,
     ScheduleClass,
+    descriptor_set_relative_name,
     descriptor_stable_id,
 )
 
@@ -240,28 +241,31 @@ def _hex_u64_literal(value: int) -> str:
     return f"UINT64_C(0x{value:x})"
 
 
-def _descriptor_id_constant_name(c_enum_prefix: str, descriptor_key: str) -> str:
-    return f"{c_enum_prefix}_DESCRIPTOR_ID_{_c_identifier(descriptor_key).upper()}"
+def _descriptor_id_constant_name(spec: DescriptorSet, descriptor_key: str) -> str:
+    descriptor_name = descriptor_set_relative_name(spec, descriptor_key)
+    return f"{spec.c_enum_prefix}_DESCRIPTOR_ID_{_c_identifier(descriptor_name).upper()}"
 
 
-def _descriptor_id_define(c_enum_prefix: str, descriptor_key: str) -> str:
-    return f"#define {_descriptor_id_constant_name(c_enum_prefix, descriptor_key)} {_hex_u64_literal(descriptor_stable_id(descriptor_key))}"
+def _descriptor_id_define(spec: DescriptorSet, descriptor_key: str) -> str:
+    return f"#define {_descriptor_id_constant_name(spec, descriptor_key)} {_hex_u64_literal(descriptor_stable_id(descriptor_key))}"
 
 
-def _reg_class_id_constant_name(c_enum_prefix: str, reg_class_name: str) -> str:
-    return f"{c_enum_prefix}_REG_CLASS_ID_{_c_identifier(reg_class_name).upper()}"
+def _reg_class_id_constant_name(spec: DescriptorSet, reg_class_name: str) -> str:
+    reg_class_name = descriptor_set_relative_name(spec, reg_class_name)
+    return f"{spec.c_enum_prefix}_REG_CLASS_ID_{_c_identifier(reg_class_name).upper()}"
 
 
-def _reg_class_id_define(c_enum_prefix: str, reg_class_name: str, reg_class_id: int) -> str:
-    return f"#define {_reg_class_id_constant_name(c_enum_prefix, reg_class_name)} {reg_class_id}u"
+def _reg_class_id_define(spec: DescriptorSet, reg_class_name: str, reg_class_id: int) -> str:
+    return f"#define {_reg_class_id_constant_name(spec, reg_class_name)} {reg_class_id}u"
 
 
-def _register_part_id_constant_name(c_enum_prefix: str, part_name: str) -> str:
-    return f"{c_enum_prefix}_REGISTER_PART_ID_{_c_identifier(part_name).upper()}"
+def _register_part_id_constant_name(spec: DescriptorSet, part_name: str) -> str:
+    part_name = descriptor_set_relative_name(spec, part_name)
+    return f"{spec.c_enum_prefix}_REGISTER_PART_ID_{_c_identifier(part_name).upper()}"
 
 
-def _register_part_id_define(c_enum_prefix: str, part_name: str, part_id: int) -> str:
-    return f"#define {_register_part_id_constant_name(c_enum_prefix, part_name)} {part_id}u"
+def _register_part_id_define(spec: DescriptorSet, part_name: str, part_id: int) -> str:
+    return f"#define {_register_part_id_constant_name(spec, part_name)} {part_id}u"
 
 
 def _register_part_id_expr(compiled: _CompiledDescriptorSet, part_name: str | None) -> str:
@@ -1173,16 +1177,16 @@ def _emit_header(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         '#include "loom/codegen/low/descriptors.h"',
         "",
     ]
-    lines.extend(_descriptor_id_define(spec.c_enum_prefix, descriptor.key) for descriptor in compiled.descriptors)
+    lines.extend(_descriptor_id_define(spec, descriptor.key) for descriptor in compiled.descriptors)
     lines.append(f"#define {spec.c_enum_prefix}_DESCRIPTOR_SET_ID UINT64_C(0x{descriptor_stable_id(spec.key):016x})")
     if spec.target_key is not None:
         lines.append(f"#define {spec.c_enum_prefix}_TARGET_ID UINT64_C(0x{descriptor_stable_id(spec.target_key):016x})")
     if compiled.reg_classes:
         lines.append("")
-        lines.extend(_reg_class_id_define(spec.c_enum_prefix, reg_class.name, i) for i, reg_class in enumerate(compiled.reg_classes))
+        lines.extend(_reg_class_id_define(spec, reg_class.name, i) for i, reg_class in enumerate(compiled.reg_classes))
     if compiled.register_parts:
         lines.append("")
-        lines.extend(_register_part_id_define(spec.c_enum_prefix, part.name, i) for i, part in enumerate(compiled.register_parts))
+        lines.extend(_register_part_id_define(spec, part.name, i) for i, part in enumerate(compiled.register_parts))
     lines.append("")
     lines.extend(
         [
@@ -1587,7 +1591,7 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         [
             [
                 f".key_string_offset = {pool.ref(f'descriptor_{descriptor.key}')},",
-                f".stable_id = {_descriptor_id_constant_name(spec.c_enum_prefix, descriptor.key)},",
+                f".stable_id = {_descriptor_id_constant_name(spec, descriptor.key)},",
                 f".mnemonic_string_offset = {_optional_string_expr(pool, f'mnemonic_{descriptor.key}' if descriptor.mnemonic is not None else None)},",
                 f".semantic_tag_string_offset = {_optional_string_expr(pool, f'semantic_{descriptor.key}' if descriptor.semantic_tag is not None else None)},",
                 f".feature_mask_word_start = {compiled.descriptor_rows[i]['feature_mask_word_start']},",

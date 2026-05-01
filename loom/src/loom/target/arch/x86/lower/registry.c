@@ -79,49 +79,49 @@ static bool loom_x86_type_is_address_gpr64(loom_type_t type) {
 static iree_status_t loom_x86_make_gpr64_register_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
   return loom_low_lower_make_register_type(
-      context, X86_AVX512_CORE_REG_CLASS_ID_X86_GPR64, 1, out_type);
+      context, X86_AVX512_CORE_REG_CLASS_ID_GPR64, 1, out_type);
 }
 
 static iree_status_t loom_x86_make_gpr32_register_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
   return loom_low_lower_make_register_type(
-      context, X86_AVX512_CORE_REG_CLASS_ID_X86_GPR32, 1, out_type);
+      context, X86_AVX512_CORE_REG_CLASS_ID_GPR32, 1, out_type);
 }
 
 iree_status_t loom_x86_make_xmm_register_type(loom_low_lower_context_t* context,
                                               loom_type_t* out_type) {
   return loom_low_lower_make_register_type(
-      context, X86_AVX512_CORE_REG_CLASS_ID_X86_XMM, 1, out_type);
+      context, X86_AVX512_CORE_REG_CLASS_ID_XMM, 1, out_type);
 }
 
 iree_status_t loom_x86_make_zmm_register_type(loom_low_lower_context_t* context,
                                               loom_type_t* out_type) {
   return loom_low_lower_make_register_type(
-      context, X86_AVX512_CORE_REG_CLASS_ID_X86_ZMM, 1, out_type);
+      context, X86_AVX512_CORE_REG_CLASS_ID_ZMM, 1, out_type);
 }
 
 static iree_status_t loom_x86_make_avx512_packed_dot_xmm_register_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
   return loom_low_lower_make_register_type(
-      context, X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_XMM, 1, out_type);
+      context, X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_XMM, 1, out_type);
 }
 
 static iree_status_t loom_x86_make_avx512_packed_dot_ymm_register_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
   return loom_low_lower_make_register_type(
-      context, X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_YMM, 1, out_type);
+      context, X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_YMM, 1, out_type);
 }
 
 static iree_status_t loom_x86_make_avx512_packed_dot_zmm_register_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
   return loom_low_lower_make_register_type(
-      context, X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_ZMM, 1, out_type);
+      context, X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_ZMM, 1, out_type);
 }
 
 static iree_status_t loom_x86_make_k_register_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
   return loom_low_lower_make_register_type(
-      context, X86_AVX512_CORE_REG_CLASS_ID_X86_K, 1, out_type);
+      context, X86_AVX512_CORE_REG_CLASS_ID_K, 1, out_type);
 }
 
 static iree_status_t loom_x86_map_avx512_type(void* user_data,

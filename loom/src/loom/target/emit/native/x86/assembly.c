@@ -111,19 +111,19 @@ static iree_status_t loom_x86_register_class_kind(
   switch (state->descriptor_set_kind) {
     case LOOM_X86_DESCRIPTOR_SET_AVX512_CORE:
       switch (assignment->descriptor_reg_class_id) {
-        case X86_AVX512_CORE_REG_CLASS_ID_X86_GPR32:
+        case X86_AVX512_CORE_REG_CLASS_ID_GPR32:
           *out_kind = LOOM_X86_REGISTER_CLASS_GPR32;
           return iree_ok_status();
-        case X86_AVX512_CORE_REG_CLASS_ID_X86_GPR64:
+        case X86_AVX512_CORE_REG_CLASS_ID_GPR64:
           *out_kind = LOOM_X86_REGISTER_CLASS_GPR64;
           return iree_ok_status();
-        case X86_AVX512_CORE_REG_CLASS_ID_X86_XMM:
+        case X86_AVX512_CORE_REG_CLASS_ID_XMM:
           *out_kind = LOOM_X86_REGISTER_CLASS_XMM;
           return iree_ok_status();
-        case X86_AVX512_CORE_REG_CLASS_ID_X86_ZMM:
+        case X86_AVX512_CORE_REG_CLASS_ID_ZMM:
           *out_kind = LOOM_X86_REGISTER_CLASS_ZMM;
           return iree_ok_status();
-        case X86_AVX512_CORE_REG_CLASS_ID_X86_K:
+        case X86_AVX512_CORE_REG_CLASS_ID_K:
           *out_kind = LOOM_X86_REGISTER_CLASS_K;
           return iree_ok_status();
         default:
@@ -132,13 +132,13 @@ static iree_status_t loom_x86_register_class_kind(
       break;
     case LOOM_X86_DESCRIPTOR_SET_PACKED_DOT_CORE:
       switch (assignment->descriptor_reg_class_id) {
-        case X86_PACKED_DOT_CORE_REG_CLASS_ID_X86_XMM:
+        case X86_PACKED_DOT_CORE_REG_CLASS_ID_XMM:
           *out_kind = LOOM_X86_REGISTER_CLASS_XMM;
           return iree_ok_status();
-        case X86_PACKED_DOT_CORE_REG_CLASS_ID_X86_YMM:
+        case X86_PACKED_DOT_CORE_REG_CLASS_ID_YMM:
           *out_kind = LOOM_X86_REGISTER_CLASS_YMM;
           return iree_ok_status();
-        case X86_PACKED_DOT_CORE_REG_CLASS_ID_X86_ZMM:
+        case X86_PACKED_DOT_CORE_REG_CLASS_ID_ZMM:
           *out_kind = LOOM_X86_REGISTER_CLASS_ZMM;
           return iree_ok_status();
         default:
@@ -147,22 +147,22 @@ static iree_status_t loom_x86_register_class_kind(
       break;
     case LOOM_X86_DESCRIPTOR_SET_AVX512_PACKED_DOT_CORE:
       switch (assignment->descriptor_reg_class_id) {
-        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_GPR32:
+        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_GPR32:
           *out_kind = LOOM_X86_REGISTER_CLASS_GPR32;
           return iree_ok_status();
-        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_GPR64:
+        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_GPR64:
           *out_kind = LOOM_X86_REGISTER_CLASS_GPR64;
           return iree_ok_status();
-        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_XMM:
+        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_XMM:
           *out_kind = LOOM_X86_REGISTER_CLASS_XMM;
           return iree_ok_status();
-        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_YMM:
+        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_YMM:
           *out_kind = LOOM_X86_REGISTER_CLASS_YMM;
           return iree_ok_status();
-        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_ZMM:
+        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_ZMM:
           *out_kind = LOOM_X86_REGISTER_CLASS_ZMM;
           return iree_ok_status();
-        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_K:
+        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_K:
           *out_kind = LOOM_X86_REGISTER_CLASS_K;
           return iree_ok_status();
         default:
@@ -1005,11 +1005,11 @@ static iree_status_t loom_x86_append_descriptor_packet(
     return loom_x86_append_tied_ternary_packet(state, context);
   }
   if (descriptor->stable_id ==
-      X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_LEA_ADD_GPR64) {
+      X86_AVX512_CORE_DESCRIPTOR_ID_AVX512_LEA_ADD_GPR64) {
     return loom_x86_append_lea_add_packet(state, context);
   }
   if (descriptor->stable_id ==
-      X86_AVX512_PACKED_DOT_CORE_DESCRIPTOR_ID_X86_AVX512_LEA_ADD_GPR64) {
+      X86_AVX512_PACKED_DOT_CORE_DESCRIPTOR_ID_AVX512_LEA_ADD_GPR64) {
     return loom_x86_append_lea_add_packet(state, context);
   }
   return loom_x86_append_canonical_asm_form_packet(state, context);

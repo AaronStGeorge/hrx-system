@@ -280,7 +280,7 @@ static const loom_low_lower_emit_t loom_ireevm_emits[] = {
     [LOOM_IREEVM_EMIT_CONST_I32] =
         {
             .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_CONST,
-            .descriptor_id = IREE_VM_CORE_DESCRIPTOR_ID_IREE_VM_CONST_I32,
+            .descriptor_id = IREE_VM_CORE_DESCRIPTOR_ID_CONST_I32,
             .result_ref_start = LOOM_IREEVM_RESULT0,
             .result_ref_count = 1,
             .attr_copy_start = 0,
@@ -289,7 +289,7 @@ static const loom_low_lower_emit_t loom_ireevm_emits[] = {
     [LOOM_IREEVM_EMIT_ADD_I32] =
         {
             .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id = IREE_VM_CORE_DESCRIPTOR_ID_IREE_VM_ADD_I32,
+            .descriptor_id = IREE_VM_CORE_DESCRIPTOR_ID_ADD_I32,
             .operand_ref_start = LOOM_IREEVM_OPERAND0,
             .operand_ref_count = 2,
             .result_ref_start = LOOM_IREEVM_RESULT0,
@@ -298,7 +298,7 @@ static const loom_low_lower_emit_t loom_ireevm_emits[] = {
     [LOOM_IREEVM_EMIT_SUB_I32] =
         {
             .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id = IREE_VM_CORE_DESCRIPTOR_ID_IREE_VM_SUB_I32,
+            .descriptor_id = IREE_VM_CORE_DESCRIPTOR_ID_SUB_I32,
             .operand_ref_start = LOOM_IREEVM_OPERAND0,
             .operand_ref_count = 2,
             .result_ref_start = LOOM_IREEVM_RESULT0,
@@ -307,7 +307,7 @@ static const loom_low_lower_emit_t loom_ireevm_emits[] = {
     [LOOM_IREEVM_EMIT_CMP_EQ_I32] =
         {
             .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id = IREE_VM_CORE_DESCRIPTOR_ID_IREE_VM_CMP_EQ_I32,
+            .descriptor_id = IREE_VM_CORE_DESCRIPTOR_ID_CMP_EQ_I32,
             .operand_ref_start = LOOM_IREEVM_OPERAND0,
             .operand_ref_count = 2,
             .result_ref_start = LOOM_IREEVM_RESULT0,

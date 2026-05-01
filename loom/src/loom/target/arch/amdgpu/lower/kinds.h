@@ -13,6 +13,24 @@
 extern "C" {
 #endif
 
+// Maximum number of 32-bit lanes supported by direct memory descriptors.
+#define LOOM_AMDGPU_MAX_MEMORY_32BIT_LANES 4u
+
+// Maximum number of scalarized 32-bit vector lanes the source-to-low path will
+// keep live as individual VGPRs.
+#define LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES 8u
+
+// Maximum number of packed f16/bf16 lanes accepted for packed-half payloads.
+#define LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES \
+  (LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES * 2u)
+
+// Maximum number of packed 32-bit registers accepted for packed byte payloads.
+#define LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS 4u
+
+// Maximum number of packed i8 lanes accepted for packed dot payloads.
+#define LOOM_AMDGPU_MAX_PACKED_I8_LANES \
+  (LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS * 4u)
+
 typedef enum loom_amdgpu_memory_address_form_e {
   LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT = 0,
   LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO = 1,

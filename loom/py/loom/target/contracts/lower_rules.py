@@ -65,6 +65,7 @@ class LowerValueRef:
 
     kind: SourceValueKind
     index: int
+    materializer_index: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,6 +213,10 @@ class _LowerRuleSetCompiler:
         self._register_class_ordinals = {
             reg_class.name: index
             for index, reg_class in enumerate(table.descriptor_set.reg_classes)
+        }
+        self._materializer_ordinals = {
+            materializer.name: index + 1
+            for index, materializer in enumerate(table.materializers)
         }
 
     def compile(self) -> CompiledLowerRuleSet:
@@ -382,6 +387,32 @@ class _LowerRuleSetCompiler:
                             subject_kind="descriptor",
                             subject_name=guard.descriptor.key,
                             reason="target contract requires descriptor availability",
+                        )
+                    ),
+                )
+            )
+            return
+
+        if guard.kind == GuardKind.VALUE_MATERIALIZABLE:
+            if guard.materializer is None:
+                raise ValueError(f"{source_op.name}: materializer guard needs a name")
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=self._append_value_ref(
+                        source_op,
+                        ValueRef.operand(
+                            guard.field,
+                            materializer=guard.materializer,
+                        ),
+                    ),
+                    diagnostic_index=self._append_diagnostic(
+                        LowerDiagnostic(
+                            subject_kind="materializer",
+                            subject_name=guard.materializer,
+                            reason=(
+                                "target contract requires a materializable source value"
+                            ),
                         )
                     ),
                 )
@@ -754,7 +785,12 @@ class _LowerRuleSetCompiler:
         value_ref: ValueRef,
         temporary_ordinals: Mapping[str, int],
     ) -> LowerValueRef:
-        return _lower_value_ref(source_op, value_ref, temporary_ordinals)
+        return _lower_value_ref(
+            source_op,
+            value_ref,
+            temporary_ordinals,
+            materializer_ordinals=self._materializer_ordinals,
+        )
 
     def _append_value_ref_sequence(self, sequence: tuple[LowerValueRef, ...]) -> int:
         if not sequence:
@@ -985,10 +1021,21 @@ def _lower_value_ref(
     source_op: Op,
     value_ref: ValueRef,
     temporary_ordinals: Mapping[str, int],
+    *,
+    materializer_ordinals: Mapping[str, int],
 ) -> LowerValueRef:
+    materializer_index = 0
+    if value_ref.materializer is not None:
+        materializer_index = materializer_ordinals.get(value_ref.materializer, 0)
+        if materializer_index == 0:
+            raise ValueError(
+                f"{source_op.name}: source value field '{value_ref.field}' "
+                f"references unknown materializer '{value_ref.materializer}'"
+            )
     return LowerValueRef(
         kind=value_ref.kind,
         index=_source_value_index(source_op, value_ref, temporary_ordinals),
+        materializer_index=materializer_index,
     )
 
 
@@ -1022,6 +1069,14 @@ def _source_attr_index(source_op: Op, field: str) -> int:
 def _type_diagnostic_reason(type_pattern: TypePattern) -> str:
     if type_pattern.kind == "scalar":
         return f"target contract requires {type_pattern.element} scalar values"
+    if (
+        type_pattern.minimum_lanes is not None
+        and type_pattern.maximum_lanes is not None
+    ):
+        return (
+            "target contract requires "
+            f"vector<{type_pattern.element}> values in the supported lane range"
+        )
     if type_pattern.lanes is None:
         return f"target contract requires vector<{type_pattern.element}> values"
     return (

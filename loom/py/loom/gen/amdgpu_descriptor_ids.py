@@ -31,7 +31,10 @@ from loom.target.arch.amdgpu.descriptors import (  # noqa: E402
     amdgpu_descriptor_id_keys,
     amdgpu_immediate_encoding_id_items,
 )
-from loom.target.low_descriptors import descriptor_stable_id  # noqa: E402
+from loom.target.low_descriptors import (  # noqa: E402
+    descriptor_stable_id,
+    target_relative_name,
+)
 
 
 def _clang_format_source(source: str, assume_filename: Path) -> str:
@@ -54,18 +57,12 @@ def _c_identifier(value: str) -> str:
     return identifier.upper()
 
 
-def _amdgpu_suffix(value: str) -> str:
-    if not value.startswith("amdgpu."):
-        raise ValueError(f"expected AMDGPU key, got '{value}'")
-    return value.removeprefix("amdgpu.")
-
-
 def _descriptor_id_constant_name(key: str) -> str:
-    return f"LOOM_AMDGPU_DESCRIPTOR_ID_{_c_identifier(_amdgpu_suffix(key))}"
+    return f"LOOM_AMDGPU_DESCRIPTOR_ID_{_c_identifier(target_relative_name('amdgpu', key))}"
 
 
 def _reg_class_id_constant_name(reg_class_name: str) -> str:
-    return f"LOOM_AMDGPU_REG_CLASS_ID_{_c_identifier(_amdgpu_suffix(reg_class_name))}"
+    return f"LOOM_AMDGPU_REG_CLASS_ID_{_c_identifier(target_relative_name('amdgpu', reg_class_name))}"
 
 
 def _immediate_encoding_id_constant_name(name: str) -> str:

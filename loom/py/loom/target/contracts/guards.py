@@ -38,6 +38,7 @@ class GuardKind(Enum):
     ENUM_ATTR_EQUALS = "enum_attr_equals"
     I64_RANGE = "i64_range"
     DESCRIPTOR_AVAILABLE = "descriptor_available"
+    VALUE_MATERIALIZABLE = "value_materializable"
     LOW_VALUE_REGISTER_CLASS = "low_value_register_class"
     VALUE_STATIC_DIM0_MULTIPLE = "value_static_dim0_multiple"
     LOW_VALUE_REGISTER_UNIT_COUNT_EQ = "low_value_register_unit_count_eq"
@@ -66,6 +67,7 @@ class Guard:
     maximum: int | None = None
     descriptor: Descriptor | None = None
     register_class: str | None = None
+    materializer: str | None = None
 
     @classmethod
     def value_type(cls, field: str, type_pattern: TypePattern) -> Self:
@@ -103,6 +105,14 @@ class Guard:
             kind=GuardKind.DESCRIPTOR_AVAILABLE,
             field=descriptor.key,
             descriptor=descriptor,
+        )
+
+    @classmethod
+    def value_materializable(cls, field: str, materializer: str) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_MATERIALIZABLE,
+            field=field,
+            materializer=materializer,
         )
 
     @classmethod
@@ -204,6 +214,8 @@ class Guard:
             raise ValueError(f"{self.kind.value} range minimum exceeds maximum")
         if self.register_class is not None and not self.register_class:
             raise ValueError(f"{self.kind.value} register class must be non-empty")
+        if self.materializer is not None and not self.materializer:
+            raise ValueError(f"{self.kind.value} materializer must be non-empty")
 
     def validate(self, source_op: Op) -> None:
         subject = f"guard {self.kind.value}"
@@ -251,6 +263,11 @@ class Guard:
         if self.kind == GuardKind.DESCRIPTOR_AVAILABLE:
             if self.descriptor is None:
                 raise ValueError(f"{source_op.name}: {subject} needs a descriptor")
+            return
+        if self.kind == GuardKind.VALUE_MATERIALIZABLE:
+            _require_operand(source_op, self.field, subject)
+            if self.materializer is None:
+                raise ValueError(f"{source_op.name}: {subject} needs a materializer")
             return
         if self.kind == GuardKind.LOW_VALUE_REGISTER_CLASS:
             _require_value(source_op, self.field, subject)

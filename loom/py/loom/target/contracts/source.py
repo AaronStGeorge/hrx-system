@@ -22,10 +22,15 @@ class ValueRef:
 
     kind: SourceValueKind
     field: str
+    materializer: str | None = None
 
     @classmethod
-    def operand(cls, field: str) -> Self:
-        return cls(kind=SourceValueKind.OPERAND, field=field)
+    def operand(cls, field: str, *, materializer: str | None = None) -> Self:
+        return cls(
+            kind=SourceValueKind.OPERAND,
+            field=field,
+            materializer=materializer,
+        )
 
     @classmethod
     def result(cls, field: str) -> Self:
@@ -42,6 +47,17 @@ class ValueRef:
         *,
         defined_temporaries: Iterable[str] = (),
     ) -> None:
+        if not self.field:
+            raise ValueError(f"{source_op.name}: {subject} field must be non-empty")
+        if self.materializer is not None:
+            if not self.materializer:
+                raise ValueError(
+                    f"{source_op.name}: {subject} materializer must be non-empty"
+                )
+            if self.kind != SourceValueKind.OPERAND:
+                raise ValueError(
+                    f"{source_op.name}: {subject} materializer requires an operand"
+                )
         if self.kind == SourceValueKind.OPERAND:
             _require_operand(source_op, self.field, subject)
             return

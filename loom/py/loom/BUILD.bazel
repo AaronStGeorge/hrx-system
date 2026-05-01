@@ -81,6 +81,7 @@ _TARGET_CONTRACT_GENERATOR_SRCS = [
     "target/contracts/immediates.py",
     "target/contracts/kinds.py",
     "target/contracts/lower_rules.py",
+    "target/contracts/materializers.py",
     "target/contracts/patterns.py",
     "target/contracts/rules.py",
     "target/contracts/source.py",
@@ -108,6 +109,33 @@ _TEST_LOW_CONTRACT_SHARD_SRCS = _TARGET_CONTRACT_GENERATOR_SRCS + [
     "target/test/__init__.py",
     "target/test/contracts.py",
     "target/test/descriptors.py",
+]
+
+_AMDGPU_CONTRACT_SHARD_SRCS = _TARGET_CONTRACT_GENERATOR_SRCS + [
+    "dialect/__init__.py",
+    "dialect/atomic.py",
+    "dialect/cache.py",
+    "dialect/combining.py",
+    "dialect/scalar/__init__.py",
+    "dialect/scalar/analysis.py",
+    "dialect/scalar/arithmetic.py",
+    "dialect/scalar/bitwise.py",
+    "dialect/scalar/comparison.py",
+    "dialect/scalar/conversion.py",
+    "dialect/scalar/defs.py",
+    "dialect/scalar/math.py",
+    "dialect/vector/__init__.py",
+    "dialect/vector/defs.py",
+    "target/arch/__init__.py",
+    "target/arch/amdgpu/__init__.py",
+    "target/arch/amdgpu/contracts/__init__.py",
+    "target/arch/amdgpu/contracts/materializers.py",
+    "target/arch/amdgpu/contracts/reduce.py",
+    "target/arch/amdgpu/descriptor_overlay.py",
+    "target/arch/amdgpu/descriptors.py",
+    "target/arch/amdgpu/encoding.py",
+    "target/arch/amdgpu/isa_xml.py",
+    "target/arch/amdgpu/target_info.py",
 ]
 
 py_binary(
@@ -225,5 +253,11 @@ py_binary(
 py_binary(
     name = "test_low_lower_rule_shard",
     srcs = _TEST_LOW_CONTRACT_SHARD_SRCS,
+    main = "gen/target_lower_rule_shard.py",
+)
+
+py_binary(
+    name = "amdgpu_lower_rule_shard",
+    srcs = _AMDGPU_CONTRACT_SHARD_SRCS,
     main = "gen/target_lower_rule_shard.py",
 )

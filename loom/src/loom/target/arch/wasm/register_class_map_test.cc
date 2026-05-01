@@ -56,8 +56,7 @@ TEST(WasmRegisterClassMapTest, ResolvesRealDescriptorIds) {
       &map, v128_string_id, &descriptor_register_class_id,
       &descriptor_register_class, &found));
   ASSERT_TRUE(found);
-  EXPECT_EQ(descriptor_register_class_id,
-            WASM_CORE_SIMD128_REG_CLASS_ID_WASM_V128);
+  EXPECT_EQ(descriptor_register_class_id, WASM_CORE_SIMD128_REG_CLASS_ID_V128);
   ASSERT_NE(descriptor_register_class, nullptr);
   EXPECT_EQ(DescriptorString(descriptor_set,
                              descriptor_register_class->name_string_offset),

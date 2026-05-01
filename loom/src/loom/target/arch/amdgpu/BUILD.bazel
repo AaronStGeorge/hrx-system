@@ -325,6 +325,15 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "lower_materializers",
+    hdrs = ["lower/materializers.h"],
+    deps = [
+        ":lower_kinds",
+        "//loom/src/loom/codegen/low:lower",
+    ],
+)
+
+loom_cc_library(
     name = "register_class",
     hdrs = ["register_class.h"],
     deps = [
@@ -361,6 +370,68 @@ loom_target_table_cc_library(
         "//loom/src/loom/ops:atomic",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
+    ],
+)
+
+_AMDGPU_LOWER_RULE_GENERATOR = "//loom/py/loom:amdgpu_lower_rule_shard"
+
+_AMDGPU_LOWER_RULE_GENERATOR_SCRIPT = "//loom/py/loom:gen/target_lower_rule_shard.py"
+
+_AMDGPU_LOWER_RULE_GENERATOR_DEPS = [
+    "//loom/py/loom:dialect/atomic.py",
+    "//loom/py/loom:dialect/cache.py",
+    "//loom/py/loom:dialect/combining.py",
+    "//loom/py/loom:dialect/scalar/__init__.py",
+    "//loom/py/loom:dialect/scalar/analysis.py",
+    "//loom/py/loom:dialect/scalar/arithmetic.py",
+    "//loom/py/loom:dialect/scalar/bitwise.py",
+    "//loom/py/loom:dialect/scalar/comparison.py",
+    "//loom/py/loom:dialect/scalar/conversion.py",
+    "//loom/py/loom:dialect/scalar/defs.py",
+    "//loom/py/loom:dialect/scalar/math.py",
+    "//loom/py/loom:dialect/vector/__init__.py",
+    "//loom/py/loom:dialect/vector/defs.py",
+    "//loom/py/loom:dsl.py",
+    "//loom/py/loom:gen/generated_file.py",
+    "//loom/py/loom:gen/target_lower_rules.py",
+    "//loom/py/loom:target/arch/amdgpu/contracts/__init__.py",
+    "//loom/py/loom:target/arch/amdgpu/contracts/materializers.py",
+    "//loom/py/loom:target/arch/amdgpu/contracts/reduce.py",
+    "//loom/py/loom:target/arch/amdgpu/descriptor_overlay.py",
+    "//loom/py/loom:target/arch/amdgpu/descriptors.py",
+    "//loom/py/loom:target/arch/amdgpu/encoding.py",
+    "//loom/py/loom:target/arch/amdgpu/isa_xml.py",
+    "//loom/py/loom:target/arch/amdgpu/target_info.py",
+    "//loom/py/loom:target/contract_tables.py",
+    "//loom/py/loom:target/contracts/__init__.py",
+    "//loom/py/loom:target/contracts/descriptors.py",
+    "//loom/py/loom:target/contracts/emits.py",
+    "//loom/py/loom:target/contracts/guards.py",
+    "//loom/py/loom:target/contracts/immediates.py",
+    "//loom/py/loom:target/contracts/kinds.py",
+    "//loom/py/loom:target/contracts/lower_rules.py",
+    "//loom/py/loom:target/contracts/materializers.py",
+    "//loom/py/loom:target/contracts/patterns.py",
+    "//loom/py/loom:target/contracts/rules.py",
+    "//loom/py/loom:target/contracts/source.py",
+    "//loom/py/loom:target/contracts/tables.py",
+    "//loom/py/loom:target/contracts/templates.py",
+    "//loom/py/loom:target/low_descriptors.py",
+]
+
+loom_target_table_cc_library(
+    name = "lower_reduce_rules",
+    args = ["--contract-table=amdgpu.reduce"],
+    cmake_generator = _AMDGPU_LOWER_RULE_GENERATOR_SCRIPT,
+    cmake_generator_deps = _AMDGPU_LOWER_RULE_GENERATOR_DEPS,
+    generator = _AMDGPU_LOWER_RULE_GENERATOR,
+    header = "lower/reduce_rules.h",
+    source = "lower/reduce_rules.c",
+    deps = [
+        ":descriptor_ids",
+        ":lower_materializers",
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/ops/vector",
     ],
 )
 
@@ -653,7 +724,6 @@ loom_cc_library(
         "lower/memory_legality.c",
         "lower/preamble.c",
         "lower/prefetch.c",
-        "lower/reduce_rules.c",
         "lower/registry.c",
         "lower/structural.c",
         "lower/subgroup.c",
@@ -674,6 +744,8 @@ loom_cc_library(
         ":descriptor_ids",
         ":hal_kernel_abi",
         ":lower_kinds",
+        ":lower_materializers",
+        ":lower_reduce_rules",
         ":matrix_contract",
         ":matrix_contract_projection",
         ":target_info",

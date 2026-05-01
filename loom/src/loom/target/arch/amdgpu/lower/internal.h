@@ -21,30 +21,13 @@
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/lower/materializers.h"
 #include "loom/target/arch/amdgpu/lower/plan.h"
 #include "loom/target/low_legality.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-// Maximum number of 32-bit lanes supported by direct memory descriptors.
-#define LOOM_AMDGPU_MAX_MEMORY_32BIT_LANES 4u
-
-// Maximum number of scalarized 32-bit vector lanes the source-to-low path will
-// keep live as individual VGPRs.
-#define LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES 8u
-
-// Maximum number of packed f16/bf16 lanes accepted for packed-half payloads.
-#define LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES \
-  (LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES * 2u)
-
-// Maximum number of packed 32-bit registers accepted for packed byte payloads.
-#define LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS 4u
-
-// Maximum number of packed i8 lanes accepted for packed dot payloads.
-#define LOOM_AMDGPU_MAX_PACKED_I8_LANES \
-  (LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS * 4u)
 
 // Returns true when the source type is a scalar i32.
 bool loom_amdgpu_type_is_i32(loom_type_t type);
@@ -262,16 +245,6 @@ bool loom_amdgpu_value_as_address_constant(loom_low_lower_context_t* context,
                                            loom_value_id_t value_id,
                                            int64_t* out_value);
 
-// Returns true when a source scalar i32 value can be materialized as a VGPR
-// operand for vector-style packets.
-bool loom_amdgpu_value_can_materialize_as_vgpr_i32(
-    loom_low_lower_context_t* context, loom_value_id_t value_id);
-
-// Returns true when a source address scalar can be materialized as a VGPR
-// operand for vector-style address arithmetic.
-bool loom_amdgpu_value_can_materialize_as_vgpr_address(
-    loom_low_lower_context_t* context, loom_value_id_t value_id);
-
 // Target-local rule table for regular arithmetic source ops.
 extern const loom_low_lower_rule_set_t loom_amdgpu_arithmetic_rule_set;
 
@@ -285,7 +258,7 @@ extern const loom_low_lower_rule_set_t loom_amdgpu_compare_rule_set;
 extern const loom_low_lower_rule_set_t loom_amdgpu_dot_rule_set;
 
 // Target-local rule table for vector reduce source ops.
-extern const loom_low_lower_rule_set_t loom_amdgpu_reduce_rule_set;
+extern const loom_low_lower_rule_set_t loom_amdgpu_reduce_lower_rule_set;
 
 // Target-local rule table for source-level async group/wait sequencing ops.
 extern const loom_low_lower_rule_set_t loom_amdgpu_async_rule_set;
@@ -566,18 +539,6 @@ iree_status_t loom_amdgpu_select_view_plan(loom_low_lower_context_t* context,
 // Lowers a view projection source op by preserving its storage root mapping.
 iree_status_t loom_amdgpu_lower_view_op(loom_low_lower_context_t* context,
                                         const loom_op_t* source_op);
-
-// Looks up a lowered i32 value and materializes exact source constants into
-// VGPRs when a vector-style packet cannot consume the existing lowering.
-iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_i32(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t source_value, loom_value_id_t* out_low_value);
-
-// Looks up a lowered address scalar and materializes exact source constants
-// into VGPRs when a vector-style packet cannot consume the existing lowering.
-iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_address(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t source_value, loom_value_id_t* out_low_value);
 
 // Returns true when value is a non-zero power of two.
 bool loom_amdgpu_u32_is_power_of_two(uint32_t value);

@@ -98,13 +98,13 @@ iree_status_t loom_x86_map_packed_dot_type(void* user_data,
     switch (vector_bit_width) {
       case 128:
         return loom_low_lower_make_register_type(
-            context, X86_PACKED_DOT_CORE_REG_CLASS_ID_X86_XMM, 1, out_low_type);
+            context, X86_PACKED_DOT_CORE_REG_CLASS_ID_XMM, 1, out_low_type);
       case 256:
         return loom_low_lower_make_register_type(
-            context, X86_PACKED_DOT_CORE_REG_CLASS_ID_X86_YMM, 1, out_low_type);
+            context, X86_PACKED_DOT_CORE_REG_CLASS_ID_YMM, 1, out_low_type);
       case 512:
         return loom_low_lower_make_register_type(
-            context, X86_PACKED_DOT_CORE_REG_CLASS_ID_X86_ZMM, 1, out_low_type);
+            context, X86_PACKED_DOT_CORE_REG_CLASS_ID_ZMM, 1, out_low_type);
       default:
         break;
     }

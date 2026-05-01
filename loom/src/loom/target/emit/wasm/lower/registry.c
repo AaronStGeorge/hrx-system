@@ -66,19 +66,19 @@ static bool loom_wasm_type_is_v128_source_vector(loom_type_t type) {
 static iree_status_t loom_wasm_make_i32_register_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
   return loom_low_lower_make_register_type(
-      context, WASM_CORE_SIMD128_REG_CLASS_ID_WASM_I32, 1, out_type);
+      context, WASM_CORE_SIMD128_REG_CLASS_ID_I32, 1, out_type);
 }
 
 static iree_status_t loom_wasm_make_f32_register_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
   return loom_low_lower_make_register_type(
-      context, WASM_CORE_SIMD128_REG_CLASS_ID_WASM_F32, 1, out_type);
+      context, WASM_CORE_SIMD128_REG_CLASS_ID_F32, 1, out_type);
 }
 
 static iree_status_t loom_wasm_make_v128_register_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
   return loom_low_lower_make_register_type(
-      context, WASM_CORE_SIMD128_REG_CLASS_ID_WASM_V128, 1, out_type);
+      context, WASM_CORE_SIMD128_REG_CLASS_ID_V128, 1, out_type);
 }
 
 static iree_status_t loom_wasm_map_type(void* user_data,
@@ -690,64 +690,64 @@ static const loom_low_lower_emit_t loom_wasm_emits[] = {
     [LOOM_WASM_EMIT_I32_CONST] =
         {
             .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_CONST,
-            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_CONST,
+            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_I32_CONST,
             .result_ref_start = LOOM_WASM_RESULT0,
             .result_ref_count = 1,
             .attr_copy_start = 0,
             .attr_copy_count = 1,
         },
     [LOOM_WASM_EMIT_I32_ADD] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_ADD),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32_ADD),
     [LOOM_WASM_EMIT_I32_SUB] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_SUB),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32_SUB),
     [LOOM_WASM_EMIT_I32_MUL] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_MUL),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32_MUL),
     [LOOM_WASM_EMIT_I32X4_SPLAT] =
-        LOOM_WASM_UNARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_SPLAT),
+        LOOM_WASM_UNARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_SPLAT),
     [LOOM_WASM_EMIT_F32X4_ADD] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_ADD),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_F32X4_ADD),
     [LOOM_WASM_EMIT_F32X4_MUL] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_MUL),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_F32X4_MUL),
     [LOOM_WASM_EMIT_I32X4_ADD] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_ADD),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_ADD),
     [LOOM_WASM_EMIT_I32X4_SUB] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_SUB),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_SUB),
     [LOOM_WASM_EMIT_I32X4_MUL] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_MUL),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_MUL),
     [LOOM_WASM_EMIT_I32X4_EQ] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_EQ),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_EQ),
     [LOOM_WASM_EMIT_I32X4_NE] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_NE),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_NE),
     [LOOM_WASM_EMIT_I32X4_LT_S] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_LT_S),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_LT_S),
     [LOOM_WASM_EMIT_I32X4_LE_S] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_LE_S),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_LE_S),
     [LOOM_WASM_EMIT_I32X4_GT_S] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_GT_S),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_GT_S),
     [LOOM_WASM_EMIT_I32X4_GE_S] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_GE_S),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_GE_S),
     [LOOM_WASM_EMIT_I32X4_LT_U] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_LT_U),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_LT_U),
     [LOOM_WASM_EMIT_I32X4_LE_U] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_LE_U),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_LE_U),
     [LOOM_WASM_EMIT_I32X4_GT_U] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_GT_U),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_GT_U),
     [LOOM_WASM_EMIT_I32X4_GE_U] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_GE_U),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_GE_U),
     [LOOM_WASM_EMIT_F32X4_EQ] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_EQ),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_F32X4_EQ),
     [LOOM_WASM_EMIT_F32X4_GT] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_GT),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_F32X4_GT),
     [LOOM_WASM_EMIT_F32X4_GE] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_GE),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_F32X4_GE),
     [LOOM_WASM_EMIT_F32X4_LT] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_LT),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_F32X4_LT),
     [LOOM_WASM_EMIT_F32X4_LE] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_LE),
-    [LOOM_WASM_EMIT_V128_BITSELECT] = LOOM_WASM_SELECT_EMIT(
-        WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_V128_BITSELECT),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_F32X4_LE),
+    [LOOM_WASM_EMIT_V128_BITSELECT] =
+        LOOM_WASM_SELECT_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_V128_BITSELECT),
     [LOOM_WASM_EMIT_F32_ADD] =
-        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32_ADD),
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_F32_ADD),
 };
 
 #undef LOOM_WASM_SELECT_EMIT
@@ -1081,13 +1081,13 @@ static iree_status_t loom_wasm_select_memory_access(
         context, &out_plan->load_result_type));
   }
   IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor(
-      context, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_CONST,
+      context, WASM_CORE_SIMD128_DESCRIPTOR_ID_I32_CONST,
       &out_plan->i32_const_descriptor));
   IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor(
-      context, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_ADD,
+      context, WASM_CORE_SIMD128_DESCRIPTOR_ID_I32_ADD,
       &out_plan->i32_add_descriptor));
   IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor(
-      context, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_MUL,
+      context, WASM_CORE_SIMD128_DESCRIPTOR_ID_I32_MUL,
       &out_plan->i32_mul_descriptor));
   IREE_RETURN_IF_ERROR(
       loom_wasm_make_i32_register_type(context, &out_plan->i32_type));
@@ -1139,12 +1139,12 @@ static iree_status_t loom_wasm_select_vector_extract(
   uint64_t descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
   if (loom_wasm_type_is_vector_4xi32(source_type) &&
       loom_wasm_type_is_address_i32(result_type)) {
-    descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_EXTRACT_LANE;
+    descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_EXTRACT_LANE;
     IREE_RETURN_IF_ERROR(
         loom_wasm_make_i32_register_type(context, &out_plan->result_type));
   } else if (loom_wasm_type_is_vector_4xf32(source_type) &&
              loom_wasm_type_is_scalar_f32(result_type)) {
-    descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_EXTRACT_LANE;
+    descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_F32X4_EXTRACT_LANE;
     IREE_RETURN_IF_ERROR(
         loom_wasm_make_f32_register_type(context, &out_plan->result_type));
   } else {
@@ -1185,11 +1185,11 @@ static iree_status_t loom_wasm_select_vector_insert(
   if (loom_wasm_type_is_address_i32(value_type) &&
       loom_wasm_type_is_vector_4xi32(dest_type) &&
       loom_wasm_type_is_vector_4xi32(result_type)) {
-    descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_REPLACE_LANE;
+    descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_REPLACE_LANE;
   } else if (loom_wasm_type_is_scalar_f32(value_type) &&
              loom_wasm_type_is_vector_4xf32(dest_type) &&
              loom_wasm_type_is_vector_4xf32(result_type)) {
-    descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_REPLACE_LANE;
+    descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_F32X4_REPLACE_LANE;
   } else {
     return iree_ok_status();
   }
@@ -1243,7 +1243,7 @@ static iree_status_t loom_wasm_select_vector_shuffle(
     }
   }
   IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor(
-      context, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I8X16_SHUFFLE,
+      context, WASM_CORE_SIMD128_DESCRIPTOR_ID_I8X16_SHUFFLE,
       &out_plan->descriptor));
   IREE_RETURN_IF_ERROR(
       loom_wasm_make_v128_register_type(context, &out_plan->result_type));
@@ -1286,8 +1286,8 @@ static iree_status_t loom_wasm_select_vector_reduce(
         return iree_ok_status();
       }
       extract_descriptor_id =
-          WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_EXTRACT_LANE;
-      add_descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_ADD;
+          WASM_CORE_SIMD128_DESCRIPTOR_ID_I32X4_EXTRACT_LANE;
+      add_descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_I32_ADD;
       IREE_RETURN_IF_ERROR(
           loom_wasm_make_i32_register_type(context, &out_plan->lane_type));
       break;
@@ -1298,8 +1298,8 @@ static iree_status_t loom_wasm_select_vector_reduce(
         return iree_ok_status();
       }
       extract_descriptor_id =
-          WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_EXTRACT_LANE;
-      add_descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32_ADD;
+          WASM_CORE_SIMD128_DESCRIPTOR_ID_F32X4_EXTRACT_LANE;
+      add_descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_F32_ADD;
       IREE_RETURN_IF_ERROR(
           loom_wasm_make_f32_register_type(context, &out_plan->lane_type));
       break;
@@ -1336,8 +1336,8 @@ static iree_status_t loom_wasm_select_op(void* user_data,
           context, source_op,
           is_load ? LOOM_LOW_SOURCE_MEMORY_OPERATION_LOAD
                   : LOOM_LOW_SOURCE_MEMORY_OPERATION_STORE,
-          is_load ? WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_V128_LOAD
-                  : WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_V128_STORE,
+          is_load ? WASM_CORE_SIMD128_DESCRIPTOR_ID_V128_LOAD
+                  : WASM_CORE_SIMD128_DESCRIPTOR_ID_V128_STORE,
           &selected_plan, &selected));
       if (selected) {
         loom_wasm_memory_access_plan_t* plan = NULL;

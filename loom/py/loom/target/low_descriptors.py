@@ -427,3 +427,20 @@ class DescriptorSet:
                     f"'{descriptor.key}' category '{descriptor.category.key}' "
                     "is not declared in categories"
                 )
+
+
+def target_relative_name(target_key: str | None, name: str) -> str:
+    """Returns `name` relative to its target namespace when it is under one."""
+
+    if not target_key:
+        return name
+    prefix = f"{target_key}."
+    if name.startswith(prefix):
+        return name.removeprefix(prefix)
+    return name
+
+
+def descriptor_set_relative_name(descriptor_set: DescriptorSet, name: str) -> str:
+    """Returns `name` relative to `descriptor_set`'s target namespace."""
+
+    return target_relative_name(descriptor_set.target_key, name)

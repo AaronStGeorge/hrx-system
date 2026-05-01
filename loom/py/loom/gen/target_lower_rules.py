@@ -28,7 +28,7 @@ from loom.target.contracts import (
     TypePattern,
     compile_lower_rule_set,
 )
-from loom.target.low_descriptors import Descriptor
+from loom.target.low_descriptors import Descriptor, descriptor_set_relative_name
 
 _SCALAR_TYPE_C_NAMES = {
     "index": "LOOM_SCALAR_TYPE_INDEX",
@@ -73,6 +73,7 @@ _GUARD_KIND_C_NAMES = {
     GuardKind.ENUM_ATTR_EQUALS: "LOOM_LOW_LOWER_GUARD_ATTR_ENUM_EQ",
     GuardKind.I64_RANGE: "LOOM_LOW_LOWER_GUARD_ATTR_I64_RANGE",
     GuardKind.DESCRIPTOR_AVAILABLE: "LOOM_LOW_LOWER_GUARD_DESCRIPTOR_AVAILABLE",
+    GuardKind.VALUE_MATERIALIZABLE: "LOOM_LOW_LOWER_GUARD_VALUE_MATERIALIZABLE",
     GuardKind.LOW_VALUE_REGISTER_CLASS: "LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_CLASS",
     GuardKind.VALUE_STATIC_DIM0_MULTIPLE: "LOOM_LOW_LOWER_GUARD_VALUE_STATIC_DIM0_MULTIPLE",
     GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ: "LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT_EQ",
@@ -214,6 +215,7 @@ def _generate_source(
             f'#include "{source_contract.descriptor_set.public_header}"',
         ]
     )
+    lines.extend(f'#include "{include}"' for include in _materializer_includes(source_contract))
     lines.extend(f'#include "{include}"' for include in _op_header_includes(table))
     lines.append("")
 
@@ -235,8 +237,24 @@ def _generate_source(
                 [
                     f".kind = {_VALUE_REF_KIND_C_NAMES[row.kind]}",
                     f".index = {row.index}",
+                    f".materializer_index = {row.materializer_index}",
                 ]
                 for row in table.value_refs
+            ],
+        )
+    )
+
+    materializers_name = f"k{c_table_prefix}Materializers"
+    lines.extend(
+        _emit_optional_array(
+            materializers_name,
+            "loom_low_lower_value_materializer_t",
+            [
+                [
+                    f".can_materialize = {materializer.can_materialize}",
+                    f".materialize = {materializer.materialize}",
+                ]
+                for materializer in source_contract.materializers
             ],
         )
     )
@@ -397,6 +415,8 @@ def _generate_source(
             f"    .type_pattern_count = {_table_count(table.type_patterns, type_patterns_name)},",
             f"    .value_refs = {_table_value(table.value_refs, value_refs_name)},",
             f"    .value_ref_count = {_table_count(table.value_refs, value_refs_name)},",
+            f"    .materializers = {_table_value(source_contract.materializers, materializers_name)},",
+            f"    .materializer_count = {_table_count(source_contract.materializers, materializers_name)},",
             f"    .guards = {_table_value(table.guards, guards_name)},",
             f"    .guard_count = {_table_count(table.guards, guards_name)},",
             f"    .attr_copies = {_table_value(table.attr_copies, attr_copies_name)},",
@@ -441,15 +461,25 @@ def _type_pattern_row(type_pattern: TypePattern) -> list[str]:
         f".element_type_mask = LOOM_LOW_LOWER_SCALAR_TYPE_BIT({_scalar_type_c_name(type_pattern.element)})",
     ]
     if type_pattern.kind == "vector":
-        if type_pattern.lanes is None:
-            raise ValueError("generated vector type patterns require static lanes")
-        row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0"
+        row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK"
         row.extend(
             [
                 ".rank = 1",
-                f".static_dim0 = {type_pattern.lanes}",
             ]
         )
+        if type_pattern.lanes is not None:
+            row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0"
+            row.append(f".static_dim0 = {_c_expression(type_pattern.lanes)}")
+        elif type_pattern.minimum_lanes is not None and type_pattern.maximum_lanes is not None:
+            row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE"
+            row.extend(
+                [
+                    f".static_dim0_min = {_c_expression(type_pattern.minimum_lanes)}",
+                    f".static_dim0_max = {_c_expression(type_pattern.maximum_lanes)}",
+                ]
+            )
+        else:
+            raise ValueError("generated vector type patterns require static lanes")
     return row
 
 
@@ -518,30 +548,39 @@ def _op_header_includes(table: CompiledLowerRuleSet) -> tuple[str, ...]:
     return tuple(f"loom/ops/{name}/ops.h" for name in sorted(dialect_names))
 
 
+def _materializer_includes(table: ContractTable) -> tuple[str, ...]:
+    return tuple(sorted({materializer.header for materializer in table.materializers}))
+
+
 def _op_c_name(op: Op) -> str:
     return "LOOM_OP_" + _c_identifier(op.name).upper()
 
 
 def _descriptor_id_constant_name(table: ContractTable, descriptor_key: str) -> str:
-    return f"{table.descriptor_set.c_enum_prefix}_DESCRIPTOR_ID_{_c_identifier(descriptor_key).upper()}"
+    descriptor_name = descriptor_set_relative_name(table.descriptor_set, descriptor_key)
+    return f"{table.descriptor_set.c_enum_prefix}_DESCRIPTOR_ID_{_c_identifier(descriptor_name).upper()}"
 
 
 def _generated_public_header(table: ContractTable) -> str:
+    name_parts = _identifier_parts(table.name)
+    if len(name_parts) == 2:
+        target_name, family_name = name_parts
+        return f"loom/target/arch/{target_name}/lower/{family_name}_rules.h"
     if not table.public_header:
         raise ValueError(f"contract table '{table.name}' requires public_header")
     return re.sub(r"contract_table\.h$", "lower_rules.h", table.public_header)
 
 
 def _generated_symbol_name(table: ContractTable) -> str:
-    if not table.symbol_name:
-        raise ValueError(f"contract table '{table.name}' requires symbol_name")
-    return re.sub(r"contract_table$", "lower_rule_set", table.symbol_name)
+    return f"loom_{_c_identifier(table.name).lower()}_lower_rule_set"
 
 
 def _generated_table_prefix(table: ContractTable) -> str:
-    if not table.c_table_prefix:
-        raise ValueError(f"contract table '{table.name}' requires c_table_prefix")
-    return f"{table.c_table_prefix}Lower"
+    return f"{_pascal_identifier(table.name)}Lower"
+
+
+def _c_expression(value: int | str) -> str:
+    return str(value)
 
 
 def _header_guard_from_public_header(public_header: str) -> str:
@@ -553,10 +592,21 @@ def _c_string_literal(value: str) -> str:
 
 
 def _c_identifier(value: str) -> str:
-    parts = tuple(part for part in re.split(r"[^0-9A-Za-z]+", value) if part)
+    parts = _identifier_parts(value)
     if not parts:
         return "_"
     identifier = "_".join(parts)
     if identifier[0].isdigit():
         return "_" + identifier
     return identifier
+
+
+def _identifier_parts(value: str) -> tuple[str, ...]:
+    return tuple(part for part in re.split(r"[^0-9A-Za-z]+", value) if part)
+
+
+def _pascal_identifier(value: str) -> str:
+    parts = _identifier_parts(value)
+    if not parts:
+        return "_"
+    return "".join(part[:1].upper() + part[1:] for part in parts)
