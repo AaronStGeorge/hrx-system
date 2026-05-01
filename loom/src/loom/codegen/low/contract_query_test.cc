@@ -36,6 +36,7 @@ loom_target_contract_fragment_t MakeContractFragment(
   loom_target_contract_fragment_t fragment = {};
   fragment.dialect_base_id = loom_op_dialect_id(kSourceOpKind);
   fragment.dialect_count = 1;
+  fragment.flags = LOOM_TARGET_CONTRACT_FRAGMENT_FLAG_TARGET_QUERY;
   fragment.dialects = dialects;
   fragment.case_count = 1;
   fragment.cases = cases;

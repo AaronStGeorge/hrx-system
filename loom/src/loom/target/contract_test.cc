@@ -52,9 +52,13 @@ const loom_target_contract_descriptor_rule_t kDescriptorRules[] = {
 };
 
 const loom_target_contract_fragment_t kContractFragment = {
-    kTestDialectId - 1, IREE_ARRAYSIZE(kDialectTables),
-    kDialectTables,     IREE_ARRAYSIZE(kFragmentCases),
-    kFragmentCases,     IREE_ARRAYSIZE(kDescriptorRules),
+    kTestDialectId - 1,
+    IREE_ARRAYSIZE(kDialectTables),
+    0,
+    kDialectTables,
+    IREE_ARRAYSIZE(kFragmentCases),
+    kFragmentCases,
+    IREE_ARRAYSIZE(kDescriptorRules),
     kDescriptorRules,
 };
 

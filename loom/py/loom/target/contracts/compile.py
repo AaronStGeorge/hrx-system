@@ -61,6 +61,7 @@ class CompiledContractFragment:
     """Compact contract fragment ready for C emission."""
 
     name: str
+    target_contract_query: bool
     dialect_base_id: int
     dialects: tuple[CompiledDialectTable, ...]
     cases: tuple[CompiledCase, ...]
@@ -72,6 +73,7 @@ def compile_contract_fragment(
     *,
     dialect_ops: Mapping[str, Sequence[Op]],
     descriptor_rule_rows: Mapping[int, CompiledDescriptorRule],
+    lower_rule_indices: Mapping[int, int],
 ) -> CompiledContractFragment:
     """Compiles an authored contract fragment into dense target fragment rows."""
 
@@ -114,6 +116,10 @@ def compile_contract_fragment(
                         authored_case_index,
                         CONTRACT_ROW_NONE,
                     ),
+                    lower_rule_index=lower_rule_indices.get(
+                        authored_case_index,
+                        CONTRACT_ROW_NONE,
+                    ),
                 )
                 compiled_cases.append(compiled_case)
             op_entries.append(
@@ -142,6 +148,7 @@ def compile_contract_fragment(
 
     return CompiledContractFragment(
         name=table.name,
+        target_contract_query=table.target_contract_query,
         dialect_base_id=dialect_base_id,
         dialects=dialect_tables,
         cases=tuple(compiled_cases),
@@ -153,6 +160,7 @@ def _compile_case(
     contract_case: ContractCase,
     *,
     descriptor_rule_index: int,
+    lower_rule_index: int,
 ) -> CompiledCase:
     if isinstance(contract_case, DescriptorRule):
         return CompiledCase(
@@ -165,9 +173,14 @@ def _compile_case(
             row_index=CONTRACT_ROW_NONE,
         )
     if isinstance(contract_case, ValueElideRule):
+        if lower_rule_index == CONTRACT_ROW_NONE:
+            raise ValueError(
+                f"{contract_case.source_op.name}: value-elide case has no "
+                "compiled lower rule"
+            )
         return CompiledCase(
             system=ContractSystem.VALUE_ELIDE,
-            row_index=CONTRACT_ROW_NONE,
+            row_index=lower_rule_index,
         )
     raise TypeError(f"unsupported contract case {contract_case!r}")
 

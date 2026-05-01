@@ -23,6 +23,7 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/pass/value_facts.h"
+#include "loom/target/test/contracts/core.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/target/test/lower.h"
 #include "loom/target/test/lower_rules.h"
@@ -84,6 +85,13 @@ static const loom_low_lower_rule_set_t* const kInvalidPreambleRuleSets[] = {
     &loom_test_low_core_lower_rule_set,
 };
 
+static const loom_target_contract_binding_t kInvalidPreambleBindings[] = {
+    {
+        .fragment = &loom_test_low_core_contract_fragment,
+        .rule_set_index = 0,
+    },
+};
+
 static const loom_low_lower_policy_t kInvalidPreamblePolicy = {
     .name = IREE_SVL("invalid-preamble-policy"),
     .map_type = {.fn = loom_test_low_lower_map_type, .user_data = nullptr},
@@ -97,6 +105,8 @@ static const loom_low_lower_policy_t kInvalidPreamblePolicy = {
             .count = IREE_ARRAYSIZE(kInvalidPreambleRuleSets),
             .values = kInvalidPreambleRuleSets,
         },
+    .contract_bindings = kInvalidPreambleBindings,
+    .contract_binding_count = IREE_ARRAYSIZE(kInvalidPreambleBindings),
 };
 
 static loom_low_lower_policy_registry_t MakeInvalidPreamblePolicyRegistry() {

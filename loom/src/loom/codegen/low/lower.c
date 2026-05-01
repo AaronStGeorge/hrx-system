@@ -566,19 +566,18 @@ static iree_status_t loom_low_lower_plan_op_from_contract_index(
     const uint16_t case_index = (uint16_t)(op_entry.case_start + i);
     const loom_target_contract_case_t* contract_case =
         &index->cases[case_index];
-    if (contract_case->system != LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_RULE) {
+    uint16_t rule_index = UINT16_MAX;
+    if (!loom_low_lower_contract_case_lower_rule_index(index, contract_case,
+                                                       &rule_index)) {
       continue;
     }
     const loom_target_contract_binding_t* binding =
         &index->bindings[contract_case->binding_index];
-    const loom_target_contract_descriptor_rule_t* descriptor_rule =
-        &binding->fragment->descriptor_rules[contract_case->row_index];
     const loom_low_lower_rule_set_t* rule_set =
         context->policy->rule_sets.values[binding->rule_set_index];
     loom_low_lower_rule_selection_t rule_selection = {0};
     IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_select_rule_range(
-        context, rule_set, source_op, descriptor_rule->rule_index, 1,
-        &rule_selection));
+        context, rule_set, source_op, rule_index, 1, &rule_selection));
     if (rule_selection.rule != NULL) {
       IREE_RETURN_IF_ERROR(loom_low_lower_record_selected_rule_plan(
           context, source_op, binding->rule_set_index, rule_set,
@@ -739,48 +738,22 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
     }
   }
 
-  for (uint16_t i = 0; i < context->policy->rule_sets.count; ++i) {
-    const loom_low_lower_rule_set_t* rule_set =
-        context->policy->rule_sets.values[i];
-    loom_low_lower_rule_selection_t rule_selection = {0};
-    IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_select(
-        context, rule_set, source_op, &rule_selection));
-    if (rule_selection.rule != NULL) {
-      IREE_RETURN_IF_ERROR(loom_low_lower_record_selected_rule_plan(
-          context, source_op, i, rule_set, rule_selection));
+  if (context->policy->select_op.fn != NULL) {
+    loom_low_lower_plan_t plan = loom_low_lower_plan_empty();
+    IREE_RETURN_IF_ERROR(context->policy->select_op.fn(
+        context->policy->select_op.user_data, context, source_op, &plan));
+    if (!loom_low_lower_plan_is_empty(plan)) {
+      loom_low_lower_record_selected_plan(context,
+                                          (loom_low_lower_selected_plan_t){
+                                              .source_op = source_op,
+                                              .rule_set_index = UINT16_MAX,
+                                              .rule_index = UINT16_MAX,
+                                              .rule_set = NULL,
+                                              .rule = NULL,
+                                              .plan = plan,
+                                          });
       return iree_ok_status();
     }
-    if (loom_low_lower_rule_selection_is_better_failure(
-            failed_rule_set, failed_rule_selection, rule_selection)) {
-      failed_rule_set = rule_set;
-      failed_rule_selection = rule_selection;
-    }
-  }
-
-  if (context->policy->select_op.fn == NULL) {
-    if (failed_rule_set == NULL &&
-        !loom_low_lower_rule_set_list_is_empty(context->policy->rule_sets)) {
-      failed_rule_set = context->policy->rule_sets.values[0];
-    }
-    IREE_ASSERT(failed_rule_set != NULL);
-    return loom_low_lower_rule_set_emit_selection_failure(
-        context, failed_rule_set, source_op, failed_rule_selection);
-  }
-
-  loom_low_lower_plan_t plan = loom_low_lower_plan_empty();
-  IREE_RETURN_IF_ERROR(context->policy->select_op.fn(
-      context->policy->select_op.user_data, context, source_op, &plan));
-  if (!loom_low_lower_plan_is_empty(plan)) {
-    loom_low_lower_record_selected_plan(context,
-                                        (loom_low_lower_selected_plan_t){
-                                            .source_op = source_op,
-                                            .rule_set_index = UINT16_MAX,
-                                            .rule_index = UINT16_MAX,
-                                            .rule_set = NULL,
-                                            .rule = NULL,
-                                            .plan = plan,
-                                        });
-    return iree_ok_status();
   }
 
   if (failed_rule_set != NULL) {

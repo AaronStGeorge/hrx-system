@@ -93,7 +93,7 @@ enum loom_target_contract_system_e {
   LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_RULE = 1,
   // Value-alias row with no emitted low descriptor.
   LOOM_TARGET_CONTRACT_SYSTEM_VALUE_ALIAS = 2,
-  // Value-elide row with no emitted low descriptor.
+  // Value-elide lower-rule row with no emitted low descriptor.
   LOOM_TARGET_CONTRACT_SYSTEM_VALUE_ELIDE = 3,
   // Source-memory row selected from a generated source-memory pool.
   LOOM_TARGET_CONTRACT_SYSTEM_SOURCE_MEMORY = 4,
@@ -141,7 +141,7 @@ typedef struct loom_target_contract_case_t {
   loom_target_contract_system_t system;
   // Active binding ordinal that owns the selected row.
   uint8_t binding_index;
-  // Index into the system-specific row pool, or LOOM_TARGET_CONTRACT_ROW_NONE.
+  // System-specific row index, or LOOM_TARGET_CONTRACT_ROW_NONE.
   uint16_t row_index;
 } loom_target_contract_case_t;
 
@@ -150,7 +150,7 @@ typedef struct loom_target_contract_fragment_case_t {
   loom_target_contract_system_t system;
   // Reserved byte for future row flags while keeping the case 4 bytes.
   uint8_t reserved;
-  // Index into the fragment-local system row pool.
+  // Fragment-local system-specific row index, or LOOM_TARGET_CONTRACT_ROW_NONE.
   uint16_t row_index;
 } loom_target_contract_fragment_case_t;
 
@@ -159,11 +159,21 @@ typedef struct loom_target_contract_descriptor_rule_t {
   uint16_t rule_index;
 } loom_target_contract_descriptor_rule_t;
 
+typedef uint8_t loom_target_contract_fragment_flags_t;
+
+enum loom_target_contract_fragment_flag_bits_e {
+  // Fragment cases participate in read-only target contract queries.
+  LOOM_TARGET_CONTRACT_FRAGMENT_FLAG_TARGET_QUERY =
+      (loom_target_contract_fragment_flags_t)1u << 0,
+};
+
 typedef struct loom_target_contract_fragment_t {
   // First dialect id covered by dialects.
   uint8_t dialect_base_id;
   // Number of dense dialect slots.
   uint8_t dialect_count;
+  // Fragment behavior flags.
+  loom_target_contract_fragment_flags_t flags;
   // Dense dialect slots indexed by dialect id minus dialect_base_id.
   const loom_target_contract_dialect_table_t* dialects;
   // Number of generic case rows.
@@ -175,6 +185,14 @@ typedef struct loom_target_contract_fragment_t {
   // Descriptor-rule row pool.
   const loom_target_contract_descriptor_rule_t* descriptor_rules;
 } loom_target_contract_fragment_t;
+
+// Returns true when |fragment| participates in read-only target contract
+// queries.
+static inline bool loom_target_contract_fragment_queries_target(
+    const loom_target_contract_fragment_t* fragment) {
+  return (fragment->flags & LOOM_TARGET_CONTRACT_FRAGMENT_FLAG_TARGET_QUERY) !=
+         0;
+}
 
 typedef struct loom_target_contract_binding_t {
   // Generated fragment rodata linked into the active target package.

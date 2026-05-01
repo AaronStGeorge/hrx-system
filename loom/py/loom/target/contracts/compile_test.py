@@ -70,6 +70,7 @@ def test_compile_contract_fragment_packs_dense_dialect_op_entries() -> None:
         table,
         dialect_ops={"vector": ALL_VECTOR_OPS},
         descriptor_rule_rows={0: CompiledDescriptorRule(0)},
+        lower_rule_indices={0: 0},
     )
 
     assert len(compiled.dialects) == 1
@@ -118,6 +119,7 @@ def test_compile_contract_fragment_uses_supplied_descriptor_rule_rows() -> None:
             0: CompiledDescriptorRule(rule_index=9),
             1: CompiledDescriptorRule(rule_index=2),
         },
+        lower_rule_indices={0: 9, 1: 2},
     )
 
     vector_dialect = compiled.dialects[0]
@@ -147,6 +149,7 @@ def test_compile_contract_fragment_records_value_elide_cases() -> None:
         table,
         dialect_ops={"vector": ALL_VECTOR_OPS},
         descriptor_rule_rows={},
+        lower_rule_indices={0: 7},
     )
 
     extract_entry = compiled.dialects[0].op_entries[
@@ -155,7 +158,7 @@ def test_compile_contract_fragment_records_value_elide_cases() -> None:
     assert extract_entry.case_start == 0
     assert extract_entry.case_count == 1
     assert compiled.cases[0].system == ContractSystem.VALUE_ELIDE
-    assert compiled.cases[0].row_index == CONTRACT_ROW_NONE
+    assert compiled.cases[0].row_index == 7
 
 
 def test_compile_contract_fragment_preserves_dense_dialect_gaps() -> None:
@@ -197,6 +200,7 @@ def test_compile_contract_fragment_preserves_dense_dialect_gaps() -> None:
             "gap_high": (high_op,),
         },
         descriptor_rule_rows={},
+        lower_rule_indices={},
     )
 
     assert compiled.dialect_base_id == 3
@@ -228,6 +232,7 @@ def test_compile_contract_fragment_rejects_missing_dialect_ops() -> None:
             table,
             dialect_ops={"vector": ALL_VECTOR_OPS},
             descriptor_rule_rows={},
+            lower_rule_indices={},
         )
 
 
@@ -243,4 +248,5 @@ def test_compile_contract_fragment_rejects_mismatched_dialect_key() -> None:
             ),
             dialect_ops={"not_scalar": ALL_SCALAR_OPS},
             descriptor_rule_rows={},
+            lower_rule_indices={},
         )

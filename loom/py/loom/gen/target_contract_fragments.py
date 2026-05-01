@@ -55,11 +55,17 @@ def generate_contract_fragment(
     """Generates C/H text for a compact target contract fragment."""
 
     lower_rules = compile_lower_rule_set(table, dialect_ops=dialect_ops)
-    descriptor_rule_rows = {authored_case_index: CompiledDescriptorRule(rule_index=rule_index) for rule_index, authored_case_index in enumerate(lower_rules.authored_case_indices)}
+    lower_rule_indices = {authored_case_index: rule_index for rule_index, authored_case_index in enumerate(lower_rules.authored_case_indices)}
+    descriptor_rule_rows = {
+        authored_case_index: CompiledDescriptorRule(rule_index=rule_index)
+        for authored_case_index, rule_index in lower_rule_indices.items()
+        if table.cases[authored_case_index].system == ContractSystem.DESCRIPTOR_RULE
+    }
     compiled = compile_contract_fragment(
         table,
         dialect_ops=dialect_ops,
         descriptor_rule_rows=descriptor_rule_rows,
+        lower_rule_indices=lower_rule_indices,
     )
     _validate_c_shard_shape(compiled)
     public_header = _generated_public_header(table)
@@ -199,12 +205,14 @@ def _generate_source(
         descriptor_rules_value = descriptor_rules_name
     else:
         descriptor_rules_value = "NULL"
+    flags_value = "LOOM_TARGET_CONTRACT_FRAGMENT_FLAG_TARGET_QUERY" if table.target_contract_query else "0"
 
     lines.extend(
         [
             f"const loom_target_contract_fragment_t {symbol_name} = {{",
             f"    {table.dialect_base_id},",
             f"    {len(table.dialects)},",
+            f"    {flags_value},",
             f"    {dialects_value},",
             f"    {len(table.cases)},",
             f"    {cases_value},",

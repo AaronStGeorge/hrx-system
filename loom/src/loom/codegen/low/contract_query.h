@@ -37,6 +37,30 @@ typedef struct loom_low_lower_contract_query_options_t {
   loom_low_lower_rule_match_can_materialize_value_callback_t can_materialize;
 } loom_low_lower_contract_query_options_t;
 
+// Returns true and assigns the generated lower-rule row referenced by a
+// composed target-contract case. Cases without source-to-low lowering payloads
+// return false so callers can leave target-owned cases unhandled.
+static inline bool loom_low_lower_contract_case_lower_rule_index(
+    const loom_target_contract_index_t* index,
+    const loom_target_contract_case_t* contract_case,
+    uint16_t* out_rule_index) {
+  const loom_target_contract_binding_t* binding =
+      &index->bindings[contract_case->binding_index];
+  switch (contract_case->system) {
+    case LOOM_TARGET_CONTRACT_SYSTEM_DESCRIPTOR_RULE: {
+      const loom_target_contract_descriptor_rule_t* descriptor_rule =
+          &binding->fragment->descriptor_rules[contract_case->row_index];
+      *out_rule_index = descriptor_rule->rule_index;
+      return true;
+    }
+    case LOOM_TARGET_CONTRACT_SYSTEM_VALUE_ELIDE:
+      *out_rule_index = contract_case->row_index;
+      return *out_rule_index != LOOM_TARGET_CONTRACT_ROW_NONE;
+    default:
+      return false;
+  }
+}
+
 // Queries source-to-target-low rule tables for one source op.
 //
 // A LEGAL result means one opt-in rule matched the selected target contract. An
