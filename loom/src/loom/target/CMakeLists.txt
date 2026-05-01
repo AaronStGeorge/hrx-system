@@ -156,21 +156,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    low_descriptor_registry_verify
-  HDRS
-    "low_descriptor_registry_verify.h"
-  SRCS
-    "low_descriptor_registry_verify.c"
-  DEPS
-    ::low_descriptor_registry
-    iree::base
-    loom::src::loom::codegen::low::requirements
-  TESTONLY
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     low_descriptor_registry_manifest
   HDRS
     "low_descriptor_registry_manifest.h"
@@ -357,20 +342,6 @@ loom_cc_test(
     "preset_registry_test.cc"
   DEPS
     ::preset_registry
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    low_descriptor_registry_test
-  SRCS
-    "low_descriptor_registry_test.cc"
-  DEPS
-    ::low_descriptor_registry_core_test
-    ::low_descriptor_registry_manifest
-    ::low_descriptor_registry_verify
-    loom::src::loom::codegen::low::requirements
     iree::testing::gtest
     iree::testing::gtest_main
 )

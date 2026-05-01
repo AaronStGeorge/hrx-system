@@ -99,7 +99,7 @@ loom_cc_test(
     ::alt_descriptors
     ::descriptors
     loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::descriptors_verify
+    loom::src::loom::codegen::low::testing::descriptors_verify
     loom::src::loom::codegen::low::testing::text_asm_roundtrip_test_util
     iree::testing::gtest
     iree::testing::gtest_main

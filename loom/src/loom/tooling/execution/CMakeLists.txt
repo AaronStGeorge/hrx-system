@@ -261,18 +261,6 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
-    execution_provider_test
-  SRCS
-    "execution_provider_test.cc"
-  DEPS
-    ::execution_provider
-    loom::src::loom::target::low_descriptor_registry_core_test
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
     hal_invocation_test
   SRCS
     "hal_invocation_test.cc"

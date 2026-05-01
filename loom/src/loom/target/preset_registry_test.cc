@@ -51,29 +51,5 @@ TEST(TargetPresetRegistryTest, RejectsUnknownKey) {
   EXPECT_EQ(bundle, nullptr);
 }
 
-TEST(TargetPresetRegistryTest, RejectsNullBundleTable) {
-  loom_target_preset_registry_t registry = {};
-  registry.target_bundle_count = 1;
-
-  const loom_target_bundle_t* bundle = nullptr;
-  iree_status_t status = loom_target_preset_registry_lookup_bundle(
-      &registry, IREE_SV("iree-vm"), &bundle);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
-  EXPECT_EQ(bundle, nullptr);
-}
-
-TEST(TargetPresetRegistryTest, RejectsNullBundleRow) {
-  const loom_target_bundle_t* bundles[] = {nullptr};
-  loom_target_preset_registry_t registry = {};
-  registry.target_bundles = bundles;
-  registry.target_bundle_count = 1;
-
-  const loom_target_bundle_t* bundle = nullptr;
-  iree_status_t status = loom_target_preset_registry_lookup_bundle(
-      &registry, IREE_SV("iree-vm"), &bundle);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
-  EXPECT_EQ(bundle, nullptr);
-}
-
 }  // namespace
 }  // namespace loom

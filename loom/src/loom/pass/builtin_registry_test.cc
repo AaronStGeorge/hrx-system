@@ -9,7 +9,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/pass_environment.h"
-#include "loom/pass/registry_verify.h"
+#include "loom/pass/testing/registry_verify.h"
 
 namespace loom {
 namespace {

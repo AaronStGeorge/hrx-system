@@ -38,45 +38,6 @@ using CollectedEmission = ::loom::testing::CapturedDiagnosticEmission;
 using EmissionCollector = ::loom::testing::DiagnosticEmissionCapture;
 using ModulePtr = ::loom::testing::ModulePtr;
 
-static iree_status_t IgnoreProviderOp(
-    const loom_target_low_legality_provider_t* provider,
-    loom_target_low_legality_context_t* context, const loom_op_t* op,
-    bool* out_handled) {
-  (void)provider;
-  (void)context;
-  (void)op;
-  *out_handled = false;
-  return iree_ok_status();
-}
-
-TEST(TargetLowLegalityProviderListTest, Empty) {
-  const loom_target_low_legality_provider_list_t list =
-      loom_target_low_legality_provider_list_empty();
-  EXPECT_TRUE(loom_target_low_legality_provider_list_is_empty(list));
-  IREE_EXPECT_OK(loom_target_low_legality_provider_list_verify(list));
-}
-
-TEST(TargetLowLegalityProviderListTest, VerifiesValues) {
-  const loom_target_low_legality_provider_t provider = {
-      .name = IREE_SVL("test-provider"),
-      .builtin_dialect_bits = 1u << LOOM_DIALECT_VECTOR,
-      .try_verify_op = IgnoreProviderOp,
-  };
-  const loom_target_low_legality_provider_t* values[] = {&provider};
-  const loom_target_low_legality_provider_list_t list =
-      loom_target_low_legality_provider_list_make(values,
-                                                  IREE_ARRAYSIZE(values));
-  EXPECT_FALSE(loom_target_low_legality_provider_list_is_empty(list));
-  IREE_EXPECT_OK(loom_target_low_legality_provider_list_verify(list));
-}
-
-TEST(TargetLowLegalityProviderListTest, RejectsMissingValues) {
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_target_low_legality_provider_list_verify(
-          (loom_target_low_legality_provider_list_t){.count = 1}));
-}
-
 class TargetLowLegalityTest : public ::testing::Test {
  protected:
   void SetUp() override {

@@ -12,8 +12,8 @@
 // lowering and emission paths trust it as part of the binary's construction
 // contract.
 
-#ifndef LOOM_CODEGEN_LOW_DESCRIPTORS_VERIFY_H_
-#define LOOM_CODEGEN_LOW_DESCRIPTORS_VERIFY_H_
+#ifndef LOOM_CODEGEN_LOW_TESTING_DESCRIPTORS_VERIFY_H_
+#define LOOM_CODEGEN_LOW_TESTING_DESCRIPTORS_VERIFY_H_
 
 #include "iree/base/api.h"
 #include "loom/codegen/low/descriptors.h"
@@ -37,4 +37,4 @@ iree_status_t loom_low_descriptor_registry_verify(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_CODEGEN_LOW_DESCRIPTORS_VERIFY_H_
+#endif  // LOOM_CODEGEN_LOW_TESTING_DESCRIPTORS_VERIFY_H_

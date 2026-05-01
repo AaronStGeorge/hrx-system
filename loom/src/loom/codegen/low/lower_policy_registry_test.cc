@@ -51,17 +51,6 @@ TEST(LowLowerPolicyRegistryTest, RejectsMissingContractKey) {
   EXPECT_EQ(policy, nullptr);
 }
 
-TEST(LowLowerPolicyRegistryTest, RejectsMissingEntries) {
-  loom_low_lower_policy_registry_t missing_entries = {};
-  missing_entries.entry_count = 1;
-  const loom_low_lower_policy_t* policy = nullptr;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_low_lower_policy_registry_lookup(&missing_entries,
-                                            IREE_SV("test.low.core"), &policy));
-  EXPECT_EQ(policy, nullptr);
-}
-
 TEST(LowLowerPolicyRegistryTest, ReturnsFirstDuplicateContractKey) {
   const loom_low_lower_policy_registry_entry_t entries[] = {
       {

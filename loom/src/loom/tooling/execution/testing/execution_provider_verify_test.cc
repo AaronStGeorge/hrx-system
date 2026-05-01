@@ -4,11 +4,12 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tooling/execution/execution_provider.h"
+#include "loom/tooling/execution/testing/execution_provider_verify.h"
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/target/low_descriptor_registry_core_test.h"
+#include "loom/tooling/execution/execution_provider.h"
 
 namespace loom {
 namespace {
@@ -93,6 +94,7 @@ TEST(ExecutionProviderTest, ComposesDescriptorRegistryAndHalBackends) {
       .providers = providers,
       .provider_count = IREE_ARRAYSIZE(providers),
   };
+  IREE_ASSERT_OK(loom_run_execution_provider_set_verify(&provider_set));
 
   loom_run_execution_environment_t environment = {};
   IREE_ASSERT_OK(
@@ -136,10 +138,8 @@ TEST(ExecutionProviderTest, RejectsDuplicateProviderNames) {
       .providers = providers,
       .provider_count = IREE_ARRAYSIZE(providers),
   };
-  loom_run_execution_environment_t environment = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_run_execution_environment_initialize(&provider_set, &environment));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_run_execution_provider_set_verify(&provider_set));
 }
 
 TEST(ExecutionProviderTest, RejectsDuplicateHalBackendNames) {
@@ -150,10 +150,8 @@ TEST(ExecutionProviderTest, RejectsDuplicateHalBackendNames) {
       .providers = providers,
       .provider_count = IREE_ARRAYSIZE(providers),
   };
-  loom_run_execution_environment_t environment = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_run_execution_environment_initialize(&provider_set, &environment));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_run_execution_provider_set_verify(&provider_set));
 }
 
 TEST(ExecutionProviderTest, RejectsDuplicateExecutionBackendNames) {
@@ -164,10 +162,8 @@ TEST(ExecutionProviderTest, RejectsDuplicateExecutionBackendNames) {
       .providers = providers,
       .provider_count = IREE_ARRAYSIZE(providers),
   };
-  loom_run_execution_environment_t environment = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_run_execution_environment_initialize(&provider_set, &environment));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_run_execution_provider_set_verify(&provider_set));
 }
 
 }  // namespace

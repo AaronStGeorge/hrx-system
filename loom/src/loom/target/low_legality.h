@@ -102,10 +102,6 @@ static inline bool loom_target_low_legality_provider_list_is_empty(
   return list.count == 0;
 }
 
-// Verifies that |list| is internally well-formed.
-iree_status_t loom_target_low_legality_provider_list_verify(
-    loom_target_low_legality_provider_list_t list);
-
 typedef struct loom_target_low_legality_options_t {
   // Target bundle selected for this source-to-low lowering attempt.
   const loom_target_bundle_t* bundle;

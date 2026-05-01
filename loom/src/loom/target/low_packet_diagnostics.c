@@ -18,28 +18,6 @@ struct loom_target_low_packet_diagnostic_context_t {
   loom_target_low_packet_diagnostics_result_t* result;
 };
 
-iree_status_t loom_target_low_packet_diagnostic_provider_list_verify(
-    loom_target_low_packet_diagnostic_provider_list_t list) {
-  if (loom_target_low_packet_diagnostic_provider_list_is_empty(list)) {
-    return iree_ok_status();
-  }
-  if (list.values == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "target-low packet diagnostic provider list is required");
-  }
-  for (iree_host_size_t i = 0; i < list.count; ++i) {
-    const loom_target_low_packet_diagnostic_provider_t* provider =
-        list.values[i];
-    if (provider == NULL || provider->try_diagnose_packet == NULL) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "target-low packet diagnostic provider is invalid");
-    }
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_target_low_packet_diagnostics_verify_options(
     const loom_low_emission_frame_t* frame,
     const loom_target_low_packet_diagnostics_options_t* options,
@@ -55,8 +33,6 @@ static iree_status_t loom_target_low_packet_diagnostics_verify_options(
                             "unknown target-low packet diagnostic flags 0x%08x",
                             unknown_flags);
   }
-  IREE_RETURN_IF_ERROR(loom_target_low_packet_diagnostic_provider_list_verify(
-      options->provider_list));
   return loom_low_packet_validate_tables(&frame->schedule, &frame->allocation);
 }
 

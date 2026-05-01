@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/pass/registry.h"
+#include "loom/pass/testing/registry_verify.h"
 
 #include <string>
 
@@ -12,7 +12,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/pass/environment.h"
-#include "loom/pass/registry_verify.h"
+#include "loom/pass/registry.h"
 #include "loom/pass/report.h"
 #include "loom/pass/test/registry.h"
 

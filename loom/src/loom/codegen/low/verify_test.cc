@@ -13,7 +13,7 @@
 #include "iree/io/vec_stream.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/codegen/low/descriptors_verify.h"
+#include "loom/codegen/low/testing/descriptors_verify.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/error/error_defs.h"
 #include "loom/format/bytecode/reader.h"

@@ -98,17 +98,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "descriptors_verify",
-    testonly = True,
-    srcs = ["descriptors_verify.c"],
-    hdrs = ["descriptors_verify.h"],
-    deps = [
-        ":descriptors",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "descriptors_manifest",
     srcs = ["descriptors_manifest.c"],
     hdrs = ["descriptors_manifest.h"],
@@ -748,18 +737,6 @@ loom_cc_test(
 )
 
 loom_cc_test(
-    name = "descriptors_test",
-    srcs = ["descriptors_test.cc"],
-    deps = [
-        ":descriptors",
-        ":descriptors_manifest",
-        ":descriptors_verify",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
     name = "packet_test",
     srcs = ["packet_test.cc"],
     deps = [
@@ -834,8 +811,8 @@ loom_cc_test(
     name = "target_binding_test",
     srcs = ["target_binding_test.cc"],
     deps = [
-        ":descriptors_verify",
         ":target_binding",
+        "//loom/src/loom/codegen/low/testing:descriptors_verify",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
@@ -854,9 +831,9 @@ loom_cc_test(
     name = "verify_test",
     srcs = ["verify_test.cc"],
     deps = [
-        ":descriptors_verify",
         ":text_asm",
         ":verify",
+        "//loom/src/loom/codegen/low/testing:descriptors_verify",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/bytecode:reader",
         "//loom/src/loom/format/bytecode:writer",

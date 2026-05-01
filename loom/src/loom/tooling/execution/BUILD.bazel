@@ -225,17 +225,6 @@ loom_cc_test(
 )
 
 loom_cc_test(
-    name = "execution_provider_test",
-    srcs = ["execution_provider_test.cc"],
-    deps = [
-        ":execution_provider",
-        "//loom/src/loom/target:low_descriptor_registry_core_test",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
     name = "hal_invocation_test",
     srcs = ["hal_invocation_test.cc"],
     deps = [

@@ -6,7 +6,6 @@
 
 #include "loom/tools/loom-check/provider.h"
 
-#include <inttypes.h>
 #include <stdio.h>
 
 #include "loom/codegen/low/lower.h"
@@ -64,38 +63,6 @@ typedef struct loom_check_provider_environment_state_t {
   // Number of entries in |requirement_providers|.
   iree_host_size_t requirement_provider_count;
 } loom_check_provider_environment_state_t;
-
-static iree_status_t loom_check_provider_validate(
-    const loom_check_provider_t* provider, iree_host_size_t provider_index) {
-  if (provider == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "loom-check provider %" PRIhsz " is null",
-                            provider_index);
-  }
-  if (iree_string_view_is_empty(iree_string_view_trim(provider->name))) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "loom-check provider %" PRIhsz " has no name",
-                            provider_index);
-  }
-  if (provider->emit_provider_count != 0 && provider->emit_providers == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "loom-check provider '%.*s' has no emit provider "
-                            "table",
-                            (int)provider->name.size, provider->name.data);
-  }
-  if (provider->requirement_provider_count != 0 &&
-      provider->requirement_providers == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "loom-check provider '%.*s' has no requirement "
-                            "provider table",
-                            (int)provider->name.size, provider->name.data);
-  }
-  IREE_RETURN_IF_ERROR(loom_target_low_legality_provider_list_verify(
-      provider->low_legality_provider_list));
-  IREE_RETURN_IF_ERROR(loom_target_low_packet_diagnostic_provider_list_verify(
-      provider->low_packet_diagnostic_provider_list));
-  return iree_ok_status();
-}
 
 static iree_status_t loom_check_provider_append_low_legality_providers(
     loom_check_provider_environment_state_t* state,
@@ -169,22 +136,14 @@ static iree_status_t loom_check_provider_append_requirement_providers(
 static iree_status_t loom_check_provider_environment_state_initialize(
     const loom_check_provider_set_t* provider_set,
     loom_check_provider_environment_state_t* out_state) {
+  IREE_ASSERT_ARGUMENT(provider_set);
   IREE_ASSERT_ARGUMENT(out_state);
   *out_state = (loom_check_provider_environment_state_t){
       .provider_set = provider_set,
   };
-  if (provider_set == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "loom-check provider set is required");
-  }
-  if (provider_set->provider_count != 0 && provider_set->providers == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "loom-check provider table is required");
-  }
 
   for (iree_host_size_t i = 0; i < provider_set->provider_count; ++i) {
     const loom_check_provider_t* provider = provider_set->providers[i];
-    IREE_RETURN_IF_ERROR(loom_check_provider_validate(provider, i));
     IREE_RETURN_IF_ERROR(
         loom_check_provider_append_low_legality_providers(out_state, provider));
     IREE_RETURN_IF_ERROR(
@@ -245,13 +204,6 @@ static iree_status_t loom_check_provider_initialize_low_lower_policy_registry(
     }
     loom_low_lower_policy_registry_t provider_registry = {0};
     provider->initialize_low_lower_policy_registry(&provider_registry);
-    if (provider_registry.entry_count != 0 &&
-        provider_registry.entries == NULL) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "loom-check provider '%.*s' has no lower policy "
-                              "entry table",
-                              (int)provider->name.size, provider->name.data);
-    }
     if (state->low_lower_policy_entry_count + provider_registry.entry_count >
         IREE_ARRAYSIZE(state->low_lower_policy_entries)) {
       return iree_make_status(

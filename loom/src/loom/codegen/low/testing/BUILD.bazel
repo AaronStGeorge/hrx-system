@@ -8,6 +8,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_assert_no_dependencies",
     "loom_cc_library",
+    "loom_cc_test",
 )
 
 package(
@@ -32,6 +33,29 @@ loom_assert_no_dependencies(
         "//loom/src/loom/target/test:low_registry",
     ],
     targets = [":source_workload_pipeline"],
+)
+
+loom_cc_library(
+    name = "descriptors_verify",
+    testonly = True,
+    srcs = ["descriptors_verify.c"],
+    hdrs = ["descriptors_verify.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:descriptors",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "descriptors_verify_test",
+    srcs = ["descriptors_verify_test.cc"],
+    deps = [
+        ":descriptors_verify",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:descriptors_manifest",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
 )
 
 loom_cc_library(

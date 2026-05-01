@@ -12,6 +12,33 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    descriptors_verify
+  HDRS
+    "descriptors_verify.h"
+  SRCS
+    "descriptors_verify.c"
+  DEPS
+    iree::base
+    loom::src::loom::codegen::low::descriptors
+  TESTONLY
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    descriptors_verify_test
+  SRCS
+    "descriptors_verify_test.cc"
+  DEPS
+    ::descriptors_verify
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::descriptors_manifest
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     source_workload
   HDRS
     "source_workload.h"

@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/target/testing/low_descriptor_registry_verify.h"
+
 #include <string>
 
 #include "iree/testing/gtest.h"
@@ -11,7 +13,6 @@
 #include "loom/codegen/low/requirements.h"
 #include "loom/target/low_descriptor_registry_core_test.h"
 #include "loom/target/low_descriptor_registry_manifest.h"
-#include "loom/target/low_descriptor_registry_verify.h"
 
 namespace loom {
 namespace {
@@ -252,12 +253,6 @@ TEST(LowDescriptorRegistryTest, RegistryRejectsMissingBundleTable) {
   iree_status_t status = loom_target_low_descriptor_registry_verify(
       &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
-
-  const loom_target_bundle_t* bundle = nullptr;
-  status = loom_target_low_descriptor_registry_lookup_bundle(
-      &registry, IREE_SV("test-low"), &bundle);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
-  EXPECT_EQ(bundle, nullptr);
 }
 
 TEST(LowDescriptorRegistryTest, RegistryRejectsMismatchedDescriptorView) {

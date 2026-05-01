@@ -82,10 +82,6 @@ static inline bool loom_target_low_packet_diagnostic_provider_list_is_empty(
   return list.count == 0;
 }
 
-// Verifies that |list| is internally well-formed.
-iree_status_t loom_target_low_packet_diagnostic_provider_list_verify(
-    loom_target_low_packet_diagnostic_provider_list_t list);
-
 typedef struct loom_target_low_packet_diagnostics_options_t {
   // Optional target-specific packet diagnostic providers.
   loom_target_low_packet_diagnostic_provider_list_t provider_list;

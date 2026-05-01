@@ -28,20 +28,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    descriptors_verify
-  HDRS
-    "descriptors_verify.h"
-  SRCS
-    "descriptors_verify.c"
-  DEPS
-    ::descriptors
-    iree::base
-  TESTONLY
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     descriptors_manifest
   HDRS
     "descriptors_manifest.h"
@@ -764,19 +750,6 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
-    descriptors_test
-  SRCS
-    "descriptors_test.cc"
-  DEPS
-    ::descriptors
-    ::descriptors_manifest
-    ::descriptors_verify
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
     packet_test
   SRCS
     "packet_test.cc"
@@ -857,9 +830,9 @@ loom_cc_test(
   SRCS
     "target_binding_test.cc"
   DEPS
-    ::descriptors_verify
     ::target_binding
     iree::base::internal::arena
+    loom::src::loom::codegen::low::testing::descriptors_verify
     loom::src::loom::error::error_defs
     loom::src::loom::format::text::parser
     loom::src::loom::ir
@@ -878,11 +851,11 @@ loom_cc_test(
   SRCS
     "verify_test.cc"
   DEPS
-    ::descriptors_verify
     ::text_asm
     ::verify
     iree::base::internal::arena
     iree::io::stream
+    loom::src::loom::codegen::low::testing::descriptors_verify
     loom::src::loom::error::error_defs
     loom::src::loom::format::bytecode::reader
     loom::src::loom::format::bytecode::writer

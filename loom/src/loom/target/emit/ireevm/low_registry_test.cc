@@ -9,7 +9,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/requirements.h"
-#include "loom/target/low_descriptor_registry_verify.h"
+#include "loom/target/testing/low_descriptor_registry_verify.h"
 
 namespace loom {
 namespace {

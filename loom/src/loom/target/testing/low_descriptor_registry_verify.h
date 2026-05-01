@@ -10,8 +10,8 @@
 // trusts their provider and bundle tables; this verifier is for package tests
 // and target bring-up checks that validate the authored tables explicitly.
 
-#ifndef LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_VERIFY_H_
-#define LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_VERIFY_H_
+#ifndef LOOM_TARGET_TESTING_LOW_DESCRIPTOR_REGISTRY_VERIFY_H_
+#define LOOM_TARGET_TESTING_LOW_DESCRIPTOR_REGISTRY_VERIFY_H_
 
 #include "iree/base/api.h"
 #include "loom/codegen/low/requirements.h"
@@ -31,4 +31,4 @@ iree_status_t loom_target_low_descriptor_registry_verify(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_VERIFY_H_
+#endif  // LOOM_TARGET_TESTING_LOW_DESCRIPTOR_REGISTRY_VERIFY_H_

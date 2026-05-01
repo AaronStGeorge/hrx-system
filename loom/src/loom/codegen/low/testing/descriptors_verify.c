@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/codegen/low/descriptors_verify.h"
+#include "loom/codegen/low/testing/descriptors_verify.h"
 
 #include <inttypes.h>
 static iree_status_t loom_low_verify_pointer_for_count(const void* pointer,
