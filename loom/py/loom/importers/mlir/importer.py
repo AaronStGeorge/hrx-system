@@ -13,15 +13,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import loom
 from loom.builder import ValueRef
-from loom.format.text.printer import Printer
 from loom.importers.core import (
     DiagnosticEngine,
     ImportBodyReport,
     ImportOptions,
     ImportResult,
+    KernelArgumentSpec,
+    KernelModuleSpec,
     StructuralVerifier,
+    create_kernel_module,
+    sanitize_symbol,
 )
 from loom.importers.mlir.api import import_iree_ir
 from loom.importers.mlir.attrs import MlirAttributeDecoder
@@ -30,7 +32,7 @@ from loom.importers.mlir.converter import convert_function_body, walk_operations
 from loom.importers.mlir.model import Binding, KernelFacts, MlirConversionContext
 from loom.importers.mlir.names import build_source_name_overrides
 from loom.importers.mlir.types import MlirTypeConverter
-from loom.ir import BUFFER_TYPE, INDEX, Module, rebuild_value_metadata
+from loom.ir import INDEX, Module, rebuild_value_metadata
 
 AXIS_BY_INDEX = {
     0: "x",
@@ -344,35 +346,36 @@ def build_loom_module(
     type_converter: MlirTypeConverter,
     source_names: dict[object, str],
 ) -> tuple[Module, ImportBodyReport]:
-    module, builder = loom.module_builder()
     target_preset = target_format or "unknown"
     target_symbol = sanitize_symbol(target_preset)
     kernel_name = export_name or function_name
     workgroup = workgroup_size or (1, 1, 1)
-
-    builder.target.profile(symbol=target_symbol, preset=target_preset)
-    binding_args = {
-        binding.binding: builder.value(f"binding{binding.binding}", BUFFER_TYPE)
-        for binding in bindings
-    }
-    body = builder.region()
-    builder.kernel.def_(
-        target=target_symbol,
-        export_symbol=kernel_name,
-        export_ordinal=export_ordinal,
-        workgroup_size_x=workgroup[0],
-        workgroup_size_y=workgroup[1],
-        workgroup_size_z=workgroup[2],
-        callee=kernel_name,
-        args=[binding_args[binding.binding] for binding in bindings],
-        body=body,
+    shell = create_kernel_module(
+        KernelModuleSpec(
+            target_preset=target_preset,
+            target_symbol=target_symbol,
+            export_symbol=kernel_name,
+            export_ordinal=export_ordinal,
+            workgroup_size=workgroup,
+            callee=kernel_name,
+            arguments=[
+                KernelArgumentSpec(
+                    ordinal=binding.binding,
+                    name=f"binding{binding.binding}",
+                )
+                for binding in bindings
+            ],
+        )
     )
+    module = shell.module
+    builder = shell.builder
+    binding_args = shell.arguments_by_ordinal
 
     topology_values: dict[tuple[str, str], ValueRef] = {}
     prelude_values: dict[Any, tuple[ValueRef, str | None]] = {}
     attr_decoder = MlirAttributeDecoder()
 
-    with builder.insertion_block(body.blocks[0]):
+    with builder.insertion_block(shell.body_block):
         binding_by_result = {binding.result: binding for binding in bindings}
         for operation in walk_operations(function_operation):
             name = operation_name(operation)
@@ -410,7 +413,7 @@ def build_loom_module(
             builder,
             prelude_values,
             diagnostics=diagnostics,
-            preview_block=body.blocks[0],
+            preview_block=shell.body_block,
             type_converter=type_converter,
             source_names=source_names,
             binding_args=binding_args,
@@ -431,24 +434,6 @@ def workgroup_axis(dimension: int | None) -> str | None:
     if dimension is None:
         return None
     return AXIS_BY_INDEX.get(dimension, str(dimension))
-
-
-def sanitize_symbol(value: str) -> str:
-    chars: list[str] = []
-    previous_was_underscore = False
-    for char in value:
-        if char.isalnum() or char == "_":
-            chars.append(char)
-            previous_was_underscore = False
-        elif not previous_was_underscore:
-            chars.append("_")
-            previous_was_underscore = True
-    sanitized = "".join(chars).strip("_")
-    if not sanitized:
-        sanitized = "target"
-    if sanitized[0].isdigit():
-        sanitized = f"t_{sanitized}"
-    return sanitized
 
 
 def format_import_report(
@@ -531,10 +516,3 @@ def format_import_report(
         for name, count in sorted(facts.converted_body.unsupported_counts.items()):
             lines.append(f"- `{name}`: {count}")
     return "\n".join(lines) + "\n"
-
-
-def print_loom_module(module: Module, *, print_locations: bool = False) -> str:
-    printer = Printer(print_locations=print_locations)
-    printer.register_ops(loom.default_ops())
-    printer.register_types(loom.default_types())
-    return printer.print_module(module)

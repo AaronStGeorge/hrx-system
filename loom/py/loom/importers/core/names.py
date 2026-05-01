@@ -42,6 +42,27 @@ def sanitize_identifier(value: str, *, fallback: str = "v") -> str:
     return sanitized
 
 
+def sanitize_symbol(value: str | None, *, fallback: str = "symbol") -> str:
+    """Sanitize a source spelling into a Loom symbol name."""
+    if value is None:
+        value = fallback
+    chars: list[str] = []
+    previous_was_underscore = False
+    for char in value:
+        if char.isalnum() or char == "_":
+            chars.append(char)
+            previous_was_underscore = False
+        elif not previous_was_underscore:
+            chars.append("_")
+            previous_was_underscore = True
+    sanitized = "".join(chars).strip("_")
+    if not sanitized:
+        sanitized = fallback
+    if sanitized[0].isdigit():
+        sanitized = f"{fallback}_{sanitized}"
+    return sanitized
+
+
 @dataclass(slots=True)
 class NameAllocator:
     """Allocates stable names while preserving meaningful source names."""

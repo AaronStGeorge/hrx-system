@@ -6,12 +6,12 @@
 
 """MLIR/IREE HAL kernel importer for Loom."""
 
+from loom.importers.core import print_loom_module
 from loom.importers.mlir.importer import (
     MlirImportOptions,
     format_import_report,
     import_mlir_file,
     import_mlir_module,
-    print_loom_module,
 )
 
 __all__ = [

@@ -12,12 +12,11 @@ import argparse
 import sys
 from pathlib import Path
 
-from loom.importers.core import LoomImportError
+from loom.importers.core import LoomImportError, print_loom_module
 from loom.importers.mlir.importer import (
     MlirImportOptions,
     format_import_report,
     import_mlir_file,
-    print_loom_module,
 )
 
 

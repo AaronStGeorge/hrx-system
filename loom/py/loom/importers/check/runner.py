@@ -218,11 +218,10 @@ def import_mlir_case(
     *,
     options: MlirCheckOptions,
 ) -> CheckResult:
-    from loom.importers.core import LoomImportError
+    from loom.importers.core import LoomImportError, print_loom_module
     from loom.importers.mlir.importer import (
         MlirImportOptions,
         import_mlir_module,
-        print_loom_module,
     )
 
     run_options = parse_mlir_run(case.run)

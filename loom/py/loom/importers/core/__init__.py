@@ -12,8 +12,21 @@ from loom.importers.core.diagnostics import (
     DiagnosticSeverity,
     LoomImportError,
 )
-from loom.importers.core.names import NameAllocator, sanitize_identifier, source_name
+from loom.importers.core.kernel import (
+    KernelArgumentSpec,
+    KernelModuleShell,
+    KernelModuleSpec,
+    create_kernel_module,
+    normalize_workgroup_size,
+)
+from loom.importers.core.names import (
+    NameAllocator,
+    sanitize_identifier,
+    sanitize_symbol,
+    source_name,
+)
 from loom.importers.core.options import ImportOptions, ImportResult
+from loom.importers.core.printing import print_loom_module
 from loom.importers.core.session import (
     ConversionRecord,
     ImportBodyReport,
@@ -29,10 +42,17 @@ __all__ = [
     "ImportBodyReport",
     "ImportOptions",
     "ImportResult",
+    "KernelArgumentSpec",
+    "KernelModuleShell",
+    "KernelModuleSpec",
     "LoomImportError",
     "NameAllocator",
     "SourceImportSession",
     "StructuralVerifier",
+    "create_kernel_module",
+    "normalize_workgroup_size",
+    "print_loom_module",
     "sanitize_identifier",
+    "sanitize_symbol",
     "source_name",
 ]
