@@ -78,10 +78,6 @@ iree_status_t loom_vector_to_scalar_copy_static_indices(
     iree_host_size_t index_count, int64_t** out_indices) {
   *out_indices = NULL;
   if (index_count == 0) return iree_ok_status();
-  if (!indices) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "static index storage is required");
-  }
   int64_t* copied_indices = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       builder->arena, index_count, sizeof(int64_t), (void**)&copied_indices));

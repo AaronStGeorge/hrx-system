@@ -725,14 +725,6 @@ iree_status_t loom_print_attr(loom_output_stream_t* stream,
 iree_status_t loom_text_print_attribute(const loom_attribute_t* attr,
                                         const loom_module_t* module,
                                         loom_output_stream_t* stream) {
-  if (attr == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "attribute to print is required");
-  }
-  if (stream == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "attribute output stream is required");
-  }
   return loom_print_attr(stream, attr, module, NULL);
 }
 

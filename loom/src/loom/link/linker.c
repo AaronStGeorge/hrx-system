@@ -1180,10 +1180,6 @@ static iree_status_t loom_link_validate_inputs(
                             "source module 0 is NULL");
   }
   loom_context_t* context = source_modules[0]->context;
-  if (!context) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "source module context is required");
-  }
   for (iree_host_size_t i = 0; i < source_module_count; ++i) {
     if (!source_modules[i]) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
