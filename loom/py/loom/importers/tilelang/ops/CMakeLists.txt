@@ -20,6 +20,7 @@ iree_py_library(
     "memory.py"
     "scalar.py"
     "structure.py"
+    "topology.py"
   DEPS
     iree::runtime::py::loom::core
     iree::runtime::py::loom::importers::core::core

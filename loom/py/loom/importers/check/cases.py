@@ -168,9 +168,9 @@ def _split_raw_case_spans(
 
 
 def trim_separator_spacer(lines: list[str]) -> None:
-    """Drops the optional blank line before a case separator."""
+    """Drops formatting-only blank lines before a case separator."""
 
-    if lines and not lines[-1].strip():
+    while lines and not lines[-1].strip():
         lines.pop()
 
 

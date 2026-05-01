@@ -37,6 +37,7 @@ from loom.importers.tilelang.nodes import (
     mapping_items,
     source_name,
 )
+from loom.importers.tilelang.ops.topology import collect_thread_extents, integer_value
 from loom.importers.tilelang.types import TileLangTypeConverter
 from loom.ir import BUFFER_TYPE, Module, rebuild_value_metadata
 from loom.verify import verify_module
@@ -260,12 +261,20 @@ def _map_kernel_arguments(
 
 def _workgroup_size(prim_func: object) -> tuple[int, int, int]:
     source_attrs = attrs(prim_func)
+    body_extents = collect_thread_extents(getattr(prim_func, "body", None))
     thread_extent = source_attrs.get("thread_extent")
-    if isinstance(thread_extent, Mapping):
+    thread_extent_items = mapping_items(thread_extent)
+    if thread_extent_items or body_extents:
+        extents = {str(key): value for key, value in body_extents.items()}
+        for key, value in thread_extent_items:
+            extent = integer_value(value)
+            if extent is None:
+                raise ValueError(f"TileLang thread extent `{key}` is not static")
+            extents[str(key)] = extent
         return (
-            int(thread_extent.get("threadIdx.x", 1)),
-            int(thread_extent.get("threadIdx.y", 1)),
-            int(thread_extent.get("threadIdx.z", 1)),
+            int(extents.get("threadIdx.x", 1)),
+            int(extents.get("threadIdx.y", 1)),
+            int(extents.get("threadIdx.z", 1)),
         )
     launch = source_attrs.get("tir.kernel_launch_params")
     if isinstance(launch, Mapping):

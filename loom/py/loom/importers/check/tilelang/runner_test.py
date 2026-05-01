@@ -98,12 +98,20 @@ def copy():
     assert "view.store" in updated_source
 
 
-def test_run_tilelang_check_verifies_checked_in_scalar_fixture() -> None:
-    path = Path(__file__).resolve().parent / "testdata" / "scalar_calls.py"
+def test_run_tilelang_check_verifies_checked_in_fixtures() -> None:
+    testdata = Path(__file__).resolve().parent / "testdata"
+    expected_statuses = {
+        "scalar_calls.py": ["passed", "passed"],
+        "topology.py": ["passed", "passed"],
+    }
 
-    results = run_tilelang_check(
-        path,
-        options=TileLangCheckOptions(),
-    )
+    for filename, statuses in expected_statuses.items():
+        results = run_tilelang_check(
+            testdata / filename,
+            options=TileLangCheckOptions(),
+        )
 
-    assert [result.status for result in results] == ["passed", "passed"]
+        assert [result.status for result in results] == statuses, [
+            (result.status, result.mismatch, result.stderr, result.diff)
+            for result in results
+        ]

@@ -28,6 +28,12 @@ def test_split_raw_cases_ignores_separator_spacer() -> None:
     assert split_raw_cases(source) == ("case 0\n", "case 1\n")
 
 
+def test_split_raw_cases_ignores_multiple_separator_spacer_lines() -> None:
+    source = "case 0\n\n\n// ====\ncase 1\n"
+
+    assert split_raw_cases(source) == ("case 0\n", "case 1\n")
+
+
 def test_split_expected_uses_loom_check_expected_separator() -> None:
     source, expected, has_expected = split_expected("input\n// ----\nexpected\n")
 

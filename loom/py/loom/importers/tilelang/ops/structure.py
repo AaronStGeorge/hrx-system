@@ -16,6 +16,13 @@ from loom.importers.tilelang.converter import (
     TileLangConverterRegistry,
 )
 from loom.importers.tilelang.nodes import node_text, source_name
+from loom.importers.tilelang.ops.topology import (
+    map_thread_axis,
+    mapped_thread_axis_sources,
+    thread_axis_from_binding,
+    thread_axis_name,
+    thread_tag,
+)
 
 
 def register(registry: TileLangConverterRegistry) -> None:
@@ -87,6 +94,39 @@ def convert_attr_stmt(
     """Normalize known metadata-only AttrStmt wrappers."""
 
     attr_key = str(getattr(stmt, "attr_key", ""))
+    if attr_key == "thread_extent":
+        node = getattr(stmt, "node", None)
+        thread_axis = thread_axis_from_binding(node)
+        if thread_axis is None:
+            if thread_tag(node) is not None:
+                context.record_blocked(
+                    node_text(stmt),
+                    "thread_extent axis is not mapped",
+                )
+                return
+            converter.convert_stmt(getattr(stmt, "body", None), context)
+            context.record_converted(
+                node_text(stmt),
+                "AttrStmt `thread_extent` normalized",
+            )
+            return
+        thread_value = map_thread_axis(
+            axis=thread_axis,
+            sources=mapped_thread_axis_sources(binding=node),
+            context=context,
+            converter=converter,
+            name=thread_axis_name(node, thread_axis),
+        )
+        if thread_value is None:
+            context.record_blocked(node_text(stmt), "thread_extent value is not mapped")
+            return
+        converter.convert_stmt(getattr(stmt, "body", None), context)
+        operation_name = f"kernel.{thread_axis.loom_scope}.id<{thread_axis.dimension}>"
+        context.record_converted(
+            node_text(stmt),
+            f"{context.ssa(thread_value)} = {operation_name}",
+        )
+        return
     if attr_key not in _NORMALIZED_ATTR_KEYS:
         context.record_blocked(node_text(stmt), f"AttrStmt `{attr_key}` is not mapped")
         return

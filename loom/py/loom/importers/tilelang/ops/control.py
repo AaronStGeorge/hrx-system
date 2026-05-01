@@ -16,6 +16,12 @@ from loom.importers.tilelang.converter import (
     TileLangConverterRegistry,
 )
 from loom.importers.tilelang.nodes import node_text, source_name
+from loom.importers.tilelang.ops.topology import (
+    map_thread_axis,
+    mapped_thread_axis_sources,
+    thread_axis_from_binding,
+    thread_axis_name,
+)
 from loom.ir import INDEX
 
 
@@ -45,6 +51,37 @@ def convert_for(
     """Import a TIR for-loop as scf.for."""
 
     loop_var = getattr(stmt, "loop_var", None)
+    thread_binding = getattr(stmt, "thread_binding", None)
+    thread_axis = thread_axis_from_binding(thread_binding)
+    if thread_binding is not None and thread_axis is None:
+        context.record_blocked(node_text(stmt), "thread binding axis is not mapped")
+        return
+    if thread_axis is not None:
+        thread_value = map_thread_axis(
+            axis=thread_axis,
+            sources=mapped_thread_axis_sources(
+                loop_var=loop_var,
+                binding=thread_binding,
+            ),
+            context=context,
+            converter=converter,
+            lower=getattr(stmt, "min", None),
+            name=thread_axis_name(loop_var, thread_axis),
+        )
+        if thread_value is None:
+            context.record_blocked(
+                node_text(stmt),
+                "thread binding lower bound is not mapped",
+            )
+            return
+        converter.convert_stmt(getattr(stmt, "body", None), context)
+        operation_name = f"kernel.{thread_axis.loom_scope}.id<{thread_axis.dimension}>"
+        context.record_converted(
+            node_text(stmt),
+            f"{context.ssa(thread_value)} = {operation_name}",
+        )
+        return
+
     loop_name = sanitize_identifier(source_name(loop_var, fallback="iv"))
     lower = converter.convert_expr(
         getattr(stmt, "min", None),

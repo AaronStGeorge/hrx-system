@@ -5,122 +5,19 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 # ruff: noqa: E501, ERA001
 
-from collections.abc import Mapping, Sequence
-
 from loom.importers.check.tilelang import TileLangImportInput, tilelang_case
-
-
-class Var:
-    def __init__(self, name: str, dtype: str = "int32") -> None:
-        self.name = name
-        self.dtype = dtype
-
-    def __repr__(self) -> str:
-        return self.name
-
-
-class Buffer:
-    def __init__(self, name: str, shape: tuple[int, ...], dtype: str) -> None:
-        self.name = name
-        self.shape = shape
-        self.dtype = dtype
-
-    def __repr__(self) -> str:
-        return self.name
-
-
-class PrimFunc:
-    def __init__(
-        self,
-        params: Sequence[Var],
-        buffer_map: Mapping[Var, Buffer],
-        body: object,
-        attrs: Mapping[str, object] | None = None,
-    ) -> None:
-        self.params = params
-        self.buffer_map = buffer_map
-        self.body = body
-        self.attrs = {} if attrs is None else attrs
-
-
-class For:
-    def __init__(
-        self,
-        loop_var: Var,
-        minimum: object,
-        extent: object,
-        body: object,
-    ) -> None:
-        self.loop_var = loop_var
-        self.min = minimum
-        self.extent = extent
-        self.body = body
-
-
-class IfThenElse:
-    def __init__(self, condition: object, then_case: object, else_case: object) -> None:
-        self.condition = condition
-        self.then_case = then_case
-        self.else_case = else_case
-
-
-class BufferLoad:
-    def __init__(
-        self,
-        buffer: Buffer,
-        indices: Sequence[object],
-        dtype: str = "float32",
-    ) -> None:
-        self.buffer = buffer
-        self.indices = tuple(indices)
-        self.dtype = dtype
-
-
-class BufferStore:
-    def __init__(
-        self,
-        buffer: Buffer,
-        value: object,
-        indices: Sequence[object],
-    ) -> None:
-        self.buffer = buffer
-        self.value = value
-        self.indices = tuple(indices)
-
-
-class IntImm:
-    def __init__(self, value: int, dtype: str = "int32") -> None:
-        self.value = value
-        self.dtype = dtype
-
-
-class Add:
-    def __init__(self, lhs: object, rhs: object, dtype: str = "float32") -> None:
-        self.a = lhs
-        self.b = rhs
-        self.dtype = dtype
-
-
-class Op:
-    def __init__(self, name: str) -> None:
-        self.name = name
-
-
-class Call:
-    def __init__(
-        self,
-        op_name: str,
-        args: Sequence[object],
-        dtype: str = "float32",
-        annotations: Mapping[str, object] | None = None,
-    ) -> None:
-        self.op = Op(op_name)
-        self.args = tuple(args)
-        self.dtype = dtype
-        self.annotations = {} if annotations is None else dict(annotations)
-
-    def __repr__(self) -> str:
-        return f"{self.op.name}(...)"
+from loom.importers.check.tilelang.testdata.tir_fakes import (
+    Add,
+    Buffer,
+    BufferLoad,
+    BufferStore,
+    Call,
+    For,
+    IfThenElse,
+    IntImm,
+    PrimFunc,
+    Var,
+)
 
 
 # ====
