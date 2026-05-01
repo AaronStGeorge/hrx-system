@@ -155,10 +155,6 @@ loom_llvmir_amdgpu_target_profile_provider(void) {
 
 iree_status_t loom_llvmir_target_profile_initialize_amdgpu_hal(
     loom_llvmir_target_profile_t* out_profile) {
-  if (out_profile == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "LLVM target profile output is required");
-  }
   *out_profile = kAmdgpuHalProfile;
   return iree_ok_status();
 }

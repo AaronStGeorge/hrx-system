@@ -298,11 +298,6 @@ iree_status_t loom_llvmir_target_legality_expect_constant_operand(
 static iree_status_t loom_llvmir_target_legality_validate_options(
     loom_llvmir_target_legality_context_t* context) {
   const loom_llvmir_target_legality_options_t* options = context->options;
-  if (!options->snapshot) {
-    return loom_llvmir_target_legality_fail(
-        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("target snapshot is required"), iree_string_view_empty());
-  }
   if (options->snapshot->codegen_format != LOOM_TARGET_CODEGEN_FORMAT_LLVMIR) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
@@ -323,16 +318,6 @@ static iree_status_t loom_llvmir_target_legality_validate_options(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
         IREE_SV("target generic pointer address space is unavailable"),
         options->snapshot->name);
-  }
-  if (!options->export_plan) {
-    return loom_llvmir_target_legality_fail(
-        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("target export plan is required"), options->snapshot->name);
-  }
-  if (!options->config) {
-    return loom_llvmir_target_legality_fail(
-        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("target config is required"), options->snapshot->name);
   }
   if (options->export_plan->abi_kind == LOOM_TARGET_ABI_HAL_KERNEL) {
     if (options->snapshot->memory_spaces.global == UINT32_MAX) {
@@ -363,28 +348,6 @@ static iree_status_t loom_llvmir_target_legality_validate_options(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
         IREE_SV("target records cannot derive an LLVMIR profile"),
         options->snapshot->name);
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_llvmir_target_legality_validate_providers(
-    loom_llvmir_target_legality_context_t* context) {
-  const loom_llvmir_target_legality_options_t* options = context->options;
-  if (options->provider_count > 0 && options->providers == NULL) {
-    return loom_llvmir_target_legality_fail(
-        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("LLVMIR legality providers are required"),
-        iree_string_view_empty());
-  }
-  for (iree_host_size_t i = 0; i < options->provider_count; ++i) {
-    const loom_llvmir_target_legality_provider_t* provider =
-        options->providers[i];
-    if (provider == NULL || provider->try_verify_op == NULL) {
-      return loom_llvmir_target_legality_fail(
-          context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-          IREE_SV("LLVMIR legality provider is invalid"),
-          iree_string_view_empty());
-    }
   }
   return iree_ok_status();
 }
@@ -940,24 +903,12 @@ iree_status_t loom_llvmir_verify_target_legality(
     const loom_llvmir_target_legality_options_t* options,
     loom_llvmir_target_legality_diagnostic_t* out_diagnostic) {
   loom_llvmir_target_legality_reset_diagnostic(out_diagnostic);
-  if (!module || !options) {
-    if (out_diagnostic) {
-      *out_diagnostic = (loom_llvmir_target_legality_diagnostic_t){
-          .code = LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET,
-          .detail = IREE_SV("module and options are required"),
-      };
-    }
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "module and LLVMIR legality options are required");
-  }
   loom_llvmir_target_legality_context_t context = {
       .module = module,
       .options = options,
       .diagnostic = out_diagnostic,
   };
   IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_validate_options(&context));
-  IREE_RETURN_IF_ERROR(
-      loom_llvmir_target_legality_validate_providers(&context));
   IREE_RETURN_IF_ERROR(
       loom_llvmir_target_legality_verify_value_types(&context));
   IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_verify_functions(&context));

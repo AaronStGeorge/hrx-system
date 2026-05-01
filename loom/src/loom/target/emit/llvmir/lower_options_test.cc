@@ -38,45 +38,6 @@ class LlvmIrLowerOptionsTest : public ::testing::Test {
   loom_module_t* module_ = NULL;
 };
 
-TEST_F(LlvmIrLowerOptionsTest, RequiresTargetProfile) {
-  loom_llvmir_lowering_options_t options = {};
-  loom_llvmir_module_t* lowered = NULL;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_llvmir_lower_module(module_, &options, iree_allocator_system(),
-                               &lowered));
-  EXPECT_EQ(lowered, nullptr);
-}
-
-TEST_F(LlvmIrLowerOptionsTest, RejectsProviderCountWithoutProviderList) {
-  loom_llvmir_lowering_options_t options = {};
-  options.target_profile = loom_llvmir_target_profile_test_object();
-  options.provider_count = 1;
-
-  loom_llvmir_module_t* lowered = NULL;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_llvmir_lower_module(module_, &options, iree_allocator_system(),
-                               &lowered));
-  EXPECT_EQ(lowered, nullptr);
-}
-
-TEST_F(LlvmIrLowerOptionsTest, RejectsInvalidProviderRow) {
-  loom_llvmir_lowering_provider_t invalid_provider = {};
-  const loom_llvmir_lowering_provider_t* providers[] = {&invalid_provider};
-  loom_llvmir_lowering_options_t options = {};
-  options.target_profile = loom_llvmir_target_profile_test_object();
-  options.providers = providers;
-  options.provider_count = IREE_ARRAYSIZE(providers);
-
-  loom_llvmir_module_t* lowered = NULL;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_llvmir_lower_module(module_, &options, iree_allocator_system(),
-                               &lowered));
-  EXPECT_EQ(lowered, nullptr);
-}
-
 TEST_F(LlvmIrLowerOptionsTest, LowersEmptyModule) {
   loom_llvmir_lowering_options_t options = {};
   options.target_profile = loom_llvmir_target_profile_test_object();

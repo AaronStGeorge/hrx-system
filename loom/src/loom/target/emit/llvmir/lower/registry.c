@@ -1312,17 +1312,6 @@ static iree_status_t loom_llvmir_lowering_state_initialize(
   state->symbol_function_count = source_module->symbols.count;
   state->kernel_attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
   state->nontemporal_metadata_id = LOOM_LLVMIR_METADATA_ID_INVALID;
-  if (state->provider_count > 0 && state->providers == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "LLVMIR lowering providers are required");
-  }
-  for (iree_host_size_t i = 0; i < state->provider_count; ++i) {
-    if (state->providers[i] == NULL ||
-        state->providers[i]->try_lower_op == NULL) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "LLVMIR lowering provider is invalid");
-    }
-  }
 
   iree_string_view_t source_name = options->source_name;
   if (iree_string_view_is_empty(source_name)) {
@@ -1409,12 +1398,6 @@ iree_status_t loom_llvmir_lower_module(
     const loom_module_t* source_module,
     const loom_llvmir_lowering_options_t* options, iree_allocator_t allocator,
     loom_llvmir_module_t** out_module) {
-  if (!source_module || !options || !options->target_profile ||
-      !options->target_profile->target_env || !out_module) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "source module, options, target profile, target "
-                            "environment, and out_module are required");
-  }
   *out_module = NULL;
 
   loom_llvmir_lowering_state_t state;
