@@ -9,7 +9,6 @@ load(
     "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_low_descriptor_cc_library",
-    "loom_target_table_cc_library",
 )
 
 package(
@@ -34,10 +33,10 @@ loom_assert_no_dependencies(
     targets = [
         ":alt_descriptors",
         ":descriptors",
-        ":lower_rules",
         ":lower",
         ":low_registry",
         "//loom/src/loom/target/test/contracts:core",
+        "//loom/src/loom/target/test/contracts:core_lower_rules",
     ],
 )
 
@@ -68,20 +67,6 @@ loom_low_descriptor_cc_library(
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
-loom_target_table_cc_library(
-    name = "lower_rules",
-    args = ["--contract-fragment=test_low_core"],
-    generator = "//loom/py/loom/gen:test_low_lower_rule_shard",
-    deps = [
-        ":descriptors",
-        "//loom/src/loom/codegen/low:lower",
-        "//loom/src/loom/ops/buffer",
-        "//loom/src/loom/ops/index",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/vector",
-    ],
-)
-
 loom_cc_library(
     name = "low_registry",
     srcs = ["low_registry.c"],
@@ -101,10 +86,10 @@ loom_cc_library(
     hdrs = ["lower.h"],
     deps = [
         ":descriptors",
-        ":lower_rules",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ir",
         "//loom/src/loom/target/test/contracts:core",
+        "//loom/src/loom/target/test/contracts:core_lower_rules",
         "//runtime/src/iree/base",
     ],
 )

@@ -10,7 +10,6 @@ load(
     "loom_cc_library",
     "loom_cc_test",
     "loom_low_descriptor_cc_library",
-    "loom_target_table_cc_library",
 )
 load(
     "//loom/build_tools/bazel:loom_check.bzl",
@@ -106,17 +105,6 @@ loom_low_descriptor_cc_library(
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
-loom_target_table_cc_library(
-    name = "core_lower_rules",
-    args = ["--contract-fragment=iree.vm.core"],
-    generator = "//loom/py/loom/gen:ireevm_lower_rule_shard",
-    deps = [
-        ":descriptors_ids",
-        "//loom/src/loom/codegen/low:lower",
-        "//loom/src/loom/ops/scalar",
-    ],
-)
-
 loom_cc_library(
     name = "low_registry",
     srcs = ["low_registry.c"],
@@ -206,13 +194,13 @@ loom_cc_library(
     srcs = ["lower/registry.c"],
     hdrs = ["lower.h"],
     deps = [
-        ":core_lower_rules",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/target/emit/ireevm:descriptors_ids",
         "//loom/src/loom/target/emit/ireevm/contracts:core",
+        "//loom/src/loom/target/emit/ireevm/contracts:core_lower_rules",
         "//runtime/src/iree/base",
     ],
 )

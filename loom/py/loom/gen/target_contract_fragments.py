@@ -23,6 +23,7 @@ from loom.target.contracts import (
     ContractSystem,
     compile_contract_fragment,
     compile_lower_rule_set,
+    contract_fragment_public_header,
 )
 
 _UINT8_MAX = 0xFF
@@ -240,19 +241,7 @@ def _validate_c_shard_shape(table: CompiledContractFragment) -> None:
 
 
 def _generated_public_header(table: ContractFragment) -> str:
-    if table.public_header:
-        return table.public_header
-    name_parts = _identifier_parts(table.name)
-    if len(name_parts) == 2:
-        target_name, family_name = name_parts
-        return f"loom/target/arch/{target_name}/contracts/{family_name}.h"
-    if name_parts[:2] == ("iree", "vm"):
-        return f"loom/target/emit/ireevm/contracts/{'_'.join(name_parts[2:])}.h"
-    if name_parts[:1] == ("wasm",):
-        return f"loom/target/emit/wasm/contracts/{'_'.join(name_parts[1:])}.h"
-    if name_parts[:2] == ("test", "low"):
-        return f"loom/target/test/contracts/{'_'.join(name_parts[2:])}.h"
-    raise ValueError(f"contract fragment '{table.name}' requires public_header")
+    return contract_fragment_public_header(table)
 
 
 def _generated_symbol_name(table: ContractFragment) -> str:

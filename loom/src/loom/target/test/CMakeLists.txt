@@ -32,22 +32,6 @@ loom_low_descriptor_cc_library(
     loom::src::loom::codegen::low::descriptors
 )
 
-loom_target_table_cc_library(
-  NAME
-    lower_rules
-  GENERATOR
-    iree::runtime::py::loom::gen::test_low_lower_rule_shard
-  ARGS
-    "--contract-fragment=test_low_core"
-  DEPS
-    ::descriptors
-    loom::src::loom::codegen::low::lower
-    loom::src::loom::ops::buffer
-    loom::src::loom::ops::index
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::vector
-)
-
 loom_cc_library(
   NAME
     low_registry
@@ -73,11 +57,11 @@ loom_cc_library(
     "lower/registry.c"
   DEPS
     ::descriptors
-    ::lower_rules
     iree::base
     loom::src::loom::codegen::low::lower
     loom::src::loom::ir
     loom::src::loom::target::test::contracts::core
+    loom::src::loom::target::test::contracts::core_lower_rules
   PUBLIC
 )
 

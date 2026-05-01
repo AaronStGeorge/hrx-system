@@ -6,10 +6,12 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
-    "loom_target_table_cc_library",
+)
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_assert_no_dependencies",
 )
 
 package(
@@ -108,25 +110,11 @@ loom_cc_library(
     ],
 )
 
-loom_target_table_cc_library(
-    name = "core_simd128_lower_rules",
-    args = ["--contract-fragment=wasm.core.simd128"],
-    generator = "//loom/py/loom/gen:wasm_lower_rule_shard",
-    deps = [
-        "//loom/src/loom/codegen/low:lower",
-        "//loom/src/loom/ops/index",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/vector",
-        "//loom/src/loom/target/arch/wasm:descriptors_ids",
-    ],
-)
-
 loom_cc_library(
     name = "lower",
     srcs = ["lower/registry.c"],
     hdrs = ["lower.h"],
     deps = [
-        ":core_simd128_lower_rules",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/codegen/low:source_memory_plan",
         "//loom/src/loom/ir",
@@ -138,6 +126,7 @@ loom_cc_library(
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/target/arch/wasm:descriptors_ids",
         "//loom/src/loom/target/emit/wasm/contracts:core_simd128",
+        "//loom/src/loom/target/emit/wasm/contracts:core_simd128_lower_rules",
         "//runtime/src/iree/base",
     ],
 )

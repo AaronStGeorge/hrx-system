@@ -23,6 +23,23 @@ loom_target_table_cc_library(
 
 loom_target_table_cc_library(
   NAME
+    arithmetic_lower_rules
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
+  ARGS
+    "--contract-fragment=amdgpu.arithmetic"
+  DEPS
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::index
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::vector
+    loom::src::loom::target::arch::amdgpu::descriptor_ids
+    loom::src::loom::target::arch::amdgpu::lower_kinds
+    loom::src::loom::target::arch::amdgpu::lower_materializers
+)
+
+loom_target_table_cc_library(
+  NAME
     async
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_contract_fragment
@@ -30,6 +47,18 @@ loom_target_table_cc_library(
     "--contract-fragment=amdgpu.async"
   DEPS
     loom::src::loom::target::contract
+)
+
+loom_target_table_cc_library(
+  NAME
+    async_lower_rules
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
+  ARGS
+    "--contract-fragment=amdgpu.async"
+  DEPS
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::kernel
 )
 
 loom_target_table_cc_library(
@@ -45,6 +74,20 @@ loom_target_table_cc_library(
 
 loom_target_table_cc_library(
   NAME
+    compare_lower_rules
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
+  ARGS
+    "--contract-fragment=amdgpu.compare"
+  DEPS
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::scalar
+    loom::src::loom::target::arch::amdgpu::descriptor_ids
+    loom::src::loom::target::arch::amdgpu::lower_materializers
+)
+
+loom_target_table_cc_library(
+  NAME
     dot
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_contract_fragment
@@ -52,6 +95,20 @@ loom_target_table_cc_library(
     "--contract-fragment=amdgpu.dot"
   DEPS
     loom::src::loom::target::contract
+)
+
+loom_target_table_cc_library(
+  NAME
+    dot_lower_rules
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
+  ARGS
+    "--contract-fragment=amdgpu.dot"
+  DEPS
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::vector
+    loom::src::loom::target::arch::amdgpu::descriptor_ids
+    loom::src::loom::target::arch::amdgpu::lower_kinds
 )
 
 loom_target_table_cc_library(
@@ -67,6 +124,21 @@ loom_target_table_cc_library(
 
 loom_target_table_cc_library(
   NAME
+    integer_lower_rules
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
+  ARGS
+    "--contract-fragment=amdgpu.integer"
+  DEPS
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::index
+    loom::src::loom::ops::scalar
+    loom::src::loom::target::arch::amdgpu::descriptor_ids
+    loom::src::loom::target::arch::amdgpu::lower_materializers
+)
+
+loom_target_table_cc_library(
+  NAME
     reduce
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_contract_fragment
@@ -74,6 +146,21 @@ loom_target_table_cc_library(
     "--contract-fragment=amdgpu.reduce"
   DEPS
     loom::src::loom::target::contract
+)
+
+loom_target_table_cc_library(
+  NAME
+    reduce_lower_rules
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
+  ARGS
+    "--contract-fragment=amdgpu.reduce"
+  DEPS
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::vector
+    loom::src::loom::target::arch::amdgpu::descriptor_ids
+    loom::src::loom::target::arch::amdgpu::lower_kinds
+    loom::src::loom::target::arch::amdgpu::lower_materializers
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

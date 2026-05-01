@@ -79,21 +79,6 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_target_table_cc_library(
-  NAME
-    core_simd128_lower_rules
-  GENERATOR
-    iree::runtime::py::loom::gen::wasm_lower_rule_shard
-  ARGS
-    "--contract-fragment=wasm.core.simd128"
-  DEPS
-    loom::src::loom::codegen::low::lower
-    loom::src::loom::ops::index
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::vector
-    loom::src::loom::target::arch::wasm::descriptors_ids
-)
-
 loom_cc_library(
   NAME
     lower
@@ -102,7 +87,6 @@ loom_cc_library(
   SRCS
     "lower/registry.c"
   DEPS
-    ::core_simd128_lower_rules
     iree::base
     loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::source_memory_plan
@@ -115,6 +99,7 @@ loom_cc_library(
     loom::src::loom::ops::vector
     loom::src::loom::target::arch::wasm::descriptors_ids
     loom::src::loom::target::emit::wasm::contracts::core_simd128
+    loom::src::loom::target::emit::wasm::contracts::core_simd128_lower_rules
   PUBLIC
 )
 

@@ -20,7 +20,10 @@ from loom.target.contracts.descriptors import (
     descriptor_by_semantic_tag,
 )
 from loom.target.contracts.emits import DescriptorEmitForm, EmitDescriptorOp
-from loom.target.contracts.fragments import ContractFragment
+from loom.target.contracts.fragments import (
+    ContractFragment,
+    contract_fragment_public_header,
+)
 from loom.target.contracts.guards import Guard, GuardDiagnostic, GuardKind
 from loom.target.contracts.immediates import (
     AttrProject,
@@ -134,6 +137,7 @@ __all__ = [
     "compile_contract_fragment",
     "compile_lower_rule_set",
     "compare_descriptor_rules",
+    "contract_fragment_public_header",
     "descriptor_by_key",
     "descriptor_by_semantic_tag",
     "reduction_descriptor_rules",

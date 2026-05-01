@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/target/emit/ireevm/contracts/core.h"
-#include "loom/target/emit/ireevm/core_lower_rules.h"
+#include "loom/target/emit/ireevm/contracts/core_lower_rules.h"
 #include "loom/target/emit/ireevm/descriptors.h"
 #include "loom/target/emit/ireevm/lower.h"
 

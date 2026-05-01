@@ -24,9 +24,9 @@
 #include "loom/ops/target/ops.h"
 #include "loom/pass/value_facts.h"
 #include "loom/target/test/contracts/core.h"
+#include "loom/target/test/contracts/core_lower_rules.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/target/test/lower.h"
-#include "loom/target/test/lower_rules.h"
 #include "loom/testing/module_ptr.h"
 
 namespace loom {

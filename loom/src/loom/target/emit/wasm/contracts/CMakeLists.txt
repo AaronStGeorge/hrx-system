@@ -21,4 +21,19 @@ loom_target_table_cc_library(
     loom::src::loom::target::contract
 )
 
+loom_target_table_cc_library(
+  NAME
+    core_simd128_lower_rules
+  GENERATOR
+    iree::runtime::py::loom::gen::wasm_lower_rule_shard
+  ARGS
+    "--contract-fragment=wasm.core.simd128"
+  DEPS
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::index
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::vector
+    loom::src::loom::target::arch::wasm::descriptors_ids
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

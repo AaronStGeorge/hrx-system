@@ -21,4 +21,20 @@ loom_target_table_cc_library(
     loom::src::loom::target::contract
 )
 
+loom_target_table_cc_library(
+  NAME
+    core_lower_rules
+  GENERATOR
+    iree::runtime::py::loom::gen::test_low_lower_rule_shard
+  ARGS
+    "--contract-fragment=test_low_core"
+  DEPS
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::buffer
+    loom::src::loom::ops::index
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::vector
+    loom::src::loom::target::test::descriptors
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

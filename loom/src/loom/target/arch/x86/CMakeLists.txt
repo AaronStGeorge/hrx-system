@@ -53,21 +53,6 @@ loom_low_descriptor_cc_library(
     loom::src::loom::codegen::low::descriptors
 )
 
-loom_target_table_cc_library(
-  NAME
-    avx512_lower_rules
-  GENERATOR
-    iree::runtime::py::loom::gen::x86_lower_rule_shard
-  ARGS
-    "--contract-fragment=x86.avx512"
-  DEPS
-    ::avx512_descriptors_ids
-    loom::src::loom::codegen::low::lower
-    loom::src::loom::ops::index
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::vector
-)
-
 loom_cc_library(
   NAME
     low_registry
@@ -99,7 +84,6 @@ loom_cc_library(
     "lower/registry.c"
   DEPS
     ::avx512_descriptors_ids
-    ::avx512_lower_rules
     ::avx512_packed_dot_descriptors_ids
     ::packed_dot_contract
     ::packed_dot_descriptors_ids
@@ -116,6 +100,7 @@ loom_cc_library(
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector
     loom::src::loom::target::arch::x86::contracts::avx512
+    loom::src::loom::target::arch::x86::contracts::avx512_lower_rules
     loom::src::loom::target::low_legality
   PUBLIC
 )

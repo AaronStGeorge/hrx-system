@@ -21,19 +21,6 @@ loom_low_descriptor_cc_library(
     loom::src::loom::codegen::low::descriptors
 )
 
-loom_target_table_cc_library(
-  NAME
-    core_lower_rules
-  GENERATOR
-    iree::runtime::py::loom::gen::ireevm_lower_rule_shard
-  ARGS
-    "--contract-fragment=iree.vm.core"
-  DEPS
-    ::descriptors_ids
-    loom::src::loom::codegen::low::lower
-    loom::src::loom::ops::scalar
-)
-
 loom_cc_library(
   NAME
     low_registry
@@ -141,13 +128,13 @@ loom_cc_library(
   SRCS
     "lower/registry.c"
   DEPS
-    ::core_lower_rules
     iree::base
     loom::src::loom::codegen::low::lower
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
     loom::src::loom::target::emit::ireevm::contracts::core
+    loom::src::loom::target::emit::ireevm::contracts::core_lower_rules
     loom::src::loom::target::emit::ireevm::descriptors_ids
   PUBLIC
 )

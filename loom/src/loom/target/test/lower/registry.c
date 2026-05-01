@@ -6,9 +6,9 @@
 
 #include "loom/ir/module.h"
 #include "loom/target/test/contracts/core.h"
+#include "loom/target/test/contracts/core_lower_rules.h"
 #include "loom/target/test/descriptors.h"
 #include "loom/target/test/lower.h"
-#include "loom/target/test/lower_rules.h"
 
 //===----------------------------------------------------------------------===//
 // Type mapping

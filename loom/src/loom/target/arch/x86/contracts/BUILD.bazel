@@ -21,3 +21,16 @@ loom_target_table_cc_library(
     generator = "//loom/py/loom/gen:x86_contract_fragment",
     deps = ["//loom/src/loom/target:contract"],
 )
+
+loom_target_table_cc_library(
+    name = "avx512_lower_rules",
+    args = ["--contract-fragment=x86.avx512"],
+    generator = "//loom/py/loom/gen:x86_lower_rule_shard",
+    deps = [
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/target/arch/x86:avx512_descriptors_ids",
+    ],
+)

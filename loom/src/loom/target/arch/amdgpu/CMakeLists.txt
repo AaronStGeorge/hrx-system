@@ -129,93 +129,6 @@ loom_target_table_cc_library(
 
 loom_target_table_cc_library(
   NAME
-    async_lower_rules
-  GENERATOR
-    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
-  ARGS
-    "--contract-fragment=amdgpu.async"
-  DEPS
-    loom::src::loom::codegen::low::lower
-    loom::src::loom::ops::kernel
-)
-
-loom_target_table_cc_library(
-  NAME
-    arithmetic_lower_rules
-  GENERATOR
-    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
-  ARGS
-    "--contract-fragment=amdgpu.arithmetic"
-  DEPS
-    ::descriptor_ids
-    ::lower_kinds
-    ::lower_materializers
-    loom::src::loom::codegen::low::lower
-    loom::src::loom::ops::index
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::vector
-)
-
-loom_target_table_cc_library(
-  NAME
-    compare_lower_rules
-  GENERATOR
-    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
-  ARGS
-    "--contract-fragment=amdgpu.compare"
-  DEPS
-    ::descriptor_ids
-    ::lower_materializers
-    loom::src::loom::codegen::low::lower
-    loom::src::loom::ops::scalar
-)
-
-loom_target_table_cc_library(
-  NAME
-    integer_lower_rules
-  GENERATOR
-    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
-  ARGS
-    "--contract-fragment=amdgpu.integer"
-  DEPS
-    ::descriptor_ids
-    ::lower_materializers
-    loom::src::loom::codegen::low::lower
-    loom::src::loom::ops::index
-    loom::src::loom::ops::scalar
-)
-
-loom_target_table_cc_library(
-  NAME
-    dot_lower_rules
-  GENERATOR
-    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
-  ARGS
-    "--contract-fragment=amdgpu.dot"
-  DEPS
-    ::descriptor_ids
-    ::lower_kinds
-    loom::src::loom::codegen::low::lower
-    loom::src::loom::ops::vector
-)
-
-loom_target_table_cc_library(
-  NAME
-    reduce_lower_rules
-  GENERATOR
-    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
-  ARGS
-    "--contract-fragment=amdgpu.reduce"
-  DEPS
-    ::descriptor_ids
-    ::lower_kinds
-    ::lower_materializers
-    loom::src::loom::codegen::low::lower
-    loom::src::loom::ops::vector
-)
-
-loom_target_table_cc_library(
-  NAME
     gfx11_encoding_tables
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_encoding_tables
@@ -442,19 +355,13 @@ loom_cc_library(
     "lower/values.c"
     "lower/view.c"
   DEPS
-    ::arithmetic_lower_rules
-    ::async_lower_rules
     ::atomic_candidates
-    ::compare_lower_rules
     ::descriptor_ids
-    ::dot_lower_rules
     ::hal_kernel_abi
-    ::integer_lower_rules
     ::lower_kinds
     ::lower_materializers
     ::matrix_contract
     ::matrix_contract_projection
-    ::reduce_lower_rules
     ::target_info
     ::wait_packets
     iree::base
@@ -478,11 +385,17 @@ loom_cc_library(
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
     loom::src::loom::target::arch::amdgpu::contracts::arithmetic
+    loom::src::loom::target::arch::amdgpu::contracts::arithmetic_lower_rules
     loom::src::loom::target::arch::amdgpu::contracts::async
+    loom::src::loom::target::arch::amdgpu::contracts::async_lower_rules
     loom::src::loom::target::arch::amdgpu::contracts::compare
+    loom::src::loom::target::arch::amdgpu::contracts::compare_lower_rules
     loom::src::loom::target::arch::amdgpu::contracts::dot
+    loom::src::loom::target::arch::amdgpu::contracts::dot_lower_rules
     loom::src::loom::target::arch::amdgpu::contracts::integer
+    loom::src::loom::target::arch::amdgpu::contracts::integer_lower_rules
     loom::src::loom::target::arch::amdgpu::contracts::reduce
+    loom::src::loom::target::arch::amdgpu::contracts::reduce_lower_rules
     loom::src::loom::target::low_legality
     loom::src::loom::util::fact_table
   PUBLIC

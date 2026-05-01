@@ -21,4 +21,19 @@ loom_target_table_cc_library(
     loom::src::loom::target::contract
 )
 
+loom_target_table_cc_library(
+  NAME
+    avx512_lower_rules
+  GENERATOR
+    iree::runtime::py::loom::gen::x86_lower_rule_shard
+  ARGS
+    "--contract-fragment=x86.avx512"
+  DEPS
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::index
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::vector
+    loom::src::loom::target::arch::x86::avx512_descriptors_ids
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

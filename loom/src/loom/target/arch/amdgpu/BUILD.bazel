@@ -292,83 +292,6 @@ loom_target_table_cc_library(
     ],
 )
 
-_AMDGPU_LOWER_RULE_GENERATOR = "//loom/py/loom/gen:amdgpu_lower_rule_shard"
-
-loom_target_table_cc_library(
-    name = "async_lower_rules",
-    args = ["--contract-fragment=amdgpu.async"],
-    generator = _AMDGPU_LOWER_RULE_GENERATOR,
-    deps = [
-        "//loom/src/loom/codegen/low:lower",
-        "//loom/src/loom/ops/kernel",
-    ],
-)
-
-loom_target_table_cc_library(
-    name = "arithmetic_lower_rules",
-    args = ["--contract-fragment=amdgpu.arithmetic"],
-    generator = _AMDGPU_LOWER_RULE_GENERATOR,
-    deps = [
-        ":descriptor_ids",
-        ":lower_kinds",
-        ":lower_materializers",
-        "//loom/src/loom/codegen/low:lower",
-        "//loom/src/loom/ops/index",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/vector",
-    ],
-)
-
-loom_target_table_cc_library(
-    name = "compare_lower_rules",
-    args = ["--contract-fragment=amdgpu.compare"],
-    generator = _AMDGPU_LOWER_RULE_GENERATOR,
-    deps = [
-        ":descriptor_ids",
-        ":lower_materializers",
-        "//loom/src/loom/codegen/low:lower",
-        "//loom/src/loom/ops/scalar",
-    ],
-)
-
-loom_target_table_cc_library(
-    name = "integer_lower_rules",
-    args = ["--contract-fragment=amdgpu.integer"],
-    generator = _AMDGPU_LOWER_RULE_GENERATOR,
-    deps = [
-        ":descriptor_ids",
-        ":lower_materializers",
-        "//loom/src/loom/codegen/low:lower",
-        "//loom/src/loom/ops/index",
-        "//loom/src/loom/ops/scalar",
-    ],
-)
-
-loom_target_table_cc_library(
-    name = "dot_lower_rules",
-    args = ["--contract-fragment=amdgpu.dot"],
-    generator = _AMDGPU_LOWER_RULE_GENERATOR,
-    deps = [
-        ":descriptor_ids",
-        ":lower_kinds",
-        "//loom/src/loom/codegen/low:lower",
-        "//loom/src/loom/ops/vector",
-    ],
-)
-
-loom_target_table_cc_library(
-    name = "reduce_lower_rules",
-    args = ["--contract-fragment=amdgpu.reduce"],
-    generator = _AMDGPU_LOWER_RULE_GENERATOR,
-    deps = [
-        ":descriptor_ids",
-        ":lower_kinds",
-        ":lower_materializers",
-        "//loom/src/loom/codegen/low:lower",
-        "//loom/src/loom/ops/vector",
-    ],
-)
-
 loom_target_table_cc_library(
     name = "gfx11_encoding_tables",
     args = [
@@ -565,19 +488,13 @@ loom_cc_library(
         "lower/plan.h",
     ],
     deps = [
-        ":arithmetic_lower_rules",
-        ":async_lower_rules",
         ":atomic_candidates",
-        ":compare_lower_rules",
         ":descriptor_ids",
-        ":dot_lower_rules",
         ":hal_kernel_abi",
-        ":integer_lower_rules",
         ":lower_kinds",
         ":lower_materializers",
         ":matrix_contract",
         ":matrix_contract_projection",
-        ":reduce_lower_rules",
         ":target_info",
         ":wait_packets",
         "//loom/src/loom/analysis:contract_vector",
@@ -601,11 +518,17 @@ loom_cc_library(
         "//loom/src/loom/ops/view",
         "//loom/src/loom/target:low_legality",
         "//loom/src/loom/target/arch/amdgpu/contracts:arithmetic",
+        "//loom/src/loom/target/arch/amdgpu/contracts:arithmetic_lower_rules",
         "//loom/src/loom/target/arch/amdgpu/contracts:async",
+        "//loom/src/loom/target/arch/amdgpu/contracts:async_lower_rules",
         "//loom/src/loom/target/arch/amdgpu/contracts:compare",
+        "//loom/src/loom/target/arch/amdgpu/contracts:compare_lower_rules",
         "//loom/src/loom/target/arch/amdgpu/contracts:dot",
+        "//loom/src/loom/target/arch/amdgpu/contracts:dot_lower_rules",
         "//loom/src/loom/target/arch/amdgpu/contracts:integer",
+        "//loom/src/loom/target/arch/amdgpu/contracts:integer_lower_rules",
         "//loom/src/loom/target/arch/amdgpu/contracts:reduce",
+        "//loom/src/loom/target/arch/amdgpu/contracts:reduce_lower_rules",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
     ],

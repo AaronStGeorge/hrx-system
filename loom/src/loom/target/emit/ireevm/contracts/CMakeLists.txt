@@ -21,4 +21,17 @@ loom_target_table_cc_library(
     loom::src::loom::target::contract
 )
 
+loom_target_table_cc_library(
+  NAME
+    core_lower_rules
+  GENERATOR
+    iree::runtime::py::loom::gen::ireevm_lower_rule_shard
+  ARGS
+    "--contract-fragment=iree.vm.core"
+  DEPS
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::scalar
+    loom::src::loom::target::emit::ireevm::descriptors_ids
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
