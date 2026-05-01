@@ -994,10 +994,6 @@ iree_status_t loom_module_compact_symbols(loom_module_t* module,
                                           iree_arena_allocator_t* scratch_arena,
                                           iree_host_size_t* out_removed_count) {
   if (out_removed_count) *out_removed_count = 0;
-  if (!module || !scratch_arena) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "module and scratch_arena are required");
-  }
   const iree_host_size_t old_symbol_count = module->symbols.count;
   if (old_symbol_count == 0) return iree_ok_status();
 
@@ -2708,11 +2704,6 @@ static iree_status_t loom_module_replace_type_value_refs_impl(
 iree_status_t loom_module_replace_type_value_references(
     loom_module_t* module, loom_type_t type, loom_value_id_t old_id,
     loom_value_id_t new_id, loom_type_t* out_type, bool* out_changed) {
-  if (!module || !out_type || !out_changed) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "module, output type, and output changed flag are required");
-  }
   *out_type = type;
   *out_changed = false;
   if (old_id == new_id) return iree_ok_status();
