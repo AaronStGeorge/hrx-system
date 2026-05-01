@@ -1011,10 +1011,6 @@ static void loom_amdgpu_hsaco_prepare_segments(
 iree_status_t loom_amdgpu_hsaco_write_file(
     const loom_amdgpu_hsaco_file_t* file, iree_io_stream_t* stream,
     iree_arena_allocator_t* scratch_arena) {
-  if (stream == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU HSACO output stream is required");
-  }
   IREE_RETURN_IF_ERROR(loom_amdgpu_hsaco_validate_file(file));
 
   const loom_amdgpu_processor_info_t* processor = NULL;

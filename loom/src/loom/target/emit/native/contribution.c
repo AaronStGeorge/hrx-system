@@ -287,10 +287,6 @@ iree_status_t loom_native_assemble_section_contributions(
     loom_native_section_contribution_assembly_t* out_assembly,
     iree_arena_allocator_t* arena) {
   *out_assembly = (loom_native_section_contribution_assembly_t){0};
-  if (contributions == NULL && contribution_count != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "native section contributions are required");
-  }
   if (contribution_count == 0) {
     return iree_ok_status();
   }

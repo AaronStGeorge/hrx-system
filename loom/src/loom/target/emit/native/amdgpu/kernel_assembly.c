@@ -77,11 +77,6 @@ static iree_status_t loom_amdgpu_kernel_assembly_emit(
     const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_kernel_assembly_options_t* options,
     iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
-  if (builder == NULL || scratch_arena == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU kernel assembly output builder and scratch arena are required");
-  }
   loom_amdgpu_kernel_record_t record = {0};
   const loom_amdgpu_kernel_record_options_t record_options = {
       .abi_layout = options ? options->abi_layout : NULL,

@@ -104,10 +104,6 @@ static iree_status_t loom_native_elf64le_validate_section_name(
 
 static iree_status_t loom_native_elf64le_validate_file(
     const loom_native_elf64le_file_t* file) {
-  if (file == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "ELF file description is required");
-  }
   if (file->type == LOOM_NATIVE_ELF_FILE_TYPE_NONE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "ELF file type is required");
@@ -123,14 +119,6 @@ static iree_status_t loom_native_elf64le_validate_file(
   if (file->segment_count > UINT16_MAX) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "ELF segment count exceeds ELF64 header capacity");
-  }
-  if (file->sections == NULL && file->section_count != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "ELF sections are required");
-  }
-  if (file->segments == NULL && file->segment_count != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "ELF segments are required");
   }
   for (iree_host_size_t i = 0; i < file->section_count; ++i) {
     const loom_native_elf64le_section_t* section = &file->sections[i];
@@ -579,10 +567,6 @@ static iree_status_t loom_native_elf64le_write_section_headers(
 iree_status_t loom_native_elf64le_write_file(
     const loom_native_elf64le_file_t* file, iree_io_stream_t* stream,
     iree_arena_allocator_t* scratch_arena) {
-  if (stream == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "ELF output stream is required");
-  }
   IREE_RETURN_IF_ERROR(loom_native_elf64le_validate_file(file));
 
   loom_native_elf64le_layout_t layout = {0};

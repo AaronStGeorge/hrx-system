@@ -102,10 +102,6 @@ static iree_status_t loom_amdgpu_metadata_validate_kernel(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU metadata wavefront size must be either 32 or 64");
   }
-  if (kernel->arguments == NULL && kernel->argument_count != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU metadata arguments are required");
-  }
   iree_host_size_t previous_argument_end = 0;
   for (iree_host_size_t i = 0; i < kernel->argument_count; ++i) {
     const loom_amdgpu_metadata_argument_t* argument = &kernel->arguments[i];
@@ -132,16 +128,8 @@ static iree_status_t loom_amdgpu_metadata_validate_kernel(
 
 static iree_status_t loom_amdgpu_metadata_validate(
     const loom_amdgpu_code_object_metadata_t* metadata) {
-  if (metadata == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU metadata is required");
-  }
   IREE_RETURN_IF_ERROR(loom_amdgpu_metadata_validate_string(
       metadata->target, IREE_SV("amdhsa.target"), /*required=*/true));
-  if (metadata->kernels == NULL && metadata->kernel_count != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU metadata kernels are required");
-  }
   if (metadata->kernel_count == 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU metadata requires at least one kernel");

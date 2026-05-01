@@ -52,10 +52,6 @@ static iree_status_t loom_tool_dup_cstring(iree_string_view_t value,
                                            iree_allocator_t allocator,
                                            char** out_string) {
   *out_string = NULL;
-  if (value.data == NULL && value.size != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "string data is required");
-  }
   if (loom_tool_string_view_contains_nul(value)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "tool arguments cannot contain NUL bytes");
@@ -94,10 +90,6 @@ static iree_status_t loom_tool_argv_allocate(
   if (iree_string_view_is_empty(executable_path)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "tool executable path is required");
-  }
-  if (arguments == NULL && argument_count != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "tool arguments are required");
   }
 
   iree_host_size_t argv_count = 0;

@@ -85,15 +85,6 @@ iree_status_t loom_native_object_resolve_symbol_layouts(
   if (symbol_count == 0) {
     return iree_ok_status();
   }
-  if (symbols == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "native object symbols are required");
-  }
-  if (section_layouts == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "native object section contribution layouts are required");
-  }
 
   for (iree_host_size_t i = 0; i < symbol_count; ++i) {
     const loom_native_object_symbol_t* symbol = &symbols[i];
@@ -150,15 +141,6 @@ iree_status_t loom_native_object_resolve_fixup_layouts(
     loom_native_object_fixup_layout_t* out_fixup_layouts) {
   if (fixup_count == 0) {
     return iree_ok_status();
-  }
-  if (fixups == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "native object fixups are required");
-  }
-  if (section_layouts == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "native object section contribution layouts are required");
   }
 
   for (iree_host_size_t i = 0; i < fixup_count; ++i) {

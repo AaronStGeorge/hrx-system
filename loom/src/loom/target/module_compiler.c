@@ -409,10 +409,6 @@ iree_status_t loom_target_module_compile_select_artifact_entries(
 
   artifact_symbol =
       loom_target_module_compile_normalize_symbol_name(artifact_symbol);
-  if (iree_string_view_is_empty(artifact_symbol)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "artifact symbol is required");
-  }
 
   loom_symbol_fact_table_t fact_table = {0};
   IREE_RETURN_IF_ERROR(loom_target_module_compile_initialize_fact_table(

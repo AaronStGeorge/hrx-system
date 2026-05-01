@@ -529,10 +529,6 @@ iree_status_t loom_amdgpu_kernel_record_build(
     loom_amdgpu_kernel_record_t* out_record,
     iree_arena_allocator_t* scratch_arena) {
   *out_record = (loom_amdgpu_kernel_record_t){0};
-  if (scratch_arena == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU kernel emission scratch arena is required");
-  }
   loom_amdgpu_native_preflight_t derived_preflight = {0};
   const loom_amdgpu_native_preflight_t* preflight =
       options ? options->preflight : NULL;

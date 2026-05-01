@@ -108,10 +108,6 @@ static iree_status_t loom_llvm_dup_cstring(iree_string_view_t value,
                                            iree_allocator_t allocator,
                                            char** out_string) {
   *out_string = NULL;
-  if (value.data == NULL && value.size != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "string data is required");
-  }
   if (loom_llvm_string_view_contains_nul(value)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "tool arguments cannot contain NUL bytes");
@@ -849,10 +845,6 @@ iree_status_t loom_llvm_tool_run(const loom_llvm_toolchain_t* toolchain,
                                  iree_allocator_t allocator,
                                  loom_llvm_tool_result_t* out_result) {
   *out_result = (loom_llvm_tool_result_t){0};
-  if (arguments == NULL && argument_count != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "LLVM tool arguments are required");
-  }
 
   char* executable_path = NULL;
   bool search_path = false;
@@ -954,10 +946,6 @@ iree_status_t loom_llvm_tool_disassemble_bitcode(
     const loom_llvm_toolchain_t* toolchain, iree_const_byte_span_t bitcode,
     iree_allocator_t allocator, loom_llvm_tool_output_t* out_text) {
   *out_text = (loom_llvm_tool_output_t){0};
-  if (bitcode.data == NULL && bitcode.data_length != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "LLVM bitcode data is required");
-  }
 
   loom_llvm_temp_file_t input_file;
   iree_status_t status = loom_llvm_temp_file_allocate("bc", &input_file);
@@ -992,11 +980,6 @@ static iree_status_t loom_llvm_tool_run_file_to_file(
     iree_string_view_t file_type_argument, iree_string_view_t action,
     const iree_string_view_t* extra_arguments,
     iree_host_size_t extra_argument_count, iree_allocator_t allocator) {
-  if (extra_arguments == NULL && extra_argument_count != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "extra LLVM tool arguments are required");
-  }
-
   iree_host_size_t argument_count = 0;
   if (!iree_host_size_checked_add(extra_argument_count, 4, &argument_count)) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -1066,14 +1049,6 @@ static iree_status_t loom_llvm_tool_run_bytes_to_file_output(
     iree_host_size_t extra_argument_count, iree_allocator_t allocator,
     loom_llvm_tool_output_t* out_output) {
   *out_output = (loom_llvm_tool_output_t){0};
-  if (input_data.data == NULL && input_data.data_length != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "LLVM tool input data is required");
-  }
-  if (extra_arguments == NULL && extra_argument_count != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "extra LLVM tool arguments are required");
-  }
 
   loom_llvm_temp_file_t input_file = {0};
   loom_llvm_temp_file_t output_file = {0};
@@ -1144,11 +1119,6 @@ static iree_status_t loom_llvm_tool_run_file_to_stdout(
     iree_host_size_t extra_argument_count, iree_allocator_t allocator,
     loom_llvm_tool_output_t* out_text) {
   *out_text = (loom_llvm_tool_output_t){0};
-  if (extra_arguments == NULL && extra_argument_count != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "extra LLVM tool arguments are required");
-  }
-
   iree_host_size_t argument_count = 0;
   if (!iree_host_size_checked_add(extra_argument_count, 1, &argument_count)) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -1202,10 +1172,6 @@ iree_status_t loom_llvm_tool_disassemble_object(
     iree_host_size_t extra_argument_count, iree_allocator_t allocator,
     loom_llvm_tool_output_t* out_text) {
   *out_text = (loom_llvm_tool_output_t){0};
-  if (object.data == NULL && object.data_length != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "LLVM object data is required");
-  }
 
   loom_llvm_temp_file_t input_file = {0};
   iree_status_t status = loom_llvm_temp_file_allocate("obj", &input_file);

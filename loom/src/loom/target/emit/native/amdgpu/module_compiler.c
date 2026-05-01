@@ -560,15 +560,6 @@ iree_status_t loom_amdgpu_compile_hal_executable(
     report->entry_symbol =
         options ? options->entry_symbol : iree_string_view_empty();
   }
-  if (!module) {
-    iree_status_t status =
-        iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "module is required");
-    if (report != NULL) {
-      loom_target_compile_report_record_status(report, status);
-    }
-    return status;
-  }
-
   const loom_target_module_compile_options_t target_options = {
       .entry_symbol =
           options ? options->entry_symbol : iree_string_view_empty(),

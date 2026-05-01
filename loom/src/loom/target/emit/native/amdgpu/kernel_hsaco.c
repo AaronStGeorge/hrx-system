@@ -22,11 +22,6 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
   if (options != NULL && options->summary != NULL) {
     *options->summary = (loom_amdgpu_kernel_hsaco_summary_t){0};
   }
-  if (scratch_arena == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU kernel HSACO contribution scratch arena is required");
-  }
 
   loom_amdgpu_kernel_record_t record = {0};
   const loom_amdgpu_kernel_record_options_t record_options = {
@@ -84,12 +79,7 @@ iree_status_t loom_amdgpu_write_kernel_hsaco_contributions(
     const loom_amdgpu_kernel_hsaco_contribution_t* contributions,
     iree_host_size_t contribution_count, iree_io_stream_t* stream,
     iree_arena_allocator_t* scratch_arena) {
-  if (stream == NULL || scratch_arena == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU kernel HSACO output stream and scratch arena are required");
-  }
-  if (contribution_count == 0 || contributions == NULL) {
+  if (contribution_count == 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU kernel HSACO requires at least one contribution");

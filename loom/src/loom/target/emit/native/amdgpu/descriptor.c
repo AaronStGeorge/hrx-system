@@ -225,10 +225,6 @@ iree_status_t loom_amdgpu_kernel_descriptor_workitem_id_mode_from_flags(
 static iree_status_t loom_amdgpu_kernel_descriptor_validate(
     const loom_amdgpu_kernel_descriptor_t* descriptor,
     const loom_amdgpu_processor_info_t** out_target) {
-  if (descriptor == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU kernel descriptor is required");
-  }
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_descriptor_resolve_target(
       descriptor->target_cpu, out_target));
   if (iree_any_bit_set(descriptor->flags, ~kAmdgpuKernelDescriptorKnownFlags)) {
@@ -281,10 +277,6 @@ static iree_status_t loom_amdgpu_kernel_descriptor_validate(
 
 static iree_status_t loom_amdgpu_kernel_descriptor_validate_metadata_kernel(
     const loom_amdgpu_metadata_kernel_t* metadata_kernel) {
-  if (metadata_kernel == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU metadata kernel is required");
-  }
   if (metadata_kernel->wavefront_size != 32 &&
       metadata_kernel->wavefront_size != 64) {
     return iree_make_status(
