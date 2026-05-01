@@ -20,6 +20,19 @@ namespace {
 constexpr loom_op_kind_t kSourceOpKind = LOOM_OP_KIND(7, 3);
 constexpr uint64_t kDescriptorId = UINT64_C(0x123456789abcdef0);
 
+const loom_target_config_t kTargetConfig = {
+    /*.name=*/{},
+    /*.contract_set_key=*/{},
+    /*.contract_feature_bits=*/0,
+};
+
+const loom_target_bundle_t kTargetBundle = {
+    /*.name=*/{},
+    /*.snapshot=*/nullptr,
+    /*.export_plan=*/nullptr,
+    /*.config=*/&kTargetConfig,
+};
+
 loom_target_contract_fragment_t MakeContractFragment(
     loom_target_contract_op_entry_t* op_entries,
     loom_target_contract_dialect_table_t* dialects,
@@ -88,7 +101,14 @@ TEST(LowContractQueryTest, ContractIndexDescriptorRuleSelectsLegalCase) {
           /*.values=*/rule_sets,
       },
   };
-  const loom_target_contract_query_environment_t environment = {};
+  const loom_target_contract_query_environment_t environment = {
+      /*.module=*/nullptr,
+      /*.function=*/{},
+      /*.bundle=*/&kTargetBundle,
+      /*.descriptor_set=*/nullptr,
+      /*.fact_table=*/nullptr,
+      /*.arena=*/nullptr,
+  };
   loom_op_t op = {};
   op.kind = kSourceOpKind;
   loom_target_contract_query_result_t result =
@@ -160,7 +180,7 @@ TEST(LowContractQueryTest, ContractIndexDescriptorRuleReportsRejectedCase) {
   const loom_target_contract_query_environment_t environment = {
       /*.module=*/nullptr,
       /*.function=*/{},
-      /*.bundle=*/nullptr,
+      /*.bundle=*/&kTargetBundle,
       /*.descriptor_set=*/nullptr,
       /*.fact_table=*/nullptr,
       /*.arena=*/&arena,

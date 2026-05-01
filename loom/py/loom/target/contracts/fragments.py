@@ -63,15 +63,16 @@ def contract_fragment_public_header(fragment: ContractFragment) -> str:
     if fragment.public_header:
         return fragment.public_header
     name_parts = _identifier_parts(fragment.name)
-    if len(name_parts) == 2:
-        target_name, family_name = name_parts
-        return f"loom/target/arch/{target_name}/contracts/{family_name}.h"
     if name_parts[:2] == ("iree", "vm"):
         return f"loom/target/emit/ireevm/contracts/{'_'.join(name_parts[2:])}.h"
     if name_parts[:1] == ("wasm",):
         return f"loom/target/emit/wasm/contracts/{'_'.join(name_parts[1:])}.h"
     if name_parts[:2] == ("test", "low"):
         return f"loom/target/test/contracts/{'_'.join(name_parts[2:])}.h"
+    if len(name_parts) >= 2 and name_parts[0] in ("amdgpu", "x86"):
+        target_name = name_parts[0]
+        family_name = "_".join(name_parts[1:])
+        return f"loom/target/arch/{target_name}/contracts/{family_name}.h"
     raise ValueError(f"contract fragment '{fragment.name}' requires public_header")
 
 

@@ -490,7 +490,8 @@ class _LowerRuleSetCompiler:
                                 subject_kind="descriptor",
                                 subject_name=self._table.name,
                                 reason=(
-                                    "target contract requires descriptor availability"
+                                    "target contract requires descriptor "
+                                    "availability and enabled features"
                                 ),
                             ),
                         )

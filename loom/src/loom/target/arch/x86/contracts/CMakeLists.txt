@@ -37,4 +37,28 @@ loom_target_table_cc_library(
     loom::src::loom::target::arch::x86::avx512_descriptors_ids
 )
 
+loom_target_table_cc_library(
+  NAME
+    packed_dot
+  GENERATOR
+    iree::runtime::py::loom::gen::x86_contract_fragment
+  ARGS
+    "--contract-fragment=x86.packed_dot"
+  DEPS
+    loom::src::loom::target::contract
+)
+
+loom_target_table_cc_library(
+  NAME
+    packed_dot_lower_rules
+  GENERATOR
+    iree::runtime::py::loom::gen::x86_lower_rule_shard
+  ARGS
+    "--contract-fragment=x86.packed_dot"
+  DEPS
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::vector
+    loom::src::loom::target::arch::x86::packed_dot_descriptors_ids
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

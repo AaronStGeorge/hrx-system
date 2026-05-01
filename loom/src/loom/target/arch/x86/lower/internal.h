@@ -39,27 +39,6 @@ iree_status_t loom_x86_map_packed_dot_type(void* user_data,
 bool loom_x86_packed_dot_type_static_vector_bit_width(loom_type_t type,
                                                       uint32_t* out_bit_width);
 
-// Selects a target-owned plan for x86 packed-dot source ops.
-iree_status_t loom_x86_select_packed_dot_op(void* user_data,
-                                            loom_low_lower_context_t* context,
-                                            const loom_op_t* source_op,
-                                            loom_low_lower_plan_t* out_plan);
-
-// Emits a previously selected x86 packed-dot source op plan.
-iree_status_t loom_x86_emit_packed_dot_op(void* user_data,
-                                          loom_low_lower_context_t* context,
-                                          const loom_op_t* source_op,
-                                          loom_low_lower_plan_t plan);
-
-// Returns true for source vector-dot ops handled by the x86 packed-dot lowerer.
-bool loom_x86_op_is_vector_dot(loom_op_kind_t kind);
-
-// Verifies source vector-dot legality for x86 packed-dot target-low selection.
-iree_status_t loom_x86_low_legality_verify_packed_dot(
-    const loom_target_low_legality_provider_t* provider,
-    loom_target_low_legality_context_t* context, const loom_op_t* op,
-    bool* out_handled);
-
 #ifdef __cplusplus
 }  // extern "C"
 #endif

@@ -16,6 +16,7 @@ py_library(
     srcs = [
         "__init__.py",
         "avx512.py",
+        "packed_dot.py",
     ],
     deps = [
         "//loom/py/loom:core",

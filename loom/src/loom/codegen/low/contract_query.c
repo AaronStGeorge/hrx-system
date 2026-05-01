@@ -140,6 +140,7 @@ iree_status_t loom_low_lower_query_target_contract(
   const loom_low_lower_rule_match_context_t match_context = {
       .module = environment->module,
       .descriptor_set = environment->descriptor_set,
+      .feature_bits = environment->bundle->config->contract_feature_bits,
       .map_value = options->map_value,
       .register_class = options->register_class,
       .can_materialize = options->can_materialize,

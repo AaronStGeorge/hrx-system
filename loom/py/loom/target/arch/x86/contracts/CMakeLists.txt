@@ -16,6 +16,7 @@ iree_py_library(
   SRCS
     "__init__.py"
     "avx512.py"
+    "packed_dot.py"
   DEPS
     iree::runtime::py::loom::core
     iree::runtime::py::loom::dialect::buffer::buffer

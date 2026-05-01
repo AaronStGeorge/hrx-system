@@ -84,18 +84,15 @@ loom_cc_library(
   DEPS
     ::avx512_descriptors_ids
     ::avx512_packed_dot_descriptors_ids
-    ::packed_dot_contract
     ::packed_dot_descriptors_ids
-    ::packed_dot_vector
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::lower
     loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::vector
     loom::src::loom::target::arch::x86::contracts::avx512
     loom::src::loom::target::arch::x86::contracts::avx512_lower_rules
-    loom::src::loom::target::low_legality
+    loom::src::loom::target::arch::x86::contracts::packed_dot
+    loom::src::loom::target::arch::x86::contracts::packed_dot_lower_rules
   PUBLIC
 )
 

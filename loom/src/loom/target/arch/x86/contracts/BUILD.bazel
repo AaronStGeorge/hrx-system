@@ -35,3 +35,21 @@ loom_target_table_cc_library(
         "//loom/src/loom/target/arch/x86:avx512_descriptors_ids",
     ],
 )
+
+loom_target_table_cc_library(
+    name = "packed_dot",
+    args = ["--contract-fragment=x86.packed_dot"],
+    generator = "//loom/py/loom/gen:x86_contract_fragment",
+    deps = ["//loom/src/loom/target:contract"],
+)
+
+loom_target_table_cc_library(
+    name = "packed_dot_lower_rules",
+    args = ["--contract-fragment=x86.packed_dot"],
+    generator = "//loom/py/loom/gen:x86_lower_rule_shard",
+    deps = [
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/target/arch/x86:packed_dot_descriptors_ids",
+    ],
+)

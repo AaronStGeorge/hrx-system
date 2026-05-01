@@ -134,6 +134,8 @@ struct loom_low_lower_rule_match_context_t {
   const loom_module_t* module;
   // Descriptor set selected for the target-low contract.
   const loom_low_descriptor_set_t* descriptor_set;
+  // Feature bits selected by the target-low contract.
+  uint64_t feature_bits;
   // Source-value to target-low register metadata mapper.
   loom_low_lower_rule_match_map_value_callback_t map_value;
   // Optional descriptor-register-class to module string mapper.
@@ -291,7 +293,8 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_ATTR_ENUM_EQ = 3,
   // Source i64 attribute value must fall in [minimum_i64, maximum_i64].
   LOOM_LOW_LOWER_GUARD_ATTR_I64_RANGE = 4,
-  // Selected descriptor set must contain descriptor_id.
+  // Selected descriptor set must contain descriptor_id and its required
+  // features must be enabled by the target bundle.
   LOOM_LOW_LOWER_GUARD_DESCRIPTOR_AVAILABLE = 5,
   // Source value ref must be accepted by its configured materializer.
   LOOM_LOW_LOWER_GUARD_VALUE_MATERIALIZABLE = 6,

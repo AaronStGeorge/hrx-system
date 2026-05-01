@@ -96,6 +96,30 @@ static bool loom_low_lower_rule_can_materialize_value(
       loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index));
 }
 
+static bool loom_low_lower_rule_descriptor_available(
+    const loom_low_lower_rule_match_context_t* match_context,
+    uint64_t descriptor_id) {
+  const uint32_t descriptor_ordinal =
+      loom_low_descriptor_set_lookup_descriptor_by_id(
+          match_context->descriptor_set, descriptor_id);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return false;
+  }
+  const loom_low_descriptor_t* descriptor =
+      loom_low_descriptor_set_descriptor_at(match_context->descriptor_set,
+                                            descriptor_ordinal);
+  for (uint16_t i = 0; i < descriptor->feature_mask_word_count; ++i) {
+    const uint32_t word_index = descriptor->feature_mask_word_start + i;
+    const uint64_t required_bits =
+        match_context->descriptor_set->feature_mask_words[word_index];
+    const uint64_t available_bits = i == 0 ? match_context->feature_bits : 0;
+    if ((required_bits & ~available_bits) != 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
 typedef struct loom_low_lower_rule_emit_state_t {
   // Rule-local low SSA values captured by earlier emit rows.
   loom_value_id_t* temporaries;
@@ -556,9 +580,8 @@ static iree_status_t loom_low_lower_rule_guard_matches(
       return iree_ok_status();
     }
     case LOOM_LOW_LOWER_GUARD_DESCRIPTOR_AVAILABLE:
-      *out_matches = loom_low_descriptor_set_lookup_descriptor_by_id(
-                         match_context->descriptor_set, guard->descriptor_id) !=
-                     LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+      *out_matches = loom_low_lower_rule_descriptor_available(
+          match_context, guard->descriptor_id);
       return iree_ok_status();
     case LOOM_LOW_LOWER_GUARD_VALUE_MATERIALIZABLE:
       *out_matches = loom_low_lower_rule_can_materialize_value(
@@ -804,6 +827,8 @@ loom_low_lower_rule_match_context_from_lowering(
   return (loom_low_lower_rule_match_context_t){
       .module = loom_low_lower_context_module(context),
       .descriptor_set = loom_low_lower_context_descriptor_set(context),
+      .feature_bits =
+          loom_low_lower_context_bundle(context)->config->contract_feature_bits,
       .map_value =
           {
               .fn = loom_low_lower_rule_match_map_value_from_lowering,

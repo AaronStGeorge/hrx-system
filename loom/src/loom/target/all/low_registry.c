@@ -47,7 +47,6 @@ static const loom_target_bundle_t* const kLowTargetBundles[] = {
 
 static const loom_target_low_legality_provider_t* const
     kLowLegalityProviders[] = {
-        &loom_x86_low_legality_provider_storage,
         &loom_amdgpu_low_legality_provider_storage,
 };
 
