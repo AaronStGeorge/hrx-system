@@ -147,6 +147,40 @@ class IfThenElse:
         self.else_case = else_case
 
 
+class Block:
+    def __init__(
+        self,
+        body: object,
+        init: object | None = None,
+        alloc_buffers: Sequence[object] = (),
+        match_buffers: Sequence[object] = (),
+    ) -> None:
+        self.body = body
+        self.init = init
+        self.alloc_buffers = alloc_buffers
+        self.match_buffers = match_buffers
+
+
+class BlockRealize:
+    def __init__(self, block: object, predicate: object | None = None) -> None:
+        self.block = block
+        self.predicate = IntImm(1, "bool") if predicate is None else predicate
+
+
+class LetStmt:
+    def __init__(self, var: Var, value: object, body: object) -> None:
+        self.var = var
+        self.value = value
+        self.body = body
+
+
+class AttrStmt:
+    def __init__(self, attr_key: str, value: object, body: object) -> None:
+        self.attr_key = attr_key
+        self.value = value
+        self.body = body
+
+
 def test_import_tilelang_builds_kernel_from_direct_primfunc() -> None:
     src, dst = Var("src"), Var("dst")
     src_buffer = Buffer("src", (4,), "float32")
@@ -241,3 +275,34 @@ def test_import_tilelang_builds_scalar_control_expressions() -> None:
     assert "scalar.minimumf" in text
     assert "scf.select" in text
     assert "scf.if" in text
+
+
+def test_import_tilelang_normalizes_structural_wrappers() -> None:
+    dst = Var("dst")
+    tmp = Var("tmp", "float32")
+    dst_buffer = Buffer("dst", (4,), "float32")
+    body = AttrStmt(
+        "thread_extent",
+        IntImm(1),
+        BlockRealize(
+            Block(
+                LetStmt(
+                    tmp,
+                    FloatImm(2.0),
+                    BufferStore(dst_buffer, tmp, [IntImm(0)]),
+                )
+            )
+        ),
+    )
+    prim_func = PrimFunc(
+        [dst],
+        {dst: dst_buffer},
+        body,
+        attrs={"global_symbol": "structural"},
+    )
+
+    result = import_tilelang(prim_func, options=TileLangImportOptions())
+    text = print_loom_module(result.module)
+
+    assert "scalar.constant 2.0" in text
+    assert "view.store" in text

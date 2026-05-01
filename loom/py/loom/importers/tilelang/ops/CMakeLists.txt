@@ -18,6 +18,7 @@ iree_py_library(
     "control.py"
     "memory.py"
     "scalar.py"
+    "structure.py"
   DEPS
     iree::runtime::py::loom::core
     iree::runtime::py::loom::importers::core::core

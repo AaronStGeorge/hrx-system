@@ -67,6 +67,12 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "Structured block wrapper; region contents are imported directly.",
     ),
     OpCoverage(
+        "tir.BlockRealize",
+        OpFamily.TIR_NODE,
+        CoverageState.NORMALIZED,
+        "Block realization wrapper; true-predicate blocks normalize to Block.",
+    ),
+    OpCoverage(
         "tir.For",
         OpFamily.TIR_NODE,
         CoverageState.SUPPORTED,

@@ -18,6 +18,7 @@ py_library(
         "control.py",
         "memory.py",
         "scalar.py",
+        "structure.py",
     ],
     deps = [
         "//loom/py/loom:core",

@@ -9,13 +9,14 @@
 from __future__ import annotations
 
 from loom.importers.tilelang.converter import TileLangConverterRegistry
-from loom.importers.tilelang.ops import control, memory, scalar
+from loom.importers.tilelang.ops import control, memory, scalar, structure
 
 
 def build_default_registry() -> TileLangConverterRegistry:
     """Builds the production TileLang/TIR converter registry."""
 
     registry = TileLangConverterRegistry()
+    structure.register(registry)
     control.register(registry)
     memory.register(registry)
     scalar.register(registry)
