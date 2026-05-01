@@ -14,18 +14,13 @@ loom_low_descriptor_cc_library(
   NAME
     descriptors
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptor_shard.py"
+    iree::runtime::py::loom::gen::wasm_low_descriptor_shard
   SOURCE
     "descriptors.c"
   HEADER
     "descriptors.h"
   ARGS
     "--descriptor-set=wasm_core_simd128"
-  INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/wasm/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/descriptor_sets.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
   DEPS
     loom::src::loom::codegen::low::descriptors
 )

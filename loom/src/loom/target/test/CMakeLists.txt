@@ -14,18 +14,13 @@ loom_low_descriptor_cc_library(
   NAME
     descriptors
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptor_shard.py"
+    iree::runtime::py::loom::gen::test_low_descriptor_shard
   SOURCE
     "descriptors.c"
   HEADER
     "descriptors.h"
   ARGS
     "--descriptor-set=test_low_core"
-  INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/descriptor_sets.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/test/descriptors.py"
   DEPS
     loom::src::loom::codegen::low::descriptors
 )
@@ -34,18 +29,13 @@ loom_low_descriptor_cc_library(
   NAME
     alt_descriptors
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptor_shard.py"
+    iree::runtime::py::loom::gen::test_low_descriptor_shard
   SOURCE
     "alt_descriptors.c"
   HEADER
     "alt_descriptors.h"
   ARGS
     "--descriptor-set=test_low_alt"
-  INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/descriptor_sets.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/test/descriptors.py"
   DEPS
     loom::src::loom::codegen::low::descriptors
 )
@@ -54,49 +44,13 @@ loom_target_table_cc_library(
   NAME
     contract_table
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_contract_shard.py"
+    iree::runtime::py::loom::gen::test_low_contract_shard
   SOURCE
     "contract_table.c"
   HEADER
     "contract_table.h"
   ARGS
     "--contract-table=test_low_core"
-  INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/atomic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/combining.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/analysis.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/arithmetic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/bitwise.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/comparison.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/conversion.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/math.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dsl.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/generated_file.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_contract_tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contract_tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/compile.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/emits.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/guards.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/immediates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/kinds.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/lower_rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/materializers.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/patterns.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/source.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/templates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/test/contracts.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/test/descriptors.py"
   DEPS
     loom::src::loom::target::contract
 )
@@ -105,48 +59,13 @@ loom_target_table_cc_library(
   NAME
     lower_rules
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rule_shard.py"
+    iree::runtime::py::loom::gen::test_low_lower_rule_shard
   SOURCE
     "lower_rules.c"
   HEADER
     "lower_rules.h"
   ARGS
     "--contract-table=test_low_core"
-  INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/atomic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/combining.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/analysis.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/arithmetic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/bitwise.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/comparison.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/conversion.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/math.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dsl.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/generated_file.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contract_tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/emits.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/guards.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/immediates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/kinds.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/lower_rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/materializers.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/patterns.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/source.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/templates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/test/contracts.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/test/descriptors.py"
   DEPS
     ::descriptors
     loom::src::loom::codegen::low::lower

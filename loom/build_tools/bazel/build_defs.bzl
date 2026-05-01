@@ -109,12 +109,10 @@ def loom_low_descriptor_data_archive(
 def loom_target_table_cc_library(
         name,
         generator,
-        cmake_generator,
         source,
         header,
         args = [],
         inputs = [],
-        cmake_generator_deps = [],
         deps = [],
         exclude_from_cmake_all = False,
         tags = [],
@@ -130,8 +128,9 @@ def loom_target_table_cc_library(
 
     Args:
       name: Runtime C library target name.
-      generator: Bazel executable label that writes C/H outputs.
-      cmake_generator: Source-file label for the same generator script in CMake.
+      generator: Python executable label that writes C/H outputs. Bazel uses it
+        as the genrule tool; bazel_to_cmake resolves the Python target's main
+        script and transitive sources for generated CMake dependencies.
       source: Generated C source filename.
       header: Generated C header filename.
       args: Generator arguments before the output flags. Arguments may use
@@ -139,8 +138,6 @@ def loom_target_table_cc_library(
         those to $(execpath <label>) while CMake conversion maps them to source
         paths.
       inputs: Source/vendor data labels consumed by the generator.
-      cmake_generator_deps: Source-file labels that should retrigger CMake
-        generation when the generator implementation changes.
       deps: Runtime C library dependencies.
       exclude_from_cmake_all: Excludes the generated C library from CMake all.
       tags: Additional Bazel tags for the internal generator action.
@@ -188,18 +185,15 @@ def loom_target_table_cc_library(
         visibility = visibility,
         **kwargs
     )
-
-    _ignore = (cmake_generator, cmake_generator_deps, exclude_from_cmake_all)
+    _ignore = (exclude_from_cmake_all,)
 
 def loom_low_descriptor_cc_library(
         name,
         generator,
-        cmake_generator,
         source,
         header,
         args = [],
         inputs = [],
-        cmake_generator_deps = [],
         deps = [],
         exclude_from_cmake_all = False,
         tags = [],
@@ -210,12 +204,10 @@ def loom_low_descriptor_cc_library(
     loom_target_table_cc_library(
         name = name,
         generator = generator,
-        cmake_generator = cmake_generator,
         source = source,
         header = header,
         args = args,
         inputs = inputs,
-        cmake_generator_deps = cmake_generator_deps,
         deps = deps,
         exclude_from_cmake_all = exclude_from_cmake_all,
         tags = tags,

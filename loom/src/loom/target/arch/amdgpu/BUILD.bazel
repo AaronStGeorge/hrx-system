@@ -191,15 +191,7 @@ loom_assert_no_dependencies(
 # AMDGPU low descriptors
 #===------------------------------------------------------------------------===#
 
-_AMDGPU_TARGET_INFO_GENERATOR = "//loom/py/loom:amdgpu_target_info"
-
-_AMDGPU_TARGET_INFO_GENERATOR_SCRIPT = "//loom/py/loom:gen/amdgpu_target_info.py"
-
-_AMDGPU_TARGET_INFO_GENERATOR_DEPS = [
-    "//loom/py/loom:gen/amdgpu_target_info.py",
-    "//loom/py/loom:target/arch/amdgpu/isa_xml.py",
-    "//loom/py/loom:target/arch/amdgpu/target_info.py",
-]
+_AMDGPU_TARGET_INFO_GENERATOR = "//loom/py/loom/gen:amdgpu_target_info"
 
 loom_low_descriptor_data_archive(
     name = "amdgpu_isa_xml",
@@ -221,8 +213,6 @@ loom_target_table_cc_library(
         "--isa-xml=rdna4:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
         "--isa-xml=cdna4:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna4.xml)",
     ],
-    cmake_generator = _AMDGPU_TARGET_INFO_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_TARGET_INFO_GENERATOR_DEPS,
     generator = _AMDGPU_TARGET_INFO_GENERATOR,
     header = "target_info.h",
     inputs = [
@@ -247,59 +237,13 @@ loom_cc_test(
     ],
 )
 
-_AMDGPU_DESCRIPTOR_GENERATOR = "//loom/py/loom:amdgpu_descriptors"
+_AMDGPU_DESCRIPTOR_GENERATOR = "//loom/py/loom/gen:amdgpu_descriptors"
 
-_AMDGPU_DESCRIPTOR_GENERATOR_SCRIPT = "//loom/py/loom:gen/amdgpu_descriptors.py"
+_AMDGPU_DESCRIPTOR_ID_GENERATOR = "//loom/py/loom/gen:amdgpu_descriptor_ids"
 
-_AMDGPU_DESCRIPTOR_GENERATOR_DEPS = [
-    "//loom/py/loom:gen/low_descriptors.py",
-    "//loom/py/loom:target/arch/amdgpu/descriptor_overlay.py",
-    "//loom/py/loom:target/arch/amdgpu/descriptors.py",
-    "//loom/py/loom:target/arch/amdgpu/encoding.py",
-    "//loom/py/loom:target/arch/amdgpu/isa_xml.py",
-    "//loom/py/loom:target/arch/amdgpu/target_info.py",
-    "//loom/py/loom:target/low_descriptors.py",
-]
+_AMDGPU_ATOMIC_CANDIDATE_GENERATOR = "//loom/py/loom/gen:amdgpu_atomic_candidates"
 
-_AMDGPU_DESCRIPTOR_ID_GENERATOR = "//loom/py/loom:amdgpu_descriptor_ids"
-
-_AMDGPU_DESCRIPTOR_ID_GENERATOR_SCRIPT = "//loom/py/loom:gen/amdgpu_descriptor_ids.py"
-
-_AMDGPU_DESCRIPTOR_ID_GENERATOR_DEPS = [
-    "//loom/py/loom:gen/amdgpu_descriptor_ids.py",
-    "//loom/py/loom:target/arch/amdgpu/descriptor_overlay.py",
-    "//loom/py/loom:target/arch/amdgpu/descriptors.py",
-    "//loom/py/loom:target/arch/amdgpu/encoding.py",
-    "//loom/py/loom:target/arch/amdgpu/isa_xml.py",
-    "//loom/py/loom:target/arch/amdgpu/target_info.py",
-    "//loom/py/loom:target/low_descriptors.py",
-]
-
-_AMDGPU_ATOMIC_CANDIDATE_GENERATOR = "//loom/py/loom:amdgpu_atomic_candidates"
-
-_AMDGPU_ATOMIC_CANDIDATE_GENERATOR_SCRIPT = "//loom/py/loom:gen/amdgpu_atomic_candidates.py"
-
-_AMDGPU_ATOMIC_CANDIDATE_GENERATOR_DEPS = [
-    "//loom/py/loom:gen/amdgpu_atomic_candidates.py",
-    "//loom/py/loom:gen/generated_file.py",
-    "//loom/py/loom:target/arch/amdgpu/descriptor_overlay.py",
-    "//loom/py/loom:target/arch/amdgpu/descriptors.py",
-    "//loom/py/loom:target/arch/amdgpu/encoding.py",
-    "//loom/py/loom:target/arch/amdgpu/isa_xml.py",
-    "//loom/py/loom:target/arch/amdgpu/target_info.py",
-    "//loom/py/loom:target/low_descriptors.py",
-]
-
-_AMDGPU_ENCODING_TABLE_GENERATOR = "//loom/py/loom:amdgpu_encoding_tables"
-
-_AMDGPU_ENCODING_TABLE_GENERATOR_SCRIPT = "//loom/py/loom:gen/amdgpu_encoding_tables.py"
-
-_AMDGPU_ENCODING_TABLE_GENERATOR_DEPS = [
-    "//loom/py/loom:gen/amdgpu_encoding_tables.py",
-    "//loom/py/loom:target/arch/amdgpu/encoding.py",
-    "//loom/py/loom:target/arch/amdgpu/isa_xml.py",
-    "//loom/py/loom:target/arch/amdgpu/target_info.py",
-]
+_AMDGPU_ENCODING_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_encoding_tables"
 
 loom_cc_library(
     name = "encoding_defs",
@@ -347,8 +291,6 @@ loom_target_table_cc_library(
     args = [
         "--public-header=loom/target/arch/amdgpu/descriptor_ids.h",
     ],
-    cmake_generator = _AMDGPU_DESCRIPTOR_ID_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_DESCRIPTOR_ID_GENERATOR_DEPS,
     generator = _AMDGPU_DESCRIPTOR_ID_GENERATOR,
     header = "descriptor_ids.h",
     source = "descriptor_ids.c",
@@ -359,8 +301,6 @@ loom_target_table_cc_library(
     args = [
         "--public-header=loom/target/arch/amdgpu/lower/atomic_candidates.h",
     ],
-    cmake_generator = _AMDGPU_ATOMIC_CANDIDATE_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_ATOMIC_CANDIDATE_GENERATOR_DEPS,
     generator = _AMDGPU_ATOMIC_CANDIDATE_GENERATOR,
     header = "lower/atomic_candidates.h",
     source = "lower/atomic_candidates.c",
@@ -373,66 +313,11 @@ loom_target_table_cc_library(
     ],
 )
 
-_AMDGPU_LOWER_RULE_GENERATOR = "//loom/py/loom:amdgpu_lower_rule_shard"
-
-_AMDGPU_LOWER_RULE_GENERATOR_SCRIPT = "//loom/py/loom:gen/target_lower_rule_shard.py"
-
-_AMDGPU_LOWER_RULE_GENERATOR_DEPS = [
-    "//loom/py/loom:dialect/atomic.py",
-    "//loom/py/loom:dialect/cache.py",
-    "//loom/py/loom:dialect/combining.py",
-    "//loom/py/loom:dialect/index/__init__.py",
-    "//loom/py/loom:dialect/index/defs.py",
-    "//loom/py/loom:dialect/kernel/__init__.py",
-    "//loom/py/loom:dialect/kernel/defs.py",
-    "//loom/py/loom:dialect/scalar/__init__.py",
-    "//loom/py/loom:dialect/scalar/analysis.py",
-    "//loom/py/loom:dialect/scalar/arithmetic.py",
-    "//loom/py/loom:dialect/scalar/bitwise.py",
-    "//loom/py/loom:dialect/scalar/comparison.py",
-    "//loom/py/loom:dialect/scalar/conversion.py",
-    "//loom/py/loom:dialect/scalar/defs.py",
-    "//loom/py/loom:dialect/scalar/math.py",
-    "//loom/py/loom:dialect/vector/__init__.py",
-    "//loom/py/loom:dialect/vector/defs.py",
-    "//loom/py/loom:dsl.py",
-    "//loom/py/loom:gen/generated_file.py",
-    "//loom/py/loom:gen/target_lower_rules.py",
-    "//loom/py/loom:target/arch/amdgpu/contracts/__init__.py",
-    "//loom/py/loom:target/arch/amdgpu/contracts/async.py",
-    "//loom/py/loom:target/arch/amdgpu/contracts/arithmetic.py",
-    "//loom/py/loom:target/arch/amdgpu/contracts/compare.py",
-    "//loom/py/loom:target/arch/amdgpu/contracts/dot.py",
-    "//loom/py/loom:target/arch/amdgpu/contracts/integer.py",
-    "//loom/py/loom:target/arch/amdgpu/contracts/materializers.py",
-    "//loom/py/loom:target/arch/amdgpu/contracts/reduce.py",
-    "//loom/py/loom:target/arch/amdgpu/descriptor_overlay.py",
-    "//loom/py/loom:target/arch/amdgpu/descriptors.py",
-    "//loom/py/loom:target/arch/amdgpu/encoding.py",
-    "//loom/py/loom:target/arch/amdgpu/isa_xml.py",
-    "//loom/py/loom:target/arch/amdgpu/target_info.py",
-    "//loom/py/loom:target/contract_tables.py",
-    "//loom/py/loom:target/contracts/__init__.py",
-    "//loom/py/loom:target/contracts/descriptors.py",
-    "//loom/py/loom:target/contracts/emits.py",
-    "//loom/py/loom:target/contracts/guards.py",
-    "//loom/py/loom:target/contracts/immediates.py",
-    "//loom/py/loom:target/contracts/kinds.py",
-    "//loom/py/loom:target/contracts/lower_rules.py",
-    "//loom/py/loom:target/contracts/materializers.py",
-    "//loom/py/loom:target/contracts/patterns.py",
-    "//loom/py/loom:target/contracts/rules.py",
-    "//loom/py/loom:target/contracts/source.py",
-    "//loom/py/loom:target/contracts/tables.py",
-    "//loom/py/loom:target/contracts/templates.py",
-    "//loom/py/loom:target/low_descriptors.py",
-]
+_AMDGPU_LOWER_RULE_GENERATOR = "//loom/py/loom/gen:amdgpu_lower_rule_shard"
 
 loom_target_table_cc_library(
     name = "lower_async_rules",
     args = ["--contract-table=amdgpu.async"],
-    cmake_generator = _AMDGPU_LOWER_RULE_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_LOWER_RULE_GENERATOR_DEPS,
     generator = _AMDGPU_LOWER_RULE_GENERATOR,
     header = "lower/async_rules.h",
     source = "lower/async_rules.c",
@@ -445,8 +330,6 @@ loom_target_table_cc_library(
 loom_target_table_cc_library(
     name = "lower_arithmetic_rules",
     args = ["--contract-table=amdgpu.arithmetic"],
-    cmake_generator = _AMDGPU_LOWER_RULE_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_LOWER_RULE_GENERATOR_DEPS,
     generator = _AMDGPU_LOWER_RULE_GENERATOR,
     header = "lower/arithmetic_rules.h",
     source = "lower/arithmetic_rules.c",
@@ -464,8 +347,6 @@ loom_target_table_cc_library(
 loom_target_table_cc_library(
     name = "lower_compare_rules",
     args = ["--contract-table=amdgpu.compare"],
-    cmake_generator = _AMDGPU_LOWER_RULE_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_LOWER_RULE_GENERATOR_DEPS,
     generator = _AMDGPU_LOWER_RULE_GENERATOR,
     header = "lower/compare_rules.h",
     source = "lower/compare_rules.c",
@@ -480,8 +361,6 @@ loom_target_table_cc_library(
 loom_target_table_cc_library(
     name = "lower_integer_rules",
     args = ["--contract-table=amdgpu.integer"],
-    cmake_generator = _AMDGPU_LOWER_RULE_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_LOWER_RULE_GENERATOR_DEPS,
     generator = _AMDGPU_LOWER_RULE_GENERATOR,
     header = "lower/integer_rules.h",
     source = "lower/integer_rules.c",
@@ -497,8 +376,6 @@ loom_target_table_cc_library(
 loom_target_table_cc_library(
     name = "lower_dot_rules",
     args = ["--contract-table=amdgpu.dot"],
-    cmake_generator = _AMDGPU_LOWER_RULE_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_LOWER_RULE_GENERATOR_DEPS,
     generator = _AMDGPU_LOWER_RULE_GENERATOR,
     header = "lower/dot_rules.h",
     source = "lower/dot_rules.c",
@@ -513,8 +390,6 @@ loom_target_table_cc_library(
 loom_target_table_cc_library(
     name = "lower_reduce_rules",
     args = ["--contract-table=amdgpu.reduce"],
-    cmake_generator = _AMDGPU_LOWER_RULE_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_LOWER_RULE_GENERATOR_DEPS,
     generator = _AMDGPU_LOWER_RULE_GENERATOR,
     header = "lower/reduce_rules.h",
     source = "lower/reduce_rules.c",
@@ -535,8 +410,6 @@ loom_target_table_cc_library(
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna3.xml)",
         "--public-header=loom/target/arch/amdgpu/gfx11_encoding_tables.h",
     ],
-    cmake_generator = _AMDGPU_ENCODING_TABLE_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_ENCODING_TABLE_GENERATOR_DEPS,
     exclude_from_cmake_all = True,
     generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
     header = "gfx11_encoding_tables.h",
@@ -556,8 +429,6 @@ loom_target_table_cc_library(
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
         "--public-header=loom/target/arch/amdgpu/gfx12_encoding_tables.h",
     ],
-    cmake_generator = _AMDGPU_ENCODING_TABLE_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_ENCODING_TABLE_GENERATOR_DEPS,
     exclude_from_cmake_all = True,
     generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
     header = "gfx12_encoding_tables.h",
@@ -577,8 +448,6 @@ loom_target_table_cc_library(
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
         "--public-header=loom/target/arch/amdgpu/gfx1250_encoding_tables.h",
     ],
-    cmake_generator = _AMDGPU_ENCODING_TABLE_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_ENCODING_TABLE_GENERATOR_DEPS,
     exclude_from_cmake_all = True,
     generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
     header = "gfx1250_encoding_tables.h",
@@ -598,8 +467,6 @@ loom_target_table_cc_library(
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna4.xml)",
         "--public-header=loom/target/arch/amdgpu/gfx950_encoding_tables.h",
     ],
-    cmake_generator = _AMDGPU_ENCODING_TABLE_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_ENCODING_TABLE_GENERATOR_DEPS,
     exclude_from_cmake_all = True,
     generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
     header = "gfx950_encoding_tables.h",
@@ -631,8 +498,6 @@ loom_low_descriptor_cc_library(
         "--target=gfx11",
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna3.xml)",
     ],
-    cmake_generator = _AMDGPU_DESCRIPTOR_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_DESCRIPTOR_GENERATOR_DEPS,
     exclude_from_cmake_all = True,
     generator = _AMDGPU_DESCRIPTOR_GENERATOR,
     header = "gfx11_descriptors.h",
@@ -661,8 +526,6 @@ loom_low_descriptor_cc_library(
         "--target=gfx12",
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
     ],
-    cmake_generator = _AMDGPU_DESCRIPTOR_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_DESCRIPTOR_GENERATOR_DEPS,
     exclude_from_cmake_all = True,
     generator = _AMDGPU_DESCRIPTOR_GENERATOR,
     header = "gfx12_descriptors.h",
@@ -691,8 +554,6 @@ loom_low_descriptor_cc_library(
         "--target=gfx1250",
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
     ],
-    cmake_generator = _AMDGPU_DESCRIPTOR_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_DESCRIPTOR_GENERATOR_DEPS,
     exclude_from_cmake_all = True,
     generator = _AMDGPU_DESCRIPTOR_GENERATOR,
     header = "gfx1250_descriptors.h",
@@ -721,8 +582,6 @@ loom_low_descriptor_cc_library(
         "--target=gfx950",
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna4.xml)",
     ],
-    cmake_generator = _AMDGPU_DESCRIPTOR_GENERATOR_SCRIPT,
-    cmake_generator_deps = _AMDGPU_DESCRIPTOR_GENERATOR_DEPS,
     exclude_from_cmake_all = True,
     generator = _AMDGPU_DESCRIPTOR_GENERATOR,
     header = "gfx950_descriptors.h",

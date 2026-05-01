@@ -1,0 +1,42 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+py_library(
+    name = "target_info",
+    srcs = [
+        "__init__.py",
+        "isa_xml.py",
+        "target_info.py",
+    ],
+    deps = [
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch:package",
+    ],
+)
+
+py_library(
+    name = "descriptors",
+    srcs = [
+        "__init__.py",
+        "descriptor_overlay.py",
+        "descriptors.py",
+        "encoding.py",
+        "isa_xml.py",
+        "target_info.py",
+    ],
+    deps = [
+        ":target_info",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch:package",
+    ],
+)

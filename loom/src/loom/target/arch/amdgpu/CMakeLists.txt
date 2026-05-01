@@ -37,7 +37,7 @@ loom_target_table_cc_library(
   NAME
     target_info
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_target_info.py"
+    iree::runtime::py::loom::gen::amdgpu_target_info
   SOURCE
     "target_info.c"
   HEADER
@@ -47,9 +47,6 @@ loom_target_table_cc_library(
     "--isa-xml=rdna4:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
     "--isa-xml=cdna4:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
   INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_target_info.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
     "loom_amdgpu_isa_xml"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
@@ -130,43 +127,26 @@ loom_target_table_cc_library(
   NAME
     descriptor_ids
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_descriptor_ids.py"
+    iree::runtime::py::loom::gen::amdgpu_descriptor_ids
   SOURCE
     "descriptor_ids.c"
   HEADER
     "descriptor_ids.h"
   ARGS
     "--public-header=loom/target/arch/amdgpu/descriptor_ids.h"
-  INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_descriptor_ids.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
 )
 
 loom_target_table_cc_library(
   NAME
     atomic_candidates
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_atomic_candidates.py"
+    iree::runtime::py::loom::gen::amdgpu_atomic_candidates
   SOURCE
     "lower/atomic_candidates.c"
   HEADER
     "lower/atomic_candidates.h"
   ARGS
     "--public-header=loom/target/arch/amdgpu/lower/atomic_candidates.h"
-  INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_atomic_candidates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/generated_file.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
   DEPS
     ::descriptor_ids
     ::lower_kinds
@@ -179,62 +159,13 @@ loom_target_table_cc_library(
   NAME
     lower_async_rules
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rule_shard.py"
+    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
   SOURCE
     "lower/async_rules.c"
   HEADER
     "lower/async_rules.h"
   ARGS
     "--contract-table=amdgpu.async"
-  INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/atomic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/cache.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/combining.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/kernel/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/kernel/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/analysis.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/arithmetic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/bitwise.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/comparison.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/conversion.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/math.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dsl.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/generated_file.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/async.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/arithmetic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/compare.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/dot.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/integer.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/materializers.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/reduce.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contract_tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/emits.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/guards.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/immediates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/kinds.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/lower_rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/materializers.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/patterns.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/source.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/templates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
   DEPS
     loom::src::loom::codegen::low::lower
     loom::src::loom::ops::kernel
@@ -244,62 +175,13 @@ loom_target_table_cc_library(
   NAME
     lower_arithmetic_rules
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rule_shard.py"
+    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
   SOURCE
     "lower/arithmetic_rules.c"
   HEADER
     "lower/arithmetic_rules.h"
   ARGS
     "--contract-table=amdgpu.arithmetic"
-  INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/atomic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/cache.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/combining.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/kernel/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/kernel/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/analysis.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/arithmetic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/bitwise.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/comparison.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/conversion.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/math.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dsl.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/generated_file.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/async.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/arithmetic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/compare.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/dot.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/integer.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/materializers.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/reduce.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contract_tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/emits.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/guards.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/immediates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/kinds.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/lower_rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/materializers.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/patterns.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/source.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/templates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
   DEPS
     ::descriptor_ids
     ::lower_kinds
@@ -314,62 +196,13 @@ loom_target_table_cc_library(
   NAME
     lower_compare_rules
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rule_shard.py"
+    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
   SOURCE
     "lower/compare_rules.c"
   HEADER
     "lower/compare_rules.h"
   ARGS
     "--contract-table=amdgpu.compare"
-  INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/atomic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/cache.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/combining.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/kernel/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/kernel/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/analysis.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/arithmetic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/bitwise.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/comparison.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/conversion.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/math.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dsl.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/generated_file.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/async.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/arithmetic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/compare.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/dot.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/integer.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/materializers.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/reduce.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contract_tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/emits.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/guards.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/immediates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/kinds.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/lower_rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/materializers.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/patterns.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/source.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/templates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
   DEPS
     ::descriptor_ids
     ::lower_materializers
@@ -381,62 +214,13 @@ loom_target_table_cc_library(
   NAME
     lower_integer_rules
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rule_shard.py"
+    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
   SOURCE
     "lower/integer_rules.c"
   HEADER
     "lower/integer_rules.h"
   ARGS
     "--contract-table=amdgpu.integer"
-  INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/atomic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/cache.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/combining.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/kernel/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/kernel/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/analysis.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/arithmetic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/bitwise.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/comparison.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/conversion.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/math.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dsl.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/generated_file.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/async.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/arithmetic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/compare.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/dot.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/integer.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/materializers.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/reduce.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contract_tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/emits.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/guards.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/immediates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/kinds.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/lower_rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/materializers.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/patterns.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/source.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/templates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
   DEPS
     ::descriptor_ids
     ::lower_materializers
@@ -449,62 +233,13 @@ loom_target_table_cc_library(
   NAME
     lower_dot_rules
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rule_shard.py"
+    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
   SOURCE
     "lower/dot_rules.c"
   HEADER
     "lower/dot_rules.h"
   ARGS
     "--contract-table=amdgpu.dot"
-  INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/atomic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/cache.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/combining.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/kernel/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/kernel/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/analysis.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/arithmetic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/bitwise.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/comparison.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/conversion.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/math.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dsl.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/generated_file.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/async.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/arithmetic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/compare.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/dot.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/integer.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/materializers.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/reduce.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contract_tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/emits.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/guards.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/immediates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/kinds.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/lower_rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/materializers.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/patterns.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/source.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/templates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
   DEPS
     ::descriptor_ids
     ::lower_kinds
@@ -516,62 +251,13 @@ loom_target_table_cc_library(
   NAME
     lower_reduce_rules
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rule_shard.py"
+    iree::runtime::py::loom::gen::amdgpu_lower_rule_shard
   SOURCE
     "lower/reduce_rules.c"
   HEADER
     "lower/reduce_rules.h"
   ARGS
     "--contract-table=amdgpu.reduce"
-  INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/atomic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/cache.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/combining.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/index/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/kernel/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/kernel/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/analysis.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/arithmetic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/bitwise.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/comparison.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/conversion.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/scalar/math.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dialect/vector/defs.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/dsl.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/generated_file.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/target_lower_rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/async.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/arithmetic.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/compare.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/dot.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/integer.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/materializers.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/contracts/reduce.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contract_tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/__init__.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/emits.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/guards.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/immediates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/kinds.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/lower_rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/materializers.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/patterns.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/rules.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/source.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/contracts/templates.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
   DEPS
     ::descriptor_ids
     ::lower_kinds
@@ -584,7 +270,7 @@ loom_target_table_cc_library(
   NAME
     gfx11_encoding_tables
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
+    iree::runtime::py::loom::gen::amdgpu_encoding_tables
   SOURCE
     "gfx11_encoding_tables.c"
   HEADER
@@ -595,10 +281,6 @@ loom_target_table_cc_library(
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
     "--public-header=loom/target/arch/amdgpu/gfx11_encoding_tables.h"
   INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
     "loom_amdgpu_isa_xml"
   DEPS
@@ -611,7 +293,7 @@ loom_target_table_cc_library(
   NAME
     gfx12_encoding_tables
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
+    iree::runtime::py::loom::gen::amdgpu_encoding_tables
   SOURCE
     "gfx12_encoding_tables.c"
   HEADER
@@ -622,10 +304,6 @@ loom_target_table_cc_library(
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
     "--public-header=loom/target/arch/amdgpu/gfx12_encoding_tables.h"
   INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
     "loom_amdgpu_isa_xml"
   DEPS
@@ -638,7 +316,7 @@ loom_target_table_cc_library(
   NAME
     gfx1250_encoding_tables
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
+    iree::runtime::py::loom::gen::amdgpu_encoding_tables
   SOURCE
     "gfx1250_encoding_tables.c"
   HEADER
@@ -649,10 +327,6 @@ loom_target_table_cc_library(
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
     "--public-header=loom/target/arch/amdgpu/gfx1250_encoding_tables.h"
   INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
     "loom_amdgpu_isa_xml"
   DEPS
@@ -665,7 +339,7 @@ loom_target_table_cc_library(
   NAME
     gfx950_encoding_tables
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
+    iree::runtime::py::loom::gen::amdgpu_encoding_tables
   SOURCE
     "gfx950_encoding_tables.c"
   HEADER
@@ -676,10 +350,6 @@ loom_target_table_cc_library(
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
     "--public-header=loom/target/arch/amdgpu/gfx950_encoding_tables.h"
   INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
     "loom_amdgpu_isa_xml"
   DEPS
@@ -709,7 +379,7 @@ loom_low_descriptor_cc_library(
   NAME
     gfx11_descriptors
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_descriptors.py"
+    iree::runtime::py::loom::gen::amdgpu_descriptors
   SOURCE
     "gfx11_descriptors.c"
   HEADER
@@ -718,13 +388,6 @@ loom_low_descriptor_cc_library(
     "--target=gfx11"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
   INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
     "loom_amdgpu_isa_xml"
   DEPS
@@ -751,7 +414,7 @@ loom_low_descriptor_cc_library(
   NAME
     gfx12_descriptors
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_descriptors.py"
+    iree::runtime::py::loom::gen::amdgpu_descriptors
   SOURCE
     "gfx12_descriptors.c"
   HEADER
@@ -760,13 +423,6 @@ loom_low_descriptor_cc_library(
     "--target=gfx12"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
   INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
     "loom_amdgpu_isa_xml"
   DEPS
@@ -793,7 +449,7 @@ loom_low_descriptor_cc_library(
   NAME
     gfx1250_descriptors
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_descriptors.py"
+    iree::runtime::py::loom::gen::amdgpu_descriptors
   SOURCE
     "gfx1250_descriptors.c"
   HEADER
@@ -802,13 +458,6 @@ loom_low_descriptor_cc_library(
     "--target=gfx1250"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
   INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
     "loom_amdgpu_isa_xml"
   DEPS
@@ -835,7 +484,7 @@ loom_low_descriptor_cc_library(
   NAME
     gfx950_descriptors
   GENERATOR
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_descriptors.py"
+    iree::runtime::py::loom::gen::amdgpu_descriptors
   SOURCE
     "gfx950_descriptors.c"
   HEADER
@@ -844,13 +493,6 @@ loom_low_descriptor_cc_library(
     "--target=gfx950"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
   INPUTS
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
-    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
     "loom_amdgpu_isa_xml"
   DEPS

@@ -12,17 +12,16 @@ package(
 )
 
 py_library(
-    name = "package",
-    srcs = ["__init__.py"],
-)
-
-py_library(
-    name = "core",
+    name = "scalar",
     srcs = [
-        "assembly.py",
-        "dsl.py",
-        "errors.py",
-        "stable_id.py",
+        "__init__.py",
+        "analysis.py",
+        "arithmetic.py",
+        "bitwise.py",
+        "comparison.py",
+        "conversion.py",
+        "defs.py",
+        "math.py",
     ],
-    deps = [":package"],
+    deps = ["//loom/py/loom:core"],
 )

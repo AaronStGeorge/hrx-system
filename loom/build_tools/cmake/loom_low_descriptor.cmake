@@ -79,6 +79,8 @@ function(loom_target_table_cc_library)
 
   set(_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_SOURCE}")
   set(_HEADER "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_HEADER}")
+  iree_py_library_main(_GENERATOR "${_RULE_GENERATOR}")
+  iree_py_library_collect_sources(_GENERATOR_INPUTS "${_RULE_GENERATOR}")
 
   add_custom_command(
     OUTPUT
@@ -86,12 +88,12 @@ function(loom_target_table_cc_library)
       "${_HEADER}"
     COMMAND
       "${Python3_EXECUTABLE}"
-      "${_RULE_GENERATOR}"
+      "${_GENERATOR}"
       ${_RULE_ARGS}
       "--source=${_SOURCE}"
       "--header=${_HEADER}"
     DEPENDS
-      "${_RULE_GENERATOR}"
+      ${_GENERATOR_INPUTS}
       ${_RULE_INPUTS}
     COMMENT
       "Generating ${_RULE_NAME} target table"

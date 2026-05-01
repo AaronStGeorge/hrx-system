@@ -1,0 +1,215 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+py_library(
+    name = "generated_file",
+    srcs = [
+        "__init__.py",
+        "generated_file.py",
+    ],
+)
+
+py_library(
+    name = "low_descriptors",
+    srcs = ["low_descriptors.py"],
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+    ],
+)
+
+py_library(
+    name = "target_contract_tables",
+    srcs = ["target_contract_tables.py"],
+    deps = [
+        ":generated_file",
+        "//loom/py/loom:core",
+        "//loom/py/loom/target/contracts",
+    ],
+)
+
+py_library(
+    name = "target_lower_rules",
+    srcs = ["target_lower_rules.py"],
+    deps = [
+        ":generated_file",
+        "//loom/py/loom:core",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/contracts",
+    ],
+)
+
+py_binary(
+    name = "ireevm_low_descriptor_shard",
+    srcs = ["low_descriptor_shard.py"],
+    main = "low_descriptor_shard.py",
+    deps = [
+        ":low_descriptors",
+        "//loom/py/loom/target:descriptor_sets",
+        "//loom/py/loom/target/emit/ireevm:descriptors",
+    ],
+)
+
+py_binary(
+    name = "ireevm_lower_rule_shard",
+    srcs = ["target_lower_rule_shard.py"],
+    main = "target_lower_rule_shard.py",
+    deps = [
+        ":target_lower_rules",
+        "//loom/py/loom/target:contract_tables",
+        "//loom/py/loom/target/emit/ireevm:contracts",
+    ],
+)
+
+py_binary(
+    name = "wasm_low_descriptor_shard",
+    srcs = ["low_descriptor_shard.py"],
+    main = "low_descriptor_shard.py",
+    deps = [
+        ":low_descriptors",
+        "//loom/py/loom/target:descriptor_sets",
+        "//loom/py/loom/target/arch/wasm:descriptors",
+    ],
+)
+
+py_binary(
+    name = "wasm_lower_rule_shard",
+    srcs = ["target_lower_rule_shard.py"],
+    main = "target_lower_rule_shard.py",
+    deps = [
+        ":target_lower_rules",
+        "//loom/py/loom/target:contract_tables",
+        "//loom/py/loom/target/emit/wasm:contracts",
+    ],
+)
+
+py_binary(
+    name = "x86_low_descriptor_shard",
+    srcs = ["low_descriptor_shard.py"],
+    main = "low_descriptor_shard.py",
+    deps = [
+        ":low_descriptors",
+        "//loom/py/loom/target:descriptor_sets",
+        "//loom/py/loom/target/arch/x86:descriptors",
+    ],
+)
+
+py_binary(
+    name = "x86_lower_rule_shard",
+    srcs = ["target_lower_rule_shard.py"],
+    main = "target_lower_rule_shard.py",
+    deps = [
+        ":target_lower_rules",
+        "//loom/py/loom/target:contract_tables",
+        "//loom/py/loom/target/arch/x86/contracts",
+    ],
+)
+
+py_binary(
+    name = "test_low_descriptor_shard",
+    srcs = ["low_descriptor_shard.py"],
+    main = "low_descriptor_shard.py",
+    deps = [
+        ":low_descriptors",
+        "//loom/py/loom/target:descriptor_sets",
+        "//loom/py/loom/target/test:descriptors",
+    ],
+)
+
+py_binary(
+    name = "test_low_contract_shard",
+    srcs = ["target_contract_shard.py"],
+    main = "target_contract_shard.py",
+    deps = [
+        ":target_contract_tables",
+        "//loom/py/loom/target:contract_tables",
+        "//loom/py/loom/target/test:contracts",
+    ],
+)
+
+py_binary(
+    name = "test_low_lower_rule_shard",
+    srcs = ["target_lower_rule_shard.py"],
+    main = "target_lower_rule_shard.py",
+    deps = [
+        ":target_lower_rules",
+        "//loom/py/loom/target:contract_tables",
+        "//loom/py/loom/target/test:contracts",
+    ],
+)
+
+py_binary(
+    name = "amdgpu_target_info",
+    srcs = ["amdgpu_target_info.py"],
+    main = "amdgpu_target_info.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
+    ],
+)
+
+py_binary(
+    name = "amdgpu_descriptors",
+    srcs = ["amdgpu_descriptors.py"],
+    main = "amdgpu_descriptors.py",
+    deps = [
+        ":low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+    ],
+)
+
+py_binary(
+    name = "amdgpu_descriptor_ids",
+    srcs = ["amdgpu_descriptor_ids.py"],
+    main = "amdgpu_descriptor_ids.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+    ],
+)
+
+py_binary(
+    name = "amdgpu_atomic_candidates",
+    srcs = ["amdgpu_atomic_candidates.py"],
+    main = "amdgpu_atomic_candidates.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+    ],
+)
+
+py_binary(
+    name = "amdgpu_encoding_tables",
+    srcs = ["amdgpu_encoding_tables.py"],
+    main = "amdgpu_encoding_tables.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
+    ],
+)
+
+py_binary(
+    name = "amdgpu_lower_rule_shard",
+    srcs = ["target_lower_rule_shard.py"],
+    main = "target_lower_rule_shard.py",
+    deps = [
+        ":target_lower_rules",
+        "//loom/py/loom/target:contract_tables",
+        "//loom/py/loom/target/arch/amdgpu/contracts",
+    ],
+)
