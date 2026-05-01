@@ -53,19 +53,14 @@ static iree_status_t loom_target_contract_index_count_fragment_rows(
 static iree_status_t loom_target_contract_index_allocate_dialects(
     const uint16_t* dialect_op_counts, uint8_t dialect_base_id,
     uint8_t dialect_count, loom_target_contract_dialect_table_t** out_dialects,
-    loom_target_contract_op_entry_t*** out_op_entries_by_dialect,
+    loom_target_contract_op_entry_t** op_entries_by_dialect,
     iree_arena_allocator_t* arena) {
   *out_dialects = NULL;
-  *out_op_entries_by_dialect = NULL;
 
   loom_target_contract_dialect_table_t* dialects = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, dialect_count, sizeof(*dialects), (void**)&dialects));
 
-  loom_target_contract_op_entry_t** op_entries_by_dialect = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, UINT8_MAX + 1, sizeof(*op_entries_by_dialect),
-      (void**)&op_entries_by_dialect));
   for (uint16_t i = 0; i <= UINT8_MAX; ++i) {
     op_entries_by_dialect[i] = NULL;
   }
@@ -105,7 +100,6 @@ static iree_status_t loom_target_contract_index_allocate_dialects(
   }
 
   *out_dialects = dialects;
-  *out_op_entries_by_dialect = op_entries_by_dialect;
   return iree_ok_status();
 }
 
@@ -251,10 +245,10 @@ iree_status_t loom_target_contract_index_compose(
   const uint8_t dialect_count = (uint8_t)dialect_count_u16;
 
   loom_target_contract_dialect_table_t* dialects = NULL;
-  loom_target_contract_op_entry_t** op_entries_by_dialect = NULL;
+  loom_target_contract_op_entry_t* op_entries_by_dialect[UINT8_MAX + 1] = {0};
   IREE_RETURN_IF_ERROR(loom_target_contract_index_allocate_dialects(
       dialect_op_counts, dialect_base_id, dialect_count, &dialects,
-      &op_entries_by_dialect, arena));
+      op_entries_by_dialect, arena));
   IREE_RETURN_IF_ERROR(loom_target_contract_index_count_cases_by_op(
       bindings, binding_count, op_entries_by_dialect));
   const uint16_t assigned_case_count =
