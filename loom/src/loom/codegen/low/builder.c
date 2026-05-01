@@ -72,11 +72,6 @@ static iree_status_t loom_low_build_lookup_descriptor(
     loom_string_id_t* out_opcode_id) {
   *out_descriptor = NULL;
   *out_opcode_id = LOOM_STRING_ID_INVALID;
-  if (descriptor_id == LOOM_LOW_DESCRIPTOR_ID_NONE) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low descriptor ID is required");
-  }
-
   const uint32_t descriptor_ordinal =
       loom_low_descriptor_set_lookup_descriptor_by_id(descriptor_set,
                                                       descriptor_id);

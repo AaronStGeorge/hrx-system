@@ -266,24 +266,9 @@ static bool loom_target_low_legality_abi_is_low(
 }
 
 static iree_status_t loom_target_low_legality_validate_options(
-    const loom_module_t* module, loom_func_like_t function,
     const loom_target_low_legality_options_t* options,
-    loom_target_low_legality_result_t* out_result,
     const loom_low_descriptor_set_t** out_descriptor_set) {
-  if (!loom_func_like_isa(function)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low legality function is required");
-  }
   *out_descriptor_set = NULL;
-  if (!options->bundle || !options->bundle->snapshot ||
-      !options->bundle->export_plan || !options->bundle->config) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "complete target-low bundle is required");
-  }
-  if (!options->descriptor_registry) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor registry is required");
-  }
   if (!loom_target_low_legality_codegen_format_is_low(
           options->bundle->snapshot->codegen_format)) {
     return iree_make_status(
@@ -740,8 +725,8 @@ iree_status_t loom_target_low_verify_function_legality(
     loom_target_low_legality_result_t* out_result) {
   *out_result = (loom_target_low_legality_result_t){0};
   const loom_low_descriptor_set_t* descriptor_set = NULL;
-  IREE_RETURN_IF_ERROR(loom_target_low_legality_validate_options(
-      module, function, options, out_result, &descriptor_set));
+  IREE_RETURN_IF_ERROR(
+      loom_target_low_legality_validate_options(options, &descriptor_set));
   out_result->descriptor_set = descriptor_set;
 
   loom_target_low_legality_context_t context = {

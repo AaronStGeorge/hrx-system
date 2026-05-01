@@ -208,16 +208,6 @@ TEST(LowDescriptorRegistryTest, FormatsRegistryManifestJson) {
   iree_string_builder_deinitialize(&builder);
 }
 
-TEST(LowDescriptorRegistryTest, FormatManifestRejectsMissingBuilder) {
-  loom_target_low_descriptor_registry_t registry = {};
-  loom_target_core_test_low_descriptor_registry_initialize(&registry);
-
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_target_low_descriptor_registry_format_manifest_json(&registry,
-                                                               nullptr));
-}
-
 TEST(LowDescriptorRegistryTest, MissingKeyReturnsNullDescriptorSet) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_target_core_test_low_descriptor_set_lookup(

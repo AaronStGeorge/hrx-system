@@ -160,15 +160,6 @@ static iree_status_t loom_target_low_manifest_write_bundle_summary(
 iree_status_t loom_target_low_descriptor_registry_format_manifest_json(
     const loom_target_low_descriptor_registry_t* registry,
     iree_string_builder_t* builder) {
-  if (builder == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low registry manifest builder is required");
-  }
-  if (registry == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low registry is required");
-  }
-
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
   const iree_host_size_t descriptor_set_count =
