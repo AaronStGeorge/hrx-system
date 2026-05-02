@@ -129,201 +129,96 @@ def tilekernels_batched_transpose_gfx942(
 
 
 # ----
-# target.profile @hip_mcpu_gfx942 preset("hip -mcpu=gfx942")
-#
-# kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") workgroup_size(256, 1, 1) @batched_transpose_kernel(%x_handle: buffer, %out_handle: buffer, %num_batches: i32, %shape_x: i32, %shape_y: i32, %stride_x: i32) {
-#   %c0_bytes = index.constant 0 : offset
-#   %layout = encoding.layout.dense : encoding<layout>
-#   %x = buffer.view %x_handle[%c0_bytes] : buffer -> view<[%num_batches]x[%shape_x]x[%shape_y]xf16, %layout>
-#   %out = buffer.view %out_handle[%c0_bytes] : buffer -> view<[%num_batches]x[%shape_y]x[%shape_x]xf16, %layout>
-#   %bx = kernel.workgroup.id<x> : index
-#   %by = kernel.workgroup.id<y> : index
-#   %bz = kernel.workgroup.id<z> : index
-#   %thread_id = kernel.workitem.id<x> : index
-#   %ty = kernel.workitem.id<y> : index
-#   %tz = kernel.workitem.id<z> : index
-#   %out_shared_bytes = index.constant 33792 : offset
-#   %out_shared_buffer = buffer.alloca %out_shared_bytes {base_alignment = 2, memory_space = workgroup} : buffer
-#   %out_shared = buffer.view %out_shared_buffer[%c0_bytes] : buffer -> view<128x132xf16, %layout>
-#   %tmp_bytes = index.constant 32 : offset
-#   %tmp_buffer = buffer.alloca %tmp_bytes {base_alignment = 2, memory_space = private} : buffer
-#   %tmp = buffer.view %tmp_buffer[%c0_bytes] : buffer -> view<4x4xf16, %layout>
-#   %tmp_row_bytes = index.constant 8 : offset
-#   %tmp_row_buffer = buffer.alloca %tmp_row_bytes {base_alignment = 2, memory_space = private} : buffer
-#   %tmp_row = buffer.view %tmp_row_buffer[%c0_bytes] : buffer -> view<4xf16, %layout>
-#   %c = index.constant 32 : index
-#   %div = index.div %thread_id, %c : index
-#   %rem = index.rem %thread_id, %c : index
-#   %shape_x_assumed = scalar.assume %shape_x [mul(%shape_x, 128)] : i32
-#   %shape_y_assumed = scalar.assume %shape_y [mul(%shape_y, 128)] : i32
-#   %stride_x_assumed = scalar.assume %stride_x [mul(%stride_x, 4)] : i32
-#   %c_2 = index.constant 0 : index
-#   %c_3 = index.constant 4 : index
-#   %i_outer_ub = index.add %c_2, %c_3 : index
-#   %c1 = index.constant 1 : index
-#   scf.for %i_outer = [%c_2 to %i_outer_ub step %c1] {
-#     %c_4 = index.constant 8 : index
-#     %madd = index.madd %i_outer, %c_4, %div : index
-#     %j_ub = index.add %c_2, %c_3 : index
-#     scf.for %j = [%c_2 to %j_ub step %c1] {
-#       %k_ub = index.add %c_2, %c_3 : index
-#       scf.for %k = [%c_2 to %k_ub step %c1] {
-#         %c_5 = index.constant 128 : index
-#         %mul = index.mul %madd, %c_3 : index
-#         %madd_2 = index.madd %by, %c_5, %mul : index
-#         %add = index.add %madd_2, %j : index
-#         %mul_2 = index.mul %rem, %c_3 : index
-#         %madd_3 = index.madd %bx, %c_5, %mul_2 : index
-#         %add_2 = index.add %madd_3, %k : index
-#         %load = view.load %x[%bz, %add, %add_2] : view<[%num_batches]x[%shape_x]x[%shape_y]xf16, %layout> -> f16
-#         view.store %load, %tmp_row[%k] : f16, view<4xf16, %layout>
-#         scf.yield
-#       }
-#       %k_ub_2 = index.add %c_2, %c_3 : index
-#       scf.for %k = [%c_2 to %k_ub_2 step %c1] {
-#         %load_2 = view.load %tmp_row[%k] : view<4xf16, %layout> -> f16
-#         view.store %load_2, %tmp[%k, %j] : f16, view<4x4xf16, %layout>
-#         scf.yield
-#       }
-#       scf.yield
-#     }
-#     %j_ub_2 = index.add %c_2, %c_3 : index
-#     scf.for %j = [%c_2 to %j_ub_2 step %c1] {
-#       %div_2 = index.div %thread_id, %c_3 : index
-#       %add_3 = index.add %j, %div_2 : index
-#       %rem_2 = index.rem %add_3, %c_3 : index
-#       %k_ub_3 = index.add %c_2, %c_3 : index
-#       scf.for %k = [%c_2 to %k_ub_3 step %c1] {
-#         %load_3 = view.load %tmp[%rem_2, %k] : view<4x4xf16, %layout> -> f16
-#         %madd_4 = index.madd %rem, %c_3, %rem_2 : index
-#         %madd_5 = index.madd %madd, %c_3, %k : index
-#         view.store %load_3, %out_shared[%madd_4, %madd_5] : f16, view<128x132xf16, %layout>
-#         scf.yield
-#       }
-#       scf.yield
-#     }
-#     scf.yield
-#   }
-#   kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
-#   %c_6 = index.constant 128 : index
-#   %i_ub = index.add %c_2, %c_6 : index
-#   scf.for %i = [%c_2 to %i_ub step %c1] {
-#     %j_ub_3 = index.add %c_2, %c_6 : index
-#     scf.for %j = [%c_2 to %j_ub_3 step %c1] {
-#       %load_4 = view.load %out_shared[%i, %j] : view<128x132xf16, %layout> -> f16
-#       %madd_6 = index.madd %bx, %c_6, %i : index
-#       %madd_7 = index.madd %by, %c_6, %j : index
-#       view.store %load_4, %out[%bz, %madd_6, %madd_7] : f16, view<[%num_batches]x[%shape_y]x[%shape_x]xf16, %layout>
-#       scf.yield
-#     }
-#     scf.yield
-#   }
-#   kernel.return
-# }
+r"""
+target.profile @hip_mcpu_gfx942 preset("hip -mcpu=gfx942")
 
-
-# ====
-@tilelang_case(
-    name="tilekernels_batched_transpose_gfx1100",
-    category="kernel",
-    tags=("tilekernels", "transpose", "amdgpu"),
-)
-def tilekernels_batched_transpose_gfx1100(
-    tilelang: Any,
-    T: Any,
-) -> TileLangImportInput:
-    return _batched_transpose_input(tilelang, T, target="hip -mcpu=gfx1100")
-
-
-# ----
-# target.profile @hip_mcpu_gfx1100 preset("hip -mcpu=gfx1100")
-#
-# kernel.def target(@hip_mcpu_gfx1100) export("batched_transpose_kernel") workgroup_size(256, 1, 1) @batched_transpose_kernel(%x_handle: buffer, %out_handle: buffer, %num_batches: i32, %shape_x: i32, %shape_y: i32, %stride_x: i32) {
-#   %c0_bytes = index.constant 0 : offset
-#   %layout = encoding.layout.dense : encoding<layout>
-#   %x = buffer.view %x_handle[%c0_bytes] : buffer -> view<[%num_batches]x[%shape_x]x[%shape_y]xf16, %layout>
-#   %out = buffer.view %out_handle[%c0_bytes] : buffer -> view<[%num_batches]x[%shape_y]x[%shape_x]xf16, %layout>
-#   %bx = kernel.workgroup.id<x> : index
-#   %by = kernel.workgroup.id<y> : index
-#   %bz = kernel.workgroup.id<z> : index
-#   %thread_id = kernel.workitem.id<x> : index
-#   %ty = kernel.workitem.id<y> : index
-#   %tz = kernel.workitem.id<z> : index
-#   %out_shared_bytes = index.constant 33792 : offset
-#   %out_shared_buffer = buffer.alloca %out_shared_bytes {base_alignment = 2, memory_space = workgroup} : buffer
-#   %out_shared = buffer.view %out_shared_buffer[%c0_bytes] : buffer -> view<128x132xf16, %layout>
-#   %tmp_bytes = index.constant 32 : offset
-#   %tmp_buffer = buffer.alloca %tmp_bytes {base_alignment = 2, memory_space = private} : buffer
-#   %tmp = buffer.view %tmp_buffer[%c0_bytes] : buffer -> view<4x4xf16, %layout>
-#   %tmp_row_bytes = index.constant 8 : offset
-#   %tmp_row_buffer = buffer.alloca %tmp_row_bytes {base_alignment = 2, memory_space = private} : buffer
-#   %tmp_row = buffer.view %tmp_row_buffer[%c0_bytes] : buffer -> view<4xf16, %layout>
-#   %c = index.constant 32 : index
-#   %div = index.div %thread_id, %c : index
-#   %rem = index.rem %thread_id, %c : index
-#   %shape_x_assumed = scalar.assume %shape_x [mul(%shape_x, 128)] : i32
-#   %shape_y_assumed = scalar.assume %shape_y [mul(%shape_y, 128)] : i32
-#   %stride_x_assumed = scalar.assume %stride_x [mul(%stride_x, 4)] : i32
-#   %c_2 = index.constant 0 : index
-#   %c_3 = index.constant 4 : index
-#   %i_outer_ub = index.add %c_2, %c_3 : index
-#   %c1 = index.constant 1 : index
-#   scf.for %i_outer = [%c_2 to %i_outer_ub step %c1] {
-#     %c_4 = index.constant 8 : index
-#     %madd = index.madd %i_outer, %c_4, %div : index
-#     %j_ub = index.add %c_2, %c_3 : index
-#     scf.for %j = [%c_2 to %j_ub step %c1] {
-#       %k_ub = index.add %c_2, %c_3 : index
-#       scf.for %k = [%c_2 to %k_ub step %c1] {
-#         %c_5 = index.constant 128 : index
-#         %mul = index.mul %madd, %c_3 : index
-#         %madd_2 = index.madd %by, %c_5, %mul : index
-#         %add = index.add %madd_2, %j : index
-#         %mul_2 = index.mul %rem, %c_3 : index
-#         %madd_3 = index.madd %bx, %c_5, %mul_2 : index
-#         %add_2 = index.add %madd_3, %k : index
-#         %load = view.load %x[%bz, %add, %add_2] : view<[%num_batches]x[%shape_x]x[%shape_y]xf16, %layout> -> f16
-#         view.store %load, %tmp_row[%k] : f16, view<4xf16, %layout>
-#         scf.yield
-#       }
-#       %k_ub_2 = index.add %c_2, %c_3 : index
-#       scf.for %k = [%c_2 to %k_ub_2 step %c1] {
-#         %load_2 = view.load %tmp_row[%k] : view<4xf16, %layout> -> f16
-#         view.store %load_2, %tmp[%k, %j] : f16, view<4x4xf16, %layout>
-#         scf.yield
-#       }
-#       scf.yield
-#     }
-#     %j_ub_2 = index.add %c_2, %c_3 : index
-#     scf.for %j = [%c_2 to %j_ub_2 step %c1] {
-#       %div_2 = index.div %thread_id, %c_3 : index
-#       %add_3 = index.add %j, %div_2 : index
-#       %rem_2 = index.rem %add_3, %c_3 : index
-#       %k_ub_3 = index.add %c_2, %c_3 : index
-#       scf.for %k = [%c_2 to %k_ub_3 step %c1] {
-#         %load_3 = view.load %tmp[%rem_2, %k] : view<4x4xf16, %layout> -> f16
-#         %madd_4 = index.madd %rem, %c_3, %rem_2 : index
-#         %madd_5 = index.madd %madd, %c_3, %k : index
-#         view.store %load_3, %out_shared[%madd_4, %madd_5] : f16, view<128x132xf16, %layout>
-#         scf.yield
-#       }
-#       scf.yield
-#     }
-#     scf.yield
-#   }
-#   kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
-#   %c_6 = index.constant 128 : index
-#   %i_ub = index.add %c_2, %c_6 : index
-#   scf.for %i = [%c_2 to %i_ub step %c1] {
-#     %j_ub_3 = index.add %c_2, %c_6 : index
-#     scf.for %j = [%c_2 to %j_ub_3 step %c1] {
-#       %load_4 = view.load %out_shared[%i, %j] : view<128x132xf16, %layout> -> f16
-#       %madd_6 = index.madd %bx, %c_6, %i : index
-#       %madd_7 = index.madd %by, %c_6, %j : index
-#       view.store %load_4, %out[%bz, %madd_6, %madd_7] : f16, view<[%num_batches]x[%shape_y]x[%shape_x]xf16, %layout>
-#       scf.yield
-#     }
-#     scf.yield
-#   }
-#   kernel.return
-# }
+kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") workgroup_size(256, 1, 1) @batched_transpose_kernel(%x_handle: buffer, %out_handle: buffer, %num_batches: i32, %shape_x: i32, %shape_y: i32, %stride_x: i32) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %x = buffer.view %x_handle[%c0_bytes] : buffer -> view<[%num_batches]x[%shape_x]x[%shape_y]xf16, %layout>
+  %out = buffer.view %out_handle[%c0_bytes] : buffer -> view<[%num_batches]x[%shape_y]x[%shape_x]xf16, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %by = kernel.workgroup.id<y> : index
+  %bz = kernel.workgroup.id<z> : index
+  %thread_id = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %out_shared_bytes = index.constant 33792 : offset
+  %out_shared_buffer = buffer.alloca %out_shared_bytes {base_alignment = 2, memory_space = workgroup} : buffer
+  %out_shared = buffer.view %out_shared_buffer[%c0_bytes] : buffer -> view<128x132xf16, %layout>
+  %tmp_bytes = index.constant 32 : offset
+  %tmp_buffer = buffer.alloca %tmp_bytes {base_alignment = 2, memory_space = private} : buffer
+  %tmp = buffer.view %tmp_buffer[%c0_bytes] : buffer -> view<4x4xf16, %layout>
+  %tmp_row_bytes = index.constant 8 : offset
+  %tmp_row_buffer = buffer.alloca %tmp_row_bytes {base_alignment = 2, memory_space = private} : buffer
+  %tmp_row = buffer.view %tmp_row_buffer[%c0_bytes] : buffer -> view<4xf16, %layout>
+  %c32 = index.constant 32 : index
+  %div = index.div %thread_id, %c32 : index
+  %rem = index.rem %thread_id, %c32 : index
+  %shape_x_assumed = scalar.assume %shape_x [mul(%shape_x, 128)] : i32
+  %shape_y_assumed = scalar.assume %shape_y [mul(%shape_y, 128)] : i32
+  %stride_x_assumed = scalar.assume %stride_x [mul(%stride_x, 4)] : i32
+  %c0 = index.constant 0 : index
+  %c4 = index.constant 4 : index
+  %i_outer_ub = index.add %c0, %c4 : index
+  %c1 = index.constant 1 : index
+  scf.for %i_outer = [%c0 to %i_outer_ub step %c1] {
+    %c8 = index.constant 8 : index
+    %madd = index.madd %i_outer, %c8, %div : index
+    %j_ub = index.add %c0, %c4 : index
+    scf.for %j = [%c0 to %j_ub step %c1] {
+      %k_ub = index.add %c0, %c4 : index
+      scf.for %k = [%c0 to %k_ub step %c1] {
+        %c128 = index.constant 128 : index
+        %mul = index.mul %madd, %c4 : index
+        %madd_2 = index.madd %by, %c128, %mul : index
+        %add = index.add %madd_2, %j : index
+        %mul_2 = index.mul %rem, %c4 : index
+        %madd_3 = index.madd %bx, %c128, %mul_2 : index
+        %add_2 = index.add %madd_3, %k : index
+        %load = view.load %x[%bz, %add, %add_2] : view<[%num_batches]x[%shape_x]x[%shape_y]xf16, %layout> -> f16
+        view.store %load, %tmp_row[%k] : f16, view<4xf16, %layout>
+        scf.yield
+      }
+      %k_ub_2 = index.add %c0, %c4 : index
+      scf.for %k = [%c0 to %k_ub_2 step %c1] {
+        %load_2 = view.load %tmp_row[%k] : view<4xf16, %layout> -> f16
+        view.store %load_2, %tmp[%k, %j] : f16, view<4x4xf16, %layout>
+        scf.yield
+      }
+      scf.yield
+    }
+    %j_ub_2 = index.add %c0, %c4 : index
+    scf.for %j = [%c0 to %j_ub_2 step %c1] {
+      %div_2 = index.div %thread_id, %c4 : index
+      %add_3 = index.add %j, %div_2 : index
+      %rem_2 = index.rem %add_3, %c4 : index
+      %k_ub_3 = index.add %c0, %c4 : index
+      scf.for %k = [%c0 to %k_ub_3 step %c1] {
+        %load_3 = view.load %tmp[%rem_2, %k] : view<4x4xf16, %layout> -> f16
+        %madd_4 = index.madd %rem, %c4, %rem_2 : index
+        %madd_5 = index.madd %madd, %c4, %k : index
+        view.store %load_3, %out_shared[%madd_4, %madd_5] : f16, view<128x132xf16, %layout>
+        scf.yield
+      }
+      scf.yield
+    }
+    scf.yield
+  }
+  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  %c128_2 = index.constant 128 : index
+  %i_ub = index.add %c0, %c128_2 : index
+  scf.for %i = [%c0 to %i_ub step %c1] {
+    %j_ub_3 = index.add %c0, %c128_2 : index
+    scf.for %j = [%c0 to %j_ub_3 step %c1] {
+      %load_4 = view.load %out_shared[%i, %j] : view<128x132xf16, %layout> -> f16
+      %madd_6 = index.madd %bx, %c128_2, %i : index
+      %madd_7 = index.madd %by, %c128_2, %j : index
+      view.store %load_4, %out[%bz, %madd_6, %madd_7] : f16, view<[%num_batches]x[%shape_y]x[%shape_x]xf16, %layout>
+      scf.yield
+    }
+    scf.yield
+  }
+  kernel.return
+}
+"""

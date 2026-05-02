@@ -48,13 +48,15 @@ The `iree-bazel-test` wrapper detects `--test_arg=--update` and uses Bazel's
 standalone TestRunner strategy so update-capable tests can rewrite checked-in
 fixture files. The `--update` flag is consumed by the tiny pytest-style runner
 so it is not treated as another module name. Fixture tests that support update
-mode then rewrite their inline `# ----` expected-output sections and still fail
+mode then rewrite their inline `# ----` expected-output blocks and still fail
 if the importer crashes or reports a failed case.
 
 Python fixture files keep shared imports at the top, split cases with
-`# ====`, and compare imported Loom IR against the inline `# ----` section.
-Use update mode after intentional importer output changes instead of editing
-the expected Loom IR by hand.
+`# ====`, and compare imported Loom IR against the inline `# ----` block.
+Expected Loom IR is stored as a raw triple-quoted string literal so it remains
+valid Python while still being easy to copy into a `.loom` file. Use update mode
+after intentional importer output changes instead of editing the expected Loom
+IR by hand.
 
 Importer check file sets are owned by BUILD filegroups under the importer they
 exercise. Add new checked fixture files to the relevant importer filegroup and

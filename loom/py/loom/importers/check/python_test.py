@@ -24,11 +24,25 @@ from loom.importers.check.python import (
 )
 
 
-def test_python_expected_codec_keeps_output_in_comments() -> None:
+def test_python_expected_codec_emits_triple_quoted_blocks() -> None:
     encoded = encode_python_expected("func @main\n\n  return\n")
 
-    assert encoded == "# func @main\n#\n#   return\n"
+    assert encoded == 'r"""\nfunc @main\n\n  return\n"""\n'
     assert decode_python_expected(encoded) == "func @main\n\n  return\n"
+
+
+def test_python_expected_codec_reads_legacy_commented_blocks() -> None:
+    assert (
+        decode_python_expected("# func @main\n#\n#   return\n")
+        == "func @main\n\n  return\n"
+    )
+
+
+def test_python_expected_codec_falls_back_to_single_quote_delimiter() -> None:
+    encoded = encode_python_expected('say """hello"""\n')
+
+    assert encoded == "r'''\nsay \"\"\"hello\"\"\"\n'''\n"
+    assert decode_python_expected(encoded) == 'say """hello"""\n'
 
 
 def test_run_python_check_executes_decorated_cases() -> None:
@@ -104,7 +118,7 @@ def second():
     assert [result.status for result in results] == ["passed", "passed"]
 
 
-def test_run_python_check_updates_commented_expected_blocks() -> None:
+def test_run_python_check_updates_expected_blocks() -> None:
     with TemporaryDirectory() as directory:
         path = Path(directory) / "cases.py"
         path.write_text(
@@ -130,7 +144,7 @@ def first():
         updated_source = path.read_text()
 
     assert results[0].updated
-    assert "# new\n" in updated_source
+    assert 'r"""\nnew\n"""\n' in updated_source
     assert "# old\n" not in updated_source
 
 

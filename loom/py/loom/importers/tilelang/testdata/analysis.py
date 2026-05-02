@@ -64,25 +64,27 @@ def scoped_tl_assume(tir: Any) -> TileLangImportInput:
 
 
 # ----
-# target.profile @hip preset("hip")
-#
-# kernel.def target(@hip) export("scoped_tl_assume") workgroup_size(1, 1, 1) @scoped_tl_assume(%n: i32, %src: buffer, %dst: buffer) {
-#   %c0_bytes = index.constant 0 : offset
-#   %layout = encoding.layout.dense : encoding<layout>
-#   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
-#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xf32, %layout>
-#   %n_assumed = scalar.assume %n [lt(0, %n)] : i32
-#   %c = index.constant 0 : index
-#   %n_idx = index.cast %n_assumed : i32 to index
-#   %i_ub = index.add %c, %n_idx : index
-#   %c1 = index.constant 1 : index
-#   scf.for %i = [%c to %i_ub step %c1] {
-#     %load = view.load %src_view[%i] : view<4xf32, %layout> -> f32
-#     view.store %load, %dst_view[%i] : f32, view<4xf32, %layout>
-#     scf.yield
-#   }
-#   kernel.return
-# }
+r"""
+target.profile @hip preset("hip")
+
+kernel.def target(@hip) export("scoped_tl_assume") workgroup_size(1, 1, 1) @scoped_tl_assume(%n: i32, %src: buffer, %dst: buffer) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %n_assumed = scalar.assume %n [lt(0, %n)] : i32
+  %c0 = index.constant 0 : index
+  %n_idx = index.cast %n_assumed : i32 to index
+  %i_ub = index.add %c0, %n_idx : index
+  %c1 = index.constant 1 : index
+  scf.for %i = [%c0 to %i_ub step %c1] {
+    %load = view.load %src_view[%i] : view<4xf32, %layout> -> f32
+    view.store %load, %dst_view[%i] : f32, view<4xf32, %layout>
+    scf.yield
+  }
+  kernel.return
+}
+"""
 
 
 # ====
@@ -117,16 +119,18 @@ def effect_tir_assume(tir: Any) -> TileLangImportInput:
 
 
 # ----
-# target.profile @hip preset("hip")
-#
-# kernel.def target(@hip) export("effect_tir_assume") workgroup_size(1, 1, 1) @effect_tir_assume(%n: i32, %src: buffer, %dst: buffer) {
-#   %c0_bytes = index.constant 0 : offset
-#   %layout = encoding.layout.dense : encoding<layout>
-#   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
-#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xf32, %layout>
-#   %n_assumed = scalar.assume %n [mul(%n, 16)] : i32
-#   %c = index.constant 0 : index
-#   %load = view.load %src_view[%c] : view<4xf32, %layout> -> f32
-#   view.store %load, %dst_view[%c] : f32, view<4xf32, %layout>
-#   kernel.return
-# }
+r"""
+target.profile @hip preset("hip")
+
+kernel.def target(@hip) export("effect_tir_assume") workgroup_size(1, 1, 1) @effect_tir_assume(%n: i32, %src: buffer, %dst: buffer) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %n_assumed = scalar.assume %n [mul(%n, 16)] : i32
+  %c0 = index.constant 0 : index
+  %load = view.load %src_view[%c0] : view<4xf32, %layout> -> f32
+  view.store %load, %dst_view[%c0] : f32, view<4xf32, %layout>
+  kernel.return
+}
+"""

@@ -66,20 +66,22 @@ def thread_return_prefix_guard(tir: Any) -> TileLangImportInput:
 
 
 # ----
-# target.profile @hip preset("hip")
-#
-# kernel.def target(@hip) export("thread_return_prefix_guard") workgroup_size(1, 1, 1) @thread_return_prefix_guard(%n: i32, %i: i32, %src: buffer, %dst: buffer) {
-#   %c0_bytes = index.constant 0 : offset
-#   %layout = encoding.layout.dense : encoding<layout>
-#   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>
-#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
-#   %cmp = scalar.cmpi sge, %i, %n : i32
-#   kernel.exit %cmp : i1
-#   %i_idx = index.cast %i : i32 to index
-#   %load = view.load %src_view[%i_idx] : view<16xf32, %layout> -> f32
-#   view.store %load, %dst_view[%i_idx] : f32, view<16xf32, %layout>
-#   kernel.return
-# }
+r"""
+target.profile @hip preset("hip")
+
+kernel.def target(@hip) export("thread_return_prefix_guard") workgroup_size(1, 1, 1) @thread_return_prefix_guard(%n: i32, %i: i32, %src: buffer, %dst: buffer) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>
+  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
+  %cmp = scalar.cmpi sge, %i, %n : i32
+  kernel.exit %cmp : i1
+  %i_idx = index.cast %i : i32 to index
+  %load = view.load %src_view[%i_idx] : view<16xf32, %layout> -> f32
+  view.store %load, %dst_view[%i_idx] : f32, view<16xf32, %layout>
+  kernel.return
+}
+"""
 
 
 # ====
@@ -124,21 +126,23 @@ def thread_return_prefix_guard_with_effects(tir: Any) -> TileLangImportInput:
 
 
 # ----
-# target.profile @hip preset("hip")
-#
-# kernel.def target(@hip) export("thread_return_prefix_guard_with_effects") workgroup_size(1, 1, 1) @thread_return_prefix_guard_with_effects(%n: i32, %i: i32, %src: buffer, %dst: buffer) {
-#   %c0_bytes = index.constant 0 : offset
-#   %layout = encoding.layout.dense : encoding<layout>
-#   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>
-#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
-#   %cmp = scalar.cmpi sge, %i, %n : i32
-#   kernel.exit %cmp : i1 {
-#     %const = scalar.constant 0.0 : f32
-#     %c = index.constant 0 : index
-#     view.store %const, %dst_view[%c] : f32, view<16xf32, %layout>
-#   }
-#   %i_idx = index.cast %i : i32 to index
-#   %load = view.load %src_view[%i_idx] : view<16xf32, %layout> -> f32
-#   view.store %load, %dst_view[%i_idx] : f32, view<16xf32, %layout>
-#   kernel.return
-# }
+r"""
+target.profile @hip preset("hip")
+
+kernel.def target(@hip) export("thread_return_prefix_guard_with_effects") workgroup_size(1, 1, 1) @thread_return_prefix_guard_with_effects(%n: i32, %i: i32, %src: buffer, %dst: buffer) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>
+  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
+  %cmp = scalar.cmpi sge, %i, %n : i32
+  kernel.exit %cmp : i1 {
+    %const = scalar.constant 0.0 : f32
+    %c0 = index.constant 0 : index
+    view.store %const, %dst_view[%c0] : f32, view<16xf32, %layout>
+  }
+  %i_idx = index.cast %i : i32 to index
+  %load = view.load %src_view[%i_idx] : view<16xf32, %layout> -> f32
+  view.store %load, %dst_view[%i_idx] : f32, view<16xf32, %layout>
+  kernel.return
+}
+"""

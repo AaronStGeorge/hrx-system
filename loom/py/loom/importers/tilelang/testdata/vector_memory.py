@@ -59,18 +59,20 @@ def broadcast_vector_store(tir: Any) -> TileLangImportInput:
 
 
 # ----
-# target.profile @hip preset("hip")
-#
-# kernel.def target(@hip) export("broadcast_vector_store") workgroup_size(1, 1, 1) @broadcast_vector_store(%dst: buffer) {
-#   %c0_bytes = index.constant 0 : offset
-#   %layout = encoding.layout.dense : encoding<layout>
-#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
-#   %const = scalar.constant 0.0 : f32
-#   %splat = vector.splat %const : vector<4xf32>
-#   %c = index.constant 4 : index
-#   vector.store %splat, %dst_view[%c] : vector<4xf32>, view<16xf32, %layout>
-#   kernel.return
-# }
+r"""
+target.profile @hip preset("hip")
+
+kernel.def target(@hip) export("broadcast_vector_store") workgroup_size(1, 1, 1) @broadcast_vector_store(%dst: buffer) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
+  %const = scalar.constant 0.0 : f32
+  %splat = vector.splat %const : vector<4xf32>
+  %c4 = index.constant 4 : index
+  vector.store %splat, %dst_view[%c4] : vector<4xf32>, view<16xf32, %layout>
+  kernel.return
+}
+"""
 
 
 # ====
@@ -93,16 +95,18 @@ def ramp_vector_load(tir: Any) -> TileLangImportInput:
 
 
 # ----
-# target.profile @hip preset("hip")
-#
-# kernel.def target(@hip) export("ramp_vector_load") workgroup_size(1, 1, 1) @ramp_vector_load(%src: buffer, %dst: buffer) {
-#   %c0_bytes = index.constant 0 : offset
-#   %layout = encoding.layout.dense : encoding<layout>
-#   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>
-#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
-#   %c = index.constant 8 : index
-#   %load = vector.load %src_view[%c] : view<16xf32, %layout> -> vector<4xf32>
-#   %c_2 = index.constant 0 : index
-#   vector.store %load, %dst_view[%c_2] : vector<4xf32>, view<16xf32, %layout>
-#   kernel.return
-# }
+r"""
+target.profile @hip preset("hip")
+
+kernel.def target(@hip) export("ramp_vector_load") workgroup_size(1, 1, 1) @ramp_vector_load(%src: buffer, %dst: buffer) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>
+  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
+  %c8 = index.constant 8 : index
+  %load = vector.load %src_view[%c8] : view<16xf32, %layout> -> vector<4xf32>
+  %c0 = index.constant 0 : index
+  vector.store %load, %dst_view[%c0] : vector<4xf32>, view<16xf32, %layout>
+  kernel.return
+}
+"""

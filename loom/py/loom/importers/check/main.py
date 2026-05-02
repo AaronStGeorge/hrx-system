@@ -176,8 +176,10 @@ fixture runner still fails if an importer crashes or produces a failed case.
 
 Python importer fixtures keep shared imports at the top of the file and split
 cases with `# ====`. Each case compares imported Loom IR against the inline
-`# ----` section. Run update mode after intentional importer output changes
-instead of editing the expected Loom IR by hand.
+`# ----` block. Expected Loom IR is stored as a raw triple-quoted string literal
+so it remains valid Python while still being easy to copy into a `.loom` file.
+Run update mode after intentional importer output changes instead of editing
+the expected Loom IR by hand.
 
 Importer check file sets belong in BUILD filegroups under the importer they
 exercise and are passed to the test runner with `$(locations ...)`. Do not

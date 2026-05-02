@@ -58,7 +58,7 @@ def copy(T: Any) -> TileLangImportInput:
 
     assert [result.status for result in update_results] == ["updated"]
     assert [result.status for result in verify_results] == ["passed"]
-    assert '# kernel.def target(@hip) export("copy")' in updated_source
+    assert 'kernel.def target(@hip) export("copy")' in updated_source
     assert "view.load" in updated_source
     assert "view.store" in updated_source
 

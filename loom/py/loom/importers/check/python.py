@@ -295,16 +295,14 @@ def _filter_python_cases(
 
 
 def encode_python_expected(text: str) -> str:
-    lines: list[str] = []
-    for line in text.splitlines(keepends=True):
-        if line.strip():
-            lines.append(f"# {line}")
-        else:
-            lines.append("#\n")
-    return "".join(lines)
+    delimiter = _select_python_expected_delimiter(text)
+    return f"r{delimiter}\n{text}{delimiter}\n"
 
 
 def decode_python_expected(text: str) -> str:
+    triple_quoted = _decode_triple_quoted_expected(text)
+    if triple_quoted is not None:
+        return triple_quoted
     lines: list[str] = []
     for line in text.splitlines(keepends=True):
         if not line.strip():
@@ -316,8 +314,50 @@ def decode_python_expected(text: str) -> str:
         if line.strip() == "#":
             lines.append("\n")
             continue
-        raise PythonCheckError("Python expected output lines must be comments")
+        raise PythonCheckError(
+            "Python expected output must be a triple-quoted block or comments"
+        )
     return "".join(lines)
+
+
+def _select_python_expected_delimiter(text: str) -> str:
+    if '"""' not in text:
+        return '"""'
+    if "'''" not in text:
+        return "'''"
+    raise PythonCheckError(
+        "Python expected output cannot contain both triple-quote delimiters"
+    )
+
+
+def _decode_triple_quoted_expected(text: str) -> str | None:
+    lines = text.splitlines(keepends=True)
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    if not lines:
+        return None
+    delimiter = _python_expected_delimiter(lines[0])
+    if delimiter is None:
+        return None
+    body_with_close = "".join(lines[1:])
+    close_position = body_with_close.rfind(delimiter)
+    if close_position < 0:
+        raise PythonCheckError("Python expected output is missing its closing quote")
+    trailing_text = body_with_close[close_position + len(delimiter) :]
+    if trailing_text.strip():
+        raise PythonCheckError(
+            "Python expected output has text after its closing quote"
+        )
+    return body_with_close[:close_position]
+
+
+def _python_expected_delimiter(line: str) -> str | None:
+    stripped = line.strip()
+    if stripped in ('"""', 'r"""', 'R"""'):
+        return '"""'
+    if stripped in ("'''", "r'''", "R'''"):
+        return "'''"
+    return None
 
 
 def _check_case_for_line(

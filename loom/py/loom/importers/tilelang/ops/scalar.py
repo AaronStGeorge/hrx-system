@@ -54,11 +54,24 @@ def convert_immediate(
         result = context.build_constant(
             value,
             value_type,
-            context.reserve_name("c" if options.index_like else "const"),
+            context.reserve_name(
+                _constant_base_name(value, index_like=options.index_like)
+            ),
         )
         context.remember_constant(constant_key, value_type, result)
     context.map_value(expr, result, value_type)
     return result
+
+
+def _constant_base_name(value: object, *, index_like: bool) -> str:
+    if not index_like:
+        return "const"
+    text = str(value)
+    if text.isdecimal():
+        return f"c{text}"
+    if text.startswith("-") and text[1:].isdecimal():
+        return f"cm{text[1:]}"
+    return "c"
 
 
 def convert_var(

@@ -74,25 +74,27 @@ def launch_thread_attrs(tir: Any, tvm: Any) -> TileLangImportInput:
 
 
 # ----
-# target.profile @hip preset("hip")
-#
-# kernel.def target(@hip) export("launch_thread_attrs") workgroup_size(64, 1, 1) @launch_thread_attrs(%src: buffer, %dst: buffer) {
-#   %c0_bytes = index.constant 0 : offset
-#   %layout = encoding.layout.dense : encoding<layout>
-#   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<1024xf32, %layout>
-#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<1024xf32, %layout>
-#   %blockIdx_x = kernel.workgroup.id<x> : index
-#   %threadIdx_x = kernel.workitem.id<x> : index
-#   %add = index.add %blockIdx_x, %blockIdx_x : index
-#   %add_2 = index.add %add, %threadIdx_x : index
-#   %add_3 = index.add %add_2, %threadIdx_x : index
-#   %load = view.load %src_view[%add_3] : view<1024xf32, %layout> -> f32
-#   %add_4 = index.add %blockIdx_x, %blockIdx_x : index
-#   %add_5 = index.add %add_4, %threadIdx_x : index
-#   %add_6 = index.add %add_5, %threadIdx_x : index
-#   view.store %load, %dst_view[%add_6] : f32, view<1024xf32, %layout>
-#   kernel.return
-# }
+r"""
+target.profile @hip preset("hip")
+
+kernel.def target(@hip) export("launch_thread_attrs") workgroup_size(64, 1, 1) @launch_thread_attrs(%src: buffer, %dst: buffer) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<1024xf32, %layout>
+  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<1024xf32, %layout>
+  %blockIdx_x = kernel.workgroup.id<x> : index
+  %threadIdx_x = kernel.workitem.id<x> : index
+  %add = index.add %blockIdx_x, %blockIdx_x : index
+  %add_2 = index.add %add, %threadIdx_x : index
+  %add_3 = index.add %add_2, %threadIdx_x : index
+  %load = view.load %src_view[%add_3] : view<1024xf32, %layout> -> f32
+  %add_4 = index.add %blockIdx_x, %blockIdx_x : index
+  %add_5 = index.add %add_4, %threadIdx_x : index
+  %add_6 = index.add %add_5, %threadIdx_x : index
+  view.store %load, %dst_view[%add_6] : f32, view<1024xf32, %layout>
+  kernel.return
+}
+"""
 
 
 # ====
@@ -122,19 +124,21 @@ def shared_storage_sync(tir: Any) -> TileLangImportInput:
 
 
 # ----
-# target.profile @hip preset("hip")
-#
-# kernel.def target(@hip) export("shared_storage_sync") workgroup_size(1, 1, 1) @shared_storage_sync(%src: buffer, %dst: buffer) {
-#   %c0_bytes = index.constant 0 : offset
-#   %layout = encoding.layout.dense : encoding<layout>
-#   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
-#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xf32, %layout>
-#   kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
-#   %c = index.constant 0 : index
-#   %load = view.load %src_view[%c] : view<4xf32, %layout> -> f32
-#   view.store %load, %dst_view[%c] : f32, view<4xf32, %layout>
-#   kernel.return
-# }
+r"""
+target.profile @hip preset("hip")
+
+kernel.def target(@hip) export("shared_storage_sync") workgroup_size(1, 1, 1) @shared_storage_sync(%src: buffer, %dst: buffer) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xf32, %layout>
+  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  %c0 = index.constant 0 : index
+  %load = view.load %src_view[%c0] : view<4xf32, %layout> -> f32
+  view.store %load, %dst_view[%c0] : f32, view<4xf32, %layout>
+  kernel.return
+}
+"""
 
 
 # ====
@@ -163,15 +167,17 @@ def thread_binding_loop(tir: Any, tvm: Any) -> TileLangImportInput:
 
 
 # ----
-# target.profile @hip preset("hip")
-#
-# kernel.def target(@hip) export("thread_binding_loop") workgroup_size(128, 1, 1) @thread_binding_loop(%src: buffer, %dst: buffer) {
-#   %c0_bytes = index.constant 0 : offset
-#   %layout = encoding.layout.dense : encoding<layout>
-#   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<128xf32, %layout>
-#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<128xf32, %layout>
-#   %tx = kernel.workitem.id<x> : index
-#   %load = view.load %src_view[%tx] : view<128xf32, %layout> -> f32
-#   view.store %load, %dst_view[%tx] : f32, view<128xf32, %layout>
-#   kernel.return
-# }
+r"""
+target.profile @hip preset("hip")
+
+kernel.def target(@hip) export("thread_binding_loop") workgroup_size(128, 1, 1) @thread_binding_loop(%src: buffer, %dst: buffer) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<128xf32, %layout>
+  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<128xf32, %layout>
+  %tx = kernel.workitem.id<x> : index
+  %load = view.load %src_view[%tx] : view<128xf32, %layout> -> f32
+  view.store %load, %dst_view[%tx] : f32, view<128xf32, %layout>
+  kernel.return
+}
+"""
