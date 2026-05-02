@@ -317,7 +317,7 @@
       "patterns": [
         {
           "name": "keyword.other.loom",
-          "match": "\\b(?:workgroup_size|allocation|iter_args|artifact|expected|priority|schedule|default|dgroups|linkage|ordinal|actual|bounds|callee|device|export|import|inputs|layout|offset|preset|public|reason|source|target|values|attrs|count|range|shape|using|value|where|atol|axes|base|case|else|from|host|into|mode|path|rtol|seed|step|abi|for|nan|as|do|to|x)\\b"
+          "match": "\\b(?:workgroup_size|allocation|iter_args|artifact|expected|priority|schedule|default|dgroups|linkage|ordinal|actual|bounds|callee|device|export|import|inputs|layout|offset|public|reason|source|target|values|attrs|count|range|shape|using|value|where|atol|axes|base|case|else|from|host|into|mode|path|rtol|seed|step|abi|for|nan|as|do|to|x)\\b"
         },
         {
           "name": "constant.language.boolean.loom",

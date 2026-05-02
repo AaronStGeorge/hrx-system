@@ -129,7 +129,6 @@ KEYWORD_MAP: dict[str, str] = {
     "allocation": "LOOM_KW_ALLOCATION",
     "schedule": "LOOM_KW_SCHEDULE",
     "source": "LOOM_KW_SOURCE",
-    "preset": "LOOM_KW_PRESET",
     "abi": "LOOM_KW_ABI",
     "export": "LOOM_KW_EXPORT",
     "for": "LOOM_KW_FOR",
