@@ -138,3 +138,58 @@ kernel.def target(@hip_mcpu_gfx1100) export("effect_tir_assume") workgroup_size(
   kernel.return
 }
 """
+
+
+# ====
+@tilelang_case(
+    name="mixed_address_scalar_assume",
+    category="op",
+    tags=("analysis", "tilelang"),
+)
+def mixed_address_scalar_assume(tilelang: Any, T: Any) -> TileLangImportInput:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_mixed_address_scalar_assume() -> Any:
+        n = T.dynamic("n")
+
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def mixed_address_scalar_assume(
+            src: T.Tensor[(n,), T.float32],
+            dst: T.Tensor[(n,), T.float32],
+        ) -> None:
+            with T.Kernel(n, threads=1) as (pid,):
+                T.assume(pid < n)
+                dst[pid] = src[pid]
+
+        return mixed_address_scalar_assume
+
+    return TileLangImportInput(
+        source=get_mixed_address_scalar_assume,
+        target="hip -mcpu=gfx1100",
+        name="mixed_address_scalar_assume",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("mixed_address_scalar_assume") workgroup_size(1, 1, 1) @mixed_address_scalar_assume(%src_handle: buffer, %dst_handle: buffer, %n: i32) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<[%n]xf32, %layout>
+  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<[%n]xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %tx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %n_idx = index.cast %n : i32 to index
+  %bx_assumed, %n_assumed = index.assume %bx, %n_idx [lt(%bx, %n_idx)] : index, index
+  %load = view.load %src[%bx_assumed] : view<[%n]xf32, %layout> -> f32
+  view.store %load, %dst[%bx_assumed] : f32, view<[%n]xf32, %layout>
+  kernel.return
+}
+"""

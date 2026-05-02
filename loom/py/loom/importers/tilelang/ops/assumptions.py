@@ -16,7 +16,7 @@ from loom.importers.tilelang.context import TileLangConversionContext
 from loom.importers.tilelang.converter import TileLangConverter
 from loom.importers.tilelang.nodes import node_kind, node_text, source_name
 from loom.importers.tilelang.ops.topology import integer_value
-from loom.ir import Predicate, PredicateArg, Type
+from loom.ir import INDEX, Predicate, PredicateArg, Type
 
 ASSUME_ATTR_KEYS = {
     "tl.assume",
@@ -41,6 +41,14 @@ class _AssumeGroup:
     domain: str
     values: list[_AssumeValue]
     predicates: list[Predicate]
+
+
+_NormalizedComparison = tuple[
+    PredicateArg,
+    _AssumeValue | None,
+    PredicateArg,
+    _AssumeValue | None,
+]
 
 
 def convert_assume_attr_stmt(
@@ -136,6 +144,16 @@ def _extract_comparison(
         return None
     lhs_predicate_arg, lhs_value = lhs_arg
     rhs_predicate_arg, rhs_value = rhs_arg
+    normalized = _normalize_mixed_address_comparison(
+        lhs_predicate_arg,
+        lhs_value,
+        rhs_predicate_arg,
+        rhs_value,
+        context,
+    )
+    if normalized is None:
+        return None
+    lhs_predicate_arg, lhs_value, rhs_predicate_arg, rhs_value = normalized
     if lhs_value is None and rhs_value is None:
         return _constant_comparison(kind, lhs_predicate_arg, rhs_predicate_arg)
     values = tuple(
@@ -150,6 +168,66 @@ def _extract_comparison(
             values=values,
         ),
     )
+
+
+def _normalize_mixed_address_comparison(
+    lhs_arg: PredicateArg,
+    lhs_value: _AssumeValue | None,
+    rhs_arg: PredicateArg,
+    rhs_value: _AssumeValue | None,
+    context: TileLangConversionContext,
+) -> _NormalizedComparison | None:
+    lhs_domain = _assume_value_domain(lhs_value)
+    rhs_domain = _assume_value_domain(rhs_value)
+    if lhs_domain is None or rhs_domain is None or lhs_domain == rhs_domain:
+        return lhs_arg, lhs_value, rhs_arg, rhs_value
+    if {lhs_domain, rhs_domain} != {"address", "scalar"}:
+        return None
+    if lhs_domain == "scalar":
+        lhs_value = _assume_value_as_index(lhs_value, context)
+        if lhs_value is None:
+            return None
+        lhs_arg = _value_predicate_arg(lhs_value.ref, context)
+    if rhs_domain == "scalar":
+        rhs_value = _assume_value_as_index(rhs_value, context)
+        if rhs_value is None:
+            return None
+        rhs_arg = _value_predicate_arg(rhs_value.ref, context)
+    return lhs_arg, lhs_value, rhs_arg, rhs_value
+
+
+def _assume_value_domain(value: _AssumeValue | None) -> str | None:
+    if value is None:
+        return None
+    return _assume_domain(value.ref)
+
+
+def _assume_value_as_index(
+    value: _AssumeValue | None,
+    context: TileLangConversionContext,
+) -> _AssumeValue | None:
+    if value is None:
+        return None
+    if _assume_domain(value.ref) == "address":
+        return value
+    if not _is_integer_scalar(value.ref):
+        return None
+    existing = context.mapped_index_value(value.source)
+    if existing is not None:
+        return _AssumeValue(source=value.source, ref=existing)
+    result = context.builder.index.cast(
+        input=value.ref,
+        results=[INDEX],
+        name=context.fresh_name(
+            f"{source_name(value.source, fallback='value')}_idx",
+        ),
+    )
+    context.map_index_value(value.source, result)
+    context.record_converted(
+        node_text(value.source),
+        f"{context.ssa(result)} = index.cast",
+    )
+    return _AssumeValue(source=value.source, ref=result)
 
 
 def _extract_divisibility(
@@ -307,7 +385,21 @@ def _build_assume_group(
             names=names,
         )
     for source_value, result in zip(group.values, results, strict=True):
-        context.map_value(source_value.source, result, str(result.type))
+        if _maps_as_index_value(source_value, result, context):
+            context.map_index_value(source_value.source, result)
+        else:
+            context.map_value(source_value.source, result, str(result.type))
+
+
+def _maps_as_index_value(
+    source_value: _AssumeValue,
+    result: ValueRef,
+    context: TileLangConversionContext,
+) -> bool:
+    if _assume_domain(result) != "address":
+        return False
+    mapped = context.mapped(source_value.source)
+    return mapped is not None and _assume_domain(mapped) == "scalar"
 
 
 def _assume_domain(ref: ValueRef) -> str | None:
@@ -317,6 +409,10 @@ def _assume_domain(ref: ValueRef) -> str | None:
     if value_type != "i1" and value_type.startswith("i"):
         return "scalar"
     return None
+
+
+def _is_integer_scalar(ref: ValueRef) -> bool:
+    return _assume_domain(ref) == "scalar"
 
 
 def _dedupe_values(values: Iterable[_AssumeValue]) -> tuple[_AssumeValue, ...]:

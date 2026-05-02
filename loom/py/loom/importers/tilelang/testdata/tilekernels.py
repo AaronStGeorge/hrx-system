@@ -989,3 +989,315 @@ kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel
   kernel.return
 }
 """
+
+
+# ====
+def _make_engram_hash_kernel(tilelang: Any, T: Any) -> Any:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+            tilelang.PassConfigKey.TL_DISABLE_VECTORIZE_256: True,
+        },
+    )
+    def get_engram_hash_kernel(
+        max_ngram_size: int,
+        num_ngram_layers: int,
+        num_embed_table_per_ngram: int,
+    ) -> Any:
+        num_tokens = T.dynamic("num_tokens")
+        threads = 32
+
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def engram_hash_kernel(
+            ngram_token_ids: T.Tensor[(num_tokens, max_ngram_size), T.int32],
+            multipliers: T.Tensor[(num_ngram_layers, max_ngram_size), T.int64],
+            vocab_sizes: T.Tensor[
+                (num_ngram_layers, max_ngram_size - 1, num_embed_table_per_ngram),
+                T.int32,
+            ],
+            offsets: T.Tensor[
+                (num_ngram_layers, (max_ngram_size - 1) * num_embed_table_per_ngram),
+                T.int32,
+            ],
+            output: T.Tensor[
+                (
+                    num_ngram_layers,
+                    num_tokens,
+                    (max_ngram_size - 1) * num_embed_table_per_ngram,
+                ),
+                T.int32,
+            ],
+        ) -> None:
+            with T.Kernel(
+                num_ngram_layers,
+                T.ceildiv(num_tokens, threads),
+                threads=threads,
+            ) as (pid_h, pid_s):
+                tid = T.get_thread_binding()
+                token_idx = pid_s * threads + tid
+                if token_idx >= num_tokens:
+                    T.thread_return()
+
+                hash_local = T.alloc_var(T.int64, init=0)
+                for ngram_idx in T.unroll(max_ngram_size):
+                    token = T.cast(ngram_token_ids[token_idx, ngram_idx], T.int64)
+                    hash_local = T.bitwise_xor(
+                        hash_local,
+                        token * multipliers[pid_h, ngram_idx],
+                    )
+                    if ngram_idx > 0:
+                        for j in T.unroll(num_embed_table_per_ngram):
+                            col = (ngram_idx - 1) * num_embed_table_per_ngram + j
+                            vocab = T.cast(
+                                vocab_sizes[pid_h, ngram_idx - 1, j],
+                                T.int64,
+                            )
+                            output[pid_h, token_idx, col] = (
+                                T.cast(
+                                    hash_local % vocab,
+                                    T.int32,
+                                )
+                                + offsets[pid_h, col]
+                            )
+
+        return engram_hash_kernel
+
+    return get_engram_hash_kernel
+
+
+def _engram_hash_input(tilelang: Any, T: Any, *, target: str) -> TileLangImportInput:
+    return TileLangImportInput(
+        source=_make_engram_hash_kernel(tilelang, T),
+        args=(3, 2, 4),
+        target=target,
+        name="engram_hash_kernel",
+    )
+
+
+@tilelang_case(
+    name="tilekernels_engram_hash_gfx1100",
+    category="kernel",
+    tags=("tilekernels", "engram", "hash", "amdgpu"),
+)
+def tilekernels_engram_hash_gfx1100(
+    tilelang: Any,
+    T: Any,
+) -> TileLangImportInput:
+    return _engram_hash_input(tilelang, T, target="hip -mcpu=gfx1100")
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") workgroup_size(32, 1, 1) @engram_hash_kernel(%ngram_token_ids_handle: buffer, %multipliers_handle: buffer, %vocab_sizes_handle: buffer, %offsets_handle: buffer, %output_handle: buffer, %num_tokens: i32) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %ngram_token_ids = buffer.view %ngram_token_ids_handle[%c0_bytes] : buffer -> view<[%num_tokens]x3xi32, %layout>
+  %multipliers = buffer.view %multipliers_handle[%c0_bytes] : buffer -> view<2x3xi64, %layout>
+  %vocab_sizes = buffer.view %vocab_sizes_handle[%c0_bytes] : buffer -> view<2x2x4xi32, %layout>
+  %offsets = buffer.view %offsets_handle[%c0_bytes] : buffer -> view<2x8xi32, %layout>
+  %output = buffer.view %output_handle[%c0_bytes] : buffer -> view<2x[%num_tokens]x8xi32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %by = kernel.workgroup.id<y> : index
+  %tid = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %hash_local_bytes = index.constant 8 : offset
+  %hash_local_buffer = buffer.alloca %hash_local_bytes {base_alignment = 8, memory_space = private} : buffer
+  %hash_local = buffer.view %hash_local_buffer[%c0_bytes] : buffer -> view<1xi64, %layout>
+  %c0 = index.constant 0 : index
+  %const = scalar.constant 0 : i64
+  view.store %const, %hash_local[%c0] : i64, view<1xi64, %layout>
+  %c32 = index.constant 32 : index
+  %madd = index.madd %by, %c32, %tid : index
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %cmp = index.cmp sge, %madd, %num_tokens_idx : index
+  kernel.exit %cmp : i1
+  %c3 = index.constant 3 : index
+  %ngram_idx_ub = index.add %c0, %c3 : index
+  %c1 = index.constant 1 : index
+  scf.for %ngram_idx = [%c0 to %ngram_idx_ub step %c1] {
+    %load = view.load %ngram_token_ids[%madd, %ngram_idx] : view<[%num_tokens]x3xi32, %layout> -> i32
+    %extsi = scalar.extsi %load : i32 to i64
+    %load_2 = view.load %hash_local[%c0] : view<1xi64, %layout> -> i64
+    %load_3 = view.load %multipliers[%bx, %ngram_idx] : view<2x3xi64, %layout> -> i64
+    %muli = scalar.muli %extsi, %load_3 : i64
+    %xori = scalar.xori %load_2, %muli : i64
+    view.store %xori, %hash_local[%c0] : i64, view<1xi64, %layout>
+    %cmp_2 = index.cmp sgt, %ngram_idx, %c0 : index
+    scf.if %cmp_2 {
+      %c4 = index.constant 4 : index
+      %j_ub = index.add %c0, %c4 : index
+      scf.for %j = [%c0 to %j_ub step %c1] {
+        %sub = index.sub %ngram_idx, %c1 : index
+        %madd_2 = index.madd %sub, %c4, %j : index
+        %sub_2 = index.sub %ngram_idx, %c1 : index
+        %load_4 = view.load %vocab_sizes[%bx, %sub_2, %j] : view<2x2x4xi32, %layout> -> i32
+        %extsi_2 = scalar.extsi %load_4 : i32 to i64
+        %load_5 = view.load %hash_local[%c0] : view<1xi64, %layout> -> i64
+        %remsi = scalar.remsi %load_5, %extsi_2 : i64
+        %trunci = scalar.trunci %remsi : i64 to i32
+        %load_6 = view.load %offsets[%bx, %madd_2] : view<2x8xi32, %layout> -> i32
+        %addi = scalar.addi %trunci, %load_6 : i32
+        view.store %addi, %output[%bx, %madd, %madd_2] : i32, view<2x[%num_tokens]x8xi32, %layout>
+        scf.yield
+      }
+      scf.yield
+    } else {
+      scf.yield
+    }
+    scf.yield
+  }
+  kernel.return
+}
+"""
+
+
+# ====
+def _make_expand_to_fused_kernel(tilelang: Any, T: Any) -> Any:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_expand_to_fused_kernel(
+        hidden: int,
+        num_topk: int,
+    ) -> Any:
+        num_threads = 64
+        num_tokens = T.dynamic("num_tokens")
+        num_expanded_tokens = T.dynamic("num_expanded_tokens")
+        num_blocks = T.max(num_tokens, num_expanded_tokens)
+
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def expand_to_fused_kernel(
+            x: T.Tensor[(num_tokens, hidden), T.float16],
+            expanded_x: T.Tensor[(num_expanded_tokens, hidden), T.float16],
+            token_topk_to_pos: T.Tensor[(num_tokens, num_topk), T.int32],
+            pos_to_expert: T.Tensor[(num_expanded_tokens,), T.int32],
+        ) -> None:
+            with T.Kernel(num_blocks, threads=num_threads) as (pid_token,):
+                thread_idx = T.get_thread_binding()
+                if pid_token < num_expanded_tokens:  # noqa: SIM102
+                    if pos_to_expert[pid_token] < 0:
+                        for i in T.serial(thread_idx, hidden, num_threads):
+                            expanded_x[pid_token, i] = 0
+
+                if pid_token >= num_tokens:
+                    T.thread_return()
+                T.assume(pid_token < num_tokens)
+
+                for k in T.unroll(num_topk):
+                    pos = token_topk_to_pos[pid_token, k]
+                    T.assume(pos < num_expanded_tokens)
+                    if pos >= 0:
+                        for i in T.serial(thread_idx, hidden, num_threads):
+                            expanded_x[pos, i] = x[pid_token, i]
+
+        return expand_to_fused_kernel
+
+    return get_expand_to_fused_kernel
+
+
+def _expand_to_fused_input(
+    tilelang: Any, T: Any, *, target: str
+) -> TileLangImportInput:
+    return TileLangImportInput(
+        source=_make_expand_to_fused_kernel(tilelang, T),
+        args=(64, 2),
+        target=target,
+        name="expand_to_fused_kernel",
+    )
+
+
+@tilelang_case(
+    name="tilekernels_expand_to_fused_gfx1100",
+    category="kernel",
+    tags=("tilekernels", "moe", "expand", "amdgpu"),
+)
+def tilekernels_expand_to_fused_gfx1100(
+    tilelang: Any,
+    T: Any,
+) -> TileLangImportInput:
+    return _expand_to_fused_input(tilelang, T, target="hip -mcpu=gfx1100")
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("expand_to_fused_kernel") workgroup_size(64, 1, 1) @expand_to_fused_kernel(%x_handle: buffer, %expanded_x_handle: buffer, %token_topk_to_pos_handle: buffer, %pos_to_expert_handle: buffer, %num_tokens: i32, %num_expanded_tokens: i32) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %x = buffer.view %x_handle[%c0_bytes] : buffer -> view<[%num_tokens]x64xf16, %layout>
+  %expanded_x = buffer.view %expanded_x_handle[%c0_bytes] : buffer -> view<[%num_expanded_tokens]x64xf16, %layout>
+  %token_topk_to_pos = buffer.view %token_topk_to_pos_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xi32, %layout>
+  %pos_to_expert = buffer.view %pos_to_expert_handle[%c0_bytes] : buffer -> view<[%num_expanded_tokens]xi32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %thread_idx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %num_expanded_tokens_idx = index.cast %num_expanded_tokens : i32 to index
+  %cmp = index.cmp slt, %bx, %num_expanded_tokens_idx : index
+  scf.if %cmp {
+    %load = view.load %pos_to_expert[%bx] : view<[%num_expanded_tokens]xi32, %layout> -> i32
+    %const = scalar.constant 0 : i32
+    %cmp_2 = scalar.cmpi slt, %load, %const : i32
+    scf.if %cmp_2 {
+      %c0 = index.constant 0 : index
+      %c127 = index.constant 127 : index
+      %sub = index.sub %c127, %thread_idx : index
+      %c64 = index.constant 64 : index
+      %div = index.div %sub, %c64 : index
+      %tmp_ub = index.add %c0, %div : index
+      %c1 = index.constant 1 : index
+      scf.for %tmp = [%c0 to %tmp_ub step %c1] {
+        %madd = index.madd %tmp, %c64, %thread_idx : index
+        %const_2 = scalar.constant 0.0 : f16
+        view.store %const_2, %expanded_x[%bx, %madd] : f16, view<[%num_expanded_tokens]x64xf16, %layout>
+        scf.yield
+      }
+      scf.yield
+    } else {
+      scf.yield
+    }
+    scf.yield
+  } else {
+    scf.yield
+  }
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %cmp_3 = index.cmp sge, %bx, %num_tokens_idx : index
+  kernel.exit %cmp_3 : i1
+  %bx_assumed, %num_tokens_assumed = index.assume %bx, %num_tokens_idx [lt(%bx, %num_tokens_idx)] : index, index
+  %c0_2 = index.constant 0 : index
+  %c2 = index.constant 2 : index
+  %k_ub = index.add %c0_2, %c2 : index
+  %c1_2 = index.constant 1 : index
+  scf.for %k = [%c0_2 to %k_ub step %c1_2] {
+    %load_2 = view.load %token_topk_to_pos[%bx_assumed, %k] : view<[%num_tokens]x2xi32, %layout> -> i32
+    %pos_assumed, %num_expanded_tokens_assumed = scalar.assume %load_2, %num_expanded_tokens [lt(%load_2, %num_expanded_tokens)] : i32, i32
+    %const_3 = scalar.constant 0 : i32
+    %cmp_4 = scalar.cmpi sge, %pos_assumed, %const_3 : i32
+    scf.if %cmp_4 {
+      %c127_2 = index.constant 127 : index
+      %sub_2 = index.sub %c127_2, %thread_idx : index
+      %c64_2 = index.constant 64 : index
+      %div_2 = index.div %sub_2, %c64_2 : index
+      %tmp_ub_2 = index.add %c0_2, %div_2 : index
+      scf.for %tmp = [%c0_2 to %tmp_ub_2 step %c1_2] {
+        %madd_2 = index.madd %tmp, %c64_2, %thread_idx : index
+        %load_3 = view.load %x[%bx_assumed, %madd_2] : view<[%num_tokens]x64xf16, %layout> -> f16
+        %pos_idx = index.cast %pos_assumed : i32 to index
+        view.store %load_3, %expanded_x[%pos_idx, %madd_2] : f16, view<[%num_expanded_tokens]x64xf16, %layout>
+        scf.yield
+      }
+      scf.yield
+    } else {
+      scf.yield
+    }
+    scf.yield
+  }
+  kernel.return
+}
+"""
