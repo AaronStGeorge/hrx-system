@@ -29,8 +29,8 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/hal_binding_materialization.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
-#include "loom/target/arch/amdgpu/hal_resource_materialization.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/ops/ops.h"
 #include "loom/target/arch/amdgpu/target_info.h"
@@ -691,16 +691,15 @@ class LowKernelCompiler {
     const loom_low_descriptor_set_t* descriptor_set = nullptr;
     IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
         &target_registry_.registry, &bundle_storage.bundle, &descriptor_set));
-    loom_amdgpu_hal_resource_materialization_result_t materialization = {};
-    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_materialize(
+    loom_amdgpu_hal_binding_materialization_result_t materialization = {};
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_binding_materialize(
         module_, low_function, &bundle_storage.bundle, descriptor_set,
         &materialization, arena));
 
     const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
     iree_host_size_t fixed_value_count = 0;
     IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
-        module_, low_function, descriptor_set, &fixed_values,
-        &fixed_value_count, arena));
+        module_, low_function, &fixed_values, &fixed_value_count, arena));
 
     loom_low_verify_options_t verify_options = {
         .descriptor_registry = &target_registry_.registry,
@@ -828,11 +827,14 @@ iree_status_t CompileWorkitemStoreKernelForAmdgpu(const AmdgpuHsaTarget& target,
       "reg<amdgpu.vgpr>\n"
       "  %byte_offset = low.op<amdgpu.v_mul_lo_u32>(%tid, %four) : "
       "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
-      "  %binding = low.resource<hal_buffer_resource> {index = 0, "
-      "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
+      "  %binding = low.resource<hal_binding> {index = 0, "
+      "source_type = hal.buffer} : reg<amdgpu.sgpr x2>\n"
+      "  %descriptor = low.op<amdgpu.hal.buffer_descriptor>(%binding) "
+      "{cache_swizzle_stride = 0, valid_byte_count = 256} : "
+      "(reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>\n"
       "  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
       "reg<amdgpu.sgpr>\n"
-      "  low.op<amdgpu.buffer_store_dword>(%tid, %binding, %byte_offset, "
+      "  low.op<amdgpu.buffer_store_dword>(%tid, %descriptor, %byte_offset, "
       "%zero) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, "
       "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
       "  low.return\n"
@@ -855,19 +857,15 @@ iree_status_t CompileB128CopyKernelForAmdgpu(const AmdgpuHsaTarget& target,
       "reg<amdgpu.vgpr>\n"
       "  %byte_offset = low.op<amdgpu.v_mul_lo_u32>(%tid, %scale) : "
       "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
-      "  %source = low.resource<hal_buffer_resource> {index = 0, semantic_type "
-      "= hal.buffer} : reg<amdgpu.sgpr x4>\n"
-      "  %target = low.resource<hal_buffer_resource> {index = 1, semantic_type "
-      "= hal.buffer} : reg<amdgpu.sgpr x4>\n"
-      "  %source_ptr = low.slice %source[0] : reg<amdgpu.sgpr x4> -> "
-      "reg<amdgpu.sgpr x2>\n"
-      "  %target_ptr = low.slice %target[0] : reg<amdgpu.sgpr x4> -> "
-      "reg<amdgpu.sgpr x2>\n"
+      "  %source = low.resource<hal_binding> {index = 0, source_type "
+      "= hal.buffer} : reg<amdgpu.sgpr x2>\n"
+      "  %target = low.resource<hal_binding> {index = 1, source_type "
+      "= hal.buffer} : reg<amdgpu.sgpr x2>\n"
       "  %loaded = low.op<amdgpu.global_load_b128_saddr>(%byte_offset, "
-      "%source_ptr) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> "
+      "%source) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> "
       "reg<amdgpu.vgpr x4>\n"
       "  low.op<amdgpu.global_store_b128_saddr>(%byte_offset, %loaded, "
-      "%target_ptr) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>, "
+      "%target) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>, "
       "reg<amdgpu.sgpr x2>)\n"
       "  low.return\n"
       "}\n";

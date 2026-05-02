@@ -586,16 +586,20 @@ loom_cc_library(
   NAME
     hal_kernel_abi
   HDRS
+    "hal_binding_descriptor.h"
     "hal_kernel_abi.h"
   SRCS
     "hal_kernel_abi.c"
   DEPS
     ::descriptor_ids
+    ::target_info
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::register_class_map
+    loom::src::loom::error::emitter
+    loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::target::types
@@ -604,11 +608,11 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    hal_resource_materialization
+    hal_binding_materialization
   HDRS
-    "hal_resource_materialization.h"
+    "hal_binding_materialization.h"
   SRCS
-    "hal_resource_materialization.c"
+    "hal_binding_materialization.c"
   DEPS
     ::descriptor_ids
     ::hal_kernel_abi

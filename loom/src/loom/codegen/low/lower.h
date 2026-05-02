@@ -151,7 +151,7 @@ typedef struct loom_low_lower_abi_argument_t {
   int64_t resource_index;
   // Semantic source type recorded on low.resource. None defaults to the source
   // argument type.
-  loom_type_t resource_semantic_type;
+  loom_type_t resource_source_type;
   // Optional low.resource builder flags for resource-specific metadata.
   loom_low_resource_build_flags_t resource_build_flags;
   // Valid byte extent for byte-addressable resources when the corresponding

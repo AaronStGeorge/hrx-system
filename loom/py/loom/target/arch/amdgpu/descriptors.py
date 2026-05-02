@@ -682,6 +682,20 @@ _U32_IMMEDIATE = Immediate(
     unsigned_max=(2**32) - 1,
 )
 
+_HAL_BUFFER_DESCRIPTOR_VALID_BYTE_COUNT_IMMEDIATE = Immediate(
+    "valid_byte_count",
+    ImmediateKind.UNSIGNED,
+    bit_width=32,
+    unsigned_max=(2**32) - 1,
+)
+
+_HAL_BUFFER_DESCRIPTOR_CACHE_SWIZZLE_STRIDE_IMMEDIATE = Immediate(
+    "cache_swizzle_stride",
+    ImmediateKind.UNSIGNED,
+    bit_width=14,
+    unsigned_max=(2**14) - 1,
+)
+
 
 _MANUAL_SCALAR_DESCRIPTOR_KEYS = (
     "amdgpu.s_mov_b32",
@@ -1101,6 +1115,27 @@ _DESTRUCTIVE_BUFFER_ATOMIC_CONSTRAINTS = (
     Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
 )
 _PSEUDO_DEAD_REMOVABLE_FLAGS = (DescriptorFlag.DEAD_REMOVABLE, DescriptorFlag.PSEUDO)
+
+
+def _hal_buffer_descriptor_pseudos() -> tuple[Descriptor, ...]:
+    return (
+        Descriptor(
+            key="amdgpu.hal.buffer_descriptor",
+            mnemonic=None,
+            semantic_tag="memory.hal.buffer_descriptor",
+            operands=(
+                _sgpr_result("descriptor", units=4),
+                _sgpr_operand("binding", units=2),
+            ),
+            immediates=(
+                _HAL_BUFFER_DESCRIPTOR_VALID_BYTE_COUNT_IMMEDIATE,
+                _HAL_BUFFER_DESCRIPTOR_CACHE_SWIZZLE_STRIDE_IMMEDIATE,
+            ),
+            schedule_class=_SCHEDULE_SALU,
+            encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
+            flags=_PSEUDO_DEAD_REMOVABLE_FLAGS,
+        ),
+    )
 
 
 def _offset_immediate(
@@ -7112,6 +7147,7 @@ def _amdgpu_core_descriptor_set_bases() -> tuple[DescriptorSet, ...]:
 def _amdgpu_descriptor_id_key_set() -> set[str]:
     keys: set[str] = set()
     keys.update(_MANUAL_SCALAR_DESCRIPTOR_KEYS)
+    keys.update(descriptor.key for descriptor in _hal_buffer_descriptor_pseudos())
     for descriptor_set in _amdgpu_core_descriptor_set_bases():
         keys.update(descriptor.key for descriptor in descriptor_set.descriptors)
     for overlays in (
@@ -7610,6 +7646,7 @@ def _with_overlay_descriptors(
                 manual_descriptors[0],
                 *overlay_descriptors,
                 *manual_descriptors[1:],
+                *_hal_buffer_descriptor_pseudos(),
                 *base.descriptors,
             )
         ),

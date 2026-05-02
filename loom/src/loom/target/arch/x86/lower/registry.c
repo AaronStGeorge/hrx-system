@@ -180,7 +180,7 @@ static iree_status_t loom_x86_map_avx512_argument(
     *out_argument = (loom_low_lower_abi_argument_t){
         .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT,
         .abi_type = address_type,
-        .resource_semantic_type = loom_type_none(),
+        .resource_source_type = loom_type_none(),
     };
     return iree_ok_status();
   }
@@ -188,7 +188,7 @@ static iree_status_t loom_x86_map_avx512_argument(
   *out_argument = (loom_low_lower_abi_argument_t){
       .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT,
       .abi_type = loom_type_none(),
-      .resource_semantic_type = loom_type_none(),
+      .resource_source_type = loom_type_none(),
   };
   return loom_x86_map_avx512_type(user_data, context, source_function_op,
                                   source_type, &out_argument->abi_type);
@@ -234,7 +234,7 @@ static iree_status_t loom_x86_map_avx512_packed_dot_argument(
     *out_argument = (loom_low_lower_abi_argument_t){
         .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT,
         .abi_type = address_type,
-        .resource_semantic_type = loom_type_none(),
+        .resource_source_type = loom_type_none(),
     };
     return iree_ok_status();
   }
@@ -242,7 +242,7 @@ static iree_status_t loom_x86_map_avx512_packed_dot_argument(
   *out_argument = (loom_low_lower_abi_argument_t){
       .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT,
       .abi_type = loom_type_none(),
-      .resource_semantic_type = loom_type_none(),
+      .resource_source_type = loom_type_none(),
   };
   return loom_x86_map_avx512_packed_dot_type(user_data, context,
                                              source_function_op, source_type,

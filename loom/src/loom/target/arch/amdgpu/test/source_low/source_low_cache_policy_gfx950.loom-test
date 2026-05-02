@@ -14,15 +14,17 @@ kernel.def target(@target) @cache_device_non_temporal_load_store(%input: buffer,
 }
 
 // ----
-low.kernel.def target(@target) @cache_device_non_temporal_load_store() asm<amdgpu.gfx950.core> {
-  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
-  %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
-  %11 = v_lshlrev_b32_lit %tid, 4
-  %12 = s_mov_b32 0
-  %loaded = buffer_load_dwordx4 %input_view, %11, %12 {nt = 1}
-  %14 = v_lshlrev_b32_lit %tid, 4
-  %15 = s_mov_b32 0
-  buffer_store_dwordx4 %loaded, %output_view, %14, %15 {nt = 1}
-  return
+low.kernel.def target(@target) @cache_device_non_temporal_load_store() {
+  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = low.resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
+  %output_view = low.resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
+  %11 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %12 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %13 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, valid_byte_count = 1024} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  %loaded = low.op<amdgpu.buffer_load_dwordx4>(%13, %11, %12) {nt = 1, offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr x4>
+  %15 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %16 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %17 = low.op<amdgpu.hal.buffer_descriptor>(%output_view) {cache_swizzle_stride = 0, valid_byte_count = 1024} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  low.op<amdgpu.buffer_store_dwordx4>(%loaded, %17, %15, %16) {nt = 1, offset = 0} : (reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
 }

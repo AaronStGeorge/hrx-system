@@ -30,7 +30,6 @@ from loom.assembly import (
     DescriptorRef,
     FormatElement,
     FuncArgs,
-    OpRef,
     OptionalGroup,
     PredicateList,
     Ref,
@@ -117,9 +116,9 @@ LowResourceImportKind = EnumDef(
             doc="IREE VM imported-function or imported-resource handle materialized as a register value.",
         ),
         EnumCase(
-            "hal_buffer_resource",
+            "hal_binding",
             4,
-            doc="IREE HAL dispatch binding buffer resource descriptor materialized as a register value.",
+            doc="IREE HAL dispatch binding payload materialized as a register value.",
         ),
     ],
     doc="Target-provided ABI resource imported into a low function body.",
@@ -835,12 +834,13 @@ low_live_in = Op(
     doc="Import a target-provided ABI live-in register value at low-function entry.",
     attrs=[
         AttrDef("source", "string"),
+        AttrDef("source_id", "i64"),
         AttrDef("attrs", "dict", optional=True),
     ],
     results=[Result("result", REGISTER)],
     verify="loom_low_live_in_verify",
     format=[
-        OpRef("source"),
+        DescriptorRef("source", "source_id"),
         AttrDict("attrs"),
         COLON,
         ResultType("result"),
@@ -1013,7 +1013,7 @@ low_resource = Op(
     attrs=[
         AttrDef("import_kind", ATTR_TYPE_ENUM, enum_def=LowResourceImportKind),
         AttrDef("index", ATTR_TYPE_I64),
-        AttrDef("semantic_type", ATTR_TYPE_TYPE),
+        AttrDef("source_type", ATTR_TYPE_TYPE),
         AttrDef(
             "valid_byte_count",
             ATTR_TYPE_I64,
@@ -1037,9 +1037,9 @@ low_resource = Op(
         ResultType("result"),
     ],
     examples=[
-        "%state = low.resource<vm_state> {index = 0, semantic_type = i64} : reg<vm.i64>",
-        "%binding = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>",
-        "%swizzled = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, cache_swizzle_stride = 64} : reg<amdgpu.sgpr x4>",
+        "%state = low.resource<vm_state> {index = 0, source_type = i64} : reg<vm.i64>",
+        "%binding = low.resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>",
+        "%swizzled = low.resource<hal_binding> {index = 1, source_type = hal.buffer, cache_swizzle_stride = 64} : reg<amdgpu.sgpr x2>",
     ],
 )
 

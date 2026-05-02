@@ -182,72 +182,7 @@ class EncodingVerifyTest : public ::testing::Test {
   loom_context_t context_;
 };
 
-TEST_F(EncodingVerifyTest, StaticOnlyFamilyKeepsExistingBehavior) {
-  DiagnosticCapture capture;
-  loom_verify_result_t result;
-  VerifySource(
-      "func.def @ok() {\n"
-      "  %enc = encoding.define #q8_0<block=32> : encoding<schema>\n"
-      "  func.return\n"
-      "}\n",
-      &capture, &result);
-
-  EXPECT_EQ(result.error_count, 0u);
-  EXPECT_TRUE(capture.diagnostics.empty());
-}
-
-TEST_F(EncodingVerifyTest, DefineRejectsWrongResultRole) {
-  DiagnosticCapture capture;
-  loom_verify_result_t result;
-  VerifySource(
-      "func.def @wrong_result_role() {\n"
-      "  %enc = encoding.define #q8_0<block=32> : encoding<transform>\n"
-      "  func.return\n"
-      "}\n",
-      &capture, &result);
-
-  ASSERT_EQ(result.error_count, 1u);
-  const testing::CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 12));
-  ASSERT_NE(diagnostic, nullptr);
-  ExpectError(*diagnostic,
-              loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 12),
-              LOOM_EMITTER_VERIFIER);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0), "q8_0");
-  ExpectTypeParam(
-      *diagnostic, 1,
-      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM));
-  ExpectTypeParam(
-      *diagnostic, 2,
-      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_STORAGE_SCHEMA));
-}
-
-TEST_F(EncodingVerifyTest, DefineRejectsGenericResultRole) {
-  DiagnosticCapture capture;
-  loom_verify_result_t result;
-  VerifySource(
-      "func.def @generic_result_role() {\n"
-      "  %enc = encoding.define #q8_0<block=32> : encoding\n"
-      "  func.return\n"
-      "}\n",
-      &capture, &result);
-
-  ASSERT_EQ(result.error_count, 1u);
-  const testing::CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 12));
-  ASSERT_NE(diagnostic, nullptr);
-  ExpectError(*diagnostic,
-              loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 12),
-              LOOM_EMITTER_VERIFIER);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0), "q8_0");
-  ExpectTypeParam(*diagnostic, 1,
-                  loom_type_encoding_with_role(LOOM_ENCODING_ROLE_UNKNOWN));
-  ExpectTypeParam(
-      *diagnostic, 2,
-      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_STORAGE_SCHEMA));
-}
-
-TEST_F(EncodingVerifyTest, DynamicVerifierRejectsMissingParam) {
+TEST_F(EncodingVerifyTest, CustomVerifierRejectsMissingParam) {
   DiagnosticCapture capture;
   loom_verify_result_t result;
   VerifySource(
@@ -258,7 +193,7 @@ TEST_F(EncodingVerifyTest, DynamicVerifierRejectsMissingParam) {
       &capture, &result);
 
   ASSERT_EQ(result.error_count, 1u);
-  const testing::CapturedDiagnostic* diagnostic = FindDiagnostic(
+  const auto* diagnostic = FindDiagnostic(
       capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 7));
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 7),
@@ -267,7 +202,7 @@ TEST_F(EncodingVerifyTest, DynamicVerifierRejectsMissingParam) {
   EXPECT_EQ(GetStringParam(*diagnostic, 1), "layout");
 }
 
-TEST_F(EncodingVerifyTest, DynamicVerifierRejectsWrongParamType) {
+TEST_F(EncodingVerifyTest, CustomVerifierRejectsWrongParamType) {
   DiagnosticCapture capture;
   loom_verify_result_t result;
   VerifySource(
@@ -279,7 +214,7 @@ TEST_F(EncodingVerifyTest, DynamicVerifierRejectsWrongParamType) {
       &capture, &result);
 
   ASSERT_EQ(result.error_count, 1u);
-  const testing::CapturedDiagnostic* diagnostic = FindDiagnostic(
+  const auto* diagnostic = FindDiagnostic(
       capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 9));
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 9),
@@ -290,7 +225,7 @@ TEST_F(EncodingVerifyTest, DynamicVerifierRejectsWrongParamType) {
   EXPECT_EQ(GetStringParam(*diagnostic, 3), "encoding");
 }
 
-TEST_F(EncodingVerifyTest, DynamicVerifierRejectsUnknownParam) {
+TEST_F(EncodingVerifyTest, CustomVerifierRejectsUnknownParam) {
   DiagnosticCapture capture;
   loom_verify_result_t result;
   VerifySource(
@@ -303,130 +238,13 @@ TEST_F(EncodingVerifyTest, DynamicVerifierRejectsUnknownParam) {
       &capture, &result);
 
   ASSERT_EQ(result.error_count, 1u);
-  const testing::CapturedDiagnostic* diagnostic = FindDiagnostic(
+  const auto* diagnostic = FindDiagnostic(
       capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 8));
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 8),
               LOOM_EMITTER_VERIFIER);
   EXPECT_EQ(GetStringParam(*diagnostic, 0), "requires_layout");
   EXPECT_EQ(GetStringParam(*diagnostic, 1), "bogus");
-}
-
-TEST_F(EncodingVerifyTest, PhysicalStorageAcceptsDynamicLayoutAndSchema) {
-  DiagnosticCapture capture;
-  loom_verify_result_t result;
-  VerifySource(
-      "func.def @physical_storage_ok() {\n"
-      "  %layout = encoding.layout.dense : encoding<layout>\n"
-      "  %schema = encoding.define "
-      "#ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>\n"
-      "  %storage = encoding.define #physical_storage "
-      "{layout = %layout : encoding<layout>, "
-      "schema = %schema : encoding<schema>} : encoding<storage>\n"
-      "  func.return\n"
-      "}\n",
-      &capture, &result);
-
-  EXPECT_EQ(result.error_count, 0u);
-  EXPECT_TRUE(capture.diagnostics.empty());
-}
-
-TEST_F(EncodingVerifyTest, PhysicalStorageAcceptsStaticNestedParams) {
-  DiagnosticCapture capture;
-  loom_verify_result_t result;
-  VerifySource(
-      "func.def @physical_storage_static_ok() {\n"
-      "  %storage = encoding.define "
-      "#physical_storage<layout=#dense, "
-      "schema=#ggml_q4_0<block_elems=32, storage_bytes=18>> : "
-      "encoding<storage>\n"
-      "  func.return\n"
-      "}\n",
-      &capture, &result);
-
-  EXPECT_EQ(result.error_count, 0u);
-  EXPECT_TRUE(capture.diagnostics.empty());
-}
-
-TEST_F(EncodingVerifyTest, PhysicalStorageRejectsMissingSchema) {
-  DiagnosticCapture capture;
-  loom_verify_result_t result;
-  VerifySource(
-      "func.def @physical_storage_missing_schema() {\n"
-      "  %layout = encoding.layout.dense : encoding<layout>\n"
-      "  %storage = encoding.define #physical_storage "
-      "{layout = %layout : encoding<layout>} : encoding<storage>\n"
-      "  func.return\n"
-      "}\n",
-      &capture, &result);
-
-  ASSERT_EQ(result.error_count, 1u);
-  const testing::CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 7));
-  ASSERT_NE(diagnostic, nullptr);
-  ExpectError(*diagnostic, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 7),
-              LOOM_EMITTER_VERIFIER);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0), "physical_storage");
-  EXPECT_EQ(GetStringParam(*diagnostic, 1), "schema");
-}
-
-TEST_F(EncodingVerifyTest, PhysicalStorageRejectsWrongOperandType) {
-  DiagnosticCapture capture;
-  loom_verify_result_t result;
-  VerifySource(
-      "func.def @physical_storage_wrong_type(%x: index) {\n"
-      "  %schema = encoding.define "
-      "#ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>\n"
-      "  %storage = encoding.define #physical_storage "
-      "{layout = %x : index, schema = %schema : encoding<schema>} : "
-      "encoding<storage>\n"
-      "  func.return\n"
-      "}\n",
-      &capture, &result);
-
-  ASSERT_EQ(result.error_count, 1u);
-  const testing::CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 9));
-  ASSERT_NE(diagnostic, nullptr);
-  ExpectError(*diagnostic, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 9),
-              LOOM_EMITTER_VERIFIER);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0), "physical_storage");
-  EXPECT_EQ(GetStringParam(*diagnostic, 1), "layout");
-  ExpectTypeParam(*diagnostic, 2, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX));
-  EXPECT_EQ(GetStringParam(*diagnostic, 3), "encoding");
-}
-
-TEST_F(EncodingVerifyTest, PhysicalStorageRejectsRoleMismatch) {
-  DiagnosticCapture capture;
-  loom_verify_result_t result;
-  VerifySource(
-      "func.def @physical_storage_role_mismatch() {\n"
-      "  %layout = encoding.layout.dense : encoding<layout>\n"
-      "  %schema = encoding.define "
-      "#ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>\n"
-      "  %storage = encoding.define #physical_storage "
-      "{layout = %schema : encoding<schema>, "
-      "schema = %layout : encoding<layout>} : encoding<storage>\n"
-      "  func.return\n"
-      "}\n",
-      &capture, &result);
-
-  ASSERT_EQ(result.error_count, 2u);
-  ASSERT_EQ(capture.diagnostics.size(), 2u);
-  ExpectError(capture.diagnostics[0],
-              loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 11),
-              LOOM_EMITTER_VERIFIER);
-  EXPECT_EQ(GetStringParam(capture.diagnostics[0], 0), "physical_storage");
-  EXPECT_EQ(GetStringParam(capture.diagnostics[0], 1), "layout");
-  EXPECT_EQ(GetStringParam(capture.diagnostics[0], 2),
-            "an address layout encoding");
-  ExpectError(capture.diagnostics[1],
-              loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 11),
-              LOOM_EMITTER_VERIFIER);
-  EXPECT_EQ(GetStringParam(capture.diagnostics[1], 0), "physical_storage");
-  EXPECT_EQ(GetStringParam(capture.diagnostics[1], 1), "schema");
-  EXPECT_EQ(GetStringParam(capture.diagnostics[1], 2),
-            "a storage schema encoding");
 }
 
 }  // namespace

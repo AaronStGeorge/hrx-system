@@ -18,7 +18,6 @@ low.func.def target(@target) abi(hal_kernel) @i32x4_slice_middle(%values: reg<am
 // ====
 
 amdgpu.target<gfx1100> @target
-
 func.def target(@target) @i8x4_slice_low_half(%bytes: vector<4xi8>) -> (vector<2xi8>) {
   %low = vector.slice %bytes[0] : vector<4xi8> -> vector<2xi8>
   func.return %low : vector<2xi8>
@@ -32,7 +31,6 @@ low.func.def target(@target) abi(hal_kernel) @i8x4_slice_low_half(%low: reg<amdg
 // ====
 
 amdgpu.target<gfx1100> @target
-
 func.def target(@target) @i8x4_slice_high_half(%bytes: vector<4xi8>) -> (vector<2xi8>) {
   %high = vector.slice %bytes[2] : vector<4xi8> -> vector<2xi8>
   func.return %high : vector<2xi8>
@@ -47,7 +45,6 @@ low.func.def target(@target) abi(hal_kernel) @i8x4_slice_high_half(%bytes: reg<a
 // ====
 
 amdgpu.target<gfx1100> @target
-
 func.def target(@target) @f16x4_slice_low_half(%values: vector<4xf16>) -> (vector<2xf16>) {
   %low = vector.slice %values[0] : vector<4xf16> -> vector<2xf16>
   func.return %low : vector<2xf16>
@@ -62,7 +59,6 @@ low.func.def target(@target) abi(hal_kernel) @f16x4_slice_low_half(%values: reg<
 // ====
 
 amdgpu.target<gfx1100> @target
-
 func.def target(@target) @f16x4_slice_high_half(%values: vector<4xf16>) -> (vector<2xf16>) {
   %high = vector.slice %values[2] : vector<4xf16> -> vector<2xf16>
   func.return %high : vector<2xf16>
@@ -77,7 +73,6 @@ low.func.def target(@target) abi(hal_kernel) @f16x4_slice_high_half(%values: reg
 // ====
 
 amdgpu.target<gfx1100> @target
-
 func.def target(@target) @bf16x4_slice_high_half(%values: vector<4xbf16>) -> (vector<2xbf16>) {
   %high = vector.slice %values[2] : vector<4xbf16> -> vector<2xbf16>
   func.return %high : vector<2xbf16>

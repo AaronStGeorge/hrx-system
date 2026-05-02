@@ -1321,6 +1321,11 @@ iree_status_t loom_amdgpu_lower_view_atomic(
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_atomic_buffer_soffset(
         context, source_op, plan, &low_soffset));
   }
+  loom_value_id_t low_descriptor = LOOM_VALUE_ID_INVALID;
+  if (loom_amdgpu_atomic_uses_buffer_resource(plan)) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_hal_buffer_descriptor(
+        context, source_op, low_resource, &low_descriptor));
+  }
   loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
   if (iree_any_bit_set(plan->flags, LOOM_AMDGPU_ATOMIC_PLAN_REQUIRES_M0)) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_m0_u32(
@@ -1351,7 +1356,7 @@ iree_status_t loom_amdgpu_lower_view_atomic(
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_atomic_cmpxchg_pair(
           context, source_op, low_expected, low_replacement, pair_type,
           &low_pair));
-      loom_value_id_t operands[] = {low_pair, low_resource, low_vaddr,
+      loom_value_id_t operands[] = {low_pair, low_descriptor, low_vaddr,
                                     low_soffset};
       const loom_tied_result_t tied_result = {
           .result_index = 0,
@@ -1407,7 +1412,7 @@ iree_status_t loom_amdgpu_lower_view_atomic(
       loom_value_id_t low_fresh_value = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_atomic_value_as_fresh_vgpr(
           context, source_op, &low_fresh_value));
-      loom_value_id_t operands[] = {low_fresh_value, low_resource, low_vaddr,
+      loom_value_id_t operands[] = {low_fresh_value, low_descriptor, low_vaddr,
                                     low_soffset};
       const loom_tied_result_t tied_result = {
           .result_index = 0,
@@ -1445,7 +1450,7 @@ iree_status_t loom_amdgpu_lower_view_atomic(
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_lookup_atomic_value_as_vgpr(context, source_op, &low_value));
   if (loom_amdgpu_atomic_uses_buffer_resource(plan)) {
-    loom_value_id_t operands[] = {low_value, low_resource, low_vaddr,
+    loom_value_id_t operands[] = {low_value, low_descriptor, low_vaddr,
                                   low_soffset};
     loom_op_t* low_op = NULL;
     IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(

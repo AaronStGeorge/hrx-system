@@ -22,8 +22,8 @@ static iree_status_t loom_amdgpu_make_hal_buffer_type(
   return iree_ok_status();
 }
 
-static uint32_t loom_amdgpu_hal_buffer_resource_index(
-    loom_low_lower_context_t* context, uint16_t source_argument_index) {
+static uint32_t loom_amdgpu_hal_binding_index(loom_low_lower_context_t* context,
+                                              uint16_t source_argument_index) {
   uint16_t argument_count = 0;
   const loom_value_id_t* argument_ids = loom_func_like_arg_ids(
       loom_low_lower_context_source_function(context), &argument_count);
@@ -155,12 +155,12 @@ iree_status_t loom_amdgpu_map_argument(
   const loom_target_bundle_t* bundle = loom_low_lower_context_bundle(context);
   if (bundle->export_plan->abi_kind == LOOM_TARGET_ABI_HAL_KERNEL &&
       loom_type_is_buffer(source_type)) {
-    loom_type_t resource_type = loom_type_none();
+    loom_type_t binding_type = loom_type_none();
     IREE_RETURN_IF_ERROR(
-        loom_amdgpu_make_sgpr_range_type(context, 4, &resource_type));
-    loom_type_t semantic_type = loom_type_none();
+        loom_amdgpu_make_sgpr_range_type(context, 2, &binding_type));
+    loom_type_t source_type = loom_type_none();
     IREE_RETURN_IF_ERROR(
-        loom_amdgpu_make_hal_buffer_type(context, &semantic_type));
+        loom_amdgpu_make_hal_buffer_type(context, &source_type));
     loom_low_resource_build_flags_t resource_build_flags = 0;
     int64_t resource_valid_byte_count = 0;
     if (loom_amdgpu_source_buffer_argument_valid_byte_count(
@@ -169,12 +169,11 @@ iree_status_t loom_amdgpu_map_argument(
     }
     *out_argument = (loom_low_lower_abi_argument_t){
         .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_RESOURCE,
-        .abi_type = resource_type,
-        .resource_import_kind =
-            LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE,
-        .resource_index = loom_amdgpu_hal_buffer_resource_index(
-            context, source_argument_index),
-        .resource_semantic_type = semantic_type,
+        .abi_type = binding_type,
+        .resource_import_kind = LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BINDING,
+        .resource_index =
+            loom_amdgpu_hal_binding_index(context, source_argument_index),
+        .resource_source_type = source_type,
         .resource_build_flags = resource_build_flags,
         .resource_valid_byte_count = resource_valid_byte_count,
     };
@@ -184,7 +183,7 @@ iree_status_t loom_amdgpu_map_argument(
   *out_argument = (loom_low_lower_abi_argument_t){
       .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT,
       .abi_type = loom_type_none(),
-      .resource_semantic_type = loom_type_none(),
+      .resource_source_type = loom_type_none(),
   };
   return loom_amdgpu_map_value(user_data, context, source_function_op,
                                source_argument_id, source_type,

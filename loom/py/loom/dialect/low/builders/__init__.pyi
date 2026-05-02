@@ -236,7 +236,7 @@ class LowBuilder(DialectBuilder):
         *,
         import_kind: str,
         index: int,
-        semantic_type: Type,
+        source_type: Type,
         valid_byte_count: int | None = ...,
         cache_swizzle_stride: int | None = ...,
         results: list[Type | TiedResultSpec],

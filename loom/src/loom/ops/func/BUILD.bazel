@@ -44,21 +44,3 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest_main",
     ],
 )
-
-loom_cc_test(
-    name = "verify_test",
-    srcs = ["verify_test.cc"],
-    deps = [
-        ":func",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/ops/test",
-        "//loom/src/loom/testing:diagnostic_matchers",
-        "//loom/src/loom/verify",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)

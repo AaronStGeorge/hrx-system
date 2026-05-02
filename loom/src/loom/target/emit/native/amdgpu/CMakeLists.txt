@@ -289,8 +289,8 @@ loom_cc_library(
     loom::src::loom::ops::target
     loom::src::loom::pass::builtin_registry
     loom::src::loom::pass::value_facts
+    loom::src::loom::target::arch::amdgpu::hal_binding_materialization
     loom::src::loom::target::arch::amdgpu::hal_kernel_abi
-    loom::src::loom::target::arch::amdgpu::hal_resource_materialization
     loom::src::loom::target::arch::amdgpu::low_registry
     loom::src::loom::target::arch::amdgpu::lower
     loom::src::loom::target::arch::amdgpu::occupancy
@@ -420,8 +420,8 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::hal_binding_materialization
     loom::src::loom::target::arch::amdgpu::hal_kernel_abi
-    loom::src::loom::target::arch::amdgpu::hal_resource_materialization
     loom::src::loom::target::arch::amdgpu::low_registry
     loom::src::loom::target::arch::amdgpu::ops
     loom::src::loom::target::arch::amdgpu::target_info

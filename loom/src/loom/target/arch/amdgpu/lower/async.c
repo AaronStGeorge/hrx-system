@@ -603,13 +603,9 @@ iree_status_t loom_amdgpu_lower_kernel_async_gather(
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, plan->source_view, &low_resource));
-  loom_type_t sgpr_x2_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_make_sgpr_range_type(context, 2, &sgpr_x2_type));
   loom_value_id_t low_saddr = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_emit_low_slice(context, source_op, low_resource,
-                                 /*lane_offset=*/0, sgpr_x2_type, &low_saddr));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_saddr(context, source_op,
+                                                     low_resource, &low_saddr));
 
   loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(

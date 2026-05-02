@@ -22,8 +22,8 @@
 #include "loom/ops/target/ops.h"
 #include "loom/pass/builtin_registry.h"
 #include "loom/pass/value_facts.h"
+#include "loom/target/arch/amdgpu/hal_binding_materialization.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
-#include "loom/target/arch/amdgpu/hal_resource_materialization.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/lower.h"
 #include "loom/target/arch/amdgpu/occupancy.h"
@@ -68,7 +68,7 @@ typedef struct loom_amdgpu_module_compile_kernel_plan_t {
   // from source IR in this compile.
   loom_low_memory_access_table_t memory_access_table;
   // ABI/resource materialization result captured before frame.
-  loom_amdgpu_hal_resource_materialization_result_t materialization;
+  loom_amdgpu_hal_binding_materialization_result_t materialization;
   // Fixed allocator values derived from the HAL ABI live-ins.
   const loom_low_allocation_fixed_value_t* fixed_values;
   // Number of entries in |fixed_values|.
@@ -471,22 +471,37 @@ static iree_status_t loom_amdgpu_module_compile_materialize_kernel_resources(
   IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
       &low_registry->registry, &plan->entry->bundle_storage.bundle,
       &descriptor_set));
-  return loom_amdgpu_hal_resource_materialize(
+  return loom_amdgpu_hal_binding_materialize(
       module, plan->low_function_op, &plan->entry->bundle_storage.bundle,
       descriptor_set, &plan->materialization, table_arena);
 }
 
-static iree_status_t loom_amdgpu_module_compile_compute_kernel_fixed_values(
-    loom_module_t* module,
+static iree_status_t loom_amdgpu_module_compile_verify_kernel_abi(
+    const loom_module_t* module,
     const loom_target_low_descriptor_registry_t* low_registry,
-    loom_amdgpu_module_compile_kernel_plan_t* plan,
+    const loom_amdgpu_module_compile_kernel_plan_t* plan,
+    loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
+    uint32_t max_errors, bool* out_failed,
     iree_arena_allocator_t* table_arena) {
+  *out_failed = false;
   const loom_low_descriptor_set_t* descriptor_set = NULL;
   IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
       &low_registry->registry, &plan->entry->bundle_storage.bundle,
       &descriptor_set));
+  loom_amdgpu_hal_kernel_abi_verify_result_t result = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_low(
+      module, plan->low_function_op, descriptor_set, max_errors,
+      loom_target_module_compile_emitter(diagnostic_emitter), &result,
+      table_arena));
+  *out_failed = result.error_count != 0;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_module_compile_compute_kernel_fixed_values(
+    const loom_module_t* module, loom_amdgpu_module_compile_kernel_plan_t* plan,
+    iree_arena_allocator_t* table_arena) {
   return loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
-      module, plan->low_function_op, descriptor_set, &plan->fixed_values,
+      module, plan->low_function_op, &plan->fixed_values,
       &plan->fixed_value_count, table_arena);
 }
 
@@ -605,6 +620,24 @@ static iree_status_t loom_amdgpu_module_compile_entries(
     }
     low_function_ops[i] = plans[i].low_function_op;
   }
+  loom_low_verify_result_t pre_materialization_low_verify_result = {0};
+  IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_low_module(
+      module, low_registry, diagnostic_emitter, max_errors,
+      &pre_materialization_low_verify_result));
+  if (pre_materialization_low_verify_result.error_count != 0) {
+    return iree_ok_status();
+  }
+  bool abi_failed = false;
+  for (uint16_t i = 0; i < entries.count; ++i) {
+    bool plan_failed = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_verify_kernel_abi(
+        module, low_registry, &plans[i], diagnostic_emitter, max_errors,
+        &plan_failed, table_arena));
+    abi_failed |= plan_failed;
+  }
+  if (abi_failed) {
+    return iree_ok_status();
+  }
   for (uint16_t i = 0; i < entries.count; ++i) {
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_module_compile_materialize_kernel_resources(
@@ -624,7 +657,7 @@ static iree_status_t loom_amdgpu_module_compile_entries(
   }
   for (uint16_t i = 0; i < entries.count; ++i) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_compute_kernel_fixed_values(
-        module, low_registry, &plans[i], table_arena));
+        module, &plans[i], table_arena));
   }
 
   loom_verify_result_t verify_result = {0};

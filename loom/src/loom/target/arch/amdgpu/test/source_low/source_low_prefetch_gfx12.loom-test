@@ -10,17 +10,17 @@ func.def target(@target) @prefetch_static(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @prefetch_static() asm<amdgpu.gfx12.core> {
-  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 272} : reg<amdgpu.sgpr x4>
-  %4 = s_mov_b32 0
-  s_buffer_prefetch_data %input_view, %4 {offset = 32, count = 1}
-  return
+low.func.def target(@target) abi(hal_kernel) @prefetch_static() {
+  %input_view = low.resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 272} : reg<amdgpu.sgpr x2>
+  %4 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %5 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, valid_byte_count = 272} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  low.op<amdgpu.s_buffer_prefetch_data>(%5, %4) {count = 1, offset = 32} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>)
+  low.return
 }
 
 // ====
 
 amdgpu.target<gfx1200> @target
-
 kernel.def target(@target) @prefetch_workgroup_id(%input: buffer) {
   %gid = kernel.workgroup.id<x> : index
   %bounded_gid = index.assume %gid [range(%gid, 0, 1024)] : index
@@ -31,19 +31,19 @@ kernel.def target(@target) @prefetch_workgroup_id(%input: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) @prefetch_workgroup_id() asm<amdgpu.gfx12.core> {
-  %bounded_gid = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
-  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
-  %7 = s_mov_b32 2
-  %8 = s_lshl_b32 %bounded_gid, %7
-  s_buffer_prefetch_data %input_view, %8 {count = 1}
-  return
+low.kernel.def target(@target) @prefetch_workgroup_id() {
+  %bounded_gid = low.live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
+  %input_view = low.resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %7 = low.const<amdgpu.s_mov_b32> {imm32 = 2} : reg<amdgpu.sgpr>
+  %8 = low.op<amdgpu.s_lshl_b32>(%bounded_gid, %7) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %9 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, valid_byte_count = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  low.op<amdgpu.s_buffer_prefetch_data>(%9, %8) {count = 1, offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>)
+  low.return
 }
 
 // ====
 
 amdgpu.target<gfx1200> @target
-
 kernel.def target(@target) workgroup_size(8, 4, 1) @prefetch_fixed_query_offset(%input: buffer) {
   %workgroup_size_x = kernel.workgroup.size<x> : index
   %workgroup_size_y = kernel.workgroup.size<y> : index
@@ -59,16 +59,17 @@ kernel.def target(@target) workgroup_size(8, 4, 1) @prefetch_fixed_query_offset(
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(8, 4, 1) @prefetch_fixed_query_offset() asm<amdgpu.gfx12.core> {
-  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
-  %workgroup_size_x = s_mov_b32 8
-  %workgroup_size_y = s_mov_b32 4
-  %subgroup_size = s_mov_b32 32
-  %subgroup_count = s_mov_b32 1
-  %offset0 = s_add_u32 %workgroup_size_x, %workgroup_size_y
-  %offset1 = s_add_u32 %offset0, %subgroup_size
-  %offset = s_add_u32 %offset1, %subgroup_count
-  %18 = s_mov_b32 0
-  s_buffer_prefetch_data %input_view, %18 {offset = 180, count = 1}
-  return
+low.kernel.def target(@target) workgroup_size(8, 4, 1) @prefetch_fixed_query_offset() {
+  %input_view = low.resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %workgroup_size_x = low.const<amdgpu.s_mov_b32> {imm32 = 8} : reg<amdgpu.sgpr>
+  %workgroup_size_y = low.const<amdgpu.s_mov_b32> {imm32 = 4} : reg<amdgpu.sgpr>
+  %subgroup_size = low.const<amdgpu.s_mov_b32> {imm32 = 32} : reg<amdgpu.sgpr>
+  %subgroup_count = low.const<amdgpu.s_mov_b32> {imm32 = 1} : reg<amdgpu.sgpr>
+  %offset0 = low.op<amdgpu.s_add_u32>(%workgroup_size_x, %workgroup_size_y) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %offset1 = low.op<amdgpu.s_add_u32>(%offset0, %subgroup_size) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %offset = low.op<amdgpu.s_add_u32>(%offset1, %subgroup_count) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %18 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %19 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, valid_byte_count = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  low.op<amdgpu.s_buffer_prefetch_data>(%19, %18) {count = 1, offset = 180} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>)
+  low.return
 }

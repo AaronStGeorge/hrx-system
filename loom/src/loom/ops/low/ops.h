@@ -94,7 +94,7 @@ typedef enum loom_low_resource_import_kind_e {
   LOOM_LOW_RESOURCE_IMPORT_KIND_NATIVE_POINTER = 1,
   LOOM_LOW_RESOURCE_IMPORT_KIND_VM_STATE = 2,
   LOOM_LOW_RESOURCE_IMPORT_KIND_VM_IMPORT = 3,
-  LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE = 4,
+  LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BINDING = 4,
   LOOM_LOW_RESOURCE_IMPORT_KIND_COUNT_ = 5,
 } loom_low_resource_import_kind_t;
 
@@ -575,12 +575,12 @@ iree_status_t loom_low_cond_br_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_LOW_RESOURCE: Import a function-local target resource into a low register value.
-// %state = low.resource<vm_state> {index = 0, semantic_type = i64} : reg<vm.i64>
+// %state = low.resource<vm_state> {index = 0, source_type = i64} : reg<vm.i64>
 LOOM_DEFINE_ISA(loom_low_resource_isa, LOOM_OP_LOW_RESOURCE)
 LOOM_DEFINE_RESULT(loom_low_resource_result, 0)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_resource_import_kind, 0, loom_low_resource_import_kind_t)
 LOOM_DEFINE_ATTR_I64(loom_low_resource_index, 1)
-LOOM_DEFINE_ATTR_TYPE(loom_low_resource_semantic_type, 2)
+LOOM_DEFINE_ATTR_TYPE(loom_low_resource_source_type, 2)
 LOOM_DEFINE_ATTR_I64(loom_low_resource_valid_byte_count, 3)
 LOOM_DEFINE_ATTR_I64(loom_low_resource_cache_swizzle_stride, 4)
 enum loom_low_resource_build_flag_bits_e {
@@ -593,7 +593,7 @@ iree_status_t loom_low_resource_build(
     loom_low_resource_build_flags_t build_flags,
     loom_low_resource_import_kind_t import_kind,
     int64_t index,
-    uint32_t semantic_type,
+    uint32_t source_type,
     loom_optional int64_t valid_byte_count,
     loom_optional int64_t cache_swizzle_stride,
     loom_type_t result_type,
@@ -608,7 +608,8 @@ iree_status_t loom_low_resource_verify(
 LOOM_DEFINE_ISA(loom_low_live_in_isa, LOOM_OP_LOW_LIVE_IN)
 LOOM_DEFINE_RESULT(loom_low_live_in_result, 0)
 LOOM_DEFINE_ATTR_STRING(loom_low_live_in_source, 0)
-LOOM_DEFINE_ATTR_DICT(loom_low_live_in_attrs, 1)
+LOOM_DEFINE_ATTR_I64(loom_low_live_in_source_id, 1)
+LOOM_DEFINE_ATTR_DICT(loom_low_live_in_attrs, 2)
 iree_status_t loom_low_live_in_build(
     loom_builder_t* builder,
     loom_string_id_t source,

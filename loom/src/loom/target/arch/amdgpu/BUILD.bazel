@@ -57,7 +57,7 @@ loom_assert_no_dependencies(
         ":gfx12_descriptors",
         ":gfx950_descriptors",
         ":hal_kernel_abi",
-        ":hal_resource_materialization",
+        ":hal_binding_materialization",
         ":low_registry",
         ":matrix_contract",
         ":matrix_contract_projection",
@@ -150,7 +150,7 @@ loom_assert_no_dependencies(
 )
 
 loom_assert_no_dependencies(
-    name = "amdgpu_hal_resource_materialization_no_backend_runtime_or_descriptor_deps",
+    name = "amdgpu_hal_binding_materialization_no_backend_runtime_or_descriptor_deps",
     dependencies = [
         ":gfx11_descriptors",
         ":gfx950_descriptors",
@@ -158,7 +158,7 @@ loom_assert_no_dependencies(
         "//loom/src/loom/target/tool:llvm",
         "//runtime/src/iree/hal/drivers/amdgpu",
     ],
-    targets = [":hal_resource_materialization"],
+    targets = [":hal_binding_materialization"],
 )
 
 loom_assert_no_dependencies(
@@ -704,12 +704,18 @@ loom_cc_test(
 loom_cc_library(
     name = "hal_kernel_abi",
     srcs = ["hal_kernel_abi.c"],
-    hdrs = ["hal_kernel_abi.h"],
+    hdrs = [
+        "hal_binding_descriptor.h",
+        "hal_kernel_abi.h",
+    ],
     deps = [
         ":descriptor_ids",
+        ":target_info",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:function",
         "//loom/src/loom/codegen/low:register_class_map",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:types",
@@ -719,9 +725,9 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "hal_resource_materialization",
-    srcs = ["hal_resource_materialization.c"],
-    hdrs = ["hal_resource_materialization.h"],
+    name = "hal_binding_materialization",
+    srcs = ["hal_binding_materialization.c"],
+    hdrs = ["hal_binding_materialization.h"],
     deps = [
         ":descriptor_ids",
         ":hal_kernel_abi",

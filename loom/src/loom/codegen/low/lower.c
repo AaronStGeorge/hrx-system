@@ -51,7 +51,7 @@ static bool loom_low_lower_resource_import_kind_is_known(
     case LOOM_LOW_RESOURCE_IMPORT_KIND_NATIVE_POINTER:
     case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_STATE:
     case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_IMPORT:
-    case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BINDING:
       return true;
     default:
       return false;
@@ -84,7 +84,7 @@ static iree_status_t loom_low_lower_map_direct_argument(
   *out_argument = (loom_low_lower_abi_argument_t){
       .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT,
       .abi_type = loom_type_none(),
-      .resource_semantic_type = loom_type_none(),
+      .resource_source_type = loom_type_none(),
   };
   return loom_low_lower_map_value(context, source_op, source_argument_id,
                                   &out_argument->abi_type);
@@ -103,7 +103,7 @@ static iree_status_t loom_low_lower_map_argument(
     *out_argument = (loom_low_lower_abi_argument_t){
         .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT,
         .abi_type = loom_type_none(),
-        .resource_semantic_type = loom_type_none(),
+        .resource_source_type = loom_type_none(),
     };
     IREE_RETURN_IF_ERROR(context->policy->map_argument.fn(
         context->policy->map_argument.user_data, context,
@@ -130,8 +130,8 @@ static iree_status_t loom_low_lower_map_argument(
   IREE_ASSERT(loom_low_lower_resource_import_kind_is_known(
       out_argument->resource_import_kind));
   IREE_ASSERT_GE(out_argument->resource_index, 0);
-  if (loom_low_lower_type_is_none(out_argument->resource_semantic_type)) {
-    out_argument->resource_semantic_type =
+  if (loom_low_lower_type_is_none(out_argument->resource_source_type)) {
+    out_argument->resource_source_type =
         loom_module_value_type(context->module, source_argument_id);
   }
   return iree_ok_status();
@@ -1225,19 +1225,19 @@ static iree_status_t loom_low_lower_emit_argument_resource_import(
     uint16_t argument_index) {
   const loom_low_lower_abi_argument_t* argument =
       &context->lowering.argument_map[argument_index];
-  loom_type_t semantic_type = argument->resource_semantic_type;
-  if (loom_low_lower_type_is_none(semantic_type)) {
-    semantic_type = loom_module_value_type(context->module,
-                                           source_arguments[argument_index]);
+  loom_type_t source_type = argument->resource_source_type;
+  if (loom_low_lower_type_is_none(source_type)) {
+    source_type = loom_module_value_type(context->module,
+                                         source_arguments[argument_index]);
   }
-  loom_type_id_t semantic_type_id = LOOM_TYPE_ID_INVALID;
+  loom_type_id_t source_type_id = LOOM_TYPE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
-      loom_low_lower_intern_type_id(context, semantic_type, &semantic_type_id));
+      loom_low_lower_intern_type_id(context, source_type, &source_type_id));
   loom_op_t* resource_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_resource_build(
       &context->builder, argument->resource_build_flags,
       (uint8_t)argument->resource_import_kind, argument->resource_index,
-      semantic_type_id, argument->resource_valid_byte_count,
+      source_type_id, argument->resource_valid_byte_count,
       argument->resource_cache_swizzle_stride, argument->abi_type,
       context->source_function.op->location, &resource_op));
   return loom_low_lower_bind_value(context, source_arguments[argument_index],

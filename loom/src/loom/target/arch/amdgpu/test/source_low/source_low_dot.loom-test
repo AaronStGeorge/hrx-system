@@ -27,7 +27,6 @@ low.func.def target(@target) abi(hal_kernel) @f32_dotf(%lhs: reg<amdgpu.vgpr x4>
 // ====
 
 amdgpu.target<gfx1100> @target
-
 func.def target(@target) @f16_dot2f(%lhs: vector<8xf16>, %rhs: vector<8xf16>, %acc: vector<4xf32>) -> (vector<4xf32>) {
   %dot = vector.dot2f %lhs, %rhs, %acc : vector<8xf16>, vector<8xf16>, vector<4xf32>
   func.return %dot : vector<4xf32>
@@ -58,7 +57,6 @@ low.func.def target(@target) abi(hal_kernel) @f16_dot2f(%lhs: reg<amdgpu.vgpr x4
 // ====
 
 amdgpu.target<gfx1100> @target
-
 func.def target(@target) @bf16_dot2f(%lhs: vector<8xbf16>, %rhs: vector<8xbf16>, %acc: vector<4xf32>) -> (vector<4xf32>) {
   %dot = vector.dot2f %lhs, %rhs, %acc : vector<8xbf16>, vector<8xbf16>, vector<4xf32>
   func.return %dot : vector<4xf32>

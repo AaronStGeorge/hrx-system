@@ -136,16 +136,22 @@ iree_status_t loom_amdgpu_emit_memory_vaddr(
     const loom_amdgpu_memory_access_t* access, loom_value_id_t low_base_addr,
     loom_value_id_t* out_low_vaddr);
 
-// Emits the SGPR SADDR operand sliced from a low buffer resource.
+// Emits the SGPR SADDR operand for a low HAL binding pointer.
 iree_status_t loom_amdgpu_emit_memory_saddr(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op,
-                                            loom_value_id_t low_resource,
+                                            loom_value_id_t low_binding,
                                             loom_value_id_t* out_low_saddr);
 
-// Emits the 64-bit flat VGPR address sliced from a low buffer resource.
+// Emits the target buffer descriptor consumed by MUBUF-style packets from a low
+// HAL binding pointer.
+iree_status_t loom_amdgpu_emit_hal_buffer_descriptor(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t low_binding, loom_value_id_t* out_low_descriptor);
+
+// Emits the 64-bit flat VGPR address sliced from a low HAL binding pointer.
 iree_status_t loom_amdgpu_emit_memory_flat_vaddr(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t low_resource, loom_value_id_t* out_low_vaddr);
+    loom_value_id_t low_binding, loom_value_id_t* out_low_vaddr);
 
 // Builds descriptor offset and cache-policy attrs for a memory packet.
 iree_status_t loom_amdgpu_make_memory_attrs(

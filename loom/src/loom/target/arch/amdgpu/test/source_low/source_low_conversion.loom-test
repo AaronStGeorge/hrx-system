@@ -28,7 +28,6 @@ low.func.def target(@target) abi(hal_kernel) @vector_sitofp_i32x2(%input: reg<am
 // ====
 
 amdgpu.target<gfx1100> @target
-
 func.def target(@target) @scalar_uitofp_i32(%input: i32) -> (f32) {
   %converted = scalar.uitofp %input : i32 to f32
   func.return %converted : f32
@@ -43,7 +42,6 @@ low.func.def target(@target) abi(hal_kernel) @scalar_uitofp_i32(%input: reg<amdg
 // ====
 
 amdgpu.target<gfx1100> @target
-
 func.def target(@target) @scalar_sitofp_i32(%input: i32) -> (f32) {
   %converted = scalar.sitofp %input : i32 to f32
   func.return %converted : f32
@@ -58,7 +56,6 @@ low.func.def target(@target) abi(hal_kernel) @scalar_sitofp_i32(%input: reg<amdg
 // ====
 
 amdgpu.target<gfx1100> @target
-
 func.def target(@target) @vector_uitofp_i32x2(%input: vector<2xi32>) -> (vector<2xf32>) {
   %converted = vector.uitofp %input : vector<2xi32> to vector<2xf32>
   func.return %converted : vector<2xf32>

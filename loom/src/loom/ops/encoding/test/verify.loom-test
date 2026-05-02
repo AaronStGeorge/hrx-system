@@ -23,8 +23,16 @@ func.def @static_param_ssa_value(%group_size: index) {
 // at the definition site; generic `encoding` would push role discovery to
 // later consumers.
 func.def @encoding_define_generic_result_role() {
-  // ERROR@+1: ENCODING/012 "q8_0" "encoding" "encoding<schema>"
+  // ERROR@+1: ENCODING/012 {encoding_name="q8_0", actual_type="encoding", expected_type="encoding<schema>"}
   %enc = encoding.define #q8_0<block=32> : encoding
+  func.return
+}
+
+// ====
+
+func.def @encoding_define_wrong_result_role() {
+  // ERROR@+1: ENCODING/012 {encoding_name="q8_0", actual_type="encoding<transform>", expected_type="encoding<schema>"}
+  %enc = encoding.define #q8_0<block=32> : encoding<transform>
   func.return
 }
 
@@ -67,6 +75,51 @@ func.def @assume_spec_rejects_role_mismatch(%schema: encoding<schema>) {
 func.def @numeric_transform_unknown_family_define_only() {
   // ERROR@+1: ENCODING/013 "numeric_transform" "family" "mystery"
   %xf = encoding.define #numeric_transform<family="mystery", input_elems=128, output_elems=128> : encoding<transform>
+  func.return
+}
+
+// ====
+
+func.def @physical_storage_dynamic_params() {
+  %layout = encoding.layout.dense : encoding<layout>
+  %schema = encoding.define #ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>
+  %storage = encoding.define #physical_storage {layout = %layout : encoding<layout>, schema = %schema : encoding<schema>} : encoding<storage>
+  func.return
+}
+
+// ====
+
+func.def @physical_storage_static_params() {
+  %storage = encoding.define #physical_storage<layout=#dense, schema=#ggml_q4_0<block_elems=32, storage_bytes=18>> : encoding<storage>
+  func.return
+}
+
+// ====
+
+func.def @physical_storage_missing_schema() {
+  %layout = encoding.layout.dense : encoding<layout>
+  // ERROR@+1: ENCODING/007 {encoding_name="physical_storage", param_name="schema"}
+  %storage = encoding.define #physical_storage {layout = %layout : encoding<layout>} : encoding<storage>
+  func.return
+}
+
+// ====
+
+func.def @physical_storage_wrong_layout_type(%x: index) {
+  %schema = encoding.define #ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>
+  // ERROR@+1: ENCODING/009 {encoding_name="physical_storage", param_name="layout", actual_type="index", expected_type="encoding"}
+  %storage = encoding.define #physical_storage {layout = %x : index, schema = %schema : encoding<schema>} : encoding<storage>
+  func.return
+}
+
+// ====
+
+func.def @physical_storage_role_mismatch() {
+  %layout = encoding.layout.dense : encoding<layout>
+  %schema = encoding.define #ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>
+  // ERROR@+2: ENCODING/011 {encoding_name="physical_storage", param_name="layout", expected_role="an address layout encoding"}
+  // ERROR@+1: ENCODING/011 {encoding_name="physical_storage", param_name="schema", expected_role="a storage schema encoding"}
+  %storage = encoding.define #physical_storage {layout = %schema : encoding<schema>, schema = %layout : encoding<layout>} : encoding<storage>
   func.return
 }
 

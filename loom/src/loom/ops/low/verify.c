@@ -535,22 +535,31 @@ static iree_status_t loom_low_emit_structural_storage_attr_error(
       field_name, reason, NULL, 0, emitter);
 }
 
-static iree_status_t loom_low_verify_descriptor_id(
+static iree_status_t loom_low_verify_stable_id_attr(
     const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter, loom_string_id_t opcode_id,
-    int64_t descriptor_id, uint16_t descriptor_id_attr_index) {
-  iree_string_view_t key = loom_low_string_or_empty(module, opcode_id);
+    iree_diagnostic_emitter_t emitter, loom_string_id_t key_id,
+    int64_t stable_id, uint16_t stable_id_attr_index,
+    iree_string_view_t stable_id_field_name, iree_string_view_t reason) {
+  iree_string_view_t key = loom_low_string_or_empty(module, key_id);
   uint64_t expected_id = loom_stable_id_from_string(key);
-  if (descriptor_id == (int64_t)expected_id) {
+  if (stable_id == (int64_t)expected_id) {
     return iree_ok_status();
   }
   return loom_low_emit_structural_storage_error(
       module, op,
       loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                descriptor_id_attr_index),
+                                stable_id_attr_index),
+      stable_id_field_name, reason, NULL, 0, emitter);
+}
+
+static iree_status_t loom_low_verify_descriptor_id(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter, loom_string_id_t opcode_id,
+    int64_t descriptor_id, uint16_t descriptor_id_attr_index) {
+  return loom_low_verify_stable_id_attr(
+      module, op, emitter, opcode_id, descriptor_id, descriptor_id_attr_index,
       IREE_SV("descriptor_id"),
-      IREE_SV("descriptor ID must match the stable ID derived from opcode"),
-      NULL, 0, emitter);
+      IREE_SV("descriptor ID must match the stable ID derived from opcode"));
 }
 
 static iree_status_t loom_low_verify_same_register_unit_count(
@@ -774,7 +783,7 @@ static bool loom_low_resource_kind_is_known(uint8_t kind) {
     case LOOM_LOW_RESOURCE_IMPORT_KIND_NATIVE_POINTER:
     case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_STATE:
     case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_IMPORT:
-    case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BINDING:
       return true;
     default:
       return false;
@@ -790,7 +799,7 @@ static iree_string_view_t loom_low_resource_export_abi_reason(uint8_t kind) {
     case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_STATE:
     case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_IMPORT:
       return IREE_SV("VM resources require vm_module_function export ABI");
-    case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BINDING:
       return IREE_SV("HAL buffer resources require hal_kernel export ABI");
     default:
       return IREE_SV(
@@ -806,7 +815,7 @@ static bool loom_low_resource_matches_export_abi(uint8_t kind,
     case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_STATE:
     case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_IMPORT:
       return abi == LOOM_TARGET_ABI_VM_MODULE_FUNCTION;
-    case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BINDING:
       return abi == LOOM_TARGET_ABI_HAL_KERNEL;
     default:
       return false;
@@ -875,13 +884,13 @@ static iree_status_t loom_low_verify_resource_op(
     }
   }
 
-  const loom_type_t semantic_type =
-      loom_low_type_attr(module, loom_low_resource_semantic_type(op));
-  if (loom_type_kind(semantic_type) == LOOM_TYPE_NONE) {
+  const loom_type_t source_type =
+      loom_low_type_attr(module, loom_low_resource_source_type(op));
+  if (loom_type_kind(source_type) == LOOM_TYPE_NONE) {
     return loom_low_emit_structural_storage_attr_error(
-        module, op, loom_low_resource_semantic_type_ATTR_INDEX,
-        IREE_SV("semantic_type"),
-        IREE_SV("semantic_type must name a valid Loom type"), emitter);
+        module, op, loom_low_resource_source_type_ATTR_INDEX,
+        IREE_SV("source_type"),
+        IREE_SV("source_type must name a valid Loom type"), emitter);
   }
 
   const loom_type_t result_type =
@@ -1269,6 +1278,11 @@ iree_status_t loom_low_live_in_verify(const loom_module_t* module,
       module, op, emitter, loom_low_live_in_source(op),
       loom_low_live_in_source_ATTR_INDEX, IREE_SV("source"),
       IREE_SV("qualified target live-in key")));
+  IREE_RETURN_IF_ERROR(loom_low_verify_stable_id_attr(
+      module, op, emitter, loom_low_live_in_source(op),
+      loom_low_live_in_source_id(op), loom_low_live_in_source_id_ATTR_INDEX,
+      IREE_SV("source_id"),
+      IREE_SV("source ID must match the stable ID derived from source")));
 
   const loom_type_t result_type =
       loom_module_value_type(module, loom_low_live_in_result(op));

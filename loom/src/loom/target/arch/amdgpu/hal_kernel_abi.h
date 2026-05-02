@@ -17,6 +17,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/allocation.h"
+#include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
 #include "loom/target/types.h"
 
@@ -34,39 +35,78 @@ extern "C" {
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_KERNARG_SEGMENT_PTR_SOURCE \
   "amdgpu.kernarg_segment_ptr"
 
+// Stable low.live_in source ID for the AMDGPU kernarg segment pointer.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_KERNARG_SEGMENT_PTR_SOURCE_ID \
+  UINT64_C(0x7C8A03858206FDDC)
+
 // Stable low.live_in source spelling for workgroup_id.x in the first system
 // SGPR after enabled user SGPRs.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_X_SOURCE "amdgpu.workgroup_id.x"
 
+// Stable low.live_in source ID for workgroup_id.x.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_X_SOURCE_ID \
+  UINT64_C(0x64E1C4EA699CDCC3)
+
 // Stable low.live_in source spelling for workgroup_id.y after workgroup_id.x.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_Y_SOURCE "amdgpu.workgroup_id.y"
+
+// Stable low.live_in source ID for workgroup_id.y.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_Y_SOURCE_ID \
+  UINT64_C(0x64E1C3EA699CDB10)
 
 // Stable low.live_in source spelling for workgroup_id.z after workgroup_id.x/y.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_Z_SOURCE "amdgpu.workgroup_id.z"
 
+// Stable low.live_in source ID for workgroup_id.z.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_Z_SOURCE_ID \
+  UINT64_C(0x64E1C6EA699CE029)
+
 // Stable low.live_in source spelling for workitem_id.x in v0.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE "amdgpu.workitem_id.x"
+
+// Stable low.live_in source ID for workitem_id.x.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE_ID \
+  UINT64_C(0x599D0AE7D922CE17)
 
 // Stable low.live_in source spelling for workitem_id.y in v1 on targets that
 // expose unpacked workitem-id VGPRs.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Y_SOURCE "amdgpu.workitem_id.y"
 
+// Stable low.live_in source ID for workitem_id.y.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Y_SOURCE_ID \
+  UINT64_C(0x599D09E7D922CC64)
+
 // Stable low.live_in source spelling for workitem_id.z in v2 on targets that
 // expose unpacked workitem-id VGPRs.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Z_SOURCE "amdgpu.workitem_id.z"
+
+// Stable low.live_in source ID for workitem_id.z.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Z_SOURCE_ID \
+  UINT64_C(0x599D0CE7D922D17D)
 
 // Stable low.live_in source spelling for targets that pack workitem_id.x/y into
 // v0. Lowering must unpack logical dimensions before ordinary use.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_PACKED_XY_SOURCE \
   "amdgpu.workitem_id.packed.xy"
 
+// Stable low.live_in source ID for packed workitem_id.x/y.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_PACKED_XY_SOURCE_ID \
+  UINT64_C(0x40BB6CD7335467E2)
+
 // Stable low.live_in source spelling for targets that pack workitem_id.x/y/z
 // into v0. Lowering must unpack logical dimensions before ordinary use.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_PACKED_XYZ_SOURCE \
   "amdgpu.workitem_id.packed.xyz"
 
+// Stable low.live_in source ID for packed workitem_id.x/y/z.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_PACKED_XYZ_SOURCE_ID \
+  UINT64_C(0x52E189AC386C0748)
+
 // Stable low.live_in source spelling for the M0 special register.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_M0_SOURCE "amdgpu.m0"
+
+// Stable low.live_in source ID for the M0 special register.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_M0_SOURCE_ID UINT64_C(0x0667779E351A470C)
 
 typedef struct loom_amdgpu_hal_kernarg_resource_t {
   // Defining low.resource op for diagnostics and cross-checks.
@@ -82,7 +122,7 @@ typedef struct loom_amdgpu_hal_kernarg_resource_t {
   // Byte alignment of the pointer entry in the kernarg segment.
   uint32_t kernarg_alignment;
   // Source/storage semantic type declared by the resource record.
-  loom_type_t semantic_type;
+  loom_type_t source_type;
   // Target-low value type produced by low.resource for this binding.
   loom_type_t abi_type;
 } loom_amdgpu_hal_kernarg_resource_t;
@@ -102,17 +142,38 @@ typedef struct loom_amdgpu_hal_kernel_abi_layout_t {
   iree_host_size_t resource_count;
 } loom_amdgpu_hal_kernel_abi_layout_t;
 
+typedef struct loom_amdgpu_hal_kernel_abi_verify_result_t {
+  // Number of AMDGPU HAL-kernel ABI errors emitted for the function.
+  uint32_t error_count;
+} loom_amdgpu_hal_kernel_abi_verify_result_t;
+
+// Emits AMDGPU HAL-kernel ABI diagnostics for |function_op|.
+//
+// Status is reserved for diagnostic emission and table-allocation failures.
+// User-visible ABI violations are emitted through |emitter| and counted in
+// |out_result|.
+iree_status_t loom_amdgpu_hal_kernel_abi_verify_low(
+    const loom_module_t* module, const loom_op_t* function_op,
+    const loom_low_descriptor_set_t* descriptor_set, uint32_t max_errors,
+    iree_diagnostic_emitter_t emitter,
+    loom_amdgpu_hal_kernel_abi_verify_result_t* out_result,
+    iree_arena_allocator_t* arena);
+
 // Derives the AMDGPU HAL-kernel ABI layout for |function_op|.
 //
-// v0 supports only low.resource imports with kind hal_buffer_resource, dense
-// unique binding indexes starting at zero, semantic type hal.buffer, and result
-// type reg<amdgpu.sgpr x4>. The kernarg segment stores one 64-bit global
-// pointer per binding in binding-index order; later lowering materializes the
-// target resource descriptor value consumed by the import.
+// v0 supports only low.resource imports with kind hal_binding, dense unique
+// binding indexes starting at zero, and result type reg<amdgpu.sgpr x2>. The
+// source_type attribute records the high-level resource handle type, but the
+// AMDGPU ABI layout is determined by the import kind and target-low result
+// type. The kernarg segment stores one 64-bit global pointer per binding in
+// binding-index order; later lowering materializes the target buffer
+// descriptor value consumed by packets that need one.
+//
+// The function must already have passed
+// loom_amdgpu_hal_kernel_abi_verify_low. Status is reserved for allocation and
+// contract misuse that would otherwise make layout construction unsafe.
 iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
     const loom_module_t* module, const loom_op_t* function_op,
-    const loom_target_bundle_t* target_bundle,
-    const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_hal_kernel_abi_layout_t* out_layout,
     iree_arena_allocator_t* arena);
 
@@ -164,9 +225,12 @@ bool loom_amdgpu_hal_kernel_abi_is_m0_live_in(const loom_module_t* module,
 // pointer live-in to s[0:1], workgroup_id.x/y/z live-ins to the SGPRs
 // immediately following enabled user SGPRs, unpacked workitem_id.x/y/z live-ins
 // to v0/v1/v2, and packed workitem-id live-ins to v0 when present.
+//
+// The function must already have passed
+// loom_amdgpu_hal_kernel_abi_verify_low. Status is reserved for allocation and
+// contract misuse that would otherwise make fixed-value construction unsafe.
 iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
     const loom_module_t* module, const loom_op_t* function_op,
-    const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_allocation_fixed_value_t** out_fixed_values,
     iree_host_size_t* out_fixed_value_count, iree_arena_allocator_t* arena);
 

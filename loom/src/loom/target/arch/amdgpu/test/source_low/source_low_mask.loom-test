@@ -32,7 +32,6 @@ low.func.def target(@target) abi(hal_kernel) @i32_cmpi_select(%lhs: reg<amdgpu.v
 // ====
 
 amdgpu.target<gfx1100> @target
-
 func.def target(@target) @f32_cmpf_select(%lhs: vector<1xf32>, %rhs: vector<1xf32>, %true_value: vector<1xf32>, %false_value: vector<1xf32>) -> (vector<1xf32>) {
   %mask = vector.cmpf olt, %lhs, %rhs : vector<1xf32> -> vector<1xi1>
   %selected = vector.select %mask, %true_value, %false_value : vector<1xf32>

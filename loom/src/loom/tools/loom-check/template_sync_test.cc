@@ -172,6 +172,7 @@ TEST_F(TemplateSyncTest, UsesKernelDefAsCaseSymbol) {
       "// RUN: roundtrip\n"
       "\n"
       "kernel.def @entry() {\n"
+      "  %id = kernel.workgroup.id<x> : index\n"
       "  kernel.return\n"
       "}\n",
       &result, &changed));
@@ -225,6 +226,66 @@ TEST_F(TemplateSyncTest, PreservesTargetAnnotationsAtAnchoredInputLines) {
   EXPECT_NE(result.find("  // ERROR@+1: \"unsupported\"\n"
                         "  %zero = scalar.constant 0 : i32\n"),
             std::string::npos);
+}
+
+TEST_F(TemplateSyncTest, PreservesTargetDeclarationOverlay) {
+  std::string result;
+  bool changed = false;
+  IREE_ASSERT_OK(Build(
+      "// TEMPLATE: loom/src/loom/test/corpus/source_low/example.loom-test\n"
+      "// RUN: emit source-low output=low\n"
+      "\n"
+      "func.decl @target()\n"
+      "kernel.def target(@target) workgroup_size(64, 1, 1) @entry() {\n"
+      "  kernel.return\n"
+      "}\n"
+      "\n"
+      "// ----\n"
+      "old target evidence\n",
+      "// RUN: roundtrip\n"
+      "\n"
+      "kernel.def @entry() {\n"
+      "  %id = kernel.workgroup.id<x> : index\n"
+      "  kernel.return\n"
+      "}\n",
+      &result, &changed));
+
+  EXPECT_TRUE(changed);
+  EXPECT_NE(result.find("func.decl @target()\n"
+                        "kernel.def target(@target) workgroup_size(64, 1, 1) "
+                        "@entry() {\n"
+                        "  %id = kernel.workgroup.id<x> : index\n"
+                        "  kernel.return\n"),
+            std::string::npos);
+  EXPECT_NE(result.find("old target evidence\n"), std::string::npos);
+}
+
+TEST_F(TemplateSyncTest, PreservesFuncTargetDeclarationOverlay) {
+  std::string result;
+  bool changed = false;
+  IREE_ASSERT_OK(Build(
+      "// TEMPLATE: loom/src/loom/test/corpus/source_low/example.loom-test\n"
+      "// RUN: emit source-low output=low\n"
+      "\n"
+      "func.decl @target()\n"
+      "func.def target(@target) @entry(%old_value: i32) {\n"
+      "}\n"
+      "\n"
+      "// ----\n"
+      "old target evidence\n",
+      "// RUN: roundtrip\n"
+      "\n"
+      "func.def @entry(%value: i32) {\n"
+      "  %zero = scalar.constant 0 : i32\n"
+      "}\n",
+      &result, &changed));
+
+  EXPECT_TRUE(changed);
+  EXPECT_NE(result.find("func.decl @target()\n"
+                        "func.def target(@target) @entry(%value: i32) {\n"
+                        "  %zero = scalar.constant 0 : i32\n"),
+            std::string::npos);
+  EXPECT_NE(result.find("old target evidence\n"), std::string::npos);
 }
 
 TEST_F(TemplateSyncTest, PreservesAnnotationLineOccurrence) {

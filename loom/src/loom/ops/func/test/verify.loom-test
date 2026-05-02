@@ -1,0 +1,23 @@
+// RUN: verify
+
+// Target-independent source functions are valid without any target record.
+func.def @semantic() {
+  func.return
+}
+
+// ====
+
+// ABI and export contracts require an explicit target record.
+// ERROR@+1: STRUCTURE/014 {attr_name="target", actual_value="0", expected_constraint="present when ABI or export attrs are present"}
+func.def abi(object_function) @semantic_requires_target() {
+  func.return
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+// Targeted function contracts are valid when the target record is present.
+func.def target(@test_target) abi(object_function) export("semantic") @targeted_semantic() {
+  func.return
+}

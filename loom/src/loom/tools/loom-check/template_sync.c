@@ -40,6 +40,16 @@ typedef struct loom_check_template_sync_annotation_anchor_t {
   bool emitted;
 } loom_check_template_sync_annotation_anchor_t;
 
+typedef struct loom_check_template_sync_target_overlay_t {
+  // Target-specific declarations before the func-like op, such as a concrete
+  // target record used by the declaration's target(@...) annotation.
+  iree_string_view_t declaration_prelude;
+
+  // Target-specific declaration clauses between func.def/kernel.def and the
+  // case symbol, such as target(@target) or workgroup_size(...).
+  iree_string_view_t declaration_prefix;
+} loom_check_template_sync_target_overlay_t;
+
 static iree_status_t loom_check_template_sync_copy_string(
     iree_arena_allocator_t* arena, iree_string_view_t source,
     iree_string_view_t* out_string) {
@@ -177,6 +187,109 @@ static bool loom_check_template_sync_line_occurrence_at(
     ++current_line;
   }
   return false;
+}
+
+static bool loom_check_template_sync_is_symbol_char(char c) {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+         (c >= '0' && c <= '9') || c == '_' || c == '$' || c == '.' || c == '-';
+}
+
+static bool loom_check_template_sync_is_space(char c) {
+  return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
+
+static bool loom_check_template_sync_find_symbol_token(
+    iree_string_view_t line, iree_string_view_t key,
+    iree_host_size_t* out_symbol_position) {
+  *out_symbol_position = IREE_STRING_VIEW_NPOS;
+  if (iree_string_view_is_empty(key)) {
+    return false;
+  }
+  iree_host_size_t position = 0;
+  while (position < line.size) {
+    position = iree_string_view_find(line, key, position);
+    if (position == IREE_STRING_VIEW_NPOS) {
+      return false;
+    }
+    const iree_host_size_t at_position =
+        position == 0 ? IREE_STRING_VIEW_NPOS : position - 1;
+    const iree_host_size_t end_position = position + key.size;
+    const bool has_symbol_prefix =
+        at_position != IREE_STRING_VIEW_NPOS && line.data[at_position] == '@';
+    const bool has_symbol_suffix =
+        end_position < line.size &&
+        loom_check_template_sync_is_symbol_char(line.data[end_position]);
+    if (has_symbol_prefix && !has_symbol_suffix) {
+      *out_symbol_position = at_position;
+      return true;
+    }
+    ++position;
+  }
+  return false;
+}
+
+static bool loom_check_template_sync_declaration_line_info(
+    iree_string_view_t line, iree_string_view_t key,
+    iree_host_size_t* out_op_end, iree_host_size_t* out_symbol_position) {
+  *out_op_end = IREE_STRING_VIEW_NPOS;
+  *out_symbol_position = IREE_STRING_VIEW_NPOS;
+  iree_string_view_t trimmed = iree_string_view_trim(line);
+  const iree_host_size_t leading_space =
+      (iree_host_size_t)(trimmed.data - line.data);
+  iree_host_size_t op_length = 0;
+  if (iree_string_view_starts_with(trimmed, IREE_SV("func.def"))) {
+    op_length = sizeof("func.def") - 1;
+  } else if (iree_string_view_starts_with(trimmed, IREE_SV("kernel.def"))) {
+    op_length = sizeof("kernel.def") - 1;
+  } else {
+    return false;
+  }
+  const iree_host_size_t op_end = leading_space + op_length;
+  if (op_end < line.size &&
+      !loom_check_template_sync_is_space(line.data[op_end])) {
+    return false;
+  }
+  iree_host_size_t symbol_position = IREE_STRING_VIEW_NPOS;
+  if (!loom_check_template_sync_find_symbol_token(line, key,
+                                                  &symbol_position)) {
+    return false;
+  }
+  if (symbol_position < op_end) {
+    return false;
+  }
+  *out_op_end = op_end;
+  *out_symbol_position = symbol_position;
+  return true;
+}
+
+static iree_status_t loom_check_template_sync_collect_target_overlay(
+    const loom_check_case_t* target_case, iree_string_view_t key,
+    loom_check_template_sync_target_overlay_t* out_overlay) {
+  *out_overlay = (loom_check_template_sync_target_overlay_t){0};
+  if (target_case == NULL) {
+    return iree_ok_status();
+  }
+
+  iree_host_size_t offset = 0;
+  iree_string_view_t remaining =
+      loom_check_template_sync_trim_trailing_blank_lines(target_case->input);
+  while (!iree_string_view_is_empty(remaining)) {
+    iree_string_view_t before = remaining;
+    iree_string_view_t line = loom_check_template_sync_consume_line(&remaining);
+    iree_host_size_t op_end = IREE_STRING_VIEW_NPOS;
+    iree_host_size_t symbol_position = IREE_STRING_VIEW_NPOS;
+    if (loom_check_template_sync_declaration_line_info(line, key, &op_end,
+                                                       &symbol_position)) {
+      out_overlay->declaration_prelude =
+          loom_check_template_sync_trim_trailing_blank_lines(
+              iree_string_view_substr(target_case->input, 0, offset));
+      out_overlay->declaration_prefix =
+          iree_string_view_substr(line, op_end, symbol_position - op_end);
+      return iree_ok_status();
+    }
+    offset += before.size - remaining.size;
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_check_template_sync_source_line_number(
@@ -399,6 +512,41 @@ static iree_status_t loom_check_template_sync_append_target_annotations(
   return iree_ok_status();
 }
 
+static iree_status_t loom_check_template_sync_append_template_input_line(
+    iree_string_view_t template_line, iree_string_view_t key,
+    const loom_check_template_sync_target_overlay_t* overlay,
+    iree_string_builder_t* builder) {
+  if (overlay == NULL ||
+      iree_string_view_is_empty(overlay->declaration_prefix)) {
+    return loom_check_template_sync_append_line(builder, template_line);
+  }
+  iree_host_size_t op_end = IREE_STRING_VIEW_NPOS;
+  iree_host_size_t symbol_position = IREE_STRING_VIEW_NPOS;
+  if (!loom_check_template_sync_declaration_line_info(
+          template_line, key, &op_end, &symbol_position)) {
+    return loom_check_template_sync_append_line(builder, template_line);
+  }
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
+      builder, iree_string_view_substr(template_line, 0, op_end)));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_string(builder, overlay->declaration_prefix));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
+      builder, iree_string_view_substr(template_line, symbol_position,
+                                       IREE_HOST_SIZE_MAX)));
+  return iree_string_builder_append_cstring(builder, "\n");
+}
+
+static iree_status_t loom_check_template_sync_append_target_overlay_prelude(
+    const loom_check_template_sync_target_overlay_t* overlay,
+    iree_string_builder_t* builder) {
+  if (overlay == NULL ||
+      iree_string_view_is_empty(overlay->declaration_prelude)) {
+    return iree_ok_status();
+  }
+  return loom_check_template_sync_append_with_trailing_newline(
+      builder, overlay->declaration_prelude);
+}
+
 static iree_status_t loom_check_template_sync_collect_annotation_anchors(
     iree_string_view_t target_source, const loom_check_case_t* target_case,
     iree_arena_allocator_t* arena,
@@ -449,17 +597,17 @@ static iree_status_t loom_check_template_sync_collect_annotation_anchors(
 
 static iree_status_t loom_check_template_sync_append_input_with_annotations(
     iree_string_view_t target_source, const loom_check_case_t* template_case,
-    const loom_check_case_t* target_case, iree_arena_allocator_t* arena,
-    iree_string_builder_t* builder) {
+    const loom_check_case_t* target_case, iree_string_view_t key,
+    iree_arena_allocator_t* arena, iree_string_builder_t* builder) {
   loom_check_template_sync_annotation_anchor_t* anchors = NULL;
   iree_host_size_t anchor_count = 0;
   IREE_RETURN_IF_ERROR(loom_check_template_sync_collect_annotation_anchors(
       target_source, target_case, arena, &anchors, &anchor_count));
-  if (anchor_count == 0) {
-    return loom_check_template_sync_append_with_trailing_newline(
-        builder, loom_check_template_sync_trim_trailing_blank_lines(
-                     template_case->input));
-  }
+  loom_check_template_sync_target_overlay_t overlay = {0};
+  IREE_RETURN_IF_ERROR(loom_check_template_sync_collect_target_overlay(
+      target_case, key, &overlay));
+  IREE_RETURN_IF_ERROR(loom_check_template_sync_append_target_overlay_prelude(
+      &overlay, builder));
 
   iree_string_view_t remaining =
       loom_check_template_sync_trim_trailing_blank_lines(template_case->input);
@@ -470,7 +618,8 @@ static iree_status_t loom_check_template_sync_append_input_with_annotations(
     IREE_RETURN_IF_ERROR(loom_check_template_sync_append_target_annotations(
         target_source, anchors, anchor_count, line,
         /*insert_after_target_line=*/false, builder));
-    IREE_RETURN_IF_ERROR(loom_check_template_sync_append_line(builder, line));
+    IREE_RETURN_IF_ERROR(loom_check_template_sync_append_template_input_line(
+        line, key, &overlay, builder));
     IREE_RETURN_IF_ERROR(loom_check_template_sync_append_target_annotations(
         target_source, anchors, anchor_count, line,
         /*insert_after_target_line=*/true, builder));
@@ -487,8 +636,9 @@ static iree_status_t loom_check_template_sync_append_input_with_annotations(
 
 static iree_status_t loom_check_template_sync_append_case(
     iree_string_view_t target_source, const loom_check_case_t* template_case,
-    const loom_check_case_t* target_case, bool is_first_case,
-    iree_arena_allocator_t* arena, iree_string_builder_t* builder) {
+    const loom_check_case_t* target_case, iree_string_view_t key,
+    bool is_first_case, iree_arena_allocator_t* arena,
+    iree_string_builder_t* builder) {
   IREE_RETURN_IF_ERROR(
       loom_check_template_sync_ensure_trailing_blank_line(builder));
   if (!is_first_case) {
@@ -498,7 +648,7 @@ static iree_status_t loom_check_template_sync_append_case(
   IREE_RETURN_IF_ERROR(loom_check_template_sync_append_target_directives(
       target_source, target_case, builder));
   IREE_RETURN_IF_ERROR(loom_check_template_sync_append_input_with_annotations(
-      target_source, template_case, target_case, arena, builder));
+      target_source, template_case, target_case, key, arena, builder));
   if (target_case && target_case->has_expected_section) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "\n"));
     IREE_RETURN_IF_ERROR(
@@ -581,7 +731,7 @@ iree_status_t loom_check_template_sync_build_source(
                                            template_record->key);
     IREE_RETURN_IF_ERROR(loom_check_template_sync_append_case(
         target_source, template_record->test_case,
-        target_record ? target_record->test_case : NULL,
+        target_record ? target_record->test_case : NULL, template_record->key,
         /*is_first_case=*/i == 0, arena, new_source));
   }
 

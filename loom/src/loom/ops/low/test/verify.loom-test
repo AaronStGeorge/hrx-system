@@ -61,3 +61,241 @@ low.func.def target(@test_target) @storage_view_bounds_storage_traffic(%value: r
   low.spill %value, %view {offset = 16} : reg<test.i32>, low.storage<scratch>
   low.return
 }
+
+// ====
+
+test.target<low_core> @test_target
+
+// low.live_in and low.resource form the entry-block preamble.
+low.func.def target(@test_target) @entry_preamble() -> (reg<test.ptr>) {
+  %state = low.resource<native_pointer> {index = 0, source_type = buffer} : reg<test.ptr>
+  %arg0 = low.live_in<test.arg0> : reg<test.ptr>
+  %copy = low.copy %state : reg<test.ptr> -> reg<test.ptr>
+  low.return %copy : reg<test.ptr>
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @live_in_after_preamble(%input: reg<test.i32>) -> (reg<test.i32>) {
+  %arg0 = low.live_in<test.arg0> : reg<test.i32>
+  %copy = low.copy %arg0 : reg<test.i32> -> reg<test.i32>
+  // ERROR@+1: LOWERING/017 {op_name="low.live_in", field_name="position", reason="live-ins and resources must form an entry-block prefix before ordinary low packets"}
+  %late = low.live_in<test.arg1> : reg<test.i32>
+  low.return %late : reg<test.i32>
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @resource_after_preamble() -> (reg<test.ptr>) {
+  %arg0 = low.live_in<test.arg0> : reg<test.ptr>
+  %copy = low.copy %arg0 : reg<test.ptr> -> reg<test.ptr>
+  // ERROR@+1: LOWERING/017 {op_name="low.resource", field_name="position", reason="live-ins and resources must form an entry-block prefix before ordinary low packets"}
+  %late = low.resource<native_pointer> {index = 0, source_type = buffer} : reg<test.ptr>
+  low.return %late : reg<test.ptr>
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @live_in_non_entry_block() -> (reg<test.i32>) {
+  %arg0 = low.live_in<test.arg0> : reg<test.i32>
+  low.br ^exit
+^exit:
+  // ERROR@+1: LOWERING/017 {op_name="low.live_in", field_name="position", reason="live-ins and resources must appear in the low entry block"}
+  %late = low.live_in<test.arg1> : reg<test.i32>
+  low.return %late : reg<test.i32>
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+// Import attrs on low.func.decl are valid without changing the referenced low
+// descriptor contract set.
+low.func.decl import(vm, "iree.vm.core.add_i32") target(@test_target) @extern_imported(%lhs: reg<vm.i32>) -> (reg<vm.i32>)
+
+// ====
+
+test.target<low_core> @test_target
+
+func.def @semantic(%value: i32, %state: vm.state) -> (i32) {
+  func.return %value : i32
+}
+
+low.func.def target(@test_target) @semantic_low(%value: reg<test.i32>) -> (reg<test.i32>) {
+  low.return %value : reg<test.i32>
+}
+
+func.def @invoke_explicit_low(%value: i32, %state: vm.state) -> (i32) {
+  %result = low.invoke @semantic_low(%value, %state) : (i32, vm.state) -> (i32)
+  func.return %result : i32
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @semantic_low(%value: reg<test.i32>) -> (reg<test.i32>) {
+  low.return %value : reg<test.i32>
+}
+
+// low.invoke crosses from source IR to a low entry and therefore does not
+// require the low callee's register signature to match the source signature.
+func.def @invoke_source_signature(%value: f32) -> (i32) {
+  %result = low.invoke @semantic_low(%value) : (f32) -> (i32)
+  func.return %result : i32
+}
+
+// ====
+
+func.decl @semantic(%arg: i32) -> (i32)
+
+func.def @invoke_non_low(%lhs: i32) -> (i32) {
+  // ERROR@+1: SYMBOL/003 {symbol_name="semantic", actual_kind="function", expected_kind="low function"}
+  %sum = low.invoke @semantic(%lhs) : (i32) -> (i32)
+  func.return %sum : i32
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.decl target(@test_target) @extern_add(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
+
+low.func.def target(@test_target) @low_call(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {
+  %sum = low.func.call @extern_add(%lhs, %rhs) : (reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
+  low.return %sum : reg<amdgpu.vgpr x1>
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.decl target(@test_target) @extern_add()
+
+func.def @low_call_outside_low_body() {
+  // ERROR@+1: LOWERING/017 {op_name="low.func.call", field_name="enclosing low entry", reason="low.func.call must be nested under a low function or low kernel body"}
+  low.func.call @extern_add() : ()
+  func.return
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.decl target(@test_target) @semantic_low()
+
+low.func.def target(@test_target) @invoke_in_low_body() {
+  // ERROR@+1: STRUCTURE/029 {op_name="low.invoke", constraint_kind="forbidden", ancestor_name="low.func.def", actual_ancestor="low.func.def"}
+  low.invoke @semantic_low() : ()
+  low.return
+}
+
+// ====
+
+func.decl @semantic(%arg: i32) -> (i32)
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @low_call_non_low(%lhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {
+  // ERROR@+1: SYMBOL/003 {symbol_name="semantic", actual_kind="function", expected_kind="low function"}
+  %sum = low.func.call @semantic(%lhs) : (reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
+  low.return %sum : reg<amdgpu.vgpr x1>
+}
+
+// ====
+
+test.target<low_core> @gfx1100
+test.target<low_core> @gfx1200
+
+low.func.decl target(@gfx1200) @extern_add(%lhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
+
+low.func.def target(@gfx1100) @low_call_cross_target(%lhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {
+  // ERROR@+1: LOWERING/017 {op_name="low.func.call", field_name="callee", reason="callee target must match enclosing low entry target"}
+  %sum = low.func.call @extern_add(%lhs) : (reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
+  low.return %sum : reg<amdgpu.vgpr x1>
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.decl target(@test_target) @extern_add(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
+
+low.func.def target(@test_target) @low_call_operand_count(%lhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {
+  // ERROR@+1: LOWERING/013 {callee_name="extern_add", field_kind="operand", actual_count="1", expected_count="2"}
+  %sum = low.func.call @extern_add(%lhs) : (reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
+  low.return %sum : reg<amdgpu.vgpr x1>
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.decl target(@test_target) @extern_add(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.sgpr x1>) -> (reg<amdgpu.vgpr x1>)
+
+low.func.def target(@test_target) @low_call_operand_type(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {
+  // ERROR@+1: LOWERING/014 {callee_name="extern_add", field_kind="operand", field_index="1", actual_type="reg<amdgpu.vgpr>", callee_field_kind="argument", expected_type="reg<amdgpu.sgpr>"}
+  %sum = low.func.call @extern_add(%lhs, %rhs) : (reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
+  low.return %sum : reg<amdgpu.vgpr x1>
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.decl target(@test_target) @extern_add(%lhs: reg<vm.i32>) -> (reg<vm.i32>)
+
+func.def @pure_invoke_impure_low(%lhs: i32) -> (i32) {
+  // ERROR@+1: LOWERING/015 {callee_name="extern_add", boundary_name="extern_add", reason="callee has no pure contract"}
+  %sum = low.invoke pure @extern_add(%lhs) : (i32) -> (i32)
+  func.return %sum : i32
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+// Storage traffic is valid when all traffic stays inside owned storage views.
+low.func.def target(@test_target) @slot_roundtrip(%input: reg<test.i32>) -> (reg<test.i32>) {
+  %storage = low.storage.reserve {byte_alignment = 4, byte_length = 4} : low.storage<scratch>
+  %view = low.storage.view %storage {byte_length = 4} : low.storage<scratch> -> low.storage<scratch>
+  low.spill %input, %view {offset = 0} : reg<test.i32>, low.storage<scratch>
+  %reload = low.reload %view {offset = 0} : low.storage<scratch> -> reg<test.i32>
+  %addr = low.storage.address %view : low.storage<scratch> -> reg<test.ptr>
+  low.return %reload : reg<test.i32>
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @resource_negative_extent() -> (reg<test.ptr>) {
+  // ERROR@+1: LOWERING/017 {op_name="low.resource", field_name="valid_byte_count", reason="valid_byte_count must be non-negative"}
+  %binding = low.resource<native_pointer> {index = 0, source_type = buffer, valid_byte_count = -1} : reg<test.ptr>
+  low.return %binding : reg<test.ptr>
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @resource_bad_swizzle_stride() -> (reg<test.ptr>) {
+  // ERROR@+1: LOWERING/017 {op_name="low.resource", field_name="cache_swizzle_stride", reason="cache_swizzle_stride must fit a 14-bit byte stride"}
+  %binding = low.resource<native_pointer> {index = 0, source_type = buffer, cache_swizzle_stride = 16384} : reg<test.ptr>
+  low.return %binding : reg<test.ptr>
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) abi(object_function) @resource_wrong_export_abi() -> (reg<vm.i32>) {
+  // ERROR@+1: LOWERING/017 {op_name="low.resource", field_name="import_kind", reason="VM resources require vm_module_function export ABI"}
+  %state = low.resource<vm_state> {index = 0, source_type = vm.state} : reg<vm.i32>
+  low.return %state : reg<vm.i32>
+}

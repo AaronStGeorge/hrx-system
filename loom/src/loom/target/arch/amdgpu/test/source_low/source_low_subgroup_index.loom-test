@@ -13,12 +13,11 @@ kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_id_x_wave32(%outpu
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_id_x_wave32() asm<amdgpu.gfx11.core> {
   %5 = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 8} : reg<amdgpu.sgpr x4>
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 8} : reg<amdgpu.sgpr x2>
   %subgroup_id = v_lshrrev_b32_lit %5, 5
   %one = v_mov_b32 1
   %9 = v_lshlrev_b32_lit %subgroup_id, 2
-  %10 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %9, %one, %10
+  global_store_b32 %9, %one, %output_view
   return
 }
 
@@ -37,12 +36,11 @@ kernel.def target(@target) workgroup_size(32, 1, 1) @subgroup_id_single_wave_gfx
 
 // ----
 low.kernel.def target(@target) workgroup_size(32, 1, 1) @subgroup_id_single_wave_gfx11() asm<amdgpu.gfx11.core> {
-  %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x2>
   %subgroup_id = v_mov_b32 0
   %one = v_mov_b32 1
   %8 = v_mov_b32 0
-  %9 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %8, %one, %9
+  global_store_b32 %8, %one, %output_view
   return
 }
 
@@ -62,7 +60,7 @@ kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wave32(
 // ----
 low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wave32() asm<amdgpu.gfx11.core> {
   %packed_tid = live_in<amdgpu.workitem_id.packed.xyz> : reg<amdgpu.vgpr>
-  %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x4>
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
   %7 = v_and_b32_lit %packed_tid, 1023
   %8 = v_lshrrev_b32_lit %packed_tid, 10
   %9 = v_and_b32_lit %8, 1023
@@ -75,8 +73,7 @@ low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wav
   %lane_id = v_and_b32_lit %15, 31
   %one = v_mov_b32 1
   %18 = v_lshlrev_b32_lit %lane_id, 2
-  %19 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %18, %one, %19
+  global_store_b32 %18, %one, %output_view
   return
 }
 
@@ -96,7 +93,7 @@ kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wave32_
 // ----
 low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wave32_gfx12() asm<amdgpu.gfx12.core> {
   %packed_tid = live_in<amdgpu.workitem_id.packed.xyz> : reg<amdgpu.vgpr>
-  %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x4>
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
   %7 = v_and_b32_lit %packed_tid, 1023
   %8 = v_lshrrev_b32_lit %packed_tid, 10
   %9 = v_and_b32_lit %8, 1023
@@ -109,8 +106,7 @@ low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wav
   %lane_id = v_and_b32_lit %15, 31
   %one = v_mov_b32 1
   %18 = v_lshlrev_b32_lit %lane_id, 2
-  %19 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b32 %18, %one, %19
+  global_store_b32 %18, %one, %output_view
   return
 }
 
@@ -128,15 +124,16 @@ kernel.def target(@target) workgroup_size(128, 1, 1) @subgroup_id_x_wave64(%outp
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(128, 1, 1) @subgroup_id_x_wave64() asm<amdgpu.gfx950.core> {
-  %5 = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 8} : reg<amdgpu.sgpr x4>
-  %subgroup_id = v_lshrrev_b32_lit %5, 6
-  %one = v_mov_b32 1
-  %9 = v_lshlrev_b32_lit %subgroup_id, 2
-  %10 = s_mov_b32 0
-  buffer_store_dword %one, %output_view, %9, %10
-  return
+low.kernel.def target(@target) workgroup_size(128, 1, 1) @subgroup_id_x_wave64() {
+  %5 = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %output_view = low.resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 8} : reg<amdgpu.sgpr x2>
+  %subgroup_id = low.op<amdgpu.v_lshrrev_b32.lit>(%5) {imm32 = 6} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %9 = low.op<amdgpu.v_lshlrev_b32.lit>(%subgroup_id) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %10 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %11 = low.op<amdgpu.hal.buffer_descriptor>(%output_view) {cache_swizzle_stride = 0, valid_byte_count = 8} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  low.op<amdgpu.buffer_store_dword>(%one, %11, %9, %10) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
 }
 
 // ====
@@ -153,12 +150,13 @@ kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_lane_id_x_wave64(%
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_lane_id_x_wave64() asm<amdgpu.gfx950.core> {
-  %lane_id = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
-  %one = v_mov_b32 1
-  %8 = v_lshlrev_b32_lit %lane_id, 2
-  %9 = s_mov_b32 0
-  buffer_store_dword %one, %output_view, %8, %9
-  return
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_lane_id_x_wave64() {
+  %lane_id = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %output_view = low.resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %8 = low.op<amdgpu.v_lshlrev_b32.lit>(%lane_id) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %9 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %10 = low.op<amdgpu.hal.buffer_descriptor>(%output_view) {cache_swizzle_stride = 0, valid_byte_count = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  low.op<amdgpu.buffer_store_dword>(%one, %10, %8, %9) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
 }

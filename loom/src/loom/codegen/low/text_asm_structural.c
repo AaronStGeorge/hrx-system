@@ -13,7 +13,7 @@
 static const uint8_t kLowAsmResourceIndexName[] =
     LOOM_BSTRING_LITERAL(5, "index");
 static const uint8_t kLowAsmResourceSemanticTypeName[] =
-    LOOM_BSTRING_LITERAL(13, "semantic_type");
+    LOOM_BSTRING_LITERAL(13, "source_type");
 static const uint8_t kLowAsmResourceValidByteCountName[] =
     LOOM_BSTRING_LITERAL(16, "valid_byte_count");
 static const uint8_t kLowAsmResourceCacheSwizzleStrideName[] =
@@ -71,8 +71,8 @@ static iree_status_t loom_low_descriptor_text_asm_resource_key_to_kind(
     *out_kind = LOOM_LOW_RESOURCE_IMPORT_KIND_VM_IMPORT;
     return iree_ok_status();
   }
-  if (iree_string_view_equal(key, IREE_SV("hal_buffer_resource"))) {
-    *out_kind = LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE;
+  if (iree_string_view_equal(key, IREE_SV("hal_binding"))) {
+    *out_kind = LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BINDING;
     return iree_ok_status();
   }
   return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -92,8 +92,8 @@ static iree_status_t loom_low_descriptor_text_asm_resource_kind_to_key(
     case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_IMPORT:
       *out_key = IREE_SV("vm_import");
       return iree_ok_status();
-    case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE:
-      *out_key = IREE_SV("hal_buffer_resource");
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BINDING:
+      *out_key = IREE_SV("hal_binding");
       return iree_ok_status();
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -129,7 +129,7 @@ iree_status_t loom_low_descriptor_text_asm_structural_attr_descriptor(
     *out_descriptor = &kLowAsmResourceIndexAttr;
     return iree_ok_status();
   }
-  if (iree_string_view_equal(attr_name, IREE_SV("semantic_type"))) {
+  if (iree_string_view_equal(attr_name, IREE_SV("source_type"))) {
     *out_descriptor = &kLowAsmResourceSemanticTypeAttr;
     return iree_ok_status();
   }
@@ -174,13 +174,12 @@ static iree_status_t loom_low_descriptor_text_asm_build_resource(
                             "low asm resource index must be an i64 attr");
   }
 
-  const loom_named_attr_t* semantic_type_attr = NULL;
+  const loom_named_attr_t* source_type_attr = NULL;
   IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_required_attr(
-      builder->module, attrs, IREE_SV("semantic_type"), &semantic_type_attr));
-  if (semantic_type_attr->value.kind != LOOM_ATTR_TYPE) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "low asm resource semantic_type must be a type attr");
+      builder->module, attrs, IREE_SV("source_type"), &source_type_attr));
+  if (source_type_attr->value.kind != LOOM_ATTR_TYPE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low asm resource source_type must be a type attr");
   }
 
   loom_low_resource_build_flags_t flags = 0;
@@ -216,7 +215,7 @@ static iree_status_t loom_low_descriptor_text_asm_build_resource(
 
   return loom_low_resource_build(
       builder, flags, import_kind, index_attr->value.i64,
-      semantic_type_attr->value.type_id, valid_byte_count, cache_swizzle_stride,
+      source_type_attr->value.type_id, valid_byte_count, cache_swizzle_stride,
       result_type, location, out_op);
 }
 
@@ -376,9 +375,8 @@ static iree_status_t loom_low_descriptor_text_asm_describe_resource(
       module, op, loom_low_resource_index_ATTR_INDEX, IREE_SV("index"),
       &kLowAsmResourceIndexAttr, out_statement));
   IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_set_structural_attr(
-      module, op, loom_low_resource_semantic_type_ATTR_INDEX,
-      IREE_SV("semantic_type"), &kLowAsmResourceSemanticTypeAttr,
-      out_statement));
+      module, op, loom_low_resource_source_type_ATTR_INDEX,
+      IREE_SV("source_type"), &kLowAsmResourceSemanticTypeAttr, out_statement));
   IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_set_structural_attr(
       module, op, loom_low_resource_valid_byte_count_ATTR_INDEX,
       IREE_SV("valid_byte_count"), &kLowAsmResourceValidByteCountAttr,

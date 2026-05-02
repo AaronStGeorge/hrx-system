@@ -566,9 +566,8 @@ iree_status_t loom_amdgpu_kernel_record_build(
     }
   } else {
     IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_layout_from_low(
-        schedule->module, schedule->function_op,
-        &schedule->target.bundle_storage.bundle,
-        schedule->target.descriptor_set, &derived_abi_layout, scratch_arena));
+        schedule->module, schedule->function_op, &derived_abi_layout,
+        scratch_arena));
     abi_layout = &derived_abi_layout;
   }
 
