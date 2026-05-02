@@ -77,26 +77,17 @@ static iree_string_view_t loom_target_low_legality_function_name(
 
 static iree_string_view_t loom_target_low_legality_target_key(
     const loom_target_bundle_t* bundle) {
-  if (!bundle) {
-    return IREE_SV("<missing>");
-  }
   return loom_target_low_legality_nonempty(bundle->name, IREE_SV("<empty>"));
 }
 
 static iree_string_view_t loom_target_low_legality_export_name(
     const loom_target_bundle_t* bundle) {
-  if (!bundle || !bundle->export_plan) {
-    return IREE_SV("<missing>");
-  }
   return loom_target_low_legality_nonempty(bundle->export_plan->name,
                                            IREE_SV("<empty>"));
 }
 
 static iree_string_view_t loom_target_low_legality_config_key(
     const loom_target_bundle_t* bundle) {
-  if (!bundle || !bundle->config) {
-    return IREE_SV("<missing>");
-  }
   return loom_target_low_legality_nonempty(bundle->config->name,
                                            IREE_SV("<empty>"));
 }
@@ -149,6 +140,16 @@ iree_status_t loom_target_low_legality_reject(
   return loom_target_low_legality_emit(
       context, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 1), params,
       IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_target_low_legality_reject_error_ref(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    const loom_target_contract_rejection_t* rejection) {
+  const loom_error_def_t* error =
+      loom_error_def_lookup_ref(rejection->error_ref);
+  IREE_ASSERT(error != NULL);
+  return loom_target_low_legality_emit(context, op, error, rejection->params,
+                                       rejection->param_count);
 }
 
 iree_status_t loom_target_low_legality_record_contract(
@@ -493,6 +494,10 @@ static iree_status_t loom_target_low_legality_reject_contract_query(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     const loom_target_contract_query_result_t* result) {
   if (result->rejection != NULL) {
+    if (loom_error_ref_is_set(result->rejection->error_ref)) {
+      return loom_target_low_legality_reject_error_ref(context, op,
+                                                       result->rejection);
+    }
     return loom_target_low_legality_reject(
         context, NULL, op, result->rejection->subject_kind,
         result->rejection->subject_name, result->rejection->reason);

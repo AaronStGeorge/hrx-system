@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from loom.dialect.buffer import ALL_BUFFER_OPS
 from loom.dialect.buffer import defs as buffer
+from loom.error.amdgpu import ERR_AMDGPU_001, ERR_AMDGPU_002
 from loom.target.arch.amdgpu.contracts.memory import BYTE_ADDRESSABLE_SCALAR_ELEMENTS
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
 from loom.target.contracts import (
@@ -19,6 +20,9 @@ from loom.target.contracts import (
     ValueAliasRule,
     ValueRef,
     View,
+    string_param,
+    target_diagnostic,
+    value_type_param,
 )
 
 _DESCRIPTOR_SET = build_amdgpu_contract_descriptor_set(
@@ -27,18 +31,19 @@ _DESCRIPTOR_SET = build_amdgpu_contract_descriptor_set(
 )
 
 _VIEW_TYPE_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="memory",
-    subject_name="buffer.view",
-    reason=(
-        "AMDGPU buffer memory lowering requires typed views over "
-        "byte-addressable scalar elements"
+    ref=target_diagnostic(
+        ERR_AMDGPU_001,
+        string_param("field_name", "result"),
+        value_type_param("actual_type", "result"),
+        string_param("required_storage", "byte-addressable scalar elements"),
     ),
 )
 
 _STATIC_BYTE_OFFSET_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="memory",
-    subject_name="buffer.view",
-    reason="AMDGPU HAL buffer views require exact non-negative static byte offsets",
+    ref=target_diagnostic(
+        ERR_AMDGPU_002,
+        string_param("field_name", "byte_offset"),
+    ),
 )
 
 AMDGPU_BUFFER_CONTRACT_DIALECT_OPS = {

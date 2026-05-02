@@ -61,6 +61,11 @@ typedef enum loom_error_domain_e {
   LOOM_ERROR_DOMAIN_FOLD = 9,       // Poison folding, canonicalization.
   LOOM_ERROR_DOMAIN_LOWERING = 10,  // Pass legality and unsupported mappings.
   LOOM_ERROR_DOMAIN_BACKEND = 11,   // Target codegen feedback and emission.
+  LOOM_ERROR_DOMAIN_TARGET = 12,    // Target contract and legality failures.
+  LOOM_ERROR_DOMAIN_AMDGPU = 13,    // AMDGPU legality and lowering failures.
+  LOOM_ERROR_DOMAIN_X86 = 14,       // X86 legality and lowering failures.
+  LOOM_ERROR_DOMAIN_WASM = 15,      // WebAssembly legality and lowering.
+  LOOM_ERROR_DOMAIN_SPIRV = 16,     // SPIR-V legality and lowering failures.
   LOOM_ERROR_DOMAIN_COUNT_,
 } loom_error_domain_t;
 

@@ -17,6 +17,7 @@ iree_py_library(
     "__init__.py"
     "compile.py"
     "descriptors.py"
+    "diagnostics.py"
     "emits.py"
     "fragments.py"
     "guards.py"
@@ -31,6 +32,7 @@ iree_py_library(
     "templates.py"
   DEPS
     iree::runtime::py::loom::core
+    iree::runtime::py::loom::error::error
     iree::runtime::py::loom::target::low_descriptors
 )
 

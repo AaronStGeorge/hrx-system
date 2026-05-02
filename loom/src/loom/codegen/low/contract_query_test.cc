@@ -21,15 +21,19 @@ constexpr loom_op_kind_t kSourceOpKind = LOOM_OP_KIND(7, 3);
 constexpr uint64_t kDescriptorId = UINT64_C(0x123456789abcdef0);
 
 const loom_target_config_t kTargetConfig = {
-    /*.name=*/{},
+    /*.name=*/IREE_SV("test-config"),
     /*.contract_set_key=*/{},
     /*.contract_feature_bits=*/0,
 };
 
+const loom_target_export_plan_t kTargetExportPlan = {
+    /*.name=*/IREE_SV("test-export"),
+};
+
 const loom_target_bundle_t kTargetBundle = {
-    /*.name=*/{},
+    /*.name=*/IREE_SV("test-target"),
     /*.snapshot=*/nullptr,
-    /*.export_plan=*/nullptr,
+    /*.export_plan=*/&kTargetExportPlan,
     /*.config=*/&kTargetConfig,
 };
 
@@ -132,10 +136,35 @@ TEST(LowContractQueryTest, ContractIndexDescriptorRuleReportsRejectedCase) {
   guard.kind = LOOM_LOW_LOWER_GUARD_ATTR_KIND;
   guard.attr_kind = LOOM_ATTR_I64;
   guard.diagnostic_index = 0;
+  loom_low_lower_diagnostic_param_t diagnostic_params[] = {
+      {
+          /*.kind=*/LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_TARGET_KEY,
+      },
+      {
+          /*.kind=*/LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_EXPORT_NAME,
+      },
+      {
+          /*.kind=*/LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_CONFIG_KEY,
+      },
+      {
+          /*.kind=*/LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_FUNCTION_NAME,
+      },
+      {
+          /*.kind=*/LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_STRING_LITERAL,
+          /*.string_value=*/IREE_SV("test.source"),
+      },
+      {
+          /*.kind=*/LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_STRING_LITERAL,
+          /*.string_value=*/IREE_SV("value"),
+      },
+      {
+          /*.kind=*/LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_STRING_LITERAL,
+          /*.string_value=*/IREE_SV("i64"),
+      },
+  };
   loom_low_lower_diagnostic_t diagnostic = {};
-  diagnostic.subject_kind = IREE_SV("attr");
-  diagnostic.subject_name = IREE_SV("value");
-  diagnostic.reason = IREE_SV("expected i64 attr");
+  diagnostic.error_ref = LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_TARGET, 3);
+  diagnostic.param_count = IREE_ARRAYSIZE(diagnostic_params);
   loom_low_lower_rule_t rule = {};
   rule.source_op_kind = kSourceOpKind;
   rule.guard_count = 1;
@@ -144,6 +173,8 @@ TEST(LowContractQueryTest, ContractIndexDescriptorRuleReportsRejectedCase) {
   rule_set.rule_count = 1;
   rule_set.guards = &guard;
   rule_set.guard_count = 1;
+  rule_set.diagnostic_params = diagnostic_params;
+  rule_set.diagnostic_param_count = IREE_ARRAYSIZE(diagnostic_params);
   rule_set.diagnostics = &diagnostic;
   rule_set.diagnostic_count = 1;
   const loom_low_lower_rule_set_t* rule_sets[] = {&rule_set};
@@ -199,12 +230,15 @@ TEST(LowContractQueryTest, ContractIndexDescriptorRuleReportsRejectedCase) {
   EXPECT_EQ(result.rule_index, UINT16_MAX);
   EXPECT_EQ(result.diagnostic_index, 0);
   ASSERT_NE(result.rejection, nullptr);
-  EXPECT_TRUE(
-      iree_string_view_equal(result.rejection->subject_kind, IREE_SV("attr")));
-  EXPECT_TRUE(
-      iree_string_view_equal(result.rejection->subject_name, IREE_SV("value")));
-  EXPECT_TRUE(iree_string_view_equal(result.rejection->reason,
-                                     IREE_SV("expected i64 attr")));
+  EXPECT_EQ(result.rejection->error_ref,
+            LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_TARGET, 3));
+  ASSERT_EQ(result.rejection->param_count, 7);
+  EXPECT_TRUE(iree_string_view_equal(result.rejection->params[4].string,
+                                     IREE_SV("test.source")));
+  EXPECT_TRUE(iree_string_view_equal(result.rejection->params[5].string,
+                                     IREE_SV("value")));
+  EXPECT_TRUE(iree_string_view_equal(result.rejection->params[6].string,
+                                     IREE_SV("i64")));
 
   iree_arena_deinitialize(&arena);
   iree_arena_block_pool_deinitialize(&block_pool);

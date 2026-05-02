@@ -5339,5 +5339,1011 @@
         "kind_name": "STRING"
       }
     ]
+  },
+  {
+    "error_id": "ERR_TARGET_001",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 1,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target has no lowering contract for an operation.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' has no target-low contract for '{op_name}' in '@{function_name}'",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Select a target contract that handles '{op_name}' or refine the operation before target-low lowering"
+  },
+  {
+    "error_id": "ERR_TARGET_002",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 2,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract rejected a value type.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' field '{field_name}' in '@{function_name}': type {actual_type} does not match {expected_type}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "expected_type",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Refine '{field_name}' to a type accepted by the selected target contract"
+  },
+  {
+    "error_id": "ERR_TARGET_003",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 3,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract rejected an attribute kind.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' field '{field_name}' in '@{function_name}': expected a {expected_attr_kind} attribute",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_attr_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_TARGET_004",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 4,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract rejected an enum attribute case.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' enum attribute '{field_name}' in '@{function_name}': expected '{expected_case}'",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_case",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_TARGET_005",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 5,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract rejected an i64 attribute range.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' i64 attribute '{field_name}' in '@{function_name}': expected range [{minimum}, {maximum}]",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "minimum",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "maximum",
+        "kind": 1,
+        "kind_name": "I64"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_TARGET_006",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 6,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target descriptor is unavailable.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' cannot lower '{op_name}' in '@{function_name}': descriptor '{descriptor_key}' is unavailable or requires disabled features",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "descriptor_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_TARGET_007",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 7,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract required a materializable value.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' field '{field_name}' in '@{function_name}': materializer '{materializer_key}' cannot produce the value",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "materializer_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_TARGET_008",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 8,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract rejected a low register class.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' field '{field_name}' in '@{function_name}': expected low register class '{register_class}'",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "register_class",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_TARGET_009",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 9,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract rejected a static dimension multiple.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' field '{field_name}' in '@{function_name}': static dimension 0 must be divisible by {multiple}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "multiple",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_TARGET_010",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 10,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract rejected low register unit counts.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' fields '{field_name}' and '{other_field_name}' in '@{function_name}': low register unit counts must match",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "other_field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_TARGET_011",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 11,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract rejected an operand segment count.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' operand segment '{field_name}' in '@{function_name}': expected {expected_count} value(s)",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_TARGET_012",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 12,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract rejected an i64 array count.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' i64 array '{field_name}' in '@{function_name}': expected {expected_count} element(s)",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_TARGET_013",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 13,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract rejected an i64 array element range.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' i64 array '{field_name}' element {element} in '@{function_name}': expected range [{minimum}, {maximum}]",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "element",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "minimum",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "maximum",
+        "kind": 1,
+        "kind_name": "I64"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_TARGET_014",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 14,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract rejected an i64 array element set.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' i64 array '{field_name}' in '@{function_name}': all elements must be in range [{minimum}, {maximum}]",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "minimum",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "maximum",
+        "kind": 1,
+        "kind_name": "I64"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_TARGET_015",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 15,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract required a bounded integer value fact.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' value '{field_name}' in '@{function_name}': requires a {signedness} {bit_count}-bit bound",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "signedness",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "bit_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_TARGET_016",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 16,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract required an exact integer value fact.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' value '{field_name}' in '@{function_name}': requires an exact integer value fact",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_TARGET_017",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 17,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract rejected an integer value fact range.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' value '{field_name}' in '@{function_name}': requires value range [{minimum}, {maximum}]",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "minimum",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "maximum",
+        "kind": 1,
+        "kind_name": "I64"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_TARGET_018",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 18,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract rejected a source memory access.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' source memory access in '@{function_name}': operation '{operation_kind}' does not match the selected contract",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "operation_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_TARGET_019",
+    "domain": 12,
+    "domain_name": "TARGET",
+    "code": 19,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target contract rejected a named subject.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' {subject_kind} '{subject_name}' in '@{function_name}': {detail}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "subject_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "subject_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "detail",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_AMDGPU_001",
+    "domain": 13,
+    "domain_name": "AMDGPU",
+    "code": 1,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "AMDGPU buffer view element storage is unsupported.",
+    "message_template": "AMDGPU target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' field '{field_name}' in '@{function_name}': type {actual_type} is not a typed view over {required_storage}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "required_storage",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Use a HAL buffer view whose element type has byte-addressable AMDGPU buffer storage"
+  },
+  {
+    "error_id": "ERR_AMDGPU_002",
+    "domain": 13,
+    "domain_name": "AMDGPU",
+    "code": 2,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "AMDGPU buffer view byte offset is not statically encodable.",
+    "message_template": "AMDGPU target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' field '{field_name}' in '@{function_name}': byte offset must be an exact non-negative static integer",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Propagate an exact non-negative byte-offset fact before AMDGPU target-low lowering"
   }
 ]

@@ -40,19 +40,47 @@ static iree_status_t loom_low_lower_rule_emit_no_mapping(
               "mapping for this op"));
 }
 
-static iree_status_t loom_low_lower_rule_emit_diagnostic(
-    loom_low_lower_context_t* context,
-    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
-    uint16_t diagnostic_index) {
-  if (diagnostic_index == LOOM_LOW_LOWER_DIAGNOSTIC_NONE ||
-      diagnostic_index >= rule_set->diagnostic_count) {
-    return loom_low_lower_rule_emit_no_mapping(context, source_op);
+static iree_string_view_t loom_low_lower_rule_nonempty(
+    iree_string_view_t value, iree_string_view_t placeholder) {
+  return iree_string_view_is_empty(value) ? placeholder : value;
+}
+
+static iree_string_view_t loom_low_lower_rule_symbol_name(
+    const loom_module_t* module, loom_symbol_ref_t symbol_ref) {
+  if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
+      symbol_ref.symbol_id >= module->symbols.count) {
+    return IREE_SV("<unnamed>");
   }
-  const loom_low_lower_diagnostic_t* diagnostic =
-      &rule_set->diagnostics[diagnostic_index];
-  return loom_low_lower_emit_reject(
-      context, source_op, diagnostic->subject_kind, diagnostic->subject_name,
-      diagnostic->reason);
+  const loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
+  if (symbol->name_id < module->strings.count) {
+    return module->strings.entries[symbol->name_id];
+  }
+  return IREE_SV("<unnamed>");
+}
+
+static iree_string_view_t loom_low_lower_rule_function_name(
+    const loom_low_lower_rule_match_context_t* match_context) {
+  if (!loom_func_like_isa(match_context->function)) {
+    return IREE_SV("<module>");
+  }
+  return loom_low_lower_rule_symbol_name(
+      match_context->module, loom_func_like_callee(match_context->function));
+}
+
+static iree_string_view_t loom_low_lower_rule_target_key(
+    const loom_target_bundle_t* bundle) {
+  return loom_low_lower_rule_nonempty(bundle->name, IREE_SV("<empty>"));
+}
+
+static iree_string_view_t loom_low_lower_rule_export_name(
+    const loom_target_bundle_t* bundle) {
+  return loom_low_lower_rule_nonempty(bundle->export_plan->name,
+                                      IREE_SV("<empty>"));
+}
+
+static iree_string_view_t loom_low_lower_rule_config_key(
+    const loom_target_bundle_t* bundle) {
+  return loom_low_lower_rule_nonempty(bundle->config->name, IREE_SV("<empty>"));
 }
 
 static const loom_low_lower_value_materializer_t*
@@ -826,6 +854,8 @@ loom_low_lower_rule_match_context_from_lowering(
     loom_low_lower_context_t* context) {
   return (loom_low_lower_rule_match_context_t){
       .module = loom_low_lower_context_module(context),
+      .function = loom_low_lower_context_source_function(context),
+      .bundle = loom_low_lower_context_bundle(context),
       .descriptor_set = loom_low_lower_context_descriptor_set(context),
       .feature_bits =
           loom_low_lower_context_bundle(context)->config->contract_feature_bits,
@@ -846,6 +876,87 @@ loom_low_lower_rule_match_context_from_lowering(
           },
       .fact_table = loom_low_lower_context_fact_table(context),
   };
+}
+
+void loom_low_lower_rule_materialize_diagnostic_params(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    const loom_low_lower_diagnostic_t* diagnostic,
+    loom_diagnostic_param_t* out_params) {
+  const loom_low_lower_diagnostic_param_t* param_rows =
+      diagnostic->param_count == 0
+          ? NULL
+          : &rule_set->diagnostic_params[diagnostic->param_start];
+  for (uint8_t i = 0; i < diagnostic->param_count; ++i) {
+    const loom_low_lower_diagnostic_param_t* row = &param_rows[i];
+    switch (row->kind) {
+      case LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_TARGET_KEY:
+        out_params[i] = loom_param_string(
+            loom_low_lower_rule_target_key(match_context->bundle));
+        break;
+      case LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_EXPORT_NAME:
+        out_params[i] = loom_param_string(
+            loom_low_lower_rule_export_name(match_context->bundle));
+        break;
+      case LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_CONFIG_KEY:
+        out_params[i] = loom_param_string(
+            loom_low_lower_rule_config_key(match_context->bundle));
+        break;
+      case LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_FUNCTION_NAME:
+        out_params[i] =
+            loom_param_string(loom_low_lower_rule_function_name(match_context));
+        break;
+      case LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_SOURCE_OP_NAME:
+        out_params[i] =
+            loom_param_string(loom_op_name(match_context->module, source_op));
+        break;
+      case LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_STRING_LITERAL:
+        out_params[i] = loom_param_string(row->string_value);
+        break;
+      case LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_VALUE_TYPE: {
+        const loom_value_id_t value_id = loom_low_lower_rule_source_value(
+            rule_set, source_op, row->value_ref_index);
+        out_params[i] = loom_param_type(
+            loom_module_value_type(match_context->module, value_id));
+        break;
+      }
+      case LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_I64_LITERAL:
+        out_params[i] = loom_param_i64(row->i64_value);
+        break;
+      case LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_U32_LITERAL:
+        out_params[i] = loom_param_u32(row->u32_value);
+        break;
+      case LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_U64_LITERAL:
+        out_params[i] = loom_param_u64(row->u64_value);
+        break;
+      case LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_BOOL_LITERAL:
+        out_params[i] = loom_param_bool(row->bool_value);
+        break;
+      default:
+        IREE_CHECK_UNREACHABLE();
+    }
+  }
+}
+
+static iree_status_t loom_low_lower_rule_emit_diagnostic(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t diagnostic_index) {
+  if (diagnostic_index == LOOM_LOW_LOWER_DIAGNOSTIC_NONE ||
+      diagnostic_index >= rule_set->diagnostic_count) {
+    return loom_low_lower_rule_emit_no_mapping(context, source_op);
+  }
+  const loom_low_lower_diagnostic_t* diagnostic =
+      &rule_set->diagnostics[diagnostic_index];
+  loom_diagnostic_param_t params[LOOM_LOW_LOWER_MAX_DIAGNOSTIC_PARAMS] = {0};
+  IREE_ASSERT_LE(diagnostic->param_count, IREE_ARRAYSIZE(params));
+  const loom_low_lower_rule_match_context_t match_context =
+      loom_low_lower_rule_match_context_from_lowering(context);
+  loom_low_lower_rule_materialize_diagnostic_params(
+      &match_context, rule_set, source_op, diagnostic, params);
+  return loom_low_lower_emit_error_ref(context, source_op,
+                                       diagnostic->error_ref, params,
+                                       diagnostic->param_count);
 }
 
 iree_status_t loom_low_lower_rule_set_select(

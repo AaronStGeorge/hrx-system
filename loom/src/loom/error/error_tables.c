@@ -31,6 +31,11 @@ static const char* const loom_error_domain_names[LOOM_ERROR_DOMAIN_COUNT_] = {
     [LOOM_ERROR_DOMAIN_FOLD] = "FOLD",
     [LOOM_ERROR_DOMAIN_LOWERING] = "LOWERING",
     [LOOM_ERROR_DOMAIN_BACKEND] = "BACKEND",
+    [LOOM_ERROR_DOMAIN_TARGET] = "TARGET",
+    [LOOM_ERROR_DOMAIN_AMDGPU] = "AMDGPU",
+    [LOOM_ERROR_DOMAIN_X86] = "X86",
+    [LOOM_ERROR_DOMAIN_WASM] = "WASM",
+    [LOOM_ERROR_DOMAIN_SPIRV] = "SPIRV",
 };
 
 const char* loom_error_domain_name(loom_error_domain_t domain) {
@@ -3551,6 +3556,461 @@ static const loom_error_def_t loom_err_backend_018 = {
     .param_count = 10,
 };
 
+static const loom_error_param_def_t loom_err_target_001_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_target_001 = {
+    .error_id = "ERR_TARGET_001",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 1,
+    .summary = "Target has no lowering contract for an operation.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "has no target-low contract for '{op_name}' in '@{function_name}'",
+    .fix_hint_template =
+        "Select a target contract that handles '{op_name}' or refine the "
+        "operation before target-low lowering",
+    .param_defs = loom_err_target_001_params,
+    .param_count = 5,
+};
+
+static const loom_error_param_def_t loom_err_target_002_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},    {"field_name", LOOM_PARAM_STRING},
+    {"actual_type", LOOM_PARAM_TYPE},  {"expected_type", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_target_002 = {
+    .error_id = "ERR_TARGET_002",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 2,
+    .summary = "Target contract rejected a value type.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' field '{field_name}' in '@{function_name}': type "
+        "{actual_type} does not match {expected_type}",
+    .fix_hint_template =
+        "Refine '{field_name}' to a type accepted by the selected target "
+        "contract",
+    .param_defs = loom_err_target_002_params,
+    .param_count = 8,
+};
+
+static const loom_error_param_def_t loom_err_target_003_params[] = {
+    {"target_key", LOOM_PARAM_STRING},
+    {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},
+    {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},
+    {"field_name", LOOM_PARAM_STRING},
+    {"expected_attr_kind", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_target_003 = {
+    .error_id = "ERR_TARGET_003",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 3,
+    .summary = "Target contract rejected an attribute kind.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' field '{field_name}' in '@{function_name}': "
+        "expected a {expected_attr_kind} attribute",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_003_params,
+    .param_count = 7,
+};
+
+static const loom_error_param_def_t loom_err_target_004_params[] = {
+    {"target_key", LOOM_PARAM_STRING},    {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},    {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},       {"field_name", LOOM_PARAM_STRING},
+    {"expected_case", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_target_004 = {
+    .error_id = "ERR_TARGET_004",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 4,
+    .summary = "Target contract rejected an enum attribute case.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' enum attribute '{field_name}' in "
+        "'@{function_name}': expected '{expected_case}'",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_004_params,
+    .param_count = 7,
+};
+
+static const loom_error_param_def_t loom_err_target_005_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},    {"field_name", LOOM_PARAM_STRING},
+    {"minimum", LOOM_PARAM_I64},       {"maximum", LOOM_PARAM_I64},
+};
+static const loom_error_def_t loom_err_target_005 = {
+    .error_id = "ERR_TARGET_005",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 5,
+    .summary = "Target contract rejected an i64 attribute range.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' i64 attribute '{field_name}' in "
+        "'@{function_name}': expected range [{minimum}, {maximum}]",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_005_params,
+    .param_count = 8,
+};
+
+static const loom_error_param_def_t loom_err_target_006_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},    {"descriptor_key", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_target_006 = {
+    .error_id = "ERR_TARGET_006",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 6,
+    .summary = "Target descriptor is unavailable.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot lower '{op_name}' in '@{function_name}': descriptor "
+        "'{descriptor_key}' is unavailable or requires disabled features",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_006_params,
+    .param_count = 6,
+};
+
+static const loom_error_param_def_t loom_err_target_007_params[] = {
+    {"target_key", LOOM_PARAM_STRING},
+    {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},
+    {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},
+    {"field_name", LOOM_PARAM_STRING},
+    {"materializer_key", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_target_007 = {
+    .error_id = "ERR_TARGET_007",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 7,
+    .summary = "Target contract required a materializable value.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' field '{field_name}' in '@{function_name}': "
+        "materializer '{materializer_key}' cannot produce the value",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_007_params,
+    .param_count = 7,
+};
+
+static const loom_error_param_def_t loom_err_target_008_params[] = {
+    {"target_key", LOOM_PARAM_STRING},     {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},     {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},        {"field_name", LOOM_PARAM_STRING},
+    {"register_class", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_target_008 = {
+    .error_id = "ERR_TARGET_008",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 8,
+    .summary = "Target contract rejected a low register class.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' field '{field_name}' in '@{function_name}': "
+        "expected low register class '{register_class}'",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_008_params,
+    .param_count = 7,
+};
+
+static const loom_error_param_def_t loom_err_target_009_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},    {"field_name", LOOM_PARAM_STRING},
+    {"multiple", LOOM_PARAM_U32},
+};
+static const loom_error_def_t loom_err_target_009 = {
+    .error_id = "ERR_TARGET_009",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 9,
+    .summary = "Target contract rejected a static dimension multiple.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' field '{field_name}' in '@{function_name}': "
+        "static dimension 0 must be divisible by {multiple}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_009_params,
+    .param_count = 7,
+};
+
+static const loom_error_param_def_t loom_err_target_010_params[] = {
+    {"target_key", LOOM_PARAM_STRING},
+    {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},
+    {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},
+    {"field_name", LOOM_PARAM_STRING},
+    {"other_field_name", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_target_010 = {
+    .error_id = "ERR_TARGET_010",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 10,
+    .summary = "Target contract rejected low register unit counts.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' fields '{field_name}' and '{other_field_name}' "
+        "in '@{function_name}': low register unit counts must match",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_010_params,
+    .param_count = 7,
+};
+
+static const loom_error_param_def_t loom_err_target_011_params[] = {
+    {"target_key", LOOM_PARAM_STRING},  {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},  {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},     {"field_name", LOOM_PARAM_STRING},
+    {"expected_count", LOOM_PARAM_U32},
+};
+static const loom_error_def_t loom_err_target_011 = {
+    .error_id = "ERR_TARGET_011",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 11,
+    .summary = "Target contract rejected an operand segment count.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' operand segment '{field_name}' in "
+        "'@{function_name}': expected {expected_count} value(s)",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_011_params,
+    .param_count = 7,
+};
+
+static const loom_error_param_def_t loom_err_target_012_params[] = {
+    {"target_key", LOOM_PARAM_STRING},  {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},  {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},     {"field_name", LOOM_PARAM_STRING},
+    {"expected_count", LOOM_PARAM_U32},
+};
+static const loom_error_def_t loom_err_target_012 = {
+    .error_id = "ERR_TARGET_012",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 12,
+    .summary = "Target contract rejected an i64 array count.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' i64 array '{field_name}' in '@{function_name}': "
+        "expected {expected_count} element(s)",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_012_params,
+    .param_count = 7,
+};
+
+static const loom_error_param_def_t loom_err_target_013_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},    {"field_name", LOOM_PARAM_STRING},
+    {"element", LOOM_PARAM_U32},       {"minimum", LOOM_PARAM_I64},
+    {"maximum", LOOM_PARAM_I64},
+};
+static const loom_error_def_t loom_err_target_013 = {
+    .error_id = "ERR_TARGET_013",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 13,
+    .summary = "Target contract rejected an i64 array element range.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' i64 array '{field_name}' element {element} in "
+        "'@{function_name}': expected range [{minimum}, {maximum}]",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_013_params,
+    .param_count = 9,
+};
+
+static const loom_error_param_def_t loom_err_target_014_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},    {"field_name", LOOM_PARAM_STRING},
+    {"minimum", LOOM_PARAM_I64},       {"maximum", LOOM_PARAM_I64},
+};
+static const loom_error_def_t loom_err_target_014 = {
+    .error_id = "ERR_TARGET_014",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 14,
+    .summary = "Target contract rejected an i64 array element set.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' i64 array '{field_name}' in '@{function_name}': "
+        "all elements must be in range [{minimum}, {maximum}]",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_014_params,
+    .param_count = 8,
+};
+
+static const loom_error_param_def_t loom_err_target_015_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},    {"field_name", LOOM_PARAM_STRING},
+    {"signedness", LOOM_PARAM_STRING}, {"bit_count", LOOM_PARAM_U32},
+};
+static const loom_error_def_t loom_err_target_015 = {
+    .error_id = "ERR_TARGET_015",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 15,
+    .summary = "Target contract required a bounded integer value fact.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' value '{field_name}' in '@{function_name}': "
+        "requires a {signedness} {bit_count}-bit bound",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_015_params,
+    .param_count = 8,
+};
+
+static const loom_error_param_def_t loom_err_target_016_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},    {"field_name", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_target_016 = {
+    .error_id = "ERR_TARGET_016",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 16,
+    .summary = "Target contract required an exact integer value fact.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' value '{field_name}' in '@{function_name}': "
+        "requires an exact integer value fact",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_016_params,
+    .param_count = 6,
+};
+
+static const loom_error_param_def_t loom_err_target_017_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},    {"field_name", LOOM_PARAM_STRING},
+    {"minimum", LOOM_PARAM_I64},       {"maximum", LOOM_PARAM_I64},
+};
+static const loom_error_def_t loom_err_target_017 = {
+    .error_id = "ERR_TARGET_017",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 17,
+    .summary = "Target contract rejected an integer value fact range.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' value '{field_name}' in '@{function_name}': "
+        "requires value range [{minimum}, {maximum}]",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_017_params,
+    .param_count = 8,
+};
+
+static const loom_error_param_def_t loom_err_target_018_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},    {"operation_kind", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_target_018 = {
+    .error_id = "ERR_TARGET_018",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 18,
+    .summary = "Target contract rejected a source memory access.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' source memory access in '@{function_name}': "
+        "operation '{operation_kind}' does not match the selected contract",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_018_params,
+    .param_count = 6,
+};
+
+static const loom_error_param_def_t loom_err_target_019_params[] = {
+    {"target_key", LOOM_PARAM_STRING},   {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},   {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},      {"subject_kind", LOOM_PARAM_STRING},
+    {"subject_name", LOOM_PARAM_STRING}, {"detail", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_target_019 = {
+    .error_id = "ERR_TARGET_019",
+    .domain = LOOM_ERROR_DOMAIN_TARGET,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 19,
+    .summary = "Target contract rejected a named subject.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' {subject_kind} '{subject_name}' in "
+        "'@{function_name}': {detail}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_target_019_params,
+    .param_count = 8,
+};
+
+static const loom_error_param_def_t loom_err_amdgpu_001_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},    {"field_name", LOOM_PARAM_STRING},
+    {"actual_type", LOOM_PARAM_TYPE},  {"required_storage", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_amdgpu_001 = {
+    .error_id = "ERR_AMDGPU_001",
+    .domain = LOOM_ERROR_DOMAIN_AMDGPU,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 1,
+    .summary = "AMDGPU buffer view element storage is unsupported.",
+    .message_template =
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' field '{field_name}' in "
+        "'@{function_name}': type {actual_type} is not a typed view over "
+        "{required_storage}",
+    .fix_hint_template =
+        "Use a HAL buffer view whose element type has byte-addressable AMDGPU "
+        "buffer storage",
+    .param_defs = loom_err_amdgpu_001_params,
+    .param_count = 8,
+};
+
+static const loom_error_param_def_t loom_err_amdgpu_002_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},    {"field_name", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_amdgpu_002 = {
+    .error_id = "ERR_AMDGPU_002",
+    .domain = LOOM_ERROR_DOMAIN_AMDGPU,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 2,
+    .summary = "AMDGPU buffer view byte offset is not statically encodable.",
+    .message_template =
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' field '{field_name}' in "
+        "'@{function_name}': byte offset must be an exact non-negative static "
+        "integer",
+    .fix_hint_template =
+        "Propagate an exact non-negative byte-offset fact before AMDGPU "
+        "target-low lowering",
+    .param_defs = loom_err_amdgpu_002_params,
+    .param_count = 6,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -3611,7 +4071,14 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_backend_009,   &loom_err_backend_010,   &loom_err_backend_011,
     &loom_err_backend_012,   &loom_err_backend_013,   &loom_err_backend_014,
     &loom_err_backend_015,   &loom_err_backend_016,   &loom_err_backend_017,
-    &loom_err_backend_018,
+    &loom_err_backend_018,   &loom_err_target_001,    &loom_err_target_002,
+    &loom_err_target_003,    &loom_err_target_004,    &loom_err_target_005,
+    &loom_err_target_006,    &loom_err_target_007,    &loom_err_target_008,
+    &loom_err_target_009,    &loom_err_target_010,    &loom_err_target_011,
+    &loom_err_target_012,    &loom_err_target_013,    &loom_err_target_014,
+    &loom_err_target_015,    &loom_err_target_016,    &loom_err_target_017,
+    &loom_err_target_018,    &loom_err_target_019,    &loom_err_amdgpu_001,
+    &loom_err_amdgpu_002,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

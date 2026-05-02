@@ -95,6 +95,11 @@ class ErrorDomain(IntEnum):
     FOLD = 9  # Poison folding, canonicalization.
     LOWERING = 10  # Pass lowering legality and unsupported mappings.
     BACKEND = 11  # Target codegen feedback, allocation, scheduling, emission.
+    TARGET = 12  # Target contract and target legality failures.
+    AMDGPU = 13  # AMDGPU-owned legality and lowering failures.
+    X86 = 14  # X86-owned legality and lowering failures.
+    WASM = 15  # WebAssembly-owned legality and lowering failures.
+    SPIRV = 16  # SPIR-V-owned legality and lowering failures.
 
 
 @unique

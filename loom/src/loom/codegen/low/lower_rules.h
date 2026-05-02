@@ -18,6 +18,7 @@
 #include "iree/base/api.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/source_memory_plan.h"
+#include "loom/error/error_defs.h"
 #include "loom/ir/ir.h"
 
 #ifdef __cplusplus
@@ -132,6 +133,10 @@ typedef struct loom_low_lower_rule_match_can_materialize_value_callback_t {
 struct loom_low_lower_rule_match_context_t {
   // Source module being matched.
   const loom_module_t* module;
+  // Source function whose body is being matched.
+  loom_func_like_t function;
+  // Target bundle selected for this match.
+  const loom_target_bundle_t* bundle;
   // Descriptor set selected for the target-low contract.
   const loom_low_descriptor_set_t* descriptor_set;
   // Feature bits selected by the target-low contract.
@@ -206,13 +211,59 @@ typedef struct loom_low_lower_attr_copy_t {
   int64_t literal_i64;
 } loom_low_lower_attr_copy_t;
 
+typedef uint8_t loom_low_lower_diagnostic_param_kind_t;
+
+#define LOOM_LOW_LOWER_MAX_DIAGNOSTIC_PARAMS 16
+
+enum loom_low_lower_diagnostic_param_kind_e {
+  // Target bundle key selected for lowering.
+  LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_TARGET_KEY = 0,
+  // Target export name selected for lowering.
+  LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_EXPORT_NAME = 1,
+  // Target config key selected for lowering.
+  LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_CONFIG_KEY = 2,
+  // Source function name being lowered.
+  LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_FUNCTION_NAME = 3,
+  // Source operation name that failed contract selection.
+  LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_SOURCE_OP_NAME = 4,
+  // String literal stored in string_value.
+  LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_STRING_LITERAL = 5,
+  // Type of the value referenced by value_ref_index.
+  LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_VALUE_TYPE = 6,
+  // Signed integer literal stored in i64_value.
+  LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_I64_LITERAL = 7,
+  // Unsigned 32-bit literal stored in u32_value.
+  LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_U32_LITERAL = 8,
+  // Unsigned 64-bit literal stored in u64_value.
+  LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_U64_LITERAL = 9,
+  // Boolean literal stored in bool_value.
+  LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_BOOL_LITERAL = 10,
+};
+
+typedef struct loom_low_lower_diagnostic_param_t {
+  // Parameter projection operation.
+  loom_low_lower_diagnostic_param_kind_t kind;
+  // String literal payload for STRING_LITERAL rows.
+  iree_string_view_t string_value;
+  // Source value-ref row consumed by VALUE_TYPE rows.
+  uint16_t value_ref_index;
+  // Signed literal payload for I64_LITERAL rows.
+  int64_t i64_value;
+  // Unsigned literal payload for U32_LITERAL rows.
+  uint32_t u32_value;
+  // Unsigned literal payload for U64_LITERAL rows.
+  uint64_t u64_value;
+  // Boolean literal payload for BOOL_LITERAL rows.
+  bool bool_value;
+} loom_low_lower_diagnostic_param_t;
+
 typedef struct loom_low_lower_diagnostic_t {
-  // Diagnostic subject category, such as "type", "attr", or "descriptor".
-  iree_string_view_t subject_kind;
-  // Diagnostic subject name within subject_kind.
-  iree_string_view_t subject_name;
-  // Human-readable rejection reason.
-  iree_string_view_t reason;
+  // Stable structured diagnostic identity.
+  loom_error_ref_t error_ref;
+  // First parameter projection row.
+  uint16_t param_start;
+  // Number of parameter projection rows.
+  uint8_t param_count;
 } loom_low_lower_diagnostic_t;
 
 #define LOOM_LOW_LOWER_DIAGNOSTIC_NONE UINT16_MAX
@@ -501,6 +552,10 @@ typedef struct loom_low_lower_rule_set_t {
   const loom_low_lower_source_memory_t* source_memories;
   // Number of rows in source_memories.
   uint16_t source_memory_count;
+  // Diagnostic parameter projection rows referenced by diagnostics.
+  const loom_low_lower_diagnostic_param_t* diagnostic_params;
+  // Number of rows in diagnostic_params.
+  uint16_t diagnostic_param_count;
   // Guard rows referenced by rules.
   const loom_low_lower_guard_t* guards;
   // Number of rows in guards.
@@ -576,6 +631,13 @@ iree_status_t loom_low_lower_rule_set_select_rule_range_with_match_context(
 const loom_low_lower_diagnostic_t* loom_low_lower_rule_set_selection_diagnostic(
     const loom_low_lower_rule_set_t* rule_set,
     loom_low_lower_rule_selection_t selection);
+
+// Materializes generated diagnostic parameter projections for a rejected rule.
+void loom_low_lower_rule_materialize_diagnostic_params(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    const loom_low_lower_diagnostic_t* diagnostic,
+    loom_diagnostic_param_t* out_params);
 
 // Returns the first descriptor ID emitted by |rule|, or
 // LOOM_LOW_DESCRIPTOR_ID_NONE when the rule does not emit a descriptor-backed

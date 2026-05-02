@@ -15,6 +15,7 @@ iree_py_library(
     error
   SRCS
     "__init__.py"
+    "amdgpu.py"
     "backend.py"
     "bytecode.py"
     "dominance.py"
@@ -23,10 +24,14 @@ iree_py_library(
     "lowering.py"
     "parse.py"
     "shape.py"
+    "spirv.py"
     "structure.py"
     "subrange.py"
     "symbol.py"
+    "target.py"
     "type.py"
+    "wasm.py"
+    "x86.py"
   DEPS
     iree::runtime::py::loom::core
 )

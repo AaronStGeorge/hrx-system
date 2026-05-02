@@ -40,26 +40,32 @@ iree_string_view_t loom_low_lower_context_function_name(
 
 static iree_string_view_t loom_low_lower_target_key(
     const loom_target_bundle_t* bundle) {
-  if (!bundle) {
-    return IREE_SV("<missing>");
-  }
   return loom_low_lower_nonempty(bundle->name, IREE_SV("<empty>"));
+}
+
+iree_string_view_t loom_low_lower_context_target_key(
+    const loom_low_lower_context_t* context) {
+  return loom_low_lower_target_key(context->options->bundle);
 }
 
 static iree_string_view_t loom_low_lower_export_name(
     const loom_target_bundle_t* bundle) {
-  if (!bundle || !bundle->export_plan) {
-    return IREE_SV("<missing>");
-  }
   return loom_low_lower_nonempty(bundle->export_plan->name, IREE_SV("<empty>"));
+}
+
+iree_string_view_t loom_low_lower_context_export_name(
+    const loom_low_lower_context_t* context) {
+  return loom_low_lower_export_name(context->options->bundle);
 }
 
 static iree_string_view_t loom_low_lower_config_key(
     const loom_target_bundle_t* bundle) {
-  if (!bundle || !bundle->config) {
-    return IREE_SV("<missing>");
-  }
   return loom_low_lower_nonempty(bundle->config->name, IREE_SV("<empty>"));
+}
+
+iree_string_view_t loom_low_lower_context_config_key(
+    const loom_low_lower_context_t* context) {
+  return loom_low_lower_config_key(context->options->bundle);
 }
 
 bool loom_low_lower_context_should_stop(
@@ -107,6 +113,15 @@ iree_status_t loom_low_lower_emit_reject(loom_low_lower_context_t* context,
   return loom_low_lower_emit(
       context, source_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 1),
       params, IREE_ARRAYSIZE(params));
+}
+
+iree_status_t loom_low_lower_emit_error_ref(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_error_ref_t error_ref, const loom_diagnostic_param_t* params,
+    iree_host_size_t param_count) {
+  const loom_error_def_t* error = loom_error_def_lookup_ref(error_ref);
+  IREE_ASSERT(error != NULL);
+  return loom_low_lower_emit(context, source_op, error, params, param_count);
 }
 
 loom_module_t* loom_low_lower_context_module(

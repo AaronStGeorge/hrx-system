@@ -2,7 +2,7 @@
 // RUN: emit source-low target-preset=amdgpu-gfx950 output=low
 
 func.def @dot8i4_u4s4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi32>) -> (vector<1xi32>) {
-  // ERROR@+1: BACKEND/001 "selected AMDGPU descriptor set does not contain the required packed dot packet"
+  // ERROR@+1: TARGET/019 {subject_kind="descriptor", subject_name="amdgpu.packed_dot"}
   %dot = vector.dot8i4<u4s4> %lhs, %rhs, %acc : vector<1xi32>
   func.return %dot : vector<1xi32>
 }

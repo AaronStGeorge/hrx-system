@@ -11,6 +11,8 @@
 
 static iree_status_t loom_low_lower_contract_query_make_rejection(
     const loom_target_contract_query_environment_t* environment,
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     const loom_low_lower_diagnostic_t* diagnostic,
     const loom_target_contract_rejection_t** out_rejection) {
   *out_rejection = NULL;
@@ -20,10 +22,18 @@ static iree_status_t loom_low_lower_contract_query_make_rejection(
   loom_target_contract_rejection_t* rejection = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate(
       environment->arena, sizeof(*rejection), (void**)&rejection));
+  loom_diagnostic_param_t* params = NULL;
+  if (diagnostic->param_count != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate(
+        environment->arena, diagnostic->param_count * sizeof(*params),
+        (void**)&params));
+    loom_low_lower_rule_materialize_diagnostic_params(
+        match_context, rule_set, source_op, diagnostic, params);
+  }
   *rejection = (loom_target_contract_rejection_t){
-      .subject_kind = diagnostic->subject_kind,
-      .subject_name = diagnostic->subject_name,
-      .reason = diagnostic->reason,
+      .error_ref = diagnostic->error_ref,
+      .params = params,
+      .param_count = diagnostic->param_count,
   };
   *out_rejection = rejection;
   return iree_ok_status();
@@ -259,7 +269,8 @@ static iree_status_t loom_low_lower_query_target_contract_index(
                                                    failed_selection);
   const loom_target_contract_rejection_t* rejection = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_contract_query_make_rejection(
-      environment, diagnostic, &rejection));
+      environment, match_context, failed_rule_set, source_op, diagnostic,
+      &rejection));
   *out_result = (loom_target_contract_query_result_t){
       .outcome = LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED,
       .binding_index = failed_binding_index,
@@ -294,6 +305,8 @@ iree_status_t loom_low_lower_query_target_contract(
 
   const loom_low_lower_rule_match_context_t match_context = {
       .module = environment->module,
+      .function = environment->function,
+      .bundle = environment->bundle,
       .descriptor_set = environment->descriptor_set,
       .feature_bits = environment->bundle->config->contract_feature_bits,
       .map_value = options->map_value,

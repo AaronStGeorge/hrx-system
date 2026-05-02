@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from loom.dsl import Op
+from loom.errors import ErrorDef, ErrorDomain
 from loom.gen.generated_file import line_comment_header
 from loom.target.contracts import (
     LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS,
@@ -25,6 +26,7 @@ from loom.target.contracts import (
     GuardKind,
     LowerAttrCopy,
     LowerAttrCopyKind,
+    LowerDiagnosticParam,
     LowerEmit,
     LowerEmitKind,
     LowerGuard,
@@ -40,6 +42,10 @@ from loom.target.contracts import (
     TypePattern,
     compile_lower_rule_set,
     contract_fragment_public_header,
+)
+from loom.target.contracts.diagnostics import (
+    MAX_TARGET_DIAGNOSTIC_PARAMS,
+    DiagnosticParamKind,
 )
 from loom.target.low_descriptors import Descriptor, descriptor_set_relative_name
 
@@ -157,6 +163,40 @@ _SOURCE_MEMORY_SPACE_C_NAMES = {
     "generic": "LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_GENERIC",
 }
 
+_DIAGNOSTIC_PARAM_KIND_C_NAMES = {
+    DiagnosticParamKind.TARGET_KEY: "LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_TARGET_KEY",
+    DiagnosticParamKind.EXPORT_NAME: "LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_EXPORT_NAME",
+    DiagnosticParamKind.CONFIG_KEY: "LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_CONFIG_KEY",
+    DiagnosticParamKind.FUNCTION_NAME: ("LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_FUNCTION_NAME"),
+    DiagnosticParamKind.SOURCE_OP_NAME: ("LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_SOURCE_OP_NAME"),
+    DiagnosticParamKind.STRING_LITERAL: ("LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_STRING_LITERAL"),
+    DiagnosticParamKind.VALUE_TYPE: "LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_VALUE_TYPE",
+    DiagnosticParamKind.I64_LITERAL: "LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_I64_LITERAL",
+    DiagnosticParamKind.U32_LITERAL: "LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_U32_LITERAL",
+    DiagnosticParamKind.U64_LITERAL: "LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_U64_LITERAL",
+    DiagnosticParamKind.BOOL_LITERAL: ("LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_BOOL_LITERAL"),
+}
+
+_ERROR_DOMAIN_C_NAMES = {
+    ErrorDomain.TYPE: "LOOM_ERROR_DOMAIN_TYPE",
+    ErrorDomain.SHAPE: "LOOM_ERROR_DOMAIN_SHAPE",
+    ErrorDomain.SUBRANGE: "LOOM_ERROR_DOMAIN_SUBRANGE",
+    ErrorDomain.ENCODING: "LOOM_ERROR_DOMAIN_ENCODING",
+    ErrorDomain.STRUCTURE: "LOOM_ERROR_DOMAIN_STRUCTURE",
+    ErrorDomain.DOMINANCE: "LOOM_ERROR_DOMAIN_DOMINANCE",
+    ErrorDomain.SYMBOL: "LOOM_ERROR_DOMAIN_SYMBOL",
+    ErrorDomain.PARSE: "LOOM_ERROR_DOMAIN_PARSE",
+    ErrorDomain.BYTECODE: "LOOM_ERROR_DOMAIN_BYTECODE",
+    ErrorDomain.FOLD: "LOOM_ERROR_DOMAIN_FOLD",
+    ErrorDomain.LOWERING: "LOOM_ERROR_DOMAIN_LOWERING",
+    ErrorDomain.BACKEND: "LOOM_ERROR_DOMAIN_BACKEND",
+    ErrorDomain.TARGET: "LOOM_ERROR_DOMAIN_TARGET",
+    ErrorDomain.AMDGPU: "LOOM_ERROR_DOMAIN_AMDGPU",
+    ErrorDomain.X86: "LOOM_ERROR_DOMAIN_X86",
+    ErrorDomain.WASM: "LOOM_ERROR_DOMAIN_WASM",
+    ErrorDomain.SPIRV: "LOOM_ERROR_DOMAIN_SPIRV",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class GeneratedLowerRuleSet:
@@ -271,6 +311,14 @@ def _generate_source(
     lines.extend(f'#include "{include}"' for include in source_contract.c_source_includes)
     lines.extend(f'#include "{include}"' for include in _materializer_includes(source_contract))
     lines.extend(f'#include "{include}"' for include in _op_header_includes(table))
+    lines.extend(
+        [
+            "",
+            f"#if LOOM_LOW_LOWER_MAX_DIAGNOSTIC_PARAMS != {MAX_TARGET_DIAGNOSTIC_PARAMS}",
+            '#error "target diagnostic parameter capacity mismatch"',
+            "#endif",
+        ]
+    )
     lines.append("")
 
     type_patterns_name = f"k{c_table_prefix}TypePatterns"
@@ -315,19 +363,34 @@ def _generate_source(
         )
     )
 
+    diagnostic_param_rows: list[LowerDiagnosticParam] = []
+    diagnostic_rows: list[list[str]] = []
+    for row in table.diagnostics:
+        param_start = len(diagnostic_param_rows)
+        diagnostic_param_rows.extend(row.params)
+        diagnostic_rows.append(
+            [
+                f".error_ref = {_error_ref_c_expr(row.error)}",
+                f".param_start = {param_start}",
+                f".param_count = {len(row.params)}",
+            ]
+        )
+
+    diagnostic_params_name = f"k{c_table_prefix}DiagnosticParams"
+    lines.extend(
+        _emit_optional_array(
+            diagnostic_params_name,
+            "loom_low_lower_diagnostic_param_t",
+            [_diagnostic_param_row(row) for row in diagnostic_param_rows],
+        )
+    )
+
     diagnostics_name = f"k{c_table_prefix}Diagnostics"
     lines.extend(
         _emit_optional_array(
             diagnostics_name,
             "loom_low_lower_diagnostic_t",
-            [
-                [
-                    f'.subject_kind = IREE_SVL("{_c_string_literal(row.subject_kind)}")',
-                    f'.subject_name = IREE_SVL("{_c_string_literal(row.subject_name)}")',
-                    f'.reason = IREE_SVL("{_c_string_literal(row.reason)}")',
-                ]
-                for row in table.diagnostics
-            ],
+            diagnostic_rows,
         )
     )
 
@@ -397,6 +460,7 @@ def _generate_source(
             value_refs_name=value_refs_name,
             materializers_name=materializers_name,
             source_memories_name=source_memories_name,
+            diagnostic_params_name=diagnostic_params_name,
             guards_name=guards_name,
             attr_copies_name=attr_copies_name,
             tied_results_name=tied_results_name,
@@ -766,6 +830,7 @@ def _rule_set_row(
     value_refs_name: str,
     materializers_name: str,
     source_memories_name: str,
+    diagnostic_params_name: str,
     guards_name: str,
     attr_copies_name: str,
     tied_results_name: str,
@@ -796,6 +861,13 @@ def _rule_set_row(
         table.source_memories,
         source_memories_name,
     )
+    diagnostic_param_rows = tuple(param for diagnostic in table.diagnostics for param in diagnostic.params)
+    _append_table_fields(
+        fields,
+        "diagnostic_params",
+        diagnostic_param_rows,
+        diagnostic_params_name,
+    )
     _append_table_fields(fields, "guards", table.guards, guards_name)
     _append_table_fields(fields, "attr_copies", table.attr_copies, attr_copies_name)
     _append_table_fields(fields, "tied_results", table.tied_results, tied_results_name)
@@ -821,7 +893,41 @@ def _table_count_field_name(field_name: str) -> str:
         return "attr_copy_count"
     if field_name == "source_memories":
         return "source_memory_count"
+    if field_name == "diagnostic_params":
+        return "diagnostic_param_count"
     return f"{field_name[:-1]}_count"
+
+
+def _diagnostic_param_row(row: LowerDiagnosticParam) -> list[str]:
+    fields: list[str] = []
+    _append_field(
+        fields,
+        "kind",
+        _DIAGNOSTIC_PARAM_KIND_C_NAMES[row.kind],
+        always=True,
+    )
+    if row.kind == DiagnosticParamKind.STRING_LITERAL:
+        _append_field(
+            fields,
+            "string_value",
+            f'IREE_SVL("{_c_string_literal(row.string_value)}")',
+            always=True,
+        )
+    if row.kind == DiagnosticParamKind.VALUE_TYPE:
+        _append_field(fields, "value_ref_index", row.value_ref_index, always=True)
+    if row.kind == DiagnosticParamKind.I64_LITERAL:
+        _append_field(fields, "i64_value", row.i64_value, always=True)
+    if row.kind == DiagnosticParamKind.U32_LITERAL:
+        _append_field(fields, "u32_value", row.u32_value, always=True)
+    if row.kind == DiagnosticParamKind.U64_LITERAL:
+        _append_field(fields, "u64_value", row.u64_value, always=True)
+    if row.kind == DiagnosticParamKind.BOOL_LITERAL:
+        _append_field(fields, "bool_value", str(row.bool_value).lower(), always=True)
+    return fields
+
+
+def _error_ref_c_expr(error: ErrorDef) -> str:
+    return f"LOOM_ERROR_REF({_ERROR_DOMAIN_C_NAMES[error.domain]}, {error.code})"
 
 
 def _type_pattern_row(type_pattern: TypePattern) -> list[str]:

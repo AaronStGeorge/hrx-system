@@ -25,6 +25,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/descriptors.h"
+#include "loom/error/error_defs.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/func/ops.h"
 #include "loom/target/types.h"
@@ -47,11 +48,18 @@ typedef enum loom_target_contract_query_outcome_e {
 } loom_target_contract_query_outcome_t;
 
 typedef struct loom_target_contract_rejection_t {
-  // Diagnostic subject category, such as "type", "attr", or "descriptor".
+  // Stable structured diagnostic identity.
+  loom_error_ref_t error_ref;
+  // Materialized diagnostic parameters.
+  const loom_diagnostic_param_t* params;
+  // Number of materialized diagnostic parameters.
+  iree_host_size_t param_count;
+  // Diagnostic subject category for direct target-owned rejection paths.
   iree_string_view_t subject_kind;
-  // Diagnostic subject name within subject_kind.
+  // Diagnostic subject name within subject_kind for direct target-owned
+  // rejection paths.
   iree_string_view_t subject_name;
-  // Human-readable rejection reason.
+  // Human-readable rejection reason for direct target-owned rejection paths.
   iree_string_view_t reason;
 } loom_target_contract_rejection_t;
 

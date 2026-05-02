@@ -17,6 +17,7 @@ py_library(
         "__init__.py",
         "compile.py",
         "descriptors.py",
+        "diagnostics.py",
         "emits.py",
         "fragments.py",
         "guards.py",
@@ -32,6 +33,7 @@ py_library(
     ],
     deps = [
         "//loom/py/loom:core",
+        "//loom/py/loom/error",
         "//loom/py/loom/target:low_descriptors",
     ],
 )

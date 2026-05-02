@@ -21,6 +21,7 @@
 #include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/memory_access.h"
 #include "loom/error/emitter.h"
+#include "loom/error/error_defs.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
@@ -495,6 +496,18 @@ loom_op_t* loom_low_lower_context_low_function(
 const loom_target_bundle_t* loom_low_lower_context_bundle(
     const loom_low_lower_context_t* context);
 
+// Returns the selected target bundle key used in generated diagnostics.
+iree_string_view_t loom_low_lower_context_target_key(
+    const loom_low_lower_context_t* context);
+
+// Returns the selected target export name used in generated diagnostics.
+iree_string_view_t loom_low_lower_context_export_name(
+    const loom_low_lower_context_t* context);
+
+// Returns the selected target config key used in generated diagnostics.
+iree_string_view_t loom_low_lower_context_config_key(
+    const loom_low_lower_context_t* context);
+
 // Returns the selected descriptor set.
 const loom_low_descriptor_set_t* loom_low_lower_context_descriptor_set(
     const loom_low_lower_context_t* context);
@@ -694,6 +707,12 @@ iree_status_t loom_low_lower_emit_reject(loom_low_lower_context_t* context,
                                          iree_string_view_t subject_kind,
                                          iree_string_view_t subject_name,
                                          iree_string_view_t reason);
+
+// Emits a generated structured lowering diagnostic.
+iree_status_t loom_low_lower_emit_error_ref(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_error_ref_t error_ref, const loom_diagnostic_param_t* params,
+    iree_host_size_t param_count);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -184,7 +184,7 @@ func.def @i8x2_load_rejected(%input: buffer) -> (vector<2xi8>) {
 
 func.def @buffer_view_i1_rejected(%input: buffer) {
   %zero = index.constant 0 : offset
-  // ERROR@+1: BACKEND/001 "AMDGPU buffer memory lowering requires typed views over byte-addressable scalar elements"
+  // ERROR@+1: AMDGPU/001 {field_name="result", required_storage="byte-addressable scalar elements"}
   %input_view = buffer.view %input[%zero] : buffer -> view<8xi1, #dense>
   func.return
 }
@@ -192,7 +192,7 @@ func.def @buffer_view_i1_rejected(%input: buffer) {
 // ====
 
 func.def @buffer_view_dynamic_offset_rejected(%input: buffer, %offset: offset) {
-  // ERROR@+1: BACKEND/001 "AMDGPU HAL buffer views require exact non-negative static byte offsets"
+  // ERROR@+1: AMDGPU/002 {field_name="byte_offset"}
   %input_view = buffer.view %input[%offset] : buffer -> view<8xi8, #dense>
   func.return
 }
@@ -275,7 +275,7 @@ kernel.def @global_dynamic_offset_sum_rejected(%input: buffer) {
 kernel.def @index_add_result_width_rejected() {
   %x = kernel.workitem.id<x> : index
   %base = index.constant 4294967000 : index
-  // ERROR@+1: BACKEND/001 "AMDGPU index lowering requires address results proven non-negative and 32-bit"
+  // ERROR@+1: TARGET/019 {subject_kind="address-width", subject_name="u32"}
   %sum = index.add %x, %base : index
   kernel.return
 }
@@ -286,7 +286,7 @@ kernel.def @index_madd_result_width_rejected() {
   %x = kernel.workitem.id<x> : index
   %scale = index.constant 2 : index
   %base = index.constant 4294967000 : index
-  // ERROR@+1: BACKEND/001 "AMDGPU index lowering requires address results proven non-negative and 32-bit"
+  // ERROR@+1: TARGET/019 {subject_kind="address-width", subject_name="u32"}
   %sum = index.madd %x, %scale, %base : index
   kernel.return
 }
