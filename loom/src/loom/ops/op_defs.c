@@ -924,10 +924,8 @@ static bool loom_region_branch_terminator_matches(
     const loom_region_descriptor_t* region_descriptor,
     const loom_op_t* terminator) {
   if (!terminator) return false;
-  return (region_descriptor->terminator != LOOM_OP_KIND_UNKNOWN &&
-          terminator->kind == region_descriptor->terminator) ||
-         (region_descriptor->implicit_terminator != LOOM_OP_KIND_UNKNOWN &&
-          terminator->kind == region_descriptor->implicit_terminator);
+  if (region_descriptor->terminator == LOOM_OP_KIND_UNKNOWN) return true;
+  return terminator->kind == region_descriptor->terminator;
 }
 
 loom_op_t* loom_region_branch_region_terminator(const loom_module_t* module,
@@ -1011,9 +1009,6 @@ iree_status_t loom_region_branch_build_region_terminator(
   }
 
   loom_op_kind_t terminator_kind = region_descriptor->terminator;
-  if (terminator_kind == LOOM_OP_KIND_UNKNOWN) {
-    terminator_kind = region_descriptor->implicit_terminator;
-  }
   if (terminator_kind == LOOM_OP_KIND_UNKNOWN) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "region branch has no yield-style terminator");

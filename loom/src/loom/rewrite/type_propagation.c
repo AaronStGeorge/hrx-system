@@ -678,12 +678,9 @@ static bool loom_type_propagator_op_is_terminator(
 
 static bool loom_type_propagator_terminator_matches(
     const loom_region_descriptor_t* descriptor, const loom_op_t* terminator) {
-  if (!terminator || !descriptor ||
-      descriptor->terminator == LOOM_OP_KIND_UNKNOWN) {
-    return true;
-  }
-  return terminator->kind == descriptor->terminator ||
-         terminator->kind == descriptor->implicit_terminator;
+  if (!terminator || !descriptor) return false;
+  if (descriptor->terminator == LOOM_OP_KIND_UNKNOWN) return true;
+  return terminator->kind == descriptor->terminator;
 }
 
 static bool loom_type_propagator_region_yield_operands(
@@ -700,9 +697,7 @@ static bool loom_type_propagator_region_yield_operands(
   loom_region_t* region = loom_op_regions(op)[region_index];
   if (!region || region->block_count == 0) return false;
   const loom_block_t* entry = loom_region_const_entry_block(region);
-  if (entry->op_count == 0) {
-    return descriptor->implicit_terminator != LOOM_OP_KIND_UNKNOWN;
-  }
+  if (entry->op_count == 0) return false;
 
   const loom_op_t* terminator = loom_block_const_last_op(entry);
   if (!loom_type_propagator_op_is_terminator(propagator, terminator)) {

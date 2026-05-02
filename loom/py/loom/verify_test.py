@@ -110,6 +110,17 @@ def test_verifier_reports_missing_region_terminator() -> None:
     )
 
 
+def test_verifier_reports_empty_block_missing_region_terminator() -> None:
+    module = Module()
+    module.symbols.append(_symbol("f", _func()))
+
+    diagnostics = verify_module(module, ops=ALL_TEST_OPS)
+
+    assert _diagnostic_text_contains(
+        diagnostics, "block is missing required terminator"
+    )
+
+
 def test_verifier_reports_unresolved_symbol_ref() -> None:
     module = _module_with_body_ops(
         Operation(name="test.invoke", attributes={"callee": "missing"})

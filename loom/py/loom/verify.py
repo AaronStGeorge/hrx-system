@@ -542,7 +542,14 @@ class ModuleVerifier:
                     source=op_path,
                 )
             self._verify_operation(operation, op_path, parent_stack=parent_stack)
-        if not block.ops or region_terminator is None:
+        if region_terminator is None:
+            return
+        if not block.ops:
+            self.diagnostics.error(
+                "block is missing required terminator",
+                source=path,
+                details=(f"expected terminator '{region_terminator}'",),
+            )
             return
         terminator = block.ops[-1]
         terminator_decl = self.registry.op(terminator.name)

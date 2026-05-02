@@ -826,12 +826,12 @@ static inline bool loom_attr_descriptor_elides_value(
 // Per-region metadata in the op vtable.
 typedef struct loom_region_descriptor_t {
   // Required explicit terminator kind, or LOOM_OP_KIND_UNKNOWN if any
-  // terminator kind is allowed. The implicit terminator kind is also accepted
-  // when present.
+  // terminator kind is allowed.
   loom_op_kind_t terminator;
 
-  // Op kind of the implicit terminator for this region, or
-  // LOOM_OP_KIND_UNKNOWN if every block must end with an explicit terminator.
+  // Op kind that the text parser may synthesize and the text printer may elide,
+  // or LOOM_OP_KIND_UNKNOWN when the text form must spell every terminator.
+  // In-memory IR must still contain a materialized terminator op.
   loom_op_kind_t implicit_terminator;
 
   // Region structure flags such as single-block enforcement.

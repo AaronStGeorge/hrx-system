@@ -497,7 +497,7 @@ TEST_F(VerifyTest, RejectsPredicateArityMismatch) {
   ExpectU32Param(*entry, 4, 2u);
 }
 
-TEST_F(VerifyTest, LoopBodyImplicitTerminatorPasses) {
+TEST_F(VerifyTest, LoopBodyMissingMaterializedTerminatorFails) {
   loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
   loom_type_t arg_types[] = {index_type, index_type, index_type};
   loom_value_id_t args[3];
@@ -513,9 +513,15 @@ TEST_F(VerifyTest, LoopBodyImplicitTerminatorPasses) {
   ASSERT_EQ(loom_region_entry_block(body)->op_count, 0u);
 
   TerminateFunc();
-  auto result = Verify();
-  EXPECT_EQ(result.error_count, 0u)
-      << (collector_.errors.empty() ? "(no errors)" : collector_.errors[0]);
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
+  EXPECT_GT(result.error_count, 0u);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 5));
+  ASSERT_NE(entry, nullptr)
+      << "Expected STRUCTURE/005 missing-terminator diagnostic";
+  EXPECT_EQ(GetStringParam(*entry, 0), "test.loop");
+  ExpectU32Param(*entry, 1, 0);
 }
 
 TEST_F(VerifyTest, WrongOperandCountDetected) {
@@ -2549,10 +2555,10 @@ TEST_F(VerifyTest, YieldCountViolation) {
   ExpectU32Param(*entry, 1, 1);
 }
 
-TEST_F(VerifyTest, YieldCountViolationWithImplicitTerminator) {
-  // test.map has one result but the body is empty. The verifier should
-  // interpret that as an implicit zero-yield terminator and reject the
-  // result/yield count mismatch.
+TEST_F(VerifyTest, YieldCountSkipsMissingMaterializedTerminator) {
+  // test.map has one result but the body is empty. Structural verification
+  // rejects the missing materialized terminator before yield-count relations
+  // inspect terminator operands.
   loom_type_t tile4 = loom_type_shaped_1d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32,
                                           loom_dim_pack_static(4), 0);
 
@@ -2573,11 +2579,15 @@ TEST_F(VerifyTest, YieldCountViolationWithImplicitTerminator) {
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
   const CapturedDiagnostic* entry = FindDiagnostic(
-      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 8));
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 5));
   ASSERT_NE(entry, nullptr)
-      << "Expected STRUCTURE/008 implicit-yield-count diagnostic";
-  ExpectU32Param(*entry, 0, 0);
-  ExpectU32Param(*entry, 1, 1);
+      << "Expected STRUCTURE/005 missing-terminator diagnostic";
+  EXPECT_EQ(GetStringParam(*entry, 0), "test.map");
+  ExpectU32Param(*entry, 1, 0);
+  EXPECT_EQ(
+      FindDiagnostic(structured,
+                     loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 8)),
+      nullptr);
 }
 
 // --- YIELD_MATCH (relation 7): yield types must match result types ---

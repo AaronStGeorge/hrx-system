@@ -1159,11 +1159,9 @@ static bool loom_verify_op_is_terminator(loom_verify_state_t* state,
 static bool loom_verify_region_terminator_matches(
     const loom_region_descriptor_t* region_descriptor,
     const loom_op_t* terminator) {
-  if (!terminator || region_descriptor->terminator == LOOM_OP_KIND_UNKNOWN) {
-    return true;
-  }
-  return terminator->kind == region_descriptor->terminator ||
-         terminator->kind == region_descriptor->implicit_terminator;
+  if (!terminator) return false;
+  if (region_descriptor->terminator == LOOM_OP_KIND_UNKNOWN) return true;
+  return terminator->kind == region_descriptor->terminator;
 }
 
 static bool loom_verify_region_has_cfg_successors(const loom_region_t* region) {
@@ -1208,7 +1206,7 @@ bool loom_verify_region_entry_yield(
     }
     return true;
   }
-  return region_descriptor->implicit_terminator != LOOM_OP_KIND_UNKNOWN;
+  return false;
 }
 
 static iree_string_view_t loom_verify_op_kind_name(loom_verify_state_t* state,
@@ -1311,9 +1309,7 @@ void loom_verify_region_structure(loom_verify_state_t* state,
           terminator_op = current_op;
         }
       }
-      if (!terminator_op &&
-          (region_descriptor->implicit_terminator == LOOM_OP_KIND_UNKNOWN ||
-           region_uses_cfg_successors)) {
+      if (!terminator_op && !region_uses_cfg_successors) {
         loom_diagnostic_param_t params[] = {
             loom_param_string(op_name),
             loom_param_u32(i),
