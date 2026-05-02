@@ -163,22 +163,19 @@ def tilekernels_batched_transpose_gfx942(
 #   %c1 = index.constant 1 : index
 #   scf.for %i_outer = [%c_2 to %i_outer_ub step %c1] {
 #     %c_4 = index.constant 8 : index
-#     %mul = index.mul %i_outer, %c_4 : index
-#     %add = index.add %mul, %div : index
+#     %madd = index.madd %i_outer, %c_4, %div : index
 #     %j_ub = index.add %c_2, %c_3 : index
 #     scf.for %j = [%c_2 to %j_ub step %c1] {
 #       %k_ub = index.add %c_2, %c_3 : index
 #       scf.for %k = [%c_2 to %k_ub step %c1] {
 #         %c_5 = index.constant 128 : index
-#         %mul_2 = index.mul %by, %c_5 : index
-#         %mul_3 = index.mul %add, %c_3 : index
-#         %add_2 = index.add %mul_2, %mul_3 : index
-#         %add_3 = index.add %add_2, %j : index
-#         %mul_4 = index.mul %bx, %c_5 : index
-#         %mul_5 = index.mul %rem, %c_3 : index
-#         %add_4 = index.add %mul_4, %mul_5 : index
-#         %add_5 = index.add %add_4, %k : index
-#         %load = view.load %x[%bz, %add_3, %add_5] : view<[%num_batches]x[%shape_x]x[%shape_y]xf16, %layout> -> f16
+#         %mul = index.mul %madd, %c_3 : index
+#         %madd_2 = index.madd %by, %c_5, %mul : index
+#         %add = index.add %madd_2, %j : index
+#         %mul_2 = index.mul %rem, %c_3 : index
+#         %madd_3 = index.madd %bx, %c_5, %mul_2 : index
+#         %add_2 = index.add %madd_3, %k : index
+#         %load = view.load %x[%bz, %add, %add_2] : view<[%num_batches]x[%shape_x]x[%shape_y]xf16, %layout> -> f16
 #         view.store %load, %tmp_row[%k] : f16, view<4xf16, %layout>
 #         scf.yield
 #       }
@@ -193,16 +190,14 @@ def tilekernels_batched_transpose_gfx942(
 #     %j_ub_2 = index.add %c_2, %c_3 : index
 #     scf.for %j = [%c_2 to %j_ub_2 step %c1] {
 #       %div_2 = index.div %thread_id, %c_3 : index
-#       %add_6 = index.add %j, %div_2 : index
-#       %rem_2 = index.rem %add_6, %c_3 : index
+#       %add_3 = index.add %j, %div_2 : index
+#       %rem_2 = index.rem %add_3, %c_3 : index
 #       %k_ub_3 = index.add %c_2, %c_3 : index
 #       scf.for %k = [%c_2 to %k_ub_3 step %c1] {
 #         %load_3 = view.load %tmp[%rem_2, %k] : view<4x4xf16, %layout> -> f16
-#         %mul_6 = index.mul %rem, %c_3 : index
-#         %add_7 = index.add %mul_6, %rem_2 : index
-#         %mul_7 = index.mul %add, %c_3 : index
-#         %add_8 = index.add %mul_7, %k : index
-#         view.store %load_3, %out_shared[%add_7, %add_8] : f16, view<128x132xf16, %layout>
+#         %madd_4 = index.madd %rem, %c_3, %rem_2 : index
+#         %madd_5 = index.madd %madd, %c_3, %k : index
+#         view.store %load_3, %out_shared[%madd_4, %madd_5] : f16, view<128x132xf16, %layout>
 #         scf.yield
 #       }
 #       scf.yield
@@ -216,11 +211,9 @@ def tilekernels_batched_transpose_gfx942(
 #     %j_ub_3 = index.add %c_2, %c_6 : index
 #     scf.for %j = [%c_2 to %j_ub_3 step %c1] {
 #       %load_4 = view.load %out_shared[%i, %j] : view<128x132xf16, %layout> -> f16
-#       %mul_8 = index.mul %bx, %c_6 : index
-#       %add_9 = index.add %mul_8, %i : index
-#       %mul_9 = index.mul %by, %c_6 : index
-#       %add_10 = index.add %mul_9, %j : index
-#       view.store %load_4, %out[%bz, %add_9, %add_10] : f16, view<[%num_batches]x[%shape_y]x[%shape_x]xf16, %layout>
+#       %madd_6 = index.madd %bx, %c_6, %i : index
+#       %madd_7 = index.madd %by, %c_6, %j : index
+#       view.store %load_4, %out[%bz, %madd_6, %madd_7] : f16, view<[%num_batches]x[%shape_y]x[%shape_x]xf16, %layout>
 #       scf.yield
 #     }
 #     scf.yield
@@ -277,22 +270,19 @@ def tilekernels_batched_transpose_gfx1100(
 #   %c1 = index.constant 1 : index
 #   scf.for %i_outer = [%c_2 to %i_outer_ub step %c1] {
 #     %c_4 = index.constant 8 : index
-#     %mul = index.mul %i_outer, %c_4 : index
-#     %add = index.add %mul, %div : index
+#     %madd = index.madd %i_outer, %c_4, %div : index
 #     %j_ub = index.add %c_2, %c_3 : index
 #     scf.for %j = [%c_2 to %j_ub step %c1] {
 #       %k_ub = index.add %c_2, %c_3 : index
 #       scf.for %k = [%c_2 to %k_ub step %c1] {
 #         %c_5 = index.constant 128 : index
-#         %mul_2 = index.mul %by, %c_5 : index
-#         %mul_3 = index.mul %add, %c_3 : index
-#         %add_2 = index.add %mul_2, %mul_3 : index
-#         %add_3 = index.add %add_2, %j : index
-#         %mul_4 = index.mul %bx, %c_5 : index
-#         %mul_5 = index.mul %rem, %c_3 : index
-#         %add_4 = index.add %mul_4, %mul_5 : index
-#         %add_5 = index.add %add_4, %k : index
-#         %load = view.load %x[%bz, %add_3, %add_5] : view<[%num_batches]x[%shape_x]x[%shape_y]xf16, %layout> -> f16
+#         %mul = index.mul %madd, %c_3 : index
+#         %madd_2 = index.madd %by, %c_5, %mul : index
+#         %add = index.add %madd_2, %j : index
+#         %mul_2 = index.mul %rem, %c_3 : index
+#         %madd_3 = index.madd %bx, %c_5, %mul_2 : index
+#         %add_2 = index.add %madd_3, %k : index
+#         %load = view.load %x[%bz, %add, %add_2] : view<[%num_batches]x[%shape_x]x[%shape_y]xf16, %layout> -> f16
 #         view.store %load, %tmp_row[%k] : f16, view<4xf16, %layout>
 #         scf.yield
 #       }
@@ -307,16 +297,14 @@ def tilekernels_batched_transpose_gfx1100(
 #     %j_ub_2 = index.add %c_2, %c_3 : index
 #     scf.for %j = [%c_2 to %j_ub_2 step %c1] {
 #       %div_2 = index.div %thread_id, %c_3 : index
-#       %add_6 = index.add %j, %div_2 : index
-#       %rem_2 = index.rem %add_6, %c_3 : index
+#       %add_3 = index.add %j, %div_2 : index
+#       %rem_2 = index.rem %add_3, %c_3 : index
 #       %k_ub_3 = index.add %c_2, %c_3 : index
 #       scf.for %k = [%c_2 to %k_ub_3 step %c1] {
 #         %load_3 = view.load %tmp[%rem_2, %k] : view<4x4xf16, %layout> -> f16
-#         %mul_6 = index.mul %rem, %c_3 : index
-#         %add_7 = index.add %mul_6, %rem_2 : index
-#         %mul_7 = index.mul %add, %c_3 : index
-#         %add_8 = index.add %mul_7, %k : index
-#         view.store %load_3, %out_shared[%add_7, %add_8] : f16, view<128x132xf16, %layout>
+#         %madd_4 = index.madd %rem, %c_3, %rem_2 : index
+#         %madd_5 = index.madd %madd, %c_3, %k : index
+#         view.store %load_3, %out_shared[%madd_4, %madd_5] : f16, view<128x132xf16, %layout>
 #         scf.yield
 #       }
 #       scf.yield
@@ -330,11 +318,9 @@ def tilekernels_batched_transpose_gfx1100(
 #     %j_ub_3 = index.add %c_2, %c_6 : index
 #     scf.for %j = [%c_2 to %j_ub_3 step %c1] {
 #       %load_4 = view.load %out_shared[%i, %j] : view<128x132xf16, %layout> -> f16
-#       %mul_8 = index.mul %bx, %c_6 : index
-#       %add_9 = index.add %mul_8, %i : index
-#       %mul_9 = index.mul %by, %c_6 : index
-#       %add_10 = index.add %mul_9, %j : index
-#       view.store %load_4, %out[%bz, %add_9, %add_10] : f16, view<[%num_batches]x[%shape_y]x[%shape_x]xf16, %layout>
+#       %madd_6 = index.madd %bx, %c_6, %i : index
+#       %madd_7 = index.madd %by, %c_6, %j : index
+#       view.store %load_4, %out[%bz, %madd_6, %madd_7] : f16, view<[%num_batches]x[%shape_y]x[%shape_x]xf16, %layout>
 #       scf.yield
 #     }
 #     scf.yield

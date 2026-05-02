@@ -17,7 +17,7 @@ from loom.importers.tilelang.converter import (
     TileLangConverter,
     TileLangConverterRegistry,
 )
-from loom.importers.tilelang.nodes import dtype, node_text, source_name
+from loom.importers.tilelang.nodes import dtype, node_kind, node_text, source_name
 from loom.ir import I1, INDEX, ShapedType, Type, TypeKind
 
 
@@ -215,6 +215,18 @@ def convert_binary_expr(
         or _source_is_index_like(source_lhs, context)
         or _source_is_index_like(source_rhs, context)
     )
+    kind = type(expr).__name__
+    if index_like:
+        madd = _convert_index_madd_expr(
+            expr,
+            source_lhs,
+            source_rhs,
+            context,
+            converter,
+            kind,
+        )
+        if madd is not None:
+            return madd
     lhs = converter.convert_expr(
         source_lhs,
         context,
@@ -245,7 +257,6 @@ def convert_binary_expr(
             return None
     if _is_vector_type(lhs.type) or _is_vector_type(rhs.type):
         return _convert_vector_binary_expr(expr, context, lhs, rhs)
-    kind = type(expr).__name__
     if index_like:
         builder_name = _BINARY_INDEX_OPS.get(kind)
         if builder_name is None:
@@ -284,6 +295,68 @@ def convert_binary_expr(
         ),
     )
     context.map_value(expr, result, str(result_type))
+    return result
+
+
+def _convert_index_madd_expr(
+    expr: object,
+    source_lhs: object,
+    source_rhs: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    kind: str,
+) -> ValueRef | None:
+    if kind != "Add":
+        return None
+    if node_kind(source_lhs) == "Mul":
+        return _build_index_madd_expr(
+            expr,
+            source_lhs,
+            source_rhs,
+            context,
+            converter,
+        )
+    if node_kind(source_rhs) == "Mul":
+        return _build_index_madd_expr(
+            expr,
+            source_rhs,
+            source_lhs,
+            context,
+            converter,
+        )
+    return None
+
+
+def _build_index_madd_expr(
+    expr: object,
+    source_product: object,
+    source_addend: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> ValueRef | None:
+    converter.operation_counts[node_kind(source_product)] += 1
+    a = converter.convert_expr(
+        getattr(source_product, "a", None),
+        context,
+        index_like=True,
+    )
+    b = converter.convert_expr(
+        getattr(source_product, "b", None),
+        context,
+        index_like=True,
+    )
+    c = converter.convert_expr(source_addend, context, index_like=True)
+    if a is None or b is None or c is None:
+        context.record_blocked(node_text(expr), "index madd operands are not mapped")
+        return None
+    result = context.builder.index.madd(
+        a=a,
+        b=b,
+        c=c,
+        results=[INDEX],
+        name=context.fresh_name("madd"),
+    )
+    context.map_value(expr, result, "index")
     return result
 
 
