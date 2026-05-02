@@ -29,6 +29,19 @@ Python fixture files keep shared imports at the top, split cases with
 Use update mode after intentional importer output changes instead of editing
 the expected Loom IR by hand.
 
+Expected diagnostics use source annotations instead of bespoke test callbacks:
+
+```python
+# ERROR@+1: TYPE/001 {field_a="lhs"} "same type"
+bad_program()
+```
+
+Annotations follow the loom-check matcher shape: uppercase severity,
+optional `@+N`/`@-N` line offset, optional `DOMAIN/CODE`, optional structured
+diagnostic parameter matchers in `{name="value"}`, and zero or more quoted
+message substrings. Structured params match the core Python `Diagnostic`
+payload; message substrings are for human-facing prose checks.
+
 Agent-oriented usage is available from:
 
 ```bash

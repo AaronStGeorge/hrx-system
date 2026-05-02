@@ -41,6 +41,7 @@ class CheckCase:
     source: str
     input: str
     expected: str
+    has_expected: bool = False
     run: str | None = None
     line_start: int = field(default=1, compare=False)
     line_end: int = field(default=1, compare=False)
@@ -79,6 +80,7 @@ def parse_inline_cases(
                 source=case_source,
                 input=input_text,
                 expected=expected if has_expected else input_text,
+                has_expected=has_expected,
                 run=runs[index] or file_run,
                 line_start=raw_case.line_start,
                 line_end=raw_case.line_end,

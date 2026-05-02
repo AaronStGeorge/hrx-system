@@ -15,6 +15,7 @@ iree_py_library(
     check
   SRCS
     "__init__.py"
+    "annotations.py"
     "cases.py"
     "main.py"
     "python.py"
@@ -44,6 +45,7 @@ iree_py_test(
   SRCS
     "../../tools/pytest_style_runner.py"
   ARGS
+    "loom.importers.check.annotations_test"
     "loom.importers.check.cases_test"
     "loom.importers.check.main_test"
     "loom.importers.check.python_test"

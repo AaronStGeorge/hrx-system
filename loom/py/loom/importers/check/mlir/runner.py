@@ -11,6 +11,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from loom.diagnostics import LoomDiagnosticError
+from loom.importers.check.annotations import (
+    parse_expected_diagnostics,
+    source_diagnostic_check_result,
+)
 from loom.importers.check.cases import (
     DEFAULT_CHECK_SYNTAX,
     CheckCase,
@@ -74,6 +79,7 @@ def parse_check_cases(
                 source=raw_case.source,
                 input=raw_case.input,
                 expected=raw_case.expected,
+                has_expected=raw_case.has_expected,
                 run=effective_run,
                 line_start=raw_case.line_start,
                 line_end=raw_case.line_end,
@@ -115,7 +121,6 @@ def import_mlir_case(
     *,
     options: MlirCheckOptions,
 ) -> CheckResult:
-    from loom.diagnostics import LoomDiagnosticError
     from loom.importers.core import print_loom_module
     from loom.importers.mlir.importer import (
         MlirImportOptions,
@@ -123,6 +128,12 @@ def import_mlir_case(
     )
 
     run_options = parse_mlir_run(case.run or "mlir")
+    expected_diagnostics = parse_expected_diagnostics(
+        case.input,
+        path=case.path,
+        line_start=case.line_start,
+        comment_prefix="//",
+    )
     try:
         result = import_mlir_module(
             case.input,
@@ -133,6 +144,12 @@ def import_mlir_case(
         )
         stdout = print_loom_module(result.module)
     except LoomDiagnosticError as exc:
+        if expected_diagnostics:
+            return source_diagnostic_check_result(
+                case,
+                expected_diagnostics=expected_diagnostics,
+                actual_diagnostics=exc.diagnostics,
+            )
         return CheckResult(
             path=case.path,
             case_index=case.index,
@@ -153,6 +170,13 @@ def import_mlir_case(
             expected=case.expected,
         )
 
+    if expected_diagnostics:
+        return source_diagnostic_check_result(
+            case,
+            expected_diagnostics=expected_diagnostics,
+            actual_diagnostics=(),
+            stdout=stdout,
+        )
     if stdout == case.expected:
         return CheckResult(
             path=case.path,

@@ -4,22 +4,34 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Diagnostics shared by Python Loom APIs."""
+"""Diagnostics shared by Python Loom APIs.
+
+This mirrors the C diagnostic vocabulary in `loom/src/loom/error/`: a
+diagnostic has a severity, structured error identity, origin/source ranges,
+typed parameters, highlights, related locations, and emitter identity.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from loom.errors import ErrorDef
+    from loom.errors import Emitter, ErrorDef
 
 __all__ = [
     "Diagnostic",
     "DiagnosticEngine",
+    "DiagnosticFieldRef",
+    "DiagnosticHighlightRange",
+    "DiagnosticParam",
+    "DiagnosticRelatedLocation",
     "DiagnosticSeverity",
+    "SourceProvenance",
+    "SourceRange",
     "LoomDiagnosticError",
 ]
 
@@ -27,9 +39,110 @@ __all__ = [
 class DiagnosticSeverity(StrEnum):
     """Severity for Python diagnostics."""
 
-    NOTE = "note"
-    WARNING = "warning"
     ERROR = "error"
+    WARNING = "warning"
+    REMARK = "remark"
+
+
+class SourceProvenance(StrEnum):
+    """Identifies which bytes back a diagnostic source range."""
+
+    EXACT_SOURCE = "exact_source"
+    PRINTED_IR_FALLBACK = "printed_ir_fallback"
+    UNAVAILABLE_SOURCE = "unavailable_source"
+
+
+@dataclass(frozen=True, slots=True)
+class SourceRange:
+    """A byte and line range in a source buffer.
+
+    Field names intentionally follow `loom_source_range_t` closely. Offsets are
+    byte offsets into `source`; the range is half-open: [start, end).
+    """
+
+    provenance: SourceProvenance = SourceProvenance.UNAVAILABLE_SOURCE
+    filename: Path | None = None
+    source: str = ""
+    start: int = 0
+    end: int = 0
+    start_line: int = 0
+    start_column: int = 0
+    end_line: int = 0
+    end_column: int = 0
+
+    @classmethod
+    def unavailable(cls) -> SourceRange:
+        return cls()
+
+    @classmethod
+    def line(
+        cls,
+        filename: Path,
+        line: int,
+        *,
+        column: int = 0,
+        source: str = "",
+        provenance: SourceProvenance = SourceProvenance.EXACT_SOURCE,
+    ) -> SourceRange:
+        return cls(
+            provenance=provenance,
+            filename=filename,
+            source=source,
+            start_line=line,
+            start_column=column,
+            end_line=line,
+            end_column=column,
+        )
+
+    @property
+    def has_location(self) -> bool:
+        return self.filename is not None and self.start_line > 0
+
+    def display(self) -> str:
+        if self.filename is None:
+            return "<unknown>"
+        if self.start_column > 0:
+            return f"{self.filename}:{self.start_line}:{self.start_column}"
+        return f"{self.filename}:{self.start_line}"
+
+
+@dataclass(frozen=True, slots=True)
+class DiagnosticFieldRef:
+    """Structured reference to an op field named by a diagnostic parameter."""
+
+    kind: str
+    index: int
+    occurrence: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class DiagnosticHighlightRange:
+    """A byte range within a diagnostic source buffer for highlighting."""
+
+    start: int
+    end: int
+    field_ref: DiagnosticFieldRef | None = None
+    param_index: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DiagnosticParam:
+    """One rendered runtime parameter for a structured diagnostic."""
+
+    name: str
+    value: Any
+    kind: str | None = None
+    field_ref: DiagnosticFieldRef | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DiagnosticRelatedLocation:
+    """A labeled secondary diagnostic source location."""
+
+    label: str
+    source_location: SourceRange
+    highlights: tuple[DiagnosticHighlightRange, ...] = ()
+    highlight_omitted_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,18 +151,71 @@ class Diagnostic:
 
     severity: DiagnosticSeverity
     message: str
+    origin: SourceRange | None = None
+    source_location: SourceRange | None = None
+    params: tuple[DiagnosticParam, ...] = ()
+    emitter: Emitter | None = None
+    highlights: tuple[DiagnosticHighlightRange, ...] = ()
+    highlight_omitted_count: int = 0
+    related_locations: tuple[DiagnosticRelatedLocation, ...] = ()
+    related_location_omitted_count: int = 0
     source: str | None = None
     details: tuple[str, ...] = ()
     error_def: ErrorDef | None = None
+
+    @property
+    def domain(self) -> str | None:
+        if self.error_def is None:
+            return None
+        return self.error_def.domain.name
+
+    @property
+    def code(self) -> str | None:
+        if self.error_def is None:
+            return None
+        return str(self.error_def.code)
+
+    @property
+    def error_id(self) -> str | None:
+        if self.error_def is None:
+            return None
+        return self.error_def.error_id
+
+    @property
+    def primary_location(self) -> SourceRange | None:
+        return self.source_location or self.origin
+
+    def rendered_message(self) -> str:
+        pieces = [self.message]
+        if self.source:
+            pieces.append(f"source: {self.source}")
+        pieces.extend(self.details)
+        return "\n".join(piece for piece in pieces if piece)
+
+    def rendered_params(self) -> dict[str, str]:
+        """Returns diagnostic parameters rendered for structured matching."""
+
+        return {
+            param.name: _render_diagnostic_param_value(param.value)
+            for param in self.params
+        }
 
     def __str__(self) -> str:
         prefix = self.severity.value
         if self.error_def is not None:
             prefix = f"{prefix} {self.error_def}"
-        pieces = [f"{prefix}: {self.message}"]
+        location = self.primary_location
+        if location is not None and location.has_location:
+            pieces = [f"{location.display()}: {prefix}: {self.message}"]
+        else:
+            pieces = [f"{prefix}: {self.message}"]
         if self.source:
             pieces.append(f"  source: {self.source}")
         pieces.extend(f"  {detail}" for detail in self.details)
+        for related in self.related_locations:
+            pieces.append(
+                f"  {related.source_location.display()}: note: {related.label}"
+            )
         return "\n".join(pieces)
 
 
@@ -79,17 +245,33 @@ class DiagnosticEngine:
             for diagnostic in self._diagnostics
         )
 
-    def note(
+    def remark(
         self,
         message: str,
         *,
+        origin: SourceRange | None = None,
+        source_location: SourceRange | None = None,
+        params: Iterable[DiagnosticParam] = (),
+        emitter: Emitter | None = None,
+        highlights: Iterable[DiagnosticHighlightRange] = (),
+        highlight_omitted_count: int = 0,
+        related_locations: Iterable[DiagnosticRelatedLocation] = (),
+        related_location_omitted_count: int = 0,
         source: str | None = None,
         details: Iterable[str] = (),
         error_def: ErrorDef | None = None,
     ) -> Diagnostic:
         return self.emit(
-            DiagnosticSeverity.NOTE,
+            DiagnosticSeverity.REMARK,
             message,
+            origin=origin,
+            source_location=source_location,
+            params=params,
+            emitter=emitter,
+            highlights=highlights,
+            highlight_omitted_count=highlight_omitted_count,
+            related_locations=related_locations,
+            related_location_omitted_count=related_location_omitted_count,
             source=source,
             details=details,
             error_def=error_def,
@@ -99,6 +281,14 @@ class DiagnosticEngine:
         self,
         message: str,
         *,
+        origin: SourceRange | None = None,
+        source_location: SourceRange | None = None,
+        params: Iterable[DiagnosticParam] = (),
+        emitter: Emitter | None = None,
+        highlights: Iterable[DiagnosticHighlightRange] = (),
+        highlight_omitted_count: int = 0,
+        related_locations: Iterable[DiagnosticRelatedLocation] = (),
+        related_location_omitted_count: int = 0,
         source: str | None = None,
         details: Iterable[str] = (),
         error_def: ErrorDef | None = None,
@@ -106,6 +296,14 @@ class DiagnosticEngine:
         return self.emit(
             DiagnosticSeverity.WARNING,
             message,
+            origin=origin,
+            source_location=source_location,
+            params=params,
+            emitter=emitter,
+            highlights=highlights,
+            highlight_omitted_count=highlight_omitted_count,
+            related_locations=related_locations,
+            related_location_omitted_count=related_location_omitted_count,
             source=source,
             details=details,
             error_def=error_def,
@@ -115,6 +313,14 @@ class DiagnosticEngine:
         self,
         message: str,
         *,
+        origin: SourceRange | None = None,
+        source_location: SourceRange | None = None,
+        params: Iterable[DiagnosticParam] = (),
+        emitter: Emitter | None = None,
+        highlights: Iterable[DiagnosticHighlightRange] = (),
+        highlight_omitted_count: int = 0,
+        related_locations: Iterable[DiagnosticRelatedLocation] = (),
+        related_location_omitted_count: int = 0,
         source: str | None = None,
         details: Iterable[str] = (),
         error_def: ErrorDef | None = None,
@@ -122,6 +328,14 @@ class DiagnosticEngine:
         return self.emit(
             DiagnosticSeverity.ERROR,
             message,
+            origin=origin,
+            source_location=source_location,
+            params=params,
+            emitter=emitter,
+            highlights=highlights,
+            highlight_omitted_count=highlight_omitted_count,
+            related_locations=related_locations,
+            related_location_omitted_count=related_location_omitted_count,
             source=source,
             details=details,
             error_def=error_def,
@@ -132,11 +346,27 @@ class DiagnosticEngine:
         operation: str,
         reason: str,
         *,
+        origin: SourceRange | None = None,
+        source_location: SourceRange | None = None,
+        params: Iterable[DiagnosticParam] = (),
+        emitter: Emitter | None = None,
+        highlights: Iterable[DiagnosticHighlightRange] = (),
+        highlight_omitted_count: int = 0,
+        related_locations: Iterable[DiagnosticRelatedLocation] = (),
+        related_location_omitted_count: int = 0,
         details: Iterable[str] = (),
         error_def: ErrorDef | None = None,
     ) -> Diagnostic:
         return self.error(
             f"unsupported source operation: {reason}",
+            origin=origin,
+            source_location=source_location,
+            params=params,
+            emitter=emitter,
+            highlights=highlights,
+            highlight_omitted_count=highlight_omitted_count,
+            related_locations=related_locations,
+            related_location_omitted_count=related_location_omitted_count,
             source=operation,
             details=details,
             error_def=error_def,
@@ -147,6 +377,14 @@ class DiagnosticEngine:
         severity: DiagnosticSeverity,
         message: str,
         *,
+        origin: SourceRange | None = None,
+        source_location: SourceRange | None = None,
+        params: Iterable[DiagnosticParam] = (),
+        emitter: Emitter | None = None,
+        highlights: Iterable[DiagnosticHighlightRange] = (),
+        highlight_omitted_count: int = 0,
+        related_locations: Iterable[DiagnosticRelatedLocation] = (),
+        related_location_omitted_count: int = 0,
         source: str | None = None,
         details: Iterable[str] = (),
         error_def: ErrorDef | None = None,
@@ -154,6 +392,14 @@ class DiagnosticEngine:
         diagnostic = Diagnostic(
             severity=severity,
             message=message,
+            origin=origin,
+            source_location=source_location,
+            params=tuple(params),
+            emitter=emitter,
+            highlights=tuple(highlights),
+            highlight_omitted_count=highlight_omitted_count,
+            related_locations=tuple(related_locations),
+            related_location_omitted_count=related_location_omitted_count,
             source=source,
             details=tuple(details),
             error_def=error_def,
@@ -167,3 +413,11 @@ class DiagnosticEngine:
     def raise_if_errors(self) -> None:
         if self.has_errors:
             raise LoomDiagnosticError(self._diagnostics)
+
+
+def _render_diagnostic_param_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, tuple | list):
+        return ", ".join(_render_diagnostic_param_value(item) for item in value)
+    return str(value)

@@ -16,6 +16,11 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from loom.diagnostics import LoomDiagnosticError
+from loom.importers.check.annotations import (
+    parse_expected_diagnostics,
+    source_diagnostic_check_result,
+)
 from loom.importers.check.cases import (
     CheckCase,
     InlineCheckSyntax,
@@ -116,7 +121,12 @@ def parse_python_check_cases(path: Path, source: str) -> tuple[CheckCase, ...]:
             index=case.index,
             source=case.source,
             input=case.input,
-            expected=decode_python_expected(case.expected),
+            expected=(
+                decode_python_expected(case.expected)
+                if case.has_expected
+                else case.expected
+            ),
+            has_expected=case.has_expected,
             run=case.run,
             line_start=case.line_start,
             line_end=case.line_end,
@@ -181,8 +191,30 @@ def run_python_case(
     invoke: Callable[[PythonCheckCase], str],
 ) -> CheckResult:
     check_case = python_case.check_case
+    expected_diagnostics = parse_expected_diagnostics(
+        check_case.input,
+        path=check_case.path,
+        line_start=check_case.line_start,
+        comment_prefix="#",
+    )
     try:
         stdout = invoke(python_case)
+    except LoomDiagnosticError as exc:
+        if expected_diagnostics:
+            return source_diagnostic_check_result(
+                check_case,
+                expected_diagnostics=expected_diagnostics,
+                actual_diagnostics=exc.diagnostics,
+            )
+        return CheckResult(
+            path=check_case.path,
+            case_index=check_case.index,
+            returncode=1,
+            stdout="",
+            stderr=f"{exc}\n",
+            input=check_case.input,
+            expected=check_case.expected,
+        )
     except Exception as exc:
         return CheckResult(
             path=check_case.path,
@@ -192,6 +224,13 @@ def run_python_case(
             stderr=f"{type(exc).__name__}: {exc}\n",
             input=check_case.input,
             expected=check_case.expected,
+        )
+    if expected_diagnostics:
+        return source_diagnostic_check_result(
+            check_case,
+            expected_diagnostics=expected_diagnostics,
+            actual_diagnostics=(),
+            stdout=stdout,
         )
     if stdout == check_case.expected:
         return CheckResult(

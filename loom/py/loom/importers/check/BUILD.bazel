@@ -15,6 +15,7 @@ py_library(
     name = "check",
     srcs = [
         "__init__.py",
+        "annotations.py",
         "cases.py",
         "main.py",
         "python.py",
@@ -39,6 +40,7 @@ py_binary(
 py_test(
     name = "check_test",
     srcs = [
+        "annotations_test.py",
         "cases_test.py",
         "main_test.py",
         "python_test.py",
@@ -48,6 +50,7 @@ py_test(
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = [
+        "loom.importers.check.annotations_test",
         "loom.importers.check.cases_test",
         "loom.importers.check.main_test",
         "loom.importers.check.python_test",

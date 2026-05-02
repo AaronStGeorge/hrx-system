@@ -152,6 +152,17 @@ cases with `# ====`. Each case compares imported Loom IR against the inline
 `# ----` section. Run update mode after intentional importer output changes
 instead of editing the expected Loom IR by hand.
 
+Expected diagnostics use loom-check-style source annotations:
+
+```python
+# ERROR@+1: TYPE/001 {{field_a="lhs"}} "same type"
+bad_program()
+```
+
+Annotations match the shared Python diagnostic model: severity, source line,
+optional error domain/code, optional structured diagnostic params, and quoted
+message substrings.
+
 ### Direct use
 
 Direct invocations are useful for inspection, but Bazel remains the update path

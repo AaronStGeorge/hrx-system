@@ -17,8 +17,14 @@ from loom.builders import (
 from loom.diagnostics import (
     Diagnostic,
     DiagnosticEngine,
+    DiagnosticFieldRef,
+    DiagnosticHighlightRange,
+    DiagnosticParam,
+    DiagnosticRelatedLocation,
     DiagnosticSeverity,
     LoomDiagnosticError,
+    SourceProvenance,
+    SourceRange,
 )
 from loom.verify import ModuleVerifier, VerifierRegistry, verify_module
 
@@ -26,11 +32,17 @@ __all__ = [
     "DialectBuilder",
     "Diagnostic",
     "DiagnosticEngine",
+    "DiagnosticFieldRef",
+    "DiagnosticHighlightRange",
+    "DiagnosticParam",
+    "DiagnosticRelatedLocation",
     "DiagnosticSeverity",
     "LoomDiagnosticError",
     "LoomBuilder",
     "ModuleVerifier",
     "OpCallable",
+    "SourceProvenance",
+    "SourceRange",
     "VerifierRegistry",
     "default_ops",
     "default_types",

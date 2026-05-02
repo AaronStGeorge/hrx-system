@@ -7,6 +7,14 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from loom.diagnostics import (
+    Diagnostic,
+    DiagnosticParam,
+    DiagnosticSeverity,
+    LoomDiagnosticError,
+    SourceRange,
+)
+from loom.error.type import ERR_TYPE_001
 from loom.importers.check.python import (
     PythonCheckCase,
     PythonCheckOptions,
@@ -124,6 +132,46 @@ def first():
     assert results[0].updated
     assert "# new\n" in updated_source
     assert "# old\n" not in updated_source
+
+
+def test_run_python_check_matches_source_diagnostic_annotations() -> None:
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "cases.py"
+        path.write_text(
+            """
+def case(func):
+    func.__case__ = True
+    return func
+
+@case
+def broken():
+    # ERROR@+1: TYPE/001 {field_a="lhs"} "same type"
+    return "ignored\\n"
+"""
+        )
+
+        def invoke(case: PythonCheckCase) -> str:
+            lines = case.check_case.input.splitlines()
+            target_line = case.check_case.line_start + lines.index(
+                '    return "ignored\\n"'
+            )
+            diagnostic = Diagnostic(
+                severity=DiagnosticSeverity.ERROR,
+                error_def=ERR_TYPE_001,
+                message="values must have the same type",
+                source_location=SourceRange.line(case.check_case.path, target_line),
+                params=(DiagnosticParam("field_a", "lhs"),),
+            )
+            raise LoomDiagnosticError((diagnostic,))
+
+        results = run_python_check(
+            path,
+            options=PythonCheckOptions(),
+            is_case=lambda value: bool(getattr(value, "__case__", False)),
+            invoke=invoke,
+        )
+
+    assert results[0].passed
 
 
 def test_run_python_check_filters_by_function_name() -> None:

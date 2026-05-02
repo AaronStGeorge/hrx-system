@@ -74,6 +74,34 @@ def test_format_updated_source_preserves_python_preamble() -> None:
     )
 
 
+def test_format_updated_source_does_not_add_expected_section_for_empty_stdout() -> None:
+    source = "# ERROR@+1: TYPE/001\nbad()\n"
+    cases = parse_inline_cases(
+        Path("kernels.py"),
+        source,
+        syntax=InlineCheckSyntax(
+            case_separator_prefix="# ====",
+            expected_separator="# ----",
+            comment_prefix="#",
+        ),
+    )
+    results = [CheckResult(Path("kernels.py"), 0, 0, "", "matched diagnostic\n")]
+
+    assert (
+        format_updated_source(
+            source,
+            cases,
+            syntax=InlineCheckSyntax(
+                case_separator_prefix="# ====",
+                expected_separator="# ----",
+                comment_prefix="#",
+            ),
+            results=results,
+        )
+        == source
+    )
+
+
 def test_format_updated_source_uses_custom_case_separator_spacer() -> None:
     syntax = InlineCheckSyntax(
         case_separator_prefix="# ====",

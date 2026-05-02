@@ -61,6 +61,7 @@ def test_parse_inline_cases_uses_configured_comment_syntax() -> None:
         source="case_0()\n",
         input="case_0()\n",
         expected="expected 0\n",
+        has_expected=True,
     )
     assert cases[1].input == "case_1()\n"
 
@@ -85,6 +86,7 @@ def test_parse_inline_cases_can_ignore_shared_preamble() -> None:
         source="case_0()\n",
         input="case_0()\n",
         expected="expected 0\n",
+        has_expected=True,
         line_start=4,
         line_end=6,
     )
