@@ -1376,12 +1376,16 @@ static iree_status_t loom_check_emit_write_source_low_text(
           "source-low output=low requires all lowered funcs to use the same "
           "target-low descriptor set");
     }
-    return loom_check_emit_write_source_low_artifacts(
+    iree_status_t status = loom_check_emit_write_source_low_artifacts(
         module, &low_registry->registry, selected_descriptor_set_key,
         &result->actual_output);
+    if (iree_status_is_ok(status)) result->has_actual_output = true;
+    return status;
   }
-  return loom_text_print_module_to_builder(module, &result->actual_output,
-                                           LOOM_TEXT_PRINT_DEFAULT);
+  status = loom_text_print_module_to_builder(module, &result->actual_output,
+                                             LOOM_TEXT_PRINT_DEFAULT);
+  if (iree_status_is_ok(status)) result->has_actual_output = true;
+  return status;
 }
 
 static iree_status_t loom_check_emit_verify_provider_module(
@@ -1608,8 +1612,10 @@ iree_status_t loom_check_execute_emit(
         .host_allocator = allocator,
         .result = result,
     };
+    iree_host_size_t actual_output_size = result->actual_output.size;
     status = provider->execute(provider, &provider_request);
-    if (iree_status_is_ok(status)) {
+    if (iree_status_is_ok(status) &&
+        result->actual_output.size != actual_output_size) {
       result->has_actual_output = true;
     }
     loom_module_free(module);
@@ -1660,9 +1666,6 @@ iree_status_t loom_check_execute_emit(
           (loom_source_resolver_t){.fn = loom_source_table_resolve,
                                    .user_data = &resolver_data},
           &diagnostic_collector, result);
-    }
-    if (iree_status_is_ok(status)) {
-      result->has_actual_output = true;
     }
     loom_module_free(module);
     diagnostic_collector.module = NULL;
@@ -1774,6 +1777,7 @@ iree_status_t loom_check_execute_emit(
                             .user_data = &resolver_data},
         .emitter = LOOM_EMITTER_PASS,
     };
+    iree_host_size_t actual_output_size = result->actual_output.size;
     if (iree_status_is_ok(status)) {
       if (request.format == LOOM_CHECK_EMIT_LIVENESS_JSON) {
         status = loom_check_emit_write_liveness_json(
@@ -1818,7 +1822,8 @@ iree_status_t loom_check_execute_emit(
             &diagnostic_arena, result);
       }
     }
-    if (iree_status_is_ok(status)) {
+    if (iree_status_is_ok(status) &&
+        result->actual_output.size != actual_output_size) {
       result->has_actual_output = true;
     }
     loom_module_free(module);

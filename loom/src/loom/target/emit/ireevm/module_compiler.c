@@ -296,6 +296,9 @@ static iree_status_t loom_ireevm_archive_compile_selected_entry(
     loom_ireevm_archive_compile_state_t* state,
     const loom_target_module_compile_entry_t* entry,
     loom_ireevm_module_archive_t* out_archive, bool* out_compiled) {
+  IREE_RETURN_IF_ERROR(loom_ireevm_module_compile_build_cconv(
+      state->module, entry->func, &state->calling_convention_builder));
+
   loom_low_lower_result_t lower_result = {0};
   IREE_RETURN_IF_ERROR(loom_ireevm_module_compile_lower_function(
       state->module, &state->low_registry, entry, entry->func,
@@ -373,8 +376,6 @@ static iree_status_t loom_ireevm_archive_compile_selected_entry(
         state->bytecode.bytecode_length, state->bytecode.data_length);
   }
 
-  IREE_RETURN_IF_ERROR(loom_ireevm_module_compile_build_cconv(
-      state->module, entry->func, &state->calling_convention_builder));
   const loom_ireevm_module_archive_function_t functions[] = {
       {
           .export_name = loom_ireevm_module_compile_export_name(entry),
