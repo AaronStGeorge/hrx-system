@@ -22,24 +22,21 @@ from loom.importers.core import (
     KernelModuleShell,
     KernelModuleSpec,
     create_kernel_module,
-    sanitize_identifier,
     sanitize_symbol,
 )
+from loom.importers.tilelang.abi import extract_bindings
 from loom.importers.tilelang.context import TileLangConversionContext
 from loom.importers.tilelang.converter import TileLangConverter
 from loom.importers.tilelang.defaults import build_default_registry
 from loom.importers.tilelang.model import TileLangBinding, TileLangKernelFacts
 from loom.importers.tilelang.nodes import (
     attrs,
-    buffer_map,
-    dtype,
-    lookup_buffer,
     mapping_items,
     source_name,
 )
 from loom.importers.tilelang.ops.topology import collect_thread_extents, integer_value
 from loom.importers.tilelang.types import TileLangTypeConverter
-from loom.ir import BUFFER_TYPE, Module, rebuild_value_metadata
+from loom.ir import Module, rebuild_value_metadata
 from loom.verify import verify_module
 
 
@@ -76,7 +73,7 @@ def import_tilelang(
     function_name = _function_name(prim_func, options.kernel or normalized.name)
     target_preset = options.target_preset or normalized.target or "tilelang.generic"
     type_converter = TileLangTypeConverter()
-    bindings = _extract_bindings(prim_func, type_converter)
+    bindings = extract_bindings(prim_func, type_converter)
     workgroup_size = _workgroup_size(prim_func)
     loom_module, body_report, operation_counts = _build_loom_module(
         prim_func,
@@ -163,33 +160,6 @@ def _function_name(prim_func: object, requested_name: str | None) -> str:
     return sanitize_symbol(source_name(prim_func, fallback="main"), fallback="kernel")
 
 
-def _extract_bindings(
-    prim_func: object,
-    type_converter: TileLangTypeConverter,
-) -> tuple[TileLangBinding, ...]:
-    source_buffer_map = buffer_map(prim_func)
-    bindings: list[TileLangBinding] = []
-    for ordinal, param in enumerate(tuple(getattr(prim_func, "params", ()))):
-        buffer = lookup_buffer(source_buffer_map, param)
-        name = sanitize_identifier(source_name(param, fallback=f"arg{ordinal}"))
-        if buffer is None:
-            value_type = type_converter.map_dtype(dtype(param), index_like=False)
-        else:
-            value_type = BUFFER_TYPE
-        bindings.append(
-            TileLangBinding(
-                ordinal=ordinal,
-                name=name,
-                source=param,
-                type=value_type,
-                buffer=buffer,
-            )
-        )
-    if not bindings:
-        raise ValueError("TileLang PrimFunc has no parameters")
-    return tuple(bindings)
-
-
 def _build_loom_module(
     prim_func: object,
     bindings: tuple[TileLangBinding, ...],
@@ -244,6 +214,8 @@ def _map_kernel_arguments(
         argument = shell.arguments_by_ordinal[binding.ordinal]
         if binding.buffer is None:
             context.map_value(binding.source, argument, str(argument.type))
+            for alias in binding.aliases:
+                context.map_value(alias, argument, str(argument.type))
             continue
         view_type = context.type_converter.view_type(binding.buffer)
         view = context.builder.buffer.view(

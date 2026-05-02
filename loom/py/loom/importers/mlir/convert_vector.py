@@ -181,7 +181,7 @@ def convert_transfer_read(op: SourceOp, context: MlirConversionContext) -> bool:
             op.text, f"missing converted operands: {', '.join(missing)}"
         )
         return True
-    if view_value not in context.value_types:
+    if context.mapped_value_type(view_value) is None:
         context.record_blocked(op.text, "missing Loom view type for transfer source")
         return True
     vector_type = op.result_type()
@@ -215,7 +215,7 @@ def convert_transfer_write(op: SourceOp, context: MlirConversionContext) -> bool
             op.text, f"missing converted operands: {', '.join(missing)}"
         )
         return True
-    if view_value not in context.value_types:
+    if context.mapped_value_type(view_value) is None:
         context.record_blocked(
             op.text, "missing Loom view type for transfer destination"
         )

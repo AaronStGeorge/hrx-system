@@ -213,14 +213,29 @@ def convert_binary_expr(
         context,
         index_like=index_like,
     )
+    if lhs is None:
+        context.record_blocked(node_text(expr), "binary operands are not mapped")
+        return None
+    rhs_index_like = index_like or _is_index_type(lhs.type)
     rhs = converter.convert_expr(
         source_rhs,
         context,
-        index_like=index_like,
+        index_like=rhs_index_like,
     )
-    if lhs is None or rhs is None:
+    if rhs is None:
         context.record_blocked(node_text(expr), "binary operands are not mapped")
         return None
+    index_like = index_like or _is_index_type(lhs.type) or _is_index_type(rhs.type)
+    if index_like and not _is_index_type(lhs.type):
+        lhs = converter.convert_expr(source_lhs, context, index_like=True)
+        if lhs is None:
+            context.record_blocked(node_text(expr), "binary operands are not mapped")
+            return None
+    if index_like and not _is_index_type(rhs.type):
+        rhs = converter.convert_expr(source_rhs, context, index_like=True)
+        if rhs is None:
+            context.record_blocked(node_text(expr), "binary operands are not mapped")
+            return None
     if _is_vector_type(lhs.type) or _is_vector_type(rhs.type):
         return _convert_vector_binary_expr(expr, context, lhs, rhs)
     kind = type(expr).__name__
@@ -279,10 +294,29 @@ def convert_compare(
         source_rhs, context
     )
     lhs = converter.convert_expr(source_lhs, context, index_like=index_like)
-    rhs = converter.convert_expr(source_rhs, context, index_like=index_like)
-    if lhs is None or rhs is None:
+    if lhs is None:
         context.record_blocked(node_text(expr), "comparison operands are not mapped")
         return None
+    rhs_index_like = index_like or _is_index_type(lhs.type)
+    rhs = converter.convert_expr(source_rhs, context, index_like=rhs_index_like)
+    if rhs is None:
+        context.record_blocked(node_text(expr), "comparison operands are not mapped")
+        return None
+    index_like = index_like or _is_index_type(lhs.type) or _is_index_type(rhs.type)
+    if index_like and not _is_index_type(lhs.type):
+        lhs = converter.convert_expr(source_lhs, context, index_like=True)
+        if lhs is None:
+            context.record_blocked(
+                node_text(expr), "comparison operands are not mapped"
+            )
+            return None
+    if index_like and not _is_index_type(rhs.type):
+        rhs = converter.convert_expr(source_rhs, context, index_like=True)
+        if rhs is None:
+            context.record_blocked(
+                node_text(expr), "comparison operands are not mapped"
+            )
+            return None
     kind = type(expr).__name__
     if _is_vector_type(lhs.type) or _is_vector_type(rhs.type):
         return _convert_vector_compare(expr, context, kind, source_lhs, lhs, rhs)
@@ -529,13 +563,17 @@ def _source_is_index_like(
     context: TileLangConversionContext,
 ) -> bool:
     mapped = context.mapped(source)
-    return mapped is not None and str(mapped.type) in ("index", "offset")
+    return mapped is not None and _is_index_type(mapped.type)
 
 
 def _is_vector_type(value_type: object) -> bool:
     return (
         isinstance(value_type, ShapedType) and value_type.type_kind == TypeKind.VECTOR
     )
+
+
+def _is_index_type(value_type: object) -> bool:
+    return str(value_type) in ("index", "offset")
 
 
 def _is_float_type(value_type: str) -> bool:

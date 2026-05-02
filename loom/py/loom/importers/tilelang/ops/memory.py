@@ -258,7 +258,7 @@ def _buffer_scope(buffer: object) -> str:
 
 def _buffer_memory_space(buffer: object) -> str | None:
     scope = _buffer_scope(buffer)
-    if scope in ("", "local", "local.dyn", "local.fragment"):
+    if scope in ("", "local", "local.dyn", "local.fragment", "local.var"):
         return "private"
     if scope in ("shared", "shared.dyn"):
         return "workgroup"

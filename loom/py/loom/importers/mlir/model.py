@@ -17,7 +17,7 @@ from typing import Any
 import loom
 from loom.builder import ValueRef
 from loom.diagnostics import DiagnosticEngine
-from loom.importers.core import ImportBodyReport, SourceImportSession
+from loom.importers.core import ImportBodyReport, SourceImportSession, source_key
 from loom.importers.mlir.attrs import MlirAttributeDecoder
 from loom.importers.mlir.locations import MlirLocationConverter
 from loom.importers.mlir.types import MlirTypeConverter
@@ -135,7 +135,11 @@ class MlirConversionContext(SourceImportSession):
             preview_block=preview_block,
             type_converter=type_converter or MlirTypeConverter(),
             location_converter=MlirLocationConverter(builder.module),
-            source_names=source_names or {},
+            source_names={
+                context_key: name
+                for source, name in (source_names or {}).items()
+                for context_key in (source_key(source),)
+            },
             binding_args=binding_args or {},
             bindings_by_result=bindings_by_result or {},
         )
@@ -148,14 +152,17 @@ class MlirConversionContext(SourceImportSession):
         return self.type_converter.map_text(value_type)
 
     def source_name(self, source: object) -> str:
-        return self.source_names.get(source) or super().source_name(source)
+        return self.source_names.get(self.source_key(source)) or super().source_name(
+            source
+        )
 
     def result_name(self, source: object, fallback: str | None = None) -> str:
-        existing = self.value_map.get(source)
+        existing = self.mapped(source)
         if existing is not None and existing.name:
             return existing.name
-        if source in self.source_names:
-            return self.names.fresh(self.source_names[source])
+        source_name = self.source_names.get(self.source_key(source))
+        if source_name is not None:
+            return self.names.fresh(source_name)
         return super().result_name(source, fallback)
 
     def build_constant(self, value: Any, value_type: str, name: str) -> ValueRef:

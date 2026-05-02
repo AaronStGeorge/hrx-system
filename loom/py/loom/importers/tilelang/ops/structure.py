@@ -161,4 +161,5 @@ def _is_true_predicate(value: object) -> bool:
 
 _NORMALIZED_ATTR_KEYS = {
     "thread_extent",
+    "threadblock_swizzle_pattern",
 }

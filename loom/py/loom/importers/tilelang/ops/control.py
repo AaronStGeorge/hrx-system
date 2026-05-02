@@ -29,6 +29,7 @@ from loom.ir import INDEX
 def register(registry: TileLangConverterRegistry) -> None:
     registry.register_statement("SeqStmt", convert_seq_stmt)
     registry.register_statement("For", convert_for)
+    registry.register_statement("While", convert_while)
     registry.register_statement("IfThenElse", convert_if_then_else)
     registry.register_statement("Evaluate", convert_evaluate)
 
@@ -123,6 +124,51 @@ def convert_for(
         body=body,
     )
     context.record_converted(node_text(stmt), "scf.for")
+
+
+def convert_while(
+    stmt: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> None:
+    """Import a TIR while-loop as resultless scf.while."""
+
+    before_region = context.builder.region()
+    before_child = context.fork(preview_block=before_region.blocks[0])
+    with context.builder.insertion_block(before_region.blocks[0]):
+        condition = converter.convert_expr(
+            getattr(stmt, "condition", None),
+            before_child,
+        )
+        if condition is None:
+            before_child.record_blocked(
+                node_text(stmt), "while condition is not mapped"
+            )
+            context.merge_child_records(before_child)
+            return
+        if str(condition.type) != "i1":
+            before_child.record_blocked(
+                node_text(stmt),
+                f"while condition must be i1, got {condition.type}",
+            )
+            context.merge_child_records(before_child)
+            return
+        context.builder.scf.condition(condition=condition, forwarded=[])
+    context.merge_child_records(before_child)
+
+    after_region = context.builder.region()
+    after_child = context.fork(preview_block=after_region.blocks[0])
+    with context.builder.insertion_block(after_region.blocks[0]):
+        converter.convert_stmt(getattr(stmt, "body", None), after_child)
+        context.builder.scf.yield_()
+    context.merge_child_records(after_child)
+    context.builder.scf.while_(
+        iter_args=[],
+        results=[],
+        before=before_region,
+        after=after_region,
+    )
+    context.record_converted(node_text(stmt), "scf.while")
 
 
 def convert_if_then_else(

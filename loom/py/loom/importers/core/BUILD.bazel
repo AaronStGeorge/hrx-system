@@ -32,10 +32,12 @@ py_test(
     name = "core_test",
     srcs = [
         "names_test.py",
+        "session_test.py",
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = [
         "loom.importers.core.names_test",
+        "loom.importers.core.session_test",
     ],
     main = "pytest_style_runner.py",
     deps = [":core"],

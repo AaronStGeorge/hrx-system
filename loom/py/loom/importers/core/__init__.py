@@ -31,6 +31,7 @@ from loom.importers.core.session import (
     ConversionRecord,
     ImportBodyReport,
     SourceImportSession,
+    source_key,
 )
 
 __all__ = [
@@ -53,4 +54,5 @@ __all__ = [
     "sanitize_identifier",
     "sanitize_symbol",
     "source_name",
+    "source_key",
 ]

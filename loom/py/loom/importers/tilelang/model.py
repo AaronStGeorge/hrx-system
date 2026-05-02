@@ -24,6 +24,7 @@ class TileLangBinding:
     source: object
     type: Type
     buffer: object | None = None
+    aliases: tuple[object, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

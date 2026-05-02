@@ -24,12 +24,18 @@ from loom.ir import (
     INDEX,
     OFFSET,
     DynamicDim,
+    EncodingInstance,
     ScalarType,
+    ScalarTypeKind,
     ShapedType,
     StaticDim,
     Type,
     TypeKind,
 )
+
+
+class TileLangTypeConversionError(ValueError):
+    """Raised when a TileLang type cannot be represented faithfully."""
 
 
 class TileLangTypeConverter:
@@ -39,31 +45,32 @@ class TileLangTypeConverter:
         if index_like:
             return INDEX
         text = str(dtype)
-        mapped = _DTYPE_MAP.get(text)
-        if mapped is None:
-            mapped = _parse_vector_dtype(text)
-        if mapped is None:
-            raise ValueError(f"unsupported TileLang dtype `{text}`")
-        return mapped
+        return _map_scalar_or_vector_dtype(text)
 
     def vector_type(self, dtype: Any, lanes: int) -> ShapedType:
         element_type = dtype if isinstance(dtype, ScalarType) else self.map_dtype(dtype)
         if not isinstance(element_type, ScalarType):
-            raise ValueError(f"vector element dtype must be scalar, got {dtype!r}")
+            raise TileLangTypeConversionError(
+                f"vector element dtype must be scalar, got {dtype!r}"
+            )
         return ShapedType(TypeKind.VECTOR, element_type, (StaticDim(lanes),))
 
     def view_type(self, buffer: object) -> ShapedType:
         dtype = _attribute(buffer, "dtype")
-        element_type = self.map_dtype(dtype)
+        element_type, encoding = _storage_element_type(dtype)
         if not isinstance(element_type, ScalarType):
-            raise ValueError(f"buffer element dtype must be scalar, got {dtype!r}")
+            raise TileLangTypeConversionError(
+                f"buffer element dtype must be scalar, got {dtype!r}"
+            )
         shape = _attribute(buffer, "shape", ())
         if shape is None:
             shape = ()
         if not isinstance(shape, Iterable) or isinstance(shape, str | bytes):
-            raise ValueError(f"buffer shape must be iterable, got {shape!r}")
+            raise TileLangTypeConversionError(
+                f"buffer shape must be iterable, got {shape!r}"
+            )
         dims = tuple(_shape_dim(dim) for dim in shape)
-        return ShapedType(TypeKind.VIEW, element_type, dims)
+        return ShapedType(TypeKind.VIEW, element_type, dims, encoding=encoding)
 
     def buffer_byte_length(self, buffer: object) -> int | None:
         view_type = self.view_type(buffer)
@@ -110,6 +117,38 @@ def _parse_vector_dtype(text: str) -> ShapedType | None:
     return ShapedType(TypeKind.VECTOR, element_type, (StaticDim(int(tail)),))
 
 
+def _storage_element_type(
+    dtype: object,
+) -> tuple[Type, EncodingInstance | None]:
+    text = str(dtype)
+    fp8_format = _FP8_FORMATS.get(text)
+    if fp8_format is None:
+        return _map_scalar_or_vector_dtype(text), None
+    element_type, format_name = fp8_format
+    encoding = EncodingInstance(
+        name="tilelang.fp8",
+        params=(("format", format_name),),
+    )
+    return element_type, encoding
+
+
+def _map_scalar_or_vector_dtype(text: str) -> Type:
+    if text in _FORMAT_PRESERVING_FP8_DTYPES:
+        raise TileLangTypeConversionError(
+            f"TileLang dtype `{text}` carries numeric-format semantics that "
+            "cannot be represented as a bare Loom scalar/register type"
+        )
+    mapped = _DTYPE_MAP.get(text)
+    if mapped is None:
+        mapped = _parse_vector_dtype(text)
+    if mapped is None:
+        raise TileLangTypeConversionError(f"unsupported TileLang dtype `{text}`")
+    return mapped
+
+
+F8E4M3 = ScalarType(ScalarTypeKind.F8E4M3)
+F8E5M2 = ScalarType(ScalarTypeKind.F8E5M2)
+
 _DTYPE_MAP: dict[str, Type] = {
     "bool": I1,
     "int8": I8,
@@ -126,7 +165,19 @@ _DTYPE_MAP: dict[str, Type] = {
     "float32": F32,
     "float64": F64,
     "bfloat16": BF16,
+    "float8_e4m3": F8E4M3,
+    "float8_e5m2": F8E5M2,
 }
+
+_FP8_FORMATS: dict[str, tuple[ScalarType, str]] = {
+    "float8_e4m3": (F8E4M3, "e4m3"),
+    "float8_e4m3fn": (F8E4M3, "e4m3fn"),
+    "float8_e4m3fnuz": (F8E4M3, "e4m3fnuz"),
+    "float8_e5m2": (F8E5M2, "e5m2"),
+    "float8_e5m2fnuz": (F8E5M2, "e5m2fnuz"),
+}
+
+_FORMAT_PRESERVING_FP8_DTYPES = set(_FP8_FORMATS) - set(_DTYPE_MAP)
 
 _ELEMENT_BYTE_SIZES: dict[str, int] = {
     "i1": 1,
@@ -136,6 +187,8 @@ _ELEMENT_BYTE_SIZES: dict[str, int] = {
     "i64": 8,
     "index": 8,
     "offset": 8,
+    "f8E4M3": 1,
+    "f8E5M2": 1,
     "f16": 2,
     "bf16": 2,
     "f32": 4,

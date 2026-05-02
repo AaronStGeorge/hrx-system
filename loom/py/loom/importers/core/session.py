@@ -41,6 +41,30 @@ class ImportBodyReport:
     unsupported_counts: Counter[str]
 
 
+@dataclass(frozen=True, slots=True)
+class _IdentitySourceKey:
+    """Identity key for foreign IR nodes."""
+
+    source: object
+    identity: int
+
+    def __hash__(self) -> int:
+        return self.identity
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _IdentitySourceKey) and self.source is other.source
+
+
+_SIMPLE_SOURCE_KEY_TYPES = (str, int, float, bool, bytes, type(None))
+
+
+def source_key(source: object) -> object:
+    """Returns a stable dictionary key for a foreign source object."""
+    if isinstance(source, _SIMPLE_SOURCE_KEY_TYPES):
+        return source
+    return _IdentitySourceKey(source=source, identity=id(source))
+
+
 @dataclass(slots=True)
 class SourceImportSession:
     """Owns mutable state for one whole-module import attempt."""
@@ -86,18 +110,21 @@ class SourceImportSession:
             if value.name:
                 self.names.capture(value.name)
 
+    def source_key(self, source: object) -> object:
+        """Returns a stable dictionary key for a foreign source object."""
+        return source_key(source)
+
     def map_value(
         self,
         source: object,
         ref: ValueRef,
         value_type: str | None = None,
     ) -> None:
-        self.value_map[source] = ref
+        key = self.source_key(source)
+        self.value_map[key] = ref
         if ref.name:
             self.names.capture(ref.name)
-        self.value_types[source] = (
-            value_type if value_type is not None else str(ref.type)
-        )
+        self.value_types[key] = value_type if value_type is not None else str(ref.type)
 
     def map_result(
         self,
@@ -108,7 +135,10 @@ class SourceImportSession:
         self.map_value(source, ref, value_type)
 
     def mapped(self, source: object) -> ValueRef | None:
-        return self.value_map.get(source)
+        return self.value_map.get(self.source_key(source))
+
+    def mapped_value_type(self, source: object) -> str | None:
+        return self.value_types.get(self.source_key(source))
 
     def mapped_operands(
         self,
@@ -128,7 +158,7 @@ class SourceImportSession:
         return source_name(source)
 
     def result_name(self, source: object, fallback: str | None = None) -> str:
-        existing = self.value_map.get(source)
+        existing = self.value_map.get(self.source_key(source))
         if existing is not None and existing.name:
             return existing.name
         return self.names.fresh(

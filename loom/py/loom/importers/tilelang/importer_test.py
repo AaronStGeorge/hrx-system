@@ -6,6 +6,7 @@
 
 from collections.abc import Mapping, Sequence
 
+from loom.diagnostics import LoomDiagnosticError
 from loom.importers.check.tilelang import TileLangImportInput
 from loom.importers.core import print_loom_module
 from loom.importers.tilelang.importer import TileLangImportOptions, import_tilelang
@@ -21,13 +22,23 @@ class Var:
 
 
 class Buffer:
-    def __init__(self, name: str, shape: tuple[int, ...], dtype: str) -> None:
+    def __init__(
+        self,
+        name: str,
+        shape: tuple[object, ...],
+        dtype: str,
+        scope: str = "",
+    ) -> None:
         self.name = name
         self.shape = shape
         self.dtype = dtype
+        self._scope = scope
 
     def __repr__(self) -> str:
         return self.name
+
+    def scope(self) -> str:
+        return self._scope
 
 
 class PrimFunc:
@@ -106,6 +117,13 @@ class Add:
         self.dtype = dtype
 
 
+class FloorMod:
+    def __init__(self, lhs: object, rhs: object, dtype: str = "int32") -> None:
+        self.a = lhs
+        self.b = rhs
+        self.dtype = dtype
+
+
 class LT:
     def __init__(self, lhs: object, rhs: object, dtype: str = "bool") -> None:
         self.a = lhs
@@ -169,6 +187,12 @@ class IfThenElse:
         self.else_case = else_case
 
 
+class While:
+    def __init__(self, condition: object, body: object) -> None:
+        self.condition = condition
+        self.body = body
+
+
 class Block:
     def __init__(
         self,
@@ -197,10 +221,17 @@ class LetStmt:
 
 
 class AttrStmt:
-    def __init__(self, attr_key: str, value: object, body: object) -> None:
+    def __init__(
+        self,
+        attr_key: str,
+        value: object,
+        body: object,
+        node: object | None = None,
+    ) -> None:
         self.attr_key = attr_key
         self.value = value
         self.body = body
+        self.node = node
 
 
 def test_import_tilelang_builds_kernel_from_direct_primfunc() -> None:
@@ -310,7 +341,10 @@ def test_import_tilelang_builds_tir_scalar_math_calls() -> None:
             dst_buffer,
             Add(
                 Call("tir.sqrt", [Call("tir.abs", [load])]),
-                Call("tir.sigmoid", [load]),
+                Add(
+                    Call("tir.fabs", [load]),
+                    Call("tir.sigmoid", [load]),
+                ),
             ),
             [IntImm(0)],
         ),
@@ -331,6 +365,28 @@ def test_import_tilelang_builds_tir_scalar_math_calls() -> None:
     assert "scalar.sqrtf" in text
     assert "scalar.expf" in text
     assert "scalar.divf" in text
+
+
+def test_import_tilelang_builds_tilelang_infinity_call() -> None:
+    dst = Var("dst")
+    dst_buffer = Buffer("dst", (4,), "float32")
+    body = BufferStore(
+        dst_buffer,
+        Call("tl.infinity", [], "float32"),
+        [IntImm(0)],
+    )
+    prim_func = PrimFunc(
+        [dst],
+        {dst: dst_buffer},
+        body,
+        attrs={"global_symbol": "infinity"},
+    )
+
+    result = import_tilelang(prim_func, options=TileLangImportOptions())
+    text = print_loom_module(result.module)
+
+    assert "scalar.constant inf : f32" in text
+    assert "view.store" in text
 
 
 def test_import_tilelang_normalizes_index_ceildiv_call() -> None:
@@ -389,3 +445,173 @@ def test_import_tilelang_normalizes_structural_wrappers() -> None:
 
     assert "scalar.constant 2.0" in text
     assert "view.store" in text
+
+
+def test_import_tilelang_adds_dynamic_shape_symbols_to_kernel_abi() -> None:
+    src, dst = Var("src"), Var("dst")
+    num_tokens = Var("num_tokens", "int32")
+    num_tokens_alias = Var("num_tokens", "int32")
+    num_tokens_assume_alias = Var("num_tokens", "int32")
+    index = Var("i", "int32")
+    src_buffer = Buffer("src", (num_tokens,), "float32")
+    dst_buffer = Buffer("dst", (num_tokens_alias,), "float32")
+    body = AttrStmt(
+        "tl.assume",
+        IntImm(1, "bool"),
+        For(
+            index,
+            IntImm(0),
+            num_tokens_alias,
+            BufferStore(
+                dst_buffer,
+                BufferLoad(src_buffer, [index]),
+                [index],
+            ),
+        ),
+        node=LT(IntImm(0), num_tokens_assume_alias),
+    )
+    prim_func = PrimFunc(
+        [src, dst],
+        {src: src_buffer, dst: dst_buffer},
+        body,
+        attrs={"global_symbol": "dynamic_shape"},
+    )
+
+    result = import_tilelang(
+        prim_func,
+        options=TileLangImportOptions(include_report=True),
+    )
+    text = print_loom_module(result.module)
+
+    assert "%num_tokens: i32" in text
+    assert "scalar.assume" in text
+    assert "index.cast" in text
+    assert "scf.for" in text
+    assert result.report is not None
+    assert [binding.name for binding in result.report.bindings] == [
+        "src",
+        "dst",
+        "num_tokens",
+    ]
+
+
+def test_import_tilelang_maps_local_var_allocations_to_private_memory() -> None:
+    dst = Var("dst")
+    scratch = Buffer("scratch", (1,), "int32", scope="local.var")
+    dst_buffer = Buffer("dst", (4,), "float32")
+    body = Block(
+        BufferStore(dst_buffer, FloatImm(1.0), [IntImm(0)]),
+        alloc_buffers=[scratch],
+    )
+    prim_func = PrimFunc(
+        [dst],
+        {dst: dst_buffer},
+        body,
+        attrs={"global_symbol": "local_var_alloc"},
+    )
+
+    result = import_tilelang(prim_func, options=TileLangImportOptions())
+    text = print_loom_module(result.module)
+
+    assert "buffer.alloca" in text
+    assert "memory_space = private" in text
+
+
+def test_import_tilelang_normalizes_threadblock_swizzle_metadata() -> None:
+    dst = Var("dst")
+    dst_buffer = Buffer("dst", (4,), "float32")
+    body = AttrStmt(
+        "threadblock_swizzle_pattern",
+        IntImm(1),
+        BufferStore(dst_buffer, FloatImm(1.0), [IntImm(0)]),
+    )
+    prim_func = PrimFunc(
+        [dst],
+        {dst: dst_buffer},
+        body,
+        attrs={"global_symbol": "swizzle_metadata"},
+    )
+
+    result = import_tilelang(prim_func, options=TileLangImportOptions())
+    text = print_loom_module(result.module)
+
+    assert "view.store" in text
+
+
+def test_import_tilelang_builds_resultless_scf_while() -> None:
+    dst = Var("dst")
+    dst_buffer = Buffer("dst", (4,), "float32")
+    body = While(
+        LT(IntImm(0), IntImm(1)),
+        BufferStore(dst_buffer, FloatImm(1.0), [IntImm(0)]),
+    )
+    prim_func = PrimFunc(
+        [dst],
+        {dst: dst_buffer},
+        body,
+        attrs={"global_symbol": "while_loop"},
+    )
+
+    result = import_tilelang(prim_func, options=TileLangImportOptions())
+    text = print_loom_module(result.module)
+
+    assert "scf.while" in text
+    assert "scf.condition" in text
+    assert "view.store" in text
+
+
+def test_import_tilelang_reconverts_nested_index_binary_expressions() -> None:
+    dst = Var("dst")
+    index = Var("i", "int32")
+    modulo = Var("modulo", "int32")
+    dst_buffer = Buffer("dst", (4,), "float32")
+    body = For(
+        index,
+        IntImm(0),
+        IntImm(4),
+        LetStmt(
+            modulo,
+            FloorMod(Add(index, IntImm(1), "int32"), IntImm(4)),
+            BufferStore(dst_buffer, FloatImm(1.0), [modulo]),
+        ),
+    )
+    prim_func = PrimFunc(
+        [dst],
+        {dst: dst_buffer},
+        body,
+        attrs={"global_symbol": "nested_index_binary"},
+    )
+
+    result = import_tilelang(prim_func, options=TileLangImportOptions())
+    text = print_loom_module(result.module)
+
+    assert "index.add" in text
+    assert "index.rem" in text
+    assert "scalar.remsi" not in text
+
+
+def test_import_tilelang_reports_unrepresentable_fp8_scalar_format() -> None:
+    src, dst = Var("src"), Var("dst")
+    src_buffer = Buffer("src", (4,), "float8_e4m3fnuz")
+    dst_buffer = Buffer("dst", (4,), "float8_e4m3fnuz")
+    body = BufferStore(
+        dst_buffer,
+        BufferLoad(src_buffer, [IntImm(0)], dtype="float8_e4m3fnuz"),
+        [IntImm(0)],
+    )
+    prim_func = PrimFunc(
+        [src, dst],
+        {src: src_buffer, dst: dst_buffer},
+        body,
+        attrs={"global_symbol": "fp8_scalar"},
+    )
+
+    try:
+        import_tilelang(prim_func, options=TileLangImportOptions())
+    except LoomDiagnosticError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected FP8 scalar format import to fail")
+
+    assert "unsupported source operation" in message
+    assert "numeric-format semantics" in message

@@ -8,11 +8,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
 from loom.builder import ValueRef
 from loom.importers.core import SourceImportSession
+from loom.importers.tilelang.nodes import dtype, node_kind, source_name
 from loom.importers.tilelang.types import TileLangTypeConverter
 from loom.ir import INDEX, OFFSET, Type
 
@@ -23,6 +25,11 @@ class TileLangConversionContext(SourceImportSession):
 
     type_converter: TileLangTypeConverter = field(default_factory=TileLangTypeConverter)
     index_values: dict[object, ValueRef] = field(default_factory=dict)
+    semantic_values: dict[tuple[object, ...], ValueRef] = field(default_factory=dict)
+    semantic_value_types: dict[tuple[object, ...], str] = field(default_factory=dict)
+    semantic_index_values: dict[tuple[object, ...], ValueRef] = field(
+        default_factory=dict
+    )
     kernel_body_block: object | None = None
 
     def type(self, value_type: str) -> Type:
@@ -45,11 +52,52 @@ class TileLangConversionContext(SourceImportSession):
             name=name,
         )
 
+    def map_value(
+        self,
+        source: object,
+        ref: ValueRef,
+        value_type: str | None = None,
+    ) -> None:
+        SourceImportSession.map_value(self, source, ref, value_type)
+        semantic_key = _semantic_source_key(source)
+        if semantic_key is not None:
+            self.semantic_values[semantic_key] = ref
+            self.semantic_value_types[semantic_key] = (
+                value_type if value_type is not None else str(ref.type)
+            )
+
+    def mapped(self, source: object) -> ValueRef | None:
+        mapped_value = SourceImportSession.mapped(self, source)
+        if mapped_value is not None:
+            return mapped_value
+        semantic_key = _semantic_source_key(source)
+        if semantic_key is None:
+            return None
+        return self.semantic_values.get(semantic_key)
+
+    def mapped_value_type(self, source: object) -> str | None:
+        mapped_type = SourceImportSession.mapped_value_type(self, source)
+        if mapped_type is not None:
+            return mapped_type
+        semantic_key = _semantic_source_key(source)
+        if semantic_key is None:
+            return None
+        return self.semantic_value_types.get(semantic_key)
+
     def mapped_index_value(self, source: object) -> ValueRef | None:
-        return self.index_values.get(source)
+        mapped_value = self.index_values.get(self.source_key(source))
+        if mapped_value is not None:
+            return mapped_value
+        semantic_key = _semantic_var_key(source)
+        if semantic_key is None:
+            return None
+        return self.semantic_index_values.get(semantic_key)
 
     def map_index_value(self, source: object, ref: ValueRef) -> None:
-        self.index_values[source] = ref
+        self.index_values[self.source_key(source)] = ref
+        semantic_key = _semantic_var_key(source)
+        if semantic_key is not None:
+            self.semantic_index_values[semantic_key] = ref
         if ref.name:
             self.names.capture(ref.name)
 
@@ -71,5 +119,70 @@ class TileLangConversionContext(SourceImportSession):
             names=self.names,
             type_converter=self.type_converter,
             index_values=dict(self.index_values),
+            semantic_values=dict(self.semantic_values),
+            semantic_value_types=dict(self.semantic_value_types),
+            semantic_index_values=dict(self.semantic_index_values),
             kernel_body_block=self.kernel_body_block,
         )
+
+
+def _semantic_source_key(source: object) -> tuple[object, ...] | None:
+    var_key = _semantic_var_key(source)
+    if var_key is not None:
+        return var_key
+    return _semantic_buffer_key(source)
+
+
+def _semantic_var_key(source: object) -> tuple[object, ...] | None:
+    if node_kind(source) not in ("Var", "SizeVar"):
+        return None
+    source_dtype = dtype(source)
+    if source_dtype == "handle" or source_dtype.endswith("*"):
+        return None
+    return ("var", source_name(source, fallback=str(source)), source_dtype)
+
+
+def _semantic_buffer_key(source: object) -> tuple[object, ...] | None:
+    if node_kind(source) != "Buffer":
+        return None
+    data = getattr(source, "data", None)
+    return (
+        "buffer",
+        source_name(source, fallback=str(source)),
+        dtype(source),
+        _buffer_scope(source),
+        source_name(data, fallback=str(data)),
+        _semantic_sequence(getattr(source, "shape", ())),
+    )
+
+
+def _semantic_sequence(value: object) -> tuple[object, ...]:
+    if value is None or isinstance(value, str | bytes):
+        return ()
+    if isinstance(value, Iterable):
+        return tuple(_semantic_value(item) for item in value)
+    return (_semantic_value(value),)
+
+
+def _semantic_value(value: object) -> object:
+    if isinstance(value, str | bytes | int | float | bool):
+        return value
+    if node_kind(value) in ("Var", "SizeVar"):
+        return _semantic_var_key(value)
+    if hasattr(value, "value"):
+        return ("imm", str(value.value), dtype(value))
+    return (
+        node_kind(value),
+        source_name(value, fallback=str(value)),
+        dtype(value),
+        str(value),
+    )
+
+
+def _buffer_scope(buffer: object) -> str:
+    scope = getattr(buffer, "scope", None)
+    if callable(scope):
+        return str(scope())
+    if scope is not None:
+        return str(scope)
+    return ""

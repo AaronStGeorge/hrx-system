@@ -134,6 +134,8 @@ def convert_call(
         )
     if op_name in _CEILDIV_CALLS:
         return _convert_ceildiv_call(expr, context, converter, op_name, options=options)
+    if op_name in _INFINITY_CALLS:
+        return _convert_infinity_call(expr, context, op_name)
     if op_name in _REINTERPRET_CALLS:
         return _convert_reinterpret_call(expr, context, converter, op_name)
     if op_name in _ATOMIC_ADD_CALLS:
@@ -603,6 +605,21 @@ def _convert_identity_call(
         return None
     context.map_value(expr, result, str(result.type))
     context.record_converted(node_text(expr), f"{op_name} normalized to identity")
+    return result
+
+
+def _convert_infinity_call(
+    expr: object,
+    context: TileLangConversionContext,
+    op_name: str,
+) -> ValueRef | None:
+    result_type = dtype(expr)
+    result = context.build_constant(
+        float("inf"),
+        result_type,
+        context.fresh_name("inf"),
+    )
+    _map_call_result(expr, context, result, op_name, value_type=result_type)
     return result
 
 
@@ -1115,6 +1132,7 @@ _FLOAT_PREDICATE_CALLS = {
 
 _ABS_CALLS = {
     "tir.abs",
+    "tir.fabs",
 }
 
 _UNARY_INTEGER_CALLS = {
@@ -1148,6 +1166,10 @@ _FORCED_INDEX_CALLS = {
 
 _CEILDIV_CALLS = {
     "tir.ceildiv",
+}
+
+_INFINITY_CALLS = {
+    "tl.infinity",
 }
 
 _REINTERPRET_CALLS = {

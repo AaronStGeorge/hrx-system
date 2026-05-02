@@ -19,6 +19,7 @@ from loom.importers.core import ImportBodyReport
 from loom.importers.tilelang.context import TileLangConversionContext
 from loom.importers.tilelang.coverage import CoverageState, coverage_by_name
 from loom.importers.tilelang.nodes import node_kind, node_text
+from loom.importers.tilelang.types import TileLangTypeConversionError
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,7 +169,10 @@ class TileLangConverter:
             self.record_unsupported(stmt, context)
             return
         handler = cast(StatementHandler, converter.handler)
-        handler(stmt, context, self)
+        try:
+            handler(stmt, context, self)
+        except TileLangTypeConversionError as exc:
+            context.record_blocked(node_text(stmt), str(exc))
 
     def convert_expr(
         self,
@@ -192,12 +196,16 @@ class TileLangConverter:
             self.record_unsupported(expr, context)
             return None
         handler = cast(ExpressionHandler, converter.handler)
-        return handler(
-            expr,
-            context,
-            self,
-            ExpressionOptions(index_like=index_like, effect=effect),
-        )
+        try:
+            return handler(
+                expr,
+                context,
+                self,
+                ExpressionOptions(index_like=index_like, effect=effect),
+            )
+        except TileLangTypeConversionError as exc:
+            context.record_blocked(node_text(expr), str(exc))
+            return None
 
     def record_unsupported(
         self,

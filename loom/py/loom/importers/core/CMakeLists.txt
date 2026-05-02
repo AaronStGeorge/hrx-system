@@ -33,6 +33,7 @@ iree_py_test(
     "../../tools/pytest_style_runner.py"
   ARGS
     "loom.importers.core.names_test"
+    "loom.importers.core.session_test"
   PACKAGE_DIRS
     "${IREE_SOURCE_DIR}/runtime/py"
     "${IREE_BINARY_DIR}/runtime/py"
