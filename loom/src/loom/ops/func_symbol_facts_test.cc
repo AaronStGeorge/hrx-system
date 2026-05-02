@@ -147,10 +147,10 @@ func.decl import("env") @do_work(%arg0: i32) -> (i32)
 
 TEST_F(FuncSymbolFactsTest, KernelEntryContractRemainsTargetNeutral) {
   ModulePtr module = ParseModule(R"(
-test.target<low_core> @profile
+test.target<low_core> @target
 test.record @artifact
 
-kernel.def target(@profile) export("dispatch") artifact(@artifact) ordinal(5) linkage(dso_local) workgroup_size(8, 4, 2) @kernel() {
+kernel.def target(@target) export("dispatch") artifact(@artifact) ordinal(5) linkage(dso_local) workgroup_size(8, 4, 2) @kernel() {
   kernel.return
 }
 )");
@@ -176,7 +176,7 @@ kernel.def target(@profile) export("dispatch") artifact(@artifact) ordinal(5) li
   EXPECT_EQ(facts->required_workgroup_size.z, 2u);
 }
 
-TEST_F(FuncSymbolFactsTest, ContractRequiresTargetProfile) {
+TEST_F(FuncSymbolFactsTest, ContractRequiresTargetRecord) {
   ModulePtr module = ParseModule(R"(
 func.def abi(object_function) @semantic() {
   func.return

@@ -129,7 +129,7 @@ func.def @semantic() {
   EXPECT_TRUE(capture.diagnostics.empty());
 }
 
-TEST_F(FuncVerifyTest, ContractRequiresTargetProfile) {
+TEST_F(FuncVerifyTest, ContractRequiresTargetRecord) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(R"(
 func.def abi(object_function) @semantic() {

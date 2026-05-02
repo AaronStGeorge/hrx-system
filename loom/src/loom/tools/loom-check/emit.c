@@ -551,20 +551,20 @@ static iree_status_t loom_check_emit_parse_request(
       .has_source_low_output_option = false,
   };
   iree_string_view_t target_name = iree_string_view_empty();
-  iree_string_view_t profile_name = iree_string_view_empty();
-  loom_check_emit_split_target(emit_target, &target_name, &profile_name);
+  iree_string_view_t target_options = iree_string_view_empty();
+  loom_check_emit_split_target(emit_target, &target_name, &target_options);
   if (!iree_string_view_is_empty(target_name)) {
     out_request->emit_target_name = target_name;
   }
 
   if (iree_string_view_equal(target_name, IREE_SV("liveness-json")) ||
       iree_string_view_equal(target_name, IREE_SV("liveness"))) {
-    if (!iree_string_view_starts_with(profile_name, IREE_SV("@"))) {
+    if (!iree_string_view_starts_with(target_options, IREE_SV("@"))) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "liveness-json requires a function symbol name");
     }
     out_request->analysis_symbol_name =
-        iree_string_view_substr(profile_name, 1, IREE_HOST_SIZE_MAX);
+        iree_string_view_substr(target_options, 1, IREE_HOST_SIZE_MAX);
     if (iree_string_view_is_empty(out_request->analysis_symbol_name)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "function symbol name is required");
@@ -576,7 +576,7 @@ static iree_status_t loom_check_emit_parse_request(
              iree_string_view_equal(target_name, IREE_SV("low-schedule"))) {
     iree_string_view_t symbol_name = iree_string_view_empty();
     iree_string_view_t option_text = iree_string_view_empty();
-    iree_string_view_split(profile_name, ' ', &symbol_name, &option_text);
+    iree_string_view_split(target_options, ' ', &symbol_name, &option_text);
     symbol_name = iree_string_view_trim(symbol_name);
     option_text = iree_string_view_trim(option_text);
     if (!iree_string_view_starts_with(symbol_name, IREE_SV("@"))) {
@@ -599,7 +599,7 @@ static iree_status_t loom_check_emit_parse_request(
              iree_string_view_equal(target_name, IREE_SV("low-allocation"))) {
     iree_string_view_t symbol_name = iree_string_view_empty();
     iree_string_view_t option_text = iree_string_view_empty();
-    iree_string_view_split(profile_name, ' ', &symbol_name, &option_text);
+    iree_string_view_split(target_options, ' ', &symbol_name, &option_text);
     symbol_name = iree_string_view_trim(symbol_name);
     option_text = iree_string_view_trim(option_text);
     if (!iree_string_view_starts_with(symbol_name, IREE_SV("@"))) {
@@ -621,7 +621,7 @@ static iree_status_t loom_check_emit_parse_request(
              iree_string_view_equal(target_name, IREE_SV("low-packet"))) {
     iree_string_view_t symbol_name = iree_string_view_empty();
     iree_string_view_t option_text = iree_string_view_empty();
-    iree_string_view_split(profile_name, ' ', &symbol_name, &option_text);
+    iree_string_view_split(target_options, ' ', &symbol_name, &option_text);
     symbol_name = iree_string_view_trim(symbol_name);
     option_text = iree_string_view_trim(option_text);
     if (!iree_string_view_starts_with(symbol_name, IREE_SV("@"))) {
@@ -643,21 +643,21 @@ static iree_status_t loom_check_emit_parse_request(
                                     IREE_SV("low-descriptor-manifest")) ||
              iree_string_view_equal(target_name,
                                     IREE_SV("low-descriptor-json"))) {
-    if (iree_string_view_is_empty(profile_name)) {
+    if (iree_string_view_is_empty(target_options)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "low descriptor set key is required");
     }
     out_request->format = LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST;
-    out_request->low_descriptor_set_key = profile_name;
+    out_request->low_descriptor_set_key = target_options;
     return iree_ok_status();
   } else if (iree_string_view_equal(target_name,
                                     IREE_SV("target-low-registry-manifest")) ||
              iree_string_view_equal(target_name,
                                     IREE_SV("target-low-registry-json"))) {
-    if (!iree_string_view_is_empty(profile_name)) {
+    if (!iree_string_view_is_empty(target_options)) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "target-low registry manifest does not accept a profile");
+          "target-low registry manifest does not accept target options");
     }
     out_request->format = LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST;
     return iree_ok_status();
@@ -665,7 +665,8 @@ static iree_status_t loom_check_emit_parse_request(
              iree_string_view_equal(target_name, IREE_SV("source-to-low"))) {
     iree_string_view_t first_token = iree_string_view_empty();
     iree_string_view_t unused_remaining = iree_string_view_empty();
-    iree_string_view_split(profile_name, ' ', &first_token, &unused_remaining);
+    iree_string_view_split(target_options, ' ', &first_token,
+                           &unused_remaining);
     first_token = iree_string_view_trim(first_token);
     if (iree_string_view_starts_with(first_token, IREE_SV("@"))) {
       return iree_make_status(
@@ -674,7 +675,7 @@ static iree_status_t loom_check_emit_parse_request(
           "targeted source funcs in the module");
     }
     IREE_RETURN_IF_ERROR(
-        loom_check_emit_parse_source_low_options(profile_name, out_request));
+        loom_check_emit_parse_source_low_options(target_options, out_request));
     out_request->format = LOOM_CHECK_EMIT_SOURCE_LOW_TEXT;
     return iree_ok_status();
   } else {

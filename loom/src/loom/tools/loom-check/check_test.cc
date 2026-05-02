@@ -108,33 +108,32 @@ TEST_F(CheckParseTest, FormatMode) {
 }
 
 TEST_F(CheckParseTest, EmitMode) {
-  IREE_ASSERT_OK(
-      Parse("// RUN: emit target-form target-profile\nfunc.def @f() {}\n"));
+  IREE_ASSERT_OK(Parse("// RUN: emit target-form @entry\nfunc.def @f() {}\n"));
   ASSERT_EQ(file_.case_count, 1);
   EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_EMIT);
-  EXPECT_TRUE(iree_string_view_equal(
-      file_.cases[0].emit_target,
-      iree_make_cstring_view("target-form target-profile")));
+  EXPECT_TRUE(
+      iree_string_view_equal(file_.cases[0].emit_target,
+                             iree_make_cstring_view("target-form @entry")));
 }
 
 TEST_F(CheckParseTest, EmitBitcodeMode) {
   IREE_ASSERT_OK(
-      Parse("// RUN: emit target-bitcode profile-a\nfunc.def @f() {}\n"));
+      Parse("// RUN: emit target-bitcode target-key-a\nfunc.def @f() {}\n"));
   ASSERT_EQ(file_.case_count, 1);
   EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_EMIT);
   EXPECT_TRUE(iree_string_view_equal(
       file_.cases[0].emit_target,
-      iree_make_cstring_view("target-bitcode profile-a")));
+      iree_make_cstring_view("target-bitcode target-key-a")));
 }
 
 TEST_F(CheckParseTest, EmitObjectMode) {
   IREE_ASSERT_OK(
-      Parse("// RUN: emit target-object profile-a\nfunc.def @f() {}\n"));
+      Parse("// RUN: emit target-object target-key-a\nfunc.def @f() {}\n"));
   ASSERT_EQ(file_.case_count, 1);
   EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_EMIT);
   EXPECT_TRUE(iree_string_view_equal(
       file_.cases[0].emit_target,
-      iree_make_cstring_view("target-object profile-a")));
+      iree_make_cstring_view("target-object target-key-a")));
 }
 
 TEST_F(CheckParseTest, XfailDirective) {
@@ -1577,23 +1576,22 @@ TEST_F(CheckParseTest, FirstCasePassModeInherited) {
 
 TEST_F(CheckParseTest, FirstCaseEmitModeInherited) {
   IREE_ASSERT_OK(
-      Parse("// RUN: emit target-form target-profile\n"
+      Parse("// RUN: emit target-form @entry\n"
             "func.def @a() {}\n"
             "// ====\n"
             "func.def @b() {}\n"));
   ASSERT_EQ(file_.case_count, 2);
   EXPECT_EQ(file_.default_mode, LOOM_CHECK_MODE_EMIT);
   EXPECT_TRUE(iree_string_view_equal(
-      file_.default_emit_target,
-      iree_make_cstring_view("target-form target-profile")));
+      file_.default_emit_target, iree_make_cstring_view("target-form @entry")));
   EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_EMIT);
-  EXPECT_TRUE(iree_string_view_equal(
-      file_.cases[0].emit_target,
-      iree_make_cstring_view("target-form target-profile")));
+  EXPECT_TRUE(
+      iree_string_view_equal(file_.cases[0].emit_target,
+                             iree_make_cstring_view("target-form @entry")));
   EXPECT_EQ(file_.cases[1].mode, LOOM_CHECK_MODE_EMIT);
-  EXPECT_TRUE(iree_string_view_equal(
-      file_.cases[1].emit_target,
-      iree_make_cstring_view("target-form target-profile")));
+  EXPECT_TRUE(
+      iree_string_view_equal(file_.cases[1].emit_target,
+                             iree_make_cstring_view("target-form @entry")));
 }
 
 TEST_F(CheckParseTest, FirstCaseRequiresInheritedAndCombined) {

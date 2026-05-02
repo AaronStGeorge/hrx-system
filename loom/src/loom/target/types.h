@@ -7,9 +7,10 @@
 // Shared target payload types.
 //
 // This header intentionally contains only target-neutral data shapes. It must
-// not include target-family descriptors, presets, feature catalogs, scheduling
-// tables, or emitter-specific helpers. Those live under opt-in target packages
-// so AOT and JIT builds can exclude every target family they do not use.
+// not include target-family descriptors, generated target records, feature
+// catalogs, scheduling tables, or emitter-specific helpers. Those live under
+// opt-in target packages so AOT and JIT builds can exclude every target family
+// they do not use.
 
 #ifndef LOOM_TARGET_TYPES_H_
 #define LOOM_TARGET_TYPES_H_
@@ -197,7 +198,7 @@ typedef struct loom_target_config_t {
 } loom_target_config_t;
 
 typedef struct loom_target_bundle_t {
-  // Stable bundle/profile name for diagnostics and tests.
+  // Stable bundle name for diagnostics and tests.
   iree_string_view_t name;
   // Frozen codegen target snapshot selected for this bundle.
   const loom_target_snapshot_t* snapshot;

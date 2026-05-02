@@ -385,7 +385,7 @@ static iree_status_t loom_target_module_compile_emit_entry_not_func(
       IREE_ARRAYSIZE(params));
 }
 
-static iree_status_t loom_target_module_compile_emit_missing_target_profile(
+static iree_status_t loom_target_module_compile_emit_missing_target_record(
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     const loom_op_t* op, iree_string_view_t pipeline_name,
     iree_string_view_t function_name) {
@@ -515,7 +515,7 @@ static iree_status_t loom_target_module_compile_try_entry(
     if (!require_compatible) {
       return iree_ok_status();
     }
-    IREE_RETURN_IF_ERROR(loom_target_module_compile_emit_missing_target_profile(
+    IREE_RETURN_IF_ERROR(loom_target_module_compile_emit_missing_target_record(
         diagnostic_emitter, func_facts->func_op, pipeline_name,
         func_facts->name));
     return iree_ok_status();

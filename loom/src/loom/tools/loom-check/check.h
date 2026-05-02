@@ -247,7 +247,7 @@ typedef struct loom_check_case_t {
   iree_string_view_t pipeline;
   // For FORMAT mode: target format name (e.g. "bytecode").
   iree_string_view_t format_target;
-  // For EMIT mode: target emission request (e.g. "target-form profile").
+  // For EMIT mode: target emission request (e.g. "target-form @symbol").
   iree_string_view_t emit_target;
   // Whether this case is expected to fail.
   bool xfail;

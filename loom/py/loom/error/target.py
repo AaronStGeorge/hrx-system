@@ -738,7 +738,7 @@ ERR_TARGET_040 = ErrorDef(
     summary="Kernel entry cannot override its ABI.",
     message=(
         "kernel entry '@{function_name}' derives its ABI from the target "
-        "profile and cannot declare an ABI override"
+        "record and cannot declare an ABI override"
     ),
     params=(ErrorParam("function_name", ParamKind.STRING),),
 )
