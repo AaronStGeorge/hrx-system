@@ -155,6 +155,22 @@ static iree_status_t loom_check_provider_environment_state_initialize(
   return iree_ok_status();
 }
 
+static iree_status_t loom_check_provider_register_context(
+    void* user_data, loom_context_t* context) {
+  loom_check_provider_environment_state_t* state =
+      (loom_check_provider_environment_state_t*)user_data;
+  IREE_RETURN_IF_ERROR(loom_check_register_production_context(NULL, context));
+  const loom_check_provider_set_t* provider_set = state->provider_set;
+  for (iree_host_size_t i = 0; i < provider_set->provider_count; ++i) {
+    const loom_check_provider_t* provider = provider_set->providers[i];
+    if (provider->register_context == NULL) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(provider->register_context(context));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_check_provider_initialize_low_descriptor_registry(
     void* user_data, loom_target_low_descriptor_registry_t* out_registry) {
   loom_check_provider_environment_state_t* state =
@@ -230,8 +246,8 @@ int loom_check_provider_main(int argc, char** argv,
   const loom_check_environment_t environment = {
       .register_context =
           {
-              .fn = loom_check_register_production_context,
-              .user_data = NULL,
+              .fn = loom_check_provider_register_context,
+              .user_data = &state,
           },
       .initialize_low_descriptor_registry =
           {

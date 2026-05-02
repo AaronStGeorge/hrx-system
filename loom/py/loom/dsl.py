@@ -2348,6 +2348,8 @@ class Dialect:
     default_phase: OpPhase | None = None
     categories: tuple[OpCategory, ...] = ()
     default_category: OpCategory | None = None
+    c_path: str | None = None
+    register_by_default: bool = True
 
     def __init__(
         self,
@@ -2359,6 +2361,8 @@ class Dialect:
         default_phase: OpPhase | None = None,
         categories: list[OpCategory] | tuple[OpCategory, ...] = (),
         default_category: OpCategory | None = None,
+        c_path: str | None = None,
+        register_by_default: bool = True,
     ) -> None:
         frozen_categories = tuple(categories)
         if default_category is not None and default_category not in frozen_categories:
@@ -2373,6 +2377,8 @@ class Dialect:
         object.__setattr__(self, "default_phase", default_phase)
         object.__setattr__(self, "categories", frozen_categories)
         object.__setattr__(self, "default_category", default_category)
+        object.__setattr__(self, "c_path", c_path)
+        object.__setattr__(self, "register_by_default", register_by_default)
 
 
 # ============================================================================

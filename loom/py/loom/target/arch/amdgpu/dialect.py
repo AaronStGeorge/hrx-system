@@ -1,0 +1,75 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""AMDGPU target-family record dialect."""
+
+from loom.assembly import AttrDict, SymbolRef, TemplateParam
+from loom.dialect.target import target_record_attrs
+from loom.dsl import (
+    SYMBOL_DEFINE,
+    Dialect,
+    EnumCase,
+    EnumDef,
+    Op,
+    OpPhase,
+    SymbolDefinition,
+    TargetLikeInterface,
+)
+
+amdgpu_ops = Dialect(
+    "amdgpu",
+    dialect_id=0x17,
+    doc="AMDGPU target-family records.",
+    default_phase=OpPhase.MODULE_METADATA,
+    c_path="target/arch/amdgpu/ops",
+    register_by_default=False,
+)
+
+AmdgpuTargetKind = EnumDef(
+    "AmdgpuTargetKind",
+    [
+        EnumCase("gfx950", 1, doc="CDNA 4 gfx950 target row."),
+        EnumCase("gfx1100", 2, doc="RDNA 3 gfx1100 target row."),
+        EnumCase("gfx1200", 3, doc="RDNA 4 gfx1200 target row."),
+        EnumCase("gfx1250", 4, doc="RDNA 4 gfx1250 target row."),
+    ],
+    doc="AMDGPU target row selected by amdgpu.target.",
+)
+
+amdgpu_target = Op(
+    "amdgpu.target",
+    group=amdgpu_ops,
+    doc=(
+        "AMDGPU target-family record. The selector chooses a generated "
+        "processor/family row; optional attrs structurally override authored "
+        "common target fields."
+    ),
+    traits=[SYMBOL_DEFINE],
+    interfaces=[
+        TargetLikeInterface(
+            symbol="symbol",
+            selector="kind",
+        )
+    ],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="target",
+        interfaces=["target", "record"],
+        bytecode_kind="LOOM_SYMBOL_RECORD",
+    ),
+    attrs=target_record_attrs(AmdgpuTargetKind),
+    format=[
+        TemplateParam("kind"),
+        SymbolRef("symbol"),
+        AttrDict(),
+    ],
+    examples=[
+        "amdgpu.target<gfx1100> @gfx11",
+        "amdgpu.target<gfx950> @gfx950 {subgroup_size = 64}",
+    ],
+)
+
+ALL_AMDGPU_OPS: tuple[Op, ...] = (amdgpu_target,)

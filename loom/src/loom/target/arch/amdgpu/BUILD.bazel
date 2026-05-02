@@ -235,6 +235,26 @@ loom_cc_test(
     ],
 )
 
+loom_cc_library(
+    name = "ops",
+    srcs = [
+        "ops/builders.c",
+        "ops/registry.c",
+        "ops/tables.c",
+    ],
+    hdrs = [
+        "ops/ops.h",
+        "ops/registry.h",
+    ],
+    deps = [
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
 _AMDGPU_DESCRIPTOR_GENERATOR = "//loom/py/loom/gen:amdgpu_descriptors"
 
 _AMDGPU_DESCRIPTOR_ID_GENERATOR = "//loom/py/loom/gen:amdgpu_descriptor_ids"
@@ -585,6 +605,7 @@ loom_cc_library(
         ":low_registry",
         ":lower",
         ":occupancy",
+        ":ops",
         ":packet_diagnostics",
         "//loom/src/loom/target/emit/native/amdgpu:loom_check",
         "//loom/src/loom/tools/loom-check:execute",
@@ -760,6 +781,7 @@ loom_check_test_suite(
         "test/source_low/source_low_sync.loom-test",
         "test/source_low/source_low_table.loom-test",
         "test/source_low/source_low_table_diagnostics.loom-test",
+        "test/source_low/target_records.loom-test",
     ],
     data = [
         "//loom/src/loom/test/corpus/source_low:async_empty.loom-test",

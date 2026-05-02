@@ -139,12 +139,10 @@ GenericTargetKind = EnumDef(
     doc="Generic target-family row selected by target.generic.",
 )
 
-# Shared target attrs that override fields from a selected target row. These are
-# presence-based attrs: absent means use the selected row, while a present zero is
-# an explicit override when the field permits zero.
-_GENERIC_TARGET_ATTRS = [
-    AttrDef("symbol", "symbol"),
-    AttrDef("kind", ATTR_TYPE_ENUM, enum_def=GenericTargetKind),
+# Shared target attrs that override fields from a selected target row. These
+# are presence-based attrs: absent means use the selected row, while a present
+# zero is an explicit override when the field permits zero.
+TARGET_COMMON_OVERRIDE_ATTRS = [
     AttrDef(
         "codegen_format",
         ATTR_TYPE_ENUM,
@@ -202,6 +200,15 @@ _GENERIC_TARGET_ATTRS = [
     AttrDef("contract_feature_bits", ATTR_TYPE_I64, optional=True),
 ]
 
+
+def target_record_attrs(kind_enum: EnumDef) -> list[AttrDef]:
+    return [
+        AttrDef("symbol", "symbol"),
+        AttrDef("kind", ATTR_TYPE_ENUM, enum_def=kind_enum),
+        *TARGET_COMMON_OVERRIDE_ATTRS,
+    ]
+
+
 # ============================================================================
 # target.generic
 # ============================================================================
@@ -223,7 +230,7 @@ target_generic = Op(
         interfaces=["target", "record"],
         bytecode_kind="LOOM_SYMBOL_RECORD",
     ),
-    attrs=_GENERIC_TARGET_ATTRS,
+    attrs=target_record_attrs(GenericTargetKind),
     verify="loom_target_generic_verify",
     format=[
         TemplateParam("kind"),

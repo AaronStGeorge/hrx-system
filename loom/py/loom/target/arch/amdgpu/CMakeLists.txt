@@ -24,6 +24,17 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    dialect
+  SRCS
+    "__init__.py"
+    "dialect.py"
+  DEPS
+    iree::runtime::py::loom::core
+    iree::runtime::py::loom::dialect::target::target
+)
+
+iree_py_library(
+  NAME
     descriptors
   SRCS
     "__init__.py"

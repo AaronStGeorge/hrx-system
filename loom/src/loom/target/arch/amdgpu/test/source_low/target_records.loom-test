@@ -1,0 +1,7 @@
+// RUN: roundtrip
+
+amdgpu.target<gfx1100> @gfx11
+
+amdgpu.target<gfx950> @gfx950 {max_flat_workgroup_size = 1024, subgroup_size = 64}
+
+target.artifact @gfx11_object target(@gfx11) {abi = object_file, artifact_format = elf}

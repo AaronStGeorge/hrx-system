@@ -116,7 +116,12 @@ from loom.dsl import (
 # Group and enums
 # ============================================================================
 
-test_ops = Dialect("test", dialect_id=0x01, doc="Test ops for infrastructure validation.")
+test_ops = Dialect(
+    "test",
+    dialect_id=0x01,
+    doc="Test ops for infrastructure validation.",
+    register_by_default=False,
+)
 
 # Enums for test.func (same values as the func dialect, defined
 # locally to avoid cross-dialect import).

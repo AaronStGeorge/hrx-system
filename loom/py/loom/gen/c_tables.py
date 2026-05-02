@@ -471,6 +471,16 @@ def _c_dialect_enum(dialect_name: str) -> str:
     return "LOOM_DIALECT_" + dialect_name.upper()
 
 
+def _c_dialect_path(dialect: Any) -> str:
+    """Returns the generated C source path under loom/src/loom."""
+    return dialect.c_path or f"ops/{dialect.name}"
+
+
+def _c_dialect_include_path(dialect: Any) -> str:
+    """Returns the generated C include path rooted at loom/src."""
+    return f"loom/{_c_dialect_path(dialect)}"
+
+
 def _guard_name(dialect_name: str) -> str:
     """Returns the header guard name."""
     return f"LOOM_OPS_{dialect_name.upper()}_OPS_H_"
@@ -3066,6 +3076,7 @@ def generate_tables_c(
     dialect_id: int,
     ops: Sequence[Op],
     *,
+    include_path: str | None = None,
     emit_registration: bool = True,
     export_vtables: bool = False,
     private_header: bool = False,
@@ -3078,10 +3089,11 @@ def generate_tables_c(
     lines.extend(line_comment_header("//", generator="loom.gen.c_tables"))
     lines.append("// clang-format off")
     lines.append("")
+    include_path = include_path or f"loom/ops/{dialect_name}"
     if private_header:
-        lines.append(f'#include "loom/ops/{dialect_name}/tables.h"')
+        lines.append(f'#include "{include_path}/tables.h"')
     else:
-        lines.append(f'#include "loom/ops/{dialect_name}/ops.h"')
+        lines.append(f'#include "{include_path}/ops.h"')
     lines.append('#include "loom/error/error_defs.h"')
     lines.append("")
     if not private_header:
@@ -3460,7 +3472,7 @@ def generate_tables_c(
     return "\n".join(lines)
 
 
-def generate_tables_h(dialect_name: str, ops: Sequence[Op]) -> str:
+def generate_tables_h(dialect_name: str, ops: Sequence[Op], *, include_path: str | None = None) -> str:
     """Generates private declarations shared by a sharded dialect table."""
     guard = f"LOOM_OPS_{dialect_name.upper()}_TABLES_H_"
     lines: list[str] = []
@@ -3471,7 +3483,8 @@ def generate_tables_h(dialect_name: str, ops: Sequence[Op]) -> str:
     lines.append(f"#ifndef {guard}")
     lines.append(f"#define {guard}")
     lines.append("")
-    lines.append(f'#include "loom/ops/{dialect_name}/ops.h"')
+    include_path = include_path or f"loom/ops/{dialect_name}"
+    lines.append(f'#include "{include_path}/ops.h"')
     lines.append("")
     _emit_table_string_macros(lines, dialect_name)
     lines.append("#ifdef __cplusplus")
@@ -3489,7 +3502,13 @@ def generate_tables_h(dialect_name: str, ops: Sequence[Op]) -> str:
     return "\n".join(lines)
 
 
-def generate_tables_aggregator_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str:
+def generate_tables_aggregator_c(
+    dialect_name: str,
+    dialect_id: int,
+    ops: Sequence[Op],
+    *,
+    include_path: str | None = None,
+) -> str:
     """Generates a dialect table aggregator for sharded per-op vtable files."""
     lines: list[str] = []
 
@@ -3497,7 +3516,8 @@ def generate_tables_aggregator_c(dialect_name: str, dialect_id: int, ops: Sequen
     lines.extend(line_comment_header("//", generator="loom.gen.c_tables"))
     lines.append("// clang-format off")
     lines.append("")
-    lines.append(f'#include "loom/ops/{dialect_name}/tables.h"')
+    include_path = include_path or f"loom/ops/{dialect_name}"
+    lines.append(f'#include "{include_path}/tables.h"')
     lines.append("")
 
     lines.append(f"static const loom_op_vtable_t* const loom_{dialect_name}_vtable_array[] = {{")
@@ -3542,6 +3562,8 @@ def generate_sharded_tables_c(
     dialect_name: str,
     dialect_id: int,
     category_groups: Sequence[tuple[Any, Sequence[Op]]],
+    *,
+    include_path: str | None = None,
 ) -> dict[str, str]:
     """Generates an aggregator plus category shards for one dialect."""
     all_ops: list[Op] = []
@@ -3557,12 +3579,13 @@ def generate_sharded_tables_c(
             dialect_name,
             dialect_id,
             shard_ops,
+            include_path=include_path,
             emit_registration=False,
             export_vtables=True,
             private_header=True,
         )
-    table_files["tables.c"] = generate_tables_aggregator_c(dialect_name, dialect_id, all_ops)
-    table_files["tables.h"] = generate_tables_h(dialect_name, all_ops)
+    table_files["tables.c"] = generate_tables_aggregator_c(dialect_name, dialect_id, all_ops, include_path=include_path)
+    table_files["tables.h"] = generate_tables_h(dialect_name, all_ops, include_path=include_path)
     return table_files
 
 
@@ -3571,7 +3594,7 @@ def generate_sharded_tables_c(
 # ============================================================================
 
 
-def generate_builders_c(dialect_name: str, ops: Sequence[Op]) -> str:
+def generate_builders_c(dialect_name: str, ops: Sequence[Op], *, include_path: str | None = None) -> str:
     """Generates the builders.c file for a dialect."""
     lines: list[str] = []
     shared_enums = _collect_shared_enums(dialect_name, ops)
@@ -3580,7 +3603,8 @@ def generate_builders_c(dialect_name: str, ops: Sequence[Op]) -> str:
     lines.extend(line_comment_header("//", generator="loom.gen.c_tables"))
     lines.append("// clang-format off")
     lines.append("")
-    lines.append(f'#include "loom/ops/{dialect_name}/ops.h"')
+    include_path = include_path or f"loom/ops/{dialect_name}"
+    lines.append(f'#include "{include_path}/ops.h"')
     lines.append("")
     lines.append("#include <string.h>")
     lines.append("")
@@ -3629,10 +3653,6 @@ def generate_op_registry(
 
     Returns (header_content, source_content).
     """
-    dialect_names: set[str] = set()
-    for dialect, _ops in dialects:
-        dialect_names.add(dialect.name)
-
     # Header.
     header = [GENERATED_HEADER]
     header.append("#ifndef LOOM_OPS_OP_REGISTRY_H_")
@@ -3674,7 +3694,7 @@ def generate_op_registry(
     source.append("#include <stdint.h>")
     source.append("")
     source.append('#include "loom/ops/encoding/families.h"')
-    source.extend(f'#include "loom/ops/{name}/ops.h"' for name in sorted(dialect_names))
+    source.extend(f'#include "{_c_dialect_include_path(dialect)}/ops.h"' for dialect, _ops in sorted(dialects, key=lambda item: item[0].name))
     source.append("")
     source.append("typedef const loom_op_vtable_t* const* (*loom_op_registry_dialect_vtables_fn_t)(")
     source.append("    iree_host_size_t* out_count);")
@@ -4202,6 +4222,7 @@ def main() -> None:
     from loom.dialect.test import ALL_TEST_OPS, test_ops
     from loom.dialect.vector import ALL_VECTOR_OPS, VECTOR_OP_CATEGORY_GROUPS, vector_ops
     from loom.dialect.view import ALL_VIEW_OPS, view_ops
+    from loom.target.arch.amdgpu.dialect import ALL_AMDGPU_OPS, amdgpu_ops
 
     dialects = [
         (test_ops, list(ALL_TEST_OPS), None),
@@ -4222,18 +4243,36 @@ def main() -> None:
         (target_ops, list(ALL_TARGET_OPS), None),
         (low_ops, list(ALL_LOW_OPS), None),
         (pass_ops, list(ALL_PASS_OPS), None),
+        (amdgpu_ops, list(ALL_AMDGPU_OPS), None),
     ]
-    production_dialects = [(dialect, ops) for dialect, ops, _ in dialects if dialect.name != "test"]
+    production_dialects = [(dialect, ops) for dialect, ops, _ in dialects if dialect.register_by_default]
 
-    output_root = _bootstrap.REPO_ROOT / "loom" / "src" / "loom" / "ops"
+    output_root = _bootstrap.REPO_ROOT / "loom" / "src" / "loom"
 
     for dialect, ops, table_shards in dialects:
-        dialect_dir = output_root / dialect.name
+        dialect_dir = output_root / _c_dialect_path(dialect)
         dialect_dir.mkdir(parents=True, exist_ok=True)
+        include_path = _c_dialect_include_path(dialect)
 
         ops_h = generate_ops_h(dialect.name, dialect.dialect_id, ops)
-        table_files = generate_sharded_tables_c(dialect.name, dialect.dialect_id, table_shards) if table_shards is not None else {"tables.c": generate_tables_c(dialect.name, dialect.dialect_id, ops)}
-        builders_c = generate_builders_c(dialect.name, ops)
+        table_files = (
+            generate_sharded_tables_c(
+                dialect.name,
+                dialect.dialect_id,
+                table_shards,
+                include_path=include_path,
+            )
+            if table_shards is not None
+            else {
+                "tables.c": generate_tables_c(
+                    dialect.name,
+                    dialect.dialect_id,
+                    ops,
+                    include_path=include_path,
+                )
+            }
+        )
+        builders_c = generate_builders_c(dialect.name, ops, include_path=include_path)
 
         ops_h_path = dialect_dir / "ops.h"
         builders_c_path = dialect_dir / "builders.c"
@@ -4256,7 +4295,7 @@ def main() -> None:
             path.parent.mkdir(parents=True, exist_ok=True)
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
-        rel = dialect_dir.relative_to(output_root)
+        rel = dialect_dir.relative_to(_bootstrap.REPO_ROOT / "loom" / "src" / "loom")
         print(f"  {dialect.name}: {len(ops)} ops in {rel}/")
 
     # Generate cross-dialect registries.
@@ -4280,7 +4319,7 @@ def main() -> None:
         ("keyword_enum.inc", keyword_enum),
         ("keyword_table.inc", keyword_table),
     ]:
-        path = output_root / filename
+        path = output_root / "ops" / filename
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
 

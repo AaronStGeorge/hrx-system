@@ -65,6 +65,25 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    ops
+  HDRS
+    "ops/ops.h"
+    "ops/registry.h"
+  SRCS
+    "ops/builders.c"
+    "ops/registry.c"
+    "ops/tables.c"
+  DEPS
+    iree::base
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     encoding_defs
   HDRS
     "encoding.h"
@@ -455,6 +474,7 @@ loom_cc_library(
     ::low_registry
     ::lower
     ::occupancy
+    ::ops
     ::packet_diagnostics
     iree::base
     loom::src::loom::target::emit::native::amdgpu::loom_check
@@ -1165,6 +1185,17 @@ iree_executable_test(
     "source_low_table_diagnostics"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_table_diagnostics.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "target_records"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/target_records.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

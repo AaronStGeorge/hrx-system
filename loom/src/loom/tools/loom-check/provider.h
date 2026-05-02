@@ -14,6 +14,7 @@
 #define LOOM_TOOLS_LOOM_CHECK_PROVIDER_H_
 
 #include "iree/base/api.h"
+#include "loom/ir/context.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/low_legality.h"
 #include "loom/target/low_packet_diagnostics.h"
@@ -27,6 +28,10 @@ typedef struct loom_low_lower_policy_registry_t
 typedef struct loom_check_emit_provider_t loom_check_emit_provider_t;
 typedef struct loom_check_requirement_provider_t
     loom_check_requirement_provider_t;
+
+// Registers target-owned dialects contributed by a provider.
+typedef iree_status_t (*loom_check_provider_context_registration_fn_t)(
+    loom_context_t* context);
 
 // Initializes a target-low descriptor registry package. Registry tables are
 // linked into the runner binary and do not allocate.
@@ -42,6 +47,9 @@ typedef void (*loom_check_low_lower_policy_registry_initializer_t)(
 typedef struct loom_check_provider_t {
   // Stable provider name used in diagnostics and help text.
   iree_string_view_t name;
+  // Optional function that registers target-owned dialects with the
+  // loom-check context.
+  loom_check_provider_context_registration_fn_t register_context;
   // Optional function that initializes a target-low descriptor registry
   // package.
   loom_check_low_descriptor_registry_initializer_t
