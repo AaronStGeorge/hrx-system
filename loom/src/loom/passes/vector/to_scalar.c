@@ -58,20 +58,8 @@ static iree_status_t loom_vector_to_scalar_prepare_state(
     loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op,
     const loom_vector_to_scalar_descriptor_t* descriptor,
     uint16_t result_ordinal, loom_vector_to_scalar_state_t* out_state) {
-  if (result_ordinal >= op->result_count) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT, "result ordinal %u out of range for %.*s",
-        (unsigned)result_ordinal, (int)loom_op_name(rewriter->module, op).size,
-        loom_op_name(rewriter->module, op).data);
-  }
   loom_value_id_t result = loom_op_results(op)[result_ordinal];
   loom_type_t result_type = loom_module_value_type(rewriter->module, result);
-  if (!loom_type_is_vector(result_type)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected vector result for %.*s",
-                            (int)loom_op_name(rewriter->module, op).size,
-                            loom_op_name(rewriter->module, op).data);
-  }
   loom_type_t scalar_type = descriptor && descriptor->result_is_i1
                                 ? loom_type_scalar(LOOM_SCALAR_TYPE_I1)
                                 : loom_vector_to_scalar_lane_type(result_type);
@@ -163,10 +151,6 @@ static iree_status_t loom_vector_to_scalar_lower_memory_store_op(
   *out_handled = true;
   loom_value_id_t value = loom_vector_to_scalar_memory_store_value(op);
   loom_type_t vector_type = loom_module_value_type(rewriter->module, value);
-  if (!loom_type_is_vector(vector_type)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected vector value for memory store op");
-  }
   loom_vector_to_scalar_state_t state = {
       .pass = pass,
       .rewriter = rewriter,
@@ -186,10 +170,6 @@ static iree_status_t loom_vector_to_scalar_lower_store_compress_op(
   *out_handled = true;
   loom_value_id_t value = loom_vector_store_compress_value(op);
   loom_type_t vector_type = loom_module_value_type(rewriter->module, value);
-  if (!loom_type_is_vector(vector_type)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected vector value for vector.store.compress");
-  }
   loom_vector_to_scalar_state_t state = {
       .pass = pass,
       .rewriter = rewriter,
@@ -210,10 +190,6 @@ static iree_status_t loom_vector_to_scalar_lower_atomic_reduce_op(
   *out_handled = true;
   loom_value_id_t value = loom_vector_to_scalar_atomic_reduce_value(op);
   loom_type_t vector_type = loom_module_value_type(rewriter->module, value);
-  if (!loom_type_is_vector(vector_type)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected vector value for vector.atomic.reduce");
-  }
   loom_vector_to_scalar_state_t state = {
       .pass = pass,
       .rewriter = rewriter,
@@ -234,10 +210,6 @@ static iree_status_t loom_vector_to_scalar_lower_atomic_rmw_op(
   *out_handled = true;
   loom_type_t vector_type =
       loom_module_value_type(rewriter->module, loom_op_results(op)[0]);
-  if (!loom_type_is_vector(vector_type)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected vector result for vector.atomic.rmw");
-  }
   loom_vector_to_scalar_state_t state = {
       .pass = pass,
       .rewriter = rewriter,
@@ -259,10 +231,6 @@ static iree_status_t loom_vector_to_scalar_lower_atomic_cmpxchg_op(
   *out_handled = true;
   loom_type_t vector_type =
       loom_module_value_type(rewriter->module, loom_op_results(op)[0]);
-  if (!loom_type_is_vector(vector_type)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected vector result for vector.atomic.cmpxchg");
-  }
   loom_vector_to_scalar_state_t state = {
       .pass = pass,
       .rewriter = rewriter,
@@ -335,10 +303,7 @@ static iree_status_t loom_vector_to_scalar_lower_static_constant(
   };
 
   iree_host_size_t element_count = 0;
-  if (!loom_type_static_element_count(result_type, &element_count)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected all-static vector.constant type");
-  }
+  loom_type_static_element_count(result_type, &element_count);
   loom_value_id_t* elements = NULL;
   if (element_count > 0) {
     IREE_RETURN_IF_ERROR(
@@ -377,10 +342,7 @@ static iree_status_t loom_vector_to_scalar_lower_static_poison(
   };
 
   iree_host_size_t element_count = 0;
-  if (!loom_type_static_element_count(result_type, &element_count)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected all-static vector.poison type");
-  }
+  loom_type_static_element_count(result_type, &element_count);
   loom_value_id_t* elements = NULL;
   if (element_count > 0) {
     IREE_RETURN_IF_ERROR(
@@ -408,10 +370,6 @@ static iree_status_t loom_vector_to_scalar_lower_deinterleave(
   const loom_vector_to_scalar_descriptor_t* descriptor =
       loom_vector_to_scalar_find_descriptor(op->kind);
   if (!descriptor) return iree_ok_status();
-  if (op->result_count != 2) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.deinterleave must have two results");
-  }
 
   loom_value_id_t replacements[2] = {LOOM_VALUE_ID_INVALID,
                                      LOOM_VALUE_ID_INVALID};
