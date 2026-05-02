@@ -121,22 +121,22 @@ def _batched_transpose_input(
 
 # ====
 @tilelang_case(
-    name="tilekernels_batched_transpose_gfx942",
+    name="tilekernels_batched_transpose_gfx950",
     category="kernel",
     tags=("tilekernels", "transpose", "amdgpu"),
 )
-def tilekernels_batched_transpose_gfx942(
+def tilekernels_batched_transpose_gfx950(
     tilelang: Any,
     T: Any,
 ) -> TileLangImportInput:
-    return _batched_transpose_input(tilelang, T, target="hip -mcpu=gfx942")
+    return _batched_transpose_input(tilelang, T, target="hip -mcpu=gfx950")
 
 
 # ----
 r"""
-target.generic<reference> @hip_mcpu_gfx942
+amdgpu.target<gfx950> @hip_mcpu_gfx950
 
-kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") workgroup_size(256, 1, 1) @batched_transpose_kernel(%x_handle: buffer, %out_handle: buffer, %num_batches: i32, %shape_x: i32, %shape_y: i32, %stride_x: i32) {
+kernel.def target(@hip_mcpu_gfx950) export("batched_transpose_kernel") workgroup_size(256, 1, 1) @batched_transpose_kernel(%x_handle: buffer, %out_handle: buffer, %num_batches: i32, %shape_x: i32, %shape_y: i32, %stride_x: i32) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %x = buffer.view %x_handle[%c0_bytes] : buffer -> view<[%num_batches]x[%shape_x]x[%shape_y]xf16, %layout>
