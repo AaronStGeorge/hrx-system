@@ -49,32 +49,6 @@ py_test(
     deps = [":mlir"],
 )
 
-filegroup(
-    name = "tests",
-    srcs = [
-        "testdata/vector_reduce_amdgpu.mlir",
-    ],
-)
-
-py_test(
-    name = "mlir_import_test",
-    srcs = ["//loom/py/loom/importers/check:import_test.py"],
-    args = [
-        "mlir",
-        "--fail-on-skip",
-        "$(locations :tests)",
-    ],
-    data = [":tests"],
-    main = "import_test.py",
-    target_compatible_with = _MLIR_IMPORTER_COMPATIBLE,
-    deps = [
-        ":mlir",
-        "//loom/py/loom/importers/check",
-        "//loom/py/loom/importers/check/tilelang",
-        "//loom/py/loom/importers/mlir:mlir_packages",
-    ],
-)
-
 iree_cmake_extra_content(
     content = """
 endif()

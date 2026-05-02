@@ -18,6 +18,8 @@ from loom.fields import FieldKind, FieldLayout, compute_layout, resolve_fields
 from loom.ir import (
     Block,
     BufferType,
+    DynamicDim,
+    DynamicEncoding,
     EncodingRole,
     EncodingType,
     GroupType,
@@ -607,6 +609,36 @@ class ModuleVerifier:
 
     def _verify_value_bindings(self, value: Any, value_id: int, source: str) -> bool:
         ok = True
+        required_dim_positions = set(_dynamic_dim_positions(value.type))
+        provided_dim_positions = set(value.dim_bindings)
+        missing_dim_positions = sorted(required_dim_positions - provided_dim_positions)
+        if missing_dim_positions:
+            positions = ", ".join(str(position) for position in missing_dim_positions)
+            self.diagnostics.error(
+                "dynamic dimension has no SSA binding",
+                source=source,
+                details=(
+                    f"value {value_id} has dynamic dimension position(s) "
+                    f"{positions} without dim_bindings entries",
+                ),
+            )
+            ok = False
+        unexpected_dim_positions = sorted(
+            provided_dim_positions - required_dim_positions
+        )
+        if unexpected_dim_positions:
+            positions = ", ".join(
+                str(position) for position in unexpected_dim_positions
+            )
+            self.diagnostics.error(
+                "static dimension has unexpected SSA binding",
+                source=source,
+                details=(
+                    f"value {value_id} has dim_bindings entries for "
+                    f"non-dynamic dimension position(s) {positions}",
+                ),
+            )
+            ok = False
         for dim_position, binding_id in value.dim_bindings.items():
             if binding_id < 0 or binding_id >= len(self.module.values):
                 self.diagnostics.error(
@@ -618,6 +650,13 @@ class ModuleVerifier:
                     ),
                 )
                 ok = False
+        if _has_dynamic_encoding(value.type) and value.encoding_binding < 0:
+            self.diagnostics.error(
+                "dynamic encoding has no SSA binding",
+                source=source,
+                details=(f"value {value_id} has dynamic encoding without binding",),
+            )
+            ok = False
         if value.encoding_binding >= 0 and value.encoding_binding >= len(
             self.module.values
         ):
@@ -631,6 +670,26 @@ class ModuleVerifier:
             )
             ok = False
         return ok
+
+
+def _dynamic_dim_positions(value_type: Type) -> tuple[int, ...]:
+    if isinstance(value_type, ShapedType):
+        return tuple(
+            position
+            for position, dim in enumerate(value_type.dims)
+            if isinstance(dim, DynamicDim)
+        )
+    if isinstance(value_type, PoolType) and isinstance(
+        value_type.block_size, DynamicDim
+    ):
+        return (0,)
+    return ()
+
+
+def _has_dynamic_encoding(value_type: Type) -> bool:
+    return isinstance(value_type, ShapedType) and isinstance(
+        value_type.encoding, DynamicEncoding
+    )
 
 
 def verify_module(

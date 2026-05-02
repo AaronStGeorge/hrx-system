@@ -10,7 +10,23 @@ from loom.dialect.test import ALL_TEST_OPS
 from loom.format.bytecode.reader import read_module
 from loom.format.bytecode.writer import write_module
 from loom.format.text.parser import Parser
-from loom.ir import F32, I32, Block, Module, Operation, Region, Symbol, Value
+from loom.ir import (
+    ENCODING_LAYOUT_TYPE,
+    F32,
+    I32,
+    INDEX,
+    Block,
+    DynamicDim,
+    DynamicEncoding,
+    Module,
+    Operation,
+    Region,
+    ShapedType,
+    StaticDim,
+    Symbol,
+    TypeKind,
+    Value,
+)
 from loom.verify import verify_module
 
 
@@ -102,6 +118,78 @@ def test_verifier_reports_unresolved_symbol_ref() -> None:
     diagnostics = verify_module(module, ops=ALL_TEST_OPS)
 
     assert _diagnostic_text_contains(diagnostics, "unresolved symbol reference")
+
+
+def test_verifier_reports_missing_dynamic_dim_binding() -> None:
+    module = Module()
+    value_type = ShapedType(TypeKind.VIEW, F32, (DynamicDim(),))
+    value = module.add_value(Value("view", value_type))
+    module = _module_with_body_ops(
+        Operation(name="test.use", operands=[value]),
+        module=module,
+    )
+
+    diagnostics = verify_module(module, ops=ALL_TEST_OPS)
+
+    assert _diagnostic_text_contains(
+        diagnostics, "dynamic dimension has no SSA binding"
+    )
+
+
+def test_verifier_reports_unexpected_dynamic_dim_binding() -> None:
+    module = Module()
+    size = module.add_value(Value("size", INDEX))
+    value_type = ShapedType(TypeKind.VIEW, F32, (StaticDim(4),))
+    value = module.add_value(Value("view", value_type, dim_bindings={0: size}))
+    module = _module_with_body_ops(
+        Operation(name="test.use", operands=[value]),
+        module=module,
+    )
+
+    diagnostics = verify_module(module, ops=ALL_TEST_OPS)
+
+    assert _diagnostic_text_contains(
+        diagnostics, "static dimension has unexpected SSA binding"
+    )
+
+
+def test_verifier_reports_missing_dynamic_encoding_binding() -> None:
+    module = Module()
+    value_type = ShapedType(
+        TypeKind.VIEW,
+        F32,
+        (StaticDim(4),),
+        encoding=DynamicEncoding(),
+    )
+    value = module.add_value(Value("view", value_type))
+    module = _module_with_body_ops(
+        Operation(name="test.use", operands=[value]),
+        module=module,
+    )
+
+    diagnostics = verify_module(module, ops=ALL_TEST_OPS)
+
+    assert _diagnostic_text_contains(diagnostics, "dynamic encoding has no SSA binding")
+
+
+def test_verifier_accepts_dynamic_encoding_binding() -> None:
+    module = Module()
+    layout = module.add_value(Value("layout", ENCODING_LAYOUT_TYPE))
+    value_type = ShapedType(
+        TypeKind.VIEW,
+        F32,
+        (StaticDim(4),),
+        encoding=DynamicEncoding(),
+    )
+    value = module.add_value(Value("view", value_type, encoding_binding=layout))
+    module = _module_with_body_ops(
+        Operation(name="test.use", operands=[value]),
+        module=module,
+    )
+
+    diagnostics = verify_module(module, ops=ALL_TEST_OPS)
+
+    assert not diagnostics.has_errors
 
 
 def test_text_parser_can_verify_parsed_module() -> None:

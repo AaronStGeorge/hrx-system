@@ -59,13 +59,13 @@ def vector_float_trunc_store(tir: Any) -> TileLangImportInput:
 #
 # kernel.def target(@hip) export("vector_float_trunc_store") workgroup_size(1, 1, 1) @vector_float_trunc_store(%src: buffer, %dst: buffer) {
 #   %c0_bytes = index.constant 0 : offset
-#   %src = buffer.view %src[%c0_bytes] : buffer -> view<16xf32>
-#   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<16xf16>
+#   %layout = encoding.layout.dense : encoding<layout>
+#   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>
+#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf16, %layout>
 #   %c = index.constant 0 : index
-#   %load = vector.load %src[%c] : view<16xf32> -> vector<4xf32>
+#   %load = vector.load %src_view[%c] : view<16xf32, %layout> -> vector<4xf32>
 #   %fptrunc = vector.fptrunc %load : vector<4xf32> to vector<4xf16>
-#   %c_2 = index.constant 0 : index
-#   vector.store %fptrunc, %dst[%c_2] : vector<4xf16>, view<16xf16>
+#   vector.store %fptrunc, %dst_view[%c] : vector<4xf16>, view<16xf16, %layout>
 #   kernel.return
 # }
 
@@ -104,13 +104,13 @@ def scalar_reinterpret_store(tir: Any) -> TileLangImportInput:
 #
 # kernel.def target(@hip) export("scalar_reinterpret_store") workgroup_size(1, 1, 1) @scalar_reinterpret_store(%src: buffer, %dst: buffer) {
 #   %c0_bytes = index.constant 0 : offset
-#   %src = buffer.view %src[%c0_bytes] : buffer -> view<4xf32>
-#   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<4xi32>
+#   %layout = encoding.layout.dense : encoding<layout>
+#   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
+#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xi32, %layout>
 #   %c = index.constant 0 : index
-#   %load = view.load %src[%c] : view<4xf32> -> f32
+#   %load = view.load %src_view[%c] : view<4xf32, %layout> -> f32
 #   %bitcast = scalar.bitcast %load : f32 to i32
-#   %c_2 = index.constant 0 : index
-#   view.store %bitcast, %dst[%c_2] : i32, view<4xi32>
+#   view.store %bitcast, %dst_view[%c] : i32, view<4xi32, %layout>
 #   kernel.return
 # }
 
@@ -147,13 +147,13 @@ def vector_reinterpret_store(tir: Any) -> TileLangImportInput:
 #
 # kernel.def target(@hip) export("vector_reinterpret_store") workgroup_size(1, 1, 1) @vector_reinterpret_store(%src: buffer, %dst: buffer) {
 #   %c0_bytes = index.constant 0 : offset
-#   %src = buffer.view %src[%c0_bytes] : buffer -> view<16xf32>
-#   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<16xi32>
+#   %layout = encoding.layout.dense : encoding<layout>
+#   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>
+#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xi32, %layout>
 #   %c = index.constant 0 : index
-#   %load = vector.load %src[%c] : view<16xf32> -> vector<4xf32>
+#   %load = vector.load %src_view[%c] : view<16xf32, %layout> -> vector<4xf32>
 #   %bitcast = vector.bitcast %load : vector<4xf32> to vector<4xi32>
-#   %c_2 = index.constant 0 : index
-#   vector.store %bitcast, %dst[%c_2] : vector<4xi32>, view<16xi32>
+#   vector.store %bitcast, %dst_view[%c] : vector<4xi32>, view<16xi32, %layout>
 #   kernel.return
 # }
 
@@ -190,12 +190,12 @@ def vector_int_to_float_store(tir: Any) -> TileLangImportInput:
 #
 # kernel.def target(@hip) export("vector_int_to_float_store") workgroup_size(1, 1, 1) @vector_int_to_float_store(%src: buffer, %dst: buffer) {
 #   %c0_bytes = index.constant 0 : offset
-#   %src = buffer.view %src[%c0_bytes] : buffer -> view<16xi32>
-#   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32>
+#   %layout = encoding.layout.dense : encoding<layout>
+#   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xi32, %layout>
+#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
 #   %c = index.constant 0 : index
-#   %load = vector.load %src[%c] : view<16xi32> -> vector<4xi32>
+#   %load = vector.load %src_view[%c] : view<16xi32, %layout> -> vector<4xi32>
 #   %sitofp = vector.sitofp %load : vector<4xi32> to vector<4xf32>
-#   %c_2 = index.constant 0 : index
-#   vector.store %sitofp, %dst[%c_2] : vector<4xf32>, view<16xf32>
+#   vector.store %sitofp, %dst_view[%c] : vector<4xf32>, view<16xf32, %layout>
 #   kernel.return
 # }

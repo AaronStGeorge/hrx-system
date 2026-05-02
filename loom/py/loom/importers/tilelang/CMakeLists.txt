@@ -60,6 +60,50 @@ iree_py_test(
     "${IREE_BINARY_DIR}/runtime/py"
 )
 
+add_custom_command(OUTPUT import_tests.stamp
+    COMMAND ${CMAKE_COMMAND} -E touch import_tests.stamp
+  DEPENDS
+    "testdata/allocations.py"
+    "testdata/analysis.py"
+    "testdata/control_flow.py"
+    "testdata/diagnostics.py"
+    "testdata/memory_effects.py"
+    "testdata/scalar_calls.py"
+    "testdata/tilekernels.py"
+    "testdata/topology.py"
+    "testdata/vector_arithmetic.py"
+    "testdata/vector_casts.py"
+    "testdata/vector_memory.py"
+)
+
+add_custom_target(import_tests
+    DEPENDS import_tests.stamp
+)
+
+iree_py_test(
+  NAME
+    tilelang_import_test
+  SRCS
+    "../check/import_test.py"
+  ARGS
+    "tilelang"
+    "--fail-on-skip"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/allocations.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/analysis.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/control_flow.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/diagnostics.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/memory_effects.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/scalar_calls.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/tilekernels.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/topology.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/vector_arithmetic.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/vector_casts.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/vector_memory.py"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
+)
+
 endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

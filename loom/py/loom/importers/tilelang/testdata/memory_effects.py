@@ -60,10 +60,11 @@ def scalar_atomic_add(tir: Any) -> TileLangImportInput:
 #
 # kernel.def target(@hip) export("scalar_atomic_add") workgroup_size(1, 1, 1) @scalar_atomic_add(%dst: buffer) {
 #   %c0_bytes = index.constant 0 : offset
-#   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<4xi32>
+#   %layout = encoding.layout.dense : encoding<layout>
+#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xi32, %layout>
 #   %const = scalar.constant 1 : i32
 #   %c = index.constant 0 : index
-#   view.atomic.reduce<addi> %const, %dst[%c] {ordering = relaxed, scope = device} : i32, view<4xi32>
+#   view.atomic.reduce<addi> %const, %dst_view[%c] {ordering = relaxed, scope = device} : i32, view<4xi32, %layout>
 #   kernel.return
 # }
 
@@ -104,11 +105,12 @@ def scalar_atomic_add_return(tir: Any) -> TileLangImportInput:
 #
 # kernel.def target(@hip) export("scalar_atomic_add_return") workgroup_size(1, 1, 1) @scalar_atomic_add_return(%dst: buffer) {
 #   %c0_bytes = index.constant 0 : offset
-#   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<4xi32>
+#   %layout = encoding.layout.dense : encoding<layout>
+#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xi32, %layout>
 #   %const = scalar.constant 1 : i32
 #   %c = index.constant 0 : index
-#   %atomic_add = view.atomic.rmw<addi> %const, %dst[%c] {ordering = acquire, scope = device} : i32, view<4xi32> -> i32
+#   %atomic_add = view.atomic.rmw<addi> %const, %dst_view[%c] {ordering = acquire, scope = device} : i32, view<4xi32, %layout> -> i32
 #   %c_2 = index.constant 1 : index
-#   view.store %atomic_add, %dst[%c_2] : i32, view<4xi32>
+#   view.store %atomic_add, %dst_view[%c_2] : i32, view<4xi32, %layout>
 #   kernel.return
 # }

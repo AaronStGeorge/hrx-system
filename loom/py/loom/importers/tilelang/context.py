@@ -16,7 +16,14 @@ from loom.builder import ValueRef
 from loom.importers.core import SourceImportSession
 from loom.importers.tilelang.nodes import dtype, node_kind, source_name
 from loom.importers.tilelang.types import TileLangTypeConverter
-from loom.ir import INDEX, OFFSET, Type
+from loom.ir import (
+    ENCODING_LAYOUT_TYPE,
+    INDEX,
+    OFFSET,
+    DynamicEncoding,
+    ShapedType,
+    Type,
+)
 
 
 @dataclass(slots=True)
@@ -31,9 +38,38 @@ class TileLangConversionContext(SourceImportSession):
         default_factory=dict
     )
     kernel_body_block: object | None = None
+    dense_layout: ValueRef | None = None
 
     def type(self, value_type: str) -> Type:
         return self.type_converter.map_dtype(value_type)
+
+    def default_address_layout(self) -> ValueRef:
+        if self.dense_layout is None:
+            self.dense_layout = self.builder.encoding.layout_dense(
+                results=[ENCODING_LAYOUT_TYPE],
+                name=self.reserve_name("layout"),
+            )
+        return self.dense_layout
+
+    def buffer_view_type(self, buffer: object) -> ShapedType:
+        view_type = self.type_converter.view_type(buffer)
+        if view_type.encoding is not None:
+            return view_type
+        self.default_address_layout()
+        return ShapedType(
+            view_type.type_kind,
+            view_type.element_type,
+            view_type.dims,
+            encoding=DynamicEncoding(),
+        )
+
+    def bind_buffer_view_layout(self, view: ValueRef) -> None:
+        view_value = self.builder.module.values[view.id]
+        view_type = view_value.type
+        if isinstance(view_type, ShapedType) and isinstance(
+            view_type.encoding, DynamicEncoding
+        ):
+            view_value.encoding_binding = self.default_address_layout().id
 
     def build_constant(self, value: Any, value_type: str, name: str) -> ValueRef:
         result_type = self.type_converter.map_dtype(
@@ -123,6 +159,7 @@ class TileLangConversionContext(SourceImportSession):
             semantic_value_types=dict(self.semantic_value_types),
             semantic_index_values=dict(self.semantic_index_values),
             kernel_body_block=self.kernel_body_block,
+            dense_layout=self.dense_layout,
         )
 
 

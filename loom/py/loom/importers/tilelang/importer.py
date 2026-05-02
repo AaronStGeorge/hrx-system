@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from loom.builder import ValueRef
 from loom.diagnostics import DiagnosticEngine
 from loom.importers.core import (
     ImportBodyReport,
@@ -36,7 +37,7 @@ from loom.importers.tilelang.nodes import (
 )
 from loom.importers.tilelang.ops.topology import collect_thread_extents, integer_value
 from loom.importers.tilelang.types import TileLangTypeConverter
-from loom.ir import Module, rebuild_value_metadata
+from loom.ir import DynamicDim, Module, ShapedType, rebuild_value_metadata
 from loom.verify import verify_module
 
 
@@ -212,18 +213,25 @@ def _map_kernel_arguments(
     zero = context.ensure_constant("0", "offset", "c0_bytes")
     for binding in bindings:
         argument = shell.arguments_by_ordinal[binding.ordinal]
-        if binding.buffer is None:
-            context.map_value(binding.source, argument, str(argument.type))
-            for alias in binding.aliases:
-                context.map_value(alias, argument, str(argument.type))
+        if binding.buffer is not None:
             continue
-        view_type = context.type_converter.view_type(binding.buffer)
+        context.map_value(binding.source, argument, str(argument.type))
+        for alias in binding.aliases:
+            context.map_value(alias, argument, str(argument.type))
+
+    for binding in bindings:
+        if binding.buffer is None:
+            continue
+        argument = shell.arguments_by_ordinal[binding.ordinal]
+        view_type = context.buffer_view_type(binding.buffer)
         view = context.builder.buffer.view(
             buffer=argument,
             byte_offset=zero,
             results=[view_type],
-            name=binding.name,
+            name=_buffer_view_name(binding, context),
         )
+        context.bind_buffer_view_layout(view)
+        _bind_dynamic_view_dimensions(context, view, binding.buffer, view_type)
         context.map_value(binding.source, view, str(view_type))
         context.map_value(binding.buffer, view, str(view_type))
         data = getattr(binding.buffer, "data", None)
@@ -233,6 +241,44 @@ def _map_kernel_arguments(
             f"param {binding.name}",
             f"{context.ssa(view)} = buffer.view",
         )
+
+
+def _buffer_view_name(
+    binding: TileLangBinding,
+    context: TileLangConversionContext,
+) -> str:
+    base_name = binding.name.removesuffix("_handle")
+    if base_name == binding.name:
+        base_name = f"{binding.name}_view"
+    return context.reserve_name(base_name)
+
+
+def _bind_dynamic_view_dimensions(
+    context: TileLangConversionContext,
+    view: ValueRef,
+    buffer: object,
+    view_type: ShapedType,
+) -> None:
+    dim_bindings: dict[int, int] = {}
+    shape = tuple(getattr(buffer, "shape", ()) or ())
+    for position, dim in enumerate(view_type.dims):
+        if not isinstance(dim, DynamicDim):
+            continue
+        if position >= len(shape):
+            raise ValueError("dynamic TileLang buffer dimension has no source shape")
+        source_dim = shape[position]
+        mapped_dim = context.mapped(source_dim)
+        if mapped_dim is None:
+            mapped_dim = context.mapped_index_value(source_dim)
+        if mapped_dim is None:
+            name = source_name(source_dim, fallback=str(source_dim))
+            raise ValueError(
+                f"dynamic TileLang buffer dimension `{name}` was not imported "
+                "as a kernel ABI value"
+            )
+        dim_bindings[position] = mapped_dim.id
+    if dim_bindings:
+        context.builder.module.values[view.id].dim_bindings = dim_bindings
 
 
 def _workgroup_size(prim_func: object) -> tuple[int, int, int]:

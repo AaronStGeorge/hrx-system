@@ -40,23 +40,6 @@ if(LOOM_IMPORTER_TILELANG)
     inline = True,
 )
 
-filegroup(
-    name = "tests",
-    srcs = [
-        "testdata/allocations.py",
-        "testdata/analysis.py",
-        "testdata/control_flow.py",
-        "testdata/diagnostics.py",
-        "testdata/memory_effects.py",
-        "testdata/scalar_calls.py",
-        "testdata/tilekernels.py",
-        "testdata/topology.py",
-        "testdata/vector_arithmetic.py",
-        "testdata/vector_casts.py",
-        "testdata/vector_memory.py",
-    ],
-)
-
 py_test(
     name = "tilelang_test",
     srcs = [
@@ -74,25 +57,6 @@ py_test(
     target_compatible_with = _TILELANG_IMPORTER_COMPATIBLE,
     deps = [
         ":tilelang",
-        "//loom/py/loom/importers/tilelang:tilelang_packages",
-    ],
-)
-
-py_test(
-    name = "tilelang_import_test",
-    srcs = ["//loom/py/loom/importers/check:import_test.py"],
-    args = [
-        "tilelang",
-        "--fail-on-skip",
-        "$(locations :tests)",
-    ],
-    data = [":tests"],
-    main = "import_test.py",
-    target_compatible_with = _TILELANG_IMPORTER_COMPATIBLE,
-    deps = [
-        ":tilelang",
-        "//loom/py/loom/importers/check",
-        "//loom/py/loom/importers/check/mlir",
         "//loom/py/loom/importers/tilelang:tilelang_packages",
     ],
 )

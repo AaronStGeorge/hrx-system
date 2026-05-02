@@ -132,13 +132,13 @@ the test environment matches CI.
 iree-bazel-test --config=asan //loom/py/loom/importers/check:check_test
 iree-bazel-test --config=asan \\
     --config=loom-importer-mlir \\
-    //loom/py/loom/importers/check/mlir:mlir_import_test
+    //loom/py/loom/importers/mlir:mlir_import_test
 iree-bazel-test --config=asan \\
     --config=loom-importer-tilelang \\
     //loom/py/loom/importers/check/tilelang:tilelang_test
 iree-bazel-test --config=asan \\
     --config=loom-importer-tilelang \\
-    //loom/py/loom/importers/check/tilelang:tilelang_import_test
+    //loom/py/loom/importers/tilelang:tilelang_import_test
 ```
 
 Importer-specific tests are disabled by default because the frontend packages
@@ -179,8 +179,9 @@ cases with `# ====`. Each case compares imported Loom IR against the inline
 `# ----` section. Run update mode after intentional importer output changes
 instead of editing the expected Loom IR by hand.
 
-Importer check file sets belong in BUILD filegroups and are passed to the test
-runner with `$(locations ...)`. Do not hardcode testdata paths in Python tests.
+Importer check file sets belong in BUILD filegroups under the importer they
+exercise and are passed to the test runner with `$(locations ...)`. Do not
+hardcode testdata paths in Python tests.
 
 Expected diagnostics use loom-check-style source annotations:
 

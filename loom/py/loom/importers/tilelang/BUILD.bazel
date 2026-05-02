@@ -152,6 +152,42 @@ py_test(
     ],
 )
 
+filegroup(
+    name = "import_tests",
+    srcs = [
+        "testdata/allocations.py",
+        "testdata/analysis.py",
+        "testdata/control_flow.py",
+        "testdata/diagnostics.py",
+        "testdata/memory_effects.py",
+        "testdata/scalar_calls.py",
+        "testdata/tilekernels.py",
+        "testdata/topology.py",
+        "testdata/vector_arithmetic.py",
+        "testdata/vector_casts.py",
+        "testdata/vector_memory.py",
+    ],
+)
+
+py_test(
+    name = "tilelang_import_test",
+    srcs = ["//loom/py/loom/importers/check:import_test.py"],
+    args = [
+        "tilelang",
+        "--fail-on-skip",
+        "$(locations :import_tests)",
+    ],
+    data = [":import_tests"],
+    main = "import_test.py",
+    target_compatible_with = _TILELANG_IMPORTER_COMPATIBLE,
+    deps = [
+        ":tilelang_packages",
+        "//loom/py/loom/importers/check",
+        "//loom/py/loom/importers/check/mlir",
+        "//loom/py/loom/importers/check/tilelang",
+    ],
+)
+
 iree_cmake_extra_content(
     content = """
 endif()

@@ -9,13 +9,13 @@ For importer fixture verification:
 iree-bazel-test --config=asan //loom/py/loom/importers/check:check_test
 iree-bazel-test --config=asan \
     --config=loom-importer-mlir \
-    //loom/py/loom/importers/check/mlir:mlir_import_test
+    //loom/py/loom/importers/mlir:mlir_import_test
 iree-bazel-test --config=asan \
     --config=loom-importer-tilelang \
     //loom/py/loom/importers/check/tilelang:tilelang_test
 iree-bazel-test --config=asan \
     --config=loom-importer-tilelang \
-    //loom/py/loom/importers/check/tilelang:tilelang_import_test
+    //loom/py/loom/importers/tilelang:tilelang_import_test
 ```
 
 Importer-specific tests are disabled by default because the frontend packages
@@ -56,9 +56,10 @@ Python fixture files keep shared imports at the top, split cases with
 Use update mode after intentional importer output changes instead of editing
 the expected Loom IR by hand.
 
-Importer check file sets are owned by BUILD filegroups. Add new checked fixture
-files to the relevant filegroup and pass them through the test target with
-`$(locations ...)`; do not hardcode testdata paths inside Python tests.
+Importer check file sets are owned by BUILD filegroups under the importer they
+exercise. Add new checked fixture files to the relevant importer filegroup and
+pass them through the test target with `$(locations ...)`; do not hardcode
+testdata paths inside Python tests.
 
 Expected diagnostics use source annotations instead of bespoke test callbacks:
 

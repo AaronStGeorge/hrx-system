@@ -59,12 +59,14 @@ def map_alloc_buffer(
         results=[BUFFER_TYPE],
         name=context.fresh_name(f"{buffer_name}_buffer"),
     )
+    view_type = context.buffer_view_type(buffer)
     view = context.builder.buffer.view(
         buffer=root,
         byte_offset=context.ensure_constant("0", "offset", "c0_bytes"),
-        results=[context.type_converter.view_type(buffer)],
+        results=[view_type],
         name=context.fresh_name(buffer_name),
     )
+    context.bind_buffer_view_layout(view)
     context.map_value(buffer, view, str(view.type))
     data = getattr(buffer, "data", None)
     if data is not None:

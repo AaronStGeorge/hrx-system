@@ -76,6 +76,30 @@ iree_py_test(
     "${IREE_BINARY_DIR}/runtime/py"
 )
 
+add_custom_command(OUTPUT import_tests.stamp
+    COMMAND ${CMAKE_COMMAND} -E touch import_tests.stamp
+  DEPENDS
+    "testdata/vector_reduce_amdgpu.mlir"
+)
+
+add_custom_target(import_tests
+    DEPENDS import_tests.stamp
+)
+
+iree_py_test(
+  NAME
+    mlir_import_test
+  SRCS
+    "../check/import_test.py"
+  ARGS
+    "mlir"
+    "--fail-on-skip"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/mlir/testdata/vector_reduce_amdgpu.mlir"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
+)
+
 endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

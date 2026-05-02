@@ -46,15 +46,15 @@ def vector_add_store(tir: Any) -> TileLangImportInput:
 #
 # kernel.def target(@hip) export("vector_add_store") workgroup_size(1, 1, 1) @vector_add_store(%src: buffer, %dst: buffer) {
 #   %c0_bytes = index.constant 0 : offset
-#   %src = buffer.view %src[%c0_bytes] : buffer -> view<16xf32>
-#   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32>
+#   %layout = encoding.layout.dense : encoding<layout>
+#   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>
+#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
 #   %c = index.constant 0 : index
-#   %load = vector.load %src[%c] : view<16xf32> -> vector<4xf32>
+#   %load = vector.load %src_view[%c] : view<16xf32, %layout> -> vector<4xf32>
 #   %const = scalar.constant 2.0 : f32
 #   %splat = vector.splat %const : vector<4xf32>
 #   %addf = vector.addf %load, %splat : vector<4xf32>
-#   %c_2 = index.constant 0 : index
-#   vector.store %addf, %dst[%c_2] : vector<4xf32>, view<16xf32>
+#   vector.store %addf, %dst_view[%c] : vector<4xf32>, view<16xf32, %layout>
 #   kernel.return
 # }
 
@@ -92,10 +92,11 @@ def vector_select_store(tir: Any) -> TileLangImportInput:
 #
 # kernel.def target(@hip) export("vector_select_store") workgroup_size(1, 1, 1) @vector_select_store(%src: buffer, %dst: buffer) {
 #   %c0_bytes = index.constant 0 : offset
-#   %src = buffer.view %src[%c0_bytes] : buffer -> view<16xf32>
-#   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32>
+#   %layout = encoding.layout.dense : encoding<layout>
+#   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>
+#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
 #   %c = index.constant 0 : index
-#   %load = vector.load %src[%c] : view<16xf32> -> vector<4xf32>
+#   %load = vector.load %src_view[%c] : view<16xf32, %layout> -> vector<4xf32>
 #   %const = scalar.constant 0.0 : f32
 #   %splat = vector.splat %const : vector<4xf32>
 #   %cmp = vector.cmpf olt, %load, %splat : vector<4xf32> -> vector<4xi1>
@@ -104,7 +105,6 @@ def vector_select_store(tir: Any) -> TileLangImportInput:
 #   %const_3 = scalar.constant -1.0 : f32
 #   %splat_3 = vector.splat %const_3 : vector<4xf32>
 #   %select = vector.select %cmp, %splat_2, %splat_3 : vector<4xf32>
-#   %c_2 = index.constant 0 : index
-#   vector.store %select, %dst[%c_2] : vector<4xf32>, view<16xf32>
+#   vector.store %select, %dst_view[%c] : vector<4xf32>, view<16xf32, %layout>
 #   kernel.return
 # }

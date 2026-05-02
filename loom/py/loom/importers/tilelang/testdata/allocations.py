@@ -67,17 +67,16 @@ def shared_block_alloc(tir: Any) -> TileLangImportInput:
 #
 # kernel.def target(@hip) export("shared_block_alloc") workgroup_size(1, 1, 1) @shared_block_alloc(%dst: buffer) {
 #   %c0_bytes = index.constant 0 : offset
-#   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<4xf32>
+#   %layout = encoding.layout.dense : encoding<layout>
+#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xf32, %layout>
 #   %scratch_bytes = index.constant 16 : offset
 #   %scratch_buffer = buffer.alloca %scratch_bytes {base_alignment = 4, memory_space = workgroup} : buffer
-#   %scratch = buffer.view %scratch_buffer[%c0_bytes] : buffer -> view<4xf32>
+#   %scratch = buffer.view %scratch_buffer[%c0_bytes] : buffer -> view<4xf32, %layout>
 #   %const = scalar.constant 1.0 : f32
 #   %c = index.constant 0 : index
-#   view.store %const, %scratch[%c] : f32, view<4xf32>
-#   %c_2 = index.constant 0 : index
-#   %load = view.load %scratch[%c_2] : view<4xf32> -> f32
-#   %c_3 = index.constant 0 : index
-#   view.store %load, %dst[%c_3] : f32, view<4xf32>
+#   view.store %const, %scratch[%c] : f32, view<4xf32, %layout>
+#   %load = view.load %scratch[%c] : view<4xf32, %layout> -> f32
+#   view.store %load, %dst_view[%c] : f32, view<4xf32, %layout>
 #   kernel.return
 # }
 
@@ -126,16 +125,15 @@ def private_block_alloc(tir: Any) -> TileLangImportInput:
 #
 # kernel.def target(@hip) export("private_block_alloc") workgroup_size(1, 1, 1) @private_block_alloc(%dst: buffer) {
 #   %c0_bytes = index.constant 0 : offset
-#   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<4xi32>
+#   %layout = encoding.layout.dense : encoding<layout>
+#   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xi32, %layout>
 #   %scratch_bytes = index.constant 16 : offset
 #   %scratch_buffer = buffer.alloca %scratch_bytes {base_alignment = 4, memory_space = private} : buffer
-#   %scratch = buffer.view %scratch_buffer[%c0_bytes] : buffer -> view<4xi32>
+#   %scratch = buffer.view %scratch_buffer[%c0_bytes] : buffer -> view<4xi32, %layout>
 #   %const = scalar.constant 7 : i32
 #   %c = index.constant 0 : index
-#   view.store %const, %scratch[%c] : i32, view<4xi32>
-#   %c_2 = index.constant 0 : index
-#   %load = view.load %scratch[%c_2] : view<4xi32> -> i32
-#   %c_3 = index.constant 0 : index
-#   view.store %load, %dst[%c_3] : i32, view<4xi32>
+#   view.store %const, %scratch[%c] : i32, view<4xi32, %layout>
+#   %load = view.load %scratch[%c] : view<4xi32, %layout> -> i32
+#   view.store %load, %dst_view[%c] : i32, view<4xi32, %layout>
 #   kernel.return
 # }
