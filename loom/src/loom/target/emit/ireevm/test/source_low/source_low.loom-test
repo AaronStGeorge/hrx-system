@@ -1,5 +1,5 @@
 // RUN: emit source-low output=low
-target.generic<reference> @vm_target {contract_set_key = "iree.vm.core"}
+ireevm.target<core> @vm_target
 
 func.def target(@vm_target) @vm_add(%lhs: i32, %rhs: i32) -> (i32) {
   %sum = scalar.addi %lhs, %rhs : i32

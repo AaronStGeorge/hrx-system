@@ -16,7 +16,7 @@
 // REPORT: COMPILE-REPORT: source_low selected_ops={{[0-9]+}}
 // REPORT: COMPILE-REPORT: pressure_rows copied=0 total={{[0-9]+}}
 
-target.generic<reference> @vm_target {contract_set_key = "iree.vm.core"}
+ireevm.target<core> @vm_target
 
 func.def target(@vm_target) @branchy(%lhs: i32, %rhs: i32) -> (i32) {
   %c0 = scalar.constant 0 : i32

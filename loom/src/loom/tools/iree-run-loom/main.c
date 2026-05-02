@@ -154,8 +154,14 @@ IREE_FLAG_CALLBACK(iree_run_loom_parse_expected_binding_flag,
 
 static iree_status_t iree_run_loom_register_context(void* user_data,
                                                     loom_context_t* context) {
-  (void)user_data;
-  return loom_op_registry_register_all_dialects(context);
+  const iree_run_loom_configuration_t* configuration =
+      (const iree_run_loom_configuration_t*)user_data;
+  IREE_RETURN_IF_ERROR(loom_op_registry_register_all_dialects(context));
+  if (configuration->register_context.fn == NULL) {
+    return iree_ok_status();
+  }
+  return configuration->register_context.fn(
+      configuration->register_context.user_data, context);
 }
 
 static iree_status_t iree_run_loom_parse_workgroup_count(
@@ -362,6 +368,7 @@ int iree_run_loom_main(int argc, char** argv,
     session_options.host_allocator = allocator;
     session_options.register_context = (loom_run_register_context_callback_t){
         .fn = iree_run_loom_register_context,
+        .user_data = (void*)configuration,
     };
     session_options.initialize_low_descriptor_registry =
         configuration->initialize_low_descriptor_registry;

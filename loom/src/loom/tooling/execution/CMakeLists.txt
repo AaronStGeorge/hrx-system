@@ -295,13 +295,10 @@ loom_cc_test(
     ::session
     ::vm_invocation
     iree::base
-    loom::src::loom::ops::cfg
-    loom::src::loom::ops::func
-    loom::src::loom::ops::low
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::target
+    loom::src::loom::ops::op_registry
     loom::src::loom::target::emit::ireevm::candidate
     loom::src::loom::target::emit::ireevm::low_registry
+    loom::src::loom::target::emit::ireevm::ops
     iree::testing::gtest
     iree::testing::gtest_main
 )

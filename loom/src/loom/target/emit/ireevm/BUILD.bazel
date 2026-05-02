@@ -41,6 +41,8 @@ loom_assert_no_dependencies(
         ":lower",
         ":module_archive",
         ":module_compiler",
+        ":ops",
+        ":target_records",
     ],
 )
 
@@ -55,6 +57,7 @@ loom_assert_no_dependencies(
     dependencies = [
         ":descriptors",
         ":low_registry",
+        ":ops",
     ],
     targets = [
         "//loom/src/loom/target:low_descriptor_registry",
@@ -106,11 +109,44 @@ loom_low_descriptor_cc_library(
 )
 
 loom_cc_library(
+    name = "target_records",
+    srcs = ["target_records.c"],
+    hdrs = ["target_records.h"],
+    deps = [
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "ops",
+    srcs = [
+        "ops/builders.c",
+        "ops/registry.c",
+        "ops/tables.c",
+    ],
+    hdrs = [
+        "ops/ops.h",
+        "ops/registry.h",
+    ],
+    deps = [
+        ":target_records",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "low_registry",
     srcs = ["low_registry.c"],
     hdrs = ["low_registry.h"],
     deps = [
         ":descriptors",
+        ":target_records",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:types",
@@ -212,6 +248,7 @@ loom_cc_library(
     deps = [
         ":low_registry",
         ":lower",
+        ":ops",
         "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
     ],
@@ -224,6 +261,7 @@ loom_cc_library(
     deps = [
         ":execution_backend",
         ":low_registry",
+        ":ops",
         "//loom/src/loom/tooling/execution:execution_provider",
         "//runtime/src/iree/base",
     ],
@@ -249,11 +287,8 @@ loom_cc_test(
     deps = [
         ":candidate",
         ":low_registry",
-        "//loom/src/loom/ops/cfg",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/target",
+        ":ops",
+        "//loom/src/loom/ops:op_registry",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

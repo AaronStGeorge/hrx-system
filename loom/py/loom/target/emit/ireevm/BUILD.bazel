@@ -12,6 +12,18 @@ package(
 )
 
 py_library(
+    name = "dialect",
+    srcs = [
+        "__init__.py",
+        "dialect.py",
+    ],
+    deps = [
+        "//loom/py/loom:core",
+        "//loom/py/loom/dialect/target",
+    ],
+)
+
+py_library(
     name = "descriptors",
     srcs = [
         "__init__.py",

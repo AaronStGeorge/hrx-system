@@ -20,6 +20,8 @@ extern "C" {
 typedef struct iree_run_loom_configuration_t {
   // Null-terminated executable name used in help and diagnostics.
   const char* tool_name;
+  // Target-owned dialect registration selected by linked providers.
+  loom_run_register_context_callback_t register_context;
   // Target-low descriptor registry package linked into this runner.
   loom_run_initialize_low_descriptor_registry_callback_t
       initialize_low_descriptor_registry;

@@ -1,6 +1,6 @@
 // RUN: emit source-low output=low
 
-target.generic<reference> @target {contract_set_key = "iree.vm.core"}
+ireevm.target<core> @target
 
 func.def target(@target) @unsupported_source_op(%lhs: i32, %rhs: i32) -> (i32) {
   // ERROR@+1: BACKEND/001 "scalar.muli" "descriptor mapping"

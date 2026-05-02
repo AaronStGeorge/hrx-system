@@ -23,6 +23,40 @@ loom_low_descriptor_cc_library(
 
 loom_cc_library(
   NAME
+    target_records
+  HDRS
+    "target_records.h"
+  SRCS
+    "target_records.c"
+  DEPS
+    iree::base
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    ops
+  HDRS
+    "ops/ops.h"
+    "ops/registry.h"
+  SRCS
+    "ops/builders.c"
+    "ops/registry.c"
+    "ops/tables.c"
+  DEPS
+    ::target_records
+    iree::base
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::target
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     low_registry
   HDRS
     "low_registry.h"
@@ -30,6 +64,7 @@ loom_cc_library(
     "low_registry.c"
   DEPS
     ::descriptors
+    ::target_records
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::target::low_descriptor_registry
@@ -149,6 +184,7 @@ loom_cc_library(
   DEPS
     ::low_registry
     ::lower
+    ::ops
     iree::base
     loom::src::loom::tools::loom-check::provider
   PUBLIC
@@ -164,6 +200,7 @@ loom_cc_library(
   DEPS
     ::execution_backend
     ::low_registry
+    ::ops
     iree::base
     loom::src::loom::tooling::execution::execution_provider
   PUBLIC
@@ -194,12 +231,9 @@ loom_cc_test(
   DEPS
     ::candidate
     ::low_registry
+    ::ops
     iree::base
-    loom::src::loom::ops::cfg
-    loom::src::loom::ops::func
-    loom::src::loom::ops::low
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::target
+    loom::src::loom::ops::op_registry
     iree::testing::gtest
     iree::testing::gtest_main
 )

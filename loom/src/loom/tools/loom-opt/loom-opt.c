@@ -27,6 +27,7 @@
 #include "loom/target/arch/amdgpu/ops/registry.h"
 #include "loom/target/arch/wasm/ops/registry.h"
 #include "loom/target/arch/x86/ops/registry.h"
+#include "loom/target/emit/ireevm/ops/registry.h"
 #include "loom/tooling/execution/session.h"
 #include "loom/tooling/io/file.h"
 #include "loom/util/json.h"
@@ -98,7 +99,8 @@ static iree_status_t loom_opt_register_context(void* user_data,
   IREE_RETURN_IF_ERROR(loom_op_registry_register_all_dialects(context));
   IREE_RETURN_IF_ERROR(loom_amdgpu_ops_register_dialect(context));
   IREE_RETURN_IF_ERROR(loom_x86_ops_register_dialect(context));
-  return loom_wasm_ops_register_dialect(context);
+  IREE_RETURN_IF_ERROR(loom_wasm_ops_register_dialect(context));
+  return loom_ireevm_ops_register_dialect(context);
 }
 
 static iree_status_t loom_opt_initialize_low_descriptor_registry(

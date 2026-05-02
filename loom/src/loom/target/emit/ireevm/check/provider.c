@@ -8,9 +8,11 @@
 
 #include "loom/target/emit/ireevm/low_registry.h"
 #include "loom/target/emit/ireevm/lower.h"
+#include "loom/target/emit/ireevm/ops/registry.h"
 
 const loom_check_provider_t loom_ireevm_check_provider = {
     .name = IREE_SVL("ireevm"),
+    .register_context = loom_ireevm_ops_register_dialect,
     .initialize_low_descriptor_registry =
         loom_ireevm_low_descriptor_registry_initialize,
     .initialize_low_lower_policy_registry =

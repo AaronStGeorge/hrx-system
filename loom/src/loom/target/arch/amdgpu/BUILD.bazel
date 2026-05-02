@@ -632,6 +632,7 @@ loom_cc_library(
     hdrs = ["execution/provider.h"],
     deps = [
         ":low_registry",
+        ":ops",
         ":amdgpu_hal_backend",
         "//loom/src/loom/tooling/execution:execution_provider",
         "//loom/src/loom/tooling/execution:hal_execution_backend",

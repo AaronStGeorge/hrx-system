@@ -508,6 +508,7 @@ loom_cc_library(
     "execution/provider.c"
   DEPS
     ::low_registry
+    ::ops
     ::amdgpu_hal_backend
     iree::base
     loom::src::loom::tooling::execution::execution_provider

@@ -10,56 +10,19 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/ops/cfg/ops.h"
-#include "loom/ops/func/ops.h"
-#include "loom/ops/low/ops.h"
-#include "loom/ops/scalar/ops.h"
-#include "loom/ops/target/ops.h"
+#include "loom/ops/op_registry.h"
 #include "loom/target/emit/ireevm/candidate.h"
 #include "loom/target/emit/ireevm/low_registry.h"
+#include "loom/target/emit/ireevm/ops/registry.h"
 #include "loom/tooling/execution/session.h"
 
 namespace loom {
 namespace {
 
-using DialectVtablesFn = const loom_op_vtable_t* const* (*)(iree_host_size_t*);
-using DialectSemanticsFn = const loom_op_semantics_t* (*)(iree_host_size_t*);
-
-iree_status_t RegisterDialect(loom_context_t* context, uint8_t dialect_id,
-                              DialectVtablesFn dialect_vtables_fn,
-                              DialectSemanticsFn dialect_semantics_fn) {
-  iree_host_size_t count = 0;
-  const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
-  iree_host_size_t semantics_count = 0;
-  const loom_op_semantics_t* semantics = dialect_semantics_fn(&semantics_count);
-  if (semantics_count != count) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "dialect %u semantics count %" PRIhsz
-                            " does not match vtable count %" PRIhsz,
-                            (unsigned)dialect_id, semantics_count, count);
-  }
-  IREE_RETURN_IF_ERROR(loom_context_register_dialect(context, dialect_id,
-                                                     vtables, (uint16_t)count));
-  return loom_context_register_dialect_semantics(context, dialect_id, semantics,
-                                                 (uint16_t)count);
-}
-
 iree_status_t RegisterContext(void* user_data, loom_context_t* context) {
   (void)user_data;
-  IREE_RETURN_IF_ERROR(RegisterDialect(context, LOOM_DIALECT_TARGET,
-                                       loom_target_dialect_vtables,
-                                       loom_target_dialect_op_semantics));
-  IREE_RETURN_IF_ERROR(RegisterDialect(context, LOOM_DIALECT_FUNC,
-                                       loom_func_dialect_vtables,
-                                       loom_func_dialect_op_semantics));
-  IREE_RETURN_IF_ERROR(RegisterDialect(context, LOOM_DIALECT_SCALAR,
-                                       loom_scalar_dialect_vtables,
-                                       loom_scalar_dialect_op_semantics));
-  IREE_RETURN_IF_ERROR(RegisterDialect(context, LOOM_DIALECT_CFG,
-                                       loom_cfg_dialect_vtables,
-                                       loom_cfg_dialect_op_semantics));
-  return RegisterDialect(context, LOOM_DIALECT_LOW, loom_low_dialect_vtables,
-                         loom_low_dialect_op_semantics);
+  IREE_RETURN_IF_ERROR(loom_op_registry_register_all_dialects(context));
+  return loom_ireevm_ops_register_dialect(context);
 }
 
 iree_status_t InitializeLowDescriptorRegistry(
@@ -70,8 +33,7 @@ iree_status_t InitializeLowDescriptorRegistry(
 }
 
 constexpr char kVmSource[] =
-    "target.generic<reference> @vm_target {contract_set_key = "
-    "\"iree.vm.core\"}\n"
+    "ireevm.target<core> @vm_target\n"
     "\n"
     "func.def target(@vm_target) @branchy(%lhs: i32, %rhs: i32) -> (i32) {\n"
     "  %c0 = scalar.constant 0 : i32\n"

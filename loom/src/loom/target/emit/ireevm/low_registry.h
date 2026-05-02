@@ -9,14 +9,12 @@
 #ifndef LOOM_TARGET_EMIT_IREEVM_LOW_REGISTRY_H_
 #define LOOM_TARGET_EMIT_IREEVM_LOW_REGISTRY_H_
 
+#include "loom/target/emit/ireevm/target_records.h"
 #include "loom/target/low_descriptor_registry.h"
-#include "loom/target/types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-extern const loom_target_bundle_t loom_ireevm_low_target_bundle_core;
 
 void loom_ireevm_low_descriptor_registry_initialize(
     loom_target_low_descriptor_registry_t* out_registry);

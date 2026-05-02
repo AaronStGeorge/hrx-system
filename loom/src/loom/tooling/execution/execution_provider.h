@@ -18,6 +18,10 @@
 extern "C" {
 #endif
 
+// Registers target-owned dialects contributed by a provider.
+typedef iree_status_t (*loom_run_execution_provider_context_registration_fn_t)(
+    loom_context_t* context);
+
 // Initializes a target-low descriptor registry package. Registry tables are
 // linked into the provider library and do not allocate.
 typedef void (*loom_run_low_descriptor_registry_initializer_t)(
@@ -27,6 +31,9 @@ typedef void (*loom_run_low_descriptor_registry_initializer_t)(
 typedef struct loom_run_execution_provider_t {
   // Stable provider name used in diagnostics and help text.
   iree_string_view_t name;
+  // Optional function that registers target-owned dialects with the execution
+  // context.
+  loom_run_execution_provider_context_registration_fn_t register_context;
   // Optional function that initializes a target-low descriptor registry
   // package.
   loom_run_low_descriptor_registry_initializer_t
@@ -87,6 +94,11 @@ iree_status_t loom_run_execution_environment_initialize(
 
 // Resets |environment| to an empty state. No provider-owned storage is freed.
 void loom_run_execution_environment_deinitialize(
+    loom_run_execution_environment_t* environment);
+
+// Returns a session context-registration callback backed by |environment|.
+loom_run_register_context_callback_t
+loom_run_execution_environment_register_context_callback(
     loom_run_execution_environment_t* environment);
 
 // Returns a session descriptor-registry callback backed by |environment|. Each

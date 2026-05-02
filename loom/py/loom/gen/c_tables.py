@@ -4365,6 +4365,7 @@ def main() -> None:
     from loom.target.arch.amdgpu.dialect import ALL_AMDGPU_OPS, amdgpu_ops
     from loom.target.arch.wasm.dialect import ALL_WASM_OPS, wasm_ops
     from loom.target.arch.x86.dialect import ALL_X86_OPS, x86_ops
+    from loom.target.emit.ireevm.dialect import ALL_IREEVM_OPS, ireevm_ops
 
     dialects = [
         (test_ops, list(ALL_TEST_OPS), None),
@@ -4388,6 +4389,7 @@ def main() -> None:
         (amdgpu_ops, list(ALL_AMDGPU_OPS), None),
         (x86_ops, list(ALL_X86_OPS), None),
         (wasm_ops, list(ALL_WASM_OPS), None),
+        (ireevm_ops, list(ALL_IREEVM_OPS), None),
     ]
     production_dialects = [(dialect, ops) for dialect, ops, _ in dialects if dialect.register_by_default]
 
