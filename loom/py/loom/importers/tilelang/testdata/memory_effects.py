@@ -52,14 +52,16 @@ def scalar_atomic_add(tir: Any) -> TileLangImportInput:
         dst=dst,
         dst_buffer=dst_buffer,
     )
-    return TileLangImportInput(source=prim_func, target="hip", name="scalar_atomic_add")
+    return TileLangImportInput(
+        source=prim_func, target="hip -mcpu=gfx1100", name="scalar_atomic_add"
+    )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("scalar_atomic_add") workgroup_size(1, 1, 1) @scalar_atomic_add(%dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("scalar_atomic_add") workgroup_size(1, 1, 1) @scalar_atomic_add(%dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xi32, %layout>
@@ -97,16 +99,16 @@ def scalar_atomic_add_return(tir: Any) -> TileLangImportInput:
     )
     return TileLangImportInput(
         source=prim_func,
-        target="hip",
+        target="hip -mcpu=gfx1100",
         name="scalar_atomic_add_return",
     )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("scalar_atomic_add_return") workgroup_size(1, 1, 1) @scalar_atomic_add_return(%dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("scalar_atomic_add_return") workgroup_size(1, 1, 1) @scalar_atomic_add_return(%dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xi32, %layout>

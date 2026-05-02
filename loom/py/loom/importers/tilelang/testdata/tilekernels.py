@@ -10,6 +10,10 @@ from typing import Any
 from loom.importers.check.tilelang import TileLangImportInput, tilelang_case
 
 
+def _align_to(value: int, alignment: int) -> int:
+    return ((value + alignment - 1) // alignment) * alignment
+
+
 def _make_batched_transpose_kernel(tilelang: Any, T: Any) -> Any:
     def create_loop_layout_fn(block_x: int, num_threads: int = 256) -> Any:
         def loop_layout_fn(i: Any, j: Any) -> tuple[Any, Any]:
@@ -130,7 +134,7 @@ def tilekernels_batched_transpose_gfx942(
 
 # ----
 r"""
-target.profile @hip_mcpu_gfx942 preset("hip -mcpu=gfx942")
+target.generic<reference> @hip_mcpu_gfx942
 
 kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") workgroup_size(256, 1, 1) @batched_transpose_kernel(%x_handle: buffer, %out_handle: buffer, %num_batches: i32, %shape_x: i32, %shape_y: i32, %stride_x: i32) {
   %c0_bytes = index.constant 0 : offset
@@ -215,6 +219,163 @@ kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") workgroup
       %madd_6 = index.madd %bx, %c128_2, %i : index
       %madd_7 = index.madd %by, %c128_2, %j : index
       view.store %load_4, %out[%bz, %madd_6, %madd_7] : f16, view<[%num_batches]x[%shape_y]x[%shape_x]xf16, %layout>
+      scf.yield
+    }
+    scf.yield
+  }
+  kernel.return
+}
+"""
+
+
+# ====
+def _make_group_count_kernel(tilelang: Any, T: Any) -> Any:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_group_count_kernel(
+        num_topk: int,
+        num_groups: int,
+        num_sms: int,
+    ) -> Any:
+        num_threads = 128
+        num_blocks = num_sms * 2
+        num_tokens = T.dynamic("num_tokens")
+        aligned_groups = _align_to(num_groups, num_threads)
+
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def group_count_kernel(
+            group_idx: T.Tensor[(num_tokens, num_topk), T.int64],
+            out: T.Tensor[(num_groups,), T.int32],
+        ) -> None:
+            with T.Kernel(num_blocks, threads=num_threads) as (pid,):
+                thread_idx = T.get_thread_binding()
+                global_thread_idx = pid * num_threads + thread_idx
+
+                out_shared = T.alloc_shared((aligned_groups,), T.int32)
+                for i in T.serial(thread_idx, aligned_groups, num_threads):
+                    out_shared[i] = 0
+                T.sync_threads()
+
+                for i in T.serial(
+                    global_thread_idx,
+                    num_tokens,
+                    num_blocks * num_threads,
+                ):
+                    for j in T.unroll(num_topk):
+                        group = T.int32(group_idx[i, j])
+                        T.assume(group < num_groups)
+                        if group >= 0:
+                            T.atomic_add(out_shared[group], 1)
+
+                T.sync_threads()
+                for i in T.serial(thread_idx, num_groups, num_threads):
+                    if out_shared[i] > 0:
+                        T.atomic_add(out[i], out_shared[i])
+
+        return group_count_kernel
+
+    return get_group_count_kernel
+
+
+def _group_count_input(tilelang: Any, T: Any, *, target: str) -> TileLangImportInput:
+    return TileLangImportInput(
+        source=_make_group_count_kernel(tilelang, T),
+        args=(2, 8, 4),
+        target=target,
+        name="group_count_kernel",
+    )
+
+
+@tilelang_case(
+    name="tilekernels_group_count_gfx1100",
+    category="kernel",
+    tags=("tilekernels", "moe", "histogram", "amdgpu"),
+)
+def tilekernels_group_count_gfx1100(
+    tilelang: Any,
+    T: Any,
+) -> TileLangImportInput:
+    return _group_count_input(tilelang, T, target="hip -mcpu=gfx1100")
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") workgroup_size(128, 1, 1) @group_count_kernel(%group_idx_handle: buffer, %out_handle: buffer, %num_tokens: i32) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %group_idx = buffer.view %group_idx_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
+  %out = buffer.view %out_handle[%c0_bytes] : buffer -> view<8xi32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %thread_idx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %out_shared_bytes = index.constant 512 : offset
+  %out_shared_buffer = buffer.alloca %out_shared_bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %out_shared = buffer.view %out_shared_buffer[%c0_bytes] : buffer -> view<128xi32, %layout>
+  %c128 = index.constant 128 : index
+  %madd = index.madd %bx, %c128, %thread_idx : index
+  %c0 = index.constant 0 : index
+  %c255 = index.constant 255 : index
+  %sub = index.sub %c255, %thread_idx : index
+  %div = index.div %sub, %c128 : index
+  %tmp_ub = index.add %c0, %div : index
+  %c1 = index.constant 1 : index
+  scf.for %tmp = [%c0 to %tmp_ub step %c1] {
+    %madd_2 = index.madd %tmp, %c128, %thread_idx : index
+    %const = scalar.constant 0 : i32
+    view.store %const, %out_shared[%madd_2] : i32, view<128xi32, %layout>
+    scf.yield
+  }
+  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %c1023 = index.constant 1023 : index
+  %add = index.add %num_tokens_idx, %c1023 : index
+  %sub_2 = index.sub %add, %madd : index
+  %c1024 = index.constant 1024 : index
+  %div_2 = index.div %sub_2, %c1024 : index
+  %tmp_ub_2 = index.add %c0, %div_2 : index
+  scf.for %tmp = [%c0 to %tmp_ub_2 step %c1] {
+    %madd_3 = index.madd %tmp, %c1024, %madd : index
+    %c2 = index.constant 2 : index
+    %j_ub = index.add %c0, %c2 : index
+    scf.for %j = [%c0 to %j_ub step %c1] {
+      %load = view.load %group_idx[%madd_3, %j] : view<[%num_tokens]x2xi64, %layout> -> i64
+      %trunci = scalar.trunci %load : i64 to i32
+      %group_assumed = scalar.assume %trunci [lt(%trunci, 8)] : i32
+      %const_2 = scalar.constant 0 : i32
+      %cmp = scalar.cmpi sge, %group_assumed, %const_2 : i32
+      scf.if %cmp {
+        %const_3 = scalar.constant 1 : i32
+        %group_idx_2 = index.cast %group_assumed : i32 to index
+        view.atomic.reduce<addi> %const_3, %out_shared[%group_idx_2] {ordering = relaxed, scope = workgroup} : i32, view<128xi32, %layout>
+        scf.yield
+      } else {
+        scf.yield
+      }
+      scf.yield
+    }
+    scf.yield
+  }
+  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  %c135 = index.constant 135 : index
+  %sub_3 = index.sub %c135, %thread_idx : index
+  %div_3 = index.div %sub_3, %c128 : index
+  %tmp_ub_3 = index.add %c0, %div_3 : index
+  scf.for %tmp = [%c0 to %tmp_ub_3 step %c1] {
+    %madd_4 = index.madd %tmp, %c128, %thread_idx : index
+    %load_2 = view.load %out_shared[%madd_4] : view<128xi32, %layout> -> i32
+    %const_4 = scalar.constant 0 : i32
+    %cmp_2 = scalar.cmpi sgt, %load_2, %const_4 : i32
+    scf.if %cmp_2 {
+      %load_3 = view.load %out_shared[%madd_4] : view<128xi32, %layout> -> i32
+      view.atomic.reduce<addi> %load_3, %out[%madd_4] {ordering = relaxed, scope = device} : i32, view<8xi32, %layout>
+      scf.yield
+    } else {
       scf.yield
     }
     scf.yield

@@ -60,14 +60,16 @@ def scoped_tl_assume(tir: Any) -> TileLangImportInput:
         body=body,
         buffer_map={src: src_buffer, dst: dst_buffer},
     )
-    return TileLangImportInput(source=prim_func, target="hip", name="scoped_tl_assume")
+    return TileLangImportInput(
+        source=prim_func, target="hip -mcpu=gfx1100", name="scoped_tl_assume"
+    )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("scoped_tl_assume") workgroup_size(1, 1, 1) @scoped_tl_assume(%n: i32, %src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("scoped_tl_assume") workgroup_size(1, 1, 1) @scoped_tl_assume(%n: i32, %src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
@@ -115,14 +117,16 @@ def effect_tir_assume(tir: Any) -> TileLangImportInput:
         body=body,
         buffer_map={src: src_buffer, dst: dst_buffer},
     )
-    return TileLangImportInput(source=prim_func, target="hip", name="effect_tir_assume")
+    return TileLangImportInput(
+        source=prim_func, target="hip -mcpu=gfx1100", name="effect_tir_assume"
+    )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("effect_tir_assume") workgroup_size(1, 1, 1) @effect_tir_assume(%n: i32, %src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("effect_tir_assume") workgroup_size(1, 1, 1) @effect_tir_assume(%n: i32, %src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>

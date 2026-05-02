@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 from loom.diagnostics import LoomDiagnosticError
-from loom.importers.core import print_loom_module
+from loom.importers.core import kernel_module_ops, print_loom_module
 from loom.importers.mlir.importer import (
     MlirImportOptions,
     format_import_report,
@@ -25,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(sys.argv[1:] if argv is None else argv)
     options = MlirImportOptions(
         kernel=args.kernel,
-        include_report=args.report is not None,
+        include_report=True,
         prefer_abi3_extensions=args.prefer_abi3_extensions,
     )
     try:
@@ -36,6 +36,9 @@ def main(argv: list[str] | None = None) -> int:
 
     output_text = print_loom_module(
         result.module,
+        ops=kernel_module_ops(
+            getattr(result.report, "target_format", None) or "unknown"
+        ),
         print_locations=args.print_locations,
     )
     if args.output is None:

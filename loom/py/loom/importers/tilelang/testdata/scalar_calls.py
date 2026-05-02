@@ -57,14 +57,16 @@ def scalar_calls(tir: Any) -> TileLangImportInput:
         body=body,
         buffer_map={src: src_buffer, dst: dst_buffer},
     )
-    return TileLangImportInput(source=prim_func, target="hip", name="scalar_calls")
+    return TileLangImportInput(
+        source=prim_func, target="hip -mcpu=gfx1100", name="scalar_calls"
+    )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("scalar_calls") workgroup_size(1, 1, 1) @scalar_calls(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("scalar_calls") workgroup_size(1, 1, 1) @scalar_calls(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
@@ -112,14 +114,16 @@ def bitwise_not(tir: Any) -> TileLangImportInput:
         body=body,
         buffer_map={src: src_buffer, dst: dst_buffer},
     )
-    return TileLangImportInput(source=prim_func, target="hip", name="bitwise_not")
+    return TileLangImportInput(
+        source=prim_func, target="hip -mcpu=gfx1100", name="bitwise_not"
+    )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("bitwise_not") workgroup_size(1, 1, 1) @bitwise_not(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("bitwise_not") workgroup_size(1, 1, 1) @bitwise_not(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xi32, %layout>
@@ -156,16 +160,16 @@ def dynamic_loop_bound(tir: Any) -> TileLangImportInput:
     )
     return TileLangImportInput(
         source=prim_func,
-        target="hip",
+        target="hip -mcpu=gfx1100",
         name="dynamic_loop_bound",
     )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("dynamic_loop_bound") workgroup_size(1, 1, 1) @dynamic_loop_bound(%n: i32, %src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("dynamic_loop_bound") workgroup_size(1, 1, 1) @dynamic_loop_bound(%n: i32, %src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<8xf32, %layout>
@@ -203,14 +207,16 @@ def ceildiv_loop(tir: Any) -> TileLangImportInput:
         body=body,
         buffer_map={src: src_buffer, dst: dst_buffer},
     )
-    return TileLangImportInput(source=prim_func, target="hip", name="ceildiv_loop")
+    return TileLangImportInput(
+        source=prim_func, target="hip -mcpu=gfx1100", name="ceildiv_loop"
+    )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("ceildiv_loop") workgroup_size(1, 1, 1) @ceildiv_loop(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("ceildiv_loop") workgroup_size(1, 1, 1) @ceildiv_loop(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<8xf32, %layout>

@@ -23,6 +23,6 @@ def unsupported_string_evaluate(tir: Any) -> TileLangImportInput:
     ).with_attr("global_symbol", "unsupported_string_evaluate")
     return TileLangImportInput(
         source=prim_func,
-        target="hip",
+        target="hip -mcpu=gfx1100",
         name="unsupported_string_evaluate",
     )

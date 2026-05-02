@@ -38,14 +38,16 @@ def vector_add_store(tir: Any) -> TileLangImportInput:
         body,
         buffer_map={src: src_buffer, dst: dst_buffer},
     ).with_attr("global_symbol", "vector_add_store")
-    return TileLangImportInput(source=prim_func, target="hip", name="vector_add_store")
+    return TileLangImportInput(
+        source=prim_func, target="hip -mcpu=gfx1100", name="vector_add_store"
+    )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("vector_add_store") workgroup_size(1, 1, 1) @vector_add_store(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("vector_add_store") workgroup_size(1, 1, 1) @vector_add_store(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>
@@ -84,16 +86,16 @@ def vector_select_store(tir: Any) -> TileLangImportInput:
     ).with_attr("global_symbol", "vector_select_store")
     return TileLangImportInput(
         source=prim_func,
-        target="hip",
+        target="hip -mcpu=gfx1100",
         name="vector_select_store",
     )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("vector_select_store") workgroup_size(1, 1, 1) @vector_select_store(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("vector_select_store") workgroup_size(1, 1, 1) @vector_select_store(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>

@@ -69,15 +69,15 @@ def launch_thread_attrs(tir: Any, tvm: Any) -> TileLangImportInput:
         buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(
-        source=prim_func, target="hip", name="launch_thread_attrs"
+        source=prim_func, target="hip -mcpu=gfx1100", name="launch_thread_attrs"
     )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("launch_thread_attrs") workgroup_size(64, 1, 1) @launch_thread_attrs(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("launch_thread_attrs") workgroup_size(64, 1, 1) @launch_thread_attrs(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<1024xf32, %layout>
@@ -119,15 +119,15 @@ def shared_storage_sync(tir: Any) -> TileLangImportInput:
         buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(
-        source=prim_func, target="hip", name="shared_storage_sync"
+        source=prim_func, target="hip -mcpu=gfx1100", name="shared_storage_sync"
     )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("shared_storage_sync") workgroup_size(1, 1, 1) @shared_storage_sync(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("shared_storage_sync") workgroup_size(1, 1, 1) @shared_storage_sync(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
@@ -162,15 +162,15 @@ def thread_binding_loop(tir: Any, tvm: Any) -> TileLangImportInput:
         buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(
-        source=prim_func, target="hip", name="thread_binding_loop"
+        source=prim_func, target="hip -mcpu=gfx1100", name="thread_binding_loop"
     )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("thread_binding_loop") workgroup_size(128, 1, 1) @thread_binding_loop(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("thread_binding_loop") workgroup_size(128, 1, 1) @thread_binding_loop(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<128xf32, %layout>

@@ -23,6 +23,7 @@ from loom.importers.core.kernel import (
     KernelModuleShell,
     KernelModuleSpec,
     create_kernel_module,
+    kernel_module_ops,
     normalize_workgroup_size,
 )
 from loom.importers.core.names import (
@@ -61,6 +62,7 @@ __all__ = [
     "SourceProvenance",
     "SourceRange",
     "create_kernel_module",
+    "kernel_module_ops",
     "normalize_workgroup_size",
     "print_loom_module",
     "sanitize_identifier",

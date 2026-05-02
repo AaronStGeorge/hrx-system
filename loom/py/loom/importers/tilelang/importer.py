@@ -23,6 +23,7 @@ from loom.importers.core import (
     KernelModuleShell,
     KernelModuleSpec,
     create_kernel_module,
+    kernel_module_ops,
     sanitize_symbol,
 )
 from loom.importers.tilelang.abi import extract_bindings
@@ -87,7 +88,11 @@ def import_tilelang(
     )
     diagnostics.raise_if_errors()
     if options.verify_structure:
-        verify_module(loom_module, diagnostics=diagnostics)
+        verify_module(
+            loom_module,
+            ops=kernel_module_ops(target_preset),
+            diagnostics=diagnostics,
+        )
         diagnostics.raise_if_errors()
     facts = TileLangKernelFacts(
         function_name=function_name,

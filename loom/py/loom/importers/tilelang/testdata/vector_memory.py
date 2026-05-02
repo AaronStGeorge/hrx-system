@@ -53,16 +53,16 @@ def broadcast_vector_store(tir: Any) -> TileLangImportInput:
     )
     return TileLangImportInput(
         source=prim_func,
-        target="hip",
+        target="hip -mcpu=gfx1100",
         name="broadcast_vector_store",
     )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("broadcast_vector_store") workgroup_size(1, 1, 1) @broadcast_vector_store(%dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("broadcast_vector_store") workgroup_size(1, 1, 1) @broadcast_vector_store(%dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
@@ -91,14 +91,16 @@ def ramp_vector_load(tir: Any) -> TileLangImportInput:
         body=body,
         buffer_map={src: src_buffer, dst: dst_buffer},
     )
-    return TileLangImportInput(source=prim_func, target="hip", name="ramp_vector_load")
+    return TileLangImportInput(
+        source=prim_func, target="hip -mcpu=gfx1100", name="ramp_vector_load"
+    )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("ramp_vector_load") workgroup_size(1, 1, 1) @ramp_vector_load(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("ramp_vector_load") workgroup_size(1, 1, 1) @ramp_vector_load(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>

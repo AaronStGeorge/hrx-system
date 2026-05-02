@@ -24,6 +24,7 @@ iree_py_library(
     iree::runtime::py::loom::core
     iree::runtime::py::loom::package
     iree::runtime::py::loom::format::text::text
+    iree::runtime::py::loom::target::arch::amdgpu::dialect
 )
 
 iree_py_test(
@@ -32,6 +33,7 @@ iree_py_test(
   SRCS
     "../../tools/pytest_style_runner.py"
   ARGS
+    "loom.importers.core.kernel_test"
     "loom.importers.core.names_test"
     "loom.importers.core.session_test"
   PACKAGE_DIRS

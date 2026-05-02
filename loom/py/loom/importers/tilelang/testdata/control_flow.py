@@ -60,16 +60,16 @@ def thread_return_prefix_guard(tir: Any) -> TileLangImportInput:
     )
     return TileLangImportInput(
         source=prim_func,
-        target="hip",
+        target="hip -mcpu=gfx1100",
         name="thread_return_prefix_guard",
     )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("thread_return_prefix_guard") workgroup_size(1, 1, 1) @thread_return_prefix_guard(%n: i32, %i: i32, %src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("thread_return_prefix_guard") workgroup_size(1, 1, 1) @thread_return_prefix_guard(%n: i32, %i: i32, %src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>
@@ -120,16 +120,16 @@ def thread_return_prefix_guard_with_effects(tir: Any) -> TileLangImportInput:
     )
     return TileLangImportInput(
         source=prim_func,
-        target="hip",
+        target="hip -mcpu=gfx1100",
         name="thread_return_prefix_guard_with_effects",
     )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("thread_return_prefix_guard_with_effects") workgroup_size(1, 1, 1) @thread_return_prefix_guard_with_effects(%n: i32, %i: i32, %src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("thread_return_prefix_guard_with_effects") workgroup_size(1, 1, 1) @thread_return_prefix_guard_with_effects(%n: i32, %i: i32, %src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>

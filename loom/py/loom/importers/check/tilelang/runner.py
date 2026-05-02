@@ -26,7 +26,7 @@ from loom.importers.check.tilelang.cases import (
     is_tilelang_case,
 )
 from loom.importers.check.tilelang.harness import TileLangHarness
-from loom.importers.core import print_loom_module
+from loom.importers.core import kernel_module_ops, print_loom_module
 from loom.importers.tilelang.importer import TileLangImportOptions, import_tilelang
 
 
@@ -69,6 +69,7 @@ def _invoke_tilelang_case(
             target=options.target_preset,
             name=metadata.name if metadata is not None else None,
         )
+    target_preset = options.target_preset or value.target or "tilelang.generic"
     result = import_tilelang(
         value,
         options=TileLangImportOptions(
@@ -76,7 +77,7 @@ def _invoke_tilelang_case(
             verify_structure=options.verify_structure,
         ),
     )
-    return print_loom_module(result.module)
+    return print_loom_module(result.module, ops=kernel_module_ops(target_preset))
 
 
 def _case_kwargs(function: Callable[..., Any]) -> dict[str, Any]:

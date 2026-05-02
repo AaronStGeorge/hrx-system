@@ -8,13 +8,21 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import loom
+from loom.dsl import Op
 from loom.format.text.printer import Printer
 from loom.ir import Module
 
 
-def print_loom_module(module: Module, *, print_locations: bool = False) -> str:
+def print_loom_module(
+    module: Module,
+    *,
+    ops: Sequence[Op] | None = None,
+    print_locations: bool = False,
+) -> str:
     printer = Printer(print_locations=print_locations)
-    printer.register_ops(loom.default_ops())
+    printer.register_ops(tuple(ops) if ops is not None else loom.default_ops())
     printer.register_types(loom.default_types())
     return printer.print_module(module)

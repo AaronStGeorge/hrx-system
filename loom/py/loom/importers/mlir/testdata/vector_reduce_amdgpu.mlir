@@ -35,7 +35,7 @@ hal.executable private @smoke {
   }
 }
 // ----
-target.profile @rocm_hsaco_fb preset("rocm-hsaco-fb")
+target.generic<reference> @rocm_hsaco_fb
 
 kernel.def target(@rocm_hsaco_fb) export("vector_reduce_amdgpu") ordinal(0) workgroup_size(1, 1, 1) @vector_reduce_amdgpu(%binding0: buffer, %binding1: buffer) {
   %c0 = index.constant 0 : index
@@ -82,7 +82,7 @@ hal.executable private @barrier_smoke {
   }
 }
 // ----
-target.profile @rocm_hsaco_fb preset("rocm-hsaco-fb")
+target.generic<reference> @rocm_hsaco_fb
 
 kernel.def target(@rocm_hsaco_fb) export("barrier_smoke") ordinal(0) workgroup_size(1, 1, 1) @barrier_smoke(%binding0: buffer) {
   %c0 = index.constant 0 : index

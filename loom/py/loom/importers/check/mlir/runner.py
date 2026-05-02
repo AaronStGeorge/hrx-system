@@ -121,7 +121,7 @@ def import_mlir_case(
     *,
     options: MlirCheckOptions,
 ) -> CheckResult:
-    from loom.importers.core import print_loom_module
+    from loom.importers.core import kernel_module_ops, print_loom_module
     from loom.importers.mlir.importer import (
         MlirImportOptions,
         import_mlir_module,
@@ -139,10 +139,15 @@ def import_mlir_case(
             case.input,
             options=MlirImportOptions(
                 kernel=run_options.kernel,
+                include_report=True,
                 prefer_abi3_extensions=options.prefer_abi3_extensions,
             ),
         )
-        stdout = print_loom_module(result.module)
+        target_format = getattr(result.report, "target_format", None)
+        stdout = print_loom_module(
+            result.module,
+            ops=kernel_module_ops(target_format or "unknown"),
+        )
     except LoomDiagnosticError as exc:
         if expected_diagnostics:
             return source_diagnostic_check_result(

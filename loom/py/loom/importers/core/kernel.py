@@ -8,11 +8,13 @@
 
 from __future__ import annotations
 
+import shlex
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 import loom
 from loom.builder import ValueRef
+from loom.dsl import Op
 from loom.importers.core.names import NameAllocator, sanitize_symbol
 from loom.ir import BUFFER_TYPE, Block, Module, Region, Type
 
@@ -28,7 +30,7 @@ class KernelArgumentSpec:
 
 @dataclass(frozen=True, slots=True)
 class KernelModuleSpec:
-    """Top-level target/profile/kernel facts shared by foreign importers."""
+    """Top-level target/kernel facts shared by foreign importers."""
 
     target_preset: str
     export_symbol: str
@@ -56,12 +58,12 @@ class KernelModuleShell:
 
 
 def create_kernel_module(spec: KernelModuleSpec) -> KernelModuleShell:
-    """Create a Loom module containing one target profile and one kernel.def."""
-    module, builder = loom.module_builder()
+    """Create a Loom module containing one target record and one kernel.def."""
+    module, builder = loom.module_builder(ops=kernel_module_ops(spec.target_preset))
     target_symbol = spec.target_symbol or sanitize_symbol(
         spec.target_preset, fallback="target"
     )
-    builder.target.profile(symbol=target_symbol, preset=spec.target_preset)
+    _build_target_record(builder, target_symbol, spec.target_preset)
     names = NameAllocator()
     arguments_by_ordinal = {
         argument.ordinal: builder.value(
@@ -101,3 +103,61 @@ def normalize_workgroup_size(workgroup_size: tuple[int, ...]) -> tuple[int, int,
     while len(values) < 3:
         values.append(1)
     return (int(values[0]), int(values[1]), int(values[2]))
+
+
+def kernel_module_ops(target_preset: str) -> tuple[Op, ...]:
+    """Return the op declarations needed for a kernel module target preset."""
+    ops = loom.default_ops()
+    if _amdgpu_target_kind(target_preset) is None:
+        return ops
+    from loom.target.arch.amdgpu.dialect import ALL_AMDGPU_OPS
+
+    return (*ops, *ALL_AMDGPU_OPS)
+
+
+def _build_target_record(
+    builder: loom.LoomBuilder,
+    target_symbol: str,
+    target_preset: str,
+) -> None:
+    amdgpu_kind = _amdgpu_target_kind(target_preset)
+    if amdgpu_kind is not None:
+        from loom.target.arch.amdgpu.dialect import amdgpu_target
+
+        builder.ir.build(
+            amdgpu_target.name,
+            attributes={"symbol": target_symbol, "kind": amdgpu_kind},
+        )
+        return
+    builder.target.generic(symbol=target_symbol, kind="reference")
+
+
+def _amdgpu_target_kind(target_preset: str) -> str | None:
+    target_cpu = _target_cpu(target_preset)
+    if target_cpu is None:
+        return None
+    from loom.target.arch.amdgpu.dialect import AmdgpuTargetKind
+
+    available_kinds = {case.keyword for case in AmdgpuTargetKind.cases}
+    if target_cpu in available_kinds:
+        return target_cpu
+    if target_cpu.startswith("gfx11") and "gfx1100" in available_kinds:
+        return "gfx1100"
+    if target_cpu.startswith("gfx12") and "gfx1200" in available_kinds:
+        return "gfx1200"
+    return None
+
+
+def _target_cpu(target_preset: str) -> str | None:
+    try:
+        tokens = shlex.split(target_preset)
+    except ValueError:
+        tokens = target_preset.split()
+    for index, token in enumerate(tokens):
+        if token.startswith("-mcpu="):
+            return token.split("=", 1)[1]
+        if token.startswith("--mcpu="):
+            return token.split("=", 1)[1]
+        if token in ("-mcpu", "--mcpu") and index + 1 < len(tokens):
+            return tokens[index + 1]
+    return None

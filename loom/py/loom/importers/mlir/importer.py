@@ -22,6 +22,7 @@ from loom.importers.core import (
     KernelArgumentSpec,
     KernelModuleSpec,
     create_kernel_module,
+    kernel_module_ops,
     sanitize_symbol,
 )
 from loom.importers.mlir.api import import_iree_ir
@@ -81,7 +82,11 @@ def import_mlir_module(
 
     diagnostics.raise_if_errors()
     if options.verify_structure:
-        verify_module(loom_module, diagnostics=diagnostics)
+        verify_module(
+            loom_module,
+            ops=kernel_module_ops(facts.target_format or "unknown"),
+            diagnostics=diagnostics,
+        )
         diagnostics.raise_if_errors()
     return ImportResult(
         module=loom_module,

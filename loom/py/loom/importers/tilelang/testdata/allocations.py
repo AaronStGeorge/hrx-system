@@ -58,15 +58,15 @@ def shared_block_alloc(tir: Any) -> TileLangImportInput:
         buffer_map={dst: dst_buffer},
     )
     return TileLangImportInput(
-        source=prim_func, target="hip", name="shared_block_alloc"
+        source=prim_func, target="hip -mcpu=gfx1100", name="shared_block_alloc"
     )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("shared_block_alloc") workgroup_size(1, 1, 1) @shared_block_alloc(%dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("shared_block_alloc") workgroup_size(1, 1, 1) @shared_block_alloc(%dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xf32, %layout>
@@ -118,15 +118,15 @@ def private_block_alloc(tir: Any) -> TileLangImportInput:
         buffer_map={dst: dst_buffer},
     )
     return TileLangImportInput(
-        source=prim_func, target="hip", name="private_block_alloc"
+        source=prim_func, target="hip -mcpu=gfx1100", name="private_block_alloc"
     )
 
 
 # ----
 r"""
-target.profile @hip preset("hip")
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip) export("private_block_alloc") workgroup_size(1, 1, 1) @private_block_alloc(%dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("private_block_alloc") workgroup_size(1, 1, 1) @private_block_alloc(%dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xi32, %layout>
