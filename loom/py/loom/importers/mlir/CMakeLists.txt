@@ -42,6 +42,13 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    mlir_packages
+)
+
+if(LOOM_IMPORTER_MLIR)
+
+iree_py_library(
+  NAME
     loom_import_mlir
   MAIN
     "__main__.py"
@@ -49,6 +56,7 @@ iree_py_library(
     "__main__.py"
   DEPS
     iree::runtime::py::loom::importers::mlir::mlir
+    iree::runtime::py::loom::importers::mlir::mlir_packages
 )
 
 iree_py_test(
@@ -60,11 +68,14 @@ iree_py_test(
     "loom.importers.mlir.attrs_test"
     "loom.importers.mlir.importer_test"
     "loom.importers.mlir.locations_test"
+    "loom.importers.mlir.model_test"
     "loom.importers.mlir.names_test"
     "loom.importers.mlir.types_test"
   PACKAGE_DIRS
     "${IREE_SOURCE_DIR}/runtime/py"
     "${IREE_BINARY_DIR}/runtime/py"
 )
+
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

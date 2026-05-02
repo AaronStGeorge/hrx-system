@@ -39,6 +39,13 @@ iree_py_library(
     iree::runtime::py::loom::importers::tilelang::ops::ops
 )
 
+iree_py_library(
+  NAME
+    tilelang_packages
+)
+
+if(LOOM_IMPORTER_TILELANG)
+
 iree_py_test(
   NAME
     tilelang_test
@@ -53,5 +60,7 @@ iree_py_test(
     "${IREE_SOURCE_DIR}/runtime/py"
     "${IREE_BINARY_DIR}/runtime/py"
 )
+
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

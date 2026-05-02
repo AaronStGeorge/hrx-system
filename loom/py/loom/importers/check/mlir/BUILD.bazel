@@ -5,11 +5,17 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("@rules_python//python:defs.bzl", "py_library", "py_test")
+load("//loom/build_tools/bazel:build_defs.bzl", "iree_cmake_extra_content", "iree_select")
 
 package(
     default_visibility = ["//visibility:public"],
     licenses = ["notice"],  # Apache 2.0
 )
+
+_MLIR_IMPORTER_COMPATIBLE = iree_select({
+    "//loom/py/loom/importers:mlir_enabled": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
 
 py_library(
     name = "mlir",
@@ -24,6 +30,13 @@ py_library(
     ],
 )
 
+iree_cmake_extra_content(
+    content = """
+if(LOOM_IMPORTER_MLIR)
+""",
+    inline = True,
+)
+
 py_test(
     name = "mlir_test",
     srcs = [
@@ -32,5 +45,39 @@ py_test(
     ],
     args = ["loom.importers.check.mlir.runner_test"],
     main = "pytest_style_runner.py",
+    target_compatible_with = _MLIR_IMPORTER_COMPATIBLE,
     deps = [":mlir"],
+)
+
+filegroup(
+    name = "tests",
+    srcs = [
+        "testdata/vector_reduce_amdgpu.mlir",
+    ],
+)
+
+py_test(
+    name = "mlir_import_test",
+    srcs = ["//loom/py/loom/importers/check:import_test.py"],
+    args = [
+        "mlir",
+        "--fail-on-skip",
+        "$(locations :tests)",
+    ],
+    data = [":tests"],
+    main = "import_test.py",
+    target_compatible_with = _MLIR_IMPORTER_COMPATIBLE,
+    deps = [
+        ":mlir",
+        "//loom/py/loom/importers/check",
+        "//loom/py/loom/importers/check/tilelang",
+        "//loom/py/loom/importers/mlir:mlir_packages",
+    ],
+)
+
+iree_cmake_extra_content(
+    content = """
+endif()
+""",
+    inline = True,
 )

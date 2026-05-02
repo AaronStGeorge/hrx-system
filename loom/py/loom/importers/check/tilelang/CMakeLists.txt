@@ -25,6 +25,8 @@ iree_py_library(
     iree::runtime::py::loom::importers::tilelang::tilelang
 )
 
+if(LOOM_IMPORTER_TILELANG)
+
 add_custom_command(OUTPUT tests.stamp
     COMMAND ${CMAKE_COMMAND} -E touch tests.stamp
   DEPENDS
@@ -57,11 +59,14 @@ iree_py_test(
     "../import_test.py"
   ARGS
     "tilelang"
+    "--fail-on-skip"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/check/tilelang/testdata/diagnostics.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/check/tilelang/testdata/vector_arithmetic.py"
   PACKAGE_DIRS
     "${IREE_SOURCE_DIR}/runtime/py"
     "${IREE_BINARY_DIR}/runtime/py"
 )
+
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -17,7 +17,13 @@ from typing import Any
 import loom
 from loom.builder import ValueRef
 from loom.diagnostics import DiagnosticEngine
-from loom.importers.core import ImportBodyReport, SourceImportSession, source_key
+from loom.importers.core import (
+    ImportBodyReport,
+    SourceImportSession,
+)
+from loom.importers.core import (
+    source_key as core_source_key,
+)
 from loom.importers.mlir.attrs import MlirAttributeDecoder
 from loom.importers.mlir.locations import MlirLocationConverter
 from loom.importers.mlir.types import MlirTypeConverter
@@ -72,6 +78,15 @@ class SourceOp:
 
     def result_type(self, index: int = 0) -> str:
         return str(self.result(index).type)
+
+
+def mlir_source_key(source: object) -> object:
+    """Returns a stable key for MLIR value wrappers across API object copies."""
+
+    get_name = getattr(source, "get_name", None)
+    if callable(get_name) and hasattr(source, "type"):
+        return ("mlir_value", str(get_name()))
+    return core_source_key(source)
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,7 +153,7 @@ class MlirConversionContext(SourceImportSession):
             source_names={
                 context_key: name
                 for source, name in (source_names or {}).items()
-                for context_key in (source_key(source),)
+                for context_key in (mlir_source_key(source),)
             },
             binding_args=binding_args or {},
             bindings_by_result=bindings_by_result or {},
@@ -151,10 +166,13 @@ class MlirConversionContext(SourceImportSession):
     def type(self, value_type: str) -> Type:
         return self.type_converter.map_text(value_type)
 
+    def source_key(self, source: object) -> object:
+        return mlir_source_key(source)
+
     def source_name(self, source: object) -> str:
-        return self.source_names.get(self.source_key(source)) or super().source_name(
-            source
-        )
+        return self.source_names.get(self.source_key(source)) or super(
+            MlirConversionContext, self
+        ).source_name(source)
 
     def result_name(self, source: object, fallback: str | None = None) -> str:
         existing = self.mapped(source)
@@ -163,7 +181,7 @@ class MlirConversionContext(SourceImportSession):
         source_name = self.source_names.get(self.source_key(source))
         if source_name is not None:
             return self.names.fresh(source_name)
-        return super().result_name(source, fallback)
+        return super(MlirConversionContext, self).result_name(source, fallback)
 
     def build_constant(self, value: Any, value_type: str, name: str) -> ValueRef:
         result_type = self.type(value_type)

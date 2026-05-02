@@ -80,7 +80,7 @@ class TileLangHarness:
             language = importlib.import_module("tilelang.language")
         except Exception as exc:
             raise TileLangHarnessError(
-                "failed to import TileLang fixture dependencies"
+                f"failed to import TileLang fixture dependencies: {exc}"
             ) from exc
         return TileLangModules(
             tilelang=tilelang,

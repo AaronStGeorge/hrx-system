@@ -4,11 +4,35 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("@bazel_skylib//rules:common_settings.bzl", "string_list_flag")
 load("@rules_python//python:defs.bzl", "py_library")
 
 package(
     default_visibility = ["//visibility:public"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+string_list_flag(
+    name = "enabled_importers",
+    build_setting_default = [],
+)
+
+config_setting(
+    name = "mlir_enabled",
+    flag_values = {
+        ":enabled_importers": "mlir",
+    },
+)
+
+# TileLang's TVM wheel uses relative native RUNPATHs between packages. Bazel
+# tests must use rules_python's merged site-packages venv layout so those paths
+# match a normal Python environment.
+config_setting(
+    name = "tilelang_enabled",
+    flag_values = {
+        ":enabled_importers": "tilelang",
+        "@rules_python//python/config_settings:venvs_site_packages": "yes",
+    },
 )
 
 py_library(
