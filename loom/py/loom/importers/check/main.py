@@ -122,7 +122,7 @@ def agent_markdown(registry: BackendRegistry) -> str:
     importers = print_importers(registry)
     return f"""## loom-import-check
 
-`loom-import-check` runs importer golden tests for frontend-specific fixtures.
+`loom-import-check` runs importer golden tests for importer-specific fixtures.
 Use checked-in Bazel test targets for normal verification and update flows so
 the test environment matches CI.
 
@@ -130,7 +130,10 @@ the test environment matches CI.
 
 ```shell
 iree-bazel-test --config=asan //loom/py/loom/importers/check:check_test
+iree-bazel-test --config=asan //loom/py/loom/importers/check:mlir_import_test
 iree-bazel-test --config=asan //loom/py/loom/importers/check/tilelang:tilelang_test
+iree-bazel-test --config=asan \\
+    //loom/py/loom/importers/check/tilelang:tilelang_import_test
 ```
 
 ### Update expected output
@@ -151,6 +154,9 @@ Python importer fixtures keep shared imports at the top of the file and split
 cases with `# ====`. Each case compares imported Loom IR against the inline
 `# ----` section. Run update mode after intentional importer output changes
 instead of editing the expected Loom IR by hand.
+
+Importer check file sets belong in BUILD filegroups and are passed to the test
+runner with `$(locations ...)`. Do not hardcode testdata paths in Python tests.
 
 Expected diagnostics use loom-check-style source annotations:
 
@@ -189,7 +195,7 @@ def _add_common_check_arguments(parser: argparse.ArgumentParser) -> None:
         dest="case_filter",
         help=(
             "only run cases whose path, case index, run directive, or "
-            "frontend-specific labels contain this substring"
+            "importer-specific labels contain this substring"
         ),
     )
     parser.add_argument(

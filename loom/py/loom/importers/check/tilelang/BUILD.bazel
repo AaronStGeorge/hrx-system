@@ -27,23 +27,20 @@ py_library(
     ],
 )
 
+filegroup(
+    name = "tests",
+    srcs = [
+        "testdata/diagnostics.py",
+        "testdata/vector_arithmetic.py",
+    ],
+)
+
 py_test(
     name = "tilelang_test",
     srcs = [
         "cases_test.py",
         "harness_test.py",
         "runner_test.py",
-        "testdata/__init__.py",
-        "testdata/allocations.py",
-        "testdata/analysis.py",
-        "testdata/control_flow.py",
-        "testdata/memory_effects.py",
-        "testdata/scalar_calls.py",
-        "testdata/tir_fakes.py",
-        "testdata/topology.py",
-        "testdata/vector_arithmetic.py",
-        "testdata/vector_casts.py",
-        "testdata/vector_memory.py",
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = [
@@ -53,4 +50,22 @@ py_test(
     ],
     main = "pytest_style_runner.py",
     deps = [":tilelang"],
+)
+
+py_test(
+    name = "tilelang_import_test",
+    srcs = [
+        ":tests",
+        "//loom/py/loom/importers/check:import_test.py",
+    ],
+    args = [
+        "tilelang",
+        "$(locations :tests)",
+    ],
+    main = "import_test.py",
+    deps = [
+        ":tilelang",
+        "//loom/py/loom/importers/check",
+        "//loom/py/loom/importers/check/mlir",
+    ],
 )

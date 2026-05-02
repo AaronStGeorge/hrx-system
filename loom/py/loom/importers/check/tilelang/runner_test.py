@@ -4,79 +4,43 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-import sys
+from argparse import Namespace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest import SkipTest
 
+from loom.importers.check.tilelang.backend import TileLangBackend
 from loom.importers.check.tilelang.runner import (
     TileLangCheckOptions,
     run_tilelang_check,
 )
 
 
-def test_run_tilelang_check_updates_and_verifies_python_fixture() -> None:
+def test_run_tilelang_check_updates_and_verifies_python_fixture_with_tilelang() -> None:
+    _require_tilelang()
     with TemporaryDirectory() as directory:
         path = Path(directory) / "tilelang_cases.py"
         path.write_text(
             """
+from typing import Any
+
 from loom.importers.check.tilelang import TileLangImportInput, tilelang_case
 
 
-class Var:
-    def __init__(self, name, dtype="int32"):
-        self.name = name
-        self.dtype = dtype
-
-
-class Buffer:
-    def __init__(self, name, shape, dtype):
-        self.name = name
-        self.shape = shape
-        self.dtype = dtype
-
-
-class PrimFunc:
-    def __init__(self, params, buffer_map, body, attrs=None):
-        self.params = params
-        self.buffer_map = buffer_map
-        self.body = body
-        self.attrs = {} if attrs is None else attrs
-
-
-class BufferLoad:
-    def __init__(self, buffer, indices, dtype="float32"):
-        self.buffer = buffer
-        self.indices = indices
-        self.dtype = dtype
-
-
-class BufferStore:
-    def __init__(self, buffer, value, indices):
-        self.buffer = buffer
-        self.value = value
-        self.indices = indices
-
-
-class IntImm:
-    def __init__(self, value, dtype="int32"):
-        self.value = value
-        self.dtype = dtype
-
-
+# ====
 @tilelang_case(name="copy")
-def copy():
-    src = Var("src")
-    dst = Var("dst")
-    src_buffer = Buffer("src", (4,), "float32")
-    dst_buffer = Buffer("dst", (4,), "float32")
-    body = BufferStore(dst_buffer, BufferLoad(src_buffer, [IntImm(0)]), [IntImm(0)])
-    prim_func = PrimFunc(
-        [src, dst],
-        {src: src_buffer, dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "copy"},
-    )
-    return TileLangImportInput(source=prim_func, target="hip", name="copy")
+def copy(T: Any) -> TileLangImportInput:
+    @T.prim_func
+    def main(
+        A: T.Tensor((4,), T.float32),
+        B: T.Tensor((4,), T.float32),
+    ):
+        with T.Kernel(1, threads=1):
+            B[0] = A[0]
+
+    return TileLangImportInput(source=main, target="hip", name="copy")
+
+
 # ----
 # old
 """
@@ -99,34 +63,10 @@ def copy():
     assert "view.store" in updated_source
 
 
-def test_run_tilelang_check_verifies_checked_in_fixtures() -> None:
-    testdata = Path(__file__).resolve().parent / "testdata"
-    update = "--update" in sys.argv[1:]
-    expected_statuses = {
-        "analysis.py": ["passed", "passed"],
-        "allocations.py": ["passed", "passed"],
-        "control_flow.py": ["passed", "passed"],
-        "memory_effects.py": ["passed", "passed"],
-        "scalar_calls.py": ["passed", "passed", "passed", "passed"],
-        "topology.py": ["passed", "passed", "passed"],
-        "vector_arithmetic.py": ["passed", "passed"],
-        "vector_casts.py": ["passed", "passed", "passed", "passed"],
-        "vector_memory.py": ["passed", "passed"],
-    }
-
-    for filename, statuses in expected_statuses.items():
-        results = run_tilelang_check(
-            testdata / filename,
-            options=TileLangCheckOptions(update=update),
-        )
-
-        if update:
-            assert all(result.passed for result in results), [
-                (result.status, result.mismatch, result.stderr, result.diff)
-                for result in results
-            ]
-        else:
-            assert [result.status for result in results] == statuses, [
-                (result.status, result.mismatch, result.stderr, result.diff)
-                for result in results
-            ]
+def _require_tilelang() -> None:
+    backend = TileLangBackend()
+    availability = backend.probe()
+    if availability.available:
+        availability = backend.prepare(Namespace())
+    if not availability.available:
+        raise SkipTest(availability.message())

@@ -7,7 +7,10 @@ For importer fixture verification:
 
 ```bash
 iree-bazel-test --config=asan //loom/py/loom/importers/check:check_test
+iree-bazel-test --config=asan //loom/py/loom/importers/check:mlir_import_test
 iree-bazel-test --config=asan //loom/py/loom/importers/check/tilelang:tilelang_test
+iree-bazel-test --config=asan \
+    //loom/py/loom/importers/check/tilelang:tilelang_import_test
 ```
 
 To accept updated inline Loom output for checked-in importer fixtures, pass the
@@ -28,6 +31,10 @@ Python fixture files keep shared imports at the top, split cases with
 `# ====`, and compare imported Loom IR against the inline `# ----` section.
 Use update mode after intentional importer output changes instead of editing
 the expected Loom IR by hand.
+
+Importer check file sets are owned by BUILD filegroups. Add new checked fixture
+files to the relevant filegroup and pass them through the test target with
+`$(locations ...)`; do not hardcode testdata paths inside Python tests.
 
 Expected diagnostics use source annotations instead of bespoke test callbacks:
 

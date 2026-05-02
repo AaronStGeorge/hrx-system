@@ -27,11 +27,6 @@ class TileLangBackend:
                 reason="Python package `tilelang` is not importable",
                 install_hint="install iree-loom[tilelang]",
             )
-        if not has_module("tvm"):
-            return Availability.unavailable(
-                reason="Python package `tvm` is not importable",
-                install_hint="install iree-loom[tilelang]",
-            )
         return Availability.yes()
 
     def prepare(self, _args: argparse.Namespace) -> Availability:

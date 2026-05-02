@@ -18,6 +18,7 @@ import importlib
 import inspect
 import sys
 import traceback
+import unittest
 from collections.abc import Callable, Iterable, Sequence
 from types import ModuleType
 from typing import Any
@@ -38,6 +39,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     failures = 0
+    skips = 0
     test_count = 0
     for module_name in module_names:
         try:
@@ -46,6 +48,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 test_count += 1
                 try:
                     _run_test_function(module_name, test_name, function)
+                except unittest.SkipTest as exc:
+                    skips += 1
+                    sys.stdout.write(f"SKIP {module_name}.{test_name}: {exc}\n")
                 except Exception:
                     failures += 1
                     sys.stderr.write(f"\nFAILED {module_name}.{test_name}\n")
@@ -56,7 +61,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             traceback.print_exc(file=sys.stderr)
 
     sys.stdout.write(
-        f"loom pytest-style runner: {test_count} tests, {failures} failures\n"
+        "loom pytest-style runner: "
+        f"{test_count} tests, {failures} failures, {skips} skipped\n"
     )
     if test_count == 0:
         sys.stderr.write("error: no tests were discovered\n")

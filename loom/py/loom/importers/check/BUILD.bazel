@@ -61,3 +61,26 @@ py_test(
     main = "pytest_style_runner.py",
     deps = [":check"],
 )
+
+filegroup(
+    name = "mlir_tests",
+    srcs = [
+        "testdata/mlir/vector_reduce_amdgpu.mlir",
+    ],
+)
+
+py_test(
+    name = "mlir_import_test",
+    srcs = ["import_test.py"],
+    args = [
+        "mlir",
+        "$(locations :mlir_tests)",
+    ],
+    data = [":mlir_tests"],
+    main = "import_test.py",
+    deps = [
+        ":check",
+        "//loom/py/loom/importers/check/mlir",
+        "//loom/py/loom/importers/check/tilelang",
+    ],
+)

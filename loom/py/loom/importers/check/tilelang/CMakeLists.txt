@@ -25,6 +25,17 @@ iree_py_library(
     iree::runtime::py::loom::importers::tilelang::tilelang
 )
 
+add_custom_command(OUTPUT tests.stamp
+    COMMAND ${CMAKE_COMMAND} -E touch tests.stamp
+  DEPENDS
+    "testdata/diagnostics.py"
+    "testdata/vector_arithmetic.py"
+)
+
+add_custom_target(tests
+    DEPENDS tests.stamp
+)
+
 iree_py_test(
   NAME
     tilelang_test
@@ -34,6 +45,20 @@ iree_py_test(
     "loom.importers.check.tilelang.cases_test"
     "loom.importers.check.tilelang.harness_test"
     "loom.importers.check.tilelang.runner_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
+)
+
+iree_py_test(
+  NAME
+    tilelang_import_test
+  SRCS
+    "../import_test.py"
+  ARGS
+    "tilelang"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/check/tilelang/testdata/diagnostics.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/check/tilelang/testdata/vector_arithmetic.py"
   PACKAGE_DIRS
     "${IREE_SOURCE_DIR}/runtime/py"
     "${IREE_BINARY_DIR}/runtime/py"

@@ -11,12 +11,12 @@ from __future__ import annotations
 import hashlib
 import sys
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from loom.diagnostics import LoomDiagnosticError
+from loom.diagnostics import Diagnostic, LoomDiagnosticError, SourceRange
 from loom.importers.check.annotations import (
     parse_expected_diagnostics,
     source_diagnostic_check_result,
@@ -200,18 +200,19 @@ def run_python_case(
     try:
         stdout = invoke(python_case)
     except LoomDiagnosticError as exc:
+        diagnostics = _diagnostics_with_case_location(exc.diagnostics, python_case)
         if expected_diagnostics:
             return source_diagnostic_check_result(
                 check_case,
                 expected_diagnostics=expected_diagnostics,
-                actual_diagnostics=exc.diagnostics,
+                actual_diagnostics=diagnostics,
             )
         return CheckResult(
             path=check_case.path,
             case_index=check_case.index,
             returncode=1,
             stdout="",
-            stderr=f"{exc}\n",
+            stderr="".join(f"{diagnostic}\n" for diagnostic in diagnostics),
             input=check_case.input,
             expected=check_case.expected,
         )
@@ -332,3 +333,27 @@ def _check_case_for_line(
 def _module_name(path: Path) -> str:
     digest = hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:16]
     return f"_loom_import_check_{digest}"
+
+
+def _diagnostics_with_case_location(
+    diagnostics: tuple[Diagnostic, ...],
+    python_case: PythonCheckCase,
+) -> tuple[Diagnostic, ...]:
+    fallback = SourceRange.line(
+        python_case.check_case.path,
+        python_case.function.__code__.co_firstlineno,
+    )
+    return tuple(
+        _diagnostic_with_fallback_location(diagnostic, fallback)
+        for diagnostic in diagnostics
+    )
+
+
+def _diagnostic_with_fallback_location(
+    diagnostic: Diagnostic,
+    fallback: SourceRange,
+) -> Diagnostic:
+    location = diagnostic.primary_location
+    if location is not None and location.has_location:
+        return diagnostic
+    return replace(diagnostic, source_location=fallback)

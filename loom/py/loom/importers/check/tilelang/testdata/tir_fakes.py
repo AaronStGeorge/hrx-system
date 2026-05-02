@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Small TVM/TIR-shaped objects for importer check corpus fixtures."""
+"""Small TVM/TIR-shaped objects for legacy importer check fixtures."""
 
 from __future__ import annotations
 
