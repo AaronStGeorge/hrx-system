@@ -7,9 +7,9 @@
 """Loom-specific Bazel build macros.
 
 The rules in this file are intentionally scoped to Loom instead of the shared
-IREE build layer. They describe target-low descriptor generation: compact C
-tables derived from checked-in Loom Python descriptions and, for some targets,
-fetched vendor machine-readable data.
+IREE build layer. They describe compact generated C tables derived from
+checked-in Loom Python descriptions and, for some targets, fetched vendor
+machine-readable data.
 """
 
 load(
@@ -189,6 +189,83 @@ def loom_target_table_cc_library(
         **kwargs
     )
     _ignore = (exclude_from_cmake_all,)
+
+def loom_generated_cc_library(
+        name,
+        generator,
+        source = None,
+        hdrs = [],
+        args = [],
+        inputs = [],
+        extra_output_flags = [],
+        extra_outputs = [],
+        deps = [],
+        tags = [],
+        testonly = False,
+        visibility = None,
+        **kwargs):
+    """Generates a C source table and wraps it in a runtime library.
+
+    This is the common build-system contract for generated C data that has a
+    checked-in public header. Generators receive --source=<path> for the C
+    output plus optional flag/output pairs such as --catalog=<path> for sidecar
+    generated artifacts.
+
+    Args:
+      name: Runtime C library target name.
+      generator: Python executable label that writes the generated outputs.
+      source: Generated C source filename. Defaults to <name>.c.
+      hdrs: Checked-in public/private headers for the C library.
+      args: Generator arguments before the output flags.
+      inputs: Source data labels consumed by the generator.
+      extra_output_flags: Generator flags paired with extra_outputs.
+      extra_outputs: Additional generated files produced by the action.
+      deps: Runtime C library dependencies.
+      tags: Additional Bazel tags for the internal generator action.
+      testonly: Passed through to the runtime C library.
+      visibility: Passed through to the generator action and runtime library.
+      **kwargs: Additional arguments passed through to loom_cc_library.
+    """
+    if len(extra_output_flags) != len(extra_outputs):
+        fail("extra_output_flags and extra_outputs must have the same length")
+
+    genrule_kwargs = {}
+    if visibility != None:
+        genrule_kwargs["visibility"] = visibility
+
+    source = source or (name + ".c")
+    bazel_args = [arg.replace("$(rootpath ", "$(execpath ") for arg in args]
+    output_args = ["--source=$(execpath %s)" % source]
+    for i in range(len(extra_outputs)):
+        flag = extra_output_flags[i]
+        output = extra_outputs[i]
+        output_args.append("%s=$(execpath %s)" % (flag, output))
+
+    iree_genrule(
+        name = name + "_gen",
+        srcs = inputs,
+        outs = [source] + extra_outputs,
+        cmd = " ".join(
+            ["$(location %s)" % generator] +
+            bazel_args +
+            output_args,
+        ),
+        tags = tags + ["skip-bazel_to_cmake"],
+        tools = [generator],
+        **genrule_kwargs
+    )
+
+    package_name = native.package_name()
+    generated_source = "//%s:%s" % (package_name, source)
+    loom_cc_library(
+        name = name,
+        srcs = [generated_source],
+        hdrs = hdrs,
+        deps = deps,
+        testonly = testonly,
+        visibility = visibility,
+        **kwargs
+    )
 
 def loom_low_descriptor_cc_library(
         name,

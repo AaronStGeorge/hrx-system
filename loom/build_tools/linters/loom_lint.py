@@ -55,7 +55,7 @@ def main() -> int:
     )
     ok &= _run(
         "c errors",
-        [sys.executable, "loom/py/loom/gen/run.py", "c_errors"],
+        [sys.executable, "loom/py/loom/gen/run.py", "c_errors", "--check"],
         cwd=REPO_ROOT,
     )
     ok &= _run(

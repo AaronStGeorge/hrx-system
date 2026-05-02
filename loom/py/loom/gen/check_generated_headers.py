@@ -22,7 +22,6 @@ PRESERVE_BELOW_TAG = "### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE #
 GENERATED_SOURCE_GLOBS = (
     "loom/py/loom/dialect/*/builders.py",
     "loom/src/loom/editor/textmate/*.tmLanguage.json",
-    "loom/src/loom/error/error_tables.c",
     "loom/src/loom/ops/*/builders.c",
     "loom/src/loom/ops/*/ops.h",
     "loom/src/loom/ops/*/tables.c",

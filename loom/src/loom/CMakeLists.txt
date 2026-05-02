@@ -15,6 +15,7 @@ iree_setup_c_src_root(
 )
 
 include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_low_descriptor.cmake")
+include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_generated.cmake")
 
 iree_add_all_subdirs()
 

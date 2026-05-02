@@ -9,6 +9,7 @@
 Usage:
     python3 loom/py/loom/gen/run.py builders_pyi --in-place
     python3 loom/py/loom/gen/run.py builders_pyi --check
+    python3 loom/py/loom/gen/run.py c_errors --check
     python3 loom/py/loom/gen/run.py c_tables
     python3 loom/py/loom/gen/run.py low_descriptors
     python3 loom/py/loom/gen/run.py textmate
@@ -30,7 +31,7 @@ GENERATORS = {
     "textmate": "loom.gen.textmate",
 }
 
-ARGUMENT_GENERATORS: set[str] = {"builders_pyi"}
+ARGUMENT_GENERATORS: set[str] = {"builders_pyi", "c_errors"}
 
 
 def _usage() -> str:

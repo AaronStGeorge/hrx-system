@@ -53,6 +53,19 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    c_errors
+  MAIN
+    "c_errors.py"
+  SRCS
+    "c_errors.py"
+  DEPS
+    iree::runtime::py::loom::gen::generated_file
+    iree::runtime::py::loom::core
+    iree::runtime::py::loom::error::error
+)
+
+iree_py_library(
+  NAME
     ireevm_low_descriptor_shard
   MAIN
     "low_descriptor_shard.py"

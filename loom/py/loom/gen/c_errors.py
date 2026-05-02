@@ -12,21 +12,34 @@ Reads ErrorDef instances from the Python error catalog and emits:
                          lookup table, name tables
   error_catalog.json  — full catalog for tooling/documentation
 
-The generated files are checked into the repository. The C build never
-requires Python.
+The generated files are build outputs. The Python error catalog is the source
+of truth.
 
 Usage:
-    python3 loom/py/loom/gen/run.py c_errors
+    python3 loom/py/loom/gen/run.py c_errors --check
+    bazel run //loom/py/loom/gen:c_errors -- --source=/tmp/error_tables.c
 """
 
 from __future__ import annotations
 
+import argparse
 import json
-import subprocess
+import sys
+from collections.abc import Sequence
+from pathlib import Path
 
-from loom.errors import Emitter, ErrorDef, ErrorDomain, ParamKind, Severity
-from loom.gen import bootstrap as _bootstrap
-from loom.gen.generated_file import line_comment_header
+
+def _ensure_runtime_py_on_path() -> None:
+    runtime_py = Path(__file__).resolve().parents[2]
+    runtime_py_string = str(runtime_py)
+    if runtime_py_string not in sys.path:
+        sys.path.insert(0, runtime_py_string)
+
+
+_ensure_runtime_py_on_path()
+
+from loom.errors import Emitter, ErrorDef, ErrorDomain, ParamKind, Severity  # noqa: E402
+from loom.gen.generated_file import line_comment_header  # noqa: E402
 
 # Maps Python ParamKind to C enum name.
 PARAM_KIND_MAP: dict[ParamKind, str] = {
@@ -78,25 +91,13 @@ def _escape_c_string(text: str) -> str:
     return text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
-def _clang_format_source(source: str) -> str:
-    """Formats generated C so generator and pre-commit formatting converge."""
-    result = subprocess.run(
-        ["clang-format"],
-        input=source,
-        capture_output=True,
-        check=True,
-        text=True,
-    )
-    return result.stdout
-
-
 def generate_error_tables_c(errors: list[ErrorDef]) -> str:
     """Generates error_tables.c with all .rodata and utility functions."""
     lines = [
         *line_comment_header(
             "//",
             generator="loom.gen.c_errors",
-            regenerate="python3 loom/py/loom/gen/run.py c_errors",
+            regenerate="iree-bazel-build //loom/src/loom/error:error_defs",
         ),
         "",
         '#include "loom/error/error_defs.h"',
@@ -216,7 +217,7 @@ def generate_error_tables_c(errors: list[ErrorDef]) -> str:
     lines.append("}")
     lines.append("")
 
-    return _clang_format_source("\n".join(lines))
+    return "\n".join(lines) + "\n"
 
 
 def generate_error_catalog_json(errors: list[ErrorDef]) -> str:
@@ -267,29 +268,49 @@ def generate_error_catalog_json(errors: list[ErrorDef]) -> str:
     return json.dumps(catalog, indent=2, ensure_ascii=False) + "\n"
 
 
-def main() -> None:
+def _write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def main(argv: Sequence[str] | None = None) -> int:
     """Generate C error tables and JSON catalog."""
+    parser = argparse.ArgumentParser(description="Generate Loom error tables from Python definitions.")
+    parser.add_argument(
+        "--source",
+        type=Path,
+        help="Generated C error table path.",
+    )
+    parser.add_argument(
+        "--catalog",
+        type=Path,
+        help="Generated JSON error catalog path.",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Validate generation without writing files.",
+    )
+    args = parser.parse_args(argv)
+
+    if not args.check and args.source is None and args.catalog is None:
+        parser.error("at least one of --source, --catalog, or --check is required")
+
     from loom.error import ALL_ERRORS
 
     errors = list(ALL_ERRORS)
+    tables_c = generate_error_tables_c(errors)
+    catalog_json = generate_error_catalog_json(errors)
 
-    output_directory = _bootstrap.REPO_ROOT / "loom" / "src" / "loom" / "error"
-    output_directory.mkdir(parents=True, exist_ok=True)
+    if args.source is not None:
+        _write_text(args.source, tables_c)
+    if args.catalog is not None:
+        _write_text(args.catalog, catalog_json)
 
-    outputs = {
-        "error_tables.c": generate_error_tables_c(errors),
-        "error_catalog.json": generate_error_catalog_json(errors),
-    }
-
-    for filename, content in outputs.items():
-        path = output_directory / filename
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(content)
-
-    print(f"Generated {len(errors)} error definitions:")
-    for filename in outputs:
-        print(f"  {filename}")
+    if args.check:
+        print(f"Validated {len(errors)} error definitions")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

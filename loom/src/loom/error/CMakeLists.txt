@@ -50,18 +50,23 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     error_defs
+  GENERATOR
+    iree::runtime::py::loom::gen::c_errors
+  SOURCE
+    "error_tables.c"
   HDRS
     "error_defs.h"
-  SRCS
-    "error_tables.c"
+  EXTRA_OUTPUT_FLAGS
+    "--catalog"
+  EXTRA_OUTPUTS
+    "error_catalog.json"
   DEPS
     ::emitter
     iree::base
     loom::src::loom::ir
-  PUBLIC
 )
 
 loom_cc_test(

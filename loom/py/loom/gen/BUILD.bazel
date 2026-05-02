@@ -50,6 +50,17 @@ py_library(
 )
 
 py_binary(
+    name = "c_errors",
+    srcs = ["c_errors.py"],
+    main = "c_errors.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom:core",
+        "//loom/py/loom/error",
+    ],
+)
+
+py_binary(
     name = "ireevm_low_descriptor_shard",
     srcs = ["low_descriptor_shard.py"],
     main = "low_descriptor_shard.py",
