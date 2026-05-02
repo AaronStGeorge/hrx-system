@@ -49,6 +49,7 @@ filegroup(
         "testdata/diagnostics.py",
         "testdata/memory_effects.py",
         "testdata/scalar_calls.py",
+        "testdata/tilekernels.py",
         "testdata/topology.py",
         "testdata/vector_arithmetic.py",
         "testdata/vector_casts.py",
