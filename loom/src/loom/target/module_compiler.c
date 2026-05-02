@@ -592,10 +592,6 @@ static iree_status_t loom_target_module_compile_select_single_entry(
   *out_selected = false;
   iree_host_size_t candidate_count = 0;
   for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
-    if (i > UINT16_MAX) {
-      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                              "symbol index exceeds entry ref range");
-    }
     bool compatible = false;
     loom_target_module_compile_entry_t candidate = {0};
     IREE_RETURN_IF_ERROR(loom_target_module_compile_try_entry(
