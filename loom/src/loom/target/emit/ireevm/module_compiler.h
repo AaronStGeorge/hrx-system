@@ -7,7 +7,7 @@
 // IREE VM archive compilation for parsed Loom modules.
 //
 // This mutates a parsed module through the current IREE VM target path:
-// target preset expansion, generic verification, source-to-low lowering, low
+// target-record resolution, generic verification, source-to-low lowering, low
 // pass-managed preparation, low descriptor verification, packetization, VM
 // function-body bytecode emission, and VM bytecode module archive wrapping. The
 // output archive is the same runtime artifact consumed by

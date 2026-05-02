@@ -7,7 +7,7 @@
 // AMDGPU HAL executable compilation for parsed Loom modules.
 //
 // This mutates a parsed module through the current AMDGPU target-low native
-// path: target preset expansion, verification, ABI resource materialization,
+// path: target-record resolution, verification, ABI resource materialization,
 // pass-managed low preparation, packetization, native HSACO writing, and IREE
 // HAL executable wrapping.
 
@@ -35,8 +35,8 @@ typedef struct loom_amdgpu_module_compile_options_t {
   // command-line ergonomics.
   iree_string_view_t artifact_symbol;
   // Optional AMDHSA processor name such as `gfx1100` overriding the selected
-  // preset snapshot CPU. This preserves the preset's descriptor-set family
-  // while letting JIT runners specialize to the concrete HAL device ISA.
+  // target snapshot CPU. This preserves the target record's descriptor-set
+  // family while letting JIT runners specialize to the concrete HAL device ISA.
   iree_string_view_t target_cpu;
   // Diagnostic sink used for verification, materialization, scheduling, and
   // allocation diagnostics. A NULL callback still counts diagnostics.

@@ -73,7 +73,7 @@ iree_status_t FakeHalSelectTarget(const loom_run_hal_backend_t* backend,
   *out_target = (loom_run_hal_selected_target_t){
       .data = &kFakeHalTarget,
       .target_bundle = &kFakeTargetBundle,
-      .preset_key = IREE_SVL("fake-hal"),
+      .target_key = IREE_SVL("fake-hal"),
   };
   return iree_ok_status();
 }
@@ -202,7 +202,7 @@ TEST_F(HalCandidateTest, CompileHalExecutableCandidate) {
   EXPECT_EQ(candidate.compile_report.status_code, IREE_STATUS_OK);
   EXPECT_TRUE(iree_string_view_equal(candidate.compile_report.backend_name,
                                      IREE_SV("fake-hal")));
-  EXPECT_TRUE(iree_string_view_equal(candidate.compile_report.target_preset_key,
+  EXPECT_TRUE(iree_string_view_equal(candidate.compile_report.target_key,
                                      IREE_SV("fake-hal")));
   EXPECT_TRUE(iree_string_view_equal(candidate.compile_report.executable_format,
                                      IREE_SV("fake-hal-format")));

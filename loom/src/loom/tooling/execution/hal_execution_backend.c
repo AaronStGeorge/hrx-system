@@ -78,10 +78,10 @@ iree_status_t loom_run_hal_execution_backend_probe(
         iree_string_builder_buffer(&target_id_builder));
   }
   if (iree_status_is_ok(status) &&
-      !iree_string_view_is_empty(target.preset_key)) {
+      !iree_string_view_is_empty(target.target_key)) {
     status = iree_string_builder_append_format(
-        &request->result->output, "hal preset: %.*s\n",
-        (int)target.preset_key.size, target.preset_key.data);
+        &request->result->output, "hal target key: %.*s\n",
+        (int)target.target_key.size, target.target_key.data);
   }
 
   iree_string_builder_deinitialize(&target_id_builder);

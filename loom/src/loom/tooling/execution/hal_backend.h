@@ -34,8 +34,8 @@ typedef struct loom_run_hal_selected_target_t {
   const void* data;
   // Target-neutral bundle resolved for the selected backend target.
   const loom_target_bundle_t* target_bundle;
-  // Preset key that aliases the selected target, if the backend has one.
-  iree_string_view_t preset_key;
+  // Backend-facing target key selected for compilation, if any.
+  iree_string_view_t target_key;
 } loom_run_hal_selected_target_t;
 
 // Generic executable bytes ready for iree_hal_executable_cache_prepare.

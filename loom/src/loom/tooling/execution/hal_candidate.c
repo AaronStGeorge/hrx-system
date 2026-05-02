@@ -49,7 +49,7 @@ iree_status_t loom_run_hal_candidate_compile(
                                     &out_candidate->target);
   }
   if (iree_status_is_ok(status) && report != NULL) {
-    report->target_preset_key = out_candidate->target.preset_key;
+    report->target_key = out_candidate->target.target_key;
   }
   if (iree_status_is_ok(status)) {
     status = backend->compile(
@@ -70,7 +70,7 @@ iree_status_t loom_run_hal_candidate_compile(
     report->target_family_name = backend->target_family_name;
   }
   if (iree_status_is_ok(status) && out_candidate->compiled && report != NULL) {
-    report->target_preset_key = out_candidate->target.preset_key;
+    report->target_key = out_candidate->target.target_key;
     report->executable_format = out_candidate->executable.executable_format;
     loom_target_compile_report_record_artifact_size(
         report, out_candidate->executable.executable_data.data_length);

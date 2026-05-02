@@ -7,7 +7,7 @@
 // Target-neutral launch-shape contracts.
 //
 // Target snapshots describe capability envelopes supplied by the hosting layer
-// or target preset. Function/export contracts may optionally select a concrete
+// or target record. Function/export contracts may optionally select a concrete
 // launch shape. This layer validates those dense records without probing the
 // current host device and without inventing fallback launch sizes.
 
