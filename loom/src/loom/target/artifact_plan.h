@@ -16,6 +16,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/analysis/symbol_facts.h"
+#include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/target/facts.h"
 #include "loom/util/call_graph.h"
@@ -50,11 +51,14 @@ typedef struct loom_target_artifact_plan_t {
 // |fact_table| must have access to the same target preset registry resources
 // used to compute target.profile facts. |call_graph| must have been built for
 // |module|. All plan arrays are allocated from |arena| and remain valid for the
-// arena lifetime.
+// arena lifetime. Returns status only for infrastructure failures. Invalid
+// user IR emits a structured diagnostic, sets |out_valid| to false, and returns
+// OK.
 iree_status_t loom_target_artifact_plan_build(
     const loom_module_t* module, loom_symbol_ref_t artifact_symbol,
     loom_symbol_fact_table_t* fact_table, const loom_call_graph_t* call_graph,
-    iree_arena_allocator_t* arena, loom_target_artifact_plan_t* out_plan);
+    iree_diagnostic_emitter_t diagnostic_emitter, iree_arena_allocator_t* arena,
+    bool* out_valid, loom_target_artifact_plan_t* out_plan);
 
 #ifdef __cplusplus
 }  // extern "C"

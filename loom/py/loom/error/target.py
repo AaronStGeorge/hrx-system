@@ -536,6 +536,169 @@ ERR_TARGET_028 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_029: Target artifact plan root is not an artifact.
+ERR_TARGET_029 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=29,
+    severity=Severity.ERROR,
+    summary="Target artifact plan root is not an artifact.",
+    message=(
+        "target artifact plan root '@{symbol_name}' must resolve to "
+        "target.artifact facts"
+    ),
+    params=(ErrorParam("symbol_name", ParamKind.STRING),),
+    fix_hint="Select a target.artifact symbol for artifact planning",
+)
+
+# ERR_TARGET_030: Target artifact closure reaches a non-function symbol.
+ERR_TARGET_030 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=30,
+    severity=Severity.ERROR,
+    summary="Target artifact closure reaches a non-function symbol.",
+    message=(
+        "target artifact '@{artifact_name}' closure reaches non-function "
+        "symbol '@{symbol_name}'"
+    ),
+    params=(
+        ErrorParam("artifact_name", ParamKind.STRING),
+        ErrorParam("symbol_name", ParamKind.STRING),
+    ),
+    fix_hint="Only call function symbols from functions exported by '@{artifact_name}'",
+)
+
+# ERR_TARGET_031: Target artifact closure crosses into another artifact.
+ERR_TARGET_031 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=31,
+    severity=Severity.ERROR,
+    summary="Target artifact closure crosses into another artifact.",
+    message=(
+        "target artifact '@{artifact_name}' closure reaches function "
+        "'@{function_name}' exported by artifact '@{other_artifact_name}'"
+    ),
+    params=(
+        ErrorParam("artifact_name", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("other_artifact_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Keep each artifact's exported function closure private to that artifact"
+    ),
+)
+
+# ERR_TARGET_032: Target artifact entry has no function body.
+ERR_TARGET_032 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=32,
+    severity=Severity.ERROR,
+    summary="Target artifact entry has no function body.",
+    message=(
+        "target artifact '@{artifact_name}' entry '@{function_name}' must "
+        "have a function body"
+    ),
+    params=(
+        ErrorParam("artifact_name", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+    ),
+)
+
+# ERR_TARGET_033: Target artifact entry target mismatches the artifact target.
+ERR_TARGET_033 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=33,
+    severity=Severity.ERROR,
+    summary="Target artifact entry target mismatches the artifact target.",
+    message=(
+        "target artifact '@{artifact_name}' targets '@{artifact_target_name}' "
+        "but entry '@{function_name}' targets '@{function_target_name}'"
+    ),
+    params=(
+        ErrorParam("artifact_name", ParamKind.STRING),
+        ErrorParam("artifact_target_name", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("function_target_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Export only functions targeting '@{artifact_target_name}' from "
+        "'@{artifact_name}'"
+    ),
+)
+
+# ERR_TARGET_034: Target artifact export ordinals are partially assigned.
+ERR_TARGET_034 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=34,
+    severity=Severity.ERROR,
+    summary="Target artifact export ordinals are partially assigned.",
+    message=(
+        "target artifact '@{artifact_name}' has {ordinal_count} explicit "
+        "export ordinal(s) for {entry_count} exported entries"
+    ),
+    params=(
+        ErrorParam("artifact_name", ParamKind.STRING),
+        ErrorParam("ordinal_count", ParamKind.U32),
+        ErrorParam("entry_count", ParamKind.U32),
+    ),
+    fix_hint=(
+        "Either assign export ordinals to every entry in '@{artifact_name}' "
+        "or omit all export ordinals"
+    ),
+)
+
+# ERR_TARGET_035: Target artifact export ordinal is outside the dense range.
+ERR_TARGET_035 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=35,
+    severity=Severity.ERROR,
+    summary="Target artifact export ordinal is outside the dense range.",
+    message=(
+        "target artifact '@{artifact_name}' entry '@{function_name}' export "
+        "ordinal {export_ordinal} is outside dense range [0, {entry_count})"
+    ),
+    params=(
+        ErrorParam("artifact_name", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("export_ordinal", ParamKind.U32),
+        ErrorParam("entry_count", ParamKind.U32),
+    ),
+)
+
+# ERR_TARGET_036: Target artifact export ordinal is assigned more than once.
+ERR_TARGET_036 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=36,
+    severity=Severity.ERROR,
+    summary="Target artifact export ordinal is assigned more than once.",
+    message=(
+        "target artifact '@{artifact_name}' export ordinal {export_ordinal} "
+        "is assigned to both '@{first_function_name}' and "
+        "'@{second_function_name}'"
+    ),
+    params=(
+        ErrorParam("artifact_name", ParamKind.STRING),
+        ErrorParam("export_ordinal", ParamKind.U32),
+        ErrorParam("first_function_name", ParamKind.STRING),
+        ErrorParam("second_function_name", ParamKind.STRING),
+    ),
+)
+
+# ERR_TARGET_037: Target artifact export ordinal is not assigned.
+ERR_TARGET_037 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=37,
+    severity=Severity.ERROR,
+    summary="Target artifact export ordinal is not assigned.",
+    message=(
+        "target artifact '@{artifact_name}' export ordinal {export_ordinal} "
+        "is not assigned"
+    ),
+    params=(
+        ErrorParam("artifact_name", ParamKind.STRING),
+        ErrorParam("export_ordinal", ParamKind.U32),
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -565,4 +728,13 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_026,
     ERR_TARGET_027,
     ERR_TARGET_028,
+    ERR_TARGET_029,
+    ERR_TARGET_030,
+    ERR_TARGET_031,
+    ERR_TARGET_032,
+    ERR_TARGET_033,
+    ERR_TARGET_034,
+    ERR_TARGET_035,
+    ERR_TARGET_036,
+    ERR_TARGET_037,
 )

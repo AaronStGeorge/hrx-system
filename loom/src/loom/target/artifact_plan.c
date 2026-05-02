@@ -6,9 +6,9 @@
 
 #include "loom/target/artifact_plan.h"
 
-#include <inttypes.h>
 #include <string.h>
 
+#include "loom/error/error_defs.h"
 #include "loom/ops/func_symbol_facts.h"
 
 static bool loom_target_artifact_plan_symbol_ref_equal(loom_symbol_ref_t lhs,
@@ -16,9 +16,60 @@ static bool loom_target_artifact_plan_symbol_ref_equal(loom_symbol_ref_t lhs,
   return lhs.module_id == rhs.module_id && lhs.symbol_id == rhs.symbol_id;
 }
 
+static iree_string_view_t loom_target_artifact_plan_symbol_name(
+    const loom_module_t* module, loom_symbol_id_t symbol_id) {
+  if (symbol_id >= module->symbols.count) {
+    return IREE_SV("<unknown>");
+  }
+  const loom_symbol_t* symbol = &module->symbols.entries[symbol_id];
+  if (symbol->name_id >= module->strings.count) {
+    return IREE_SV("<unknown>");
+  }
+  return module->strings.entries[symbol->name_id];
+}
+
+static iree_string_view_t loom_target_artifact_plan_symbol_ref_name(
+    const loom_module_t* module, loom_symbol_ref_t symbol_ref) {
+  if (symbol_ref.module_id != 0) {
+    return IREE_SV("<unknown>");
+  }
+  return loom_target_artifact_plan_symbol_name(module, symbol_ref.symbol_id);
+}
+
+static const loom_op_t* loom_target_artifact_plan_symbol_op(
+    const loom_module_t* module, loom_symbol_id_t symbol_id) {
+  if (symbol_id >= module->symbols.count) {
+    return NULL;
+  }
+  return module->symbols.entries[symbol_id].defining_op;
+}
+
+static iree_status_t loom_target_artifact_plan_emit(
+    iree_diagnostic_emitter_t diagnostic_emitter, const loom_op_t* op,
+    uint16_t code, const loom_diagnostic_param_t* params,
+    iree_host_size_t param_count) {
+  const loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, code),
+      .params = params,
+      .param_count = param_count,
+  };
+  return iree_diagnostic_emit(diagnostic_emitter, &emission);
+}
+
+static iree_status_t loom_target_artifact_plan_reject(
+    iree_diagnostic_emitter_t diagnostic_emitter, const loom_op_t* op,
+    uint16_t code, const loom_diagnostic_param_t* params,
+    iree_host_size_t param_count, bool* out_valid) {
+  *out_valid = false;
+  return loom_target_artifact_plan_emit(diagnostic_emitter, op, code, params,
+                                        param_count);
+}
+
 static iree_status_t loom_target_artifact_plan_lookup_artifact(
     const loom_module_t* module, loom_symbol_ref_t artifact_symbol,
     loom_symbol_fact_table_t* fact_table,
+    iree_diagnostic_emitter_t diagnostic_emitter, bool* out_valid,
     const loom_target_artifact_symbol_facts_t** out_artifact_facts) {
   const loom_symbol_facts_base_t* base_facts = NULL;
   IREE_RETURN_IF_ERROR(loom_symbol_fact_table_lookup_ref(
@@ -26,11 +77,17 @@ static iree_status_t loom_target_artifact_plan_lookup_artifact(
   const loom_target_artifact_symbol_facts_t* artifact_facts =
       loom_target_artifact_symbol_facts_cast(base_facts);
   if (!artifact_facts) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "artifact plan root must resolve to target.artifact facts");
+    const loom_diagnostic_param_t params[] = {
+        loom_param_string(
+            loom_target_artifact_plan_symbol_ref_name(module, artifact_symbol)),
+    };
+    return loom_target_artifact_plan_reject(
+        diagnostic_emitter,
+        loom_target_artifact_plan_symbol_op(module, artifact_symbol.symbol_id),
+        29, params, IREE_ARRAYSIZE(params), out_valid);
   }
   *out_artifact_facts = artifact_facts;
+  *out_valid = true;
   return iree_ok_status();
 }
 
@@ -47,24 +104,38 @@ static iree_status_t loom_target_artifact_plan_lookup_func(
 
 static iree_status_t loom_target_artifact_plan_check_reachable_func(
     const loom_module_t* module, loom_symbol_ref_t artifact_symbol,
-    loom_symbol_fact_table_t* fact_table, loom_symbol_id_t symbol_id,
-    bool* out_has_body) {
+    const loom_target_artifact_symbol_facts_t* artifact_facts,
+    loom_symbol_fact_table_t* fact_table,
+    iree_diagnostic_emitter_t diagnostic_emitter, loom_symbol_id_t symbol_id,
+    bool* out_valid, bool* out_has_body) {
   *out_has_body = false;
   const loom_func_symbol_facts_t* func_facts = NULL;
   IREE_RETURN_IF_ERROR(loom_target_artifact_plan_lookup_func(
       module, fact_table, symbol_id, &func_facts));
   if (!func_facts) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "artifact plan closure reaches a non-func symbol");
+    const loom_diagnostic_param_t params[] = {
+        loom_param_string(artifact_facts->name),
+        loom_param_string(
+            loom_target_artifact_plan_symbol_name(module, symbol_id)),
+    };
+    return loom_target_artifact_plan_reject(
+        diagnostic_emitter,
+        loom_target_artifact_plan_symbol_op(module, symbol_id), 30, params,
+        IREE_ARRAYSIZE(params), out_valid);
   }
   if (func_facts->exports &&
       loom_symbol_ref_is_valid(func_facts->artifact_symbol) &&
       !loom_target_artifact_plan_symbol_ref_equal(func_facts->artifact_symbol,
                                                   artifact_symbol)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "artifact plan closure reaches a func exported into another "
-        "artifact");
+    const loom_diagnostic_param_t params[] = {
+        loom_param_string(artifact_facts->name),
+        loom_param_string(func_facts->name),
+        loom_param_string(loom_target_artifact_plan_symbol_ref_name(
+            module, func_facts->artifact_symbol)),
+    };
+    return loom_target_artifact_plan_reject(diagnostic_emitter,
+                                            func_facts->func_op, 31, params,
+                                            IREE_ARRAYSIZE(params), out_valid);
   }
   *out_has_body = func_facts->has_body;
   return iree_ok_status();
@@ -72,9 +143,10 @@ static iree_status_t loom_target_artifact_plan_check_reachable_func(
 
 static iree_status_t loom_target_artifact_plan_mark_closure(
     const loom_module_t* module, loom_symbol_ref_t artifact_symbol,
+    const loom_target_artifact_symbol_facts_t* artifact_facts,
     loom_symbol_fact_table_t* fact_table, const loom_call_graph_t* call_graph,
-    iree_arena_allocator_t* arena, uint8_t* func_marks,
-    uint16_t* out_func_count) {
+    iree_diagnostic_emitter_t diagnostic_emitter, iree_arena_allocator_t* arena,
+    uint8_t* func_marks, bool* out_valid, uint16_t* out_func_count) {
   loom_symbol_id_t* stack = NULL;
   if (call_graph->node_count > 0) {
     IREE_RETURN_IF_ERROR(
@@ -96,7 +168,7 @@ static iree_status_t loom_target_artifact_plan_mark_closure(
     stack[stack_count++] = i;
   }
 
-  while (stack_count > 0) {
+  while (*out_valid && stack_count > 0) {
     loom_symbol_id_t symbol_id = stack[--stack_count];
     const loom_call_graph_node_t* node =
         loom_call_graph_node(call_graph, symbol_id);
@@ -107,7 +179,11 @@ static iree_status_t loom_target_artifact_plan_mark_closure(
       loom_symbol_id_t callee_id = node->callees[i];
       bool callee_has_body = false;
       IREE_RETURN_IF_ERROR(loom_target_artifact_plan_check_reachable_func(
-          module, artifact_symbol, fact_table, callee_id, &callee_has_body));
+          module, artifact_symbol, artifact_facts, fact_table,
+          diagnostic_emitter, callee_id, out_valid, &callee_has_body));
+      if (!*out_valid) {
+        return iree_ok_status();
+      }
       if (!callee_has_body || func_marks[callee_id]) {
         continue;
       }
@@ -131,17 +207,24 @@ static iree_status_t loom_target_artifact_plan_allocate_ids(
 }
 
 static iree_status_t loom_target_artifact_plan_assign_ordered_entries(
-    const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
-    const uint8_t* entry_marks, uint16_t entry_count, uint16_t ordinal_count,
+    const loom_module_t* module,
+    const loom_target_artifact_symbol_facts_t* artifact_facts,
+    loom_symbol_fact_table_t* fact_table,
+    iree_diagnostic_emitter_t diagnostic_emitter, const uint8_t* entry_marks,
+    uint16_t entry_count, uint16_t ordinal_count, bool* out_valid,
     loom_symbol_id_t* entry_symbol_ids) {
   if (entry_count == 0) {
     return iree_ok_status();
   }
   if (ordinal_count != 0 && ordinal_count != entry_count) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "artifact plan entries must either all declare export ordinals or none "
-        "declare export ordinals");
+    const loom_diagnostic_param_t params[] = {
+        loom_param_string(artifact_facts->name),
+        loom_param_u32(ordinal_count),
+        loom_param_u32(entry_count),
+    };
+    return loom_target_artifact_plan_reject(
+        diagnostic_emitter, artifact_facts->artifact_op, 34, params,
+        IREE_ARRAYSIZE(params), out_valid);
   }
 
   if (ordinal_count == 0) {
@@ -165,27 +248,42 @@ static iree_status_t loom_target_artifact_plan_assign_ordered_entries(
     IREE_RETURN_IF_ERROR(loom_target_artifact_plan_lookup_func(
         module, fact_table, (loom_symbol_id_t)i, &func_facts));
     if (func_facts->export_ordinal >= entry_count) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "artifact plan entry @%.*s export ordinal %" PRIu32
-          " is outside dense range [0, %u)",
-          (int)func_facts->name.size, func_facts->name.data,
-          func_facts->export_ordinal, (unsigned)entry_count);
+      const loom_diagnostic_param_t params[] = {
+          loom_param_string(artifact_facts->name),
+          loom_param_string(func_facts->name),
+          loom_param_u32(func_facts->export_ordinal),
+          loom_param_u32(entry_count),
+      };
+      return loom_target_artifact_plan_reject(
+          diagnostic_emitter, func_facts->func_op, 35, params,
+          IREE_ARRAYSIZE(params), out_valid);
     }
     loom_symbol_id_t* slot = &entry_symbol_ids[func_facts->export_ordinal];
     if (*slot != LOOM_SYMBOL_ID_INVALID) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "artifact plan export ordinal %" PRIu32
-                              " is assigned more than once",
-                              func_facts->export_ordinal);
+      const loom_func_symbol_facts_t* first_func_facts = NULL;
+      IREE_RETURN_IF_ERROR(loom_target_artifact_plan_lookup_func(
+          module, fact_table, *slot, &first_func_facts));
+      const loom_diagnostic_param_t params[] = {
+          loom_param_string(artifact_facts->name),
+          loom_param_u32(func_facts->export_ordinal),
+          loom_param_string(first_func_facts->name),
+          loom_param_string(func_facts->name),
+      };
+      return loom_target_artifact_plan_reject(
+          diagnostic_emitter, func_facts->func_op, 36, params,
+          IREE_ARRAYSIZE(params), out_valid);
     }
     *slot = (loom_symbol_id_t)i;
   }
   for (uint16_t i = 0; i < entry_count; ++i) {
     if (entry_symbol_ids[i] == LOOM_SYMBOL_ID_INVALID) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "artifact plan export ordinal %u is not assigned",
-                              i);
+      const loom_diagnostic_param_t params[] = {
+          loom_param_string(artifact_facts->name),
+          loom_param_u32(i),
+      };
+      return loom_target_artifact_plan_reject(
+          diagnostic_emitter, artifact_facts->artifact_op, 37, params,
+          IREE_ARRAYSIZE(params), out_valid);
     }
   }
   return iree_ok_status();
@@ -194,8 +292,10 @@ static iree_status_t loom_target_artifact_plan_assign_ordered_entries(
 iree_status_t loom_target_artifact_plan_build(
     const loom_module_t* module, loom_symbol_ref_t artifact_symbol,
     loom_symbol_fact_table_t* fact_table, const loom_call_graph_t* call_graph,
-    iree_arena_allocator_t* arena, loom_target_artifact_plan_t* out_plan) {
+    iree_diagnostic_emitter_t diagnostic_emitter, iree_arena_allocator_t* arena,
+    bool* out_valid, loom_target_artifact_plan_t* out_plan) {
   memset(out_plan, 0, sizeof(*out_plan));
+  *out_valid = false;
   if (call_graph->module != module) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "artifact plan call graph belongs to another "
@@ -204,7 +304,11 @@ iree_status_t loom_target_artifact_plan_build(
 
   const loom_target_artifact_symbol_facts_t* artifact_facts = NULL;
   IREE_RETURN_IF_ERROR(loom_target_artifact_plan_lookup_artifact(
-      module, artifact_symbol, fact_table, &artifact_facts));
+      module, artifact_symbol, fact_table, diagnostic_emitter, out_valid,
+      &artifact_facts));
+  if (!*out_valid) {
+    return iree_ok_status();
+  }
 
   uint8_t* entry_marks = NULL;
   uint8_t* func_marks = NULL;
@@ -229,16 +333,27 @@ iree_status_t loom_target_artifact_plan_build(
       continue;
     }
     if (!func_facts->has_body) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "artifact plan entry func must have a body");
+      const loom_diagnostic_param_t params[] = {
+          loom_param_string(artifact_facts->name),
+          loom_param_string(func_facts->name),
+      };
+      return loom_target_artifact_plan_reject(
+          diagnostic_emitter, func_facts->func_op, 32, params,
+          IREE_ARRAYSIZE(params), out_valid);
     }
     if (!loom_target_artifact_plan_symbol_ref_equal(
             func_facts->target_symbol, artifact_facts->target_symbol)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "artifact plan entry func @%.*s target profile does not match the "
-          "artifact target profile",
-          (int)func_facts->name.size, func_facts->name.data);
+      const loom_diagnostic_param_t params[] = {
+          loom_param_string(artifact_facts->name),
+          loom_param_string(loom_target_artifact_plan_symbol_ref_name(
+              module, artifact_facts->target_symbol)),
+          loom_param_string(func_facts->name),
+          loom_param_string(loom_target_artifact_plan_symbol_ref_name(
+              module, func_facts->target_symbol)),
+      };
+      return loom_target_artifact_plan_reject(
+          diagnostic_emitter, func_facts->func_op, 33, params,
+          IREE_ARRAYSIZE(params), out_valid);
     }
     entry_marks[i] = 1;
     func_marks[i] = 1;
@@ -250,8 +365,11 @@ iree_status_t loom_target_artifact_plan_build(
   }
 
   IREE_RETURN_IF_ERROR(loom_target_artifact_plan_mark_closure(
-      module, artifact_symbol, fact_table, call_graph, arena, func_marks,
-      &func_count));
+      module, artifact_symbol, artifact_facts, fact_table, call_graph,
+      diagnostic_emitter, arena, func_marks, out_valid, &func_count));
+  if (!*out_valid) {
+    return iree_ok_status();
+  }
 
   out_plan->artifact_symbol = artifact_symbol;
   out_plan->artifact_facts = artifact_facts;
@@ -267,8 +385,11 @@ iree_status_t loom_target_artifact_plan_build(
   out_plan->func_symbol_ids = func_symbol_ids;
 
   IREE_RETURN_IF_ERROR(loom_target_artifact_plan_assign_ordered_entries(
-      module, fact_table, entry_marks, entry_count, ordinal_count,
-      entry_symbol_ids));
+      module, artifact_facts, fact_table, diagnostic_emitter, entry_marks,
+      entry_count, ordinal_count, out_valid, entry_symbol_ids));
+  if (!*out_valid) {
+    return iree_ok_status();
+  }
 
   uint16_t func_index = 0;
   for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
@@ -276,5 +397,6 @@ iree_status_t loom_target_artifact_plan_build(
       func_symbol_ids[func_index++] = (loom_symbol_id_t)i;
     }
   }
+  *out_valid = true;
   return iree_ok_status();
 }

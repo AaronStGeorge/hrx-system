@@ -10,6 +10,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/analysis/symbol_facts.h"
+#include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -18,6 +19,7 @@
 #include "loom/ops/target/ops.h"
 #include "loom/target/preset_registry.h"
 #include "loom/target/types.h"
+#include "loom/testing/diagnostic_matchers.h"
 #include "loom/testing/module_ptr.h"
 #include "loom/util/call_graph.h"
 
@@ -148,6 +150,33 @@ class ArtifactPlanTest : public ::testing::Test {
     };
   }
 
+  iree_status_t BuildArtifactPlan(const loom_module_t* module,
+                                  iree_string_view_t artifact_name,
+                                  testing::DiagnosticEmissionCapture* capture,
+                                  bool* out_valid,
+                                  loom_target_artifact_plan_t* out_plan) {
+    loom_call_graph_t call_graph;
+    IREE_RETURN_IF_ERROR(
+        loom_call_graph_build(module, &analysis_arena_, &call_graph));
+    iree_diagnostic_emitter_t diagnostic_emitter =
+        capture ? capture->emitter() : iree_diagnostic_emitter_t{};
+    return loom_target_artifact_plan_build(
+        module, SymbolRef(module, artifact_name), &fact_table_, &call_graph,
+        diagnostic_emitter, &analysis_arena_, out_valid, out_plan);
+  }
+
+  void ExpectArtifactPlanError(const loom_module_t* module, uint16_t code) {
+    testing::DiagnosticEmissionCapture capture;
+    loom_target_artifact_plan_t plan;
+    bool valid = true;
+    IREE_ASSERT_OK(
+        BuildArtifactPlan(module, IREE_SV("module"), &capture, &valid, &plan));
+    EXPECT_FALSE(valid);
+    ASSERT_EQ(capture.emissions.size(), 1u);
+    EXPECT_EQ(capture.emissions[0].error,
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, code));
+  }
+
   // Block pool shared by parser, module allocation, and analysis storage.
   iree_arena_block_pool_t block_pool_;
 
@@ -183,14 +212,11 @@ func.def target(@test_target) abi(object_function) @unused() {
 }
 )");
 
-  loom_call_graph_t call_graph;
-  IREE_ASSERT_OK(
-      loom_call_graph_build(module.get(), &analysis_arena_, &call_graph));
-
   loom_target_artifact_plan_t plan;
-  IREE_ASSERT_OK(loom_target_artifact_plan_build(
-      module.get(), SymbolRef(module.get(), IREE_SV("module")), &fact_table_,
-      &call_graph, &analysis_arena_, &plan));
+  bool valid = false;
+  IREE_ASSERT_OK(BuildArtifactPlan(module.get(), IREE_SV("module"), nullptr,
+                                   &valid, &plan));
+  ASSERT_TRUE(valid);
 
   EXPECT_EQ(plan.entry_count, 1u);
   EXPECT_EQ(plan.entry_symbol_ids[0],
@@ -216,14 +242,11 @@ func.def target(@test_target) abi(object_function) export("first", {artifact = @
 }
 )");
 
-  loom_call_graph_t call_graph;
-  IREE_ASSERT_OK(
-      loom_call_graph_build(module.get(), &analysis_arena_, &call_graph));
-
   loom_target_artifact_plan_t plan;
-  IREE_ASSERT_OK(loom_target_artifact_plan_build(
-      module.get(), SymbolRef(module.get(), IREE_SV("module")), &fact_table_,
-      &call_graph, &analysis_arena_, &plan));
+  bool valid = false;
+  IREE_ASSERT_OK(BuildArtifactPlan(module.get(), IREE_SV("module"), nullptr,
+                                   &valid, &plan));
+  ASSERT_TRUE(valid);
 
   ASSERT_EQ(plan.entry_count, 2u);
   EXPECT_EQ(plan.entry_symbol_ids[0],
@@ -246,16 +269,7 @@ func.def target(@test_target) abi(object_function) export("second", {artifact = 
 }
 )");
 
-  loom_call_graph_t call_graph;
-  IREE_ASSERT_OK(
-      loom_call_graph_build(module.get(), &analysis_arena_, &call_graph));
-
-  loom_target_artifact_plan_t plan;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_target_artifact_plan_build(
-          module.get(), SymbolRef(module.get(), IREE_SV("module")),
-          &fact_table_, &call_graph, &analysis_arena_, &plan));
+  ExpectArtifactPlanError(module.get(), 34);
 }
 
 TEST_F(ArtifactPlanTest, RejectsEntryTargetMismatchingArtifactTarget) {
@@ -269,16 +283,7 @@ func.def target(@other) abi(object_function) export("entry", {artifact = @module
 }
 )");
 
-  loom_call_graph_t call_graph;
-  IREE_ASSERT_OK(
-      loom_call_graph_build(module.get(), &analysis_arena_, &call_graph));
-
-  loom_target_artifact_plan_t plan;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_target_artifact_plan_build(
-          module.get(), SymbolRef(module.get(), IREE_SV("module")),
-          &fact_table_, &call_graph, &analysis_arena_, &plan));
+  ExpectArtifactPlanError(module.get(), 33);
 }
 
 TEST_F(ArtifactPlanTest, RejectsClosureCrossingIntoAnotherArtifact) {
@@ -297,16 +302,7 @@ func.def target(@test_target) abi(object_function) export("other", {artifact = @
 }
 )");
 
-  loom_call_graph_t call_graph;
-  IREE_ASSERT_OK(
-      loom_call_graph_build(module.get(), &analysis_arena_, &call_graph));
-
-  loom_target_artifact_plan_t plan;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_target_artifact_plan_build(
-          module.get(), SymbolRef(module.get(), IREE_SV("module")),
-          &fact_table_, &call_graph, &analysis_arena_, &plan));
+  ExpectArtifactPlanError(module.get(), 31);
 }
 
 TEST_F(ArtifactPlanTest, AllowsExternalDeclarationCalls) {
@@ -322,14 +318,11 @@ func.def target(@test_target) abi(object_function) export("entry", {artifact = @
 func.decl import("env") @external()
 )");
 
-  loom_call_graph_t call_graph;
-  IREE_ASSERT_OK(
-      loom_call_graph_build(module.get(), &analysis_arena_, &call_graph));
-
   loom_target_artifact_plan_t plan;
-  IREE_ASSERT_OK(loom_target_artifact_plan_build(
-      module.get(), SymbolRef(module.get(), IREE_SV("module")), &fact_table_,
-      &call_graph, &analysis_arena_, &plan));
+  bool valid = false;
+  IREE_ASSERT_OK(BuildArtifactPlan(module.get(), IREE_SV("module"), nullptr,
+                                   &valid, &plan));
+  ASSERT_TRUE(valid);
 
   EXPECT_EQ(plan.entry_count, 1u);
   EXPECT_EQ(plan.func_count, 1u);
@@ -348,16 +341,7 @@ func.def target(@test_target) abi(object_function) export("entry", {artifact = @
 }
 )");
 
-  loom_call_graph_t call_graph;
-  IREE_ASSERT_OK(
-      loom_call_graph_build(module.get(), &analysis_arena_, &call_graph));
-
-  loom_target_artifact_plan_t plan;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_target_artifact_plan_build(
-          module.get(), SymbolRef(module.get(), IREE_SV("module")),
-          &fact_table_, &call_graph, &analysis_arena_, &plan));
+  ExpectArtifactPlanError(module.get(), 30);
 }
 
 }  // namespace

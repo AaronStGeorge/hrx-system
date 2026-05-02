@@ -673,13 +673,19 @@ iree_status_t loom_target_module_compile_select_artifact_entries(
   loom_call_graph_t call_graph = {0};
   IREE_RETURN_IF_ERROR(loom_call_graph_build(module, arena, &call_graph));
   loom_target_artifact_plan_t artifact_plan = {0};
+  bool artifact_plan_valid = false;
   IREE_RETURN_IF_ERROR(loom_target_artifact_plan_build(
       module,
       (loom_symbol_ref_t){
           .module_id = 0,
           .symbol_id = artifact_symbol_id,
       },
-      &fact_table, &call_graph, arena, &artifact_plan));
+      &fact_table, &call_graph,
+      loom_target_module_compile_emitter(diagnostic_emitter), arena,
+      &artifact_plan_valid, &artifact_plan));
+  if (!artifact_plan_valid) {
+    return iree_ok_status();
+  }
   if (artifact_plan.entry_count == 0) {
     return loom_target_module_compile_emit_empty_artifact(
         diagnostic_emitter,
