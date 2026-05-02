@@ -33,7 +33,20 @@ def main(
     registry: BackendRegistry | None = None,
 ) -> int:
     registry = registry or make_default_registry()
-    parser = argparse.ArgumentParser(prog="loom-import-check")
+    parser = argparse.ArgumentParser(
+        prog="loom-import-check",
+        description=(
+            "Run importer golden tests and optionally update inline Loom IR output."
+        ),
+    )
+    parser.add_argument(
+        "--agent-md",
+        "--agent_md",
+        "--agents-md",
+        "--agents_md",
+        action="store_true",
+        help="print agent-oriented Markdown usage and exit",
+    )
     parser.add_argument(
         "--list-importers",
         action="store_true",
@@ -48,6 +61,9 @@ def main(
         candidate.backend.add_arguments(subparser)
         _add_common_check_arguments(subparser)
     args = parser.parse_args(argv)
+    if args.agent_md:
+        sys.stdout.write(f"{agent_markdown(registry)}\n")
+        return 0
     if args.list_importers:
         sys.stdout.write(f"{print_importers(registry)}\n")
         return 0
@@ -98,6 +114,62 @@ def main(
     if args.fail_on_skip and any(result.skipped for result in results):
         return 1
     return 0 if all(result.passed for result in results) else 1
+
+
+def agent_markdown(registry: BackendRegistry) -> str:
+    """Returns agent-facing usage documentation for importer checks."""
+
+    importers = print_importers(registry)
+    return f"""## loom-import-check
+
+`loom-import-check` runs importer golden tests for frontend-specific fixtures.
+Use checked-in Bazel test targets for normal verification and update flows so
+the test environment matches CI.
+
+### Verify tests
+
+```shell
+iree-bazel-test --config=asan //loom/py/loom/importers/check:check_test
+iree-bazel-test --config=asan //loom/py/loom/importers/check/tilelang:tilelang_test
+```
+
+### Update expected output
+
+Pass the update flag through Bazel with `--test_arg=--update`:
+
+```shell
+iree-bazel-test --config=asan <import-check-test-target> --test_arg=--update
+```
+
+`iree-bazel-test` detects this flag and uses Bazel's standalone TestRunner
+strategy so update-capable tests can rewrite checked-in fixture files. The
+fixture runner still fails if an importer crashes or produces a failed case.
+
+### Fixture shape
+
+Python importer fixtures keep shared imports at the top of the file and split
+cases with `# ====`. Each case compares imported Loom IR against the inline
+`# ----` section. Run update mode after intentional importer output changes
+instead of editing the expected Loom IR by hand.
+
+### Direct use
+
+Direct invocations are useful for inspection, but Bazel remains the update path
+for checked-in tests:
+
+```shell
+iree-bazel-run //loom/py/loom/importers/check:loom_import_check -- --list-importers
+iree-bazel-run //loom/py/loom/importers/check:loom_import_check -- \\
+    tilelang path/to/case.py
+iree-bazel-run //loom/py/loom/importers/check:loom_import_check -- \\
+    tilelang --update path/to/case.py
+```
+
+### Importers
+
+```text
+{importers}
+```"""
 
 
 def _add_common_check_arguments(parser: argparse.ArgumentParser) -> None:

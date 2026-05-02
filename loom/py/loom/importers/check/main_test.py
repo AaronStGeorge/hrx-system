@@ -95,3 +95,18 @@ def test_main_reports_empty_filtered_result_as_failure() -> None:
 
     assert exit_code == 1
     assert stderr.getvalue() == "error: no importer check cases matched\n"
+
+
+def test_main_prints_agent_markdown_without_importer() -> None:
+    registry = BackendRegistry()
+    registry.register(_EmptyBackend())
+    stdout = io.StringIO()
+
+    with contextlib.redirect_stdout(stdout):
+        exit_code = main(["--agents_md"], registry=registry)
+
+    assert exit_code == 0
+    output = stdout.getvalue()
+    assert "## loom-import-check" in output
+    assert "--test_arg=--update" in output
+    assert "enabled  empty" in output

@@ -9,6 +9,7 @@
 #include "loom/tools/loom-check/main.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
@@ -89,6 +90,59 @@ IREE_FLAG_CALLBACK(loom_check_parse_json_flag, loom_check_print_json_flag,
                    "Structured JSON output to stdout. Bare --json is the same\n"
                    "as --json=failures. Modes: failures, summary, all.");
 
+static bool loom_check_is_agent_markdown_arg(const char* arg) {
+  return strcmp(arg, "--agent_md") == 0 || strcmp(arg, "--agent-md") == 0 ||
+         strcmp(arg, "--agents_md") == 0 || strcmp(arg, "--agents-md") == 0;
+}
+
+static void loom_check_print_agent_markdown(FILE* stream) {
+  fprintf(
+      stream,
+      "## loom-check\n"
+      "\n"
+      "`loom-check` is the Loom IR golden-test runner for `.loom-test` files.\n"
+      "Prefer checked-in Bazel test targets over direct tool invocations so "
+      "the\n"
+      "test environment matches CI.\n"
+      "\n"
+      "### Verify tests\n"
+      "\n"
+      "```shell\n"
+      "iree-bazel-test --config=asan //loom/src/loom/...\n"
+      "iree-bazel-test --config=asan "
+      "//loom/src/loom/tools/loom-check/test:test\n"
+      "```\n"
+      "\n"
+      "### Update expected output\n"
+      "\n"
+      "Pass the update flag through Bazel with `--test_arg=--update`:\n"
+      "\n"
+      "```shell\n"
+      "iree-bazel-test --config=asan <loom-check-test-target> "
+      "--test_arg=--update\n"
+      "```\n"
+      "\n"
+      "`iree-bazel-test` detects this flag and uses Bazel's standalone\n"
+      "TestRunner strategy so update-capable tests can rewrite checked-in\n"
+      "fixture files. Do not replace this with lit, FileCheck, raw Bazel, or\n"
+      "one-off shell loops.\n"
+      "\n"
+      "### Direct use\n"
+      "\n"
+      "Direct runs are useful for local inspection, but Bazel remains the "
+      "update\n"
+      "path for checked-in tests:\n"
+      "\n"
+      "```shell\n"
+      "iree-bazel-run //loom/src/loom/tools/loom-check -- "
+      "path/to/file.loom-test\n"
+      "iree-bazel-run //loom/src/loom/tools/loom-check -- --update "
+      "path/to/file.loom-test\n"
+      "```\n"
+      "\n"
+      "`--update` cannot be used with stdin or verify-mode cases.\n");
+}
+
 iree_status_t loom_check_register_production_context(void* user_data,
                                                      loom_context_t* context) {
   (void)user_data;
@@ -118,6 +172,17 @@ int loom_check_main(int argc, char** argv,
       "Usage:\n"
       "  loom-check [flags] [file]\n"
       "  cat test.loom-test | loom-check\n"
+      "  loom-check --agent_md\n"
+      "\n"
+      "Update workflow:\n"
+      "  Checked-in .loom-test expectations are updated through Bazel test\n"
+      "  targets, not ad hoc shell loops:\n"
+      "    iree-bazel-test --config=asan <loom-check-test-target> "
+      "--test_arg=--update\n"
+      "  The iree-bazel-test wrapper automatically uses Bazel's standalone\n"
+      "  TestRunner strategy for --test_arg=--update so fixture files are\n"
+      "  writable. Direct --update runs are useful for local inspection, but\n"
+      "  the Bazel path is the normal project workflow.\n"
       "\n"
       "Modes (set via // RUN: directive, default is roundtrip):\n"
       "  roundtrip   Parse, print, compare against expected output.\n"
@@ -189,6 +254,13 @@ int loom_check_main(int argc, char** argv,
       "  bogus.nonexistent' | loom-check\n"
       "\n"
       "Exit code is 0 when all cases pass, 1 if any fail.\n");
+
+  for (int i = 1; i < argc; ++i) {
+    if (loom_check_is_agent_markdown_arg(argv[i])) {
+      loom_check_print_agent_markdown(stdout);
+      return 0;
+    }
+  }
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t host_allocator = iree_allocator_system();
