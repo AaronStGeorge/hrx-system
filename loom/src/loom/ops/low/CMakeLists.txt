@@ -36,4 +36,24 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_test(
+  NAME
+    hidden_attr_verify_test
+  SRCS
+    "hidden_attr_verify_test.cc"
+  DEPS
+    ::low
+    iree::base::internal::arena
+    loom::src::loom::error::error_defs
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::target
+    loom::src::loom::ops::test
+    loom::src::loom::testing::diagnostic_matchers
+    loom::src::loom::verify
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
