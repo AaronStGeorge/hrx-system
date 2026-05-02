@@ -5,35 +5,51 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 # ruff: noqa: E501, ERA001
 
+from typing import Any
+
 from loom.importers.check.tilelang import TileLangImportInput, tilelang_case
-from loom.importers.check.tilelang.testdata.tir_fakes import (
-    Broadcast,
-    Buffer,
-    BufferLoad,
-    BufferStore,
-    FloatImm,
-    IntImm,
-    PrimFunc,
-    Ramp,
-    Var,
-)
+
+
+def _buffer_pair(tir: Any) -> tuple[Any, Any, Any, Any]:
+    src = tir.Var("src", "handle")
+    dst = tir.Var("dst", "handle")
+    src_buffer = tir.decl_buffer((16,), "float32", name="src")
+    dst_buffer = tir.decl_buffer((16,), "float32", name="dst")
+    return src, dst, src_buffer, dst_buffer
+
+
+def _prim_func(
+    tir: Any,
+    *,
+    name: str,
+    params: list[Any],
+    body: Any,
+    buffer_map: dict[Any, Any],
+) -> Any:
+    return tir.PrimFunc(params, body, buffer_map=buffer_map).with_attr(
+        "global_symbol", name
+    )
+
+
+def _ramp4(tir: Any, base: int) -> Any:
+    return tir.Ramp(tir.IntImm("int32", base), tir.IntImm("int32", 1), 4)
 
 
 # ====
-@tilelang_case(name="broadcast_vector_store", category="op", tags=("vector",))
-def broadcast_vector_store() -> TileLangImportInput:
-    dst = Var("dst")
-    dst_buffer = Buffer("dst", (16,), "float32")
-    body = BufferStore(
+@tilelang_case(name="broadcast_vector_store", category="op", tags=("vector", "memory"))
+def broadcast_vector_store(tir: Any) -> TileLangImportInput:
+    _src, dst, _src_buffer, dst_buffer = _buffer_pair(tir)
+    body = tir.BufferStore(
         dst_buffer,
-        Broadcast(FloatImm(0.0), 4),
-        [Ramp(IntImm(4), IntImm(1), 4)],
+        tir.Broadcast(tir.FloatImm("float32", 0.0), 4),
+        [_ramp4(tir, 4)],
     )
-    prim_func = PrimFunc(
-        [dst],
-        {dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "broadcast_vector_store"},
+    prim_func = _prim_func(
+        tir,
+        name="broadcast_vector_store",
+        params=[dst],
+        body=body,
+        buffer_map={dst: dst_buffer},
     )
     return TileLangImportInput(
         source=prim_func,
@@ -57,21 +73,20 @@ def broadcast_vector_store() -> TileLangImportInput:
 
 
 # ====
-@tilelang_case(name="ramp_vector_load", category="op", tags=("vector",))
-def ramp_vector_load() -> TileLangImportInput:
-    src, dst = Var("src"), Var("dst")
-    src_buffer = Buffer("src", (16,), "float32")
-    dst_buffer = Buffer("dst", (16,), "float32")
-    body = BufferStore(
+@tilelang_case(name="ramp_vector_load", category="op", tags=("vector", "memory"))
+def ramp_vector_load(tir: Any) -> TileLangImportInput:
+    src, dst, src_buffer, dst_buffer = _buffer_pair(tir)
+    body = tir.BufferStore(
         dst_buffer,
-        BufferLoad(src_buffer, [Ramp(IntImm(8), IntImm(1), 4)], "float32x4"),
-        [Ramp(IntImm(0), IntImm(1), 4)],
+        tir.BufferLoad(src_buffer, [_ramp4(tir, 8)]),
+        [_ramp4(tir, 0)],
     )
-    prim_func = PrimFunc(
-        [src, dst],
-        {src: src_buffer, dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "ramp_vector_load"},
+    prim_func = _prim_func(
+        tir,
+        name="ramp_vector_load",
+        params=[src, dst],
+        body=body,
+        buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(source=prim_func, target="hip", name="ramp_vector_load")
 

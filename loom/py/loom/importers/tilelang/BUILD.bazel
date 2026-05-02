@@ -136,14 +136,12 @@ py_test(
     srcs = [
         "context_test.py",
         "coverage_test.py",
-        "importer_test.py",
         "types_test.py",
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = [
         "loom.importers.tilelang.context_test",
         "loom.importers.tilelang.coverage_test",
-        "loom.importers.tilelang.importer_test",
         "loom.importers.tilelang.types_test",
     ],
     main = "pytest_style_runner.py",

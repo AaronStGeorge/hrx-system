@@ -5,45 +5,57 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 # ruff: noqa: E501, ERA001
 
+from typing import Any
+
 from loom.importers.check.tilelang import TileLangImportInput, tilelang_case
-from loom.importers.check.tilelang.testdata.tir_fakes import (
-    Add,
-    Buffer,
-    BufferLoad,
-    BufferStore,
-    Call,
-    For,
-    IfThenElse,
-    IntImm,
-    PrimFunc,
-    Var,
-)
+
+
+def _buffer_pair(
+    tir: Any,
+    *,
+    dtype: str = "float32",
+    shape: tuple[int, ...] = (4,),
+) -> tuple[Any, Any, Any, Any]:
+    src = tir.Var("src", "handle")
+    dst = tir.Var("dst", "handle")
+    src_buffer = tir.decl_buffer(shape, dtype, name="src")
+    dst_buffer = tir.decl_buffer(shape, dtype, name="dst")
+    return src, dst, src_buffer, dst_buffer
+
+
+def _prim_func(
+    tir: Any,
+    *,
+    name: str,
+    params: list[Any],
+    body: Any,
+    buffer_map: dict[Any, Any],
+) -> Any:
+    return tir.PrimFunc(params, body, buffer_map=buffer_map).with_attr(
+        "global_symbol", name
+    )
 
 
 # ====
 @tilelang_case(name="scalar_calls", category="op", tags=("call", "scalar"))
-def scalar_calls() -> TileLangImportInput:
-    src, dst = Var("src"), Var("dst")
-    src_buffer = Buffer("src", (4,), "float32")
-    dst_buffer = Buffer("dst", (4,), "float32")
-    load = BufferLoad(src_buffer, [IntImm(0)])
-    body = IfThenElse(
-        Call("tir.isfinite", [load], "bool"),
-        BufferStore(
+def scalar_calls(tir: Any) -> TileLangImportInput:
+    src, dst, src_buffer, dst_buffer = _buffer_pair(tir)
+    load = tir.BufferLoad(src_buffer, [tir.IntImm("int32", 0)])
+    body = tir.IfThenElse(
+        tir.isfinite(load),
+        tir.BufferStore(
             dst_buffer,
-            Add(
-                Call("tir.sqrt", [Call("tir.abs", [load])]),
-                Call("tir.sigmoid", [load]),
-            ),
-            [IntImm(0)],
+            tir.sqrt(tir.abs(load)) + tir.sigmoid(load),
+            [tir.IntImm("int32", 0)],
         ),
-        BufferStore(dst_buffer, Call("tir.exp", [load]), [IntImm(0)]),
+        tir.BufferStore(dst_buffer, tir.exp(load), [tir.IntImm("int32", 0)]),
     )
-    prim_func = PrimFunc(
-        [src, dst],
-        {src: src_buffer, dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "scalar_calls"},
+    prim_func = _prim_func(
+        tir,
+        name="scalar_calls",
+        params=[src, dst],
+        body=body,
+        buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(source=prim_func, target="hip", name="scalar_calls")
 
@@ -59,21 +71,27 @@ def scalar_calls() -> TileLangImportInput:
 #   %load = view.load %src[%c] : view<4xf32> -> f32
 #   %isfinitef = scalar.isfinitef %load : f32
 #   scf.if %isfinitef {
-#     %absf = scalar.absf %load : f32
+#     %c_2 = index.constant 0 : index
+#     %load_2 = view.load %src[%c_2] : view<4xf32> -> f32
+#     %absf = scalar.absf %load_2 : f32
 #     %sqrtf = scalar.sqrtf %absf : f32
+#     %c_3 = index.constant 0 : index
+#     %load_3 = view.load %src[%c_3] : view<4xf32> -> f32
 #     %one = scalar.constant 1.0 : f32
-#     %sigmoid_neg = scalar.negf %load : f32
+#     %sigmoid_neg = scalar.negf %load_3 : f32
 #     %sigmoid_exp = scalar.expf %sigmoid_neg : f32
 #     %sigmoid_den = scalar.addf %one, %sigmoid_exp : f32
 #     %sigmoid = scalar.divf %one, %sigmoid_den : f32
 #     %addf = scalar.addf %sqrtf, %sigmoid : f32
-#     %c_2 = index.constant 0 : index
-#     view.store %addf, %dst[%c_2] : f32, view<4xf32>
+#     %c_4 = index.constant 0 : index
+#     view.store %addf, %dst[%c_4] : f32, view<4xf32>
 #     scf.yield
 #   } else {
-#     %expf = scalar.expf %load : f32
-#     %c_3 = index.constant 0 : index
-#     view.store %expf, %dst[%c_3] : f32, view<4xf32>
+#     %c_5 = index.constant 0 : index
+#     %load_4 = view.load %src[%c_5] : view<4xf32> -> f32
+#     %expf = scalar.expf %load_4 : f32
+#     %c_6 = index.constant 0 : index
+#     view.store %expf, %dst[%c_6] : f32, view<4xf32>
 #     scf.yield
 #   }
 #   kernel.return
@@ -82,22 +100,19 @@ def scalar_calls() -> TileLangImportInput:
 
 # ====
 @tilelang_case(name="bitwise_not", category="op", tags=("call", "integer"))
-def bitwise_not() -> TileLangImportInput:
-    src, dst = Var("src"), Var("dst")
-    src_buffer = Buffer("src", (4,), "int32")
-    dst_buffer = Buffer("dst", (4,), "int32")
-    body = BufferStore(
+def bitwise_not(tir: Any) -> TileLangImportInput:
+    src, dst, src_buffer, dst_buffer = _buffer_pair(tir, dtype="int32")
+    body = tir.BufferStore(
         dst_buffer,
-        Call(
-            "tir.bitwise_not", [BufferLoad(src_buffer, [IntImm(0)], "int32")], "int32"
-        ),
-        [IntImm(0)],
+        tir.bitwise_not(tir.BufferLoad(src_buffer, [tir.IntImm("int32", 0)])),
+        [tir.IntImm("int32", 0)],
     )
-    prim_func = PrimFunc(
-        [src, dst],
-        {src: src_buffer, dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "bitwise_not"},
+    prim_func = _prim_func(
+        tir,
+        name="bitwise_not",
+        params=[src, dst],
+        body=body,
+        buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(source=prim_func, target="hip", name="bitwise_not")
 
@@ -121,22 +136,23 @@ def bitwise_not() -> TileLangImportInput:
 
 # ====
 @tilelang_case(name="dynamic_loop_bound", category="op", tags=("index", "loop"))
-def dynamic_loop_bound() -> TileLangImportInput:
-    n, src, dst = Var("n"), Var("src"), Var("dst")
-    index = Var("i", "int32")
-    src_buffer = Buffer("src", (8,), "float32")
-    dst_buffer = Buffer("dst", (8,), "float32")
-    body = For(
+def dynamic_loop_bound(tir: Any) -> TileLangImportInput:
+    n = tir.Var("n", "int32")
+    src, dst, src_buffer, dst_buffer = _buffer_pair(tir, shape=(8,))
+    index = tir.Var("i", "int32")
+    body = tir.For(
         index,
-        IntImm(0),
+        tir.IntImm("int32", 0),
         n,
-        BufferStore(dst_buffer, BufferLoad(src_buffer, [index]), [index]),
+        tir.ForKind.SERIAL,
+        tir.BufferStore(dst_buffer, tir.BufferLoad(src_buffer, [index]), [index]),
     )
-    prim_func = PrimFunc(
-        [n, src, dst],
-        {src: src_buffer, dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "dynamic_loop_bound"},
+    prim_func = _prim_func(
+        tir,
+        name="dynamic_loop_bound",
+        params=[n, src, dst],
+        body=body,
+        buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(
         source=prim_func,
@@ -167,22 +183,22 @@ def dynamic_loop_bound() -> TileLangImportInput:
 
 # ====
 @tilelang_case(name="ceildiv_loop", category="op", tags=("call", "index"))
-def ceildiv_loop() -> TileLangImportInput:
-    src, dst = Var("src"), Var("dst")
-    index = Var("i", "int32")
-    src_buffer = Buffer("src", (8,), "float32")
-    dst_buffer = Buffer("dst", (8,), "float32")
-    body = For(
+def ceildiv_loop(tir: Any) -> TileLangImportInput:
+    src, dst, src_buffer, dst_buffer = _buffer_pair(tir, shape=(8,))
+    index = tir.Var("i", "int32")
+    body = tir.For(
         index,
-        IntImm(0),
-        Call("tir.ceildiv", [IntImm(7), IntImm(4)], "int32"),
-        BufferStore(dst_buffer, BufferLoad(src_buffer, [index]), [index]),
+        tir.IntImm("int32", 0),
+        tir.ceildiv(tir.IntImm("int32", 7), tir.IntImm("int32", 4)),
+        tir.ForKind.SERIAL,
+        tir.BufferStore(dst_buffer, tir.BufferLoad(src_buffer, [index]), [index]),
     )
-    prim_func = PrimFunc(
-        [src, dst],
-        {src: src_buffer, dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "ceildiv_loop"},
+    prim_func = _prim_func(
+        tir,
+        name="ceildiv_loop",
+        params=[src, dst],
+        body=body,
+        buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(source=prim_func, target="hip", name="ceildiv_loop")
 
@@ -195,13 +211,9 @@ def ceildiv_loop() -> TileLangImportInput:
 #   %src = buffer.view %src[%c0_bytes] : buffer -> view<8xf32>
 #   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<8xf32>
 #   %c = index.constant 0 : index
-#   %c_2 = index.constant 7 : index
-#   %c_3 = index.constant 4 : index
+#   %c_2 = index.constant 2 : index
+#   %i_ub = index.add %c, %c_2 : index
 #   %c1 = index.constant 1 : index
-#   %ceil_rhs_minus_one = index.sub %c_3, %c1 : index
-#   %ceil_adjusted = index.add %c_2, %ceil_rhs_minus_one : index
-#   %ceildiv = index.div %ceil_adjusted, %c_3 : index
-#   %i_ub = index.add %c, %ceildiv : index
 #   scf.for %i = [%c to %i_ub step %c1] {
 #     %load = view.load %src[%i] : view<8xf32> -> f32
 #     view.store %load, %dst[%i] : f32, view<8xf32>

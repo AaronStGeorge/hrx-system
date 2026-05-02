@@ -5,39 +5,47 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 # ruff: noqa: E501, ERA001
 
+from typing import Any
+
 from loom.importers.check.tilelang import TileLangImportInput, tilelang_case
-from loom.importers.check.tilelang.testdata.tir_fakes import (
-    Buffer,
-    BufferLoad,
-    BufferStore,
-    Call,
-    Cast,
-    IntImm,
-    PrimFunc,
-    Ramp,
-    Var,
-)
+
+
+def _prim_func(
+    tir: Any,
+    *,
+    name: str,
+    params: list[Any],
+    body: Any,
+    buffer_map: dict[Any, Any],
+) -> Any:
+    return tir.PrimFunc(params, body, buffer_map=buffer_map).with_attr(
+        "global_symbol", name
+    )
+
+
+def _ramp4(tir: Any) -> Any:
+    return tir.Ramp(tir.IntImm("int32", 0), tir.IntImm("int32", 1), 4)
 
 
 # ====
-@tilelang_case(name="vector_float_trunc_store", category="op", tags=("vector",))
-def vector_float_trunc_store() -> TileLangImportInput:
-    src, dst = Var("src"), Var("dst")
-    src_buffer = Buffer("src", (16,), "float32")
-    dst_buffer = Buffer("dst", (16,), "float16")
-    body = BufferStore(
+@tilelang_case(name="vector_float_trunc_store", category="op", tags=("vector", "cast"))
+def vector_float_trunc_store(tir: Any) -> TileLangImportInput:
+    src = tir.Var("src", "handle")
+    dst = tir.Var("dst", "handle")
+    src_buffer = tir.decl_buffer((16,), "float32", name="src")
+    dst_buffer = tir.decl_buffer((16,), "float16", name="dst")
+    ramp = _ramp4(tir)
+    body = tir.BufferStore(
         dst_buffer,
-        Cast(
-            BufferLoad(src_buffer, [Ramp(IntImm(0), IntImm(1), 4)], "float32x4"),
-            "float16x4",
-        ),
-        [Ramp(IntImm(0), IntImm(1), 4)],
+        tir.Cast("float16x4", tir.BufferLoad(src_buffer, [ramp])),
+        [ramp],
     )
-    prim_func = PrimFunc(
-        [src, dst],
-        {src: src_buffer, dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "vector_float_trunc_store"},
+    prim_func = _prim_func(
+        tir,
+        name="vector_float_trunc_store",
+        params=[src, dst],
+        body=body,
+        buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(
         source=prim_func,
@@ -63,29 +71,26 @@ def vector_float_trunc_store() -> TileLangImportInput:
 
 
 # ====
-@tilelang_case(
-    name="scalar_reinterpret_store",
-    category="op",
-    tags=("call", "scalar"),
-)
-def scalar_reinterpret_store() -> TileLangImportInput:
-    src, dst = Var("src"), Var("dst")
-    src_buffer = Buffer("src", (4,), "float32")
-    dst_buffer = Buffer("dst", (4,), "uint32")
-    body = BufferStore(
+@tilelang_case(name="scalar_reinterpret_store", category="op", tags=("cast",))
+def scalar_reinterpret_store(tir: Any) -> TileLangImportInput:
+    src = tir.Var("src", "handle")
+    dst = tir.Var("dst", "handle")
+    src_buffer = tir.decl_buffer((4,), "float32", name="src")
+    dst_buffer = tir.decl_buffer((4,), "uint32", name="dst")
+    body = tir.BufferStore(
         dst_buffer,
-        Call(
-            "tir.reinterpret",
-            [BufferLoad(src_buffer, [IntImm(0)], "float32")],
+        tir.reinterpret(
             "uint32",
+            tir.BufferLoad(src_buffer, [tir.IntImm("int32", 0)]),
         ),
-        [IntImm(0)],
+        [tir.IntImm("int32", 0)],
     )
-    prim_func = PrimFunc(
-        [src, dst],
-        {src: src_buffer, dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "scalar_reinterpret_store"},
+    prim_func = _prim_func(
+        tir,
+        name="scalar_reinterpret_store",
+        params=[src, dst],
+        body=body,
+        buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(
         source=prim_func,
@@ -111,29 +116,24 @@ def scalar_reinterpret_store() -> TileLangImportInput:
 
 
 # ====
-@tilelang_case(
-    name="vector_reinterpret_store",
-    category="op",
-    tags=("call", "vector"),
-)
-def vector_reinterpret_store() -> TileLangImportInput:
-    src, dst = Var("src"), Var("dst")
-    src_buffer = Buffer("src", (16,), "float32")
-    dst_buffer = Buffer("dst", (16,), "uint32")
-    body = BufferStore(
+@tilelang_case(name="vector_reinterpret_store", category="op", tags=("vector", "cast"))
+def vector_reinterpret_store(tir: Any) -> TileLangImportInput:
+    src = tir.Var("src", "handle")
+    dst = tir.Var("dst", "handle")
+    src_buffer = tir.decl_buffer((16,), "float32", name="src")
+    dst_buffer = tir.decl_buffer((16,), "uint32", name="dst")
+    ramp = _ramp4(tir)
+    body = tir.BufferStore(
         dst_buffer,
-        Call(
-            "tir.reinterpret",
-            [BufferLoad(src_buffer, [Ramp(IntImm(0), IntImm(1), 4)], "float32x4")],
-            "uint32x4",
-        ),
-        [Ramp(IntImm(0), IntImm(1), 4)],
+        tir.reinterpret("uint32x4", tir.BufferLoad(src_buffer, [ramp])),
+        [ramp],
     )
-    prim_func = PrimFunc(
-        [src, dst],
-        {src: src_buffer, dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "vector_reinterpret_store"},
+    prim_func = _prim_func(
+        tir,
+        name="vector_reinterpret_store",
+        params=[src, dst],
+        body=body,
+        buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(
         source=prim_func,
@@ -159,24 +159,24 @@ def vector_reinterpret_store() -> TileLangImportInput:
 
 
 # ====
-@tilelang_case(name="vector_int_to_float_store", category="op", tags=("vector",))
-def vector_int_to_float_store() -> TileLangImportInput:
-    src, dst = Var("src"), Var("dst")
-    src_buffer = Buffer("src", (16,), "int32")
-    dst_buffer = Buffer("dst", (16,), "float32")
-    body = BufferStore(
+@tilelang_case(name="vector_int_to_float_store", category="op", tags=("vector", "cast"))
+def vector_int_to_float_store(tir: Any) -> TileLangImportInput:
+    src = tir.Var("src", "handle")
+    dst = tir.Var("dst", "handle")
+    src_buffer = tir.decl_buffer((16,), "int32", name="src")
+    dst_buffer = tir.decl_buffer((16,), "float32", name="dst")
+    ramp = _ramp4(tir)
+    body = tir.BufferStore(
         dst_buffer,
-        Cast(
-            BufferLoad(src_buffer, [Ramp(IntImm(0), IntImm(1), 4)], "int32x4"),
-            "float32x4",
-        ),
-        [Ramp(IntImm(0), IntImm(1), 4)],
+        tir.Cast("float32x4", tir.BufferLoad(src_buffer, [ramp])),
+        [ramp],
     )
-    prim_func = PrimFunc(
-        [src, dst],
-        {src: src_buffer, dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "vector_int_to_float_store"},
+    prim_func = _prim_func(
+        tir,
+        name="vector_int_to_float_store",
+        params=[src, dst],
+        body=body,
+        buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(
         source=prim_func,

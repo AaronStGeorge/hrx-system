@@ -30,8 +30,16 @@ if(LOOM_IMPORTER_TILELANG)
 add_custom_command(OUTPUT tests.stamp
     COMMAND ${CMAKE_COMMAND} -E touch tests.stamp
   DEPENDS
+    "testdata/allocations.py"
+    "testdata/analysis.py"
+    "testdata/control_flow.py"
     "testdata/diagnostics.py"
+    "testdata/memory_effects.py"
+    "testdata/scalar_calls.py"
+    "testdata/topology.py"
     "testdata/vector_arithmetic.py"
+    "testdata/vector_casts.py"
+    "testdata/vector_memory.py"
 )
 
 add_custom_target(tests
@@ -60,8 +68,16 @@ iree_py_test(
   ARGS
     "tilelang"
     "--fail-on-skip"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/check/tilelang/testdata/allocations.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/check/tilelang/testdata/analysis.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/check/tilelang/testdata/control_flow.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/check/tilelang/testdata/diagnostics.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/check/tilelang/testdata/memory_effects.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/check/tilelang/testdata/scalar_calls.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/check/tilelang/testdata/topology.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/check/tilelang/testdata/vector_arithmetic.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/check/tilelang/testdata/vector_casts.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/check/tilelang/testdata/vector_memory.py"
   PACKAGE_DIRS
     "${IREE_SOURCE_DIR}/runtime/py"
     "${IREE_BINARY_DIR}/runtime/py"

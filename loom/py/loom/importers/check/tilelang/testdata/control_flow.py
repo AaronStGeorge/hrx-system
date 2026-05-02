@@ -5,44 +5,58 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 # ruff: noqa: E501, ERA001
 
+from typing import Any
+
 from loom.importers.check.tilelang import TileLangImportInput, tilelang_case
-from loom.importers.check.tilelang.testdata.tir_fakes import (
-    GE,
-    Buffer,
-    BufferLoad,
-    BufferStore,
-    Call,
-    Evaluate,
-    FloatImm,
-    IfThenElse,
-    IntImm,
-    PrimFunc,
-    SeqStmt,
-    Var,
-)
+
+
+def _call(tir: Any, dtype: str, name: str, *args: Any) -> Any:
+    return tir.call_intrin(dtype, name, *args)
+
+
+def _prim_func(
+    tir: Any,
+    *,
+    name: str,
+    params: list[Any],
+    body: Any,
+    buffer_map: dict[Any, Any],
+) -> Any:
+    return tir.PrimFunc(params, body, buffer_map=buffer_map).with_attr(
+        "global_symbol", name
+    )
+
+
+def _kernel_args(tir: Any) -> tuple[Any, Any, Any, Any, Any, Any]:
+    n = tir.Var("n", "int32")
+    i = tir.Var("i", "int32")
+    src = tir.Var("src", "handle")
+    dst = tir.Var("dst", "handle")
+    src_buffer = tir.decl_buffer((16,), "float32", name="src")
+    dst_buffer = tir.decl_buffer((16,), "float32", name="dst")
+    return n, i, src, dst, src_buffer, dst_buffer
 
 
 # ====
 @tilelang_case(name="thread_return_prefix_guard", category="op", tags=("control",))
-def thread_return_prefix_guard() -> TileLangImportInput:
-    n, i, src, dst = Var("n"), Var("i"), Var("src"), Var("dst")
-    src_buffer = Buffer("src", (16,), "float32")
-    dst_buffer = Buffer("dst", (16,), "float32")
-    body = SeqStmt(
+def thread_return_prefix_guard(tir: Any) -> TileLangImportInput:
+    n, i, src, dst, src_buffer, dst_buffer = _kernel_args(tir)
+    body = tir.SeqStmt(
         [
-            IfThenElse(
-                GE(i, n),
-                Evaluate(Call("tir.thread_return", [], "void")),
+            tir.IfThenElse(
+                i >= n,
+                tir.Evaluate(_call(tir, "void", "tir.thread_return")),
                 None,
             ),
-            BufferStore(dst_buffer, BufferLoad(src_buffer, [i]), [i]),
+            tir.BufferStore(dst_buffer, tir.BufferLoad(src_buffer, [i]), [i]),
         ]
     )
-    prim_func = PrimFunc(
-        [n, i, src, dst],
-        {src: src_buffer, dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "thread_return_prefix_guard"},
+    prim_func = _prim_func(
+        tir,
+        name="thread_return_prefix_guard",
+        params=[n, i, src, dst],
+        body=body,
+        buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(
         source=prim_func,
@@ -73,30 +87,33 @@ def thread_return_prefix_guard() -> TileLangImportInput:
     category="op",
     tags=("control",),
 )
-def thread_return_prefix_guard_with_effects() -> TileLangImportInput:
-    n, i, src, dst = Var("n"), Var("i"), Var("src"), Var("dst")
-    src_buffer = Buffer("src", (16,), "float32")
-    dst_buffer = Buffer("dst", (16,), "float32")
-    body = SeqStmt(
+def thread_return_prefix_guard_with_effects(tir: Any) -> TileLangImportInput:
+    n, i, src, dst, src_buffer, dst_buffer = _kernel_args(tir)
+    body = tir.SeqStmt(
         [
-            IfThenElse(
-                GE(i, n),
-                SeqStmt(
+            tir.IfThenElse(
+                i >= n,
+                tir.SeqStmt(
                     [
-                        BufferStore(dst_buffer, FloatImm(0.0), [IntImm(0)]),
-                        Evaluate(Call("tir.thread_return", [], "void")),
+                        tir.BufferStore(
+                            dst_buffer,
+                            tir.FloatImm("float32", 0.0),
+                            [tir.IntImm("int32", 0)],
+                        ),
+                        tir.Evaluate(_call(tir, "void", "tir.thread_return")),
                     ]
                 ),
                 None,
             ),
-            BufferStore(dst_buffer, BufferLoad(src_buffer, [i]), [i]),
+            tir.BufferStore(dst_buffer, tir.BufferLoad(src_buffer, [i]), [i]),
         ]
     )
-    prim_func = PrimFunc(
-        [n, i, src, dst],
-        {src: src_buffer, dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "thread_return_prefix_guard_with_effects"},
+    prim_func = _prim_func(
+        tir,
+        name="thread_return_prefix_guard_with_effects",
+        params=[n, i, src, dst],
+        body=body,
+        buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(
         source=prim_func,

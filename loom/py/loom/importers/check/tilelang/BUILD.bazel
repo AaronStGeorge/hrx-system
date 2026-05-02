@@ -43,8 +43,16 @@ if(LOOM_IMPORTER_TILELANG)
 filegroup(
     name = "tests",
     srcs = [
+        "testdata/allocations.py",
+        "testdata/analysis.py",
+        "testdata/control_flow.py",
         "testdata/diagnostics.py",
+        "testdata/memory_effects.py",
+        "testdata/scalar_calls.py",
+        "testdata/topology.py",
         "testdata/vector_arithmetic.py",
+        "testdata/vector_casts.py",
+        "testdata/vector_memory.py",
     ],
 )
 

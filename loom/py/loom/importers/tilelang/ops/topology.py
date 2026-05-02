@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from loom.builder import ValueRef
+from loom.importers.core import sanitize_identifier
 from loom.importers.tilelang.context import TileLangConversionContext
 from loom.importers.tilelang.converter import TileLangConverter
 from loom.importers.tilelang.nodes import node_kind, source_name
@@ -183,5 +184,11 @@ def thread_axis_name(source: object | None, axis: ThreadAxis) -> str:
         return axis.default_name
     binding_var = thread_binding_var(source)
     if binding_var is not None:
-        return source_name(binding_var, fallback=axis.default_name)
-    return source_name(source, fallback=axis.default_name)
+        return sanitize_identifier(
+            source_name(binding_var, fallback=axis.default_name),
+            fallback=axis.default_name,
+        )
+    return sanitize_identifier(
+        source_name(source, fallback=axis.default_name),
+        fallback=axis.default_name,
+    )

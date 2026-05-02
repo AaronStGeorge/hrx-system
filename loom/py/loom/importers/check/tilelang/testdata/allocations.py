@@ -5,40 +5,57 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 # ruff: noqa: E501, ERA001
 
+from typing import Any
+
 from loom.importers.check.tilelang import TileLangImportInput, tilelang_case
-from loom.importers.check.tilelang.testdata.tir_fakes import (
-    Block,
-    Buffer,
-    BufferLoad,
-    BufferStore,
-    FloatImm,
-    IntImm,
-    PrimFunc,
-    SeqStmt,
-    Var,
-)
+
+
+def _prim_func(
+    tir: Any,
+    *,
+    name: str,
+    params: list[Any],
+    body: Any,
+    buffer_map: dict[Any, Any],
+) -> Any:
+    return tir.PrimFunc(params, body, buffer_map=buffer_map).with_attr(
+        "global_symbol", name
+    )
 
 
 # ====
-@tilelang_case(name="shared_block_alloc", category="composition", tags=("memory",))
-def shared_block_alloc() -> TileLangImportInput:
-    dst = Var("dst")
-    dst_buffer = Buffer("dst", (4,), "float32")
-    scratch = Buffer("scratch", (4,), "float32", scope="shared.dyn")
-    body = Block(
-        SeqStmt(
+@tilelang_case(name="shared_block_alloc", category="op", tags=("alloc", "memory"))
+def shared_block_alloc(tir: Any) -> TileLangImportInput:
+    dst = tir.Var("dst", "handle")
+    dst_buffer = tir.decl_buffer((4,), "float32", name="dst")
+    scratch = tir.decl_buffer((4,), "float32", name="scratch", scope="shared.dyn")
+    body = tir.Block(
+        [],
+        [],
+        [],
+        "root",
+        tir.SeqStmt(
             [
-                BufferStore(scratch, FloatImm(1.0), [IntImm(0)]),
-                BufferStore(dst_buffer, BufferLoad(scratch, [IntImm(0)]), [IntImm(0)]),
+                tir.BufferStore(
+                    scratch,
+                    tir.FloatImm("float32", 1.0),
+                    [tir.IntImm("int32", 0)],
+                ),
+                tir.BufferStore(
+                    dst_buffer,
+                    tir.BufferLoad(scratch, [tir.IntImm("int32", 0)]),
+                    [tir.IntImm("int32", 0)],
+                ),
             ]
         ),
         alloc_buffers=[scratch],
     )
-    prim_func = PrimFunc(
-        [dst],
-        {dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "shared_block_alloc"},
+    prim_func = _prim_func(
+        tir,
+        name="shared_block_alloc",
+        params=[dst],
+        body=body,
+        buffer_map={dst: dst_buffer},
     )
     return TileLangImportInput(
         source=prim_func, target="hip", name="shared_block_alloc"
@@ -66,27 +83,38 @@ def shared_block_alloc() -> TileLangImportInput:
 
 
 # ====
-@tilelang_case(name="private_block_alloc", category="composition", tags=("memory",))
-def private_block_alloc() -> TileLangImportInput:
-    dst = Var("dst")
-    dst_buffer = Buffer("dst", (4,), "int32")
-    scratch = Buffer("scratch", (4,), "int32", scope="local")
-    body = Block(
-        SeqStmt(
+@tilelang_case(name="private_block_alloc", category="op", tags=("alloc", "memory"))
+def private_block_alloc(tir: Any) -> TileLangImportInput:
+    dst = tir.Var("dst", "handle")
+    dst_buffer = tir.decl_buffer((4,), "int32", name="dst")
+    scratch = tir.decl_buffer((4,), "int32", name="scratch", scope="local")
+    body = tir.Block(
+        [],
+        [],
+        [],
+        "root",
+        tir.SeqStmt(
             [
-                BufferStore(scratch, IntImm(7), [IntImm(0)]),
-                BufferStore(
-                    dst_buffer, BufferLoad(scratch, [IntImm(0)], "int32"), [IntImm(0)]
+                tir.BufferStore(
+                    scratch,
+                    tir.IntImm("int32", 7),
+                    [tir.IntImm("int32", 0)],
+                ),
+                tir.BufferStore(
+                    dst_buffer,
+                    tir.BufferLoad(scratch, [tir.IntImm("int32", 0)]),
+                    [tir.IntImm("int32", 0)],
                 ),
             ]
         ),
         alloc_buffers=[scratch],
     )
-    prim_func = PrimFunc(
-        [dst],
-        {dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "private_block_alloc"},
+    prim_func = _prim_func(
+        tir,
+        name="private_block_alloc",
+        params=[dst],
+        body=body,
+        buffer_map={dst: dst_buffer},
     )
     return TileLangImportInput(
         source=prim_func, target="hip", name="private_block_alloc"

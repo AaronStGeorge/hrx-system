@@ -5,61 +5,68 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 # ruff: noqa: E501, ERA001
 
+from typing import Any
+
 from loom.importers.check.tilelang import TileLangImportInput, tilelang_case
-from loom.importers.check.tilelang.testdata.tir_fakes import (
-    Add,
-    AttrStmt,
-    Buffer,
-    BufferLoad,
-    BufferStore,
-    Call,
-    Evaluate,
-    For,
-    IntImm,
-    PrimFunc,
-    SeqStmt,
-    ThreadAxis,
-    Var,
-)
+
+
+def _buffer_pair(
+    tir: Any,
+    *,
+    shape: tuple[int, ...],
+) -> tuple[Any, Any, Any, Any]:
+    src = tir.Var("src", "handle")
+    dst = tir.Var("dst", "handle")
+    src_buffer = tir.decl_buffer(shape, "float32", name="src")
+    dst_buffer = tir.decl_buffer(shape, "float32", name="dst")
+    return src, dst, src_buffer, dst_buffer
+
+
+def _call(tir: Any, dtype: str, name: str, *args: Any) -> Any:
+    return tir.call_intrin(dtype, name, *args)
+
+
+def _prim_func(
+    tir: Any,
+    *,
+    name: str,
+    params: list[Any],
+    body: Any,
+    buffer_map: dict[Any, Any],
+) -> Any:
+    return tir.PrimFunc(params, body, buffer_map=buffer_map).with_attr(
+        "global_symbol", name
+    )
 
 
 # ====
 @tilelang_case(name="launch_thread_attrs", category="op", tags=("topology",))
-def launch_thread_attrs() -> TileLangImportInput:
-    src, dst = Var("src"), Var("dst")
-    bx = Var("bx")
-    tx = Var("tx")
-    src_buffer = Buffer("src", (1024,), "float32")
-    dst_buffer = Buffer("dst", (1024,), "float32")
-    index = Add(
-        Add(
-            Add(bx, bx, "int32"),
-            Add(tx, tx, "int32"),
-            "int32",
-        ),
-        IntImm(0),
-        "int32",
-    )
-    body = AttrStmt(
-        ThreadAxis("blockIdx.x", bx),
+def launch_thread_attrs(tir: Any, tvm: Any) -> TileLangImportInput:
+    src, dst, src_buffer, dst_buffer = _buffer_pair(tir, shape=(1024,))
+    bx = tvm.te.thread_axis("blockIdx.x")
+    tx = tvm.te.thread_axis("threadIdx.x")
+    index = bx.var + bx.var + tx.var + tx.var
+    body = tir.AttrStmt(
+        bx,
         "thread_extent",
-        IntImm(8),
-        AttrStmt(
-            ThreadAxis("threadIdx.x", tx),
+        tir.IntImm("int32", 8),
+        tir.AttrStmt(
+            tx,
             "thread_extent",
-            IntImm(64),
-            BufferStore(
+            tir.IntImm("int32", 64),
+            tir.BufferStore(
                 dst_buffer,
-                BufferLoad(src_buffer, [index]),
+                tir.BufferLoad(src_buffer, [index]),
                 [index],
             ),
         ),
     )
-    prim_func = PrimFunc(
-        [src, dst],
-        {src: src_buffer, dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "launch_thread_attrs"},
+    prim_func = _prim_func(
+        tir,
+        name="launch_thread_attrs",
+        params=[src, dst],
+        body=body,
+        buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(
         source=prim_func, target="hip", name="launch_thread_attrs"
@@ -73,40 +80,40 @@ def launch_thread_attrs() -> TileLangImportInput:
 #   %c0_bytes = index.constant 0 : offset
 #   %src = buffer.view %src[%c0_bytes] : buffer -> view<1024xf32>
 #   %dst = buffer.view %dst[%c0_bytes] : buffer -> view<1024xf32>
-#   %bx = kernel.workgroup.id<x> : index
-#   %tx = kernel.workitem.id<x> : index
-#   %add = index.add %bx, %bx : index
-#   %add_2 = index.add %tx, %tx : index
-#   %add_3 = index.add %add, %add_2 : index
-#   %c = index.constant 0 : index
-#   %add_4 = index.add %add_3, %c : index
-#   %load = view.load %src[%add_4] : view<1024xf32> -> f32
-#   view.store %load, %dst[%add_4] : f32, view<1024xf32>
+#   %blockIdx_x = kernel.workgroup.id<x> : index
+#   %threadIdx_x = kernel.workitem.id<x> : index
+#   %add = index.add %blockIdx_x, %blockIdx_x : index
+#   %add_2 = index.add %add, %threadIdx_x : index
+#   %add_3 = index.add %add_2, %threadIdx_x : index
+#   %load = view.load %src[%add_3] : view<1024xf32> -> f32
+#   %add_4 = index.add %blockIdx_x, %blockIdx_x : index
+#   %add_5 = index.add %add_4, %threadIdx_x : index
+#   %add_6 = index.add %add_5, %threadIdx_x : index
+#   view.store %load, %dst[%add_6] : f32, view<1024xf32>
 #   kernel.return
 # }
 
 
 # ====
-@tilelang_case(name="shared_storage_sync", category="op", tags=("topology",))
-def shared_storage_sync() -> TileLangImportInput:
-    src, dst = Var("src"), Var("dst")
-    src_buffer = Buffer("src", (4,), "float32")
-    dst_buffer = Buffer("dst", (4,), "float32")
-    body = SeqStmt(
+@tilelang_case(name="shared_storage_sync", category="op", tags=("topology", "memory"))
+def shared_storage_sync(tir: Any) -> TileLangImportInput:
+    src, dst, src_buffer, dst_buffer = _buffer_pair(tir, shape=(4,))
+    body = tir.SeqStmt(
         [
-            Evaluate(Call("tir.tvm_storage_sync", ["shared"], "int32")),
-            BufferStore(
+            tir.Evaluate(_call(tir, "int32", "tir.tvm_storage_sync", "shared")),
+            tir.BufferStore(
                 dst_buffer,
-                BufferLoad(src_buffer, [IntImm(0)]),
-                [IntImm(0)],
+                tir.BufferLoad(src_buffer, [tir.IntImm("int32", 0)]),
+                [tir.IntImm("int32", 0)],
             ),
         ]
     )
-    prim_func = PrimFunc(
-        [src, dst],
-        {src: src_buffer, dst: dst_buffer},
-        body,
-        attrs={"global_symbol": "shared_storage_sync"},
+    prim_func = _prim_func(
+        tir,
+        name="shared_storage_sync",
+        params=[src, dst],
+        body=body,
+        buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(
         source=prim_func, target="hip", name="shared_storage_sync"
@@ -131,23 +138,23 @@ def shared_storage_sync() -> TileLangImportInput:
 
 # ====
 @tilelang_case(name="thread_binding_loop", category="op", tags=("topology",))
-def thread_binding_loop() -> TileLangImportInput:
-    src, dst = Var("src"), Var("dst")
-    tx = Var("tx")
-    src_buffer = Buffer("src", (128,), "float32")
-    dst_buffer = Buffer("dst", (128,), "float32")
-    body = For(
+def thread_binding_loop(tir: Any, tvm: Any) -> TileLangImportInput:
+    src, dst, src_buffer, dst_buffer = _buffer_pair(tir, shape=(128,))
+    tx = tir.Var("tx", "int32")
+    body = tir.For(
         tx,
-        IntImm(0),
-        IntImm(128),
-        BufferStore(dst_buffer, BufferLoad(src_buffer, [tx]), [tx]),
-        thread_binding=ThreadAxis("threadIdx.x", tx),
+        tir.IntImm("int32", 0),
+        tir.IntImm("int32", 128),
+        tir.ForKind.THREAD_BINDING,
+        tir.BufferStore(dst_buffer, tir.BufferLoad(src_buffer, [tx]), [tx]),
+        thread_binding=tvm.te.thread_axis("threadIdx.x"),
     )
-    prim_func = PrimFunc(
-        [src, dst],
-        {src: src_buffer, dst: dst_buffer},
-        SeqStmt([body]),
-        attrs={"global_symbol": "thread_binding_loop"},
+    prim_func = _prim_func(
+        tir,
+        name="thread_binding_loop",
+        params=[src, dst],
+        body=body,
+        buffer_map={src: src_buffer, dst: dst_buffer},
     )
     return TileLangImportInput(
         source=prim_func, target="hip", name="thread_binding_loop"
