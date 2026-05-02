@@ -62,7 +62,58 @@ ERR_AMDGPU_002 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_003: AMDGPU target CPU override is unknown.
+ERR_AMDGPU_003 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=3,
+    severity=Severity.ERROR,
+    summary="AMDGPU target CPU override is unknown.",
+    message="AMDGPU target CPU override '{target_cpu}' is not a known processor",
+    params=(ErrorParam("target_cpu", ParamKind.STRING),),
+    fix_hint="Use a known AMDGPU processor name such as gfx1100 or gfx950",
+)
+
+# ERR_AMDGPU_004: AMDGPU target CPU override has no native descriptor set.
+ERR_AMDGPU_004 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=4,
+    severity=Severity.ERROR,
+    summary="AMDGPU target CPU override has no native descriptor set.",
+    message=(
+        "AMDGPU target CPU override '{target_cpu}' is known but has no "
+        "native target-low descriptor set"
+    ),
+    params=(ErrorParam("target_cpu", ParamKind.STRING),),
+    fix_hint="Use an AMDGPU processor with native target-low descriptor coverage",
+)
+
+# ERR_AMDGPU_005: AMDGPU target CPU override changes descriptor set.
+ERR_AMDGPU_005 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=5,
+    severity=Severity.ERROR,
+    summary="AMDGPU target CPU override changes descriptor set.",
+    message=(
+        "AMDGPU target CPU override '{target_cpu}' selects descriptor set "
+        "'{target_descriptor_set}' but target record '@{target_name}' uses "
+        "descriptor set '{record_descriptor_set}'"
+    ),
+    params=(
+        ErrorParam("target_cpu", ParamKind.STRING),
+        ErrorParam("target_descriptor_set", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+        ErrorParam("record_descriptor_set", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Select a target record from the same AMDGPU descriptor-set family as "
+        "the requested processor"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_002,
+    ERR_AMDGPU_003,
+    ERR_AMDGPU_004,
+    ERR_AMDGPU_005,
 )

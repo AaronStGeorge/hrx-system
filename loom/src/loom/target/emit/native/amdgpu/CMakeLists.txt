@@ -282,6 +282,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::preparation
     loom::src::loom::codegen::low::verify
     loom::src::loom::error::diagnostic
+    loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::kernel
     loom::src::loom::ops::low
@@ -302,6 +303,25 @@ loom_cc_library(
     loom::src::loom::target::module_compiler
     loom::src::loom::verify
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    module_compiler_test
+  SRCS
+    "module_compiler_test.cc"
+  DEPS
+    ::module_compiler
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::error::error_defs
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::op_registry
+    loom::src::loom::target::arch::amdgpu::ops
+    loom::src::loom::testing::diagnostic_matchers
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(
