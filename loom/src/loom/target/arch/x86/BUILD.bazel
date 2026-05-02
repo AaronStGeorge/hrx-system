@@ -37,11 +37,13 @@ loom_assert_no_dependencies(
     targets = [
         ":avx512_descriptors",
         ":avx512_packed_dot_descriptors",
+        ":ops",
         ":low_registry",
         ":packed_dot_contract",
         ":packed_dot_contract_projection",
         ":packed_dot_descriptors",
         ":packed_dot_vector",
+        ":target_records",
         "//loom/src/loom/target/arch/x86/contracts:avx512_lower_rules",
         "//loom/src/loom/target/arch/x86/contracts:packed_dot_lower_rules",
     ],
@@ -57,6 +59,7 @@ loom_assert_no_dependencies(
         ":packed_dot_contract",
         ":packed_dot_contract_projection",
         ":packed_dot_descriptors",
+        ":target_records",
     ],
     targets = [
         "//loom/src/loom/target:low_descriptor_registry",
@@ -93,6 +96,39 @@ loom_cc_library(
     deps = ["//runtime/src/iree/base"],
 )
 
+loom_cc_library(
+    name = "target_records",
+    srcs = ["target_records.c"],
+    hdrs = ["target_records.h"],
+    deps = [
+        ":feature_bits",
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "ops",
+    srcs = [
+        "ops/builders.c",
+        "ops/registry.c",
+        "ops/tables.c",
+    ],
+    hdrs = [
+        "ops/ops.h",
+        "ops/registry.h",
+    ],
+    deps = [
+        ":target_records",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
 loom_low_descriptor_cc_library(
     name = "avx512_descriptors",
     args = ["--descriptor-set=x86_avx512_core"],
@@ -121,8 +157,8 @@ loom_cc_library(
     deps = [
         ":avx512_descriptors",
         ":avx512_packed_dot_descriptors",
-        ":feature_bits",
         ":packed_dot_descriptors",
+        ":target_records",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:types",
@@ -162,6 +198,7 @@ loom_cc_library(
     deps = [
         ":low_registry",
         ":lower",
+        ":ops",
         "//loom/src/loom/target/emit/native/x86:loom_check",
         "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",

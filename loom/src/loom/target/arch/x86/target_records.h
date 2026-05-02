@@ -1,0 +1,29 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// x86 target-family records.
+
+#ifndef LOOM_TARGET_ARCH_X86_TARGET_RECORDS_H_
+#define LOOM_TARGET_ARCH_X86_TARGET_RECORDS_H_
+
+#include "loom/target/types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+extern const loom_target_bundle_t loom_x86_low_target_bundle_avx512_core;
+extern const loom_target_bundle_t loom_x86_low_target_bundle_packed_dot_core;
+extern const loom_target_bundle_t
+    loom_x86_low_target_bundle_avx512_packed_dot_core;
+
+extern const loom_target_bundle_table_t loom_x86_target_bundles;
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
+#endif  // LOOM_TARGET_ARCH_X86_TARGET_RECORDS_H_

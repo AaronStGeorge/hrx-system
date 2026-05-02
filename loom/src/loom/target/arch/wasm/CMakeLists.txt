@@ -23,6 +23,40 @@ loom_low_descriptor_cc_library(
 
 loom_cc_library(
   NAME
+    target_records
+  HDRS
+    "target_records.h"
+  SRCS
+    "target_records.c"
+  DEPS
+    iree::base
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    ops
+  HDRS
+    "ops/ops.h"
+    "ops/registry.h"
+  SRCS
+    "ops/builders.c"
+    "ops/registry.c"
+    "ops/tables.c"
+  DEPS
+    ::target_records
+    iree::base
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::target
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     low_registry
   HDRS
     "low_registry.h"
@@ -30,6 +64,7 @@ loom_cc_library(
     "low_registry.c"
   DEPS
     ::descriptors
+    ::target_records
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::target::low_descriptor_registry
@@ -46,6 +81,7 @@ loom_cc_library(
     "check/provider.c"
   DEPS
     ::low_registry
+    ::ops
     iree::base
     loom::src::loom::target::emit::wasm::lower
     loom::src::loom::tools::loom-check::provider

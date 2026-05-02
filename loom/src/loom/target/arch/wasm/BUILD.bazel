@@ -37,6 +37,8 @@ loom_assert_no_dependencies(
     targets = [
         ":descriptors",
         ":low_registry",
+        ":ops",
+        ":target_records",
     ],
 )
 
@@ -45,6 +47,7 @@ loom_assert_no_dependencies(
     dependencies = [
         ":descriptors",
         ":low_registry",
+        ":target_records",
     ],
     targets = [
         "//loom/src/loom/target:low_descriptor_registry",
@@ -76,11 +79,44 @@ loom_low_descriptor_cc_library(
 )
 
 loom_cc_library(
+    name = "target_records",
+    srcs = ["target_records.c"],
+    hdrs = ["target_records.h"],
+    deps = [
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "ops",
+    srcs = [
+        "ops/builders.c",
+        "ops/registry.c",
+        "ops/tables.c",
+    ],
+    hdrs = [
+        "ops/ops.h",
+        "ops/registry.h",
+    ],
+    deps = [
+        ":target_records",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "low_registry",
     srcs = ["low_registry.c"],
     hdrs = ["low_registry.h"],
     deps = [
         ":descriptors",
+        ":target_records",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:types",
@@ -94,6 +130,7 @@ loom_cc_library(
     hdrs = ["check/provider.h"],
     deps = [
         ":low_registry",
+        ":ops",
         "//loom/src/loom/target/emit/wasm:lower",
         "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",

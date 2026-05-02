@@ -1,6 +1,6 @@
 // RUN: emit source-low output=low
 
-target.generic<llvm_cpu> @target {codegen_format = wasm, artifact_format = wasm_binary, abi = wasm_function, contract_set_key = "wasm.core.simd128", default_pointer_bitwidth = 32, index_bitwidth = 32, offset_bitwidth = 32}
+wasm.target<simd128> @target
 
 func.def target(@target) @unsupported_vector_shape(%lhs: vector<8xi32>, %rhs: vector<8xi32>) -> (vector<8xi32>) {
   // ERROR@+1: WASM/001 {field_name="lhs", required_type="vector<4xi32>"}
@@ -10,7 +10,7 @@ func.def target(@target) @unsupported_vector_shape(%lhs: vector<8xi32>, %rhs: ve
 
 // ====
 
-target.generic<llvm_cpu> @target {codegen_format = wasm, artifact_format = wasm_binary, abi = wasm_function, contract_set_key = "wasm.core.simd128", default_pointer_bitwidth = 32, index_bitwidth = 32, offset_bitwidth = 32}
+wasm.target<simd128> @target
 
 func.def target(@target) @unsupported_source_op(%lhs: i32, %rhs: i32) -> (i32) {
   // ERROR@+1: BACKEND/001 "scalar.muli" "descriptor mapping"

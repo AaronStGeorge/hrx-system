@@ -20,6 +20,41 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    target_records
+  HDRS
+    "target_records.h"
+  SRCS
+    "target_records.c"
+  DEPS
+    ::feature_bits
+    iree::base
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    ops
+  HDRS
+    "ops/ops.h"
+    "ops/registry.h"
+  SRCS
+    "ops/builders.c"
+    "ops/registry.c"
+    "ops/tables.c"
+  DEPS
+    ::target_records
+    iree::base
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::target
+    loom::src::loom::target::types
+  PUBLIC
+)
+
 loom_low_descriptor_cc_library(
   NAME
     avx512_descriptors
@@ -63,8 +98,8 @@ loom_cc_library(
   DEPS
     ::avx512_descriptors
     ::avx512_packed_dot_descriptors
-    ::feature_bits
     ::packed_dot_descriptors
+    ::target_records
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::target::low_descriptor_registry
@@ -106,6 +141,7 @@ loom_cc_library(
   DEPS
     ::low_registry
     ::lower
+    ::ops
     iree::base
     loom::src::loom::target::emit::native::x86::loom_check
     loom::src::loom::tools::loom-check::provider

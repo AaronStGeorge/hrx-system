@@ -1,7 +1,7 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test
 // RUN: emit source-low output=low
 
-target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @target
 
 func.def target(@target) @scalar_f32_arith(%lhs: f32, %rhs: f32, %bias: f32) -> (f32) {
   %sum = scalar.addf %lhs, %rhs : f32

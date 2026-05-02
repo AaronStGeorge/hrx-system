@@ -1,5 +1,5 @@
 // RUN: emit x86-asm @x86_fragment
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) asm<x86.avx512.core> {
   %loaded = vmovdqu32.load %base {disp32 = 0}
@@ -16,7 +16,7 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%input: reg<x86.gpr64>, %output: reg<x86.gpr64>, %i: reg<x86.gpr64>, %j: reg<x86.gpr64>) asm<x86.avx512.core> {
   %index = lea %i, %j
@@ -34,7 +34,7 @@ low.func.def target(@x86_target) @x86_fragment(%input: reg<x86.gpr64>, %output: 
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>, %base: reg<x86.gpr64>) asm<x86.avx512.core> {
   %copy = copy %lhs : reg<x86.zmm> -> reg<x86.zmm>
@@ -53,7 +53,7 @@ low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%value: reg<x86.zmm>) asm<x86.avx512.core> {
   %addr = mov.imm64 1024
@@ -69,7 +69,7 @@ low.func.def target(@x86_target) @x86_fragment(%value: reg<x86.zmm>) asm<x86.avx
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %value: reg<x86.gpr32>, %rhs: reg<x86.zmm>) asm<x86.avx512.core> {
   %splat = vpbroadcastd %value
@@ -87,7 +87,7 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %value: re
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %value: reg<x86.xmm>, %rhs: reg<x86.zmm>) asm<x86.avx512.core> {
   %splat = vbroadcastss %value
@@ -105,7 +105,7 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %value: re
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) asm<x86.avx512.core> {
   %min_s = vpminsd %lhs, %rhs
@@ -139,7 +139,7 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>, %fallback: reg<x86.zmm>) asm<x86.avx512.core> {
   %signed = vpcmpd.sgt %lhs, %rhs
@@ -165,7 +165,7 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) asm<x86.avx512.core> {
   %greater = vpcmpd.sgt %lhs, %rhs
@@ -201,7 +201,7 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<x86.zmm>) asm<x86.avx512.core> {
   low.br ^join(%lhs: reg<x86.zmm>)
@@ -222,7 +222,7 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) asm<x86.avx512.core> {
   low.br ^join(%rhs: reg<x86.zmm>, %lhs: reg<x86.zmm>)
@@ -245,7 +245,7 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) asm<x86.avx512.core> {
   low.br ^loop(%rhs: reg<x86.zmm>, %lhs: reg<x86.zmm>)
@@ -267,7 +267,7 @@ low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%input: reg<x86.gpr64>, %output: reg<x86.gpr64>, %row: reg<x86.gpr64>, %stride: reg<x86.gpr64>, %col: reg<x86.gpr64>) asm<x86.avx512.core> {
   %bias = mov.imm64 256
@@ -292,7 +292,7 @@ low.func.def target(@x86_target) @x86_fragment(%input: reg<x86.gpr64>, %output: 
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x86.zmm>) asm<x86.avx512.core> {
   %quarter = vextractf32x4.xmm %v, 2
@@ -308,7 +308,7 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x8
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x86.xmm>, %init: reg<x86.gpr32>) asm<x86.avx512.core> {
   %reversed = vpshufd.xmm %v, 27
@@ -346,7 +346,7 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x8
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x86.xmm>) asm<x86.avx512.core> {
   %shuffled = vpermilps.xmm %v, 39
@@ -362,7 +362,7 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x8
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x86.xmm>, %x: reg<x86.xmm>) asm<x86.avx512.core> {
   %lane = vpermilps.xmm %v, 1
@@ -382,7 +382,7 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x8
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x86.xmm>, %init: reg<x86.xmm>) asm<x86.avx512.core> {
   %paired = vpermilps.xmm %v, 78
@@ -406,7 +406,7 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x8
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<x86.xmm>, %rhs: reg<x86.xmm>, %bias: reg<x86.xmm>) asm<x86.avx512.core> {
   %sum = vaddss.xmm %lhs, %rhs
@@ -429,7 +429,7 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 
 // ====
 
-target.generic<llvm_cpu> @x86_target {codegen_format = low_native, contract_set_key = "x86.avx512_packed_dot.core", contract_feature_bits = 79}
+x86.target<avx512_packed_dot> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %bf16_acc: reg<x86.zmm>, %bf16_lhs: reg<x86.zmm>, %bf16_rhs: reg<x86.zmm>, %i8_acc: reg<x86.zmm>, %i8_lhs: reg<x86.zmm>, %i8_rhs: reg<x86.zmm>) asm<x86.avx512_packed_dot.core> {
   %bf16_dot = vdpbf16ps %bf16_acc, %bf16_lhs, %bf16_rhs

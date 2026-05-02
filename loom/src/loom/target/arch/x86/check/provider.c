@@ -8,6 +8,7 @@
 
 #include "loom/target/arch/x86/low_registry.h"
 #include "loom/target/arch/x86/lower.h"
+#include "loom/target/arch/x86/ops/registry.h"
 #include "loom/target/emit/native/x86/check/loom_check.h"
 
 static const loom_check_emit_provider_t* const kLoomX86CheckEmitProviders[] = {
@@ -16,6 +17,7 @@ static const loom_check_emit_provider_t* const kLoomX86CheckEmitProviders[] = {
 
 const loom_check_provider_t loom_x86_check_provider = {
     .name = IREE_SVL("x86"),
+    .register_context = loom_x86_ops_register_dialect,
     .initialize_low_descriptor_registry =
         loom_x86_low_descriptor_registry_initialize,
     .initialize_low_lower_policy_registry =

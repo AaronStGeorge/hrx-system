@@ -1,7 +1,7 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/vector_v16.loom-test
 // RUN: emit source-low output=low
 
-target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @target
 
 func.def target(@target) @i32x16_arith(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<16xi32>) {
   %sum = vector.addi %lhs, %rhs : vector<16xi32>
@@ -18,7 +18,7 @@ low.func.def target(@target) abi(object_function) @i32x16_arith(%lhs: reg<x86.zm
 
 // ====
 
-target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @target
 
 func.def target(@target) @i32x16_minmax_logic(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<16xi32>) {
   %min_s = vector.minsi %lhs, %rhs : vector<16xi32>
@@ -45,7 +45,7 @@ low.func.def target(@target) abi(object_function) @i32x16_minmax_logic(%lhs: reg
 
 // ====
 
-target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @target
 
 func.def target(@target) @i32x16_variable_shift(%value: vector<16xi32>, %amount: vector<16xi32>) -> (vector<16xi32>) {
   %left = vector.shli %value, %amount : vector<16xi32>
@@ -64,7 +64,7 @@ low.func.def target(@target) abi(object_function) @i32x16_variable_shift(%value:
 
 // ====
 
-target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @target
 
 func.def target(@target) @i32x16_splat_add(%value: i32, %rhs: vector<16xi32>) -> (vector<16xi32>) {
   %splat = vector.splat %value : vector<16xi32>
@@ -81,7 +81,7 @@ low.func.def target(@target) abi(object_function) @i32x16_splat_add(%value: reg<
 
 // ====
 
-target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @target
 
 func.def target(@target) @i32x16_compare_select(%lhs: vector<16xi32>, %rhs: vector<16xi32>, %fallback: vector<16xi32>) -> (vector<16xi32>) {
   %signed = vector.cmpi sgt, %lhs, %rhs : vector<16xi32> -> vector<16xi1>
@@ -102,7 +102,7 @@ low.func.def target(@target) abi(object_function) @i32x16_compare_select(%lhs: r
 
 // ====
 
-target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @target
 
 func.def target(@target) @i32x16_mask_and_select(%lhs: vector<16xi32>, %rhs: vector<16xi32>, %fallback: vector<16xi32>) -> (vector<16xi32>) {
   %greater = vector.cmpi sgt, %lhs, %rhs : vector<16xi32> -> vector<16xi1>
@@ -127,7 +127,7 @@ low.func.def target(@target) abi(object_function) @i32x16_mask_and_select(%lhs: 
 
 // ====
 
-target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @target
 
 func.def target(@target) @f32x16_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<16xf32>) {
   %sum = vector.addf %lhs, %rhs : vector<16xf32>
@@ -149,7 +149,7 @@ low.func.def target(@target) abi(object_function) @f32x16_arith(%lhs: reg<x86.zm
 
 // ====
 
-target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @target
 
 func.def target(@target) @f32x16_splat_add(%value: f32, %rhs: vector<16xf32>) -> (vector<16xf32>) {
   %splat = vector.splat %value : vector<16xf32>
@@ -166,7 +166,7 @@ low.func.def target(@target) abi(object_function) @f32x16_splat_add(%value: reg<
 
 // ====
 
-target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @target
 
 func.def target(@target) @f32x16_reduce_add(%v: vector<16xf32>, %init: f32) -> (f32) {
   %sum = vector.reduce<addf> %v, %init : vector<16xf32>, f32
@@ -192,7 +192,7 @@ low.func.def target(@target) abi(object_function) @f32x16_reduce_add(%v: reg<x86
 
 // ====
 
-target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @target
 
 func.def target(@target) @f32x16_compare_select(%lhs: vector<16xf32>, %rhs: vector<16xf32>, %fallback: vector<16xf32>) -> (vector<16xf32>) {
   %ordered_lt = vector.cmpf olt, %lhs, %rhs : vector<16xf32> -> vector<16xi1>
@@ -213,7 +213,7 @@ low.func.def target(@target) abi(object_function) @f32x16_compare_select(%lhs: r
 
 // ====
 
-target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @target
 
 func.def target(@target) @f32x16_static_memory(%input: buffer, %output: buffer) {
   %input_base = index.constant 16 : offset
@@ -234,7 +234,7 @@ low.func.def target(@target) abi(object_function) @f32x16_static_memory(%input_v
 
 // ====
 
-target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @target
 
 func.def target(@target) @f32x16_dynamic_memory(%input: buffer, %output: buffer, %i: index) {
   %input_base = index.constant 16 : offset
@@ -256,7 +256,7 @@ low.func.def target(@target) abi(object_function) @f32x16_dynamic_memory(%input_
 
 // ====
 
-target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @target
 
 func.def target(@target) @f32x16_index_add_memory(%input: buffer, %output: buffer, %i: index, %j: index) {
   %zero = index.constant 0 : offset
@@ -279,7 +279,7 @@ low.func.def target(@target) abi(object_function) @f32x16_index_add_memory(%inpu
 
 // ====
 
-target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.avx512.core"}
+x86.target<avx512> @target
 
 func.def target(@target) @f32x16_index_madd_memory(%input: buffer, %output: buffer, %row: index, %stride: index, %col: index) {
   %zero = index.constant 0 : offset

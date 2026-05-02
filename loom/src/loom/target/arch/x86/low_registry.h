@@ -9,17 +9,12 @@
 #ifndef LOOM_TARGET_ARCH_X86_LOW_REGISTRY_H_
 #define LOOM_TARGET_ARCH_X86_LOW_REGISTRY_H_
 
+#include "loom/target/arch/x86/target_records.h"
 #include "loom/target/low_descriptor_registry.h"
-#include "loom/target/types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-extern const loom_target_bundle_t loom_x86_low_target_bundle_avx512_core;
-extern const loom_target_bundle_t loom_x86_low_target_bundle_packed_dot_core;
-extern const loom_target_bundle_t
-    loom_x86_low_target_bundle_avx512_packed_dot_core;
 
 void loom_x86_low_descriptor_registry_initialize(
     loom_target_low_descriptor_registry_t* out_registry);
