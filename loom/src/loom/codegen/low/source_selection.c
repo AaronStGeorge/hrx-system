@@ -6,7 +6,6 @@
 
 #include "loom/codegen/low/source_selection.h"
 
-#include <inttypes.h>
 #include <string.h>
 
 #include "loom/analysis/symbol_facts.h"
@@ -14,14 +13,6 @@
 #include "loom/ops/target/facts.h"
 #include "loom/target/function_contract.h"
 #include "loom/target/preset_registry.h"
-
-static iree_string_view_t loom_low_source_selection_kind(
-    const loom_low_source_selection_options_t* options) {
-  if (!options || iree_string_view_is_empty(options->lowering_kind)) {
-    return IREE_SV("source-to-low");
-  }
-  return options->lowering_kind;
-}
 
 static iree_status_t loom_low_source_selection_initialize_fact_table(
     const loom_low_descriptor_registry_t* descriptor_registry,
@@ -67,45 +58,30 @@ static iree_status_t loom_low_source_selection_try_func(
     const loom_module_t* module,
     const loom_low_source_selection_options_t* options,
     loom_symbol_fact_table_t* fact_table, loom_symbol_id_t symbol_id,
-    bool require_compatible, bool* out_compatible,
-    loom_low_source_selection_t* out_selection) {
+    bool* out_compatible, loom_low_source_selection_t* out_selection) {
   *out_compatible = false;
   const loom_func_symbol_facts_t* func_facts = NULL;
   IREE_RETURN_IF_ERROR(loom_low_source_selection_lookup_func_facts(
       module, fact_table, symbol_id, &func_facts));
   if (!func_facts || !func_facts->has_body) {
-    if (!require_compatible) {
-      return iree_ok_status();
-    }
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "symbol is not a func with a body");
+    return iree_ok_status();
   }
   if (!loom_symbol_ref_is_valid(func_facts->target_symbol)) {
-    if (!require_compatible) {
-      return iree_ok_status();
-    }
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "source func @%.*s must declare a target profile",
-                            (int)func_facts->name.size, func_facts->name.data);
+    return iree_ok_status();
   }
+  bool contract_valid = false;
   IREE_RETURN_IF_ERROR(loom_target_function_contract_resolve(
-      module, fact_table, func_facts, &out_selection->target_bundle_storage));
+      module, fact_table, func_facts, options->diagnostic_emitter,
+      &contract_valid, &out_selection->target_bundle_storage));
+  if (!contract_valid) {
+    return iree_ok_status();
+  }
   out_selection->target_bundle = &out_selection->target_bundle_storage.bundle;
   const loom_low_lower_policy_t* policy =
       loom_low_lower_policy_registry_lookup_for_bundle(
           options->policy_registry, out_selection->target_bundle);
   if (policy == NULL) {
-    if (!require_compatible) {
-      return iree_ok_status();
-    }
-    const iree_string_view_t contract_set_key =
-        out_selection->target_bundle->config->contract_set_key;
-    return iree_make_status(
-        IREE_STATUS_NOT_FOUND,
-        "source func @%.*s target contract set '%.*s' has no target-low "
-        "lowering policy",
-        (int)func_facts->name.size, func_facts->name.data,
-        (int)contract_set_key.size, contract_set_key.data);
+    return iree_ok_status();
   }
 
   out_selection->func = loom_func_like_cast(module, func_facts->func_op);
@@ -122,48 +98,6 @@ static void loom_low_source_selection_assign(
   *out_selection = *source;
   loom_target_bundle_storage_rebind(&out_selection->target_bundle_storage);
   out_selection->target_bundle = &out_selection->target_bundle_storage.bundle;
-}
-
-static iree_status_t loom_low_source_selection_select_single(
-    const loom_module_t* module,
-    const loom_low_source_selection_options_t* options,
-    loom_symbol_fact_table_t* fact_table,
-    loom_low_source_selection_t* out_selection) {
-  iree_host_size_t compatible_count = 0;
-  for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
-    if (i > UINT16_MAX) {
-      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                              "symbol index exceeds source selection range");
-    }
-    bool compatible = false;
-    loom_low_source_selection_t candidate = {0};
-    IREE_RETURN_IF_ERROR(loom_low_source_selection_try_func(
-        module, options, fact_table, (loom_symbol_id_t)i,
-        /*require_compatible=*/false, &compatible, &candidate));
-    if (!compatible) {
-      continue;
-    }
-    ++compatible_count;
-    if (compatible_count == 1) {
-      loom_low_source_selection_assign(&candidate, out_selection);
-    }
-  }
-
-  iree_string_view_t lowering_kind = loom_low_source_selection_kind(options);
-  if (compatible_count == 0) {
-    return iree_make_status(
-        IREE_STATUS_NOT_FOUND,
-        "module contains no %.*s-compatible func with a target profile",
-        (int)lowering_kind.size, lowering_kind.data);
-  }
-  if (compatible_count > 1) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "module contains %" PRIhsz
-                            " %.*s-compatible funcs; expected exactly one",
-                            compatible_count, (int)lowering_kind.size,
-                            lowering_kind.data);
-  }
-  return iree_ok_status();
 }
 
 iree_status_t loom_low_select_source_funcs(
@@ -199,8 +133,8 @@ iree_status_t loom_low_select_source_funcs(
     bool compatible = false;
     loom_low_source_selection_t candidate = {0};
     IREE_RETURN_IF_ERROR(loom_low_source_selection_try_func(
-        module, options, &fact_table, (loom_symbol_id_t)i,
-        /*require_compatible=*/false, &compatible, &candidate));
+        module, options, &fact_table, (loom_symbol_id_t)i, &compatible,
+        &candidate));
     if (!compatible) {
       continue;
     }
@@ -211,24 +145,4 @@ iree_status_t loom_low_select_source_funcs(
   out_selection_list->values = selections;
   out_selection_list->count = selection_count;
   return iree_ok_status();
-}
-
-iree_status_t loom_low_select_source_func(
-    const loom_module_t* module,
-    const loom_low_source_selection_options_t* options,
-    iree_arena_allocator_t* arena, loom_low_source_selection_t* out_selection) {
-  memset(out_selection, 0, sizeof(*out_selection));
-  if (options->descriptor_registry == NULL ||
-      options->policy_registry == NULL) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "source-to-low selection requires descriptor and policy "
-        "registries");
-  }
-
-  loom_symbol_fact_table_t fact_table = {0};
-  IREE_RETURN_IF_ERROR(loom_low_source_selection_initialize_fact_table(
-      options->descriptor_registry, arena, &fact_table));
-  return loom_low_source_selection_select_single(module, options, &fact_table,
-                                                 out_selection);
 }

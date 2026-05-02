@@ -17,6 +17,7 @@
 
 #include "iree/base/api.h"
 #include "loom/analysis/symbol_facts.h"
+#include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/func_symbol_facts.h"
 #include "loom/target/types.h"
@@ -32,10 +33,13 @@ extern "C" {
 // plan starts from the target profile defaults and is then overlaid with
 // function-owned ABI/export attrs or kernel-owned launch/export attrs.
 // |out_bundle_storage| owns the copied payload fields and its embedded bundle
-// points at those copies.
+// points at those copies. Returns status only for infrastructure failures.
+// Invalid user IR emits a structured diagnostic, sets |out_valid| to false,
+// and returns OK.
 iree_status_t loom_target_function_contract_resolve(
     const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
     const loom_func_symbol_facts_t* func_facts,
+    iree_diagnostic_emitter_t diagnostic_emitter, bool* out_valid,
     loom_target_bundle_storage_t* out_bundle_storage);
 
 #ifdef __cplusplus

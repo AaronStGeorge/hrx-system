@@ -170,6 +170,7 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
   const loom_low_source_selection_options_t selection_options = {
       .descriptor_registry = descriptor_registry,
       .policy_registry = policy_registry,
+      .diagnostic_emitter = pass->diagnostic_emitter,
       .lowering_kind = IREE_SV("source-to-low"),
   };
   iree_status_t status = loom_low_select_source_funcs(

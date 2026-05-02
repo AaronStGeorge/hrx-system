@@ -10,6 +10,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/analysis/symbol_facts.h"
+#include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -19,6 +20,7 @@
 #include "loom/ops/target/ops.h"
 #include "loom/target/preset_registry.h"
 #include "loom/target/types.h"
+#include "loom/testing/diagnostic_matchers.h"
 #include "loom/testing/module_ptr.h"
 
 namespace loom {
@@ -153,8 +155,25 @@ class TargetFunctionContractTest : public ::testing::Test {
   void ResolveContract(const loom_module_t* module,
                        const loom_func_symbol_facts_t* facts,
                        loom_target_bundle_storage_t* out_storage) {
-    IREE_CHECK_OK(loom_target_function_contract_resolve(module, &fact_table_,
-                                                        facts, out_storage));
+    bool valid = false;
+    IREE_CHECK_OK(loom_target_function_contract_resolve(
+        module, &fact_table_, facts, iree_diagnostic_emitter_t{}, &valid,
+        out_storage));
+    ASSERT_TRUE(valid);
+  }
+
+  void ExpectContractError(const loom_module_t* module,
+                           const loom_func_symbol_facts_t* facts,
+                           uint16_t code) {
+    testing::DiagnosticEmissionCapture capture;
+    loom_target_bundle_storage_t storage = {};
+    bool valid = true;
+    IREE_ASSERT_OK(loom_target_function_contract_resolve(
+        module, &fact_table_, facts, capture.emitter(), &valid, &storage));
+    EXPECT_FALSE(valid);
+    ASSERT_EQ(capture.emissions.size(), 1u);
+    EXPECT_EQ(capture.emissions[0].error,
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, code));
   }
 
   // Block pool shared by parser, module allocation, and analysis storage.
@@ -241,10 +260,7 @@ low.func.def target(@not_profile) @kernel() {
 
   const loom_func_symbol_facts_t* facts =
       LookupFunc(module.get(), IREE_SV("kernel"));
-  loom_target_bundle_storage_t storage = {};
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        loom_target_function_contract_resolve(
-                            module.get(), &fact_table_, facts, &storage));
+  ExpectContractError(module.get(), facts, 38);
 }
 
 }  // namespace

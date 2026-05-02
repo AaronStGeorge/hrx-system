@@ -225,11 +225,13 @@ static iree_status_t loom_low_resolve_func_target(
         out_target->target_symbol, target_attr_index,
         IREE_SV("target profile"));
   }
+  bool contract_valid = false;
   if (iree_status_is_ok(status)) {
     status = loom_target_function_contract_resolve(
-        module, &fact_table, func_facts, &out_target->bundle_storage);
+        module, &fact_table, func_facts, emitter, &contract_valid,
+        &out_target->bundle_storage);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && contract_valid) {
     out_target->descriptor_set_key =
         out_target->bundle_storage.config.contract_set_key;
     out_target->feature_bits =
@@ -239,6 +241,9 @@ static iree_status_t loom_low_resolve_func_target(
   iree_arena_deinitialize(&arena);
   if (!iree_status_is_ok(status)) {
     return status;
+  }
+  if (!contract_valid) {
+    return iree_ok_status();
   }
 
   const loom_low_descriptor_set_t* descriptor_set =

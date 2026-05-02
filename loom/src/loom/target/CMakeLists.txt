@@ -89,6 +89,8 @@ loom_cc_library(
     ::types
     iree::base
     loom::src::loom::analysis::symbol_facts
+    loom::src::loom::error::emitter
+    loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::func_symbol_facts
     loom::src::loom::ops::target
@@ -304,11 +306,13 @@ loom_cc_test(
     ::types
     iree::base::internal::arena
     loom::src::loom::analysis::symbol_facts
+    loom::src::loom::error::error_defs
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::func_symbol_facts
     loom::src::loom::ops::low
     loom::src::loom::ops::target
+    loom::src::loom::testing::diagnostic_matchers
     loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main

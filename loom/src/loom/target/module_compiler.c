@@ -545,8 +545,14 @@ static iree_status_t loom_target_module_compile_try_entry(
   loom_target_module_compile_entry_t entry = {0};
   loom_target_module_compile_entry_from_facts(module, symbol_id, func_facts,
                                               &entry);
+  bool contract_valid = false;
   IREE_RETURN_IF_ERROR(loom_target_function_contract_resolve(
-      module, fact_table, func_facts, &entry.bundle_storage));
+      module, fact_table, func_facts,
+      loom_target_module_compile_emitter(diagnostic_emitter), &contract_valid,
+      &entry.bundle_storage));
+  if (!contract_valid) {
+    return iree_ok_status();
+  }
   if (!predicate.fn(predicate.user_data, &entry)) {
     if (!require_compatible) {
       return iree_ok_status();

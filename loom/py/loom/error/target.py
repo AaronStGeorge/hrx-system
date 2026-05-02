@@ -699,6 +699,262 @@ ERR_TARGET_037 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_038: Function target is not a target profile.
+ERR_TARGET_038 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=38,
+    severity=Severity.ERROR,
+    summary="Function target is not a target profile.",
+    message=(
+        "function '@{function_name}' target '@{target_name}' must resolve to "
+        "target.profile facts"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+    ),
+)
+
+# ERR_TARGET_039: Function ABI override field is unsupported.
+ERR_TARGET_039 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=39,
+    severity=Severity.ERROR,
+    summary="Function ABI override field is unsupported.",
+    message=(
+        "function '@{function_name}' ABI override field '{field_name}' is not supported"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("field_name", ParamKind.STRING),
+    ),
+)
+
+# ERR_TARGET_040: Kernel entry cannot override its ABI.
+ERR_TARGET_040 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=40,
+    severity=Severity.ERROR,
+    summary="Kernel entry cannot override its ABI.",
+    message=(
+        "kernel entry '@{function_name}' derives its ABI from the target "
+        "profile and cannot declare an ABI override"
+    ),
+    params=(ErrorParam("function_name", ParamKind.STRING),),
+)
+
+# ERR_TARGET_041: Function target contract has no concrete ABI.
+ERR_TARGET_041 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=41,
+    severity=Severity.ERROR,
+    summary="Function target contract has no concrete ABI.",
+    message=(
+        "function '@{function_name}' target profile '@{target_name}' must "
+        "resolve a concrete ABI"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+    ),
+)
+
+# ERR_TARGET_042: Kernel entry target contract is not a HAL kernel ABI.
+ERR_TARGET_042 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=42,
+    severity=Severity.ERROR,
+    summary="Kernel entry target contract is not a HAL kernel ABI.",
+    message=(
+        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "must resolve a HAL kernel ABI"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+    ),
+)
+
+# ERR_TARGET_043: HAL kernel binding alignment is zero.
+ERR_TARGET_043 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=43,
+    severity=Severity.ERROR,
+    summary="HAL kernel binding alignment is zero.",
+    message=(
+        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "must resolve a non-zero HAL binding alignment"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+    ),
+)
+
+# ERR_TARGET_044: HAL kernel workgroup size is partial.
+ERR_TARGET_044 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=44,
+    severity=Severity.ERROR,
+    summary="HAL kernel workgroup size is partial.",
+    message=(
+        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "requires workgroup size dimensions to be all zero or all non-zero"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+    ),
+)
+
+# ERR_TARGET_045: HAL kernel flat workgroup range is partial.
+ERR_TARGET_045 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=45,
+    severity=Severity.ERROR,
+    summary="HAL kernel flat workgroup range is partial.",
+    message=(
+        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "requires flat workgroup size min and max to be both zero or both "
+        "non-zero"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+    ),
+)
+
+# ERR_TARGET_046: HAL kernel flat workgroup range is unordered.
+ERR_TARGET_046 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=46,
+    severity=Severity.ERROR,
+    summary="HAL kernel flat workgroup range is unordered.",
+    message=(
+        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "flat workgroup size min {minimum} exceeds max {maximum}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+        ErrorParam("minimum", ParamKind.U32),
+        ErrorParam("maximum", ParamKind.U32),
+    ),
+)
+
+# ERR_TARGET_047: HAL kernel flat workgroup max exceeds target limit.
+ERR_TARGET_047 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=47,
+    severity=Severity.ERROR,
+    summary="HAL kernel flat workgroup max exceeds target limit.",
+    message=(
+        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "flat workgroup max {maximum} exceeds target limit {limit}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+        ErrorParam("maximum", ParamKind.U32),
+        ErrorParam("limit", ParamKind.U32),
+    ),
+)
+
+# ERR_TARGET_048: HAL kernel required workgroup dimension exceeds target limit.
+ERR_TARGET_048 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=48,
+    severity=Severity.ERROR,
+    summary="HAL kernel required workgroup dimension exceeds target limit.",
+    message=(
+        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "required workgroup {axis} size {size} exceeds target limit {limit}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+        ErrorParam("axis", ParamKind.STRING),
+        ErrorParam("size", ParamKind.U32),
+        ErrorParam("limit", ParamKind.U32),
+    ),
+)
+
+# ERR_TARGET_049: HAL kernel required flat workgroup size overflows.
+ERR_TARGET_049 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=49,
+    severity=Severity.ERROR,
+    summary="HAL kernel required flat workgroup size overflows.",
+    message=(
+        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "required flat workgroup size overflows uint64"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+    ),
+)
+
+# ERR_TARGET_050: HAL kernel required flat workgroup size exceeds target limit.
+ERR_TARGET_050 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=50,
+    severity=Severity.ERROR,
+    summary="HAL kernel required flat workgroup size exceeds target limit.",
+    message=(
+        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "required flat workgroup size {size} exceeds target limit {limit}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+        ErrorParam("size", ParamKind.U64),
+        ErrorParam("limit", ParamKind.U32),
+    ),
+)
+
+# ERR_TARGET_051: HAL kernel required flat workgroup size is outside range.
+ERR_TARGET_051 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=51,
+    severity=Severity.ERROR,
+    summary="HAL kernel required flat workgroup size is outside range.",
+    message=(
+        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "required flat workgroup size {size} is outside range "
+        "[{minimum}, {maximum}]"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+        ErrorParam("size", ParamKind.U64),
+        ErrorParam("minimum", ParamKind.U32),
+        ErrorParam("maximum", ParamKind.U32),
+    ),
+)
+
+# ERR_TARGET_052: Source-to-low found no compatible source functions.
+ERR_TARGET_052 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=52,
+    severity=Severity.ERROR,
+    summary="Source-to-low found no compatible source functions.",
+    message=(
+        "module contains no function compatible with target pipeline '{pipeline_name}'"
+    ),
+    params=(ErrorParam("pipeline_name", ParamKind.STRING),),
+)
+
+# ERR_TARGET_053: Function has no target profile.
+ERR_TARGET_053 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=53,
+    severity=Severity.ERROR,
+    summary="Function has no target profile.",
+    message="function '@{function_name}' must declare a target profile",
+    params=(ErrorParam("function_name", ParamKind.STRING),),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -737,4 +993,20 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_035,
     ERR_TARGET_036,
     ERR_TARGET_037,
+    ERR_TARGET_038,
+    ERR_TARGET_039,
+    ERR_TARGET_040,
+    ERR_TARGET_041,
+    ERR_TARGET_042,
+    ERR_TARGET_043,
+    ERR_TARGET_044,
+    ERR_TARGET_045,
+    ERR_TARGET_046,
+    ERR_TARGET_047,
+    ERR_TARGET_048,
+    ERR_TARGET_049,
+    ERR_TARGET_050,
+    ERR_TARGET_051,
+    ERR_TARGET_052,
+    ERR_TARGET_053,
 )

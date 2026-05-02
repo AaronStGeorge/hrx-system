@@ -557,6 +557,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::src::loom::analysis::symbol_facts
+    loom::src::loom::error::emitter
     loom::src::loom::ir
     loom::src::loom::ops::func_symbol_facts
     loom::src::loom::ops::target

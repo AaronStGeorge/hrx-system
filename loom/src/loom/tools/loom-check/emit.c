@@ -21,6 +21,7 @@
 #include "loom/codegen/low/target_binding.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
+#include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
 #include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
@@ -1278,6 +1279,7 @@ static iree_status_t loom_check_emit_write_source_low_text(
   const loom_low_source_selection_options_t selection_options = {
       .descriptor_registry = &low_registry->registry,
       .policy_registry = policy_registry,
+      .diagnostic_emitter = loom_target_module_compile_emitter(&pass_emitter),
       .lowering_kind = IREE_SV("source-to-low"),
   };
   iree_string_view_t selected_descriptor_set_key = iree_string_view_empty();
@@ -1333,13 +1335,23 @@ static iree_status_t loom_check_emit_write_source_low_text(
   loom_pass_value_fact_owner_deinitialize(&value_facts);
   iree_arena_deinitialize(&selection_arena);
   IREE_RETURN_IF_ERROR(status);
+  if (pass_emitter.error_count != 0) {
+    return iree_ok_status();
+  }
   if (rejected) {
     return iree_ok_status();
   }
   if (selection_list.count == 0) {
-    return iree_make_status(
-        IREE_STATUS_NOT_FOUND,
-        "source-low found no compatible source funcs with a target profile");
+    const loom_diagnostic_param_t params[] = {
+        loom_param_string(IREE_SV("source-to-low")),
+    };
+    const loom_diagnostic_emission_t emission = {
+        .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 52),
+        .params = params,
+        .param_count = IREE_ARRAYSIZE(params),
+    };
+    return iree_diagnostic_emit(
+        loom_target_module_compile_emitter(&pass_emitter), &emission);
   }
   IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_module(
       module, &compile_options, 20, &verify_result));
