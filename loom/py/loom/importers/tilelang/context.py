@@ -34,6 +34,7 @@ class TileLangConversionContext(SourceImportSession):
     index_values: dict[object, ValueRef] = field(default_factory=dict)
     semantic_values: dict[tuple[object, ...], ValueRef] = field(default_factory=dict)
     semantic_value_types: dict[tuple[object, ...], str] = field(default_factory=dict)
+    buffer_data_values: dict[tuple[object, ...], ValueRef] = field(default_factory=dict)
     semantic_index_values: dict[tuple[object, ...], ValueRef] = field(
         default_factory=dict
     )
@@ -120,6 +121,21 @@ class TileLangConversionContext(SourceImportSession):
             return None
         return self.semantic_value_types.get(semantic_key)
 
+    def map_buffer_data(self, source: object, ref: ValueRef) -> None:
+        self.map_value(source, ref, str(ref.type))
+        semantic_key = _semantic_buffer_data_key(source)
+        if semantic_key is not None:
+            self.buffer_data_values[semantic_key] = ref
+
+    def mapped_buffer_data(self, source: object) -> ValueRef | None:
+        mapped_value = self.mapped(source)
+        if mapped_value is not None:
+            return mapped_value
+        semantic_key = _semantic_buffer_data_key(source)
+        if semantic_key is None:
+            return None
+        return self.buffer_data_values.get(semantic_key)
+
     def mapped_index_value(self, source: object) -> ValueRef | None:
         mapped_value = self.index_values.get(self.source_key(source))
         if mapped_value is not None:
@@ -157,6 +173,7 @@ class TileLangConversionContext(SourceImportSession):
             index_values=dict(self.index_values),
             semantic_values=dict(self.semantic_values),
             semantic_value_types=dict(self.semantic_value_types),
+            buffer_data_values=dict(self.buffer_data_values),
             semantic_index_values=dict(self.semantic_index_values),
             kernel_body_block=self.kernel_body_block,
             dense_layout=self.dense_layout,
@@ -177,6 +194,15 @@ def _semantic_var_key(source: object) -> tuple[object, ...] | None:
     if source_dtype == "handle" or source_dtype.endswith("*"):
         return None
     return ("var", source_name(source, fallback=str(source)), source_dtype)
+
+
+def _semantic_buffer_data_key(source: object) -> tuple[object, ...] | None:
+    if node_kind(source) not in ("Var", "SizeVar"):
+        return None
+    source_dtype = dtype(source)
+    if source_dtype != "handle" and not source_dtype.endswith("*"):
+        return None
+    return ("buffer_data", source_name(source, fallback=str(source)), source_dtype)
 
 
 def _semantic_buffer_key(source: object) -> tuple[object, ...] | None:

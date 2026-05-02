@@ -383,3 +383,609 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") workgroup_size
   kernel.return
 }
 """
+
+
+# ====
+def _make_mask_indices_by_tp_kernel(tilelang: Any, T: Any) -> Any:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_mask_indices_by_tp_kernel(num_topk: int, dtype: T.dtype) -> Any:
+        num_threads = 128
+        num_tokens = T.dynamic("num_tokens")
+        num_blocks = T.ceildiv(num_tokens * num_topk, num_threads)
+
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def mask_indices_by_tp_kernel(
+            indices: T.Tensor[(num_tokens, num_topk), dtype],
+            masked_indices: T.Tensor[(num_tokens, num_topk), dtype],
+            per_gpu: T.int32,
+            per_dp: T.int32,
+            num_tp_ranks: T.int32,
+            tp_rank: T.int32,
+        ) -> None:
+            with T.Kernel(num_blocks, threads=num_threads) as (pid,):
+                indices_1d = T.reshape(indices, (num_tokens * num_topk,))
+                masked_indices_1d = T.reshape(masked_indices, (num_tokens * num_topk,))
+                thread_idx = T.get_thread_binding()
+                index = pid * num_threads + thread_idx
+                value = T.alloc_var(dtype)
+                if index < num_tokens * num_topk:
+                    value = indices_1d[index]
+                    if (
+                        value < 0
+                        or T.truncmod(T.truncdiv(value, per_gpu), num_tp_ranks)
+                        != tp_rank
+                    ):
+                        masked_indices_1d[index] = -1
+                    else:
+                        value -= tp_rank * per_gpu
+                        dp_rank = T.truncdiv(value, per_dp)
+                        value -= dp_rank * (per_dp - per_gpu)
+                        masked_indices_1d[index] = T.Select(
+                            value < 0,
+                            T.int64(-1),
+                            value,
+                        )
+
+        return mask_indices_by_tp_kernel
+
+    return get_mask_indices_by_tp_kernel
+
+
+def _mask_indices_by_tp_input(
+    tilelang: Any, T: Any, *, target: str
+) -> TileLangImportInput:
+    return TileLangImportInput(
+        source=_make_mask_indices_by_tp_kernel(tilelang, T),
+        args=(2, T.int64),
+        target=target,
+        name="mask_indices_by_tp_kernel",
+    )
+
+
+@tilelang_case(
+    name="tilekernels_mask_indices_by_tp_gfx1100",
+    category="kernel",
+    tags=("tilekernels", "moe", "routing", "amdgpu"),
+)
+def tilekernels_mask_indices_by_tp_gfx1100(
+    tilelang: Any,
+    T: Any,
+) -> TileLangImportInput:
+    return _mask_indices_by_tp_input(tilelang, T, target="hip -mcpu=gfx1100")
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") workgroup_size(128, 1, 1) @mask_indices_by_tp_kernel(%indices_handle: buffer, %masked_indices_handle: buffer, %per_gpu: i32, %per_dp: i32, %num_tp_ranks: i32, %tp_rank: i32, %num_tokens: i32) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %indices = buffer.view %indices_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
+  %masked_indices = buffer.view %masked_indices_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %thread_idx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %value_bytes = index.constant 8 : offset
+  %value_buffer = buffer.alloca %value_bytes {base_alignment = 8, memory_space = private} : buffer
+  %value = buffer.view %value_buffer[%c0_bytes] : buffer -> view<1xi64, %layout>
+  %c128 = index.constant 128 : index
+  %madd = index.madd %bx, %c128, %thread_idx : index
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %c2 = index.constant 2 : index
+  %mul = index.mul %num_tokens_idx, %c2 : index
+  %cmp = index.cmp slt, %madd, %mul : index
+  scf.if %cmp {
+    %rem = index.rem %madd, %c2 : index
+    %div = index.div %madd, %c2 : index
+    %load = view.load %indices[%div, %rem] : view<[%num_tokens]x2xi64, %layout> -> i64
+    %c0 = index.constant 0 : index
+    view.store %load, %value[%c0] : i64, view<1xi64, %layout>
+    %load_2 = view.load %value[%c0] : view<1xi64, %layout> -> i64
+    %const = scalar.constant 0 : i64
+    %cmp_2 = scalar.cmpi slt, %load_2, %const : i64
+    %load_3 = view.load %value[%c0] : view<1xi64, %layout> -> i64
+    %extsi = scalar.extsi %per_gpu : i32 to i64
+    %divsi = scalar.divsi %load_3, %extsi : i64
+    %extsi_2 = scalar.extsi %num_tp_ranks : i32 to i64
+    %remsi = scalar.remsi %divsi, %extsi_2 : i64
+    %extsi_3 = scalar.extsi %tp_rank : i32 to i64
+    %cmp_3 = scalar.cmpi ne, %remsi, %extsi_3 : i64
+    %ori = scalar.ori %cmp_2, %cmp_3 : i1
+    scf.if %ori {
+      %rem_2 = index.rem %madd, %c2 : index
+      %div_2 = index.div %madd, %c2 : index
+      %const_2 = scalar.constant -1 : i64
+      view.store %const_2, %masked_indices[%div_2, %rem_2] : i64, view<[%num_tokens]x2xi64, %layout>
+      scf.yield
+    } else {
+      %load_4 = view.load %value[%c0] : view<1xi64, %layout> -> i64
+      %muli = scalar.muli %tp_rank, %per_gpu : i32
+      %extsi_4 = scalar.extsi %muli : i32 to i64
+      %subi = scalar.subi %load_4, %extsi_4 : i64
+      view.store %subi, %value[%c0] : i64, view<1xi64, %layout>
+      %load_5 = view.load %value[%c0] : view<1xi64, %layout> -> i64
+      %extsi_5 = scalar.extsi %per_dp : i32 to i64
+      %divsi_2 = scalar.divsi %load_5, %extsi_5 : i64
+      %load_6 = view.load %value[%c0] : view<1xi64, %layout> -> i64
+      %subi_2 = scalar.subi %per_dp, %per_gpu : i32
+      %extsi_6 = scalar.extsi %subi_2 : i32 to i64
+      %muli_2 = scalar.muli %divsi_2, %extsi_6 : i64
+      %subi_3 = scalar.subi %load_6, %muli_2 : i64
+      view.store %subi_3, %value[%c0] : i64, view<1xi64, %layout>
+      %rem_3 = index.rem %madd, %c2 : index
+      %div_3 = index.div %madd, %c2 : index
+      %load_7 = view.load %value[%c0] : view<1xi64, %layout> -> i64
+      %cmp_4 = scalar.cmpi slt, %load_7, %const : i64
+      %const_3 = scalar.constant -1 : i64
+      %load_8 = view.load %value[%c0] : view<1xi64, %layout> -> i64
+      %select = scf.select %cmp_4, %const_3, %load_8 : i64
+      view.store %select, %masked_indices[%div_3, %rem_3] : i64, view<[%num_tokens]x2xi64, %layout>
+      scf.yield
+    }
+    scf.yield
+  } else {
+    scf.yield
+  }
+  kernel.return
+}
+"""
+
+
+# ====
+def _make_normalize_weight_kernel(tilelang: Any, T: Any) -> Any:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_normalize_weight_kernel(num_topk: int) -> Any:
+        num_threads = 128
+        num_tokens = T.dynamic("num_tokens")
+        num_blocks = T.ceildiv(num_tokens, 128)
+
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def normalize_weight_kernel(
+            topk_weights: T.Tensor[(num_tokens, num_topk), T.float32],
+            denominator: T.Tensor[(num_tokens,), T.float32],
+            normalized_weights: T.Tensor[(num_tokens, num_topk), T.float32],
+        ) -> None:
+            with T.Kernel(num_blocks, threads=num_threads) as (pid,):
+                tid = T.get_thread_binding()
+                weights_local = T.alloc_local((num_topk,), T.float32)
+                row = pid * num_threads + tid
+                if row < num_tokens:
+                    total = T.alloc_var(T.float32, init=1e-20)
+                    for i in T.vectorized(num_topk):
+                        weights_local[i] = topk_weights[row, i]
+                    for i in T.unroll(num_topk):
+                        total += weights_local[i]
+                    denominator[row] = total
+                    for i in T.vectorized(num_topk):
+                        normalized_weights[row, i] = weights_local[i] / total
+
+        return normalize_weight_kernel
+
+    return get_normalize_weight_kernel
+
+
+def _normalize_weight_input(
+    tilelang: Any, T: Any, *, target: str
+) -> TileLangImportInput:
+    return TileLangImportInput(
+        source=_make_normalize_weight_kernel(tilelang, T),
+        args=(2,),
+        target=target,
+        name="normalize_weight_kernel",
+    )
+
+
+@tilelang_case(
+    name="tilekernels_normalize_weight_gfx1100",
+    category="kernel",
+    tags=("tilekernels", "moe", "normalize", "amdgpu"),
+)
+def tilekernels_normalize_weight_gfx1100(
+    tilelang: Any,
+    T: Any,
+) -> TileLangImportInput:
+    return _normalize_weight_input(tilelang, T, target="hip -mcpu=gfx1100")
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") workgroup_size(128, 1, 1) @normalize_weight_kernel(%topk_weights_handle: buffer, %denominator_handle: buffer, %normalized_weights_handle: buffer, %num_tokens: i32) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %topk_weights = buffer.view %topk_weights_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
+  %denominator = buffer.view %denominator_handle[%c0_bytes] : buffer -> view<[%num_tokens]xf32, %layout>
+  %normalized_weights = buffer.view %normalized_weights_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %tid = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %weights_local_bytes = index.constant 8 : offset
+  %weights_local_buffer = buffer.alloca %weights_local_bytes {base_alignment = 4, memory_space = private} : buffer
+  %weights_local = buffer.view %weights_local_buffer[%c0_bytes] : buffer -> view<2xf32, %layout>
+  %total_bytes = index.constant 4 : offset
+  %total_buffer = buffer.alloca %total_bytes {base_alignment = 4, memory_space = private} : buffer
+  %total = buffer.view %total_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %c0 = index.constant 0 : index
+  %const = scalar.constant 9.9999999999999995e-21 : f32
+  view.store %const, %total[%c0] : f32, view<1xf32, %layout>
+  %c128 = index.constant 128 : index
+  %madd = index.madd %bx, %c128, %tid : index
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %cmp = index.cmp slt, %madd, %num_tokens_idx : index
+  scf.if %cmp {
+    %c2 = index.constant 2 : index
+    %i_ub = index.add %c0, %c2 : index
+    %c1 = index.constant 1 : index
+    scf.for %i = [%c0 to %i_ub step %c1] {
+      %load = view.load %topk_weights[%madd, %i] : view<[%num_tokens]x2xf32, %layout> -> f32
+      view.store %load, %weights_local[%i] : f32, view<2xf32, %layout>
+      scf.yield
+    }
+    %i_ub_2 = index.add %c0, %c2 : index
+    scf.for %i = [%c0 to %i_ub_2 step %c1] {
+      %load_2 = view.load %total[%c0] : view<1xf32, %layout> -> f32
+      %load_3 = view.load %weights_local[%i] : view<2xf32, %layout> -> f32
+      %addf = scalar.addf %load_2, %load_3 : f32
+      view.store %addf, %total[%c0] : f32, view<1xf32, %layout>
+      scf.yield
+    }
+    %load_4 = view.load %total[%c0] : view<1xf32, %layout> -> f32
+    view.store %load_4, %denominator[%madd] : f32, view<[%num_tokens]xf32, %layout>
+    %i_ub_3 = index.add %c0, %c2 : index
+    scf.for %i = [%c0 to %i_ub_3 step %c1] {
+      %load_5 = view.load %weights_local[%i] : view<2xf32, %layout> -> f32
+      %load_6 = view.load %total[%c0] : view<1xf32, %layout> -> f32
+      %divf = scalar.divf %load_5, %load_6 : f32
+      view.store %divf, %normalized_weights[%madd, %i] : f32, view<[%num_tokens]x2xf32, %layout>
+      scf.yield
+    }
+    scf.yield
+  } else {
+    scf.yield
+  }
+  kernel.return
+}
+"""
+
+
+# ====
+def _make_aux_fi_kernel(tilelang: Any, T: Any) -> Any:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_aux_fi_kernel(
+        num_topk: int,
+        num_experts: int,
+        num_sms: int,
+    ) -> Any:
+        num_threads = 128
+        num_tokens = T.dynamic("num_tokens")
+        num_blocks = num_sms * 2
+
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def aux_fi_kernel(
+            topk_idx: T.Tensor[(num_tokens, num_topk), T.int64],
+            out: T.Tensor[(num_experts,), T.float32],
+            num_aux_topk: T.int32,
+        ) -> None:
+            with T.Kernel(num_blocks, threads=num_threads) as (pid,):
+                thread_idx = T.get_thread_binding()
+                global_thread_idx = pid * num_threads + thread_idx
+                out_shared = T.alloc_shared(
+                    (_align_to(num_experts, num_threads),), T.int32
+                )
+                for i in T.serial(
+                    thread_idx,
+                    _align_to(num_experts, num_threads),
+                    num_threads,
+                ):
+                    out_shared[i] = 0
+                T.sync_threads()
+
+                for i in T.serial(
+                    global_thread_idx,
+                    num_tokens,
+                    num_blocks * num_threads,
+                ):
+                    for j in T.unroll(num_topk):
+                        expert_idx = T.int32(topk_idx[i, j])
+                        T.assume(expert_idx < num_experts)
+                        if expert_idx >= 0:
+                            T.atomic_add(out_shared[expert_idx], 1)
+
+                T.sync_threads()
+                for i in T.serial(thread_idx, num_experts, num_threads):
+                    if out_shared[i] > 0:
+                        numerator = T.cast(out_shared[i] * num_experts, T.float32)
+                        denominator = T.cast(num_tokens * num_aux_topk, T.float32)
+                        T.atomic_add(out[i], numerator / denominator)
+
+        return aux_fi_kernel
+
+    return get_aux_fi_kernel
+
+
+def _aux_fi_input(tilelang: Any, T: Any, *, target: str) -> TileLangImportInput:
+    return TileLangImportInput(
+        source=_make_aux_fi_kernel(tilelang, T),
+        args=(2, 8, 4),
+        target=target,
+        name="aux_fi_kernel",
+    )
+
+
+@tilelang_case(
+    name="tilekernels_aux_fi_gfx1100",
+    category="kernel",
+    tags=("tilekernels", "moe", "atomic", "amdgpu"),
+)
+def tilekernels_aux_fi_gfx1100(
+    tilelang: Any,
+    T: Any,
+) -> TileLangImportInput:
+    return _aux_fi_input(tilelang, T, target="hip -mcpu=gfx1100")
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") workgroup_size(128, 1, 1) @aux_fi_kernel(%topk_idx_handle: buffer, %out_handle: buffer, %num_aux_topk: i32, %num_tokens: i32) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %topk_idx = buffer.view %topk_idx_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
+  %out = buffer.view %out_handle[%c0_bytes] : buffer -> view<8xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %thread_idx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %out_shared_bytes = index.constant 512 : offset
+  %out_shared_buffer = buffer.alloca %out_shared_bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %out_shared = buffer.view %out_shared_buffer[%c0_bytes] : buffer -> view<128xi32, %layout>
+  %c128 = index.constant 128 : index
+  %madd = index.madd %bx, %c128, %thread_idx : index
+  %c0 = index.constant 0 : index
+  %c255 = index.constant 255 : index
+  %sub = index.sub %c255, %thread_idx : index
+  %div = index.div %sub, %c128 : index
+  %tmp_ub = index.add %c0, %div : index
+  %c1 = index.constant 1 : index
+  scf.for %tmp = [%c0 to %tmp_ub step %c1] {
+    %madd_2 = index.madd %tmp, %c128, %thread_idx : index
+    %const = scalar.constant 0 : i32
+    view.store %const, %out_shared[%madd_2] : i32, view<128xi32, %layout>
+    scf.yield
+  }
+  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %c1023 = index.constant 1023 : index
+  %add = index.add %num_tokens_idx, %c1023 : index
+  %sub_2 = index.sub %add, %madd : index
+  %c1024 = index.constant 1024 : index
+  %div_2 = index.div %sub_2, %c1024 : index
+  %tmp_ub_2 = index.add %c0, %div_2 : index
+  scf.for %tmp = [%c0 to %tmp_ub_2 step %c1] {
+    %madd_3 = index.madd %tmp, %c1024, %madd : index
+    %c2 = index.constant 2 : index
+    %j_ub = index.add %c0, %c2 : index
+    scf.for %j = [%c0 to %j_ub step %c1] {
+      %load = view.load %topk_idx[%madd_3, %j] : view<[%num_tokens]x2xi64, %layout> -> i64
+      %trunci = scalar.trunci %load : i64 to i32
+      %expert_idx_assumed = scalar.assume %trunci [lt(%trunci, 8)] : i32
+      %const_2 = scalar.constant 0 : i32
+      %cmp = scalar.cmpi sge, %expert_idx_assumed, %const_2 : i32
+      scf.if %cmp {
+        %const_3 = scalar.constant 1 : i32
+        %expert_idx_idx = index.cast %expert_idx_assumed : i32 to index
+        view.atomic.reduce<addi> %const_3, %out_shared[%expert_idx_idx] {ordering = relaxed, scope = workgroup} : i32, view<128xi32, %layout>
+        scf.yield
+      } else {
+        scf.yield
+      }
+      scf.yield
+    }
+    scf.yield
+  }
+  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  %c135 = index.constant 135 : index
+  %sub_3 = index.sub %c135, %thread_idx : index
+  %div_3 = index.div %sub_3, %c128 : index
+  %tmp_ub_3 = index.add %c0, %div_3 : index
+  scf.for %tmp = [%c0 to %tmp_ub_3 step %c1] {
+    %madd_4 = index.madd %tmp, %c128, %thread_idx : index
+    %load_2 = view.load %out_shared[%madd_4] : view<128xi32, %layout> -> i32
+    %const_4 = scalar.constant 0 : i32
+    %cmp_2 = scalar.cmpi sgt, %load_2, %const_4 : i32
+    scf.if %cmp_2 {
+      %load_3 = view.load %out_shared[%madd_4] : view<128xi32, %layout> -> i32
+      %const_5 = scalar.constant 8 : i32
+      %muli = scalar.muli %load_3, %const_5 : i32
+      %sitofp = scalar.sitofp %muli : i32 to f32
+      %muli_2 = scalar.muli %num_tokens, %num_aux_topk : i32
+      %sitofp_2 = scalar.sitofp %muli_2 : i32 to f32
+      %divf = scalar.divf %sitofp, %sitofp_2 : f32
+      view.atomic.reduce<addf> %divf, %out[%madd_4] {ordering = relaxed, scope = device} : f32, view<8xf32, %layout>
+      scf.yield
+    } else {
+      scf.yield
+    }
+    scf.yield
+  }
+  kernel.return
+}
+"""
+
+
+# ====
+def _make_inplace_unique_group_indices_kernel(tilelang: Any, T: Any) -> Any:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+            tilelang.PassConfigKey.TL_ENABLE_LOWER_LDGSTG_PREDICATED: True,
+        },
+    )
+    def get_inplace_unique_group_indices_kernel(
+        num_topk: int,
+        num_groups_aligned: int,
+        num_sms: int,
+    ) -> Any:
+        num_threads = 128
+        num_tokens = T.dynamic("num_tokens")
+        grid_x = num_sms * 2
+
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def inplace_unique_group_indices_kernel(
+            group_indices: T.Tensor[(num_tokens, num_topk), T.int64],
+        ) -> None:
+            with T.Kernel(grid_x, threads=num_threads) as (pid_token,):
+                thread_idx = T.get_thread_binding()
+                global_thread_idx = pid_token * num_threads + thread_idx
+                group_sel = T.alloc_local((2,), T.uint64)
+
+                for i in T.serial(
+                    global_thread_idx,
+                    num_tokens,
+                    grid_x * num_threads,
+                ):
+                    for j in T.unroll(num_groups_aligned // 64):
+                        group_sel[j] = 0
+                    for j in T.unroll(num_topk):
+                        group_idx = group_indices[i, j]
+                        T.assume(group_idx < num_groups_aligned)
+                        mask = T.Select(
+                            group_idx >= 0,
+                            T.uint64(1) << (group_idx % 64),
+                            T.uint64(0),
+                        )
+                        lo_mask = T.Select(group_idx < 64, mask, T.uint64(0))
+                        hi_mask = T.Select(group_idx >= 64, mask, T.uint64(0))
+                        found = (lo_mask & group_sel[0]) | (hi_mask & group_sel[1])
+                        group_sel[0] |= lo_mask
+                        group_sel[1] |= hi_mask
+                        if found:
+                            group_indices[i, j] = -1
+
+        return inplace_unique_group_indices_kernel
+
+    return get_inplace_unique_group_indices_kernel
+
+
+def _inplace_unique_group_indices_input(
+    tilelang: Any, T: Any, *, target: str
+) -> TileLangImportInput:
+    return TileLangImportInput(
+        source=_make_inplace_unique_group_indices_kernel(tilelang, T),
+        args=(4, _align_to(8, 64), 4),
+        target=target,
+        name="inplace_unique_group_indices_kernel",
+    )
+
+
+@tilelang_case(
+    name="tilekernels_inplace_unique_group_indices_gfx1100",
+    category="kernel",
+    tags=("tilekernels", "moe", "dedupe", "amdgpu"),
+)
+def tilekernels_inplace_unique_group_indices_gfx1100(
+    tilelang: Any,
+    T: Any,
+) -> TileLangImportInput:
+    return _inplace_unique_group_indices_input(
+        tilelang,
+        T,
+        target="hip -mcpu=gfx1100",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel") workgroup_size(128, 1, 1) @inplace_unique_group_indices_kernel(%group_indices_handle: buffer, %num_tokens: i32) {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %group_indices = buffer.view %group_indices_handle[%c0_bytes] : buffer -> view<[%num_tokens]x4xi64, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %thread_idx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %group_sel_bytes = index.constant 16 : offset
+  %group_sel_buffer = buffer.alloca %group_sel_bytes {base_alignment = 8, memory_space = private} : buffer
+  %group_sel = buffer.view %group_sel_buffer[%c0_bytes] : buffer -> view<2xi64, %layout>
+  %c128 = index.constant 128 : index
+  %madd = index.madd %bx, %c128, %thread_idx : index
+  %c0 = index.constant 0 : index
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %c1023 = index.constant 1023 : index
+  %add = index.add %num_tokens_idx, %c1023 : index
+  %sub = index.sub %add, %madd : index
+  %c1024 = index.constant 1024 : index
+  %div = index.div %sub, %c1024 : index
+  %tmp_ub = index.add %c0, %div : index
+  %c1 = index.constant 1 : index
+  scf.for %tmp = [%c0 to %tmp_ub step %c1] {
+    %madd_2 = index.madd %tmp, %c1024, %madd : index
+    %j_ub = index.add %c0, %c1 : index
+    scf.for %j = [%c0 to %j_ub step %c1] {
+      %const = scalar.constant 0 : i64
+      view.store %const, %group_sel[%j] : i64, view<2xi64, %layout>
+      scf.yield
+    }
+    %c4 = index.constant 4 : index
+    %j_ub_2 = index.add %c0, %c4 : index
+    scf.for %j = [%c0 to %j_ub_2 step %c1] {
+      %load = view.load %group_indices[%madd_2, %j] : view<[%num_tokens]x4xi64, %layout> -> i64
+      %group_idx_assumed = scalar.assume %load [lt(%load, 64)] : i64
+      %const_2 = scalar.constant 0 : i64
+      %cmp = scalar.cmpi sge, %group_idx_assumed, %const_2 : i64
+      %const_3 = scalar.constant 1 : i64
+      %const_4 = scalar.constant 64 : i64
+      %remsi = scalar.remsi %group_idx_assumed, %const_4 : i64
+      %shli = scalar.shli %const_3, %remsi : i64
+      %const_5 = scalar.constant 0 : i64
+      %select = scf.select %cmp, %shli, %const_5 : i64
+      %cmp_2 = scalar.cmpi slt, %group_idx_assumed, %const_4 : i64
+      %select_2 = scf.select %cmp_2, %select, %const_5 : i64
+      %cmp_3 = scalar.cmpi sge, %group_idx_assumed, %const_4 : i64
+      %select_3 = scf.select %cmp_3, %select, %const_5 : i64
+      %load_2 = view.load %group_sel[%c0] : view<2xi64, %layout> -> i64
+      %andi = scalar.andi %select_2, %load_2 : i64
+      %load_3 = view.load %group_sel[%c1] : view<2xi64, %layout> -> i64
+      %andi_2 = scalar.andi %select_3, %load_3 : i64
+      %ori = scalar.ori %andi, %andi_2 : i64
+      %load_4 = view.load %group_sel[%c0] : view<2xi64, %layout> -> i64
+      %ori_2 = scalar.ori %load_4, %select_2 : i64
+      view.store %ori_2, %group_sel[%c0] : i64, view<2xi64, %layout>
+      %load_5 = view.load %group_sel[%c1] : view<2xi64, %layout> -> i64
+      %ori_3 = scalar.ori %load_5, %select_3 : i64
+      view.store %ori_3, %group_sel[%c1] : i64, view<2xi64, %layout>
+      %const_6 = scalar.constant 0 : i64
+      %cmp_4 = scalar.cmpi ne, %ori, %const_6 : i64
+      scf.if %cmp_4 {
+        %const_7 = scalar.constant -1 : i64
+        view.store %const_7, %group_indices[%madd_2, %j] : i64, view<[%num_tokens]x4xi64, %layout>
+        scf.yield
+      } else {
+        scf.yield
+      }
+      scf.yield
+    }
+    scf.yield
+  }
+  kernel.return
+}
+"""

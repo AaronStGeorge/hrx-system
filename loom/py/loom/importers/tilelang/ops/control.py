@@ -23,7 +23,7 @@ from loom.importers.tilelang.ops.topology import (
     thread_axis_from_binding,
     thread_axis_name,
 )
-from loom.ir import INDEX
+from loom.ir import I1, INDEX
 
 
 def register(registry: TileLangConverterRegistry) -> None:
@@ -146,11 +146,8 @@ def convert_while(
             )
             context.merge_child_records(before_child)
             return
-        if str(condition.type) != "i1":
-            before_child.record_blocked(
-                node_text(stmt),
-                f"while condition must be i1, got {condition.type}",
-            )
+        condition = _coerce_condition(condition, before_child, stmt)
+        if condition is None:
             context.merge_child_records(before_child)
             return
         context.builder.scf.condition(condition=condition, forwarded=[])
@@ -184,6 +181,9 @@ def convert_if_then_else(
     condition = converter.convert_expr(getattr(stmt, "condition", None), context)
     if condition is None:
         context.record_blocked(node_text(stmt), "if condition is not mapped")
+        return
+    condition = _coerce_condition(condition, context, stmt)
+    if condition is None:
         return
     then_region = context.builder.region()
     else_region = context.builder.region()
@@ -253,11 +253,8 @@ def convert_thread_return_prefix_guard(
             "thread_return guard condition is not mapped",
         )
         return True
-    if str(condition.type) != "i1":
-        context.record_blocked(
-            node_text(stmt),
-            f"thread_return guard condition must be i1, got {condition.type}",
-        )
+    condition = _coerce_condition(condition, context, stmt)
+    if condition is None:
         return True
 
     body = None
@@ -273,6 +270,57 @@ def convert_thread_return_prefix_guard(
     context.builder.kernel.exit(condition=condition, body=body)
     context.record_converted(node_text(stmt), "kernel.exit")
     return True
+
+
+def _coerce_condition(
+    condition: ValueRef,
+    context: TileLangConversionContext,
+    owner: object,
+) -> ValueRef | None:
+    """Normalize TileLang truthy scalar conditions to Loom i1."""
+
+    source_type = str(condition.type)
+    if source_type == "i1":
+        return condition
+    if source_type in ("index", "offset"):
+        zero = context.ensure_constant("0", source_type, "c0")
+        return context.builder.index.cmp(
+            predicate="ne",
+            lhs=condition,
+            rhs=zero,
+            results=[I1],
+            name=context.fresh_name("cmp"),
+        )
+    if _is_integer_type(source_type):
+        zero = _ensure_scalar_zero(context, source_type)
+        return context.builder.scalar.cmpi(
+            predicate="ne",
+            lhs=condition,
+            rhs=zero,
+            results=[I1],
+            name=context.fresh_name("cmp"),
+        )
+    context.record_blocked(
+        node_text(owner),
+        f"condition must be i1 or integer-like, got {condition.type}",
+    )
+    return None
+
+
+def _is_integer_type(value_type: str) -> bool:
+    return value_type in {"i8", "i16", "i32", "i64"}
+
+
+def _ensure_scalar_zero(
+    context: TileLangConversionContext,
+    value_type: str,
+) -> ValueRef:
+    existing = context.constants.get((value_type, "0"))
+    if existing is not None:
+        return existing
+    result = context.build_constant(0, value_type, context.reserve_name("const"))
+    context.remember_constant("0", value_type, result)
+    return result
 
 
 def _thread_return_exit_path(stmt: object | None) -> tuple[object, ...] | None:

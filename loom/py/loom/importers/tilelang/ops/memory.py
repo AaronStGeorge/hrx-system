@@ -19,7 +19,7 @@ from loom.importers.tilelang.converter import (
 from loom.importers.tilelang.nodes import dtype, node_kind, node_text, source_name
 from loom.importers.tilelang.ops.topology import integer_value
 from loom.importers.tilelang.ops.vector import vector_lanes
-from loom.ir import BUFFER_TYPE, ShapedType, TypeKind
+from loom.ir import BUFFER_TYPE, DynamicDim, ShapedType, StaticDim, TypeKind
 
 
 def register(registry: TileLangConverterRegistry) -> None:
@@ -70,7 +70,7 @@ def map_alloc_buffer(
     context.map_value(buffer, view, str(view.type))
     data = getattr(buffer, "data", None)
     if data is not None:
-        context.map_value(data, view, str(view.type))
+        context.map_buffer_data(data, view)
     context.record_converted(
         node_text(buffer),
         (
@@ -88,13 +88,18 @@ def convert_buffer_store(
 ) -> None:
     """Import a TIR buffer store as view.store."""
 
+    source_indices = tuple(getattr(stmt, "indices", ()))
     buffer = getattr(stmt, "buffer", None)
-    view = context.mapped(buffer)
+    view, source_indices = _resolve_buffer_view(
+        buffer,
+        source_indices,
+        context,
+        converter,
+        diagnostic_owner=stmt,
+    )
     if view is None:
-        context.record_blocked(node_text(stmt), "buffer store target is not mapped")
         return
     value = converter.convert_expr(getattr(stmt, "value", None), context)
-    source_indices = tuple(getattr(stmt, "indices", ()))
     if value is None:
         context.record_blocked(node_text(stmt), "buffer store operands are not mapped")
         return
@@ -122,10 +127,7 @@ def convert_buffer_store(
         )
         context.record_converted(node_text(stmt), "vector.store")
         return
-    indices = [
-        converter.convert_expr(index, context, index_like=True)
-        for index in source_indices
-    ]
+    indices = [_convert_index(index, context, converter) for index in source_indices]
     if any(index is None for index in indices):
         context.record_blocked(node_text(stmt), "buffer store operands are not mapped")
         return
@@ -144,12 +146,17 @@ def convert_buffer_load(
 ) -> ValueRef | None:
     """Import a TIR buffer load as view.load."""
 
-    buffer = getattr(expr, "buffer", None)
-    view = context.mapped(buffer)
-    if view is None:
-        context.record_blocked(node_text(expr), "buffer load source is not mapped")
-        return None
     source_indices = tuple(getattr(expr, "indices", ()))
+    buffer = getattr(expr, "buffer", None)
+    view, source_indices = _resolve_buffer_view(
+        buffer,
+        source_indices,
+        context,
+        converter,
+        diagnostic_owner=expr,
+    )
+    if view is None:
+        return None
     result_type = context.type_converter.map_dtype(dtype(expr))
     if is_vector_type(result_type) or _has_ramp_index(expr):
         vector_indices = _vector_memory_indices(source_indices, context, converter)
@@ -177,10 +184,7 @@ def convert_buffer_load(
             node_text(expr), f"{context.ssa(result)} = vector.load"
         )
         return result
-    indices = [
-        converter.convert_expr(index, context, index_like=True)
-        for index in source_indices
-    ]
+    indices = [_convert_index(index, context, converter) for index in source_indices]
     if any(index is None for index in indices):
         context.record_blocked(node_text(expr), "buffer load indices are not mapped")
         return None
@@ -193,6 +197,130 @@ def convert_buffer_load(
     context.map_value(expr, result, str(result_type))
     context.record_converted(node_text(expr), f"{context.ssa(result)} = view.load")
     return result
+
+
+def _resolve_buffer_view(
+    buffer: object,
+    source_indices: tuple[object, ...],
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    *,
+    diagnostic_owner: object,
+) -> tuple[ValueRef | None, tuple[object | ValueRef, ...]]:
+    view = context.mapped(buffer)
+    if view is not None:
+        return view, source_indices
+    data = getattr(buffer, "data", None)
+    view = context.mapped_buffer_data(data)
+    if view is None:
+        context.record_blocked(
+            node_text(diagnostic_owner),
+            "buffer access target is not mapped",
+        )
+        return None, source_indices
+    view_type = _view_type(view, context)
+    if isinstance(view_type, ShapedType) and len(view_type.dims) <= 1:
+        return view, source_indices
+    remapped_indices = _remap_flattened_indices(
+        view,
+        source_indices,
+        context,
+        converter,
+        diagnostic_owner=diagnostic_owner,
+    )
+    if remapped_indices is None:
+        return None, source_indices
+    return view, tuple(remapped_indices)
+
+
+def _convert_index(
+    index: object | ValueRef,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> ValueRef | None:
+    if isinstance(index, ValueRef):
+        return index
+    return converter.convert_expr(index, context, index_like=True)
+
+
+def _remap_flattened_indices(
+    view: ValueRef,
+    source_indices: tuple[object, ...],
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    *,
+    diagnostic_owner: object,
+) -> list[ValueRef] | None:
+    """Map a TileLang flattened alias index back onto the source view rank."""
+
+    view_type = _view_type(view, context)
+    if not isinstance(view_type, ShapedType) or len(view_type.dims) <= 1:
+        context.record_blocked(
+            node_text(diagnostic_owner),
+            "buffer alias target does not have a remappable shaped view type",
+        )
+        return None
+    if len(source_indices) != 1:
+        context.record_blocked(
+            node_text(diagnostic_owner),
+            "buffer alias access has non-flat indices",
+        )
+        return None
+    flat_index = converter.convert_expr(source_indices[0], context, index_like=True)
+    if flat_index is None:
+        context.record_blocked(
+            node_text(diagnostic_owner),
+            "buffer alias flat index is not mapped",
+        )
+        return None
+    remapped: list[ValueRef | None] = [None] * len(view_type.dims)
+    running = flat_index
+    for position in range(len(view_type.dims) - 1, 0, -1):
+        extent = _view_dim_extent(view, position, context)
+        if extent is None:
+            context.record_blocked(
+                node_text(diagnostic_owner),
+                "buffer alias target dimension is not bound",
+            )
+            return None
+        remapped[position] = context.builder.index.rem(
+            lhs=running,
+            rhs=extent,
+            results=[running.type],
+            name=context.fresh_name("rem"),
+        )
+        running = context.builder.index.div(
+            lhs=running,
+            rhs=extent,
+            results=[running.type],
+            name=context.fresh_name("div"),
+        )
+    remapped[0] = running
+    return [index for index in remapped if index is not None]
+
+
+def _view_dim_extent(
+    view: ValueRef,
+    position: int,
+    context: TileLangConversionContext,
+) -> ValueRef | None:
+    view_value = context.builder.module.values[view.id]
+    view_type = _view_type(view, context)
+    if not isinstance(view_type, ShapedType):
+        return None
+    dim = view_type.dims[position]
+    if isinstance(dim, StaticDim):
+        return context.ensure_constant(str(dim.size), "index", f"c{dim.size}")
+    if isinstance(dim, DynamicDim):
+        value_id = view_value.dim_bindings.get(position)
+        if value_id is None:
+            return None
+        return ValueRef(value_id, context.builder.ir)
+    return None
+
+
+def _view_type(view: ValueRef, context: TileLangConversionContext) -> object:
+    return context.builder.module.values[view.id].type
 
 
 def is_vector_type(value_type: object) -> bool:

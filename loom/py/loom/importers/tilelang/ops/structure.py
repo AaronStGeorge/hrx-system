@@ -15,7 +15,7 @@ from loom.importers.tilelang.converter import (
     TileLangConverter,
     TileLangConverterRegistry,
 )
-from loom.importers.tilelang.nodes import node_text, source_name
+from loom.importers.tilelang.nodes import attrs, mapping_items, node_text, source_name
 from loom.importers.tilelang.ops.assumptions import (
     ASSUME_ATTR_KEYS,
     convert_assume_attr_stmt,
@@ -47,6 +47,8 @@ def convert_block(
     for buffer in tuple(getattr(stmt, "alloc_buffers", ()) or ()):
         if not map_alloc_buffer(buffer, context):
             return
+    if not _import_local_var_initializers(stmt, context, converter):
+        return
     if _has_items(getattr(stmt, "match_buffers", ())):
         context.record_blocked(node_text(stmt), "block match buffers are not mapped")
         return
@@ -56,6 +58,44 @@ def convert_block(
         return
     converter.convert_stmt(getattr(stmt, "body", None), context)
     context.record_converted(node_text(stmt), "tir.Block normalized")
+
+
+def _import_local_var_initializers(
+    stmt: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> bool:
+    """Import TileLang alloc_var initializer annotations as explicit stores."""
+
+    local_var_init = _metadata_attrs(stmt).get("tl.local_var_init")
+    if local_var_init is None:
+        return True
+    zero = context.ensure_constant("0", "index", "c0")
+    for data_var, init_expr in mapping_items(local_var_init):
+        view = context.mapped_buffer_data(data_var)
+        if view is None:
+            context.record_blocked(
+                node_text(stmt),
+                "local variable initializer target is not mapped",
+            )
+            return False
+        init_value = converter.convert_expr(init_expr, context)
+        if init_value is None:
+            context.record_blocked(
+                node_text(stmt),
+                "local variable initializer value is not mapped",
+            )
+            return False
+        context.builder.view.store(value=init_value, view=view, indices=[zero])
+        context.record_converted(node_text(init_expr), "local var initializer")
+    return True
+
+
+def _metadata_attrs(value: object) -> dict[str, object]:
+    result = dict(attrs(value))
+    for key, item in mapping_items(getattr(value, "annotations", {})):
+        result[str(key)] = item
+    return result
 
 
 def convert_block_realize(

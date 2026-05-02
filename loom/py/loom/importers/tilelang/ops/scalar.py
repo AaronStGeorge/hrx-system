@@ -735,6 +735,7 @@ _BINARY_INDEX_OPS = {
     "Mul": "mul",
     "FloorDiv": "div",
     "FloorMod": "rem",
+    "Mod": "rem",
 }
 
 _BINARY_INTEGER_OPS = {
@@ -743,6 +744,7 @@ _BINARY_INTEGER_OPS = {
     "Mul": "muli",
     "FloorDiv": "floordivsi",
     "FloorMod": "remsi",
+    "Mod": "remsi",
     "Div": "divsi",
     "Min": "minsi",
     "Max": "maxsi",
@@ -754,6 +756,7 @@ _BINARY_UNSIGNED_INTEGER_OPS = {
     "Mul": "muli",
     "FloorDiv": "divui",
     "FloorMod": "remui",
+    "Mod": "remui",
     "Div": "divui",
     "Min": "minui",
     "Max": "maxui",

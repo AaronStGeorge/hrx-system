@@ -201,6 +201,12 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "Index/scalar/vector integer floor remainder.",
     ),
     OpCoverage(
+        "tir.Mod",
+        OpFamily.TIR_NODE,
+        CoverageState.SUPPORTED,
+        "Index/scalar/vector integer remainder.",
+    ),
+    OpCoverage(
         "tir.Min",
         OpFamily.TIR_NODE,
         CoverageState.SUPPORTED,
