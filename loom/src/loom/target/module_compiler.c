@@ -309,17 +309,6 @@ iree_status_t loom_target_module_compile_verify_low_module(
   return loom_low_verify_module(module, &low_verify_options, out_result);
 }
 
-iree_status_t loom_target_module_compile_find_symbol_by_name(
-    const loom_module_t* module, iree_string_view_t symbol_name,
-    uint16_t* out_symbol_id) {
-  if (!loom_target_module_compile_lookup_symbol_id(module, symbol_name,
-                                                   out_symbol_id)) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND, "symbol @%.*s was not found",
-                            (int)symbol_name.size, symbol_name.data);
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_target_module_compile_initialize_fact_table(
     const loom_target_low_descriptor_registry_t* low_registry,
     iree_arena_allocator_t* arena, loom_symbol_fact_table_t* out_fact_table) {

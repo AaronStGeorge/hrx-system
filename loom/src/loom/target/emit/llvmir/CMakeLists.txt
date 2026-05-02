@@ -235,8 +235,8 @@ loom_cc_library(
     iree::base
     iree::io::stream
     loom::src::loom::analysis::symbol_facts
+    loom::src::loom::ir
     loom::src::loom::ops::target
-    loom::src::loom::target::module_compiler
     loom::src::loom::target::tool::llvm
     loom::src::loom::tools::loom-check::execute
     loom::src::loom::util::stream

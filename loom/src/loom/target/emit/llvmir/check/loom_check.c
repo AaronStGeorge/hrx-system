@@ -8,6 +8,7 @@
 
 #include "iree/io/vec_stream.h"
 #include "loom/analysis/symbol_facts.h"
+#include "loom/ir/module.h"
 #include "loom/ops/target/facts.h"
 #include "loom/target/emit/llvmir/bitcode_writer.h"
 #include "loom/target/emit/llvmir/legality.h"
@@ -15,7 +16,6 @@
 #include "loom/target/emit/llvmir/target_registry.h"
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/verify.h"
-#include "loom/target/module_compiler.h"
 #include "loom/target/tool/llvm.h"
 #include "loom/util/stream.h"
 
@@ -118,7 +118,6 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_check_requirements(
     const loom_check_emit_provider_t* provider,
     const loom_check_case_t* test_case, loom_check_result_t* result,
     bool* out_continue_execution) {
-  (void)provider;
   iree_string_view_t emit_target =
       iree_string_view_trim(test_case->emit_target);
   iree_string_view_t target_name = iree_string_view_empty();
@@ -155,7 +154,6 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_check_requirements(
 static bool loom_llvmir_loom_check_emit_provider_matches(
     const loom_check_emit_provider_t* provider,
     iree_string_view_t target_name) {
-  (void)provider;
   return iree_string_view_equal(target_name, IREE_SV("llvmir")) ||
          iree_string_view_equal(target_name, IREE_SV("llvmir-text")) ||
          iree_string_view_equal(target_name, IREE_SV("llvmir-body")) ||
@@ -392,15 +390,37 @@ static iree_status_t loom_llvmir_loom_check_write_object(
   return status;
 }
 
+static bool loom_llvmir_loom_check_lookup_symbol_id(
+    const loom_module_t* module, iree_string_view_t symbol_name,
+    loom_symbol_id_t* out_symbol_id) {
+  *out_symbol_id = LOOM_SYMBOL_ID_INVALID;
+  const loom_string_id_t symbol_name_id =
+      loom_module_lookup_string(module, symbol_name);
+  if (symbol_name_id == LOOM_STRING_ID_INVALID) {
+    return false;
+  }
+  const loom_symbol_id_t symbol_id =
+      loom_module_find_symbol(module, symbol_name_id);
+  if (symbol_id == LOOM_SYMBOL_ID_INVALID) {
+    return false;
+  }
+  *out_symbol_id = symbol_id;
+  return true;
+}
+
 static iree_status_t loom_llvmir_loom_check_resolve_profile_bundle(
     const loom_check_emit_provider_request_t* request,
     const loom_llvmir_target_registry_t* target_registry,
     iree_string_view_t symbol_name,
     loom_target_bundle_storage_t* out_symbol_storage,
     const loom_target_bundle_t** out_bundle) {
-  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_target_module_compile_find_symbol_by_name(
-      request->module, symbol_name, &symbol_id));
+  loom_symbol_id_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  if (!loom_llvmir_loom_check_lookup_symbol_id(request->module, symbol_name,
+                                               &symbol_id)) {
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "target profile symbol @%.*s was not found",
+                            (int)symbol_name.size, symbol_name.data);
+  }
 
   const loom_target_preset_registry_t preset_registry = {
       .target_bundles = target_registry->bundles,
@@ -459,7 +479,6 @@ static iree_status_t loom_llvmir_loom_check_resolve_bundle(
 static iree_status_t loom_llvmir_loom_check_emit_provider_execute(
     const loom_check_emit_provider_t* provider,
     const loom_check_emit_provider_request_t* request) {
-  (void)provider;
   loom_llvmir_loom_check_emit_format_t format;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_loom_check_parse_emit_format(request->target_name, &format));
@@ -534,7 +553,6 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_execute(
 static iree_status_t loom_llvmir_loom_check_emit_provider_append_names(
     const loom_check_emit_provider_t* provider,
     iree_string_builder_t* builder) {
-  (void)provider;
   return iree_string_builder_append_cstring(
       builder,
       "llvmir, llvmir-text, llvmir-body, llvmir-text-body, llvmir-bitcode, "
@@ -572,7 +590,6 @@ static bool loom_llvmir_loom_check_string_contains_case_insensitive(
 static bool loom_llvmir_loom_check_requirement_provider_matches(
     const loom_check_requirement_provider_t* provider,
     iree_string_view_t requirement) {
-  (void)provider;
   loom_llvmir_target_registry_t target_registry;
   loom_llvmir_target_registry_initialize(&target_registry);
   return iree_string_view_equal(requirement, IREE_SV("llvm-as")) ||
@@ -628,8 +645,6 @@ static iree_status_t loom_llvmir_loom_check_requirement_provider_query(
     const loom_check_requirement_provider_t* provider,
     const loom_check_environment_t* environment, iree_string_view_t requirement,
     iree_allocator_t allocator) {
-  (void)provider;
-  (void)environment;
   if (iree_string_view_equal(requirement, IREE_SV("llvm-as"))) {
     return loom_llvmir_loom_check_query_llvm_tool(LOOM_LLVM_TOOL_LLVM_AS,
                                                   allocator);
@@ -670,7 +685,6 @@ static iree_status_t loom_llvmir_loom_check_requirement_provider_query(
 static iree_status_t loom_llvmir_loom_check_requirement_provider_append_names(
     const loom_check_requirement_provider_t* provider,
     iree_string_builder_t* builder) {
-  (void)provider;
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
       builder, "llvm-as, llvm-dis, opt, llc, llvm-mc, llvm-objdump"));
 

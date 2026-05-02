@@ -129,11 +129,6 @@ iree_status_t loom_target_module_compile_verify_low_module(
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     uint32_t max_errors, loom_low_verify_result_t* out_result);
 
-// Finds a module-local symbol by spelling without a leading '@'.
-iree_status_t loom_target_module_compile_find_symbol_by_name(
-    const loom_module_t* module, iree_string_view_t symbol_name,
-    uint16_t* out_symbol_id);
-
 // Selects either the named func entry or the only compatible func entry
 // according to |predicate|.
 iree_status_t loom_target_module_compile_select_entry(
