@@ -1,4 +1,10 @@
 // RUN: roundtrip
 
 // Production target preset authoring record.
+target.generic<reference> @reference
+
+target.generic<llvm_cpu> @host {subgroup_size = 0}
+
 target.profile @vm_target preset("iree-vm")
+
+target.artifact @host_object target(@host) {abi = object_file, artifact_format = elf}

@@ -190,7 +190,7 @@ static constexpr const char* kHalTargetBundle =
 TEST_F(LowVerifyTest, DescriptorKeysPassWithQualifiedSegments) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "test.record @gfx1100 {}\n"
+      "test.target<low_core> @gfx1100\n"
       "low.func.def target(@gfx1100) @add(%lhs: reg<amdgpu.vgpr x1>, "
       "%rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {\n"
       "  %sum = low.op<amdgpu.v_add_u32>(%lhs, %rhs) : "
@@ -205,7 +205,7 @@ TEST_F(LowVerifyTest, DescriptorKeysPassWithQualifiedSegments) {
 
 TEST_F(LowVerifyTest, DescriptorIdMustMatchDescriptorKey) {
   static const char* kSource =
-      "test.record @gfx1100 {}\n"
+      "test.target<low_core> @gfx1100\n"
       "low.func.def target(@gfx1100) @add(%lhs: reg<amdgpu.vgpr x1>, "
       "%rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {\n"
       "  %sum = low.op<amdgpu.v_add_u32>(%lhs, %rhs) : "
@@ -259,7 +259,7 @@ TEST_F(LowVerifyTest, LiveInAndResourceAcceptEntryPreamble) {
 TEST_F(LowVerifyTest, LiveInRejectsAfterEntryPreamble) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "test.record @target {}\n"
+      "test.target<low_core> @target\n"
       "low.func.def target(@target) @kernel() -> (reg<test.i32>) {\n"
       "  %arg0 = low.live_in<test.arg0> : reg<test.i32>\n"
       "  %copy = low.copy %arg0 : reg<test.i32> -> reg<test.i32>\n"
@@ -307,7 +307,7 @@ TEST_F(LowVerifyTest, ResourceRejectsAfterEntryPreamble) {
 TEST_F(LowVerifyTest, LiveInRejectsNonEntryBlock) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "test.record @target {}\n"
+      "test.target<low_core> @target\n"
       "low.func.def target(@target) @kernel() -> (reg<test.i32>) {\n"
       "  %arg0 = low.live_in<test.arg0> : reg<test.i32>\n"
       "  low.br ^exit\n"
@@ -332,7 +332,7 @@ TEST_F(LowVerifyTest, LiveInRejectsNonEntryBlock) {
 TEST_F(LowVerifyTest, ImportedDeclContractsAreLocalToDecl) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "test.record @vm_target {}\n"
+      "test.target<low_core> @vm_target\n"
       "low.func.decl import(vm, \"iree.vm.core.add_i32\") target(@vm_target) "
       "@extern_add(%lhs: reg<vm.i32>) -> (reg<vm.i32>)\n",
       &capture);
@@ -342,7 +342,7 @@ TEST_F(LowVerifyTest, ImportedDeclContractsAreLocalToDecl) {
 
 TEST_F(LowVerifyTest, ImportedDeclRejectsMissingCodeSymbol) {
   static const char* kSource =
-      "test.record @vm_target {}\n"
+      "test.target<low_core> @vm_target\n"
       "low.func.decl target(@vm_target) @extern_add(%lhs: reg<vm.i32>) -> "
       "(reg<vm.i32>)\n";
   loom_module_t* module = ParseSource(kSource);
@@ -372,7 +372,7 @@ TEST_F(LowVerifyTest, ImportedDeclRejectsMissingCodeSymbol) {
 
 TEST_F(LowVerifyTest, ImportedDeclRejectsMissingImportKind) {
   static const char* kSource =
-      "test.record @vm_target {}\n"
+      "test.target<low_core> @vm_target\n"
       "low.func.decl target(@vm_target) @extern_add(%lhs: reg<vm.i32>) -> "
       "(reg<vm.i32>)\n";
   loom_module_t* module = ParseSource(kSource);
@@ -405,7 +405,7 @@ TEST_F(LowVerifyTest, ImportedDeclRejectsMissingImportKind) {
 
 TEST_F(LowVerifyTest, ImportedDeclRejectsNamelessImportKind) {
   static const char* kSource =
-      "test.record @vm_target {}\n"
+      "test.target<low_core> @vm_target\n"
       "low.func.decl target(@vm_target) @extern_add(%lhs: reg<vm.i32>) -> "
       "(reg<vm.i32>)\n";
   loom_module_t* module = ParseSource(kSource);
@@ -464,7 +464,7 @@ TEST_F(LowVerifyTest, InvokeAcceptsExplicitTranslatedLowFunction) {
 TEST_F(LowVerifyTest, InvokeDoesNotDependOnSourceSignature) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "test.record @vm_target {}\n"
+      "test.target<low_core> @vm_target\n"
       "low.func.def target(@vm_target) @semantic_low(%value: reg<vm.i32>) "
       "-> (reg<vm.i32>) {\n"
       "  low.return %value : reg<vm.i32>\n"
@@ -504,7 +504,7 @@ TEST_F(LowVerifyTest, InvokeRejectsNonLowCallee) {
 TEST_F(LowVerifyTest, FuncCallMatchesDirectLowFunctionSignature) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "test.record @gfx1100 {}\n"
+      "test.target<low_core> @gfx1100\n"
       "low.func.decl target(@gfx1100) @extern_add(%lhs: "
       "reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> "
       "(reg<amdgpu.vgpr x1>)\n"
@@ -523,7 +523,7 @@ TEST_F(LowVerifyTest, FuncCallMatchesDirectLowFunctionSignature) {
 TEST_F(LowVerifyTest, FuncCallRequiresLowFunctionBody) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "test.record @gfx1100 {}\n"
+      "test.target<low_core> @gfx1100\n"
       "low.func.decl target(@gfx1100) @extern_add()\n"
       "func.def @caller() {\n"
       "  low.func.call @extern_add() : ()\n"
@@ -547,7 +547,7 @@ TEST_F(LowVerifyTest, FuncCallRequiresLowFunctionBody) {
 TEST_F(LowVerifyTest, InvokeRejectsLowFunctionBody) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "test.record @vm_target {}\n"
+      "test.target<low_core> @vm_target\n"
       "low.func.decl target(@vm_target) @semantic_low()\n"
       "low.func.def target(@vm_target) @caller() {\n"
       "  low.invoke @semantic_low() : ()\n"
@@ -571,7 +571,7 @@ TEST_F(LowVerifyTest, FuncCallRejectsNonLowCallee) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
       "func.decl @semantic(%arg: i32) -> (i32)\n"
-      "test.record @gfx1100 {}\n"
+      "test.target<low_core> @gfx1100\n"
       "low.func.def target(@gfx1100) @caller(%lhs: reg<amdgpu.vgpr x1>) -> "
       "(reg<amdgpu.vgpr x1>) {\n"
       "  %sum = low.func.call @semantic(%lhs) : (reg<amdgpu.vgpr x1>) -> "
@@ -596,8 +596,8 @@ TEST_F(LowVerifyTest, FuncCallRejectsNonLowCallee) {
 TEST_F(LowVerifyTest, FuncCallRejectsCrossTargetCallee) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "test.record @gfx1100 {}\n"
-      "test.record @gfx1200 {}\n"
+      "test.target<low_core> @gfx1100\n"
+      "test.target<low_core> @gfx1200\n"
       "low.func.decl target(@gfx1200) @extern_add(%lhs: "
       "reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)\n"
       "low.func.def target(@gfx1100) @caller(%lhs: reg<amdgpu.vgpr x1>) -> "
@@ -623,7 +623,7 @@ TEST_F(LowVerifyTest, FuncCallRejectsCrossTargetCallee) {
 TEST_F(LowVerifyTest, FuncCallRejectsOperandCountMismatch) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "test.record @gfx1100 {}\n"
+      "test.target<low_core> @gfx1100\n"
       "low.func.decl target(@gfx1100) @extern_add(%lhs: "
       "reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> "
       "(reg<amdgpu.vgpr x1>)\n"
@@ -650,7 +650,7 @@ TEST_F(LowVerifyTest, FuncCallRejectsOperandCountMismatch) {
 TEST_F(LowVerifyTest, FuncCallRejectsOperandTypeMismatch) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "test.record @gfx1100 {}\n"
+      "test.target<low_core> @gfx1100\n"
       "low.func.decl target(@gfx1100) @extern_add(%lhs: "
       "reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.sgpr x1>) -> "
       "(reg<amdgpu.vgpr x1>)\n"
@@ -678,7 +678,7 @@ TEST_F(LowVerifyTest, FuncCallRejectsOperandTypeMismatch) {
 TEST_F(LowVerifyTest, InvokeRejectsPureImpureCallee) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "test.record @vm_target {}\n"
+      "test.target<low_core> @vm_target\n"
       "low.func.decl target(@vm_target) @extern_add(%lhs: reg<vm.i32>) -> "
       "(reg<vm.i32>)\n"
       "func.def @caller(%lhs: i32) -> (i32) {\n"
@@ -700,7 +700,7 @@ TEST_F(LowVerifyTest, InvokeRejectsPureImpureCallee) {
 TEST_F(LowVerifyTest, StorageTrafficPassesWithOwnedStorage) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "test.record @vm_target {}\n"
+      "test.target<low_core> @vm_target\n"
       "low.func.def target(@vm_target) @slot_roundtrip(%input: reg<vm.i32>) "
       "-> (reg<vm.i32>) {\n"
       "  %storage = low.storage.reserve {byte_alignment = 4, byte_length = 4} "

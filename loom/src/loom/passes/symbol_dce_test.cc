@@ -141,7 +141,7 @@ class SymbolDCETest : public ::testing::Test {
 
 TEST_F(SymbolDCETest, PrunedLowIslandRoundTripsThroughBytecode) {
   const char* source = R"(
-test.record @vm_target
+test.target<low_core> @vm_target
 
 func.decl @add_i32(%lhs: i32, %rhs: i32) -> (i32)
 

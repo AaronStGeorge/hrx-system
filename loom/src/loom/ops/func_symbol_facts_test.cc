@@ -147,7 +147,7 @@ func.decl import("env") @do_work(%arg0: i32) -> (i32)
 
 TEST_F(FuncSymbolFactsTest, KernelEntryContractRemainsTargetNeutral) {
   ModulePtr module = ParseModule(R"(
-test.record @profile
+test.target<low_core> @profile
 test.record @artifact
 
 kernel.def target(@profile) export("dispatch") artifact(@artifact) ordinal(5) linkage(dso_local) workgroup_size(8, 4, 2) @kernel() {

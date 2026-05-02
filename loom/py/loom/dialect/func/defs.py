@@ -208,7 +208,7 @@ _CONTRACT_ATTRS = [
         "target",
         "symbol",
         optional=True,
-        symbol_ref=SymbolReference("target profile", ["record"]),
+        symbol_ref=SymbolReference("target", ["target"]),
     ),
     AttrDef(
         "abi",

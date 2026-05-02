@@ -7,14 +7,13 @@
 """Target planning dialect op definitions.
 
 The target dialect owns durable module records that select and freeze code
-generation facts before backend-specific lowering. ``target.profile`` is the
-compact authoring form: it names a provider-owned preset and sparse overrides,
-then symbol facts resolve it into dense target structs for compiler use.
+generation facts before backend-specific lowering.
 """
 
-from loom.assembly import GLUE, LPAREN, RPAREN, Attr, AttrDict, SymbolRef, kw
+from loom.assembly import GLUE, LPAREN, RPAREN, Attr, AttrDict, SymbolRef, TemplateParam, kw
 from loom.dsl import (
     ATTR_TYPE_ENUM,
+    ATTR_TYPE_I64,
     ATTR_TYPE_STRING,
     SYMBOL_DEFINE,
     AttrDef,
@@ -25,6 +24,7 @@ from loom.dsl import (
     OpPhase,
     SymbolDefinition,
     SymbolReference,
+    TargetLikeInterface,
 )
 
 # ============================================================================
@@ -34,7 +34,7 @@ from loom.dsl import (
 target_ops = Dialect(
     "target",
     dialect_id=0x13,
-    doc="Target planning records: profiles and artifacts.",
+    doc="Target planning records: generic targets, profiles, and artifacts.",
     default_phase=OpPhase.MODULE_METADATA,
 )
 
@@ -130,6 +130,112 @@ ExportLinkage = EnumDef(
     c_include="loom/target/types.h",
 )
 
+GenericTargetKind = EnumDef(
+    "GenericTargetKind",
+    [
+        EnumCase("reference", 1, doc="Target-independent reference execution."),
+        EnumCase("llvm_cpu", 2, doc="Host-neutral LLVM CPU code generation."),
+    ],
+    doc="Generic target-family row selected by target.generic.",
+)
+
+# Shared target attrs that override fields from a selected target row. These are
+# presence-based attrs: absent means use the selected row, while a present zero is
+# an explicit override when the field permits zero.
+_GENERIC_TARGET_ATTRS = [
+    AttrDef("symbol", "symbol"),
+    AttrDef("kind", ATTR_TYPE_ENUM, enum_def=GenericTargetKind),
+    AttrDef(
+        "codegen_format",
+        ATTR_TYPE_ENUM,
+        enum_def=SnapshotCodegenFormat,
+        open_enum=True,
+        optional=True,
+    ),
+    AttrDef("target_triple", ATTR_TYPE_STRING, optional=True),
+    AttrDef("data_layout", ATTR_TYPE_STRING, optional=True),
+    AttrDef(
+        "artifact_format",
+        ATTR_TYPE_ENUM,
+        enum_def=ArtifactFormatAttr,
+        open_enum=True,
+        optional=True,
+    ),
+    AttrDef("target_cpu", ATTR_TYPE_STRING, optional=True),
+    AttrDef("target_features", ATTR_TYPE_STRING, optional=True),
+    AttrDef("default_pointer_bitwidth", ATTR_TYPE_I64, optional=True),
+    AttrDef("index_bitwidth", ATTR_TYPE_I64, optional=True),
+    AttrDef("offset_bitwidth", ATTR_TYPE_I64, optional=True),
+    AttrDef("max_workgroup_size_x", ATTR_TYPE_I64, optional=True),
+    AttrDef("max_workgroup_size_y", ATTR_TYPE_I64, optional=True),
+    AttrDef("max_workgroup_size_z", ATTR_TYPE_I64, optional=True),
+    AttrDef("max_flat_workgroup_size", ATTR_TYPE_I64, optional=True),
+    AttrDef("subgroup_size", ATTR_TYPE_I64, optional=True),
+    AttrDef("max_workgroup_count_x", ATTR_TYPE_I64, optional=True),
+    AttrDef("max_workgroup_count_y", ATTR_TYPE_I64, optional=True),
+    AttrDef("max_workgroup_count_z", ATTR_TYPE_I64, optional=True),
+    AttrDef("memory_space_generic", ATTR_TYPE_I64, optional=True),
+    AttrDef("memory_space_global", ATTR_TYPE_I64, optional=True),
+    AttrDef("memory_space_workgroup", ATTR_TYPE_I64, optional=True),
+    AttrDef("memory_space_constant", ATTR_TYPE_I64, optional=True),
+    AttrDef("memory_space_private", ATTR_TYPE_I64, optional=True),
+    AttrDef("memory_space_host", ATTR_TYPE_I64, optional=True),
+    AttrDef("memory_space_descriptor", ATTR_TYPE_I64, optional=True),
+    AttrDef(
+        "abi",
+        ATTR_TYPE_ENUM,
+        enum_def=ExportAbiKind,
+        open_enum=True,
+        optional=True,
+    ),
+    AttrDef("export_symbol", ATTR_TYPE_STRING, optional=True),
+    AttrDef(
+        "linkage",
+        ATTR_TYPE_ENUM,
+        enum_def=ExportLinkage,
+        open_enum=True,
+        optional=True,
+    ),
+    AttrDef("hal_binding_alignment", ATTR_TYPE_I64, optional=True),
+    AttrDef("hal_buffer_resource_flags", ATTR_TYPE_I64, optional=True),
+    AttrDef("contract_set_key", ATTR_TYPE_STRING, optional=True),
+    AttrDef("contract_feature_bits", ATTR_TYPE_I64, optional=True),
+]
+
+# ============================================================================
+# target.generic
+# ============================================================================
+
+target_generic = Op(
+    "target.generic",
+    group=target_ops,
+    doc=("Generic target-family record for target-independent or host-neutral compilation. The typed selector chooses a generated row; optional attrs structurally override only the authored fields."),
+    traits=[SYMBOL_DEFINE],
+    interfaces=[
+        TargetLikeInterface(
+            symbol="symbol",
+            selector="kind",
+        )
+    ],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="target",
+        interfaces=["target", "record"],
+        bytecode_kind="LOOM_SYMBOL_RECORD",
+    ),
+    attrs=_GENERIC_TARGET_ATTRS,
+    verify="loom_target_generic_verify",
+    format=[
+        TemplateParam("kind"),
+        SymbolRef("symbol"),
+        AttrDict(),
+    ],
+    examples=[
+        "target.generic<reference> @oracle",
+        "target.generic<llvm_cpu> @host {index_bitwidth = 64}",
+    ],
+)
+
 # ============================================================================
 # target.profile
 # ============================================================================
@@ -146,7 +252,7 @@ target_profile = Op(
     symbol_def=SymbolDefinition(
         field="symbol",
         name="target profile",
-        interfaces=["record"],
+        interfaces=["target", "record"],
         bytecode_kind="LOOM_SYMBOL_RECORD",
         fact_domain="loom_target_profile_symbol_fact_domain",
     ),
@@ -194,7 +300,7 @@ target_artifact = Op(
         AttrDef(
             "target",
             "symbol",
-            symbol_ref=SymbolReference("target profile", ["record"]),
+            symbol_ref=SymbolReference("target", ["target"]),
         ),
         AttrDef(
             "artifact_format",
@@ -235,5 +341,6 @@ target_artifact = Op(
 
 ALL_TARGET_OPS: tuple[Op, ...] = (
     target_artifact,
+    target_generic,
     target_profile,
 )

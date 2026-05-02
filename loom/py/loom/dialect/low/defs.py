@@ -185,7 +185,7 @@ _FUNC_COMMON_ATTRS = [
     AttrDef(
         "target",
         "symbol",
-        symbol_ref=SymbolReference("record", ["record"]),
+        symbol_ref=SymbolReference("target", ["target"]),
     ),
     AttrDef(
         "abi",
@@ -210,7 +210,7 @@ _KERNEL_COMMON_ATTRS = [
     AttrDef(
         "target",
         "symbol",
-        symbol_ref=SymbolReference("record", ["record"]),
+        symbol_ref=SymbolReference("target", ["target"]),
     ),
     AttrDef("export_symbol", "string", optional=True),
     AttrDef(

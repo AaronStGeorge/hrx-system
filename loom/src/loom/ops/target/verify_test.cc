@@ -125,12 +125,16 @@ class TargetVerifyTest : public ::testing::Test {
 };
 
 static const char* kValidTargetRecords =
+    "target.generic<reference> @reference\n"
+    "target.generic<llvm_cpu> @host {index_bitwidth = 64, subgroup_size = 0}\n"
     "target.profile @vm preset(\"iree-vm\")\n"
     "target.profile @gfx11 preset(\"amdgpu-gfx11\") {target_cpu = "
     "\"gfx1100\", contract_feature_bits = 1}\n"
     "target.profile @test_low preset(\"test-low\")\n"
     "target.artifact @vm_module target(@vm) {artifact_format = vm_bytecode, "
     "abi = vm_module}\n"
+    "target.artifact @host_object target(@host) {artifact_format = elf, "
+    "abi = object_file}\n"
     "target.artifact @gfx_hal target(@gfx11) {artifact_format = elf, "
     "abi = hal_executable}\n"
     "target.artifact @test_object target(@test_low) {artifact_format = elf, "
@@ -166,6 +170,31 @@ TEST_F(TargetVerifyTest, FutureTargetEnumOrdinalsVerifyAsOpenEnums) {
   loom_module_free(module);
 }
 
+TEST_F(TargetVerifyTest, GenericRejectsUnknownKind) {
+  loom_module_t* module =
+      ParseSource(kValidTargetRecords, "target_verify_test.loom");
+  ASSERT_NE(module, nullptr);
+  loom_op_t* generic = FindFirstMutableOp(module, LOOM_OP_TARGET_GENERIC);
+  ASSERT_NE(generic, nullptr);
+  loom_op_attrs(generic)[loom_target_generic_kind_ATTR_INDEX] =
+      loom_attr_enum(0);
+
+  DiagnosticCapture capture;
+  loom_verify_options_t verify_options = {};
+  verify_options.sink = capture.sink();
+  verify_options.max_errors = 20;
+  loom_verify_result_t result = {};
+  IREE_ASSERT_OK(loom_verify_module(module, &verify_options, &result));
+
+  EXPECT_EQ(result.error_count, 1u);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(
+      capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14));
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "kind");
+  ExpectI64Param(*diagnostic, 1, 0);
+  loom_module_free(module);
+}
+
 TEST_F(TargetVerifyTest, ProfileRejectsEmptyPresetKey) {
   DiagnosticCapture capture;
   VerifySource("target.profile @bad preset(\"\")\n", &capture);
@@ -177,7 +206,7 @@ TEST_F(TargetVerifyTest, ProfileRejectsEmptyPresetKey) {
   ExpectI64Param(*diagnostic, 1, 0);
 }
 
-TEST_F(TargetVerifyTest, ArtifactRejectsWrongRecordClass) {
+TEST_F(TargetVerifyTest, ArtifactRejectsNonTargetSymbol) {
   loom_module_t* module = ParseSource(
       "target.profile @ok preset(\"test-low\")\n"
       "target.artifact @not_profile target(@ok)\n"
@@ -214,7 +243,7 @@ TEST_F(TargetVerifyTest, ArtifactRejectsWrongRecordClass) {
               LOOM_EMITTER_VERIFIER);
   EXPECT_EQ(GetStringParam(*diagnostic, 0), "not_profile");
   EXPECT_EQ(GetStringParam(*diagnostic, 1), "target artifact");
-  EXPECT_EQ(GetStringParam(*diagnostic, 2), "target profile");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "target");
 
   loom_module_free(module);
 }
