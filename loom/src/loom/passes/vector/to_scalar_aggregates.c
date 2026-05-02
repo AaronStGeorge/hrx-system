@@ -17,10 +17,7 @@
 static iree_status_t loom_vector_to_scalar_lower_static_aggregate(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
   iree_host_size_t element_count = 0;
-  if (!loom_type_static_element_count(state->vector_type, &element_count)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected all-static vector result type");
-  }
+  loom_type_static_element_count(state->vector_type, &element_count);
 
   loom_builder_t* builder = &state->rewriter->builder;
   loom_value_id_t* elements = NULL;
@@ -163,10 +160,7 @@ iree_status_t loom_vector_to_scalar_lower_aggregate(
 static iree_status_t loom_vector_to_scalar_lower_static_splat(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
   iree_host_size_t element_count = 0;
-  if (!loom_type_static_element_count(state->vector_type, &element_count)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected all-static vector result type");
-  }
+  loom_type_static_element_count(state->vector_type, &element_count);
   loom_value_id_t scalar = loom_vector_splat_scalar(state->op);
   loom_value_id_t* elements = NULL;
   if (element_count > 0) {
