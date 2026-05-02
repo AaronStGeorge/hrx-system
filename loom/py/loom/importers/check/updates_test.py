@@ -72,3 +72,33 @@ def test_format_updated_source_preserves_python_preamble() -> None:
         )
         == "shared = 1\n\n# ====\ncase_0()\n# ----\n# new\n"
     )
+
+
+def test_format_updated_source_uses_custom_case_separator_spacer() -> None:
+    syntax = InlineCheckSyntax(
+        case_separator_prefix="# ====",
+        expected_separator="# ----",
+        comment_prefix="#",
+        case_separator_spacer="\n\n",
+    )
+    source = "# ====\ncase_0()\n# ----\n# old\n\n# ====\ncase_1()\n# ----\n# old\n"
+    cases = parse_inline_cases(
+        Path("kernels.py"),
+        source,
+        syntax=syntax,
+    )
+    results = [
+        CheckResult(Path("kernels.py"), 0, 0, "new\n", ""),
+        CheckResult(Path("kernels.py"), 1, 0, "new2\n", ""),
+    ]
+
+    assert (
+        format_updated_source(
+            source,
+            cases,
+            results,
+            syntax=syntax,
+            expected_encoder=lambda text: f"# {text}",
+        )
+        == "# ====\ncase_0()\n# ----\n# new\n\n\n# ====\ncase_1()\n# ----\n# new2\n"
+    )

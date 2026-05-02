@@ -21,6 +21,7 @@ class InlineCheckSyntax:
     expected_separator: str
     run_prefix: str | None = None
     comment_prefix: str | None = None
+    case_separator_spacer: str = "\n"
 
 
 DEFAULT_CHECK_SYNTAX = InlineCheckSyntax(

@@ -663,6 +663,12 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "Shared-memory workgroup barrier; shared/shared.dyn map to kernel.barrier.",
     ),
     OpCoverage(
+        "tir.thread_return",
+        OpFamily.TIR_OP,
+        CoverageState.NORMALIZED,
+        "Per-thread kernel exit; top-level prefix guards map to kernel.exit.",
+    ),
+    OpCoverage(
         "tl.sync_grid",
         OpFamily.TILELANG_OP,
         CoverageState.DEFERRED,

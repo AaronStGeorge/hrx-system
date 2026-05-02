@@ -120,7 +120,12 @@ class AttrStmt:
 
 
 class IfThenElse:
-    def __init__(self, condition: object, then_case: object, else_case: object) -> None:
+    def __init__(
+        self,
+        condition: object,
+        then_case: object,
+        else_case: object | None,
+    ) -> None:
         self.condition = condition
         self.then_case = then_case
         self.else_case = else_case

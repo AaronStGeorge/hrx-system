@@ -15,7 +15,8 @@ from loom.importers.tilelang.converter import (
     TileLangConverter,
     TileLangConverterRegistry,
 )
-from loom.importers.tilelang.nodes import node_text, source_name
+from loom.importers.tilelang.nodes import node_kind, node_text, source_name
+from loom.importers.tilelang.ops.calls import is_thread_return_call
 from loom.importers.tilelang.ops.topology import (
     map_thread_axis,
     mapped_thread_axis_sources,
@@ -40,6 +41,8 @@ def convert_seq_stmt(
     """Import a TIR statement sequence by preserving source order."""
 
     for child in tuple(getattr(stmt, "seq", ())):
+        if convert_thread_return_prefix_guard(child, context, converter):
+            continue
         converter.convert_stmt(child, context)
 
 
@@ -129,6 +132,9 @@ def convert_if_then_else(
 ) -> None:
     """Import a TIR if-then-else as scf.if."""
 
+    if convert_thread_return_prefix_guard(stmt, context, converter):
+        return
+
     condition = converter.convert_expr(getattr(stmt, "condition", None), context)
     if condition is None:
         context.record_blocked(node_text(stmt), "if condition is not mapped")
@@ -161,6 +167,82 @@ def convert_evaluate(
 ) -> None:
     """Import an effect expression wrapper."""
 
+    if convert_thread_return_prefix_guard(stmt, context, converter):
+        return
+
     value = getattr(stmt, "value", None)
     if value is not None:
         converter.convert_expr(value, context, effect=True)
+
+
+def convert_thread_return_prefix_guard(
+    stmt: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> bool:
+    """Import a top-level `if cond: tir.thread_return()` as kernel.exit."""
+
+    if not context.can_emit_kernel_exit():
+        return False
+
+    if node_kind(stmt) == "Evaluate" and _is_thread_return_statement(stmt):
+        exit_condition = context.ensure_constant("1", "bool", "thread_return")
+        context.builder.kernel.exit(condition=exit_condition)
+        context.record_converted(node_text(stmt), "kernel.exit")
+        return True
+
+    if node_kind(stmt) != "IfThenElse":
+        return False
+    if getattr(stmt, "else_case", None) is not None:
+        return False
+
+    exit_path = _thread_return_exit_path(getattr(stmt, "then_case", None))
+    if exit_path is None:
+        return False
+
+    condition = converter.convert_expr(getattr(stmt, "condition", None), context)
+    if condition is None:
+        context.record_blocked(
+            node_text(stmt),
+            "thread_return guard condition is not mapped",
+        )
+        return True
+    if str(condition.type) != "i1":
+        context.record_blocked(
+            node_text(stmt),
+            f"thread_return guard condition must be i1, got {condition.type}",
+        )
+        return True
+
+    body = None
+    if exit_path:
+        body = context.builder.region()
+        child = context.fork(preview_block=body.blocks[0])
+        with context.builder.insertion_block(body.blocks[0]):
+            for body_stmt in exit_path:
+                converter.convert_stmt(body_stmt, child)
+            context.builder.kernel.return_()
+        context.merge_child_records(child)
+
+    context.builder.kernel.exit(condition=condition, body=body)
+    context.record_converted(node_text(stmt), "kernel.exit")
+    return True
+
+
+def _thread_return_exit_path(stmt: object | None) -> tuple[object, ...] | None:
+    if stmt is None:
+        return None
+    if _is_thread_return_statement(stmt):
+        return ()
+    if node_kind(stmt) != "SeqStmt":
+        return None
+    statements = tuple(getattr(stmt, "seq", ()))
+    if not statements or not _is_thread_return_statement(statements[-1]):
+        return None
+    return statements[:-1]
+
+
+def _is_thread_return_statement(stmt: object) -> bool:
+    if node_kind(stmt) != "Evaluate":
+        return False
+    return is_thread_return_call(getattr(stmt, "value", None))

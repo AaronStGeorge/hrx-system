@@ -29,6 +29,7 @@ PYTHON_CHECK_SYNTAX = InlineCheckSyntax(
     case_separator_prefix="# ====",
     expected_separator="# ----",
     comment_prefix="#",
+    case_separator_spacer="\n\n",
 )
 
 

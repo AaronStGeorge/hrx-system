@@ -46,7 +46,9 @@ def format_updated_source(
             )
         else:
             updated_cases.append(case.raw_source or case.source)
-    body = f"\n{syntax.case_separator_prefix}\n".join(updated_cases)
+    body = f"{syntax.case_separator_spacer}{syntax.case_separator_prefix}\n".join(
+        updated_cases
+    )
     prefix = leading_case_separator_prefix(original_source, cases, syntax)
     if prefix is None:
         return body

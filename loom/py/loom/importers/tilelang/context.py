@@ -23,6 +23,7 @@ class TileLangConversionContext(SourceImportSession):
 
     type_converter: TileLangTypeConverter = field(default_factory=TileLangTypeConverter)
     index_values: dict[object, ValueRef] = field(default_factory=dict)
+    kernel_body_block: object | None = None
 
     def type(self, value_type: str) -> Type:
         return self.type_converter.map_dtype(value_type)
@@ -52,6 +53,12 @@ class TileLangConversionContext(SourceImportSession):
         if ref.name:
             self.names.capture(ref.name)
 
+    def can_emit_kernel_exit(self) -> bool:
+        return (
+            self.kernel_body_block is not None
+            and self.builder.ir.insertion_block is self.kernel_body_block
+        )
+
     def fork(self, *, preview_block: object | None = None) -> TileLangConversionContext:
         return TileLangConversionContext(
             builder=self.builder,
@@ -64,4 +71,5 @@ class TileLangConversionContext(SourceImportSession):
             names=self.names,
             type_converter=self.type_converter,
             index_values=dict(self.index_values),
+            kernel_body_block=self.kernel_body_block,
         )

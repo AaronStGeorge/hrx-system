@@ -28,7 +28,11 @@ class TestRunnerError(ValueError):
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    module_names = tuple(sys.argv[1:] if argv is None else argv)
+    try:
+        module_names = _parse_runner_args(tuple(sys.argv[1:] if argv is None else argv))
+    except TestRunnerError as exc:
+        sys.stderr.write(f"error: {exc}\n")
+        return 2
     if not module_names:
         sys.stderr.write("error: at least one test module is required\n")
         return 2
@@ -84,6 +88,17 @@ def _run_test_function(
 ) -> None:
     sys.stdout.write(f"RUN {module_name}.{test_name}\n")
     function()
+
+
+def _parse_runner_args(args: Sequence[str]) -> tuple[str, ...]:
+    module_names: list[str] = []
+    for arg in args:
+        if arg == "--update":
+            continue
+        if arg.startswith("--"):
+            raise TestRunnerError(f"unsupported runner flag {arg!r}")
+        module_names.append(arg)
+    return tuple(module_names)
 
 
 if __name__ == "__main__":

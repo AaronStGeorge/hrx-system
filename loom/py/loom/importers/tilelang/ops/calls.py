@@ -179,6 +179,12 @@ def call_op_name(call: object) -> str | None:
     return text if text else None
 
 
+def is_thread_return_call(call: object) -> bool:
+    """Returns whether a TIR call is the per-thread kernel exit intrinsic."""
+
+    return call_op_name(call) in _THREAD_RETURN_CALLS
+
+
 def _convert_unary_call(
     expr: object,
     context: TileLangConversionContext,
@@ -682,6 +688,15 @@ def _convert_effect_call(
     if op_name in _STORAGE_SYNC_CALLS:
         _convert_storage_sync_call(expr, context, op_name)
         return None
+    if op_name in _THREAD_RETURN_CALLS:
+        context.record_blocked(
+            node_text(expr),
+            (
+                f"call `{op_name}` must be imported as a top-level "
+                "kernel.exit by the structured control-flow converter"
+            ),
+        )
+        return None
     _record_unsupported_call(expr, context, op_name)
     return None
 
@@ -1165,7 +1180,11 @@ _ASSUME_CALLS = {
     "tir.assume",
 }
 
-_EFFECT_CALLS = _STORAGE_SYNC_CALLS | _ASSUME_CALLS
+_THREAD_RETURN_CALLS = {
+    "tir.thread_return",
+}
+
+_EFFECT_CALLS = _STORAGE_SYNC_CALLS | _ASSUME_CALLS | _THREAD_RETURN_CALLS
 
 _WORKGROUP_STORAGE_SCOPES = {
     "shared",

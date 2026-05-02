@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -100,9 +101,11 @@ def copy():
 
 def test_run_tilelang_check_verifies_checked_in_fixtures() -> None:
     testdata = Path(__file__).resolve().parent / "testdata"
+    update = "--update" in sys.argv[1:]
     expected_statuses = {
         "analysis.py": ["passed", "passed"],
         "allocations.py": ["passed", "passed"],
+        "control_flow.py": ["passed", "passed"],
         "memory_effects.py": ["passed", "passed"],
         "scalar_calls.py": ["passed", "passed", "passed", "passed"],
         "topology.py": ["passed", "passed", "passed"],
@@ -114,10 +117,16 @@ def test_run_tilelang_check_verifies_checked_in_fixtures() -> None:
     for filename, statuses in expected_statuses.items():
         results = run_tilelang_check(
             testdata / filename,
-            options=TileLangCheckOptions(),
+            options=TileLangCheckOptions(update=update),
         )
 
-        assert [result.status for result in results] == statuses, [
-            (result.status, result.mismatch, result.stderr, result.diff)
-            for result in results
-        ]
+        if update:
+            assert all(result.passed for result in results), [
+                (result.status, result.mismatch, result.stderr, result.diff)
+                for result in results
+            ]
+        else:
+            assert [result.status for result in results] == statuses, [
+                (result.status, result.mismatch, result.stderr, result.diff)
+                for result in results
+            ]

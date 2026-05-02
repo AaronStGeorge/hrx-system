@@ -222,6 +222,7 @@ def _build_loom_module(
         diagnostics=diagnostics,
         preview_block=shell.body_block,
         type_converter=type_converter,
+        kernel_body_block=shell.body_block,
     )
     context.capture_existing_value_names()
     converter = TileLangConverter(build_default_registry())
