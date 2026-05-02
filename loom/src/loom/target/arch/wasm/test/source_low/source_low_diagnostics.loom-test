@@ -1,7 +1,7 @@
 // RUN: emit source-low target-preset=wasm-simd128 output=low
 
 func.def @unsupported_vector_shape(%lhs: vector<8xi32>, %rhs: vector<8xi32>) -> (vector<8xi32>) {
-  // ERROR@+1: TARGET/019 {subject_kind="type", subject_name="vector<4xi32>"}
+  // ERROR@+1: WASM/001 {field_name="lhs", required_type="vector<4xi32>"}
   %sum = vector.addi %lhs, %rhs : vector<8xi32>
   func.return %sum : vector<8xi32>
 }

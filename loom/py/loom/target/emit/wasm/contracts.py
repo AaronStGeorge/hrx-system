@@ -20,6 +20,13 @@ from loom.dialect.scalar import conversion as scalar_conversion
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
 from loom.dsl import Op
+from loom.error.wasm import (
+    ERR_WASM_001,
+    ERR_WASM_002,
+    ERR_WASM_003,
+    ERR_WASM_004,
+    ERR_WASM_005,
+)
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
 from loom.target.contracts import (
     AttrProject,
@@ -39,6 +46,10 @@ from loom.target.contracts import (
     ValueRef,
     Vector,
     descriptor_by_key,
+    i64_param,
+    string_param,
+    target_diagnostic,
+    value_type_param,
 )
 from loom.target.contracts.templates import (
     ReductionDescriptorCase,
@@ -54,58 +65,28 @@ _V4I1 = Vector("i1", lanes=4)
 _V4I32 = Vector("i32", lanes=4)
 _V4F32 = Vector("f32", lanes=4)
 
-_I32_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
-    subject_name="i32",
-    reason="Wasm lowering requires i32 scalar values",
-)
-_F32_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
-    subject_name="f32",
-    reason="Wasm lowering requires f32 scalar values",
-)
-_ADDRESS_I32_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
-    subject_name="index_or_offset",
-    reason="Wasm address lowering requires index or offset scalar values",
-)
-_V4I1_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
-    subject_name="vector<4xi1>",
-    reason="Wasm SIMD mask lowering requires vector<4xi1> values",
-)
-_V4I32_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
-    subject_name="vector<4xi32>",
-    reason="Wasm SIMD lowering requires vector<4xi32> values",
-)
-_V4F32_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
-    subject_name="vector<4xf32>",
-    reason="Wasm SIMD lowering requires vector<4xf32> values",
-)
 _I64_ATTR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="attr",
-    subject_name="value",
-    reason="Wasm constant lowering requires an i64 value",
+    ref=target_diagnostic(
+        ERR_WASM_002,
+        string_param("field_name", "value"),
+    ),
 )
 _I32_CONSTANT_RANGE_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="attr",
-    subject_name="value",
-    reason="Wasm i32 constants must fit in signed i32",
+    ref=target_diagnostic(
+        ERR_WASM_003,
+        string_param("field_name", "value"),
+        i64_param("minimum", -(2**31)),
+        i64_param("maximum", (2**31) - 1),
+    ),
 )
 _ZERO_BUFFER_VIEW_OFFSET_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="value",
-    subject_name="byte_offset",
-    reason="Wasm lowering requires zero-offset buffer views",
+    ref=target_diagnostic(
+        ERR_WASM_004,
+        string_param("field_name", "byte_offset"),
+    ),
 )
 _SOURCE_MEMORY_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="source-memory",
-    subject_name="wasm",
-    reason=(
-        "Wasm SIMD memory lowering requires a contiguous 4-lane zero-offset "
-        "linear memory access with an ABI argument base"
-    ),
+    ref=target_diagnostic(ERR_WASM_005),
 )
 
 
@@ -113,27 +94,38 @@ def _descriptor(key: str) -> Descriptor:
     return descriptor_by_key(WASM_CORE_SIMD128_DESCRIPTOR_SET, key)
 
 
-def _type_diagnostic(type_pattern: TypePattern) -> GuardDiagnostic:
+def _type_text(type_pattern: TypePattern) -> str:
     if type_pattern == _I32:
-        return _I32_DIAGNOSTIC
+        return "i32 scalar"
     if type_pattern == _F32:
-        return _F32_DIAGNOSTIC
+        return "f32 scalar"
     if type_pattern in (_INDEX, _OFFSET):
-        return _ADDRESS_I32_DIAGNOSTIC
+        return "index or offset scalar"
     if type_pattern == _V4I1:
-        return _V4I1_DIAGNOSTIC
+        return "vector<4xi1>"
     if type_pattern == _V4I32:
-        return _V4I32_DIAGNOSTIC
+        return "vector<4xi32>"
     if type_pattern == _V4F32:
-        return _V4F32_DIAGNOSTIC
+        return "vector<4xf32>"
     raise ValueError(f"unknown Wasm type pattern: {type_pattern!r}")
+
+
+def _type_diagnostic(field: str, type_pattern: TypePattern) -> GuardDiagnostic:
+    return GuardDiagnostic(
+        ref=target_diagnostic(
+            ERR_WASM_001,
+            string_param("field_name", field),
+            value_type_param("actual_type", field),
+            string_param("required_type", _type_text(type_pattern)),
+        )
+    )
 
 
 def _value_type(field: str, type_pattern: TypePattern) -> Guard:
     return Guard.value_type(
         field,
         type_pattern,
-        diagnostic=_type_diagnostic(type_pattern),
+        diagnostic=_type_diagnostic(field, type_pattern),
     )
 
 

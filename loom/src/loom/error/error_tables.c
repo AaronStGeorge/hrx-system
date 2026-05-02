@@ -4011,6 +4011,109 @@ static const loom_error_def_t loom_err_amdgpu_002 = {
     .param_count = 6,
 };
 
+static const loom_error_param_def_t loom_err_wasm_001_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},    {"field_name", LOOM_PARAM_STRING},
+    {"actual_type", LOOM_PARAM_TYPE},  {"required_type", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_wasm_001 = {
+    .error_id = "ERR_WASM_001",
+    .domain = LOOM_ERROR_DOMAIN_WASM,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 1,
+    .summary = "Wasm source value type is unsupported.",
+    .message_template =
+        "Wasm target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' field '{field_name}' in "
+        "'@{function_name}': type {actual_type} is not {required_type}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_wasm_001_params,
+    .param_count = 8,
+};
+
+static const loom_error_param_def_t loom_err_wasm_002_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},    {"field_name", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_wasm_002 = {
+    .error_id = "ERR_WASM_002",
+    .domain = LOOM_ERROR_DOMAIN_WASM,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 2,
+    .summary = "Wasm constant attribute kind is unsupported.",
+    .message_template =
+        "Wasm target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' attribute '{field_name}' in "
+        "'@{function_name}': expected an i64 constant attribute",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_wasm_002_params,
+    .param_count = 6,
+};
+
+static const loom_error_param_def_t loom_err_wasm_003_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},    {"field_name", LOOM_PARAM_STRING},
+    {"minimum", LOOM_PARAM_I64},       {"maximum", LOOM_PARAM_I64},
+};
+static const loom_error_def_t loom_err_wasm_003 = {
+    .error_id = "ERR_WASM_003",
+    .domain = LOOM_ERROR_DOMAIN_WASM,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 3,
+    .summary = "Wasm constant value is outside the encodable range.",
+    .message_template =
+        "Wasm target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' attribute '{field_name}' in "
+        "'@{function_name}': expected range [{minimum}, {maximum}]",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_wasm_003_params,
+    .param_count = 8,
+};
+
+static const loom_error_param_def_t loom_err_wasm_004_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},    {"field_name", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_wasm_004 = {
+    .error_id = "ERR_WASM_004",
+    .domain = LOOM_ERROR_DOMAIN_WASM,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 4,
+    .summary = "Wasm buffer view byte offset is unsupported.",
+    .message_template =
+        "Wasm target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' field '{field_name}' in "
+        "'@{function_name}': byte offset must be exactly zero",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_wasm_004_params,
+    .param_count = 6,
+};
+
+static const loom_error_param_def_t loom_err_wasm_005_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_wasm_005 = {
+    .error_id = "ERR_WASM_005",
+    .domain = LOOM_ERROR_DOMAIN_WASM,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 5,
+    .summary = "Wasm SIMD source memory access is unsupported.",
+    .message_template =
+        "Wasm target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' source memory access in "
+        "'@{function_name}': expected a contiguous four-lane zero-offset "
+        "linear-memory access rooted at an ABI argument",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_wasm_005_params,
+    .param_count = 5,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -4078,7 +4181,8 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_target_012,    &loom_err_target_013,    &loom_err_target_014,
     &loom_err_target_015,    &loom_err_target_016,    &loom_err_target_017,
     &loom_err_target_018,    &loom_err_target_019,    &loom_err_amdgpu_001,
-    &loom_err_amdgpu_002,
+    &loom_err_amdgpu_002,    &loom_err_wasm_001,      &loom_err_wasm_002,
+    &loom_err_wasm_003,      &loom_err_wasm_004,      &loom_err_wasm_005,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

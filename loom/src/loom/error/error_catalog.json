@@ -6345,5 +6345,230 @@
       }
     ],
     "fix_hint_template": "Propagate an exact non-negative byte-offset fact before AMDGPU target-low lowering"
+  },
+  {
+    "error_id": "ERR_WASM_001",
+    "domain": 15,
+    "domain_name": "WASM",
+    "code": 1,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Wasm source value type is unsupported.",
+    "message_template": "Wasm target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' field '{field_name}' in '@{function_name}': type {actual_type} is not {required_type}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "required_type",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_WASM_002",
+    "domain": 15,
+    "domain_name": "WASM",
+    "code": 2,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Wasm constant attribute kind is unsupported.",
+    "message_template": "Wasm target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' attribute '{field_name}' in '@{function_name}': expected an i64 constant attribute",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_WASM_003",
+    "domain": 15,
+    "domain_name": "WASM",
+    "code": 3,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Wasm constant value is outside the encodable range.",
+    "message_template": "Wasm target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' attribute '{field_name}' in '@{function_name}': expected range [{minimum}, {maximum}]",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "minimum",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "maximum",
+        "kind": 1,
+        "kind_name": "I64"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_WASM_004",
+    "domain": 15,
+    "domain_name": "WASM",
+    "code": 4,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Wasm buffer view byte offset is unsupported.",
+    "message_template": "Wasm target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' field '{field_name}' in '@{function_name}': byte offset must be exactly zero",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_WASM_005",
+    "domain": 15,
+    "domain_name": "WASM",
+    "code": 5,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Wasm SIMD source memory access is unsupported.",
+    "message_template": "Wasm target '{target_key}' export '{export_name}' config '{config_key}' rejected '{op_name}' source memory access in '@{function_name}': expected a contiguous four-lane zero-offset linear-memory access rooted at an ABI argument",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
   }
 ]
