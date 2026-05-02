@@ -2900,7 +2900,7 @@ class FuncLikeInterface(NamedTuple):
     import_module: str | None = None
     # Optional import symbol string attr for external declarations.
     import_symbol: str | None = None
-    # Optional symbol ref attr naming the resolved target profile.
+    # Optional symbol ref attr naming the resolved target record.
     target: str | None = None
     # Optional ABI enum attr for concrete target-bound functions.
     abi: str | None = None
@@ -2950,11 +2950,10 @@ class TargetLikeInterface(NamedTuple):
     """Interface for ops that define target environment records.
 
     The symbol field names the defining symbol attr. The selector field names
-    the typed attr selecting the generated target row, such as a processor,
-    preset, or generic target kind. The extensions field names an optional dict
+    the typed attr selecting the generated target row, such as a processor or
+    generic target kind. The extensions field names an optional dict
     attr carrying target-specific extension data. Descriptor names a C-side
-    projection descriptor owned by the target family; None is valid for test
-    records that are handled by generic test projection.
+    projection descriptor owned by the target family.
     """
 
     # Symbol attr that names the target record.
@@ -2965,6 +2964,10 @@ class TargetLikeInterface(NamedTuple):
     extensions: str | None = None
     # Optional C symbol for the target-family projection descriptor.
     descriptor: str | None = None
+    # Optional C symbol for the selector-indexed target bundle table. When
+    # present, the C generator emits the TargetLike descriptor and projection
+    # table instead of requiring hand-authored descriptor metadata.
+    bundle_table: str | None = None
 
 
 class LoopLikeInterface(NamedTuple):

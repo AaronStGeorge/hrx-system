@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_workgroup_b128.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-kernel.def @lds_b128_roundtrip(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @lds_b128_roundtrip(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -42,7 +43,9 @@ low.kernel.def target(@target) @lds_b128_roundtrip() asm<amdgpu.gfx11.core> {
 
 // ====
 
-kernel.def @lds_b128_large_static_offset_roundtrip(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @lds_b128_large_static_offset_roundtrip(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset

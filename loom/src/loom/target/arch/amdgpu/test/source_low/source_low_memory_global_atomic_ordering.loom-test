@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_global_atomic_ordering.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-kernel.def @global_atomic_release_reduce_i32(%input: buffer) {
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @global_atomic_release_reduce_i32(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -27,7 +28,9 @@ low.kernel.def target(@target) @global_atomic_release_reduce_i32() {
 
 // ====
 
-kernel.def @global_atomic_acquire_rmw_i32(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @global_atomic_acquire_rmw_i32(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -54,7 +57,9 @@ low.kernel.def target(@target) @global_atomic_acquire_rmw_i32() {
 
 // ====
 
-kernel.def @global_atomic_acq_rel_rmw_i32(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @global_atomic_acq_rel_rmw_i32(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -83,7 +88,9 @@ low.kernel.def target(@target) @global_atomic_acq_rel_rmw_i32() {
 
 // ====
 
-kernel.def @global_atomic_acq_rel_cmpxchg_i32(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @global_atomic_acq_rel_cmpxchg_i32(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -117,7 +124,9 @@ low.kernel.def target(@target) @global_atomic_acq_rel_cmpxchg_i32() {
 
 // ====
 
-kernel.def @global_atomic_seq_cst_reduce_i32(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @global_atomic_seq_cst_reduce_i32(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer

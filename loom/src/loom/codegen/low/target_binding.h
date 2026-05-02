@@ -6,9 +6,9 @@
 
 // Low function target binding.
 //
-// This layer connects low function target profiles to dense low descriptor
+// This layer connects low function target records to dense low descriptor
 // tables. The descriptor table ABI itself remains IR-agnostic; this file owns
-// the codegen contract that says a low.func target profile selects one
+// the codegen contract that says a low.func target record selects one
 // descriptor set key and feature bitset before low.op packet verification,
 // scheduling, allocation feedback, or emission run.
 
@@ -27,18 +27,18 @@ extern "C" {
 
 // Resolved low target context for one low function.
 typedef struct loom_low_resolved_target_t {
-  // Symbol defining the low function target profile.
+  // Symbol defining the low function target record.
   const loom_symbol_t* target_symbol;
   // Defining op for |target_symbol|.
   const loom_op_t* target_op;
   // Materialized target payloads selected by this low function. Snapshot and
-  // config come from the target profile; export_plan is function-local.
+  // config come from the target record; export_plan is function-local.
   loom_target_bundle_storage_t bundle_storage;
   // Borrowed target symbol name without the leading '@'.
   iree_string_view_t target_name;
-  // Borrowed descriptor-set key selected by the resolved target profile.
+  // Borrowed descriptor-set key selected by the resolved target record.
   iree_string_view_t descriptor_set_key;
-  // Feature bitset selected by the resolved target profile.
+  // Feature bitset selected by the resolved target record.
   uint64_t feature_bits;
   // Descriptor set found in the caller-provided registry.
   const loom_low_descriptor_set_t* descriptor_set;
@@ -75,7 +75,7 @@ typedef struct loom_low_resolved_descriptor_packet_t {
   const loom_low_descriptor_t* descriptor;
 } loom_low_resolved_descriptor_packet_t;
 
-// Resolves the target profile payloads and descriptor set for |low_func_op|.
+// Resolves the target record payloads and descriptor set for |low_func_op|.
 // User IR failures are emitted through |emitter| and leave
 // out_target->descriptor_set NULL. Infrastructure failures are returned as
 // status. |low_func_op| must be a target-low function definition or

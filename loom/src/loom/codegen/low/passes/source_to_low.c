@@ -48,8 +48,7 @@ static const loom_pass_statistic_def_t kLowSourceToLowStatistics[] = {
 
 static const loom_pass_info_t loom_low_source_to_low_pass_info_storage = {
     .name = IREE_SVL("source-to-low"),
-    .description =
-        IREE_SVL("Lower target-profiled source funcs to target-low IR."),
+    .description = IREE_SVL("Lower targeted source funcs to target-low IR."),
     .kind = LOOM_PASS_MODULE,
     .option_defs = kLowSourceToLowOptions,
     .option_count = IREE_ARRAYSIZE(kLowSourceToLowOptions),
@@ -168,7 +167,6 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
   iree_arena_initialize(module->arena.block_pool, &selection_arena);
   loom_low_source_selection_list_t selection_list = {0};
   const loom_low_source_selection_options_t selection_options = {
-      .descriptor_registry = descriptor_registry,
       .policy_registry = policy_registry,
       .diagnostic_emitter = pass->diagnostic_emitter,
       .lowering_kind = IREE_SV("source-to-low"),

@@ -207,6 +207,47 @@ typedef struct loom_target_bundle_t {
   const loom_target_config_t* config;
 } loom_target_bundle_t;
 
+typedef struct loom_target_bundle_table_t {
+  // Selector-indexed target row pointers. Entry zero is normally NULL because
+  // generated enums reserve zero for absent/unknown cases.
+  const loom_target_bundle_t* const* values;
+  // Number of entries in |values|.
+  uint8_t count;
+} loom_target_bundle_table_t;
+
+enum loom_target_projection_value_bits_e {
+  // Enum attr projected into a target enum field.
+  LOOM_TARGET_PROJECTION_VALUE_ENUM_U32 = 1,
+  // I64 attr projected into a uint32_t field after verification.
+  LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32 = 2,
+  // I64 attr projected into a uint64_t field after verification.
+  LOOM_TARGET_PROJECTION_VALUE_I64_TO_U64 = 3,
+  // String attr projected into an iree_string_view_t field.
+  LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW = 4,
+};
+typedef uint8_t loom_target_projection_value_kind_t;
+
+typedef struct loom_target_projection_t {
+  // Byte offset into loom_target_bundle_storage_t for the destination field.
+  uint16_t storage_offset;
+  // Attribute index on the target-like op.
+  uint8_t attr_index;
+  // Projection operation used to copy the present attr payload.
+  loom_target_projection_value_kind_t value_kind;
+} loom_target_projection_t;
+
+static_assert(sizeof(loom_target_projection_t) == 4,
+              "loom_target_projection_t must be exactly 4 bytes");
+
+typedef struct loom_target_like_descriptor_t {
+  // Direct selector-indexed bundle table for a target-like op family.
+  const loom_target_bundle_table_t* bundle_table;
+  // Optional projection rows for typed attrs that override the selected bundle.
+  const loom_target_projection_t* projections;
+  // Number of entries in |projections|.
+  uint8_t projection_count;
+} loom_target_like_descriptor_t;
+
 typedef struct loom_target_bundle_storage_t {
   // Materialized target snapshot owned by this storage object.
   loom_target_snapshot_t snapshot;

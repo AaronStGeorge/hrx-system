@@ -15,8 +15,7 @@ extern "C" {
 
 // Appends a compact JSON manifest for the linked target-low registry package to
 // |builder|. The manifest is a diagnostic/tooling format that lists linked
-// descriptor-set summaries and target bundle selections without embedding full
-// instruction descriptor rows.
+// descriptor-set summaries without embedding full instruction descriptor rows.
 iree_status_t loom_target_low_descriptor_registry_format_manifest_json(
     const loom_target_low_descriptor_registry_t* registry,
     iree_string_builder_t* builder);

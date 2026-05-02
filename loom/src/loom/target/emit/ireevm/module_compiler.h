@@ -31,7 +31,7 @@ typedef struct loom_ireevm_module_compile_options_t {
   // VM module name stored in the emitted archive. Empty uses "loom".
   iree_string_view_t module_name;
   // Optional function symbol to compile. Empty requires exactly one
-  // IREE-VM-compatible function with a target profile. A leading '@' is
+  // IREE-VM-compatible function with a target record. A leading '@' is
   // accepted for command-line ergonomics.
   iree_string_view_t entry_symbol;
   // Diagnostic sink used for verification, lowering, scheduling, and
@@ -51,7 +51,7 @@ typedef struct loom_ireevm_module_compile_options_t {
 // Compiles |module| into an allocator-owned IREE VM bytecode module archive.
 //
 // |module| is mutated in place: the selected function gains sibling low IR
-// produced by source-to-low lowering. Target profiles are resolved through the
+// produced by source-to-low lowering. Target records are resolved through the
 // linked descriptor registry without materializing companion target records in
 // the IR. |out_compiled| is false when target preflight or compiler diagnostics
 // rejected the module; status remains reserved for infrastructure failures. The

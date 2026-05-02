@@ -57,7 +57,7 @@ TEST_F(SourceLoweringStressTest, GeneratedSupportedSourceLowersAndPacketizes) {
     SCOPED_TRACE(::testing::Message() << "seed=" << seed);
     loom_module_t* module_raw = nullptr;
     loom_low_source_workload_config_t workload_config =
-        loom_low_source_workload_config_make(IREE_SV("test-low"), 1);
+        loom_low_source_workload_config_make(1);
     IREE_ASSERT_OK(loom_low_source_workload_generate_seeded_module(
         seed, &workload_config, &context_, &block_pool_, &module_raw));
     ModulePtr module(module_raw);

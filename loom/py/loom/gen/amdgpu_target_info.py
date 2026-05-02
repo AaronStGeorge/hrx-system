@@ -198,8 +198,6 @@ def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
             raise ValueError("AMDGPU descriptor generator target is required")
         if not info.key:
             raise ValueError("AMDGPU descriptor-set key is required")
-        if not info.low_preset_key:
-            raise ValueError(f"AMDGPU low preset key is required for {info.key}")
         if not info.isa_xml_key:
             raise ValueError(f"AMDGPU ISA XML key is required for {info.key}")
         if not info.isa_architecture_name:
@@ -233,13 +231,8 @@ def _validate_processors(
     for info in processors:
         if not info.target_cpu:
             raise ValueError("AMDGPU target CPU is required")
-        if info.descriptor_set_key:
-            if info.descriptor_set_key not in descriptor_set_keys:
-                raise ValueError(f"AMDGPU processor {info.target_cpu} references unknown descriptor set {info.descriptor_set_key}")
-            if not info.low_preset_key:
-                raise ValueError(f"AMDGPU low preset key is required for {info.target_cpu}")
-        elif info.low_preset_key:
-            raise ValueError(f"AMDGPU processor {info.target_cpu} has a low preset key but no descriptor set")
+        if info.descriptor_set_key and info.descriptor_set_key not in descriptor_set_keys:
+            raise ValueError(f"AMDGPU processor {info.target_cpu} references unknown descriptor set {info.descriptor_set_key}")
         if info.elf_machine_flags < 0 or info.elf_machine_flags > 0x0FF:
             raise ValueError(f"AMDGPU ELF machine flags for {info.target_cpu} must fit EF_AMDGPU_MACH")
         if info.default_wavefront_size not in (32, 64):
@@ -276,16 +269,14 @@ def _emit_header() -> str:
 
 def _emit_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> list[str]:
     key_width = max(len(_c_string_arg(row.info.key)) for row in rows)
-    preset_width = max(len(_c_string_arg(row.info.low_preset_key)) for row in rows)
     opcode_width = len("0x000")
     packet_encoding_width = len("packet_encoding")
     cache_swizzle_width = len("LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT")
     lines = [
-        "#define LOOM_AMDGPU_DESCRIPTOR_SET_INFO(stable_id_, descriptor_set_key_, low_preset_key_, s_endpgm_opcode_, s_branch_opcode_, s_cbranch_scc1_opcode_, supports_descriptor_packet_encoding_, buffer_resource_cache_swizzle_, vector_memory_cache_policy_encoding_) \\",
+        "#define LOOM_AMDGPU_DESCRIPTOR_SET_INFO(stable_id_, descriptor_set_key_, s_endpgm_opcode_, s_branch_opcode_, s_cbranch_scc1_opcode_, supports_descriptor_packet_encoding_, buffer_resource_cache_swizzle_, vector_memory_cache_policy_encoding_) \\",
         "  { \\",
         "    .descriptor_set_stable_id = stable_id_, \\",
         "    .descriptor_set_key = IREE_SVL(descriptor_set_key_), \\",
-        "    .low_preset_key = IREE_SVL(low_preset_key_), \\",
         "    .s_endpgm_opcode = UINT16_C(s_endpgm_opcode_), \\",
         "    .s_branch_opcode = UINT16_C(s_branch_opcode_), \\",
         "    .s_cbranch_scc1_opcode = UINT16_C(s_cbranch_scc1_opcode_), \\",
@@ -295,14 +286,13 @@ def _emit_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> list[s
         "  }",
         "",
         "static const loom_amdgpu_descriptor_set_info_t kAmdgpuDescriptorSetInfos[] = {",
-        "  // stable_id            descriptor_set_key     low_preset_key   s_endpgm s_branch s_cbranch_scc1 packet_encoding cache_swizzle cache_policy",
+        "  // stable_id            descriptor_set_key     s_endpgm s_branch s_cbranch_scc1 packet_encoding cache_swizzle cache_policy",
     ]
     lines.extend(
         (
             "  LOOM_AMDGPU_DESCRIPTOR_SET_INFO("
             f"{_padded_arg(_u64_expr(descriptor_stable_id(info.key)), len('UINT64_C(0xffffffffffffffff)'))}"
             f"{_padded_arg(_c_string_arg(info.key), key_width)}"
-            f"{_padded_arg(_c_string_arg(info.low_preset_key), preset_width)}"
             f"{_padded_arg(f'0x{row.s_endpgm_opcode:03x}', opcode_width)}"
             f"{_padded_arg(f'0x{row.s_branch_opcode:03x}', opcode_width)}"
             f"{_padded_arg(f'0x{row.s_cbranch_scc1_opcode:03x}', opcode_width)}"
@@ -321,7 +311,6 @@ def _emit_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> list[s
 def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]:
     target_cpu_width = max(len(_c_string_arg(info.target_cpu)) for info in processors)
     descriptor_set_width = max(len(_c_string_arg(info.descriptor_set_key)) for info in processors)
-    preset_width = max(len(_c_string_arg(info.low_preset_key)) for info in processors)
     machine_flags_width = len("0x000")
     feature_flags_width = len("0x0")
     wavefront_width = 2
@@ -330,12 +319,11 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
     register_granule_width = 1
     bool_width = len("false")
     lines = [
-        "#define LOOM_AMDGPU_PROCESSOR_INFO(target_cpu_, descriptor_set_key_, descriptor_set_stable_id_, low_preset_key_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, kernel_descriptor_profile_, matrix_feature_profile_, vgpr_granule_wave32_, vgpr_granule_wave64_, has_flat_scratch_, uses_gfx10_sgpr_, has_dx10_ieee_, has_packed_tid_) \\",
+        "#define LOOM_AMDGPU_PROCESSOR_INFO(target_cpu_, descriptor_set_key_, descriptor_set_stable_id_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, kernel_descriptor_profile_, matrix_feature_profile_, vgpr_granule_wave32_, vgpr_granule_wave64_, has_flat_scratch_, uses_gfx10_sgpr_, has_dx10_ieee_, has_packed_tid_) \\",
         "  { \\",
         "    .target_cpu = IREE_SVL(target_cpu_), \\",
         "    .descriptor_set_key = IREE_SVL(descriptor_set_key_), \\",
         "    .descriptor_set_stable_id = descriptor_set_stable_id_, \\",
-        "    .low_preset_key = IREE_SVL(low_preset_key_), \\",
         "    .elf_machine_flags = UINT32_C(elf_machine_flags_), \\",
         "    .elf_feature_flags = UINT32_C(elf_feature_flags_), \\",
         "    .default_wavefront_size = default_wavefront_size_, \\",
@@ -350,7 +338,7 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
         "  }",
         "",
         "static const loom_amdgpu_processor_info_t kAmdgpuProcessorInfos[] = {",
-        "  // target_cpu descriptor_set_key    stable_id            low_preset_key  mach  feat wave kernel_profile                             matrix_profile                             vgpr32 vgpr64 flat_scratch gfx10_sgpr dx10_ieee packed_tid",
+        "  // target_cpu descriptor_set_key    stable_id            mach  feat wave kernel_profile                             matrix_profile                             vgpr32 vgpr64 flat_scratch gfx10_sgpr dx10_ieee packed_tid",
     ]
     lines.extend(
         (
@@ -358,7 +346,6 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
             f"{_padded_arg(_c_string_arg(info.target_cpu), target_cpu_width)}"
             f"{_padded_arg(_c_string_arg(info.descriptor_set_key), descriptor_set_width)}"
             f"{_padded_arg(_u64_expr(descriptor_stable_id(info.descriptor_set_key)) if info.descriptor_set_key else _u64_expr(0), len('UINT64_C(0xffffffffffffffff)'))}"
-            f"{_padded_arg(_c_string_arg(info.low_preset_key), preset_width)}"
             f"{_padded_arg(f'0x{info.elf_machine_flags:03x}', machine_flags_width)}"
             f"{_padded_arg(f'0x{info.elf_feature_flags:x}', feature_flags_width)}"
             f"{_padded_arg(str(info.default_wavefront_size), wavefront_width)}"

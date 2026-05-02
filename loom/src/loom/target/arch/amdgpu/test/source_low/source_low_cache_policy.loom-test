@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_cache_policy_scopes.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx12 output=low
+// RUN: emit source-low output=low
 
-kernel.def @cache_system_bypass_load_device_writeback_store(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1200> @target
+kernel.def target(@target) @cache_system_bypass_load_device_writeback_store(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset

@@ -180,7 +180,7 @@ low.func.decl target(@vm_target) @dead_add(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>)
 
 TEST_F(SymbolDCETest, FunctionExportRootsPrivateEntryAndClosure) {
   const char* source = R"(
-target.profile @test_target preset("test.profile")
+test.target<low_core> @test_target
 target.artifact @module target(@test_target)
 
 func.def target(@test_target) abi(object_function) export("entry", {artifact = @module}) @entry() {

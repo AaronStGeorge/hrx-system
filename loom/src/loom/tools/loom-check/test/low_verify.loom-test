@@ -1,6 +1,6 @@
 // RUN: verify
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
   %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   low.return %sum : reg<test.i32>
@@ -8,7 +8,7 @@ low.func.def target(@test_target) @add(%lhs: reg<test.i32>, %rhs: reg<test.i32>)
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @partial_register_pair(%ptr: reg<test.ptr>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
   %low = low.op<test.write.low16.i32>(%ptr) : (reg<test.ptr>) -> reg<test.i32>
   %full = low.op<test.write.high16.i32>(%low, %ptr) : (reg<test.i32>, reg<test.ptr>) -> %low as reg<test.i32>
@@ -18,7 +18,7 @@ low.func.def target(@test_target) @partial_register_pair(%ptr: reg<test.ptr>, %r
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @partial_register_full_use(%ptr: reg<test.ptr>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
   %low = low.op<test.write.low16.i32>(%ptr) : (reg<test.ptr>) -> reg<test.i32>
   // ERROR@+1: LOWERING/019 {op_name="test.add.i32", field_name="lhs"}
@@ -28,7 +28,7 @@ low.func.def target(@test_target) @partial_register_full_use(%ptr: reg<test.ptr>
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @partial_register_structural_use(%ptr: reg<test.ptr>) -> (reg<test.i32>) {
   %low = low.op<test.write.low16.i32>(%ptr) : (reg<test.ptr>) -> reg<test.i32>
   // ERROR@+1: LOWERING/019 {op_name="low.return", field_name="operand"}
@@ -37,7 +37,7 @@ low.func.def target(@test_target) @partial_register_structural_use(%ptr: reg<tes
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @concat(%lo: reg<test.i32>, %hi: reg<test.i32>) -> (reg<test.i32 x2>) {
   %pair = low.concat(%lo, %hi) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
   %lane = low.slice %pair[1] : reg<test.i32 x2> -> reg<test.i32>
@@ -46,7 +46,7 @@ low.func.def target(@test_target) @concat(%lo: reg<test.i32>, %hi: reg<test.i32>
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @copy_bad_units(%pair: reg<test.i32 x2>) {
   // ERROR@+1: LOWERING/017
   %copy = low.copy %pair : reg<test.i32 x2> -> reg<test.i32>
@@ -55,7 +55,7 @@ low.func.def target(@test_target) @copy_bad_units(%pair: reg<test.i32 x2>) {
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @slice_bad_class(%pair: reg<test.i32 x2>) {
   // ERROR@+1: TYPE/001
   %lane = low.slice %pair[0] : reg<test.i32 x2> -> reg<test.i64>
@@ -64,7 +64,7 @@ low.func.def target(@test_target) @slice_bad_class(%pair: reg<test.i32 x2>) {
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @slice_negative_offset(%pair: reg<test.i32 x2>) {
   // ERROR@+1: LOWERING/017
   %lane = low.slice %pair[-1] : reg<test.i32 x2> -> reg<test.i32>
@@ -73,7 +73,7 @@ low.func.def target(@test_target) @slice_negative_offset(%pair: reg<test.i32 x2>
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @slice_out_of_range(%pair: reg<test.i32 x2>) {
   // ERROR@+1: LOWERING/017
   %lane = low.slice %pair[2] : reg<test.i32 x2> -> reg<test.i32>
@@ -82,7 +82,7 @@ low.func.def target(@test_target) @slice_out_of_range(%pair: reg<test.i32 x2>) {
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @concat_bad_class(%lo: reg<test.i32>, %hi: reg<test.i64>) {
   // ERROR@+1: TYPE/001
   %pair = low.concat(%lo, %hi) : (reg<test.i32>, reg<test.i64>) -> reg<test.i32 x2>
@@ -91,7 +91,7 @@ low.func.def target(@test_target) @concat_bad_class(%lo: reg<test.i32>, %hi: reg
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @concat_bad_units(%lo: reg<test.i32>) {
   // ERROR@+1: TYPE/004
   %pair = low.concat(%lo) : (reg<test.i32>) -> reg<test.i32 x2>
@@ -100,7 +100,8 @@ low.func.def target(@test_target) @concat_bad_units(%lo: reg<test.i32>) {
 
 // ====
 
-target.profile @test_target preset("test-low") {contract_set_key = "missing.low"}
+test.target<low_core> @test_target {contract_set_key = "missing.low"}
+
 // ERROR@+1: LOWERING/003 "missing.low"
 low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
   %c0 = low.const<test.const.i32> {i32_value = 7} : reg<test.i32>
@@ -109,7 +110,7 @@ low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
   // ERROR@+1: LOWERING/004 "test.missing.i32"
   %sum = low.op<test.missing.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
@@ -118,7 +119,7 @@ low.func.def target(@test_target) @add(%lhs: reg<test.i32>, %rhs: reg<test.i32>)
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
   // ERROR@+1: LOWERING/007 "i32_value"
   %c0 = low.const<test.const.i32> : reg<test.i32>
@@ -127,7 +128,7 @@ low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
   // ERROR@+1: LOWERING/008 "junk"
   %sum = low.op<test.add.i32>(%lhs, %rhs) {junk = 1} : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
@@ -136,7 +137,7 @@ low.func.def target(@test_target) @add(%lhs: reg<test.i32>, %rhs: reg<test.i32>)
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
   // ERROR@+1: LOWERING/009 "i64 signed integer"
   %c0 = low.const<test.const.i32> {i32_value = "wrong"} : reg<test.i32>
@@ -145,7 +146,7 @@ low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
   // ERROR@+1: LOWERING/010 "2147483648"
   %c0 = low.const<test.const.i32> {i32_value = 2147483648} : reg<test.i32>
@@ -154,7 +155,7 @@ low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @branch(%arg: reg<test.i32>) -> (reg<test.i32>) {
   // ERROR@+1: STRUCTURE/025 "low.br" "successor 0" "expected 1"
   low.br ^exit
@@ -164,7 +165,7 @@ low.func.def target(@test_target) @branch(%arg: reg<test.i32>) -> (reg<test.i32>
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @branch(%arg: reg<test.i32>) {
   // ERROR@+1: STRUCTURE/026 "low.br" "successor 0" "expected reg<test.i64>"
   low.br ^exit(%arg: reg<test.i32>)
@@ -174,7 +175,7 @@ low.func.def target(@test_target) @branch(%arg: reg<test.i32>) {
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 low.func.def target(@test_target) @branch(%cond: reg<test.i32>) {
   // ERROR@+1: STRUCTURE/025 "low.cond_br" "successor 0" "expected 1"
   low.cond_br %cond, ^then, ^else : reg<test.i32>

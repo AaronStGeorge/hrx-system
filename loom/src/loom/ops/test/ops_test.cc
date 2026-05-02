@@ -777,8 +777,24 @@ TEST_F(BuilderTest, TargetLikeInterfaceReadsTargetRecordFields) {
   loom_symbol_ref_t symbol = {0, 7};
   loom_op_t* op = NULL;
   IREE_ASSERT_OK(loom_test_target_build(
-      &builder_, LOOM_TEST_TARGET_KIND_LOW_CORE, symbol,
-      loom_named_attr_slice_empty(), LOOM_LOCATION_UNKNOWN, &op));
+      &builder_, /*build_flags=*/0, LOOM_TEST_TARGET_KIND_LOW_CORE, symbol,
+      /*codegen_format=*/0, /*target_triple=*/LOOM_STRING_ID_INVALID,
+      /*data_layout=*/LOOM_STRING_ID_INVALID, /*artifact_format=*/0,
+      /*target_cpu=*/LOOM_STRING_ID_INVALID,
+      /*target_features=*/LOOM_STRING_ID_INVALID,
+      /*default_pointer_bitwidth=*/0, /*index_bitwidth=*/0,
+      /*offset_bitwidth=*/0, /*max_workgroup_size_x=*/0,
+      /*max_workgroup_size_y=*/0, /*max_workgroup_size_z=*/0,
+      /*max_flat_workgroup_size=*/0, /*subgroup_size=*/0,
+      /*max_workgroup_count_x=*/0, /*max_workgroup_count_y=*/0,
+      /*max_workgroup_count_z=*/0, /*memory_space_generic=*/0,
+      /*memory_space_global=*/0, /*memory_space_workgroup=*/0,
+      /*memory_space_constant=*/0, /*memory_space_private=*/0,
+      /*memory_space_host=*/0, /*memory_space_descriptor=*/0, /*abi=*/0,
+      /*export_symbol=*/LOOM_STRING_ID_INVALID, /*linkage=*/0,
+      /*hal_binding_alignment=*/0, /*hal_buffer_resource_flags=*/0,
+      /*contract_set_key=*/LOOM_STRING_ID_INVALID,
+      /*contract_feature_bits=*/0, LOOM_LOCATION_UNKNOWN, &op));
 
   loom_target_like_t target = loom_target_like_cast(module_, op);
   ASSERT_TRUE(loom_target_like_isa(target));
@@ -788,7 +804,7 @@ TEST_F(BuilderTest, TargetLikeInterfaceReadsTargetRecordFields) {
   EXPECT_EQ(loom_attr_as_enum(loom_target_like_selector(target)),
             LOOM_TEST_TARGET_KIND_LOW_CORE);
   EXPECT_EQ(loom_target_like_extension_attrs(target).count, 0u);
-  EXPECT_EQ(loom_target_like_descriptor(target), nullptr);
+  EXPECT_NE(loom_target_like_descriptor(target), nullptr);
 }
 
 TEST_F(BuilderTest, AttrsBuilder) {

@@ -17,6 +17,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/target/ops.h"
+#include "loom/ops/test/ops.h"
 #include "loom/testing/diagnostic_matchers.h"
 
 namespace loom {
@@ -34,6 +35,7 @@ class FuncVerifyTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_TARGET, loom_target_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
@@ -151,7 +153,7 @@ func.def abi(object_function) @semantic() {
 TEST_F(FuncVerifyTest, TargetedContractIsValid) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(R"(
-target.profile @test_target preset("test.profile")
+test.target<low_core> @test_target
 
 func.def target(@test_target) abi(object_function) export("semantic") @semantic() {
   func.return

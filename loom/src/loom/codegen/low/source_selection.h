@@ -6,7 +6,7 @@
 
 // Source module selection for source-to-low lowering.
 //
-// This is cold compilation setup: it resolves a func-owned target profile
+// This is cold compilation setup: it resolves a func-owned target record
 // through symbol facts, checks that the low lowering policy supports the
 // resulting target contract, and returns the concrete inputs needed by the core
 // lowerer. The selected target comes from each func contract, never from a
@@ -29,9 +29,6 @@ extern "C" {
 #endif
 
 typedef struct loom_low_source_selection_options_t {
-  // Low descriptor registry linked into the caller.
-  const loom_low_descriptor_registry_t* descriptor_registry;
-
   // Target lowering policies linked into the caller.
   const loom_low_lower_policy_registry_t* policy_registry;
 
@@ -50,7 +47,7 @@ typedef struct loom_low_source_selection_t {
   // Dense func facts backing |func|.
   const loom_func_symbol_facts_t* func_facts;
 
-  // Module-local target.profile symbol referenced by |func|.
+  // Module-local target record symbol referenced by |func|.
   loom_symbol_ref_t target_ref;
 
   // Storage for the effective target bundle selected by |func|.

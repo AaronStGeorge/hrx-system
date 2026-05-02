@@ -51,7 +51,6 @@ typedef struct loom_run_execution_provider_set_t {
 
 enum {
   LOOM_RUN_EXECUTION_PROVIDER_DESCRIPTOR_SET_PROVIDER_CAPACITY = 256,
-  LOOM_RUN_EXECUTION_PROVIDER_TARGET_BUNDLE_CAPACITY = 256,
   LOOM_RUN_EXECUTION_PROVIDER_HAL_BACKEND_CAPACITY = 64,
   LOOM_RUN_EXECUTION_PROVIDER_EXECUTION_BACKEND_CAPACITY = 64,
 };
@@ -65,11 +64,6 @@ typedef struct loom_run_execution_environment_t {
       [LOOM_RUN_EXECUTION_PROVIDER_DESCRIPTOR_SET_PROVIDER_CAPACITY];
   // Number of entries in |descriptor_set_providers|.
   iree_host_size_t descriptor_set_provider_count;
-  // Target bundle scratch table assembled on demand.
-  const loom_target_bundle_t*
-      target_bundles[LOOM_RUN_EXECUTION_PROVIDER_TARGET_BUNDLE_CAPACITY];
-  // Number of entries in |target_bundles|.
-  iree_host_size_t target_bundle_count;
   // HAL backend table assembled once for the environment.
   const loom_run_hal_backend_t*
       hal_backends[LOOM_RUN_EXECUTION_PROVIDER_HAL_BACKEND_CAPACITY];

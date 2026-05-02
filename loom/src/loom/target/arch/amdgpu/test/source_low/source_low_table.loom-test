@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/lookup_table.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-kernel.def @f32_table_lookup_i8_codes(%codes_buffer: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @f32_table_lookup_i8_codes(%codes_buffer: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 1)] : index
   %zero = index.constant 0 : offset
@@ -82,7 +83,9 @@ low.kernel.def target(@target) @f32_table_lookup_i8_codes() asm<amdgpu.gfx11.cor
 
 // ====
 
-func.def @f32_table_lookup_i32_codes(%codes: vector<2xi32>) -> (vector<2xf32>) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @f32_table_lookup_i32_codes(%codes: vector<2xi32>) -> (vector<2xf32>) {
   %g0 = scalar.constant 2.0 : f32
   %g1 = scalar.constant -3.0 : f32
   %g2 = scalar.constant 5.0 : f32

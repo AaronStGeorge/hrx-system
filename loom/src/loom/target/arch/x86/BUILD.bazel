@@ -61,7 +61,6 @@ loom_assert_no_dependencies(
     targets = [
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:low_legality",
-        "//loom/src/loom/target:preset_registry",
         "//loom/src/loom/target:types",
     ],
 )

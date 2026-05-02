@@ -1,4 +1,4 @@
-target.profile @matmul_x86_target preset("test-object") {target_cpu = "x86-64-v3", target_features = "+avx2,+fma", target_triple = "x86_64-pc-linux-gnu"}
+target.generic<llvm_cpu> @matmul_x86_target {target_cpu = "x86-64-v3", target_features = "+avx2,+fma", target_triple = "x86_64-pc-linux-gnu"}
 
 target.artifact @matmul_x86_object target(@matmul_x86_target) {abi = object_file, artifact_format = elf}
 
@@ -6,7 +6,7 @@ func.def target(@matmul_x86_target) abi(object_function) export("matmul", {artif
   func.return
 }
 
-target.profile @matmul_gfx1100_target preset("amdgpu-gfx11") {contract_feature_bits = 1, contract_set_key = "amdgpu.gfx11", target_features = "+wavefrontsize32"}
+target.generic<reference> @matmul_gfx1100_target {abi = hal_kernel, contract_feature_bits = 1, target_features = "+wavefrontsize32"}
 
 target.artifact @matmul_gfx1100_hsaco target(@matmul_gfx1100_target) {abi = hal_executable, artifact_format = elf}
 

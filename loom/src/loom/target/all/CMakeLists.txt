@@ -19,6 +19,7 @@ loom_cc_library(
     "low_registry.c"
   DEPS
     iree::base
+    iree::base::threading
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::lower
     loom::src::loom::target::arch::amdgpu::gfx11_descriptors

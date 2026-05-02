@@ -64,16 +64,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "preset_registry",
-    srcs = ["preset_registry.c"],
-    hdrs = ["preset_registry.h"],
-    deps = [
-        ":types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "function_contract",
     srcs = ["function_contract.c"],
     hdrs = ["function_contract.h"],
@@ -132,7 +122,6 @@ loom_cc_library(
     srcs = ["low_descriptor_registry.c"],
     hdrs = ["low_descriptor_registry.h"],
     deps = [
-        ":preset_registry",
         ":types",
         "//loom/src/loom/codegen/low:descriptors",
         "//runtime/src/iree/base",
@@ -262,7 +251,6 @@ loom_cc_test(
     srcs = ["function_contract_test.cc"],
     deps = [
         ":function_contract",
-        ":preset_registry",
         ":types",
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/error:error_defs",
@@ -271,6 +259,7 @@ loom_cc_test(
         "//loom/src/loom/ops:func_symbol_facts",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/target",
+        "//loom/src/loom/ops/test",
         "//loom/src/loom/testing:diagnostic_matchers",
         "//loom/src/loom/testing:module_ptr",
         "//runtime/src/iree/base/internal:arena",
@@ -284,7 +273,6 @@ loom_cc_test(
     srcs = ["artifact_plan_test.cc"],
     deps = [
         ":artifact_plan",
-        ":preset_registry",
         ":types",
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/error:error_defs",
@@ -292,6 +280,7 @@ loom_cc_test(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/target",
+        "//loom/src/loom/ops/test",
         "//loom/src/loom/testing:diagnostic_matchers",
         "//loom/src/loom/testing:module_ptr",
         "//loom/src/loom/util:call_graph",
@@ -317,16 +306,6 @@ loom_cc_test(
     deps = [
         ":compile_report_format",
         "//loom/src/loom/ir",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "preset_registry_test",
-    srcs = ["preset_registry_test.cc"],
-    deps = [
-        ":preset_registry",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

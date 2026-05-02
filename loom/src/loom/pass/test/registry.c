@@ -10,23 +10,23 @@
 
 #include "loom/ops/op_defs.h"
 
-static bool loom_test_pass_target_profile_satisfies_requirement(
+static bool loom_test_pass_target_record_satisfies_requirement(
     const loom_pass_environment_capability_t* capability,
     iree_string_view_t requirement) {
   (void)capability;
-  return iree_string_view_equal(requirement, IREE_SV("target.profile"));
+  return iree_string_view_equal(requirement, IREE_SV("target.record"));
 }
 
 const loom_pass_environment_capability_type_t
-    loom_test_pass_target_profile_capability_type = {
-        .name = IREE_SVL("test.target-profile"),
+    loom_test_pass_target_record_capability_type = {
+        .name = IREE_SVL("test.target-record"),
         .satisfies_requirement =
-            loom_test_pass_target_profile_satisfies_requirement,
+            loom_test_pass_target_record_satisfies_requirement,
 };
 
 const loom_pass_environment_capability_t
-    loom_test_pass_target_profile_capability = {
-        .type = &loom_test_pass_target_profile_capability_type,
+    loom_test_pass_target_record_capability = {
+        .type = &loom_test_pass_target_record_capability_type,
 };
 
 const loom_pass_environment_capability_type_t
@@ -263,9 +263,9 @@ static const loom_pass_option_schema_t kTestRequiredSchema[] = {
 
 static const loom_pass_requirement_def_t kTestRequiresTargetRequirements[] = {
     {
-        .capability_type = &loom_test_pass_target_profile_capability_type,
-        .key = IREE_SVL("target.profile"),
-        .description = IREE_SVL("Synthetic target profile availability."),
+        .capability_type = &loom_test_pass_target_record_capability_type,
+        .key = IREE_SVL("target.record"),
+        .description = IREE_SVL("Synthetic target record availability."),
     },
 };
 

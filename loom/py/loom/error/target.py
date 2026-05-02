@@ -416,22 +416,22 @@ ERR_TARGET_022 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_023: Target pipeline entry has no target profile.
+# ERR_TARGET_023: Target pipeline entry has no target record.
 ERR_TARGET_023 = ErrorDef(
     domain=ErrorDomain.TARGET,
     code=23,
     severity=Severity.ERROR,
-    summary="Target pipeline entry has no target profile.",
+    summary="Target pipeline entry has no target record.",
     message=(
         "target pipeline '{pipeline_name}' entry '@{function_name}' must "
-        "declare a target profile"
+        "declare a target record"
     ),
     params=(
         ErrorParam("pipeline_name", ParamKind.STRING),
         ErrorParam("function_name", ParamKind.STRING),
     ),
     fix_hint=(
-        "Attach a target profile compatible with pipeline '{pipeline_name}' "
+        "Attach a target record compatible with pipeline '{pipeline_name}' "
         "to '@{function_name}'"
     ),
 )
@@ -460,7 +460,7 @@ ERR_TARGET_024 = ErrorDef(
         ErrorParam("target_triple", ParamKind.STRING),
     ),
     fix_hint=(
-        "Select a target profile/export whose artifact kind is consumed by "
+        "Select a target record/export whose artifact kind is consumed by "
         "pipeline '{pipeline_name}'"
     ),
 )
@@ -472,12 +472,12 @@ ERR_TARGET_025 = ErrorDef(
     severity=Severity.ERROR,
     summary="Target pipeline found no compatible entry.",
     message=(
-        "module contains no function with a target profile compatible with "
+        "module contains no function with a target record compatible with "
         "target pipeline '{pipeline_name}'"
     ),
     params=(ErrorParam("pipeline_name", ParamKind.STRING),),
     fix_hint=(
-        "Select an entry symbol explicitly or add a target profile compatible "
+        "Select an entry symbol explicitly or add a target record compatible "
         "with pipeline '{pipeline_name}'"
     ),
 )
@@ -699,15 +699,15 @@ ERR_TARGET_037 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_038: Function target is not a target profile.
+# ERR_TARGET_038: Function target is not a target record.
 ERR_TARGET_038 = ErrorDef(
     domain=ErrorDomain.TARGET,
     code=38,
     severity=Severity.ERROR,
-    summary="Function target is not a target profile.",
+    summary="Function target is not a target record.",
     message=(
         "function '@{function_name}' target '@{target_name}' must resolve to "
-        "target.profile facts"
+        "target-record facts"
     ),
     params=(
         ErrorParam("function_name", ParamKind.STRING),
@@ -750,7 +750,7 @@ ERR_TARGET_041 = ErrorDef(
     severity=Severity.ERROR,
     summary="Function target contract has no concrete ABI.",
     message=(
-        "function '@{function_name}' target profile '@{target_name}' must "
+        "function '@{function_name}' target record '@{target_name}' must "
         "resolve a concrete ABI"
     ),
     params=(
@@ -766,7 +766,7 @@ ERR_TARGET_042 = ErrorDef(
     severity=Severity.ERROR,
     summary="Kernel entry target contract is not a HAL kernel ABI.",
     message=(
-        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "kernel entry '@{function_name}' target record '@{target_name}' "
         "must resolve a HAL kernel ABI"
     ),
     params=(
@@ -782,7 +782,7 @@ ERR_TARGET_043 = ErrorDef(
     severity=Severity.ERROR,
     summary="HAL kernel binding alignment is zero.",
     message=(
-        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "kernel entry '@{function_name}' target record '@{target_name}' "
         "must resolve a non-zero HAL binding alignment"
     ),
     params=(
@@ -798,7 +798,7 @@ ERR_TARGET_044 = ErrorDef(
     severity=Severity.ERROR,
     summary="HAL kernel workgroup size is partial.",
     message=(
-        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "kernel entry '@{function_name}' target record '@{target_name}' "
         "requires workgroup size dimensions to be all zero or all non-zero"
     ),
     params=(
@@ -814,7 +814,7 @@ ERR_TARGET_045 = ErrorDef(
     severity=Severity.ERROR,
     summary="HAL kernel flat workgroup range is partial.",
     message=(
-        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "kernel entry '@{function_name}' target record '@{target_name}' "
         "requires flat workgroup size min and max to be both zero or both "
         "non-zero"
     ),
@@ -831,7 +831,7 @@ ERR_TARGET_046 = ErrorDef(
     severity=Severity.ERROR,
     summary="HAL kernel flat workgroup range is unordered.",
     message=(
-        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "kernel entry '@{function_name}' target record '@{target_name}' "
         "flat workgroup size min {minimum} exceeds max {maximum}"
     ),
     params=(
@@ -849,7 +849,7 @@ ERR_TARGET_047 = ErrorDef(
     severity=Severity.ERROR,
     summary="HAL kernel flat workgroup max exceeds target limit.",
     message=(
-        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "kernel entry '@{function_name}' target record '@{target_name}' "
         "flat workgroup max {maximum} exceeds target limit {limit}"
     ),
     params=(
@@ -867,7 +867,7 @@ ERR_TARGET_048 = ErrorDef(
     severity=Severity.ERROR,
     summary="HAL kernel required workgroup dimension exceeds target limit.",
     message=(
-        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "kernel entry '@{function_name}' target record '@{target_name}' "
         "required workgroup {axis} size {size} exceeds target limit {limit}"
     ),
     params=(
@@ -886,7 +886,7 @@ ERR_TARGET_049 = ErrorDef(
     severity=Severity.ERROR,
     summary="HAL kernel required flat workgroup size overflows.",
     message=(
-        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "kernel entry '@{function_name}' target record '@{target_name}' "
         "required flat workgroup size overflows uint64"
     ),
     params=(
@@ -902,7 +902,7 @@ ERR_TARGET_050 = ErrorDef(
     severity=Severity.ERROR,
     summary="HAL kernel required flat workgroup size exceeds target limit.",
     message=(
-        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "kernel entry '@{function_name}' target record '@{target_name}' "
         "required flat workgroup size {size} exceeds target limit {limit}"
     ),
     params=(
@@ -920,7 +920,7 @@ ERR_TARGET_051 = ErrorDef(
     severity=Severity.ERROR,
     summary="HAL kernel required flat workgroup size is outside range.",
     message=(
-        "kernel entry '@{function_name}' target profile '@{target_name}' "
+        "kernel entry '@{function_name}' target record '@{target_name}' "
         "required flat workgroup size {size} is outside range "
         "[{minimum}, {maximum}]"
     ),
@@ -945,13 +945,13 @@ ERR_TARGET_052 = ErrorDef(
     params=(ErrorParam("pipeline_name", ParamKind.STRING),),
 )
 
-# ERR_TARGET_053: Function has no target profile.
+# ERR_TARGET_053: Function has no target record.
 ERR_TARGET_053 = ErrorDef(
     domain=ErrorDomain.TARGET,
     code=53,
     severity=Severity.ERROR,
-    summary="Function has no target profile.",
-    message="function '@{function_name}' must declare a target profile",
+    summary="Function has no target record.",
+    message="function '@{function_name}' must declare a target record",
     params=(ErrorParam("function_name", ParamKind.STRING),),
 )
 

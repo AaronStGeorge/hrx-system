@@ -66,19 +66,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    preset_registry
-  HDRS
-    "preset_registry.h"
-  SRCS
-    "preset_registry.c"
-  DEPS
-    ::types
-    iree::base
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     function_contract
   HDRS
     "function_contract.h"
@@ -151,7 +138,6 @@ loom_cc_library(
   SRCS
     "low_descriptor_registry.c"
   DEPS
-    ::preset_registry
     ::types
     iree::base
     loom::src::loom::codegen::low::descriptors
@@ -302,7 +288,6 @@ loom_cc_test(
     "function_contract_test.cc"
   DEPS
     ::function_contract
-    ::preset_registry
     ::types
     iree::base::internal::arena
     loom::src::loom::analysis::symbol_facts
@@ -312,6 +297,7 @@ loom_cc_test(
     loom::src::loom::ops::func_symbol_facts
     loom::src::loom::ops::low
     loom::src::loom::ops::target
+    loom::src::loom::ops::test
     loom::src::loom::testing::diagnostic_matchers
     loom::src::loom::testing::module_ptr
     iree::testing::gtest
@@ -325,7 +311,6 @@ loom_cc_test(
     "artifact_plan_test.cc"
   DEPS
     ::artifact_plan
-    ::preset_registry
     ::types
     iree::base::internal::arena
     loom::src::loom::analysis::symbol_facts
@@ -334,6 +319,7 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::func
     loom::src::loom::ops::target
+    loom::src::loom::ops::test
     loom::src::loom::testing::diagnostic_matchers
     loom::src::loom::testing::module_ptr
     loom::src::loom::util::call_graph
@@ -360,17 +346,6 @@ loom_cc_test(
   DEPS
     ::compile_report_format
     loom::src::loom::ir
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    preset_registry_test
-  SRCS
-    "preset_registry_test.cc"
-  DEPS
-    ::preset_registry
     iree::testing::gtest
     iree::testing::gtest_main
 )

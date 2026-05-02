@@ -1355,7 +1355,7 @@ class TestOp:
 
     def test_effective_phase_uses_dialect_default(self) -> None:
         op = Op(
-            "target.profile",
+            "target.generic",
             group=Dialect("target", default_phase=OpPhase.MODULE_METADATA),
         )
 

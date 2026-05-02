@@ -1,6 +1,6 @@
 // RUN: emit low-schedule-json @sched
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @sched(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) asm<test.low.core> {
   %a = test.call.i32 %lhs {callee = 0}
@@ -16,7 +16,7 @@ low.func.def target(@test_target) @sched(%lhs: reg<test.i32>, %rhs: reg<test.i32
 
 // RUN: emit low-schedule-json @resource_mix
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @resource_mix(%ptr: reg<test.ptr>, %lhs: reg<test.i32 x4>, %rhs: reg<test.i32 x4>, %arg: reg<test.i32>) -> (reg<test.i32 x4>) {
   %loaded = low.op<test.load.v4i32>(%ptr) : (reg<test.ptr>) -> reg<test.i32 x4>
@@ -36,7 +36,7 @@ low.func.def target(@test_target) @resource_mix(%ptr: reg<test.ptr>, %lhs: reg<t
 
 // RUN: emit low-schedule-json @branch_sched
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @branch_sched(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
   %cond = low.op<test.cmp.eq.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
@@ -60,7 +60,7 @@ low.func.def target(@test_target) @branch_sched(%lhs: reg<test.i32>, %rhs: reg<t
 
 // RUN: emit low-schedule-json @pressure diagnostics=pressure
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @pressure(%lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys>) {
   // REMARK@+1: BACKEND/003 "test_target" "test.phys pressure is 2" "against budget 32" "contributors: [lhs, rhs]"
@@ -75,7 +75,7 @@ low.func.def target(@test_target) @pressure(%lhs: reg<test.phys>, %rhs: reg<test
 
 // RUN: emit low-schedule-json @resource_diag diagnostics=resources
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 // REMARK@+1: BACKEND/013 "test_target" "resource 'test.scalar' is a schedule bottleneck" "3 estimated cycle(s)" "3 use(s)"
 low.func.def target(@test_target) @resource_diag(%a: reg<test.i32>, %b: reg<test.i32>, %c: reg<test.i32>) -> (reg<test.i32>) {
@@ -92,7 +92,7 @@ low.func.def target(@test_target) @resource_diag(%a: reg<test.i32>, %b: reg<test
 
 // RUN: emit low-schedule-json @model_diag diagnostics=model
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @model_diag(%ptr: reg<test.ptr>, %arg: reg<test.i32>) -> (reg<test.i32 x4>) {
   // REMARK@+1: BACKEND/016 "schedule class 'test.load'" "fallback model quality" "2 scheduled use(s)"
@@ -114,7 +114,7 @@ low.func.def target(@test_target) @model_diag(%ptr: reg<test.ptr>, %arg: reg<tes
 
 // RUN: emit low-schedule-json @hazard_diag diagnostics=hazards
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @hazard_diag(%ptr: reg<test.ptr>) -> (reg<test.i32 x4>) {
   %a = low.op<test.load.v4i32>(%ptr) : (reg<test.ptr>) -> reg<test.i32 x4>
@@ -131,7 +131,7 @@ low.func.def target(@test_target) @hazard_diag(%ptr: reg<test.ptr>) -> (reg<test
 
 // RUN: emit low-schedule-json @pressure_candidates strategy=pressure diagnostics=candidates
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @pressure_candidates(%a: reg<test.i32>, %b: reg<test.i32>, %c: reg<test.i32>, %e: reg<test.i32>) -> (reg<test.i32>) {
   %hold = low.op<test.add.i32>(%a, %b) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
@@ -152,7 +152,7 @@ low.func.def target(@test_target) @pressure_candidates(%a: reg<test.i32>, %b: re
 
 // RUN: emit low-schedule-json @pressure_order strategy=pressure
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @pressure_order(%a: reg<test.i32>, %b: reg<test.i32>, %c: reg<test.i32>, %e: reg<test.i32>) -> (reg<test.i32>) {
   %hold = low.op<test.add.i32>(%a, %b) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
@@ -171,7 +171,7 @@ low.func.def target(@test_target) @pressure_order(%a: reg<test.i32>, %b: reg<tes
 
 // RUN: emit low-schedule-json @latency_hiding_order strategy=latency-hiding
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @latency_hiding_order(%ptr: reg<test.ptr>, %lhs: reg<test.i32 x4>, %rhs: reg<test.i32 x4>) -> (reg<test.i32 x4>) {
   %loaded0 = low.op<test.load.v4i32>(%ptr) : (reg<test.ptr>) -> reg<test.i32 x4>
@@ -189,7 +189,7 @@ low.func.def target(@test_target) @latency_hiding_order(%ptr: reg<test.ptr>, %lh
 
 // RUN: emit low-schedule-json @resource_stall_hides_load_hazard strategy=resource-stall
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @resource_stall_hides_load_hazard(%ptr: reg<test.ptr>, %lhs: reg<test.i32 x4>, %rhs: reg<test.i32 x4>) -> (reg<test.i32 x4>) asm<test.low.core> {
   %loaded0 = test.load.v4i32 %ptr
@@ -207,7 +207,7 @@ low.func.def target(@test_target) @resource_stall_hides_load_hazard(%ptr: reg<te
 
 // RUN: emit low-schedule-json @pressure_cliff_avoids_register_file_drop strategy=pressure cliff=test.i32:17:16:15
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @pressure_cliff_avoids_register_file_drop(%p0: reg<test.ptr>, %p1: reg<test.ptr>, %out_ptr: reg<test.ptr>, %a0: reg<test.i32 x4>, %a1: reg<test.i32 x4>, %a2: reg<test.i32 x4>, %a3: reg<test.i32 x4>) -> (reg<test.i32 x4>) asm<test.low.core> {
   %i0 = test.load.v4i32 %p0
@@ -227,7 +227,7 @@ low.func.def target(@test_target) @pressure_cliff_avoids_register_file_drop(%p0:
 
 // RUN: emit low-schedule-json @sparse_pressure strategy=pressure
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @padding(%value: reg<test.i32>) -> (reg<test.i32>) asm<test.low.core> {
   %a = test.add.i32 %value, %value

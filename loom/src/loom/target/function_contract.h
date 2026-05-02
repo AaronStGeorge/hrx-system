@@ -8,8 +8,8 @@
 //
 // Generic func symbol facts carry only function-local structure: target symbol,
 // ABI/export syntax, kernel launch structure, and signature/import facts. This
-// target layer resolves the referenced target.profile facts and overlays the
-// func-like-owned contract onto the selected profile bundle for lowering,
+// target layer resolves the referenced target-record facts and overlays the
+// func-like-owned contract onto the selected target bundle for lowering,
 // packaging, and execution.
 
 #ifndef LOOM_TARGET_FUNCTION_CONTRACT_H_
@@ -26,11 +26,11 @@
 extern "C" {
 #endif
 
-// Resolves |func_facts|'s target profile and materializes the effective target
+// Resolves |func_facts|'s target record and materializes the effective target
 // bundle selected by the func-like symbol.
 //
-// The target snapshot and config come from target.profile facts. The export
-// plan starts from the target profile defaults and is then overlaid with
+// The target snapshot and config come from target-record facts. The export
+// plan starts from the target-record defaults and is then overlaid with
 // function-owned ABI/export attrs or kernel-owned launch/export attrs.
 // |out_bundle_storage| owns the copied payload fields and its embedded bundle
 // points at those copies. Returns status only for infrastructure failures.

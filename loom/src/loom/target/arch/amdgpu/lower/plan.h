@@ -7,7 +7,7 @@
 // AMDGPU source-to-low lowering plans selected before emission.
 //
 // These structs are immutable emission contracts. The planner computes them
-// once from source IR, facts, target profile, and descriptor availability; the
+// once from source IR, facts, target record, and descriptor availability; the
 // emitter consumes them without re-running legality or descriptor selection.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_PLAN_H_

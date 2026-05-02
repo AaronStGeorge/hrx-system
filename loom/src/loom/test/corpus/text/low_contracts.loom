@@ -14,21 +14,21 @@ low.func.def target(@vm_target) @vm_slot_roundtrip(%input: reg<vm.i32>) -> (reg<
   low.return %reload : reg<vm.i32>
 }
 
-target.profile @low_vm_resource_target preset("iree-vm") {contract_set_key = "test.low.core"}
+test.target<low_core> @low_vm_resource_target {abi = vm_module_function}
 
 low.func.def target(@low_vm_resource_target) abi(vm_module_function) export("low_vm_resource") @low_vm_resource() -> (reg<vm.i32>) {
   %state = low.resource<vm_state> {index = 0, semantic_type = vm.state} : reg<vm.i32>
   low.return %state : reg<vm.i32>
 }
 
-target.profile @low_native_resource_target preset("test-low") {contract_set_key = "test.low.core", target_triple = "x86_64-unknown-linux-gnu"}
+test.target<low_core> @low_native_resource_target {target_triple = "x86_64-unknown-linux-gnu"}
 
 low.func.def target(@low_native_resource_target) abi(object_function) export("low_native_resource", {linkage = "dso_local"}) @low_native_resource() -> (reg<native.ptr>) {
   %ptr = low.resource<native_pointer> {index = 0, semantic_type = buffer} : reg<native.ptr>
   low.return %ptr : reg<native.ptr>
 }
 
-target.profile @low_hal_resource_target preset("amdgpu-gfx11") {contract_set_key = "test.low.core"}
+test.target<low_core> @low_hal_resource_target {abi = hal_kernel}
 
 low.kernel.def target(@low_hal_resource_target) export("low_hal_resource") workgroup_size(1, 1, 1) @low_hal_resource() {
   %binding = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>

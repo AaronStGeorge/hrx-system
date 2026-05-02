@@ -19,7 +19,6 @@ from loom.dialect.target.defs import (
     target_artifact,
     target_generic,
     target_ops,
-    target_profile,
     target_record_attrs,
 )
 
@@ -36,6 +35,5 @@ __all__ = [
     "target_artifact",
     "target_generic",
     "target_ops",
-    "target_profile",
     "target_record_attrs",
 ]

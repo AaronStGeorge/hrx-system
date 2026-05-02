@@ -20,7 +20,7 @@ extern "C" {
 //
 // The generic request supplies target-independent algebra, numeric, fragment,
 // and policy facts. The caller supplies the concrete x86 feature bits from the
-// selected target profile.
+// selected target record.
 bool loom_x86_packed_dot_match_request_from_contract(
     const loom_contract_request_t* contract_request,
     loom_x86_packed_dot_feature_bits_t feature_bits,

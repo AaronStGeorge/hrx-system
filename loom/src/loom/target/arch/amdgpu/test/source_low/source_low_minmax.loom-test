@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/numeric_minmax.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-func.def @scalar_f32_minnum_maxnum(%lhs: f32, %rhs: f32) -> (f32) {
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_f32_minnum_maxnum(%lhs: f32, %rhs: f32) -> (f32) {
   %min = scalar.minnumf %lhs, %rhs : f32
   %max = scalar.maxnumf %lhs, %rhs : f32
   %sum = scalar.addf %min, %max : f32
@@ -18,7 +19,9 @@ low.func.def target(@target) abi(hal_kernel) @scalar_f32_minnum_maxnum(%lhs: reg
 
 // ====
 
-func.def @vector_f32_minnum_maxnum(%lhs: vector<2xf32>, %rhs: vector<2xf32>) -> (vector<2xf32>) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @vector_f32_minnum_maxnum(%lhs: vector<2xf32>, %rhs: vector<2xf32>) -> (vector<2xf32>) {
   %min = vector.minnumf %lhs, %rhs : vector<2xf32>
   %max = vector.maxnumf %lhs, %rhs : vector<2xf32>
   %sum = vector.addf %min, %max : vector<2xf32>
@@ -53,7 +56,9 @@ low.func.def target(@target) abi(hal_kernel) @vector_f32_minnum_maxnum(%lhs: reg
 
 // ====
 
-func.def @f32_reduce_minnum_maxnum(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @f32_reduce_minnum_maxnum(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<4xf32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<2xf32, #dense>

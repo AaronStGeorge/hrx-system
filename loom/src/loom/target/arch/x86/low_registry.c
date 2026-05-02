@@ -152,16 +152,9 @@ static const loom_low_descriptor_set_provider_t kLowDescriptorSetProviders[] = {
     loom_x86_avx512_packed_dot_core_descriptor_set,
 };
 
-static const loom_target_bundle_t* const kLowTargetBundles[] = {
-    &loom_x86_low_target_bundle_avx512_core,
-    &loom_x86_low_target_bundle_packed_dot_core,
-    &loom_x86_low_target_bundle_avx512_packed_dot_core,
-};
-
 void loom_x86_low_descriptor_registry_initialize(
     loom_target_low_descriptor_registry_t* out_registry) {
   loom_target_low_descriptor_registry_initialize_from_tables(
       out_registry, kLowDescriptorSetProviders,
-      IREE_ARRAYSIZE(kLowDescriptorSetProviders), kLowTargetBundles,
-      IREE_ARRAYSIZE(kLowTargetBundles));
+      IREE_ARRAYSIZE(kLowDescriptorSetProviders));
 }

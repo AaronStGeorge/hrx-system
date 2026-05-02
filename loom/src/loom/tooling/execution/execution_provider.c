@@ -75,8 +75,6 @@ loom_run_execution_environment_initialize_low_descriptor_registry(
   loom_run_execution_environment_t* environment =
       (loom_run_execution_environment_t*)user_data;
   environment->descriptor_set_provider_count = 0;
-  environment->target_bundle_count = 0;
-
   const loom_run_execution_provider_set_t* provider_set =
       environment->provider_set;
   for (iree_host_size_t i = 0; i < provider_set->provider_count; ++i) {
@@ -89,16 +87,12 @@ loom_run_execution_environment_initialize_low_descriptor_registry(
     IREE_RETURN_IF_ERROR(loom_target_low_descriptor_registry_append_to_tables(
         &provider_registry, environment->descriptor_set_providers,
         IREE_ARRAYSIZE(environment->descriptor_set_providers),
-        &environment->descriptor_set_provider_count,
-        environment->target_bundles,
-        IREE_ARRAYSIZE(environment->target_bundles),
-        &environment->target_bundle_count));
+        &environment->descriptor_set_provider_count));
   }
 
   loom_target_low_descriptor_registry_initialize_from_tables(
       out_registry, environment->descriptor_set_providers,
-      environment->descriptor_set_provider_count, environment->target_bundles,
-      environment->target_bundle_count);
+      environment->descriptor_set_provider_count);
   return iree_ok_status();
 }
 

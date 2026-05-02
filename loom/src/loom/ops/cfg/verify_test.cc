@@ -35,8 +35,10 @@ class CfgVerifyTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
-    RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
-    RegisterDialect(LOOM_DIALECT_CFG, loom_cfg_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables,
+                    loom_func_dialect_op_semantics);
+    RegisterDialect(LOOM_DIALECT_CFG, loom_cfg_dialect_vtables,
+                    loom_cfg_dialect_op_semantics);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
   }
 
@@ -47,13 +49,19 @@ class CfgVerifyTest : public ::testing::Test {
 
   using DialectVtablesFn =
       const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+  using DialectSemanticsFn = const loom_op_semantics_t* (*)(iree_host_size_t*);
 
-  void RegisterDialect(uint8_t dialect_id,
-                       DialectVtablesFn dialect_vtables_fn) {
+  void RegisterDialect(uint8_t dialect_id, DialectVtablesFn dialect_vtables_fn,
+                       DialectSemanticsFn dialect_semantics_fn) {
     iree_host_size_t count = 0;
     const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
     IREE_ASSERT_OK(loom_context_register_dialect(&context_, dialect_id, vtables,
                                                  (uint16_t)count));
+    iree_host_size_t semantics_count = 0;
+    const loom_op_semantics_t* semantics =
+        dialect_semantics_fn(&semantics_count);
+    IREE_ASSERT_OK(loom_context_register_dialect_semantics(
+        &context_, dialect_id, semantics, (uint16_t)semantics_count));
   }
 
   loom_verify_result_t VerifySource(const char* source,
@@ -187,25 +195,6 @@ TEST_F(CfgVerifyTest, ConditionalBranchRequiresArgumentFreeDestinations) {
   ExpectU32Param(*diagnostic, 1, 1);
   ExpectU32Param(*diagnostic, 2, 0);
   ExpectU32Param(*diagnostic, 3, 1);
-}
-
-TEST_F(CfgVerifyTest, CfgRegionRequiresExplicitTerminators) {
-  DiagnosticCapture capture;
-  VerifySource(
-      "func.def @missing_terminator(%condition: i1) {\n"
-      "  cfg.cond_br %condition, ^then, ^else : i1\n"
-      "^then:\n"
-      "  func.return\n"
-      "^else:\n"
-      "}\n",
-      &capture);
-
-  const CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 5));
-  ASSERT_NE(diagnostic, nullptr);
-  ExpectError(*diagnostic,
-              loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 5),
-              LOOM_EMITTER_VERIFIER);
 }
 
 }  // namespace

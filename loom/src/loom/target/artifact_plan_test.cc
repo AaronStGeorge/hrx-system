@@ -17,7 +17,7 @@
 #include "loom/ops/func/ops.h"
 #include "loom/ops/target/facts.h"
 #include "loom/ops/target/ops.h"
-#include "loom/target/preset_registry.h"
+#include "loom/ops/test/ops.h"
 #include "loom/target/types.h"
 #include "loom/testing/diagnostic_matchers.h"
 #include "loom/testing/module_ptr.h"
@@ -28,83 +28,18 @@ namespace {
 
 using ModulePtr = ::loom::testing::ModulePtr;
 
-static const loom_target_snapshot_t kPresetSnapshot = {
-    .name = IREE_SVL("test.profile"),
-    .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,
-    .target_triple = IREE_SVL("test-low-unknown"),
-    .data_layout = IREE_SVL(""),
-    .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
-    .target_cpu = IREE_SVL("generic"),
-    .target_features = IREE_SVL("+test"),
-    .default_pointer_bitwidth = 32,
-    .index_bitwidth = 32,
-    .offset_bitwidth = 32,
-    .memory_spaces =
-        {
-            .generic = 0,
-            .global = 0,
-            .workgroup = UINT32_MAX,
-            .constant = 0,
-            .private_memory = UINT32_MAX,
-            .host = UINT32_MAX,
-            .descriptor = UINT32_MAX,
-        },
-};
-
-static const loom_target_export_plan_t kPresetExportPlan = {
-    .name = IREE_SVL("test.profile"),
-    .export_symbol = IREE_SVL(""),
-    .abi_kind = LOOM_TARGET_ABI_OBJECT_FUNCTION,
-    .linkage = LOOM_TARGET_LINKAGE_DEFAULT,
-    .hal_kernel =
-        {
-            .binding_alignment = 0,
-            .required_workgroup_size = {.x = 0, .y = 0, .z = 0},
-            .flat_workgroup_size_min = 0,
-            .flat_workgroup_size_max = 0,
-            .buffer_resource_flags = 0,
-        },
-};
-
-static const loom_target_config_t kPresetConfig = {
-    .name = IREE_SVL("test.profile"),
-    .contract_set_key = IREE_SVL("test.low.core"),
-    .contract_feature_bits = 1,
-};
-
-static const loom_target_bundle_t kPresetBundle = {
-    .name = IREE_SVL("test.profile"),
-    .snapshot = &kPresetSnapshot,
-    .export_plan = &kPresetExportPlan,
-    .config = &kPresetConfig,
-};
-
-static const loom_target_bundle_t* const kPresetBundles[] = {
-    &kPresetBundle,
-};
-
-static const loom_target_preset_registry_t kPresetRegistry = {
-    .target_bundles = kPresetBundles,
-    .target_bundle_count = IREE_ARRAYSIZE(kPresetBundles),
-};
-
 class ArtifactPlanTest : public ::testing::Test {
  protected:
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_TARGET, loom_target_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     iree_arena_initialize(&block_pool_, &analysis_arena_);
-    resources_[0] =
-        loom_target_profile_preset_registry_resource(&kPresetRegistry);
-    const loom_symbol_fact_table_options_t options = {
-        .resources = loom_make_symbol_fact_resource_list(resources_, 1),
-    };
-    loom_symbol_fact_table_initialize_with_options(&fact_table_, &options,
-                                                   &analysis_arena_);
+    loom_symbol_fact_table_initialize(&fact_table_, &analysis_arena_);
   }
 
   void TearDown() override {
@@ -188,14 +123,11 @@ class ArtifactPlanTest : public ::testing::Test {
 
   // Dense symbol fact table under test.
   loom_symbol_fact_table_t fact_table_;
-
-  // Resource storage borrowed by the symbol fact table.
-  loom_symbol_fact_resource_t resources_[1];
 };
 
 TEST_F(ArtifactPlanTest, CollectsExportedEntryAndPrivateClosure) {
   ModulePtr module = ParseModule(R"(
-target.profile @test_target preset("test.profile")
+test.target<low_core> @test_target {contract_feature_bits = 1}
 target.artifact @module target(@test_target)
 
 func.def target(@test_target) abi(object_function) export("entry", {artifact = @module}) @entry() {
@@ -230,7 +162,7 @@ func.def target(@test_target) abi(object_function) @unused() {
 
 TEST_F(ArtifactPlanTest, OrdersEntriesByDenseExportOrdinal) {
   ModulePtr module = ParseModule(R"(
-target.profile @test_target preset("test.profile")
+test.target<low_core> @test_target {contract_feature_bits = 1}
 target.artifact @module target(@test_target)
 
 func.def target(@test_target) abi(object_function) export("second", {artifact = @module, ordinal = 1}) @second() {
@@ -257,7 +189,7 @@ func.def target(@test_target) abi(object_function) export("first", {artifact = @
 
 TEST_F(ArtifactPlanTest, RejectsMixedExportOrdinalPolicy) {
   ModulePtr module = ParseModule(R"(
-target.profile @test_target preset("test.profile")
+test.target<low_core> @test_target {contract_feature_bits = 1}
 target.artifact @module target(@test_target)
 
 func.def target(@test_target) abi(object_function) export("first", {artifact = @module, ordinal = 0}) @first() {
@@ -274,8 +206,8 @@ func.def target(@test_target) abi(object_function) export("second", {artifact = 
 
 TEST_F(ArtifactPlanTest, RejectsEntryTargetMismatchingArtifactTarget) {
   ModulePtr module = ParseModule(R"(
-target.profile @test_target preset("test.profile")
-target.profile @other preset("test.profile")
+test.target<low_core> @test_target {contract_feature_bits = 1}
+test.target<low_core> @other {contract_feature_bits = 1}
 target.artifact @module target(@test_target)
 
 func.def target(@other) abi(object_function) export("entry", {artifact = @module}) @entry() {
@@ -288,7 +220,7 @@ func.def target(@other) abi(object_function) export("entry", {artifact = @module
 
 TEST_F(ArtifactPlanTest, RejectsClosureCrossingIntoAnotherArtifact) {
   ModulePtr module = ParseModule(R"(
-target.profile @test_target preset("test.profile")
+test.target<low_core> @test_target {contract_feature_bits = 1}
 target.artifact @module target(@test_target)
 target.artifact @other_module target(@test_target)
 
@@ -307,7 +239,7 @@ func.def target(@test_target) abi(object_function) export("other", {artifact = @
 
 TEST_F(ArtifactPlanTest, AllowsExternalDeclarationCalls) {
   ModulePtr module = ParseModule(R"(
-target.profile @test_target preset("test.profile")
+test.target<low_core> @test_target {contract_feature_bits = 1}
 target.artifact @module target(@test_target)
 
 func.def target(@test_target) abi(object_function) export("entry", {artifact = @module}) @entry() {
@@ -332,7 +264,7 @@ func.decl import("env") @external()
 
 TEST_F(ArtifactPlanTest, RejectsNonFunctionCallees) {
   ModulePtr module = ParseModule(R"(
-target.profile @test_target preset("test.profile")
+test.target<low_core> @test_target {contract_feature_bits = 1}
 target.artifact @module target(@test_target)
 
 func.def target(@test_target) abi(object_function) export("entry", {artifact = @module}) @entry() {

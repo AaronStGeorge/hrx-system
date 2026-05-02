@@ -6,56 +6,65 @@
 
 #include "loom/target/all/low_registry.h"
 
-#include "loom/target/arch/amdgpu/gfx11_descriptors.h"
-#include "loom/target/arch/amdgpu/gfx1250_descriptors.h"
-#include "loom/target/arch/amdgpu/gfx12_descriptors.h"
-#include "loom/target/arch/amdgpu/gfx950_descriptors.h"
+#include "iree/base/threading/call_once.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/lower.h"
-#include "loom/target/arch/wasm/descriptors.h"
 #include "loom/target/arch/wasm/low_registry.h"
-#include "loom/target/arch/x86/avx512_descriptors.h"
 #include "loom/target/arch/x86/low_registry.h"
 #include "loom/target/arch/x86/lower.h"
-#include "loom/target/arch/x86/packed_dot_descriptors.h"
-#include "loom/target/emit/ireevm/descriptors.h"
 #include "loom/target/emit/ireevm/low_registry.h"
 #include "loom/target/emit/ireevm/lower.h"
 #include "loom/target/emit/wasm/lower.h"
 
-static const loom_low_descriptor_set_provider_t kLowDescriptorSetProviders[] = {
-    loom_ireevm_core_descriptor_set,
-    loom_wasm_core_simd128_descriptor_set,
-    loom_x86_avx512_core_descriptor_set,
-    loom_x86_packed_dot_core_descriptor_set,
-    loom_amdgpu_gfx950_core_descriptor_set,
-    loom_amdgpu_gfx11_core_descriptor_set,
-    loom_amdgpu_gfx12_core_descriptor_set,
-    loom_amdgpu_gfx1250_core_descriptor_set,
+enum {
+  LOOM_ALL_LOW_DESCRIPTOR_SET_PROVIDER_CAPACITY = 8,
 };
 
-static const loom_target_bundle_t* const kLowTargetBundles[] = {
-    &loom_ireevm_low_target_bundle_core,
-    &loom_wasm_low_target_bundle_core_simd128,
-    &loom_x86_low_target_bundle_avx512_core,
-    &loom_x86_low_target_bundle_packed_dot_core,
-    &loom_amdgpu_low_target_bundle_gfx950_core,
-    &loom_amdgpu_low_target_bundle_gfx11_core,
-    &loom_amdgpu_low_target_bundle_gfx12_core,
-    &loom_amdgpu_low_target_bundle_gfx1250_core,
-};
+typedef struct loom_all_low_registry_tables_t {
+  loom_low_descriptor_set_provider_t
+      descriptor_set_providers[LOOM_ALL_LOW_DESCRIPTOR_SET_PROVIDER_CAPACITY];
+  iree_host_size_t descriptor_set_provider_count;
+} loom_all_low_registry_tables_t;
+
+static loom_all_low_registry_tables_t kLowRegistryTables;
+static iree_once_flag kLowRegistryTablesOnce = IREE_ONCE_FLAG_INIT;
 
 static const loom_target_low_legality_provider_t* const
     kLowLegalityProviders[] = {
         &loom_amdgpu_low_legality_provider_storage,
 };
 
+static void loom_all_low_registry_append(
+    const loom_target_low_descriptor_registry_t* source) {
+  IREE_ASSERT(kLowRegistryTables.descriptor_set_provider_count +
+                  source->descriptor_set_provider_count <=
+              IREE_ARRAYSIZE(kLowRegistryTables.descriptor_set_providers));
+  for (iree_host_size_t i = 0; i < source->descriptor_set_provider_count; ++i) {
+    kLowRegistryTables.descriptor_set_providers
+        [kLowRegistryTables.descriptor_set_provider_count++] =
+        source->descriptor_set_providers[i];
+  }
+}
+
+static void loom_all_low_registry_initialize_tables(void) {
+  loom_target_low_descriptor_registry_t registry = {0};
+  loom_ireevm_low_descriptor_registry_initialize(&registry);
+  loom_all_low_registry_append(&registry);
+  loom_wasm_low_descriptor_registry_initialize(&registry);
+  loom_all_low_registry_append(&registry);
+  loom_x86_low_descriptor_registry_initialize(&registry);
+  loom_all_low_registry_append(&registry);
+  loom_amdgpu_low_descriptor_registry_initialize(&registry);
+  loom_all_low_registry_append(&registry);
+}
+
 void loom_all_low_descriptor_registry_initialize(
     loom_target_low_descriptor_registry_t* out_registry) {
+  iree_call_once(&kLowRegistryTablesOnce,
+                 loom_all_low_registry_initialize_tables);
   loom_target_low_descriptor_registry_initialize_from_tables(
-      out_registry, kLowDescriptorSetProviders,
-      IREE_ARRAYSIZE(kLowDescriptorSetProviders), kLowTargetBundles,
-      IREE_ARRAYSIZE(kLowTargetBundles));
+      out_registry, kLowRegistryTables.descriptor_set_providers,
+      kLowRegistryTables.descriptor_set_provider_count);
 }
 
 void loom_all_low_lower_policy_registry_initialize(

@@ -6,9 +6,9 @@
 
 // Generated source workloads for source-to-low tests and fuzzers.
 //
-// This is target-agnostic test infrastructure: it builds ordinary Loom source
-// functions with a caller-selected target.profile preset, but it does not link
-// or query any concrete target descriptor registry. Consumers choose a target
+// This is synthetic target-low test infrastructure: it builds ordinary Loom
+// source functions targeted to `test.target<low_core>` without linking or
+// querying any concrete target descriptor registry. Consumers choose a target
 // provider separately when they lower or execute the generated module.
 
 #ifndef LOOM_CODEGEN_LOW_TESTING_SOURCE_WORKLOAD_H_
@@ -30,10 +30,8 @@ typedef struct loom_low_source_workload_config_t {
   // Module name assigned to the generated compilation unit. Empty uses a stable
   // default.
   iree_string_view_t module_name;
-  // Symbol name for the generated target.profile. Empty uses a stable default.
+  // Symbol name for the generated target record. Empty uses a stable default.
   iree_string_view_t target_symbol_name;
-  // Preset key written into target.profile. This is required.
-  iree_string_view_t target_preset;
   // Symbol name for the generated source function. Empty uses a stable default.
   iree_string_view_t function_symbol_name;
   // Number of non-structural source ops to emit in the generated function body.
@@ -93,10 +91,10 @@ typedef struct loom_low_source_workload_counts_t {
   uint32_t cfg_branch_count;
 } loom_low_source_workload_counts_t;
 
-// Returns a generated source-to-low workload config using |target_preset|.
+// Returns a generated source-to-low workload config.
 // Scale 1 produces a compact body; larger scales increase only the op count.
 loom_low_source_workload_config_t loom_low_source_workload_config_make(
-    iree_string_view_t target_preset, uint32_t scale);
+    uint32_t scale);
 
 // Registers the exact source and low dialects used by generated source-low
 // workloads. Callers own context initialization and finalization so they can

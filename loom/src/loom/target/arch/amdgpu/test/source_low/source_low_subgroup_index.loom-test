@@ -1,6 +1,7 @@
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_id_x_wave32(%output: buffer) {
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_id_x_wave32(%output: buffer) {
   %subgroup_id = kernel.subgroup.id : index
   %zero = index.constant 0 : offset
   %output_view = buffer.view %output[%zero] : buffer -> view<2xi32, #dense>
@@ -23,7 +24,9 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_id_x_wave32() 
 
 // ====
 
-kernel.def workgroup_size(32, 1, 1) @subgroup_id_single_wave_gfx11(%output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) workgroup_size(32, 1, 1) @subgroup_id_single_wave_gfx11(%output: buffer) {
   %subgroup_id = kernel.subgroup.id : index
   %zero = index.constant 0 : offset
   %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
@@ -45,7 +48,9 @@ low.kernel.def target(@target) workgroup_size(32, 1, 1) @subgroup_id_single_wave
 
 // ====
 
-kernel.def workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wave32(%output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wave32(%output: buffer) {
   %lane_id = kernel.subgroup.lane.id : index
   %zero = index.constant 0 : offset
   %output_view = buffer.view %output[%zero] : buffer -> view<32xi32, #dense>
@@ -76,9 +81,10 @@ low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wav
 }
 
 // ====
-// RUN: emit source-low target-preset=amdgpu-gfx12 output=low
+// RUN: emit source-low output=low
 
-kernel.def workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wave32_gfx12(%output: buffer) {
+amdgpu.target<gfx1200> @target
+kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wave32_gfx12(%output: buffer) {
   %lane_id = kernel.subgroup.lane.id : index
   %zero = index.constant 0 : offset
   %output_view = buffer.view %output[%zero] : buffer -> view<32xi32, #dense>
@@ -109,9 +115,10 @@ low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wav
 }
 
 // ====
-// RUN: emit source-low target-preset=amdgpu-gfx950 output=low
+// RUN: emit source-low output=low
 
-kernel.def workgroup_size(128, 1, 1) @subgroup_id_x_wave64(%output: buffer) {
+amdgpu.target<gfx950> @target
+kernel.def target(@target) workgroup_size(128, 1, 1) @subgroup_id_x_wave64(%output: buffer) {
   %subgroup_id = kernel.subgroup.id : index
   %zero = index.constant 0 : offset
   %output_view = buffer.view %output[%zero] : buffer -> view<2xi32, #dense>
@@ -133,9 +140,10 @@ low.kernel.def target(@target) workgroup_size(128, 1, 1) @subgroup_id_x_wave64()
 }
 
 // ====
-// RUN: emit source-low target-preset=amdgpu-gfx950 output=low
+// RUN: emit source-low output=low
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_lane_id_x_wave64(%output: buffer) {
+amdgpu.target<gfx950> @target
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_lane_id_x_wave64(%output: buffer) {
   %lane_id = kernel.subgroup.lane.id : index
   %zero = index.constant 0 : offset
   %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>

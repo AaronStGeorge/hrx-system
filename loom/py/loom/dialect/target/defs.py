@@ -34,7 +34,7 @@ from loom.dsl import (
 target_ops = Dialect(
     "target",
     dialect_id=0x13,
-    doc="Target planning records: generic targets, profiles, and artifacts.",
+    doc="Target planning records: generic targets and artifacts.",
     default_phase=OpPhase.MODULE_METADATA,
 )
 
@@ -222,6 +222,7 @@ target_generic = Op(
         TargetLikeInterface(
             symbol="symbol",
             selector="kind",
+            bundle_table="loom_target_generic_target_bundles",
         )
     ],
     symbol_def=SymbolDefinition(
@@ -229,9 +230,10 @@ target_generic = Op(
         name="target",
         interfaces=["target", "record"],
         bytecode_kind="LOOM_SYMBOL_RECORD",
+        fact_domain="loom_target_symbol_fact_domain",
     ),
     attrs=target_record_attrs(GenericTargetKind),
-    verify="loom_target_generic_verify",
+    verify="loom_target_record_verify",
     format=[
         TemplateParam("kind"),
         SymbolRef("symbol"),
@@ -240,49 +242,6 @@ target_generic = Op(
     examples=[
         "target.generic<reference> @oracle",
         "target.generic<llvm_cpu> @host {index_bitwidth = 64}",
-    ],
-)
-
-# ============================================================================
-# target.profile
-# ============================================================================
-
-target_profile = Op(
-    "target.profile",
-    group=target_ops,
-    doc=(
-        "Compact reusable target environment profile. Providers own preset "
-        "tables; the optional override dictionary is resolved once into dense "
-        "symbol facts so target queries do not walk attr dictionaries."
-    ),
-    traits=[SYMBOL_DEFINE],
-    symbol_def=SymbolDefinition(
-        field="symbol",
-        name="target profile",
-        interfaces=["target", "record"],
-        bytecode_kind="LOOM_SYMBOL_RECORD",
-        fact_domain="loom_target_profile_symbol_fact_domain",
-    ),
-    attrs=[
-        AttrDef("symbol", "symbol"),
-        AttrDef("preset", ATTR_TYPE_STRING),
-        AttrDef("overrides", "dict", optional=True),
-    ],
-    verify="loom_target_profile_verify",
-    format=[
-        SymbolRef("symbol"),
-        kw("preset"),
-        GLUE,
-        LPAREN,
-        GLUE,
-        Attr("preset"),
-        GLUE,
-        RPAREN,
-        AttrDict("overrides"),
-    ],
-    examples=[
-        'target.profile @vm preset("iree-vm")',
-        'target.profile @gfx1100 preset("amdgpu.gfx1100") {target_cpu = "gfx1100"}',
     ],
 )
 
@@ -324,7 +283,6 @@ target_artifact = Op(
             optional=True,
         ),
     ],
-    verify="loom_target_artifact_verify",
     format=[
         SymbolRef("symbol"),
         kw("target"),
@@ -349,5 +307,4 @@ target_artifact = Op(
 ALL_TARGET_OPS: tuple[Op, ...] = (
     target_artifact,
     target_generic,
-    target_profile,
 )

@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/packed_bitpack.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-func.def @i32x4_to_i8x4_bitpack(%codes: vector<4xi32>) -> (vector<4xi8>) {
+amdgpu.target<gfx1100> @target
+func.def target(@target) @i32x4_to_i8x4_bitpack(%codes: vector<4xi32>) -> (vector<4xi8>) {
   %packed = vector.bitpack<8> %codes : vector<4xi32> -> vector<4xi8>
   func.return %packed : vector<4xi8>
 }

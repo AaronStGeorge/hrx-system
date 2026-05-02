@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_prefetch.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx12 output=low
+// RUN: emit source-low output=low
 
-func.def @prefetch_static(%input: buffer) {
+amdgpu.target<gfx1200> @target
+func.def target(@target) @prefetch_static(%input: buffer) {
   %base = index.constant 16 : offset
   %input_view = buffer.view %input[%base] : buffer -> view<64xi32, #dense>
   view.prefetch %input_view[4] {intent = read, locality = l1} : view<64xi32, #dense>
@@ -18,7 +19,9 @@ low.func.def target(@target) abi(hal_kernel) @prefetch_static() asm<amdgpu.gfx12
 
 // ====
 
-kernel.def @prefetch_workgroup_id(%input: buffer) {
+amdgpu.target<gfx1200> @target
+
+kernel.def target(@target) @prefetch_workgroup_id(%input: buffer) {
   %gid = kernel.workgroup.id<x> : index
   %bounded_gid = index.assume %gid [range(%gid, 0, 1024)] : index
   %zero = index.constant 0 : offset
@@ -39,7 +42,9 @@ low.kernel.def target(@target) @prefetch_workgroup_id() asm<amdgpu.gfx12.core> {
 
 // ====
 
-kernel.def workgroup_size(8, 4, 1) @prefetch_fixed_query_offset(%input: buffer) {
+amdgpu.target<gfx1200> @target
+
+kernel.def target(@target) workgroup_size(8, 4, 1) @prefetch_fixed_query_offset(%input: buffer) {
   %workgroup_size_x = kernel.workgroup.size<x> : index
   %workgroup_size_y = kernel.workgroup.size<y> : index
   %subgroup_size = kernel.subgroup.size : index

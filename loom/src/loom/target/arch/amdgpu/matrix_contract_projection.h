@@ -20,7 +20,7 @@ extern "C" {
 //
 // The generic request supplies target-independent algebra, numeric, fragment,
 // capability, and policy facts. The caller supplies processor feature bits and
-// selected wave size from the AMDGPU target profile.
+// selected wave size from the AMDGPU target record.
 bool loom_amdgpu_matrix_contract_match_request_from_contract(
     const loom_contract_request_t* contract_request,
     loom_amdgpu_matrix_feature_bits_t feature_bits, uint32_t wave_size,

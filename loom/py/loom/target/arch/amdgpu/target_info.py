@@ -43,7 +43,6 @@ AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1 = "gfx950_nt_sc0_sc
 class AmdgpuDescriptorSetInfo:
     generator_target: str
     key: str
-    low_preset_key: str
     isa_xml_key: str
     isa_architecture_name: str
     isa_architecture_id: int
@@ -58,7 +57,6 @@ class AmdgpuDescriptorSetInfo:
 class AmdgpuProcessorInfo:
     target_cpu: str
     descriptor_set_key: str
-    low_preset_key: str
     elf_machine_flags: int
     elf_feature_flags: int
     default_wavefront_size: int
@@ -89,7 +87,6 @@ def gfx11_processor_info(
     return AmdgpuProcessorInfo(
         target_cpu=target_cpu,
         descriptor_set_key="amdgpu.gfx11.core",
-        low_preset_key="amdgpu-gfx11",
         elf_machine_flags=elf_machine_flags,
         elf_feature_flags=0,
         default_wavefront_size=32,
@@ -108,7 +105,6 @@ def gfx1170_processor_info() -> AmdgpuProcessorInfo:
     return AmdgpuProcessorInfo(
         target_cpu="gfx1170",
         descriptor_set_key="",
-        low_preset_key="",
         elf_machine_flags=0x05D,
         elf_feature_flags=0,
         default_wavefront_size=32,
@@ -122,7 +118,6 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
     AmdgpuDescriptorSetInfo(
         generator_target="gfx1250",
         key="amdgpu.gfx1250.core",
-        low_preset_key="amdgpu-gfx1250",
         isa_xml_key="rdna4",
         isa_architecture_name="AMD RDNA 4",
         isa_architecture_id=10,
@@ -132,7 +127,6 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
     AmdgpuDescriptorSetInfo(
         generator_target="gfx11",
         key="amdgpu.gfx11.core",
-        low_preset_key="amdgpu-gfx11",
         isa_xml_key="rdna3",
         isa_architecture_name="AMD RDNA 3",
         isa_architecture_id=8,
@@ -142,7 +136,6 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
     AmdgpuDescriptorSetInfo(
         generator_target="gfx12",
         key="amdgpu.gfx12.core",
-        low_preset_key="amdgpu-gfx12",
         isa_xml_key="rdna4",
         isa_architecture_name="AMD RDNA 4",
         isa_architecture_id=10,
@@ -152,7 +145,6 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
     AmdgpuDescriptorSetInfo(
         generator_target="gfx950",
         key="amdgpu.gfx950.core",
-        low_preset_key="amdgpu-gfx950",
         isa_xml_key="cdna4",
         isa_architecture_name="AMD CDNA 4",
         isa_architecture_id=3,
@@ -167,7 +159,6 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     AmdgpuProcessorInfo(
         target_cpu="gfx908",
         descriptor_set_key="",
-        low_preset_key="",
         elf_machine_flags=0x030,
         elf_feature_flags=0,
         default_wavefront_size=64,
@@ -177,7 +168,6 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     AmdgpuProcessorInfo(
         target_cpu="gfx90a",
         descriptor_set_key="",
-        low_preset_key="",
         elf_machine_flags=0x03F,
         elf_feature_flags=0,
         default_wavefront_size=64,
@@ -188,7 +178,6 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     AmdgpuProcessorInfo(
         target_cpu="gfx940",
         descriptor_set_key="",
-        low_preset_key="",
         elf_machine_flags=0,
         elf_feature_flags=0,
         default_wavefront_size=64,
@@ -199,7 +188,6 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     AmdgpuProcessorInfo(
         target_cpu="gfx941",
         descriptor_set_key="",
-        low_preset_key="",
         elf_machine_flags=0,
         elf_feature_flags=0,
         default_wavefront_size=64,
@@ -210,7 +198,6 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     AmdgpuProcessorInfo(
         target_cpu="gfx942",
         descriptor_set_key="",
-        low_preset_key="",
         elf_machine_flags=0x04C,
         elf_feature_flags=0,
         default_wavefront_size=64,
@@ -230,7 +217,6 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     AmdgpuProcessorInfo(
         target_cpu="gfx1200",
         descriptor_set_key="amdgpu.gfx12.core",
-        low_preset_key="amdgpu-gfx12",
         elf_machine_flags=0x048,
         elf_feature_flags=0,
         default_wavefront_size=32,
@@ -241,7 +227,6 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     AmdgpuProcessorInfo(
         target_cpu="gfx1201",
         descriptor_set_key="amdgpu.gfx12.core",
-        low_preset_key="amdgpu-gfx12",
         elf_machine_flags=0x04E,
         elf_feature_flags=0,
         default_wavefront_size=32,
@@ -252,7 +237,6 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     AmdgpuProcessorInfo(
         target_cpu="gfx1250",
         descriptor_set_key="amdgpu.gfx1250.core",
-        low_preset_key="amdgpu-gfx1250",
         elf_machine_flags=0x049,
         elf_feature_flags=0,
         default_wavefront_size=32,
@@ -263,7 +247,6 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     AmdgpuProcessorInfo(
         target_cpu="gfx1251",
         descriptor_set_key="amdgpu.gfx1250.core",
-        low_preset_key="amdgpu-gfx1250",
         elf_machine_flags=0x05A,
         elf_feature_flags=0,
         default_wavefront_size=32,
@@ -274,7 +257,6 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     AmdgpuProcessorInfo(
         target_cpu="gfx1252",
         descriptor_set_key="amdgpu.gfx1250.core",
-        low_preset_key="amdgpu-gfx1250",
         elf_machine_flags=0,
         elf_feature_flags=0,
         default_wavefront_size=32,
@@ -285,7 +267,6 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     AmdgpuProcessorInfo(
         target_cpu="gfx950",
         descriptor_set_key="amdgpu.gfx950.core",
-        low_preset_key="amdgpu-gfx950",
         elf_machine_flags=0x04F,
         elf_feature_flags=0,
         default_wavefront_size=64,

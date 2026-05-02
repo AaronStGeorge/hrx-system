@@ -39,11 +39,8 @@
 //                           and low-packet-json @function.
 //                           Source lowering tests use source-low
 //                           [output=module|low]
-//                           [diagnostics=none|memory|all]
-//                           [target-preset=<preset>]. target-preset
-//                           materializes one target.profile and attaches it to
-//                           untargeted func.def ops before lowering. Linked
-//                           providers may add target-specific emit forms.
+//                           [diagnostics=none|memory|all]. Linked providers
+//                           may add target-specific emit forms.
 //                           Low schedule diagnostics are one of none,
 //                           pressure, resources, hazards, candidates, model,
 //                           or all.

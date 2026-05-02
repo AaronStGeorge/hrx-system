@@ -1,7 +1,9 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test
-// RUN: emit source-low target-preset=x86-packed-dot output=low
+// RUN: emit source-low output=low
 
-func.def @bf16_dot2_256(%lhs: vector<16xbf16>, %rhs: vector<16xbf16>, %acc: vector<8xf32>) -> (vector<8xf32>) {
+target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.packed_dot.core", contract_feature_bits = 78}
+
+func.def target(@target) @bf16_dot2_256(%lhs: vector<16xbf16>, %rhs: vector<16xbf16>, %acc: vector<8xf32>) -> (vector<8xf32>) {
   %dot = vector.dot2f %lhs, %rhs, %acc : vector<16xbf16>, vector<16xbf16>, vector<8xf32>
   func.return %dot : vector<8xf32>
 }
@@ -15,7 +17,9 @@ low.func.def target(@target) abi(object_function) @bf16_dot2_256(%lhs: reg<x86.y
 
 // ====
 
-func.def @dot4i_u8s8_256(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32>) -> (vector<8xi32>) {
+target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.packed_dot.core", contract_feature_bits = 78}
+
+func.def target(@target) @dot4i_u8s8_256(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32>) -> (vector<8xi32>) {
   %dot = vector.dot4i<u8s8> %lhs, %rhs, %acc : vector<32xi8>, vector<32xi8>, vector<8xi32>
   func.return %dot : vector<8xi32>
 }
@@ -29,7 +33,9 @@ low.func.def target(@target) abi(object_function) @dot4i_u8s8_256(%lhs: reg<x86.
 
 // ====
 
-func.def @dot4i_s8s8_256(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32>) -> (vector<8xi32>) {
+target.generic<llvm_cpu> @target {codegen_format = low_native, contract_set_key = "x86.packed_dot.core", contract_feature_bits = 78}
+
+func.def target(@target) @dot4i_s8s8_256(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32>) -> (vector<8xi32>) {
   %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<32xi8>, vector<32xi8>, vector<8xi32>
   func.return %dot : vector<8xi32>
 }

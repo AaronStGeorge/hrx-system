@@ -18,7 +18,6 @@
 
 #include "iree/base/api.h"
 #include "loom/codegen/low/descriptors.h"
-#include "loom/target/preset_registry.h"
 #include "loom/target/types.h"
 
 #ifdef __cplusplus
@@ -30,10 +29,6 @@ typedef struct loom_target_low_descriptor_registry_t {
   const loom_low_descriptor_set_provider_t* descriptor_set_providers;
   // Number of provider functions in |descriptor_set_providers|.
   iree_host_size_t descriptor_set_provider_count;
-  // Borrowed target-bundle preset pointers linked into this registry package.
-  const loom_target_bundle_t* const* target_bundles;
-  // Number of valid target-bundle preset pointers in |target_bundles|.
-  iree_host_size_t target_bundle_count;
   // Registry view over the package descriptor-set providers.
   loom_low_descriptor_registry_t registry;
 } loom_target_low_descriptor_registry_t;
@@ -43,9 +38,7 @@ typedef struct loom_target_low_descriptor_registry_t {
 void loom_target_low_descriptor_registry_initialize_from_tables(
     loom_target_low_descriptor_registry_t* out_registry,
     const loom_low_descriptor_set_provider_t* descriptor_set_providers,
-    iree_host_size_t descriptor_set_provider_count,
-    const loom_target_bundle_t* const* target_bundles,
-    iree_host_size_t target_bundle_count);
+    iree_host_size_t descriptor_set_provider_count);
 
 // Appends the borrowed package tables in |source| into caller-owned table
 // storage. The inout counts must point at initialized counts already present in
@@ -56,26 +49,7 @@ iree_status_t loom_target_low_descriptor_registry_append_to_tables(
     const loom_target_low_descriptor_registry_t* source,
     loom_low_descriptor_set_provider_t* descriptor_set_providers,
     iree_host_size_t descriptor_set_provider_capacity,
-    iree_host_size_t* descriptor_set_provider_count,
-    const loom_target_bundle_t** target_bundles,
-    iree_host_size_t target_bundle_capacity,
-    iree_host_size_t* target_bundle_count);
-
-// Returns a generic preset-registry view over |registry|'s bundle table.
-static inline loom_target_preset_registry_t
-loom_target_low_descriptor_registry_presets(
-    const loom_target_low_descriptor_registry_t* registry) {
-  return (loom_target_preset_registry_t){
-      .target_bundles = registry ? registry->target_bundles : NULL,
-      .target_bundle_count = registry ? registry->target_bundle_count : 0,
-  };
-}
-
-// Looks up a target-low preset bundle by key in |registry|. Empty keys are not
-// defaulted because low target selection must be explicit and reproducible.
-iree_status_t loom_target_low_descriptor_registry_lookup_bundle(
-    const loom_target_low_descriptor_registry_t* registry,
-    iree_string_view_t key, const loom_target_bundle_t** out_bundle);
+    iree_host_size_t* descriptor_set_provider_count);
 
 // Selects the descriptor set named by |bundle->config->contract_set_key| from
 // |registry|. This is an exact key lookup; target triples and CPUs are

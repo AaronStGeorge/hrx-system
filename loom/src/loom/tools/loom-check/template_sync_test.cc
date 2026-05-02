@@ -87,7 +87,7 @@ TEST_F(TemplateSyncTest, UsesTemplateCasesAndTargetPreamble) {
   bool changed = false;
   IREE_ASSERT_OK(Build(
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
-      "// RUN: emit source-low target-preset=test-low output=module\n"
+      "// RUN: emit source-low output=module\n"
       "\n",
       "// RUN: roundtrip\n"
       "\n"
@@ -108,7 +108,7 @@ TEST_F(TemplateSyncTest, UsesTemplateCasesAndTargetPreamble) {
   EXPECT_NE(result.find("// TEMPLATE: loom/src/loom/test/corpus/vector/"
                         "arithmetic.loom-test\n"),
             std::string::npos);
-  EXPECT_NE(result.find("// RUN: emit source-low target-preset=test-low "
+  EXPECT_NE(result.find("// RUN: emit source-low "
                         "output=module\n"),
             std::string::npos);
   EXPECT_NE(result.find("func.def @alpha()"), std::string::npos);
@@ -122,7 +122,7 @@ TEST_F(TemplateSyncTest, PreservesMatchingTargetEvidenceAndDirectives) {
   bool changed = false;
   IREE_ASSERT_OK(Build(
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
-      "// RUN: emit source-low target-preset=test-low output=module\n"
+      "// RUN: emit source-low output=module\n"
       "\n"
       "// REQUIRES: fake-target\n"
       "// XFAIL: pending target support\n"
@@ -167,7 +167,7 @@ TEST_F(TemplateSyncTest, UsesKernelDefAsCaseSymbol) {
   bool changed = false;
   IREE_ASSERT_OK(Build(
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
-      "// RUN: emit source-low target-preset=test-low output=module\n"
+      "// RUN: emit source-low output=module\n"
       "\n",
       "// RUN: roundtrip\n"
       "\n"
@@ -185,7 +185,7 @@ TEST_F(TemplateSyncTest, IgnoresFuncDeclWhenSelectingCaseSymbol) {
   bool changed = false;
   IREE_ASSERT_OK(Build(
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
-      "// RUN: emit source-low target-preset=test-low output=module\n"
+      "// RUN: emit source-low output=module\n"
       "\n",
       "// RUN: roundtrip\n"
       "\n"
@@ -204,7 +204,7 @@ TEST_F(TemplateSyncTest, PreservesTargetAnnotationsAtAnchoredInputLines) {
   bool changed = false;
   IREE_ASSERT_OK(Build(
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
-      "// RUN: emit source-low target-preset=test-low output=module\n"
+      "// RUN: emit source-low output=module\n"
       "\n"
       "func.def @alpha(%value: i32) -> (i32) {\n"
       "  // ERROR@+1: \"unsupported\"\n"
@@ -230,7 +230,7 @@ TEST_F(TemplateSyncTest, PreservesTargetAnnotationsAtAnchoredInputLines) {
 TEST_F(TemplateSyncTest, PreservesAnnotationLineOccurrence) {
   const char* target_source =
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
-      "// RUN: emit source-low target-preset=test-low output=module\n"
+      "// RUN: emit source-low output=module\n"
       "\n"
       "func.def @alpha() {\n"
       "  func.return\n"
@@ -256,7 +256,7 @@ TEST_F(TemplateSyncTest, PreservesAnnotationLineOccurrence) {
 TEST_F(TemplateSyncTest, ReportsUnchangedWhenConcreteFileIsCurrent) {
   const char* target_source =
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
-      "// RUN: emit source-low target-preset=test-low output=module\n"
+      "// RUN: emit source-low output=module\n"
       "\n"
       "func.def @alpha() {\n"
       "}\n";
@@ -281,7 +281,7 @@ TEST_F(TemplateSyncTest, RejectsTargetCaseRunDirectives) {
       IREE_STATUS_INVALID_ARGUMENT,
       Build("// TEMPLATE: "
             "loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
-            "// RUN: emit source-low target-preset=test-low output=module\n"
+            "// RUN: emit source-low output=module\n"
             "\n"
             "// RUN: verify\n"
             "func.def @alpha() {\n"
@@ -300,7 +300,7 @@ TEST_F(TemplateSyncTest, RejectsEmptyTemplate) {
       IREE_STATUS_INVALID_ARGUMENT,
       Build("// TEMPLATE: "
             "loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
-            "// RUN: emit source-low target-preset=test-low output=module\n"
+            "// RUN: emit source-low output=module\n"
             "\n",
             "// RUN: roundtrip\n", &result, &changed));
 }
@@ -312,7 +312,7 @@ TEST_F(TemplateSyncTest, RejectsDuplicateTemplateFunctions) {
       IREE_STATUS_INVALID_ARGUMENT,
       Build("// TEMPLATE: "
             "loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
-            "// RUN: emit source-low target-preset=test-low output=module\n"
+            "// RUN: emit source-low output=module\n"
             "\n",
             "// RUN: roundtrip\n"
             "\n"

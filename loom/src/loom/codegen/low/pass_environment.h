@@ -9,7 +9,7 @@
 // This capability exposes the target-low tables linked into the current
 // compiler session without selecting a target for the whole pipeline. Passes
 // use the registry and policy tables here, then resolve each function's
-// concrete target profile from IR facts.
+// concrete target record from IR facts.
 
 #ifndef LOOM_CODEGEN_LOW_PASS_ENVIRONMENT_H_
 #define LOOM_CODEGEN_LOW_PASS_ENVIRONMENT_H_

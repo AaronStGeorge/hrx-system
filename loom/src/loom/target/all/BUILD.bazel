@@ -64,5 +64,6 @@ loom_cc_library(
         "//loom/src/loom/target/emit/ireevm:lower",
         "//loom/src/loom/target/emit/wasm:lower",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
     ],
 )

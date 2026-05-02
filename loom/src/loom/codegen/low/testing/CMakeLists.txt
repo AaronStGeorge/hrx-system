@@ -57,7 +57,7 @@ loom_cc_library(
     loom::src::loom::ops::index
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
-    loom::src::loom::ops::target
+    loom::src::loom::ops::test
     loom::src::loom::ops::vector
   TESTONLY
   PUBLIC

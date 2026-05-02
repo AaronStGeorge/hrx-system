@@ -48,12 +48,11 @@ typedef struct loom_target_artifact_plan_t {
 
 // Builds a compile-unit plan for one target.artifact.
 //
-// |fact_table| must have access to the same target preset registry resources
-// used to compute target.profile facts. |call_graph| must have been built for
-// |module|. All plan arrays are allocated from |arena| and remain valid for the
-// arena lifetime. Returns status only for infrastructure failures. Invalid
-// user IR emits a structured diagnostic, sets |out_valid| to false, and returns
-// OK.
+// |fact_table| must contain the target-record facts referenced by exported
+// functions. |call_graph| must have been built for |module|. All plan arrays
+// are allocated from |arena| and remain valid for the arena lifetime. Returns
+// status only for infrastructure failures. Invalid user IR emits a structured
+// diagnostic, sets |out_valid| to false, and returns OK.
 iree_status_t loom_target_artifact_plan_build(
     const loom_module_t* module, loom_symbol_ref_t artifact_symbol,
     loom_symbol_fact_table_t* fact_table, const loom_call_graph_t* call_graph,

@@ -12,36 +12,6 @@
 #include "loom/ir/module.h"
 #include "loom/ops/target/facts.h"
 #include "loom/target/function_contract.h"
-#include "loom/target/preset_registry.h"
-
-static iree_status_t loom_low_source_selection_initialize_fact_table(
-    const loom_low_descriptor_registry_t* descriptor_registry,
-    iree_arena_allocator_t* arena, loom_symbol_fact_table_t* out_fact_table) {
-  if (descriptor_registry == NULL ||
-      descriptor_registry->target_bundle_count == 0 ||
-      descriptor_registry->target_bundles == NULL) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "source-to-low selection requires target profile presets");
-  }
-  loom_target_preset_registry_t* preset_registry = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate(arena, sizeof(*preset_registry),
-                                           (void**)&preset_registry));
-  *preset_registry = (loom_target_preset_registry_t){
-      .target_bundles = descriptor_registry->target_bundles,
-      .target_bundle_count = descriptor_registry->target_bundle_count,
-  };
-  loom_symbol_fact_resource_t* resource = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate(arena, sizeof(*resource), (void**)&resource));
-  *resource = loom_target_profile_preset_registry_resource(preset_registry);
-  const loom_symbol_fact_table_options_t fact_options = {
-      .resources = loom_make_symbol_fact_resource_list(resource, 1),
-  };
-  loom_symbol_fact_table_initialize_with_options(out_fact_table, &fact_options,
-                                                 arena);
-  return iree_ok_status();
-}
 
 static iree_status_t loom_low_source_selection_lookup_func_facts(
     const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
@@ -106,17 +76,14 @@ iree_status_t loom_low_select_source_funcs(
     iree_arena_allocator_t* arena,
     loom_low_source_selection_list_t* out_selection_list) {
   *out_selection_list = (loom_low_source_selection_list_t){0};
-  if (options->descriptor_registry == NULL ||
-      options->policy_registry == NULL) {
+  if (options->policy_registry == NULL) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "source-to-low selection requires descriptor and policy "
-        "registries");
+        "source-to-low selection requires a lowering policy registry");
   }
 
   loom_symbol_fact_table_t fact_table = {0};
-  IREE_RETURN_IF_ERROR(loom_low_source_selection_initialize_fact_table(
-      options->descriptor_registry, arena, &fact_table));
+  loom_symbol_fact_table_initialize(&fact_table, arena);
   if (module->symbols.count == 0) {
     return iree_ok_status();
   }

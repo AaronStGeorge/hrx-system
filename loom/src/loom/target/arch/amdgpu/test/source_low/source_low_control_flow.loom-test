@@ -1,6 +1,7 @@
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-func.def @cfg_if_scalar_compare(%lhs: i32, %rhs: i32, %a: i32, %b: i32) -> (i32) {
+amdgpu.target<gfx1100> @target
+func.def target(@target) @cfg_if_scalar_compare(%lhs: i32, %rhs: i32, %a: i32, %b: i32) -> (i32) {
   %cond = scalar.cmpi slt, %lhs, %rhs : i32
   cfg.cond_br %cond, ^then, ^else : i1
 ^then:
@@ -29,7 +30,9 @@ low.func.def target(@target) abi(hal_kernel) @cfg_if_scalar_compare(%lhs: reg<am
 
 // ====
 
-func.def @divergent_if_else(%values: vector<2xi32>, %limit: i32) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @divergent_if_else(%values: vector<2xi32>, %limit: i32) {
   %lane = vector.extract %values[0] : vector<2xi32> -> i32
   %cond = scalar.cmpi slt, %lane, %limit : i32
   cfg.cond_br %cond, ^then, ^else : i1
@@ -63,7 +66,9 @@ low.func.def target(@target) abi(hal_kernel) @divergent_if_else(%values: reg<amd
 
 // ====
 
-func.def @divergent_then_only(%values: vector<2xi32>, %limit: i32) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @divergent_then_only(%values: vector<2xi32>, %limit: i32) {
   %lane = vector.extract %values[0] : vector<2xi32> -> i32
   %cond = scalar.cmpi slt, %lane, %limit : i32
   cfg.cond_br %cond, ^then, ^join : i1

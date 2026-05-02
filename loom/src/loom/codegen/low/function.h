@@ -27,7 +27,7 @@ bool loom_low_function_def_isa(const loom_op_t* op);
 // Returns the module-local symbol ref naming |function_op|.
 loom_symbol_ref_t loom_low_function_callee(const loom_op_t* function_op);
 
-// Returns the module-local target profile symbol ref selected by |function_op|.
+// Returns the module-local target record symbol ref selected by |function_op|.
 loom_symbol_ref_t loom_low_function_target(const loom_op_t* function_op);
 
 // Returns the low allocation mode attr value, or 0 when absent.

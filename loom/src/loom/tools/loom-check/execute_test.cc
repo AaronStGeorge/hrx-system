@@ -376,13 +376,13 @@ TEST_F(ExecuteTest, VerifyCleanIR) {
   loom_check_result_deinitialize(&result);
 }
 
-static const char kVerifyTestLowPreset[] =
-    "target.profile @test_target preset(\"test-low\")\n";
+static const char kVerifyTestLowTarget[] =
+    "test.target<low_core> @test_target\n";
 
 TEST_F(ExecuteTest, VerifyRunsLowDescriptorVerifier) {
   loom_check_result_t result;
   std::string source =
-      std::string("// RUN: verify\n") + kVerifyTestLowPreset +
+      std::string("// RUN: verify\n") + kVerifyTestLowTarget +
       "low.func.def target(@test_target) @constant() -> (reg<test.i32>) {\n"
       "  %c0 = low.const<test.const.i32> : reg<test.i32>\n"
       "  low.return %c0 : reg<test.i32>\n"
@@ -1126,7 +1126,7 @@ TEST_F(ExecuteTest, EmitLowDescriptorManifestReportsUnknownSet) {
   loom_check_result_deinitialize(&result);
 }
 
-TEST_F(ExecuteTest, EmitTargetLowRegistryManifestReportsRegisteredBundle) {
+TEST_F(ExecuteTest, EmitTargetLowRegistryManifestReportsDescriptorSets) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
       ExecuteFirst("// RUN: emit target-low-registry-manifest\n"
@@ -1138,12 +1138,7 @@ TEST_F(ExecuteTest, EmitTargetLowRegistryManifestReportsRegisteredBundle) {
   const std::string actual_output = ActualOutputString(result);
   EXPECT_NE(actual_output.find("\"descriptor_set_count\":1"),
             std::string::npos);
-  EXPECT_NE(actual_output.find("\"bundle_count\":1"), std::string::npos);
   EXPECT_NE(actual_output.find("\"key\":\"test.low.core\""), std::string::npos);
-  EXPECT_NE(actual_output.find("\"name\":\"test-low\""), std::string::npos);
-  EXPECT_NE(actual_output.find("\"subgroup_size\":0"), std::string::npos);
-  EXPECT_NE(actual_output.find("\"descriptor_set\":\"test.low.core\""),
-            std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 
@@ -1166,7 +1161,7 @@ TEST_F(ExecuteTest, EmitSourceLowLowersEveryTargetedFunction) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
       ExecuteFirst("// RUN: emit source-low output=module\n"
-                   "target.profile @test_target preset(\"test-low\")\n"
+                   "test.target<low_core> @test_target\n"
                    "\n"
                    "func.def target(@test_target) @first() {\n"
                    "  func.return\n"
@@ -1190,62 +1185,11 @@ TEST_F(ExecuteTest, EmitSourceLowLowersEveryTargetedFunction) {
   loom_check_result_deinitialize(&result);
 }
 
-TEST_F(ExecuteTest, EmitSourceLowTargetPresetTargetsUntargetedFunctions) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit source-low target-preset=test-low "
-                   "output=module\n"
-                   "func.def @first() {\n"
-                   "  func.return\n"
-                   "}\n"
-                   "\n"
-                   "func.def @second() {\n"
-                   "  func.return\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  const std::string actual_output = ActualOutputString(result);
-  EXPECT_NE(actual_output.find("target.profile @target preset(\"test-low\")"),
-            std::string::npos);
-  EXPECT_NE(actual_output.find("low.func.def target(@target)"),
-            std::string::npos);
-  EXPECT_NE(actual_output.find("@first()"), std::string::npos);
-  EXPECT_NE(actual_output.find("@second()"), std::string::npos);
-  EXPECT_EQ(actual_output.find("\nfunc.def target(@target) @first"),
-            std::string::npos);
-  EXPECT_EQ(actual_output.find("\nfunc.def target(@target) @second"),
-            std::string::npos);
-  loom_check_result_deinitialize(&result);
-}
-
-TEST_F(ExecuteTest, EmitSourceLowTargetPresetRejectsPreTargetedFunctions) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit source-low target-preset=test-low "
-                   "output=module\n"
-                   "target.profile @explicit preset(\"test-low\")\n"
-                   "\n"
-                   "func.def target(@explicit) @first(%lhs: i32, %rhs: i32) "
-                   "-> (i32) {\n"
-                   "  %sum = scalar.addi %lhs, %rhs : i32\n"
-                   "  func.return %sum : i32\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  const std::string detail = DetailString(result);
-  EXPECT_NE(detail.find("target-preset cannot be used with pre-targeted entry "
-                        "@first"),
-            std::string::npos);
-  loom_check_result_deinitialize(&result);
-}
-
 TEST_F(ExecuteTest, EmitLowScheduleJsonAnchorsLiveInPreamble) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
       ExecuteFirst("// RUN: emit low-schedule-json @livein\n"
-                   "target.profile @test_target preset(\"test-low\")\n"
+                   "test.target<low_core> @test_target\n"
                    "low.func.def target(@test_target) @livein() -> "
                    "(reg<test.i32>) {\n"
                    "  %arg0 = low.live_in<test.arg0> : reg<test.i32>\n"

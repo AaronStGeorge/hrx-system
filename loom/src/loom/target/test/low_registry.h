@@ -13,13 +13,10 @@
 #define LOOM_TARGET_TEST_LOW_REGISTRY_H_
 
 #include "loom/target/low_descriptor_registry.h"
-#include "loom/target/types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-extern const loom_target_bundle_t loom_test_low_target_bundle_core;
 
 void loom_test_low_descriptor_registry_initialize(
     loom_target_low_descriptor_registry_t* out_registry);

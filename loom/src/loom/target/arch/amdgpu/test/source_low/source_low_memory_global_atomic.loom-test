@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_global_atomic.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-kernel.def @global_atomic_add_i32(%input: buffer) {
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @global_atomic_add_i32(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -30,7 +31,9 @@ low.kernel.def target(@target) @global_atomic_add_i32() {
 
 // ====
 
-kernel.def @global_atomic_add_f32(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @global_atomic_add_f32(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -58,7 +61,9 @@ low.kernel.def target(@target) @global_atomic_add_f32() {
 
 // ====
 
-kernel.def @global_atomic_minnum_maxnum_f32(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @global_atomic_minnum_maxnum_f32(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -95,7 +100,9 @@ low.kernel.def target(@target) @global_atomic_minnum_maxnum_f32() {
 
 // ====
 
-kernel.def @global_atomic_dynamic_minnum_f32(%input: buffer, %value: f32) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @global_atomic_dynamic_minnum_f32(%input: buffer, %value: f32) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -122,7 +129,9 @@ low.kernel.def target(@target) @global_atomic_dynamic_minnum_f32(%value: reg<amd
 
 // ====
 
-kernel.def @global_atomic_bitwise_i32(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @global_atomic_bitwise_i32(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -171,7 +180,9 @@ low.kernel.def target(@target) @global_atomic_bitwise_i32() {
 
 // ====
 
-kernel.def @global_atomic_sub_i32(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @global_atomic_sub_i32(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -200,7 +211,9 @@ low.kernel.def target(@target) @global_atomic_sub_i32() {
 
 // ====
 
-kernel.def @global_atomic_exchange_i32(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @global_atomic_exchange_i32(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -224,7 +237,9 @@ low.kernel.def target(@target) @global_atomic_exchange_i32() {
 
 // ====
 
-kernel.def @global_atomic_cmpxchg_i32(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @global_atomic_cmpxchg_i32(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -253,7 +268,9 @@ low.kernel.def target(@target) @global_atomic_cmpxchg_i32() {
 
 // ====
 
-kernel.def @global_atomic_minmax_i32(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @global_atomic_minmax_i32(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer

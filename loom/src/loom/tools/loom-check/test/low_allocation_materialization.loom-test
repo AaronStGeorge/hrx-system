@@ -1,6 +1,6 @@
 // RUN: pass low-materialize-allocation{budgets=test.i32=2}
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @spill(%a: reg<test.i32>, %b: reg<test.i32>, %c: reg<test.i32>) -> (reg<test.i32>) {
   %ab = low.op<test.add.i32>(%a, %b) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
@@ -11,7 +11,7 @@ low.func.def target(@test_target) @spill(%a: reg<test.i32>, %b: reg<test.i32>, %
 }
 
 // ----
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @spill(%a: reg<test.i32>, %b: reg<test.i32>, %c: reg<test.i32>) -> (reg<test.i32>) {
   %spill_spill_storage_0 = low.storage.reserve {byte_alignment = 4, byte_length = 4} : low.storage<private>
@@ -32,7 +32,7 @@ low.func.def target(@test_target) @spill(%a: reg<test.i32>, %b: reg<test.i32>, %
 
 // RUN: pass low-materialize-allocation{budgets=test.i32=2,diagnostics=spills}
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 // WARNING@+1: BACKEND/009 "test_target" "value 'a'" "test.i32" "spill_spill_storage_0"
 low.func.def target(@test_target) @spill(%a: reg<test.i32>, %b: reg<test.i32>, %c: reg<test.i32>) -> (reg<test.i32>) {
@@ -50,7 +50,7 @@ low.func.def target(@test_target) @spill(%a: reg<test.i32>, %b: reg<test.i32>, %
 
 // RUN: pass low-materialize-allocation{budgets=test.phys=1}
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @phys(%lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys>) {
   %sum = low.op<test.add.phys>(%lhs, %rhs) : (reg<test.phys>, reg<test.phys>) -> reg<test.phys>
@@ -58,7 +58,7 @@ low.func.def target(@test_target) @phys(%lhs: reg<test.phys>, %rhs: reg<test.phy
 }
 
 // ----
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @phys(%lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys>) {
   %phys_spill_storage_0 = low.storage.reserve {byte_alignment = 64, byte_length = 64} : low.storage<stack>
@@ -72,7 +72,7 @@ low.func.def target(@test_target) @phys(%lhs: reg<test.phys>, %rhs: reg<test.phy
 
 // RUN: pass low-materialize-allocation{budgets=test.phys=1,diagnostics=spills}
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 // WARNING@+1: BACKEND/009 "test_target" "value 'rhs'" "test.phys" "phys_spill_storage_0"
 low.func.def target(@test_target) @phys(%lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys>) {

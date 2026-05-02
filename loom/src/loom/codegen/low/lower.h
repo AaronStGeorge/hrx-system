@@ -399,7 +399,7 @@ const loom_low_lower_policy_t* loom_low_lower_policy_registry_lookup_for_bundle(
     const loom_target_bundle_t* bundle);
 
 typedef struct loom_low_lower_options_t {
-  // Module-local target.profile symbol used by the emitted low function.
+  // Module-local target record symbol used by the emitted low function.
   loom_symbol_ref_t target_ref;
   // Target bundle selected for this lowering attempt.
   const loom_target_bundle_t* bundle;

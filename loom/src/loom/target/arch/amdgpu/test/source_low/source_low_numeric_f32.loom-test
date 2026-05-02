@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/numeric_f32_memory.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-kernel.def @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -38,7 +39,9 @@ low.kernel.def target(@target) @f32_arith() asm<amdgpu.gfx11.core> {
 
 // ====
 
-kernel.def @f32_fma(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @f32_fma(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -77,7 +80,9 @@ low.kernel.def target(@target) @f32_fma() asm<amdgpu.gfx11.core> {
 
 // ====
 
-kernel.def @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset

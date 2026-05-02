@@ -184,10 +184,6 @@ static void loom_low_lower_assert_options(
   IREE_ASSERT(loom_symbol_ref_is_valid(options->target_ref));
   IREE_ASSERT_EQ(options->target_ref.module_id, 0);
   IREE_ASSERT_LT(options->target_ref.symbol_id, module->symbols.count);
-  const loom_symbol_t* target_symbol =
-      &module->symbols.entries[options->target_ref.symbol_id];
-  IREE_ASSERT(target_symbol->defining_op != NULL);
-  IREE_ASSERT_EQ(target_symbol->defining_op->kind, LOOM_OP_TARGET_PROFILE);
   IREE_ASSERT(options->bundle != NULL);
   IREE_ASSERT(options->bundle->snapshot != NULL);
   IREE_ASSERT(options->bundle->export_plan != NULL);

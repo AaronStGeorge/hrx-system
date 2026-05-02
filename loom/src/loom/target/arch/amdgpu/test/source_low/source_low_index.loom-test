@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/index_addressing.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-kernel.def @index_madd_global_b32(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @index_madd_global_b32(%input: buffer, %output: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 0, 3)] : index
   %y0 = kernel.workitem.id<y> : index
@@ -39,7 +40,9 @@ low.kernel.def target(@target) @index_madd_global_b32() asm<amdgpu.gfx11.core> {
 
 // ====
 
-kernel.def @index_madd_constant_addend_global_b32(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @index_madd_constant_addend_global_b32(%input: buffer, %output: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 0, 3)] : index
   %zero = index.constant 0 : offset
@@ -73,7 +76,9 @@ low.kernel.def target(@target) @index_madd_constant_addend_global_b32() asm<amdg
 
 // ====
 
-kernel.def @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {
   %y0 = kernel.workitem.id<y> : index
   %y = index.assume %y0 [range(%y0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -112,7 +117,9 @@ low.kernel.def target(@target) @workitem_y_lds_uses_explicit_vaddr() asm<amdgpu.
 
 // ====
 
-kernel.def workgroup_size(8, 4, 1) @dispatch_id_xy_global_b32(%output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) workgroup_size(8, 4, 1) @dispatch_id_xy_global_b32(%output: buffer) {
   %dispatch_x0 = kernel.workitem.dispatch.id<x> : index
   %dispatch_x = index.assume %dispatch_x0 [range(%dispatch_x0, 0, 31)] : index
   %dispatch_y0 = kernel.workitem.dispatch.id<y> : index

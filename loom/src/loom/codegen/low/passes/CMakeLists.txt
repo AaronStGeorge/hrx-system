@@ -117,6 +117,7 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
     loom::src::loom::ops::target
+    loom::src::loom::ops::test
     loom::src::loom::pass::value_facts
     loom::src::loom::target::test::contracts::core
     loom::src::loom::target::test::contracts::core_lower_rules

@@ -20,20 +20,6 @@ static iree_status_t loom_target_low_manifest_write_string_field(
   return loom_json_write_escaped_string(stream, value);
 }
 
-static iree_status_t loom_target_low_manifest_write_memory_spaces(
-    loom_output_stream_t* stream,
-    const loom_target_memory_space_map_t* memory_spaces) {
-  return loom_output_stream_write_format(
-      stream,
-      "\"memory_spaces\":{\"generic\":%" PRIu32 ",\"global\":%" PRIu32
-      ",\"workgroup\":%" PRIu32 ",\"constant\":%" PRIu32
-      ",\"private_memory\":%" PRIu32 ",\"host\":%" PRIu32
-      ",\"descriptor\":%" PRIu32 "}",
-      memory_spaces->generic, memory_spaces->global, memory_spaces->workgroup,
-      memory_spaces->constant, memory_spaces->private_memory,
-      memory_spaces->host, memory_spaces->descriptor);
-}
-
 static iree_status_t loom_target_low_manifest_write_descriptor_set_summary(
     loom_output_stream_t* stream,
     const loom_low_descriptor_set_t* descriptor_set) {
@@ -78,85 +64,6 @@ static iree_status_t loom_target_low_manifest_write_descriptor_set_summary(
   return iree_ok_status();
 }
 
-static iree_status_t loom_target_low_manifest_write_bundle_summary(
-    const loom_low_descriptor_registry_t* descriptor_registry,
-    const loom_target_bundle_t* bundle, loom_output_stream_t* stream) {
-  const loom_low_descriptor_set_t* descriptor_set = NULL;
-  IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
-      descriptor_registry, bundle, &descriptor_set));
-  iree_string_view_t descriptor_set_key = loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->key_string_offset);
-
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '{'));
-  IREE_RETURN_IF_ERROR(
-      loom_target_low_manifest_write_string_field(stream, "key", bundle->name));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"snapshot\":{"));
-  IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_string_field(
-      stream, "name", bundle->snapshot->name));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"codegen_format\":%u,",
-      (unsigned)bundle->snapshot->codegen_format));
-  IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_string_field(
-      stream, "target_triple", bundle->snapshot->target_triple));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ','));
-  IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_string_field(
-      stream, "data_layout", bundle->snapshot->data_layout));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"artifact_format\":%u,",
-      (unsigned)bundle->snapshot->artifact_format));
-  IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_string_field(
-      stream, "target_cpu", bundle->snapshot->target_cpu));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ','));
-  IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_string_field(
-      stream, "target_features", bundle->snapshot->target_features));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream,
-      ",\"default_pointer_bitwidth\":%" PRIu32 ",\"index_bitwidth\":%" PRIu32
-      ",\"offset_bitwidth\":%" PRIu32 ",\"subgroup_size\":%" PRIu32 ",",
-      bundle->snapshot->default_pointer_bitwidth,
-      bundle->snapshot->index_bitwidth, bundle->snapshot->offset_bitwidth,
-      bundle->snapshot->subgroup_size));
-  IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_memory_spaces(
-      stream, &bundle->snapshot->memory_spaces));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, "},\"export\":{"));
-  IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_string_field(
-      stream, "name", bundle->export_plan->name));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ','));
-  IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_string_field(
-      stream, "export_symbol", bundle->export_plan->export_symbol));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_format(stream, ",\"abi_kind\":%u,\"linkage\":%u",
-                                      (unsigned)bundle->export_plan->abi_kind,
-                                      (unsigned)bundle->export_plan->linkage));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream,
-      ",\"hal_kernel\":{\"binding_alignment\":%" PRIu32
-      ",\"required_workgroup_size\":{\"x\":%" PRIu32 ",\"y\":%" PRIu32
-      ",\"z\":%" PRIu32 "},\"flat_workgroup_size_min\":%" PRIu32
-      ",\"flat_workgroup_size_max\":%" PRIu32
-      ",\"buffer_resource_flags\":%" PRIu32 "}",
-      bundle->export_plan->hal_kernel.binding_alignment,
-      bundle->export_plan->hal_kernel.required_workgroup_size.x,
-      bundle->export_plan->hal_kernel.required_workgroup_size.y,
-      bundle->export_plan->hal_kernel.required_workgroup_size.z,
-      bundle->export_plan->hal_kernel.flat_workgroup_size_min,
-      bundle->export_plan->hal_kernel.flat_workgroup_size_max,
-      bundle->export_plan->hal_kernel.buffer_resource_flags));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, "},\"config\":{"));
-  IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_string_field(
-      stream, "name", bundle->config->name));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ','));
-  IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_string_field(
-      stream, "descriptor_set", descriptor_set_key));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"contract_feature_bits\":%" PRIu64 "}}",
-      bundle->config->contract_feature_bits));
-  return iree_ok_status();
-}
-
 iree_status_t loom_target_low_descriptor_registry_format_manifest_json(
     const loom_target_low_descriptor_registry_t* registry,
     iree_string_builder_t* builder) {
@@ -165,10 +72,8 @@ iree_status_t loom_target_low_descriptor_registry_format_manifest_json(
   const iree_host_size_t descriptor_set_count =
       loom_low_descriptor_registry_descriptor_set_count(&registry->registry);
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      &stream,
-      "{\"descriptor_set_count\":%" PRIhsz ",\"bundle_count\":%" PRIhsz
-      ",\"descriptor_sets\":[",
-      descriptor_set_count, registry->target_bundle_count));
+      &stream, "{\"descriptor_set_count\":%" PRIhsz ",\"descriptor_sets\":[",
+      descriptor_set_count));
   for (iree_host_size_t i = 0; i < descriptor_set_count; ++i) {
     if (i != 0) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_char(&stream, ','));
@@ -177,15 +82,6 @@ iree_status_t loom_target_low_descriptor_registry_format_manifest_json(
         loom_low_descriptor_registry_descriptor_set_at(&registry->registry, i);
     IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_descriptor_set_summary(
         &stream, descriptor_set));
-  }
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, "],\"bundles\":["));
-  for (iree_host_size_t i = 0; i < registry->target_bundle_count; ++i) {
-    if (i != 0) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(&stream, ','));
-    }
-    IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_bundle_summary(
-        &registry->registry, registry->target_bundles[i], &stream));
   }
   return loom_output_stream_write_cstring(&stream, "]}");
 }

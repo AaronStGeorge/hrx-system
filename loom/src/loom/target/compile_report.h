@@ -203,7 +203,7 @@ typedef struct loom_target_compile_report_t {
   iree_string_view_t target_family_name;
   // Target preset key selected by the backend, if any.
   iree_string_view_t target_preset_key;
-  // Resolved target profile name selected for compilation, if any.
+  // Resolved target record name selected for compilation, if any.
   iree_string_view_t target_bundle_name;
   // Resolved target snapshot name selected for compilation, if any.
   iree_string_view_t target_snapshot_name;

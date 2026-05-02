@@ -22,6 +22,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/target/ops.h"
+#include "loom/ops/test/ops.h"
 #include "loom/pass/value_facts.h"
 #include "loom/target/test/contracts/core.h"
 #include "loom/target/test/contracts/core_lower_rules.h"
@@ -132,6 +133,7 @@ class LowLowerPassTest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_LOW, loom_low_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     loom_test_low_descriptor_registry_initialize(&registry_);
     invalid_preamble_policy_registry_ = MakeInvalidPreamblePolicyRegistry();
@@ -213,7 +215,7 @@ class LowLowerPassTest : public ::testing::Test {
 
 TEST_F(LowLowerPassTest, VerifiesLoweredModuleBeforeReturningSuccess) {
   ModulePtr module = Parse(IREE_SV(
-      "target.profile @test_target preset(\"test-low\")\n"
+      "test.target<low_core> @test_target\n"
       "func.def target(@test_target) @identity(%value: i32) -> (i32) {\n"
       "  func.return %value : i32\n"
       "}\n"));
@@ -226,7 +228,7 @@ TEST_F(LowLowerPassTest, VerifiesLoweredModuleBeforeReturningSuccess) {
 TEST_F(LowLowerPassTest,
        ContractFragmentDrivesRuleSelectionWithoutLegacySpans) {
   ModulePtr module = Parse(IREE_SV(
-      "target.profile @test_target preset(\"test-low\")\n"
+      "test.target<low_core> @test_target\n"
       "func.def target(@test_target) @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
       "  %sum = scalar.addi %lhs, %rhs : i32\n"
       "  func.return %sum : i32\n"

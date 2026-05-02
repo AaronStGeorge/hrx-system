@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/packed_bitfield.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-func.def @i32_bitfield_extractu(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+func.def target(@target) @i32_bitfield_extractu(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<1xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
@@ -28,7 +29,9 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extractu() asm<amdgpu
 
 // ====
 
-func.def @i32_bitfield_extracts(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @i32_bitfield_extracts(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<1xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
@@ -55,7 +58,9 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extracts() asm<amdgpu
 
 // ====
 
-func.def @i32_bitfield_insert(%field_buffer: buffer, %base_buffer: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @i32_bitfield_insert(%field_buffer: buffer, %base_buffer: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %field_view = buffer.view %field_buffer[%zero] : buffer -> view<1xi32, #dense>
   %base_view = buffer.view %base_buffer[%zero] : buffer -> view<1xi32, #dense>
@@ -90,7 +95,9 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_insert() asm<amdgpu.g
 
 // ====
 
-func.def @i32_bitfield_b128_shape(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @i32_bitfield_b128_shape(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<4xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<4xi32, #dense>

@@ -6,7 +6,7 @@ kernel.def @empty_kernel(%buffer: buffer) {
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 target.artifact @test_artifact target(@test_target) {abi = hal_executable, artifact_format = elf}
 
@@ -16,12 +16,16 @@ kernel.def target(@test_target) export("entry") artifact(@test_artifact) ordinal
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @workgroup_barrier() {
   kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
   func.return
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 kernel.def @workitem_coordinates() {
   %x = kernel.workitem.id<x> : index
@@ -32,12 +36,16 @@ kernel.def @workitem_coordinates() {
 
 // ====
 
+test.target<low_core> @test_target
+
 kernel.def @conditional_exit(%done: i1) {
   kernel.exit %done : i1
   kernel.return
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 kernel.def @conditional_exit_with_body(%done: i1) {
   kernel.exit %done : i1 {
@@ -47,6 +55,8 @@ kernel.def @conditional_exit_with_body(%done: i1) {
 
 // ====
 
+test.target<low_core> @test_target
+
 kernel.def @workgroup_coordinates() {
   %x = kernel.workgroup.id<x> : index
   %y = kernel.workgroup.id<y> : index
@@ -55,6 +65,8 @@ kernel.def @workgroup_coordinates() {
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 kernel.def @launch_queries() {
   %wg_size_x = kernel.workgroup.size<x> : index
@@ -71,6 +83,8 @@ kernel.def @launch_queries() {
 
 // ====
 
+test.target<low_core> @test_target
+
 kernel.def @subgroup_queries() {
   %id = kernel.subgroup.id : index
   %count = kernel.subgroup.count : index
@@ -80,6 +94,8 @@ kernel.def @subgroup_queries() {
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 kernel.def @subgroup_collectives(%value: f32, %vector: vector<4xf32>, %predicate: i1, %lane: i32, %offset: i32, %width: i32) {
   %shuffle, %valid = kernel.subgroup.shuffle<xor> %value, %offset, %width : f32, i32, i32
@@ -101,6 +117,8 @@ kernel.def @subgroup_collectives(%value: f32, %vector: vector<4xf32>, %predicate
 
 // ====
 
+test.target<low_core> @test_target
+
 kernel.def @workgroup_collectives(%value: f32, %predicate: i1) {
   %sum = kernel.workgroup.reduce<addf> %value : f32
   %any = kernel.workgroup.vote.any %predicate : i1
@@ -110,6 +128,8 @@ kernel.def @workgroup_collectives(%value: f32, %predicate: i1) {
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_copy_global_to_workgroup(%source_buffer: buffer, %byte_offset: offset) {
   %zero = index.constant 0 : offset
@@ -128,6 +148,8 @@ func.def @async_copy_global_to_workgroup(%source_buffer: buffer, %byte_offset: o
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_copy_masked(%source_buffer: buffer, %byte_offset: offset, %in_bounds: i1) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -143,6 +165,8 @@ func.def @async_copy_masked(%source_buffer: buffer, %byte_offset: offset, %in_bo
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_copy_workgroup_to_global(%dest_buffer: buffer, %byte_offset: offset) {
   %zero = index.constant 0 : offset
@@ -160,6 +184,8 @@ func.def @async_copy_workgroup_to_global(%dest_buffer: buffer, %byte_offset: off
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_copy_reinterpreted_bytes(%source_buffer: buffer, %byte_offset: offset) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -175,6 +201,8 @@ func.def @async_copy_reinterpreted_bytes(%source_buffer: buffer, %byte_offset: o
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_subgroup_gather(%source_buffer: buffer, %byte_offset: offset) {
   %zero = index.constant 0 : offset
@@ -192,6 +220,8 @@ func.def @async_subgroup_gather(%source_buffer: buffer, %byte_offset: offset) {
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_subgroup_gather_padded_lane_slot(%source_buffer: buffer, %byte_offset: offset) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -208,6 +238,8 @@ func.def @async_subgroup_gather_padded_lane_slot(%source_buffer: buffer, %byte_o
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_subgroup_gather_gfx950_padded_lane_slot(%source_buffer: buffer, %byte_offset: offset) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 4096 : offset
@@ -223,6 +255,8 @@ func.def @async_subgroup_gather_gfx950_padded_lane_slot(%source_buffer: buffer, 
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_cluster_gather_widths(%source_buffer: buffer, %byte_offset: offset) {
   %zero = index.constant 0 : offset
@@ -250,6 +284,8 @@ func.def @async_cluster_gather_widths(%source_buffer: buffer, %byte_offset: offs
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_cluster_gather_masked(%source_buffer: buffer, %byte_offset: offset, %in_bounds: i1) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -266,6 +302,8 @@ func.def @async_cluster_gather_masked(%source_buffer: buffer, %byte_offset: offs
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_tensor_load_to_lds(%source_buffer: buffer, %byte_offset: offset) {
   %zero = index.constant 0 : offset
@@ -290,6 +328,8 @@ func.def @async_tensor_load_to_lds(%source_buffer: buffer, %byte_offset: offset)
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_tensor_store_from_lds(%dest_buffer: buffer, %byte_offset: offset) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 16384 : offset
@@ -309,6 +349,8 @@ func.def @async_tensor_store_from_lds(%dest_buffer: buffer, %byte_offset: offset
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_empty_pipeline_marker() {
   %group = kernel.async.group -> kernel.async.group

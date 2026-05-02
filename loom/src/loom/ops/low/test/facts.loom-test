@@ -1,6 +1,6 @@
 // RUN: pass canonicalize
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @target
 
 func.def @low_const_concat_uniform_zero() -> (i64, i64) {
   %zero = low.const<test.const.i32> {i32_value = 0} : reg<test.i32>
@@ -14,7 +14,7 @@ func.def @low_const_concat_uniform_zero() -> (i64, i64) {
 }
 
 // ----
-target.profile @test_target preset("test-low")
+test.target<low_core> @target
 
 func.def @low_const_concat_uniform_zero() -> (i64, i64) {
   %lo = scalar.constant 0 : i64
@@ -24,7 +24,7 @@ func.def @low_const_concat_uniform_zero() -> (i64, i64) {
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @target
 
 func.def @low_concat_rejects_mixed_elements() -> (i64, i64) {
   %zero = low.const<test.const.i32> {i32_value = 0} : reg<test.i32>
@@ -36,7 +36,7 @@ func.def @low_concat_rejects_mixed_elements() -> (i64, i64) {
 }
 
 // ----
-target.profile @test_target preset("test-low")
+test.target<low_core> @target
 
 func.def @low_concat_rejects_mixed_elements() -> (i64, i64) {
   %lo = scalar.constant -9223372036854775808 : i64
@@ -45,6 +45,8 @@ func.def @low_concat_rejects_mixed_elements() -> (i64, i64) {
 }
 
 // ====
+
+test.target<low_core> @target
 
 func.def @low_storage_reserve_and_view_facts() -> (i1, i1, i64, i64, i64, i64, i64, i64, i64) {
   %storage = low.storage.reserve {byte_alignment = 64, byte_length = 256} : low.storage<workgroup>
@@ -62,6 +64,8 @@ func.def @low_storage_reserve_and_view_facts() -> (i1, i1, i64, i64, i64, i64, i
 }
 
 // ----
+test.target<low_core> @target
+
 func.def @low_storage_reserve_and_view_facts() -> (i1, i1, i64, i64, i64, i64, i64, i64, i64) {
   %is = scalar.constant true : i1
   %same = scalar.constant true : i1
@@ -77,6 +81,8 @@ func.def @low_storage_reserve_and_view_facts() -> (i1, i1, i64, i64, i64, i64, i
 
 // ====
 
+test.target<low_core> @target
+
 func.def @low_storage_select_same_backing(%cond: i1) -> (i1, i64, i64, i64, i64) {
   %storage = low.storage.reserve {byte_alignment = 64, byte_length = 256} : low.storage<workgroup>
   %a = low.storage.view %storage {offset = 16, byte_length = 32} : low.storage<workgroup> -> low.storage<workgroup>
@@ -91,6 +97,8 @@ func.def @low_storage_select_same_backing(%cond: i1) -> (i1, i64, i64, i64, i64)
 }
 
 // ----
+test.target<low_core> @target
+
 func.def @low_storage_select_same_backing(%cond: i1) -> (i1, i64, i64, i64, i64) {
   %same = scalar.constant true : i1
   %offset_lo = scalar.constant 16 : i64
@@ -102,6 +110,8 @@ func.def @low_storage_select_same_backing(%cond: i1) -> (i1, i64, i64, i64, i64)
 
 // ====
 
+test.target<low_core> @target
+
 func.def @low_storage_select_different_backing(%cond: i1) -> (i1, i64) {
   %lhs = low.storage.reserve {byte_alignment = 64, byte_length = 128} : low.storage<private>
   %rhs = low.storage.reserve {byte_alignment = 64, byte_length = 128} : low.storage<private>
@@ -112,6 +122,8 @@ func.def @low_storage_select_different_backing(%cond: i1) -> (i1, i64) {
 }
 
 // ----
+test.target<low_core> @target
+
 func.def @low_storage_select_different_backing(%cond: i1) -> (i1, i64) {
   %is = scalar.constant false : i1
   %offset_lo = scalar.constant -9223372036854775808 : i64
@@ -119,6 +131,8 @@ func.def @low_storage_select_different_backing(%cond: i1) -> (i1, i64) {
 }
 
 // ====
+
+test.target<low_core> @target
 
 func.def @low_storage_loop_widens_unstable_offset(%n: index) -> (i1, i64, i64) {
   %lo = index.constant 0 : index
@@ -137,6 +151,8 @@ func.def @low_storage_loop_widens_unstable_offset(%n: index) -> (i1, i64, i64) {
 }
 
 // ----
+test.target<low_core> @target
+
 func.def @low_storage_loop_widens_unstable_offset(%n: index) -> (i1, i64, i64) {
   %is = scalar.constant true : i1
   %offset_lo = scalar.constant -9223372036854775808 : i64

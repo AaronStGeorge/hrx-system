@@ -1,6 +1,7 @@
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-func.def @f16_wmmar3(%lhs_data: vector<16xf16>, %rhs_data: vector<16xf16>, %init_data: vector<8xf32>) -> (vector<8xf32>) {
+amdgpu.target<gfx1100> @target
+func.def target(@target) @f16_wmmar3(%lhs_data: vector<16xf16>, %rhs_data: vector<16xf16>, %init_data: vector<8xf32>) -> (vector<8xf32>) {
   %m = index.constant 16 : index
   %n = index.constant 16 : index
   %k = index.constant 16 : index
@@ -19,7 +20,9 @@ low.func.def target(@target) abi(hal_kernel) @f16_wmmar3(%lhs: reg<amdgpu.vgpr x
 
 // ====
 
-func.def @f16_wmmar3_wrong_payload(%lhs_data: vector<8xf16>, %rhs_data: vector<8xf16>, %init_data: vector<8xf32>) -> (vector<8xf32>) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @f16_wmmar3_wrong_payload(%lhs_data: vector<8xf16>, %rhs_data: vector<8xf16>, %init_data: vector<8xf32>) -> (vector<8xf32>) {
   %m = index.constant 16 : index
   %n = index.constant 16 : index
   %k = index.constant 16 : index

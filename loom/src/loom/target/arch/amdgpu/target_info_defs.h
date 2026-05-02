@@ -83,8 +83,6 @@ typedef struct loom_amdgpu_descriptor_set_info_t {
   uint64_t descriptor_set_stable_id;
   // Target-low descriptor set key such as `amdgpu.gfx11.core`.
   iree_string_view_t descriptor_set_key;
-  // Production target preset key that expands to this descriptor set.
-  iree_string_view_t low_preset_key;
   // SOPP opcode used when lowering structural `low.return` to `s_endpgm`.
   uint16_t s_endpgm_opcode;
   // SOPP opcode used when lowering structural `low.br` to `s_branch`.
@@ -107,8 +105,6 @@ typedef struct loom_amdgpu_processor_info_t {
   iree_string_view_t descriptor_set_key;
   // Durable descriptor-set identity selected for this processor.
   uint64_t descriptor_set_stable_id;
-  // Production target preset key selected for this processor.
-  iree_string_view_t low_preset_key;
   // ELF EF_AMDGPU_MACH bits for this processor, or 0 when unknown.
   uint32_t elf_machine_flags;
   // ELF EF_AMDGPU_FEATURE_* bits implied by the selected target-id policy.

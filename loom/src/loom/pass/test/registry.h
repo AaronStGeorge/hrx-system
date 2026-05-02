@@ -58,13 +58,13 @@ typedef struct loom_test_pass_trace_t {
   loom_test_pass_trace_event_t events[LOOM_TEST_PASS_TRACE_EVENT_CAPACITY];
 } loom_test_pass_trace_t;
 
-// Capability type satisfying the synthetic target.profile requirement.
+// Capability type satisfying the synthetic target.record requirement.
 extern const loom_pass_environment_capability_type_t
-    loom_test_pass_target_profile_capability_type;
+    loom_test_pass_target_record_capability_type;
 
-// Static capability satisfying the synthetic target.profile requirement.
+// Static capability satisfying the synthetic target.record requirement.
 extern const loom_pass_environment_capability_t
-    loom_test_pass_target_profile_capability;
+    loom_test_pass_target_record_capability;
 
 // Capability type carrying synthetic pass trace storage.
 extern const loom_pass_environment_capability_type_t

@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/numeric_reduce.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-func.def @i32_reduce_add(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+func.def target(@target) @i32_reduce_add(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<4xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
@@ -38,7 +39,9 @@ low.func.def target(@target) abi(hal_kernel) @i32_reduce_add() asm<amdgpu.gfx11.
 
 // ====
 
-func.def @f32_reduce_add(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @f32_reduce_add(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<4xf32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<1xf32, #dense>

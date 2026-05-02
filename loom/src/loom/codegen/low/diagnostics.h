@@ -26,7 +26,7 @@ iree_string_view_t loom_low_diagnostic_string_or_placeholder(
 iree_string_view_t loom_low_diagnostic_symbol_name(
     const loom_module_t* module, loom_symbol_ref_t symbol_ref);
 
-// Returns the resolved target profile name selected by |target|, or "<empty>".
+// Returns the resolved target record name selected by |target|, or "<empty>".
 iree_string_view_t loom_low_diagnostic_target_key(
     const loom_low_resolved_target_t* target);
 

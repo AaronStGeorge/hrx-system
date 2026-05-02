@@ -30,42 +30,7 @@ loom_cc_library(
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/target:preset_registry",
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_test(
-    name = "facts_test",
-    srcs = ["facts_test.cc"],
-    deps = [
-        ":target",
-        "//loom/src/loom/analysis:symbol_facts",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/format/text:printer",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/target:preset_registry",
-        "//loom/src/loom/target:types",
-        "//loom/src/loom/testing:module_ptr",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "verify_test",
-    srcs = ["verify_test.cc"],
-    deps = [
-        ":target",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/testing:diagnostic_matchers",
-        "//loom/src/loom/verify",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )

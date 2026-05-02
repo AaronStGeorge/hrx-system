@@ -781,6 +781,8 @@ class InterfaceFieldSpec:
         other kinds.
     required: True when a soft default is still semantically required and
         must resolve to a declared op field.
+    c_pointee_type: For kind="c_ptr", the const pointee type used to emit an
+        extern declaration for the referenced C symbol.
     """
 
     py_field: str
@@ -788,6 +790,7 @@ class InterfaceFieldSpec:
     kind: str
     region_field: str = ""
     required: bool = False
+    c_pointee_type: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -872,7 +875,12 @@ _INTERFACES: tuple[InterfaceSpec, ...] = (
             InterfaceFieldSpec("symbol", "symbol_attr_index", "attr"),
             InterfaceFieldSpec("selector", "selector_attr_index", "attr"),
             InterfaceFieldSpec("extensions", "extension_attrs_attr_index", "attr"),
-            InterfaceFieldSpec("descriptor", "descriptor", "c_ptr"),
+            InterfaceFieldSpec(
+                "descriptor",
+                "descriptor",
+                "c_ptr",
+                c_pointee_type="loom_target_like_descriptor_t",
+            ),
         ),
     ),
     InterfaceSpec(
@@ -922,6 +930,41 @@ _INTERFACES: tuple[InterfaceSpec, ...] = (
         ),
     ),
 )
+
+
+_TARGET_PROJECTION_FIELDS: dict[str, tuple[str, str]] = {
+    "codegen_format": ("LOOM_TARGET_PROJECTION_VALUE_ENUM_U32", "snapshot.codegen_format"),
+    "target_triple": ("LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW", "snapshot.target_triple"),
+    "data_layout": ("LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW", "snapshot.data_layout"),
+    "artifact_format": ("LOOM_TARGET_PROJECTION_VALUE_ENUM_U32", "snapshot.artifact_format"),
+    "target_cpu": ("LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW", "snapshot.target_cpu"),
+    "target_features": ("LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW", "snapshot.target_features"),
+    "default_pointer_bitwidth": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.default_pointer_bitwidth"),
+    "index_bitwidth": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.index_bitwidth"),
+    "offset_bitwidth": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.offset_bitwidth"),
+    "max_workgroup_size_x": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.max_workgroup_size.x"),
+    "max_workgroup_size_y": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.max_workgroup_size.y"),
+    "max_workgroup_size_z": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.max_workgroup_size.z"),
+    "max_flat_workgroup_size": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.max_flat_workgroup_size"),
+    "subgroup_size": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.subgroup_size"),
+    "max_workgroup_count_x": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.max_workgroup_count.x"),
+    "max_workgroup_count_y": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.max_workgroup_count.y"),
+    "max_workgroup_count_z": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.max_workgroup_count.z"),
+    "memory_space_generic": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.memory_spaces.generic"),
+    "memory_space_global": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.memory_spaces.global"),
+    "memory_space_workgroup": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.memory_spaces.workgroup"),
+    "memory_space_constant": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.memory_spaces.constant"),
+    "memory_space_private": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.memory_spaces.private_memory"),
+    "memory_space_host": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.memory_spaces.host"),
+    "memory_space_descriptor": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.memory_spaces.descriptor"),
+    "abi": ("LOOM_TARGET_PROJECTION_VALUE_ENUM_U32", "export_plan.abi_kind"),
+    "export_symbol": ("LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW", "export_plan.export_symbol"),
+    "linkage": ("LOOM_TARGET_PROJECTION_VALUE_ENUM_U32", "export_plan.linkage"),
+    "hal_binding_alignment": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "export_plan.hal_kernel.binding_alignment"),
+    "hal_buffer_resource_flags": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "export_plan.hal_kernel.buffer_resource_flags"),
+    "contract_set_key": ("LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW", "config.contract_set_key"),
+    "contract_feature_bits": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U64", "config.contract_feature_bits"),
+}
 
 
 def _interface_field_is_explicit(iface: Any, field_name: str) -> bool:
@@ -1008,11 +1051,14 @@ def _resolve_interface_field(
             raise ValueError(f"{interface_name} field {field_spec.py_field!r}: expected CallLikeKind, got {py_value!r}")
         return CALL_LIKE_KIND_MAP[py_value]
     if field_spec.kind == "c_ptr":
+        if isinstance(iface, TargetLikeInterface) and field_spec.py_field == "descriptor" and iface.bundle_table is not None:
+            descriptor = iface.descriptor or f"{_c_prefix(op)}_target_like_descriptor"
+            return f"&{_normalize_c_symbol_reference(descriptor)}"
         if py_value is None:
             return "NULL"
         if not isinstance(py_value, str) or not py_value:
             raise ValueError(f"{interface_name} field {field_spec.py_field!r}: expected C symbol name or None, got {py_value!r}")
-        return py_value if py_value.startswith("&") else f"&{py_value}"
+        return f"&{_normalize_c_symbol_reference(py_value)}"
     raise ValueError(f"{interface_name} field {field_spec.py_field!r}: unknown kind {field_spec.kind!r}")
 
 
@@ -1079,6 +1125,41 @@ def _validate_memory_access_interface(op: Op, iface: MemoryAccessInterface, inte
         raise ValueError(f"{interface_name} on {op.name!r}: atomic_success_ordering and atomic_failure_ordering must be declared together")
     if atomic_ordering_index is not None and atomic_success_ordering_index is not None:
         raise ValueError(f"{interface_name} on {op.name!r}: use either atomic_ordering or success/failure orderings, not both")
+
+
+def _target_like_projection_entries(op: Op) -> list[tuple[int, str, str]]:
+    entries: list[tuple[int, str, str]] = []
+    for attr_def in op.attrs:
+        projection = _TARGET_PROJECTION_FIELDS.get(attr_def.name)
+        if projection is None:
+            continue
+        value_kind, storage_field = projection
+        attr_index = _resolve_attr_index(op, attr_def.name, "TargetLikeInterface")
+        entries.append((attr_index, value_kind, storage_field))
+    return entries
+
+
+def _emit_target_like_descriptor(op: Op, iface: TargetLikeInterface, lines: list[str]) -> None:
+    if iface.bundle_table is None:
+        return
+    descriptor = _normalize_c_symbol_reference(iface.descriptor or f"{_c_prefix(op)}_target_like_descriptor")
+    bundle_table = _normalize_c_symbol_reference(iface.bundle_table)
+    prefix = _c_prefix(op)
+    projections = _target_like_projection_entries(op)
+    projection_array = "NULL"
+    if projections:
+        projection_array = f"{prefix}_target_projections"
+        lines.append(f"static const loom_target_projection_t {projection_array}[] = {{")
+        for attr_index, value_kind, storage_field in projections:
+            lines.append(f"    {{offsetof(loom_target_bundle_storage_t, {storage_field}), {attr_index}, {value_kind}}},")
+        lines.append("};")
+    lines.append(f"static const loom_target_like_descriptor_t {descriptor} = {{")
+    lines.append(f"    .bundle_table = &{bundle_table},")
+    if projection_array != "NULL":
+        lines.append(f"    .projections = {projection_array},")
+        lines.append(f"    .projection_count = IREE_ARRAYSIZE({projection_array}),")
+    lines.append("};")
+    lines.append("")
 
 
 def _emit_interface_vtable(op: Op, spec: InterfaceSpec, lines: list[str]) -> None:
@@ -3094,6 +3175,11 @@ def generate_tables_c(
         lines.append(f'#include "{include_path}/tables.h"')
     else:
         lines.append(f'#include "{include_path}/ops.h"')
+    if _target_like_bundle_table_symbols(ops):
+        lines.append("")
+        lines.append("#include <stddef.h>")
+        lines.append("")
+        lines.append('#include "loom/target/types.h"')
     lines.append('#include "loom/error/error_defs.h"')
     lines.append("")
     if not private_header:
@@ -3121,6 +3207,14 @@ def generate_tables_c(
     symbol_fact_domain_symbols = sorted({fact_domain for op in ops if op.symbol_def is not None if (fact_domain := _symbol_fact_domain_symbol(op)) is not None})
     if symbol_fact_domain_symbols:
         lines.extend(f"extern const loom_symbol_fact_domain_t {fact_domain};" for fact_domain in symbol_fact_domain_symbols)
+        lines.append("")
+    interface_c_ptr_symbols = _interface_c_ptr_symbols(ops)
+    if interface_c_ptr_symbols:
+        lines.extend(f"extern const {c_type} {symbol};" for c_type, symbol in interface_c_ptr_symbols)
+        lines.append("")
+    target_like_bundle_table_symbols = _target_like_bundle_table_symbols(ops)
+    if target_like_bundle_table_symbols:
+        lines.extend(f"extern const loom_target_bundle_table_t {symbol};" for symbol in target_like_bundle_table_symbols)
         lines.append("")
 
     emitted_enum_case_name_arrays: set[str] = set()
@@ -3285,6 +3379,10 @@ def generate_tables_c(
                 error_ref = _error_ref_literal(constraint.error) if constraint.error is not None else "LOOM_ERROR_REF_NONE"
                 lines.append(f"    {{{relation_name}, {property_name}, {len(constraint.args)}, 0, {{{args_str}}}, {error_ref}}},")
             lines.append("};")
+
+        target_like_iface = _find_interface(op, TargetLikeInterface)
+        if target_like_iface is not None:
+            _emit_target_like_descriptor(op, target_like_iface, lines)
 
         # Interface vtables.
         for spec in _INTERFACES:
@@ -3814,6 +3912,48 @@ def _symbol_fact_domain_symbol(op: Any) -> str | None:
     if not isinstance(fact_domain, str) or not _C_SYMBOL_RE.fullmatch(fact_domain):
         raise ValueError(f"Op {op.name!r}: symbol_def.fact_domain must be a C symbol name, got {fact_domain!r}")
     return fact_domain
+
+
+def _normalize_c_symbol_reference(symbol: str) -> str:
+    """Returns a bare C symbol name from a c_ptr field value."""
+    symbol = symbol[1:] if symbol.startswith("&") else symbol
+    if not _C_SYMBOL_RE.fullmatch(symbol):
+        raise ValueError(f"C pointer interface field must be a C symbol name, got {symbol!r}")
+    return symbol
+
+
+def _interface_c_ptr_symbols(ops: Sequence[Op]) -> list[tuple[str, str]]:
+    """Returns sorted (type, symbol) extern declarations for interface C pointers."""
+    declarations: set[tuple[str, str]] = set()
+    for op in ops:
+        for spec in _INTERFACES:
+            iface = _find_interface(op, spec.python_class)
+            if iface is None:
+                continue
+            for field_spec in spec.fields:
+                if field_spec.kind != "c_ptr":
+                    continue
+                if isinstance(iface, TargetLikeInterface) and field_spec.py_field == "descriptor" and iface.bundle_table is not None:
+                    continue
+                if not field_spec.c_pointee_type:
+                    raise ValueError(f"{spec.name} field {field_spec.py_field!r}: kind='c_ptr' requires c_pointee_type")
+                py_value = getattr(iface, field_spec.py_field)
+                if py_value is None:
+                    continue
+                if not isinstance(py_value, str) or not py_value:
+                    raise ValueError(f"{spec.name} field {field_spec.py_field!r}: expected C symbol name or None, got {py_value!r}")
+                declarations.add((field_spec.c_pointee_type, _normalize_c_symbol_reference(py_value)))
+    return sorted(declarations)
+
+
+def _target_like_bundle_table_symbols(ops: Sequence[Op]) -> list[str]:
+    symbols: set[str] = set()
+    for op in ops:
+        iface = _find_interface(op, TargetLikeInterface)
+        if iface is None or iface.bundle_table is None:
+            continue
+        symbols.add(_normalize_c_symbol_reference(iface.bundle_table))
+    return sorted(symbols)
 
 
 def _translate_type_format_elements(

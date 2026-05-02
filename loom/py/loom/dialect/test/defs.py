@@ -53,6 +53,7 @@ from loom.assembly import (
     TypesOf,
     kw,
 )
+from loom.dialect.target import target_record_attrs
 from loom.dsl import (
     ANY,
     ANY_ENCODING,
@@ -1941,7 +1942,7 @@ test_target = Op(
         TargetLikeInterface(
             symbol="symbol",
             selector="kind",
-            extensions="attrs",
+            bundle_table="loom_test_target_bundles",
         )
     ],
     symbol_def=SymbolDefinition(
@@ -1949,16 +1950,14 @@ test_target = Op(
         name="target",
         interfaces=["target", "record"],
         bytecode_kind="LOOM_SYMBOL_RECORD",
+        fact_domain="loom_target_symbol_fact_domain",
     ),
-    attrs=[
-        AttrDef("symbol", "symbol"),
-        AttrDef("kind", "enum", enum_def=_TargetKind),
-        AttrDef("attrs", "dict", optional=True),
-    ],
+    attrs=target_record_attrs(_TargetKind),
+    verify="loom_target_record_verify",
     format=[
         TemplateParam("kind"),
         SymbolRef("symbol"),
-        AttrDict("attrs"),
+        AttrDict(),
     ],
     examples=[
         "test.target<low_core> @target {subgroup_size = 64}",

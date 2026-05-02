@@ -60,11 +60,3 @@ class TargetBuilder(DialectBuilder):
         contract_feature_bits: int | None = ...,
         location_id: int | None = ...,
     ) -> None: ...
-    def profile(
-        self,
-        *,
-        symbol: str,
-        preset: str,
-        overrides: Mapping[str, Any] | None = ...,
-        location_id: int | None = ...,
-    ) -> None: ...

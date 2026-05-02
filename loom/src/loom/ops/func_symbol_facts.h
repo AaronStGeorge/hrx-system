@@ -72,7 +72,7 @@ typedef struct loom_func_symbol_facts_t {
   // Borrowed import symbol name for external declarations, or empty.
   iree_string_view_t import_symbol;
 
-  // Module-local target profile symbol, or null for target-independent funcs.
+  // Module-local target record symbol, or null for target-independent funcs.
   loom_symbol_ref_t target_symbol;
 
   // True when the func declares a callable target ABI override.

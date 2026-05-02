@@ -1,6 +1,7 @@
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-func.def @async_group_argument_rejected(%group: kernel.async.group) {
+amdgpu.target<gfx1100> @target
+func.def target(@target) @async_group_argument_rejected(%group: kernel.async.group) {
   // ERROR@+1: LOWERING/001 "kernel.async.wait" "source-low" "waited async group is not committed in the current straight-line async stream"
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group
   func.return
@@ -8,7 +9,9 @@ func.def @async_group_argument_rejected(%group: kernel.async.group) {
 
 // ====
 
-func.def @async_copy_transfer_rejected(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @async_copy_transfer_rejected(%input: buffer) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 64 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -26,7 +29,9 @@ func.def @async_copy_transfer_rejected(%input: buffer) {
 
 // ====
 
-kernel.def @async_gather_destination_read_before_wait(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @async_gather_destination_read_before_wait(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -45,8 +50,10 @@ kernel.def @async_gather_destination_read_before_wait(%input: buffer) {
 
 // ====
 
-// RUN: emit source-low target-preset=amdgpu-gfx950 output=low
-kernel.def @async_gather_dynamic_offset_sum_rejected(%input: buffer) {
+// RUN: emit source-low output=low
+
+amdgpu.target<gfx950> @target
+kernel.def target(@target) @async_gather_dynamic_offset_sum_rejected(%input: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %base_x = index.constant 4294966000 : index
   %x = index.add %x0, %base_x : index

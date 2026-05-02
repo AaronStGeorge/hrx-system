@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_generic_atomic.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx950 output=low
+// RUN: emit source-low output=low
 
-func.def @generic_atomic_i32_static(%input: buffer) {
+amdgpu.target<gfx950> @target
+func.def target(@target) @generic_atomic_i32_static(%input: buffer) {
   %zero = index.constant 0 : offset
   %generic = buffer.assume.memory_space %input {memory_space = generic} : buffer
   %view = buffer.view %generic[%zero] : buffer -> view<1xi32, #dense>

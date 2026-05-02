@@ -1,7 +1,6 @@
 // RUN: verify
 
-target.profile @gfx11_target preset("amdgpu-gfx11")
-
+amdgpu.target<gfx1100> @gfx11_target
 low.kernel.def target(@gfx11_target) workgroup_size(64, 1, 1) @gfx11_wmma_zero_hal_kernel() {
   %output = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>

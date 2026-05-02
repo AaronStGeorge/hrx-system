@@ -53,14 +53,9 @@ static const loom_low_descriptor_set_provider_t kLowDescriptorSetProviders[] = {
     loom_ireevm_core_descriptor_set,
 };
 
-static const loom_target_bundle_t* const kLowTargetBundles[] = {
-    &loom_ireevm_low_target_bundle_core,
-};
-
 void loom_ireevm_low_descriptor_registry_initialize(
     loom_target_low_descriptor_registry_t* out_registry) {
   loom_target_low_descriptor_registry_initialize_from_tables(
       out_registry, kLowDescriptorSetProviders,
-      IREE_ARRAYSIZE(kLowDescriptorSetProviders), kLowTargetBundles,
-      IREE_ARRAYSIZE(kLowTargetBundles));
+      IREE_ARRAYSIZE(kLowDescriptorSetProviders));
 }

@@ -1,6 +1,7 @@
-// RUN: emit source-low target-preset=amdgpu-gfx11 diagnostics=memory output=low
+// RUN: emit source-low diagnostics=memory output=low
 
-kernel.def @lds_b32_diagnostics(%output: buffer) {
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @lds_b32_diagnostics(%output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -39,7 +40,9 @@ low.kernel.def target(@target) @lds_b32_diagnostics() {
 
 // ====
 
-kernel.def @lds_padded_diagnostics(%output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @lds_padded_diagnostics(%output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -85,7 +88,9 @@ low.kernel.def target(@target) @lds_padded_diagnostics() asm<amdgpu.gfx11.core> 
 
 // ====
 
-kernel.def @lds_read2_write2_diagnostics(%output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @lds_read2_write2_diagnostics(%output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -129,7 +134,9 @@ low.kernel.def target(@target) @lds_read2_write2_diagnostics() asm<amdgpu.gfx11.
 
 // ====
 
-kernel.def @lds_conflict_risk_diagnostics(%output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @lds_conflict_risk_diagnostics(%output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -172,7 +179,9 @@ low.kernel.def target(@target) @lds_conflict_risk_diagnostics() asm<amdgpu.gfx11
 
 // ====
 
-func.def @i8x2_load_rejected(%input: buffer) -> (vector<2xi8>) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @i8x2_load_rejected(%input: buffer) -> (vector<2xi8>) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<2xi8, #dense>
   // ERROR@+1: BACKEND/001 "requires the vector footprint to exactly fill complete 32-bit memory registers"
@@ -182,7 +191,9 @@ func.def @i8x2_load_rejected(%input: buffer) -> (vector<2xi8>) {
 
 // ====
 
-func.def @buffer_view_i1_rejected(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @buffer_view_i1_rejected(%input: buffer) {
   %zero = index.constant 0 : offset
   // ERROR@+1: AMDGPU/001 {field_name="result", required_storage="byte-addressable scalar elements"}
   %input_view = buffer.view %input[%zero] : buffer -> view<8xi1, #dense>
@@ -191,7 +202,9 @@ func.def @buffer_view_i1_rejected(%input: buffer) {
 
 // ====
 
-func.def @buffer_view_dynamic_offset_rejected(%input: buffer, %offset: offset) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @buffer_view_dynamic_offset_rejected(%input: buffer, %offset: offset) {
   // ERROR@+1: AMDGPU/002 {field_name="byte_offset"}
   %input_view = buffer.view %input[%offset] : buffer -> view<8xi8, #dense>
   func.return
@@ -199,7 +212,9 @@ func.def @buffer_view_dynamic_offset_rejected(%input: buffer, %offset: offset) {
 
 // ====
 
-kernel.def @lds_i8x8_strided_load_rejected() {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @lds_i8x8_strided_load_rejected() {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -214,7 +229,9 @@ kernel.def @lds_i8x8_strided_load_rejected() {
 
 // ====
 
-kernel.def @cache_policy_non_temporal_load_rejected(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @cache_policy_non_temporal_load_rejected(%input: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -226,7 +243,9 @@ kernel.def @cache_policy_non_temporal_load_rejected(%input: buffer) {
 
 // ====
 
-kernel.def @cache_policy_workgroup_store_rejected() {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @cache_policy_workgroup_store_rejected() {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -241,7 +260,9 @@ kernel.def @cache_policy_workgroup_store_rejected() {
 
 // ====
 
-kernel.def @global_atomic_system_scope_rejected(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @global_atomic_system_scope_rejected(%input: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -255,7 +276,9 @@ kernel.def @global_atomic_system_scope_rejected(%input: buffer) {
 
 // ====
 
-kernel.def @global_dynamic_offset_sum_rejected(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @global_dynamic_offset_sum_rejected(%input: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %base_x = index.constant 4294966000 : index
   %x = index.add %x0, %base_x : index
@@ -272,7 +295,9 @@ kernel.def @global_dynamic_offset_sum_rejected(%input: buffer) {
 
 // ====
 
-kernel.def @index_add_result_width_rejected() {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @index_add_result_width_rejected() {
   %x = kernel.workitem.id<x> : index
   %base = index.constant 4294967000 : index
   // ERROR@+1: TARGET/019 {subject_kind="address-width", subject_name="u32"}
@@ -282,7 +307,9 @@ kernel.def @index_add_result_width_rejected() {
 
 // ====
 
-kernel.def @index_madd_result_width_rejected() {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @index_madd_result_width_rejected() {
   %x = kernel.workitem.id<x> : index
   %scale = index.constant 2 : index
   %base = index.constant 4294967000 : index
@@ -293,7 +320,9 @@ kernel.def @index_madd_result_width_rejected() {
 
 // ====
 
-kernel.def @workgroup_count_rejected() {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @workgroup_count_rejected() {
   // ERROR@+1: BACKEND/001 "AMDGPU HAL kernel ABI does not expose dispatch workgroup count live-ins yet"
   %count = kernel.workgroup.count<x> : index
   kernel.return
@@ -301,7 +330,9 @@ kernel.def @workgroup_count_rejected() {
 
 // ====
 
-kernel.def @subgroup_id_rejected() {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @subgroup_id_rejected() {
   // ERROR@+1: BACKEND/001 "AMDGPU source-to-low currently requires a fixed workgroup size for subgroup index queries"
   %id = kernel.subgroup.id : index
   kernel.return
@@ -309,7 +340,9 @@ kernel.def @subgroup_id_rejected() {
 
 // ====
 
-kernel.def @subgroup_lane_id_rejected() {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @subgroup_lane_id_rejected() {
   // ERROR@+1: BACKEND/001 "AMDGPU source-to-low currently requires a fixed workgroup size for subgroup index queries"
   %id = kernel.subgroup.lane.id : index
   kernel.return
@@ -317,7 +350,9 @@ kernel.def @subgroup_lane_id_rejected() {
 
 // ====
 
-kernel.def @subgroup_reduce_rejected(%value: f32) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @subgroup_reduce_rejected(%value: f32) {
   // ERROR@+1: BACKEND/001 "AMDGPU subgroup reduce lowering requires a fixed workgroup size that is an exact multiple"
   %sum = kernel.subgroup.reduce<addf> %value : f32
   kernel.return
@@ -325,7 +360,9 @@ kernel.def @subgroup_reduce_rejected(%value: f32) {
 
 // ====
 
-kernel.def @workgroup_vote_count_rejected(%predicate: i1) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @workgroup_vote_count_rejected(%predicate: i1) {
   // ERROR@+1: BACKEND/001 "AMDGPU source-to-low needs target packet lowering for this collective form"
   %count = kernel.workgroup.vote.count %predicate : i1 -> i32
   kernel.return
@@ -333,7 +370,9 @@ kernel.def @workgroup_vote_count_rejected(%predicate: i1) {
 
 // ====
 
-func.def @reduce_axes_rejected(%v: vector<4xi32>, %init: i32) -> (i32) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @reduce_axes_rejected(%v: vector<4xi32>, %init: i32) -> (i32) {
   // ERROR@+1: BACKEND/001 "vector.reduce.axes" "descriptor mapping"
   %r = vector.reduce.axes<addi> %v, %init axes [0] : vector<4xi32>, i32
   func.return %r : i32

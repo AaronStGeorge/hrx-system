@@ -13,7 +13,6 @@
 
 enum {
   LOOM_CHECK_PROVIDER_DESCRIPTOR_SET_PROVIDER_CAPACITY = 256,
-  LOOM_CHECK_PROVIDER_TARGET_BUNDLE_CAPACITY = 256,
   LOOM_CHECK_PROVIDER_LOW_LOWER_POLICY_CAPACITY = 128,
   LOOM_CHECK_PROVIDER_LOW_LEGALITY_PROVIDER_CAPACITY = 64,
   LOOM_CHECK_PROVIDER_LOW_PACKET_DIAGNOSTIC_PROVIDER_CAPACITY = 64,
@@ -29,11 +28,6 @@ typedef struct loom_check_provider_environment_state_t {
       [LOOM_CHECK_PROVIDER_DESCRIPTOR_SET_PROVIDER_CAPACITY];
   // Number of entries in |descriptor_set_providers|.
   iree_host_size_t descriptor_set_provider_count;
-  // Target bundle scratch table assembled on demand.
-  const loom_target_bundle_t*
-      target_bundles[LOOM_CHECK_PROVIDER_TARGET_BUNDLE_CAPACITY];
-  // Number of entries in |target_bundles|.
-  iree_host_size_t target_bundle_count;
   // Source-to-low policy scratch table assembled on demand.
   loom_low_lower_policy_registry_entry_t
       low_lower_policy_entries[LOOM_CHECK_PROVIDER_LOW_LOWER_POLICY_CAPACITY];
@@ -176,8 +170,6 @@ static iree_status_t loom_check_provider_initialize_low_descriptor_registry(
   loom_check_provider_environment_state_t* state =
       (loom_check_provider_environment_state_t*)user_data;
   state->descriptor_set_provider_count = 0;
-  state->target_bundle_count = 0;
-
   const loom_check_provider_set_t* provider_set = state->provider_set;
   for (iree_host_size_t i = 0; i < provider_set->provider_count; ++i) {
     const loom_check_provider_t* provider = provider_set->providers[i];
@@ -189,14 +181,12 @@ static iree_status_t loom_check_provider_initialize_low_descriptor_registry(
     IREE_RETURN_IF_ERROR(loom_target_low_descriptor_registry_append_to_tables(
         &provider_registry, state->descriptor_set_providers,
         IREE_ARRAYSIZE(state->descriptor_set_providers),
-        &state->descriptor_set_provider_count, state->target_bundles,
-        IREE_ARRAYSIZE(state->target_bundles), &state->target_bundle_count));
+        &state->descriptor_set_provider_count));
   }
 
   loom_target_low_descriptor_registry_initialize_from_tables(
       out_registry, state->descriptor_set_providers,
-      state->descriptor_set_provider_count, state->target_bundles,
-      state->target_bundle_count);
+      state->descriptor_set_provider_count);
   return iree_ok_status();
 }
 

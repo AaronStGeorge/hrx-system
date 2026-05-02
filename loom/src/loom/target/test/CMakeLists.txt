@@ -34,6 +34,19 @@ loom_low_descriptor_cc_library(
 
 loom_cc_library(
   NAME
+    target_record_table
+  HDRS
+    "target_records.h"
+  SRCS
+    "target_records.c"
+  DEPS
+    iree::base
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     low_registry
   HDRS
     "low_registry.h"

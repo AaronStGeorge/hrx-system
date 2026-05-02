@@ -29,12 +29,12 @@ def test_derives_target_low_legality_from_phase_and_contracts() -> None:
             ),
             (unsupported_dialect, [Op("misc.unsupported", group=unsupported_dialect)]),
             (source_dialect, [Op("scf.for", group=source_dialect)]),
-            (metadata_dialect, [Op("target.profile", group=metadata_dialect)]),
+            (metadata_dialect, [Op("target.generic", group=metadata_dialect)]),
         ]
     )
 
     assert legality_by_name["test.add"] == TargetLowLegality.CORE
     assert legality_by_name["test.contract"] == TargetLowLegality.PROVIDER
     assert legality_by_name["scf.for"] == TargetLowLegality.SOURCE_ONLY
-    assert legality_by_name["target.profile"] == TargetLowLegality.MODULE_METADATA
+    assert legality_by_name["target.generic"] == TargetLowLegality.MODULE_METADATA
     assert "misc.unsupported" not in legality_by_name

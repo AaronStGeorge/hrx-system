@@ -64,9 +64,9 @@ struct PassTestPredicateCapture {
 loom_pass_predicate_provider_t PassTestTargetPredicateProvider(
     PassTestPredicateCapture* capture);
 
-// Returns a pass environment satisfying the synthetic `target.profile`
+// Returns a pass environment satisfying the synthetic `target.record`
 // descriptor requirement.
-loom_pass_environment_t PassTestTargetProfileEnvironment();
+loom_pass_environment_t PassTestTargetRecordEnvironment();
 
 // Asserts one chronological synthetic pass trace event.
 void ExpectTraceEvent(const loom_test_pass_trace_t& trace,

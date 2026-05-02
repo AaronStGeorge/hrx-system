@@ -4,13 +4,11 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Explicit core test-low registry package.
+// Explicit core test-low descriptor registry package.
 //
-// This package intentionally links only the synthetic test-low descriptor set
-// and preset bundle. Core compiler tests and developer tools use it when they
-// need a tiny deterministic target package instead of real backend tables.
-// Production tools that need real backend descriptor sets should use
-// backend-specific registry packages instead.
+// This package intentionally links only synthetic test-low descriptor sets.
+// Core compiler tests and developer tools use it when they need a tiny
+// deterministic descriptor package instead of real backend tables.
 
 #ifndef LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_CORE_TEST_H_
 #define LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_CORE_TEST_H_
@@ -29,10 +27,6 @@ void loom_target_core_test_low_descriptor_registry_initialize(
 // NULL when no descriptor set matches.
 const loom_low_descriptor_set_t*
 loom_target_core_test_low_descriptor_set_lookup(iree_string_view_t key);
-
-// Looks up a target-low preset bundle by key in the core test-low registry.
-iree_status_t loom_target_core_test_low_bundle_lookup(
-    iree_string_view_t key, const loom_target_bundle_t** out_bundle);
 
 #ifdef __cplusplus
 }  // extern "C"

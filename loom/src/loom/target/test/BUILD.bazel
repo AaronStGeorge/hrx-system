@@ -68,6 +68,16 @@ loom_low_descriptor_cc_library(
 )
 
 loom_cc_library(
+    name = "target_record_table",
+    srcs = ["target_records.c"],
+    hdrs = ["target_records.h"],
+    deps = [
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "low_registry",
     srcs = ["low_registry.c"],
     hdrs = ["low_registry.h"],

@@ -67,7 +67,7 @@ static iree_status_t fuzz_one_input(const uint8_t* data, size_t size) {
   iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool);
 
   loom_low_source_workload_config_t workload_config =
-      loom_low_source_workload_config_make(IREE_SV("test-low"), scale);
+      loom_low_source_workload_config_make(scale);
 
   loom_module_t* module = NULL;
   iree_status_t status = loom_low_source_workload_generate_fuzz_module(

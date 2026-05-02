@@ -62,7 +62,7 @@ TEST_F(PassVerifyTest, VerifiesSatisfiedDescriptorRequirement) {
   IREE_ASSERT_OK(Verify(IREE_SV("pass.pipeline<func> @pipeline pipeline {\n"
                                 "  test.requires-target\n"
                                 "}\n"),
-                        PassTestTargetProfileEnvironment()));
+                        PassTestTargetRecordEnvironment()));
 }
 
 TEST_F(PassVerifyTest, RejectsUnknownPassKey) {

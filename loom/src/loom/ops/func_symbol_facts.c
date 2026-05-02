@@ -261,7 +261,7 @@ static iree_status_t loom_func_symbol_fact_compute(
   if (has_func_contract && !loom_symbol_ref_is_valid(facts->target_symbol)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "func target ABI/export contracts require a target profile");
+        "func target ABI/export contracts require a target record");
   }
   if (has_export_symbol) {
     IREE_RETURN_IF_ERROR(loom_func_symbol_string_from_id(

@@ -21,7 +21,7 @@
 #include "loom/ops/index/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/scalar/ops.h"
-#include "loom/ops/target/ops.h"
+#include "loom/ops/test/ops.h"
 #include "loom/ops/vector/ops.h"
 
 enum {
@@ -119,7 +119,7 @@ static loom_type_t loom_low_source_workload_view16xf32_type(
 //===----------------------------------------------------------------------===//
 
 loom_low_source_workload_config_t loom_low_source_workload_config_make(
-    iree_string_view_t target_preset, uint32_t scale) {
+    uint32_t scale) {
   if (scale == 0) {
     scale = 1;
   }
@@ -130,7 +130,6 @@ loom_low_source_workload_config_t loom_low_source_workload_config_make(
   return (loom_low_source_workload_config_t){
       .module_name = IREE_SV("source_low_workload"),
       .target_symbol_name = IREE_SV("target"),
-      .target_preset = target_preset,
       .function_symbol_name = IREE_SV("generated"),
       .op_count = (uint16_t)op_count,
   };
@@ -173,8 +172,8 @@ static iree_status_t loom_low_source_workload_register_dialect(
 iree_status_t loom_low_source_workload_register_dialects(
     loom_context_t* context) {
   IREE_RETURN_IF_ERROR(loom_low_source_workload_register_dialect(
-      context, LOOM_DIALECT_TARGET, loom_target_dialect_vtables,
-      loom_target_dialect_op_semantics));
+      context, LOOM_DIALECT_TEST, loom_test_dialect_vtables,
+      loom_test_dialect_op_semantics));
   IREE_RETURN_IF_ERROR(loom_low_source_workload_register_dialect(
       context, LOOM_DIALECT_CFG, loom_cfg_dialect_vtables,
       loom_cfg_dialect_op_semantics));
@@ -1252,13 +1251,26 @@ static iree_status_t loom_low_source_workload_generate_module_into(
   IREE_RETURN_IF_ERROR(loom_low_source_workload_add_symbol(
       &builder, target_symbol_name, &target_ref));
 
-  loom_string_id_t preset_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_builder_intern_string(&builder, config->target_preset, &preset_id));
   loom_op_t* target_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_target_profile_build(
-      &builder, target_ref, preset_id, loom_named_attr_slice_empty(),
-      LOOM_LOCATION_UNKNOWN, &target_op));
+  IREE_RETURN_IF_ERROR(loom_test_target_build(
+      &builder, /*build_flags=*/0, LOOM_TEST_TARGET_KIND_LOW_CORE, target_ref,
+      /*codegen_format=*/0, /*target_triple=*/LOOM_STRING_ID_INVALID,
+      /*data_layout=*/LOOM_STRING_ID_INVALID, /*artifact_format=*/0,
+      /*target_cpu=*/LOOM_STRING_ID_INVALID,
+      /*target_features=*/LOOM_STRING_ID_INVALID,
+      /*default_pointer_bitwidth=*/0, /*index_bitwidth=*/0,
+      /*offset_bitwidth=*/0, /*max_workgroup_size_x=*/0,
+      /*max_workgroup_size_y=*/0, /*max_workgroup_size_z=*/0,
+      /*max_flat_workgroup_size=*/0, /*subgroup_size=*/0,
+      /*max_workgroup_count_x=*/0, /*max_workgroup_count_y=*/0,
+      /*max_workgroup_count_z=*/0, /*memory_space_generic=*/0,
+      /*memory_space_global=*/0, /*memory_space_workgroup=*/0,
+      /*memory_space_constant=*/0, /*memory_space_private=*/0,
+      /*memory_space_host=*/0, /*memory_space_descriptor=*/0, /*abi=*/0,
+      /*export_symbol=*/LOOM_STRING_ID_INVALID, /*linkage=*/0,
+      /*hal_binding_alignment=*/0, /*hal_buffer_resource_flags=*/0,
+      /*contract_set_key=*/LOOM_STRING_ID_INVALID,
+      /*contract_feature_bits=*/0, LOOM_LOCATION_UNKNOWN, &target_op));
   (void)target_op;
 
   iree_string_view_t function_symbol_name =
@@ -1462,11 +1474,6 @@ static iree_status_t loom_low_source_workload_generate_module(
     const loom_low_source_workload_config_t* config, loom_context_t* context,
     iree_arena_block_pool_t* block_pool, loom_module_t** out_module) {
   *out_module = NULL;
-  if (iree_string_view_is_empty(config->target_preset)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "source workload target preset is required");
-  }
-
   iree_string_view_t module_name = loom_low_source_workload_default_string(
       config->module_name, IREE_SV("source_low_workload"));
   loom_module_t* module = NULL;

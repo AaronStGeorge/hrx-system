@@ -109,7 +109,6 @@ loom_assert_no_dependencies(
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:low_legality",
         "//loom/src/loom/target:low_packet_diagnostics",
-        "//loom/src/loom/target:preset_registry",
         "//loom/src/loom/target:types",
     ],
 )
@@ -247,9 +246,11 @@ loom_cc_library(
         "ops/registry.h",
     ],
     deps = [
+        ":target_record_table",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/target",
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
     ],
@@ -443,6 +444,17 @@ loom_low_descriptor_cc_library(
 )
 
 loom_cc_library(
+    name = "target_record_table",
+    srcs = ["target_records.c"],
+    hdrs = ["target_records.h"],
+    deps = [
+        ":target_info_defs",
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "low_registry",
     srcs = ["low_registry.c"],
     hdrs = ["low_registry.h"],
@@ -451,7 +463,6 @@ loom_cc_library(
         ":gfx1250_descriptors",
         ":gfx12_descriptors",
         ":gfx950_descriptors",
-        ":target_info_defs",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:types",
@@ -565,7 +576,7 @@ loom_cc_library(
     deps = [
         ":low_registry",
         ":target_info",
-        "//loom/src/loom/ops/target",
+        ":target_record_table",
         "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
         "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
         "//loom/src/loom/tooling/execution:hal_backend",
@@ -578,6 +589,7 @@ loom_cc_test(
     name = "amdgpu_hal_backend_test",
     srcs = ["execution/amdgpu_hal_backend_test.cc"],
     deps = [
+        ":ops",
         ":amdgpu_hal_backend",
         ":target_info",
         ":target_info_defs",
@@ -674,6 +686,7 @@ loom_cc_test(
         ":amdgpu_hal_testdata",
         ":amdgpu_hal_backend",
         ":target_info_defs",
+        ":target_record_table",
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/tooling/execution:compile_options",
         "//loom/src/loom/tooling/execution:execution_provider",

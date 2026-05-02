@@ -1,6 +1,7 @@
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-func.def @bitpack_width_rejected(%codes: vector<8xi32>) -> (vector<4xi8>) {
+amdgpu.target<gfx1100> @target
+func.def target(@target) @bitpack_width_rejected(%codes: vector<8xi32>) -> (vector<4xi8>) {
   // ERROR@+1: BACKEND/001 "AMDGPU vector.bitpack currently lowers byte packing width 8"
   %packed = vector.bitpack<4> %codes : vector<8xi32> -> vector<4xi8>
   func.return %packed : vector<4xi8>
@@ -8,7 +9,9 @@ func.def @bitpack_width_rejected(%codes: vector<8xi32>) -> (vector<4xi8>) {
 
 // ====
 
-func.def @bitpack_source_type_rejected(%codes: vector<4xi8>) -> (vector<4xi8>) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @bitpack_source_type_rejected(%codes: vector<4xi8>) -> (vector<4xi8>) {
   // ERROR@+1: BACKEND/001 "static rank-1 i32 source vector"
   %packed = vector.bitpack<8> %codes : vector<4xi8> -> vector<4xi8>
   func.return %packed : vector<4xi8>

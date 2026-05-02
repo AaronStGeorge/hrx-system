@@ -6,6 +6,7 @@
 
 #include "loom/target/emit/native/amdgpu/module_compiler.h"
 
+#include <stddef.h>
 #include <string.h>
 
 #include "iree/base/internal/arena.h"
@@ -89,7 +90,7 @@ static iree_status_t loom_amdgpu_module_compile_symbol_name(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_module_compile_set_target_profile_cpu(
+static iree_status_t loom_amdgpu_module_compile_set_target_record_cpu(
     loom_module_t* module, const loom_target_module_compile_entry_t* entry,
     iree_string_view_t target_cpu) {
   if (!loom_symbol_ref_is_valid(entry->target_ref) ||
@@ -97,29 +98,34 @@ static iree_status_t loom_amdgpu_module_compile_set_target_profile_cpu(
       entry->target_ref.symbol_id >= module->symbols.count) {
     return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU target CPU override requires a valid "
-                            "target profile symbol");
+                            "target symbol");
   }
   loom_symbol_t* symbol = &module->symbols.entries[entry->target_ref.symbol_id];
-  if (!symbol->defining_op || !loom_target_profile_isa(symbol->defining_op)) {
+  loom_target_like_t target =
+      loom_target_like_cast(module, symbol->defining_op);
+  const loom_target_like_descriptor_t* descriptor =
+      loom_target_like_descriptor(target);
+  if (!loom_target_like_isa(target) || descriptor == NULL) {
     return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU target CPU override requires a "
-                            "target.profile symbol");
+                            "target record");
   }
-  loom_string_id_t target_cpu_name_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_module_intern_string(module, IREE_SV("target_cpu"),
-                                                 &target_cpu_name_id));
   loom_string_id_t target_cpu_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_module_intern_string(module, target_cpu, &target_cpu_id));
-  const loom_named_attr_update_t update = loom_named_attr_replace(
-      target_cpu_name_id, loom_attr_string(target_cpu_id));
-  loom_attribute_t overrides = {0};
-  IREE_RETURN_IF_ERROR(loom_module_replace_canonical_attr_dict(
-      module, loom_target_profile_overrides(symbol->defining_op),
-      loom_make_named_attr_update_slice(&update, 1), &overrides));
-  loom_op_attrs(symbol->defining_op)[loom_target_profile_overrides_ATTR_INDEX] =
-      overrides;
-  return iree_ok_status();
+  const uint16_t target_cpu_storage_offset =
+      offsetof(loom_target_bundle_storage_t, snapshot.target_cpu);
+  for (uint8_t i = 0; i < descriptor->projection_count; ++i) {
+    const loom_target_projection_t* projection = &descriptor->projections[i];
+    if (projection->storage_offset == target_cpu_storage_offset &&
+        projection->value_kind == LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW) {
+      loom_op_attrs(symbol->defining_op)[projection->attr_index] =
+          loom_attr_string(target_cpu_id);
+      return iree_ok_status();
+    }
+  }
+  return iree_make_status(IREE_STATUS_INTERNAL,
+                          "AMDGPU target record has no target_cpu projection");
 }
 
 static iree_status_t loom_amdgpu_module_compile_apply_target_cpu(
@@ -131,7 +137,7 @@ static iree_status_t loom_amdgpu_module_compile_apply_target_cpu(
   const loom_amdgpu_processor_info_t* processor = NULL;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_target_info_lookup_processor(target_cpu, &processor));
-  if (iree_string_view_is_empty(processor->low_preset_key) ||
+  if (processor->descriptor_set_stable_id == 0 ||
       !iree_string_view_equal(processor->descriptor_set_key,
                               entry->bundle_storage.config.contract_set_key)) {
     return iree_make_status(
@@ -142,7 +148,7 @@ static iree_status_t loom_amdgpu_module_compile_apply_target_cpu(
         entry->bundle_storage.config.contract_set_key.data);
   }
 
-  IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_set_target_profile_cpu(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_set_target_record_cpu(
       module, entry, processor->target_cpu));
   entry->bundle_storage.snapshot.target_cpu = processor->target_cpu;
   entry->bundle_storage.snapshot.subgroup_size =
@@ -634,14 +640,12 @@ iree_status_t loom_amdgpu_compile_hal_executable(
       diagnostic_emitter.error_count == 0) {
     if (!iree_string_view_is_empty(artifact_symbol)) {
       status = loom_target_module_compile_select_artifact_entries(
-          module, artifact_symbol, &low_registry, entry_predicate,
-          &diagnostic_emitter, IREE_SV("AMDGPU HAL-native"), &table_arena,
-          &selected, &entries);
+          module, artifact_symbol, entry_predicate, &diagnostic_emitter,
+          IREE_SV("AMDGPU HAL-native"), &table_arena, &selected, &entries);
     } else {
       status = loom_target_module_compile_select_entry(
-          module, &target_options, &low_registry, entry_predicate,
-          &diagnostic_emitter, IREE_SV("AMDGPU HAL-native"), &table_arena,
-          &selected, &single_entry);
+          module, &target_options, entry_predicate, &diagnostic_emitter,
+          IREE_SV("AMDGPU HAL-native"), &table_arena, &selected, &single_entry);
       if (iree_status_is_ok(status) && selected) {
         entries = (loom_target_module_compile_entry_list_t){
             .values = &single_entry,

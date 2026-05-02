@@ -74,10 +74,12 @@ loom_cc_library(
     "ops/registry.c"
     "ops/tables.c"
   DEPS
+    ::target_record_table
     iree::base
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::target
     loom::src::loom::target::types
   PUBLIC
 )
@@ -305,6 +307,20 @@ loom_low_descriptor_cc_library(
 
 loom_cc_library(
   NAME
+    target_record_table
+  HDRS
+    "target_records.h"
+  SRCS
+    "target_records.c"
+  DEPS
+    ::target_info_defs
+    iree::base
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     low_registry
   HDRS
     "low_registry.h"
@@ -315,7 +331,6 @@ loom_cc_library(
     ::gfx1250_descriptors
     ::gfx12_descriptors
     ::gfx950_descriptors
-    ::target_info_defs
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::target::low_descriptor_registry
@@ -434,8 +449,8 @@ loom_cc_library(
   DEPS
     ::low_registry
     ::target_info
+    ::target_record_table
     iree::base
-    loom::src::loom::ops::target
     loom::src::loom::target::emit::native::amdgpu::hal_executable
     loom::src::loom::target::emit::native::amdgpu::module_compiler
     loom::src::loom::tooling::execution::hal_backend
@@ -449,6 +464,7 @@ loom_cc_test(
   SRCS
     "execution/amdgpu_hal_backend_test.cc"
   DEPS
+    ::ops
     ::amdgpu_hal_backend
     ::target_info
     ::target_info_defs
@@ -546,6 +562,7 @@ loom_cc_test(
     ::amdgpu_hal_testdata
     ::amdgpu_hal_backend
     ::target_info_defs
+    ::target_record_table
     iree::base
     loom::src::loom::ops::op_registry
     loom::src::loom::tooling::execution::compile_options

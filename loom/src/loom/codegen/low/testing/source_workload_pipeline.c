@@ -107,7 +107,6 @@ iree_status_t loom_low_source_workload_run_pipeline(
     loom_pass_value_fact_owner_initialize(block_pool, &value_facts);
     value_facts_initialized = true;
     const loom_low_source_selection_options_t selection_options = {
-        .descriptor_registry = options->descriptor_registry,
         .policy_registry = options->policy_registry,
     };
     loom_low_source_selection_list_t selection_list = {0};

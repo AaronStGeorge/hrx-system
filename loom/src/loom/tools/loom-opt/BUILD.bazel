@@ -29,6 +29,7 @@ loom_cc_binary(
         "//loom/src/loom/pass:report",
         "//loom/src/loom/pass:tooling",
         "//loom/src/loom/target/all:low_registry",
+        "//loom/src/loom/target/arch/amdgpu:ops",
         "//loom/src/loom/tooling/execution:session",
         "//loom/src/loom/tooling/io:file",
         "//loom/src/loom/util:json",

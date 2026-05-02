@@ -2584,10 +2584,9 @@ TEST_F(VerifyTest, YieldCountSkipsMissingMaterializedTerminator) {
       << "Expected STRUCTURE/005 missing-terminator diagnostic";
   EXPECT_EQ(GetStringParam(*entry, 0), "test.map");
   ExpectU32Param(*entry, 1, 0);
-  EXPECT_EQ(
-      FindDiagnostic(structured,
-                     loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 8)),
-      nullptr);
+  EXPECT_EQ(FindDiagnostic(structured, loom_error_def_lookup(
+                                           LOOM_ERROR_DOMAIN_STRUCTURE, 8)),
+            nullptr);
 }
 
 // --- YIELD_MATCH (relation 7): yield types must match result types ---

@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_workgroup_atomic.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-kernel.def @lds_atomic_add_i32() {
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @lds_atomic_add_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -33,7 +34,9 @@ low.kernel.def target(@target) @lds_atomic_add_i32() asm<amdgpu.gfx11.core> {
 
 // ====
 
-kernel.def @lds_atomic_ordering_i32() {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @lds_atomic_ordering_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -80,7 +83,9 @@ low.kernel.def target(@target) @lds_atomic_ordering_i32() asm<amdgpu.gfx11.core>
 
 // ====
 
-kernel.def @lds_atomic_add_f32() {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @lds_atomic_add_f32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -110,7 +115,9 @@ low.kernel.def target(@target) @lds_atomic_add_f32() asm<amdgpu.gfx11.core> {
 
 // ====
 
-kernel.def @lds_atomic_minnum_maxnum_f32() {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @lds_atomic_minnum_maxnum_f32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -148,7 +155,9 @@ low.kernel.def target(@target) @lds_atomic_minnum_maxnum_f32() asm<amdgpu.gfx11.
 
 // ====
 
-kernel.def @lds_atomic_bitwise_i32() {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @lds_atomic_bitwise_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -200,7 +209,9 @@ low.kernel.def target(@target) @lds_atomic_bitwise_i32() asm<amdgpu.gfx11.core> 
 
 // ====
 
-kernel.def @lds_atomic_sub_i32() {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @lds_atomic_sub_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -232,7 +243,9 @@ low.kernel.def target(@target) @lds_atomic_sub_i32() asm<amdgpu.gfx11.core> {
 
 // ====
 
-kernel.def @lds_atomic_exchange_i32() {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @lds_atomic_exchange_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -259,7 +272,9 @@ low.kernel.def target(@target) @lds_atomic_exchange_i32() asm<amdgpu.gfx11.core>
 
 // ====
 
-kernel.def @lds_atomic_cmpxchg_i32() {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @lds_atomic_cmpxchg_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -289,7 +304,9 @@ low.kernel.def target(@target) @lds_atomic_cmpxchg_i32() asm<amdgpu.gfx11.core> 
 
 // ====
 
-kernel.def @lds_atomic_minmax_i32() {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @lds_atomic_minmax_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset

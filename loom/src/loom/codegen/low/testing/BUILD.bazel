@@ -18,12 +18,6 @@ package(
 )
 
 loom_assert_no_dependencies(
-    name = "source_workload_no_test_dialect_dep",
-    dependencies = ["//loom/src/loom/ops/test:test"],
-    targets = [":source_workload"],
-)
-
-loom_assert_no_dependencies(
     name = "source_workload_pipeline_no_target_provider_deps",
     dependencies = [
         "//loom/src/loom/target/arch/amdgpu:low_registry",
@@ -73,7 +67,7 @@ loom_cc_library(
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/target",
+        "//loom/src/loom/ops/test",
         "//loom/src/loom/ops/vector",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",

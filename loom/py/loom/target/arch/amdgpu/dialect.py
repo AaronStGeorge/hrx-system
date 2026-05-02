@@ -52,6 +52,7 @@ amdgpu_target = Op(
         TargetLikeInterface(
             symbol="symbol",
             selector="kind",
+            bundle_table="loom_amdgpu_target_bundles",
         )
     ],
     symbol_def=SymbolDefinition(
@@ -59,8 +60,10 @@ amdgpu_target = Op(
         name="target",
         interfaces=["target", "record"],
         bytecode_kind="LOOM_SYMBOL_RECORD",
+        fact_domain="loom_target_symbol_fact_domain",
     ),
     attrs=target_record_attrs(AmdgpuTargetKind),
+    verify="loom_target_record_verify",
     format=[
         TemplateParam("kind"),
         SymbolRef("symbol"),

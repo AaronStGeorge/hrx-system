@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/numeric_conversion.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-func.def @vector_sitofp_i32x2(%input: vector<2xi32>, %scale: vector<2xf32>) -> (vector<2xf32>) {
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_sitofp_i32x2(%input: vector<2xi32>, %scale: vector<2xf32>) -> (vector<2xf32>) {
   %converted = vector.sitofp %input : vector<2xi32> to vector<2xf32>
   %scaled = vector.mulf %converted, %scale : vector<2xf32>
   func.return %scaled : vector<2xf32>
@@ -26,7 +27,9 @@ low.func.def target(@target) abi(hal_kernel) @vector_sitofp_i32x2(%input: reg<am
 
 // ====
 
-func.def @scalar_uitofp_i32(%input: i32) -> (f32) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @scalar_uitofp_i32(%input: i32) -> (f32) {
   %converted = scalar.uitofp %input : i32 to f32
   func.return %converted : f32
 }
@@ -39,7 +42,9 @@ low.func.def target(@target) abi(hal_kernel) @scalar_uitofp_i32(%input: reg<amdg
 
 // ====
 
-func.def @scalar_sitofp_i32(%input: i32) -> (f32) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @scalar_sitofp_i32(%input: i32) -> (f32) {
   %converted = scalar.sitofp %input : i32 to f32
   func.return %converted : f32
 }
@@ -52,7 +57,9 @@ low.func.def target(@target) abi(hal_kernel) @scalar_sitofp_i32(%input: reg<amdg
 
 // ====
 
-func.def @vector_uitofp_i32x2(%input: vector<2xi32>) -> (vector<2xf32>) {
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @vector_uitofp_i32x2(%input: vector<2xi32>) -> (vector<2xf32>) {
   %converted = vector.uitofp %input : vector<2xi32> to vector<2xf32>
   func.return %converted : vector<2xf32>
 }

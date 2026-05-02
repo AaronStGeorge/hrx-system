@@ -8,7 +8,7 @@
 //
 // These utilities own target-neutral mechanics that every concrete backend
 // needs: generic and low verification, func-entry selection, func-owned
-// target profile resolution, and diagnostic emission with source ranges.
+// target record resolution, and diagnostic emission with source ranges.
 
 #ifndef LOOM_TARGET_MODULE_COMPILER_H_
 #define LOOM_TARGET_MODULE_COMPILER_H_
@@ -28,7 +28,7 @@ extern "C" {
 
 typedef struct loom_target_module_compile_options_t {
   // Optional func symbol to compile. Empty requires exactly one compatible
-  // func with a target profile. A leading '@' is accepted for command-line
+  // func with a target record. A leading '@' is accepted for command-line
   // ergonomics.
   iree_string_view_t entry_symbol;
   // Diagnostic sink used for verification, lowering, scheduling, and
@@ -48,7 +48,7 @@ typedef struct loom_target_module_compile_entry_t {
   iree_string_view_t func_name;
   // Module-local symbol reference for |func|.
   loom_symbol_ref_t func_ref;
-  // Module-local target.profile symbol referenced by |func|.
+  // Module-local target record symbol referenced by |func|.
   loom_symbol_ref_t target_ref;
   // Materialized target bundle selected by |func|. The export plan is the
   // func-owned effective export plan, not a profile-global backreference.
@@ -134,7 +134,6 @@ iree_status_t loom_target_module_compile_verify_low_module(
 iree_status_t loom_target_module_compile_select_entry(
     const loom_module_t* module,
     const loom_target_module_compile_options_t* options,
-    const loom_target_low_descriptor_registry_t* low_registry,
     loom_target_module_compile_entry_predicate_t predicate,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
@@ -152,11 +151,9 @@ iree_status_t loom_target_module_compile_emit_entry_artifact_conflict(
 // |artifact_symbol| names the target.artifact symbol without or with a leading
 // '@'. The artifact plan is derived from function export facts and call graph
 // closure; this helper only returns exported entry funcs, not private closure
-// funcs. All returned entries are target-profile-resolved and
-// predicate-checked.
+// funcs. All returned entries are target-record-resolved and predicate-checked.
 iree_status_t loom_target_module_compile_select_artifact_entries(
     const loom_module_t* module, iree_string_view_t artifact_symbol,
-    const loom_target_low_descriptor_registry_t* low_registry,
     loom_target_module_compile_entry_predicate_t predicate,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     iree_string_view_t entry_kind, iree_arena_allocator_t* arena,

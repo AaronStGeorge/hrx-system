@@ -27,7 +27,7 @@ extern "C" {
 
 typedef struct loom_amdgpu_module_compile_options_t {
   // Optional function symbol to compile. Empty requires exactly one AMDGPU
-  // HAL-native-compatible function with a target profile. A leading '@' is
+  // HAL-native-compatible function with a target record. A leading '@' is
   // accepted for command-line ergonomics.
   iree_string_view_t entry_symbol;
   // Optional target.artifact symbol to compile as one multi-export executable.
@@ -56,7 +56,7 @@ typedef struct loom_amdgpu_module_compile_options_t {
 //
 // |module| is mutated in place: source functions may gain sibling low IR and
 // HAL low.resource imports in the selected target-low function are materialized
-// before scheduling. Target profiles are resolved through the linked descriptor
+// before scheduling. Target records are resolved through the linked descriptor
 // registry without materializing companion target records in the IR.
 // |out_compiled| is false when target preflight or compiler diagnostics
 // rejected the module; status remains reserved for infrastructure failures. The

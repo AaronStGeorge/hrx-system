@@ -1,6 +1,6 @@
 // RUN: verify
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 target.artifact @test_artifact target(@test_target) {abi = hal_executable, artifact_format = elf}
 
@@ -11,7 +11,7 @@ low.kernel.def target(@test_target) artifact(@test_artifact) @kernel_artifact_re
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 // ERROR@+1: LOWERING/016 "kernel_rejects_zero_workgroup_size" "workgroup_size_x" "positive u32"
 low.kernel.def target(@test_target) workgroup_size(0, 1, 1) @kernel_rejects_zero_workgroup_size() {
@@ -20,7 +20,7 @@ low.kernel.def target(@test_target) workgroup_size(0, 1, 1) @kernel_rejects_zero
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.kernel.def target(@test_target) @kernel_return_rejects_values(%value: reg<test.i32>) {
   // ERROR@+1: LOWERING/017 "low.return" "values" "low kernel entries must return no values"
@@ -29,7 +29,7 @@ low.kernel.def target(@test_target) @kernel_return_rejects_values(%value: reg<te
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @storage_view_passes(%value: reg<test.i32>) -> (reg<test.i32>) {
   %storage = low.storage.reserve {byte_alignment = 16, byte_length = 64} : low.storage<scratch>
@@ -41,7 +41,7 @@ low.func.def target(@test_target) @storage_view_passes(%value: reg<test.i32>) ->
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @storage_view_rejects_overflowing_length() {
   %storage = low.storage.reserve {byte_alignment = 16, byte_length = 64} : low.storage<scratch>
@@ -52,7 +52,7 @@ low.func.def target(@test_target) @storage_view_rejects_overflowing_length() {
 
 // ====
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 low.func.def target(@test_target) @storage_view_bounds_storage_traffic(%value: reg<test.i32>) {
   %storage = low.storage.reserve {byte_alignment = 16, byte_length = 64} : low.storage<scratch>

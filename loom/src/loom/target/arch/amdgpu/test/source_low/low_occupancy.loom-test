@@ -1,7 +1,6 @@
 // RUN: emit amdgpu-occupancy-json @gfx11_pressure diagnostics=summary fixed=%value:physical_register:64:1
 
-target.profile @gfx11_target preset("amdgpu-gfx11")
-
+amdgpu.target<gfx1100> @gfx11_target
 // REMARK@+2: BACKEND/010 "uses 0 of 800 amdgpu.sgpr" "93%" "limited by 'amdgpu.vgpr'"
 // REMARK@+1: BACKEND/010 "uses 65 of 1024 amdgpu.vgpr" "93%" "limited by 'amdgpu.vgpr'"
 low.func.def target(@gfx11_target) @gfx11_pressure(%value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
@@ -15,8 +14,7 @@ low.func.def target(@gfx11_target) @gfx11_pressure(%value: reg<amdgpu.vgpr>) -> 
 
 // RUN: emit amdgpu-occupancy-json @gfx11_spill amdgpu.vgpr=2
 
-target.profile @gfx11_target preset("amdgpu-gfx11")
-
+amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_spill(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) {
   low.return %a, %b, %c : reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>
 }

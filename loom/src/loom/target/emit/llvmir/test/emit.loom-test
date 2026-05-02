@@ -19,7 +19,7 @@ entry:
 
 // RUN: emit llvmir-body @ir_target
 
-target.profile @ir_target preset("test-object")
+target.generic<llvm_cpu> @ir_target
 
 func.def target(@ir_target) abi(object_function) export("ir_target_add") @ir_target_add(%lhs: i32, %rhs: i32) -> (i32) {
   %sum = scalar.addi %lhs, %rhs : i32

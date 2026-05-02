@@ -22,8 +22,7 @@ extern "C" {
 enum {
   LOOM_OP_TARGET_ARTIFACT = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 0),
   LOOM_OP_TARGET_GENERIC = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 1),
-  LOOM_OP_TARGET_PROFILE = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 2),
-  LOOM_OP_TARGET_COUNT_ = 3,
+  LOOM_OP_TARGET_COUNT_ = 2,
 };
 
 // Generic target-family row selected by target.generic.
@@ -54,9 +53,6 @@ iree_status_t loom_target_artifact_build(
     loom_optional uint8_t abi,
     loom_location_id_t location,
     loom_op_t** out_op);
-iree_status_t loom_target_artifact_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_TARGET_GENERIC: Generic target-family record for target-independent or host-neutral compilation. The typed selector chooses a generated row; optional attrs structurally override only the authored fields.
 // target.generic<reference> @oracle
@@ -166,24 +162,7 @@ iree_status_t loom_target_generic_build(
     loom_optional int64_t contract_feature_bits,
     loom_location_id_t location,
     loom_op_t** out_op);
-iree_status_t loom_target_generic_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
-
-// LOOM_OP_TARGET_PROFILE: Compact reusable target environment profile. Providers own preset tables; the optional override dictionary is resolved once into dense symbol facts so target queries do not walk attr dictionaries.
-// target.profile @vm preset("iree-vm")
-LOOM_DEFINE_ISA(loom_target_profile_isa, LOOM_OP_TARGET_PROFILE)
-LOOM_DEFINE_ATTR_SYMBOL(loom_target_profile_symbol, 0)
-LOOM_DEFINE_ATTR_STRING(loom_target_profile_preset, 1)
-LOOM_DEFINE_ATTR_DICT(loom_target_profile_overrides, 2)
-iree_status_t loom_target_profile_build(
-    loom_builder_t* builder,
-    loom_symbol_ref_t symbol,
-    loom_string_id_t preset,
-    loom_optional loom_named_attr_slice_t overrides,
-    loom_location_id_t location,
-    loom_op_t** out_op);
-iree_status_t loom_target_profile_verify(
+iree_status_t loom_target_record_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

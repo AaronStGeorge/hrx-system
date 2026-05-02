@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/numeric_i32_memory.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-kernel.def @i32_bitwise(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @i32_bitwise(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -36,7 +37,9 @@ low.kernel.def target(@target) @i32_bitwise() asm<amdgpu.gfx11.core> {
 
 // ====
 
-kernel.def @i32_shift(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @i32_shift(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -74,7 +77,9 @@ low.kernel.def target(@target) @i32_shift() asm<amdgpu.gfx11.core> {
 
 // ====
 
-kernel.def @i32_negative_literal(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @i32_negative_literal(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -104,7 +109,9 @@ low.kernel.def target(@target) @i32_negative_literal() asm<amdgpu.gfx11.core> {
 
 // ====
 
-kernel.def @i32_scalarized(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @i32_scalarized(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset

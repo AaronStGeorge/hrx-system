@@ -29,11 +29,12 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
-#include "loom/ops/target/ops.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/arch/amdgpu/hal_resource_materialization.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
+#include "loom/target/arch/amdgpu/ops/ops.h"
 #include "loom/target/arch/amdgpu/target_info.h"
+#include "loom/target/arch/amdgpu/target_records.h"
 #include "loom/target/arch/amdgpu/wait_packets.h"
 #include "loom/target/arch/amdgpu/wait_plan.h"
 #include "loom/target/emit/native/amdgpu/kernel_hsaco.h"
@@ -57,7 +58,7 @@ void RegisterDialect(loom_context_t* context, uint8_t dialect_id,
 
 void InitializeLowKernelContext(loom_context_t* context) {
   loom_context_initialize(iree_allocator_system(), context);
-  RegisterDialect(context, LOOM_DIALECT_TARGET, loom_target_dialect_vtables);
+  RegisterDialect(context, LOOM_DIALECT_AMDGPU, loom_amdgpu_dialect_vtables);
   RegisterDialect(context, LOOM_DIALECT_LOW, loom_low_dialect_vtables);
   IREE_ASSERT_OK(loom_context_finalize(context));
 }
@@ -651,16 +652,26 @@ class LowKernelCompiler {
     iree_arena_block_pool_deinitialize(&block_pool_);
   }
 
-  iree_status_t CompileKernel(iree_string_view_t preset_key,
+  iree_status_t CompileKernel(const loom_amdgpu_processor_info_t* processor,
                               const std::string& kernel_source,
                               std::string* out_hsaco,
                               iree_arena_allocator_t* arena) {
     IREE_ASSERT_ARGUMENT(out_hsaco);
     IREE_ASSERT_ARGUMENT(arena);
     *out_hsaco = {};
-    std::string source = "target.profile @gfx_target preset(\"";
-    source.append(preset_key.data, preset_key.size);
-    source += "\")\n";
+    const loom_target_bundle_t* target_bundle =
+        loom_amdgpu_target_bundle_for_descriptor_set(
+            processor->descriptor_set_stable_id);
+    if (target_bundle == nullptr) {
+      return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                              "AMDGPU HSA processor has no target record for "
+                              "descriptor set 0x%" PRIx64,
+                              processor->descriptor_set_stable_id);
+    }
+    iree_string_view_t target_kind = target_bundle->snapshot->target_cpu;
+    std::string source = "amdgpu.target<";
+    source.append(target_kind.data, target_kind.size);
+    source += "> @gfx_target\n";
     source += kernel_source;
     IREE_RETURN_IF_ERROR(ParseSource(source));
 
@@ -754,7 +765,7 @@ class LowKernelCompiler {
   loom_context_t context_ = {};
   // Parsed module owned by this compiler instance.
   loom_module_t* module_ = nullptr;
-  // AMDGPU-only descriptor/preset registry used by low verification.
+  // AMDGPU-only descriptor registry used by low verification.
   loom_target_low_descriptor_registry_t target_registry_ = {};
 };
 
@@ -773,9 +784,11 @@ iree_status_t PrepareTargetProcessorForLowHsaco(
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_processor(
       iree_make_string_view(target.target_cpu.data(), target.target_cpu.size()),
       &processor));
-  if (iree_string_view_is_empty(processor->low_preset_key)) {
+  if (processor->descriptor_set_stable_id == 0 ||
+      loom_amdgpu_target_bundle_for_descriptor_set(
+          processor->descriptor_set_stable_id) == nullptr) {
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "AMDGPU target CPU '%s' has no target-low preset",
+                            "AMDGPU target CPU '%s' has no target-low record",
                             target.target_cpu.c_str());
   }
   if (processor->elf_machine_flags == 0) {
@@ -807,7 +820,7 @@ iree_status_t CompileWorkitemStoreKernelForAmdgpu(const AmdgpuHsaTarget& target,
   TestArena arena;
   LowKernelCompiler compiler;
   return compiler.CompileKernel(
-      processor->low_preset_key,
+      processor,
       "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
       "> : reg<amdgpu.vgpr>\n"
@@ -860,8 +873,7 @@ iree_status_t CompileB128CopyKernelForAmdgpu(const AmdgpuHsaTarget& target,
       "}\n";
   TestArena arena;
   LowKernelCompiler compiler;
-  return compiler.CompileKernel(processor->low_preset_key, source, out_hsaco,
-                                arena.arena());
+  return compiler.CompileKernel(processor, source, out_hsaco, arena.arena());
 }
 
 iree_status_t CheckHsaStatus(const HsaApi& api, hsa_status_t status,

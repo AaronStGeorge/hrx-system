@@ -1,5 +1,5 @@
 // RUN: pass source-to-low
-target.profile @vm_target preset("iree-vm")
+target.generic<reference> @vm_target {contract_set_key = "iree.vm.core"}
 
 func.def target(@vm_target) @vm_add(%lhs: i32, %rhs: i32) -> (i32) {
   %sum = scalar.addi %lhs, %rhs : i32
@@ -7,7 +7,7 @@ func.def target(@vm_target) @vm_add(%lhs: i32, %rhs: i32) -> (i32) {
 }
 
 // ----
-target.profile @vm_target preset("iree-vm")
+target.generic<reference> @vm_target {contract_set_key = "iree.vm.core"}
 
 low.func.def target(@vm_target) abi(vm_module_function) @vm_add(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>) {
   %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>

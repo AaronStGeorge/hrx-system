@@ -16,8 +16,6 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx11Processor) {
   IREE_ASSERT_OK(
       loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx1100"), &processor));
   ASSERT_NE(processor, nullptr);
-  EXPECT_TRUE(iree_string_view_equal(processor->low_preset_key,
-                                     IREE_SV("amdgpu-gfx11")));
   EXPECT_TRUE(iree_string_view_equal(processor->descriptor_set_key,
                                      IREE_SV("amdgpu.gfx11.core")));
   EXPECT_NE(processor->descriptor_set_stable_id, 0u);
@@ -45,8 +43,6 @@ TEST(AmdgpuTargetInfoTest, LooksUpDescriptorSetEncodingProfile) {
   IREE_ASSERT_OK(loom_amdgpu_target_info_lookup_descriptor_set(
       IREE_SV("amdgpu.gfx950.core"), &descriptor_set));
   ASSERT_NE(descriptor_set, nullptr);
-  EXPECT_TRUE(iree_string_view_equal(descriptor_set->low_preset_key,
-                                     IREE_SV("amdgpu-gfx950")));
   ASSERT_NE(descriptor_set->descriptor_set_stable_id, 0u);
   const loom_amdgpu_descriptor_set_info_t* descriptor_set_by_id = nullptr;
   IREE_ASSERT_OK(loom_amdgpu_target_info_lookup_descriptor_set_by_id(
@@ -70,7 +66,6 @@ TEST(AmdgpuTargetInfoTest, LooksUpMatrixOnlyProcessor) {
   IREE_ASSERT_OK(
       loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx942"), &processor));
   ASSERT_NE(processor, nullptr);
-  EXPECT_TRUE(iree_string_view_is_empty(processor->low_preset_key));
   EXPECT_TRUE(iree_string_view_is_empty(processor->descriptor_set_key));
   EXPECT_EQ(processor->descriptor_set_stable_id, 0u);
   EXPECT_EQ(processor->elf_machine_flags, 0x04Cu);
@@ -85,7 +80,6 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx1170AsMatrixOnlyProcessor) {
   IREE_ASSERT_OK(
       loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx1170"), &processor));
   ASSERT_NE(processor, nullptr);
-  EXPECT_TRUE(iree_string_view_is_empty(processor->low_preset_key));
   EXPECT_TRUE(iree_string_view_is_empty(processor->descriptor_set_key));
   EXPECT_EQ(processor->descriptor_set_stable_id, 0u);
   EXPECT_EQ(processor->elf_machine_flags, 0x05Du);

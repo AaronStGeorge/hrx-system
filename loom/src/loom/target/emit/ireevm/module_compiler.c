@@ -279,9 +279,9 @@ static iree_status_t loom_ireevm_archive_compile_select_entry(
   }
 
   IREE_RETURN_IF_ERROR(loom_target_module_compile_select_entry(
-      state->module, &state->target_options, &state->low_registry,
-      state->entry_predicate, &state->diagnostic_emitter, IREE_SV("IREE VM"),
-      &state->table_arena, out_selected, out_entry));
+      state->module, &state->target_options, state->entry_predicate,
+      &state->diagnostic_emitter, IREE_SV("IREE VM"), &state->table_arena,
+      out_selected, out_entry));
   if (!*out_selected) {
     return iree_ok_status();
   }

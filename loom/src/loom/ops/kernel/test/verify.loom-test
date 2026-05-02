@@ -1,6 +1,6 @@
 // RUN: verify
 
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 target.artifact @test_artifact target(@test_target) {abi = hal_executable, artifact_format = elf}
 
@@ -11,12 +11,16 @@ kernel.def target(@test_target) artifact(@test_artifact) @kernel_artifact_requir
 
 // ====
 
+test.target<low_core> @test_target
+
 // ERROR@+1: STRUCTURE/014 "workgroup_size_x" "0" "positive u32"
 kernel.def workgroup_size(0, 1, 1) @kernel_rejects_zero_workgroup_size() {
   kernel.return
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @workitem_id_requires_kernel_def() {
   // ERROR@+1: STRUCTURE/029 "kernel.workitem.id" "required" "kernel.def" "func.def"
@@ -25,6 +29,8 @@ func.def @workitem_id_requires_kernel_def() {
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 kernel.def @exit_requires_direct_kernel_body(%cond: i1) {
   scf.if %cond {
@@ -37,6 +43,8 @@ kernel.def @exit_requires_direct_kernel_body(%cond: i1) {
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @workgroup_id_requires_kernel_def() {
   // ERROR@+1: STRUCTURE/029 "kernel.workgroup.id" "required" "kernel.def" "func.def"
   %gid = kernel.workgroup.id<x> : index
@@ -44,6 +52,8 @@ func.def @workgroup_id_requires_kernel_def() {
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @workgroup_size_requires_kernel_def() {
   // ERROR@+1: STRUCTURE/029 "kernel.workgroup.size" "required" "kernel.def" "func.def"
@@ -53,6 +63,8 @@ func.def @workgroup_size_requires_kernel_def() {
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @subgroup_collective_requires_kernel_def(%value: f32) {
   // ERROR@+1: STRUCTURE/029 "kernel.subgroup.reduce" "required" "kernel.def" "func.def"
   %sum = kernel.subgroup.reduce<addf> %value : f32
@@ -60,6 +72,8 @@ func.def @subgroup_collective_requires_kernel_def(%value: f32) {
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 kernel.def @subgroup_shuffle_requires_i32_offset(%value: f32, %offset: i64, %width: i32) {
   // ERROR@+1: TYPE/003 "offset" "i64" "i32"
@@ -69,6 +83,8 @@ kernel.def @subgroup_shuffle_requires_i32_offset(%value: f32, %offset: i64, %wid
 
 // ====
 
+test.target<low_core> @test_target
+
 kernel.def @subgroup_broadcast_requires_i32_lane(%value: f32, %lane: index) {
   // ERROR@+1: TYPE/003 "lane" "index" "integer"
   %broadcast = kernel.subgroup.broadcast %value from %lane : f32, index
@@ -76,6 +92,8 @@ kernel.def @subgroup_broadcast_requires_i32_lane(%value: f32, %lane: index) {
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 kernel.def @subgroup_reduce_rejects_integer_value_for_float_kind(%value: i32) {
   // ERROR@+1: TYPE/003 "value" "i32" "floating-point element type for combining kind"
@@ -85,6 +103,8 @@ kernel.def @subgroup_reduce_rejects_integer_value_for_float_kind(%value: i32) {
 
 // ====
 
+test.target<low_core> @test_target
+
 kernel.def @subgroup_reduce_rejects_non_collective_value(%value: vector<2x2xf32>) {
   // ERROR@+1: TYPE/003 "value" "vector<2x2xf32>" "scalar or rank-1 vector"
   %sum = kernel.subgroup.reduce<addf> %value : vector<2x2xf32>
@@ -92,6 +112,8 @@ kernel.def @subgroup_reduce_rejects_non_collective_value(%value: vector<2x2xf32>
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 kernel.def @subgroup_scan_requires_cluster_size_with_stride(%value: f32) {
   // ERROR@+1: STRUCTURE/014 "cluster_size" "0" "present when cluster_stride is present"
@@ -101,6 +123,8 @@ kernel.def @subgroup_scan_requires_cluster_size_with_stride(%value: f32) {
 
 // ====
 
+test.target<low_core> @test_target
+
 kernel.def @subgroup_ballot_rejects_narrow_mask(%predicate: i1) {
   // ERROR@+1: TYPE/004 "mask" "i8" "i32 or i64"
   %mask = kernel.subgroup.vote.ballot %predicate : i1 -> i8
@@ -108,6 +132,8 @@ kernel.def @subgroup_ballot_rejects_narrow_mask(%predicate: i1) {
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 kernel.def @workgroup_reduce_rejects_float_value_for_integer_kind(%value: f32) {
   // ERROR@+1: TYPE/003 "value" "f32" "integer element type for combining kind"
@@ -117,6 +143,8 @@ kernel.def @workgroup_reduce_rejects_float_value_for_integer_kind(%value: f32) {
 
 // ====
 
+test.target<low_core> @test_target
+
 kernel.def @workgroup_vote_count_rejects_narrow_result(%predicate: i1) {
   // ERROR@+1: TYPE/004 "result" "i8" "i32 or i64"
   %count = kernel.workgroup.vote.count %predicate : i1 -> i8
@@ -124,6 +152,8 @@ kernel.def @workgroup_vote_count_rejects_narrow_result(%predicate: i1) {
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @barrier_rejects_global_memory_space() {
   // ERROR@+1: STRUCTURE/014 "memory_space" "1" "workgroup memory space"
@@ -133,6 +163,8 @@ func.def @barrier_rejects_global_memory_space() {
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @barrier_rejects_acquire_ordering() {
   // ERROR@+1: STRUCTURE/014 "ordering" "1" "acq_rel ordering"
   kernel.barrier {memory_space = workgroup, ordering = acquire, scope = workgroup}
@@ -141,6 +173,8 @@ func.def @barrier_rejects_acquire_ordering() {
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @barrier_rejects_subgroup_scope() {
   // ERROR@+1: STRUCTURE/014 "scope" "1" "workgroup scope"
   kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = subgroup}
@@ -148,6 +182,8 @@ func.def @barrier_rejects_subgroup_scope() {
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_copy_requires_static_byte_footprint(%buffer: buffer, %offset: offset, %n: index) {
   %zero = index.constant 0 : offset
@@ -167,6 +203,8 @@ func.def @async_copy_requires_static_byte_footprint(%buffer: buffer, %offset: of
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_copy_rejects_mismatched_byte_footprint(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -184,6 +222,8 @@ func.def @async_copy_rejects_mismatched_byte_footprint(%buffer: buffer, %offset:
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_copy_rejects_unknown_source_memory(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -199,6 +239,8 @@ func.def @async_copy_rejects_unknown_source_memory(%buffer: buffer, %offset: off
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_copy_rejects_direction_memory_mismatch(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
@@ -217,6 +259,8 @@ func.def @async_copy_rejects_direction_memory_mismatch(%buffer: buffer, %offset:
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_copy_rejects_global_store_last_use_cache(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -233,6 +277,8 @@ func.def @async_copy_rejects_global_store_last_use_cache(%buffer: buffer, %offse
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_copy_rejects_global_load_writeback_cache(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
@@ -251,6 +297,8 @@ func.def @async_copy_rejects_global_load_writeback_cache(%buffer: buffer, %offse
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_copy_rejects_bypass_non_system_scope(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -268,6 +316,8 @@ func.def @async_copy_rejects_bypass_non_system_scope(%buffer: buffer, %offset: o
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_copy_token_must_be_grouped(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -282,6 +332,8 @@ func.def @async_copy_token_must_be_grouped(%buffer: buffer, %offset: offset) {
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_group_must_be_used(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
@@ -299,6 +351,8 @@ func.def @async_group_must_be_used(%buffer: buffer, %offset: offset) {
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_wait_rejects_negative_newer_group_count(%group: kernel.async.group) {
   // ERROR@+1: STRUCTURE/014 "newer_groups" "-1" "nonnegative i16 wait count"
   kernel.async.wait %group {newer_groups = -1} : kernel.async.group
@@ -307,6 +361,8 @@ func.def @async_wait_rejects_negative_newer_group_count(%group: kernel.async.gro
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_wait_rejects_large_newer_group_count(%group: kernel.async.group) {
   // ERROR@+1: STRUCTURE/014 "newer_groups" "65536" "nonnegative i16 wait count"
   kernel.async.wait %group {newer_groups = 65536} : kernel.async.group
@@ -314,6 +370,8 @@ func.def @async_wait_rejects_large_newer_group_count(%group: kernel.async.group)
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_group_rejects_group_operand_as_token() {
   %empty = kernel.async.group -> kernel.async.group
@@ -326,6 +384,8 @@ func.def @async_group_rejects_group_operand_as_token() {
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_group_rejects_block_arg_token(%token: kernel.async.token) {
   // ERROR@+1: DOMINANCE/010 "token" "<null>" "kernel async transfer result"
   %group = kernel.async.group %token : kernel.async.token -> kernel.async.group
@@ -334,6 +394,8 @@ func.def @async_group_rejects_block_arg_token(%token: kernel.async.token) {
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_copy_token_rejects_multiple_groups(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
@@ -354,6 +416,8 @@ func.def @async_copy_token_rejects_multiple_groups(%buffer: buffer, %offset: off
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_gather_requires_lane_axis(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -370,6 +434,8 @@ func.def @async_gather_requires_lane_axis(%buffer: buffer, %offset: offset) {
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_gather_rejects_small_lane_slot(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
@@ -388,6 +454,8 @@ func.def @async_gather_rejects_small_lane_slot(%buffer: buffer, %offset: offset)
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_gather_requires_static_lane_footprint(%buffer: buffer, %offset: offset, %n: index) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -405,6 +473,8 @@ func.def @async_gather_requires_static_lane_footprint(%buffer: buffer, %offset: 
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_gather_rejects_workgroup_source(%bytes: offset) {
   %zero = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
@@ -419,6 +489,8 @@ func.def @async_gather_rejects_workgroup_source(%bytes: offset) {
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_cluster_gather_rejects_wrong_mask_type(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
@@ -438,6 +510,8 @@ func.def @async_cluster_gather_rejects_wrong_mask_type(%buffer: buffer, %offset:
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_cluster_gather_rejects_unsupported_width(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -455,6 +529,8 @@ func.def @async_cluster_gather_rejects_unsupported_width(%buffer: buffer, %offse
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_cluster_gather_rejects_mismatched_width(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
@@ -474,6 +550,8 @@ func.def @async_cluster_gather_rejects_mismatched_width(%buffer: buffer, %offset
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_cluster_gather_rejects_workgroup_source(%bytes: offset) {
   %zero = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
@@ -490,6 +568,8 @@ func.def @async_cluster_gather_rejects_workgroup_source(%bytes: offset) {
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @async_cluster_gather_rejects_global_dest(%buffer: buffer, %offset: offset) {
   %layout = encoding.layout.dense : encoding<layout>
   %cluster_mask = scalar.constant 15 : i32
@@ -505,6 +585,8 @@ func.def @async_cluster_gather_rejects_global_dest(%buffer: buffer, %offset: off
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @tensor_descriptor_rejects_three_dgroups() {
   %i32_zero = scalar.constant 0 : i32
   %d0 = vector.splat %i32_zero : vector<4xi32>
@@ -518,6 +600,8 @@ func.def @tensor_descriptor_rejects_three_dgroups() {
 
 // ====
 
+test.target<low_core> @test_target
+
 func.def @tensor_descriptor_rejects_wrong_d1_shape() {
   %i32_zero = scalar.constant 0 : i32
   %d0 = vector.splat %i32_zero : vector<4xi32>
@@ -529,6 +613,8 @@ func.def @tensor_descriptor_rejects_wrong_d1_shape() {
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_tensor_load_rejects_wrong_descriptor_type(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
@@ -548,6 +634,8 @@ func.def @async_tensor_load_rejects_wrong_descriptor_type(%buffer: buffer, %offs
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_tensor_load_rejects_rank_mismatch(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
@@ -569,6 +657,8 @@ func.def @async_tensor_load_rejects_rank_mismatch(%buffer: buffer, %offset: offs
 }
 
 // ====
+
+test.target<low_core> @test_target
 
 func.def @async_tensor_store_rejects_constant_dest(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset

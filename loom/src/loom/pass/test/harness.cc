@@ -73,9 +73,9 @@ loom_pass_predicate_provider_t PassTestTargetPredicateProvider(
   };
 }
 
-loom_pass_environment_t PassTestTargetProfileEnvironment() {
+loom_pass_environment_t PassTestTargetRecordEnvironment() {
   static const loom_pass_environment_capability_t* const capabilities[] = {
-      &loom_test_pass_target_profile_capability,
+      &loom_test_pass_target_record_capability,
   };
   return loom_pass_environment_make(capabilities, IREE_ARRAYSIZE(capabilities));
 }

@@ -15,7 +15,6 @@
 #include "loom/ops/func_symbol_facts.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/facts.h"
-#include "loom/ops/target/ops.h"
 #include "loom/target/function_contract.h"
 
 static iree_status_t loom_low_emit(iree_diagnostic_emitter_t emitter,
@@ -180,29 +179,16 @@ static iree_status_t loom_low_resolve_func_target(
     const loom_low_descriptor_registry_t* registry,
     iree_diagnostic_emitter_t emitter, uint16_t target_attr_index,
     loom_low_resolved_target_t* out_target) {
-  if (registry == NULL || registry->target_bundle_count == 0 ||
-      registry->target_bundles == NULL) {
+  if (registry == NULL) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "target.profile low function targets require a descriptor registry "
-        "with target-bundle presets");
+        "low function target resolution requires a descriptor registry");
   }
-
-  loom_target_preset_registry_t preset_registry = {
-      .target_bundles = registry->target_bundles,
-      .target_bundle_count = registry->target_bundle_count,
-  };
-  loom_symbol_fact_resource_t resource =
-      loom_target_profile_preset_registry_resource(&preset_registry);
-  const loom_symbol_fact_table_options_t fact_options = {
-      .resources = loom_make_symbol_fact_resource_list(&resource, 1),
-  };
 
   iree_arena_allocator_t arena;
   iree_arena_initialize(module->arena.block_pool, &arena);
   loom_symbol_fact_table_t fact_table = {0};
-  loom_symbol_fact_table_initialize_with_options(&fact_table, &fact_options,
-                                                 &arena);
+  loom_symbol_fact_table_initialize(&fact_table, &arena);
 
   loom_symbol_ref_t func_ref = loom_func_like_callee(
       loom_func_like_cast(module, (loom_op_t*)low_func_op));
@@ -222,8 +208,7 @@ static iree_status_t loom_low_resolve_func_target(
       !loom_symbol_ref_is_valid(func_facts->target_symbol)) {
     status = loom_low_emit_symbol_kind_mismatch(
         emitter, module, low_func_op, func_facts->target_symbol,
-        out_target->target_symbol, target_attr_index,
-        IREE_SV("target profile"));
+        out_target->target_symbol, target_attr_index, IREE_SV("target record"));
   }
   bool contract_valid = false;
   if (iree_status_is_ok(status)) {
@@ -283,13 +268,13 @@ iree_status_t loom_low_resolve_function_target(
   out_target->target_op = target_symbol->defining_op;
   out_target->target_name = loom_low_symbol_name(module, target_ref);
 
-  if (loom_target_profile_isa(target_symbol->defining_op)) {
+  if (loom_symbol_implements(target_symbol, LOOM_SYMBOL_INTERFACE_TARGET)) {
     return loom_low_resolve_func_target(module, low_func_op, registry, emitter,
                                         target_attr_index, out_target);
   }
   return loom_low_emit_symbol_kind_mismatch(
       emitter, module, low_func_op, target_ref, target_symbol,
-      target_attr_index, IREE_SV("target profile"));
+      target_attr_index, IREE_SV("target record"));
 }
 
 iree_status_t loom_low_resolve_descriptor_packet(

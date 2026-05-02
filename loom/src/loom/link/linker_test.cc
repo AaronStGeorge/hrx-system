@@ -18,6 +18,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/target/ops.h"
+#include "loom/ops/test/ops.h"
 #include "loom/verify/verify.h"
 
 namespace loom {
@@ -29,8 +30,12 @@ class LinkerTest : public ::testing::Test {
     iree_arena_block_pool_initialize(32 * 1024, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
-    RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
-    RegisterDialect(LOOM_DIALECT_TARGET, loom_target_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables,
+                    loom_func_dialect_op_semantics);
+    RegisterDialect(LOOM_DIALECT_TARGET, loom_target_dialect_vtables,
+                    loom_target_dialect_op_semantics);
+    RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables,
+                    loom_test_dialect_op_semantics);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
   }
 
@@ -44,13 +49,19 @@ class LinkerTest : public ::testing::Test {
 
   using DialectVtablesFn =
       const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+  using DialectSemanticsFn = const loom_op_semantics_t* (*)(iree_host_size_t*);
 
-  void RegisterDialect(uint8_t dialect_id,
-                       DialectVtablesFn dialect_vtables_fn) {
+  void RegisterDialect(uint8_t dialect_id, DialectVtablesFn dialect_vtables_fn,
+                       DialectSemanticsFn dialect_semantics_fn) {
     iree_host_size_t count = 0;
     const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
     IREE_ASSERT_OK(loom_context_register_dialect(&context_, dialect_id, vtables,
                                                  (uint16_t)count));
+    iree_host_size_t semantics_count = 0;
+    const loom_op_semantics_t* semantics =
+        dialect_semantics_fn(&semantics_count);
+    IREE_ASSERT_OK(loom_context_register_dialect_semantics(
+        &context_, dialect_id, semantics, (uint16_t)semantics_count));
   }
 
   loom_module_t* Parse(iree_string_view_t source,
@@ -181,7 +192,7 @@ func.def @identity(%x: i32) -> (i32) {
 
 TEST_F(LinkerTest, SelectiveRootMaterializesReachableSymbols) {
   loom_module_t* harness = Parse(IREE_SV(R"(
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 func.decl target(@test_target) @identity(%x: i32) -> (i32)
 func.decl @unused_decl(%x: i32) -> (i32)
@@ -206,7 +217,7 @@ func.def @unused(%x: i32) -> (i32) {
   EXPECT_EQ(linked->symbols.count, 3u);
 
   std::string text = Print(linked);
-  EXPECT_NE(text.find("target.profile @test_target"), std::string::npos);
+  EXPECT_NE(text.find("test.target<low_core> @test_target"), std::string::npos);
   EXPECT_NE(text.find("func.def @caller"), std::string::npos);
   EXPECT_NE(text.find("func.call @identity"), std::string::npos);
   EXPECT_NE(text.find("func.def target(@test_target) @identity"),
@@ -316,7 +327,7 @@ func.def @identity(%x: i32) -> (i32) {
 
 TEST_F(LinkerTest, MergesDeclarationTargetContractIntoDefinition) {
   loom_module_t* harness = Parse(IREE_SV(R"(
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 func.decl target(@test_target) abi(object_function) export("identity_export") @identity(%x: i32) -> (i32)
 )"));
@@ -338,7 +349,7 @@ func.def @identity(%x: i32) -> (i32) {
 
 TEST_F(LinkerTest, MergesDeclarationPredicatesIntoDefinition) {
   loom_module_t* harness = Parse(IREE_SV(R"(
-target.profile @test_target preset("test-low")
+test.target<low_core> @test_target
 
 func.decl target(@test_target) @bounded(%m: index, %x: tensor<[%m]xf32>) -> (tensor<[%m]xf32>) where [mul(%m, 16)]
 )"));
@@ -360,12 +371,12 @@ func.def @bounded(%m: index, %x: tensor<[%m]xf32>) -> (tensor<[%m]xf32>) {
 
 TEST_F(LinkerTest, RejectsDeclarationDefinitionTargetConflict) {
   loom_module_t* harness = Parse(IREE_SV(R"(
-target.profile @decl_target preset("test-low")
+test.target<low_core> @decl_target
 
 func.decl target(@decl_target) @identity(%x: i32) -> (i32)
 )"));
   loom_module_t* corpus = Parse(IREE_SV(R"(
-target.profile @def_target preset("test-low")
+test.target<low_core> @def_target
 
 func.def target(@def_target) @identity(%x: i32) -> (i32) {
   func.return %x : i32

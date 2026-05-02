@@ -1,7 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_global.loom-test
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-func.def @global_saddr_fallback(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+func.def target(@target) @global_saddr_fallback(%input: buffer, %output: buffer) {
   %base = index.constant 4 : offset
   %input_view = buffer.view %input[%base] : buffer -> view<4xi32, #dense>
   %output_view = buffer.view %output[%base] : buffer -> view<4xi32, #dense>
@@ -25,7 +26,9 @@ low.func.def target(@target) abi(hal_kernel) @global_saddr_fallback() asm<amdgpu
 
 // ====
 
-kernel.def @i32_b128(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @i32_b128(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -83,7 +86,9 @@ low.kernel.def target(@target) @i32_b128() asm<amdgpu.gfx11.core> {
 
 // ====
 
-kernel.def @i32_scalar_2d_store(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @i32_scalar_2d_store(%input: buffer, %output: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 0, 7)] : index
   %y0 = kernel.workitem.id<y> : index
@@ -119,7 +124,9 @@ low.kernel.def target(@target) @i32_scalar_2d_store() asm<amdgpu.gfx11.core> {
 
 // ====
 
-kernel.def @i32_dynamic_constant_index(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @i32_dynamic_constant_index(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero_offset = index.constant 0 : offset
@@ -148,7 +155,9 @@ low.kernel.def target(@target) @i32_dynamic_constant_index() asm<amdgpu.gfx11.co
 
 // ====
 
-kernel.def @f16x2_b32(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @f16x2_b32(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -175,7 +184,9 @@ low.kernel.def target(@target) @f16x2_b32() asm<amdgpu.gfx11.core> {
 
 // ====
 
-kernel.def @f16x4_b64(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @f16x4_b64(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -202,7 +213,9 @@ low.kernel.def target(@target) @f16x4_b64() asm<amdgpu.gfx11.core> {
 
 // ====
 
-kernel.def @bf16x2_b32(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @bf16x2_b32(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -229,7 +242,9 @@ low.kernel.def target(@target) @bf16x2_b32() asm<amdgpu.gfx11.core> {
 
 // ====
 
-kernel.def @bf16x4_b64(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @bf16x4_b64(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset

@@ -309,30 +309,9 @@ iree_status_t loom_target_module_compile_verify_low_module(
   return loom_low_verify_module(module, &low_verify_options, out_result);
 }
 
-static iree_status_t loom_target_module_compile_initialize_fact_table(
-    const loom_target_low_descriptor_registry_t* low_registry,
+static void loom_target_module_compile_initialize_fact_table(
     iree_arena_allocator_t* arena, loom_symbol_fact_table_t* out_fact_table) {
-  if (low_registry == NULL || low_registry->target_bundle_count == 0 ||
-      low_registry->target_bundles == NULL) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "module compilation requires target profile presets");
-  }
-  loom_target_preset_registry_t* preset_registry = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate(arena, sizeof(*preset_registry),
-                                           (void**)&preset_registry));
-  *preset_registry = loom_target_low_descriptor_registry_presets(low_registry);
-
-  loom_symbol_fact_resource_t* resource = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate(arena, sizeof(*resource), (void**)&resource));
-  *resource = loom_target_profile_preset_registry_resource(preset_registry);
-  const loom_symbol_fact_table_options_t fact_options = {
-      .resources = loom_make_symbol_fact_resource_list(resource, 1),
-  };
-  loom_symbol_fact_table_initialize_with_options(out_fact_table, &fact_options,
-                                                 arena);
-  return iree_ok_status();
+  loom_symbol_fact_table_initialize(out_fact_table, arena);
 }
 
 static iree_status_t loom_target_module_compile_lookup_func_facts(
@@ -629,7 +608,6 @@ static iree_status_t loom_target_module_compile_select_single_entry(
 iree_status_t loom_target_module_compile_select_entry(
     const loom_module_t* module,
     const loom_target_module_compile_options_t* options,
-    const loom_target_low_descriptor_registry_t* low_registry,
     loom_target_module_compile_entry_predicate_t predicate,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
@@ -638,8 +616,7 @@ iree_status_t loom_target_module_compile_select_entry(
   *out_selected = false;
 
   loom_symbol_fact_table_t fact_table = {0};
-  IREE_RETURN_IF_ERROR(loom_target_module_compile_initialize_fact_table(
-      low_registry, arena, &fact_table));
+  loom_target_module_compile_initialize_fact_table(arena, &fact_table);
 
   iree_string_view_t entry_symbol =
       loom_target_module_compile_entry_symbol_name(options);
@@ -655,7 +632,6 @@ iree_status_t loom_target_module_compile_select_entry(
 
 iree_status_t loom_target_module_compile_select_artifact_entries(
     const loom_module_t* module, iree_string_view_t artifact_symbol,
-    const loom_target_low_descriptor_registry_t* low_registry,
     loom_target_module_compile_entry_predicate_t predicate,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
@@ -667,8 +643,7 @@ iree_status_t loom_target_module_compile_select_artifact_entries(
       loom_target_module_compile_normalize_symbol_name(artifact_symbol);
 
   loom_symbol_fact_table_t fact_table = {0};
-  IREE_RETURN_IF_ERROR(loom_target_module_compile_initialize_fact_table(
-      low_registry, arena, &fact_table));
+  loom_target_module_compile_initialize_fact_table(arena, &fact_table);
 
   uint16_t artifact_symbol_id = LOOM_SYMBOL_ID_INVALID;
   if (!loom_target_module_compile_lookup_symbol_id(module, artifact_symbol,

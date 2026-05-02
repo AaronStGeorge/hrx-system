@@ -176,16 +176,16 @@ class LowVerifyTest : public ::testing::Test {
 };
 
 static constexpr const char* kVmTargetBundle =
-    "target.profile @vm_target preset(\"test-low\")\n";
+    "test.target<low_core> @vm_target\n";
 
 static constexpr const char* kSemanticVmTargetBundle =
-    "target.profile @vm_target preset(\"test-low\")\n";
+    "test.target<low_core> @vm_target\n";
 
 static constexpr const char* kNativeTargetBundle =
-    "target.profile @native_target preset(\"test-low\")\n";
+    "test.target<low_core> @native_target\n";
 
 static constexpr const char* kHalTargetBundle =
-    "target.profile @hal_target preset(\"test-low\")\n";
+    "test.target<low_core> @hal_target\n";
 
 TEST_F(LowVerifyTest, DescriptorKeysPassWithQualifiedSegments) {
   DiagnosticCapture capture;
@@ -809,7 +809,7 @@ TEST_F(LowVerifyTest, ResourceRejectsInvalidCacheSwizzleStride) {
 TEST_F(LowVerifyTest, ResourceRejectsWrongExportAbi) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "target.profile @native_target preset(\"test-low\")\n"
+      "test.target<low_core> @native_target\n"
       "low.func.def target(@native_target) abi(object_function) @vm_resource() "
       "-> (reg<vm.i32>) {\n"
       "  %state = low.resource<vm_state> {index = 0, semantic_type = "

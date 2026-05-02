@@ -132,13 +132,30 @@ class LlvmIrLegalityTest : public ::testing::Test {
                                           LOOM_LOCATION_UNKNOWN, &return_op));
   }
 
-  void BuildTargetProfileRecords() {
-    loom_symbol_ref_t profile_symbol = MakeSymbol(IREE_SV("test_target"));
-    loom_op_t* profile_op = NULL;
-    IREE_ASSERT_OK(loom_target_profile_build(
-        &module_builder_, profile_symbol, InternString(IREE_SV("test-object")),
-        loom_named_attr_slice_empty(), LOOM_LOCATION_UNKNOWN, &profile_op));
-    ASSERT_NE(profile_op, nullptr);
+  void BuildTargetRecords() {
+    loom_symbol_ref_t target_symbol = MakeSymbol(IREE_SV("test_target"));
+    loom_op_t* target_op = NULL;
+    IREE_ASSERT_OK(loom_target_generic_build(
+        &module_builder_, /*build_flags=*/0, LOOM_TARGET_GENERIC_KIND_REFERENCE,
+        target_symbol, /*codegen_format=*/0,
+        /*target_triple=*/LOOM_STRING_ID_INVALID,
+        /*data_layout=*/LOOM_STRING_ID_INVALID, /*artifact_format=*/0,
+        /*target_cpu=*/LOOM_STRING_ID_INVALID,
+        /*target_features=*/LOOM_STRING_ID_INVALID,
+        /*default_pointer_bitwidth=*/0, /*index_bitwidth=*/0,
+        /*offset_bitwidth=*/0, /*max_workgroup_size_x=*/0,
+        /*max_workgroup_size_y=*/0, /*max_workgroup_size_z=*/0,
+        /*max_flat_workgroup_size=*/0, /*subgroup_size=*/0,
+        /*max_workgroup_count_x=*/0, /*max_workgroup_count_y=*/0,
+        /*max_workgroup_count_z=*/0, /*memory_space_generic=*/0,
+        /*memory_space_global=*/0, /*memory_space_workgroup=*/0,
+        /*memory_space_constant=*/0, /*memory_space_private=*/0,
+        /*memory_space_host=*/0, /*memory_space_descriptor=*/0, /*abi=*/0,
+        /*export_symbol=*/LOOM_STRING_ID_INVALID, /*linkage=*/0,
+        /*hal_binding_alignment=*/0, /*hal_buffer_resource_flags=*/0,
+        /*contract_set_key=*/LOOM_STRING_ID_INVALID,
+        /*contract_feature_bits=*/0, LOOM_LOCATION_UNKNOWN, &target_op));
+    ASSERT_NE(target_op, nullptr);
 
     loom_symbol_ref_t artifact_symbol = MakeSymbol(IREE_SV("test_artifact"));
     loom_op_t* artifact_op = NULL;
@@ -146,7 +163,7 @@ class LlvmIrLegalityTest : public ::testing::Test {
         &module_builder_,
         LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ARTIFACT_FORMAT |
             LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ABI,
-        artifact_symbol, profile_symbol, LOOM_TARGET_ARTIFACT_FORMAT_ELF,
+        artifact_symbol, target_symbol, LOOM_TARGET_ARTIFACT_FORMAT_ELF,
         LOOM_TARGET_ARTIFACT_ABI_KIND_OBJECT_FILE, LOOM_LOCATION_UNKNOWN,
         &artifact_op));
     ASSERT_NE(artifact_op, nullptr);
@@ -275,7 +292,7 @@ TEST_F(LlvmIrLegalityTest, AcceptsObjectArithmetic) {
 }
 
 TEST_F(LlvmIrLegalityTest, AcceptsModuleTargetRecordsAsMetadata) {
-  BuildTargetProfileRecords();
+  BuildTargetRecords();
   BuildAddI32Function();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;

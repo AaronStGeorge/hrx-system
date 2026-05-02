@@ -1,6 +1,7 @@
-// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// RUN: emit source-low output=low
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_broadcast_i32_wave32(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_i32_wave32(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -34,7 +35,9 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_i32_
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_broadcast_first_i32_wave32(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_first_i32_wave32(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -66,7 +69,9 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_firs
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_shuffle_index_i32_wave32(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_index_i32_wave32(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -104,7 +109,9 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_index_
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_shuffle_up_i32_wave32(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_up_i32_wave32(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -144,7 +151,9 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_up_i32
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_broadcast_f32_vector_wave32(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_f32_vector_wave32(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -184,7 +193,9 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_f32_
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_shuffle_down_f32_vector_wave32(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_down_f32_vector_wave32(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -231,7 +242,9 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_down_f
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_reduce_addi_i32_wave32(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_reduce_addi_i32_wave32(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -282,7 +295,9 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_reduce_addi_i3
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_scan_inclusive_addi_i32_wave32(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_scan_inclusive_addi_i32_wave32(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -348,7 +363,9 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_scan_inclusive
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_scan_exclusive_reverse_addi_i32_wave32(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_scan_exclusive_reverse_addi_i32_wave32(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -418,7 +435,9 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_scan_exclusive
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_active_mask_i32_wave32(%output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_active_mask_i32_wave32(%output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -444,7 +463,9 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_active_mask_i3
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_vote_ballot_i32_wave32(%input: buffer, %output: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_vote_ballot_i32_wave32(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -481,7 +502,9 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_vote_ballot_i3
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_vote_any_wave32(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_vote_any_wave32(%input: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -521,7 +544,9 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_vote_any_wave3
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_vote_all_wave32(%input: buffer) {
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_vote_all_wave32(%input: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -558,9 +583,10 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_vote_all_wave3
 }
 
 // ====
-// RUN: emit source-low target-preset=amdgpu-gfx950 output=low
+// RUN: emit source-low output=low
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_active_mask_i64_wave64() {
+amdgpu.target<gfx950> @target
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_active_mask_i64_wave64() {
   %mask = kernel.subgroup.active.mask : i64
   kernel.return
 }
@@ -572,9 +598,10 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_active_mask_i6
 }
 
 // ====
-// RUN: emit source-low target-preset=amdgpu-gfx950 output=low
+// RUN: emit source-low output=low
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_broadcast_i32_wave64(%input: buffer, %output: buffer) {
+amdgpu.target<gfx950> @target
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_i32_wave64(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -607,9 +634,10 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_i32_
 }
 
 // ====
-// RUN: emit source-low target-preset=amdgpu-gfx950 output=low
+// RUN: emit source-low output=low
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_reduce_addf_f32_wave64(%input: buffer, %output: buffer) {
+amdgpu.target<gfx950> @target
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_reduce_addf_f32_wave64(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -662,9 +690,10 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_reduce_addf_f3
 }
 
 // ====
-// RUN: emit source-low target-preset=amdgpu-gfx950 output=low
+// RUN: emit source-low output=low
 
-kernel.def workgroup_size(64, 1, 1) @subgroup_shuffle_xor_i32_wave64(%input: buffer, %output: buffer) {
+amdgpu.target<gfx950> @target
+kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_xor_i32_wave64(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
