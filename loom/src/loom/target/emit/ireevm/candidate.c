@@ -45,13 +45,14 @@ iree_status_t loom_ireevm_run_candidate_compile(
       .report_row_storage = options->report_row_storage,
   };
   iree_status_t status = loom_ireevm_compile_module_archive(
-      run_module->module, &compile_options, allocator, &out_candidate->archive);
+      run_module->module, &compile_options, allocator, &out_candidate->compiled,
+      &out_candidate->archive);
   if (report != NULL) {
     report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
     report->module_name = options->module_name;
     report->entry_symbol = options->entry_symbol;
   }
-  if (iree_status_is_ok(status) && report != NULL) {
+  if (iree_status_is_ok(status) && out_candidate->compiled && report != NULL) {
     loom_target_compile_report_record_artifact_size(
         report, out_candidate->archive.data_length);
   }

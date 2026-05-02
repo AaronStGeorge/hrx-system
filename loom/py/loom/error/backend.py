@@ -287,32 +287,6 @@ ERR_BACKEND_011 = ErrorDef(
     ),
 )
 
-# ERR_BACKEND_012: Artifact emission failed.
-ERR_BACKEND_012 = ErrorDef(
-    domain=ErrorDomain.BACKEND,
-    code=12,
-    severity=Severity.ERROR,
-    summary="Backend artifact emission failed.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "emitter '{emitter_name}' failed to emit {artifact_kind} for "
-        "'@{function_name}': {reason}"
-    ),
-    params=(
-        ErrorParam("target_key", ParamKind.STRING),
-        ErrorParam("export_name", ParamKind.STRING),
-        ErrorParam("config_key", ParamKind.STRING),
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("emitter_name", ParamKind.STRING),
-        ErrorParam("artifact_kind", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Check target package support, descriptor encoding hooks, relocation "
-        "records, and artifact metadata for emitter '{emitter_name}'"
-    ),
-)
-
 # ERR_BACKEND_013: Schedule resource bottleneck estimate was recorded.
 ERR_BACKEND_013 = ErrorDef(
     domain=ErrorDomain.BACKEND,
@@ -532,7 +506,6 @@ ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_009,
     ERR_BACKEND_010,
     ERR_BACKEND_011,
-    ERR_BACKEND_012,
     ERR_BACKEND_013,
     ERR_BACKEND_014,
     ERR_BACKEND_015,

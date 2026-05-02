@@ -92,7 +92,7 @@ iree_status_t FakeHalCompile(
     iree_string_view_t entry_symbol, loom_diagnostic_sink_t diagnostic_sink,
     loom_source_resolver_t source_resolver, uint32_t max_errors,
     loom_target_compile_report_t* report, iree_allocator_t allocator,
-    loom_run_hal_executable_t* out_executable) {
+    bool* out_compiled, loom_run_hal_executable_t* out_executable) {
   (void)backend;
   (void)module;
   (void)entry_symbol;
@@ -102,6 +102,7 @@ iree_status_t FakeHalCompile(
   (void)allocator;
   g_fake_hal_compile_was_called = true;
   g_fake_hal_compile_report = report;
+  *out_compiled = false;
   if (target->data != &kFakeHalTarget) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unexpected fake HAL target payload");
@@ -112,6 +113,7 @@ iree_status_t FakeHalCompile(
           kFakeHalExecutableData, sizeof(kFakeHalExecutableData)),
       .storage = &kFakeHalTarget,
   };
+  *out_compiled = true;
   return iree_ok_status();
 }
 

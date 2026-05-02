@@ -66,7 +66,7 @@ typedef iree_status_t (*loom_run_hal_compile_fn_t)(
     iree_string_view_t entry_symbol, loom_diagnostic_sink_t diagnostic_sink,
     loom_source_resolver_t source_resolver, uint32_t max_errors,
     loom_target_compile_report_t* report, iree_allocator_t allocator,
-    loom_run_hal_executable_t* out_executable);
+    bool* out_compiled, loom_run_hal_executable_t* out_executable);
 
 typedef void (*loom_run_hal_deinitialize_executable_fn_t)(
     const loom_run_hal_backend_t* backend,

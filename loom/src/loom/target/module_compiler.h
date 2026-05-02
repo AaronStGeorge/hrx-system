@@ -15,6 +15,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/codegen/low/verify.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/ir.h"
 #include "loom/target/low_descriptor_registry.h"
@@ -70,6 +71,12 @@ typedef struct loom_target_module_compile_diagnostic_emitter_t {
   loom_diagnostic_sink_t diagnostic_sink;
   // Subsystem identity stored in materialized diagnostics.
   loom_emitter_t emitter;
+  // Error diagnostics emitted through this materializer.
+  uint32_t error_count;
+  // Warning diagnostics emitted through this materializer.
+  uint32_t warning_count;
+  // Remark diagnostics emitted through this materializer.
+  uint32_t remark_count;
 } loom_target_module_compile_diagnostic_emitter_t;
 
 typedef bool(IREE_API_PTR* loom_target_module_compile_entry_predicate_fn_t)(
@@ -107,19 +114,20 @@ void loom_target_module_compile_diagnostic_emitter_initialize(
 iree_diagnostic_emitter_t loom_target_module_compile_emitter(
     loom_target_module_compile_diagnostic_emitter_t* emitter);
 
-// Runs generic module verification and fails if any diagnostics were emitted.
+// Runs generic module verification. Status is reserved for infrastructure
+// failures; verification errors are reported through |out_result|.
 iree_status_t loom_target_module_compile_verify_module(
     const loom_module_t* module,
     const loom_target_module_compile_options_t* options,
-    uint32_t default_max_errors);
+    uint32_t default_max_errors, loom_verify_result_t* out_result);
 
-// Runs target-low semantic verification and fails if any diagnostics were
-// emitted.
+// Runs target-low semantic verification. Status is reserved for infrastructure
+// failures; verification errors are reported through |out_result|.
 iree_status_t loom_target_module_compile_verify_low_module(
     const loom_module_t* module,
     const loom_target_low_descriptor_registry_t* low_registry,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    uint32_t max_errors);
+    uint32_t max_errors, loom_low_verify_result_t* out_result);
 
 // Finds a module-local symbol by spelling without a leading '@'.
 iree_status_t loom_target_module_compile_find_symbol_by_name(
@@ -133,8 +141,16 @@ iree_status_t loom_target_module_compile_select_entry(
     const loom_target_module_compile_options_t* options,
     const loom_target_low_descriptor_registry_t* low_registry,
     loom_target_module_compile_entry_predicate_t predicate,
+    loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
-    loom_target_module_compile_entry_t* out_entry);
+    bool* out_selected, loom_target_module_compile_entry_t* out_entry);
+
+// Emits a structured diagnostic for mutually exclusive entry/artifact selection
+// options.
+iree_status_t loom_target_module_compile_emit_entry_artifact_conflict(
+    loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
+    iree_string_view_t entry_kind, iree_string_view_t entry_symbol,
+    iree_string_view_t artifact_symbol);
 
 // Selects exported artifact entries in target.artifact plan order.
 //
@@ -147,8 +163,9 @@ iree_status_t loom_target_module_compile_select_artifact_entries(
     const loom_module_t* module, iree_string_view_t artifact_symbol,
     const loom_target_low_descriptor_registry_t* low_registry,
     loom_target_module_compile_entry_predicate_t predicate,
+    loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
-    loom_target_module_compile_entry_list_t* out_entries);
+    bool* out_selected, loom_target_module_compile_entry_list_t* out_entries);
 
 #ifdef __cplusplus
 }  // extern "C"

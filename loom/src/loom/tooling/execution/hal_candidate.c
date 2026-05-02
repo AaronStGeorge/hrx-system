@@ -52,12 +52,12 @@ iree_status_t loom_run_hal_candidate_compile(
     report->target_preset_key = out_candidate->target.preset_key;
   }
   if (iree_status_is_ok(status)) {
-    status =
-        backend->compile(backend, run_module->module, &out_candidate->target,
-                         options->entry_symbol, options->diagnostic_sink,
-                         options->source_resolver, options->max_errors, report,
-                         allocator, &out_candidate->executable);
-    if (iree_status_is_ok(status) &&
+    status = backend->compile(
+        backend, run_module->module, &out_candidate->target,
+        options->entry_symbol, options->diagnostic_sink,
+        options->source_resolver, options->max_errors, report, allocator,
+        &out_candidate->compiled, &out_candidate->executable);
+    if (iree_status_is_ok(status) && out_candidate->compiled &&
         out_candidate->executable.target_bundle == NULL) {
       out_candidate->executable.target_bundle =
           out_candidate->target.target_bundle;
@@ -69,7 +69,7 @@ iree_status_t loom_run_hal_candidate_compile(
     report->backend_name = backend->name;
     report->target_family_name = backend->target_family_name;
   }
-  if (iree_status_is_ok(status) && report != NULL) {
+  if (iree_status_is_ok(status) && out_candidate->compiled && report != NULL) {
     report->target_preset_key = out_candidate->target.preset_key;
     report->executable_format = out_candidate->executable.executable_format;
     loom_target_compile_report_record_artifact_size(

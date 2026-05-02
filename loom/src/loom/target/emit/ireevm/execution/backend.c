@@ -23,10 +23,13 @@ static iree_status_t loom_ireevm_execution_backend_run_one_shot(
   iree_status_t status = loom_ireevm_run_candidate_compile(
       request->run_module, request->compile_options, request->host_allocator,
       &candidate);
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && !candidate.compiled) {
+    request->result->exit_code = 1;
+  }
+  if (iree_status_is_ok(status) && candidate.compiled) {
     status = loom_run_vm_runtime_initialize(request->host_allocator, &runtime);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && candidate.compiled) {
     loom_run_vm_invocation_request_t invocation_request = {0};
     loom_run_vm_invocation_request_initialize(&invocation_request);
     invocation_request.runtime = &runtime;
@@ -50,7 +53,7 @@ static iree_status_t loom_ireevm_execution_backend_run_one_shot(
     status = loom_run_vm_invocation_run(
         &invocation_request, request->host_allocator, &invocation_result);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && candidate.compiled) {
     request->result->exit_code = invocation_result.exit_code;
     status = iree_string_builder_append_string(
         &request->result->output,

@@ -27,6 +27,8 @@ typedef struct loom_run_hal_candidate_t {
   const loom_run_hal_backend_t* backend;
   // HAL target selected during candidate compilation.
   loom_run_hal_selected_target_t target;
+  // True when compilation produced executable bytes.
+  bool compiled;
   // HAL executable bytes produced by |backend|.
   loom_run_hal_executable_t executable;
 } loom_run_hal_candidate_t;

@@ -6,7 +6,6 @@
 
 #include "loom/target/emit/native/amdgpu/module_compiler.h"
 
-#include <inttypes.h>
 #include <string.h>
 
 #include "iree/base/internal/arena.h"
@@ -41,7 +40,6 @@ enum {
 
 static bool loom_amdgpu_module_compile_bundle_is_compatible(
     void* user_data, const loom_target_module_compile_entry_t* entry) {
-  (void)user_data;
   if (!loom_kernel_def_isa(entry->func.op) &&
       !loom_low_kernel_def_isa(entry->func.op)) {
     return false;
@@ -78,13 +76,13 @@ static iree_status_t loom_amdgpu_module_compile_symbol_name(
   *out_name = iree_string_view_empty();
   if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
       symbol_ref.symbol_id >= module->symbols.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU compile symbol reference is invalid");
   }
   const loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
   if (symbol->name_id == LOOM_STRING_ID_INVALID ||
       symbol->name_id >= module->strings.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU compile symbol has no module string");
   }
   *out_name = module->strings.entries[symbol->name_id];
@@ -97,13 +95,13 @@ static iree_status_t loom_amdgpu_module_compile_set_target_profile_cpu(
   if (!loom_symbol_ref_is_valid(entry->target_ref) ||
       entry->target_ref.module_id != 0 ||
       entry->target_ref.symbol_id >= module->symbols.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU target CPU override requires a valid "
                             "target profile symbol");
   }
   loom_symbol_t* symbol = &module->symbols.entries[entry->target_ref.symbol_id];
   if (!symbol->defining_op || !loom_target_profile_isa(symbol->defining_op)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU target CPU override requires a "
                             "target.profile symbol");
   }
@@ -240,7 +238,7 @@ static iree_status_t loom_amdgpu_module_compile_lower_function(
           &policy_registry, &entry->bundle_storage.bundle);
   if (policy == NULL) {
     return iree_make_status(
-        IREE_STATUS_NOT_FOUND,
+        IREE_STATUS_INTERNAL,
         "AMDGPU compiler has no target-low lowering policy for contract set "
         "'%.*s'",
         (int)entry->bundle_storage.bundle.config->contract_set_key.size,
@@ -284,11 +282,12 @@ static iree_status_t loom_amdgpu_module_compile_lower_function(
   if (report != NULL) {
     loom_target_compile_report_record_low_lowering(report, out_result);
   }
-  if (out_result->error_count > 0 || out_result->low_func_op == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU source-to-low lowering failed with %" PRIu32 " error%s",
-        out_result->error_count, out_result->error_count == 1 ? "" : "s");
+  if (out_result->error_count != 0) {
+    return iree_ok_status();
+  }
+  if (out_result->low_func_op == NULL) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "source-to-low lowering produced no low kernel");
   }
   return iree_ok_status();
 }
@@ -312,7 +311,7 @@ static iree_status_t loom_amdgpu_module_compile_select_low_function(
   }
   if (!loom_kernel_def_isa(source_function.op)) {
     return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
+        IREE_STATUS_INTERNAL,
         "AMDGPU HAL executable compilation requires the export source to be "
         "a kernel.def or low.kernel.def");
   }
@@ -474,10 +473,11 @@ static iree_status_t loom_amdgpu_module_compile_entries(
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     iree_arena_block_pool_t* block_pool, iree_arena_allocator_t* table_arena,
     loom_pass_value_fact_owner_t* value_facts,
-    loom_target_compile_report_t* report,
+    loom_target_compile_report_t* report, bool* out_compiled,
     loom_amdgpu_hal_executable_t* out_executable, iree_allocator_t allocator) {
+  *out_compiled = false;
   if (entries.count == 0 || entries.values == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU compilation requires at least one entry");
   }
 
@@ -496,6 +496,9 @@ static iree_status_t loom_amdgpu_module_compile_entries(
     IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_prepare_kernel_plan(
         module, low_registry, &entries.values[i], diagnostic_emitter,
         max_errors, table_arena, value_facts, single_entry_report, &plans[i]));
+    if (plans[i].low_function_op == NULL) {
+      return iree_ok_status();
+    }
     low_function_ops[i] = plans[i].low_function_op;
   }
   for (uint16_t i = 0; i < entries.count; ++i) {
@@ -512,15 +515,28 @@ static iree_status_t loom_amdgpu_module_compile_entries(
   IREE_RETURN_IF_ERROR(loom_low_prepare_functions_for_packetization(
       module, low_function_ops, entries.count, &preparation_options,
       block_pool));
+  if (diagnostic_emitter->error_count != 0) {
+    return iree_ok_status();
+  }
   for (uint16_t i = 0; i < entries.count; ++i) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_compute_kernel_fixed_values(
         module, low_registry, &plans[i], table_arena));
   }
 
+  loom_verify_result_t verify_result = {0};
   IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_module(
-      module, target_options, LOOM_AMDGPU_MODULE_COMPILE_DEFAULT_MAX_ERRORS));
+      module, target_options, LOOM_AMDGPU_MODULE_COMPILE_DEFAULT_MAX_ERRORS,
+      &verify_result));
+  if (verify_result.error_count != 0) {
+    return iree_ok_status();
+  }
+  loom_low_verify_result_t low_verify_result = {0};
   IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_low_module(
-      module, low_registry, diagnostic_emitter, max_errors));
+      module, low_registry, diagnostic_emitter, max_errors,
+      &low_verify_result));
+  if (low_verify_result.error_count != 0) {
+    return iree_ok_status();
+  }
 
   loom_amdgpu_kernel_hsaco_contribution_t* contributions = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(table_arena, entries.count,
@@ -534,6 +550,9 @@ static iree_status_t loom_amdgpu_module_compile_entries(
         module, low_registry, &plans[i], diagnostic_emitter, table_arena,
         single_entry_report, &contributions[i], &exports[i]));
   }
+  if (diagnostic_emitter->error_count != 0) {
+    return iree_ok_status();
+  }
 
   iree_const_byte_span_t hsaco = iree_const_byte_span_empty();
   iree_status_t status = loom_amdgpu_module_compile_write_hsaco(
@@ -544,12 +563,17 @@ static iree_status_t loom_amdgpu_module_compile_entries(
                                              out_executable);
   }
   iree_allocator_free(allocator, (void*)hsaco.data);
+  if (iree_status_is_ok(status)) {
+    *out_compiled = true;
+  }
   return status;
 }
 
 iree_status_t loom_amdgpu_compile_hal_executable(
     loom_module_t* module, const loom_amdgpu_module_compile_options_t* options,
-    iree_allocator_t allocator, loom_amdgpu_hal_executable_t* out_executable) {
+    iree_allocator_t allocator, bool* out_compiled,
+    loom_amdgpu_hal_executable_t* out_executable) {
+  *out_compiled = false;
   *out_executable = (loom_amdgpu_hal_executable_t){0};
   loom_target_compile_report_t* report = options ? options->report : NULL;
   if (report != NULL) {
@@ -594,24 +618,31 @@ iree_status_t loom_amdgpu_compile_hal_executable(
               : iree_string_view_empty();
   const iree_string_view_t entry_symbol =
       loom_target_module_compile_entry_symbol_name(&target_options);
+  loom_verify_result_t verify_result = {0};
   iree_status_t status = loom_target_module_compile_verify_module(
-      module, &target_options, LOOM_AMDGPU_MODULE_COMPILE_DEFAULT_MAX_ERRORS);
-  if (iree_status_is_ok(status) && !iree_string_view_is_empty(entry_symbol) &&
+      module, &target_options, LOOM_AMDGPU_MODULE_COMPILE_DEFAULT_MAX_ERRORS,
+      &verify_result);
+  if (iree_status_is_ok(status) && verify_result.error_count == 0 &&
+      !iree_string_view_is_empty(entry_symbol) &&
       !iree_string_view_is_empty(artifact_symbol)) {
-    status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "select either an AMDGPU entry symbol or an "
-                              "AMDGPU artifact symbol, not both");
+    status = loom_target_module_compile_emit_entry_artifact_conflict(
+        &diagnostic_emitter, IREE_SV("AMDGPU HAL-native"), entry_symbol,
+        artifact_symbol);
   }
-  if (iree_status_is_ok(status)) {
+  bool selected = false;
+  if (iree_status_is_ok(status) && verify_result.error_count == 0 &&
+      diagnostic_emitter.error_count == 0) {
     if (!iree_string_view_is_empty(artifact_symbol)) {
       status = loom_target_module_compile_select_artifact_entries(
           module, artifact_symbol, &low_registry, entry_predicate,
-          IREE_SV("AMDGPU HAL-native"), &table_arena, &entries);
+          &diagnostic_emitter, IREE_SV("AMDGPU HAL-native"), &table_arena,
+          &selected, &entries);
     } else {
       status = loom_target_module_compile_select_entry(
           module, &target_options, &low_registry, entry_predicate,
-          IREE_SV("AMDGPU HAL-native"), &table_arena, &single_entry);
-      if (iree_status_is_ok(status)) {
+          &diagnostic_emitter, IREE_SV("AMDGPU HAL-native"), &table_arena,
+          &selected, &single_entry);
+      if (iree_status_is_ok(status) && selected) {
         entries = (loom_target_module_compile_entry_list_t){
             .values = &single_entry,
             .count = 1,
@@ -619,23 +650,23 @@ iree_status_t loom_amdgpu_compile_hal_executable(
       }
     }
   }
-  if (iree_status_is_ok(status) && options != NULL) {
+  if (iree_status_is_ok(status) && selected && options != NULL) {
     for (uint16_t i = 0; i < entries.count && iree_status_is_ok(status); ++i) {
       status = loom_amdgpu_module_compile_apply_target_cpu(
           module, &entries.values[i], options->target_cpu);
     }
   }
-  if (iree_status_is_ok(status) && report != NULL) {
+  if (iree_status_is_ok(status) && selected && report != NULL) {
     loom_target_compile_report_record_target_bundle(
         report, &entries.values[0].bundle_storage.bundle);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && selected) {
     status = loom_amdgpu_module_compile_entries(
         module, &target_options, &low_registry, entries, &diagnostic_emitter,
-        &block_pool, &table_arena, &value_facts, report, out_executable,
-        allocator);
+        &block_pool, &table_arena, &value_facts, report, out_compiled,
+        out_executable, allocator);
   }
-  if (iree_status_is_ok(status) && report != NULL) {
+  if (iree_status_is_ok(status) && *out_compiled && report != NULL) {
     loom_target_compile_report_record_artifact_size(
         report, out_executable->data_length);
   }

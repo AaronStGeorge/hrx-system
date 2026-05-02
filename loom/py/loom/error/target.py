@@ -365,6 +365,177 @@ ERR_TARGET_019 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_020: Target pipeline entry symbol was not found.
+ERR_TARGET_020 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=20,
+    severity=Severity.ERROR,
+    summary="Target pipeline entry symbol was not found.",
+    message=(
+        "target pipeline '{pipeline_name}' cannot find selected entry '@{symbol_name}'"
+    ),
+    params=(
+        ErrorParam("pipeline_name", ParamKind.STRING),
+        ErrorParam("symbol_name", ParamKind.STRING),
+    ),
+    fix_hint="Select an existing function symbol for pipeline '{pipeline_name}'",
+)
+
+# ERR_TARGET_021: Target pipeline artifact symbol was not found.
+ERR_TARGET_021 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=21,
+    severity=Severity.ERROR,
+    summary="Target pipeline artifact symbol was not found.",
+    message=(
+        "target pipeline '{pipeline_name}' cannot find selected artifact "
+        "'@{artifact_name}'"
+    ),
+    params=(
+        ErrorParam("pipeline_name", ParamKind.STRING),
+        ErrorParam("artifact_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Select an existing target.artifact symbol for pipeline '{pipeline_name}'"
+    ),
+)
+
+# ERR_TARGET_022: Target pipeline entry is not a function body.
+ERR_TARGET_022 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=22,
+    severity=Severity.ERROR,
+    summary="Target pipeline entry is not a function body.",
+    message=(
+        "target pipeline '{pipeline_name}' entry '@{symbol_name}' must "
+        "resolve to a function with a body"
+    ),
+    params=(
+        ErrorParam("pipeline_name", ParamKind.STRING),
+        ErrorParam("symbol_name", ParamKind.STRING),
+    ),
+)
+
+# ERR_TARGET_023: Target pipeline entry has no target profile.
+ERR_TARGET_023 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=23,
+    severity=Severity.ERROR,
+    summary="Target pipeline entry has no target profile.",
+    message=(
+        "target pipeline '{pipeline_name}' entry '@{function_name}' must "
+        "declare a target profile"
+    ),
+    params=(
+        ErrorParam("pipeline_name", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Attach a target profile compatible with pipeline '{pipeline_name}' "
+        "to '@{function_name}'"
+    ),
+)
+
+# ERR_TARGET_024: Target pipeline rejected the selected target bundle.
+ERR_TARGET_024 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=24,
+    severity=Severity.ERROR,
+    summary="Target pipeline rejected the selected target bundle.",
+    message=(
+        "target pipeline '{pipeline_name}' cannot compile '@{function_name}' "
+        "with target '{target_key}' export '{export_name}' config "
+        "'{config_key}' ({codegen_format}/{artifact_format}/{abi_kind}, "
+        "triple '{target_triple}')"
+    ),
+    params=(
+        ErrorParam("pipeline_name", ParamKind.STRING),
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("codegen_format", ParamKind.STRING),
+        ErrorParam("artifact_format", ParamKind.STRING),
+        ErrorParam("abi_kind", ParamKind.STRING),
+        ErrorParam("target_triple", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Select a target profile/export whose artifact kind is consumed by "
+        "pipeline '{pipeline_name}'"
+    ),
+)
+
+# ERR_TARGET_025: Target pipeline found no compatible entry.
+ERR_TARGET_025 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=25,
+    severity=Severity.ERROR,
+    summary="Target pipeline found no compatible entry.",
+    message=(
+        "module contains no function with a target profile compatible with "
+        "target pipeline '{pipeline_name}'"
+    ),
+    params=(ErrorParam("pipeline_name", ParamKind.STRING),),
+    fix_hint=(
+        "Select an entry symbol explicitly or add a target profile compatible "
+        "with pipeline '{pipeline_name}'"
+    ),
+)
+
+# ERR_TARGET_026: Target pipeline found multiple compatible entries.
+ERR_TARGET_026 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=26,
+    severity=Severity.ERROR,
+    summary="Target pipeline found multiple compatible entries.",
+    message=(
+        "module contains {candidate_count} functions compatible with target "
+        "pipeline '{pipeline_name}'"
+    ),
+    params=(
+        ErrorParam("pipeline_name", ParamKind.STRING),
+        ErrorParam("candidate_count", ParamKind.U32),
+    ),
+    fix_hint="Select one entry symbol explicitly for pipeline '{pipeline_name}'",
+)
+
+# ERR_TARGET_027: Target artifact exports no entries.
+ERR_TARGET_027 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=27,
+    severity=Severity.ERROR,
+    summary="Target artifact exports no entries.",
+    message=(
+        "target pipeline '{pipeline_name}' selected artifact "
+        "'@{artifact_name}' with no exported entries"
+    ),
+    params=(
+        ErrorParam("pipeline_name", ParamKind.STRING),
+        ErrorParam("artifact_name", ParamKind.STRING),
+    ),
+)
+
+# ERR_TARGET_028: Target pipeline selection options conflict.
+ERR_TARGET_028 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=28,
+    severity=Severity.ERROR,
+    summary="Target pipeline selection options conflict.",
+    message=(
+        "target pipeline '{pipeline_name}' cannot select both entry "
+        "'@{entry_symbol}' and artifact '@{artifact_symbol}'"
+    ),
+    params=(
+        ErrorParam("pipeline_name", ParamKind.STRING),
+        ErrorParam("entry_symbol", ParamKind.STRING),
+        ErrorParam("artifact_symbol", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Select either a single entry symbol or an artifact symbol for "
+        "pipeline '{pipeline_name}'"
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -385,4 +556,13 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_017,
     ERR_TARGET_018,
     ERR_TARGET_019,
+    ERR_TARGET_020,
+    ERR_TARGET_021,
+    ERR_TARGET_022,
+    ERR_TARGET_023,
+    ERR_TARGET_024,
+    ERR_TARGET_025,
+    ERR_TARGET_026,
+    ERR_TARGET_027,
+    ERR_TARGET_028,
 )

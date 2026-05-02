@@ -57,12 +57,15 @@ typedef struct loom_amdgpu_module_compile_options_t {
 // |module| is mutated in place: source functions may gain sibling low IR and
 // HAL low.resource imports in the selected target-low function are materialized
 // before scheduling. Target profiles are resolved through the linked descriptor
-// registry without materializing companion target records in the IR. The caller
-// owns |out_executable| and must release it with
-// loom_amdgpu_hal_executable_deinitialize.
+// registry without materializing companion target records in the IR.
+// |out_compiled| is false when target preflight or compiler diagnostics
+// rejected the module; status remains reserved for infrastructure failures. The
+// caller owns |out_executable| when |out_compiled| is true and must release it
+// with loom_amdgpu_hal_executable_deinitialize.
 iree_status_t loom_amdgpu_compile_hal_executable(
     loom_module_t* module, const loom_amdgpu_module_compile_options_t* options,
-    iree_allocator_t allocator, loom_amdgpu_hal_executable_t* out_executable);
+    iree_allocator_t allocator, bool* out_compiled,
+    loom_amdgpu_hal_executable_t* out_executable);
 
 #ifdef __cplusplus
 }  // extern "C"

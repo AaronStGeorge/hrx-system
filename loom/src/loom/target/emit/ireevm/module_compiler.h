@@ -53,11 +53,14 @@ typedef struct loom_ireevm_module_compile_options_t {
 // |module| is mutated in place: the selected function gains sibling low IR
 // produced by source-to-low lowering. Target profiles are resolved through the
 // linked descriptor registry without materializing companion target records in
-// the IR. The caller owns |out_archive| and must release it with
-// loom_ireevm_module_archive_deinitialize.
+// the IR. |out_compiled| is false when target preflight or compiler diagnostics
+// rejected the module; status remains reserved for infrastructure failures. The
+// caller owns |out_archive| when |out_compiled| is true and must release it
+// with loom_ireevm_module_archive_deinitialize.
 iree_status_t loom_ireevm_compile_module_archive(
     loom_module_t* module, const loom_ireevm_module_compile_options_t* options,
-    iree_allocator_t allocator, loom_ireevm_module_archive_t* out_archive);
+    iree_allocator_t allocator, bool* out_compiled,
+    loom_ireevm_module_archive_t* out_archive);
 
 #ifdef __cplusplus
 }  // extern "C"

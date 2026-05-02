@@ -1259,8 +1259,12 @@ static iree_status_t loom_check_emit_write_source_low_text(
       .source_resolver = source_resolver,
       .max_errors = 20,
   };
-  IREE_RETURN_IF_ERROR(
-      loom_target_module_compile_verify_module(module, &compile_options, 20));
+  loom_verify_result_t verify_result = {0};
+  IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_module(
+      module, &compile_options, 20, &verify_result));
+  if (verify_result.error_count != 0) {
+    return iree_ok_status();
+  }
 
   loom_target_module_compile_diagnostic_emitter_t pass_emitter = {0};
   loom_target_module_compile_diagnostic_emitter_initialize(
@@ -1278,10 +1282,12 @@ static iree_status_t loom_check_emit_write_source_low_text(
   };
   iree_string_view_t selected_descriptor_set_key = iree_string_view_empty();
   bool has_multiple_descriptor_sets = false;
+  bool rejected = false;
   iree_status_t status = loom_low_select_source_funcs(
       module, &selection_options, &selection_arena, &selection_list);
   for (iree_host_size_t i = 0;
-       i < selection_list.count && iree_status_is_ok(status); ++i) {
+       i < selection_list.count && iree_status_is_ok(status) && !rejected;
+       ++i) {
     const loom_low_source_selection_t* selection = &selection_list.values[i];
     const iree_string_view_t descriptor_set_key =
         selection->target_bundle->config->contract_set_key;
@@ -1315,30 +1321,41 @@ static iree_status_t loom_check_emit_write_source_low_text(
     status = loom_low_lower_function(module, selection->func, &lower_options,
                                      &lower_result);
     loom_pass_value_fact_owner_invalidate(&value_facts);
-    if (iree_status_is_ok(status) &&
-        (lower_result.error_count > 0 || lower_result.low_func_op == NULL)) {
-      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "source-to-low lowering failed with %u error%s",
-                                (unsigned)lower_result.error_count,
-                                lower_result.error_count == 1 ? "" : "s");
+    if (iree_status_is_ok(status) && lower_result.error_count != 0) {
+      rejected = true;
+    }
+    if (iree_status_is_ok(status) && lower_result.error_count == 0 &&
+        lower_result.low_func_op == NULL) {
+      status = iree_make_status(IREE_STATUS_INTERNAL,
+                                "source-to-low lowering produced no low func");
     }
   }
   loom_pass_value_fact_owner_deinitialize(&value_facts);
   iree_arena_deinitialize(&selection_arena);
   IREE_RETURN_IF_ERROR(status);
+  if (rejected) {
+    return iree_ok_status();
+  }
   if (selection_list.count == 0) {
     return iree_make_status(
         IREE_STATUS_NOT_FOUND,
         "source-low found no compatible source funcs with a target profile");
   }
-  IREE_RETURN_IF_ERROR(
-      loom_target_module_compile_verify_module(module, &compile_options, 20));
+  IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_module(
+      module, &compile_options, 20, &verify_result));
+  if (verify_result.error_count != 0) {
+    return iree_ok_status();
+  }
 
   loom_target_module_compile_diagnostic_emitter_t verifier_emitter = {0};
   loom_target_module_compile_diagnostic_emitter_initialize(
       module, &compile_options, LOOM_EMITTER_VERIFIER, &verifier_emitter);
+  loom_low_verify_result_t low_verify_result = {0};
   IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_low_module(
-      module, low_registry, &verifier_emitter, 20));
+      module, low_registry, &verifier_emitter, 20, &low_verify_result));
+  if (low_verify_result.error_count != 0) {
+    return iree_ok_status();
+  }
 
   if (request->source_low_output == LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW) {
     if (has_multiple_descriptor_sets) {
@@ -1366,14 +1383,20 @@ static iree_status_t loom_check_emit_verify_provider_module(
       .source_resolver = source_resolver,
       .max_errors = 20,
   };
-  IREE_RETURN_IF_ERROR(
-      loom_target_module_compile_verify_module(module, &compile_options, 20));
+  loom_verify_result_t verify_result = {0};
+  IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_module(
+      module, &compile_options, 20, &verify_result));
+  if (verify_result.error_count != 0) {
+    return iree_ok_status();
+  }
 
   loom_target_module_compile_diagnostic_emitter_t verifier_emitter = {0};
   loom_target_module_compile_diagnostic_emitter_initialize(
       module, &compile_options, LOOM_EMITTER_VERIFIER, &verifier_emitter);
-  return loom_target_module_compile_verify_low_module(module, low_registry,
-                                                      &verifier_emitter, 20);
+  loom_low_verify_result_t low_verify_result = {0};
+  IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_low_module(
+      module, low_registry, &verifier_emitter, 20, &low_verify_result));
+  return iree_ok_status();
 }
 
 iree_status_t loom_check_execute_emit(

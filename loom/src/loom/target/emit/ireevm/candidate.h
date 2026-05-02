@@ -21,6 +21,8 @@ extern "C" {
 typedef struct loom_ireevm_run_candidate_t {
   // Host allocator used for owned candidate storage.
   iree_allocator_t host_allocator;
+  // True when compilation produced |archive|.
+  bool compiled;
   // Structured report for this candidate's compilation.
   loom_target_compile_report_t compile_report;
   // VM bytecode archive produced by the IREE VM compiler path.
