@@ -164,15 +164,12 @@ kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") workgroup
   %stride_x_assumed = scalar.assume %stride_x [mul(%stride_x, 4)] : i32
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
-  %i_outer_ub = index.add %c0, %c4 : index
   %c1 = index.constant 1 : index
-  scf.for %i_outer = [%c0 to %i_outer_ub step %c1] {
+  scf.for %i_outer = [%c0 to %c4 step %c1] {
     %c8 = index.constant 8 : index
     %madd = index.madd %i_outer, %c8, %div : index
-    %j_ub = index.add %c0, %c4 : index
-    scf.for %j = [%c0 to %j_ub step %c1] {
-      %k_ub = index.add %c0, %c4 : index
-      scf.for %k = [%c0 to %k_ub step %c1] {
+    scf.for %j = [%c0 to %c4 step %c1] {
+      scf.for %k = [%c0 to %c4 step %c1] {
         %c128 = index.constant 128 : index
         %mul = index.mul %madd, %c4 : index
         %madd_2 = index.madd %by, %c128, %mul : index
@@ -184,21 +181,18 @@ kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") workgroup
         view.store %load, %tmp_row[%k] : f16, view<4xf16, %layout>
         scf.yield
       }
-      %k_ub_2 = index.add %c0, %c4 : index
-      scf.for %k = [%c0 to %k_ub_2 step %c1] {
+      scf.for %k = [%c0 to %c4 step %c1] {
         %load_2 = view.load %tmp_row[%k] : view<4xf16, %layout> -> f16
         view.store %load_2, %tmp[%k, %j] : f16, view<4x4xf16, %layout>
         scf.yield
       }
       scf.yield
     }
-    %j_ub_2 = index.add %c0, %c4 : index
-    scf.for %j = [%c0 to %j_ub_2 step %c1] {
+    scf.for %j = [%c0 to %c4 step %c1] {
       %div_2 = index.div %thread_id, %c4 : index
       %add_3 = index.add %j, %div_2 : index
       %rem_2 = index.rem %add_3, %c4 : index
-      %k_ub_3 = index.add %c0, %c4 : index
-      scf.for %k = [%c0 to %k_ub_3 step %c1] {
+      scf.for %k = [%c0 to %c4 step %c1] {
         %load_3 = view.load %tmp[%rem_2, %k] : view<4x4xf16, %layout> -> f16
         %madd_4 = index.madd %rem, %c4, %rem_2 : index
         %madd_5 = index.madd %madd, %c4, %k : index
@@ -211,10 +205,8 @@ kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") workgroup
   }
   kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
   %c128_2 = index.constant 128 : index
-  %i_ub = index.add %c0, %c128_2 : index
-  scf.for %i = [%c0 to %i_ub step %c1] {
-    %j_ub_3 = index.add %c0, %c128_2 : index
-    scf.for %j = [%c0 to %j_ub_3 step %c1] {
+  scf.for %i = [%c0 to %c128_2 step %c1] {
+    scf.for %j = [%c0 to %c128_2 step %c1] {
       %load_4 = view.load %out_shared[%i, %j] : view<128x132xf16, %layout> -> f16
       %madd_6 = index.madd %bx, %c128_2, %i : index
       %madd_7 = index.madd %by, %c128_2, %j : index
@@ -323,9 +315,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") workgroup_size
   %c255 = index.constant 255 : index
   %sub = index.sub %c255, %thread_idx : index
   %div = index.div %sub, %c128 : index
-  %tmp_ub = index.add %c0, %div : index
   %c1 = index.constant 1 : index
-  scf.for %tmp = [%c0 to %tmp_ub step %c1] {
+  scf.for %tmp = [%c0 to %div step %c1] {
     %madd_2 = index.madd %tmp, %c128, %thread_idx : index
     %const = scalar.constant 0 : i32
     view.store %const, %out_shared[%madd_2] : i32, view<128xi32, %layout>
@@ -338,12 +329,10 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") workgroup_size
   %sub_2 = index.sub %add, %madd : index
   %c1024 = index.constant 1024 : index
   %div_2 = index.div %sub_2, %c1024 : index
-  %tmp_ub_2 = index.add %c0, %div_2 : index
-  scf.for %tmp = [%c0 to %tmp_ub_2 step %c1] {
+  scf.for %tmp = [%c0 to %div_2 step %c1] {
     %madd_3 = index.madd %tmp, %c1024, %madd : index
     %c2 = index.constant 2 : index
-    %j_ub = index.add %c0, %c2 : index
-    scf.for %j = [%c0 to %j_ub step %c1] {
+    scf.for %j = [%c0 to %c2 step %c1] {
       %load = view.load %group_idx[%madd_3, %j] : view<[%num_tokens]x2xi64, %layout> -> i64
       %trunci = scalar.trunci %load : i64 to i32
       %group_assumed = scalar.assume %trunci [lt(%trunci, 8)] : i32
@@ -354,8 +343,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") workgroup_size
         %group_idx_2 = index.cast %group_assumed : i32 to index
         view.atomic.reduce<addi> %const_3, %out_shared[%group_idx_2] {ordering = relaxed, scope = workgroup} : i32, view<128xi32, %layout>
         scf.yield
-      } else {
-        scf.yield
       }
       scf.yield
     }
@@ -365,8 +352,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") workgroup_size
   %c135 = index.constant 135 : index
   %sub_3 = index.sub %c135, %thread_idx : index
   %div_3 = index.div %sub_3, %c128 : index
-  %tmp_ub_3 = index.add %c0, %div_3 : index
-  scf.for %tmp = [%c0 to %tmp_ub_3 step %c1] {
+  scf.for %tmp = [%c0 to %div_3 step %c1] {
     %madd_4 = index.madd %tmp, %c128, %thread_idx : index
     %load_2 = view.load %out_shared[%madd_4] : view<128xi32, %layout> -> i32
     %const_4 = scalar.constant 0 : i32
@@ -374,8 +360,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") workgroup_size
     scf.if %cmp_2 {
       %load_3 = view.load %out_shared[%madd_4] : view<128xi32, %layout> -> i32
       view.atomic.reduce<addi> %load_3, %out[%madd_4] {ordering = relaxed, scope = device} : i32, view<8xi32, %layout>
-      scf.yield
-    } else {
       scf.yield
     }
     scf.yield
@@ -529,8 +513,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") workgro
       scf.yield
     }
     scf.yield
-  } else {
-    scf.yield
   }
   kernel.return
 }
@@ -626,15 +608,13 @@ kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") workgroup
   %cmp = index.cmp slt, %madd, %num_tokens_idx : index
   scf.if %cmp {
     %c2 = index.constant 2 : index
-    %i_ub = index.add %c0, %c2 : index
     %c1 = index.constant 1 : index
-    scf.for %i = [%c0 to %i_ub step %c1] {
+    scf.for %i = [%c0 to %c2 step %c1] {
       %load = view.load %topk_weights[%madd, %i] : view<[%num_tokens]x2xf32, %layout> -> f32
       view.store %load, %weights_local[%i] : f32, view<2xf32, %layout>
       scf.yield
     }
-    %i_ub_2 = index.add %c0, %c2 : index
-    scf.for %i = [%c0 to %i_ub_2 step %c1] {
+    scf.for %i = [%c0 to %c2 step %c1] {
       %load_2 = view.load %total[%c0] : view<1xf32, %layout> -> f32
       %load_3 = view.load %weights_local[%i] : view<2xf32, %layout> -> f32
       %addf = scalar.addf %load_2, %load_3 : f32
@@ -643,16 +623,13 @@ kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") workgroup
     }
     %load_4 = view.load %total[%c0] : view<1xf32, %layout> -> f32
     view.store %load_4, %denominator[%madd] : f32, view<[%num_tokens]xf32, %layout>
-    %i_ub_3 = index.add %c0, %c2 : index
-    scf.for %i = [%c0 to %i_ub_3 step %c1] {
+    scf.for %i = [%c0 to %c2 step %c1] {
       %load_5 = view.load %weights_local[%i] : view<2xf32, %layout> -> f32
       %load_6 = view.load %total[%c0] : view<1xf32, %layout> -> f32
       %divf = scalar.divf %load_5, %load_6 : f32
       view.store %divf, %normalized_weights[%madd, %i] : f32, view<[%num_tokens]x2xf32, %layout>
       scf.yield
     }
-    scf.yield
-  } else {
     scf.yield
   }
   kernel.return
@@ -762,9 +739,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") workgroup_size(128,
   %c255 = index.constant 255 : index
   %sub = index.sub %c255, %thread_idx : index
   %div = index.div %sub, %c128 : index
-  %tmp_ub = index.add %c0, %div : index
   %c1 = index.constant 1 : index
-  scf.for %tmp = [%c0 to %tmp_ub step %c1] {
+  scf.for %tmp = [%c0 to %div step %c1] {
     %madd_2 = index.madd %tmp, %c128, %thread_idx : index
     %const = scalar.constant 0 : i32
     view.store %const, %out_shared[%madd_2] : i32, view<128xi32, %layout>
@@ -777,12 +753,10 @@ kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") workgroup_size(128,
   %sub_2 = index.sub %add, %madd : index
   %c1024 = index.constant 1024 : index
   %div_2 = index.div %sub_2, %c1024 : index
-  %tmp_ub_2 = index.add %c0, %div_2 : index
-  scf.for %tmp = [%c0 to %tmp_ub_2 step %c1] {
+  scf.for %tmp = [%c0 to %div_2 step %c1] {
     %madd_3 = index.madd %tmp, %c1024, %madd : index
     %c2 = index.constant 2 : index
-    %j_ub = index.add %c0, %c2 : index
-    scf.for %j = [%c0 to %j_ub step %c1] {
+    scf.for %j = [%c0 to %c2 step %c1] {
       %load = view.load %topk_idx[%madd_3, %j] : view<[%num_tokens]x2xi64, %layout> -> i64
       %trunci = scalar.trunci %load : i64 to i32
       %expert_idx_assumed = scalar.assume %trunci [lt(%trunci, 8)] : i32
@@ -793,8 +767,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") workgroup_size(128,
         %expert_idx_idx = index.cast %expert_idx_assumed : i32 to index
         view.atomic.reduce<addi> %const_3, %out_shared[%expert_idx_idx] {ordering = relaxed, scope = workgroup} : i32, view<128xi32, %layout>
         scf.yield
-      } else {
-        scf.yield
       }
       scf.yield
     }
@@ -804,8 +776,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") workgroup_size(128,
   %c135 = index.constant 135 : index
   %sub_3 = index.sub %c135, %thread_idx : index
   %div_3 = index.div %sub_3, %c128 : index
-  %tmp_ub_3 = index.add %c0, %div_3 : index
-  scf.for %tmp = [%c0 to %tmp_ub_3 step %c1] {
+  scf.for %tmp = [%c0 to %div_3 step %c1] {
     %madd_4 = index.madd %tmp, %c128, %thread_idx : index
     %load_2 = view.load %out_shared[%madd_4] : view<128xi32, %layout> -> i32
     %const_4 = scalar.constant 0 : i32
@@ -819,8 +790,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") workgroup_size(128,
       %sitofp_2 = scalar.sitofp %muli_2 : i32 to f32
       %divf = scalar.divf %sitofp, %sitofp_2 : f32
       view.atomic.reduce<addf> %divf, %out[%madd_4] {ordering = relaxed, scope = device} : f32, view<8xf32, %layout>
-      scf.yield
-    } else {
       scf.yield
     }
     scf.yield
@@ -935,19 +904,16 @@ kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel
   %sub = index.sub %add, %madd : index
   %c1024 = index.constant 1024 : index
   %div = index.div %sub, %c1024 : index
-  %tmp_ub = index.add %c0, %div : index
   %c1 = index.constant 1 : index
-  scf.for %tmp = [%c0 to %tmp_ub step %c1] {
+  scf.for %tmp = [%c0 to %div step %c1] {
     %madd_2 = index.madd %tmp, %c1024, %madd : index
-    %j_ub = index.add %c0, %c1 : index
-    scf.for %j = [%c0 to %j_ub step %c1] {
+    scf.for %j = [%c0 to %c1 step %c1] {
       %const = scalar.constant 0 : i64
       view.store %const, %group_sel[%j] : i64, view<2xi64, %layout>
       scf.yield
     }
     %c4 = index.constant 4 : index
-    %j_ub_2 = index.add %c0, %c4 : index
-    scf.for %j = [%c0 to %j_ub_2 step %c1] {
+    scf.for %j = [%c0 to %c4 step %c1] {
       %load = view.load %group_indices[%madd_2, %j] : view<[%num_tokens]x4xi64, %layout> -> i64
       %group_idx_assumed = scalar.assume %load [lt(%load, 64)] : i64
       %const_2 = scalar.constant 0 : i64
@@ -978,8 +944,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel
       scf.if %cmp_4 {
         %const_7 = scalar.constant -1 : i64
         view.store %const_7, %group_indices[%madd_2, %j] : i64, view<[%num_tokens]x4xi64, %layout>
-        scf.yield
-      } else {
         scf.yield
       }
       scf.yield
@@ -1115,9 +1079,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") workgroup_size
   %cmp = index.cmp sge, %madd, %num_tokens_idx : index
   kernel.exit %cmp : i1
   %c3 = index.constant 3 : index
-  %ngram_idx_ub = index.add %c0, %c3 : index
   %c1 = index.constant 1 : index
-  scf.for %ngram_idx = [%c0 to %ngram_idx_ub step %c1] {
+  scf.for %ngram_idx = [%c0 to %c3 step %c1] {
     %load = view.load %ngram_token_ids[%madd, %ngram_idx] : view<[%num_tokens]x3xi32, %layout> -> i32
     %extsi = scalar.extsi %load : i32 to i64
     %load_2 = view.load %hash_local[%c0] : view<1xi64, %layout> -> i64
@@ -1128,8 +1091,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") workgroup_size
     %cmp_2 = index.cmp sgt, %ngram_idx, %c0 : index
     scf.if %cmp_2 {
       %c4 = index.constant 4 : index
-      %j_ub = index.add %c0, %c4 : index
-      scf.for %j = [%c0 to %j_ub step %c1] {
+      scf.for %j = [%c0 to %c4 step %c1] {
         %sub = index.sub %ngram_idx, %c1 : index
         %madd_2 = index.madd %sub, %c4, %j : index
         %sub_2 = index.sub %ngram_idx, %c1 : index
@@ -1143,8 +1105,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") workgroup_size
         view.store %addi, %output[%bx, %madd, %madd_2] : i32, view<2x[%num_tokens]x8xi32, %layout>
         scf.yield
       }
-      scf.yield
-    } else {
       scf.yield
     }
     scf.yield
@@ -1250,20 +1210,15 @@ kernel.def target(@hip_mcpu_gfx1100) export("expand_to_fused_kernel") workgroup_
       %sub = index.sub %c127, %thread_idx : index
       %c64 = index.constant 64 : index
       %div = index.div %sub, %c64 : index
-      %tmp_ub = index.add %c0, %div : index
       %c1 = index.constant 1 : index
-      scf.for %tmp = [%c0 to %tmp_ub step %c1] {
+      scf.for %tmp = [%c0 to %div step %c1] {
         %madd = index.madd %tmp, %c64, %thread_idx : index
         %const_2 = scalar.constant 0.0 : f16
         view.store %const_2, %expanded_x[%bx, %madd] : f16, view<[%num_expanded_tokens]x64xf16, %layout>
         scf.yield
       }
       scf.yield
-    } else {
-      scf.yield
     }
-    scf.yield
-  } else {
     scf.yield
   }
   %num_tokens_idx = index.cast %num_tokens : i32 to index
@@ -1272,9 +1227,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("expand_to_fused_kernel") workgroup_
   %bx_assumed, %num_tokens_assumed = index.assume %bx, %num_tokens_idx [lt(%bx, %num_tokens_idx)] : index, index
   %c0_2 = index.constant 0 : index
   %c2 = index.constant 2 : index
-  %k_ub = index.add %c0_2, %c2 : index
   %c1_2 = index.constant 1 : index
-  scf.for %k = [%c0_2 to %k_ub step %c1_2] {
+  scf.for %k = [%c0_2 to %c2 step %c1_2] {
     %load_2 = view.load %token_topk_to_pos[%bx_assumed, %k] : view<[%num_tokens]x2xi32, %layout> -> i32
     %pos_assumed, %num_expanded_tokens_assumed = scalar.assume %load_2, %num_expanded_tokens [lt(%load_2, %num_expanded_tokens)] : i32, i32
     %const_3 = scalar.constant 0 : i32
@@ -1284,16 +1238,13 @@ kernel.def target(@hip_mcpu_gfx1100) export("expand_to_fused_kernel") workgroup_
       %sub_2 = index.sub %c127_2, %thread_idx : index
       %c64_2 = index.constant 64 : index
       %div_2 = index.div %sub_2, %c64_2 : index
-      %tmp_ub_2 = index.add %c0_2, %div_2 : index
-      scf.for %tmp = [%c0_2 to %tmp_ub_2 step %c1_2] {
+      scf.for %tmp = [%c0_2 to %div_2 step %c1_2] {
         %madd_2 = index.madd %tmp, %c64_2, %thread_idx : index
         %load_3 = view.load %x[%bx_assumed, %madd_2] : view<[%num_tokens]x64xf16, %layout> -> f16
         %pos_idx = index.cast %pos_assumed : i32 to index
         view.store %load_3, %expanded_x[%pos_idx, %madd_2] : f16, view<[%num_expanded_tokens]x64xf16, %layout>
         scf.yield
       }
-      scf.yield
-    } else {
       scf.yield
     }
     scf.yield

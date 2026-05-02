@@ -18,6 +18,7 @@ from loom.importers.tilelang.converter import (
 from loom.importers.tilelang.nodes import node_kind, node_text, source_name
 from loom.importers.tilelang.ops.calls import is_thread_return_call
 from loom.importers.tilelang.ops.topology import (
+    integer_value,
     map_thread_axis,
     mapped_thread_axis_sources,
     thread_axis_from_binding,
@@ -100,12 +101,15 @@ def convert_for(
     if lower is None or extent is None:
         context.record_blocked(node_text(stmt), "loop bounds are not mapped")
         return
-    upper = context.builder.index.add(
-        lhs=lower,
-        rhs=extent,
-        results=[INDEX],
-        name=context.fresh_name(f"{loop_name}_ub"),
-    )
+    if integer_value(getattr(stmt, "min", None)) == 0:
+        upper = extent
+    else:
+        upper = context.builder.index.add(
+            lhs=lower,
+            rhs=extent,
+            results=[INDEX],
+            name=context.fresh_name(f"{loop_name}_ub"),
+        )
     step = context.ensure_constant("1", "index", "c1")
     body = context.builder.region(args=[(loop_name, INDEX)])
     loop_var_ref = ValueRef(body.blocks[0].arg_ids[0], context.builder.ir)
@@ -186,17 +190,19 @@ def convert_if_then_else(
     if condition is None:
         return
     then_region = context.builder.region()
-    else_region = context.builder.region()
+    else_case = getattr(stmt, "else_case", None)
+    else_region = context.builder.region() if else_case is not None else None
     then_child = context.fork(preview_block=then_region.blocks[0])
-    else_child = context.fork(preview_block=else_region.blocks[0])
     with context.builder.insertion_block(then_region.blocks[0]):
         converter.convert_stmt(getattr(stmt, "then_case", None), then_child)
         context.builder.scf.yield_()
-    with context.builder.insertion_block(else_region.blocks[0]):
-        converter.convert_stmt(getattr(stmt, "else_case", None), else_child)
-        context.builder.scf.yield_()
     context.merge_child_records(then_child)
-    context.merge_child_records(else_child)
+    if else_region is not None:
+        else_child = context.fork(preview_block=else_region.blocks[0])
+        with context.builder.insertion_block(else_region.blocks[0]):
+            converter.convert_stmt(else_case, else_child)
+            context.builder.scf.yield_()
+        context.merge_child_records(else_child)
     context.builder.scf.if_(
         condition=condition,
         results=[],

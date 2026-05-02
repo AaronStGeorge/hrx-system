@@ -176,9 +176,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("dynamic_loop_bound") workgroup_size
   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<8xf32, %layout>
   %c0 = index.constant 0 : index
   %n_idx = index.cast %n : i32 to index
-  %i_ub = index.add %c0, %n_idx : index
   %c1 = index.constant 1 : index
-  scf.for %i = [%c0 to %i_ub step %c1] {
+  scf.for %i = [%c0 to %n_idx step %c1] {
     %load = view.load %src_view[%i] : view<8xf32, %layout> -> f32
     view.store %load, %dst_view[%i] : f32, view<8xf32, %layout>
     scf.yield
@@ -223,9 +222,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("ceildiv_loop") workgroup_size(1, 1,
   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<8xf32, %layout>
   %c0 = index.constant 0 : index
   %c2 = index.constant 2 : index
-  %i_ub = index.add %c0, %c2 : index
   %c1 = index.constant 1 : index
-  scf.for %i = [%c0 to %i_ub step %c1] {
+  scf.for %i = [%c0 to %c2 step %c1] {
     %load = view.load %src_view[%i] : view<8xf32, %layout> -> f32
     view.store %load, %dst_view[%i] : f32, view<8xf32, %layout>
     scf.yield
