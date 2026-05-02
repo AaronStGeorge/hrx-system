@@ -47,6 +47,7 @@ from loom.assembly import (
     ResultTypeList,
     Scope,
     SymbolRef,
+    TemplateParam,
     TypedRefs,
     TypeOf,
     TypesOf,
@@ -100,6 +101,7 @@ from loom.dsl import (
     Successor,
     SymbolDefinition,
     SymbolReference,
+    TargetLikeInterface,
     TiedResult,
     Writes,
     YieldCountMatchesResults,
@@ -141,6 +143,15 @@ _RecordKind = EnumDef(
         EnumCase("artifact", 2, doc="Artifact-like record."),
     ],
     doc="Synthetic record kind. Open for bytecode future-ordinal tests.",
+)
+
+_TargetKind = EnumDef(
+    "TargetKind",
+    [
+        EnumCase("low_core", 1, doc="Generic target-low test core."),
+        EnumCase("quirky", 2, doc="Synthetic edge-case target."),
+    ],
+    doc="Synthetic target kind for target-like interface tests.",
 )
 
 cmp_predicates = EnumDef(
@@ -1913,6 +1924,43 @@ test_low_asm_region = Op(
 )
 
 # ============================================================================
+# test.target — target-like symbol record
+# ============================================================================
+
+test_target = Op(
+    "test.target",
+    group=test_ops,
+    doc="Test target-like module record with structural interface metadata.",
+    traits=[SYMBOL_DEFINE],
+    interfaces=[
+        TargetLikeInterface(
+            symbol="symbol",
+            selector="kind",
+            extensions="attrs",
+        )
+    ],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="target",
+        interfaces=["target", "record"],
+        bytecode_kind="LOOM_SYMBOL_RECORD",
+    ),
+    attrs=[
+        AttrDef("symbol", "symbol"),
+        AttrDef("kind", "enum", enum_def=_TargetKind),
+        AttrDef("attrs", "dict", optional=True),
+    ],
+    format=[
+        TemplateParam("kind"),
+        SymbolRef("symbol"),
+        AttrDict("attrs"),
+    ],
+    examples=[
+        "test.target<low_core> @target {subgroup_size = 64}",
+    ],
+)
+
+# ============================================================================
 # Registry: all test ops in declaration order
 # ============================================================================
 
@@ -1999,4 +2047,5 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_clause_copy,
     test_typed_use,
     test_shape,
+    test_target,
 )

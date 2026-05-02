@@ -76,6 +76,7 @@ from loom.dsl import (
     Operand,
     RegionBranchInterface,
     RegionDef,
+    TargetLikeInterface,
     TiedResult,
     TypeConstraint,
     TypeDef,
@@ -595,6 +596,7 @@ SYMBOL_INTERFACE_MAP: dict[str, str] = {
     "global": "LOOM_SYMBOL_INTERFACE_GLOBAL",
     "executable": "LOOM_SYMBOL_INTERFACE_EXECUTABLE",
     "record": "LOOM_SYMBOL_INTERFACE_RECORD",
+    "target": "LOOM_SYMBOL_INTERFACE_TARGET",
 }
 
 
@@ -763,6 +765,7 @@ class InterfaceFieldSpec:
                          region (requires region_field)
           "bool"       — render as a C boolean literal (true/false)
           "call_kind"  — render a loom_call_like_kind_t constant
+          "c_ptr"      — render NULL or an address-of C data symbol
     region_field: For kind="block_arg", the name of the interface field
         that names the region the block arg belongs to. Unused for
         other kinds.
@@ -848,6 +851,18 @@ _INTERFACES: tuple[InterfaceSpec, ...] = (
             InterfaceFieldSpec("implements", "implements_attr_index", "attr"),
             InterfaceFieldSpec("priority", "priority_attr_index", "attr"),
             InterfaceFieldSpec("args_as_operands", "args_as_operands", "bool"),
+        ),
+    ),
+    InterfaceSpec(
+        python_class=TargetLikeInterface,
+        name="TargetLikeInterface",
+        c_struct="loom_target_like_vtable_t",
+        vtable_field="target_like",
+        fields=(
+            InterfaceFieldSpec("symbol", "symbol_attr_index", "attr"),
+            InterfaceFieldSpec("selector", "selector_attr_index", "attr"),
+            InterfaceFieldSpec("extensions", "extension_attrs_attr_index", "attr"),
+            InterfaceFieldSpec("descriptor", "descriptor", "c_ptr"),
         ),
     ),
     InterfaceSpec(
@@ -982,6 +997,12 @@ def _resolve_interface_field(
         if not isinstance(py_value, CallLikeKind):
             raise ValueError(f"{interface_name} field {field_spec.py_field!r}: expected CallLikeKind, got {py_value!r}")
         return CALL_LIKE_KIND_MAP[py_value]
+    if field_spec.kind == "c_ptr":
+        if py_value is None:
+            return "NULL"
+        if not isinstance(py_value, str) or not py_value:
+            raise ValueError(f"{interface_name} field {field_spec.py_field!r}: expected C symbol name or None, got {py_value!r}")
+        return py_value if py_value.startswith("&") else f"&{py_value}"
     raise ValueError(f"{interface_name} field {field_spec.py_field!r}: unknown kind {field_spec.kind!r}")
 
 

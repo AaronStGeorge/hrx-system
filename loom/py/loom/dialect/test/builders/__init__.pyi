@@ -823,3 +823,11 @@ class TestBuilder(DialectBuilder):
         dims: list[int | ValueRef],
         location_id: int | None = ...,
     ) -> None: ...
+    def target(
+        self,
+        *,
+        kind: str,
+        symbol: str,
+        attrs: Mapping[str, Any] | None = ...,
+        location_id: int | None = ...,
+    ) -> None: ...

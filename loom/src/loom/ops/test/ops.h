@@ -101,7 +101,8 @@ enum {
   LOOM_OP_TEST_CLAUSE_COPY = LOOM_OP_KIND(LOOM_DIALECT_TEST, 79),
   LOOM_OP_TEST_TYPED_USE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 80),
   LOOM_OP_TEST_SHAPE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 81),
-  LOOM_OP_TEST_COUNT_ = 82,
+  LOOM_OP_TEST_TARGET = LOOM_OP_KIND(LOOM_DIALECT_TEST, 82),
+  LOOM_OP_TEST_COUNT_ = 83,
 };
 
 // Function visibility. Absent (0) means private.
@@ -135,6 +136,13 @@ typedef enum loom_test_record_kind_e {
   LOOM_TEST_RECORD_KIND_ARTIFACT = 2,
   LOOM_TEST_RECORD_KIND_COUNT_ = 3,
 } loom_test_record_kind_t;
+
+// Synthetic target kind for target-like interface tests.
+typedef enum loom_test_target_kind_e {
+  LOOM_TEST_TARGET_KIND_LOW_CORE = 1,
+  LOOM_TEST_TARGET_KIND_QUIRKY = 2,
+  LOOM_TEST_TARGET_KIND_COUNT_ = 3,
+} loom_test_target_kind_t;
 
 // LOOM_OP_TEST_ADDI: Test binary integer op.
 // %result = test.addi %lhs, %rhs : i32
@@ -1477,6 +1485,20 @@ iree_status_t loom_test_shape_build(
     iree_host_size_t dims_count,
     const int64_t* static_dims,
     iree_host_size_t static_dims_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_TARGET: Test target-like module record with structural interface metadata.
+// test.target<low_core> @target {subgroup_size = 64}
+LOOM_DEFINE_ISA(loom_test_target_isa, LOOM_OP_TEST_TARGET)
+LOOM_DEFINE_ATTR_SYMBOL(loom_test_target_symbol, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_test_target_kind, 1, loom_test_target_kind_t)
+LOOM_DEFINE_ATTR_DICT(loom_test_target_attrs, 2)
+iree_status_t loom_test_target_build(
+    loom_builder_t* builder,
+    loom_test_target_kind_t kind,
+    loom_symbol_ref_t symbol,
+    loom_optional loom_named_attr_slice_t attrs,
     loom_location_id_t location,
     loom_op_t** out_op);
 

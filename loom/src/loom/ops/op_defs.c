@@ -756,6 +756,57 @@ int64_t loom_func_like_priority(loom_func_like_t func) {
 }
 
 //===----------------------------------------------------------------------===//
+// TargetLike interface
+//===----------------------------------------------------------------------===//
+
+loom_target_like_t loom_target_like_cast(const loom_module_t* module,
+                                         const loom_op_t* op) {
+  if (!op) return (loom_target_like_t){.op = NULL, .vtable = NULL};
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  if (!vtable || !vtable->target_like) {
+    return (loom_target_like_t){.op = NULL, .vtable = NULL};
+  }
+  return (loom_target_like_t){.op = op, .vtable = vtable->target_like};
+}
+
+static loom_attribute_t loom_target_like_attr(loom_target_like_t target,
+                                              uint8_t attr_index) {
+  if (!target.vtable || attr_index == LOOM_ATTR_INDEX_NONE ||
+      attr_index >= target.op->attribute_count) {
+    return loom_attr_absent();
+  }
+  return loom_op_attrs(target.op)[attr_index];
+}
+
+loom_symbol_ref_t loom_target_like_symbol(loom_target_like_t target) {
+  loom_attribute_t attr = loom_target_like_attr(
+      target,
+      target.vtable ? target.vtable->symbol_attr_index : LOOM_ATTR_INDEX_NONE);
+  if (loom_attr_is_absent(attr)) return loom_symbol_ref_null();
+  return loom_attr_as_symbol(attr);
+}
+
+loom_attribute_t loom_target_like_selector(loom_target_like_t target) {
+  return loom_target_like_attr(target, target.vtable
+                                           ? target.vtable->selector_attr_index
+                                           : LOOM_ATTR_INDEX_NONE);
+}
+
+loom_named_attr_slice_t loom_target_like_extension_attrs(
+    loom_target_like_t target) {
+  loom_attribute_t attr = loom_target_like_attr(
+      target, target.vtable ? target.vtable->extension_attrs_attr_index
+                            : LOOM_ATTR_INDEX_NONE);
+  if (loom_attr_is_absent(attr)) return loom_named_attr_slice_empty();
+  return loom_attr_as_dict(attr);
+}
+
+const loom_target_like_descriptor_t* loom_target_like_descriptor(
+    loom_target_like_t target) {
+  return target.vtable ? target.vtable->descriptor : NULL;
+}
+
+//===----------------------------------------------------------------------===//
 // LoopLike interface
 //===----------------------------------------------------------------------===//
 

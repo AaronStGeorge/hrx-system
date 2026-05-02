@@ -773,6 +773,24 @@ TEST_F(BuilderTest, FuncBuilder) {
             LOOM_SCALAR_TYPE_I32);
 }
 
+TEST_F(BuilderTest, TargetLikeInterfaceReadsTargetRecordFields) {
+  loom_symbol_ref_t symbol = {0, 7};
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_target_build(
+      &builder_, LOOM_TEST_TARGET_KIND_LOW_CORE, symbol,
+      loom_named_attr_slice_empty(), LOOM_LOCATION_UNKNOWN, &op));
+
+  loom_target_like_t target = loom_target_like_cast(module_, op);
+  ASSERT_TRUE(loom_target_like_isa(target));
+  EXPECT_TRUE(loom_symbol_definition_implements(
+      loom_op_vtable(module_, op)->symbol_def, LOOM_SYMBOL_INTERFACE_TARGET));
+  EXPECT_EQ(loom_target_like_symbol(target).symbol_id, 7u);
+  EXPECT_EQ(loom_attr_as_enum(loom_target_like_selector(target)),
+            LOOM_TEST_TARGET_KIND_LOW_CORE);
+  EXPECT_EQ(loom_target_like_extension_attrs(target).count, 0u);
+  EXPECT_EQ(loom_target_like_descriptor(target), nullptr);
+}
+
 TEST_F(BuilderTest, AttrsBuilder) {
   loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
   loom_op_t* op = NULL;

@@ -720,6 +720,8 @@ enum loom_symbol_interface_bits_e {
   LOOM_SYMBOL_INTERFACE_EXECUTABLE = 1u << 2,
   // Symbol names a generic module-level record.
   LOOM_SYMBOL_INTERFACE_RECORD = 1u << 3,
+  // Symbol names a target environment record.
+  LOOM_SYMBOL_INTERFACE_TARGET = 1u << 4,
 };
 
 // Generated metadata for an op that defines a module symbol.
@@ -1105,6 +1107,39 @@ loom_string_id_t loom_func_like_implements(loom_func_like_t func);
 // Returns the dispatch priority for template/ukernel ops. Returns 0 for
 // def/decl ops, ops with no priority attr, or if |func| is not valid.
 int64_t loom_func_like_priority(loom_func_like_t func);
+
+//===----------------------------------------------------------------------===//
+// TargetLike interface helpers
+//===----------------------------------------------------------------------===//
+
+// Returns true if |target| refers to a valid target-like op. A cast via
+// loom_target_like_cast() returns {NULL, NULL} on failure. All accessor helpers
+// below tolerate a NULL vtable and return safe defaults.
+static inline bool loom_target_like_isa(loom_target_like_t target) {
+  return target.op != NULL;
+}
+
+// Casts |op| to loom_target_like_t if it implements the TargetLike interface.
+// Returns {NULL, NULL} if |op| is NULL or does not implement it. Safe to call
+// unconditionally; callers check the result with loom_target_like_isa().
+loom_target_like_t loom_target_like_cast(const loom_module_t* module,
+                                         const loom_op_t* op);
+
+// Returns the symbol ref naming a target-like op, or null if |target| is not
+// valid.
+loom_symbol_ref_t loom_target_like_symbol(loom_target_like_t target);
+
+// Returns the typed selector attr that chooses the target row used as the
+// projection base, or an absent attr if |target| is not valid.
+loom_attribute_t loom_target_like_selector(loom_target_like_t target);
+
+// Returns the target-specific extension attrs, or an empty slice if absent.
+loom_named_attr_slice_t loom_target_like_extension_attrs(
+    loom_target_like_t target);
+
+// Returns the opaque target-family projection descriptor, or NULL if absent.
+const loom_target_like_descriptor_t* loom_target_like_descriptor(
+    loom_target_like_t target);
 
 //===----------------------------------------------------------------------===//
 // LoopLike interface

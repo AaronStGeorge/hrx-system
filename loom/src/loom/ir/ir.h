@@ -123,6 +123,8 @@ typedef struct loom_constraint_t loom_constraint_t;
 typedef struct loom_rewriter_t loom_rewriter_t;
 typedef struct loom_call_like_vtable_t loom_call_like_vtable_t;
 typedef struct loom_func_like_vtable_t loom_func_like_vtable_t;
+typedef struct loom_target_like_descriptor_t loom_target_like_descriptor_t;
+typedef struct loom_target_like_vtable_t loom_target_like_vtable_t;
 typedef struct loom_loop_like_vtable_t loom_loop_like_vtable_t;
 typedef struct loom_region_branch_vtable_t loom_region_branch_vtable_t;
 typedef struct loom_memory_access_vtable_t loom_memory_access_vtable_t;
@@ -964,6 +966,39 @@ typedef struct loom_func_like_t {
 } loom_func_like_t;
 
 //===----------------------------------------------------------------------===//
+// TargetLike interface vtable
+//===----------------------------------------------------------------------===//
+
+// Interface descriptor for ops that define target environment records. Target
+// facts resolve a target symbol, cast the defining op through this interface,
+// and use the target-family descriptor plus generated attr indices to project
+// common and target-specific facts without switching on concrete op names.
+typedef struct loom_target_like_vtable_t {
+  // Index of the symbol attr that names this target record.
+  uint8_t symbol_attr_index;
+
+  // Index of the typed attr selecting the target row used as the projection
+  // base. The attr kind is target-family defined.
+  uint8_t selector_attr_index;
+
+  // Index of the optional target-specific extension dictionary attr.
+  // LOOM_ATTR_INDEX_NONE if absent.
+  uint8_t extension_attrs_attr_index;
+
+  // Opaque target-family projection descriptor.
+  const loom_target_like_descriptor_t* descriptor;
+} loom_target_like_vtable_t;
+
+// Fat reference to a target-like op. 16 bytes, passed by value.
+typedef struct loom_target_like_t {
+  // Operation implementing the TargetLike interface.
+  const loom_op_t* op;
+
+  // Interface vtable for |op|.
+  const loom_target_like_vtable_t* vtable;
+} loom_target_like_t;
+
+//===----------------------------------------------------------------------===//
 // LoopLike interface vtable
 //===----------------------------------------------------------------------===//
 
@@ -1197,6 +1232,7 @@ struct loom_op_vtable_t {
 
   const loom_call_like_vtable_t* call_like;
   const loom_func_like_vtable_t* func_like;
+  const loom_target_like_vtable_t* target_like;
   const loom_loop_like_vtable_t* loop_like;
   const loom_region_branch_vtable_t* region_branch;
   // Generated semantic contract for memory-access op roles.
@@ -1205,8 +1241,6 @@ struct loom_op_vtable_t {
   const loom_symbol_definition_descriptor_t* symbol_def;
   // Generated structural placement contract for ancestor constraints.
   const loom_op_placement_descriptor_t* placement;
-  // 8 bytes padding to fill cache line 3.
-  const void* _padding_iface[1];
 };
 
 // Returns the full dotted name as a string view (e.g., "test.addi").

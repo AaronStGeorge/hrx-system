@@ -1,6 +1,9 @@
 // Generic attr-only module record symbol used by bytecode symbol payload tests.
 test.record @target_snapshot {arch = "gfx1100", lanes = 64}
 
+// Test target-like symbol record used by interface projection tests.
+test.target<low_core> @test_target {subgroup_size = 64}
+
 // Low function declarations carry their source semantic mapping inline.
 test.record @vm_target
 

@@ -117,6 +117,7 @@ from loom.dsl import (
     SameShape,
     SameType,
     Successor,
+    TargetLikeInterface,
     TotalBitCountEqual,
     TypeConstraint,
     TypeDef,
@@ -463,6 +464,14 @@ class TestInterfaces:
         assert CallLikeKind.TEMPLATE.value == "template"
         assert CallLikeKind.LOW_INTERNAL.value == "low_internal"
         assert CallLikeKind.LOW_INVOKE.value == "low_invoke"
+
+    def test_target_like_interface_defaults_to_no_extensions(self) -> None:
+        interface = TargetLikeInterface(symbol="symbol", selector="kind")
+
+        assert interface.symbol == "symbol"
+        assert interface.selector == "kind"
+        assert interface.extensions is None
+        assert interface.descriptor is None
 
     def test_memory_access_interface_uses_soft_field_defaults(self) -> None:
         interface = MemoryAccessInterface()

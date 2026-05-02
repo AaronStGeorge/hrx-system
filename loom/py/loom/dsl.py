@@ -203,6 +203,7 @@ __all__ = [
     "LoopLikeInterface",
     "MemoryAccessInterface",
     "RegionBranchInterface",
+    "TargetLikeInterface",
     # Op declaration.
     "Op",
     # Type declaration.
@@ -479,6 +480,7 @@ _VALID_SYMBOL_INTERFACES = frozenset(
         "global",
         "executable",
         "record",
+        "target",
     }
 )
 
@@ -2936,6 +2938,27 @@ class FuncLikeInterface(NamedTuple):
     # ops that have a signature but no body (the parser stores parsed
     # FUNC_ARGS as operands when no REGION follows).
     args_as_operands: bool = False
+
+
+class TargetLikeInterface(NamedTuple):
+    """Interface for ops that define target environment records.
+
+    The symbol field names the defining symbol attr. The selector field names
+    the typed attr selecting the generated target row, such as a processor,
+    preset, or generic target kind. The extensions field names an optional dict
+    attr carrying target-specific extension data. Descriptor names a C-side
+    projection descriptor owned by the target family; None is valid for test
+    records that are handled by generic test projection.
+    """
+
+    # Symbol attr that names the target record.
+    symbol: str
+    # Typed attr selecting the target row used as the projection base.
+    selector: str
+    # Optional target-specific extension dictionary attr.
+    extensions: str | None = None
+    # Optional C symbol for the target-family projection descriptor.
+    descriptor: str | None = None
 
 
 class LoopLikeInterface(NamedTuple):
