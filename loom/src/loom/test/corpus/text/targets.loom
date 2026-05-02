@@ -1,15 +1,15 @@
-target.generic<llvm_cpu> @matmul_x86_target {target_cpu = "x86-64-v3", target_features = "+avx2,+fma", target_triple = "x86_64-pc-linux-gnu"}
+test.target<low_core> @matmul_native_target
 
-target.artifact @matmul_x86_object target(@matmul_x86_target) {abi = object_file, artifact_format = elf}
+target.artifact @matmul_native_object target(@matmul_native_target) {abi = object_file, artifact_format = elf}
 
-func.def target(@matmul_x86_target) abi(object_function) export("matmul", {artifact = @matmul_x86_object, linkage = "dso_local"}) @matmul_x86() {
+func.def target(@matmul_native_target) abi(object_function) export("matmul", {artifact = @matmul_native_object, linkage = "dso_local"}) @matmul_native() {
   func.return
 }
 
-target.generic<reference> @matmul_gfx1100_target {abi = hal_kernel, contract_feature_bits = 1, target_features = "+wavefrontsize32"}
+test.target<low_core> @matmul_hal_target {abi = hal_kernel}
 
-target.artifact @matmul_gfx1100_hsaco target(@matmul_gfx1100_target) {abi = hal_executable, artifact_format = elf}
+target.artifact @matmul_hal_executable target(@matmul_hal_target) {abi = hal_executable, artifact_format = elf}
 
-kernel.def target(@matmul_gfx1100_target) export("matmul") artifact(@matmul_gfx1100_hsaco) workgroup_size(16, 4, 1) @matmul_gfx1100() {
+kernel.def target(@matmul_hal_target) export("matmul") artifact(@matmul_hal_executable) workgroup_size(16, 4, 1) @matmul_hal() {
   kernel.return
 }
