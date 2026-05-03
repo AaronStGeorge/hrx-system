@@ -172,6 +172,63 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_fill_kernel") @tileop_fill_k
 
 
 # ====
+@tilelang_case(
+    name="tileop_fill_integer_zero_to_float",
+    category="op",
+    tags=("tileop", "fill", "constant"),
+)
+def tileop_fill_integer_zero_to_float(
+    tilelang: Any,
+    T: Any,
+) -> TileLangImportInput:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_kernel() -> Any:
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def tileop_fill_integer_zero_kernel(dst: T.Tensor[(4,), T.float32]) -> None:
+            with T.Kernel(1, threads=1):
+                T.fill(dst, 0)
+
+        return tileop_fill_integer_zero_kernel
+
+    return TileLangImportInput(
+        source=get_kernel,
+        target="hip -mcpu=gfx1100",
+        name="tileop_fill_integer_zero_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_fill_integer_zero_kernel") @tileop_fill_integer_zero_kernel(%dst_handle: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %tx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %c0 = index.constant 0 : index
+  %c4 = index.constant 4 : index
+  %const = scalar.constant 0.0 : f32
+  %c1 = index.constant 1 : index
+  scf.for %i0 = [%c0 to %c4 step %c1] {
+    view.store %const, %dst[%i0] : f32, view<4xf32, %layout>
+  }
+  kernel.return
+}
+"""
+
+
+# ====
 @tilelang_case(name="tileop_reduce_sum_1d", category="op", tags=("tileop", "reduce"))
 def tileop_reduce_sum_1d(T: Any) -> TileLangImportInput:
     @T.prim_func  # type: ignore[untyped-decorator]

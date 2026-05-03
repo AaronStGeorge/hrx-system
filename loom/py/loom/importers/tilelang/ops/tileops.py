@@ -1434,9 +1434,9 @@ def _convert_fill_value(
 ) -> ValueRef | None:
     payload = getattr(source, "value", source)
     if isinstance(payload, int | float | bool):
-        return context.builder.scalar.constant(
-            value=payload,
-            results=[element_type],
+        return context.build_typed_constant(
+            payload,
+            element_type,
             name=context.reserve_name("const"),
         )
     return converter.convert_expr(source, context)

@@ -21,6 +21,8 @@ from loom.ir import (
     INDEX,
     OFFSET,
     DynamicEncoding,
+    ScalarType,
+    ScalarTypeKind,
     ShapedType,
     Type,
 )
@@ -87,14 +89,21 @@ class TileLangConversionContext(SourceImportSession):
             value_type,
             index_like=value_type == "index",
         )
+        return self.build_typed_constant(value, result_type, name)
+
+    def build_typed_constant(
+        self, value: Any, result_type: Type, name: str
+    ) -> ValueRef:
         if result_type in (INDEX, OFFSET):
             return self.builder.index.constant(
                 value=int(value),
                 results=[result_type],
                 name=name,
             )
-        if str(result_type).startswith("i"):
+        if _is_integer_scalar_type(result_type):
             value = _integer_constant_value(value)
+        elif _is_float_scalar_type(result_type):
+            value = _float_constant_value(value)
         return self.builder.scalar.constant(
             value=value,
             results=[result_type],
@@ -304,6 +313,37 @@ def _integer_constant_value(value: object) -> int:
     if isinstance(value, float):
         return int(value)
     raise TypeError(f"integer constant value must be integer-like, got {value!r}")
+
+
+def _float_constant_value(value: object) -> float:
+    if isinstance(value, bool):
+        return float(int(value))
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        return float(value)
+    raise TypeError(f"floating-point constant value must be float-like, got {value!r}")
+
+
+def _is_integer_scalar_type(value_type: Type) -> bool:
+    return isinstance(value_type, ScalarType) and value_type.kind in (
+        ScalarTypeKind.I1,
+        ScalarTypeKind.I8,
+        ScalarTypeKind.I16,
+        ScalarTypeKind.I32,
+        ScalarTypeKind.I64,
+    )
+
+
+def _is_float_scalar_type(value_type: Type) -> bool:
+    return isinstance(value_type, ScalarType) and value_type.kind in (
+        ScalarTypeKind.F8E4M3,
+        ScalarTypeKind.F8E5M2,
+        ScalarTypeKind.F16,
+        ScalarTypeKind.BF16,
+        ScalarTypeKind.F32,
+        ScalarTypeKind.F64,
+    )
 
 
 def _buffer_scope(buffer: object) -> str:
