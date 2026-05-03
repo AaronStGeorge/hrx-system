@@ -119,15 +119,49 @@ def _extract_condition(
     context: TileLangConversionContext,
     converter: TileLangConverter,
 ) -> tuple[_ExtractedPredicate, ...] | None:
+    constant = _condition_static_bool(condition)
+    if constant is not None:
+        return () if constant else None
     kind = node_kind(condition)
     if kind == "And":
-        lhs = _extract_condition(getattr(condition, "a", None), context, converter)
-        rhs = _extract_condition(getattr(condition, "b", None), context, converter)
+        source_lhs = getattr(condition, "a", None)
+        source_rhs = getattr(condition, "b", None)
+        lhs_constant = _condition_static_bool(source_lhs)
+        rhs_constant = _condition_static_bool(source_rhs)
+        if lhs_constant is False or rhs_constant is False:
+            return None
+        if lhs_constant is True:
+            return _extract_condition(source_rhs, context, converter)
+        if rhs_constant is True:
+            return _extract_condition(source_lhs, context, converter)
+        lhs = _extract_condition(source_lhs, context, converter)
+        rhs = _extract_condition(source_rhs, context, converter)
         if lhs is None or rhs is None:
             return None
         return lhs + rhs
+    if kind == "Or":
+        source_lhs = getattr(condition, "a", None)
+        source_rhs = getattr(condition, "b", None)
+        lhs_constant = _condition_static_bool(source_lhs)
+        rhs_constant = _condition_static_bool(source_rhs)
+        if lhs_constant is True or rhs_constant is True:
+            return ()
+        if lhs_constant is False:
+            return _extract_condition(source_rhs, context, converter)
+        if rhs_constant is False:
+            return _extract_condition(source_lhs, context, converter)
+        return None
     if kind in _COMPARISON_PREDICATES:
         return _extract_comparison(condition, context, converter)
+    return None
+
+
+def _condition_static_bool(condition: object) -> bool | None:
+    if isinstance(condition, bool):
+        return condition
+    value = integer_value(condition)
+    if value in (0, 1):
+        return bool(value)
     return None
 
 

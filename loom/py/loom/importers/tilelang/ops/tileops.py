@@ -25,7 +25,7 @@ from loom.importers.tilelang.converter import ExpressionOptions, TileLangConvert
 from loom.importers.tilelang.coverage import coverage_row
 from loom.importers.tilelang.nodes import dtype, mapping_items, node_kind, node_text
 from loom.importers.tilelang.ops.topology import integer_value
-from loom.ir import INDEX, ShapedType, StaticDim, Type, TypeKind
+from loom.ir import INDEX, ScalarType, ShapedType, StaticDim, Type, TypeKind
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,7 +293,7 @@ def _convert_reduce_call(
         )
         return None
     source_type = cast(ShapedType, source.type)
-    element_type = source_type.element_type
+    source_element_type = source_type.element_type
     target = _decode_buffer_access(args[1], expr, context, converter)
     if target is None:
         return None
@@ -304,11 +304,16 @@ def _convert_reduce_call(
             f"call `{op_name}` destination is not a shaped view",
         )
         return None
-    if str(target_element_type) != str(element_type):
-        context.record_blocked(
-            node_text(expr),
-            f"call `{op_name}` source and destination element types differ",
-        )
+    element_type = target_element_type
+    source = _reduce_vector_value_cast(
+        source,
+        source_type,
+        source_element_type,
+        element_type,
+        expr,
+        context,
+    )
+    if source is None:
         return None
     reduce_spec = _reduce_spec(args[2], args[0], element_type, expr, context)
     if reduce_spec is None:
@@ -381,10 +386,15 @@ def _convert_region_reduce_call(
             f"call `{op_name}` destination region is not a shaped view",
         )
         return None
-    if str(target_element_type) != str(element_type):
+    source_element_type = element_type
+    element_type = target_element_type
+    if not _reduce_value_cast_is_supported(source_element_type, element_type):
         context.record_blocked(
             node_text(expr),
-            f"call `{op_name}` source and destination element types differ",
+            (
+                f"call `{op_name}` source and destination element conversion "
+                f"{source_element_type} to {element_type} is not imported"
+            ),
         )
         return None
     reduce_spec = _reduce_spec(kind_expr, _args(expr)[0], element_type, expr, context)
@@ -427,9 +437,12 @@ def _convert_region_reduce_call(
             output_indices,
             init,
             reduce_spec,
+            source_element_type,
             element_type,
             body_context,
         )
+        if result is None:
+            return
         body_context.builder.view.store(
             value=result,
             view=target.view,
@@ -998,9 +1011,10 @@ def _emit_scalar_reduce_loop(
     output_indices: tuple[ValueRef, ...],
     init: ValueRef,
     reduce_spec: TileReduceSpec,
-    element_type: Type,
+    source_element_type: ScalarType,
+    element_type: ScalarType,
     context: TileLangConversionContext,
-) -> ValueRef:
+) -> ValueRef | None:
     zero = context.ensure_constant("0", "index", "c0")
     one = context.ensure_constant("1", "index", "c1")
     loop_body = context.builder.region(args=[("r", INDEX), ("acc", element_type)])
@@ -1018,9 +1032,20 @@ def _emit_scalar_reduce_loop(
         value = child.builder.view.load(
             view=source.view,
             indices=list(source_indices),
-            results=[element_type],
+            results=[source_element_type],
             name=child.fresh_name("reduce_value"),
         )
+        cast_value = _reduce_scalar_value_cast(
+            value,
+            source_element_type,
+            element_type,
+            child,
+        )
+        if cast_value is None:
+            child.builder.scf.yield_(values=[accumulator])
+            context.merge_child_records(child)
+            return None
+        value = cast_value
         value = _build_scalar_reduce_input(value, reduce_spec, element_type, child)
         combined = _build_scalar_combiner(
             reduce_spec.combiner,
@@ -1041,6 +1066,107 @@ def _emit_scalar_reduce_loop(
         names=[context.fresh_name("reduce")],
     )
     return loop_results[0]
+
+
+def _reduce_vector_value_cast(
+    value: ValueRef,
+    value_type: ShapedType,
+    source_element_type: ScalarType,
+    target_element_type: ScalarType,
+    owner: object,
+    context: TileLangConversionContext,
+) -> ValueRef | None:
+    if str(source_element_type) == str(target_element_type):
+        return value
+    target_type = ShapedType(
+        TypeKind.VECTOR,
+        target_element_type,
+        value_type.dims,
+        encoding=value_type.encoding,
+    )
+    builder_name = _reduce_value_cast_builder_name(
+        source_element_type,
+        target_element_type,
+    )
+    if builder_name is None:
+        context.record_blocked(
+            node_text(owner),
+            (
+                "tl.tileop.reduce source vector conversion "
+                f"{source_element_type} to {target_element_type} is not imported"
+            ),
+        )
+        return None
+    builder = getattr(context.builder.vector, builder_name)
+    return cast(
+        ValueRef,
+        builder(
+            input=value,
+            results=[target_type],
+            name=context.fresh_name("reduce_cast"),
+        ),
+    )
+
+
+def _reduce_scalar_value_cast(
+    value: ValueRef,
+    source_element_type: ScalarType,
+    target_element_type: ScalarType,
+    context: TileLangConversionContext,
+) -> ValueRef | None:
+    if str(source_element_type) == str(target_element_type):
+        return value
+    builder_name = _reduce_value_cast_builder_name(
+        source_element_type,
+        target_element_type,
+    )
+    if builder_name is None:
+        return None
+    builder = getattr(context.builder.scalar, builder_name)
+    return cast(
+        ValueRef,
+        builder(
+            input=value,
+            results=[target_element_type],
+            name=context.fresh_name("reduce_cast"),
+        ),
+    )
+
+
+def _reduce_value_cast_is_supported(
+    source_element_type: ScalarType,
+    target_element_type: ScalarType,
+) -> bool:
+    return (
+        str(source_element_type) == str(target_element_type)
+        or _reduce_value_cast_builder_name(source_element_type, target_element_type)
+        is not None
+    )
+
+
+def _reduce_value_cast_builder_name(
+    source_element_type: ScalarType,
+    target_element_type: ScalarType,
+) -> str | None:
+    source_text = str(source_element_type)
+    target_text = str(target_element_type)
+    if _is_float_type(source_element_type) and _is_float_type(target_element_type):
+        source_width = _floating_point_bit_width(source_text)
+        target_width = _floating_point_bit_width(target_text)
+        if source_width < target_width:
+            return "extf"
+        if source_width > target_width:
+            return "fptrunc"
+        return None
+    source_integer_width = _integer_bit_width(source_text)
+    target_integer_width = _integer_bit_width(target_text)
+    if source_integer_width is not None and target_integer_width is not None:
+        if source_integer_width < target_integer_width:
+            return "extsi"
+        if source_integer_width > target_integer_width:
+            return "trunci"
+        return "bitcast"
+    return None
 
 
 def _reduction_source_indices(
@@ -1158,7 +1284,7 @@ def _copy_value_cast(
 def _view_element_type(
     view: ValueRef,
     context: TileLangConversionContext,
-) -> Type | None:
+) -> ScalarType | None:
     view_type = context.builder.module.values[view.id].type
     if not isinstance(view_type, ShapedType):
         return None
@@ -1368,6 +1494,14 @@ def _integer_bit_width(element_text: str) -> int | None:
     if not element_text.startswith("i") or not element_text[1:].isdecimal():
         return None
     return int(element_text[1:])
+
+
+def _floating_point_bit_width(element_text: str) -> int:
+    if element_text == "bf16":
+        return 16
+    if element_text.startswith("f") and element_text[1:].isdecimal():
+        return int(element_text[1:])
+    return 0
 
 
 def _is_float_type(value_type: Type) -> bool:

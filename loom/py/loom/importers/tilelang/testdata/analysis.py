@@ -265,3 +265,138 @@ kernel.def target(@hip_mcpu_gfx1100) export("mixed_address_scalar_assume") @mixe
   kernel.return
 }
 """
+
+
+# ====
+@tilelang_case(
+    name="derived_dynamic_buffer_dimension",
+    category="op",
+    tags=("analysis", "tilelang"),
+)
+def derived_dynamic_buffer_dimension(tilelang: Any, T: Any) -> TileLangImportInput:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_derived_dynamic_buffer_dimension() -> Any:
+        n = T.dynamic("n")
+        block = 128
+
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def derived_dynamic_buffer_dimension(
+            src: T.Tensor[(n,), T.float32],
+            scale: T.Tensor[(T.ceildiv(n, block),), T.float32],
+            dst: T.Tensor[(n,), T.float32],
+        ) -> None:
+            with T.Kernel(T.ceildiv(n, block), threads=1) as (pid,):
+                offset = pid * block
+                if offset < n:
+                    dst[offset] = src[offset] * scale[pid]
+
+        return derived_dynamic_buffer_dimension
+
+    return TileLangImportInput(
+        source=get_derived_dynamic_buffer_dimension,
+        target="hip -mcpu=gfx1100",
+        name="derived_dynamic_buffer_dimension",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("derived_dynamic_buffer_dimension") @derived_dynamic_buffer_dimension(%src_handle: buffer, %scale_handle: buffer, %dst_handle: buffer, %n: i32) {
+  %n_idx = index.cast %n : i32 to index
+  %c128 = index.constant 128 : index
+  %add = index.add %n_idx, %c128 : index
+  %c1 = index.constant 1 : index
+  %sub = index.sub %add, %c1 : index
+  %div = index.div %sub, %c128 : index
+  kernel.launch.config workgroups(%div, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<[%n]xf32, %layout>
+  %n_idx = index.cast %n : i32 to index
+  %c128 = index.constant 128 : index
+  %add = index.add %n_idx, %c128 : index
+  %c1 = index.constant 1 : index
+  %sub = index.sub %add, %c1 : index
+  %div = index.div %sub, %c128 : index
+  %scale = buffer.view %scale_handle[%c0_bytes] : buffer -> view<[%div]xf32, %layout>
+  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<[%n]xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %tx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %mul = index.mul %bx, %c128 : index
+  %cmp = index.cmp slt, %mul, %n_idx : index
+  scf.if %cmp {
+    %load = view.load %src[%mul] : view<[%n]xf32, %layout> -> f32
+    %load_2 = view.load %scale[%bx] : view<[%div]xf32, %layout> -> f32
+    %mulf = scalar.mulf %load, %load_2 : f32
+    view.store %mulf, %dst[%mul] : f32, view<[%n]xf32, %layout>
+  }
+  kernel.return
+}
+"""
+
+
+# ====
+@tilelang_case(
+    name="assume_or_static_false",
+    category="op",
+    tags=("analysis", "tilelang"),
+)
+def assume_or_static_false(tilelang: Any, T: Any) -> TileLangImportInput:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_assume_or_static_false() -> Any:
+        n = T.dynamic("n")
+
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def assume_or_static_false(
+            src: T.Tensor[(1,), T.float32],
+            dst: T.Tensor[(1,), T.float32],
+        ) -> None:
+            with T.Kernel(1, threads=1):
+                T.assume(n % 128 == 0 or False)
+                dst[0] = src[0]
+
+        return assume_or_static_false
+
+    return TileLangImportInput(
+        source=get_assume_or_static_false,
+        target="hip -mcpu=gfx1100",
+        name="assume_or_static_false",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("assume_or_static_false") @assume_or_static_false(%src_handle: buffer, %dst_handle: buffer, %n: i32) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %tx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %n_assumed = scalar.assume %n [mul(%n, 128)] : i32
+  %c0 = index.constant 0 : index
+  %load = view.load %src[%c0] : view<1xf32, %layout> -> f32
+  view.store %load, %dst[%c0] : f32, view<1xf32, %layout>
+  kernel.return
+}
+"""

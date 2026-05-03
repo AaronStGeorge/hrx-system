@@ -222,8 +222,9 @@ def _build_loom_module(
     )
     _capture_block_value_names(context, shell.body_block)
     with shell.builder.insertion_block(shell.body_block):
-        _map_kernel_arguments(shell, bindings, context)
-        converter.convert_stmt(getattr(prim_func, "body", None), context)
+        mapped_arguments = _map_kernel_arguments(shell, bindings, context, converter)
+        if mapped_arguments:
+            converter.convert_stmt(getattr(prim_func, "body", None), context)
         shell.builder.kernel.return_()
     rebuild_value_metadata(shell.module)
     return shell.module, context.finish(), converter.operation_counts
@@ -331,7 +332,8 @@ def _map_kernel_arguments(
     shell: KernelModuleShell,
     bindings: tuple[TileLangBinding, ...],
     context: TileLangConversionContext,
-) -> None:
+    converter: TileLangConverter,
+) -> bool:
     zero = context.ensure_constant("0", "offset", "c0_bytes")
     _map_scalar_kernel_arguments(shell.body_arguments_by_ordinal, bindings, context)
     for binding in bindings:
@@ -339,6 +341,14 @@ def _map_kernel_arguments(
             continue
         argument = shell.body_arguments_by_ordinal[binding.ordinal]
         view_type = context.buffer_view_type(binding.buffer)
+        dim_bindings = _dynamic_view_dimension_bindings(
+            context,
+            converter,
+            binding.buffer,
+            view_type,
+        )
+        if dim_bindings is None:
+            return False
         view = context.builder.buffer.view(
             buffer=argument,
             byte_offset=zero,
@@ -346,7 +356,7 @@ def _map_kernel_arguments(
             name=_buffer_view_name(binding, context),
         )
         context.bind_buffer_view_layout(view)
-        _bind_dynamic_view_dimensions(context, view, binding.buffer, view_type)
+        _bind_dynamic_view_dimensions(context, view, dim_bindings)
         context.map_value(binding.source, view, str(view_type))
         context.map_value(binding.buffer, view, str(view_type))
         data = getattr(binding.buffer, "data", None)
@@ -356,6 +366,7 @@ def _map_kernel_arguments(
             f"param {binding.name}",
             f"{context.ssa(view)} = buffer.view",
         )
+    return True
 
 
 def _map_scalar_kernel_arguments(
@@ -383,32 +394,50 @@ def _buffer_view_name(
     return context.reserve_name(base_name)
 
 
-def _bind_dynamic_view_dimensions(
+def _dynamic_view_dimension_bindings(
     context: TileLangConversionContext,
-    view: ValueRef,
+    converter: TileLangConverter,
     buffer: object,
     view_type: ShapedType,
-) -> None:
-    dim_bindings: dict[int, int] = {}
+) -> dict[int, ValueRef] | None:
+    dim_bindings: dict[int, ValueRef] = {}
     shape = tuple(getattr(buffer, "shape", ()) or ())
     for position, dim in enumerate(view_type.dims):
         if not isinstance(dim, DynamicDim):
             continue
         if position >= len(shape):
-            raise ValueError("dynamic TileLang buffer dimension has no source shape")
+            context.record_blocked(
+                node_text(buffer),
+                "dynamic TileLang buffer dimension has no source shape",
+            )
+            return None
         source_dim = shape[position]
         mapped_dim = context.mapped(source_dim)
         if mapped_dim is None:
             mapped_dim = context.mapped_index_value(source_dim)
         if mapped_dim is None:
+            mapped_dim = converter.convert_expr(source_dim, context, index_like=True)
+        if mapped_dim is None:
             name = source_name(source_dim, fallback=str(source_dim))
-            raise ValueError(
+            context.record_blocked(
+                node_text(source_dim),
                 f"dynamic TileLang buffer dimension `{name}` was not imported "
-                "as a kernel ABI value"
+                "as an index value",
             )
-        dim_bindings[position] = mapped_dim.id
+            return None
+        dim_bindings[position] = mapped_dim
+    return dim_bindings
+
+
+def _bind_dynamic_view_dimensions(
+    context: TileLangConversionContext,
+    view: ValueRef,
+    dim_bindings: Mapping[int, ValueRef],
+) -> None:
     if dim_bindings:
-        context.builder.module.values[view.id].dim_bindings = dim_bindings
+        context.builder.module.values[view.id].dim_bindings = {
+            position: binding.id for position, binding in dim_bindings.items()
+        }
 
 
 def _launch_topology(prim_func: object) -> _LaunchTopology:
