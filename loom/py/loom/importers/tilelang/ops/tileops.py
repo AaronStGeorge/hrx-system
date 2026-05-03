@@ -10,13 +10,14 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import cast
 
 from loom.builder import ValueRef
 from loom.importers.tilelang.context import TileLangConversionContext
 from loom.importers.tilelang.converter import ExpressionOptions, TileLangConverter
-from loom.importers.tilelang.nodes import node_kind, node_text
+from loom.importers.tilelang.nodes import dtype, mapping_items, node_kind, node_text
 from loom.importers.tilelang.ops.topology import integer_value
-from loom.ir import INDEX, ShapedType, Type
+from loom.ir import INDEX, ShapedType, StaticDim, Type, TypeKind
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +27,14 @@ class TileRegion:
     view: ValueRef
     indices: tuple[ValueRef, ...]
     extents: tuple[ValueRef, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class TileBufferAccess:
+    """Decoded TileLang buffer access over one Loom view."""
+
+    view: ValueRef
+    indices: tuple[ValueRef, ...]
 
 
 def is_tileop_call(op_name: str) -> bool:
@@ -53,6 +62,8 @@ def convert_tileop_call(
         return _convert_copy_call(expr, context, converter, options, op_name)
     if op_name in _FILL_CALLS:
         return _convert_fill_call(expr, context, converter, options, op_name)
+    if op_name in _REDUCE_CALLS:
+        return _convert_reduce_call(expr, context, converter, options, op_name)
     context.record_blocked(
         node_text(expr),
         f"TileLang tile operation `{op_name}` is not imported",
@@ -171,6 +182,209 @@ def _convert_fill_call(
     return None
 
 
+def _convert_reduce_call(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    options: ExpressionOptions,
+    op_name: str,
+) -> ValueRef | None:
+    if not _require_effect(expr, context, options, op_name):
+        return None
+    args = _args(expr)
+    if len(args) != 5:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` expects source, destination, kind, dim, and clear",
+        )
+        return None
+    dim = integer_value(args[3])
+    if dim is None:
+        context.record_blocked(node_text(expr), f"call `{op_name}` dim is not static")
+        return None
+    clear = integer_value(args[4])
+    if clear is None:
+        context.record_blocked(node_text(expr), f"call `{op_name}` clear is not static")
+        return None
+    source_axis = _single_ramp_axis(args[0])
+    if source_axis is None:
+        return _convert_region_reduce_call(
+            expr,
+            context,
+            converter,
+            op_name,
+            dim=dim,
+            clear=bool(clear),
+            kind_expr=args[2],
+        )
+    if source_axis != dim:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` dim {dim} does not match source ramp axis {source_axis}",
+        )
+        return None
+    source = converter.convert_expr(args[0], context)
+    if source is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` source vector is not mapped",
+        )
+        return None
+    if not _is_rank_one_vector_type(source.type):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` source must map to a rank-1 vector",
+        )
+        return None
+    source_type = cast(ShapedType, source.type)
+    element_type = source_type.element_type
+    target = _decode_buffer_access(args[1], expr, context, converter)
+    if target is None:
+        return None
+    target_element_type = _view_element_type(target.view, context)
+    if target_element_type is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` destination is not a shaped view",
+        )
+        return None
+    if str(target_element_type) != str(element_type):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` source and destination element types differ",
+        )
+        return None
+    kind = _reduce_kind(args[2], args[0], element_type, expr, context)
+    if kind is None:
+        return None
+    init = _reduce_init(
+        bool(clear),
+        kind,
+        element_type,
+        target,
+        expr,
+        context,
+    )
+    if init is None:
+        return None
+    result = context.builder.vector.reduce(
+        kind=kind,
+        input=source,
+        init=init,
+        results=[element_type],
+        name=context.fresh_name("reduce"),
+    )
+    context.builder.view.store(
+        value=result,
+        view=target.view,
+        indices=list(target.indices),
+    )
+    context.record_converted(node_text(expr), f"tl.tileop.reduce<{kind}>")
+    return None
+
+
+def _convert_region_reduce_call(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    op_name: str,
+    *,
+    dim: int,
+    clear: bool,
+    kind_expr: object,
+) -> ValueRef | None:
+    source = _decode_region_arg(
+        args=_args(expr), position=0, expr=expr, context=context, converter=converter
+    )
+    target = _decode_region_arg(
+        args=_args(expr), position=1, expr=expr, context=context, converter=converter
+    )
+    if source is None or target is None:
+        return None
+    if dim < 0 or dim >= len(source.extents):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` dim {dim} is outside source rank {len(source.extents)}",
+        )
+        return None
+    element_type = _view_element_type(source.view, context)
+    if element_type is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` source region is not a shaped view",
+        )
+        return None
+    target_element_type = _view_element_type(target.view, context)
+    if target_element_type is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` destination region is not a shaped view",
+        )
+        return None
+    if str(target_element_type) != str(element_type):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` source and destination element types differ",
+        )
+        return None
+    kind = _reduce_kind(kind_expr, _args(expr)[0], element_type, expr, context)
+    if kind is None:
+        return None
+    output_extents = tuple(
+        extent for axis, extent in enumerate(source.extents) if axis != dim
+    )
+
+    def emit_reduce(
+        output_indices: tuple[ValueRef, ...],
+        body_context: TileLangConversionContext,
+    ) -> None:
+        target_indices = _reduction_target_indices(
+            target,
+            len(source.extents),
+            dim,
+            output_indices,
+            body_context,
+        )
+        if target_indices is None:
+            body_context.record_blocked(
+                node_text(expr),
+                f"call `{op_name}` destination rank does not match reduced shape",
+            )
+            return
+        init = _reduce_init(
+            clear,
+            kind,
+            element_type,
+            TileBufferAccess(target.view, target_indices),
+            expr,
+            body_context,
+        )
+        if init is None:
+            return
+        result = _emit_scalar_reduce_loop(
+            source,
+            dim,
+            output_indices,
+            init,
+            kind,
+            element_type,
+            body_context,
+        )
+        body_context.builder.view.store(
+            value=result,
+            view=target.view,
+            indices=list(target_indices),
+        )
+
+    if not _emit_region_loops(output_extents, context, emit_reduce):
+        context.record_blocked(
+            node_text(expr), f"call `{op_name}` output region is not mapped"
+        )
+        return None
+    context.record_converted(node_text(expr), f"tl.tileop.reduce<{kind}>")
+    return None
+
+
 def _require_effect(
     expr: object,
     context: TileLangConversionContext,
@@ -266,6 +480,160 @@ def _decode_region(
     )
 
 
+def _decode_region_arg(
+    *,
+    args: tuple[object, ...],
+    position: int,
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> TileRegion | None:
+    value = args[position]
+    if _call_op_name(value) == "tl.tileop.region":
+        return _decode_region(value, expr, context, converter, expected_access=3)
+    if node_kind(value) == "BufferRegion":
+        return _decode_buffer_region(value, expr, context, converter)
+    if node_kind(value) == "BufferLoad":
+        return _decode_buffer_load_region(value, expr, context, converter)
+    context.record_blocked(
+        node_text(expr),
+        f"tile operation region argument must be region-like, got `{node_kind(value)}`",
+    )
+    return None
+
+
+def _decode_buffer_region(
+    expr: object,
+    owner: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> TileRegion | None:
+    buffer = getattr(expr, "buffer", None)
+    view = context.mapped(buffer)
+    if view is None:
+        data = getattr(buffer, "data", None)
+        view = context.mapped_buffer_data(data)
+    if view is None:
+        context.record_blocked(
+            node_text(owner),
+            "tile operation buffer region target is not mapped",
+        )
+        return None
+    ranges = tuple(getattr(expr, "region", ()))
+    indices = _convert_index_sequence(
+        tuple(getattr(item, "min", None) for item in ranges),
+        owner,
+        context,
+        converter,
+        what="region indices",
+    )
+    extents = _convert_index_sequence(
+        tuple(getattr(item, "extent", None) for item in ranges),
+        owner,
+        context,
+        converter,
+        what="region extents",
+    )
+    if indices is None or extents is None:
+        return None
+    return TileRegion(view=view, indices=tuple(indices), extents=tuple(extents))
+
+
+def _decode_buffer_load_region(
+    expr: object,
+    owner: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> TileRegion | None:
+    buffer = getattr(expr, "buffer", None)
+    view = context.mapped(buffer)
+    if view is None:
+        data = getattr(buffer, "data", None)
+        view = context.mapped_buffer_data(data)
+    if view is None:
+        context.record_blocked(
+            node_text(owner),
+            "tile operation buffer load region target is not mapped",
+        )
+        return None
+    one = context.ensure_constant("1", "index", "c1")
+    indices: list[ValueRef] = []
+    extents: list[ValueRef] = []
+    for index in tuple(getattr(expr, "indices", ())):
+        if node_kind(index) == "Ramp":
+            stride = integer_value(getattr(index, "stride", None))
+            lanes = integer_value(getattr(index, "lanes", None))
+            if stride != 1 or lanes is None:
+                context.record_blocked(
+                    node_text(owner),
+                    "tile operation ramp region requires unit stride and static lanes",
+                )
+                return None
+            base = converter.convert_expr(
+                getattr(index, "base", None),
+                context,
+                index_like=True,
+            )
+            if base is None:
+                context.record_blocked(
+                    node_text(owner),
+                    "tile operation ramp region base is not mapped",
+                )
+                return None
+            indices.append(base)
+            extents.append(context.ensure_constant(str(lanes), "index", f"c{lanes}"))
+            continue
+        mapped = converter.convert_expr(index, context, index_like=True)
+        if mapped is None:
+            context.record_blocked(
+                node_text(owner),
+                "tile operation buffer load region index is not mapped",
+            )
+            return None
+        indices.append(mapped)
+        extents.append(one)
+    return TileRegion(
+        view=view,
+        indices=tuple(indices),
+        extents=tuple(extents),
+    )
+
+
+def _decode_buffer_access(
+    expr: object,
+    owner: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> TileBufferAccess | None:
+    if node_kind(expr) != "BufferLoad":
+        context.record_blocked(
+            node_text(owner),
+            f"tile operation buffer access must be BufferLoad, got `{node_kind(expr)}`",
+        )
+        return None
+    buffer = getattr(expr, "buffer", None)
+    view = context.mapped(buffer)
+    if view is None:
+        data = getattr(buffer, "data", None)
+        view = context.mapped_buffer_data(data)
+    if view is None:
+        context.record_blocked(
+            node_text(owner),
+            "tile operation buffer access target is not mapped",
+        )
+        return None
+    indices = _convert_index_sequence(
+        tuple(getattr(expr, "indices", ())),
+        owner,
+        context,
+        converter,
+        what="buffer indices",
+    )
+    if indices is None:
+        return None
+    return TileBufferAccess(view=view, indices=tuple(indices))
+
+
 def _convert_index_sequence(
     values: Sequence[object],
     owner: object,
@@ -346,6 +714,112 @@ def _region_indices(
     return tuple(indices)
 
 
+def _reduction_target_indices(
+    target: TileRegion,
+    source_rank: int,
+    dim: int,
+    output_indices: tuple[ValueRef, ...],
+    context: TileLangConversionContext,
+) -> tuple[ValueRef, ...] | None:
+    if len(target.indices) == len(output_indices):
+        return _region_indices(target, output_indices, context)
+    if len(target.indices) == source_rank:
+        expanded: list[ValueRef] = []
+        output_axis = 0
+        zero = context.ensure_constant("0", "index", "c0")
+        for axis in range(source_rank):
+            if axis == dim:
+                expanded.append(zero)
+                continue
+            expanded.append(output_indices[output_axis])
+            output_axis += 1
+        return _region_indices(target, tuple(expanded), context)
+    if not output_indices and len(target.indices) == 1:
+        return target.indices
+    return None
+
+
+def _emit_scalar_reduce_loop(
+    source: TileRegion,
+    dim: int,
+    output_indices: tuple[ValueRef, ...],
+    init: ValueRef,
+    kind: str,
+    element_type: Type,
+    context: TileLangConversionContext,
+) -> ValueRef:
+    zero = context.ensure_constant("0", "index", "c0")
+    one = context.ensure_constant("1", "index", "c1")
+    loop_body = context.builder.region(args=[("r", INDEX), ("acc", element_type)])
+    reduce_index = ValueRef(loop_body.blocks[0].arg_ids[0], context.builder.ir)
+    accumulator = ValueRef(loop_body.blocks[0].arg_ids[1], context.builder.ir)
+    child = context.fork(preview_block=loop_body.blocks[0])
+    with context.builder.insertion_block(loop_body.blocks[0]):
+        source_indices = _reduction_source_indices(
+            source,
+            dim,
+            output_indices,
+            reduce_index,
+            child,
+        )
+        value = child.builder.view.load(
+            view=source.view,
+            indices=list(source_indices),
+            results=[element_type],
+            name=child.fresh_name("reduce_value"),
+        )
+        combined = _build_scalar_combiner(kind, accumulator, value, element_type, child)
+        child.builder.scf.yield_(values=[combined])
+    context.merge_child_records(child)
+    loop_results = context.builder.scf.for_(
+        lower_bound=zero,
+        upper_bound=source.extents[dim],
+        step=one,
+        iter_args=[init],
+        results=[element_type],
+        body=loop_body,
+        names=[context.fresh_name("reduce")],
+    )
+    return loop_results[0]
+
+
+def _reduction_source_indices(
+    source: TileRegion,
+    dim: int,
+    output_indices: tuple[ValueRef, ...],
+    reduce_index: ValueRef,
+    context: TileLangConversionContext,
+) -> tuple[ValueRef, ...]:
+    source_offsets: list[ValueRef] = []
+    output_axis = 0
+    for axis in range(len(source.indices)):
+        if axis == dim:
+            source_offsets.append(reduce_index)
+            continue
+        source_offsets.append(output_indices[output_axis])
+        output_axis += 1
+    return _region_indices(source, tuple(source_offsets), context)
+
+
+def _build_scalar_combiner(
+    kind: str,
+    lhs: ValueRef,
+    rhs: ValueRef,
+    element_type: Type,
+    context: TileLangConversionContext,
+) -> ValueRef:
+    builder = getattr(context.builder.scalar, kind)
+    return cast(
+        ValueRef,
+        builder(
+            lhs=lhs,
+            rhs=rhs,
+            results=[element_type],
+            name=context.fresh_name(kind),
+        ),
+    )
+
+
 def _add_region_index(
     base: ValueRef,
     offset: ValueRef,
@@ -373,6 +847,158 @@ def _view_element_type(
     if not isinstance(view_type, ShapedType):
         return None
     return view_type.element_type
+
+
+def _is_rank_one_vector_type(value_type: Type) -> bool:
+    return (
+        isinstance(value_type, ShapedType)
+        and value_type.type_kind == TypeKind.VECTOR
+        and len(value_type.dims) == 1
+        and isinstance(value_type.dims[0], StaticDim)
+    )
+
+
+def _single_ramp_axis(expr: object) -> int | None:
+    if node_kind(expr) != "BufferLoad":
+        return None
+    ramp_axis: int | None = None
+    for axis, index in enumerate(tuple(getattr(expr, "indices", ()))):
+        if node_kind(index) != "Ramp":
+            continue
+        if ramp_axis is not None:
+            return None
+        ramp_axis = axis
+    return ramp_axis
+
+
+def _reduce_kind(
+    kind_expr: object,
+    source: object,
+    element_type: Type,
+    owner: object,
+    context: TileLangConversionContext,
+) -> str | None:
+    reduce_type = getattr(kind_expr, "value", None)
+    if reduce_type is None:
+        context.record_blocked(node_text(owner), "tl.tileop.reduce kind is not static")
+        return None
+    reduce_type = str(reduce_type)
+    annotations = _call_annotations(owner)
+    unknown_annotations = sorted(set(annotations) - {"nan_propagate"})
+    if unknown_annotations:
+        context.record_blocked(
+            node_text(owner),
+            (
+                "tl.tileop.reduce annotations are not imported: "
+                + ", ".join(unknown_annotations)
+            ),
+        )
+        return None
+    nan_propagate = bool(annotations.get("nan_propagate", False))
+    element_text = str(element_type)
+    source_dtype = _scalar_dtype_text(dtype(source))
+    is_float = element_text in ("f16", "bf16", "f32", "f64")
+    is_unsigned = source_dtype.startswith(("uint", "u"))
+    if reduce_type == "sum":
+        return "addf" if is_float else "addi"
+    if reduce_type == "max":
+        if is_float:
+            return "maximumf" if nan_propagate else "maxnumf"
+        return "maxui" if is_unsigned else "maxsi"
+    if reduce_type == "min":
+        if is_float:
+            return "minimumf" if nan_propagate else "minnumf"
+        return "minui" if is_unsigned else "minsi"
+    if reduce_type == "bitand" and not is_float:
+        return "andi"
+    if reduce_type == "bitor" and not is_float:
+        return "ori"
+    if reduce_type == "bitxor" and not is_float:
+        return "xori"
+    if reduce_type in ("abssum", "absmax"):
+        context.record_blocked(
+            node_text(owner),
+            f"tl.tileop.reduce `{reduce_type}` needs absolute-value reduction import",
+        )
+        return None
+    context.record_blocked(
+        node_text(owner),
+        f"tl.tileop.reduce kind `{reduce_type}` is not imported",
+    )
+    return None
+
+
+def _reduce_init(
+    clear: bool,
+    kind: str,
+    element_type: Type,
+    target: TileBufferAccess,
+    owner: object,
+    context: TileLangConversionContext,
+) -> ValueRef | None:
+    if not clear:
+        return context.builder.view.load(
+            view=target.view,
+            indices=list(target.indices),
+            results=[element_type],
+            name=context.fresh_name("reduce_init"),
+        )
+    identity = _reduce_identity(kind, element_type)
+    if identity is None:
+        context.record_blocked(
+            node_text(owner),
+            f"tl.tileop.reduce<{kind}> identity is not imported for {element_type}",
+        )
+        return None
+    return context.builder.scalar.constant(
+        value=identity,
+        results=[element_type],
+        name=context.reserve_name("identity"),
+    )
+
+
+def _reduce_identity(kind: str, element_type: Type) -> int | float | None:
+    element_text = str(element_type)
+    bit_width = _integer_bit_width(element_text)
+    if kind in ("addf", "addi", "ori", "xori"):
+        return 0
+    if kind in ("mulf", "muli"):
+        return 1
+    if kind == "andi":
+        return -1
+    if kind in ("maxnumf", "maximumf"):
+        return float("-inf")
+    if kind in ("minnumf", "minimumf"):
+        return float("inf")
+    if kind == "maxui":
+        return 0
+    if kind == "minui":
+        return -1
+    if bit_width is None:
+        return None
+    if kind == "maxsi":
+        return -(1 << (bit_width - 1))
+    if kind == "minsi":
+        return (1 << (bit_width - 1)) - 1
+    return None
+
+
+def _integer_bit_width(element_text: str) -> int | None:
+    if not element_text.startswith("i") or not element_text[1:].isdecimal():
+        return None
+    return int(element_text[1:])
+
+
+def _scalar_dtype_text(source_dtype: str) -> str:
+    head, separator, tail = source_dtype.rpartition("x")
+    if separator and tail.isdecimal():
+        return head
+    return source_dtype
+
+
+def _call_annotations(call: object) -> dict[str, object]:
+    annotations = getattr(call, "annotations", None)
+    return {str(key): value for key, value in mapping_items(annotations)}
 
 
 def _convert_fill_value(
@@ -418,4 +1044,8 @@ _COPY_CALLS = {
 
 _FILL_CALLS = {
     "tl.tileop.fill",
+}
+
+_REDUCE_CALLS = {
+    "tl.tileop.reduce",
 }

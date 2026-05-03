@@ -956,8 +956,11 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
     OpCoverage(
         "tl.tileop.reduce",
         OpFamily.TILELANG_TILEOP,
-        CoverageState.DEFERRED,
-        "Tile reduction needs axis/kind mapping and reducer state preservation.",
+        CoverageState.SUPPORTED,
+        (
+            "Vectorized single-axis tile reductions import through vector.reduce; "
+            "reducer-state forms remain separate."
+        ),
     ),
     OpCoverage(
         "tl.tileop.finalize_reducer",

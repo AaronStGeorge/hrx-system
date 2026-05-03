@@ -114,6 +114,142 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_fill_kernel") @tileop_fill_k
 
 
 # ====
+@tilelang_case(name="tileop_reduce_sum_1d", category="op", tags=("tileop", "reduce"))
+def tileop_reduce_sum_1d(T: Any) -> TileLangImportInput:
+    @T.prim_func  # type: ignore[untyped-decorator]
+    def tileop_reduce_sum_kernel(
+        src: T.Tensor[(4,), T.float32],
+        dst: T.Tensor[(1,), T.float32],
+    ) -> None:
+        with T.Kernel(1, threads=1):
+            local = T.alloc_fragment((4,), T.float32)
+            out = T.alloc_fragment((1,), T.float32)
+            T.copy(src, local)
+            T.reduce_sum(local, out, dim=0)
+            T.copy(out, dst)
+
+    return TileLangImportInput(
+        source=tileop_reduce_sum_kernel,
+        target="hip -mcpu=gfx1100",
+        name="tileop_reduce_sum_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_kernel") @tileop_reduce_sum_kernel(%src_handle: buffer, %dst_handle: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %tx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %local_bytes = index.constant 16 : offset
+  %local_buffer = buffer.alloca %local_bytes {base_alignment = 4, memory_space = private} : buffer
+  %local = buffer.view %local_buffer[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %out_bytes = index.constant 4 : offset
+  %out_buffer = buffer.alloca %out_bytes {base_alignment = 4, memory_space = private} : buffer
+  %out = buffer.view %out_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %c0 = index.constant 0 : index
+  %c4 = index.constant 4 : index
+  %c1 = index.constant 1 : index
+  scf.for %i0 = [%c0 to %c4 step %c1] {
+    %copy = view.load %src[%i0] : view<4xf32, %layout> -> f32
+    view.store %copy, %local[%i0] : f32, view<4xf32, %layout>
+  }
+  %load = vector.load %local[%c0] : view<4xf32, %layout> -> vector<4xf32>
+  %identity = scalar.constant 0 : f32
+  %reduce = vector.reduce<addf> %load, %identity : vector<4xf32>, f32
+  view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
+  scf.for %i0 = [%c0 to %c1 step %c1] {
+    %copy_2 = view.load %out[%i0] : view<1xf32, %layout> -> f32
+    view.store %copy_2, %dst[%i0] : f32, view<1xf32, %layout>
+  }
+  kernel.return
+}
+"""
+
+
+# ====
+@tilelang_case(name="tileop_reduce_sum_2d", category="op", tags=("tileop", "reduce"))
+def tileop_reduce_sum_2d(T: Any) -> TileLangImportInput:
+    @T.prim_func  # type: ignore[untyped-decorator]
+    def tileop_reduce_sum_2d_kernel(
+        src: T.Tensor[(2, 4), T.float32],
+        dst: T.Tensor[(2,), T.float32],
+    ) -> None:
+        with T.Kernel(1, threads=1):
+            local = T.alloc_fragment((2, 4), T.float32)
+            out = T.alloc_fragment((2,), T.float32)
+            T.copy(src, local)
+            T.reduce_sum(local, out, dim=1)
+            T.copy(out, dst)
+
+    return TileLangImportInput(
+        source=tileop_reduce_sum_2d_kernel,
+        target="hip -mcpu=gfx1100",
+        name="tileop_reduce_sum_2d_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_2d_kernel") @tileop_reduce_sum_2d_kernel(%src_handle: buffer, %dst_handle: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<2x4xf32, %layout>
+  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<2xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %tx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %local_bytes = index.constant 32 : offset
+  %local_buffer = buffer.alloca %local_bytes {base_alignment = 4, memory_space = private} : buffer
+  %local = buffer.view %local_buffer[%c0_bytes] : buffer -> view<2x4xf32, %layout>
+  %out_bytes = index.constant 8 : offset
+  %out_buffer = buffer.alloca %out_bytes {base_alignment = 4, memory_space = private} : buffer
+  %out = buffer.view %out_buffer[%c0_bytes] : buffer -> view<2xf32, %layout>
+  %c0 = index.constant 0 : index
+  %c2 = index.constant 2 : index
+  %c4 = index.constant 4 : index
+  %c1 = index.constant 1 : index
+  scf.for %i0 = [%c0 to %c2 step %c1] {
+    scf.for %i1 = [%c0 to %c4 step %c1] {
+      %copy = view.load %src[%i0, %i1] : view<2x4xf32, %layout> -> f32
+      view.store %copy, %local[%i0, %i1] : f32, view<2x4xf32, %layout>
+    }
+  }
+  scf.for %i0 = [%c0 to %c2 step %c1] {
+    %identity = scalar.constant 0 : f32
+    %reduce = scf.for %r = [%c0 to %c4 step %c1](%acc = %identity : f32) -> (f32) {
+      %reduce_value = view.load %local[%i0, %r] : view<2x4xf32, %layout> -> f32
+      %addf = scalar.addf %acc, %reduce_value : f32
+      scf.yield %addf : f32
+    }
+    view.store %reduce, %out[%i0] : f32, view<2xf32, %layout>
+  }
+  scf.for %i0 = [%c0 to %c2 step %c1] {
+    %copy_2 = view.load %out[%i0] : view<2xf32, %layout> -> f32
+    view.store %copy_2, %dst[%i0] : f32, view<2xf32, %layout>
+  }
+  kernel.return
+}
+"""
+
+
+# ====
 @tilelang_case(name="tileop_copy_2d", category="op", tags=("tileop", "copy"))
 def tileop_copy_2d(tilelang: Any, T: Any) -> TileLangImportInput:
     @tilelang.jit(  # type: ignore[untyped-decorator]
