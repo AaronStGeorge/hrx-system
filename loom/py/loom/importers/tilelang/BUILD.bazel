@@ -159,6 +159,7 @@ filegroup(
         "testdata/analysis.py",
         "testdata/control_flow.py",
         "testdata/diagnostics.py",
+        "testdata/lowered_metadata.py",
         "testdata/memory_effects.py",
         "testdata/scalar_calls.py",
         "testdata/tilekernels.py",

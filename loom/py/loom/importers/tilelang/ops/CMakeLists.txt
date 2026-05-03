@@ -17,6 +17,7 @@ iree_py_library(
     "__init__.py"
     "assumptions.py"
     "calls.py"
+    "conditions.py"
     "control.py"
     "memory.py"
     "scalar.py"

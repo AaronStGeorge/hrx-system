@@ -70,7 +70,7 @@ def map_alloc_buffer(
     context.map_value(buffer, view, str(view.type))
     data = getattr(buffer, "data", None)
     if data is not None:
-        context.map_buffer_data(data, view)
+        context.map_buffer_data(data, view, buffer=buffer)
     context.record_converted(
         node_text(buffer),
         (
@@ -221,7 +221,7 @@ def _resolve_buffer_view(
     view_type = _view_type(view, context)
     if isinstance(view_type, ShapedType) and len(view_type.dims) <= 1:
         return view, source_indices
-    remapped_indices = _remap_flattened_indices(
+    remapped_indices = remap_flattened_indices(
         view,
         source_indices,
         context,
@@ -243,7 +243,7 @@ def _convert_index(
     return converter.convert_expr(index, context, index_like=True)
 
 
-def _remap_flattened_indices(
+def remap_flattened_indices(
     view: ValueRef,
     source_indices: tuple[object, ...],
     context: TileLangConversionContext,

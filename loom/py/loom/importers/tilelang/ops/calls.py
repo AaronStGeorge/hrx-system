@@ -21,6 +21,8 @@ from loom.importers.tilelang.converter import (
 from loom.importers.tilelang.coverage import OpCoverage, coverage_by_name
 from loom.importers.tilelang.nodes import dtype, mapping_items, node_kind, node_text
 from loom.importers.tilelang.ops.assumptions import convert_assume_call
+from loom.importers.tilelang.ops.conditions import coerce_condition
+from loom.importers.tilelang.ops.memory import remap_flattened_indices
 from loom.importers.tilelang.ops.topology import integer_value
 from loom.ir import I1, INDEX, ScalarType, ShapedType, StaticDim, Type, TypeKind
 
@@ -134,10 +136,14 @@ def convert_call(
         )
     if op_name in _CEILDIV_CALLS:
         return _convert_ceildiv_call(expr, context, converter, op_name, options=options)
+    if op_name in _IF_THEN_ELSE_CALLS:
+        return _convert_if_then_else_call(expr, context, converter, op_name)
     if op_name in _INFINITY_CALLS:
         return _convert_infinity_call(expr, context, op_name)
     if op_name in _REINTERPRET_CALLS:
         return _convert_reinterpret_call(expr, context, converter, op_name)
+    if op_name in _CALL_EXTERN_CALLS:
+        return _convert_call_extern_call(expr, context, op_name)
     if op_name in _ATOMIC_ADD_CALLS:
         return _convert_atomic_add_call(
             expr,
@@ -623,6 +629,75 @@ def _convert_infinity_call(
     return result
 
 
+def _convert_if_then_else_call(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    op_name: str,
+) -> ValueRef | None:
+    args = _args(expr)
+    if len(args) != 3:
+        context.record_blocked(node_text(expr), f"call `{op_name}` expects 3 operands")
+        return None
+    condition = converter.convert_expr(args[0], context)
+    if condition is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` condition is not mapped",
+        )
+        return None
+    condition = coerce_condition(condition, context, expr)
+    if condition is None:
+        return None
+    result_type = context.type_converter.map_dtype(dtype(expr))
+    if _is_vector_type(result_type):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` vector results are not supported",
+        )
+        return None
+    then_region = context.builder.region()
+    then_child = context.fork(preview_block=then_region.blocks[0])
+    with context.builder.insertion_block(then_region.blocks[0]):
+        true_value = converter.convert_expr(args[1], then_child)
+        if true_value is None:
+            then_child.record_blocked(
+                node_text(expr),
+                f"call `{op_name}` true value is not mapped",
+            )
+        else:
+            context.builder.scf.yield_(values=[true_value])
+    context.merge_child_records(then_child)
+    if true_value is None:
+        return None
+
+    else_region = context.builder.region()
+    else_child = context.fork(preview_block=else_region.blocks[0])
+    with context.builder.insertion_block(else_region.blocks[0]):
+        false_value = converter.convert_expr(args[2], else_child)
+        if false_value is None:
+            else_child.record_blocked(
+                node_text(expr),
+                f"call `{op_name}` false value is not mapped",
+            )
+        else:
+            context.builder.scf.yield_(values=[false_value])
+    context.merge_child_records(else_child)
+    if false_value is None:
+        return None
+
+    results = context.builder.scf.if_(
+        condition=condition,
+        results=[result_type],
+        then_region=then_region,
+        else_region=else_region,
+        names=[context.fresh_name("if")],
+    )
+    result = results[0]
+    _map_call_result(expr, context, result, op_name, value_type=str(result_type))
+    return result
+
+
 def _convert_reinterpret_call(
     expr: object,
     context: TileLangConversionContext,
@@ -684,6 +759,20 @@ def _convert_reinterpret_call(
         )
     _map_call_result(expr, context, result, op_name)
     return result
+
+
+def _convert_call_extern_call(
+    expr: object,
+    context: TileLangConversionContext,
+    op_name: str,
+) -> ValueRef | None:
+    args = _args(expr)
+    callee = _string_value(args[0]) if args else "<missing>"
+    context.record_blocked(
+        node_text(expr),
+        f"call `{op_name}` to extern callee `{callee}` is not imported",
+    )
+    return None
 
 
 def _convert_effect_call(
@@ -812,10 +901,15 @@ def _decode_tilelang_access_ptr(
     converter: TileLangConverter,
 ) -> AccessPtrValue | None:
     op_name = call_op_name(expr)
+    if op_name == "tir.tvm_access_ptr":
+        return _decode_tvm_access_ptr(expr, owner, context, converter)
     if op_name != "tl.access_ptr":
         context.record_blocked(
             node_text(owner),
-            f"atomic destination must be tl.access_ptr, got `{op_name}`",
+            (
+                "atomic destination must be tl.access_ptr or "
+                f"tir.tvm_access_ptr, got `{op_name}`"
+            ),
         )
         return None
     args = _args(expr)
@@ -867,6 +961,93 @@ def _decode_tilelang_access_ptr(
         buffer=buffer,
         rw_mask=rw_mask,
     )
+
+
+def _decode_tvm_access_ptr(
+    expr: object,
+    owner: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> AccessPtrValue | None:
+    args = _args(expr)
+    if len(args) != 5:
+        context.record_blocked(
+            node_text(owner),
+            (
+                "tir.tvm_access_ptr expects type annotation, data, offset, "
+                "extent, and rw mask"
+            ),
+        )
+        return None
+    if not _is_type_annotation_call(args[0]):
+        context.record_blocked(
+            node_text(owner),
+            "tir.tvm_access_ptr type annotation is not mapped",
+        )
+        return None
+    data = args[1]
+    view = context.mapped_buffer_data(data)
+    buffer = context.mapped_buffer_for_data(data)
+    if view is None or buffer is None:
+        context.record_blocked(
+            node_text(owner),
+            "tir.tvm_access_ptr buffer data is not mapped",
+        )
+        return None
+    offset = converter.convert_expr(args[2], context, index_like=True)
+    if offset is None:
+        context.record_blocked(
+            node_text(owner),
+            "tir.tvm_access_ptr offset is not mapped",
+        )
+        return None
+    extent = integer_value(args[3])
+    if extent != 1:
+        context.record_blocked(
+            node_text(owner),
+            f"tir.tvm_access_ptr extent `{extent}` is not a scalar element access",
+        )
+        return None
+    rw_mask = integer_value(args[4])
+    if rw_mask is None:
+        context.record_blocked(
+            node_text(owner),
+            "tir.tvm_access_ptr rw mask is not static",
+        )
+        return None
+    view_type = context.builder.module.values[view.id].type
+    if not isinstance(view_type, ShapedType):
+        context.record_blocked(
+            node_text(owner),
+            "tir.tvm_access_ptr buffer data is not a shaped view",
+        )
+        return None
+    indices: list[ValueRef]
+    if len(view_type.dims) <= 1:
+        indices = [offset]
+    else:
+        remapped_indices = remap_flattened_indices(
+            view,
+            (offset,),
+            context,
+            converter,
+            diagnostic_owner=owner,
+        )
+        if remapped_indices is None:
+            return None
+        indices = remapped_indices
+    return AccessPtrValue(
+        view=view,
+        indices=tuple(indices),
+        buffer=buffer,
+        rw_mask=rw_mask,
+    )
+
+
+def _is_type_annotation_call(expr: object) -> bool:
+    if call_op_name(expr) != "tir.type_annotation":
+        return False
+    return len(_args(expr)) in (0, 1)
 
 
 def _atomic_ordering(
@@ -1168,12 +1349,20 @@ _CEILDIV_CALLS = {
     "tir.ceildiv",
 }
 
+_IF_THEN_ELSE_CALLS = {
+    "tir.if_then_else",
+}
+
 _INFINITY_CALLS = {
     "tl.infinity",
 }
 
 _REINTERPRET_CALLS = {
     "tir.reinterpret",
+}
+
+_CALL_EXTERN_CALLS = {
+    "tir.call_extern",
 }
 
 _ATOMIC_ADD_EFFECT_CALLS = {

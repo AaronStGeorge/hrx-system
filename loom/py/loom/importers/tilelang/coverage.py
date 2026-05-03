@@ -473,8 +473,8 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
     OpCoverage(
         "tir.if_then_else",
         OpFamily.TIR_OP,
-        CoverageState.DEFERRED,
-        "Short-circuit selection needs a region-aware lowering, not eager scf.select.",
+        CoverageState.SUPPORTED,
+        "Lazy expression-level selection maps to result-producing scf.if.",
     ),
     OpCoverage(
         "tir.indexdiv",
@@ -826,6 +826,18 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         OpFamily.TIR_OP,
         CoverageState.OPAQUE_FOREIGN,
         "Opaque external call; requires an explicit foreign-op policy.",
+    ),
+    OpCoverage(
+        "tir.type_annotation",
+        OpFamily.TIR_OP,
+        CoverageState.NORMALIZED,
+        "Pointer type metadata helper; access-pointer import validates and drops it.",
+    ),
+    OpCoverage(
+        "tir.tvm_tuple",
+        OpFamily.TIR_OP,
+        CoverageState.IGNORED_METADATA,
+        "Attribute value tuple; known metadata attributes decode the wrapper shape.",
     ),
     OpCoverage(
         "tir.call_packed",

@@ -35,6 +35,7 @@ class TileLangConversionContext(SourceImportSession):
     semantic_values: dict[tuple[object, ...], ValueRef] = field(default_factory=dict)
     semantic_value_types: dict[tuple[object, ...], str] = field(default_factory=dict)
     buffer_data_values: dict[tuple[object, ...], ValueRef] = field(default_factory=dict)
+    buffer_data_buffers: dict[tuple[object, ...], object] = field(default_factory=dict)
     semantic_index_values: dict[tuple[object, ...], ValueRef] = field(
         default_factory=dict
     )
@@ -121,20 +122,33 @@ class TileLangConversionContext(SourceImportSession):
             return None
         return self.semantic_value_types.get(semantic_key)
 
-    def map_buffer_data(self, source: object, ref: ValueRef) -> None:
+    def map_buffer_data(
+        self,
+        source: object,
+        ref: ValueRef,
+        *,
+        buffer: object | None = None,
+    ) -> None:
         self.map_value(source, ref, str(ref.type))
         semantic_key = _semantic_buffer_data_key(source)
         if semantic_key is not None:
             self.buffer_data_values[semantic_key] = ref
+            if buffer is not None:
+                self.buffer_data_buffers[semantic_key] = buffer
 
     def mapped_buffer_data(self, source: object) -> ValueRef | None:
-        mapped_value = self.mapped(source)
-        if mapped_value is not None:
-            return mapped_value
+        semantic_key = _semantic_buffer_data_key(source)
+        if semantic_key is not None:
+            mapped_data = self.buffer_data_values.get(semantic_key)
+            if mapped_data is not None:
+                return mapped_data
+        return self.mapped(source)
+
+    def mapped_buffer_for_data(self, source: object) -> object | None:
         semantic_key = _semantic_buffer_data_key(source)
         if semantic_key is None:
             return None
-        return self.buffer_data_values.get(semantic_key)
+        return self.buffer_data_buffers.get(semantic_key)
 
     def mapped_index_value(self, source: object) -> ValueRef | None:
         mapped_value = self.index_values.get(self.source_key(source))
@@ -174,6 +188,7 @@ class TileLangConversionContext(SourceImportSession):
             semantic_values=dict(self.semantic_values),
             semantic_value_types=dict(self.semantic_value_types),
             buffer_data_values=dict(self.buffer_data_values),
+            buffer_data_buffers=dict(self.buffer_data_buffers),
             semantic_index_values=dict(self.semantic_index_values),
             kernel_body_block=self.kernel_body_block,
             dense_layout=self.dense_layout,
