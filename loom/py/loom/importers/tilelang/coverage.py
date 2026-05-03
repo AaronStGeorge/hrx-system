@@ -914,8 +914,8 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
     OpCoverage(
         "tl.copy",
         OpFamily.TILELANG_OP,
-        CoverageState.DEFERRED,
-        "Bulk copy; needs memory space, vectorization, and async policy mapping.",
+        CoverageState.NORMALIZED,
+        "High-level authoring copy normalizes to tl.tileop.copy in structured TIR.",
     ),
     OpCoverage(
         "tl.gemm",
@@ -936,10 +936,40 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "Fragment allocation; depends on vector.fragment encoding import.",
     ),
     OpCoverage(
-        "tl.tileop.*",
+        "tl.tileop.region",
+        OpFamily.TILELANG_TILEOP,
+        CoverageState.SUPPORTED,
+        "Tile region descriptor; decoded from buffer load, access mask, and extents.",
+    ),
+    OpCoverage(
+        "tl.tileop.copy",
+        OpFamily.TILELANG_TILEOP,
+        CoverageState.SUPPORTED,
+        "Region-to-region copy; imports as structured scf.for plus view.load/store.",
+    ),
+    OpCoverage(
+        "tl.tileop.fill",
+        OpFamily.TILELANG_TILEOP,
+        CoverageState.SUPPORTED,
+        "Region fill; imports as structured scf.for plus view.store.",
+    ),
+    OpCoverage(
+        "tl.tileop.reduce",
         OpFamily.TILELANG_TILEOP,
         CoverageState.DEFERRED,
-        "Tile-level op family; each op must map to tile/vector dialect semantics.",
+        "Tile reduction needs axis/kind mapping and reducer state preservation.",
+    ),
+    OpCoverage(
+        "tl.tileop.finalize_reducer",
+        OpFamily.TILELANG_TILEOP,
+        CoverageState.DEFERRED,
+        "Reducer finalization needs explicit reducer-state representation.",
+    ),
+    OpCoverage(
+        "tl.tileop.gemm",
+        OpFamily.TILELANG_TILEOP,
+        CoverageState.DEFERRED,
+        "Matrix tile op; maps through vector.fragment and vector.mma.",
     ),
 )
 

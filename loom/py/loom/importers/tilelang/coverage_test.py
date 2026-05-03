@@ -31,10 +31,11 @@ def test_audit_coverage_reports_missing_names() -> None:
     audit = audit_coverage(
         [
             "tir.For",
+            "tl.tileop.copy",
             "tl.tileop.custom",
             "tl.future_op",
         ]
     )
 
-    assert audit.known == ("tir.For", "tl.tileop.custom")
-    assert audit.missing == ("tl.future_op",)
+    assert audit.known == ("tir.For", "tl.tileop.copy")
+    assert audit.missing == ("tl.future_op", "tl.tileop.custom")
