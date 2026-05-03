@@ -559,3 +559,110 @@ func.def public @call_private_conflicting_layout_view(%buffer: buffer) {
   test.use %view0, %view1 : view<4xf32, #dense>, view<4xf32, #strided<stride=8>>
   func.return
 }
+
+// ====
+
+// Projected function-like regions share one logical signature. Exact caller
+// facts materialize as separate constants in each isolated projection so body
+// and config rewrite independently without crossing region SSA boundaries.
+test.split_func @projected_exact_constant(%n: index) {
+  %one = index.constant 1 : index
+  %sum = index.add %n, %one : index
+  test.use %sum : index
+  test.yield
+} config(%cfg_n: index) {
+  %cfg_one = index.constant 1 : index
+  %cfg_sum = index.add %cfg_n, %cfg_one : index
+  test.use %cfg_sum : index
+  test.yield
+}
+
+func.def public @call_projected_exact_constant() {
+  %n = index.constant 7 : index
+  test.invoke @projected_exact_constant(%n) : (index)
+  func.return
+}
+
+// ----
+test.split_func @projected_exact_constant() {
+  %sum = index.constant 8 : index
+  test.use %sum : index
+  test.yield
+} config() {
+  %cfg_sum = index.constant 8 : index
+  test.use %cfg_sum : index
+  test.yield
+}
+
+func.def public @call_projected_exact_constant() {
+  test.invoke @projected_exact_constant() : ()
+  func.return
+}
+
+// ====
+
+// Argument equality is also logical: replacing one duplicate argument with
+// another must happen independently in every projected root region before local
+// canonicalization sees the simplified expressions.
+test.split_func @projected_equal_arguments(%lhs: index, %rhs: index) {
+  %delta = index.sub %lhs, %rhs : index
+  test.use %delta : index
+  test.yield
+} config(%cfg_lhs: index, %cfg_rhs: index) {
+  %cfg_delta = index.sub %cfg_lhs, %cfg_rhs : index
+  test.use %cfg_delta : index
+  test.yield
+}
+
+func.def public @call_projected_equal_arguments(%n: index) {
+  test.invoke @projected_equal_arguments(%n, %n) : (index, index)
+  func.return
+}
+
+// ----
+test.split_func @projected_equal_arguments() {
+  %delta = index.constant 0 : index
+  test.use %delta : index
+  test.yield
+} config() {
+  %cfg_delta = index.constant 0 : index
+  test.use %cfg_delta : index
+  test.yield
+}
+
+func.def public @call_projected_equal_arguments(%n: index) {
+  test.invoke @projected_equal_arguments() : ()
+  func.return
+}
+
+// ====
+
+// A logical argument is prunable only when every projection drops its matching
+// entry argument. The rewrite then removes the same argument index from each
+// projected region and from all semantic call-like edges.
+test.split_func @projected_dead_argument(%kept: index, %dead: index) {
+  test.use %kept : index
+  test.yield
+} config(%cfg_kept: index, %cfg_dead: index) {
+  test.use %cfg_kept : index
+  test.yield
+}
+
+func.def public @call_projected_dead_argument(%kept: index, %dead: index) {
+  test.invoke @projected_dead_argument(%kept, %dead) : (index, index)
+  func.return
+}
+
+// ----
+test.split_func @projected_dead_argument(%kept: index) {
+  test.use %kept : index
+  test.yield
+} config(%cfg_kept: index) {
+  test.use %cfg_kept : index
+  test.yield
+}
+
+func.def public @call_projected_dead_argument(%kept: index, %dead: index) {
+  test.invoke @projected_dead_argument(%kept) : (index)
+  func.return
+}
