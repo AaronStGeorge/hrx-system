@@ -37,7 +37,15 @@ def test_create_kernel_module_uses_supported_amdgpu_target_record() -> None:
         )
         == """amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export(\"kernel\") workgroup_size(1, 1, 1) @kernel() {
+kernel.def target(@hip_mcpu_gfx1100) export(\"kernel\") @kernel() {
+  %wg_count_x = index.constant 1 : index
+  %wg_count_y = index.constant 1 : index
+  %wg_count_z = index.constant 1 : index
+  %wg_size_x = index.constant 1 : index
+  %wg_size_y = index.constant 1 : index
+  %wg_size_z = index.constant 1 : index
+  kernel.launch.config workgroups(%wg_count_x, %wg_count_y, %wg_count_z) workgroup_size(%wg_size_x, %wg_size_y, %wg_size_z) : index
+} launch {
   kernel.return
 }
 """
@@ -68,7 +76,15 @@ def test_create_kernel_module_uses_generic_target_when_cpu_has_no_row() -> None:
         )
         == """target.generic<reference> @hip_mcpu_gfx942
 
-kernel.def target(@hip_mcpu_gfx942) export(\"kernel\") workgroup_size(1, 1, 1) @kernel() {
+kernel.def target(@hip_mcpu_gfx942) export(\"kernel\") @kernel() {
+  %wg_count_x = index.constant 1 : index
+  %wg_count_y = index.constant 1 : index
+  %wg_count_z = index.constant 1 : index
+  %wg_size_x = index.constant 1 : index
+  %wg_size_y = index.constant 1 : index
+  %wg_size_z = index.constant 1 : index
+  kernel.launch.config workgroups(%wg_count_x, %wg_count_y, %wg_count_z) workgroup_size(%wg_size_x, %wg_size_y, %wg_size_z) : index
+} launch {
   kernel.return
 }
 """

@@ -75,30 +75,29 @@ func.def @convergent_ops_do_not_cse(%value: i32) -> (i32, i32) {
 // ====
 
 // Function passes still run over the function-like body projection. CSE can be
-// driven over projected regions explicitly, but a normal function pass must not
-// mutate every root region of a multi-region function-like op.
+// driven over every root region. Equivalent expressions are only shared inside
+// one region tree; config and body keep separate SSA scopes.
 // RUN: pass cse
-test.split_func @split_func_body_only_cse(%arg: i32) {
+test.split_func @split_func_all_regions_cse(%arg: i32) {
+  %cfg_lhs = test.addi %arg, %arg : i32
+  %cfg_rhs = test.addi %arg, %arg : i32
+  test.use %cfg_lhs, %cfg_rhs : i32, i32
+  test.yield
+} launch {
   %body_lhs = test.addi %arg, %arg : i32
   %body_rhs = test.addi %arg, %arg : i32
   test.use %body_lhs, %body_rhs : i32, i32
   test.yield
-} config(%cfg_arg: i32) {
-  %cfg_lhs = test.addi %cfg_arg, %cfg_arg : i32
-  %cfg_rhs = test.addi %cfg_arg, %cfg_arg : i32
-  test.use %cfg_lhs, %cfg_rhs : i32, i32
-  test.yield
 }
 
 // ----
-test.split_func @split_func_body_only_cse(%arg: i32) {
+test.split_func @split_func_all_regions_cse(%arg: i32) {
+  %cfg_lhs = test.addi %arg, %arg : i32
+  test.use %cfg_lhs, %cfg_lhs : i32, i32
+  test.yield
+} launch {
   %body_lhs = test.addi %arg, %arg : i32
   test.use %body_lhs, %body_lhs : i32, i32
-  test.yield
-} config(%cfg_arg: i32) {
-  %cfg_lhs = test.addi %cfg_arg, %cfg_arg : i32
-  %cfg_rhs = test.addi %cfg_arg, %cfg_arg : i32
-  test.use %cfg_lhs, %cfg_rhs : i32, i32
   test.yield
 }
 

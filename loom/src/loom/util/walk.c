@@ -237,7 +237,12 @@ iree_status_t loom_walk_function(const loom_module_t* module,
                                  iree_arena_allocator_t* arena,
                                  loom_walk_result_t* out_result) {
   *out_result = LOOM_WALK_CONTINUE;
-  loom_region_t* body = loom_func_like_body(function);
-  if (!body) return iree_ok_status();
-  return loom_walk_region(module, body, order, callback, arena, out_result);
+  for (uint8_t i = 0; i < loom_func_like_region_count(function); ++i) {
+    loom_region_t* region = loom_func_like_region(function, i);
+    if (!region) continue;
+    IREE_RETURN_IF_ERROR(
+        loom_walk_region(module, region, order, callback, arena, out_result));
+    if (*out_result == LOOM_WALK_ABORT) break;
+  }
+  return iree_ok_status();
 }

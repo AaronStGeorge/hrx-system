@@ -558,6 +558,8 @@ static iree_status_t loom_parse_op_into(loom_parser_t* parser,
                             params, IREE_ARRAYSIZE(params), op_name_token);
   }
 
+  uint16_t pending_func_arg_start = parser->pending_func_args.count;
+
   bool is_symbol_definition =
       iree_any_bit_set(vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE);
   if (is_symbol_definition && parsed->result_count > 0) {
@@ -567,32 +569,40 @@ static iree_status_t loom_parse_op_into(loom_parser_t* parser,
   }
 
   // Walk the format elements.
-  IREE_RETURN_IF_ERROR(
-      loom_parser_walk_format(parser, vtable, op_name_token, parsed));
+  bool func_args_consumed_by_region = false;
+  IREE_RETURN_IF_ERROR(loom_parser_walk_format(parser, vtable, op_name_token,
+                                               parsed, pending_func_arg_start,
+                                               &func_args_consumed_by_region));
 
   if (parser->error_count > errors_before) {
     loom_parser_definition_scope_discard(parser);
   }
 
-  // If FUNC_ARGS produced pending args but no REGION consumed them (e.g.,
-  // func.decl, func.ukernel), these are declaration signature args. Store
-  // their value IDs as op operands so FuncArgs printing and func-like
+  // If FUNC_ARGS produced signature args but no body REGION consumed them
+  // (e.g., func.decl, func.ukernel), these are declaration signature args.
+  // Store their value IDs as op operands so FuncArgs printing and func-like
   // verification can recover the signature.
-  if (parser->error_count == errors_before &&
-      parser->pending_block_args.count > 0) {
-    for (uint16_t i = 0; i < parser->pending_block_args.count; ++i) {
+  if (parser->error_count == errors_before && func_args_consumed_by_region) {
+    loom_parser_pending_block_args_truncate(&parser->pending_func_args,
+                                            pending_func_arg_start);
+  } else if (parser->error_count == errors_before &&
+             parser->pending_func_args.count > pending_func_arg_start) {
+    for (uint16_t i = pending_func_arg_start;
+         i < parser->pending_func_args.count; ++i) {
       uint16_t operand_index = parsed->operand_count;
       IREE_RETURN_IF_ERROR(loom_parsed_op_add_operand(
           parsed, &parser->parser_arena,
-          parser->pending_block_args.entries[i].value_id));
-      loom_token_t name_token =
-          parser->pending_block_args.entries[i].name_token;
+          parser->pending_func_args.entries[i].value_id));
+      loom_token_t name_token = parser->pending_func_args.entries[i].name_token;
       IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
           parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
           operand_index, name_token, name_token.line, name_token.end_column));
     }
-    loom_parser_pending_block_args_clear(&parser->pending_block_args);
+    loom_parser_pending_block_args_truncate(&parser->pending_func_args,
+                                            pending_func_arg_start);
   } else if (parser->error_count > 0) {
+    loom_parser_pending_block_args_truncate(&parser->pending_func_args,
+                                            pending_func_arg_start);
     loom_parser_pending_block_args_clear(&parser->pending_block_args);
   }
 

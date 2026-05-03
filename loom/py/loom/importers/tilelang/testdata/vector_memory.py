@@ -62,7 +62,10 @@ def broadcast_vector_store(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("broadcast_vector_store") workgroup_size(1, 1, 1) @broadcast_vector_store(%dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("broadcast_vector_store") @broadcast_vector_store(%dst: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
@@ -100,7 +103,10 @@ def ramp_vector_load(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("ramp_vector_load") workgroup_size(1, 1, 1) @ramp_vector_load(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("ramp_vector_load") @ramp_vector_load(%src: buffer, %dst: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>

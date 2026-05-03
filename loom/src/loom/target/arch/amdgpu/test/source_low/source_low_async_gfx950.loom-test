@@ -3,6 +3,9 @@
 
 amdgpu.target<gfx950> @target
 kernel.def target(@target) @async_gather_dword(%input: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -18,16 +21,16 @@ kernel.def target(@target) @async_gather_dword(%input: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) @async_gather_dword() {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @async_gather_dword() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = low.resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
-  %14 = low.storage.reserve {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
-  %dest = low.storage.address %14 : low.storage<workgroup> -> reg<amdgpu.vgpr>
-  %16 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %17 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %18 = low.op<amdgpu.s_mov_b32_m0>(%17) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  low.op<amdgpu.global_load_lds_dword_saddr>(%16, %source, %18) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  %16 = low.storage.reserve {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %dest = low.storage.address %16 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %18 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %19 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %20 = low.op<amdgpu.s_mov_b32_m0>(%19) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dword_saddr>(%18, %source, %20) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 63, vmcnt = 0} : ()
   low.return
 }
@@ -36,6 +39,9 @@ low.kernel.def target(@target) @async_gather_dword() {
 
 amdgpu.target<gfx950> @target
 kernel.def target(@target) @async_gather_b128(%input: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -51,16 +57,16 @@ kernel.def target(@target) @async_gather_b128(%input: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) @async_gather_b128() {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @async_gather_b128() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = low.resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 1024} : reg<amdgpu.sgpr>
-  %14 = low.storage.reserve {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
-  %dest = low.storage.address %14 : low.storage<workgroup> -> reg<amdgpu.vgpr>
-  %16 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %17 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %18 = low.op<amdgpu.s_mov_b32_m0>(%17) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%16, %source, %18) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  %16 = low.storage.reserve {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
+  %dest = low.storage.address %16 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %18 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %19 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %20 = low.op<amdgpu.s_mov_b32_m0>(%19) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%18, %source, %20) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 63, vmcnt = 0} : ()
   low.return
 }
@@ -69,6 +75,9 @@ low.kernel.def target(@target) @async_gather_b128() {
 
 amdgpu.target<gfx950> @target
 kernel.def target(@target) @async_gather_two_stage(%input: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 2048 : offset
@@ -89,20 +98,20 @@ kernel.def target(@target) @async_gather_two_stage(%input: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) @async_gather_two_stage() {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @async_gather_two_stage() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = low.resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 2048} : reg<amdgpu.sgpr>
-  %18 = low.storage.reserve {byte_alignment = 16, byte_length = 2048} : low.storage<workgroup>
-  %dest1 = low.storage.address %18 : low.storage<workgroup> -> reg<amdgpu.vgpr>
-  %20 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %21 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %22 = low.op<amdgpu.s_mov_b32_m0>(%21) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%20, %source, %22) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
-  %23 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %24 = low.const<amdgpu.s_mov_b32> {imm32 = 1024} : reg<amdgpu.sgpr>
-  %25 = low.op<amdgpu.s_mov_b32_m0>(%24) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%23, %source, %25) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  %20 = low.storage.reserve {byte_alignment = 16, byte_length = 2048} : low.storage<workgroup>
+  %dest1 = low.storage.address %20 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %22 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %23 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %24 = low.op<amdgpu.s_mov_b32_m0>(%23) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%22, %source, %24) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  %25 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %26 = low.const<amdgpu.s_mov_b32> {imm32 = 1024} : reg<amdgpu.sgpr>
+  %27 = low.op<amdgpu.s_mov_b32_m0>(%26) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%25, %source, %27) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 63, vmcnt = 1} : ()
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 63, vmcnt = 0} : ()
   low.return
@@ -112,6 +121,9 @@ low.kernel.def target(@target) @async_gather_two_stage() {
 
 amdgpu.target<gfx950> @target
 kernel.def target(@target) @async_gather_multi_packet_newer_group(%input: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 3072 : offset
@@ -134,24 +146,24 @@ kernel.def target(@target) @async_gather_multi_packet_newer_group(%input: buffer
 }
 
 // ----
-low.kernel.def target(@target) @async_gather_multi_packet_newer_group() {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @async_gather_multi_packet_newer_group() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = low.resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 3072} : reg<amdgpu.sgpr>
-  %20 = low.storage.reserve {byte_alignment = 16, byte_length = 3072} : low.storage<workgroup>
-  %dest1b = low.storage.address %20 : low.storage<workgroup> -> reg<amdgpu.vgpr>
-  %22 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %23 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %24 = low.op<amdgpu.s_mov_b32_m0>(%23) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%22, %source, %24) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
-  %25 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %26 = low.const<amdgpu.s_mov_b32> {imm32 = 1024} : reg<amdgpu.sgpr>
-  %27 = low.op<amdgpu.s_mov_b32_m0>(%26) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%25, %source, %27) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
-  %28 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %29 = low.const<amdgpu.s_mov_b32> {imm32 = 2048} : reg<amdgpu.sgpr>
-  %30 = low.op<amdgpu.s_mov_b32_m0>(%29) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%28, %source, %30) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  %22 = low.storage.reserve {byte_alignment = 16, byte_length = 3072} : low.storage<workgroup>
+  %dest1b = low.storage.address %22 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %24 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %25 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %26 = low.op<amdgpu.s_mov_b32_m0>(%25) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%24, %source, %26) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  %27 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %28 = low.const<amdgpu.s_mov_b32> {imm32 = 1024} : reg<amdgpu.sgpr>
+  %29 = low.op<amdgpu.s_mov_b32_m0>(%28) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%27, %source, %29) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  %30 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %31 = low.const<amdgpu.s_mov_b32> {imm32 = 2048} : reg<amdgpu.sgpr>
+  %32 = low.op<amdgpu.s_mov_b32_m0>(%31) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%30, %source, %32) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 63, vmcnt = 2} : ()
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 63, vmcnt = 0} : ()
   low.return
@@ -161,6 +173,9 @@ low.kernel.def target(@target) @async_gather_multi_packet_newer_group() {
 
 amdgpu.target<gfx950> @target
 kernel.def target(@target) @async_gather_second_lds_slot(%input: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %pad_bytes = index.constant 256 : offset
@@ -178,19 +193,19 @@ kernel.def target(@target) @async_gather_second_lds_slot(%input: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) @async_gather_second_lds_slot() {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @async_gather_second_lds_slot() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = low.resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %pad_bytes = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
   %scratch_bytes = low.const<amdgpu.s_mov_b32> {imm32 = 1024} : reg<amdgpu.sgpr>
-  %17 = low.storage.reserve {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
-  %pad = low.storage.address %17 : low.storage<workgroup> -> reg<amdgpu.vgpr>
-  %19 = low.storage.reserve {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
-  %dest = low.storage.address %19 : low.storage<workgroup> -> reg<amdgpu.vgpr>
-  %21 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %22 = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
-  %23 = low.op<amdgpu.s_mov_b32_m0>(%22) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%21, %source, %23) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  %19 = low.storage.reserve {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %pad = low.storage.address %19 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %21 = low.storage.reserve {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
+  %dest = low.storage.address %21 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %23 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %24 = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
+  %25 = low.op<amdgpu.s_mov_b32_m0>(%24) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%23, %source, %25) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 63, vmcnt = 0} : ()
   low.return
 }

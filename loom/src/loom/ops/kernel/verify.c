@@ -90,14 +90,6 @@ static iree_status_t loom_kernel_verify_def_contract(
       op, loom_kernel_def_export_ordinal_ATTR_INDEX);
   const bool has_export_linkage = loom_kernel_optional_attr_is_present(
       op, loom_kernel_def_export_linkage_ATTR_INDEX);
-  const bool has_workgroup_size_x = loom_kernel_optional_attr_is_present(
-      op, loom_kernel_def_workgroup_size_x_ATTR_INDEX);
-  const bool has_workgroup_size_y = loom_kernel_optional_attr_is_present(
-      op, loom_kernel_def_workgroup_size_y_ATTR_INDEX);
-  const bool has_workgroup_size_z = loom_kernel_optional_attr_is_present(
-      op, loom_kernel_def_workgroup_size_z_ATTR_INDEX);
-  const bool has_any_workgroup_size =
-      has_workgroup_size_x || has_workgroup_size_y || has_workgroup_size_z;
   if (!has_export_symbol &&
       (has_artifact || has_export_ordinal || has_export_linkage)) {
     return loom_kernel_verify_contract_attr_present(
@@ -114,29 +106,6 @@ static iree_status_t loom_kernel_verify_def_contract(
     IREE_RETURN_IF_ERROR(loom_kernel_verify_contract_attr_present(
         emitter, op, loom_kernel_def_target_ATTR_INDEX, IREE_SV("target"),
         IREE_SV("present when artifact is present")));
-  }
-  if (has_any_workgroup_size) {
-    IREE_RETURN_IF_ERROR(loom_kernel_verify_contract_attr_present(
-        emitter, op, loom_kernel_def_workgroup_size_x_ATTR_INDEX,
-        IREE_SV("workgroup_size_x"),
-        IREE_SV("present with workgroup_size_y and workgroup_size_z")));
-    IREE_RETURN_IF_ERROR(loom_kernel_verify_contract_attr_present(
-        emitter, op, loom_kernel_def_workgroup_size_y_ATTR_INDEX,
-        IREE_SV("workgroup_size_y"),
-        IREE_SV("present with workgroup_size_x and workgroup_size_z")));
-    IREE_RETURN_IF_ERROR(loom_kernel_verify_contract_attr_present(
-        emitter, op, loom_kernel_def_workgroup_size_z_ATTR_INDEX,
-        IREE_SV("workgroup_size_z"),
-        IREE_SV("present with workgroup_size_x and workgroup_size_y")));
-    IREE_RETURN_IF_ERROR(loom_kernel_verify_positive_u32_attr(
-        emitter, op, loom_kernel_def_workgroup_size_x_ATTR_INDEX,
-        loom_kernel_def_workgroup_size_x(op), IREE_SV("workgroup_size_x")));
-    IREE_RETURN_IF_ERROR(loom_kernel_verify_positive_u32_attr(
-        emitter, op, loom_kernel_def_workgroup_size_y_ATTR_INDEX,
-        loom_kernel_def_workgroup_size_y(op), IREE_SV("workgroup_size_y")));
-    IREE_RETURN_IF_ERROR(loom_kernel_verify_positive_u32_attr(
-        emitter, op, loom_kernel_def_workgroup_size_z_ATTR_INDEX,
-        loom_kernel_def_workgroup_size_z(op), IREE_SV("workgroup_size_z")));
   }
   return iree_ok_status();
 }

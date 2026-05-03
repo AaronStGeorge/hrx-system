@@ -10,6 +10,11 @@ test.target<low_core> @matmul_hal_target {abi = hal_kernel}
 
 target.artifact @matmul_hal_executable target(@matmul_hal_target) {abi = hal_executable, artifact_format = elf}
 
-kernel.def target(@matmul_hal_target) export("matmul") artifact(@matmul_hal_executable) workgroup_size(16, 4, 1) @matmul_hal() {
+kernel.def target(@matmul_hal_target) export("matmul") artifact(@matmul_hal_executable) @matmul_hal() {
+  %c1 = index.constant 1 : index
+  %c16 = index.constant 16 : index
+  %c4 = index.constant 4 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c16, %c4, %c1) : index
+} launch {
   kernel.return
 }

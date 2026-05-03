@@ -58,8 +58,12 @@ class AmdgpuModuleCompilerTest : public ::testing::Test {
   void ParseGfx11Kernel(loom_module_t** out_module) {
     static const char kSource[] =
         "amdgpu.target<gfx1100> @gfx_target\n"
-        "kernel.def target(@gfx_target) workgroup_size(64, 1, 1) "
-        "@loom_kernel() {\n"
+        "kernel.def target(@gfx_target) @loom_kernel() {\n"
+        "  %c1 = index.constant 1 : index\n"
+        "  %c64 = index.constant 64 : index\n"
+        "  kernel.launch.config workgroups(%c1, %c1, %c1) "
+        "workgroup_size(%c64, %c1, %c1) : index\n"
+        "} launch {\n"
         "  kernel.return\n"
         "}\n";
     DiagnosticCapture parse_capture;

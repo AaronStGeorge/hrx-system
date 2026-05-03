@@ -58,6 +58,7 @@ from loom.assembly import (
 )
 from loom.dsl import (
     AttrDef,
+    FuncLikeInterface,
     Op,
     ShapeParam,
     TypeConstraint,
@@ -1098,6 +1099,45 @@ class ParsedFields:
         self.operand_fields: dict[str, list[int]] = {}
 
 
+def _func_args_field(op_decl: Op) -> str:
+    """Return the FuncArgs format field name, defaulting to args."""
+
+    def walk(elements: Sequence[FormatElement]) -> str | None:
+        for element in elements:
+            match element:
+                case FuncArgs(field=name):
+                    return name
+                case (
+                    Clause(elements=inner)
+                    | OptionalGroup(elements=inner)
+                    | Scope(elements=inner)
+                ):
+                    nested = walk(inner)
+                    if nested is not None:
+                        return nested
+                case _:
+                    continue
+        return None
+
+    return walk(op_decl.format) or "args"
+
+
+def _func_like_body_field(op_decl: Op) -> str | None:
+    """Return the FuncLike body region field for op_decl, if any."""
+    for interface in op_decl.interfaces:
+        if isinstance(interface, FuncLikeInterface):
+            return interface.body
+    return None
+
+
+def _region_def(op_decl: Op, name: str) -> Any | None:
+    """Return the declared region matching name."""
+    for region in op_decl.regions:
+        if region.name == name:
+            return region
+    return None
+
+
 class Parser:
     """Format-element-driven parser for loom IR text format.
 
@@ -2026,9 +2066,35 @@ class Parser:
                     # Get block arg info from binding list if available.
                     binding_names = parsed.attributes.pop("_binding_arg_names", None)
                     binding_types = parsed.attributes.pop("_binding_arg_types", None)
-                    # Func arg IDs (from FuncArgs) become the entry block's args.
                     pre_arg_ids = None
-                    if parsed.func_arg_ids and not parsed.func_args_consumed:
+                    region_def = _region_def(op_decl, name)
+                    func_args_field = _func_args_field(op_decl)
+                    if (
+                        parsed.func_arg_ids
+                        and region_def is not None
+                        and region_def.arg_source == func_args_field
+                    ):
+                        if binding_names or binding_types:
+                            raise ParseError(
+                                f"region '{name}' cannot combine projected "
+                                "FuncArgs with explicit binding args",
+                                tok.peek().location,
+                                tok._filename,
+                            )
+                        binding_names = [
+                            self._module.values[value_id].name
+                            for value_id in parsed.func_arg_ids
+                        ]
+                        binding_types = [
+                            self._module.values[value_id].type
+                            for value_id in parsed.func_arg_ids
+                        ]
+                    elif (
+                        parsed.func_arg_ids
+                        and not parsed.func_args_consumed
+                        and name == _func_like_body_field(op_decl)
+                    ):
+                        # Body regions receive the logical FuncArgs values.
                         pre_arg_ids = parsed.func_arg_ids
                         parsed.func_args_consumed = True
                     region = self._parse_region_with_syntax(

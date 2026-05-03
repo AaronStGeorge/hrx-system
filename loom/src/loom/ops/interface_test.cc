@@ -25,6 +25,10 @@
 namespace loom {
 namespace {
 
+TEST(OpIsaTest, GeneratedIsaReturnsFalseForNull) {
+  EXPECT_FALSE(loom_test_addi_isa(nullptr));
+}
+
 //===----------------------------------------------------------------------===//
 // Test fixture
 //===----------------------------------------------------------------------===//

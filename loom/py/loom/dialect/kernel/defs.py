@@ -53,6 +53,8 @@ from loom.dsl import (
     VECTOR,
     VIEW,
     AttrDef,
+    BlockArgCount,
+    BlockArgsMatchTypes,
     ContractFamily,
     Dialect,
     EnumCase,
@@ -212,24 +214,6 @@ _ENTRY_EXPORT_FORMAT: list[FormatElement] = [
     ),
 ]
 
-_ENTRY_WORKGROUP_SIZE_FORMAT: list[FormatElement] = [
-    OptionalGroup(
-        [
-            kw("workgroup_size"),
-            GLUE,
-            LPAREN,
-            Attr("workgroup_size_x"),
-            COMMA,
-            Attr("workgroup_size_y"),
-            COMMA,
-            Attr("workgroup_size_z"),
-            GLUE,
-            RPAREN,
-        ],
-        anchor="workgroup_size_x",
-    ),
-]
-
 _ENTRY_SIGNATURE_FORMAT: list[FormatElement] = [
     SymbolRef("callee"),
     Scope(
@@ -260,9 +244,6 @@ _ENTRY_ATTRS = [
     ),
     AttrDef("export_ordinal", ATTR_TYPE_I64, optional=True),
     AttrDef("export_linkage", "enum", enum_def=ExportLinkage, optional=True),
-    AttrDef("workgroup_size_x", ATTR_TYPE_I64, optional=True),
-    AttrDef("workgroup_size_y", ATTR_TYPE_I64, optional=True),
-    AttrDef("workgroup_size_z", ATTR_TYPE_I64, optional=True),
     AttrDef("predicates", "predicate_list", optional=True),
 ]
 
@@ -281,7 +262,20 @@ kernel_def = Op(
         bytecode_kind="LOOM_SYMBOL_FUNC_DEF",
         fact_domain="loom_func_symbol_fact_domain",
     ),
-    regions=[RegionDef("body", doc="Kernel body.", terminator="kernel.return")],
+    regions=[
+        RegionDef(
+            "config",
+            doc=("Launch configuration region. The region has projected copies of the kernel signature arguments and must terminate with kernel.launch.config."),
+            single_block=True,
+            terminator="kernel.launch.config",
+            arg_source="args",
+        ),
+        RegionDef("body", doc="Kernel body.", terminator="kernel.return"),
+    ],
+    constraints=[
+        BlockArgCount("config", "body"),
+        BlockArgsMatchTypes("config", "body"),
+    ],
     interfaces=[
         FuncLikeInterface(
             callee="callee",
@@ -290,9 +284,6 @@ kernel_def = Op(
             artifact="artifact",
             export_ordinal="export_ordinal",
             export_linkage="export_linkage",
-            workgroup_size_x="workgroup_size_x",
-            workgroup_size_y="workgroup_size_y",
-            workgroup_size_z="workgroup_size_z",
             predicates="predicates",
             body="body",
         )
@@ -301,13 +292,82 @@ kernel_def = Op(
     format=[
         *_ENTRY_TARGET_FORMAT,
         *_ENTRY_EXPORT_FORMAT,
-        *_ENTRY_WORKGROUP_SIZE_FORMAT,
         *_ENTRY_SIGNATURE_FORMAT,
+        Region("config"),
+        kw("launch"),
         Region("body"),
     ],
     examples=[
-        "kernel.def @entry(%buffer: buffer) {\n  kernel.return\n}",
-        'kernel.def target(@gfx1100) export("matmul") artifact(@gfx_hsaco) workgroup_size(16, 4, 1) @matmul(%lhs: buffer, %rhs: buffer, %out: buffer) {\n  kernel.return\n}',
+        "kernel.def @entry(%buffer: buffer) {\n  %one = index.constant 1 : index\n  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index\n} launch {\n  kernel.return\n}",
+        'kernel.def target(@gfx1100) export("matmul") artifact(@gfx_hsaco) @matmul(%lhs: buffer, %rhs: buffer, %out: buffer) {\n  %one = index.constant 1 : index\n  %threads = index.constant 256 : index\n  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%threads, %one, %one) : index\n} launch {\n  kernel.return\n}',
+    ],
+)
+
+
+kernel_launch_config = Op(
+    "kernel.launch.config",
+    group=kernel_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=("Terminate a kernel launch configuration region with the computed workgroup grid and required workgroup size."),
+    operands=[
+        Operand(
+            "workgroup_count_x",
+            INDEX,
+            doc="Number of workgroups to launch in the x dimension.",
+        ),
+        Operand(
+            "workgroup_count_y",
+            INDEX,
+            doc="Number of workgroups to launch in the y dimension.",
+        ),
+        Operand(
+            "workgroup_count_z",
+            INDEX,
+            doc="Number of workgroups to launch in the z dimension.",
+        ),
+        Operand(
+            "workgroup_size_x",
+            INDEX,
+            doc="Required workgroup size in the x dimension.",
+        ),
+        Operand(
+            "workgroup_size_y",
+            INDEX,
+            doc="Required workgroup size in the y dimension.",
+        ),
+        Operand(
+            "workgroup_size_z",
+            INDEX,
+            doc="Required workgroup size in the z dimension.",
+        ),
+    ],
+    traits=[TERMINATOR, HasParent("kernel.def")],
+    format=[
+        kw("workgroups"),
+        GLUE,
+        LPAREN,
+        Ref("workgroup_count_x"),
+        COMMA,
+        Ref("workgroup_count_y"),
+        COMMA,
+        Ref("workgroup_count_z"),
+        GLUE,
+        RPAREN,
+        kw("workgroup_size"),
+        GLUE,
+        LPAREN,
+        Ref("workgroup_size_x"),
+        COMMA,
+        Ref("workgroup_size_y"),
+        COMMA,
+        Ref("workgroup_size_z"),
+        GLUE,
+        RPAREN,
+        COLON,
+        TypeOf("workgroup_count_x"),
+    ],
+    examples=[
+        "kernel.launch.config workgroups(%gx, %gy, %gz) workgroup_size(%sx, %sy, %sz) : index",
     ],
 )
 
@@ -460,7 +520,7 @@ kernel_workgroup_size = Op(
     name="kernel.workgroup.size",
     group=kernel_ops,
     phase=OpPhase.EXECUTABLE,
-    doc=("Read the selected workgroup size dimension. A fixed kernel.def workgroup_size contract makes this an exact fact; otherwise target facts bound the dynamic launch value."),
+    doc=("Read the selected workgroup size dimension. A launch configuration contract can make this an exact fact; otherwise target facts bound the dynamic launch value."),
     results=[Result("result", INDEX, doc="Workgroup size in the selected dimension.")],
     attrs=[
         AttrDef(
@@ -1465,6 +1525,7 @@ ALL_KERNEL_TYPES: tuple[TypeDef, ...] = (
 
 ALL_KERNEL_OPS: tuple[Op, ...] = (
     kernel_def,
+    kernel_launch_config,
     kernel_return,
     kernel_exit,
     kernel_barrier,

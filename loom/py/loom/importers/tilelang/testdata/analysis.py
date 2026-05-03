@@ -69,7 +69,10 @@ def scoped_tl_assume(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("scoped_tl_assume") workgroup_size(1, 1, 1) @scoped_tl_assume(%n: i32, %src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("scoped_tl_assume") @scoped_tl_assume(%n: i32, %src: buffer, %dst: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
@@ -125,7 +128,10 @@ def effect_tir_assume(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("effect_tir_assume") workgroup_size(1, 1, 1) @effect_tir_assume(%n: i32, %src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("effect_tir_assume") @effect_tir_assume(%n: i32, %src: buffer, %dst: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
@@ -176,7 +182,10 @@ def mixed_address_scalar_assume(tilelang: Any, T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("mixed_address_scalar_assume") workgroup_size(1, 1, 1) @mixed_address_scalar_assume(%src_handle: buffer, %dst_handle: buffer, %n: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("mixed_address_scalar_assume") @mixed_address_scalar_assume(%src_handle: buffer, %dst_handle: buffer, %n: i32) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<[%n]xf32, %layout>

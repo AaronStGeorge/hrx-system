@@ -135,10 +135,10 @@ TEST_F(PassValueFactsTest, ModuleScopeComputesAllFunctionsExplicitly) {
 TEST_F(PassValueFactsTest, RegionScopeComputesRequestedProjection) {
   loom_module_t* module =
       Parse(IREE_SV("test.split_func @projected(%arg: i32) {\n"
-                    "  %body = test.constant 42 : i32\n"
-                    "  test.yield\n"
-                    "} config(%cfg_arg: i32) {\n"
                     "  %config = test.constant 7 : i32\n"
+                    "  test.yield\n"
+                    "} launch {\n"
+                    "  %body = test.constant 42 : i32\n"
                     "  test.yield\n"
                     "}\n"));
   ASSERT_NE(module, nullptr);
@@ -178,8 +178,7 @@ TEST_F(PassValueFactsTest, RegionScopeComputesRequestedProjection) {
       &body_facts));
   EXPECT_EQ(body_facts, facts);
   EXPECT_EQ(loom_value_fact_table_lookup(body_facts, body_value).range_lo, 42);
-  EXPECT_TRUE(loom_value_facts_is_unknown(
-      loom_value_fact_table_lookup(body_facts, config_value)));
+  EXPECT_EQ(loom_value_fact_table_lookup(body_facts, config_value).range_lo, 7);
 
   loom_pass_value_fact_owner_deinitialize(&owner);
 }

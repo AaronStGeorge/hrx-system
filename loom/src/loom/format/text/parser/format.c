@@ -424,10 +424,29 @@ static iree_status_t loom_parse_format_emit_operand_ref_type_mismatch(
 // Format walker
 //===----------------------------------------------------------------------===//
 
+static iree_status_t loom_parse_format_project_func_args(
+    loom_parser_t* parser, uint16_t pending_func_arg_start, bool clone_values) {
+  for (uint16_t i = pending_func_arg_start; i < parser->pending_func_args.count;
+       ++i) {
+    loom_value_id_t value_id = parser->pending_func_args.entries[i].value_id;
+    if (clone_values) {
+      loom_type_t value_type = loom_module_value_type(parser->module, value_id);
+      IREE_RETURN_IF_ERROR(
+          loom_module_define_value(parser->module, value_type, &value_id));
+    }
+    IREE_RETURN_IF_ERROR(loom_parser_add_pending_block_arg(
+        parser, value_id, parser->pending_func_args.entries[i].name_token));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_parser_walk_format(loom_parser_t* parser,
                                       const loom_op_vtable_t* vtable,
                                       loom_token_t op_name_token,
-                                      loom_parsed_op_t* parsed) {
+                                      loom_parsed_op_t* parsed,
+                                      uint16_t pending_func_arg_start,
+                                      bool* out_func_args_consumed_by_region) {
+  *out_func_args_consumed_by_region = false;
   const loom_format_element_t* elements = vtable->format_elements;
   uint16_t element_count = vtable->format_element_count;
   bool is_symbol_definition =
@@ -639,6 +658,22 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
               IREE_STATUS_INVALID_ARGUMENT,
               "format REGION field_index %u out of range (op has %u regions)",
               element->field_index, vtable->region_count);
+        }
+        bool has_pending_func_args =
+            parser->pending_func_args.count > pending_func_arg_start;
+        bool is_func_like_body =
+            vtable->func_like &&
+            vtable->func_like->body_region_index == element->field_index;
+        bool projects_func_args = iree_any_bit_set(
+            region_descriptor->flags, LOOM_REGION_PROJECT_FUNC_ARGS);
+        if (has_pending_func_args &&
+            (projects_func_args || is_func_like_body)) {
+          IREE_RETURN_IF_ERROR(loom_parse_format_project_func_args(
+              parser, pending_func_arg_start,
+              /*clone_values=*/!is_func_like_body));
+        }
+        if (has_pending_func_args && is_func_like_body) {
+          *out_func_args_consumed_by_region = true;
         }
         loom_region_t* region = NULL;
         IREE_RETURN_IF_ERROR(loom_parse_region_with_syntax(

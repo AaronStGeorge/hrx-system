@@ -1433,7 +1433,6 @@ test_split_func = Op(
         AttrDef("cc", "enum", enum_def=_CallingConv, optional=True),
     ],
     regions=[
-        RegionDef("body", doc="Function body.", terminator="test.yield"),
         RegionDef(
             "config",
             doc="Projected configuration region.",
@@ -1441,6 +1440,7 @@ test_split_func = Op(
             terminator="test.yield",
             arg_source="args",
         ),
+        RegionDef("body", doc="Function body.", terminator="test.yield"),
     ],
     constraints=[
         BlockArgCount("config", "body"),
@@ -1451,13 +1451,12 @@ test_split_func = Op(
         OptionalGroup([Attr("cc")], anchor="cc"),
         SymbolRef("callee"),
         Scope([FuncArgs("args")]),
-        Region("body"),
-        kw("config"),
-        BlockArgs("config"),
         Region("config"),
+        kw("launch"),
+        Region("body"),
     ],
     examples=[
-        "test.split_func @projected(%arg: i32) {\n  test.yield\n} config(%cfg_arg: i32) {\n  test.yield\n}",
+        "test.split_func @projected(%arg: i32) {\n  test.yield\n} launch {\n  test.yield\n}",
     ],
 )
 

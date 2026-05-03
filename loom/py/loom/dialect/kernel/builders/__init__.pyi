@@ -21,13 +21,22 @@ class KernelBuilder(DialectBuilder):
         artifact: str | None = ...,
         export_ordinal: int | None = ...,
         export_linkage: str | None = ...,
-        workgroup_size_x: int | None = ...,
-        workgroup_size_y: int | None = ...,
-        workgroup_size_z: int | None = ...,
         callee: str,
         args: list[ValueRef] = ...,
         predicates: list[Predicate] = ...,
+        config: Region | None = ...,
         body: Region | None = ...,
+        location_id: int | None = ...,
+    ) -> None: ...
+    def config(
+        self,
+        *,
+        workgroup_count_x: ValueRef,
+        workgroup_count_y: ValueRef,
+        workgroup_count_z: ValueRef,
+        workgroup_size_x: ValueRef,
+        workgroup_size_y: ValueRef,
+        workgroup_size_z: ValueRef,
         location_id: int | None = ...,
     ) -> None: ...
     def return_(

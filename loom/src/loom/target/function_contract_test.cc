@@ -148,7 +148,7 @@ low.func.def target(@test_target) @kernel() {
   EXPECT_TRUE(iree_string_view_is_empty(storage.export_plan.export_symbol));
 }
 
-TEST_F(TargetFunctionContractTest, KernelEntryContractOverlaysTargetRecord) {
+TEST_F(TargetFunctionContractTest, HalContractOverlaysTargetRecord) {
   ModulePtr module = ParseModule(R"(
 test.target<low_core> @test_target {
   abi = hal_kernel,
@@ -156,7 +156,7 @@ test.target<low_core> @test_target {
   hal_buffer_resource_flags = 7
 }
 
-low.kernel.def target(@test_target) export("dispatch") ordinal(5) linkage(dso_local) workgroup_size(8, 4, 2) @kernel() {
+low.kernel.def target(@test_target) export("dispatch") ordinal(5) linkage(dso_local) @kernel() {
   low.return
 }
 )");
@@ -172,9 +172,6 @@ low.kernel.def target(@test_target) export("dispatch") ordinal(5) linkage(dso_lo
   EXPECT_TRUE(iree_string_view_equal(storage.export_plan.export_symbol,
                                      IREE_SV("dispatch")));
   EXPECT_EQ(storage.export_plan.hal_kernel.binding_alignment, 16u);
-  EXPECT_EQ(storage.export_plan.hal_kernel.required_workgroup_size.x, 8u);
-  EXPECT_EQ(storage.export_plan.hal_kernel.required_workgroup_size.y, 4u);
-  EXPECT_EQ(storage.export_plan.hal_kernel.required_workgroup_size.z, 2u);
   EXPECT_EQ(storage.export_plan.hal_kernel.flat_workgroup_size_min, 0u);
   EXPECT_EQ(storage.export_plan.hal_kernel.flat_workgroup_size_max, 0u);
   EXPECT_EQ(storage.export_plan.hal_kernel.buffer_resource_flags, 7u);

@@ -269,9 +269,14 @@ iree_status_t loom_dce_run_with_deadness_query(
 
   loom_dce_worklist_t worklist = {0};
   iree_status_t status = loom_dce_worklist_initialize(pass->arena, &worklist);
-  if (iree_status_is_ok(status)) {
-    status = loom_dce_seed_worklist(pass->arena, module, body, &deadness_query,
-                                    &worklist);
+  for (uint8_t region_index = 0;
+       region_index < loom_func_like_region_count(function) &&
+       iree_status_is_ok(status);
+       ++region_index) {
+    loom_region_t* region = loom_func_like_region(function, region_index);
+    if (!region) continue;
+    status = loom_dce_seed_worklist(pass->arena, module, region,
+                                    &deadness_query, &worklist);
   }
 
   while (iree_status_is_ok(status)) {

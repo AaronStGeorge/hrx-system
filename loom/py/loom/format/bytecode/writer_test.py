@@ -1313,9 +1313,9 @@ class TestCrossFormatRoundTrip:
             "  test.use %arg : i32\n"
             "  test.use %other : index\n"
             "  test.yield\n"
-            "} config(%cfg_arg: i32, %cfg_other: index) {\n"
-            "  test.use %cfg_arg : i32\n"
-            "  test.use %cfg_other : index\n"
+            "} launch {\n"
+            "  test.use %arg : i32\n"
+            "  test.use %other : index\n"
             "  test.yield\n"
             "}\n"
         )
@@ -1323,12 +1323,12 @@ class TestCrossFormatRoundTrip:
         op = loaded.symbols[0].op
         assert op is not None
         assert len(op.regions) == 2
-        body_arg_ids = op.regions[0].blocks[0].arg_ids
-        config_arg_ids = op.regions[1].blocks[0].arg_ids
+        config_arg_ids = op.regions[0].blocks[0].arg_ids
+        body_arg_ids = op.regions[1].blocks[0].arg_ids
         assert len(body_arg_ids) == len(config_arg_ids) == 2
         assert body_arg_ids[0] != config_arg_ids[0]
         assert loaded.values[body_arg_ids[0]].name == "arg"
-        assert loaded.values[config_arg_ids[0]].name == "cfg_arg"
+        assert loaded.values[config_arg_ids[0]].name == "arg"
         assert _roundtrip_text_through_bytecode(text) == text
 
     def test_record_symbol_survives_bytecode(self) -> None:

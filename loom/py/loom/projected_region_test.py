@@ -41,13 +41,13 @@ def test_builder_seeds_projected_func_args_region() -> None:
     builder.register_types(ALL_BUILTIN_TYPES)
 
     x = builder.value("x", I32)
-    body = IRRegion(blocks=[Block()])
     config = IRRegion(blocks=[Block()])
+    body = IRRegion(blocks=[Block()])
     builder.build(
         "test.split_func",
         func_args=[x],
         attributes={"callee": "projected"},
-        regions=[body, config],
+        regions=[config, body],
     )
 
     assert body.blocks[0].arg_ids == [x.id]
@@ -68,9 +68,9 @@ def test_bytecode_preserves_projected_func_regions() -> None:
         "  test.use %arg : i32\n"
         "  test.use %other : index\n"
         "  test.yield\n"
-        "} config(%cfg_arg: i32, %cfg_other: index) {\n"
-        "  test.use %cfg_arg : i32\n"
-        "  test.use %cfg_other : index\n"
+        "} launch {\n"
+        "  test.use %arg : i32\n"
+        "  test.use %other : index\n"
         "  test.yield\n"
         "}\n"
     )
@@ -79,9 +79,9 @@ def test_bytecode_preserves_projected_func_regions() -> None:
     op = loaded.symbols[0].op
     assert op is not None
     assert len(op.regions) == 2
-    body_arg_ids = op.regions[0].blocks[0].arg_ids
-    config_arg_ids = op.regions[1].blocks[0].arg_ids
+    config_arg_ids = op.regions[0].blocks[0].arg_ids
+    body_arg_ids = op.regions[1].blocks[0].arg_ids
     assert len(body_arg_ids) == len(config_arg_ids) == 2
     assert body_arg_ids[0] != config_arg_ids[0]
     assert loaded.values[body_arg_ids[0]].name == "arg"
-    assert loaded.values[config_arg_ids[0]].name == "cfg_arg"
+    assert loaded.values[config_arg_ids[0]].name == "arg"

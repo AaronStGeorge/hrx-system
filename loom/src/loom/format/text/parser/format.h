@@ -19,7 +19,9 @@ extern "C" {
 iree_status_t loom_parser_walk_format(loom_parser_t* parser,
                                       const loom_op_vtable_t* vtable,
                                       loom_token_t op_name_token,
-                                      loom_parsed_op_t* parsed);
+                                      loom_parsed_op_t* parsed,
+                                      uint16_t pending_func_arg_start,
+                                      bool* out_func_args_consumed_by_region);
 
 #ifdef __cplusplus
 }  // extern "C"

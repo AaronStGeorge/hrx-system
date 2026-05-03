@@ -315,6 +315,7 @@ static iree_status_t loom_parse_pipeline_nested_region(
       !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
     loom_parser_sync_to_brace(parser);
   }
+  loom_parser_pending_block_args_clear(&parser->pending_func_args);
   loom_parser_pending_block_args_clear(&parser->pending_block_args);
   loom_builder_restore(&parser->builder, saved_ip);
   loom_parser_scope_pop(parser);
@@ -567,6 +568,7 @@ iree_status_t loom_parse_pipeline_prefixed_region(
       !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
     loom_parser_sync_to_brace(parser);
   }
+  loom_parser_pending_block_args_clear(&parser->pending_func_args);
   loom_parser_pending_block_args_clear(&parser->pending_block_args);
   if (parser->error_count > errors_before || !iree_status_is_ok(status)) {
     parser->pending_successor_refs.count = pending_successor_start;

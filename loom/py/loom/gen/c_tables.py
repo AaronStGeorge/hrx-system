@@ -159,6 +159,8 @@ KEYWORD_MAP: dict[str, str] = {
     "from": "LOOM_KW_FROM",
     "axes": "LOOM_KW_AXES",
     "config": "LOOM_KW_CONFIG",
+    "launch": "LOOM_KW_LAUNCH",
+    "workgroups": "LOOM_KW_WORKGROUPS",
 }
 
 # Maps Region(..., syntax=...) names to C parser/printer selector IDs. The
@@ -586,6 +588,25 @@ def _func_args_field_name(op: Op) -> str:
     return _walk(op.format) or "args"
 
 
+def _func_args_field_names(op: Op) -> set[str]:
+    """Returns FuncArgs field names explicitly declared by an op format."""
+
+    names: set[str] = set()
+
+    def _walk(elements: Sequence[FormatElement]) -> None:
+        for element in elements:
+            match element:
+                case FuncArgs(field=name):
+                    names.add(name)
+                case OptionalGroup(elements=inner) | Scope(elements=inner) | Clause(elements=inner):
+                    _walk(inner)
+                case _:
+                    continue
+
+    _walk(op.format)
+    return names
+
+
 def _explicit_func_args_operand(op: Op) -> Operand | None:
     """Returns the operand descriptor that backs FuncArgs, if declared."""
     if not _func_args_are_operands(op):
@@ -853,9 +874,6 @@ _INTERFACES: tuple[InterfaceSpec, ...] = (
             InterfaceFieldSpec("artifact", "artifact_attr_index", "attr"),
             InterfaceFieldSpec("export_ordinal", "export_ordinal_attr_index", "attr"),
             InterfaceFieldSpec("export_linkage", "export_linkage_attr_index", "attr"),
-            InterfaceFieldSpec("workgroup_size_x", "workgroup_size_x_attr_index", "attr"),
-            InterfaceFieldSpec("workgroup_size_y", "workgroup_size_y_attr_index", "attr"),
-            InterfaceFieldSpec("workgroup_size_z", "workgroup_size_z_attr_index", "attr"),
             InterfaceFieldSpec("visibility", "visibility_attr_index", "attr"),
             InterfaceFieldSpec("cc", "cc_attr_index", "attr"),
             InterfaceFieldSpec("purity", "purity_attr_index", "attr"),
@@ -1942,6 +1960,11 @@ def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]])
     # Track whether FuncArgs was seen (entry block args come from arg_types).
     _pending_func_args: bool = False
     func_args_field_name = _func_args_field_name(op)
+    func_like_body_region_name: str | None = None
+    for interface in op.interfaces:
+        if isinstance(interface, FuncLikeInterface):
+            func_like_body_region_name = interface.body
+            break
 
     def _find_region_def(target_op: Op, region_name: str) -> RegionDef | None:
         for r in target_op.regions:
@@ -2133,7 +2156,7 @@ def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]])
                     binding = _pending_binding
                     _pending_binding = None
                     arg_source = region_def.arg_source if region_def else None
-                    func_args = _pending_func_args or arg_source == func_args_field_name
+                    func_args = _pending_func_args or arg_source == func_args_field_name or name == func_like_body_region_name
                     _pending_func_args = False
                     if arg_source == func_args_field_name:
                         arg_source = None
@@ -3337,12 +3360,15 @@ def generate_tables_c(
         if op.regions:
             implicit_terminator = _implicit_terminator_kind(op, ops_by_name)
             lines.append(f"static const loom_region_descriptor_t {prefix}_region_desc[] = {{")
+            func_args_fields = _func_args_field_names(op)
             for region_def in op.regions:
                 region_flags = []
                 if region_def.single_block:
                     region_flags.append("LOOM_REGION_SINGLE_BLOCK")
                 if region_def.optional:
                     region_flags.append("LOOM_REGION_OPTIONAL")
+                if region_def.arg_source in func_args_fields:
+                    region_flags.append("LOOM_REGION_PROJECT_FUNC_ARGS")
                 flags = " | ".join(region_flags) if region_flags else "0"
                 terminator = _region_terminator_kind(op, region_def, ops_by_name)
                 lines.append(f"    {{{terminator}, {implicit_terminator}, {flags}}},")

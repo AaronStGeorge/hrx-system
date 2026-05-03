@@ -2,8 +2,8 @@ test.split_func @projected(%arg: i32, %other: index) {
   test.use %arg : i32
   test.use %other : index
   test.yield
-} config(%cfg_arg: i32, %cfg_other: index) {
-  test.use %cfg_arg : i32
-  test.use %cfg_other : index
+} launch {
+  test.use %arg : i32
+  test.use %other : index
   test.yield
 }

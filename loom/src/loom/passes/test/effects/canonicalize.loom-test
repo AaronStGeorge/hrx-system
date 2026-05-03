@@ -69,28 +69,25 @@ func.def @dead_read_only_while_dies(%cond: i1, %buffer: buffer, %offset: offset,
 
 // ====
 
-// The canonicalize pass drives the body projection of a function-like op. A
-// projected config region uses the same driver through explicit region APIs,
-// but it is not an accidental part of a body pass.
-test.split_func @split_func_body_only_canonicalize(%arg: i32) {
+// Function-level canonicalization runs over every root region. Projected
+// regions keep distinct SSA values, but use the same logical signature facts.
+test.split_func @split_func_all_regions_canonicalize(%arg: i32) {
+  %cfg_zero = test.constant 0 : i32
+  %cfg_sum = test.addi %arg, %cfg_zero : i32
+  test.use %cfg_sum : i32
+  test.yield
+} launch {
   %zero = test.constant 0 : i32
   %sum = test.addi %arg, %zero : i32
   test.use %sum : i32
   test.yield
-} config(%cfg_arg: i32) {
-  %cfg_zero = test.constant 0 : i32
-  %cfg_sum = test.addi %cfg_arg, %cfg_zero : i32
-  test.use %cfg_sum : i32
-  test.yield
 }
 
 // ----
-test.split_func @split_func_body_only_canonicalize(%arg: i32) {
+test.split_func @split_func_all_regions_canonicalize(%arg: i32) {
   test.use %arg : i32
   test.yield
-} config(%cfg_arg: i32) {
-  %cfg_zero = test.constant 0 : i32
-  %cfg_sum = test.addi %cfg_arg, %cfg_zero : i32
-  test.use %cfg_sum : i32
+} launch {
+  test.use %arg : i32
   test.yield
 }

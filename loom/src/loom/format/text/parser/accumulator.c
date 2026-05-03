@@ -331,11 +331,9 @@ iree_status_t loom_parsed_op_add_field_span(
   return iree_ok_status();
 }
 
-iree_status_t loom_parser_add_pending_block_arg(loom_parser_t* parser,
-                                                loom_value_id_t value_id,
-                                                loom_token_t name_token) {
-  loom_parser_pending_block_args_t* pending_block_args =
-      &parser->pending_block_args;
+static iree_status_t loom_parser_add_pending_arg(
+    loom_parser_t* parser, loom_parser_pending_block_args_t* pending_block_args,
+    loom_value_id_t value_id, loom_token_t name_token) {
   if (pending_block_args->count >= pending_block_args->capacity) {
     iree_host_size_t capacity = pending_block_args->capacity;
     IREE_RETURN_IF_ERROR(loom_parser_grow_bounded_array(
@@ -354,9 +352,30 @@ iree_status_t loom_parser_add_pending_block_arg(loom_parser_t* parser,
   return iree_ok_status();
 }
 
+iree_status_t loom_parser_add_pending_block_arg(loom_parser_t* parser,
+                                                loom_value_id_t value_id,
+                                                loom_token_t name_token) {
+  return loom_parser_add_pending_arg(parser, &parser->pending_block_args,
+                                     value_id, name_token);
+}
+
+iree_status_t loom_parser_add_pending_func_arg(loom_parser_t* parser,
+                                               loom_value_id_t value_id,
+                                               loom_token_t name_token) {
+  return loom_parser_add_pending_arg(parser, &parser->pending_func_args,
+                                     value_id, name_token);
+}
+
 // Clears the active pending-arg list while retaining arena-backed storage for
 // reuse by later REGION elements.
 void loom_parser_pending_block_args_clear(
     loom_parser_pending_block_args_t* pending_block_args) {
   pending_block_args->count = 0;
+}
+
+void loom_parser_pending_block_args_truncate(
+    loom_parser_pending_block_args_t* pending_block_args, uint16_t count) {
+  if (pending_block_args->count > count) {
+    pending_block_args->count = count;
+  }
 }

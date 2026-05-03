@@ -149,8 +149,13 @@ iree_status_t loom_parse_format_add_field_span(loom_parser_t* parser,
 iree_status_t loom_parser_add_pending_block_arg(loom_parser_t* parser,
                                                 loom_value_id_t value_id,
                                                 loom_token_t name_token);
+iree_status_t loom_parser_add_pending_func_arg(loom_parser_t* parser,
+                                               loom_value_id_t value_id,
+                                               loom_token_t name_token);
 void loom_parser_pending_block_args_clear(
     loom_parser_pending_block_args_t* pending);
+void loom_parser_pending_block_args_truncate(
+    loom_parser_pending_block_args_t* pending, uint16_t count);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -119,6 +119,15 @@ static iree_status_t loom_parse_format_resolve_symbol_tied_result_operand(
       return iree_ok_status();
     }
   }
+  uint16_t pending_operand_base =
+      (uint16_t)(parsed->operand_count + parser->pending_block_args.count);
+  for (uint16_t arg_index = 0; arg_index < parser->pending_func_args.count;
+       ++arg_index) {
+    if (parser->pending_func_args.entries[arg_index].value_id == operand_id) {
+      *out_operand_index = (uint16_t)(pending_operand_base + arg_index);
+      return iree_ok_status();
+    }
+  }
 
   loom_diagnostic_param_t params[] = {
       loom_param_string(ssa_token.text),
@@ -264,12 +273,22 @@ static iree_status_t loom_parse_format_symbol_result_type_list(
         IREE_RETURN_IF_ERROR(
             loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &type));
 
-        loom_value_id_t operand_id =
-            operand_index < parsed->operand_count
-                ? parsed->operand_ids[operand_index]
-                : parser->pending_block_args
-                      .entries[operand_index - parsed->operand_count]
-                      .value_id;
+        loom_value_id_t operand_id = LOOM_VALUE_ID_INVALID;
+        if (operand_index < parsed->operand_count) {
+          operand_id = parsed->operand_ids[operand_index];
+        } else {
+          uint16_t pending_index =
+              (uint16_t)(operand_index - parsed->operand_count);
+          if (pending_index < parser->pending_block_args.count) {
+            operand_id =
+                parser->pending_block_args.entries[pending_index].value_id;
+          } else {
+            pending_index =
+                (uint16_t)(pending_index - parser->pending_block_args.count);
+            operand_id =
+                parser->pending_func_args.entries[pending_index].value_id;
+          }
+        }
         loom_type_t operand_type =
             loom_module_value_type(parser->module, operand_id);
         loom_tied_result_t tied = {
@@ -493,7 +512,7 @@ iree_status_t loom_parse_format_func_args(loom_parser_t* parser,
     }
 
     IREE_RETURN_IF_ERROR(
-        loom_parser_add_pending_block_arg(parser, value_id, name_token));
+        loom_parser_add_pending_func_arg(parser, value_id, name_token));
     ++parsed_arg_count;
   }
 

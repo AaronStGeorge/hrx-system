@@ -14,11 +14,13 @@ loom_cc_library(
   NAME
     kernel
   HDRS
+    "launch_config.h"
     "ops.h"
   SRCS
     "builders.c"
     "canonicalize.c"
     "facts.c"
+    "launch_config.c"
     "tables.c"
     "verify.c"
   DEPS
@@ -31,6 +33,7 @@ loom_cc_library(
     loom::src::loom::ops::cache
     loom::src::loom::ops::combining
     loom::src::loom::ops::func_symbol_facts
+    loom::src::loom::ops::index
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scf
     loom::src::loom::ops::view

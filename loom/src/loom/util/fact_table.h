@@ -844,9 +844,10 @@ iree_status_t loom_value_fact_table_compute_region(
     loom_value_fact_table_t* table, const loom_module_t* module,
     loom_func_like_t function, loom_region_t* region, loom_op_t* parent_op);
 
-// Seeds the table by running a forward pass over |function|'s body region and
-// nested regions. This is a convenience wrapper over
-// loom_value_fact_table_compute_region for body-only function passes.
+// Seeds the table by running a forward pass over |function|'s root regions and
+// nested regions. Non-body root regions are analyzed before the body so source
+// containers can compute launch/configuration facts that body ops query through
+// the same fact table.
 iree_status_t loom_value_fact_table_compute(loom_value_fact_table_t* table,
                                             const loom_module_t* module,
                                             loom_func_like_t function);

@@ -1620,6 +1620,45 @@ static iree_status_t loom_value_fact_table_compute_region_tree(
   return iree_ok_status();
 }
 
+static iree_status_t loom_value_fact_table_seed_projected_func_args(
+    loom_value_fact_table_t* table, const loom_module_t* module,
+    loom_func_like_t function, loom_region_t* region, loom_op_t* parent_op) {
+  if (!loom_func_like_isa(function) || parent_op != function.op || !region ||
+      region->block_count == 0) {
+    return iree_ok_status();
+  }
+
+  uint8_t region_index = LOOM_REGION_INDEX_NONE;
+  for (uint8_t i = 0; i < loom_func_like_region_count(function); ++i) {
+    if (loom_func_like_region(function, i) == region) {
+      region_index = i;
+      break;
+    }
+  }
+  if (region_index == LOOM_REGION_INDEX_NONE ||
+      !loom_func_like_region_projects_args(module, function, region_index)) {
+    return iree_ok_status();
+  }
+
+  uint16_t argument_count = 0;
+  const loom_value_id_t* arguments =
+      loom_func_like_arg_ids(function, &argument_count);
+  loom_block_t* entry_block = loom_region_entry_block(region);
+  if (!arguments || !entry_block) return iree_ok_status();
+
+  uint16_t projected_count = iree_min(argument_count, entry_block->arg_count);
+  for (uint16_t i = 0; i < projected_count; ++i) {
+    loom_value_facts_t facts =
+        loom_value_fact_table_lookup(table, arguments[i]);
+    if (loom_value_facts_is_unknown(facts)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_value_fact_table_define(
+        table, loom_block_arg_id(entry_block, i), facts));
+  }
+  return iree_ok_status();
+}
+
 static bool loom_value_fact_counted_loop_proven_zero_trip(
     loom_value_facts_t lower_bound, loom_value_facts_t upper_bound,
     loom_value_facts_t step) {
@@ -2062,6 +2101,8 @@ iree_status_t loom_value_fact_table_compute_region(
     loom_value_fact_table_t* table, const loom_module_t* module,
     loom_func_like_t function, loom_region_t* region, loom_op_t* parent_op) {
   table->context.function = function;
+  IREE_RETURN_IF_ERROR(loom_value_fact_table_seed_projected_func_args(
+      table, module, function, region, parent_op));
   return loom_value_fact_table_compute_region_tree(table, module, region,
                                                    parent_op);
 }
@@ -2070,6 +2111,14 @@ iree_status_t loom_value_fact_table_compute(loom_value_fact_table_t* table,
                                             const loom_module_t* module,
                                             loom_func_like_t function) {
   loom_region_t* body = loom_func_like_body(function);
+  if (!body) return iree_ok_status();
+  const uint8_t body_region_index = loom_func_like_body_region_index(function);
+  for (uint8_t i = 0; i < loom_func_like_region_count(function); ++i) {
+    if (i == body_region_index) continue;
+    IREE_RETURN_IF_ERROR(loom_value_fact_table_compute_region(
+        table, module, function, loom_func_like_region(function, i),
+        function.op));
+  }
   return loom_value_fact_table_compute_region(table, module, function, body,
                                               function.op);
 }

@@ -61,7 +61,10 @@ def scalar_atomic_add(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("scalar_atomic_add") workgroup_size(1, 1, 1) @scalar_atomic_add(%dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("scalar_atomic_add") @scalar_atomic_add(%dst: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xi32, %layout>
@@ -108,7 +111,10 @@ def scalar_atomic_add_return(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("scalar_atomic_add_return") workgroup_size(1, 1, 1) @scalar_atomic_add_return(%dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("scalar_atomic_add_return") @scalar_atomic_add_return(%dst: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xi32, %layout>

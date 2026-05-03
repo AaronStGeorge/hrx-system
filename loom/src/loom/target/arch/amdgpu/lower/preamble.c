@@ -6,6 +6,7 @@
 
 #include "loom/codegen/low/function.h"
 #include "loom/ir/context.h"
+#include "loom/ops/kernel/launch_config.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
@@ -33,16 +34,12 @@ static uint32_t loom_amdgpu_workgroup_size_dim(
 }
 
 static bool loom_amdgpu_required_workgroup_size(
-    loom_func_like_t function, const loom_target_bundle_t* bundle,
+    const loom_module_t* module, loom_func_like_t function,
+    const loom_target_bundle_t* bundle,
     loom_target_workgroup_size_t* out_size) {
   *out_size = (loom_target_workgroup_size_t){0};
 
-  uint32_t x = 0;
-  uint32_t y = 0;
-  uint32_t z = 0;
-  if (loom_kernel_def_isa(function.op) &&
-      loom_func_like_workgroup_size(function, &x, &y, &z)) {
-    *out_size = (loom_target_workgroup_size_t){.x = x, .y = y, .z = z};
+  if (loom_kernel_def_static_workgroup_size(module, function.op, out_size)) {
     return true;
   }
 
@@ -55,14 +52,15 @@ static bool loom_amdgpu_required_workgroup_size(
 }
 
 static bool loom_amdgpu_required_workgroup_size_dim(
-    loom_func_like_t function, const loom_target_bundle_t* bundle,
-    loom_kernel_dimension_t dimension, uint32_t* out_value) {
+    const loom_module_t* module, loom_func_like_t function,
+    const loom_target_bundle_t* bundle, loom_kernel_dimension_t dimension,
+    uint32_t* out_value) {
   *out_value = 0;
   if (dimension >= LOOM_KERNEL_DIMENSION_COUNT_) {
     return false;
   }
   loom_target_workgroup_size_t size = {0};
-  if (!loom_amdgpu_required_workgroup_size(function, bundle, &size)) {
+  if (!loom_amdgpu_required_workgroup_size(module, function, bundle, &size)) {
     return false;
   }
   *out_value = loom_amdgpu_workgroup_size_dim(&size, dimension);
@@ -70,11 +68,11 @@ static bool loom_amdgpu_required_workgroup_size_dim(
 }
 
 bool loom_amdgpu_required_flat_workgroup_size(
-    loom_func_like_t function, const loom_target_bundle_t* bundle,
-    uint32_t* out_flat_size) {
+    const loom_module_t* module, loom_func_like_t function,
+    const loom_target_bundle_t* bundle, uint32_t* out_flat_size) {
   *out_flat_size = 0;
   loom_target_workgroup_size_t size = {0};
-  if (!loom_amdgpu_required_workgroup_size(function, bundle, &size) ||
+  if (!loom_amdgpu_required_workgroup_size(module, function, bundle, &size) ||
       size.x == 0 || size.y == 0 || size.z == 0) {
     return false;
   }
@@ -151,6 +149,7 @@ static bool loom_amdgpu_can_lower_workgroup_size(
   return loom_amdgpu_value_is_address_scalar(
              context, loom_kernel_workgroup_size_result(source_op)) &&
          loom_amdgpu_required_workgroup_size_dim(
+             loom_low_lower_context_module(context),
              loom_low_lower_context_source_function(context),
              loom_low_lower_context_bundle(context), dimension, &unused_size);
 }
@@ -163,6 +162,7 @@ static bool loom_amdgpu_can_lower_workitem_dispatch_id(
   return loom_amdgpu_value_is_address_scalar(
              context, loom_kernel_workitem_dispatch_id_result(source_op)) &&
          loom_amdgpu_required_workgroup_size_dim(
+             loom_low_lower_context_module(context),
              loom_low_lower_context_source_function(context),
              loom_low_lower_context_bundle(context), dimension, &unused_size);
 }
@@ -191,6 +191,7 @@ static iree_status_t loom_amdgpu_can_lower_subgroup_count(
       loom_amdgpu_value_is_address_scalar(
           context, loom_kernel_subgroup_count_result(source_op)) &&
       loom_amdgpu_required_flat_workgroup_size(
+          loom_low_lower_context_module(context),
           loom_low_lower_context_source_function(context),
           loom_low_lower_context_bundle(context), &unused_flat_workgroup_size);
   return iree_ok_status();
@@ -209,6 +210,7 @@ static iree_status_t loom_amdgpu_can_lower_subgroup_linear_query(
       loom_amdgpu_value_is_address_scalar(context, result) &&
       loom_amdgpu_u32_is_power_of_two(wavefront_size) &&
       loom_amdgpu_required_flat_workgroup_size(
+          loom_low_lower_context_module(context),
           loom_low_lower_context_source_function(context),
           loom_low_lower_context_bundle(context), &unused_flat_workgroup_size);
   return iree_ok_status();
@@ -568,9 +570,11 @@ static iree_status_t loom_amdgpu_mark_subgroup_query_workitem_id_live_ins(
   loom_target_workgroup_size_t workgroup_size = {0};
   uint32_t unused_flat_workgroup_size = 0;
   if (!loom_amdgpu_required_workgroup_size(
+          loom_low_lower_context_module(context),
           loom_low_lower_context_source_function(context),
           loom_low_lower_context_bundle(context), &workgroup_size) ||
       !loom_amdgpu_required_flat_workgroup_size(
+          loom_low_lower_context_module(context),
           loom_low_lower_context_source_function(context),
           loom_low_lower_context_bundle(context),
           &unused_flat_workgroup_size) ||
@@ -673,6 +677,7 @@ static iree_status_t loom_amdgpu_emit_workitem_dispatch_id(
       loom_kernel_workitem_dispatch_id_dimension(source_op);
   uint32_t workgroup_size = 0;
   if (!loom_amdgpu_required_workgroup_size_dim(
+          loom_low_lower_context_module(context),
           loom_low_lower_context_source_function(context),
           loom_low_lower_context_bundle(context), dimension, &workgroup_size)) {
     return iree_make_status(
@@ -917,9 +922,11 @@ static iree_status_t loom_amdgpu_emit_subgroup_query_linear_id(
   loom_target_workgroup_size_t workgroup_size = {0};
   uint32_t flat_workgroup_size = 0;
   if (!loom_amdgpu_required_workgroup_size(
+          loom_low_lower_context_module(context),
           loom_low_lower_context_source_function(context),
           loom_low_lower_context_bundle(context), &workgroup_size) ||
       !loom_amdgpu_required_flat_workgroup_size(
+          loom_low_lower_context_module(context),
           loom_low_lower_context_source_function(context),
           loom_low_lower_context_bundle(context), &flat_workgroup_size) ||
       workgroup_size.x == 0 || workgroup_size.y == 0 || workgroup_size.z == 0) {
@@ -1054,6 +1061,7 @@ iree_status_t loom_amdgpu_lower_preamble_op(loom_low_lower_context_t* context,
     case LOOM_OP_KERNEL_WORKGROUP_SIZE: {
       uint32_t workgroup_size = 0;
       if (!loom_amdgpu_required_workgroup_size_dim(
+              loom_low_lower_context_module(context),
               loom_low_lower_context_source_function(context),
               loom_low_lower_context_bundle(context),
               loom_kernel_workgroup_size_dimension(source_op),
@@ -1096,6 +1104,7 @@ iree_status_t loom_amdgpu_lower_preamble_op(loom_low_lower_context_t* context,
     case LOOM_OP_KERNEL_SUBGROUP_COUNT: {
       uint32_t flat_workgroup_size = 0;
       if (!loom_amdgpu_required_flat_workgroup_size(
+              loom_low_lower_context_module(context),
               loom_low_lower_context_source_function(context),
               loom_low_lower_context_bundle(context), &flat_workgroup_size)) {
         return iree_make_status(
@@ -1140,7 +1149,7 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_preamble(
     case LOOM_OP_KERNEL_WORKGROUP_SIZE: {
       uint32_t unused_workgroup_size = 0;
       if (loom_amdgpu_required_workgroup_size_dim(
-              loom_target_low_legality_function(context), bundle,
+              module, loom_target_low_legality_function(context), bundle,
               loom_kernel_workgroup_size_dimension(op),
               &unused_workgroup_size)) {
         return iree_ok_status();
@@ -1158,7 +1167,7 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_preamble(
     case LOOM_OP_KERNEL_WORKITEM_DISPATCH_ID: {
       uint32_t unused_workgroup_size = 0;
       if (loom_amdgpu_required_workgroup_size_dim(
-              loom_target_low_legality_function(context), bundle,
+              module, loom_target_low_legality_function(context), bundle,
               loom_kernel_workitem_dispatch_id_dimension(op),
               &unused_workgroup_size)) {
         return iree_ok_status();
@@ -1180,7 +1189,7 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_preamble(
           loom_amdgpu_target_wavefront_size(bundle, &unused_wavefront_size));
       uint32_t unused_flat_workgroup_size = 0;
       if (loom_amdgpu_required_flat_workgroup_size(
-              loom_target_low_legality_function(context), bundle,
+              module, loom_target_low_legality_function(context), bundle,
               &unused_flat_workgroup_size)) {
         return iree_ok_status();
       }
@@ -1202,7 +1211,7 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_preamble(
       }
       uint32_t unused_flat_workgroup_size = 0;
       if (loom_amdgpu_required_flat_workgroup_size(
-              loom_target_low_legality_function(context), bundle,
+              module, loom_target_low_legality_function(context), bundle,
               &unused_flat_workgroup_size)) {
         return iree_ok_status();
       }

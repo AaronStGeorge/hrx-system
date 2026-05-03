@@ -32,10 +32,6 @@ static bool loom_func_symbol_attr_present(loom_func_like_t func,
   return !loom_attr_is_absent(loom_op_attrs(func.op)[attr_index]);
 }
 
-static bool loom_func_symbol_interface_field_present(uint8_t attr_index) {
-  return attr_index != LOOM_ATTR_INDEX_NONE;
-}
-
 static iree_status_t loom_func_symbol_string_attr(
     const loom_module_t* module, const loom_attribute_t* attr,
     iree_string_view_t field_name, iree_string_view_t* out_string) {
@@ -155,19 +151,6 @@ static iree_status_t loom_func_symbol_apply_direct_export_attrs(
     facts->exports = true;
   }
 
-  uint32_t workgroup_size_x = 0;
-  uint32_t workgroup_size_y = 0;
-  uint32_t workgroup_size_z = 0;
-  if (loom_func_like_workgroup_size(func, &workgroup_size_x, &workgroup_size_y,
-                                    &workgroup_size_z)) {
-    facts->required_workgroup_size = (loom_target_workgroup_size_t){
-        .x = workgroup_size_x,
-        .y = workgroup_size_y,
-        .z = workgroup_size_z,
-    };
-    facts->has_required_workgroup_size = true;
-  }
-
   return iree_ok_status();
 }
 
@@ -230,8 +213,6 @@ static iree_status_t loom_func_symbol_fact_compute(
   facts->result_count = func.op->result_count;
   IREE_RETURN_IF_ERROR(loom_func_symbol_apply_imports(module, func, facts));
   facts->target_symbol = loom_func_like_target(func);
-  facts->is_kernel_entry = loom_func_symbol_interface_field_present(
-      func.vtable->workgroup_size_x_attr_index);
 
   bool has_abi_attr =
       loom_func_symbol_attr_present(func, func.vtable->abi_attr_index);
@@ -248,13 +229,7 @@ static iree_status_t loom_func_symbol_fact_compute(
       loom_func_symbol_attr_present(func,
                                     func.vtable->export_ordinal_attr_index) ||
       loom_func_symbol_attr_present(func,
-                                    func.vtable->export_linkage_attr_index) ||
-      loom_func_symbol_attr_present(func,
-                                    func.vtable->workgroup_size_x_attr_index) ||
-      loom_func_symbol_attr_present(func,
-                                    func.vtable->workgroup_size_y_attr_index) ||
-      loom_func_symbol_attr_present(func,
-                                    func.vtable->workgroup_size_z_attr_index);
+                                    func.vtable->export_linkage_attr_index);
   bool has_func_contract = has_abi_attr || facts->abi_attrs.count > 0 ||
                            has_export_symbol || export_attrs.count > 0 ||
                            has_direct_export_contract;

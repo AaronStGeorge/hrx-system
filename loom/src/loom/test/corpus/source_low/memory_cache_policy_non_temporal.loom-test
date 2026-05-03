@@ -1,6 +1,9 @@
 // RUN: roundtrip
 
 kernel.def @cache_device_non_temporal_load_store(%input: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset

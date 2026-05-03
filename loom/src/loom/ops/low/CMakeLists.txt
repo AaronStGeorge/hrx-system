@@ -14,10 +14,12 @@ loom_cc_library(
   NAME
     low
   HDRS
+    "kernel.h"
     "ops.h"
   SRCS
     "builders.c"
     "facts.c"
+    "kernel.c"
     "tables.c"
     "verify.c"
   DEPS

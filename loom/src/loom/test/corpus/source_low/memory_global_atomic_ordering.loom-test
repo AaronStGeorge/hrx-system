@@ -1,6 +1,9 @@
 // RUN: roundtrip
 
 kernel.def @global_atomic_release_reduce_i32(%input: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -13,6 +16,9 @@ kernel.def @global_atomic_release_reduce_i32(%input: buffer) {
 // ====
 
 kernel.def @global_atomic_acquire_rmw_i32(%input: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -25,6 +31,9 @@ kernel.def @global_atomic_acquire_rmw_i32(%input: buffer) {
 // ====
 
 kernel.def @global_atomic_acq_rel_rmw_i32(%input: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -37,6 +46,9 @@ kernel.def @global_atomic_acq_rel_rmw_i32(%input: buffer) {
 // ====
 
 kernel.def @global_atomic_acq_rel_cmpxchg_i32(%input: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -50,6 +62,9 @@ kernel.def @global_atomic_acq_rel_cmpxchg_i32(%input: buffer) {
 // ====
 
 kernel.def @global_atomic_seq_cst_reduce_i32(%input: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer

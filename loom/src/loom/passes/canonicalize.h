@@ -106,7 +106,8 @@ iree_status_t loom_canonicalizer_run_region(
     const loom_canonicalizer_options_t* options,
     loom_canonicalizer_result_t* out_result);
 
-// Runs canonicalization on a single function-like body region.
+// Runs canonicalization on a function-like op's root regions. Non-body regions
+// run first, then their facts seed body-region canonicalization.
 iree_status_t loom_canonicalizer_run_function(
     loom_canonicalizer_t* canonicalizer, loom_func_like_t function,
     const loom_canonicalizer_options_t* options,

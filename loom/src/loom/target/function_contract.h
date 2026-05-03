@@ -7,10 +7,9 @@
 // Target-aware function contract materialization.
 //
 // Generic func symbol facts carry only function-local structure: target symbol,
-// ABI/export syntax, kernel launch structure, and signature/import facts. This
-// target layer resolves the referenced target-record facts and overlays the
-// func-like-owned contract onto the selected target bundle for lowering,
-// packaging, and execution.
+// ABI/export syntax, and signature/import facts. This target layer resolves the
+// referenced target-record facts and overlays the func-owned contract onto the
+// selected target bundle for lowering, packaging, and execution.
 
 #ifndef LOOM_TARGET_FUNCTION_CONTRACT_H_
 #define LOOM_TARGET_FUNCTION_CONTRACT_H_
@@ -31,7 +30,8 @@ extern "C" {
 //
 // The target snapshot and config come from target-record facts. The export
 // plan starts from the target-record defaults and is then overlaid with
-// function-owned ABI/export attrs or kernel-owned launch/export attrs.
+// function-owned ABI/export attrs. Kernel-specific launch metadata is applied
+// by kernel-aware callers after they derive it from kernel IR.
 // |out_bundle_storage| owns the copied payload fields and its embedded bundle
 // points at those copies. Returns status only for infrastructure failures.
 // Invalid user IR emits a structured diagnostic, sets |out_valid| to false,
@@ -41,6 +41,17 @@ iree_status_t loom_target_function_contract_resolve(
     const loom_func_symbol_facts_t* func_facts,
     iree_diagnostic_emitter_t diagnostic_emitter, bool* out_valid,
     loom_target_bundle_storage_t* out_bundle_storage);
+
+// Applies a fixed workgroup size to an already resolved HAL-kernel export plan.
+//
+// Kernel dialect code calls this after it has derived launch metadata from
+// kernel-owned IR. Ordinary function contract resolution intentionally never
+// discovers or stores workgroup sizes.
+iree_status_t loom_target_function_contract_apply_hal_workgroup_size(
+    const loom_func_symbol_facts_t* func_facts, iree_string_view_t target_name,
+    const loom_target_workgroup_size_t* required_workgroup_size,
+    iree_diagnostic_emitter_t diagnostic_emitter,
+    loom_target_bundle_storage_t* bundle_storage, bool* out_valid);
 
 #ifdef __cplusplus
 }  // extern "C"

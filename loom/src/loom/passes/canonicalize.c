@@ -18,6 +18,7 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/special_values.h"
+#include "loom/ops/type_registry.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
@@ -1231,6 +1232,17 @@ static void loom_canonicalizer_record_rewrite(
   if (count_modified_op) ++result->ops_modified;
 }
 
+static void loom_canonicalizer_merge_result(
+    loom_canonicalizer_result_t* target,
+    const loom_canonicalizer_result_t* source) {
+  if (!target || !source) return;
+  target->changed |= source->changed;
+  target->facts_changed |= source->facts_changed;
+  target->types_changed |= source->types_changed;
+  target->boundary_maybe_changed |= source->boundary_maybe_changed;
+  target->ops_modified += source->ops_modified;
+}
+
 iree_status_t loom_canonicalizer_initialize(
     loom_module_t* module, iree_arena_allocator_t* parent_arena,
     loom_pass_value_fact_owner_t* value_facts,
@@ -1477,9 +1489,81 @@ iree_status_t loom_canonicalizer_run_function(
     loom_canonicalizer_t* canonicalizer, loom_func_like_t function,
     const loom_canonicalizer_options_t* options,
     loom_canonicalizer_result_t* out_result) {
-  return loom_canonicalizer_run_region(canonicalizer, function,
-                                       loom_func_like_body(function),
-                                       function.op, options, out_result);
+  if (out_result) memset(out_result, 0, sizeof(*out_result));
+  loom_region_t* body = loom_func_like_body(function);
+  if (!body) {
+    loom_canonicalizer_reset_run_state(canonicalizer);
+    return iree_ok_status();
+  }
+
+  const uint8_t body_region_index = loom_func_like_body_region_index(function);
+  bool has_non_body_regions = false;
+  loom_canonicalizer_result_t aggregate_result = {0};
+  iree_status_t status = iree_ok_status();
+  for (uint8_t i = 0; i < loom_func_like_region_count(function); ++i) {
+    if (i == body_region_index) continue;
+    loom_region_t* region = loom_func_like_region(function, i);
+    if (!region) continue;
+    has_non_body_regions = true;
+    loom_canonicalizer_result_t region_result = {0};
+    status = loom_canonicalizer_run_region(
+        canonicalizer, function, region, function.op, options, &region_result);
+    if (!iree_status_is_ok(status)) break;
+    loom_canonicalizer_merge_result(&aggregate_result, &region_result);
+  }
+  if (!iree_status_is_ok(status)) {
+    if (out_result) *out_result = aggregate_result;
+    return status;
+  }
+
+  iree_arena_allocator_t seed_arena;
+  loom_value_fact_table_t seed_facts;
+  const loom_value_fact_table_t* body_seed_facts =
+      options ? options->seed_facts : NULL;
+  bool seed_facts_initialized = false;
+  if (has_non_body_regions) {
+    iree_arena_initialize(canonicalizer->parent_arena->block_pool, &seed_arena);
+    seed_facts_initialized = true;
+    status = loom_value_fact_table_initialize(
+        &seed_facts, &seed_arena, canonicalizer->module->values.capacity);
+    if (iree_status_is_ok(status)) {
+      loom_type_registry_configure_fact_context(&seed_facts.context);
+    }
+    if (iree_status_is_ok(status) && options && options->seed_facts) {
+      status = loom_value_fact_table_clone_defined_facts(
+          &seed_facts, options->seed_facts, canonicalizer->module);
+    }
+    for (uint8_t i = 0;
+         i < loom_func_like_region_count(function) && iree_status_is_ok(status);
+         ++i) {
+      if (i == body_region_index) continue;
+      status = loom_value_fact_table_compute_region(
+          &seed_facts, canonicalizer->module, function,
+          loom_func_like_region(function, i), function.op);
+    }
+    if (iree_status_is_ok(status)) {
+      body_seed_facts = &seed_facts;
+    }
+  }
+
+  if (iree_status_is_ok(status)) {
+    loom_canonicalizer_options_t body_options = {0};
+    if (options) body_options = *options;
+    body_options.seed_facts = body_seed_facts;
+    loom_canonicalizer_result_t body_result = {0};
+    status =
+        loom_canonicalizer_run_region(canonicalizer, function, body,
+                                      function.op, &body_options, &body_result);
+    if (iree_status_is_ok(status)) {
+      loom_canonicalizer_merge_result(&aggregate_result, &body_result);
+    }
+  }
+
+  if (seed_facts_initialized) {
+    iree_arena_deinitialize(&seed_arena);
+  }
+  if (out_result) *out_result = aggregate_result;
+  return status;
 }
 
 iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,

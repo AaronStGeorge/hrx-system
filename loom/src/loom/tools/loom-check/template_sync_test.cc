@@ -13,6 +13,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ops/func/ops.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/tools/loom-check/check.h"
@@ -38,6 +39,8 @@ class TemplateSyncTest : public ::testing::Test {
     loom_context_initialize(iree_allocator_system(), &context_);
     IREE_ASSERT_OK(RegisterDialect(&context_, LOOM_DIALECT_FUNC,
                                    loom_func_dialect_vtables));
+    IREE_ASSERT_OK(RegisterDialect(&context_, LOOM_DIALECT_INDEX,
+                                   loom_index_dialect_vtables));
     IREE_ASSERT_OK(RegisterDialect(&context_, LOOM_DIALECT_KERNEL,
                                    loom_kernel_dialect_vtables));
     IREE_ASSERT_OK(RegisterDialect(&context_, LOOM_DIALECT_SCALAR,
@@ -172,6 +175,10 @@ TEST_F(TemplateSyncTest, UsesKernelDefAsCaseSymbol) {
       "// RUN: roundtrip\n"
       "\n"
       "kernel.def @entry() {\n"
+      "  %c1 = index.constant 1 : index\n"
+      "  kernel.launch.config workgroups(%c1, %c1, %c1) "
+      "workgroup_size(%c1, %c1, %c1) : index\n"
+      "} launch {\n"
       "  %id = kernel.workgroup.id<x> : index\n"
       "  kernel.return\n"
       "}\n",
@@ -236,7 +243,11 @@ TEST_F(TemplateSyncTest, PreservesTargetDeclarationOverlay) {
       "// RUN: emit source-low output=low\n"
       "\n"
       "func.decl @target()\n"
-      "kernel.def target(@target) workgroup_size(64, 1, 1) @entry() {\n"
+      "kernel.def target(@target) @entry() {\n"
+      "  %c1 = index.constant 1 : index\n"
+      "  kernel.launch.config workgroups(%c1, %c1, %c1) "
+      "workgroup_size(%c1, %c1, %c1) : index\n"
+      "} launch {\n"
       "  kernel.return\n"
       "}\n"
       "\n"
@@ -245,6 +256,10 @@ TEST_F(TemplateSyncTest, PreservesTargetDeclarationOverlay) {
       "// RUN: roundtrip\n"
       "\n"
       "kernel.def @entry() {\n"
+      "  %c1 = index.constant 1 : index\n"
+      "  kernel.launch.config workgroups(%c1, %c1, %c1) "
+      "workgroup_size(%c1, %c1, %c1) : index\n"
+      "} launch {\n"
       "  %id = kernel.workgroup.id<x> : index\n"
       "  kernel.return\n"
       "}\n",
@@ -252,8 +267,11 @@ TEST_F(TemplateSyncTest, PreservesTargetDeclarationOverlay) {
 
   EXPECT_TRUE(changed);
   EXPECT_NE(result.find("func.decl @target()\n"
-                        "kernel.def target(@target) workgroup_size(64, 1, 1) "
-                        "@entry() {\n"
+                        "kernel.def target(@target) @entry() {\n"
+                        "  %c1 = index.constant 1 : index\n"
+                        "  kernel.launch.config workgroups(%c1, %c1, %c1) "
+                        "workgroup_size(%c1, %c1, %c1) : index\n"
+                        "} launch {\n"
                         "  %id = kernel.workgroup.id<x> : index\n"
                         "  kernel.return\n"),
             std::string::npos);

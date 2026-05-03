@@ -69,7 +69,12 @@ typedef struct loom_parser_t {
     loom_source_id_t source_id;
   } cached_location;
 
-  // Pending block arguments from FUNC_ARGS, BINDING_LIST, or implicit region
+  // Pending signature arguments from FUNC_ARGS. Bodyful func-like ops attach
+  // these to their declared body region; bodyless declarations store them as
+  // operands.
+  loom_parser_pending_block_args_t pending_func_args;
+
+  // Pending block arguments from BLOCK_ARGS, BINDING_LIST, or implicit region
   // operands such as loop IVs.
   loom_parser_pending_block_args_t pending_block_args;
 

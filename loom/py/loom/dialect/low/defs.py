@@ -400,9 +400,6 @@ _KERNEL_FUNC_LIKE_COMMON: dict[str, Any] = dict(
     artifact="artifact",
     export_ordinal="export_ordinal",
     export_linkage="export_linkage",
-    workgroup_size_x="workgroup_size_x",
-    workgroup_size_y="workgroup_size_y",
-    workgroup_size_z="workgroup_size_z",
     predicates="predicates",
 )
 

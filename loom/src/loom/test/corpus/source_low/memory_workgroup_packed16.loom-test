@@ -1,6 +1,9 @@
 // RUN: roundtrip
 
 kernel.def @lds_f16x4_b64_roundtrip(%input: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -19,6 +22,9 @@ kernel.def @lds_f16x4_b64_roundtrip(%input: buffer, %output: buffer) {
 // ====
 
 kernel.def @lds_f16x8_b128_roundtrip(%input: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -37,6 +43,9 @@ kernel.def @lds_f16x8_b128_roundtrip(%input: buffer, %output: buffer) {
 // ====
 
 kernel.def @lds_bf16x4_b64_roundtrip(%input: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -55,6 +64,9 @@ kernel.def @lds_bf16x4_b64_roundtrip(%input: buffer, %output: buffer) {
 // ====
 
 kernel.def @lds_bf16x8_b128_roundtrip(%input: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset

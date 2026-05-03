@@ -566,14 +566,14 @@ func.def public @call_private_conflicting_layout_view(%buffer: buffer) {
 // facts materialize as separate constants in each isolated projection so body
 // and config rewrite independently without crossing region SSA boundaries.
 test.split_func @projected_exact_constant(%n: index) {
+  %cfg_one = index.constant 1 : index
+  %cfg_sum = index.add %n, %cfg_one : index
+  test.use %cfg_sum : index
+  test.yield
+} launch {
   %one = index.constant 1 : index
   %sum = index.add %n, %one : index
   test.use %sum : index
-  test.yield
-} config(%cfg_n: index) {
-  %cfg_one = index.constant 1 : index
-  %cfg_sum = index.add %cfg_n, %cfg_one : index
-  test.use %cfg_sum : index
   test.yield
 }
 
@@ -585,12 +585,12 @@ func.def public @call_projected_exact_constant() {
 
 // ----
 test.split_func @projected_exact_constant() {
-  %sum = index.constant 8 : index
-  test.use %sum : index
-  test.yield
-} config() {
   %cfg_sum = index.constant 8 : index
   test.use %cfg_sum : index
+  test.yield
+} launch {
+  %sum = index.constant 8 : index
+  test.use %sum : index
   test.yield
 }
 
@@ -605,12 +605,12 @@ func.def public @call_projected_exact_constant() {
 // another must happen independently in every projected root region before local
 // canonicalization sees the simplified expressions.
 test.split_func @projected_equal_arguments(%lhs: index, %rhs: index) {
+  %cfg_delta = index.sub %lhs, %rhs : index
+  test.use %cfg_delta : index
+  test.yield
+} launch {
   %delta = index.sub %lhs, %rhs : index
   test.use %delta : index
-  test.yield
-} config(%cfg_lhs: index, %cfg_rhs: index) {
-  %cfg_delta = index.sub %cfg_lhs, %cfg_rhs : index
-  test.use %cfg_delta : index
   test.yield
 }
 
@@ -621,12 +621,12 @@ func.def public @call_projected_equal_arguments(%n: index) {
 
 // ----
 test.split_func @projected_equal_arguments() {
-  %delta = index.constant 0 : index
-  test.use %delta : index
-  test.yield
-} config() {
   %cfg_delta = index.constant 0 : index
   test.use %cfg_delta : index
+  test.yield
+} launch {
+  %delta = index.constant 0 : index
+  test.use %delta : index
   test.yield
 }
 
@@ -643,8 +643,8 @@ func.def public @call_projected_equal_arguments(%n: index) {
 test.split_func @projected_dead_argument(%kept: index, %dead: index) {
   test.use %kept : index
   test.yield
-} config(%cfg_kept: index, %cfg_dead: index) {
-  test.use %cfg_kept : index
+} launch {
+  test.use %kept : index
   test.yield
 }
 
@@ -657,8 +657,8 @@ func.def public @call_projected_dead_argument(%kept: index, %dead: index) {
 test.split_func @projected_dead_argument(%kept: index) {
   test.use %kept : index
   test.yield
-} config(%cfg_kept: index) {
-  test.use %cfg_kept : index
+} launch {
+  test.use %kept : index
   test.yield
 }
 

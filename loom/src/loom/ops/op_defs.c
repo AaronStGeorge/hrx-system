@@ -513,9 +513,43 @@ loom_func_like_t loom_func_like_cast(const loom_module_t* module,
 }
 
 loom_region_t* loom_func_like_body(loom_func_like_t func) {
-  if (!func.vtable) return NULL;
-  if (func.vtable->body_region_index == LOOM_REGION_INDEX_NONE) return NULL;
-  return loom_op_regions(func.op)[func.vtable->body_region_index];
+  return loom_func_like_region(func, loom_func_like_body_region_index(func));
+}
+
+uint8_t loom_func_like_body_region_index(loom_func_like_t func) {
+  if (!func.vtable) return LOOM_REGION_INDEX_NONE;
+  return func.vtable->body_region_index;
+}
+
+uint8_t loom_func_like_region_count(loom_func_like_t func) {
+  if (!func.vtable || !func.op) return 0;
+  return func.op->region_count;
+}
+
+loom_region_t* loom_func_like_region(loom_func_like_t func,
+                                     uint8_t region_index) {
+  if (!func.vtable || !func.op || region_index >= func.op->region_count) {
+    return NULL;
+  }
+  return loom_op_regions(func.op)[region_index];
+}
+
+bool loom_func_like_region_is_body(loom_func_like_t func,
+                                   uint8_t region_index) {
+  return region_index == loom_func_like_body_region_index(func);
+}
+
+bool loom_func_like_region_projects_args(const loom_module_t* module,
+                                         loom_func_like_t func,
+                                         uint8_t region_index) {
+  if (!loom_func_like_isa(func) || region_index >= func.op->region_count) {
+    return false;
+  }
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, func.op);
+  const loom_region_descriptor_t* descriptor =
+      loom_op_vtable_region_descriptor(vtable, region_index);
+  return descriptor &&
+         iree_any_bit_set(descriptor->flags, LOOM_REGION_PROJECT_FUNC_ARGS);
 }
 
 uint8_t loom_func_like_purity(loom_func_like_t func) {
@@ -662,44 +696,6 @@ bool loom_func_like_export_linkage(loom_func_like_t func,
     return false;
   }
   *out_linkage = loom_attr_as_enum(attr);
-  return true;
-}
-
-static bool loom_func_like_i64_attr(loom_func_like_t func, uint8_t attr_index,
-                                    int64_t* out_value) {
-  if (attr_index == LOOM_ATTR_INDEX_NONE) {
-    return false;
-  }
-  loom_attribute_t attr = loom_op_attrs(func.op)[attr_index];
-  if (loom_attr_is_absent(attr)) {
-    return false;
-  }
-  *out_value = loom_attr_as_i64(attr);
-  return true;
-}
-
-bool loom_func_like_workgroup_size(loom_func_like_t func, uint32_t* out_x,
-                                   uint32_t* out_y, uint32_t* out_z) {
-  *out_x = 0;
-  *out_y = 0;
-  *out_z = 0;
-  if (!func.vtable) {
-    return false;
-  }
-  int64_t x = 0;
-  int64_t y = 0;
-  int64_t z = 0;
-  if (!loom_func_like_i64_attr(func, func.vtable->workgroup_size_x_attr_index,
-                               &x) ||
-      !loom_func_like_i64_attr(func, func.vtable->workgroup_size_y_attr_index,
-                               &y) ||
-      !loom_func_like_i64_attr(func, func.vtable->workgroup_size_z_attr_index,
-                               &z)) {
-    return false;
-  }
-  *out_x = (uint32_t)x;
-  *out_y = (uint32_t)y;
-  *out_z = (uint32_t)z;
   return true;
 }
 

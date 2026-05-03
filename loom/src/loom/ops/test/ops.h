@@ -503,15 +503,15 @@ iree_status_t loom_test_func_build(
 // LOOM_OP_TEST_SPLIT_FUNC: Test function definition with projected signature args in a side region.
 // test.split_func @projected(%arg: i32) {
 //   test.yield
-// } config(%cfg_arg: i32) {
+// } launch {
 //   test.yield
 // }
 LOOM_DEFINE_ISA(loom_test_split_func_isa, LOOM_OP_TEST_SPLIT_FUNC)
 LOOM_DEFINE_ATTR_SYMBOL(loom_test_split_func_callee, 0)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_test_split_func_visibility, 1, loom_test_visibility_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_test_split_func_cc, 2, loom_test_cc_t)
-LOOM_DEFINE_REGION(loom_test_split_func_body, 0)
-LOOM_DEFINE_REGION(loom_test_split_func_config, 1)
+LOOM_DEFINE_REGION(loom_test_split_func_config, 0)
+LOOM_DEFINE_REGION(loom_test_split_func_body, 1)
 enum loom_test_split_func_build_flag_bits_e {
   LOOM_TEST_SPLIT_FUNC_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
   LOOM_TEST_SPLIT_FUNC_BUILD_FLAG_HAS_CC = 1u << 1,

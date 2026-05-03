@@ -18,10 +18,14 @@ loom_cc_library(
         "builders.c",
         "canonicalize.c",
         "facts.c",
+        "launch_config.c",
         "tables.c",
         "verify.c",
     ],
-    hdrs = ["ops.h"],
+    hdrs = [
+        "launch_config.h",
+        "ops.h",
+    ],
     deps = [
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
@@ -33,6 +37,7 @@ loom_cc_library(
         "//loom/src/loom/ops:func_symbol_facts",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scf",
         "//loom/src/loom/ops/view",
         "//loom/src/loom/rewrite:rewriter",

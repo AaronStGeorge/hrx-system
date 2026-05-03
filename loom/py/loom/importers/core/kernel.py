@@ -16,7 +16,7 @@ import loom
 from loom.builder import ValueRef
 from loom.dsl import Op
 from loom.importers.core.names import NameAllocator, sanitize_symbol
-from loom.ir import BUFFER_TYPE, Block, Module, Region, Type
+from loom.ir import BUFFER_TYPE, INDEX, Block, Module, Region, Type
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +47,7 @@ class KernelModuleShell:
 
     module: Module
     builder: loom.LoomBuilder
+    config: Region
     body: Region
     arguments_by_ordinal: dict[int, ValueRef]
     target_symbol: str
@@ -55,6 +56,10 @@ class KernelModuleShell:
     @property
     def body_block(self) -> Block:
         return self.body.blocks[0]
+
+    @property
+    def config_block(self) -> Block:
+        return self.config.blocks[0]
 
 
 def create_kernel_module(spec: KernelModuleSpec) -> KernelModuleShell:
@@ -72,27 +77,62 @@ def create_kernel_module(spec: KernelModuleSpec) -> KernelModuleShell:
         )
         for argument in spec.arguments
     }
-    body = builder.region()
     workgroup = normalize_workgroup_size(spec.workgroup_size)
+    config = builder.region()
+    body = builder.region()
     builder.kernel.def_(
         target=target_symbol,
         export_symbol=spec.export_symbol,
         export_ordinal=spec.export_ordinal,
-        workgroup_size_x=workgroup[0],
-        workgroup_size_y=workgroup[1],
-        workgroup_size_z=workgroup[2],
         callee=spec.callee,
         args=[arguments_by_ordinal[argument.ordinal] for argument in spec.arguments],
+        config=config,
         body=body,
     )
+    _build_launch_config(builder, config, workgroup)
     return KernelModuleShell(
         module=module,
         builder=builder,
+        config=config,
         body=body,
         arguments_by_ordinal=arguments_by_ordinal,
         target_symbol=target_symbol,
         kernel_symbol=spec.callee,
     )
+
+
+def _build_launch_config(
+    builder: loom.LoomBuilder,
+    config: Region,
+    workgroup_size: tuple[int, int, int],
+) -> None:
+    with builder.insertion_block(config.blocks[0]):
+        count_x = builder.index.constant(value=1, results=[INDEX], name="wg_count_x")
+        count_y = builder.index.constant(value=1, results=[INDEX], name="wg_count_y")
+        count_z = builder.index.constant(value=1, results=[INDEX], name="wg_count_z")
+        size_x = builder.index.constant(
+            value=workgroup_size[0],
+            results=[INDEX],
+            name="wg_size_x",
+        )
+        size_y = builder.index.constant(
+            value=workgroup_size[1],
+            results=[INDEX],
+            name="wg_size_y",
+        )
+        size_z = builder.index.constant(
+            value=workgroup_size[2],
+            results=[INDEX],
+            name="wg_size_z",
+        )
+        builder.kernel.config(
+            workgroup_count_x=count_x,
+            workgroup_count_y=count_y,
+            workgroup_count_z=count_z,
+            workgroup_size_x=size_x,
+            workgroup_size_y=size_y,
+            workgroup_size_z=size_z,
+        )
 
 
 def normalize_workgroup_size(workgroup_size: tuple[int, ...]) -> tuple[int, int, int]:

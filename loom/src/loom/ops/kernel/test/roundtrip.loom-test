@@ -1,6 +1,17 @@
 // RUN: roundtrip
 
 kernel.def @empty_kernel(%buffer: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  kernel.return
+}
+
+// ----
+kernel.def @empty_kernel(%buffer: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   kernel.return
 }
 
@@ -10,7 +21,26 @@ test.target<low_core> @test_target
 
 target.artifact @test_artifact target(@test_target) {abi = hal_executable, artifact_format = elf}
 
-kernel.def target(@test_target) export("entry") artifact(@test_artifact) ordinal(0) linkage(dso_local) workgroup_size(16, 4, 1) @entry(%buffer: buffer) {
+kernel.def target(@test_target) export("entry") artifact(@test_artifact) ordinal(0) linkage(dso_local) @entry(%buffer: buffer) {
+  %c1 = index.constant 1 : index
+  %c4 = index.constant 4 : index
+  %c16 = index.constant 16 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c16, %c4, %c1) : index
+} launch {
+  kernel.return
+}
+
+// ----
+test.target<low_core> @test_target
+
+target.artifact @test_artifact target(@test_target) {abi = hal_executable, artifact_format = elf}
+
+kernel.def target(@test_target) export("entry") artifact(@test_artifact) ordinal(0) linkage(dso_local) @entry(%buffer: buffer) {
+  %c1 = index.constant 1 : index
+  %c4 = index.constant 4 : index
+  %c16 = index.constant 16 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c16, %c4, %c1) : index
+} launch {
   kernel.return
 }
 
@@ -28,6 +58,9 @@ func.def @workgroup_barrier() {
 test.target<low_core> @test_target
 
 kernel.def @workitem_coordinates() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %x = kernel.workitem.id<x> : index
   %y = kernel.workitem.id<y> : index
   %z = kernel.workitem.id<z> : index
@@ -39,6 +72,9 @@ kernel.def @workitem_coordinates() {
 test.target<low_core> @test_target
 
 kernel.def @conditional_exit(%done: i1) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   kernel.exit %done : i1
   kernel.return
 }
@@ -48,6 +84,9 @@ kernel.def @conditional_exit(%done: i1) {
 test.target<low_core> @test_target
 
 kernel.def @conditional_exit_with_body(%done: i1) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   kernel.exit %done : i1 {
   }
   kernel.return
@@ -58,6 +97,9 @@ kernel.def @conditional_exit_with_body(%done: i1) {
 test.target<low_core> @test_target
 
 kernel.def @workgroup_coordinates() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %x = kernel.workgroup.id<x> : index
   %y = kernel.workgroup.id<y> : index
   %z = kernel.workgroup.id<z> : index
@@ -69,6 +111,9 @@ kernel.def @workgroup_coordinates() {
 test.target<low_core> @test_target
 
 kernel.def @launch_queries() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %wg_size_x = kernel.workgroup.size<x> : index
   %wg_size_y = kernel.workgroup.size<y> : index
   %wg_size_z = kernel.workgroup.size<z> : index
@@ -86,6 +131,9 @@ kernel.def @launch_queries() {
 test.target<low_core> @test_target
 
 kernel.def @subgroup_queries() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %id = kernel.subgroup.id : index
   %count = kernel.subgroup.count : index
   %size = kernel.subgroup.size : index
@@ -98,6 +146,9 @@ kernel.def @subgroup_queries() {
 test.target<low_core> @test_target
 
 kernel.def @subgroup_collectives(%value: f32, %vector: vector<4xf32>, %predicate: i1, %lane: i32, %offset: i32, %width: i32) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %shuffle, %valid = kernel.subgroup.shuffle<xor> %value, %offset, %width : f32, i32, i32
   %shuffle_vector, %valid_vector = kernel.subgroup.shuffle<down> %vector, %offset, %width : vector<4xf32>, i32, i32
   %broadcast = kernel.subgroup.broadcast %value from %lane : f32, i32
@@ -120,6 +171,9 @@ kernel.def @subgroup_collectives(%value: f32, %vector: vector<4xf32>, %predicate
 test.target<low_core> @test_target
 
 kernel.def @workgroup_collectives(%value: f32, %predicate: i1) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %sum = kernel.workgroup.reduce<addf> %value : f32
   %any = kernel.workgroup.vote.any %predicate : i1
   %all = kernel.workgroup.vote.all %predicate : i1

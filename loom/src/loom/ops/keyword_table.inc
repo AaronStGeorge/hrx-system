@@ -69,3 +69,5 @@
     [LOOM_KW_FROM] = (const uint8_t*)"\x04" "from",
     [LOOM_KW_AXES] = (const uint8_t*)"\x04" "axes",
     [LOOM_KW_CONFIG] = (const uint8_t*)"\x06" "config",
+    [LOOM_KW_LAUNCH] = (const uint8_t*)"\x06" "launch",
+    [LOOM_KW_WORKGROUPS] = (const uint8_t*)"\x0a" "workgroups",

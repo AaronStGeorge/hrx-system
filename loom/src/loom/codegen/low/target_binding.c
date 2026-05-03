@@ -13,6 +13,7 @@
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func_symbol_facts.h"
+#include "loom/ops/low/kernel.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/facts.h"
 #include "loom/target/function_contract.h"
@@ -215,6 +216,13 @@ static iree_status_t loom_low_resolve_func_target(
     status = loom_target_function_contract_resolve(
         module, &fact_table, func_facts, emitter, &contract_valid,
         &out_target->bundle_storage);
+  }
+  loom_target_workgroup_size_t workgroup_size = {0};
+  if (iree_status_is_ok(status) && contract_valid &&
+      loom_low_kernel_def_static_workgroup_size(low_func_op, &workgroup_size)) {
+    status = loom_target_function_contract_apply_hal_workgroup_size(
+        func_facts, out_target->target_name, &workgroup_size, emitter,
+        &out_target->bundle_storage, &contract_valid);
   }
   if (iree_status_is_ok(status) && contract_valid) {
     out_target->descriptor_set_key =

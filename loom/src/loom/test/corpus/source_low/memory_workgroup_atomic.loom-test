@@ -1,6 +1,9 @@
 // RUN: roundtrip
 
 kernel.def @lds_atomic_add_i32() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -15,6 +18,9 @@ kernel.def @lds_atomic_add_i32() {
 // ====
 
 kernel.def @lds_atomic_ordering_i32() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -32,6 +38,9 @@ kernel.def @lds_atomic_ordering_i32() {
 // ====
 
 kernel.def @lds_atomic_add_f32() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -46,6 +55,9 @@ kernel.def @lds_atomic_add_f32() {
 // ====
 
 kernel.def @lds_atomic_minnum_maxnum_f32() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -62,6 +74,9 @@ kernel.def @lds_atomic_minnum_maxnum_f32() {
 // ====
 
 kernel.def @lds_atomic_bitwise_i32() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -80,6 +95,9 @@ kernel.def @lds_atomic_bitwise_i32() {
 // ====
 
 kernel.def @lds_atomic_sub_i32() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -94,6 +112,9 @@ kernel.def @lds_atomic_sub_i32() {
 // ====
 
 kernel.def @lds_atomic_exchange_i32() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -107,6 +128,9 @@ kernel.def @lds_atomic_exchange_i32() {
 // ====
 
 kernel.def @lds_atomic_cmpxchg_i32() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -121,6 +145,9 @@ kernel.def @lds_atomic_cmpxchg_i32() {
 // ====
 
 kernel.def @lds_atomic_minmax_i32() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset

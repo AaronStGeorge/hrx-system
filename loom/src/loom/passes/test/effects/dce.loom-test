@@ -158,22 +158,19 @@ func.def @nested_while_read_only_parent_dies(%cond: i1, %buffer: buffer, %offset
 
 // ====
 
-// Function passes still run over the function-like body projection. A side
-// projection may be canonicalized explicitly by a caller, but ordinary DCE must
-// not discover it by scanning every root region.
+// Function-level DCE scans every root region of a function-like op.
 // RUN: pass dce
-test.split_func @split_func_body_only_dce(%arg: i32) {
-  %body_dead = test.constant 1 : i32
-  test.yield
-} config(%cfg_arg: i32) {
+test.split_func @split_func_all_regions_dce(%arg: i32) {
   %config_dead = test.constant 2 : i32
+  test.yield
+} launch {
+  %body_dead = test.constant 1 : i32
   test.yield
 }
 
 // ----
-test.split_func @split_func_body_only_dce(%arg: i32) {
+test.split_func @split_func_all_regions_dce(%arg: i32) {
   test.yield
-} config(%cfg_arg: i32) {
-  %config_dead = test.constant 2 : i32
+} launch {
   test.yield
 }

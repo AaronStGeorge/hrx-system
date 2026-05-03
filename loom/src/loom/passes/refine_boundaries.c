@@ -641,44 +641,16 @@ static bool loom_refine_boundaries_region_projects_arguments(
   return true;
 }
 
-static bool loom_refine_boundaries_constraint_matches_projection(
-    const loom_constraint_t* constraint, loom_constraint_relation_t relation,
-    uint8_t region_index, uint8_t body_region_index) {
-  if (constraint->relation != relation) {
-    return false;
-  }
-  if (constraint->arg_count < 2) {
-    return false;
-  }
-  if (LOOM_FIELD_REF_CATEGORY(constraint->args[0]) != LOOM_FIELD_REGION ||
-      LOOM_FIELD_REF_CATEGORY(constraint->args[1]) != LOOM_FIELD_REGION) {
-    return false;
-  }
-  uint8_t lhs = (uint8_t)LOOM_FIELD_REF_INDEX(constraint->args[0]);
-  uint8_t rhs = (uint8_t)LOOM_FIELD_REF_INDEX(constraint->args[1]);
-  return (lhs == region_index && rhs == body_region_index) ||
-         (lhs == body_region_index && rhs == region_index);
-}
-
 static bool loom_refine_boundaries_region_declares_argument_projection(
     const loom_op_vtable_t* vtable, uint8_t region_index,
     uint8_t body_region_index) {
   if (region_index == body_region_index) {
     return true;
   }
-
-  bool count_matches = false;
-  bool types_match = false;
-  for (iree_host_size_t i = 0; i < vtable->constraint_count; ++i) {
-    const loom_constraint_t* constraint = &vtable->constraints[i];
-    count_matches |= loom_refine_boundaries_constraint_matches_projection(
-        constraint, LOOM_RELATION_REGION_ARG_COUNT, region_index,
-        body_region_index);
-    types_match |= loom_refine_boundaries_constraint_matches_projection(
-        constraint, LOOM_RELATION_REGION_ARG_MATCH, region_index,
-        body_region_index);
-  }
-  return count_matches && types_match;
+  const loom_region_descriptor_t* descriptor =
+      loom_op_vtable_region_descriptor(vtable, region_index);
+  return descriptor &&
+         iree_any_bit_set(descriptor->flags, LOOM_REGION_PROJECT_FUNC_ARGS);
 }
 
 static iree_status_t loom_refine_boundaries_collect_argument_projections(
@@ -1593,23 +1565,6 @@ static iree_status_t loom_refine_boundaries_run_function(
     IREE_RETURN_IF_ERROR(loom_refine_boundaries_collect_function(
         graph, function_facts, next_boundary_facts, next_boundary_replacements,
         function_info));
-  }
-
-  loom_region_t* body = loom_func_like_body(function_info->function);
-  for (uint8_t projection_index = 0;
-       projection_index < function_info->argument_projection_count;
-       ++projection_index) {
-    loom_region_t* region =
-        function_info->argument_projections[projection_index].region;
-    if (region == body) {
-      continue;
-    }
-    loom_canonicalizer_result_t projection_result = {0};
-    IREE_RETURN_IF_ERROR(loom_canonicalizer_run_region(
-        canonicalizer, function_info->function, region,
-        function_info->function.op, &options, &projection_result));
-    loom_refine_boundaries_merge_canonicalize_result(&canonicalize_result,
-                                                     &projection_result);
   }
 
   if (pass->statistics) {

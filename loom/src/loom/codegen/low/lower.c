@@ -18,6 +18,7 @@
 #include "loom/ops/cfg/ops.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
+#include "loom/ops/kernel/launch_config.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
@@ -999,7 +1000,7 @@ static loom_region_t* loom_low_lower_low_body(
   return NULL;
 }
 
-static bool loom_low_lower_source_is_kernel_entry(
+static bool loom_low_lower_source_is_kernel_def(
     const loom_low_lower_context_t* context) {
   return loom_kernel_def_isa(context->source_function.op);
 }
@@ -1089,11 +1090,10 @@ static iree_status_t loom_low_lower_create_kernel_op(
     build_flags |= LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_LINKAGE;
   }
 
-  uint32_t workgroup_size_x = 0;
-  uint32_t workgroup_size_y = 0;
-  uint32_t workgroup_size_z = 0;
-  if (loom_func_like_workgroup_size(context->source_function, &workgroup_size_x,
-                                    &workgroup_size_y, &workgroup_size_z)) {
+  loom_target_workgroup_size_t workgroup_size = {0};
+  if (loom_kernel_def_static_workgroup_size_from_facts(
+          context->module, context->source_function.op,
+          context->lowering.fact_table, &workgroup_size)) {
     build_flags |= LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_X |
                    LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_Y |
                    LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_Z;
@@ -1106,7 +1106,7 @@ static iree_status_t loom_low_lower_create_kernel_op(
   IREE_RETURN_IF_ERROR(loom_low_kernel_def_build(
       &context->builder, build_flags, /*allocation=*/0, /*schedule=*/0,
       context->options->target_ref, export_symbol, artifact, export_ordinal,
-      export_linkage, workgroup_size_x, workgroup_size_y, workgroup_size_z,
+      export_linkage, workgroup_size.x, workgroup_size.y, workgroup_size.z,
       low_func_ref, arg_types, arg_count, predicates, predicate_count,
       context->source_function.op->location, &context->low_func_op));
 
@@ -1125,7 +1125,7 @@ static iree_status_t loom_low_lower_create_function_op(
   IREE_RETURN_IF_ERROR(loom_low_lower_map_signature_types(
       context, &arg_types, &arg_count, &result_types, &result_count));
 
-  if (loom_low_lower_source_is_kernel_entry(context)) {
+  if (loom_low_lower_source_is_kernel_def(context)) {
     IREE_ASSERT_EQ(result_count, 0);
     IREE_RETURN_IF_ERROR(loom_low_lower_create_kernel_op(
         context, source_body, low_func_ref, arg_types, arg_count));

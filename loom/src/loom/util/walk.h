@@ -132,9 +132,10 @@ iree_status_t loom_walk_region(const loom_module_t* module,
                                iree_arena_allocator_t* arena,
                                loom_walk_result_t* out_result);
 
-// Walks all ops in |function|'s body region. Convenience wrapper
-// around loom_walk_region. Returns iree_ok_status() with
-// *out_result = LOOM_WALK_CONTINUE if the function has no body.
+// Walks all ops in |function|'s root regions. Regions are visited in physical
+// region order; nested regions are handled by loom_walk_region. Returns
+// iree_ok_status() with *out_result = LOOM_WALK_CONTINUE if the function has no
+// regions.
 iree_status_t loom_walk_function(const loom_module_t* module,
                                  loom_func_like_t function,
                                  loom_walk_order_t order,

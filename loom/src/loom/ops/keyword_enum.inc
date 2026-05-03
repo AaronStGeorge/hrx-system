@@ -69,3 +69,5 @@
   LOOM_KW_FROM = 60,  // "from"
   LOOM_KW_AXES = 61,  // "axes"
   LOOM_KW_CONFIG = 62,  // "config"
+  LOOM_KW_LAUNCH = 63,  // "launch"
+  LOOM_KW_WORKGROUPS = 64,  // "workgroups"

@@ -686,6 +686,10 @@ enum loom_region_flag_bits_e {
   LOOM_REGION_SINGLE_BLOCK = 1u << 0,
   // Region may be absent when it is part of a trailing optional suffix.
   LOOM_REGION_OPTIONAL = 1u << 1,
+  // Region entry block arguments are projected from the op's FuncArgs
+  // signature. The projected values have matching names and types but remain
+  // distinct SSA values owned by this region.
+  LOOM_REGION_PROJECT_FUNC_ARGS = 1u << 2,
 };
 typedef uint8_t loom_region_flags_t;
 
@@ -1034,6 +1038,26 @@ loom_func_like_t loom_func_like_cast(const loom_module_t* module,
 // (func.decl, func.ukernel) or if |func| is not valid.
 loom_region_t* loom_func_like_body(loom_func_like_t func);
 
+// Returns the body region index, or LOOM_REGION_INDEX_NONE for bodyless ops or
+// invalid func-like references.
+uint8_t loom_func_like_body_region_index(loom_func_like_t func);
+
+// Returns the number of root regions owned by a func-like op.
+uint8_t loom_func_like_region_count(loom_func_like_t func);
+
+// Returns the root region at |region_index|, or NULL for invalid inputs.
+loom_region_t* loom_func_like_region(loom_func_like_t func,
+                                     uint8_t region_index);
+
+// Returns true when |region_index| names the body region.
+bool loom_func_like_region_is_body(loom_func_like_t func, uint8_t region_index);
+
+// Returns true when |region_index| projects the function signature arguments
+// into a distinct root-region entry block.
+bool loom_func_like_region_projects_args(const loom_module_t* module,
+                                         loom_func_like_t func,
+                                         uint8_t region_index);
+
 // Returns the purity attr value (0 = unspecified, nonzero = pure).
 uint8_t loom_func_like_purity(loom_func_like_t func);
 
@@ -1079,11 +1103,6 @@ bool loom_func_like_export_ordinal(loom_func_like_t func, int64_t* out_ordinal);
 
 // Returns true and assigns the export linkage enum value when present.
 bool loom_func_like_export_linkage(loom_func_like_t func, uint8_t* out_linkage);
-
-// Returns true and assigns the fixed workgroup size when all dimensions are
-// present. Partial workgroup sizes are rejected by op verification.
-bool loom_func_like_workgroup_size(loom_func_like_t func, uint32_t* out_x,
-                                   uint32_t* out_y, uint32_t* out_z);
 
 // Returns the function argument value IDs and their count. For ops
 // with a body region, args are the entry block's block arguments.
@@ -1325,7 +1344,7 @@ loom_attribute_t loom_memory_access_atomic_scope(loom_memory_access_t access);
 // Defines a function that checks if an op is of a specific kind.
 #define LOOM_DEFINE_ISA(func_name, kind_enum)         \
   static inline bool func_name(const loom_op_t* op) { \
-    return op->kind == (kind_enum);                   \
+    return op != NULL && op->kind == (kind_enum);     \
   }
 
 // Defines a function that reads a fixed operand by index.

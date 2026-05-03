@@ -66,7 +66,10 @@ def scalar_calls(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("scalar_calls") workgroup_size(1, 1, 1) @scalar_calls(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("scalar_calls") @scalar_calls(%src: buffer, %dst: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
@@ -123,7 +126,10 @@ def bitwise_not(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("bitwise_not") workgroup_size(1, 1, 1) @bitwise_not(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("bitwise_not") @bitwise_not(%src: buffer, %dst: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xi32, %layout>
@@ -169,7 +175,10 @@ def dynamic_loop_bound(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("dynamic_loop_bound") workgroup_size(1, 1, 1) @dynamic_loop_bound(%n: i32, %src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("dynamic_loop_bound") @dynamic_loop_bound(%n: i32, %src: buffer, %dst: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<8xf32, %layout>
@@ -215,7 +224,10 @@ def ceildiv_loop(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("ceildiv_loop") workgroup_size(1, 1, 1) @ceildiv_loop(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("ceildiv_loop") @ceildiv_loop(%src: buffer, %dst: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<8xf32, %layout>

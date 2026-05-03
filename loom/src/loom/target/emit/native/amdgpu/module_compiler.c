@@ -11,13 +11,17 @@
 
 #include "iree/base/internal/arena.h"
 #include "iree/io/vec_stream.h"
+#include "loom/analysis/symbol_facts.h"
 #include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/preparation.h"
+#include "loom/codegen/low/target_binding.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
+#include "loom/ops/func_symbol_facts.h"
 #include "loom/ops/kernel/ops.h"
+#include "loom/ops/low/kernel.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/pass/builtin_registry.h"
@@ -33,6 +37,7 @@
 #include "loom/target/compile_report_low.h"
 #include "loom/target/emit/native/amdgpu/kernel_hsaco.h"
 #include "loom/target/emit/native/amdgpu/preflight.h"
+#include "loom/target/function_contract.h"
 #include "loom/target/launch.h"
 #include "loom/target/module_compiler.h"
 
@@ -61,7 +66,7 @@ static bool loom_amdgpu_module_compile_bundle_is_compatible(
 
 typedef struct loom_amdgpu_module_compile_kernel_plan_t {
   // Target-resolved function entry used to build this kernel.
-  const loom_target_module_compile_entry_t* entry;
+  loom_target_module_compile_entry_t* entry;
   // Selected or lowered low.kernel.def op for frame.
   loom_op_t* low_function_op;
   // Source-derived memory summaries for low_function_op, when this plan lowered
@@ -430,10 +435,54 @@ static iree_status_t loom_amdgpu_module_compile_select_low_function(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_module_compile_lookup_func_facts(
+    const loom_module_t* module, loom_symbol_ref_t func_ref,
+    iree_arena_allocator_t* table_arena,
+    const loom_func_symbol_facts_t** out_func_facts) {
+  *out_func_facts = NULL;
+  loom_symbol_fact_table_t fact_table = {0};
+  loom_symbol_fact_table_initialize(&fact_table, table_arena);
+  const loom_symbol_facts_base_t* base_facts = NULL;
+  IREE_RETURN_IF_ERROR(loom_symbol_fact_table_lookup_ref(
+      &fact_table, module, func_ref, &base_facts));
+  *out_func_facts = loom_func_symbol_facts_cast(base_facts);
+  if (*out_func_facts == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU compilation entry must resolve to func symbol facts");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_module_compile_apply_low_kernel_contract(
+    const loom_module_t* module, const loom_op_t* low_function_op,
+    loom_target_module_compile_entry_t* entry,
+    loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
+    iree_arena_allocator_t* table_arena, bool* out_valid) {
+  *out_valid = true;
+  loom_target_workgroup_size_t workgroup_size = {0};
+  if (!loom_low_kernel_def_static_workgroup_size(low_function_op,
+                                                 &workgroup_size)) {
+    return iree_ok_status();
+  }
+
+  const loom_func_symbol_facts_t* func_facts = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_lookup_func_facts(
+      module, entry->func_ref, table_arena, &func_facts));
+
+  iree_string_view_t target_name = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_symbol_name(
+      module, entry->target_ref, &target_name));
+  return loom_target_function_contract_apply_hal_workgroup_size(
+      func_facts, target_name, &workgroup_size,
+      loom_target_module_compile_emitter(diagnostic_emitter),
+      &entry->bundle_storage, out_valid);
+}
+
 static iree_status_t loom_amdgpu_module_compile_prepare_kernel_plan(
     loom_module_t* module,
     const loom_target_low_descriptor_registry_t* low_registry,
-    const loom_target_module_compile_entry_t* entry,
+    loom_target_module_compile_entry_t* entry,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     uint32_t max_errors, iree_arena_allocator_t* table_arena,
     loom_pass_value_fact_owner_t* value_facts,
@@ -448,6 +497,13 @@ static iree_status_t loom_amdgpu_module_compile_prepare_kernel_plan(
       module, low_registry, entry, entry->func, diagnostic_emitter, max_errors,
       table_arena, value_facts, report, &low_function_op,
       &out_plan->memory_access_table));
+  bool kernel_contract_valid = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_apply_low_kernel_contract(
+      module, low_function_op, entry, diagnostic_emitter, table_arena,
+      &kernel_contract_valid));
+  if (!kernel_contract_valid) {
+    return iree_ok_status();
+  }
   out_plan->low_function_op = low_function_op;
   if (report != NULL) {
     loom_symbol_ref_t lowered_ref = entry->func_ref;

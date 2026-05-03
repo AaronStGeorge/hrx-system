@@ -677,8 +677,9 @@ class RegionDef:
         Example: loop IV is ("iv", "index").
     arg_source: Optional variadic value field or FuncArgs field whose
         per-position types seed entry block arguments in generated builders.
-        Text parsing still gets the concrete names and types from BindingList
-        or BlockArgs format elements.
+        Text parsing gets concrete names and types from BindingList or
+        BlockArgs format elements for ordinary value fields, or clones the
+        FuncArgs signature names and types for projected FuncArgs regions.
     """
 
     name: str
@@ -2941,12 +2942,6 @@ class FuncLikeInterface(NamedTuple):
     export_ordinal: str | None = None
     # Optional export linkage attr for entry-style exports.
     export_linkage: str | None = None
-    # Optional fixed workgroup size X dimension attr for kernel entries.
-    workgroup_size_x: str | None = None
-    # Optional fixed workgroup size Y dimension attr for kernel entries.
-    workgroup_size_y: str | None = None
-    # Optional fixed workgroup size Z dimension attr for kernel entries.
-    workgroup_size_z: str | None = None
     # Visibility enum attr (e.g., public). None if not applicable.
     visibility: str | None = None
     # Calling convention enum attr. None if not applicable.

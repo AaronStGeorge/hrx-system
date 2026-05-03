@@ -17,10 +17,14 @@ loom_cc_library(
     srcs = [
         "builders.c",
         "facts.c",
+        "kernel.c",
         "tables.c",
         "verify.c",
     ],
-    hdrs = ["ops.h"],
+    hdrs = [
+        "kernel.h",
+        "ops.h",
+    ],
     deps = [
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",

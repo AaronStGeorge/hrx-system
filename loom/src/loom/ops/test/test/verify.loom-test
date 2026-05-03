@@ -1,19 +1,9 @@
 // RUN: verify
 
-// Projected region args must preserve the function signature types.
-// ERROR@+1: TYPE/013
-test.split_func @config_arg_type_mismatch(%arg: i32) {
+// Projected region args are parser-owned clones of the function signature and
+// verify without spelling a second argument list.
+test.split_func @projected(%arg: i32, %other: i32) {
   test.yield
-} config(%cfg_arg: f32) {
-  test.yield
-}
-
-// ====
-
-// Projected region args must preserve the function signature arity.
-// ERROR@+1: STRUCTURE/007
-test.split_func @config_arg_count_mismatch(%arg: i32, %other: i32) {
-  test.yield
-} config(%cfg_arg: i32) {
+} launch {
   test.yield
 }

@@ -3,6 +3,9 @@
 
 amdgpu.target<gfx1100> @target
 kernel.def target(@target) @index_madd_global_b32(%input: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 0, 3)] : index
   %y0 = kernel.workitem.id<y> : index
@@ -18,21 +21,21 @@ kernel.def target(@target) @index_madd_global_b32(%input: buffer, %output: buffe
 }
 
 // ----
-low.kernel.def target(@target) @index_madd_global_b32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @index_madd_global_b32() asm<amdgpu.gfx11.core> {
   %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x2>
   %x = v_and_b32_lit %packed_tid, 1023
-  %16 = v_lshrrev_b32_lit %packed_tid, 10
-  %y = v_and_b32_lit %16, 1023
+  %19 = v_lshrrev_b32_lit %packed_tid, 10
+  %y = v_and_b32_lit %19, 1023
   %row_stride = s_mov_b32 4
-  %19 = v_mov_b32 4
-  %20 = v_mul_lo_u32 %y, %19
-  %linear = v_add_u32 %20, %x
-  %22 = v_lshlrev_b32_lit %linear, 2
-  %loaded = global_load_b32 %22, %input_view
-  %24 = v_lshlrev_b32_lit %linear, 2
-  global_store_b32 %24, %loaded, %output_view
+  %22 = v_mov_b32 4
+  %23 = v_mul_lo_u32 %y, %22
+  %linear = v_add_u32_lit %23, 0
+  %25 = v_mov_b32 0
+  %loaded = global_load_b32 %25, %input_view
+  %27 = v_mov_b32 0
+  global_store_b32 %27, %loaded, %output_view
   return
 }
 
@@ -40,6 +43,9 @@ low.kernel.def target(@target) @index_madd_global_b32() asm<amdgpu.gfx11.core> {
 
 amdgpu.target<gfx1100> @target
 kernel.def target(@target) @index_madd_constant_addend_global_b32(%input: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 0, 3)] : index
   %zero = index.constant 0 : offset
@@ -54,18 +60,18 @@ kernel.def target(@target) @index_madd_constant_addend_global_b32(%input: buffer
 }
 
 // ----
-low.kernel.def target(@target) @index_madd_constant_addend_global_b32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @index_madd_constant_addend_global_b32() asm<amdgpu.gfx11.core> {
   %x = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x2>
   %row_stride = s_mov_b32 4
-  %15 = v_mov_b32 4
-  %16 = v_mul_lo_u32 %x, %15
-  %linear = v_add_u32_lit %16, 1
-  %18 = v_lshlrev_b32_lit %linear, 2
-  %loaded = global_load_b32 %18, %input_view
-  %20 = v_lshlrev_b32_lit %linear, 2
-  global_store_b32 %20, %loaded, %output_view
+  %18 = v_mov_b32 4
+  %19 = v_mul_lo_u32 %x, %18
+  %linear = v_add_u32_lit %19, 1
+  %21 = v_mov_b32 0
+  %loaded = global_load_b32 %21, %input_view {offset = 4}
+  %23 = v_mov_b32 0
+  global_store_b32 %23, %loaded, %output_view {offset = 4}
   return
 }
 
@@ -73,6 +79,9 @@ low.kernel.def target(@target) @index_madd_constant_addend_global_b32() asm<amdg
 
 amdgpu.target<gfx1100> @target
 kernel.def target(@target) @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %y0 = kernel.workitem.id<y> : index
   %y = index.assume %y0 [range(%y0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -88,30 +97,31 @@ kernel.def target(@target) @workitem_y_lds_uses_explicit_vaddr(%output: buffer) 
 }
 
 // ----
-low.kernel.def target(@target) @workitem_y_lds_uses_explicit_vaddr() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @workitem_y_lds_uses_explicit_vaddr() asm<amdgpu.gfx11.core> {
   %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
-  %12 = v_lshrrev_b32_lit %packed_tid, 10
-  %y = v_and_b32_lit %12, 1023
+  %14 = v_lshrrev_b32_lit %packed_tid, 10
+  %y = v_and_b32_lit %14, 1023
   %bytes = s_mov_b32 256
-  %15 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
-  %scratch_view = storage_address %15 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %17 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %scratch_view = storage_address %17 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %value = v_mov_b32 7
-  %18 = v_lshlrev_b32_lit %y, 2
-  %19 = v_add_u32 %scratch_view, %18
-  ds_write_b32 %19, %value
-  %20 = v_lshlrev_b32_lit %y, 2
-  %21 = v_add_u32 %scratch_view, %20
-  %loaded = ds_read_b32 %21
-  %23 = v_lshlrev_b32_lit %y, 2
-  global_store_b32 %23, %loaded, %output_view
+  ds_write_b32 %scratch_view, %value
+  %loaded = ds_read_b32 %scratch_view
+  %21 = v_mov_b32 0
+  global_store_b32 %21, %loaded, %output_view
   return
 }
 
 // ====
 
 amdgpu.target<gfx1100> @target
-kernel.def target(@target) workgroup_size(8, 4, 1) @dispatch_id_xy_global_b32(%output: buffer) {
+kernel.def target(@target) @dispatch_id_xy_global_b32(%output: buffer) {
+  %c1 = index.constant 1 : index
+  %c8 = index.constant 8 : index
+  %c4 = index.constant 4 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c8, %c4, %c1) : index
+} launch {
   %dispatch_x0 = kernel.workitem.dispatch.id<x> : index
   %dispatch_x = index.assume %dispatch_x0 [range(%dispatch_x0, 0, 31)] : index
   %dispatch_y0 = kernel.workitem.dispatch.id<y> : index
@@ -127,25 +137,25 @@ kernel.def target(@target) workgroup_size(8, 4, 1) @dispatch_id_xy_global_b32(%o
 
 // ----
 low.kernel.def target(@target) workgroup_size(8, 4, 1) @dispatch_id_xy_global_b32() asm<amdgpu.gfx11.core> {
-  %10 = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
-  %11 = live_in<amdgpu.workgroup_id.y> : reg<amdgpu.sgpr>
+  %14 = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
+  %15 = live_in<amdgpu.workgroup_id.y> : reg<amdgpu.sgpr>
   %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 2048} : reg<amdgpu.sgpr x2>
-  %14 = v_and_b32_lit %packed_tid, 1023
-  %15 = v_mov_b32_copy %10
-  %16 = v_lshlrev_b32_lit %15, 3
-  %dispatch_x = v_add_u32 %16, %14
-  %18 = v_lshrrev_b32_lit %packed_tid, 10
-  %19 = v_and_b32_lit %18, 1023
-  %20 = v_mov_b32_copy %11
-  %21 = v_lshlrev_b32_lit %20, 2
-  %dispatch_y = v_add_u32 %21, %19
+  %18 = v_and_b32_lit %packed_tid, 1023
+  %19 = v_mov_b32_copy %14
+  %20 = v_lshlrev_b32_lit %19, 3
+  %dispatch_x = v_add_u32 %20, %18
+  %22 = v_lshrrev_b32_lit %packed_tid, 10
+  %23 = v_and_b32_lit %22, 1023
+  %24 = v_mov_b32_copy %15
+  %25 = v_lshlrev_b32_lit %24, 2
+  %dispatch_y = v_add_u32 %25, %23
   %row_stride = s_mov_b32 32
-  %24 = v_mov_b32 32
-  %25 = v_mul_lo_u32 %dispatch_y, %24
-  %linear = v_add_u32 %25, %dispatch_x
+  %28 = v_mov_b32 32
+  %29 = v_mul_lo_u32 %dispatch_y, %28
+  %linear = v_add_u32 %29, %dispatch_x
   %one = v_mov_b32 1
-  %28 = v_lshlrev_b32_lit %linear, 2
-  global_store_b32 %28, %one, %output_view
+  %32 = v_lshlrev_b32_lit %linear, 2
+  global_store_b32 %32, %one, %output_view
   return
 }

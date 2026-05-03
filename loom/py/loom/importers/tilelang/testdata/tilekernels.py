@@ -136,7 +136,11 @@ def tilekernels_batched_transpose_gfx950(
 r"""
 amdgpu.target<gfx950> @hip_mcpu_gfx950
 
-kernel.def target(@hip_mcpu_gfx950) export("batched_transpose_kernel") workgroup_size(256, 1, 1) @batched_transpose_kernel(%x_handle: buffer, %out_handle: buffer, %num_batches: i32, %shape_x: i32, %shape_y: i32, %stride_x: i32) {
+kernel.def target(@hip_mcpu_gfx950) export("batched_transpose_kernel") @batched_transpose_kernel(%x_handle: buffer, %out_handle: buffer, %num_batches: i32, %shape_x: i32, %shape_y: i32, %stride_x: i32) {
+  %c1 = index.constant 1 : index
+  %c256 = index.constant 256 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c256, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %x = buffer.view %x_handle[%c0_bytes] : buffer -> view<[%num_batches]x[%shape_x]x[%shape_y]xf16, %layout>
@@ -297,7 +301,11 @@ def tilekernels_group_count_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") workgroup_size(128, 1, 1) @group_count_kernel(%group_idx_handle: buffer, %out_handle: buffer, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") @group_count_kernel(%group_idx_handle: buffer, %out_handle: buffer, %num_tokens: i32) {
+  %c1 = index.constant 1 : index
+  %c128 = index.constant 128 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %group_idx = buffer.view %group_idx_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
@@ -446,7 +454,11 @@ def tilekernels_mask_indices_by_tp_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") workgroup_size(128, 1, 1) @mask_indices_by_tp_kernel(%indices_handle: buffer, %masked_indices_handle: buffer, %per_gpu: i32, %per_dp: i32, %num_tp_ranks: i32, %tp_rank: i32, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") @mask_indices_by_tp_kernel(%indices_handle: buffer, %masked_indices_handle: buffer, %per_gpu: i32, %per_dp: i32, %num_tp_ranks: i32, %tp_rank: i32, %num_tokens: i32) {
+  %c1 = index.constant 1 : index
+  %c128 = index.constant 128 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %indices = buffer.view %indices_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
@@ -583,7 +595,11 @@ def tilekernels_normalize_weight_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") workgroup_size(128, 1, 1) @normalize_weight_kernel(%topk_weights_handle: buffer, %denominator_handle: buffer, %normalized_weights_handle: buffer, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") @normalize_weight_kernel(%topk_weights_handle: buffer, %denominator_handle: buffer, %normalized_weights_handle: buffer, %num_tokens: i32) {
+  %c1 = index.constant 1 : index
+  %c128 = index.constant 128 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %topk_weights = buffer.view %topk_weights_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
@@ -721,7 +737,11 @@ def tilekernels_aux_fi_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") workgroup_size(128, 1, 1) @aux_fi_kernel(%topk_idx_handle: buffer, %out_handle: buffer, %num_aux_topk: i32, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") @aux_fi_kernel(%topk_idx_handle: buffer, %out_handle: buffer, %num_aux_topk: i32, %num_tokens: i32) {
+  %c1 = index.constant 1 : index
+  %c128 = index.constant 128 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %topk_idx = buffer.view %topk_idx_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
@@ -884,7 +904,11 @@ def tilekernels_inplace_unique_group_indices_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel") workgroup_size(128, 1, 1) @inplace_unique_group_indices_kernel(%group_indices_handle: buffer, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel") @inplace_unique_group_indices_kernel(%group_indices_handle: buffer, %num_tokens: i32) {
+  %c1 = index.constant 1 : index
+  %c128 = index.constant 128 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %group_indices = buffer.view %group_indices_handle[%c0_bytes] : buffer -> view<[%num_tokens]x4xi64, %layout>
@@ -1054,7 +1078,11 @@ def tilekernels_engram_hash_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") workgroup_size(32, 1, 1) @engram_hash_kernel(%ngram_token_ids_handle: buffer, %multipliers_handle: buffer, %vocab_sizes_handle: buffer, %offsets_handle: buffer, %output_handle: buffer, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_kernel(%ngram_token_ids_handle: buffer, %multipliers_handle: buffer, %vocab_sizes_handle: buffer, %offsets_handle: buffer, %output_handle: buffer, %num_tokens: i32) {
+  %c1 = index.constant 1 : index
+  %c32 = index.constant 32 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %ngram_token_ids = buffer.view %ngram_token_ids_handle[%c0_bytes] : buffer -> view<[%num_tokens]x3xi32, %layout>
@@ -1187,7 +1215,11 @@ def tilekernels_expand_to_fused_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("expand_to_fused_kernel") workgroup_size(64, 1, 1) @expand_to_fused_kernel(%x_handle: buffer, %expanded_x_handle: buffer, %token_topk_to_pos_handle: buffer, %pos_to_expert_handle: buffer, %num_tokens: i32, %num_expanded_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("expand_to_fused_kernel") @expand_to_fused_kernel(%x_handle: buffer, %expanded_x_handle: buffer, %token_topk_to_pos_handle: buffer, %pos_to_expert_handle: buffer, %num_tokens: i32, %num_expanded_tokens: i32) {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %x = buffer.view %x_handle[%c0_bytes] : buffer -> view<[%num_tokens]x64xf16, %layout>

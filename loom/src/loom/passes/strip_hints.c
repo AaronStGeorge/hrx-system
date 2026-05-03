@@ -95,30 +95,35 @@ static iree_status_t loom_strip_hints_collect_blocks(
 
 iree_status_t loom_strip_hints_run(loom_pass_t* pass, loom_module_t* module,
                                    loom_func_like_t function) {
-  loom_region_t* body = loom_func_like_body(function);
-  if (!body) return iree_ok_status();
+  if (!loom_func_like_body(function)) return iree_ok_status();
 
-  loom_block_t** all_blocks = NULL;
-  iree_host_size_t block_count = 0;
-  IREE_RETURN_IF_ERROR(loom_strip_hints_collect_blocks(
-      pass->arena, body, &all_blocks, &block_count));
+  for (uint8_t region_index = 0;
+       region_index < loom_func_like_region_count(function); ++region_index) {
+    loom_region_t* region = loom_func_like_region(function, region_index);
+    if (!region) continue;
 
-  for (iree_host_size_t b = 0; b < block_count; ++b) {
-    loom_block_t* block = all_blocks[b];
-    for (loom_op_t* op = block->last_op; op;) {
-      loom_op_t* prev_op = op->prev_op;
-      if (!iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
-        loom_trait_flags_t traits = loom_op_effective_traits(module, op);
-        if (iree_any_bit_set(traits, LOOM_TRAIT_HINT)) {
-          IREE_RETURN_IF_ERROR(loom_op_erase(module, op));
-          loom_pass_mark_changed(pass);
-          if (pass->statistics) {
-            loom_pass_statistic_add(pass, LOOM_STRIP_HINTS_STAT_HINTS_STRIPPED,
-                                    1);
+    loom_block_t** all_blocks = NULL;
+    iree_host_size_t block_count = 0;
+    IREE_RETURN_IF_ERROR(loom_strip_hints_collect_blocks(
+        pass->arena, region, &all_blocks, &block_count));
+
+    for (iree_host_size_t b = 0; b < block_count; ++b) {
+      loom_block_t* block = all_blocks[b];
+      for (loom_op_t* op = block->last_op; op;) {
+        loom_op_t* prev_op = op->prev_op;
+        if (!iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
+          loom_trait_flags_t traits = loom_op_effective_traits(module, op);
+          if (iree_any_bit_set(traits, LOOM_TRAIT_HINT)) {
+            IREE_RETURN_IF_ERROR(loom_op_erase(module, op));
+            loom_pass_mark_changed(pass);
+            if (pass->statistics) {
+              loom_pass_statistic_add(pass,
+                                      LOOM_STRIP_HINTS_STAT_HINTS_STRIPPED, 1);
+            }
           }
         }
+        op = prev_op;
       }
-      op = prev_op;
     }
   }
   return iree_ok_status();

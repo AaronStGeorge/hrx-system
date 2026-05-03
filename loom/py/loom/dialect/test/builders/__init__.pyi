@@ -229,8 +229,8 @@ class TestBuilder(DialectBuilder):
         cc: str | None = ...,
         callee: str,
         args: list[ValueRef] = ...,
-        body: Region | None = ...,
         config: Region | None = ...,
+        body: Region | None = ...,
         location_id: int | None = ...,
     ) -> None: ...
     def decl(

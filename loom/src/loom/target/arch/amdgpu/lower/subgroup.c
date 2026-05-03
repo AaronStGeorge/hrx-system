@@ -101,10 +101,10 @@ static bool loom_amdgpu_subgroup_scan_has_cluster_attrs(const loom_op_t* op) {
 }
 
 static bool loom_amdgpu_subgroup_full_wave_workgroups(
-    loom_func_like_t function, const loom_target_bundle_t* bundle,
-    uint32_t wavefront_size) {
+    const loom_module_t* module, loom_func_like_t function,
+    const loom_target_bundle_t* bundle, uint32_t wavefront_size) {
   uint32_t flat_workgroup_size = 0;
-  return loom_amdgpu_required_flat_workgroup_size(function, bundle,
+  return loom_amdgpu_required_flat_workgroup_size(module, function, bundle,
                                                   &flat_workgroup_size) &&
          flat_workgroup_size >= wavefront_size &&
          (flat_workgroup_size % wavefront_size) == 0;
@@ -423,7 +423,7 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
       loom_low_lower_context_bundle(context), &wavefront_size));
   if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size) ||
       !loom_amdgpu_subgroup_full_wave_workgroups(
-          loom_low_lower_context_source_function(context),
+          module, loom_low_lower_context_source_function(context),
           loom_low_lower_context_bundle(context), wavefront_size)) {
     return iree_ok_status();
   }
@@ -517,7 +517,7 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_scan_plan(
       loom_low_lower_context_bundle(context), &wavefront_size));
   if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size) ||
       !loom_amdgpu_subgroup_full_wave_workgroups(
-          loom_low_lower_context_source_function(context),
+          module, loom_low_lower_context_source_function(context),
           loom_low_lower_context_bundle(context), wavefront_size)) {
     return iree_ok_status();
   }
@@ -1771,7 +1771,8 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(
                 "target subgroup"));
   }
   if (!loom_amdgpu_subgroup_full_wave_workgroups(
-          loom_target_low_legality_function(context), bundle, wavefront_size)) {
+          module, loom_target_low_legality_function(context), bundle,
+          wavefront_size)) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("workgroup"), loom_op_name(module, op),
         IREE_SV("AMDGPU subgroup reduce lowering requires a fixed workgroup "
@@ -1886,7 +1887,8 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_scan(
                 "target subgroup"));
   }
   if (!loom_amdgpu_subgroup_full_wave_workgroups(
-          loom_target_low_legality_function(context), bundle, wavefront_size)) {
+          module, loom_target_low_legality_function(context), bundle,
+          wavefront_size)) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("workgroup"), loom_op_name(module, op),
         IREE_SV("AMDGPU subgroup scan lowering requires a fixed workgroup size "

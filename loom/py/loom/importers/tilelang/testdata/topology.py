@@ -77,7 +77,11 @@ def launch_thread_attrs(tir: Any, tvm: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("launch_thread_attrs") workgroup_size(64, 1, 1) @launch_thread_attrs(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("launch_thread_attrs") @launch_thread_attrs(%src: buffer, %dst: buffer) {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<1024xf32, %layout>
@@ -127,7 +131,10 @@ def shared_storage_sync(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("shared_storage_sync") workgroup_size(1, 1, 1) @shared_storage_sync(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("shared_storage_sync") @shared_storage_sync(%src: buffer, %dst: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
@@ -170,7 +177,11 @@ def thread_binding_loop(tir: Any, tvm: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("thread_binding_loop") workgroup_size(128, 1, 1) @thread_binding_loop(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("thread_binding_loop") @thread_binding_loop(%src: buffer, %dst: buffer) {
+  %c1 = index.constant 1 : index
+  %c128 = index.constant 128 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
+} launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<128xf32, %layout>
