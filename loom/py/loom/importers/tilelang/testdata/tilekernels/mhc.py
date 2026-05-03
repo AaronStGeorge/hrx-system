@@ -10,6 +10,53 @@ from typing import Any
 from loom.importers.check.tilelang import TileLangImportInput, tilelang_case
 
 
+def _make_expand_kernel(tilelang: Any, T: Any) -> Any:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_expand_kernel(hidden: int, mhc_mult: int) -> Any:
+        num_tokens = T.dynamic("num_tokens")
+        token_block_size = 32
+        hidden_block_size = 128
+
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def expand_to_mhc_fwd_kernel(
+            x: T.Tensor[(num_tokens, hidden), T.bfloat16],
+            output: T.Tensor[(num_tokens, mhc_mult, hidden), T.bfloat16],
+        ) -> None:
+            with T.Kernel(
+                T.ceildiv(num_tokens, token_block_size),
+                T.ceildiv(hidden, hidden_block_size),
+            ) as (pid_token, pid_hidden):
+                if num_tokens > 0:
+                    local = T.alloc_fragment(
+                        (token_block_size, hidden_block_size),
+                        T.bfloat16,
+                    )
+                    T.copy(
+                        x[
+                            pid_token * token_block_size,
+                            pid_hidden * hidden_block_size,
+                        ],
+                        local,
+                    )
+                    for m in T.serial(mhc_mult):
+                        for ti, tj in T.Parallel(
+                            token_block_size,
+                            hidden_block_size,
+                        ):
+                            i = pid_token * token_block_size + ti
+                            j = pid_hidden * hidden_block_size + tj
+                            if i < num_tokens and j < hidden:
+                                output[i, m, j] = local[ti, tj]
+
+        return expand_to_mhc_fwd_kernel
+
+    return get_expand_kernel
+
+
 def _make_head_compute_mix_kernel(tilelang: Any, T: Any) -> Any:
     @tilelang.jit(  # type: ignore[untyped-decorator]
         pass_configs={
@@ -226,6 +273,91 @@ def _make_sinkhorn_kernel(tilelang: Any, T: Any) -> Any:
     return get_sinkhorn_kernel
 
 
+# ====
+@tilelang_case(
+    name="tilekernels_mhc_expand_fwd_gfx1100",
+    category="kernel",
+    tags=("tilekernels", "mhc", "expand", "amdgpu"),
+)
+def tilekernels_mhc_expand_fwd_gfx1100(
+    tilelang: Any,
+    T: Any,
+) -> TileLangImportInput:
+    return TileLangImportInput(
+        source=_make_expand_kernel(tilelang, T),
+        args=(128, 2),
+        target="hip -mcpu=gfx1100",
+        name="expand_to_mhc_fwd_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("expand_to_mhc_fwd_kernel") @expand_to_mhc_fwd_kernel(%x_handle: buffer, %output_handle: buffer, %num_tokens: i32) {
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %c32 = index.constant 32 : index
+  %add = index.add %num_tokens_idx, %c32 : index
+  %c1 = index.constant 1 : index
+  %sub = index.sub %add, %c1 : index
+  %div = index.div %sub, %c32 : index
+  %c128 = index.constant 128 : index
+  kernel.launch.config workgroups(%div, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %x = buffer.view %x_handle[%c0_bytes] : buffer -> view<[%num_tokens]x128xbf16, %layout>
+  %output = buffer.view %output_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2x128xbf16, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %by = kernel.workgroup.id<y> : index
+  %tx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %local_bytes = index.constant 8192 : offset
+  %local_buffer = buffer.alloca %local_bytes {base_alignment = 2, memory_space = private} : buffer
+  %local = buffer.view %local_buffer[%c0_bytes] : buffer -> view<32x128xbf16, %layout>
+  %const = scalar.constant 0 : i32
+  %cmp = scalar.cmpi sgt, %num_tokens, %const : i32
+  scf.if %cmp {
+    %c32 = index.constant 32 : index
+    %mul = index.mul %bx, %c32 : index
+    %c128 = index.constant 128 : index
+    %mul_2 = index.mul %by, %c128 : index
+    %c0 = index.constant 0 : index
+    %c1 = index.constant 1 : index
+    scf.for %i0 = [%c0 to %c32 step %c1] {
+      scf.for %i1 = [%c0 to %c128 step %c1] {
+        %idx = index.add %mul, %i0 : index
+        %idx_2 = index.add %mul_2, %i1 : index
+        %copy = view.load %x[%idx, %idx_2] : view<[%num_tokens]x128xbf16, %layout> -> bf16
+        view.store %copy, %local[%i0, %i1] : bf16, view<32x128xbf16, %layout>
+      }
+    }
+    %c2 = index.constant 2 : index
+    scf.for %m = [%c0 to %c2 step %c1] {
+      scf.for %ti = [%c0 to %c32 step %c1] {
+        scf.for %tj = [%c0 to %c128 step %c1] {
+          %madd = index.madd %bx, %c32, %ti : index
+          %madd_2 = index.madd %by, %c128, %tj : index
+          %num_tokens_idx = index.cast %num_tokens : i32 to index
+          %cmp_2 = index.cmp slt, %madd, %num_tokens_idx : index
+          %cmp_3 = index.cmp slt, %madd_2, %c128 : index
+          %andi = scalar.andi %cmp_2, %cmp_3 : i1
+          scf.if %andi {
+            %load = view.load %local[%ti, %tj] : view<32x128xbf16, %layout> -> bf16
+            view.store %load, %output[%madd, %m, %madd_2] : bf16, view<[%num_tokens]x2x128xbf16, %layout>
+          }
+        }
+      }
+    }
+  }
+  kernel.return
+}
+"""
+
+
+# ====
 @tilelang_case(
     name="tilekernels_mhc_head_compute_mix_fwd_gfx1100",
     category="kernel",
