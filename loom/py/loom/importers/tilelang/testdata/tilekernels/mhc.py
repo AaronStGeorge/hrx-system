@@ -10,6 +10,42 @@ from typing import Any
 from loom.importers.check.tilelang import TileLangImportInput, tilelang_case
 
 
+def _make_head_compute_mix_kernel(tilelang: Any, T: Any) -> Any:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_head_compute_mix_kernel(
+        mhc_mult: int,
+        mhc_pre_eps: float,
+        token_block_size: int,
+    ) -> Any:
+        num_tokens = T.dynamic("num_tokens")
+
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def mhc_head_compute_mix_fwd_kernel(
+            input_mix: T.Tensor[(num_tokens, mhc_mult), T.float32],
+            mhc_scale: T.Tensor[(1,), T.float32],
+            mhc_base: T.Tensor[(mhc_mult,), T.float32],
+            output_mix: T.Tensor[(num_tokens, mhc_mult), T.float32],
+        ) -> None:
+            with T.Kernel(T.ceildiv(num_tokens, token_block_size)) as (pid,):
+                for i1, j in T.Parallel(token_block_size, mhc_mult):
+                    i = pid * token_block_size + i1
+                    if i < num_tokens:
+                        output_mix[i, j] = (
+                            T.sigmoid(
+                                input_mix[i, j] * mhc_scale[0] + mhc_base[j],
+                            )
+                            + mhc_pre_eps
+                        )
+
+        return mhc_head_compute_mix_fwd_kernel
+
+    return get_head_compute_mix_kernel
+
+
 def _make_sinkhorn_kernel(tilelang: Any, T: Any) -> Any:
     @tilelang.jit(  # type: ignore[untyped-decorator]
         pass_configs={
@@ -105,6 +141,78 @@ def _make_sinkhorn_kernel(tilelang: Any, T: Any) -> Any:
     return get_sinkhorn_kernel
 
 
+@tilelang_case(
+    name="tilekernels_mhc_head_compute_mix_fwd_gfx1100",
+    category="kernel",
+    tags=("tilekernels", "mhc", "sigmoid", "amdgpu"),
+)
+def tilekernels_mhc_head_compute_mix_fwd_gfx1100(
+    tilelang: Any,
+    T: Any,
+) -> TileLangImportInput:
+    return TileLangImportInput(
+        source=_make_head_compute_mix_kernel(tilelang, T),
+        args=(2, 1e-5, 2),
+        target="hip -mcpu=gfx1100",
+        name="mhc_head_compute_mix_fwd_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("mhc_head_compute_mix_fwd_kernel") @mhc_head_compute_mix_fwd_kernel(%input_mix_handle: buffer, %mhc_scale_handle: buffer, %mhc_base_handle: buffer, %output_mix_handle: buffer, %num_tokens: i32) {
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %c2 = index.constant 2 : index
+  %add = index.add %num_tokens_idx, %c2 : index
+  %c1 = index.constant 1 : index
+  %sub = index.sub %add, %c1 : index
+  %div = index.div %sub, %c2 : index
+  %c128 = index.constant 128 : index
+  kernel.launch.config workgroups(%div, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %input_mix = buffer.view %input_mix_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
+  %mhc_scale = buffer.view %mhc_scale_handle[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %mhc_base = buffer.view %mhc_base_handle[%c0_bytes] : buffer -> view<2xf32, %layout>
+  %output_mix = buffer.view %output_mix_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %tx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %c0 = index.constant 0 : index
+  %c2 = index.constant 2 : index
+  %c1 = index.constant 1 : index
+  scf.for %i1 = [%c0 to %c2 step %c1] {
+    scf.for %j = [%c0 to %c2 step %c1] {
+      %madd = index.madd %bx, %c2, %i1 : index
+      %num_tokens_idx = index.cast %num_tokens : i32 to index
+      %cmp = index.cmp slt, %madd, %num_tokens_idx : index
+      scf.if %cmp {
+        %load = view.load %input_mix[%madd, %j] : view<[%num_tokens]x2xf32, %layout> -> f32
+        %load_2 = view.load %mhc_scale[%c0] : view<1xf32, %layout> -> f32
+        %mulf = scalar.mulf %load, %load_2 : f32
+        %load_3 = view.load %mhc_base[%j] : view<2xf32, %layout> -> f32
+        %addf = scalar.addf %mulf, %load_3 : f32
+        %one = scalar.constant 1.0 : f32
+        %sigmoid_neg = scalar.negf %addf : f32
+        %sigmoid_exp = scalar.expf %sigmoid_neg : f32
+        %sigmoid_den = scalar.addf %one, %sigmoid_exp : f32
+        %sigmoid = scalar.divf %one, %sigmoid_den : f32
+        %const = scalar.constant 1.0000000000000001e-05 : f32
+        %addf_2 = scalar.addf %sigmoid, %const : f32
+        view.store %addf_2, %output_mix[%madd, %j] : f32, view<[%num_tokens]x2xf32, %layout>
+      }
+    }
+  }
+  kernel.return
+}
+"""
+
+
+# ====
 @tilelang_case(
     name="tilekernels_mhc_sinkhorn_gfx1100",
     category="kernel",
