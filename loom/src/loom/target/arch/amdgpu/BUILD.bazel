@@ -517,6 +517,9 @@ loom_cc_library(
         "lower/memory_internal.h",
         "lower/plan.h",
     ],
+    textual_hdrs = [
+        "lower/registry_tables.inl",
+    ],
     deps = [
         ":atomic_candidates",
         ":descriptor_ids",

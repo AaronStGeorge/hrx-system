@@ -361,6 +361,8 @@ loom_cc_library(
     "lower/internal.h"
     "lower/memory_internal.h"
     "lower/plan.h"
+  TEXTUAL_HDRS
+    "lower/registry_tables.inl"
   SRCS
     "lower/abi.c"
     "lower/async.c"
