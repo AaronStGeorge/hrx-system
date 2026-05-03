@@ -688,6 +688,36 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "Warp synchronization needs a reviewed subgroup barrier/fence representation.",
     ),
     OpCoverage(
+        "tl.warp_reduce_sum",
+        OpFamily.TILELANG_OP,
+        CoverageState.SUPPORTED,
+        "Warp scalar sum reduction; maps to kernel.subgroup.reduce<add*>.",
+    ),
+    OpCoverage(
+        "tl.warp_reduce_max",
+        OpFamily.TILELANG_OP,
+        CoverageState.SUPPORTED,
+        "Warp scalar max reduction; maps to kernel.subgroup.reduce<max*>.",
+    ),
+    OpCoverage(
+        "tl.warp_reduce_min",
+        OpFamily.TILELANG_OP,
+        CoverageState.SUPPORTED,
+        "Warp scalar min reduction; maps to kernel.subgroup.reduce<min*>.",
+    ),
+    OpCoverage(
+        "tl.warp_reduce_bitand",
+        OpFamily.TILELANG_OP,
+        CoverageState.SUPPORTED,
+        "Warp scalar bitwise-and reduction; maps to kernel.subgroup.reduce<andi>.",
+    ),
+    OpCoverage(
+        "tl.warp_reduce_bitor",
+        OpFamily.TILELANG_OP,
+        CoverageState.SUPPORTED,
+        "Warp scalar bitwise-or reduction; maps to kernel.subgroup.reduce<ori>.",
+    ),
+    OpCoverage(
         "tl.access_ptr",
         OpFamily.TILELANG_OP,
         CoverageState.NORMALIZED,

@@ -144,6 +144,8 @@ def convert_call(
         return _convert_ceildiv_call(expr, context, converter, op_name, options=options)
     if op_name in _IF_THEN_ELSE_CALLS:
         return _convert_if_then_else_call(expr, context, converter, op_name)
+    if op_name in _WARP_REDUCE_CALLS:
+        return _convert_warp_reduce_call(expr, context, converter, op_name)
     if op_name in _INFINITY_CALLS:
         return _convert_infinity_call(expr, context, op_name)
     if op_name in _REINTERPRET_CALLS:
@@ -617,6 +619,46 @@ def _convert_identity_call(
         return None
     context.map_value(expr, result, str(result.type))
     context.record_converted(node_text(expr), f"{op_name} normalized to identity")
+    return result
+
+
+def _convert_warp_reduce_call(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    op_name: str,
+) -> ValueRef | None:
+    args = _args(expr)
+    if len(args) != 1:
+        context.record_blocked(node_text(expr), f"call `{op_name}` expects 1 operand")
+        return None
+    value = converter.convert_expr(args[0], context)
+    if value is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` operand is not mapped",
+        )
+        return None
+    if _is_vector_type(value.type):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` vector operands are not imported by the scalar path",
+        )
+        return None
+    kind = _warp_reduce_kind(op_name, value, dtype(args[0]))
+    if kind is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` operand type {value.type} is not supported",
+        )
+        return None
+    result = context.builder.kernel.subgroup_reduce(
+        kind=kind,
+        value=value,
+        results=[value.type],
+        name=context.fresh_name("warp_reduce"),
+    )
+    _map_call_result(expr, context, result, op_name)
     return result
 
 
@@ -1191,6 +1233,38 @@ def _scalar_integer_builder(builder_name: str, source_dtype: object) -> str:
     return builder_name
 
 
+def _warp_reduce_kind(
+    op_name: str,
+    value: ValueRef,
+    source_dtype: object,
+) -> str | None:
+    value_type = str(value.type)
+    is_float = _is_float_type(value_type)
+    is_integer = _is_integer_type(value_type)
+    is_unsigned = _is_unsigned_dtype(source_dtype)
+    if op_name == "tl.warp_reduce_sum":
+        if is_float:
+            return "addf"
+        return "addi" if is_integer else None
+    if op_name == "tl.warp_reduce_max":
+        if is_float:
+            return "maxnumf"
+        if not is_integer:
+            return None
+        return "maxui" if is_unsigned else "maxsi"
+    if op_name == "tl.warp_reduce_min":
+        if is_float:
+            return "minnumf"
+        if not is_integer:
+            return None
+        return "minui" if is_unsigned else "minsi"
+    if op_name == "tl.warp_reduce_bitand" and is_integer:
+        return "andi"
+    if op_name == "tl.warp_reduce_bitor" and is_integer:
+        return "ori"
+    return None
+
+
 def _ensure_float_one(
     context: TileLangConversionContext,
     value_type: str,
@@ -1357,6 +1431,14 @@ _CEILDIV_CALLS = {
 
 _IF_THEN_ELSE_CALLS = {
     "tir.if_then_else",
+}
+
+_WARP_REDUCE_CALLS = {
+    "tl.warp_reduce_bitand",
+    "tl.warp_reduce_bitor",
+    "tl.warp_reduce_max",
+    "tl.warp_reduce_min",
+    "tl.warp_reduce_sum",
 }
 
 _INFINITY_CALLS = {

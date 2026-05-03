@@ -193,3 +193,144 @@ kernel.def target(@hip_mcpu_gfx1100) export("thread_binding_loop") @thread_bindi
   kernel.return
 }
 """
+
+
+# ====
+@tilelang_case(
+    name="warp_reduce_float",
+    category="op",
+    tags=("topology", "subgroup", "reduce"),
+)
+def warp_reduce_float(T: Any) -> TileLangImportInput:
+    @T.prim_func  # type: ignore[untyped-decorator]
+    def warp_reduce_float_kernel(
+        src: T.Tensor[(32,), T.float32],
+        dst: T.Tensor[(96,), T.float32],
+    ) -> None:
+        with T.Kernel(1, threads=32):
+            thread_index = T.get_thread_binding()
+            value = src[thread_index]
+            dst[thread_index] = T.warp_reduce_sum(value)
+            dst[thread_index + 32] = T.warp_reduce_max(value)
+            dst[thread_index + 64] = T.warp_reduce_min(value)
+
+    return TileLangImportInput(
+        source=warp_reduce_float_kernel,
+        target="hip -mcpu=gfx1100",
+        name="warp_reduce_float_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("warp_reduce_float_kernel") @warp_reduce_float_kernel(%src_handle: buffer, %dst_handle: buffer) {
+  %c1 = index.constant 1 : index
+  %c32 = index.constant 32 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<32xf32, %layout>
+  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<96xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %thread_index = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %load = view.load %src[%thread_index] : view<32xf32, %layout> -> f32
+  %warp_reduce = kernel.subgroup.reduce<addf> %load : f32
+  view.store %warp_reduce, %dst[%thread_index] : f32, view<96xf32, %layout>
+  %warp_reduce_2 = kernel.subgroup.reduce<maxnumf> %load : f32
+  %c32 = index.constant 32 : index
+  %add = index.add %thread_index, %c32 : index
+  view.store %warp_reduce_2, %dst[%add] : f32, view<96xf32, %layout>
+  %warp_reduce_3 = kernel.subgroup.reduce<minnumf> %load : f32
+  %c64 = index.constant 64 : index
+  %add_2 = index.add %thread_index, %c64 : index
+  view.store %warp_reduce_3, %dst[%add_2] : f32, view<96xf32, %layout>
+  kernel.return
+}
+"""
+
+
+# ====
+@tilelang_case(
+    name="warp_reduce_integer",
+    category="op",
+    tags=("topology", "subgroup", "reduce"),
+)
+def warp_reduce_integer(T: Any) -> TileLangImportInput:
+    @T.prim_func  # type: ignore[untyped-decorator]
+    def warp_reduce_integer_kernel(
+        src: T.Tensor[(32,), T.int32],
+        dst: T.Tensor[(160,), T.int32],
+        unsigned_src: T.Tensor[(32,), T.uint32],
+        unsigned_dst: T.Tensor[(64,), T.uint32],
+    ) -> None:
+        with T.Kernel(1, threads=32):
+            thread_index = T.get_thread_binding()
+            value = src[thread_index]
+            dst[thread_index] = T.warp_reduce_sum(value)
+            dst[thread_index + 32] = T.warp_reduce_max(value)
+            dst[thread_index + 64] = T.warp_reduce_min(value)
+            dst[thread_index + 96] = T.warp_reduce_bitand(value)
+            dst[thread_index + 128] = T.warp_reduce_bitor(value)
+            unsigned_value = unsigned_src[thread_index]
+            unsigned_dst[thread_index] = T.warp_reduce_max(unsigned_value)
+            unsigned_dst[thread_index + 32] = T.warp_reduce_min(unsigned_value)
+
+    return TileLangImportInput(
+        source=warp_reduce_integer_kernel,
+        target="hip -mcpu=gfx1100",
+        name="warp_reduce_integer_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("warp_reduce_integer_kernel") @warp_reduce_integer_kernel(%src_handle: buffer, %dst_handle: buffer, %unsigned_src_handle: buffer, %unsigned_dst_handle: buffer) {
+  %c1 = index.constant 1 : index
+  %c32 = index.constant 32 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<32xi32, %layout>
+  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<160xi32, %layout>
+  %unsigned_src = buffer.view %unsigned_src_handle[%c0_bytes] : buffer -> view<32xi32, %layout>
+  %unsigned_dst = buffer.view %unsigned_dst_handle[%c0_bytes] : buffer -> view<64xi32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %thread_index = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %load = view.load %src[%thread_index] : view<32xi32, %layout> -> i32
+  %warp_reduce = kernel.subgroup.reduce<addi> %load : i32
+  view.store %warp_reduce, %dst[%thread_index] : i32, view<160xi32, %layout>
+  %warp_reduce_2 = kernel.subgroup.reduce<maxsi> %load : i32
+  %c32 = index.constant 32 : index
+  %add = index.add %thread_index, %c32 : index
+  view.store %warp_reduce_2, %dst[%add] : i32, view<160xi32, %layout>
+  %warp_reduce_3 = kernel.subgroup.reduce<minsi> %load : i32
+  %c64 = index.constant 64 : index
+  %add_2 = index.add %thread_index, %c64 : index
+  view.store %warp_reduce_3, %dst[%add_2] : i32, view<160xi32, %layout>
+  %warp_reduce_4 = kernel.subgroup.reduce<andi> %load : i32
+  %c96 = index.constant 96 : index
+  %add_3 = index.add %thread_index, %c96 : index
+  view.store %warp_reduce_4, %dst[%add_3] : i32, view<160xi32, %layout>
+  %warp_reduce_5 = kernel.subgroup.reduce<ori> %load : i32
+  %c128 = index.constant 128 : index
+  %add_4 = index.add %thread_index, %c128 : index
+  view.store %warp_reduce_5, %dst[%add_4] : i32, view<160xi32, %layout>
+  %load_2 = view.load %unsigned_src[%thread_index] : view<32xi32, %layout> -> i32
+  %warp_reduce_6 = kernel.subgroup.reduce<maxui> %load_2 : i32
+  view.store %warp_reduce_6, %unsigned_dst[%thread_index] : i32, view<64xi32, %layout>
+  %warp_reduce_7 = kernel.subgroup.reduce<minui> %load_2 : i32
+  %add_5 = index.add %thread_index, %c32 : index
+  view.store %warp_reduce_7, %unsigned_dst[%add_5] : i32, view<64xi32, %layout>
+  kernel.return
+}
+"""
