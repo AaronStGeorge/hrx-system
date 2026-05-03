@@ -19,7 +19,15 @@ from loom.importers.tilelang.converter import (
 from loom.importers.tilelang.nodes import dtype, node_kind, node_text, source_name
 from loom.importers.tilelang.ops.topology import integer_value
 from loom.importers.tilelang.ops.vector import vector_lanes
-from loom.ir import BUFFER_TYPE, DynamicDim, ShapedType, StaticDim, Type, TypeKind
+from loom.ir import (
+    BUFFER_TYPE,
+    INDEX,
+    DynamicDim,
+    ShapedType,
+    StaticDim,
+    Type,
+    TypeKind,
+)
 
 
 def register(registry: TileLangConverterRegistry) -> None:
@@ -145,7 +153,7 @@ def convert_buffer_load(
     expr: object,
     context: TileLangConversionContext,
     converter: TileLangConverter,
-    _options: ExpressionOptions,
+    options: ExpressionOptions,
 ) -> ValueRef | None:
     """Import a TIR buffer load as view.load."""
 
@@ -199,6 +207,11 @@ def convert_buffer_load(
     )
     context.map_value(expr, result, str(result_type))
     context.record_converted(node_text(expr), f"{context.ssa(result)} = view.load")
+    if options.index_like:
+        index_result = _coerce_index_like_load(result, expr, context)
+        if index_result is None:
+            return None
+        return index_result
     return result
 
 
@@ -244,6 +257,30 @@ def _convert_index(
     if isinstance(index, ValueRef):
         return index
     return converter.convert_expr(index, context, index_like=True)
+
+
+def _coerce_index_like_load(
+    value: ValueRef,
+    source: object,
+    context: TileLangConversionContext,
+) -> ValueRef | None:
+    if str(value.type) in ("index", "offset"):
+        context.map_index_value(source, value)
+        return value
+    if _integer_bit_width(str(value.type)) is None:
+        context.record_blocked(
+            node_text(source),
+            f"buffer load value conversion {value.type} to index is not imported",
+        )
+        return None
+    result = context.builder.index.cast(
+        input=value,
+        results=[INDEX],
+        name=context.fresh_name("load_idx"),
+    )
+    context.map_index_value(source, result)
+    context.record_converted(node_text(source), f"{context.ssa(result)} = index.cast")
+    return result
 
 
 def _coerce_store_value(

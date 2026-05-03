@@ -660,7 +660,10 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "tir.assume",
         OpFamily.TIR_OP,
         CoverageState.SUPPORTED,
-        "Effect assumption call; simple integer predicates map to Loom assume.",
+        (
+            "Effect assumption call; simple integer predicates map to Loom "
+            "assume after materializing pure operand expressions."
+        ),
     ),
     OpCoverage(
         "tir.tvm_storage_sync",

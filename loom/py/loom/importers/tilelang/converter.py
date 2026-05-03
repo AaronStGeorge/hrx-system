@@ -184,6 +184,10 @@ class TileLangConverter:
     ) -> ValueRef | None:
         if expr is None:
             return None
+        if index_like:
+            mapped_index = context.mapped_index_value(expr)
+            if mapped_index is not None:
+                return mapped_index
         mapped = context.mapped(expr)
         if mapped is not None and (
             not index_like or str(mapped.type) in ("index", "offset")

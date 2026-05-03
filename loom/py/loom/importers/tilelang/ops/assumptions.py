@@ -60,7 +60,7 @@ def convert_assume_attr_stmt(
 
     child = context.fork(preview_block=context.preview_block)
     condition = getattr(stmt, "node", None)
-    if apply_assumption(condition, child, owner=stmt):
+    if apply_assumption(condition, child, converter, owner=stmt):
         converter.convert_stmt(getattr(stmt, "body", None), child)
         child.record_converted(
             node_text(stmt),
@@ -75,6 +75,7 @@ def convert_assume_attr_stmt(
 def convert_assume_call(
     expr: object,
     context: TileLangConversionContext,
+    converter: TileLangConverter,
 ) -> bool:
     """Import a tir.assume effect call into the current statement scope."""
 
@@ -82,18 +83,19 @@ def convert_assume_call(
     if len(args) != 1:
         context.record_blocked(node_text(expr), "tir.assume expects one condition")
         return False
-    return apply_assumption(args[0], context, owner=expr)
+    return apply_assumption(args[0], context, converter, owner=expr)
 
 
 def apply_assumption(
     condition: object,
     context: TileLangConversionContext,
+    converter: TileLangConverter,
     *,
     owner: object,
 ) -> bool:
     """Build Loom assume ops for a supported TileLang/TIR predicate."""
 
-    extracted = _extract_condition(condition, context)
+    extracted = _extract_condition(condition, context, converter)
     if extracted is None:
         context.record_blocked(
             node_text(owner),
@@ -115,31 +117,33 @@ def apply_assumption(
 def _extract_condition(
     condition: object,
     context: TileLangConversionContext,
+    converter: TileLangConverter,
 ) -> tuple[_ExtractedPredicate, ...] | None:
     kind = node_kind(condition)
     if kind == "And":
-        lhs = _extract_condition(getattr(condition, "a", None), context)
-        rhs = _extract_condition(getattr(condition, "b", None), context)
+        lhs = _extract_condition(getattr(condition, "a", None), context, converter)
+        rhs = _extract_condition(getattr(condition, "b", None), context, converter)
         if lhs is None or rhs is None:
             return None
         return lhs + rhs
     if kind in _COMPARISON_PREDICATES:
-        return _extract_comparison(condition, context)
+        return _extract_comparison(condition, context, converter)
     return None
 
 
 def _extract_comparison(
     condition: object,
     context: TileLangConversionContext,
+    converter: TileLangConverter,
 ) -> tuple[_ExtractedPredicate, ...] | None:
     kind = node_kind(condition)
     lhs = getattr(condition, "a", None)
     rhs = getattr(condition, "b", None)
-    divisibility = _extract_divisibility(kind, lhs, rhs, context)
+    divisibility = _extract_divisibility(kind, lhs, rhs, context, converter)
     if divisibility is not None:
         return (divisibility,)
-    lhs_arg = _predicate_arg(lhs, context)
-    rhs_arg = _predicate_arg(rhs, context)
+    lhs_arg = _predicate_arg(lhs, context, converter)
+    rhs_arg = _predicate_arg(rhs, context, converter)
     if lhs_arg is None or rhs_arg is None:
         return None
     lhs_predicate_arg, lhs_value = lhs_arg
@@ -235,6 +239,7 @@ def _extract_divisibility(
     lhs: object,
     rhs: object,
     context: TileLangConversionContext,
+    converter: TileLangConverter,
 ) -> _ExtractedPredicate | None:
     if kind != "EQ":
         return None
@@ -245,7 +250,7 @@ def _extract_divisibility(
         mod_expr = rhs
     if mod_expr is None:
         return None
-    value = _assume_value(getattr(mod_expr, "a", None), context)
+    value = _assume_value(getattr(mod_expr, "a", None), context, converter)
     modulus = integer_value(getattr(mod_expr, "b", None))
     if value is None or modulus is None:
         return None
@@ -293,11 +298,12 @@ def _constant_comparison(
 def _predicate_arg(
     expr: object,
     context: TileLangConversionContext,
+    converter: TileLangConverter,
 ) -> tuple[PredicateArg, _AssumeValue | None] | None:
     value = integer_value(expr)
     if value is not None:
         return PredicateArg("const", value), None
-    assume_value = _assume_value(expr, context)
+    assume_value = _assume_value(expr, context, converter)
     if assume_value is None:
         return None
     return _value_predicate_arg(assume_value.ref, context), assume_value
@@ -306,8 +312,11 @@ def _predicate_arg(
 def _assume_value(
     source: object,
     context: TileLangConversionContext,
+    converter: TileLangConverter,
 ) -> _AssumeValue | None:
     ref = context.mapped(source)
+    if ref is None:
+        ref = converter.convert_expr(source, context)
     if ref is None:
         return None
     return _AssumeValue(source=source, ref=ref)

@@ -166,6 +166,7 @@ def convert_call(
         return _convert_effect_call(
             expr,
             context,
+            converter,
             op_name,
             options=options,
         )
@@ -879,6 +880,7 @@ def _convert_call_extern_call(
 def _convert_effect_call(
     expr: object,
     context: TileLangConversionContext,
+    converter: TileLangConverter,
     op_name: str,
     *,
     options: ExpressionOptions,
@@ -890,7 +892,7 @@ def _convert_effect_call(
         )
         return None
     if op_name in _ASSUME_CALLS:
-        convert_assume_call(expr, context)
+        convert_assume_call(expr, context, converter)
         return None
     if op_name in _STORAGE_SYNC_CALLS:
         _convert_storage_sync_call(expr, context, op_name)

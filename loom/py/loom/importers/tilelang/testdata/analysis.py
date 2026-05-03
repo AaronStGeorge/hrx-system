@@ -146,6 +146,70 @@ kernel.def target(@hip_mcpu_gfx1100) export("effect_tir_assume") @effect_tir_ass
 
 # ====
 @tilelang_case(
+    name="effect_tir_assume_buffer_load",
+    category="op",
+    tags=("analysis",),
+)
+def effect_tir_assume_buffer_load(tir: Any) -> TileLangImportInput:
+    n = tir.Var("n", "int32")
+    src = tir.Var("src", "handle")
+    dst = tir.Var("dst", "handle")
+    src_buffer = tir.decl_buffer((4,), "int32", name="src")
+    dst_buffer = tir.decl_buffer((4,), "int32", name="dst")
+    body = tir.SeqStmt(
+        [
+            tir.Evaluate(
+                tir.call_intrin(
+                    "bool",
+                    "tir.assume",
+                    tir.BufferLoad(src_buffer, [tir.IntImm("int32", 0)]) < n,
+                )
+            ),
+            tir.BufferStore(
+                dst_buffer,
+                tir.BufferLoad(src_buffer, [tir.IntImm("int32", 0)]),
+                [tir.IntImm("int32", 0)],
+            ),
+        ]
+    )
+    prim_func = _prim_func(
+        tir,
+        name="effect_tir_assume_buffer_load",
+        params=[n, src, dst],
+        body=body,
+        buffer_map={src: src_buffer, dst: dst_buffer},
+    )
+    return TileLangImportInput(
+        source=prim_func,
+        target="hip -mcpu=gfx1100",
+        name="effect_tir_assume_buffer_load",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("effect_tir_assume_buffer_load") @effect_tir_assume_buffer_load(%n: i32, %src: buffer, %dst: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xi32, %layout>
+  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xi32, %layout>
+  %c0 = index.constant 0 : index
+  %load = view.load %src_view[%c0] : view<4xi32, %layout> -> i32
+  %value_assumed, %n_assumed = scalar.assume %load, %n [lt(%load, %n)] : i32, i32
+  %load_2 = view.load %src_view[%c0] : view<4xi32, %layout> -> i32
+  view.store %load_2, %dst_view[%c0] : i32, view<4xi32, %layout>
+  kernel.return
+}
+"""
+
+
+# ====
+@tilelang_case(
     name="mixed_address_scalar_assume",
     category="op",
     tags=("analysis", "tilelang"),
