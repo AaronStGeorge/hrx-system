@@ -966,7 +966,10 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "tl.tileop.finalize_reducer",
         OpFamily.TILELANG_TILEOP,
         CoverageState.DEFERRED,
-        "Reducer finalization needs explicit reducer-state representation.",
+        (
+            "replication=none finalizers normalize to no-op; replication=all "
+            "needs explicit cross-thread allreduce representation."
+        ),
     ),
     OpCoverage(
         "tl.tileop.gemm",

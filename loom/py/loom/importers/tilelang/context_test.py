@@ -7,7 +7,10 @@
 from dataclasses import dataclass
 
 import loom
-from loom.importers.tilelang.context import TileLangConversionContext
+from loom.importers.tilelang.context import (
+    TileLangConversionContext,
+    TileLangReducerInfo,
+)
 from loom.ir import INDEX
 
 
@@ -31,6 +34,12 @@ def test_maps_unhashable_index_sources_by_identity() -> None:
 
 @dataclass
 class _HandleSource:
+    name: str
+    dtype: str = "handle"
+
+
+@dataclass
+class Var:
     name: str
     dtype: str = "handle"
 
@@ -61,3 +70,17 @@ def test_maps_buffer_wrappers_by_source_semantics() -> None:
     assert context.mapped(equal_wrapper) is ref
     assert context.mapped_value_type(equal_wrapper) == "view<1xf32>"
     assert context.mapped(different_shape) is None
+
+
+def test_maps_reducer_info_by_buffer_data_semantics() -> None:
+    _, builder = loom.module_builder()
+    source = Var("reducer")
+    equal_source = Var("reducer")
+    different_source = Var("other")
+    context = TileLangConversionContext(builder=builder)
+    reducer_info = TileLangReducerInfo(operation="sum", replication="none")
+
+    context.map_reducer_info(source, reducer_info)
+
+    assert context.reducer_info(equal_source) == reducer_info
+    assert context.reducer_info(different_source) is None

@@ -10,7 +10,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from loom.importers.tilelang.context import TileLangConversionContext
+from loom.importers.tilelang.context import (
+    TileLangConversionContext,
+    TileLangReducerInfo,
+)
 from loom.importers.tilelang.converter import (
     TileLangConverter,
     TileLangConverterRegistry,
@@ -47,6 +50,8 @@ def convert_block(
     for buffer in tuple(getattr(stmt, "alloc_buffers", ()) or ()):
         if not map_alloc_buffer(buffer, context):
             return
+    if not _import_reducer_infos(stmt, context):
+        return
     if not _import_local_var_initializers(stmt, context, converter):
         return
     if _has_items(getattr(stmt, "match_buffers", ())):
@@ -89,6 +94,89 @@ def _import_local_var_initializers(
         context.builder.view.store(value=init_value, view=view, indices=[zero])
         context.record_converted(node_text(init_expr), "local var initializer")
     return True
+
+
+def _import_reducer_infos(
+    stmt: object,
+    context: TileLangConversionContext,
+) -> bool:
+    reducer_infos = _metadata_attrs(stmt).get("reducer_info")
+    if reducer_infos is None:
+        return True
+    reducer_info_items = mapping_items(reducer_infos)
+    if not reducer_info_items and bool(reducer_infos):
+        context.record_blocked(node_text(stmt), "reducer_info map is not mapped")
+        return False
+    for data_var, source_info in reducer_info_items:
+        reducer_info = _decode_reducer_info(source_info, stmt, context)
+        if reducer_info is None:
+            return False
+        context.map_reducer_info(data_var, reducer_info)
+        context.record_converted(
+            node_text(data_var),
+            f"reducer_info {reducer_info.operation}/{reducer_info.replication}",
+        )
+    return True
+
+
+def _decode_reducer_info(
+    source_info: object,
+    owner: object,
+    context: TileLangConversionContext,
+) -> TileLangReducerInfo | None:
+    fields = {str(key): value for key, value in mapping_items(source_info)}
+    if fields:
+        unknown_fields = sorted(set(fields) - {"op", "rep"})
+        if unknown_fields:
+            context.record_blocked(
+                node_text(owner),
+                ("reducer_info fields are not imported: " + ", ".join(unknown_fields)),
+            )
+            return None
+        operation = _decode_reducer_operation(fields.get("op"))
+        replication = _decode_reducer_replication(fields.get("rep"))
+    else:
+        operation = _decode_reducer_operation(getattr(source_info, "op", None))
+        replication = _decode_reducer_replication(getattr(source_info, "rep", None))
+    if operation is None:
+        context.record_blocked(node_text(owner), "reducer_info op is not mapped")
+        return None
+    if replication is None:
+        context.record_blocked(node_text(owner), "reducer_info rep is not mapped")
+        return None
+    return TileLangReducerInfo(operation=operation, replication=replication)
+
+
+def _decode_reducer_operation(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value if value in _REDUCER_OPERATIONS else None
+    if isinstance(value, int):
+        return _REDUCER_OPERATION_CODES.get(value)
+    payload = getattr(value, "value", None)
+    if isinstance(payload, int):
+        return _REDUCER_OPERATION_CODES.get(payload)
+    text = str(value)
+    if text in _REDUCER_OPERATIONS:
+        return text
+    return None
+
+
+def _decode_reducer_replication(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value if value in _REDUCER_REPLICATIONS else None
+    if isinstance(value, int):
+        return _REDUCER_REPLICATION_CODES.get(value)
+    payload = getattr(value, "value", None)
+    if isinstance(payload, int):
+        return _REDUCER_REPLICATION_CODES.get(payload)
+    text = str(value)
+    if text in _REDUCER_REPLICATIONS:
+        return text
+    return None
 
 
 def _metadata_attrs(value: object) -> dict[str, object]:
@@ -202,4 +290,16 @@ def _is_true_predicate(value: object) -> bool:
 _NORMALIZED_ATTR_KEYS = {
     "thread_extent",
     "threadblock_swizzle_pattern",
+}
+
+_REDUCER_OPERATIONS = frozenset(("sum", "max", "min"))
+_REDUCER_OPERATION_CODES = {
+    0: "sum",
+    1: "max",
+    2: "min",
+}
+_REDUCER_REPLICATIONS = frozenset(("all", "none"))
+_REDUCER_REPLICATION_CODES = {
+    0: "all",
+    1: "none",
 }

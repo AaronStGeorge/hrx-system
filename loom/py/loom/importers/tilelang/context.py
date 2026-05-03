@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from loom.builder import ValueRef
-from loom.importers.core import SourceImportSession
+from loom.importers.core import SourceImportSession, source_key
 from loom.importers.tilelang.nodes import dtype, node_kind, source_name
 from loom.importers.tilelang.types import TileLangTypeConverter
 from loom.ir import (
@@ -24,6 +24,14 @@ from loom.ir import (
     ShapedType,
     Type,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class TileLangReducerInfo:
+    """Reducer metadata captured from TileLang reducer_info annotations."""
+
+    operation: str
+    replication: str
 
 
 @dataclass(slots=True)
@@ -39,6 +47,7 @@ class TileLangConversionContext(SourceImportSession):
     semantic_index_values: dict[tuple[object, ...], ValueRef] = field(
         default_factory=dict
     )
+    reducer_infos: dict[object, TileLangReducerInfo] = field(default_factory=dict)
     kernel_body_block: object | None = None
     dense_layout: ValueRef | None = None
 
@@ -150,6 +159,16 @@ class TileLangConversionContext(SourceImportSession):
             return None
         return self.buffer_data_buffers.get(semantic_key)
 
+    def map_reducer_info(
+        self,
+        source: object,
+        reducer_info: TileLangReducerInfo,
+    ) -> None:
+        self.reducer_infos[_reducer_info_key(source)] = reducer_info
+
+    def reducer_info(self, source: object) -> TileLangReducerInfo | None:
+        return self.reducer_infos.get(_reducer_info_key(source))
+
     def mapped_index_value(self, source: object) -> ValueRef | None:
         mapped_value = self.index_values.get(self.source_key(source))
         if mapped_value is not None:
@@ -190,6 +209,7 @@ class TileLangConversionContext(SourceImportSession):
             buffer_data_values=dict(self.buffer_data_values),
             buffer_data_buffers=dict(self.buffer_data_buffers),
             semantic_index_values=dict(self.semantic_index_values),
+            reducer_infos=dict(self.reducer_infos),
             kernel_body_block=self.kernel_body_block,
             dense_layout=self.dense_layout,
         )
@@ -232,6 +252,16 @@ def _semantic_buffer_key(source: object) -> tuple[object, ...] | None:
         source_name(data, fallback=str(data)),
         _semantic_sequence(getattr(source, "shape", ())),
     )
+
+
+def _reducer_info_key(source: object) -> tuple[object, ...]:
+    semantic_key = _semantic_buffer_data_key(source)
+    if semantic_key is not None:
+        return ("reducer_info", *semantic_key)
+    semantic_key = _semantic_buffer_key(source)
+    if semantic_key is not None:
+        return ("reducer_info", *semantic_key)
+    return ("reducer_info", source_key(source))
 
 
 def _semantic_sequence(value: object) -> tuple[object, ...]:

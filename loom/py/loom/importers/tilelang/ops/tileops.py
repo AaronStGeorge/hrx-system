@@ -64,6 +64,10 @@ def convert_tileop_call(
         return _convert_fill_call(expr, context, converter, options, op_name)
     if op_name in _REDUCE_CALLS:
         return _convert_reduce_call(expr, context, converter, options, op_name)
+    if op_name in _FINALIZE_REDUCER_CALLS:
+        return _convert_finalize_reducer_call(
+            expr, context, converter, options, op_name
+        )
     context.record_blocked(
         node_text(expr),
         f"TileLang tile operation `{op_name}` is not imported",
@@ -385,6 +389,63 @@ def _convert_region_reduce_call(
     return None
 
 
+def _convert_finalize_reducer_call(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    options: ExpressionOptions,
+    op_name: str,
+) -> ValueRef | None:
+    if not _require_effect(expr, context, options, op_name):
+        return None
+    args = _args(expr)
+    if len(args) not in (1, 2):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` expects reducer region and optional op code",
+        )
+        return None
+    data_source = _reducer_data_source(args[0], expr, context)
+    if data_source is None:
+        return None
+    reducer_info = context.reducer_info(data_source)
+    if reducer_info is None:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.finalize_reducer reducer_info metadata is missing",
+        )
+        return None
+    if len(args) == 2:
+        op_code = integer_value(args[1])
+        expected_op_code = _REDUCER_OPERATION_CODES.get(reducer_info.operation)
+        if op_code is None or op_code != expected_op_code:
+            context.record_blocked(
+                node_text(expr),
+                "tl.tileop.finalize_reducer op code does not match reducer_info",
+            )
+            return None
+    if reducer_info.replication == "none":
+        context.record_converted(
+            node_text(expr),
+            f"tl.tileop.finalize_reducer<{reducer_info.operation}, none> normalized",
+        )
+        return None
+    if reducer_info.replication == "all":
+        context.record_blocked(
+            node_text(expr),
+            "replication `all` requires cross-thread allreduce import",
+        )
+        return None
+    context.record_blocked(
+        node_text(expr),
+        (
+            "tl.tileop.finalize_reducer replication "
+            f"`{reducer_info.replication}` is not imported"
+        ),
+    )
+    return None
+
+
 def _require_effect(
     expr: object,
     context: TileLangConversionContext,
@@ -632,6 +693,41 @@ def _decode_buffer_access(
     if indices is None:
         return None
     return TileBufferAccess(view=view, indices=tuple(indices))
+
+
+def _reducer_data_source(
+    expr: object,
+    owner: object,
+    context: TileLangConversionContext,
+) -> object | None:
+    region_like = expr
+    if _call_op_name(region_like) == "tl.tileop.region":
+        args = _args(region_like)
+        if not args:
+            context.record_blocked(
+                node_text(owner),
+                "tl.tileop.finalize_reducer region has no base",
+            )
+            return None
+        region_like = args[0]
+    if node_kind(region_like) == "BufferLoad":
+        buffer = getattr(region_like, "buffer", None)
+        data = getattr(buffer, "data", None)
+        if data is not None:
+            return cast(object, data)
+    if node_kind(region_like) == "BufferRegion":
+        buffer = getattr(region_like, "buffer", None)
+        data = getattr(buffer, "data", None)
+        if data is not None:
+            return cast(object, data)
+    context.record_blocked(
+        node_text(owner),
+        (
+            "tl.tileop.finalize_reducer target must be a reducer BufferLoad, "
+            f"BufferRegion, or tl.tileop.region, got `{node_kind(expr)}`"
+        ),
+    )
+    return None
 
 
 def _convert_index_sequence(
@@ -1048,4 +1144,14 @@ _FILL_CALLS = {
 
 _REDUCE_CALLS = {
     "tl.tileop.reduce",
+}
+
+_FINALIZE_REDUCER_CALLS = {
+    "tl.tileop.finalize_reducer",
+}
+
+_REDUCER_OPERATION_CODES = {
+    "sum": 0,
+    "max": 1,
+    "min": 2,
 }

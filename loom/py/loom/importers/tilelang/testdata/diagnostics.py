@@ -26,3 +26,36 @@ def unsupported_string_evaluate(tir: Any) -> TileLangImportInput:
         target="hip -mcpu=gfx1100",
         name="unsupported_string_evaluate",
     )
+
+
+# ====
+# ERROR@+1: "replication `all` requires cross-thread allreduce import"
+@tilelang_case(
+    name="tileop_finalize_reducer_all",
+    category="diagnostic",
+    tags=("tileop", "finalize_reducer"),
+)
+def tileop_finalize_reducer_all(T: Any) -> TileLangImportInput:
+    @T.prim_func  # type: ignore[untyped-decorator]
+    def tileop_finalize_reducer_all_kernel(
+        src: T.Tensor[(4,), T.float32],
+        dst: T.Tensor[(4,), T.float32],
+    ) -> None:
+        with T.Kernel(1, threads=4):
+            reducer = T.alloc_reducer(
+                (4,),
+                T.float32,
+                "sum",
+                replication="all",
+            )
+            T.fill(reducer, 0.0)
+            for i in T.serial(0, 4):
+                reducer[i] = src[i]
+            T.finalize_reducer(reducer)
+            T.copy(reducer, dst)
+
+    return TileLangImportInput(
+        source=tileop_finalize_reducer_all_kernel,
+        target="hip -mcpu=gfx1100",
+        name="tileop_finalize_reducer_all_kernel",
+    )
