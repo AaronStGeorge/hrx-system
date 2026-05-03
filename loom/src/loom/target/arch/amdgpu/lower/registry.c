@@ -330,21 +330,21 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_slice_dispatch,
                              loom_amdgpu_vector_slice_plan_t,
                              loom_amdgpu_lower_vector_slice)
 
-LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_load_dispatch,
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_memory_load_dispatch,
                                loom_amdgpu_memory_access_plan_t,
-                               loom_amdgpu_select_vector_load_plan)
+                               loom_amdgpu_select_memory_load_plan)
 
-LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_load_dispatch,
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_memory_load_dispatch,
                              loom_amdgpu_memory_access_plan_t,
-                             loom_amdgpu_lower_vector_load)
+                             loom_amdgpu_lower_memory_load)
 
-LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_store_dispatch,
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_memory_store_dispatch,
                                loom_amdgpu_memory_access_plan_t,
-                               loom_amdgpu_select_vector_store_plan)
+                               loom_amdgpu_select_memory_store_plan)
 
-LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_store_dispatch,
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_memory_store_dispatch,
                              loom_amdgpu_memory_access_plan_t,
-                             loom_amdgpu_lower_vector_store)
+                             loom_amdgpu_lower_memory_store)
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_view_atomic_dispatch,
                                loom_amdgpu_atomic_plan_t,
@@ -422,6 +422,16 @@ static const loom_amdgpu_lower_dispatch_row_t
 
 static const loom_amdgpu_lower_dispatch_row_t
     kAmdgpuViewDispatchRows[LOOM_OP_VIEW_COUNT_] = {
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VIEW_LOAD)] = LOOM_AMDGPU_DATA_ROW(
+            LOOM_OP_VIEW_LOAD, loom_amdgpu_memory_access_plan_t,
+            loom_amdgpu_select_memory_load_dispatch,
+            loom_amdgpu_emit_memory_load_dispatch,
+            loom_amdgpu_low_legality_verify_memory),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VIEW_STORE)] = LOOM_AMDGPU_DATA_ROW(
+            LOOM_OP_VIEW_STORE, loom_amdgpu_memory_access_plan_t,
+            loom_amdgpu_select_memory_store_dispatch,
+            loom_amdgpu_emit_memory_store_dispatch,
+            loom_amdgpu_low_legality_verify_memory),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VIEW_ATOMIC_REDUCE)] =
             LOOM_AMDGPU_DATA_ROW(LOOM_OP_VIEW_ATOMIC_REDUCE,
                                  loom_amdgpu_atomic_plan_t,
@@ -526,14 +536,14 @@ static const loom_amdgpu_lower_dispatch_row_t
                                    loom_amdgpu_emit_value_dispatch, NULL),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_LOAD)] = LOOM_AMDGPU_DATA_ROW(
             LOOM_OP_VECTOR_LOAD, loom_amdgpu_memory_access_plan_t,
-            loom_amdgpu_select_vector_load_dispatch,
-            loom_amdgpu_emit_vector_load_dispatch,
-            loom_amdgpu_low_legality_verify_vector_memory),
+            loom_amdgpu_select_memory_load_dispatch,
+            loom_amdgpu_emit_memory_load_dispatch,
+            loom_amdgpu_low_legality_verify_memory),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_STORE)] = LOOM_AMDGPU_DATA_ROW(
             LOOM_OP_VECTOR_STORE, loom_amdgpu_memory_access_plan_t,
-            loom_amdgpu_select_vector_store_dispatch,
-            loom_amdgpu_emit_vector_store_dispatch,
-            loom_amdgpu_low_legality_verify_vector_memory),
+            loom_amdgpu_select_memory_store_dispatch,
+            loom_amdgpu_emit_memory_store_dispatch,
+            loom_amdgpu_low_legality_verify_memory),
 };
 
 static const loom_amdgpu_lower_dispatch_row_t

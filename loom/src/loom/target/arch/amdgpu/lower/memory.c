@@ -13,6 +13,7 @@
 #include "loom/ops/encoding/storage.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
 #include "loom/target/arch/amdgpu/lower/memory_internal.h"
@@ -1297,14 +1298,26 @@ loom_amdgpu_memory_operation_kind_from_source(
 
 static loom_type_t loom_amdgpu_memory_access_source_vector_type(
     const loom_module_t* module, const loom_op_t* source_op) {
+  loom_type_t scalar_type = loom_type_none();
   switch (source_op->kind) {
     case LOOM_OP_VECTOR_LOAD:
       return loom_module_value_type(module, loom_vector_load_result(source_op));
     case LOOM_OP_VECTOR_STORE:
       return loom_module_value_type(module, loom_vector_store_value(source_op));
+    case LOOM_OP_VIEW_LOAD:
+      scalar_type =
+          loom_module_value_type(module, loom_view_load_result(source_op));
+      break;
+    case LOOM_OP_VIEW_STORE:
+      scalar_type =
+          loom_module_value_type(module, loom_view_store_value(source_op));
+      break;
     default:
       return loom_type_none();
   }
+  return loom_type_shaped_1d(LOOM_TYPE_VECTOR,
+                             loom_type_element_type(scalar_type),
+                             loom_dim_pack_static(1), /*encoding_id=*/0);
 }
 
 bool loom_amdgpu_memory_access_select(
@@ -1425,7 +1438,7 @@ static iree_status_t loom_amdgpu_memory_access_plan_resolve(
   return iree_ok_status();
 }
 
-iree_status_t loom_amdgpu_select_vector_load_plan(
+iree_status_t loom_amdgpu_select_memory_load_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_memory_access_plan_t* out_plan, bool* out_selected) {
   *out_plan = (loom_amdgpu_memory_access_plan_t){0};
@@ -1445,7 +1458,7 @@ iree_status_t loom_amdgpu_select_vector_load_plan(
   return iree_ok_status();
 }
 
-iree_status_t loom_amdgpu_select_vector_store_plan(
+iree_status_t loom_amdgpu_select_memory_store_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_memory_access_plan_t* out_plan, bool* out_selected) {
   *out_plan = (loom_amdgpu_memory_access_plan_t){0};

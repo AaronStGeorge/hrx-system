@@ -763,23 +763,23 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_structural(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
 
-// Selects an AMDGPU vector.load memory packet plan.
-iree_status_t loom_amdgpu_select_vector_load_plan(
+// Selects an AMDGPU source memory-load packet plan.
+iree_status_t loom_amdgpu_select_memory_load_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_memory_access_plan_t* out_plan, bool* out_selected);
 
-// Selects an AMDGPU vector.store memory packet plan.
-iree_status_t loom_amdgpu_select_vector_store_plan(
+// Selects an AMDGPU source memory-store packet plan.
+iree_status_t loom_amdgpu_select_memory_store_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_memory_access_plan_t* out_plan, bool* out_selected);
 
-// Lowers a source vector.load to an AMDGPU memory packet.
-iree_status_t loom_amdgpu_lower_vector_load(
+// Lowers a source memory-load op to an AMDGPU memory packet.
+iree_status_t loom_amdgpu_lower_memory_load(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_memory_access_plan_t* plan);
 
-// Lowers a source vector.store to an AMDGPU memory packet.
-iree_status_t loom_amdgpu_lower_vector_store(
+// Lowers a source memory-store op to an AMDGPU memory packet.
+iree_status_t loom_amdgpu_lower_memory_store(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_memory_access_plan_t* plan);
 
@@ -804,8 +804,8 @@ iree_status_t loom_amdgpu_lower_view_prefetch(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_prefetch_plan_t* plan);
 
-// Verifies source vector memory legality for AMDGPU target-low selection.
-iree_status_t loom_amdgpu_low_legality_verify_vector_memory(
+// Verifies source memory legality for AMDGPU target-low selection.
+iree_status_t loom_amdgpu_low_legality_verify_memory(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);

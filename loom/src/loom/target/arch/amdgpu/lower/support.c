@@ -374,6 +374,7 @@ bool loom_amdgpu_module_value_prefers_vgpr(const loom_module_t* module,
              loom_amdgpu_module_value_prefers_vgpr(
                  module, loom_index_madd_c(defining_op));
     case LOOM_OP_VECTOR_EXTRACT:
+    case LOOM_OP_VIEW_LOAD:
       return true;
     case LOOM_OP_VECTOR_REDUCE:
       return loom_amdgpu_type_is_vector_32bit_lane_range(loom_module_value_type(

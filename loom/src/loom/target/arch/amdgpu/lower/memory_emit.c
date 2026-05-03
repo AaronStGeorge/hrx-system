@@ -9,6 +9,7 @@
 #include "loom/ops/cache.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
 #include "loom/target/arch/amdgpu/lower/memory_internal.h"
@@ -129,6 +130,40 @@ static iree_status_t loom_amdgpu_emit_memory_packet(
       source_op->location, out_op));
   return loom_low_lower_record_source_memory_access(context, *out_op,
                                                     &plan->access.source);
+}
+
+static iree_status_t loom_amdgpu_memory_payload_low_type(
+    loom_low_lower_context_t* context,
+    const loom_amdgpu_memory_access_t* access, loom_type_t* out_type) {
+  if (access->vgpr_count == 1) {
+    return loom_amdgpu_make_vgpr_type(context, out_type);
+  }
+  return loom_amdgpu_make_vgpr_range_type(context, access->vgpr_count,
+                                          out_type);
+}
+
+static iree_status_t loom_amdgpu_ensure_memory_store_payload_vgpr(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_memory_access_t* access, loom_value_id_t low_value,
+    loom_value_id_t* out_low_value) {
+  *out_low_value = low_value;
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_type_t low_type = loom_module_value_type(module, low_value);
+  bool is_vgpr = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
+      context, low_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, &is_vgpr));
+  if (is_vgpr) {
+    return iree_ok_status();
+  }
+  bool is_sgpr = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
+      context, low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, &is_sgpr));
+  if (is_sgpr && access->vgpr_count == 1 &&
+      loom_type_register_unit_count(low_type) == 1) {
+    return loom_amdgpu_emit_vgpr_b32_copy(context, source_op, low_value,
+                                          out_low_value);
+  }
+  return iree_ok_status();
 }
 
 iree_status_t loom_amdgpu_emit_memory_saddr(loom_low_lower_context_t* context,
@@ -285,13 +320,61 @@ iree_status_t loom_amdgpu_make_memory_attrs(
                                                attr_capacity, out_attr_count);
 }
 
-iree_status_t loom_amdgpu_lower_vector_load(
+static loom_value_id_t loom_amdgpu_memory_load_view(
+    const loom_op_t* source_op) {
+  switch (source_op->kind) {
+    case LOOM_OP_VECTOR_LOAD:
+      return loom_vector_load_view(source_op);
+    case LOOM_OP_VIEW_LOAD:
+      return loom_view_load_view(source_op);
+    default:
+      IREE_CHECK_UNREACHABLE();
+  }
+}
+
+static loom_value_id_t loom_amdgpu_memory_load_result(
+    const loom_op_t* source_op) {
+  switch (source_op->kind) {
+    case LOOM_OP_VECTOR_LOAD:
+      return loom_vector_load_result(source_op);
+    case LOOM_OP_VIEW_LOAD:
+      return loom_view_load_result(source_op);
+    default:
+      IREE_CHECK_UNREACHABLE();
+  }
+}
+
+static loom_value_id_t loom_amdgpu_memory_store_value(
+    const loom_op_t* source_op) {
+  switch (source_op->kind) {
+    case LOOM_OP_VECTOR_STORE:
+      return loom_vector_store_value(source_op);
+    case LOOM_OP_VIEW_STORE:
+      return loom_view_store_value(source_op);
+    default:
+      IREE_CHECK_UNREACHABLE();
+  }
+}
+
+static loom_value_id_t loom_amdgpu_memory_store_view(
+    const loom_op_t* source_op) {
+  switch (source_op->kind) {
+    case LOOM_OP_VECTOR_STORE:
+      return loom_vector_store_view(source_op);
+    case LOOM_OP_VIEW_STORE:
+      return loom_view_store_view(source_op);
+    default:
+      IREE_CHECK_UNREACHABLE();
+  }
+}
+
+iree_status_t loom_amdgpu_lower_memory_load(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_memory_access_plan_t* plan) {
   const loom_amdgpu_memory_access_t* access = &plan->access;
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, loom_vector_load_view(source_op), &low_resource));
+      context, loom_amdgpu_memory_load_view(source_op), &low_resource));
 
   loom_value_id_t low_vaddr = LOOM_VALUE_ID_INVALID;
   if (access->address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO &&
@@ -305,8 +388,8 @@ iree_status_t loom_amdgpu_lower_vector_load(
   }
 
   loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
-      context, source_op, loom_vector_load_result(source_op), &result_type));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_memory_payload_low_type(context, access, &result_type));
 
   loom_named_attr_t attrs[5] = {0};
   iree_host_size_t attr_count = 0;
@@ -328,7 +411,7 @@ iree_status_t loom_amdgpu_lower_vector_load(
           loom_make_named_attr_slice(attrs, attr_count), &result_type, 1,
           &low_op));
       return loom_low_lower_bind_value(
-          context, loom_vector_load_result(source_op),
+          context, loom_amdgpu_memory_load_result(source_op),
           loom_value_slice_get(loom_low_op_results(low_op), 0));
     }
     loom_value_id_t operands[] = {low_vaddr};
@@ -338,7 +421,7 @@ iree_status_t loom_amdgpu_lower_vector_load(
         loom_make_named_attr_slice(attrs, attr_count), &result_type, 1,
         &low_op));
     return loom_low_lower_bind_value(
-        context, loom_vector_load_result(source_op),
+        context, loom_amdgpu_memory_load_result(source_op),
         loom_value_slice_get(loom_low_op_results(low_op), 0));
   }
 
@@ -356,7 +439,7 @@ iree_status_t loom_amdgpu_lower_vector_load(
         loom_make_named_attr_slice(attrs, attr_count), &result_type, 1,
         &low_op));
     return loom_low_lower_bind_value(
-        context, loom_vector_load_result(source_op),
+        context, loom_amdgpu_memory_load_result(source_op),
         loom_value_slice_get(loom_low_op_results(low_op), 0));
   }
 
@@ -371,7 +454,7 @@ iree_status_t loom_amdgpu_lower_vector_load(
         loom_make_named_attr_slice(attrs, attr_count), &result_type, 1,
         &low_op));
     return loom_low_lower_bind_value(
-        context, loom_vector_load_result(source_op),
+        context, loom_amdgpu_memory_load_result(source_op),
         loom_value_slice_get(loom_low_op_results(low_op), 0));
   }
 
@@ -391,20 +474,22 @@ iree_status_t loom_amdgpu_lower_vector_load(
       context, source_op, plan, operands, IREE_ARRAYSIZE(operands),
       loom_make_named_attr_slice(attrs, attr_count), &result_type, 1, &low_op));
   return loom_low_lower_bind_value(
-      context, loom_vector_load_result(source_op),
+      context, loom_amdgpu_memory_load_result(source_op),
       loom_value_slice_get(loom_low_op_results(low_op), 0));
 }
 
-iree_status_t loom_amdgpu_lower_vector_store(
+iree_status_t loom_amdgpu_lower_memory_store(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_memory_access_plan_t* plan) {
   const loom_amdgpu_memory_access_t* access = &plan->access;
   loom_value_id_t low_value = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, loom_vector_store_value(source_op), &low_value));
+      context, loom_amdgpu_memory_store_value(source_op), &low_value));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_ensure_memory_store_payload_vgpr(
+      context, source_op, access, low_value, &low_value));
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, loom_vector_store_view(source_op), &low_resource));
+      context, loom_amdgpu_memory_store_view(source_op), &low_resource));
 
   loom_value_id_t low_vaddr = LOOM_VALUE_ID_INVALID;
   if (access->address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO &&

@@ -8,10 +8,11 @@
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/context.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
 #include "loom/target/arch/amdgpu/lower/memory_internal.h"
 
-iree_status_t loom_amdgpu_low_legality_verify_vector_memory(
+iree_status_t loom_amdgpu_low_legality_verify_memory(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled) {
@@ -24,7 +25,8 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_memory(
   const loom_module_t* module = loom_target_low_legality_module(context);
   const loom_low_descriptor_set_t* descriptor_set =
       loom_target_low_legality_descriptor_set(context);
-  if (op->kind != LOOM_OP_VECTOR_LOAD && op->kind != LOOM_OP_VECTOR_STORE) {
+  if (op->kind != LOOM_OP_VECTOR_LOAD && op->kind != LOOM_OP_VECTOR_STORE &&
+      op->kind != LOOM_OP_VIEW_LOAD && op->kind != LOOM_OP_VIEW_STORE) {
     *out_handled = false;
     return iree_ok_status();
   }
