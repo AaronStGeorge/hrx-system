@@ -108,6 +108,6 @@ kernel.def target(@rocm_hsaco_fb) export("barrier_smoke") artifact(@barrier_smok
   %c0 = index.constant 0 : index
   %c0_bytes = index.cast %c0 : index to offset
   %input = buffer.view %binding0[%c0_bytes] : buffer -> view<4xf32, #dense>
-  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
   kernel.return
 }

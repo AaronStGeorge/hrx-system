@@ -1278,7 +1278,7 @@ def _convert_storage_sync_call(
         ordering="acq_rel",
         scope="workgroup",
     )
-    context.record_converted(node_text(expr), "kernel.barrier")
+    context.record_converted(node_text(expr), "kernel.barrier<workgroup>")
 
 
 def _convert_warp_sync_call(
@@ -1305,7 +1305,7 @@ def _convert_warp_sync_call(
         ordering="acq_rel",
         scope="subgroup",
     )
-    context.record_converted(node_text(expr), "kernel.barrier<subgroup>")
+    context.record_converted(node_text(expr), "kernel.barrier<workgroup>")
 
 
 def _call_result_type(

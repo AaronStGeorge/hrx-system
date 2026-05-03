@@ -1056,10 +1056,10 @@ kernel_barrier = Op(
     ],
     traits=[UNKNOWN_EFFECTS, CONVERGENT],
     verify="loom_kernel_barrier_verify",
-    format=[AttrDict()],
+    format=[TemplateParam("memory_space"), AttrDict()],
     examples=[
-        "kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = subgroup}",
-        "kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}",
+        "kernel.barrier<workgroup> {ordering = acq_rel, scope = subgroup}",
+        "kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}",
     ],
 )
 

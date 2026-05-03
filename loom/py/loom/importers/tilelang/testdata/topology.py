@@ -140,7 +140,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("shared_storage_sync") @shared_stora
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
   %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xf32, %layout>
-  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
   %c0 = index.constant 0 : index
   %load = view.load %src_view[%c0] : view<4xf32, %layout> -> f32
   view.store %load, %dst_view[%c0] : f32, view<4xf32, %layout>
@@ -192,7 +192,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("warp_sync_kernel") @warp_sync_kerne
   %tz = kernel.workitem.id<z> : index
   %load = view.load %src[%thread_index] : view<32xf32, %layout> -> f32
   view.store %load, %dst[%thread_index] : f32, view<32xf32, %layout>
-  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = subgroup}
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = subgroup}
   kernel.return
 }
 """

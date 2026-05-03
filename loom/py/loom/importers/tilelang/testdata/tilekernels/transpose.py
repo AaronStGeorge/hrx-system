@@ -203,7 +203,7 @@ kernel.def target(@hip_mcpu_gfx950) export("batched_transpose_kernel") @batched_
       }
     }
   }
-  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
   %c128_2 = index.constant 128 : index
   scf.for %i = [%c0 to %c128_2 step %c1] {
     scf.for %j = [%c0 to %c128_2 step %c1] {

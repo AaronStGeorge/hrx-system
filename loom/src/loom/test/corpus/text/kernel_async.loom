@@ -13,6 +13,6 @@ func.def @kernel_async(%source_buffer: buffer, %byte_offset: offset) {
   %copy = kernel.async.tensor.load.to.lds %source to %dest using %desc {cache_scope = cu, cache_temporal = regular} : view<64x64xf32, %layout> to view<64x64xf32, %layout>, kernel.tensor.lds.descriptor -> kernel.async.token
   %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
   func.return
 }

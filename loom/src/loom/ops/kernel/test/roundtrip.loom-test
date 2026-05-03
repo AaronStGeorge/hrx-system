@@ -49,7 +49,7 @@ kernel.def target(@test_target) export("entry") artifact(@test_artifact) ordinal
 test.target<low_core> @test_target
 
 func.def @workgroup_barrier() {
-  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
   func.return
 }
 
@@ -58,7 +58,7 @@ func.def @workgroup_barrier() {
 test.target<low_core> @test_target
 
 func.def @subgroup_barrier() {
-  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = subgroup}
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = subgroup}
   func.return
 }
 
@@ -218,7 +218,7 @@ func.def @async_copy_global_to_workgroup(%source_buffer: buffer, %byte_offset: o
   %copy = kernel.async.copy %source to %dest {cache_scope = cu, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8, %layout> to view<16xi8, %layout> -> kernel.async.token
   %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
   func.return
 }
 
@@ -398,7 +398,7 @@ func.def @async_tensor_load_to_lds(%source_buffer: buffer, %byte_offset: offset)
   %copy = kernel.async.tensor.load.to.lds %source to %dest using %desc {cache_scope = cu, cache_temporal = regular} : view<64x64xf32, %layout> to view<64x64xf32, %layout>, kernel.tensor.lds.descriptor -> kernel.async.token
   %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
   func.return
 }
 

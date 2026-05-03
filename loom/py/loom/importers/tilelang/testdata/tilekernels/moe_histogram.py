@@ -120,7 +120,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") @group_count_k
     %const = scalar.constant 0 : i32
     view.store %const, %out_shared[%madd_2] : i32, view<128xi32, %layout>
   }
-  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
   %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c1023 = index.constant 1023 : index
   %add = index.add %num_tokens_idx, %c1023 : index
@@ -143,7 +143,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") @group_count_k
       }
     }
   }
-  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
   %c135 = index.constant 135 : index
   %sub_3 = index.sub %c135, %thread_idx : index
   %div_3 = index.div %sub_3, %c128 : index
@@ -275,7 +275,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") @aux_fi_kernel(%top
     %const = scalar.constant 0 : i32
     view.store %const, %out_shared[%madd_2] : i32, view<128xi32, %layout>
   }
-  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
   %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c1023 = index.constant 1023 : index
   %add = index.add %num_tokens_idx, %c1023 : index
@@ -298,7 +298,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") @aux_fi_kernel(%top
       }
     }
   }
-  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
   %c135 = index.constant 135 : index
   %sub_3 = index.sub %c135, %thread_idx : index
   %div_3 = index.div %sub_3, %c128 : index

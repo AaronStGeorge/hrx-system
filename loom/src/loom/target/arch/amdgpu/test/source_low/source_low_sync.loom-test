@@ -3,7 +3,7 @@
 
 amdgpu.target<gfx1100> @target
 func.def target(@target) @workgroup_barrier() {
-  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
   func.return
 }
 
@@ -18,6 +18,6 @@ low.func.def target(@target) abi(hal_kernel) @workgroup_barrier() asm<amdgpu.gfx
 amdgpu.target<gfx1100> @target
 func.def target(@target) @subgroup_barrier_rejected() {
   // ERROR@+1: BACKEND/001 "AMDGPU source-to-low currently lowers only workgroup-scope barriers"
-  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = subgroup}
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = subgroup}
   func.return
 }

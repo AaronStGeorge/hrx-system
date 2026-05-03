@@ -58,7 +58,7 @@
 // RUN:   '  %c1 = index.constant 1 : index' \
 // RUN:   '  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index' \
 // RUN:   '} launch {' \
-// RUN:   '  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}' \
+// RUN:   '  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}' \
 // RUN:   '  kernel.return' \
 // RUN:   '}' \
 // RUN:   | loom-opt --pass=source-to-low \
