@@ -36,8 +36,8 @@ iree_status_t loom_amdgpu_emit_memory_vaddr(
     const loom_low_source_memory_dynamic_term_t* term =
         &access->source.dynamic_terms[i];
     loom_value_id_t low_index = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(
-        loom_low_lower_lookup_value(context, term->index, &low_index));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_vgpr_address(
+        context, source_op, term->index, &low_index));
     loom_value_id_t low_offset = low_index;
     if (term->byte_stride != 1) {
       const bool use_shift =

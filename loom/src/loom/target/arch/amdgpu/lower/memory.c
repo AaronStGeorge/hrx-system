@@ -70,7 +70,7 @@ typedef uint32_t loom_amdgpu_dynamic_index_source_rule_flags_t;
 
 #define LOOM_AMDGPU_DYNAMIC_INDEX_SOURCE_RULE_REJECT_WORKGROUP_MEMORY \
   ((uint32_t)1u << 0)
-#define LOOM_AMDGPU_DYNAMIC_INDEX_SOURCE_RULE_REQUIRE_VGPR_VALUE \
+#define LOOM_AMDGPU_DYNAMIC_INDEX_SOURCE_RULE_REQUIRE_VADDR_VALUE \
   ((uint32_t)1u << 1)
 
 typedef struct loom_amdgpu_dynamic_index_source_rule_t {
@@ -101,11 +101,24 @@ static const loom_amdgpu_dynamic_index_source_rule_t
         {
             .source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE,
             .dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR,
-            .flags = LOOM_AMDGPU_DYNAMIC_INDEX_SOURCE_RULE_REQUIRE_VGPR_VALUE,
+            .flags = LOOM_AMDGPU_DYNAMIC_INDEX_SOURCE_RULE_REQUIRE_VADDR_VALUE,
             .rejection_bits =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_INDEX_SOURCE,
         },
 };
+
+static bool loom_amdgpu_memory_dynamic_index_can_materialize_vaddr(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  if (loom_amdgpu_module_value_prefers_vgpr(module, value_id)) {
+    return true;
+  }
+  if (value_id >= module->values.count) {
+    return false;
+  }
+  const loom_type_t type = loom_module_value_type(module, value_id);
+  return loom_amdgpu_type_is_address_scalar(type) ||
+         loom_amdgpu_type_is_i32(type);
+}
 
 bool loom_amdgpu_memory_access_select_dynamic_term_kinds(
     const loom_module_t* module, loom_amdgpu_memory_access_t* access,
@@ -144,8 +157,9 @@ bool loom_amdgpu_memory_access_select_dynamic_term_kinds(
       }
       if (iree_any_bit_set(
               rule->flags,
-              LOOM_AMDGPU_DYNAMIC_INDEX_SOURCE_RULE_REQUIRE_VGPR_VALUE) &&
-          !loom_amdgpu_module_value_prefers_vgpr(module, term->index)) {
+              LOOM_AMDGPU_DYNAMIC_INDEX_SOURCE_RULE_REQUIRE_VADDR_VALUE) &&
+          !loom_amdgpu_memory_dynamic_index_can_materialize_vaddr(
+              module, term->index)) {
         diagnostic->rejection_bits |= rule->rejection_bits;
         return false;
       }

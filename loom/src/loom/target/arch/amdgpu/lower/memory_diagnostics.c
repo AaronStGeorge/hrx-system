@@ -93,7 +93,7 @@ static const loom_amdgpu_memory_access_rejection_detail_t
             .detail = IREE_SVL(
                 "AMDGPU buffer memory lowering currently requires dynamic "
                 "indices to come from kernel.workitem.id, kernel.workgroup.id, "
-                "or VGPR address arithmetic"),
+                "or materializable 32-bit address values"),
         },
         {
             .rejection_bit = LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_STRIDE,

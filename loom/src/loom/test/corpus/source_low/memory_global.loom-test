@@ -84,6 +84,22 @@ kernel.def @i32_dynamic_constant_index(%input: buffer, %output: buffer) {
 
 // ====
 
+kernel.def @i32_scalar_arg_index(%input: buffer, %output: buffer, %column_i32: i32) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch {
+  %base = index.constant 0 : offset
+  %column0 = index.cast %column_i32 : i32 to index
+  %column = index.assume %column0 [range(%column0, 0, 7)] : index
+  %input_view = buffer.view %input[%base] : buffer -> view<8xi32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<8xi32, #dense>
+  %loaded = view.load %input_view[%column] : view<8xi32, #dense> -> i32
+  view.store %loaded, %output_view[%column] : i32, view<8xi32, #dense>
+  kernel.return
+}
+
+// ====
+
 kernel.def @f16x2_b32(%input: buffer, %output: buffer) {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
