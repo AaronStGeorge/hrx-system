@@ -46,6 +46,91 @@ def _make_head_compute_mix_kernel(tilelang: Any, T: Any) -> Any:
     return get_head_compute_mix_kernel
 
 
+def _make_pre_split_mixes_kernel(tilelang: Any, T: Any) -> Any:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_pre_split_mixes_kernel(
+        mhc_mult: int,
+        mhc_post_mult_value: float,
+        mhc_pre_eps: float,
+        token_block_size: int,
+        dtype: Any = T.float32,
+    ) -> Any:
+        num_tokens = T.dynamic("num_tokens")
+        mhc_mult2 = mhc_mult * mhc_mult
+        mhc_mult3 = mhc_mult * 2 + mhc_mult2
+
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def mhc_pre_split_mixes_fwd_kernel(
+            input_mixes: T.Tensor[(num_tokens, mhc_mult3), dtype],
+            mhc_scale: T.Tensor[(3,), dtype],
+            mhc_base: T.Tensor[(mhc_mult3,), dtype],
+            pre_layer_mix: T.Tensor[(num_tokens, mhc_mult), dtype],
+            post_layer_mix: T.Tensor[(num_tokens, mhc_mult), dtype],
+            comb_res_mix: T.Tensor[(num_tokens, mhc_mult2), dtype],
+        ) -> None:
+            with T.Kernel(T.ceildiv(num_tokens, token_block_size)) as (pid,):
+                input_mixes_frag = T.alloc_fragment(
+                    (token_block_size, mhc_mult3),
+                    dtype,
+                )
+                pre_layer_mix_frag = T.alloc_fragment(
+                    (token_block_size, mhc_mult),
+                    dtype,
+                )
+                post_layer_mix_frag = T.alloc_fragment(
+                    (token_block_size, mhc_mult),
+                    dtype,
+                )
+                comb_res_mix_frag = T.alloc_fragment(
+                    (token_block_size, mhc_mult2),
+                    dtype,
+                )
+
+                T.annotate_layout(
+                    {
+                        input_mixes_frag: T.Fragment(
+                            (token_block_size, mhc_mult3),
+                            lambda i, j: (i % 32, i // 32 * mhc_mult3 + j),
+                        ),
+                    },
+                )
+
+                T.copy(input_mixes[pid * token_block_size, 0], input_mixes_frag)
+
+                for i, j in T.Parallel(token_block_size, mhc_mult):
+                    pre_layer_mix_frag[i, j] = (
+                        T.sigmoid(
+                            input_mixes_frag[i, j] * mhc_scale[0] + mhc_base[j],
+                        )
+                        + mhc_pre_eps
+                    )
+                for i, j in T.Parallel(token_block_size, mhc_mult):
+                    post_layer_mix_frag[i, j] = (
+                        T.sigmoid(
+                            input_mixes_frag[i, j + mhc_mult] * mhc_scale[1]
+                            + mhc_base[j + mhc_mult],
+                        )
+                        * mhc_post_mult_value
+                    )
+                for i, j in T.Parallel(token_block_size, mhc_mult2):
+                    comb_res_mix_frag[i, j] = (
+                        input_mixes_frag[i, j + mhc_mult * 2] * mhc_scale[2]
+                        + mhc_base[j + mhc_mult * 2]
+                    )
+
+                T.copy(pre_layer_mix_frag, pre_layer_mix[pid * token_block_size, 0])
+                T.copy(post_layer_mix_frag, post_layer_mix[pid * token_block_size, 0])
+                T.copy(comb_res_mix_frag, comb_res_mix[pid * token_block_size, 0])
+
+        return mhc_pre_split_mixes_fwd_kernel
+
+    return get_pre_split_mixes_kernel
+
+
 def _make_sinkhorn_kernel(tilelang: Any, T: Any) -> Any:
     @tilelang.jit(  # type: ignore[untyped-decorator]
         pass_configs={
@@ -205,6 +290,152 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_head_compute_mix_fwd_kernel") @
         %addf_2 = scalar.addf %sigmoid, %const : f32
         view.store %addf_2, %output_mix[%madd, %j] : f32, view<[%num_tokens]x2xf32, %layout>
       }
+    }
+  }
+  kernel.return
+}
+"""
+
+
+# ====
+@tilelang_case(
+    name="tilekernels_mhc_pre_split_mixes_fwd_gfx1100",
+    category="kernel",
+    tags=("tilekernels", "mhc", "split", "amdgpu"),
+)
+def tilekernels_mhc_pre_split_mixes_fwd_gfx1100(
+    tilelang: Any,
+    T: Any,
+) -> TileLangImportInput:
+    return TileLangImportInput(
+        source=_make_pre_split_mixes_kernel(tilelang, T),
+        args=(2, 0.5, 1e-5, 2),
+        target="hip -mcpu=gfx1100",
+        name="mhc_pre_split_mixes_fwd_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("mhc_pre_split_mixes_fwd_kernel") @mhc_pre_split_mixes_fwd_kernel(%input_mixes_handle: buffer, %mhc_scale_handle: buffer, %mhc_base_handle: buffer, %pre_layer_mix_handle: buffer, %post_layer_mix_handle: buffer, %comb_res_mix_handle: buffer, %num_tokens: i32) {
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %c2 = index.constant 2 : index
+  %add = index.add %num_tokens_idx, %c2 : index
+  %c1 = index.constant 1 : index
+  %sub = index.sub %add, %c1 : index
+  %div = index.div %sub, %c2 : index
+  %c128 = index.constant 128 : index
+  kernel.launch.config workgroups(%div, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %input_mixes = buffer.view %input_mixes_handle[%c0_bytes] : buffer -> view<[%num_tokens]x8xf32, %layout>
+  %mhc_scale = buffer.view %mhc_scale_handle[%c0_bytes] : buffer -> view<3xf32, %layout>
+  %mhc_base = buffer.view %mhc_base_handle[%c0_bytes] : buffer -> view<8xf32, %layout>
+  %pre_layer_mix = buffer.view %pre_layer_mix_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
+  %post_layer_mix = buffer.view %post_layer_mix_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
+  %comb_res_mix = buffer.view %comb_res_mix_handle[%c0_bytes] : buffer -> view<[%num_tokens]x4xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %tx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %input_mixes_frag_bytes = index.constant 64 : offset
+  %input_mixes_frag_buffer = buffer.alloca %input_mixes_frag_bytes {base_alignment = 4, memory_space = private} : buffer
+  %input_mixes_frag = buffer.view %input_mixes_frag_buffer[%c0_bytes] : buffer -> view<2x8xf32, %layout>
+  %pre_layer_mix_frag_bytes = index.constant 16 : offset
+  %pre_layer_mix_frag_buffer = buffer.alloca %pre_layer_mix_frag_bytes {base_alignment = 4, memory_space = private} : buffer
+  %pre_layer_mix_frag = buffer.view %pre_layer_mix_frag_buffer[%c0_bytes] : buffer -> view<2x2xf32, %layout>
+  %post_layer_mix_frag_buffer = buffer.alloca %pre_layer_mix_frag_bytes {base_alignment = 4, memory_space = private} : buffer
+  %post_layer_mix_frag = buffer.view %post_layer_mix_frag_buffer[%c0_bytes] : buffer -> view<2x2xf32, %layout>
+  %comb_res_mix_frag_bytes = index.constant 32 : offset
+  %comb_res_mix_frag_buffer = buffer.alloca %comb_res_mix_frag_bytes {base_alignment = 4, memory_space = private} : buffer
+  %comb_res_mix_frag = buffer.view %comb_res_mix_frag_buffer[%c0_bytes] : buffer -> view<2x4xf32, %layout>
+  %c2 = index.constant 2 : index
+  %mul = index.mul %bx, %c2 : index
+  %c0 = index.constant 0 : index
+  %c8 = index.constant 8 : index
+  %c1 = index.constant 1 : index
+  scf.for %i0 = [%c0 to %c2 step %c1] {
+    scf.for %i1 = [%c0 to %c8 step %c1] {
+      %idx = index.add %mul, %i0 : index
+      %copy = view.load %input_mixes[%idx, %i1] : view<[%num_tokens]x8xf32, %layout> -> f32
+      view.store %copy, %input_mixes_frag[%i0, %i1] : f32, view<2x8xf32, %layout>
+    }
+  }
+  scf.for %i = [%c0 to %c2 step %c1] {
+    scf.for %j = [%c0 to %c2 step %c1] {
+      %load = view.load %input_mixes_frag[%i, %j] : view<2x8xf32, %layout> -> f32
+      %load_2 = view.load %mhc_scale[%c0] : view<3xf32, %layout> -> f32
+      %mulf = scalar.mulf %load, %load_2 : f32
+      %load_3 = view.load %mhc_base[%j] : view<8xf32, %layout> -> f32
+      %addf = scalar.addf %mulf, %load_3 : f32
+      %one = scalar.constant 1.0 : f32
+      %sigmoid_neg = scalar.negf %addf : f32
+      %sigmoid_exp = scalar.expf %sigmoid_neg : f32
+      %sigmoid_den = scalar.addf %one, %sigmoid_exp : f32
+      %sigmoid = scalar.divf %one, %sigmoid_den : f32
+      %const = scalar.constant 1.0000000000000001e-05 : f32
+      %addf_2 = scalar.addf %sigmoid, %const : f32
+      view.store %addf_2, %pre_layer_mix_frag[%i, %j] : f32, view<2x2xf32, %layout>
+    }
+  }
+  scf.for %i = [%c0 to %c2 step %c1] {
+    scf.for %j = [%c0 to %c2 step %c1] {
+      %add = index.add %j, %c2 : index
+      %load_4 = view.load %input_mixes_frag[%i, %add] : view<2x8xf32, %layout> -> f32
+      %load_5 = view.load %mhc_scale[%c1] : view<3xf32, %layout> -> f32
+      %mulf_2 = scalar.mulf %load_4, %load_5 : f32
+      %add_2 = index.add %j, %c2 : index
+      %load_6 = view.load %mhc_base[%add_2] : view<8xf32, %layout> -> f32
+      %addf_3 = scalar.addf %mulf_2, %load_6 : f32
+      %one_2 = scalar.constant 1.0 : f32
+      %sigmoid_neg_2 = scalar.negf %addf_3 : f32
+      %sigmoid_exp_2 = scalar.expf %sigmoid_neg_2 : f32
+      %sigmoid_den_2 = scalar.addf %one_2, %sigmoid_exp_2 : f32
+      %sigmoid_2 = scalar.divf %one_2, %sigmoid_den_2 : f32
+      %const_2 = scalar.constant 0.5 : f32
+      %mulf_3 = scalar.mulf %sigmoid_2, %const_2 : f32
+      view.store %mulf_3, %post_layer_mix_frag[%i, %j] : f32, view<2x2xf32, %layout>
+    }
+  }
+  scf.for %i = [%c0 to %c2 step %c1] {
+    %c4 = index.constant 4 : index
+    scf.for %j = [%c0 to %c4 step %c1] {
+      %add_3 = index.add %j, %c4 : index
+      %load_7 = view.load %input_mixes_frag[%i, %add_3] : view<2x8xf32, %layout> -> f32
+      %load_8 = view.load %mhc_scale[%c2] : view<3xf32, %layout> -> f32
+      %mulf_4 = scalar.mulf %load_7, %load_8 : f32
+      %add_4 = index.add %j, %c4 : index
+      %load_9 = view.load %mhc_base[%add_4] : view<8xf32, %layout> -> f32
+      %addf_4 = scalar.addf %mulf_4, %load_9 : f32
+      view.store %addf_4, %comb_res_mix_frag[%i, %j] : f32, view<2x4xf32, %layout>
+    }
+  }
+  %mul_2 = index.mul %bx, %c2 : index
+  scf.for %i0 = [%c0 to %c2 step %c1] {
+    scf.for %i1 = [%c0 to %c2 step %c1] {
+      %idx_2 = index.add %mul_2, %i0 : index
+      %copy_2 = view.load %pre_layer_mix_frag[%i0, %i1] : view<2x2xf32, %layout> -> f32
+      view.store %copy_2, %pre_layer_mix[%idx_2, %i1] : f32, view<[%num_tokens]x2xf32, %layout>
+    }
+  }
+  %mul_3 = index.mul %bx, %c2 : index
+  scf.for %i0 = [%c0 to %c2 step %c1] {
+    scf.for %i1 = [%c0 to %c2 step %c1] {
+      %idx_3 = index.add %mul_3, %i0 : index
+      %copy_3 = view.load %post_layer_mix_frag[%i0, %i1] : view<2x2xf32, %layout> -> f32
+      view.store %copy_3, %post_layer_mix[%idx_3, %i1] : f32, view<[%num_tokens]x2xf32, %layout>
+    }
+  }
+  %c4_2 = index.constant 4 : index
+  %mul_4 = index.mul %bx, %c2 : index
+  scf.for %i0 = [%c0 to %c2 step %c1] {
+    scf.for %i1 = [%c0 to %c4_2 step %c1] {
+      %idx_4 = index.add %mul_4, %i0 : index
+      %copy_4 = view.load %comb_res_mix_frag[%i0, %i1] : view<2x4xf32, %layout> -> f32
+      view.store %copy_4, %comb_res_mix[%idx_4, %i1] : f32, view<[%num_tokens]x4xf32, %layout>
     }
   }
   kernel.return
