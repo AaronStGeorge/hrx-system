@@ -41,6 +41,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
+from loom.assembly import Clause, FuncArgs, OptionalGroup, Scope
 from loom.dsl import FuncLikeInterface, Op, TypeDef
 from loom.fields import FieldLayout
 from loom.ir import (
@@ -217,6 +218,29 @@ def _find_func_like_interface(op_decl: Op) -> FuncLikeInterface | None:
     return None
 
 
+def _find_func_args_field(op_decl: Op) -> str:
+    """Return op_decl's FuncArgs format field name, defaulting to args."""
+
+    def walk(elements: Sequence[Any]) -> str | None:
+        for element in elements:
+            match element:
+                case FuncArgs(field=name):
+                    return name
+                case (
+                    Clause(elements=inner)
+                    | OptionalGroup(elements=inner)
+                    | Scope(elements=inner)
+                ):
+                    nested = walk(inner)
+                    if nested is not None:
+                        return nested
+                case _:
+                    continue
+        return None
+
+    return walk(op_decl.format) or "args"
+
+
 class IRBuilder:
     """Generic IR builder: constructs Operations from Op declarations.
 
@@ -367,19 +391,89 @@ class IRBuilder:
         body_region = region_list[body_region_index]
         if not body_region.blocks:
             body_region.blocks.append(Block(arg_ids=list(func_arg_ids)))
-            return list(body_region.blocks[0].arg_ids)
+        else:
+            entry_block = body_region.blocks[0]
+            if func_arg_ids:
+                if entry_block.arg_ids and entry_block.arg_ids != list(func_arg_ids):
+                    raise ValueError(
+                        f"Op '{op_decl.name}' body entry block arg_ids "
+                        f"{entry_block.arg_ids} do not match func_args "
+                        f"{list(func_arg_ids)}."
+                    )
+                if not entry_block.arg_ids:
+                    entry_block.arg_ids.extend(func_arg_ids)
 
-        entry_block = body_region.blocks[0]
-        if func_arg_ids:
-            if entry_block.arg_ids and entry_block.arg_ids != list(func_arg_ids):
-                raise ValueError(
-                    f"Op '{op_decl.name}' body entry block arg_ids "
-                    f"{entry_block.arg_ids} do not match func_args "
-                    f"{list(func_arg_ids)}."
+        signature_arg_ids = list(body_region.blocks[0].arg_ids)
+        func_args_field = _find_func_args_field(op_decl)
+        for region_index, region_def in enumerate(op_decl.regions):
+            if region_index == body_region_index:
+                continue
+            if region_def.arg_source != func_args_field:
+                continue
+            while len(region_list) <= region_index:
+                region_list.append(Region())
+            projected_region = region_list[region_index]
+            if not projected_region.blocks:
+                projected_region.blocks.append(
+                    Block(arg_ids=self._clone_func_signature_args(signature_arg_ids))
                 )
-            if not entry_block.arg_ids:
-                entry_block.arg_ids.extend(func_arg_ids)
-        return list(entry_block.arg_ids)
+                continue
+            projected_entry = projected_region.blocks[0]
+            if not projected_entry.arg_ids:
+                projected_entry.arg_ids.extend(
+                    self._clone_func_signature_args(signature_arg_ids)
+                )
+                continue
+            self._validate_projected_region_args(
+                op_decl.name,
+                region_def.name,
+                signature_arg_ids,
+                projected_entry.arg_ids,
+            )
+        return signature_arg_ids
+
+    def _clone_func_signature_args(self, arg_ids: Sequence[int]) -> list[int]:
+        """Clone function signature values into another region's entry block."""
+        cloned_ids: list[int] = []
+        for arg_index, arg_id in enumerate(arg_ids):
+            source = self._module.values[arg_id]
+            cloned_ids.append(
+                self._module.add_value(
+                    Value(
+                        name=source.name,
+                        type=source.type,
+                        flags=source.flags,
+                        def_result_index=arg_index,
+                    )
+                )
+            )
+        return cloned_ids
+
+    def _validate_projected_region_args(
+        self,
+        op_name: str,
+        region_name: str,
+        signature_arg_ids: Sequence[int],
+        projected_arg_ids: Sequence[int],
+    ) -> None:
+        """Validate explicit projected region args against the signature."""
+        if len(projected_arg_ids) != len(signature_arg_ids):
+            raise ValueError(
+                f"Op '{op_name}' region '{region_name}' entry block has "
+                f"{len(projected_arg_ids)} args but function signature has "
+                f"{len(signature_arg_ids)}."
+            )
+        for arg_index, (signature_id, projected_id) in enumerate(
+            zip(signature_arg_ids, projected_arg_ids, strict=True)
+        ):
+            signature_type = self._module.values[signature_id].type
+            projected_type = self._module.values[projected_id].type
+            if projected_type != signature_type:
+                raise ValueError(
+                    f"Op '{op_name}' region '{region_name}' arg {arg_index} "
+                    f"has type {projected_type!r} but function signature arg "
+                    f"has type {signature_type!r}."
+                )
 
     def _insert_operation(self, op_decl: Op, operation: Operation) -> None:
         """Insert operation into module symbol state or the current block."""

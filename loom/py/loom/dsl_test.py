@@ -1534,8 +1534,10 @@ class TestOp:
             )
 
     def test_region_arg_source_must_be_value_field(self) -> None:
-        """Region arg_source must name an operand or result field."""
-        with pytest.raises(ValueError, match="arg_source references non-value"):
+        """Region arg_source must name a variadic value or FuncArgs field."""
+        with pytest.raises(
+            ValueError, match="arg_source references non-value/non-FuncArgs"
+        ):
             Op(
                 "test.bad",
                 attrs=[AttrDef("types", "string")],
@@ -1545,7 +1547,9 @@ class TestOp:
 
     def test_region_arg_source_validates_without_format(self) -> None:
         """Region arg_source is an op contract, not an assembly-format detail."""
-        with pytest.raises(ValueError, match="arg_source references non-value"):
+        with pytest.raises(
+            ValueError, match="arg_source references non-value/non-FuncArgs"
+        ):
             Op(
                 "test.bad",
                 regions=[RegionDef("body", arg_source="missing")],

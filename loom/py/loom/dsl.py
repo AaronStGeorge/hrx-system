@@ -675,9 +675,10 @@ class RegionDef:
         where type_keyword is a scalar type name (e.g., "index").
         These are prepended before any BindingList-derived args.
         Example: loop IV is ("iv", "index").
-    arg_source: Optional value field whose per-position types seed entry block
-        arguments in generated builders. Text parsing still gets the concrete
-        names and types from BindingList or BlockArgs format elements.
+    arg_source: Optional variadic value field or FuncArgs field whose
+        per-position types seed entry block arguments in generated builders.
+        Text parsing still gets the concrete names and types from BindingList
+        or BlockArgs format elements.
     """
 
     name: str
@@ -2177,7 +2178,7 @@ def LastAxisGroupedBy(source: str, result: str, group_size: int) -> Constraint:
 
 
 def BlockArgCount(region: str, inputs: str) -> Constraint:
-    """Region block must have one argument per input."""
+    """Region block must have one argument per input or reference-region arg."""
     from loom.error.structure import ERR_STRUCTURE_007
 
     return Constraint(
@@ -2200,7 +2201,7 @@ def BlockArgsSatisfy(region: str, constraint: TypeConstraint) -> Constraint:
 
 
 def BlockArgsMatchTypes(region: str, inputs: str) -> Constraint:
-    """Each block argument type must match its input type."""
+    """Each block argument type must match its input or reference-region type."""
     from loom.error.type import ERR_TYPE_013
 
     return Constraint(
@@ -2211,7 +2212,7 @@ def BlockArgsMatchTypes(region: str, inputs: str) -> Constraint:
 
 
 def BlockArgsMatchElementTypes(region: str, inputs: str) -> Constraint:
-    """Each block argument type must match its input's element type."""
+    """Each block argument type must match its input element type."""
     from loom.error.type import ERR_TYPE_008
 
     return Constraint(
@@ -2623,6 +2624,26 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
     return fields
 
 
+def _collect_func_args_fields(elements: tuple[FormatElement, ...]) -> set[str]:
+    """Recursively collect FuncArgs field names referenced by format elements."""
+    from loom.assembly import Clause, FuncArgs, OptionalGroup, Scope
+
+    fields: set[str] = set()
+    for elem in elements:
+        match elem:
+            case FuncArgs(field=f):
+                fields.add(f)
+            case Clause(elements=inner):
+                fields |= _collect_func_args_fields(inner)
+            case OptionalGroup(elements=inner):
+                fields |= _collect_func_args_fields(inner)
+            case Scope(elements=inner):
+                fields |= _collect_func_args_fields(inner)
+            case _:
+                pass
+    return fields
+
+
 def _validate_no_nested_scope(
     op_name: str,
     elements: tuple[FormatElement, ...],
@@ -2676,19 +2697,23 @@ def _validate_region_arg_sources(
     operands: tuple[Operand, ...],
     results: tuple[Result | TiedResult, ...],
     regions: tuple[RegionDef, ...],
+    format_elements: tuple[FormatElement, ...],
 ) -> None:
     """Validate RegionDef.arg_source contracts."""
     value_fields: dict[str, bool] = {o.name: o.variadic for o in operands} | {
         r.name: r.variadic for r in results
     }
+    func_args_fields = _collect_func_args_fields(format_elements)
     for region in regions:
         if region.arg_source is None:
+            continue
+        if region.arg_source in func_args_fields:
             continue
         variadic = value_fields.get(region.arg_source)
         if variadic is None:
             raise ValueError(
                 f"Op '{op_name}': region '{region.name}' arg_source "
-                f"references non-value field '{region.arg_source}'."
+                f"references non-value/non-FuncArgs field '{region.arg_source}'."
             )
         if not variadic:
             raise ValueError(
@@ -3362,6 +3387,7 @@ class Op:
             frozen_operands,
             frozen_results,
             frozen_regions,
+            frozen_format,
         )
 
     def __repr__(self) -> str:

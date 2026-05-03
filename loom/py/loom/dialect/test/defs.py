@@ -1404,6 +1404,63 @@ test_func = Op(
     ],
 )
 
+# ============================================================================
+# test.split_func — multi-region function definition
+# ============================================================================
+
+test_split_func = Op(
+    "test.split_func",
+    group=test_ops,
+    doc="Test function definition with projected signature args in a side region.",
+    traits=[SYMBOL_DEFINE, ISOLATED_FROM_ABOVE],
+    interfaces=[
+        FuncLikeInterface(
+            callee="callee",
+            visibility="visibility",
+            cc="cc",
+            body="body",
+        )
+    ],
+    symbol_def=SymbolDefinition(
+        field="callee",
+        name="function",
+        interfaces=["func_like"],
+        bytecode_kind="LOOM_SYMBOL_FUNC_DEF",
+    ),
+    attrs=[
+        AttrDef("callee", "symbol"),
+        AttrDef("visibility", "enum", enum_def=_Visibility, optional=True),
+        AttrDef("cc", "enum", enum_def=_CallingConv, optional=True),
+    ],
+    regions=[
+        RegionDef("body", doc="Function body.", terminator="test.yield"),
+        RegionDef(
+            "config",
+            doc="Projected configuration region.",
+            single_block=True,
+            terminator="test.yield",
+            arg_source="args",
+        ),
+    ],
+    constraints=[
+        BlockArgCount("config", "body"),
+        BlockArgsMatchTypes("config", "body"),
+    ],
+    format=[
+        OptionalGroup([Attr("visibility")], anchor="visibility"),
+        OptionalGroup([Attr("cc")], anchor="cc"),
+        SymbolRef("callee"),
+        Scope([FuncArgs("args")]),
+        Region("body"),
+        kw("config"),
+        BlockArgs("config"),
+        Region("config"),
+    ],
+    examples=[
+        "test.split_func @projected(%arg: i32) {\n  test.yield\n} config(%cfg_arg: i32) {\n  test.yield\n}",
+    ],
+)
+
 test_decl = Op(
     "test.decl",
     group=test_ops,
@@ -1990,6 +2047,7 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_yield,
     test_br,
     test_func,
+    test_split_func,
     test_decl,
     test_record,
     test_attrs,

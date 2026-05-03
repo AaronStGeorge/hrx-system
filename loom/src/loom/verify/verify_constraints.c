@@ -425,6 +425,26 @@ static void loom_verify_relation_region_args_satisfy(
   }
 }
 
+typedef struct loom_verify_value_span_t {
+  const loom_value_id_t* values;
+  uint16_t count;
+} loom_verify_value_span_t;
+
+static bool loom_verify_region_entry_args(const loom_op_t* op,
+                                          loom_field_ref_t region_ref,
+                                          loom_verify_value_span_t* out_span) {
+  *out_span = (loom_verify_value_span_t){0};
+  if (LOOM_FIELD_REF_CATEGORY(region_ref) != LOOM_FIELD_REGION) return false;
+  uint8_t region_index = LOOM_FIELD_REF_INDEX(region_ref);
+  if (region_index >= op->region_count) return false;
+  loom_region_t* region = loom_op_regions(op)[region_index];
+  if (!region || region->block_count == 0) return false;
+  loom_block_t* entry = loom_region_entry_block(region);
+  out_span->values = entry->arg_ids;
+  out_span->count = entry->arg_count;
+  return true;
+}
+
 static bool loom_verify_query_element_bit_width(loom_type_t type,
                                                 int32_t* out_bit_width) {
   if (!loom_type_is_scalar(type) && !loom_type_is_shaped(type)) return false;
@@ -1221,9 +1241,9 @@ static void loom_verify_relation_attr_in_range_rank(
                               error->param_count < 2 ? error->param_count : 2);
 }
 
-// REGION_ARG_COUNT: a region's entry block argument count matches
-// the element count of a variadic value field. Args: (region field,
-// variadic value field).
+// REGION_ARG_COUNT: a region's entry block argument count matches the element
+// count of a variadic value field or another region's entry block args. Args:
+// (region field, variadic value field | region field).
 static void loom_verify_relation_region_arg_count(
     loom_verify_state_t* state, const loom_op_t* op,
     const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
@@ -1233,46 +1253,53 @@ static void loom_verify_relation_region_arg_count(
   loom_region_t* region = loom_op_regions(op)[region_index];
   if (!region || region->block_count == 0) return;
   uint16_t block_arg_count = loom_region_entry_arg_count(region);
-  uint16_t input_count =
-      loom_verify_variadic_count(op, vtable, constraint->args[1]);
-  if (block_arg_count == input_count) return;
+  uint16_t expected_count = 0;
+  if (LOOM_FIELD_REF_CATEGORY(constraint->args[1]) == LOOM_FIELD_REGION) {
+    loom_verify_value_span_t reference_args = {0};
+    if (!loom_verify_region_entry_args(op, constraint->args[1],
+                                       &reference_args)) {
+      return;
+    }
+    expected_count = reference_args.count;
+  } else {
+    expected_count =
+        loom_verify_variadic_count(op, vtable, constraint->args[1]);
+  }
+  if (block_arg_count == expected_count) return;
   const loom_error_def_t* error = loom_verify_constraint_error_or(
       constraint, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 7));
   loom_diagnostic_param_t params[] = {
       loom_param_u32(block_arg_count),
-      loom_param_u32(input_count),
+      loom_param_u32(expected_count),
   };
   loom_verify_emit_structured(state, op, error, params,
                               error->param_count < 2 ? error->param_count : 2);
 }
 
-// REGION_ARG_MATCH: each region entry block argument's property
-// matches the corresponding element of a variadic value field at the
-// same position. Args: (region field, variadic operand field).
+// REGION_ARG_MATCH: each region entry block argument's property matches the
+// corresponding element of a variadic value field or another region's entry
+// block args at the same position. Args: (region field, variadic value field |
+// region field).
 static void loom_verify_relation_region_arg_match(
     loom_verify_state_t* state, const loom_op_t* op,
     const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
   if (constraint->arg_count < 2) return;
-  uint8_t region_index = LOOM_FIELD_REF_INDEX(constraint->args[0]);
-  if (region_index >= op->region_count) return;
-  loom_region_t* region = loom_op_regions(op)[region_index];
-  if (!region || region->block_count == 0) return;
-  loom_block_t* entry = loom_region_entry_block(region);
-  // Block args are sourced from operand-side fields only — region
-  // entry args mirror an op's input values, never its result values.
-  if (LOOM_FIELD_REF_CATEGORY(constraint->args[1]) != LOOM_FIELD_OPERAND) {
-    return;
+  loom_verify_value_span_t args = {0};
+  if (!loom_verify_region_entry_args(op, constraint->args[0], &args)) return;
+  loom_verify_value_span_t inputs = {0};
+  if (LOOM_FIELD_REF_CATEGORY(constraint->args[1]) == LOOM_FIELD_REGION) {
+    if (!loom_verify_region_entry_args(op, constraint->args[1], &inputs)) {
+      return;
+    }
+  } else {
+    inputs.values = loom_verify_resolve_variadic_field(op, constraint->args[1],
+                                                       &inputs.count);
+    if (!inputs.values) return;
   }
-  uint16_t input_count = 0;
-  const loom_value_id_t* input_values =
-      loom_verify_resolve_variadic_field(op, constraint->args[1], &input_count);
-  if (!input_values) return;
-  uint16_t check_count =
-      entry->arg_count < input_count ? entry->arg_count : input_count;
+  uint16_t check_count = args.count < inputs.count ? args.count : inputs.count;
   for (uint16_t i = 0; i < check_count; ++i) {
-    loom_type_t block_arg_type =
-        loom_verify_value_type(state, loom_block_arg_id(entry, i));
-    loom_type_t input_type = loom_verify_value_type(state, input_values[i]);
+    loom_type_t block_arg_type = loom_verify_value_type(state, args.values[i]);
+    loom_type_t input_type = loom_verify_value_type(state, inputs.values[i]);
     if (loom_constraint_property_equals(block_arg_type, input_type,
                                         constraint->property)) {
       continue;

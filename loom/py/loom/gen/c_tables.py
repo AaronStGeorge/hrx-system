@@ -158,6 +158,7 @@ KEYWORD_MAP: dict[str, str] = {
     "workgroup_size": "LOOM_KW_WORKGROUP_SIZE",
     "from": "LOOM_KW_FROM",
     "axes": "LOOM_KW_AXES",
+    "config": "LOOM_KW_CONFIG",
 }
 
 # Maps Region(..., syntax=...) names to C parser/printer selector IDs. The
@@ -1940,6 +1941,7 @@ def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]])
     _pending_binding: dict[str, Any] | None = None
     # Track whether FuncArgs was seen (entry block args come from arg_types).
     _pending_func_args: bool = False
+    func_args_field_name = _func_args_field_name(op)
 
     def _find_region_def(target_op: Op, region_name: str) -> RegionDef | None:
         for r in target_op.regions:
@@ -2130,8 +2132,11 @@ def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]])
                     region_def = _find_region_def(op, name)
                     binding = _pending_binding
                     _pending_binding = None
-                    func_args = _pending_func_args
+                    arg_source = region_def.arg_source if region_def else None
+                    func_args = _pending_func_args or arg_source == func_args_field_name
                     _pending_func_args = False
+                    if arg_source == func_args_field_name:
+                        arg_source = None
                     params.append(
                         {
                             "name": name,
@@ -2139,7 +2144,7 @@ def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]])
                             "region_index": layout.fields[name].index,
                             "optional": (region_def.optional if region_def else False),
                             "binding": binding,
-                            "arg_source": (region_def.arg_source if region_def else None),
+                            "arg_source": arg_source,
                             "implicit_args": (region_def.implicit_args if region_def else ()),
                             "func_args": func_args,
                         }

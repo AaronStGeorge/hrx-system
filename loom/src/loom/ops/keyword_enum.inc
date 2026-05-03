@@ -68,3 +68,4 @@
   LOOM_KW_WORKGROUP_SIZE = 59,  // "workgroup_size"
   LOOM_KW_FROM = 60,  // "from"
   LOOM_KW_AXES = 61,  // "axes"
+  LOOM_KW_CONFIG = 62,  // "config"

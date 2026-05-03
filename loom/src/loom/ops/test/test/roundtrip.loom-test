@@ -1,0 +1,15 @@
+// RUN: roundtrip
+
+// Multi-region function-like op with region-local projections of one logical
+// function signature. The body receives the signature args through FuncArgs;
+// the config region spells its own block args so the two regions have distinct
+// SSA values with matching types.
+test.split_func @projected(%arg: i32, %other: index) {
+  test.use %arg : i32
+  test.use %other : index
+  test.yield
+} config(%cfg_arg: i32, %cfg_other: index) {
+  test.use %cfg_arg : i32
+  test.use %cfg_other : index
+  test.yield
+}

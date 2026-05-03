@@ -773,6 +773,43 @@ TEST_F(BuilderTest, FuncBuilder) {
             LOOM_SCALAR_TYPE_I32);
 }
 
+TEST_F(BuilderTest, SplitFuncBuilderProjectsSignatureArgs) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_symbol_ref_t name = {0, 7};
+  loom_type_t arg_types[] = {f32, i32};
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_split_func_build(&builder_, 0, 0, 0, name, arg_types,
+                                            2, LOOM_LOCATION_UNKNOWN, &op));
+  ASSERT_NE(op, nullptr);
+  EXPECT_EQ(op->kind, LOOM_OP_TEST_SPLIT_FUNC);
+  EXPECT_EQ(op->region_count, 2);
+
+  loom_region_t* body = loom_test_split_func_body(op);
+  loom_region_t* config = loom_test_split_func_config(op);
+  ASSERT_NE(body, nullptr);
+  ASSERT_NE(config, nullptr);
+  loom_block_t* body_entry = loom_region_entry_block(body);
+  loom_block_t* config_entry = loom_region_entry_block(config);
+  ASSERT_NE(body_entry, nullptr);
+  ASSERT_NE(config_entry, nullptr);
+  ASSERT_EQ(body_entry->arg_count, 2);
+  ASSERT_EQ(config_entry->arg_count, 2);
+
+  EXPECT_NE(loom_block_arg_id(body_entry, 0),
+            loom_block_arg_id(config_entry, 0));
+  EXPECT_EQ(loom_type_element_type(loom_block_arg_type(module_, body_entry, 0)),
+            LOOM_SCALAR_TYPE_F32);
+  EXPECT_EQ(
+      loom_type_element_type(loom_block_arg_type(module_, config_entry, 0)),
+      LOOM_SCALAR_TYPE_F32);
+  EXPECT_EQ(loom_type_element_type(loom_block_arg_type(module_, body_entry, 1)),
+            LOOM_SCALAR_TYPE_I32);
+  EXPECT_EQ(
+      loom_type_element_type(loom_block_arg_type(module_, config_entry, 1)),
+      LOOM_SCALAR_TYPE_I32);
+}
+
 TEST_F(BuilderTest, TargetLikeInterfaceReadsTargetRecordFields) {
   loom_symbol_ref_t symbol = {0, 7};
   loom_op_t* op = NULL;

@@ -1080,6 +1080,7 @@ class ParsedFields:
         "tied_results",
         "implicit_values",
         "func_arg_ids",
+        "func_args_consumed",
         "operand_fields",
     )
 
@@ -1093,6 +1094,7 @@ class ParsedFields:
         self.tied_results: list[IRTiedResult] = []
         self.implicit_values: dict[str, int] = {}
         self.func_arg_ids: list[int] = []
+        self.func_args_consumed = False
         self.operand_fields: dict[str, list[int]] = {}
 
 
@@ -1554,7 +1556,7 @@ class Parser:
         # For declaration-style ops (no body region), func args become operands.
         # For definition-style ops (has body region), they were already consumed
         # by the RegionFmt case as pre_arg_ids.
-        if parsed.func_arg_ids and not parsed.regions:
+        if parsed.func_arg_ids and not parsed.func_args_consumed and not parsed.regions:
             parsed.operand_ids.extend(parsed.func_arg_ids)
 
         # 5. Assign real types to pre-allocated result values and
@@ -2025,7 +2027,10 @@ class Parser:
                     binding_names = parsed.attributes.pop("_binding_arg_names", None)
                     binding_types = parsed.attributes.pop("_binding_arg_types", None)
                     # Func arg IDs (from FuncArgs) become the entry block's args.
-                    pre_arg_ids = parsed.func_arg_ids if parsed.func_arg_ids else None
+                    pre_arg_ids = None
+                    if parsed.func_arg_ids and not parsed.func_args_consumed:
+                        pre_arg_ids = parsed.func_arg_ids
+                        parsed.func_args_consumed = True
                     region = self._parse_region_with_syntax(
                         syntax,
                         implicit_terminator_decl=implicit_terminator_decl,

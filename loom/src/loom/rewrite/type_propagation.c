@@ -820,9 +820,16 @@ static iree_status_t loom_type_propagator_relation_region_arg_match(
   if (!loom_type_propagator_region_entry_args(op, constraint->args[0], &args)) {
     return iree_ok_status();
   }
-  if (!loom_type_propagator_resolve_value_field(op, vtable, constraint->args[1],
+  if (LOOM_FIELD_REF_CATEGORY(constraint->args[1]) == LOOM_FIELD_REGION) {
+    if (!loom_type_propagator_region_entry_args(op, constraint->args[1],
                                                 &inputs)) {
-    return iree_ok_status();
+      return iree_ok_status();
+    }
+  } else {
+    if (!loom_type_propagator_resolve_value_field(
+            op, vtable, constraint->args[1], &inputs)) {
+      return iree_ok_status();
+    }
   }
   uint16_t count = args.count < inputs.count ? args.count : inputs.count;
   for (uint16_t i = 0; i < count; ++i) {

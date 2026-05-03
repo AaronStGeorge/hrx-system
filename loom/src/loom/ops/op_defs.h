@@ -530,15 +530,15 @@ enum loom_constraint_relation_e {
   // DimIndexInBounds.
   LOOM_RELATION_ATTR_IN_RANGE_RANK,
 
-  // A region's entry block argument count matches the element count
-  // of a variadic value field. Args: (region field, variadic value
-  // field). Used by BlockArgCount.
+  // A region's entry block argument count matches the element count of a
+  // variadic value field or another region's entry block args. Args: (region
+  // field, variadic value field | region field). Used by BlockArgCount.
   LOOM_RELATION_REGION_ARG_COUNT,
 
-  // Each region entry block argument's property matches the
-  // corresponding element of a variadic value field at the same
-  // position. Args: (region field, variadic value field). Used by
-  // BlockArgsMatchElementTypes.
+  // Each region entry block argument's property matches the corresponding
+  // element of a variadic value field or another region's entry block args at
+  // the same position. Args: (region field, variadic value field | region
+  // field). Used by BlockArgsMatchTypes and BlockArgsMatchElementTypes.
   LOOM_RELATION_REGION_ARG_MATCH,
 
   // A region's terminator (yield) operand count matches the element

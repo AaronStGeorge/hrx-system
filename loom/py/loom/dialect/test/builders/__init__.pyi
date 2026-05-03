@@ -222,6 +222,17 @@ class TestBuilder(DialectBuilder):
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
     ) -> list[ValueRef]: ...
+    def split_func(
+        self,
+        *,
+        visibility: str | None = ...,
+        cc: str | None = ...,
+        callee: str,
+        args: list[ValueRef] = ...,
+        body: Region | None = ...,
+        config: Region | None = ...,
+        location_id: int | None = ...,
+    ) -> None: ...
     def decl(
         self,
         *,
