@@ -1268,13 +1268,14 @@ const loom_value_fact_table_t* loom_canonicalizer_fact_table(
   return canonicalizer->latest_facts;
 }
 
-iree_status_t loom_canonicalizer_run_function(
+iree_status_t loom_canonicalizer_run_region(
     loom_canonicalizer_t* canonicalizer, loom_func_like_t function,
+    loom_region_t* region, loom_op_t* parent_op,
     const loom_canonicalizer_options_t* options,
     loom_canonicalizer_result_t* out_result) {
   if (out_result) memset(out_result, 0, sizeof(*out_result));
   loom_canonicalizer_reset_run_state(canonicalizer);
-  if (!loom_func_like_body(function)) return iree_ok_status();
+  if (!region) return iree_ok_status();
 
   uint32_t max_iterations = options && options->max_iterations > 0
                                 ? options->max_iterations
@@ -1289,13 +1290,14 @@ iree_status_t loom_canonicalizer_run_function(
   loom_value_fact_table_t* function_facts = NULL;
   iree_status_t status = loom_pass_value_fact_owner_prepare(
       canonicalizer->value_facts, canonicalizer->module,
-      loom_pass_value_fact_scope_function(function), &function_facts);
+      loom_pass_value_fact_scope_region(function, region, parent_op),
+      &function_facts);
   if (iree_status_is_ok(status)) {
     canonicalizer->latest_facts = function_facts;
   }
   if (iree_status_is_ok(status)) {
-    status = loom_rewriter_enable_analysis_with_seed_facts(
-        rewriter, function, function_facts,
+    status = loom_rewriter_enable_region_analysis_with_seed_facts(
+        rewriter, function, region, parent_op, function_facts,
         options ? options->seed_facts : NULL);
   }
   loom_symbolic_expr_context_t expression_context;
@@ -1310,12 +1312,13 @@ iree_status_t loom_canonicalizer_run_function(
         canonicalizer->module, &canonicalizer->scratch_arena, &type_propagator);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_type_propagator_prepare_function(type_propagator, function);
+    status =
+        loom_type_propagator_prepare_region(type_propagator, region, parent_op);
   }
 
   for (uint32_t iteration = 0;
        iree_status_is_ok(status) && iteration < max_iterations; ++iteration) {
-    status = loom_rewriter_seed_function(rewriter, function);
+    status = loom_rewriter_seed_region(rewriter, region);
     if (!iree_status_is_ok(status)) break;
     bool any_changed = false;
 
@@ -1468,6 +1471,15 @@ iree_status_t loom_canonicalizer_run_function(
     iree_arena_reset(&canonicalizer->scratch_arena);
   }
   return status;
+}
+
+iree_status_t loom_canonicalizer_run_function(
+    loom_canonicalizer_t* canonicalizer, loom_func_like_t function,
+    const loom_canonicalizer_options_t* options,
+    loom_canonicalizer_result_t* out_result) {
+  return loom_canonicalizer_run_region(canonicalizer, function,
+                                       loom_func_like_body(function),
+                                       function.op, options, out_result);
 }
 
 iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,

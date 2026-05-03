@@ -108,22 +108,40 @@ iree_status_t loom_rewriter_initialize(loom_rewriter_t* rewriter,
 
 void loom_rewriter_deinitialize(loom_rewriter_t* rewriter);
 
-// Seeds the worklist with all live ops in a function.
+// Seeds the worklist with all live ops in |region| and its nested regions.
+iree_status_t loom_rewriter_seed_region(loom_rewriter_t* rewriter,
+                                        loom_region_t* region);
+
+// Seeds the worklist with all live ops in a function-like body region.
 iree_status_t loom_rewriter_seed_function(loom_rewriter_t* rewriter,
                                           loom_func_like_t function);
 
 // Enables value analysis on this rewriter using caller-owned fact storage and
-// runs the initial forward pass over the function, seeding facts from fact
-// inference functions. Call once after initialize, before the worklist loop.
-// Patterns can then query facts via loom_rewriter_value_facts.
+// runs the initial forward pass over |region| and its nested regions, seeding
+// facts from fact inference functions. |function| supplies the logical
+// function context for fact inference and may be empty for detached regions.
+// Call once after initialize, before the worklist loop. Patterns can then query
+// facts via loom_rewriter_value_facts.
+iree_status_t loom_rewriter_enable_region_analysis(
+    loom_rewriter_t* rewriter, loom_func_like_t function, loom_region_t* region,
+    loom_op_t* parent_op, loom_value_fact_table_t* facts);
+
+// Enables value analysis and first clones caller-provided seed facts into the
+// caller-owned fact table before computing |region| facts. Extension payloads
+// are re-interned so seed facts can come from a different analysis context.
+// Block-argument seeders preserve already-defined facts from |seed_facts|.
+iree_status_t loom_rewriter_enable_region_analysis_with_seed_facts(
+    loom_rewriter_t* rewriter, loom_func_like_t function, loom_region_t* region,
+    loom_op_t* parent_op, loom_value_fact_table_t* facts,
+    const loom_value_fact_table_t* seed_facts);
+
+// Enables value analysis over a function-like body region.
 iree_status_t loom_rewriter_enable_analysis(loom_rewriter_t* rewriter,
                                             loom_func_like_t function,
                                             loom_value_fact_table_t* facts);
 
-// Enables value analysis and first clones caller-provided seed facts into the
-// caller-owned fact table. Extension payloads are re-interned so seed facts can
-// come from a different analysis context. Block-argument seeders preserve
-// already-defined facts from |seed_facts|.
+// Enables value analysis over a function-like body region and first clones
+// caller-provided seed facts into the caller-owned fact table.
 iree_status_t loom_rewriter_enable_analysis_with_seed_facts(
     loom_rewriter_t* rewriter, loom_func_like_t function,
     loom_value_fact_table_t* facts, const loom_value_fact_table_t* seed_facts);

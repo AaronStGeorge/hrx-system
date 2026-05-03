@@ -62,13 +62,13 @@ typedef struct loom_canonicalizer_t {
   // Module being transformed.
   loom_module_t* module;
 
-  // Caller-owned reusable value-fact storage used for function analysis.
+  // Caller-owned reusable value-fact storage used for region analysis.
   loom_pass_value_fact_owner_t* value_facts;
 
   // Parent arena whose block pool backs the resettable scratch arena.
   iree_arena_allocator_t* parent_arena;
 
-  // Reset before each function run; owns the rewriter worklist and
+  // Reset before each region run; owns the rewriter worklist and
   // symbolic-expression scratch state for the most recent run.
   iree_arena_allocator_t scratch_arena;
 
@@ -96,7 +96,17 @@ iree_status_t loom_canonicalizer_initialize(
 // arena's block pool. Does not modify the module.
 void loom_canonicalizer_deinitialize(loom_canonicalizer_t* canonicalizer);
 
-// Runs canonicalization on a single function-like body.
+// Runs canonicalization on an explicit region tree. |function| supplies the
+// logical function context for value-fact inference and may be empty for
+// detached regions. |parent_op| owns the root entry block arguments when
+// provided.
+iree_status_t loom_canonicalizer_run_region(
+    loom_canonicalizer_t* canonicalizer, loom_func_like_t function,
+    loom_region_t* region, loom_op_t* parent_op,
+    const loom_canonicalizer_options_t* options,
+    loom_canonicalizer_result_t* out_result);
+
+// Runs canonicalization on a single function-like body region.
 iree_status_t loom_canonicalizer_run_function(
     loom_canonicalizer_t* canonicalizer, loom_func_like_t function,
     const loom_canonicalizer_options_t* options,

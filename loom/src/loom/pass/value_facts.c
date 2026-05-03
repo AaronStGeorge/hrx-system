@@ -23,6 +23,10 @@ static bool loom_pass_value_fact_scope_equal(loom_pass_value_fact_scope_t lhs,
     case LOOM_PASS_VALUE_FACT_SCOPE_FUNCTION:
       return lhs.function.op == rhs.function.op &&
              lhs.function.vtable == rhs.function.vtable;
+    case LOOM_PASS_VALUE_FACT_SCOPE_REGION:
+      return lhs.function.op == rhs.function.op &&
+             lhs.function.vtable == rhs.function.vtable &&
+             lhs.region == rhs.region && lhs.parent_op == rhs.parent_op;
     default:
       return false;
   }
@@ -30,12 +34,25 @@ static bool loom_pass_value_fact_scope_equal(loom_pass_value_fact_scope_t lhs,
 
 static iree_status_t loom_pass_value_fact_scope_validate(
     loom_pass_value_fact_scope_t scope) {
-  if (scope.kind != LOOM_PASS_VALUE_FACT_SCOPE_FUNCTION &&
-      scope.kind != LOOM_PASS_VALUE_FACT_SCOPE_MODULE) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "unsupported value fact scope");
+  switch (scope.kind) {
+    case LOOM_PASS_VALUE_FACT_SCOPE_FUNCTION:
+      if (!loom_func_like_isa(scope.function)) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "function fact scope requires a function");
+      }
+      return iree_ok_status();
+    case LOOM_PASS_VALUE_FACT_SCOPE_MODULE:
+      return iree_ok_status();
+    case LOOM_PASS_VALUE_FACT_SCOPE_REGION:
+      if (!scope.region) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "region fact scope requires a region");
+      }
+      return iree_ok_status();
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unsupported value fact scope");
   }
-  return iree_ok_status();
 }
 
 static iree_status_t loom_pass_value_fact_owner_ensure_table(
@@ -140,6 +157,10 @@ iree_status_t loom_pass_value_fact_owner_acquire(
     case LOOM_PASS_VALUE_FACT_SCOPE_FUNCTION:
       status =
           loom_value_fact_table_compute(&owner->table, module, scope.function);
+      break;
+    case LOOM_PASS_VALUE_FACT_SCOPE_REGION:
+      status = loom_value_fact_table_compute_region(
+          &owner->table, module, scope.function, scope.region, scope.parent_op);
       break;
     case LOOM_PASS_VALUE_FACT_SCOPE_MODULE:
       status = loom_pass_value_fact_owner_compute_module(owner, module);

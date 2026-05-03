@@ -36,7 +36,7 @@ struct loom_type_propagator_t {
   // Scratch arena owning transaction arrays and temporary overflow dimensions.
   iree_arena_allocator_t* arena;
 
-  // Function-local domain mapping module value IDs to compact ordinals.
+  // Region-local domain mapping module value IDs to compact ordinals.
   loom_local_value_domain_t value_domain;
 
   // Number of local value ordinals addressable by the dense arrays below.
@@ -260,15 +260,29 @@ static iree_status_t loom_type_propagator_record_region_tree_owners(
   return iree_ok_status();
 }
 
-iree_status_t loom_type_propagator_prepare_function(
-    loom_type_propagator_t* propagator, loom_func_like_t function) {
+static iree_status_t loom_type_propagator_record_root_entry_owner(
+    loom_type_propagator_t* propagator, loom_region_t* region,
+    loom_op_t* parent_op) {
+  if (!region || !parent_op || region->block_count == 0) {
+    return iree_ok_status();
+  }
+  loom_block_t* entry = loom_region_entry_block(region);
+  for (uint16_t arg_index = 0; arg_index < entry->arg_count; ++arg_index) {
+    IREE_RETURN_IF_ERROR(loom_type_propagator_note_owner(
+        propagator, loom_block_arg_id(entry, arg_index), parent_op));
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_type_propagator_prepare_region(
+    loom_type_propagator_t* propagator, loom_region_t* region,
+    loom_op_t* parent_op) {
   loom_local_value_domain_release(&propagator->value_domain);
-  loom_region_t* body = loom_func_like_body(function);
-  if (!body) {
+  if (!region) {
     return iree_ok_status();
   }
   iree_status_t status = loom_local_value_domain_acquire_for_region(
-      propagator->module, body, propagator->arena, &propagator->value_domain);
+      propagator->module, region, propagator->arena, &propagator->value_domain);
   if (iree_status_is_ok(status)) {
     status = loom_type_propagator_ensure_ordinal_capacity(
         propagator, propagator->value_domain.value_count);
@@ -278,12 +292,22 @@ iree_status_t loom_type_propagator_prepare_function(
            propagator->ordinal_capacity * sizeof(*propagator->owner_ops));
   }
   if (iree_status_is_ok(status)) {
-    status = loom_type_propagator_record_region_tree_owners(propagator, body);
+    status = loom_type_propagator_record_root_entry_owner(propagator, region,
+                                                          parent_op);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_type_propagator_record_region_tree_owners(propagator, region);
   }
   if (!iree_status_is_ok(status)) {
     loom_local_value_domain_release(&propagator->value_domain);
   }
   return status;
+}
+
+iree_status_t loom_type_propagator_prepare_function(
+    loom_type_propagator_t* propagator, loom_func_like_t function) {
+  return loom_type_propagator_prepare_region(
+      propagator, loom_func_like_body(function), function.op);
 }
 
 static bool loom_type_propagator_has_candidate(

@@ -34,8 +34,8 @@ typedef struct loom_type_propagator_t loom_type_propagator_t;
 typedef struct loom_type_transfer_context_t loom_type_transfer_context_t;
 
 // Allocates a type propagator from |arena|. The propagator owns compact scratch
-// indexed by function-local value ordinals and may be reused across many op
-// transactions in the same pass/function run.
+// indexed by region-local value ordinals and may be reused across many op
+// transactions in the same pass/region run.
 iree_status_t loom_type_propagator_allocate(
     loom_module_t* module, iree_arena_allocator_t* arena,
     loom_type_propagator_t** out_propagator);
@@ -44,10 +44,17 @@ iree_status_t loom_type_propagator_allocate(
 // object itself is arena-allocated and has no heap ownership.
 void loom_type_propagator_deinitialize(loom_type_propagator_t* propagator);
 
-// Refreshes function-local block-argument ownership metadata. Call once before
-// processing a function. New values created by rewrites are admitted to the
-// same function-local domain on demand; new region-owner ops are recorded when
+// Refreshes region-local block-argument ownership metadata. Call once before
+// processing an explicit region tree. |parent_op| owns the root entry block
+// arguments when provided. New values created by rewrites are admitted to the
+// same region-local domain on demand; new region-owner ops are recorded when
 // their constraints are processed.
+iree_status_t loom_type_propagator_prepare_region(
+    loom_type_propagator_t* propagator, loom_region_t* region,
+    loom_op_t* parent_op);
+
+// Refreshes function-body block-argument ownership metadata. Convenience
+// wrapper around loom_type_propagator_prepare_region.
 iree_status_t loom_type_propagator_prepare_function(
     loom_type_propagator_t* propagator, loom_func_like_t function);
 

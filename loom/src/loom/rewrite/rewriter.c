@@ -86,14 +86,12 @@ void loom_rewriter_deinitialize(loom_rewriter_t* rewriter) {
   memset(rewriter, 0, sizeof(*rewriter));
 }
 
-iree_status_t loom_rewriter_seed_function(loom_rewriter_t* rewriter,
-                                          loom_func_like_t function) {
-  loom_region_t* body = loom_func_like_body(function);
-  if (!body) return iree_ok_status();
+iree_status_t loom_rewriter_seed_region(loom_rewriter_t* rewriter,
+                                        loom_region_t* region) {
+  if (!region) return iree_ok_status();
 
-  // Iterative DFS over all regions in the function. We maintain a stack
-  // of regions to visit so that ops in nested regions (test.map body,
-  // scf.for body, scf.if then/else) are added to the worklist alongside
+  // Iterative DFS over the explicit region tree. We maintain a stack of regions
+  // to visit so that ops in nested regions are added to the worklist alongside
   // top-level ops.
   iree_host_size_t stack_capacity = LOOM_REWRITER_INITIAL_REGION_STACK_CAPACITY;
   loom_region_t** region_stack = NULL;
@@ -101,7 +99,7 @@ iree_status_t loom_rewriter_seed_function(loom_rewriter_t* rewriter,
       iree_arena_allocate_array(rewriter->arena, stack_capacity,
                                 sizeof(loom_region_t*), (void**)&region_stack));
   iree_host_size_t stack_count = 0;
-  region_stack[stack_count++] = body;
+  region_stack[stack_count++] = region;
 
   while (stack_count > 0) {
     loom_region_t* region = region_stack[--stack_count];
@@ -131,6 +129,31 @@ iree_status_t loom_rewriter_seed_function(loom_rewriter_t* rewriter,
   return iree_ok_status();
 }
 
+iree_status_t loom_rewriter_seed_function(loom_rewriter_t* rewriter,
+                                          loom_func_like_t function) {
+  return loom_rewriter_seed_region(rewriter, loom_func_like_body(function));
+}
+
+iree_status_t loom_rewriter_enable_region_analysis(
+    loom_rewriter_t* rewriter, loom_func_like_t function, loom_region_t* region,
+    loom_op_t* parent_op, loom_value_fact_table_t* facts) {
+  return loom_rewriter_enable_region_analysis_with_seed_facts(
+      rewriter, function, region, parent_op, facts, NULL);
+}
+
+iree_status_t loom_rewriter_enable_region_analysis_with_seed_facts(
+    loom_rewriter_t* rewriter, loom_func_like_t function, loom_region_t* region,
+    loom_op_t* parent_op, loom_value_fact_table_t* facts,
+    const loom_value_fact_table_t* seed_facts) {
+  rewriter->fact_table = facts;
+  if (seed_facts) {
+    IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_defined_facts(
+        rewriter->fact_table, seed_facts, rewriter->module));
+  }
+  return loom_value_fact_table_compute_region(
+      rewriter->fact_table, rewriter->module, function, region, parent_op);
+}
+
 iree_status_t loom_rewriter_enable_analysis(loom_rewriter_t* rewriter,
                                             loom_func_like_t function,
                                             loom_value_fact_table_t* facts) {
@@ -141,13 +164,9 @@ iree_status_t loom_rewriter_enable_analysis(loom_rewriter_t* rewriter,
 iree_status_t loom_rewriter_enable_analysis_with_seed_facts(
     loom_rewriter_t* rewriter, loom_func_like_t function,
     loom_value_fact_table_t* facts, const loom_value_fact_table_t* seed_facts) {
-  rewriter->fact_table = facts;
-  if (seed_facts) {
-    IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_defined_facts(
-        rewriter->fact_table, seed_facts, rewriter->module));
-  }
-  return loom_value_fact_table_compute(rewriter->fact_table, rewriter->module,
-                                       function);
+  return loom_rewriter_enable_region_analysis_with_seed_facts(
+      rewriter, function, loom_func_like_body(function), function.op, facts,
+      seed_facts);
 }
 
 iree_status_t loom_rewriter_build_constant(loom_rewriter_t* rewriter,

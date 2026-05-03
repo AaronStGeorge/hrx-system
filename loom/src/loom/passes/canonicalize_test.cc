@@ -95,6 +95,19 @@ class CanonicalizeTest : public ::testing::Test {
     return count;
   }
 
+  iree_status_t add_symbol(iree_string_view_t name,
+                           loom_symbol_ref_t* out_symbol_ref) {
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_module_intern_string(module_, name, &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_module_add_symbol(module_, name_id, &symbol_id));
+    *out_symbol_ref = (loom_symbol_ref_t){
+        .module_id = 0,
+        .symbol_id = symbol_id,
+    };
+    return iree_ok_status();
+  }
+
   // Returns the integer constant value of the op defining |value_id|.
   // Assumes the defining op is a constant-like op with an i64 attr.
   int64_t constant_value(loom_value_id_t value_id) {
@@ -571,6 +584,74 @@ TEST_F(CanonicalizeTest, DriverAcceptsSeedFacts) {
       loom_value_fact_table_lookup(final_facts, addi_result);
   EXPECT_TRUE(loom_value_facts_is_exact(addi_facts));
   EXPECT_EQ(addi_facts.range_lo, 42);
+
+  loom_canonicalizer_deinitialize(&canonicalizer);
+  loom_pass_value_fact_owner_deinitialize(&value_facts);
+  iree_arena_deinitialize(&pass_arena);
+  iree_arena_deinitialize(&seed_arena);
+}
+
+TEST_F(CanonicalizeTest, RegionDriverAcceptsSeedFacts) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_builder_t module_builder;
+  loom_builder_initialize(module_, &module_->arena, loom_module_block(module_),
+                          &module_builder);
+  loom_symbol_ref_t callee = {};
+  IREE_ASSERT_OK(add_symbol(IREE_SV("projected"), &callee));
+  loom_op_t* split_op = NULL;
+  IREE_ASSERT_OK(loom_test_split_func_build(&module_builder, 0, 0, 0, callee,
+                                            &i32, 1, LOOM_LOCATION_UNKNOWN,
+                                            &split_op));
+  loom_func_like_t split_func = loom_func_like_cast(module_, split_op);
+  loom_region_t* config = loom_test_split_func_config(split_op);
+  loom_block_t* config_entry = loom_region_entry_block(config);
+  loom_value_id_t config_arg = loom_block_arg_id(config_entry, 0);
+
+  loom_builder_t config_builder;
+  loom_builder_initialize(module_, &module_->arena, config_entry,
+                          &config_builder);
+  loom_op_t* addi = NULL;
+  IREE_ASSERT_OK(loom_test_addi_build(&config_builder, config_arg, config_arg,
+                                      i32, LOOM_LOCATION_UNKNOWN, &addi));
+  loom_value_id_t addi_result = loom_test_addi_result(addi);
+
+  loom_op_t* use = NULL;
+  IREE_ASSERT_OK(loom_test_use_build(&config_builder, &addi_result, 1,
+                                     LOOM_LOCATION_UNKNOWN, &use));
+
+  iree_arena_allocator_t seed_arena;
+  iree_arena_initialize(&block_pool_, &seed_arena);
+  loom_value_fact_table_t seed_facts;
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&seed_facts, &seed_arena,
+                                                  module_->values.capacity));
+  IREE_ASSERT_OK(loom_value_fact_table_define(&seed_facts, config_arg,
+                                              loom_value_facts_exact_i64(5)));
+
+  iree_arena_allocator_t pass_arena;
+  iree_arena_initialize(&block_pool_, &pass_arena);
+  loom_pass_value_fact_owner_t value_facts = {};
+  loom_pass_value_fact_owner_initialize(&block_pool_, &value_facts);
+  loom_canonicalizer_t canonicalizer;
+  IREE_ASSERT_OK(loom_canonicalizer_initialize(module_, &pass_arena,
+                                               &value_facts, &canonicalizer));
+  loom_canonicalizer_result_t result;
+  loom_canonicalizer_options_t options = {
+      .seed_facts = &seed_facts,
+  };
+  IREE_ASSERT_OK(loom_canonicalizer_run_region(
+      &canonicalizer, split_func, config, split_op, &options, &result));
+
+  EXPECT_TRUE(result.changed);
+  EXPECT_TRUE(result.boundary_maybe_changed);
+  EXPECT_EQ(constant_value(loom_op_operands(use)[0]), 10);
+  const loom_value_fact_table_t* final_facts =
+      loom_canonicalizer_fact_table(&canonicalizer);
+  ASSERT_NE(final_facts, nullptr);
+  loom_value_facts_t addi_facts =
+      loom_value_fact_table_lookup(final_facts, addi_result);
+  EXPECT_TRUE(loom_value_facts_is_exact(addi_facts));
+  EXPECT_EQ(addi_facts.range_lo, 10);
 
   loom_canonicalizer_deinitialize(&canonicalizer);
   loom_pass_value_fact_owner_deinitialize(&value_facts);

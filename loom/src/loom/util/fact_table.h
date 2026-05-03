@@ -13,8 +13,9 @@
 // allowing O(1) initialization via memset(0).
 //
 // Define stores facts for a value ID inside the caller-declared value
-// capacity. Compute runs a forward pass over a function, calling each op's fact
-// inference function to seed initial facts from constants and op semantics.
+// capacity. Compute runs a forward pass over an explicit region tree, calling
+// each op's fact inference function to seed initial facts from constants and op
+// semantics.
 //
 // The table is a reusable component: borrowed by the rewriter for
 // canonicalization, owned by pass-scoped storage, and usable standalone for IPO
@@ -586,8 +587,9 @@ struct loom_fact_context_t {
   // inference helpers.
   loom_value_fact_table_t* table;
 
-  // Function-like op whose body is currently being analyzed. Empty when facts
-  // are computed for individual detached ops instead of a full function body.
+  // Function-like op whose projected region is currently being analyzed. Empty
+  // when facts are computed for individual detached ops instead of a full
+  // function-like projection.
   loom_func_like_t function;
 
   // Optional selected target bundle for target-sensitive fact inference.
@@ -832,10 +834,19 @@ iree_status_t loom_value_fact_table_compute_op_and_report(
     loom_value_fact_table_t* table, const loom_module_t* module,
     const loom_op_t* op, bool* out_changed);
 
-// Seeds the table by running a forward pass over all ops in a
-// function. For each op with an inference function, calls compute_op.
-// Visits ops in dominance order so operand facts are available
-// before use.
+// Seeds the table by running a forward pass over |region| and its nested
+// regions. |function| supplies the logical function context for op fact
+// inference, and may be empty for detached regions. |parent_op| is the op that
+// owns |region|; it is used to seed entry-block argument facts such as loop IV
+// ranges. Visits ops in dominance order so operand facts are available before
+// use.
+iree_status_t loom_value_fact_table_compute_region(
+    loom_value_fact_table_t* table, const loom_module_t* module,
+    loom_func_like_t function, loom_region_t* region, loom_op_t* parent_op);
+
+// Seeds the table by running a forward pass over |function|'s body region and
+// nested regions. This is a convenience wrapper over
+// loom_value_fact_table_compute_region for body-only function passes.
 iree_status_t loom_value_fact_table_compute(loom_value_fact_table_t* table,
                                             const loom_module_t* module,
                                             loom_func_like_t function);
