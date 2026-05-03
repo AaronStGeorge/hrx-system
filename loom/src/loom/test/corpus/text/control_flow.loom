@@ -34,3 +34,18 @@ func.def @loop_and_switch(%init: index, %limit: index, %one: index, %variant: in
   }
   func.return %result : index
 }
+
+func.def @resultless_control(%variant: index, %cond: i1, %lo: index, %hi: index, %step: index) {
+  scf.if %cond {
+  } else {
+  }
+  scf.for %iv = [%lo to %hi step %step] {
+  }
+  scf.switch %variant {
+    case 0 {
+    }
+    default {
+    }
+  }
+  func.return
+}

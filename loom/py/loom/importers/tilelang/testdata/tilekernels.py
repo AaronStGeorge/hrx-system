@@ -189,14 +189,11 @@ kernel.def target(@hip_mcpu_gfx950) export("batched_transpose_kernel") @batched_
         %add_2 = index.add %madd_3, %k : index
         %load = view.load %x[%bz, %add, %add_2] : view<[%num_batches]x[%shape_x]x[%shape_y]xf16, %layout> -> f16
         view.store %load, %tmp_row[%k] : f16, view<4xf16, %layout>
-        scf.yield
       }
       scf.for %k = [%c0 to %c4 step %c1] {
         %load_2 = view.load %tmp_row[%k] : view<4xf16, %layout> -> f16
         view.store %load_2, %tmp[%k, %j] : f16, view<4x4xf16, %layout>
-        scf.yield
       }
-      scf.yield
     }
     scf.for %j = [%c0 to %c4 step %c1] {
       %div_2 = index.div %thread_id, %c4 : index
@@ -207,11 +204,8 @@ kernel.def target(@hip_mcpu_gfx950) export("batched_transpose_kernel") @batched_
         %madd_4 = index.madd %rem, %c4, %rem_2 : index
         %madd_5 = index.madd %madd, %c4, %k : index
         view.store %load_3, %out_shared[%madd_4, %madd_5] : f16, view<128x132xf16, %layout>
-        scf.yield
       }
-      scf.yield
     }
-    scf.yield
   }
   kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
   %c128_2 = index.constant 128 : index
@@ -221,9 +215,7 @@ kernel.def target(@hip_mcpu_gfx950) export("batched_transpose_kernel") @batched_
       %madd_6 = index.madd %bx, %c128_2, %i : index
       %madd_7 = index.madd %by, %c128_2, %j : index
       view.store %load_4, %out[%bz, %madd_6, %madd_7] : f16, view<[%num_batches]x[%shape_y]x[%shape_x]xf16, %layout>
-      scf.yield
     }
-    scf.yield
   }
   kernel.return
 }
@@ -335,7 +327,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") @group_count_k
     %madd_2 = index.madd %tmp, %c128, %thread_idx : index
     %const = scalar.constant 0 : i32
     view.store %const, %out_shared[%madd_2] : i32, view<128xi32, %layout>
-    scf.yield
   }
   kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
   %num_tokens_idx = index.cast %num_tokens : i32 to index
@@ -357,11 +348,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") @group_count_k
         %const_3 = scalar.constant 1 : i32
         %group_idx_2 = index.cast %group_assumed : i32 to index
         view.atomic.reduce<addi> %const_3, %out_shared[%group_idx_2] {ordering = relaxed, scope = workgroup} : i32, view<128xi32, %layout>
-        scf.yield
       }
-      scf.yield
     }
-    scf.yield
   }
   kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
   %c135 = index.constant 135 : index
@@ -375,9 +363,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") @group_count_k
     scf.if %cmp_2 {
       %load_3 = view.load %out_shared[%madd_4] : view<128xi32, %layout> -> i32
       view.atomic.reduce<addi> %load_3, %out[%madd_4] {ordering = relaxed, scope = device} : i32, view<8xi32, %layout>
-      scf.yield
     }
-    scf.yield
   }
   kernel.return
 }
@@ -510,7 +496,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") @mask_i
       %div_2 = index.div %madd, %c2 : index
       %const_2 = scalar.constant -1 : i64
       view.store %const_2, %masked_indices[%div_2, %rem_2] : i64, view<[%num_tokens]x2xi64, %layout>
-      scf.yield
     } else {
       %load_4 = view.load %value[%c0] : view<1xi64, %layout> -> i64
       %muli = scalar.muli %tp_rank, %per_gpu : i32
@@ -534,9 +519,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") @mask_i
       %load_8 = view.load %value[%c0] : view<1xi64, %layout> -> i64
       %select = scf.select %cmp_4, %const_3, %load_8 : i64
       view.store %select, %masked_indices[%div_3, %rem_3] : i64, view<[%num_tokens]x2xi64, %layout>
-      scf.yield
     }
-    scf.yield
   }
   kernel.return
 }
@@ -644,14 +627,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") @normaliz
     scf.for %i = [%c0 to %c2 step %c1] {
       %load = view.load %topk_weights[%madd, %i] : view<[%num_tokens]x2xf32, %layout> -> f32
       view.store %load, %weights_local[%i] : f32, view<2xf32, %layout>
-      scf.yield
     }
     scf.for %i = [%c0 to %c2 step %c1] {
       %load_2 = view.load %total[%c0] : view<1xf32, %layout> -> f32
       %load_3 = view.load %weights_local[%i] : view<2xf32, %layout> -> f32
       %addf = scalar.addf %load_2, %load_3 : f32
       view.store %addf, %total[%c0] : f32, view<1xf32, %layout>
-      scf.yield
     }
     %load_4 = view.load %total[%c0] : view<1xf32, %layout> -> f32
     view.store %load_4, %denominator[%madd] : f32, view<[%num_tokens]xf32, %layout>
@@ -660,9 +641,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") @normaliz
       %load_6 = view.load %total[%c0] : view<1xf32, %layout> -> f32
       %divf = scalar.divf %load_5, %load_6 : f32
       view.store %divf, %normalized_weights[%madd, %i] : f32, view<[%num_tokens]x2xf32, %layout>
-      scf.yield
     }
-    scf.yield
   }
   kernel.return
 }
@@ -781,7 +760,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") @aux_fi_kernel(%top
     %madd_2 = index.madd %tmp, %c128, %thread_idx : index
     %const = scalar.constant 0 : i32
     view.store %const, %out_shared[%madd_2] : i32, view<128xi32, %layout>
-    scf.yield
   }
   kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
   %num_tokens_idx = index.cast %num_tokens : i32 to index
@@ -803,11 +781,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") @aux_fi_kernel(%top
         %const_3 = scalar.constant 1 : i32
         %expert_idx_idx = index.cast %expert_idx_assumed : i32 to index
         view.atomic.reduce<addi> %const_3, %out_shared[%expert_idx_idx] {ordering = relaxed, scope = workgroup} : i32, view<128xi32, %layout>
-        scf.yield
       }
-      scf.yield
     }
-    scf.yield
   }
   kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
   %c135 = index.constant 135 : index
@@ -827,9 +802,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") @aux_fi_kernel(%top
       %sitofp_2 = scalar.sitofp %muli_2 : i32 to f32
       %divf = scalar.divf %sitofp, %sitofp_2 : f32
       view.atomic.reduce<addf> %divf, %out[%madd_4] {ordering = relaxed, scope = device} : f32, view<8xf32, %layout>
-      scf.yield
     }
-    scf.yield
   }
   kernel.return
 }
@@ -952,7 +925,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel
     scf.for %j = [%c0 to %c1 step %c1] {
       %const = scalar.constant 0 : i64
       view.store %const, %group_sel[%j] : i64, view<2xi64, %layout>
-      scf.yield
     }
     %c4 = index.constant 4 : index
     scf.for %j = [%c0 to %c4 step %c1] {
@@ -986,11 +958,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel
       scf.if %cmp_4 {
         %const_7 = scalar.constant -1 : i64
         view.store %const_7, %group_indices[%madd_2, %j] : i64, view<[%num_tokens]x4xi64, %layout>
-        scf.yield
       }
-      scf.yield
     }
-    scf.yield
   }
   kernel.return
 }
@@ -1154,11 +1123,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_k
         %load_6 = view.load %offsets[%bx, %madd_2] : view<2x8xi32, %layout> -> i32
         %addi = scalar.addi %trunci, %load_6 : i32
         view.store %addi, %output[%bx, %madd, %madd_2] : i32, view<2x[%num_tokens]x8xi32, %layout>
-        scf.yield
       }
-      scf.yield
     }
-    scf.yield
   }
   kernel.return
 }
@@ -1273,11 +1239,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("expand_to_fused_kernel") @expand_to
         %madd = index.madd %tmp, %c64, %thread_idx : index
         %const_2 = scalar.constant 0.0 : f16
         view.store %const_2, %expanded_x[%bx, %madd] : f16, view<[%num_expanded_tokens]x64xf16, %layout>
-        scf.yield
       }
-      scf.yield
     }
-    scf.yield
   }
   %num_tokens_idx = index.cast %num_tokens : i32 to index
   %cmp_3 = index.cmp sge, %bx, %num_tokens_idx : index
@@ -1301,11 +1264,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("expand_to_fused_kernel") @expand_to
         %load_3 = view.load %x[%bx_assumed, %madd_2] : view<[%num_tokens]x64xf16, %layout> -> f16
         %pos_idx = index.cast %pos_assumed : i32 to index
         view.store %load_3, %expanded_x[%pos_idx, %madd_2] : f16, view<[%num_expanded_tokens]x64xf16, %layout>
-        scf.yield
       }
-      scf.yield
     }
-    scf.yield
   }
   kernel.return
 }

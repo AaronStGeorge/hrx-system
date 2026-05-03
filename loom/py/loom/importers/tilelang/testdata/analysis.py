@@ -84,7 +84,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("scoped_tl_assume") @scoped_tl_assum
   scf.for %i = [%c0 to %n_idx step %c1] {
     %load = view.load %src_view[%i] : view<4xf32, %layout> -> f32
     view.store %load, %dst_view[%i] : f32, view<4xf32, %layout>
-    scf.yield
   }
   kernel.return
 }

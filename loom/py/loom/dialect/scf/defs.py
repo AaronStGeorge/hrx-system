@@ -15,11 +15,11 @@ Core ops:
   scf.select  — Scalar-condition whole-value selection.
   scf.condition — Boolean forwarding terminator for scf.while before regions.
   scf.switch  — Multi-way index branch with explicit case regions.
-  scf.yield   — Variadic terminator for all scf op regions.
+  scf.yield   — Variadic terminator for scf value-forwarding regions.
 
-Always-explicit yield (no implicit terminator). Every scf op region
-ends with a literal scf.yield, so passes walking region terminators
-have a single uniform op kind to handle.
+Every scf op region still contains a concrete terminator in memory. Text forms
+may elide an empty `scf.yield` for ops whose regions all use it as their
+terminator; the parser materializes the terminator again on read.
 """
 
 from loom.assembly import (
@@ -55,6 +55,7 @@ from loom.dsl import (
     BlockArgCount,
     BlockArgsMatchTypes,
     Dialect,
+    ImplicitTerminator,
     IterArgsMatchResults,
     LoopLikeInterface,
     Op,
@@ -83,11 +84,9 @@ scf_ops = Dialect(
 # scf.yield — variadic region terminator
 # ============================================================================
 #
-# Single shared terminator for every scf op region (scf.for body,
-# scf.if then/else). No implicit-yield variant: regions always end
-# with an explicit scf.yield, even when there are no values to
-# forward. Trades one line of printed IR for uniform terminator
-# handling in every pass.
+# Shared terminator for scf regions that forward values to a parent op. Empty
+# `scf.yield` may be implicit in text for parent ops that opt in, but the
+# terminator is always present in memory.
 
 scf_yield = Op(
     "scf.yield",
@@ -295,6 +294,7 @@ scf_for = Op(
         YieldCountMatchesResults("body", "results"),
         YieldTypesMatchResults("body", "results"),
     ],
+    traits=[ImplicitTerminator("scf.yield")],
     format=[
         Ref("iv"),
         EQUALS,
@@ -434,6 +434,7 @@ scf_if = Op(
         YieldCountMatchesResults("else_region", "results"),
         YieldTypesMatchResults("else_region", "results"),
     ],
+    traits=[ImplicitTerminator("scf.yield")],
     format=[
         Ref("condition"),
         OptionalGroup(
@@ -501,6 +502,7 @@ scf_switch = Op(
     interfaces=[
         RegionBranchInterface(selector="selector"),
     ],
+    traits=[ImplicitTerminator("scf.yield")],
     format=[
         Ref("selector"),
         OptionalGroup(

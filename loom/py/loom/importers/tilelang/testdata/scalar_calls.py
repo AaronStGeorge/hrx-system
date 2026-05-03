@@ -89,12 +89,10 @@ kernel.def target(@hip_mcpu_gfx1100) export("scalar_calls") @scalar_calls(%src: 
     %sigmoid = scalar.divf %one, %sigmoid_den : f32
     %addf = scalar.addf %sqrtf, %sigmoid : f32
     view.store %addf, %dst_view[%c0] : f32, view<4xf32, %layout>
-    scf.yield
   } else {
     %load_4 = view.load %src_view[%c0] : view<4xf32, %layout> -> f32
     %expf = scalar.expf %load_4 : f32
     view.store %expf, %dst_view[%c0] : f32, view<4xf32, %layout>
-    scf.yield
   }
   kernel.return
 }
@@ -189,7 +187,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("dynamic_loop_bound") @dynamic_loop_
   scf.for %i = [%c0 to %n_idx step %c1] {
     %load = view.load %src_view[%i] : view<8xf32, %layout> -> f32
     view.store %load, %dst_view[%i] : f32, view<8xf32, %layout>
-    scf.yield
   }
   kernel.return
 }
@@ -238,7 +235,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("ceildiv_loop") @ceildiv_loop(%src: 
   scf.for %i = [%c0 to %c2 step %c1] {
     %load = view.load %src_view[%i] : view<8xf32, %layout> -> f32
     view.store %load, %dst_view[%i] : f32, view<8xf32, %layout>
-    scf.yield
   }
   kernel.return
 }
