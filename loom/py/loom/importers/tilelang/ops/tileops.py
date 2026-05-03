@@ -15,6 +15,7 @@ from typing import cast
 from loom.builder import ValueRef
 from loom.importers.tilelang.context import TileLangConversionContext
 from loom.importers.tilelang.converter import ExpressionOptions, TileLangConverter
+from loom.importers.tilelang.coverage import coverage_row
 from loom.importers.tilelang.nodes import dtype, mapping_items, node_kind, node_text
 from loom.importers.tilelang.ops.topology import integer_value
 from loom.ir import INDEX, ShapedType, StaticDim, Type, TypeKind
@@ -77,10 +78,9 @@ def convert_tileop_call(
         return _convert_finalize_reducer_call(
             expr, context, converter, options, op_name
         )
-    context.record_blocked(
-        node_text(expr),
-        f"TileLang tile operation `{op_name}` is not imported",
-    )
+    if op_name in _GEMM_CALLS:
+        return _convert_gemm_call(expr, context, options, op_name)
+    _record_unsupported_tileop(expr, context, op_name)
     return None
 
 
@@ -592,6 +592,49 @@ def _convert_finalize_reducer_all(
     return None
 
 
+def _convert_gemm_call(
+    expr: object,
+    context: TileLangConversionContext,
+    options: ExpressionOptions,
+    op_name: str,
+) -> ValueRef | None:
+    if not _require_effect(expr, context, options, op_name):
+        return None
+    args = _args(expr)
+    if len(args) < 19:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` expects at least 19 descriptor operands",
+        )
+        return None
+    descriptor = ", ".join(
+        (
+            f"a={_region_source_name(args[0])}",
+            f"b={_region_source_name(args[1])}",
+            f"c={_region_source_name(args[2])}",
+            f"transpose_a={_field_bool(args[3])}",
+            f"transpose_b={_field_bool(args[4])}",
+            f"m={_field_integer(args[5])}",
+            f"n={_field_integer(args[6])}",
+            f"k={_field_integer(args[7])}",
+            f"policy={_field_integer(args[8])}",
+            f"clear_accum={_field_bool(args[9])}",
+            f"k_pack={_field_integer(args[14])}",
+            f"wg_wait={_field_integer(args[15])}",
+        )
+    )
+    row = coverage_row(op_name)
+    if row is None:
+        context.record_blocked(
+            node_text(expr),
+            f"TileLang GEMM operation `{op_name}` is not in the coverage manifest",
+        )
+        return None
+    reason = f"call `{op_name}` coverage state is {row.state.value}: {row.note}"
+    context.record_blocked(node_text(expr), f"{reason} ({descriptor})")
+    return None
+
+
 def _require_effect(
     expr: object,
     context: TileLangConversionContext,
@@ -605,6 +648,24 @@ def _require_effect(
         f"call `{op_name}` is effect-only and must appear under tir.Evaluate",
     )
     return False
+
+
+def _record_unsupported_tileop(
+    expr: object,
+    context: TileLangConversionContext,
+    op_name: str,
+) -> None:
+    row = coverage_row(op_name)
+    if row is None:
+        context.record_blocked(
+            node_text(expr),
+            f"TileLang tile operation `{op_name}` is not in the coverage manifest",
+        )
+        return
+    context.record_blocked(
+        node_text(expr),
+        f"call `{op_name}` coverage state is {row.state.value}: {row.note}",
+    )
 
 
 def _decode_region(
@@ -1453,6 +1514,37 @@ def _static_bool(value: object) -> bool | None:
     return None
 
 
+def _field_bool(value: object) -> str:
+    boolean = _static_bool(value)
+    if boolean is None:
+        return "dynamic"
+    return "true" if boolean else "false"
+
+
+def _field_integer(value: object) -> str:
+    integer = integer_value(value)
+    if integer is None:
+        return "dynamic"
+    return str(integer)
+
+
+def _region_source_name(value: object) -> str:
+    if _call_op_name(value) == "tl.tileop.region":
+        args = _args(value)
+        if args:
+            return _region_source_name(args[0])
+    if node_kind(value) == "BufferLoad":
+        buffer = getattr(value, "buffer", None)
+        name = getattr(buffer, "name", None)
+        if name:
+            return str(name)
+        data = getattr(buffer, "data", None)
+        data_name = getattr(data, "name", None)
+        if data_name:
+            return str(data_name)
+    return node_kind(value)
+
+
 def _convert_fill_value(
     source: object,
     element_type: Type,
@@ -1521,6 +1613,10 @@ _REDUCE_CALLS = {
 
 _FINALIZE_REDUCER_CALLS = {
     "tl.tileop.finalize_reducer",
+}
+
+_GEMM_CALLS = {
+    "tl.tileop.gemm",
 }
 
 _REDUCER_OPERATION_CODES = {

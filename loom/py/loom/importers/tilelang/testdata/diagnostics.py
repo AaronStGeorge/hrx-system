@@ -93,6 +93,37 @@ def tileop_copy_coalesced_width(tilelang: Any, T: Any) -> TileLangImportInput:
 
 
 # ====
+# ERROR@+1: "tl.tileop.gemm" "vector.fragment" "m=16" "a=a_shared"
+@tilelang_case(
+    name="tileop_gemm_deferred",
+    category="diagnostic",
+    tags=("tileop", "gemm", "matrix"),
+)
+def tileop_gemm_deferred(T: Any) -> TileLangImportInput:
+    @T.prim_func  # type: ignore[untyped-decorator]
+    def tileop_gemm_deferred_kernel(
+        a: T.Tensor[(16, 16), T.float16],
+        b: T.Tensor[(16, 16), T.float16],
+        c: T.Tensor[(16, 16), T.float32],
+    ) -> None:
+        with T.Kernel(1, threads=32):
+            a_shared = T.alloc_shared((16, 16), T.float16)
+            b_shared = T.alloc_shared((16, 16), T.float16)
+            c_local = T.alloc_fragment((16, 16), T.float32)
+            T.copy(a, a_shared)
+            T.copy(b, b_shared)
+            T.fill(c_local, 0.0)
+            T.gemm(a_shared, b_shared, c_local)
+            T.copy(c_local, c)
+
+    return TileLangImportInput(
+        source=tileop_gemm_deferred_kernel,
+        target="hip -mcpu=gfx1100",
+        name="tileop_gemm_deferred_kernel",
+    )
+
+
+# ====
 # ERROR@+1: "call `tl.shfl_xor_sync` mask must be the full warp mask"
 @tilelang_case(
     name="masked_warp_shuffle",

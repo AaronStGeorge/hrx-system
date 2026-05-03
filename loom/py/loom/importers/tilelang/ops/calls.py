@@ -18,7 +18,7 @@ from loom.importers.tilelang.converter import (
     TileLangConverter,
     TileLangConverterRegistry,
 )
-from loom.importers.tilelang.coverage import OpCoverage, coverage_by_name
+from loom.importers.tilelang.coverage import coverage_row
 from loom.importers.tilelang.nodes import dtype, mapping_items, node_kind, node_text
 from loom.importers.tilelang.ops.assumptions import convert_assume_call
 from loom.importers.tilelang.ops.conditions import coerce_condition
@@ -1282,7 +1282,7 @@ def _record_unsupported_call(
     context: TileLangConversionContext,
     op_name: str,
 ) -> None:
-    row = _coverage_row(op_name)
+    row = coverage_row(op_name)
     if row is None:
         context.record_blocked(
             node_text(expr),
@@ -1293,17 +1293,6 @@ def _record_unsupported_call(
         node_text(expr),
         f"call `{op_name}` coverage state is {row.state.value}: {row.note}",
     )
-
-
-def _coverage_row(op_name: str) -> OpCoverage | None:
-    rows = coverage_by_name()
-    exact = rows.get(op_name)
-    if exact is not None:
-        return exact
-    for row in rows.values():
-        if row.name.endswith(".*") and op_name.startswith(row.name[:-1]):
-            return row
-    return None
 
 
 def _scalar_integer_builder(builder_name: str, source_dtype: object) -> str:

@@ -1071,6 +1071,19 @@ def coverage_by_name() -> Mapping[str, OpCoverage]:
     return coverage
 
 
+def coverage_row(op_name: str) -> OpCoverage | None:
+    """Returns the exact or wildcard coverage row for a TileLang/TIR op name."""
+
+    rows = coverage_by_name()
+    exact = rows.get(op_name)
+    if exact is not None:
+        return exact
+    for row in rows.values():
+        if row.name.endswith(".*") and op_name.startswith(row.name[:-1]):
+            return row
+    return None
+
+
 def audit_coverage(names: Iterable[str]) -> CoverageAudit:
     known_rows = coverage_by_name()
     known: list[str] = []
