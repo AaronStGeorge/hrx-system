@@ -945,7 +945,11 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "tl.tileop.copy",
         OpFamily.TILELANG_TILEOP,
         CoverageState.SUPPORTED,
-        "Region-to-region copy; imports as structured scf.for plus view.load/store.",
+        (
+            "Region-to-region copy; imports as structured scf.for plus "
+            "view.load/store. disable_tma normalizes to this explicit copy; "
+            "other scheduling annotations remain deferred."
+        ),
     ),
     OpCoverage(
         "tl.tileop.fill",

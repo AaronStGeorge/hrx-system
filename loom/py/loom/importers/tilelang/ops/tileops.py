@@ -97,6 +97,8 @@ def _convert_copy_call(
     if len(args) != 2:
         context.record_blocked(node_text(expr), f"call `{op_name}` expects 2 regions")
         return None
+    if not _validate_copy_annotations(expr, context):
+        return None
     source = _decode_region(args[0], expr, context, converter, expected_access=1)
     target = _decode_region(args[1], expr, context, converter, expected_access=2)
     if source is None or target is None:
@@ -140,6 +142,38 @@ def _convert_copy_call(
         return None
     context.record_converted(node_text(expr), "tl.tileop.copy")
     return None
+
+
+def _validate_copy_annotations(
+    expr: object,
+    context: TileLangConversionContext,
+) -> bool:
+    annotations = _call_annotations(expr)
+    unknown_annotations = sorted(set(annotations) - _COPY_ANNOTATIONS)
+    if unknown_annotations:
+        context.record_blocked(
+            node_text(expr),
+            (
+                "tl.tileop.copy annotations are not imported: "
+                + ", ".join(unknown_annotations)
+            ),
+        )
+        return False
+    if "disable_tma" in annotations:
+        disable_tma = _static_bool(annotations["disable_tma"])
+        if disable_tma is None:
+            context.record_blocked(
+                node_text(expr),
+                "tl.tileop.copy annotation `disable_tma` is not static",
+            )
+            return False
+    for annotation in sorted(set(annotations) - {"disable_tma"}):
+        context.record_blocked(
+            node_text(expr),
+            f"copy annotation `{annotation}` needs scheduling import",
+        )
+        return False
+    return True
 
 
 def _convert_fill_call(
@@ -1192,6 +1226,15 @@ def _call_annotations(call: object) -> dict[str, object]:
     return {str(key): value for key, value in mapping_items(annotations)}
 
 
+def _static_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    integer = integer_value(value)
+    if integer in (0, 1):
+        return bool(integer)
+    return None
+
+
 def _convert_fill_value(
     source: object,
     element_type: Type,
@@ -1232,6 +1275,23 @@ _REGION_CALLS = {
 _COPY_CALLS = {
     "tl.tileop.copy",
 }
+
+_COPY_ANNOTATIONS = frozenset(
+    (
+        "barrier",
+        "coalesced_width",
+        "disable_tma",
+        "emit_arrive",
+        "eviction_policy",
+        "force_cp_async",
+        "is_async_copy",
+        "is_tma_copy",
+        "no_implicit_async_commit_wait",
+        "parallel_loop_layout",
+        "tl.pipeline_mbar_phase_expr",
+        "use_2cta",
+    )
+)
 
 _FILL_CALLS = {
     "tl.tileop.fill",

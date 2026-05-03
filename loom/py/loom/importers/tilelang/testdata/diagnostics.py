@@ -59,3 +59,34 @@ def tileop_finalize_reducer_all(T: Any) -> TileLangImportInput:
         target="hip -mcpu=gfx1100",
         name="tileop_finalize_reducer_all_kernel",
     )
+
+
+# ====
+# ERROR@+1: "copy annotation `coalesced_width` needs scheduling import"
+@tilelang_case(
+    name="tileop_copy_coalesced_width",
+    category="diagnostic",
+    tags=("tileop", "copy", "annotation"),
+)
+def tileop_copy_coalesced_width(tilelang: Any, T: Any) -> TileLangImportInput:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_kernel() -> Any:
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def tileop_copy_coalesced_width_kernel(
+            src: T.Tensor[(4,), T.float32],
+            dst: T.Tensor[(4,), T.float32],
+        ) -> None:
+            with T.Kernel(1, threads=1):
+                T.copy(src, dst, coalesced_width=4)
+
+        return tileop_copy_coalesced_width_kernel
+
+    return TileLangImportInput(
+        source=get_kernel,
+        target="hip -mcpu=gfx1100",
+        name="tileop_copy_coalesced_width_kernel",
+    )

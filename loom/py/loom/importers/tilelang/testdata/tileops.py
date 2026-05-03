@@ -64,6 +64,64 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_copy_kernel") @tileop_copy_k
 
 
 # ====
+@tilelang_case(
+    name="tileop_copy_disable_tma_1d",
+    category="op",
+    tags=("tileop", "copy", "annotation"),
+)
+def tileop_copy_disable_tma_1d(tilelang: Any, T: Any) -> TileLangImportInput:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_kernel() -> Any:
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def tileop_copy_disable_tma_kernel(
+            src: T.Tensor[(4,), T.float32],
+            dst: T.Tensor[(4,), T.float32],
+        ) -> None:
+            with T.Kernel(1, threads=1):
+                T.copy(src, dst, disable_tma=True)
+
+        return tileop_copy_disable_tma_kernel
+
+    return TileLangImportInput(
+        source=get_kernel,
+        target="hip -mcpu=gfx1100",
+        name="tileop_copy_disable_tma_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_copy_disable_tma_kernel") @tileop_copy_disable_tma_kernel(%src_handle: buffer, %dst_handle: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %tx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %c0 = index.constant 0 : index
+  %c4 = index.constant 4 : index
+  %c1 = index.constant 1 : index
+  scf.for %i0 = [%c0 to %c4 step %c1] {
+    %copy = view.load %src[%i0] : view<4xf32, %layout> -> f32
+    view.store %copy, %dst[%i0] : f32, view<4xf32, %layout>
+  }
+  kernel.return
+}
+"""
+
+
+# ====
 @tilelang_case(name="tileop_fill_1d", category="op", tags=("tileop", "fill"))
 def tileop_fill_1d(tilelang: Any, T: Any, tir: Any) -> TileLangImportInput:
     @tilelang.jit(  # type: ignore[untyped-decorator]
