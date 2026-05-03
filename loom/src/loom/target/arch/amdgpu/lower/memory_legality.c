@@ -38,6 +38,14 @@ iree_status_t loom_amdgpu_low_legality_verify_memory(
           module, loom_target_low_legality_fact_table(context), descriptor_set,
           loom_target_low_legality_function(context), op, &access,
           &source_diagnostic, &diagnostic)) {
+    bool handled = false;
+    if (diagnostic.rejection_bits != 0) {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_access_rejection_diagnostic(
+          context, op, &access.source, &diagnostic, &handled));
+      if (handled) {
+        return iree_ok_status();
+      }
+    }
     const iree_string_view_t detail =
         source_diagnostic.rejection_bits != 0
             ? loom_low_source_memory_access_rejection_detail(

@@ -326,6 +326,61 @@ ERR_AMDGPU_018 = ErrorDef(
     fix_hint="Use the AMDGPU M0 physical register type for the M0 live-in",
 )
 
+# ERR_AMDGPU_019: AMDGPU packed memory payload does not fill registers.
+ERR_AMDGPU_019 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=19,
+    severity=Severity.ERROR,
+    summary="AMDGPU packed memory payload footprint is unsupported.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' in '@{function_name}': payload "
+        "type {payload_type} has {payload_bit_count} payload bit(s), but the "
+        "selected packed memory register footprint holds {register_bit_count} "
+        "bit(s)"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("payload_type", ParamKind.TYPE),
+        ErrorParam("payload_bit_count", ParamKind.U32),
+        ErrorParam("register_bit_count", ParamKind.U32),
+    ),
+    fix_hint=(
+        "Widen the packed payload to fill complete 32-bit AMDGPU memory "
+        "registers or use a supported scalar D16 access"
+    ),
+)
+
+# ERR_AMDGPU_020: AMDGPU flat dynamic memory address is unsupported.
+ERR_AMDGPU_020 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=20,
+    severity=Severity.ERROR,
+    summary="AMDGPU flat dynamic memory address is unsupported.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' in '@{function_name}': "
+        "{operation_kind} in {memory_space} memory has flat dynamic address "
+        "term {dynamic_term_index} with byte stride {byte_stride}, byte range "
+        "[{byte_range_lo}, {byte_range_hi}], and byte shift {byte_shift}"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("operation_kind", ParamKind.STRING),
+        ErrorParam("memory_space", ParamKind.STRING),
+        ErrorParam("dynamic_term_index", ParamKind.U32),
+        ErrorParam("byte_stride", ParamKind.I64),
+        ErrorParam("byte_range_lo", ParamKind.I64),
+        ErrorParam("byte_range_hi", ParamKind.I64),
+        ErrorParam("byte_shift", ParamKind.U32),
+    ),
+    fix_hint=(
+        "Prove a non-negative 32-bit dynamic byte address before AMDGPU "
+        "flat memory lowering, or lower through an address form that supports "
+        "the dynamic term"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_002,
@@ -345,4 +400,6 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_016,
     ERR_AMDGPU_017,
     ERR_AMDGPU_018,
+    ERR_AMDGPU_019,
+    ERR_AMDGPU_020,
 )

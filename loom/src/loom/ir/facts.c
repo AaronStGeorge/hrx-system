@@ -64,6 +64,56 @@ loom_value_facts_t loom_value_facts_make(int64_t lo, int64_t hi,
   return facts;
 }
 
+bool loom_value_facts_scalar_type_domain(loom_scalar_type_t scalar_type,
+                                         int64_t* out_lo, int64_t* out_hi) {
+  switch (scalar_type) {
+    case LOOM_SCALAR_TYPE_INDEX:
+    case LOOM_SCALAR_TYPE_I64:
+      *out_lo = INT64_MIN;
+      *out_hi = INT64_MAX;
+      return true;
+    case LOOM_SCALAR_TYPE_OFFSET:
+      *out_lo = 0;
+      *out_hi = INT64_MAX;
+      return true;
+    case LOOM_SCALAR_TYPE_I1:
+      *out_lo = 0;
+      *out_hi = 1;
+      return true;
+    case LOOM_SCALAR_TYPE_I8:
+    case LOOM_SCALAR_TYPE_I16:
+    case LOOM_SCALAR_TYPE_I32: {
+      const int32_t bitwidth = loom_scalar_type_bitwidth(scalar_type);
+      const int64_t positive_extent = INT64_C(1) << (bitwidth - 1);
+      *out_lo = -positive_extent;
+      *out_hi = positive_extent - 1;
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
+loom_value_facts_t loom_value_facts_clamp_domain(loom_value_facts_t facts,
+                                                 int64_t lo, int64_t hi) {
+  if (loom_value_facts_is_float(facts)) {
+    return loom_value_facts_make(lo, hi, 1);
+  }
+  int64_t range_lo = loom_max_i64(facts.range_lo, lo);
+  int64_t range_hi = loom_min_i64(facts.range_hi, hi);
+  if (range_lo > range_hi) {
+    return loom_value_facts_make(lo, hi, 1);
+  }
+  loom_value_facts_t result =
+      loom_value_facts_make(range_lo, range_hi, facts.known_divisor);
+  if (iree_any_bit_set(facts.flags, LOOM_VALUE_FACT_POWER_OF_TWO) &&
+      range_hi > 0) {
+    result.flags |= LOOM_VALUE_FACT_POWER_OF_TWO;
+  }
+  result.extension_id = facts.extension_id;
+  return result;
+}
+
 //===----------------------------------------------------------------------===//
 // Flag recomputation
 //===----------------------------------------------------------------------===//

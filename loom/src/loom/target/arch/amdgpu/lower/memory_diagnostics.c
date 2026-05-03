@@ -6,11 +6,18 @@
 
 #include <stdint.h>
 
+#include "loom/codegen/low/source_memory_plan.h"
+#include "loom/ir/context.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
 #include "loom/target/arch/amdgpu/lower/memory_internal.h"
 
 #define LOOM_AMDGPU_LDS_BANK_COUNT 32u
 #define LOOM_AMDGPU_LDS_BANK_WIDTH_BYTES 4u
+
+enum {
+  LOOM_AMDGPU_ERROR_MEMORY_PACKED_REGISTER_FOOTPRINT = 19,
+  LOOM_AMDGPU_ERROR_MEMORY_FLAT_DYNAMIC_ADDRESS = 20,
+};
 
 typedef struct loom_amdgpu_memory_access_bank_summary_t {
   // Distance between adjacent workitems in 32-bit LDS bank words.
@@ -63,6 +70,112 @@ static iree_string_view_t loom_amdgpu_memory_operation_name(
       return IREE_SV("store");
   }
   return IREE_SV("invalid");
+}
+
+static iree_string_view_t loom_amdgpu_source_memory_operation_name(
+    loom_low_source_memory_operation_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_SOURCE_MEMORY_OPERATION_LOAD:
+      return IREE_SV("load");
+    case LOOM_LOW_SOURCE_MEMORY_OPERATION_STORE:
+      return IREE_SV("store");
+    case LOOM_LOW_SOURCE_MEMORY_OPERATION_PREFETCH:
+      return IREE_SV("prefetch");
+    case LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_REDUCE:
+      return IREE_SV("atomic_reduce");
+    case LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_RMW:
+      return IREE_SV("atomic_rmw");
+    case LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_CMPXCHG:
+      return IREE_SV("atomic_cmpxchg");
+  }
+  return IREE_SV("invalid");
+}
+
+static iree_string_view_t loom_amdgpu_memory_diagnostic_nonempty(
+    iree_string_view_t value, iree_string_view_t placeholder) {
+  return iree_string_view_is_empty(value) ? placeholder : value;
+}
+
+static iree_status_t loom_amdgpu_emit_memory_access_packed_footprint_error(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    const loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
+  const loom_module_t* module = loom_target_low_legality_module(context);
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_amdgpu_memory_diagnostic_nonempty(
+          bundle->name, IREE_SV("<empty>"))),
+      loom_param_string(loom_amdgpu_memory_diagnostic_nonempty(
+          bundle->export_plan->name, IREE_SV("<empty>"))),
+      loom_param_string(loom_amdgpu_memory_diagnostic_nonempty(
+          bundle->config->name, IREE_SV("<empty>"))),
+      loom_param_string(loom_target_low_legality_function_name(context)),
+      loom_param_string(loom_op_name(module, op)),
+      loom_param_type(diagnostic->payload_type),
+      loom_param_u32(diagnostic->payload_bit_count),
+      loom_param_u32(diagnostic->register_bit_count),
+  };
+  return loom_target_low_legality_emit_error_ref(
+      context, op,
+      LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_AMDGPU,
+                     LOOM_AMDGPU_ERROR_MEMORY_PACKED_REGISTER_FOOTPRINT),
+      params, IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_amdgpu_emit_memory_access_flat_dynamic_error(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    const loom_low_source_memory_access_plan_t* source,
+    const loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
+  const loom_module_t* module = loom_target_low_legality_module(context);
+  loom_low_source_memory_dynamic_term_t term = {0};
+  if (diagnostic->dynamic_term_index < source->dynamic_term_count) {
+    term = source->dynamic_terms[diagnostic->dynamic_term_index];
+  }
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_amdgpu_memory_diagnostic_nonempty(
+          bundle->name, IREE_SV("<empty>"))),
+      loom_param_string(loom_amdgpu_memory_diagnostic_nonempty(
+          bundle->export_plan->name, IREE_SV("<empty>"))),
+      loom_param_string(loom_amdgpu_memory_diagnostic_nonempty(
+          bundle->config->name, IREE_SV("<empty>"))),
+      loom_param_string(loom_target_low_legality_function_name(context)),
+      loom_param_string(loom_op_name(module, op)),
+      loom_param_string(
+          loom_amdgpu_source_memory_operation_name(source->operation_kind)),
+      loom_param_string(loom_amdgpu_memory_space_name(source->memory_space)),
+      loom_param_u32(diagnostic->dynamic_term_index),
+      loom_param_i64(term.byte_stride),
+      loom_param_i64(term.byte_facts.range_lo),
+      loom_param_i64(term.byte_facts.range_hi),
+      loom_param_u32(term.byte_shift),
+  };
+  return loom_target_low_legality_emit_error_ref(
+      context, op,
+      LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_AMDGPU,
+                     LOOM_AMDGPU_ERROR_MEMORY_FLAT_DYNAMIC_ADDRESS),
+      params, IREE_ARRAYSIZE(params));
+}
+
+iree_status_t loom_amdgpu_emit_memory_access_rejection_diagnostic(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    const loom_low_source_memory_access_plan_t* source,
+    const loom_amdgpu_memory_access_diagnostic_t* diagnostic,
+    bool* out_handled) {
+  *out_handled = true;
+  if (iree_any_bit_set(
+          diagnostic->rejection_bits,
+          LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_PACKED_REGISTER_FOOTPRINT)) {
+    return loom_amdgpu_emit_memory_access_packed_footprint_error(context, op,
+                                                                 diagnostic);
+  }
+  if (iree_any_bit_set(
+          diagnostic->rejection_bits,
+          LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_FLAT_DYNAMIC_ADDRESS)) {
+    return loom_amdgpu_emit_memory_access_flat_dynamic_error(
+        context, op, source, diagnostic);
+  }
+  *out_handled = false;
+  return iree_ok_status();
 }
 
 typedef struct loom_amdgpu_memory_access_rejection_detail_t {
@@ -149,8 +262,9 @@ static const loom_amdgpu_memory_access_rejection_detail_t
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_FLAT_DYNAMIC_ADDRESS,
             .detail = IREE_SVL(
-                "AMDGPU flat memory lowering currently requires a static "
-                "source address"),
+                "AMDGPU flat memory lowering requires dynamic byte offsets to "
+                "be non-negative u32 values scaled by power-of-two byte "
+                "strides"),
         },
         {
             .rejection_bit =

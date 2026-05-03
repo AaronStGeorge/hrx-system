@@ -67,6 +67,14 @@ typedef uint32_t loom_amdgpu_memory_access_rejection_flags_t;
 typedef struct loom_amdgpu_memory_access_diagnostic_t {
   // Rejection bits explaining why an access is not legal for this target.
   loom_amdgpu_memory_access_rejection_flags_t rejection_bits;
+  // Source payload type involved in register-footprint diagnostics.
+  loom_type_t payload_type;
+  // Number of source payload bits involved in register-footprint diagnostics.
+  uint32_t payload_bit_count;
+  // Number of selected register-footprint bits for the payload.
+  uint32_t register_bit_count;
+  // First dynamic address term involved in dynamic-address diagnostics.
+  uint32_t dynamic_term_index;
 } loom_amdgpu_memory_access_diagnostic_t;
 
 typedef struct loom_amdgpu_descriptor_offset_immediate_info_t {
@@ -148,10 +156,12 @@ iree_status_t loom_amdgpu_emit_hal_buffer_descriptor(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t low_binding, loom_value_id_t* out_low_descriptor);
 
-// Emits the 64-bit flat VGPR address sliced from a low HAL binding pointer.
+// Emits the 64-bit flat VGPR address sliced from a low HAL binding pointer and
+// extended by the selected source memory byte offset.
 iree_status_t loom_amdgpu_emit_memory_flat_vaddr(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t low_binding, loom_value_id_t* out_low_vaddr);
+    const loom_amdgpu_memory_access_t* access, loom_value_id_t low_binding,
+    loom_value_id_t* out_low_vaddr);
 
 // Builds descriptor offset and cache-policy attrs for a memory packet.
 iree_status_t loom_amdgpu_make_memory_attrs(
@@ -194,6 +204,19 @@ iree_status_t loom_amdgpu_memory_cache_policy_format_rejection_detail(
 // bits.
 iree_string_view_t loom_amdgpu_memory_access_rejection_detail(
     loom_amdgpu_memory_access_rejection_flags_t rejection_bits);
+
+// Records the first source dynamic term relevant to a flat-address rejection.
+void loom_amdgpu_memory_access_record_flat_dynamic_address_rejection(
+    const loom_low_source_memory_access_plan_t* source,
+    loom_amdgpu_memory_access_diagnostic_t* diagnostic);
+
+// Emits a dedicated AMDGPU memory-access rejection diagnostic when one exists
+// for the recorded rejection bits.
+iree_status_t loom_amdgpu_emit_memory_access_rejection_diagnostic(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    const loom_low_source_memory_access_plan_t* source,
+    const loom_amdgpu_memory_access_diagnostic_t* diagnostic,
+    bool* out_handled);
 
 // Records optional memory diagnostics for a selected memory access plan.
 iree_status_t loom_amdgpu_record_memory_access_diagnostic(

@@ -199,3 +199,22 @@ kernel.def @bf16x4_b64(%input: buffer, %output: buffer) {
   vector.store %loaded, %output_view[%tid, 0] : vector<4xbf16>, view<64x4xbf16, #dense>
   kernel.return
 }
+
+// ====
+
+kernel.def @i32_dynamic_flat_store(%input: buffer, %output: buffer, %row_count_i32: i32, %row_i32: i32) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch {
+  %base = index.constant 0 : offset
+  %start = index.constant 0 : index
+  %row_count0 = index.cast %row_count_i32 : i32 to index
+  %row_count = index.assume %row_count0 [range(%row_count0, 1, 2147483647)] : index
+  %row0 = index.cast %row_i32 : i32 to index
+  %row = index.assume %row0 [range(%row0, 0, 2147483646)] : index
+  %input_view = buffer.view %input[%base] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<[%row_count]x128xi32, #dense>
+  %loaded = view.load %input_view[%start] : view<1xi32, #dense> -> i32
+  view.store %loaded, %output_view[%row, %start] : i32, view<[%row_count]x128xi32, #dense>
+  kernel.return
+}

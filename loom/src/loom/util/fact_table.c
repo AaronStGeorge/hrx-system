@@ -1451,6 +1451,22 @@ static bool loom_value_fact_table_dynamic_extent_type_supported(
          loom_scalar_type_is_integer(scalar_type);
 }
 
+static loom_value_facts_t loom_value_fact_table_clamp_scalar_type_domain(
+    const loom_module_t* module, loom_value_id_t value_id,
+    loom_value_facts_t facts) {
+  loom_type_t type = loom_module_value_type(module, value_id);
+  if (!loom_type_is_scalar(type)) {
+    return facts;
+  }
+  int64_t lo = 0;
+  int64_t hi = 0;
+  if (!loom_value_facts_scalar_type_domain(loom_type_element_type(type), &lo,
+                                           &hi)) {
+    return facts;
+  }
+  return loom_value_facts_clamp_domain(facts, lo, hi);
+}
+
 static iree_status_t loom_value_fact_table_seed_dynamic_extent(
     loom_value_fact_table_t* table, const loom_module_t* module,
     loom_value_id_t value_id, const loom_value_id_t* result_ids,
@@ -1467,13 +1483,15 @@ static iree_status_t loom_value_fact_table_seed_dynamic_extent(
   uint16_t result_index = 0;
   if (result_facts && loom_value_fact_table_find_result(
                           result_ids, result_count, value_id, &result_index)) {
-    result_facts[result_index] =
-        loom_value_facts_non_negative_extent(result_facts[result_index]);
+    result_facts[result_index] = loom_value_fact_table_clamp_scalar_type_domain(
+        module, value_id,
+        loom_value_facts_non_negative_extent(result_facts[result_index]));
     return iree_ok_status();
   }
 
   loom_value_facts_t current = loom_value_fact_table_lookup(table, value_id);
-  loom_value_facts_t extent = loom_value_facts_non_negative_extent(current);
+  loom_value_facts_t extent = loom_value_fact_table_clamp_scalar_type_domain(
+      module, value_id, loom_value_facts_non_negative_extent(current));
   return loom_value_fact_table_define_if_changed(table, value_id, extent,
                                                  out_changed);
 }

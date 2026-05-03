@@ -20,6 +20,7 @@
 
 #include "iree/base/api.h"
 #include "loom/error/emitter.h"
+#include "loom/error/error_defs.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/op_defs.h"
 #include "loom/target/contract.h"
@@ -156,6 +157,11 @@ const loom_module_t* loom_target_low_legality_module(
 loom_func_like_t loom_target_low_legality_function(
     const loom_target_low_legality_context_t* context);
 
+// Returns the checked function's symbol name, or a placeholder when the
+// checked subject is not a named function-like op.
+iree_string_view_t loom_target_low_legality_function_name(
+    const loom_target_low_legality_context_t* context);
+
 // Returns the selected target bundle.
 const loom_target_bundle_t* loom_target_low_legality_bundle(
     const loom_target_low_legality_context_t* context);
@@ -179,6 +185,12 @@ iree_status_t loom_target_low_legality_reject(
     const loom_target_low_legality_provider_t* provider, const loom_op_t* op,
     iree_string_view_t subject_kind, iree_string_view_t subject_name,
     iree_string_view_t reason);
+
+// Emits a generated structured legality diagnostic.
+iree_status_t loom_target_low_legality_emit_error_ref(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    loom_error_ref_t error_ref, const loom_diagnostic_param_t* params,
+    iree_host_size_t param_count);
 
 // Emits ERR_BACKEND_002 for a target contract decision.
 iree_status_t loom_target_low_legality_record_contract(

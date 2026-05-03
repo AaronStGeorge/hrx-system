@@ -939,8 +939,8 @@ static bool loom_amdgpu_atomic_select(
     case LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC:
       out_selection->address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT;
       if (loom_low_source_memory_access_is_dynamic(&out_selection->source)) {
-        memory_diagnostic->rejection_bits |=
-            LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_FLAT_DYNAMIC_ADDRESS;
+        loom_amdgpu_memory_access_record_flat_dynamic_address_rejection(
+            &out_selection->source, memory_diagnostic);
         return false;
       }
       break;
@@ -1296,7 +1296,7 @@ iree_status_t loom_amdgpu_lower_view_atomic(
   loom_value_id_t low_vaddr = LOOM_VALUE_ID_INVALID;
   if (loom_amdgpu_atomic_uses_flat_address(plan)) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_flat_vaddr(
-        context, source_op, low_resource, &low_vaddr));
+        context, source_op, &access, low_resource, &low_vaddr));
   } else {
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_vaddr(
         context, source_op, &access, low_base_addr, &low_vaddr));
@@ -1502,6 +1502,12 @@ iree_status_t loom_amdgpu_low_legality_verify_view_atomic(
     detail = loom_low_source_memory_access_rejection_detail(
         source_diagnostic.rejection_bits);
   } else if (memory_diagnostic.rejection_bits != 0) {
+    bool handled = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_access_rejection_diagnostic(
+        context, op, &selection.source, &memory_diagnostic, &handled));
+    if (handled) {
+      return iree_ok_status();
+    }
     detail = loom_amdgpu_memory_access_rejection_detail(
         memory_diagnostic.rejection_bits);
   } else {

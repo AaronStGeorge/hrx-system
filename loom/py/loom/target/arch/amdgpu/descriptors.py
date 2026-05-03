@@ -1663,6 +1663,45 @@ def _v_add_u32_literal_overlay(instruction_name: str) -> AmdgpuDescriptorOverlay
     )
 
 
+def _v_add_co_u32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_add_co_u32",
+        instruction_name="V_ADD_CO_U32",
+        mnemonic="v_add_co_u32",
+        encoding_name="VOP3_SDST_ENC",
+        semantic_tag="integer.add.carry_out.u32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result("sum")),
+            AmdgpuOperandOverlay("SDST", _sgpr_result("carry", units=2)),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("rhs")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_add_co_ci_u32_overlay(
+    *, instruction_name: str = "V_ADD_CO_CI_U32", mnemonic: str = "v_add_co_ci_u32"
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_add_co_ci_u32",
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="VOP3_SDST_ENC",
+        semantic_tag="integer.add.carry_in_out.u32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result("sum")),
+            AmdgpuOperandOverlay("SDST", _sgpr_result("carry", units=2)),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("rhs")),
+            AmdgpuOperandOverlay("SRC2", _sgpr_operand("carry_in", units=2)),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_sub_u32_overlay(instruction_name: str, mnemonic: str) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_sub_u32",
@@ -6053,6 +6092,10 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_and_saveexec_b64_overlay("default"),
         _v_add_u32_overlay("V_ADD_U32"),
         _v_add_u32_literal_overlay("V_ADD_U32"),
+        _v_add_co_u32_overlay(),
+        _v_add_co_ci_u32_overlay(
+            instruction_name="V_ADDC_CO_U32", mnemonic="v_addc_co_u32"
+        ),
         _v_sub_u32_overlay("V_SUB_U32", "v_sub_u32"),
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
@@ -6252,6 +6295,8 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
         _v_add_u32_overlay("V_ADD_NC_U32"),
         _v_add_u32_literal_overlay("V_ADD_NC_U32"),
+        _v_add_co_u32_overlay(),
+        _v_add_co_ci_u32_overlay(),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
@@ -6454,6 +6499,8 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
         _v_add_u32_overlay("V_ADD_NC_U32"),
         _v_add_u32_literal_overlay("V_ADD_NC_U32"),
+        _v_add_co_u32_overlay(),
+        _v_add_co_ci_u32_overlay(),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
@@ -6691,6 +6738,8 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
         _v_add_u32_overlay("V_ADD_NC_U32"),
         _v_add_u32_literal_overlay("V_ADD_NC_U32"),
+        _v_add_co_u32_overlay(),
+        _v_add_co_ci_u32_overlay(),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),

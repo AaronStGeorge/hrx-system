@@ -8,7 +8,10 @@
 
 from loom.errors import ErrorDef, ErrorDomain, ErrorParam, ParamKind, Severity
 
-# ERR_BACKEND_001: Target legality rejected a codegen subject.
+# ERR_BACKEND_001: Deprecated catch-all target legality rejection.
+#
+# Do not add new uses. Target-owned legality failures need domain-specific
+# diagnostics with stable error identities and typed parameters.
 ERR_BACKEND_001 = ErrorDef(
     domain=ErrorDomain.BACKEND,
     code=1,

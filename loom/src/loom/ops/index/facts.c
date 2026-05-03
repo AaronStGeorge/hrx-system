@@ -43,56 +43,6 @@ static bool loom_index_cast_scalar_type(const loom_module_t* module,
   return true;
 }
 
-static bool loom_index_cast_scalar_domain(loom_scalar_type_t scalar_type,
-                                          int64_t* out_lo, int64_t* out_hi) {
-  switch (scalar_type) {
-    case LOOM_SCALAR_TYPE_INDEX:
-    case LOOM_SCALAR_TYPE_I64:
-      *out_lo = INT64_MIN;
-      *out_hi = INT64_MAX;
-      return true;
-    case LOOM_SCALAR_TYPE_OFFSET:
-      *out_lo = 0;
-      *out_hi = INT64_MAX;
-      return true;
-    case LOOM_SCALAR_TYPE_I1:
-      *out_lo = 0;
-      *out_hi = 1;
-      return true;
-    case LOOM_SCALAR_TYPE_I8:
-    case LOOM_SCALAR_TYPE_I16:
-    case LOOM_SCALAR_TYPE_I32: {
-      int32_t bitwidth = loom_scalar_type_bitwidth(scalar_type);
-      int64_t positive_extent = INT64_C(1) << (bitwidth - 1);
-      *out_lo = -positive_extent;
-      *out_hi = positive_extent - 1;
-      return true;
-    }
-    default:
-      return false;
-  }
-}
-
-static loom_value_facts_t loom_index_cast_intersect_domain(
-    loom_value_facts_t facts, int64_t lo, int64_t hi) {
-  if (loom_value_facts_is_float(facts)) {
-    return loom_value_facts_make(lo, hi, 1);
-  }
-  int64_t range_lo = loom_max_i64(facts.range_lo, lo);
-  int64_t range_hi = loom_min_i64(facts.range_hi, hi);
-  if (range_lo > range_hi) {
-    return loom_value_facts_make(lo, hi, 1);
-  }
-  loom_value_facts_t result =
-      loom_value_facts_make(range_lo, range_hi, facts.known_divisor);
-  if (iree_any_bit_set(facts.flags, LOOM_VALUE_FACT_POWER_OF_TWO) &&
-      range_hi > 0) {
-    result.flags |= LOOM_VALUE_FACT_POWER_OF_TWO;
-  }
-  result.extension_id = facts.extension_id;
-  return result;
-}
-
 iree_status_t loom_index_cast_facts(loom_fact_context_t* context,
                                     const loom_module_t* module,
                                     const loom_op_t* op,
@@ -112,9 +62,10 @@ iree_status_t loom_index_cast_facts(loom_fact_context_t* context,
   int64_t input_hi = 0;
   int64_t result_lo = 0;
   int64_t result_hi = 0;
-  if (!loom_index_cast_scalar_domain(input_scalar_type, &input_lo, &input_hi) ||
-      !loom_index_cast_scalar_domain(result_scalar_type, &result_lo,
-                                     &result_hi)) {
+  if (!loom_value_facts_scalar_type_domain(input_scalar_type, &input_lo,
+                                           &input_hi) ||
+      !loom_value_facts_scalar_type_domain(result_scalar_type, &result_lo,
+                                           &result_hi)) {
     result_facts[0] = loom_value_facts_unknown();
     return iree_ok_status();
   }
@@ -122,11 +73,11 @@ iree_status_t loom_index_cast_facts(loom_fact_context_t* context,
   int32_t input_bitwidth = loom_scalar_type_bitwidth(input_scalar_type);
   int32_t result_bitwidth = loom_scalar_type_bitwidth(result_scalar_type);
   loom_value_facts_t facts =
-      loom_index_cast_intersect_domain(operand_facts[0], input_lo, input_hi);
+      loom_value_facts_clamp_domain(operand_facts[0], input_lo, input_hi);
 
   if (input_bitwidth <= result_bitwidth) {
     result_facts[0] =
-        loom_index_cast_intersect_domain(facts, result_lo, result_hi);
+        loom_value_facts_clamp_domain(facts, result_lo, result_hi);
     return iree_ok_status();
   }
 

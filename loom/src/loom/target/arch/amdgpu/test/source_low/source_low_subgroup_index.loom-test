@@ -155,8 +155,8 @@ low.kernel.def target(@target) workgroup_size(128, 1, 1) @subgroup_id_x_wave64()
   %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
   %12 = low.op<amdgpu.v_lshlrev_b32.lit>(%subgroup_id) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %13 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %14 = low.op<amdgpu.hal.buffer_descriptor>(%output_view) {cache_swizzle_stride = 0, valid_byte_count = 8} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
-  low.op<amdgpu.buffer_store_dword>(%one, %14, %12, %13) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  %14 = low.op<amdgpu.s_mov_b32_m0>(%13) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_store_b32_saddr>(%12, %one, %output_view, %14) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
   low.return
 }
 
@@ -184,7 +184,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_lane_id_x_wave
   %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
   %11 = low.op<amdgpu.v_lshlrev_b32.lit>(%lane_id) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %12 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %13 = low.op<amdgpu.hal.buffer_descriptor>(%output_view) {cache_swizzle_stride = 0, valid_byte_count = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
-  low.op<amdgpu.buffer_store_dword>(%one, %13, %11, %12) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  %13 = low.op<amdgpu.s_mov_b32_m0>(%12) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_store_b32_saddr>(%11, %one, %output_view, %13) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
   low.return
 }

@@ -66,7 +66,7 @@ static iree_string_view_t loom_target_low_legality_symbol_name(
   return IREE_SV("<unnamed>");
 }
 
-static iree_string_view_t loom_target_low_legality_function_name(
+iree_string_view_t loom_target_low_legality_function_name(
     const loom_target_low_legality_context_t* context) {
   if (!loom_func_like_isa(context->function)) {
     return IREE_SV("<module>");
@@ -140,6 +140,15 @@ iree_status_t loom_target_low_legality_reject(
   return loom_target_low_legality_emit(
       context, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 1), params,
       IREE_ARRAYSIZE(params));
+}
+
+iree_status_t loom_target_low_legality_emit_error_ref(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    loom_error_ref_t error_ref, const loom_diagnostic_param_t* params,
+    iree_host_size_t param_count) {
+  const loom_error_def_t* error = loom_error_def_lookup_ref(error_ref);
+  IREE_ASSERT(error != NULL);
+  return loom_target_low_legality_emit(context, op, error, params, param_count);
 }
 
 static iree_status_t loom_target_low_legality_reject_error_ref(

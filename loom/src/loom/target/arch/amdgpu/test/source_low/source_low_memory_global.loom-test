@@ -400,3 +400,44 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @bf16x4_b64() asm<amdgpu.
   global_store_b64 %16, %loaded, %output_view
   return
 }
+
+// ====
+
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @i32_dynamic_flat_store(%input: buffer, %output: buffer, %row_count_i32: i32, %row_i32: i32) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch {
+  %base = index.constant 0 : offset
+  %start = index.constant 0 : index
+  %row_count0 = index.cast %row_count_i32 : i32 to index
+  %row_count = index.assume %row_count0 [range(%row_count0, 1, 2147483647)] : index
+  %row0 = index.cast %row_i32 : i32 to index
+  %row = index.assume %row0 [range(%row0, 0, 2147483646)] : index
+  %input_view = buffer.view %input[%base] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<[%row_count]x128xi32, #dense>
+  %loaded = view.load %input_view[%start] : view<1xi32, #dense> -> i32
+  view.store %loaded, %output_view[%row, %start] : i32, view<[%row_count]x128xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_dynamic_flat_store(%row_count: reg<amdgpu.sgpr>, %row: reg<amdgpu.sgpr>) {
+  %input_view = low.resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x2>
+  %output_view = low.resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %start = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %23 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %loaded = low.op<amdgpu.global_load_b32_saddr>(%23, %input_view) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  %25 = low.slice %output_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %26 = low.slice %output_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %27 = low.op<amdgpu.v_mov_b32_copy>(%25) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %28 = low.op<amdgpu.v_mov_b32_copy>(%26) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %29 = low.op<amdgpu.v_mov_b32_copy>(%row) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %30 = low.op<amdgpu.v_lshlrev_b32.lit>(%29) {imm32 = 9} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %31 = low.op<amdgpu.v_lshrrev_b32.lit>(%29) {imm32 = 23} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %32, %33 = low.op<amdgpu.v_add_co_u32>(%27, %30) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>
+  %34, %35 = low.op<amdgpu.v_add_co_ci_u32>(%28, %31, %33) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>
+  %36 = low.concat(%32, %34) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.op<amdgpu.global_store_b32>(%36, %loaded) {offset = 0} : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr>)
+  low.return
+}
