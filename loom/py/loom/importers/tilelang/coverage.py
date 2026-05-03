@@ -958,8 +958,9 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         OpFamily.TILELANG_TILEOP,
         CoverageState.SUPPORTED,
         (
-            "Vectorized single-axis tile reductions import through vector.reduce; "
-            "reducer-state forms remain separate."
+            "Vectorized single-axis tile reductions import through vector.reduce, "
+            "including absolute-value reductions; reducer-state forms remain "
+            "separate."
         ),
     ),
     OpCoverage(

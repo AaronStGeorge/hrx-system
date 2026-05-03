@@ -37,6 +37,15 @@ class TileBufferAccess:
     indices: tuple[ValueRef, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class TileReduceSpec:
+    """Decoded TileLang reduction semantics over one element stream."""
+
+    source_kind: str
+    combiner: str
+    absolute: bool = False
+
+
 def is_tileop_call(op_name: str) -> bool:
     """Returns true for calls owned by TileLang's tileop namespace."""
 
@@ -258,12 +267,12 @@ def _convert_reduce_call(
             f"call `{op_name}` source and destination element types differ",
         )
         return None
-    kind = _reduce_kind(args[2], args[0], element_type, expr, context)
-    if kind is None:
+    reduce_spec = _reduce_spec(args[2], args[0], element_type, expr, context)
+    if reduce_spec is None:
         return None
     init = _reduce_init(
         bool(clear),
-        kind,
+        reduce_spec,
         element_type,
         target,
         expr,
@@ -271,8 +280,9 @@ def _convert_reduce_call(
     )
     if init is None:
         return None
+    source = _build_vector_reduce_input(source, reduce_spec, element_type, context)
     result = context.builder.vector.reduce(
-        kind=kind,
+        kind=reduce_spec.combiner,
         input=source,
         init=init,
         results=[element_type],
@@ -283,7 +293,10 @@ def _convert_reduce_call(
         view=target.view,
         indices=list(target.indices),
     )
-    context.record_converted(node_text(expr), f"tl.tileop.reduce<{kind}>")
+    context.record_converted(
+        node_text(expr),
+        f"tl.tileop.reduce<{reduce_spec.source_kind}>",
+    )
     return None
 
 
@@ -331,8 +344,8 @@ def _convert_region_reduce_call(
             f"call `{op_name}` source and destination element types differ",
         )
         return None
-    kind = _reduce_kind(kind_expr, _args(expr)[0], element_type, expr, context)
-    if kind is None:
+    reduce_spec = _reduce_spec(kind_expr, _args(expr)[0], element_type, expr, context)
+    if reduce_spec is None:
         return None
     output_extents = tuple(
         extent for axis, extent in enumerate(source.extents) if axis != dim
@@ -357,7 +370,7 @@ def _convert_region_reduce_call(
             return
         init = _reduce_init(
             clear,
-            kind,
+            reduce_spec,
             element_type,
             TileBufferAccess(target.view, target_indices),
             expr,
@@ -370,7 +383,7 @@ def _convert_region_reduce_call(
             dim,
             output_indices,
             init,
-            kind,
+            reduce_spec,
             element_type,
             body_context,
         )
@@ -385,7 +398,10 @@ def _convert_region_reduce_call(
             node_text(expr), f"call `{op_name}` output region is not mapped"
         )
         return None
-    context.record_converted(node_text(expr), f"tl.tileop.reduce<{kind}>")
+    context.record_converted(
+        node_text(expr),
+        f"tl.tileop.reduce<{reduce_spec.source_kind}>",
+    )
     return None
 
 
@@ -840,7 +856,7 @@ def _emit_scalar_reduce_loop(
     dim: int,
     output_indices: tuple[ValueRef, ...],
     init: ValueRef,
-    kind: str,
+    reduce_spec: TileReduceSpec,
     element_type: Type,
     context: TileLangConversionContext,
 ) -> ValueRef:
@@ -864,7 +880,14 @@ def _emit_scalar_reduce_loop(
             results=[element_type],
             name=child.fresh_name("reduce_value"),
         )
-        combined = _build_scalar_combiner(kind, accumulator, value, element_type, child)
+        value = _build_scalar_reduce_input(value, reduce_spec, element_type, child)
+        combined = _build_scalar_combiner(
+            reduce_spec.combiner,
+            accumulator,
+            value,
+            element_type,
+            child,
+        )
         child.builder.scf.yield_(values=[combined])
     context.merge_child_records(child)
     loop_results = context.builder.scf.for_(
@@ -895,6 +918,47 @@ def _reduction_source_indices(
         source_offsets.append(output_indices[output_axis])
         output_axis += 1
     return _region_indices(source, tuple(source_offsets), context)
+
+
+def _build_vector_reduce_input(
+    source: ValueRef,
+    reduce_spec: TileReduceSpec,
+    element_type: Type,
+    context: TileLangConversionContext,
+) -> ValueRef:
+    if not reduce_spec.absolute:
+        return source
+    vector_type = context.builder.module.values[source.id].type
+    builder_name = "absf" if _is_float_type(element_type) else "absi"
+    builder = getattr(context.builder.vector, builder_name)
+    return cast(
+        ValueRef,
+        builder(
+            input=source,
+            results=[vector_type],
+            name=context.fresh_name("abs"),
+        ),
+    )
+
+
+def _build_scalar_reduce_input(
+    source: ValueRef,
+    reduce_spec: TileReduceSpec,
+    element_type: Type,
+    context: TileLangConversionContext,
+) -> ValueRef:
+    if not reduce_spec.absolute:
+        return source
+    builder_name = "absf" if _is_float_type(element_type) else "absi"
+    builder = getattr(context.builder.scalar, builder_name)
+    return cast(
+        ValueRef,
+        builder(
+            input=source,
+            results=[element_type],
+            name=context.fresh_name("abs"),
+        ),
+    )
 
 
 def _build_scalar_combiner(
@@ -967,13 +1031,13 @@ def _single_ramp_axis(expr: object) -> int | None:
     return ramp_axis
 
 
-def _reduce_kind(
+def _reduce_spec(
     kind_expr: object,
     source: object,
     element_type: Type,
     owner: object,
     context: TileLangConversionContext,
-) -> str | None:
+) -> TileReduceSpec | None:
     reduce_type = getattr(kind_expr, "value", None)
     if reduce_type is None:
         context.record_blocked(node_text(owner), "tl.tileop.reduce kind is not static")
@@ -996,27 +1060,45 @@ def _reduce_kind(
     is_float = element_text in ("f16", "bf16", "f32", "f64")
     is_unsigned = source_dtype.startswith(("uint", "u"))
     if reduce_type == "sum":
-        return "addf" if is_float else "addi"
+        return TileReduceSpec(reduce_type, "addf" if is_float else "addi")
+    if reduce_type == "abssum":
+        return TileReduceSpec(
+            reduce_type,
+            "addf" if is_float else "addi",
+            absolute=True,
+        )
     if reduce_type == "max":
         if is_float:
-            return "maximumf" if nan_propagate else "maxnumf"
-        return "maxui" if is_unsigned else "maxsi"
+            return TileReduceSpec(
+                reduce_type,
+                "maximumf" if nan_propagate else "maxnumf",
+            )
+        return TileReduceSpec(reduce_type, "maxui" if is_unsigned else "maxsi")
+    if reduce_type == "absmax":
+        if is_float:
+            return TileReduceSpec(
+                reduce_type,
+                "maximumf" if nan_propagate else "maxnumf",
+                absolute=True,
+            )
+        return TileReduceSpec(
+            reduce_type,
+            "maxui" if is_unsigned else "maxsi",
+            absolute=True,
+        )
     if reduce_type == "min":
         if is_float:
-            return "minimumf" if nan_propagate else "minnumf"
-        return "minui" if is_unsigned else "minsi"
+            return TileReduceSpec(
+                reduce_type,
+                "minimumf" if nan_propagate else "minnumf",
+            )
+        return TileReduceSpec(reduce_type, "minui" if is_unsigned else "minsi")
     if reduce_type == "bitand" and not is_float:
-        return "andi"
+        return TileReduceSpec(reduce_type, "andi")
     if reduce_type == "bitor" and not is_float:
-        return "ori"
+        return TileReduceSpec(reduce_type, "ori")
     if reduce_type == "bitxor" and not is_float:
-        return "xori"
-    if reduce_type in ("abssum", "absmax"):
-        context.record_blocked(
-            node_text(owner),
-            f"tl.tileop.reduce `{reduce_type}` needs absolute-value reduction import",
-        )
-        return None
+        return TileReduceSpec(reduce_type, "xori")
     context.record_blocked(
         node_text(owner),
         f"tl.tileop.reduce kind `{reduce_type}` is not imported",
@@ -1026,7 +1108,7 @@ def _reduce_kind(
 
 def _reduce_init(
     clear: bool,
-    kind: str,
+    reduce_spec: TileReduceSpec,
     element_type: Type,
     target: TileBufferAccess,
     owner: object,
@@ -1039,11 +1121,14 @@ def _reduce_init(
             results=[element_type],
             name=context.fresh_name("reduce_init"),
         )
-    identity = _reduce_identity(kind, element_type)
+    identity = _reduce_identity(reduce_spec, element_type)
     if identity is None:
         context.record_blocked(
             node_text(owner),
-            f"tl.tileop.reduce<{kind}> identity is not imported for {element_type}",
+            (
+                f"tl.tileop.reduce<{reduce_spec.source_kind}> identity "
+                f"is not imported for {element_type}"
+            ),
         )
         return None
     return context.builder.scalar.constant(
@@ -1053,7 +1138,13 @@ def _reduce_init(
     )
 
 
-def _reduce_identity(kind: str, element_type: Type) -> int | float | None:
+def _reduce_identity(
+    reduce_spec: TileReduceSpec,
+    element_type: Type,
+) -> int | float | None:
+    if reduce_spec.source_kind == "absmax":
+        return 0
+    kind = reduce_spec.combiner
     element_text = str(element_type)
     bit_width = _integer_bit_width(element_text)
     if kind in ("addf", "addi", "ori", "xori"):
@@ -1083,6 +1174,10 @@ def _integer_bit_width(element_text: str) -> int | None:
     if not element_text.startswith("i") or not element_text[1:].isdecimal():
         return None
     return int(element_text[1:])
+
+
+def _is_float_type(value_type: Type) -> bool:
+    return str(value_type) in ("f16", "bf16", "f32", "f64")
 
 
 def _scalar_dtype_text(source_dtype: str) -> str:
