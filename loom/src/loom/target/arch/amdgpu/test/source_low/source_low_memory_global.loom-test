@@ -214,6 +214,80 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_scalar_arg_index(%co
 // ====
 
 amdgpu.target<gfx1100> @target
+kernel.def target(@target) @f16_view_scalar(%input: buffer, %output: buffer, %column_i32: i32) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch {
+  %base = index.constant 0 : offset
+  %zero = index.constant 0 : index
+  %column0 = index.cast %column_i32 : i32 to index
+  %column = index.assume %column0 [range(%column0, 0, 7)] : index
+  %input_view = buffer.view %input[%base] : buffer -> view<8xf16, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<8xf16, #dense>
+  %loaded = view.load %input_view[%column] : view<8xf16, #dense> -> f16
+  view.store %loaded, %output_view[%column] : f16, view<8xf16, #dense>
+  %cleared = scalar.constant 0.0 : f16
+  view.store %cleared, %output_view[%zero] : f16, view<8xf16, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @f16_view_scalar(%column: reg<amdgpu.sgpr>) asm<amdgpu.gfx11.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x2>
+  %zero = s_mov_b32 0
+  %19 = v_mov_b32_copy %column
+  %20 = v_lshlrev_b32_lit %19, 1
+  %loaded = global_load_short_d16 %20, %input_view
+  %22 = v_mov_b32_copy %column
+  %23 = v_lshlrev_b32_lit %22, 1
+  global_store_short %23, %loaded, %output_view
+  %cleared = v_mov_b32 0
+  %25 = v_mov_b32 0
+  global_store_short %25, %cleared, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @bf16_view_scalar(%input: buffer, %output: buffer, %column_i32: i32) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch {
+  %base = index.constant 0 : offset
+  %zero = index.constant 0 : index
+  %column0 = index.cast %column_i32 : i32 to index
+  %column = index.assume %column0 [range(%column0, 0, 7)] : index
+  %input_view = buffer.view %input[%base] : buffer -> view<8xbf16, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<8xbf16, #dense>
+  %loaded = view.load %input_view[%column] : view<8xbf16, #dense> -> bf16
+  view.store %loaded, %output_view[%column] : bf16, view<8xbf16, #dense>
+  %cleared = scalar.constant 0.0 : bf16
+  view.store %cleared, %output_view[%zero] : bf16, view<8xbf16, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @bf16_view_scalar(%column: reg<amdgpu.sgpr>) asm<amdgpu.gfx11.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x2>
+  %zero = s_mov_b32 0
+  %19 = v_mov_b32_copy %column
+  %20 = v_lshlrev_b32_lit %19, 1
+  %loaded = global_load_short_d16 %20, %input_view
+  %22 = v_mov_b32_copy %column
+  %23 = v_lshlrev_b32_lit %22, 1
+  global_store_short %23, %loaded, %output_view
+  %cleared = v_mov_b32 0
+  %25 = v_mov_b32 0
+  global_store_short %25, %cleared, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 kernel.def target(@target) @f16x2_b32(%input: buffer, %output: buffer) {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index

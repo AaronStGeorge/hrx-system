@@ -995,6 +995,13 @@ _GLOBAL_LOAD_EFFECT = Effect(
     width_bits=32,
 )
 
+_GLOBAL_LOAD_B16_EFFECT = Effect(
+    EffectKind.READ,
+    memory_space=MemorySpace.GLOBAL,
+    flags=(EffectFlag.DEPENDENCY,),
+    width_bits=16,
+)
+
 _GLOBAL_LOAD_B64_EFFECT = Effect(
     EffectKind.READ,
     memory_space=MemorySpace.GLOBAL,
@@ -1014,6 +1021,13 @@ _GLOBAL_STORE_EFFECT = Effect(
     memory_space=MemorySpace.GLOBAL,
     flags=(EffectFlag.DEPENDENCY,),
     width_bits=32,
+)
+
+_GLOBAL_STORE_B16_EFFECT = Effect(
+    EffectKind.WRITE,
+    memory_space=MemorySpace.GLOBAL,
+    flags=(EffectFlag.DEPENDENCY,),
+    width_bits=16,
 )
 
 _GLOBAL_STORE_B64_EFFECT = Effect(
@@ -1238,6 +1252,15 @@ _IGNORE_GLOBAL_READ_MEMORY = AmdgpuImplicitOperandOverlay(
     ignore_reason="modeled-by-global-read-effect",
 )
 
+_IGNORE_GLOBAL_READ_MEMORY_B16 = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_B16",
+    size_bits=16,
+    is_input=True,
+    is_output=False,
+    ignore_reason="modeled-by-global-read-effect",
+)
+
 _IGNORE_GLOBAL_READ_MEMORY_B64 = AmdgpuImplicitOperandOverlay(
     operand_type="OPR_GPUMEM",
     data_format_name="FMT_NUM_B64",
@@ -1260,6 +1283,15 @@ _IGNORE_GLOBAL_WRITE_MEMORY = AmdgpuImplicitOperandOverlay(
     operand_type="OPR_GPUMEM",
     data_format_name="FMT_NUM_B32",
     size_bits=32,
+    is_input=False,
+    is_output=True,
+    ignore_reason="modeled-by-global-write-effect",
+)
+
+_IGNORE_GLOBAL_WRITE_MEMORY_B16 = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_B16",
+    size_bits=16,
     is_input=False,
     is_output=True,
     ignore_reason="modeled-by-global-write-effect",
@@ -1303,6 +1335,8 @@ def _ignore_workgroup_memory(
 
 def _ignore_global_read_memory(width_bits: int) -> AmdgpuImplicitOperandOverlay:
     match width_bits:
+        case 16:
+            return _IGNORE_GLOBAL_READ_MEMORY_B16
         case 32:
             return _IGNORE_GLOBAL_READ_MEMORY
         case 64:
@@ -1315,6 +1349,8 @@ def _ignore_global_read_memory(width_bits: int) -> AmdgpuImplicitOperandOverlay:
 
 def _ignore_global_write_memory(width_bits: int) -> AmdgpuImplicitOperandOverlay:
     match width_bits:
+        case 16:
+            return _IGNORE_GLOBAL_WRITE_MEMORY_B16
         case 32:
             return _IGNORE_GLOBAL_WRITE_MEMORY
         case 64:
@@ -1327,6 +1363,8 @@ def _ignore_global_write_memory(width_bits: int) -> AmdgpuImplicitOperandOverlay
 
 def _global_read_effect(width_bits: int) -> Effect:
     match width_bits:
+        case 16:
+            return _GLOBAL_LOAD_B16_EFFECT
         case 32:
             return _GLOBAL_LOAD_EFFECT
         case 64:
@@ -1339,6 +1377,8 @@ def _global_read_effect(width_bits: int) -> Effect:
 
 def _global_write_effect(width_bits: int) -> Effect:
     match width_bits:
+        case 16:
+            return _GLOBAL_STORE_B16_EFFECT
         case 32:
             return _GLOBAL_STORE_EFFECT
         case 64:
@@ -2490,6 +2530,45 @@ def _buffer_load_dword_off_zero_overlay(
     )
 
 
+def _buffer_load_b16_d16_overlay(
+    *,
+    encoding_name: str,
+    resource_field_name: str,
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 12,
+    cache_fields: tuple[tuple[str, int], ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.buffer_load_b16_d16",
+        instruction_name="BUFFER_LOAD_SHORT_D16",
+        mnemonic="buffer_load_short_d16",
+        encoding_name=encoding_name,
+        semantic_tag="memory.load.u16.d16.low",
+        schedule_class=_SCHEDULE_VMEM_LOAD,
+        operands=(
+            AmdgpuOperandOverlay(
+                "VDATA",
+                _vgpr_result(register_part=_REG_PART_VGPR_LOW16),
+                size_exception_reason=_D16_PARTIAL_REGISTER_SIZE_REASON,
+            ),
+            AmdgpuOperandOverlay(
+                resource_field_name, _sgpr_resource("resource", units=4)
+            ),
+            _mubuf_vaddr_operand(),
+            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+        ),
+        implicit_operands=(_ignore_global_read_memory(16),),
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
+        fixed_encoding_fields=(("IDXEN", 0), ("OFFEN", 1)),
+        effects=(_global_read_effect(16),),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
 def _buffer_load_64_overlay(
     *,
     descriptor_key: str = "amdgpu.buffer_load_b64",
@@ -2640,6 +2719,45 @@ def _buffer_store_dword_off_zero_overlay(
     )
 
 
+def _buffer_store_b16_overlay(
+    *,
+    encoding_name: str,
+    resource_field_name: str,
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 12,
+    cache_fields: tuple[tuple[str, int], ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.buffer_store_b16",
+        instruction_name="BUFFER_STORE_SHORT",
+        mnemonic="buffer_store_short",
+        encoding_name=encoding_name,
+        semantic_tag="memory.store.u16.low",
+        schedule_class=_SCHEDULE_VMEM_STORE,
+        operands=(
+            AmdgpuOperandOverlay(
+                "VDATA",
+                _vgpr_operand("value", register_part=_REG_PART_VGPR_LOW16),
+                size_exception_reason=_D16_PARTIAL_REGISTER_SIZE_REASON,
+            ),
+            AmdgpuOperandOverlay(
+                resource_field_name, _sgpr_resource("resource", units=4)
+            ),
+            _mubuf_vaddr_operand(),
+            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+        ),
+        implicit_operands=(_ignore_global_write_memory(16),),
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
+        fixed_encoding_fields=(("IDXEN", 0), ("OFFEN", 1)),
+        effects=(_global_write_effect(16),),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
 def _buffer_store_64_overlay(
     *,
     descriptor_key: str = "amdgpu.buffer_store_b64",
@@ -2716,6 +2834,32 @@ def _buffer_store_128_overlay(
     )
 
 
+def _buffer_b16_memory_overlays(
+    *,
+    encoding_name: str,
+    resource_field_name: str,
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 12,
+    cache_fields: tuple[tuple[str, int], ...] = (),
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _buffer_load_b16_d16_overlay(
+            encoding_name=encoding_name,
+            resource_field_name=resource_field_name,
+            offset_field_name=offset_field_name,
+            offset_bit_width=offset_bit_width,
+            cache_fields=cache_fields,
+        ),
+        _buffer_store_b16_overlay(
+            encoding_name=encoding_name,
+            resource_field_name=resource_field_name,
+            offset_field_name=offset_field_name,
+            offset_bit_width=offset_bit_width,
+            cache_fields=cache_fields,
+        ),
+    )
+
+
 def _global_load_overlay(
     *,
     descriptor_key: str,
@@ -2770,6 +2914,60 @@ def _global_load_overlay(
     )
 
 
+def _global_load_b16_d16_overlay(
+    *,
+    descriptor_key: str,
+    encoding_name: str,
+    address_field_name: str,
+    data_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    saddr_off: AmdgpuFixedEncodingValue | None,
+    address_units: int,
+    implicit_m0: bool = False,
+    cache_fields: tuple[tuple[str, int], ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = (
+        _ignore_global_read_memory(16),
+    )
+    if implicit_m0:
+        implicit_operands += (_implicit_m0_input(),)
+    operands: tuple[AmdgpuOperandOverlay, ...] = (
+        AmdgpuOperandOverlay(
+            data_field_name,
+            _vgpr_result(register_part=_REG_PART_VGPR_LOW16),
+            size_exception_reason=_D16_PARTIAL_REGISTER_SIZE_REASON,
+        ),
+        _global_addr_operand(
+            address_field_name, units=address_units, has_saddr=saddr_off is None
+        ),
+    )
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = ()
+    if saddr_off is None:
+        operands += (AmdgpuOperandOverlay("SADDR", _sgpr_operand("saddr", units=2)),)
+    else:
+        fixed_encoding_fields = (("SADDR", saddr_off),)
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name="GLOBAL_LOAD_SHORT_D16",
+        mnemonic="global_load_short_d16",
+        encoding_name=encoding_name,
+        semantic_tag="memory.load.u16.d16.low",
+        schedule_class=_SCHEDULE_VMEM_LOAD,
+        operands=operands,
+        implicit_operands=implicit_operands,
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _signed_offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_global_read_effect(16),),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=None if saddr_off is None else (),
+    )
+
+
 def _global_store_overlay(
     *,
     descriptor_key: str,
@@ -2819,6 +3017,60 @@ def _global_store_overlay(
         ),
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_global_write_effect(width_bits),),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=None if saddr_off is None else (),
+    )
+
+
+def _global_store_b16_overlay(
+    *,
+    descriptor_key: str,
+    encoding_name: str,
+    address_field_name: str,
+    data_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    saddr_off: AmdgpuFixedEncodingValue | None,
+    address_units: int,
+    implicit_m0: bool = False,
+    cache_fields: tuple[tuple[str, int], ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = (
+        _ignore_global_write_memory(16),
+    )
+    if implicit_m0:
+        implicit_operands += (_implicit_m0_input(),)
+    operands: tuple[AmdgpuOperandOverlay, ...] = (
+        _global_addr_operand(
+            address_field_name, units=address_units, has_saddr=saddr_off is None
+        ),
+        AmdgpuOperandOverlay(
+            data_field_name,
+            _vgpr_operand("value", register_part=_REG_PART_VGPR_LOW16),
+            size_exception_reason=_D16_PARTIAL_REGISTER_SIZE_REASON,
+        ),
+    )
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = ()
+    if saddr_off is None:
+        operands += (AmdgpuOperandOverlay("SADDR", _sgpr_operand("saddr", units=2)),)
+    else:
+        fixed_encoding_fields = (("SADDR", saddr_off),)
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name="GLOBAL_STORE_SHORT",
+        mnemonic="global_store_short",
+        encoding_name=encoding_name,
+        semantic_tag="memory.store.u16.low",
+        schedule_class=_SCHEDULE_VMEM_STORE,
+        operands=operands,
+        implicit_operands=implicit_operands,
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _signed_offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_global_write_effect(16),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=None if saddr_off is None else (),
     )
@@ -2897,6 +3149,48 @@ def _global_load_lds_overlays(
             cache_fields=cache_fields,
         )
         for instruction_suffix, mnemonic_suffix, width_bits in variants
+    )
+
+
+def _global_b16_memory_overlays(
+    *,
+    encoding_name: str,
+    address_field_name: str,
+    load_data_field_name: str,
+    store_data_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    saddr_off: AmdgpuFixedEncodingValue | None,
+    address_units: int,
+    descriptor_key_suffix: str = "",
+    implicit_m0: bool = False,
+    cache_fields: tuple[tuple[str, int], ...] = (),
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _global_load_b16_d16_overlay(
+            descriptor_key=f"amdgpu.global_load_b16_d16{descriptor_key_suffix}",
+            encoding_name=encoding_name,
+            address_field_name=address_field_name,
+            data_field_name=load_data_field_name,
+            offset_field_name=offset_field_name,
+            offset_bit_width=offset_bit_width,
+            saddr_off=saddr_off,
+            address_units=address_units,
+            implicit_m0=implicit_m0,
+            cache_fields=cache_fields,
+        ),
+        _global_store_b16_overlay(
+            descriptor_key=f"amdgpu.global_store_b16{descriptor_key_suffix}",
+            encoding_name=encoding_name,
+            address_field_name=address_field_name,
+            data_field_name=store_data_field_name,
+            offset_field_name=offset_field_name,
+            offset_bit_width=offset_bit_width,
+            saddr_off=saddr_off,
+            address_units=address_units,
+            implicit_m0=implicit_m0,
+            cache_fields=cache_fields,
+        ),
     )
 
 
@@ -5834,6 +6128,11 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             resource_field_name="SRSRC",
             cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
+        *_buffer_b16_memory_overlays(
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+        ),
         *_global_memory_overlays(
             instruction_suffixes=("DWORD", "DWORDX2", "DWORDX4"),
             mnemonic_suffixes=("dword", "dwordx2", "dwordx4"),
@@ -5848,9 +6147,34 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             implicit_m0=True,
             cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
+        *_global_b16_memory_overlays(
+            encoding_name="ENC_FLAT_GLBL",
+            address_field_name="ADDR",
+            load_data_field_name="VDST",
+            store_data_field_name="DATA",
+            offset_field_name="OFFSET",
+            offset_bit_width=13,
+            saddr_off=_GLOBAL_GFX950_SADDR_OFF,
+            address_units=2,
+            implicit_m0=True,
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+        ),
         *_global_memory_overlays(
             instruction_suffixes=("DWORD", "DWORDX2", "DWORDX4"),
             mnemonic_suffixes=("dword", "dwordx2", "dwordx4"),
+            encoding_name="ENC_FLAT_GLBL",
+            address_field_name="ADDR",
+            load_data_field_name="VDST",
+            store_data_field_name="DATA",
+            offset_field_name="OFFSET",
+            offset_bit_width=13,
+            saddr_off=None,
+            address_units=1,
+            descriptor_key_suffix="_saddr",
+            implicit_m0=True,
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+        ),
+        *_global_b16_memory_overlays(
             encoding_name="ENC_FLAT_GLBL",
             address_field_name="ADDR",
             load_data_field_name="VDST",
@@ -5987,6 +6311,11 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             resource_field_name="SRSRC",
             cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
         ),
+        *_buffer_b16_memory_overlays(
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+            cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
+        ),
         *_buffer_atomic_overlays(
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
@@ -6009,9 +6338,32 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             address_units=2,
             cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
         ),
+        *_global_b16_memory_overlays(
+            encoding_name="ENC_FLAT_GLOBAL",
+            address_field_name="ADDR",
+            load_data_field_name="VDST",
+            store_data_field_name="DATA",
+            offset_field_name="OFFSET",
+            offset_bit_width=13,
+            saddr_off=_GLOBAL_SADDR_OFF,
+            address_units=2,
+            cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
+        ),
         *_global_memory_overlays(
             instruction_suffixes=("B32", "B64", "B128"),
             mnemonic_suffixes=("b32", "b64", "b128"),
+            encoding_name="ENC_FLAT_GLOBAL",
+            address_field_name="ADDR",
+            load_data_field_name="VDST",
+            store_data_field_name="DATA",
+            offset_field_name="OFFSET",
+            offset_bit_width=13,
+            saddr_off=None,
+            address_units=1,
+            descriptor_key_suffix="_saddr",
+            cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
+        ),
+        *_global_b16_memory_overlays(
             encoding_name="ENC_FLAT_GLOBAL",
             address_field_name="ADDR",
             load_data_field_name="VDST",
@@ -6163,6 +6515,13 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_bit_width=24,
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
+        *_buffer_b16_memory_overlays(
+            encoding_name="ENC_VBUFFER",
+            resource_field_name="RSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+        ),
         *_buffer_atomic_overlays(
             encoding_name="ENC_VBUFFER",
             resource_field_name="RSRC",
@@ -6187,9 +6546,32 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             address_units=2,
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
+        *_global_b16_memory_overlays(
+            encoding_name="ENC_VGLOBAL",
+            address_field_name="VADDR",
+            load_data_field_name="VDST",
+            store_data_field_name="VSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+            saddr_off=_GLOBAL_SADDR_OFF,
+            address_units=2,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+        ),
         *_global_memory_overlays(
             instruction_suffixes=("B32", "B64", "B128"),
             mnemonic_suffixes=("b32", "b64", "b128"),
+            encoding_name="ENC_VGLOBAL",
+            address_field_name="VADDR",
+            load_data_field_name="VDST",
+            store_data_field_name="VSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+            saddr_off=None,
+            address_units=1,
+            descriptor_key_suffix="_saddr",
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+        ),
+        *_global_b16_memory_overlays(
             encoding_name="ENC_VGLOBAL",
             address_field_name="VADDR",
             load_data_field_name="VDST",
@@ -6370,6 +6752,13 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_bit_width=24,
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
+        *_buffer_b16_memory_overlays(
+            encoding_name="ENC_VBUFFER",
+            resource_field_name="RSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+        ),
         *_buffer_atomic_overlays(
             encoding_name="ENC_VBUFFER",
             resource_field_name="RSRC",
@@ -6394,9 +6783,32 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             address_units=2,
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
+        *_global_b16_memory_overlays(
+            encoding_name="ENC_VGLOBAL",
+            address_field_name="VADDR",
+            load_data_field_name="VDST",
+            store_data_field_name="VSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+            saddr_off=_GLOBAL_SADDR_OFF,
+            address_units=2,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+        ),
         *_global_memory_overlays(
             instruction_suffixes=("B32", "B64", "B128"),
             mnemonic_suffixes=("b32", "b64", "b128"),
+            encoding_name="ENC_VGLOBAL",
+            address_field_name="VADDR",
+            load_data_field_name="VDST",
+            store_data_field_name="VSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+            saddr_off=None,
+            address_units=1,
+            descriptor_key_suffix="_saddr",
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+        ),
+        *_global_b16_memory_overlays(
             encoding_name="ENC_VGLOBAL",
             address_field_name="VADDR",
             load_data_field_name="VDST",

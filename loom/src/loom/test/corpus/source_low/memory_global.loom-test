@@ -100,6 +100,44 @@ kernel.def @i32_scalar_arg_index(%input: buffer, %output: buffer, %column_i32: i
 
 // ====
 
+kernel.def @f16_view_scalar(%input: buffer, %output: buffer, %column_i32: i32) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch {
+  %base = index.constant 0 : offset
+  %zero = index.constant 0 : index
+  %column0 = index.cast %column_i32 : i32 to index
+  %column = index.assume %column0 [range(%column0, 0, 7)] : index
+  %input_view = buffer.view %input[%base] : buffer -> view<8xf16, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<8xf16, #dense>
+  %loaded = view.load %input_view[%column] : view<8xf16, #dense> -> f16
+  view.store %loaded, %output_view[%column] : f16, view<8xf16, #dense>
+  %cleared = scalar.constant 0.0 : f16
+  view.store %cleared, %output_view[%zero] : f16, view<8xf16, #dense>
+  kernel.return
+}
+
+// ====
+
+kernel.def @bf16_view_scalar(%input: buffer, %output: buffer, %column_i32: i32) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch {
+  %base = index.constant 0 : offset
+  %zero = index.constant 0 : index
+  %column0 = index.cast %column_i32 : i32 to index
+  %column = index.assume %column0 [range(%column0, 0, 7)] : index
+  %input_view = buffer.view %input[%base] : buffer -> view<8xbf16, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<8xbf16, #dense>
+  %loaded = view.load %input_view[%column] : view<8xbf16, #dense> -> bf16
+  view.store %loaded, %output_view[%column] : bf16, view<8xbf16, #dense>
+  %cleared = scalar.constant 0.0 : bf16
+  view.store %cleared, %output_view[%zero] : bf16, view<8xbf16, #dense>
+  kernel.return
+}
+
+// ====
+
 kernel.def @f16x2_b32(%input: buffer, %output: buffer) {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index

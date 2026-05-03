@@ -45,6 +45,9 @@ bool loom_amdgpu_type_is_address_scalar(loom_type_t type);
 // Returns true when the source type is a scalar f32.
 bool loom_amdgpu_type_is_f32(loom_type_t type);
 
+// Returns true when the source type is a scalar f16 or bf16.
+bool loom_amdgpu_type_is_16bit_float(loom_type_t type);
+
 // Returns a static rank-1 vector lane count for the requested element type, or
 // zero when the type is not a supported static rank-1 vector.
 uint32_t loom_amdgpu_static_vector_lane_count(loom_type_t type,
@@ -100,6 +103,10 @@ bool loom_amdgpu_value_is_address_scalar(loom_low_lower_context_t* context,
 // Returns true when a source value has scalar f32 type.
 bool loom_amdgpu_value_is_f32(loom_low_lower_context_t* context,
                               loom_value_id_t value_id);
+
+// Returns true when a source value has scalar f16 or bf16 type.
+bool loom_amdgpu_value_is_16bit_float(loom_low_lower_context_t* context,
+                                      loom_value_id_t value_id);
 
 // Returns true when a source value has a byte-addressable view type.
 bool loom_amdgpu_value_is_byte_addressable_view(
@@ -229,6 +236,13 @@ bool loom_amdgpu_attr_is_f32_immediate(loom_attribute_t value);
 
 // Returns the f32 bit pattern produced by narrowing an attribute.
 uint32_t loom_amdgpu_attr_f32_bit_pattern(loom_attribute_t value);
+
+// Returns true when an attribute can encode as an f16/bf16 immediate payload.
+bool loom_amdgpu_attr_is_16bit_float_immediate(loom_attribute_t value);
+
+// Returns the low-half f16/bf16 bit pattern produced by narrowing an attribute.
+uint32_t loom_amdgpu_attr_16bit_float_bit_pattern(loom_scalar_type_t type,
+                                                  loom_attribute_t value);
 
 // Extracts a source scalar i32 constant.
 bool loom_amdgpu_value_as_i32_constant(loom_low_lower_context_t* context,

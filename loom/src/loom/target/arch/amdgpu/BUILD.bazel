@@ -568,6 +568,7 @@ loom_cc_library(
         "//loom/src/loom/target/arch/amdgpu/contracts:view",
         "//loom/src/loom/target/arch/amdgpu/contracts:view_lower_rules",
         "//loom/src/loom/util:fact_table",
+        "//loom/src/loom/util:math",
         "//runtime/src/iree/base",
     ],
 )

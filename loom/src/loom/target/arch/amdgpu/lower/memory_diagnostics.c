@@ -141,8 +141,9 @@ static const loom_amdgpu_memory_access_rejection_detail_t
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_PACKED_REGISTER_FOOTPRINT,
             .detail = IREE_SVL(
-                "AMDGPU packed integer memory lowering requires the vector "
-                "footprint to exactly fill complete 32-bit memory registers"),
+                "AMDGPU packed memory lowering requires vector footprints to "
+                "fill complete 32-bit memory registers, except scalar "
+                "f16/bf16 D16 accesses"),
         },
         {
             .rejection_bit =

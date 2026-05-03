@@ -16,6 +16,7 @@
 #include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
+#include "loom/util/math.h"
 
 bool loom_amdgpu_type_is_i32(loom_type_t type) {
   return loom_type_is_scalar(type) &&
@@ -41,6 +42,15 @@ bool loom_amdgpu_type_is_address_scalar(loom_type_t type) {
 bool loom_amdgpu_type_is_f32(loom_type_t type) {
   return loom_type_is_scalar(type) &&
          loom_type_element_type(type) == LOOM_SCALAR_TYPE_F32;
+}
+
+bool loom_amdgpu_type_is_16bit_float(loom_type_t type) {
+  if (!loom_type_is_scalar(type)) {
+    return false;
+  }
+  const loom_scalar_type_t element_type = loom_type_element_type(type);
+  return element_type == LOOM_SCALAR_TYPE_F16 ||
+         element_type == LOOM_SCALAR_TYPE_BF16;
 }
 
 uint32_t loom_amdgpu_static_vector_lane_count(loom_type_t type,
@@ -180,6 +190,12 @@ bool loom_amdgpu_value_is_address_scalar(loom_low_lower_context_t* context,
 bool loom_amdgpu_value_is_f32(loom_low_lower_context_t* context,
                               loom_value_id_t value_id) {
   return loom_amdgpu_type_is_f32(
+      loom_module_value_type(loom_low_lower_context_module(context), value_id));
+}
+
+bool loom_amdgpu_value_is_16bit_float(loom_low_lower_context_t* context,
+                                      loom_value_id_t value_id) {
+  return loom_amdgpu_type_is_16bit_float(
       loom_module_value_type(loom_low_lower_context_module(context), value_id));
 }
 
@@ -521,6 +537,9 @@ iree_status_t loom_amdgpu_map_type(void* user_data,
   if (loom_amdgpu_type_is_address_scalar(source_type)) {
     return loom_amdgpu_make_sgpr_type(context, out_low_type);
   }
+  if (loom_amdgpu_type_is_16bit_float(source_type)) {
+    return loom_amdgpu_make_vgpr_type(context, out_low_type);
+  }
   const uint32_t vector_lane_count =
       loom_amdgpu_vector_32bit_lane_count(source_type);
   if (vector_lane_count == 1) {
@@ -556,8 +575,8 @@ iree_status_t loom_amdgpu_map_type(void* user_data,
   }
   return loom_low_lower_emit_reject(
       context, source_op, IREE_SV("type"), IREE_SV("source"),
-      IREE_SV("AMDGPU lowering currently supports only i1 and i32 scalar "
-              "values, "
+      IREE_SV("AMDGPU lowering currently supports only i1, i32, f16, bf16, "
+              "and f32 scalar values, "
               "address scalar values, rank-1 static i32/f32 vectors with "
               "1 to 8 lanes, rank-1 static i1 mask vectors with 1 to 8 lanes, "
               "rank-1 static f16/bf16 vectors that fit in 1 to 8 packed "
@@ -583,6 +602,9 @@ iree_status_t loom_amdgpu_map_value(void* user_data,
     return loom_amdgpu_make_sgpr_range_type(context, 2, out_low_type);
   }
   if (loom_amdgpu_type_is_f32(source_type)) {
+    return loom_amdgpu_make_vgpr_type(context, out_low_type);
+  }
+  if (loom_amdgpu_type_is_16bit_float(source_type)) {
     return loom_amdgpu_make_vgpr_type(context, out_low_type);
   }
   if ((loom_amdgpu_type_is_i32(source_type) ||
@@ -636,6 +658,10 @@ iree_status_t loom_amdgpu_map_contract_value(
         environment, LOOM_AMDGPU_REG_CLASS_ID_SCC, 1, out_mapped_value);
   }
   if (loom_amdgpu_type_is_f32(source_type)) {
+    return loom_amdgpu_map_contract_register(
+        environment, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1, out_mapped_value);
+  }
+  if (loom_amdgpu_type_is_16bit_float(source_type)) {
     return loom_amdgpu_map_contract_register(
         environment, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1, out_mapped_value);
   }
@@ -783,6 +809,24 @@ uint32_t loom_amdgpu_attr_f32_bit_pattern(loom_attribute_t value) {
   uint32_t bit_pattern = 0;
   memcpy(&bit_pattern, &f32_value, sizeof(bit_pattern));
   return bit_pattern;
+}
+
+bool loom_amdgpu_attr_is_16bit_float_immediate(loom_attribute_t value) {
+  return value.kind == LOOM_ATTR_F64;
+}
+
+uint32_t loom_amdgpu_attr_16bit_float_bit_pattern(loom_scalar_type_t type,
+                                                  loom_attribute_t value) {
+  const float f32_value = (float)loom_attr_as_f64(value);
+  switch (type) {
+    case LOOM_SCALAR_TYPE_F16:
+      return iree_math_f32_to_f16(f32_value);
+    case LOOM_SCALAR_TYPE_BF16:
+      return iree_math_f32_to_bf16(f32_value);
+    default:
+      IREE_ASSERT_UNREACHABLE("expected f16 or bf16");
+      return 0;
+  }
 }
 
 bool loom_amdgpu_value_as_i32_constant(loom_low_lower_context_t* context,

@@ -168,6 +168,18 @@ static iree_status_t loom_amdgpu_select_scalar_constant_plan(
     return loom_amdgpu_select_f32_constant_plan(
         context, value, result, /*lane_count=*/1, out_plan, out_selected);
   }
+  if (loom_amdgpu_value_is_16bit_float(context, result)) {
+    if (!loom_amdgpu_attr_is_16bit_float_immediate(value)) {
+      return iree_ok_status();
+    }
+    const loom_type_t result_type =
+        loom_module_value_type(loom_low_lower_context_module(context), result);
+    return loom_amdgpu_select_u32_bit_pattern_constant_plan(
+        context,
+        loom_amdgpu_attr_16bit_float_bit_pattern(
+            loom_type_element_type(result_type), value),
+        result, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32, out_plan, out_selected);
+  }
   if (!loom_amdgpu_value_is_i32(context, result)) {
     return iree_ok_status();
   }
