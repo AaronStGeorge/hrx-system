@@ -12,6 +12,7 @@
 #include "loom/ops/kernel/ops.h"
 #include "loom/target/types.h"
 #include "loom/util/fact_table.h"
+#include "loom/util/math.h"
 
 #define LOOM_KERNEL_DEFAULT_MAX_SUBGROUP_SIZE 128u
 
@@ -21,6 +22,58 @@ static loom_value_facts_t loom_kernel_hal_coordinate_facts(void) {
 
 static loom_value_facts_t loom_kernel_hal_positive_u32_facts(void) {
   return loom_value_facts_make(1, (int64_t)UINT32_MAX, 1);
+}
+
+static loom_value_facts_t loom_kernel_positive_u32_extent_facts(
+    loom_value_facts_t facts, uint32_t maximum_extent) {
+  const int64_t maximum =
+      maximum_extent == 0 ? (int64_t)UINT32_MAX : (int64_t)maximum_extent;
+  if (loom_value_facts_is_float(facts)) {
+    return loom_value_facts_make(1, maximum, 1);
+  }
+  const int64_t lower_bound = loom_max_i64(facts.range_lo, 1);
+  const int64_t upper_bound = loom_min_i64(facts.range_hi, maximum);
+  if (lower_bound > upper_bound) {
+    return loom_value_facts_make(1, maximum, 1);
+  }
+  loom_value_facts_t extent =
+      loom_value_facts_make(lower_bound, upper_bound, facts.known_divisor);
+  extent.flags |= facts.flags & LOOM_VALUE_FACT_POWER_OF_TWO;
+  return extent;
+}
+
+static loom_value_facts_t loom_kernel_intersect_integer_facts(
+    loom_value_facts_t lhs, loom_value_facts_t rhs) {
+  if (loom_value_facts_is_float(lhs)) {
+    return rhs;
+  }
+  if (loom_value_facts_is_float(rhs)) {
+    return lhs;
+  }
+  const int64_t lower_bound = loom_max_i64(lhs.range_lo, rhs.range_lo);
+  const int64_t upper_bound = loom_min_i64(lhs.range_hi, rhs.range_hi);
+  if (lower_bound > upper_bound) {
+    return loom_value_facts_unknown();
+  }
+  int64_t divisor = 1;
+  if (!loom_lcm_i64(lhs.known_divisor, rhs.known_divisor, &divisor)) {
+    divisor = loom_gcd_i64(lhs.known_divisor, rhs.known_divisor);
+  }
+  loom_value_facts_t facts =
+      loom_value_facts_make(lower_bound, upper_bound, divisor);
+  if (!loom_value_facts_is_exact(facts)) {
+    facts.flags |= (lhs.flags | rhs.flags) & (LOOM_VALUE_FACT_POWER_OF_TWO);
+  }
+  return facts;
+}
+
+static loom_value_facts_t loom_kernel_coordinate_from_extent_facts(
+    loom_value_facts_t extent_facts) {
+  if (loom_value_facts_is_float(extent_facts) || extent_facts.range_hi < 1 ||
+      extent_facts.range_hi > UINT32_MAX) {
+    return loom_kernel_hal_coordinate_facts();
+  }
+  return loom_value_facts_make(0, extent_facts.range_hi - 1, 1);
 }
 
 static uint32_t loom_kernel_workgroup_size_dim(
@@ -107,6 +160,57 @@ static uint32_t loom_kernel_max_workgroup_count(
   return max_count;
 }
 
+static loom_value_id_t loom_kernel_launch_config_workgroup_count_operand(
+    const loom_op_t* launch_config, loom_kernel_dimension_t dimension) {
+  switch (dimension) {
+    case LOOM_KERNEL_DIMENSION_X:
+      return loom_kernel_launch_config_workgroup_count_x(launch_config);
+    case LOOM_KERNEL_DIMENSION_Y:
+      return loom_kernel_launch_config_workgroup_count_y(launch_config);
+    case LOOM_KERNEL_DIMENSION_Z:
+      return loom_kernel_launch_config_workgroup_count_z(launch_config);
+    default:
+      return LOOM_VALUE_ID_INVALID;
+  }
+}
+
+static loom_value_id_t loom_kernel_launch_config_workgroup_size_operand(
+    const loom_op_t* launch_config, loom_kernel_dimension_t dimension) {
+  switch (dimension) {
+    case LOOM_KERNEL_DIMENSION_X:
+      return loom_kernel_launch_config_workgroup_size_x(launch_config);
+    case LOOM_KERNEL_DIMENSION_Y:
+      return loom_kernel_launch_config_workgroup_size_y(launch_config);
+    case LOOM_KERNEL_DIMENSION_Z:
+      return loom_kernel_launch_config_workgroup_size_z(launch_config);
+    default:
+      return LOOM_VALUE_ID_INVALID;
+  }
+}
+
+static bool loom_kernel_launch_config_operand_facts(
+    const loom_fact_context_t* context, loom_kernel_dimension_t dimension,
+    loom_value_id_t (*operand_lookup)(const loom_op_t* launch_config,
+                                      loom_kernel_dimension_t dimension),
+    loom_value_facts_t* out_facts) {
+  *out_facts = loom_value_facts_unknown();
+  if (!context || !context->table ||
+      !loom_kernel_def_isa(context->function.op)) {
+    return false;
+  }
+  const loom_op_t* launch_config =
+      loom_kernel_def_launch_config_op(context->function.op);
+  if (!launch_config) {
+    return false;
+  }
+  const loom_value_id_t operand = operand_lookup(launch_config, dimension);
+  if (operand == LOOM_VALUE_ID_INVALID) {
+    return false;
+  }
+  *out_facts = loom_value_fact_table_lookup(context->table, operand);
+  return true;
+}
+
 static const loom_target_bundle_t* loom_kernel_target_bundle(
     const loom_fact_context_t* context) {
   const loom_target_bundle_t* bundle = context->target_bundle;
@@ -132,7 +236,7 @@ static bool loom_kernel_context_required_workgroup_size(
     loom_target_workgroup_size_t* out_size) {
   *out_size = (loom_target_workgroup_size_t){0};
 
-  if (module && loom_func_like_isa(context->function) &&
+  if (module && loom_kernel_def_isa(context->function.op) &&
       loom_kernel_def_static_workgroup_size_from_facts(
           module, context->function.op, context->table, out_size)) {
     return true;
@@ -181,52 +285,6 @@ static uint32_t loom_kernel_context_max_flat_workgroup_size(
   return 0;
 }
 
-static loom_value_facts_t loom_kernel_workitem_id_target_facts(
-    const loom_fact_context_t* context, const loom_module_t* module,
-    loom_kernel_dimension_t dimension) {
-  loom_target_workgroup_size_t required_workgroup_size = {0};
-  if (loom_kernel_context_required_workgroup_size(context, module,
-                                                  &required_workgroup_size)) {
-    const uint32_t fixed_workgroup_size =
-        loom_kernel_workgroup_size_dim(&required_workgroup_size, dimension);
-    if (fixed_workgroup_size != 0) {
-      return loom_value_facts_make(0, (int64_t)fixed_workgroup_size - 1, 1);
-    }
-  }
-
-  const loom_target_bundle_t* bundle = loom_kernel_target_bundle(context);
-  if (!bundle || bundle->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
-    return loom_kernel_hal_coordinate_facts();
-  }
-  const uint32_t max_workgroup_size = loom_kernel_workgroup_size_dim(
-      &bundle->snapshot->max_workgroup_size, dimension);
-  if (max_workgroup_size != 0) {
-    return loom_value_facts_make(0, (int64_t)max_workgroup_size - 1, 1);
-  }
-  return loom_kernel_hal_coordinate_facts();
-}
-
-static loom_value_facts_t loom_kernel_workgroup_id_target_facts(
-    const loom_fact_context_t* context, const loom_module_t* module,
-    loom_kernel_dimension_t dimension) {
-  const loom_target_bundle_t* bundle = loom_kernel_target_bundle(context);
-  if (!bundle || bundle->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
-    return loom_kernel_hal_coordinate_facts();
-  }
-  loom_target_workgroup_size_t required_workgroup_size = {0};
-  if (!loom_kernel_context_required_workgroup_size(context, module,
-                                                   &required_workgroup_size)) {
-    required_workgroup_size =
-        bundle->export_plan->hal_kernel.required_workgroup_size;
-  }
-  const uint32_t max_workgroup_count = loom_kernel_max_workgroup_count(
-      bundle->snapshot, &required_workgroup_size, dimension);
-  if (max_workgroup_count == 0) {
-    return loom_kernel_hal_coordinate_facts();
-  }
-  return loom_value_facts_make(0, (int64_t)max_workgroup_count - 1, 1);
-}
-
 static loom_value_facts_t loom_kernel_workgroup_size_target_facts(
     const loom_fact_context_t* context, const loom_module_t* module,
     loom_kernel_dimension_t dimension) {
@@ -273,6 +331,48 @@ static loom_value_facts_t loom_kernel_workgroup_count_target_facts(
   return loom_value_facts_make(1, (int64_t)max_workgroup_count, 1);
 }
 
+static loom_value_facts_t loom_kernel_launch_workgroup_size_facts(
+    const loom_fact_context_t* context, const loom_module_t* module,
+    loom_kernel_dimension_t dimension) {
+  loom_value_facts_t target_facts =
+      loom_kernel_workgroup_size_target_facts(context, module, dimension);
+  loom_value_facts_t launch_facts = {0};
+  if (!loom_kernel_launch_config_operand_facts(
+          context, dimension, loom_kernel_launch_config_workgroup_size_operand,
+          &launch_facts)) {
+    return target_facts;
+  }
+
+  const uint32_t maximum_extent =
+      target_facts.range_hi > 0 && target_facts.range_hi <= UINT32_MAX
+          ? (uint32_t)target_facts.range_hi
+          : 0;
+  launch_facts =
+      loom_kernel_positive_u32_extent_facts(launch_facts, maximum_extent);
+  return loom_kernel_intersect_integer_facts(launch_facts, target_facts);
+}
+
+static loom_value_facts_t loom_kernel_launch_workgroup_count_facts(
+    const loom_fact_context_t* context, const loom_module_t* module,
+    loom_kernel_dimension_t dimension) {
+  loom_value_facts_t target_facts =
+      loom_kernel_workgroup_count_target_facts(context, module, dimension);
+  loom_value_facts_t launch_facts = {0};
+  if (!loom_kernel_launch_config_operand_facts(
+          context, dimension, loom_kernel_launch_config_workgroup_count_operand,
+          &launch_facts)) {
+    return target_facts;
+  }
+
+  const uint32_t maximum_extent =
+      target_facts.range_hi > 0 && target_facts.range_hi <= UINT32_MAX
+          ? (uint32_t)target_facts.range_hi
+          : 0;
+  launch_facts =
+      loom_kernel_positive_u32_extent_facts(launch_facts, maximum_extent);
+  return loom_kernel_intersect_integer_facts(launch_facts, target_facts);
+}
+
 static loom_value_facts_t loom_kernel_workitem_dispatch_id_target_facts(
     const loom_fact_context_t* context, const loom_module_t* module,
     loom_kernel_dimension_t dimension) {
@@ -303,6 +403,27 @@ static loom_value_facts_t loom_kernel_workitem_dispatch_id_target_facts(
     return loom_kernel_hal_coordinate_facts();
   }
   return loom_value_facts_make(0, (int64_t)max_dispatch_size - 1, 1);
+}
+
+static loom_value_facts_t loom_kernel_launch_workitem_dispatch_id_facts(
+    const loom_fact_context_t* context, const loom_module_t* module,
+    loom_kernel_dimension_t dimension) {
+  loom_value_facts_t target_facts =
+      loom_kernel_workitem_dispatch_id_target_facts(context, module, dimension);
+  const loom_value_facts_t count_facts =
+      loom_kernel_launch_workgroup_count_facts(context, module, dimension);
+  const loom_value_facts_t size_facts =
+      loom_kernel_launch_workgroup_size_facts(context, module, dimension);
+
+  int64_t upper_bound = 0;
+  if (!loom_checked_mul_i64(count_facts.range_hi, size_facts.range_hi,
+                            &upper_bound) ||
+      upper_bound < 1) {
+    return target_facts;
+  }
+  const loom_value_facts_t launch_facts =
+      loom_value_facts_make(0, upper_bound - 1, 1);
+  return loom_kernel_intersect_integer_facts(launch_facts, target_facts);
 }
 
 static uint32_t loom_kernel_max_subgroup_size(
@@ -389,8 +510,9 @@ iree_status_t loom_kernel_workitem_id_facts(
     const loom_op_t* op, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts) {
   (void)operand_facts;
-  result_facts[0] = loom_kernel_workitem_id_target_facts(
-      context, module, loom_kernel_workitem_id_dimension(op));
+  result_facts[0] = loom_kernel_coordinate_from_extent_facts(
+      loom_kernel_launch_workgroup_size_facts(
+          context, module, loom_kernel_workitem_id_dimension(op)));
   return iree_ok_status();
 }
 
@@ -399,8 +521,9 @@ iree_status_t loom_kernel_workgroup_id_facts(
     const loom_op_t* op, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts) {
   (void)operand_facts;
-  result_facts[0] = loom_kernel_workgroup_id_target_facts(
-      context, module, loom_kernel_workgroup_id_dimension(op));
+  result_facts[0] = loom_kernel_coordinate_from_extent_facts(
+      loom_kernel_launch_workgroup_count_facts(
+          context, module, loom_kernel_workgroup_id_dimension(op)));
   return iree_ok_status();
 }
 
@@ -409,7 +532,7 @@ iree_status_t loom_kernel_workgroup_size_facts(
     const loom_op_t* op, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts) {
   (void)operand_facts;
-  result_facts[0] = loom_kernel_workgroup_size_target_facts(
+  result_facts[0] = loom_kernel_launch_workgroup_size_facts(
       context, module, loom_kernel_workgroup_size_dimension(op));
   return iree_ok_status();
 }
@@ -419,7 +542,7 @@ iree_status_t loom_kernel_workgroup_count_facts(
     const loom_op_t* op, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts) {
   (void)operand_facts;
-  result_facts[0] = loom_kernel_workgroup_count_target_facts(
+  result_facts[0] = loom_kernel_launch_workgroup_count_facts(
       context, module, loom_kernel_workgroup_count_dimension(op));
   return iree_ok_status();
 }
@@ -429,7 +552,7 @@ iree_status_t loom_kernel_workitem_dispatch_id_facts(
     const loom_op_t* op, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts) {
   (void)operand_facts;
-  result_facts[0] = loom_kernel_workitem_dispatch_id_target_facts(
+  result_facts[0] = loom_kernel_launch_workitem_dispatch_id_facts(
       context, module, loom_kernel_workitem_dispatch_id_dimension(op));
   return iree_ok_status();
 }

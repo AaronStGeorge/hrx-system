@@ -77,6 +77,49 @@ kernel.def @computed_launch_config_facts_seed_body() {
 
 // ====
 
+kernel.def @dynamic_launch_config_facts_seed_body(%count: index) {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  %bounded_count = index.assume %count [range(%count, 1, 128)] : index
+  kernel.launch.config workgroups(%bounded_count, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch {
+  %tile = index.constant 64 : index
+  %bid = kernel.workgroup.id<x> : index
+  %count_query = kernel.workgroup.count<x> : index
+  %tid = kernel.workitem.id<x> : index
+  %dispatch_id = kernel.workitem.dispatch.id<x> : index
+  %linear = index.madd %bid, %tile, %tid : index
+  %bid_hi = test.fact_range_hi %bid : index -> i64
+  %count_lo = test.fact_range_lo %count_query : index -> i64
+  %count_hi = test.fact_range_hi %count_query : index -> i64
+  %tid_hi = test.fact_range_hi %tid : index -> i64
+  %dispatch_hi = test.fact_range_hi %dispatch_id : index -> i64
+  %linear_non_negative = test.fact_non_negative %linear : index -> i1
+  %linear_hi = test.fact_range_hi %linear : index -> i64
+  test.use %bid_hi, %count_lo, %count_hi, %tid_hi, %dispatch_hi, %linear_non_negative, %linear_hi : i64, i64, i64, i64, i64, i1, i64
+  kernel.return
+}
+
+// ----
+kernel.def @dynamic_launch_config_facts_seed_body(%count: index) {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  %bounded_count = index.assume %count [range(%count, 1, 128)] : index
+  kernel.launch.config workgroups(%bounded_count, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch {
+  %bid_hi = scalar.constant 127 : i64
+  %count_lo = scalar.constant 1 : i64
+  %count_hi = scalar.constant 128 : i64
+  %tid_hi = scalar.constant 63 : i64
+  %dispatch_hi = scalar.constant 8191 : i64
+  %linear_non_negative = scalar.constant true : i1
+  %linear_hi = scalar.constant 8191 : i64
+  test.use %bid_hi, %count_lo, %count_hi, %tid_hi, %dispatch_hi, %linear_non_negative, %linear_hi : i64, i64, i64, i64, i64, i1, i64
+  kernel.return
+}
+
+// ====
+
 kernel.def @small_workgroup_lane_facts() {
   %c1 = index.constant 1 : index
   %c8 = index.constant 8 : index
@@ -134,9 +177,9 @@ kernel.def @default_hal_query_facts() {
   %workgroup_size_lo = scalar.constant 1 : i64
   %workgroup_size_hi = scalar.constant 1 : i64
   %workgroup_count_lo = scalar.constant 1 : i64
-  %workgroup_count_hi = scalar.constant 4294967295 : i64
+  %workgroup_count_hi = scalar.constant 1 : i64
   %dispatch_id_lo = scalar.constant 0 : i64
-  %dispatch_id_hi = scalar.constant 4294967295 : i64
+  %dispatch_id_hi = scalar.constant 0 : i64
   %subgroup_size_lo = scalar.constant 1 : i64
   %subgroup_size_hi = scalar.constant 1 : i64
   %workgroup_size_positive = scalar.constant true : i1
