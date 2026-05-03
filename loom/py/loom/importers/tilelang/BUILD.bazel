@@ -170,6 +170,7 @@ filegroup(
         "testdata/tilekernels/moe_gate.py",
         "testdata/tilekernels/moe_histogram.py",
         "testdata/tilekernels/moe_normalize.py",
+        "testdata/tilekernels/moe_reduce.py",
         "testdata/tilekernels/moe_routing.py",
         "testdata/tilekernels/transpose.py",
         "testdata/tileops.py",
