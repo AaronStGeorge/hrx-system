@@ -136,9 +136,9 @@ kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") @mask_i
     %cmp_3 = scalar.cmpi ne, %remsi, %extsi_3 : i64
     %ori = scalar.ori %cmp_2, %cmp_3 : i1
     scf.if %ori {
+      %const_2 = scalar.constant -1 : i64
       %rem_2 = index.rem %madd, %c2 : index
       %div_2 = index.div %madd, %c2 : index
-      %const_2 = scalar.constant -1 : i64
       view.store %const_2, %masked_indices[%div_2, %rem_2] : i64, view<[%num_tokens]x2xi64, %layout>
     } else {
       %load_4 = view.load %value[%c0] : view<1xi64, %layout> -> i64
@@ -155,13 +155,13 @@ kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") @mask_i
       %muli_2 = scalar.muli %divsi_2, %extsi_6 : i64
       %subi_3 = scalar.subi %load_6, %muli_2 : i64
       view.store %subi_3, %value[%c0] : i64, view<1xi64, %layout>
-      %rem_3 = index.rem %madd, %c2 : index
-      %div_3 = index.div %madd, %c2 : index
       %load_7 = view.load %value[%c0] : view<1xi64, %layout> -> i64
       %cmp_4 = scalar.cmpi slt, %load_7, %const : i64
       %const_3 = scalar.constant -1 : i64
       %load_8 = view.load %value[%c0] : view<1xi64, %layout> -> i64
       %select = scf.select %cmp_4, %const_3, %load_8 : i64
+      %rem_3 = index.rem %madd, %c2 : index
+      %div_3 = index.div %madd, %c2 : index
       view.store %select, %masked_indices[%div_3, %rem_3] : i64, view<[%num_tokens]x2xi64, %layout>
     }
   }

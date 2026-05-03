@@ -46,6 +46,7 @@ py_library(
     name = "core",
     srcs = [
         "abi.py",
+        "buffers.py",
         "context.py",
         "converter.py",
         "coverage.py",

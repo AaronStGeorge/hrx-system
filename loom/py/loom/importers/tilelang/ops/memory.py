@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from loom.builder import ValueRef
 from loom.importers.core import sanitize_identifier
+from loom.importers.tilelang.buffers import resolve_buffer_access
 from loom.importers.tilelang.context import TileLangConversionContext
 from loom.importers.tilelang.converter import (
     ExpressionOptions,
@@ -22,9 +23,7 @@ from loom.importers.tilelang.ops.vector import vector_lanes
 from loom.ir import (
     BUFFER_TYPE,
     INDEX,
-    DynamicDim,
     ShapedType,
-    StaticDim,
     Type,
     TypeKind,
 )
@@ -98,15 +97,6 @@ def convert_buffer_store(
 
     source_indices = tuple(getattr(stmt, "indices", ()))
     buffer = getattr(stmt, "buffer", None)
-    view, source_indices = _resolve_buffer_view(
-        buffer,
-        source_indices,
-        context,
-        converter,
-        diagnostic_owner=stmt,
-    )
-    if view is None:
-        return
     value = converter.convert_expr(getattr(stmt, "value", None), context)
     if value is None:
         context.record_blocked(node_text(stmt), "buffer store operands are not mapped")
@@ -128,6 +118,9 @@ def convert_buffer_store(
                 node_text(stmt), "vector store indices are not mapped"
             )
             return
+        view = _resolve_vector_view(buffer, context, diagnostic_owner=stmt)
+        if view is None:
+            return
         context.builder.vector.store(
             value=value,
             view=view,
@@ -135,17 +128,23 @@ def convert_buffer_store(
         )
         context.record_converted(node_text(stmt), "vector.store")
         return
-    indices = [_convert_index(index, context, converter) for index in source_indices]
-    if any(index is None for index in indices):
-        context.record_blocked(node_text(stmt), "buffer store operands are not mapped")
+    access = resolve_buffer_access(
+        buffer,
+        source_indices,
+        context,
+        converter,
+        diagnostic_owner=stmt,
+    )
+    if access is None:
         return
-    value = _coerce_store_value(value, view, stmt, context)
+    value = _coerce_store_value(value, access.view, stmt, context)
     if value is None:
         return
-    mapped_indices: list[int | ValueRef] = [
-        index for index in indices if index is not None
-    ]
-    context.builder.view.store(value=value, view=view, indices=mapped_indices)
+    context.builder.view.store(
+        value=value,
+        view=access.view,
+        indices=list(access.indices),
+    )
     context.record_converted(node_text(stmt), "view.store")
 
 
@@ -159,15 +158,6 @@ def convert_buffer_load(
 
     source_indices = tuple(getattr(expr, "indices", ()))
     buffer = getattr(expr, "buffer", None)
-    view, source_indices = _resolve_buffer_view(
-        buffer,
-        source_indices,
-        context,
-        converter,
-        diagnostic_owner=expr,
-    )
-    if view is None:
-        return None
     result_type = context.type_converter.map_dtype(dtype(expr))
     if is_vector_type(result_type) or _has_ramp_index(expr):
         vector_indices = _vector_memory_indices(source_indices, context, converter)
@@ -175,6 +165,9 @@ def convert_buffer_load(
             context.record_blocked(
                 node_text(expr), "vector load indices are not mapped"
             )
+            return None
+        view = _resolve_vector_view(buffer, context, diagnostic_owner=expr)
+        if view is None:
             return None
         if not is_vector_type(result_type):
             lanes = _single_ramp_lanes(source_indices)
@@ -195,13 +188,18 @@ def convert_buffer_load(
             node_text(expr), f"{context.ssa(result)} = vector.load"
         )
         return result
-    indices = [_convert_index(index, context, converter) for index in source_indices]
-    if any(index is None for index in indices):
-        context.record_blocked(node_text(expr), "buffer load indices are not mapped")
+    access = resolve_buffer_access(
+        buffer,
+        source_indices,
+        context,
+        converter,
+        diagnostic_owner=expr,
+    )
+    if access is None:
         return None
     result = context.builder.view.load(
-        view=view,
-        indices=[index for index in indices if index is not None],
+        view=access.view,
+        indices=list(access.indices),
         results=[result_type],
         name=context.fresh_name("load"),
     )
@@ -215,17 +213,15 @@ def convert_buffer_load(
     return result
 
 
-def _resolve_buffer_view(
+def _resolve_vector_view(
     buffer: object,
-    source_indices: tuple[object, ...],
     context: TileLangConversionContext,
-    converter: TileLangConverter,
     *,
     diagnostic_owner: object,
-) -> tuple[ValueRef | None, tuple[object | ValueRef, ...]]:
+) -> ValueRef | None:
     view = context.mapped(buffer)
     if view is not None:
-        return view, source_indices
+        return view
     data = getattr(buffer, "data", None)
     view = context.mapped_buffer_data(data)
     if view is None:
@@ -233,30 +229,8 @@ def _resolve_buffer_view(
             node_text(diagnostic_owner),
             "buffer access target is not mapped",
         )
-        return None, source_indices
-    view_type = _view_type(view, context)
-    if isinstance(view_type, ShapedType) and len(view_type.dims) <= 1:
-        return view, source_indices
-    remapped_indices = remap_flattened_indices(
-        view,
-        source_indices,
-        context,
-        converter,
-        diagnostic_owner=diagnostic_owner,
-    )
-    if remapped_indices is None:
-        return None, source_indices
-    return view, tuple(remapped_indices)
-
-
-def _convert_index(
-    index: object | ValueRef,
-    context: TileLangConversionContext,
-    converter: TileLangConverter,
-) -> ValueRef | None:
-    if isinstance(index, ValueRef):
-        return index
-    return converter.convert_expr(index, context, index_like=True)
+        return None
+    return view
 
 
 def _coerce_index_like_load(
@@ -342,82 +316,6 @@ def _integer_bit_width(type_text: str) -> int | None:
     if not type_text.startswith("i") or not type_text[1:].isdecimal():
         return None
     return int(type_text[1:])
-
-
-def remap_flattened_indices(
-    view: ValueRef,
-    source_indices: tuple[object, ...],
-    context: TileLangConversionContext,
-    converter: TileLangConverter,
-    *,
-    diagnostic_owner: object,
-) -> list[ValueRef] | None:
-    """Map a TileLang flattened alias index back onto the source view rank."""
-
-    view_type = _view_type(view, context)
-    if not isinstance(view_type, ShapedType) or len(view_type.dims) <= 1:
-        context.record_blocked(
-            node_text(diagnostic_owner),
-            "buffer alias target does not have a remappable shaped view type",
-        )
-        return None
-    if len(source_indices) != 1:
-        context.record_blocked(
-            node_text(diagnostic_owner),
-            "buffer alias access has non-flat indices",
-        )
-        return None
-    flat_index = converter.convert_expr(source_indices[0], context, index_like=True)
-    if flat_index is None:
-        context.record_blocked(
-            node_text(diagnostic_owner),
-            "buffer alias flat index is not mapped",
-        )
-        return None
-    remapped: list[ValueRef | None] = [None] * len(view_type.dims)
-    running = flat_index
-    for position in range(len(view_type.dims) - 1, 0, -1):
-        extent = _view_dim_extent(view, position, context)
-        if extent is None:
-            context.record_blocked(
-                node_text(diagnostic_owner),
-                "buffer alias target dimension is not bound",
-            )
-            return None
-        remapped[position] = context.builder.index.rem(
-            lhs=running,
-            rhs=extent,
-            results=[running.type],
-            name=context.fresh_name("rem"),
-        )
-        running = context.builder.index.div(
-            lhs=running,
-            rhs=extent,
-            results=[running.type],
-            name=context.fresh_name("div"),
-        )
-    remapped[0] = running
-    return [index for index in remapped if index is not None]
-
-
-def _view_dim_extent(
-    view: ValueRef,
-    position: int,
-    context: TileLangConversionContext,
-) -> ValueRef | None:
-    view_value = context.builder.module.values[view.id]
-    view_type = _view_type(view, context)
-    if not isinstance(view_type, ShapedType):
-        return None
-    dim = view_type.dims[position]
-    if isinstance(dim, StaticDim):
-        return context.ensure_constant(str(dim.size), "index", f"c{dim.size}")
-    if isinstance(dim, DynamicDim):
-        value_id = view_value.dim_bindings.get(position)
-        if value_id is None:
-            return None
-        return ValueRef(value_id, context.builder.ir)
-    return None
 
 
 def _view_type(view: ValueRef, context: TileLangConversionContext) -> object:

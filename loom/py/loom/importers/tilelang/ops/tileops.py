@@ -8,34 +8,24 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import cast
 
 from loom.builder import ValueRef
+from loom.importers.tilelang.buffers import (
+    TileLangBufferAccess,
+    TileLangBufferRegion,
+    map_region_indices,
+    resolve_buffer_access,
+    resolve_buffer_region,
+)
 from loom.importers.tilelang.context import TileLangConversionContext
 from loom.importers.tilelang.converter import ExpressionOptions, TileLangConverter
 from loom.importers.tilelang.coverage import coverage_row
 from loom.importers.tilelang.nodes import dtype, mapping_items, node_kind, node_text
 from loom.importers.tilelang.ops.topology import integer_value
 from loom.ir import INDEX, ShapedType, StaticDim, Type, TypeKind
-
-
-@dataclass(frozen=True, slots=True)
-class TileRegion:
-    """Decoded TileLang tile region over one Loom view."""
-
-    view: ValueRef
-    indices: tuple[ValueRef, ...]
-    extents: tuple[ValueRef, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class TileBufferAccess:
-    """Decoded TileLang buffer access over one Loom view."""
-
-    view: ValueRef
-    indices: tuple[ValueRef, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -425,7 +415,7 @@ def _convert_region_reduce_call(
             clear,
             reduce_spec,
             element_type,
-            TileBufferAccess(target.view, target_indices),
+            TileLangBufferAccess(target.view, target_indices),
             expr,
             body_context,
         )
@@ -675,7 +665,7 @@ def _decode_region(
     converter: TileLangConverter,
     *,
     expected_access: int,
-) -> TileRegion | None:
+) -> TileLangBufferRegion | None:
     op_name = _call_op_name(expr)
     if op_name != "tl.tileop.region":
         context.record_blocked(
@@ -711,40 +701,13 @@ def _decode_region(
             "the operation",
         )
         return None
-    buffer = getattr(buffer_load, "buffer", None)
-    view = context.mapped(buffer)
-    if view is None:
-        context.record_blocked(
-            node_text(owner),
-            "tl.tileop.region buffer is not mapped",
-        )
-        return None
-    indices = _convert_index_sequence(
+    return resolve_buffer_region(
+        getattr(buffer_load, "buffer", None),
         tuple(getattr(buffer_load, "indices", ())),
-        owner,
-        context,
-        converter,
-        what="region indices",
-    )
-    extents = _convert_index_sequence(
         args[2:],
-        owner,
         context,
         converter,
-        what="region extents",
-    )
-    if indices is None or extents is None:
-        return None
-    if len(indices) != len(extents):
-        context.record_blocked(
-            node_text(owner),
-            "tl.tileop.region index and extent ranks differ",
-        )
-        return None
-    return TileRegion(
-        view=view,
-        indices=tuple(indices),
-        extents=tuple(extents),
+        diagnostic_owner=owner,
     )
 
 
@@ -755,7 +718,7 @@ def _decode_region_arg(
     expr: object,
     context: TileLangConversionContext,
     converter: TileLangConverter,
-) -> TileRegion | None:
+) -> TileLangBufferRegion | None:
     value = args[position]
     if _call_op_name(value) == "tl.tileop.region":
         return _decode_region(value, expr, context, converter, expected_access=3)
@@ -775,36 +738,16 @@ def _decode_buffer_region(
     owner: object,
     context: TileLangConversionContext,
     converter: TileLangConverter,
-) -> TileRegion | None:
-    buffer = getattr(expr, "buffer", None)
-    view = context.mapped(buffer)
-    if view is None:
-        data = getattr(buffer, "data", None)
-        view = context.mapped_buffer_data(data)
-    if view is None:
-        context.record_blocked(
-            node_text(owner),
-            "tile operation buffer region target is not mapped",
-        )
-        return None
+) -> TileLangBufferRegion | None:
     ranges = tuple(getattr(expr, "region", ()))
-    indices = _convert_index_sequence(
+    return resolve_buffer_region(
+        getattr(expr, "buffer", None),
         tuple(getattr(item, "min", None) for item in ranges),
-        owner,
-        context,
-        converter,
-        what="region indices",
-    )
-    extents = _convert_index_sequence(
         tuple(getattr(item, "extent", None) for item in ranges),
-        owner,
         context,
         converter,
-        what="region extents",
+        diagnostic_owner=owner,
     )
-    if indices is None or extents is None:
-        return None
-    return TileRegion(view=view, indices=tuple(indices), extents=tuple(extents))
 
 
 def _decode_buffer_load_region(
@@ -812,18 +755,7 @@ def _decode_buffer_load_region(
     owner: object,
     context: TileLangConversionContext,
     converter: TileLangConverter,
-) -> TileRegion | None:
-    buffer = getattr(expr, "buffer", None)
-    view = context.mapped(buffer)
-    if view is None:
-        data = getattr(buffer, "data", None)
-        view = context.mapped_buffer_data(data)
-    if view is None:
-        context.record_blocked(
-            node_text(owner),
-            "tile operation buffer load region target is not mapped",
-        )
-        return None
+) -> TileLangBufferRegion | None:
     one = context.ensure_constant("1", "index", "c1")
     indices: list[ValueRef] = []
     extents: list[ValueRef] = []
@@ -860,10 +792,13 @@ def _decode_buffer_load_region(
             return None
         indices.append(mapped)
         extents.append(one)
-    return TileRegion(
-        view=view,
-        indices=tuple(indices),
-        extents=tuple(extents),
+    return resolve_buffer_region(
+        getattr(expr, "buffer", None),
+        tuple(indices),
+        tuple(extents),
+        context,
+        converter,
+        diagnostic_owner=owner,
     )
 
 
@@ -872,34 +807,20 @@ def _decode_buffer_access(
     owner: object,
     context: TileLangConversionContext,
     converter: TileLangConverter,
-) -> TileBufferAccess | None:
+) -> TileLangBufferAccess | None:
     if node_kind(expr) != "BufferLoad":
         context.record_blocked(
             node_text(owner),
             f"tile operation buffer access must be BufferLoad, got `{node_kind(expr)}`",
         )
         return None
-    buffer = getattr(expr, "buffer", None)
-    view = context.mapped(buffer)
-    if view is None:
-        data = getattr(buffer, "data", None)
-        view = context.mapped_buffer_data(data)
-    if view is None:
-        context.record_blocked(
-            node_text(owner),
-            "tile operation buffer access target is not mapped",
-        )
-        return None
-    indices = _convert_index_sequence(
+    return resolve_buffer_access(
+        getattr(expr, "buffer", None),
         tuple(getattr(expr, "indices", ())),
-        owner,
         context,
         converter,
-        what="buffer indices",
+        diagnostic_owner=owner,
     )
-    if indices is None:
-        return None
-    return TileBufferAccess(view=view, indices=tuple(indices))
 
 
 def _reducer_data_source(
@@ -937,33 +858,9 @@ def _reducer_data_source(
     return None
 
 
-def _convert_index_sequence(
-    values: Sequence[object],
-    owner: object,
-    context: TileLangConversionContext,
-    converter: TileLangConverter,
-    *,
-    what: str,
-) -> list[ValueRef] | None:
-    converted: list[ValueRef] = []
-    for value in values:
-        index = converter.convert_expr(value, context, index_like=True)
-        if index is None:
-            context.record_blocked(node_text(owner), f"tl.tileop {what} are not mapped")
-            return None
-        if str(index.type) != "index":
-            context.record_blocked(
-                node_text(owner),
-                f"tl.tileop {what} must be scalar index values",
-            )
-            return None
-        converted.append(index)
-    return converted
-
-
 def _copy_loop_extents(
-    source: TileRegion,
-    target: TileRegion,
+    source: TileLangBufferRegion,
+    target: TileLangBufferRegion,
     context: TileLangConversionContext,
 ) -> tuple[ValueRef, ...] | None:
     source_extents = _squeezed_singleton_extents(source.extents, context)
@@ -1032,18 +929,15 @@ def _emit_region_loops(
 
 
 def _region_indices(
-    region: TileRegion,
+    region: TileLangBufferRegion,
     loop_indices: tuple[ValueRef, ...],
     context: TileLangConversionContext,
 ) -> tuple[ValueRef, ...]:
-    indices: list[ValueRef] = []
-    for base, offset in zip(region.indices, loop_indices, strict=True):
-        indices.append(_add_region_index(base, offset, context))
-    return tuple(indices)
+    return map_region_indices(region, loop_indices, context)
 
 
 def _project_region_indices(
-    region: TileRegion,
+    region: TileLangBufferRegion,
     loop_indices: tuple[ValueRef, ...],
     owner: object,
     context: TileLangConversionContext,
@@ -1073,7 +967,7 @@ def _project_region_indices(
 
 
 def _reduction_target_indices(
-    target: TileRegion,
+    target: TileLangBufferRegion,
     source_rank: int,
     dim: int,
     output_indices: tuple[ValueRef, ...],
@@ -1093,12 +987,13 @@ def _reduction_target_indices(
             output_axis += 1
         return _region_indices(target, tuple(expanded), context)
     if not output_indices and len(target.indices) == 1:
-        return target.indices
+        zero = context.ensure_constant("0", "index", "c0")
+        return _region_indices(target, (zero,), context)
     return None
 
 
 def _emit_scalar_reduce_loop(
-    source: TileRegion,
+    source: TileLangBufferRegion,
     dim: int,
     output_indices: tuple[ValueRef, ...],
     init: ValueRef,
@@ -1149,7 +1044,7 @@ def _emit_scalar_reduce_loop(
 
 
 def _reduction_source_indices(
-    source: TileRegion,
+    source: TileLangBufferRegion,
     dim: int,
     output_indices: tuple[ValueRef, ...],
     reduce_index: ValueRef,
@@ -1258,25 +1153,6 @@ def _copy_value_cast(
         ),
     )
     return None
-
-
-def _add_region_index(
-    base: ValueRef,
-    offset: ValueRef,
-    context: TileLangConversionContext,
-) -> ValueRef:
-    zero = context.constants.get(("index", "0"))
-    if zero is not None:
-        if base.id == zero.id:
-            return offset
-        if offset.id == zero.id:
-            return base
-    return context.builder.index.add(
-        lhs=base,
-        rhs=offset,
-        results=[INDEX],
-        name=context.fresh_name("idx"),
-    )
 
 
 def _view_element_type(
@@ -1423,7 +1299,7 @@ def _reduce_init(
     clear: bool,
     reduce_spec: TileReduceSpec,
     element_type: Type,
-    target: TileBufferAccess,
+    target: TileLangBufferAccess,
     owner: object,
     context: TileLangConversionContext,
 ) -> ValueRef | None:

@@ -15,6 +15,7 @@ iree_py_library(
     core
   SRCS
     "abi.py"
+    "buffers.py"
     "context.py"
     "converter.py"
     "coverage.py"

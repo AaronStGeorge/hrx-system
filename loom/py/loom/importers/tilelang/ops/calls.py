@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import cast
 
 from loom.builder import ValueRef
+from loom.importers.tilelang.buffers import resolve_buffer_access
 from loom.importers.tilelang.context import TileLangConversionContext
 from loom.importers.tilelang.converter import (
     ExpressionOptions,
@@ -22,7 +23,6 @@ from loom.importers.tilelang.coverage import coverage_row
 from loom.importers.tilelang.nodes import dtype, mapping_items, node_kind, node_text
 from loom.importers.tilelang.ops.assumptions import convert_assume_call
 from loom.importers.tilelang.ops.conditions import coerce_condition
-from loom.importers.tilelang.ops.memory import remap_flattened_indices
 from loom.importers.tilelang.ops.tileops import (
     convert_tileop_call,
     is_tileop_call,
@@ -1044,26 +1044,18 @@ def _decode_tilelang_access_ptr(
         )
         return None
     buffer = getattr(base_load, "buffer", None)
-    view = context.mapped(buffer)
-    if view is None:
-        context.record_blocked(
-            node_text(owner),
-            "tl.access_ptr buffer is not mapped",
-        )
+    access = resolve_buffer_access(
+        buffer,
+        tuple(getattr(base_load, "indices", ())),
+        context,
+        converter,
+        diagnostic_owner=owner,
+    )
+    if access is None:
         return None
-    indices: list[int | ValueRef] = []
-    for source_index in tuple(getattr(base_load, "indices", ())):
-        index = converter.convert_expr(source_index, context, index_like=True)
-        if index is None:
-            context.record_blocked(
-                node_text(owner),
-                "tl.access_ptr index is not mapped",
-            )
-            return None
-        indices.append(index)
     return AccessPtrValue(
-        view=view,
-        indices=tuple(indices),
+        view=access.view,
+        indices=access.indices,
         buffer=buffer,
         rw_mask=rw_mask,
     )
@@ -1091,10 +1083,8 @@ def _decode_tvm_access_ptr(
             "tir.tvm_access_ptr type annotation is not mapped",
         )
         return None
-    data = args[1]
-    view = context.mapped_buffer_data(data)
-    buffer = context.mapped_buffer_for_data(data)
-    if view is None or buffer is None:
+    buffer = context.mapped_buffer_for_data(args[1])
+    if buffer is None:
         context.record_blocked(
             node_text(owner),
             "tir.tvm_access_ptr buffer data is not mapped",
@@ -1121,30 +1111,18 @@ def _decode_tvm_access_ptr(
             "tir.tvm_access_ptr rw mask is not static",
         )
         return None
-    view_type = context.builder.module.values[view.id].type
-    if not isinstance(view_type, ShapedType):
-        context.record_blocked(
-            node_text(owner),
-            "tir.tvm_access_ptr buffer data is not a shaped view",
-        )
+    access = resolve_buffer_access(
+        buffer,
+        (offset,),
+        context,
+        converter,
+        diagnostic_owner=owner,
+    )
+    if access is None:
         return None
-    indices: list[ValueRef]
-    if len(view_type.dims) <= 1:
-        indices = [offset]
-    else:
-        remapped_indices = remap_flattened_indices(
-            view,
-            (offset,),
-            context,
-            converter,
-            diagnostic_owner=owner,
-        )
-        if remapped_indices is None:
-            return None
-        indices = remapped_indices
     return AccessPtrValue(
-        view=view,
-        indices=tuple(indices),
+        view=access.view,
+        indices=access.indices,
         buffer=buffer,
         rw_mask=rw_mask,
     )
