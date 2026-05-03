@@ -104,6 +104,7 @@ loom_target_table_cc_library(
     "--contract-fragment=amdgpu.compare"
   DEPS
     loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::index
     loom::src::loom::ops::scalar
     loom::src::loom::target::arch::amdgpu::descriptor_ids
     loom::src::loom::target::arch::amdgpu::lower_materializers

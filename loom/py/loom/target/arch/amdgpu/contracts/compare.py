@@ -4,13 +4,19 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""AMDGPU scalar integer comparison source-to-low contracts."""
+"""AMDGPU scalar integer and index comparison source-to-low contracts."""
 
 from __future__ import annotations
 
+from loom.dialect.index import ALL_INDEX_OPS
+from loom.dialect.index import defs as index
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import comparison as scalar
-from loom.target.arch.amdgpu.contracts.materializers import I32_VGPR_MATERIALIZER
+from loom.dsl import Op
+from loom.target.arch.amdgpu.contracts.materializers import (
+    ADDRESS_VGPR_MATERIALIZER,
+    I32_VGPR_MATERIALIZER,
+)
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
 from loom.target.contracts import (
     ContractFragment,
@@ -18,6 +24,7 @@ from loom.target.contracts import (
     EmitDescriptorOp,
     Guard,
     Scalar,
+    TypePattern,
     ValueRef,
     descriptor_by_key,
 )
@@ -48,23 +55,32 @@ _DESCRIPTOR_SET = build_amdgpu_contract_descriptor_set(
 )
 
 _I32 = Scalar("i32")
+_INDEX = Scalar("index")
+_OFFSET = Scalar("offset")
 _I1 = Scalar("i1")
 _I32_VGPR_LHS = ValueRef.operand("lhs", materializer=I32_VGPR_MATERIALIZER.name)
 _I32_VGPR_RHS = ValueRef.operand("rhs", materializer=I32_VGPR_MATERIALIZER.name)
+_ADDRESS_VGPR_LHS = ValueRef.operand("lhs", materializer=ADDRESS_VGPR_MATERIALIZER.name)
+_ADDRESS_VGPR_RHS = ValueRef.operand("rhs", materializer=ADDRESS_VGPR_MATERIALIZER.name)
 
 
 def _descriptor(key: str) -> Descriptor:
     return descriptor_by_key(_DESCRIPTOR_SET, key)
 
 
-def _scc_rule(predicate: str, descriptor: Descriptor) -> DescriptorRule:
+def _scc_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    predicate: str,
+    descriptor: Descriptor,
+) -> DescriptorRule:
     return DescriptorRule(
-        source_op=scalar.scalar_cmpi,
+        source_op=source_op,
         descriptor=descriptor,
         guards=(
             Guard.enum_attr_equals("predicate", predicate),
-            Guard.value_type("lhs", _I32),
-            Guard.value_type("rhs", _I32),
+            Guard.value_type("lhs", type_pattern),
+            Guard.value_type("rhs", type_pattern),
             Guard.value_type("result", _I1),
             Guard.low_value_register_class("lhs", "amdgpu.sgpr"),
             Guard.low_value_register_class("rhs", "amdgpu.sgpr"),
@@ -84,26 +100,34 @@ def _scc_rule(predicate: str, descriptor: Descriptor) -> DescriptorRule:
     )
 
 
-def _mask_rule(predicate: str, descriptor: Descriptor) -> DescriptorRule:
+def _mask_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    lhs: ValueRef,
+    rhs: ValueRef,
+    materializer_name: str,
+    predicate: str,
+    descriptor: Descriptor,
+) -> DescriptorRule:
     return DescriptorRule(
-        source_op=scalar.scalar_cmpi,
+        source_op=source_op,
         descriptor=descriptor,
         guards=(
             Guard.enum_attr_equals("predicate", predicate),
-            Guard.value_type("lhs", _I32),
-            Guard.value_type("rhs", _I32),
+            Guard.value_type("lhs", type_pattern),
+            Guard.value_type("rhs", type_pattern),
             Guard.value_type("result", _I1),
             Guard.low_value_register_class("result", "amdgpu.sgpr"),
-            Guard.value_materializable("lhs", I32_VGPR_MATERIALIZER.name),
-            Guard.value_materializable("rhs", I32_VGPR_MATERIALIZER.name),
+            Guard.value_materializable("lhs", materializer_name),
+            Guard.value_materializable("rhs", materializer_name),
             Guard.descriptor_available(descriptor),
         ),
         emit=(
             EmitDescriptorOp(
                 descriptor=descriptor,
                 operands={
-                    "lhs": _I32_VGPR_LHS,
-                    "rhs": _I32_VGPR_RHS,
+                    "lhs": lhs,
+                    "rhs": rhs,
                 },
                 results={"mask": ValueRef.result("result")},
             ),
@@ -111,25 +135,66 @@ def _mask_rule(predicate: str, descriptor: Descriptor) -> DescriptorRule:
     )
 
 
-def _rules() -> tuple[DescriptorRule, ...]:
+def _typed_rules(
+    source_op: Op,
+    type_pattern: TypePattern,
+    lhs: ValueRef,
+    rhs: ValueRef,
+    materializer_name: str,
+) -> tuple[DescriptorRule, ...]:
     scalar_rules = tuple(
-        _scc_rule(predicate, _descriptor(descriptor_key))
+        _scc_rule(source_op, type_pattern, predicate, _descriptor(descriptor_key))
         for predicate, descriptor_key, _ in _CMP_I32_CASES
     )
     mask_rules = tuple(
-        _mask_rule(predicate, _descriptor(descriptor_key))
+        _mask_rule(
+            source_op,
+            type_pattern,
+            lhs,
+            rhs,
+            materializer_name,
+            predicate,
+            _descriptor(descriptor_key),
+        )
         for predicate, _, descriptor_key in _CMP_I32_CASES
     )
     return scalar_rules + mask_rules
 
 
+def _rules() -> tuple[DescriptorRule, ...]:
+    return (
+        *_typed_rules(
+            scalar.scalar_cmpi,
+            _I32,
+            _I32_VGPR_LHS,
+            _I32_VGPR_RHS,
+            I32_VGPR_MATERIALIZER.name,
+        ),
+        *_typed_rules(
+            index.index_cmp,
+            _INDEX,
+            _ADDRESS_VGPR_LHS,
+            _ADDRESS_VGPR_RHS,
+            ADDRESS_VGPR_MATERIALIZER.name,
+        ),
+        *_typed_rules(
+            index.index_cmp,
+            _OFFSET,
+            _ADDRESS_VGPR_LHS,
+            _ADDRESS_VGPR_RHS,
+            ADDRESS_VGPR_MATERIALIZER.name,
+        ),
+    )
+
+
 AMDGPU_COMPARE_CONTRACT_DIALECT_OPS = {
+    "index": ALL_INDEX_OPS,
     "scalar": ALL_SCALAR_OPS,
 }
 
 AMDGPU_COMPARE_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.compare",
     descriptor_set=_DESCRIPTOR_SET,
-    materializers=(I32_VGPR_MATERIALIZER,),
+    materializers=(I32_VGPR_MATERIALIZER, ADDRESS_VGPR_MATERIALIZER),
     cases=_rules(),
 )

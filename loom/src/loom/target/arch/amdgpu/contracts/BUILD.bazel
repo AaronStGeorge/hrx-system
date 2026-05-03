@@ -88,6 +88,7 @@ loom_target_table_cc_library(
     generator = _AMDGPU_LOWER_RULE_GENERATOR,
     deps = [
         "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/target/arch/amdgpu:descriptor_ids",
         "//loom/src/loom/target/arch/amdgpu:lower_materializers",

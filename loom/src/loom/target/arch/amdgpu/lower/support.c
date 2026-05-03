@@ -338,6 +338,9 @@ bool loom_amdgpu_module_value_prefers_vgpr(const loom_module_t* module,
       return loom_value_def_index(value) == 0;
     case LOOM_OP_KERNEL_SUBGROUP_SHUFFLE:
       return loom_value_def_index(value) == 0;
+    case LOOM_OP_INDEX_CAST:
+      return loom_amdgpu_module_value_prefers_vgpr(
+          module, loom_index_cast_input(defining_op));
     case LOOM_OP_INDEX_ADD:
       return loom_amdgpu_module_value_prefers_vgpr(
                  module, loom_index_add_lhs(defining_op)) ||
@@ -469,6 +472,13 @@ bool loom_amdgpu_module_value_is_native_i1_mask(
                module, loom_scalar_cmpi_lhs(defining_op)) ||
            loom_amdgpu_module_value_prefers_vgpr(
                module, loom_scalar_cmpi_rhs(defining_op));
+  }
+
+  if (loom_index_cmp_isa(defining_op) && loom_value_def_index(value) == 0) {
+    return loom_amdgpu_module_value_prefers_vgpr(
+               module, loom_index_cmp_lhs(defining_op)) ||
+           loom_amdgpu_module_value_prefers_vgpr(
+               module, loom_index_cmp_rhs(defining_op));
   }
 
   return loom_kernel_subgroup_shuffle_isa(defining_op) &&
@@ -807,10 +817,5 @@ bool loom_amdgpu_value_can_materialize_as_vgpr_i32(
 
 bool loom_amdgpu_value_can_materialize_as_vgpr_address(
     loom_low_lower_context_t* context, loom_value_id_t value_id) {
-  if (loom_amdgpu_value_prefers_vgpr(context, value_id)) {
-    return true;
-  }
-  int64_t value = 0;
-  return loom_amdgpu_value_as_address_constant(context, value_id, &value) &&
-         value >= 0 && value <= UINT32_MAX;
+  return loom_amdgpu_value_is_address_scalar(context, value_id);
 }

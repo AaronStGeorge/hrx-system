@@ -439,6 +439,13 @@ iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_address(
   int64_t value = 0;
   if (!loom_amdgpu_value_as_address_constant(context, source_value, &value) ||
       value < 0 || value > UINT32_MAX) {
+    bool is_sgpr = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
+        context, low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, &is_sgpr));
+    if (is_sgpr && loom_type_register_unit_count(low_type) == 1) {
+      return loom_amdgpu_emit_vgpr_b32_copy(context, source_op, low_value,
+                                            out_low_value);
+    }
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU address value cannot materialize as a VGPR operand");

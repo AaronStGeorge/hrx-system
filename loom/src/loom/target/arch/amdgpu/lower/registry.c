@@ -400,6 +400,9 @@ static const loom_amdgpu_lower_dispatch_row_t
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_INDEX_CONSTANT)] = LOOM_AMDGPU_DIRECT_ROW(
             LOOM_OP_INDEX_CONSTANT, loom_amdgpu_select_value_dispatch,
             loom_amdgpu_emit_value_dispatch, NULL),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_INDEX_CAST)] = LOOM_AMDGPU_DIRECT_ROW(
+            LOOM_OP_INDEX_CAST, loom_amdgpu_select_value_dispatch,
+            loom_amdgpu_emit_value_dispatch, NULL),
 };
 
 static const loom_amdgpu_lower_dispatch_row_t
