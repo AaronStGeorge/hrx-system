@@ -955,6 +955,271 @@ ERR_TARGET_053 = ErrorDef(
     params=(ErrorParam("function_name", ParamKind.STRING),),
 )
 
+# ERR_TARGET_054: Target-low ABI policy did not map a value.
+ERR_TARGET_054 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=54,
+    severity=Severity.ERROR,
+    summary="Target-low ABI policy did not map a value.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' {value_kind} value {value_id} in "
+        "'@{function_name}': target-low ABI policy did not produce a "
+        "register type"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("value_kind", ParamKind.STRING),
+        ErrorParam("value_id", ParamKind.U64),
+    ),
+)
+
+# ERR_TARGET_055: Function predicates reached target-low lowering.
+ERR_TARGET_055 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=55,
+    severity=Severity.ERROR,
+    summary="Function predicates reached target-low lowering.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' in '@{function_name}': {predicate_count} "
+        "function predicate(s) require value remapping before target-low "
+        "lowering"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("predicate_count", ParamKind.U32),
+    ),
+)
+
+# ERR_TARGET_056: Tied function results reached target-low lowering.
+ERR_TARGET_056 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=56,
+    severity=Severity.ERROR,
+    summary="Tied function results reached target-low lowering.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' in '@{function_name}': {tied_result_count} "
+        "tied result(s) require explicit ABI ownership lowering"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("tied_result_count", ParamKind.U32),
+    ),
+)
+
+# ERR_TARGET_057: Operation with regions reached target-low source lowering.
+ERR_TARGET_057 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=57,
+    severity=Severity.ERROR,
+    summary="Operation with regions reached target-low source lowering.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' in '@{function_name}': {region_count} nested "
+        "region(s) must be lowered away before target-low source lowering"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("region_count", ParamKind.U32),
+    ),
+)
+
+# ERR_TARGET_058: FP8 scalar type reached target-low legality.
+ERR_TARGET_058 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=58,
+    severity=Severity.ERROR,
+    summary="FP8 scalar type reached target-low legality.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' type {actual_type} in '@{function_name}': "
+        "FP8 scalar types require explicit decode or a selected target-low "
+        "contract"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("actual_type", ParamKind.TYPE),
+    ),
+)
+
+# ERR_TARGET_059: Unknown scalar type reached target-low legality.
+ERR_TARGET_059 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=59,
+    severity=Severity.ERROR,
+    summary="Unknown scalar type reached target-low legality.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' type {actual_type} in '@{function_name}': "
+        "scalar type is not known to target-low legality"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("actual_type", ParamKind.TYPE),
+    ),
+)
+
+# ERR_TARGET_060: Contract-owned type escaped its contract family.
+ERR_TARGET_060 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=60,
+    severity=Severity.ERROR,
+    summary="Contract-owned type escaped its contract family.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' type {actual_type} in '@{function_name}': "
+        "{type_semantic} types must be produced or consumed by an op from a "
+        "matching target contract family before target-low lowering"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("type_semantic", ParamKind.STRING),
+    ),
+)
+
+# ERR_TARGET_061: Vector type shape is not target-low legal.
+ERR_TARGET_061 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=61,
+    severity=Severity.ERROR,
+    summary="Vector type shape is not target-low legal.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' type {actual_type} in '@{function_name}': "
+        "target-low legality requires specialized static one-dimensional "
+        "vectors"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("actual_type", ParamKind.TYPE),
+    ),
+)
+
+# ERR_TARGET_062: Vector lane count is not target-low representable.
+ERR_TARGET_062 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=62,
+    severity=Severity.ERROR,
+    summary="Vector lane count is not target-low representable.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' type {actual_type} in '@{function_name}': "
+        "vector lane count is not representable"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("actual_type", ParamKind.TYPE),
+    ),
+)
+
+# ERR_TARGET_063: Type has no target-low legality mapping.
+ERR_TARGET_063 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=63,
+    severity=Severity.ERROR,
+    summary="Type has no target-low legality mapping.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' type {actual_type} in '@{function_name}': "
+        "no target-low legality mapping exists for this type"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("actual_type", ParamKind.TYPE),
+    ),
+)
+
+# ERR_TARGET_064: Operation references an invalid SSA value.
+ERR_TARGET_064 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=64,
+    severity=Severity.ERROR,
+    summary="Operation references an invalid SSA value.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' value {value_id} in '@{function_name}': SSA "
+        "value id is outside the module value table"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("value_id", ParamKind.U64),
+    ),
+)
+
+# ERR_TARGET_065: Target-low legality requires a target provider.
+ERR_TARGET_065 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=65,
+    severity=Severity.ERROR,
+    summary="Target-low legality requires a target provider.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' in '@{function_name}': operation belongs to a "
+        "target contract family and requires a target legality provider"
+    ),
+    params=_TARGET_CONTEXT_PARAMS,
+)
+
+# ERR_TARGET_066: Structured control flow reached target-low legality.
+ERR_TARGET_066 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=66,
+    severity=Severity.ERROR,
+    summary="Structured control flow reached target-low legality.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' in '@{function_name}': structured SCF control "
+        "flow must be lowered to CFG before target-low lowering"
+    ),
+    params=_TARGET_CONTEXT_PARAMS,
+)
+
+# ERR_TARGET_067: Structured control-flow terminator reached target-low legality.
+ERR_TARGET_067 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=67,
+    severity=Severity.ERROR,
+    summary="Structured control-flow terminator reached target-low legality.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' in '@{function_name}': SCF terminators must be "
+        "lowered with their parent structured control-flow op before "
+        "target-low lowering"
+    ),
+    params=_TARGET_CONTEXT_PARAMS,
+)
+
+# ERR_TARGET_068: Source-only operation reached target-low legality.
+ERR_TARGET_068 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=68,
+    severity=Severity.ERROR,
+    summary="Source-only operation reached target-low legality.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' in '@{function_name}': source-only operation "
+        "must be lowered before target-low legality"
+    ),
+    params=_TARGET_CONTEXT_PARAMS,
+)
+
+# ERR_TARGET_069: Module metadata operation reached executable target-low legality.
+ERR_TARGET_069 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=69,
+    severity=Severity.ERROR,
+    summary="Module metadata operation reached executable target-low legality.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' in '@{function_name}': target record ops are "
+        "module metadata and cannot appear inside executable regions"
+    ),
+    params=_TARGET_CONTEXT_PARAMS,
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -1009,4 +1274,20 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_051,
     ERR_TARGET_052,
     ERR_TARGET_053,
+    ERR_TARGET_054,
+    ERR_TARGET_055,
+    ERR_TARGET_056,
+    ERR_TARGET_057,
+    ERR_TARGET_058,
+    ERR_TARGET_059,
+    ERR_TARGET_060,
+    ERR_TARGET_061,
+    ERR_TARGET_062,
+    ERR_TARGET_063,
+    ERR_TARGET_064,
+    ERR_TARGET_065,
+    ERR_TARGET_066,
+    ERR_TARGET_067,
+    ERR_TARGET_068,
+    ERR_TARGET_069,
 )

@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 
+#include "loom/codegen/low/lower_internal.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
@@ -33,11 +34,7 @@ static const loom_low_lower_rule_span_t* loom_low_lower_rule_set_find_span(
 
 static iree_status_t loom_low_lower_rule_emit_no_mapping(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
-  return loom_low_lower_emit_reject(
-      context, source_op, IREE_SV("op"),
-      loom_op_name(loom_low_lower_context_module(context), source_op),
-      IREE_SV("the selected target-low lowering policy has no descriptor "
-              "mapping for this op"));
+  return loom_low_lower_emit_no_target_contract(context, source_op);
 }
 
 static iree_string_view_t loom_low_lower_rule_nonempty(

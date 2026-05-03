@@ -7,6 +7,7 @@
 #include "loom/codegen/low/lower_internal.h"
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/error/error_defs.h"
+#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/cfg/ops.h"
 #include "loom/ops/low/ops.h"
@@ -122,6 +123,43 @@ iree_status_t loom_low_lower_emit_error_ref(
   const loom_error_def_t* error = loom_error_def_lookup_ref(error_ref);
   IREE_ASSERT(error != NULL);
   return loom_low_lower_emit(context, source_op, error, params, param_count);
+}
+
+#define LOOM_LOW_LOWER_TARGET_CONTEXT_PARAM_COUNT 5
+
+static void loom_low_lower_make_target_context_params(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_diagnostic_param_t* params) {
+  params[0] =
+      loom_param_string(loom_low_lower_target_key(context->options->bundle));
+  params[1] =
+      loom_param_string(loom_low_lower_export_name(context->options->bundle));
+  params[2] =
+      loom_param_string(loom_low_lower_config_key(context->options->bundle));
+  params[3] = loom_param_string(loom_low_lower_context_function_name(context));
+  params[4] = loom_param_string(loom_op_name(context->module, source_op));
+}
+
+iree_status_t loom_low_lower_emit_target_context_error(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint16_t error_code, const loom_diagnostic_param_t* extra_params,
+    iree_host_size_t extra_param_count) {
+  IREE_ASSERT_LE(extra_param_count, 4);
+  loom_diagnostic_param_t params[LOOM_LOW_LOWER_TARGET_CONTEXT_PARAM_COUNT + 4];
+  loom_low_lower_make_target_context_params(context, source_op, params);
+  for (iree_host_size_t i = 0; i < extra_param_count; ++i) {
+    params[LOOM_LOW_LOWER_TARGET_CONTEXT_PARAM_COUNT + i] = extra_params[i];
+  }
+  return loom_low_lower_emit(
+      context, source_op,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, error_code), params,
+      LOOM_LOW_LOWER_TARGET_CONTEXT_PARAM_COUNT + extra_param_count);
+}
+
+iree_status_t loom_low_lower_emit_no_target_contract(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  return loom_low_lower_emit_target_context_error(
+      context, source_op, 1, /*extra_params=*/NULL, /*extra_param_count=*/0);
 }
 
 loom_module_t* loom_low_lower_context_module(

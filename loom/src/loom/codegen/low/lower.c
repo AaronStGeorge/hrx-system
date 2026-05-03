@@ -115,11 +115,13 @@ static iree_status_t loom_low_lower_map_argument(
   IREE_ASSERT(loom_low_lower_abi_argument_kind_is_known(out_argument->kind));
   if (loom_low_lower_type_is_none(out_argument->abi_type)) {
     if (context->result->error_count == previous_error_count) {
-      IREE_RETURN_IF_ERROR(loom_low_lower_emit_reject(
-          context, context->source_function.op, IREE_SV("argument"),
-          IREE_SV("<unknown>"),
-          IREE_SV("target-low argument ABI policy did not produce a register "
-                  "type")));
+      const loom_diagnostic_param_t params[] = {
+          loom_param_string(IREE_SV("argument")),
+          loom_param_u64(source_argument_id),
+      };
+      IREE_RETURN_IF_ERROR(loom_low_lower_emit_target_context_error(
+          context, context->source_function.op, 54, params,
+          IREE_ARRAYSIZE(params)));
     }
     return iree_ok_status();
   }
@@ -209,9 +211,12 @@ static iree_status_t loom_low_lower_check_mapped_value(
                                                 source_value_id, out_low_type));
   if (loom_low_lower_type_is_none(*out_low_type)) {
     if (context->result->error_count == previous_error_count) {
-      IREE_RETURN_IF_ERROR(loom_low_lower_emit_reject(
-          context, source_op, IREE_SV("value"), IREE_SV("<unknown>"),
-          IREE_SV("target-low value policy did not produce a register type")));
+      const loom_diagnostic_param_t params[] = {
+          loom_param_string(IREE_SV("source")),
+          loom_param_u64(source_value_id),
+      };
+      IREE_RETURN_IF_ERROR(loom_low_lower_emit_target_context_error(
+          context, source_op, 54, params, IREE_ARRAYSIZE(params)));
     }
   }
   return iree_ok_status();
@@ -232,17 +237,20 @@ static iree_status_t loom_low_lower_check_function_signature(
   uint16_t predicate_count = 0;
   (void)loom_func_like_predicates(context->source_function, &predicate_count);
   if (predicate_count != 0) {
-    IREE_RETURN_IF_ERROR(loom_low_lower_emit_reject(
-        context, context->source_function.op, IREE_SV("function"),
-        loom_low_lower_context_function_name(context),
-        IREE_SV("function predicates need value remapping before target-low "
-                "lowering")));
+    const loom_diagnostic_param_t params[] = {
+        loom_param_u32(predicate_count),
+    };
+    IREE_RETURN_IF_ERROR(loom_low_lower_emit_target_context_error(
+        context, context->source_function.op, 55, params,
+        IREE_ARRAYSIZE(params)));
   }
   if (context->source_function.op->tied_result_count != 0) {
-    IREE_RETURN_IF_ERROR(loom_low_lower_emit_reject(
-        context, context->source_function.op, IREE_SV("function"),
-        loom_low_lower_context_function_name(context),
-        IREE_SV("tied function results need explicit ABI ownership lowering")));
+    const loom_diagnostic_param_t params[] = {
+        loom_param_u32(context->source_function.op->tied_result_count),
+    };
+    IREE_RETURN_IF_ERROR(loom_low_lower_emit_target_context_error(
+        context, context->source_function.op, 56, params,
+        IREE_ARRAYSIZE(params)));
   }
   return iree_ok_status();
 }
@@ -615,10 +623,7 @@ static iree_status_t loom_low_lower_emit_contract_query_rejection(
         context, source_op, result->rejection->subject_kind,
         result->rejection->subject_name, result->rejection->reason);
   }
-  return loom_low_lower_emit_reject(
-      context, source_op, IREE_SV("op"),
-      loom_op_name(context->module, source_op),
-      IREE_SV("the selected target contract rejected this op"));
+  return loom_low_lower_emit_no_target_contract(context, source_op);
 }
 
 static iree_status_t loom_low_lower_record_descriptor_matrix_plan(
@@ -840,11 +845,11 @@ static void loom_low_lower_record_report_row(
 static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op) {
   if (source_op->region_count != 0) {
-    return loom_low_lower_emit_reject(
-        context, source_op, IREE_SV("op"),
-        loom_op_name(context->module, source_op),
-        IREE_SV("nested regions must be lowered away before target-low "
-                "source lowering"));
+    const loom_diagnostic_param_t params[] = {
+        loom_param_u32(source_op->region_count),
+    };
+    return loom_low_lower_emit_target_context_error(
+        context, source_op, 57, params, IREE_ARRAYSIZE(params));
   }
   if (loom_low_lower_op_is_structural(context->module, source_op)) {
     return iree_ok_status();
@@ -892,11 +897,7 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
     return loom_low_lower_rule_set_emit_selection_failure(
         context, failed_rule_set, source_op, failed_rule_selection);
   }
-  return loom_low_lower_emit_reject(
-      context, source_op, IREE_SV("op"),
-      loom_op_name(context->module, source_op),
-      IREE_SV("the selected target-low lowering policy has no descriptor "
-              "mapping for this op"));
+  return loom_low_lower_emit_no_target_contract(context, source_op);
 }
 
 static iree_status_t loom_low_lower_plan_body(loom_low_lower_context_t* context,

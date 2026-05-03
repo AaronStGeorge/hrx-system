@@ -140,6 +140,17 @@ iree_string_view_t loom_low_lower_context_function_name(
 bool loom_low_lower_context_should_stop(
     const loom_low_lower_context_t* context);
 
+// Emits a TARGET-domain diagnostic with the standard target-low source
+// context followed by |extra_params|.
+iree_status_t loom_low_lower_emit_target_context_error(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint16_t error_code, const loom_diagnostic_param_t* extra_params,
+    iree_host_size_t extra_param_count);
+
+// Emits ERR_TARGET_001 for a source op with no selected target-low contract.
+iree_status_t loom_low_lower_emit_no_target_contract(
+    loom_low_lower_context_t* context, const loom_op_t* source_op);
+
 // Copies a source SSA value display name onto a low SSA value.
 iree_status_t loom_low_lower_copy_value_name(loom_low_lower_context_t* context,
                                              loom_value_id_t source_value_id,

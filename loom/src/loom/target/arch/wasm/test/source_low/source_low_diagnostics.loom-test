@@ -13,7 +13,7 @@ func.def target(@target) @unsupported_vector_shape(%lhs: vector<8xi32>, %rhs: ve
 wasm.target<simd128> @target
 
 func.def target(@target) @unsupported_source_op(%lhs: i32, %rhs: i32) -> (i32) {
-  // ERROR@+1: BACKEND/001 "scalar.muli" "descriptor mapping"
+  // ERROR@+1: TARGET/001 {op_name="scalar.muli"}
   %product = scalar.muli %lhs, %rhs : i32
   func.return %product : i32
 }
