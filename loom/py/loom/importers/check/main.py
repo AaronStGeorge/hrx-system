@@ -188,8 +188,10 @@ hardcode testdata paths in Python tests.
 
 Checked-in importer tests also provide `loom-opt` to the check tool so
 generated Loom IR is verified before expected-output comparison or `--update`
-rewrites. Direct `iree-bazel-run` use tries to resolve the bundled tool from
-runfiles, and `--loom-opt` can be passed explicitly for non-Bazel debugging.
+rewrites. Bazel and CMake tests pass `--loom-opt` explicitly from build
+metadata. Direct use resolves `loom-opt` from `--loom-opt`, `LOOM_BIN_DIR`, or
+`PATH`; importer-check Python does not inspect Bazel runfiles or repository
+paths.
 
 Expected diagnostics use loom-check-style source annotations:
 
@@ -254,7 +256,8 @@ def _add_common_check_arguments(parser: argparse.ArgumentParser) -> None:
         type=Path,
         help=(
             "path to loom-opt used to verify generated Loom IR before "
-            "comparing or updating expected output"
+            "comparing or updating expected output; when omitted, "
+            "LOOM_BIN_DIR/loom-opt or PATH is used if available"
         ),
     )
 

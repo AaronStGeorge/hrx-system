@@ -25,6 +25,7 @@ iree_py_library(
     "updates.py"
   DEPS
     iree::runtime::py::loom::package
+    iree::runtime::py::loom::tools::loom_opt
 )
 
 iree_py_library(

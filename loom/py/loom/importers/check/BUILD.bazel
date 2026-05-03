@@ -42,14 +42,15 @@ py_library(
         "results.py",
         "updates.py",
     ],
-    deps = ["//loom/py/loom:package"],
+    deps = [
+        "//loom/py/loom:package",
+        "//loom/py/loom/tools:loom_opt",
+    ],
 )
 
 py_binary(
     name = "loom_import_check",
     srcs = ["__main__.py"],
-    data = ["//loom/src/loom/tools/loom-opt"],
-    legacy_create_init = False,
     main = "__main__.py",
     deps = [
         ":check",

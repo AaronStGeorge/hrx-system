@@ -20,6 +20,7 @@ loom_cc_binary(
         "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/codegen/low:verify",
         "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/error:json_sink",
         "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_registry",

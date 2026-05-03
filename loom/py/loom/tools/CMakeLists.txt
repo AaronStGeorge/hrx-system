@@ -22,11 +22,34 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    loom_opt
+  SRCS
+    "__init__.py"
+    "loom_opt.py"
+  DEPS
+    iree::runtime::py::loom::core
+    iree::runtime::py::loom::error::error
+)
+
+iree_py_library(
+  NAME
     pytest_style_runner
   MAIN
     "pytest_style_runner.py"
   SRCS
     "pytest_style_runner.py"
+)
+
+iree_py_test(
+  NAME
+    tools_test
+  SRCS
+    "pytest_style_runner.py"
+  ARGS
+    "loom.tools.loom_opt_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

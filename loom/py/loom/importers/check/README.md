@@ -66,8 +66,10 @@ testdata paths inside Python tests.
 
 Checked-in importer tests should provide `loom-opt` to the check tool so
 generated Loom IR is verified before expected output comparison or `--update`
-rewrites. Bazel tests pass the tool with `--loom-opt=$(location ...)`; direct
-`iree-bazel-run` use also tries to resolve the bundled tool from runfiles.
+rewrites. Bazel tests pass the tool with `--loom-opt=$(location ...)`; CMake
+tests pass the built target path. Direct use resolves `loom-opt` from
+`--loom-opt`, `LOOM_BIN_DIR`, or `PATH`. Importer-check Python does not inspect
+Bazel runfiles or repository paths.
 
 Expected diagnostics use source annotations instead of bespoke test callbacks:
 

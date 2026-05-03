@@ -15,6 +15,7 @@
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/error/diagnostic.h"
+#include "loom/error/json_sink.h"
 #include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
@@ -48,6 +49,8 @@ IREE_FLAG(string, pass_report, "",
           "Pass execution report format. Use 'json' or empty/'none'.");
 IREE_FLAG(string, pass_reproducer, "",
           "Path to a one-file pass failure reproducer to write on failure.");
+IREE_FLAG(string, diagnostic_format, "text",
+          "Diagnostic output format. Use 'text' or 'json'.");
 IREE_FLAG(string, low_asm_descriptor_set, "",
           "Descriptor-set key used when printing low asm regions.");
 
@@ -56,11 +59,18 @@ typedef enum loom_opt_pass_report_mode_e {
   LOOM_OPT_PASS_REPORT_JSON = 1,
 } loom_opt_pass_report_mode_t;
 
+typedef enum loom_opt_diagnostic_format_e {
+  LOOM_OPT_DIAGNOSTIC_FORMAT_TEXT = 0,
+  LOOM_OPT_DIAGNOSTIC_FORMAT_JSON = 1,
+} loom_opt_diagnostic_format_t;
+
 typedef struct loom_opt_diagnostic_emitter_t {
   // Module containing the op referenced by emitted diagnostics.
   const loom_module_t* module;
   // Source resolver for source-backed operation locations.
   loom_source_resolver_t source_resolver;
+  // Destination for materialized low verifier diagnostics.
+  loom_diagnostic_sink_t diagnostic_sink;
   // Subsystem identity to store in materialized diagnostics.
   loom_emitter_t emitter;
 } loom_opt_diagnostic_emitter_t;
@@ -90,6 +100,23 @@ static iree_status_t loom_opt_parse_pass_report_mode(
   }
   return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                           "unsupported --pass-report mode '%.*s'",
+                          (int)value.size, value.data);
+}
+
+static iree_status_t loom_opt_parse_diagnostic_format(
+    iree_string_view_t value, loom_opt_diagnostic_format_t* out_format) {
+  value = iree_string_view_trim(value);
+  if (iree_string_view_is_empty(value) ||
+      iree_string_view_equal(value, IREE_SV("text"))) {
+    *out_format = LOOM_OPT_DIAGNOSTIC_FORMAT_TEXT;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(value, IREE_SV("json"))) {
+    *out_format = LOOM_OPT_DIAGNOSTIC_FORMAT_JSON;
+    return iree_ok_status();
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "unsupported --diagnostic-format mode '%.*s'",
                           (int)value.size, value.data);
 }
 
@@ -193,18 +220,18 @@ static iree_status_t loom_opt_diagnostic_emitter_emit(
                                          &diagnostic.source_location)) {
     diagnostic.origin = diagnostic.source_location;
   }
-  return loom_diagnostic_stderr_sink(NULL, &diagnostic);
+  return loom_diagnostic_emit(&emitter->diagnostic_sink, &diagnostic);
 }
 
 static iree_status_t loom_opt_verify_module(
     const loom_target_low_descriptor_registry_t* low_registry,
-    loom_run_module_t* run_module) {
+    loom_run_module_t* run_module, loom_diagnostic_sink_t diagnostic_sink) {
   loom_module_t* module = run_module->module;
   loom_source_resolver_t source_resolver =
       loom_run_module_source_resolver(run_module);
 
   loom_verify_options_t verify_options = {
-      .sink = {.fn = loom_diagnostic_stderr_sink},
+      .sink = diagnostic_sink,
       .max_errors = 100,
       .source_resolver = source_resolver,
   };
@@ -221,6 +248,7 @@ static iree_status_t loom_opt_verify_module(
   loom_opt_diagnostic_emitter_t low_emitter = {
       .module = module,
       .source_resolver = source_resolver,
+      .diagnostic_sink = diagnostic_sink,
       .emitter = LOOM_EMITTER_VERIFIER,
   };
   loom_low_verify_options_t low_verify_options = {
@@ -841,6 +869,8 @@ int main(int argc, char** argv) {
       "registry.\n"
       "Use --pass-report=json to print a structured execution report to "
       "stderr.\n"
+      "Use --diagnostic-format=json to print structured diagnostic JSONL to "
+      "stderr.\n"
       "Use --pass-reproducer=file to capture a rerunnable failure file.\n");
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
@@ -852,6 +882,13 @@ int main(int argc, char** argv) {
   const loom_pass_registry_t* pass_registry = loom_pass_builtin_registry();
   iree_string_view_t source = iree_string_view_empty();
   loom_opt_pass_report_mode_t pass_report_mode = LOOM_OPT_PASS_REPORT_NONE;
+  loom_opt_diagnostic_format_t diagnostic_format =
+      LOOM_OPT_DIAGNOSTIC_FORMAT_TEXT;
+  loom_output_stream_t diagnostic_json_stream = {0};
+  loom_json_sink_options_t diagnostic_json_options = {0};
+  loom_diagnostic_sink_t diagnostic_sink = {
+      .fn = loom_diagnostic_stderr_sink,
+  };
   loom_pass_report_t pass_report = {0};
   bool pass_report_initialized = false;
   bool pass_execution_started = false;
@@ -859,6 +896,22 @@ int main(int argc, char** argv) {
 
   iree_status_t status = loom_opt_parse_pass_report_mode(
       iree_make_cstring_view(FLAG_pass_report), &pass_report_mode);
+  if (iree_status_is_ok(status)) {
+    status = loom_opt_parse_diagnostic_format(
+        iree_make_cstring_view(FLAG_diagnostic_format), &diagnostic_format);
+  }
+  if (iree_status_is_ok(status) &&
+      diagnostic_format == LOOM_OPT_DIAGNOSTIC_FORMAT_JSON) {
+    loom_output_stream_for_file(stderr, &diagnostic_json_stream);
+    diagnostic_json_options = (loom_json_sink_options_t){
+        .stream = &diagnostic_json_stream,
+        .type_formatter = {loom_type_format_minimal, NULL},
+    };
+    diagnostic_sink = (loom_diagnostic_sink_t){
+        .fn = loom_diagnostic_json_sink,
+        .user_data = &diagnostic_json_options,
+    };
+  }
   if (iree_status_is_ok(status) && FLAG_list_passes) {
     status = loom_opt_print_pass_list(pass_registry);
   }
@@ -916,11 +969,13 @@ int main(int argc, char** argv) {
     loom_run_module_parse_options_initialize(&parse_options);
     parse_options.filename = filename;
     parse_options.source = source;
+    parse_options.diagnostic_sink = diagnostic_sink;
     status = loom_run_module_parse(&run_session, &parse_options, &run_module);
   }
   if (iree_status_is_ok(status) && !metadata_only && FLAG_verify) {
     status = loom_opt_verify_module(
-        loom_run_session_low_descriptor_registry(&run_session), &run_module);
+        loom_run_session_low_descriptor_registry(&run_session), &run_module,
+        diagnostic_sink);
   }
   if (iree_status_is_ok(status) && !metadata_only) {
     pass_pipeline_status = loom_opt_run_passes(
@@ -945,7 +1000,8 @@ int main(int argc, char** argv) {
   }
   if (iree_status_is_ok(status) && !metadata_only && FLAG_verify) {
     status = loom_opt_verify_module(
-        loom_run_session_low_descriptor_registry(&run_session), &run_module);
+        loom_run_session_low_descriptor_registry(&run_session), &run_module,
+        diagnostic_sink);
     if (!iree_status_is_ok(status) && pass_execution_started &&
         iree_status_is_ok(pass_pipeline_status)) {
       status = iree_status_join(

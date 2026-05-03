@@ -145,7 +145,6 @@ py_test(
         "loom.importers.tilelang.coverage_test",
         "loom.importers.tilelang.types_test",
     ],
-    legacy_create_init = False,
     main = "pytest_style_runner.py",
     target_compatible_with = _TILELANG_IMPORTER_COMPATIBLE,
     deps = [
@@ -194,7 +193,6 @@ py_test(
         ":import_tests",
         "//loom/src/loom/tools/loom-opt",
     ],
-    legacy_create_init = False,
     main = "import_test.py",
     target_compatible_with = _TILELANG_IMPORTER_COMPATIBLE,
     deps = [
