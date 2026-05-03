@@ -22,6 +22,7 @@ iree_py_library(
     "memory.py"
     "scalar.py"
     "structure.py"
+    "tileops.py"
     "topology.py"
     "vector.py"
   DEPS

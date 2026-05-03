@@ -23,6 +23,10 @@ from loom.importers.tilelang.nodes import dtype, mapping_items, node_kind, node_
 from loom.importers.tilelang.ops.assumptions import convert_assume_call
 from loom.importers.tilelang.ops.conditions import coerce_condition
 from loom.importers.tilelang.ops.memory import remap_flattened_indices
+from loom.importers.tilelang.ops.tileops import (
+    convert_tileop_call,
+    is_tileop_call,
+)
 from loom.importers.tilelang.ops.topology import integer_value
 from loom.ir import I1, INDEX, ScalarType, ShapedType, StaticDim, Type, TypeKind
 
@@ -75,6 +79,8 @@ def convert_call(
     if op_name is None:
         context.record_blocked(node_text(expr), "call has no structured op name")
         return None
+    if is_tileop_call(op_name):
+        return convert_tileop_call(expr, context, converter, options, op_name)
     if _annotations(expr):
         context.record_blocked(
             node_text(expr),
