@@ -762,6 +762,9 @@ static iree_status_t loom_llvmir_lowering_lower_op(
       return loom_llvmir_lowering_lower_vector_shuffle(state, target_block, op);
     case LOOM_OP_INDEX_MADD:
       return loom_llvmir_lowering_lower_index_madd(state, target_block, op);
+    case LOOM_OP_INDEX_MIN:
+    case LOOM_OP_INDEX_MAX:
+      return loom_llvmir_lowering_lower_index_minmax(state, target_block, op);
     case LOOM_OP_SCALAR_CMPI:
       return loom_llvmir_lowering_lower_icmp(state, target_block, op,
                                              loom_scalar_cmpi_predicate(op));

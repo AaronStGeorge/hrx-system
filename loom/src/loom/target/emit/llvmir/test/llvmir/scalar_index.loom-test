@@ -55,6 +55,34 @@ entry:
 
 // ====
 
+// Index min/max lower to signed compare/select at LLVMIR export.
+func.def public @index_min(%lhs: index, %rhs: index) -> (index) {
+  %min = index.min %lhs, %rhs : index
+  func.return %min : index
+}
+
+func.def public @index_max(%lhs: index, %rhs: index) -> (index) {
+  %max = index.max %lhs, %rhs : index
+  func.return %max : index
+}
+
+// ----
+define dso_local i64 @index_min(i64 %lhs, i64 %rhs) {
+entry:
+  %v4 = icmp sle i64 %lhs, %rhs
+  %min = select i1 %v4, i64 %lhs, i64 %rhs
+  ret i64 %min
+}
+
+define dso_local i64 @index_max(i64 %lhs, i64 %rhs) {
+entry:
+  %v6 = icmp sle i64 %lhs, %rhs
+  %max = select i1 %v6, i64 %rhs, i64 %lhs
+  ret i64 %max
+}
+
+// ====
+
 // Fact identity assumes refine analysis facts without emitting LLVMIR ops.
 func.def public @scalar_assume_identity(%value: i32) -> (i32) {
   %refined = scalar.assume %value [range(%value, 0, 1024)] : i32

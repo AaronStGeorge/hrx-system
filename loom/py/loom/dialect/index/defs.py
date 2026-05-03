@@ -220,6 +220,30 @@ index_rem = binary_op(
     examples=["%r = index.rem %lane, %group_size : index"],
 )
 
+index_min = binary_op(
+    "index.min",
+    group=index_ops,
+    phase=OpPhase.EXECUTABLE,
+    type_constraint=INDEX,
+    doc="Signed minimum of two logical coordinate values.",
+    commutative=True,
+    canonicalize="loom_index_min_canonicalize",
+    facts="loom_index_min_facts",
+    examples=["%r = index.min %lhs, %rhs : index"],
+)
+
+index_max = binary_op(
+    "index.max",
+    group=index_ops,
+    phase=OpPhase.EXECUTABLE,
+    type_constraint=INDEX,
+    doc="Signed maximum of two logical coordinate values.",
+    commutative=True,
+    canonicalize="loom_index_max_canonicalize",
+    facts="loom_index_max_facts",
+    examples=["%r = index.max %lhs, %rhs : index"],
+)
+
 index_madd = Op(
     "index.madd",
     group=index_ops,
@@ -404,6 +428,8 @@ ALL_INDEX_OPS: tuple[Op, ...] = (
     index_mul,
     index_div,
     index_rem,
+    index_min,
+    index_max,
     index_madd,
     index_andi,
     index_ori,

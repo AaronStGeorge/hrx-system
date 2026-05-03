@@ -87,6 +87,26 @@ func.def @rem_rejects_offset(%x: offset, %y: offset) -> (offset) {
 
 // ====
 
+func.def @min_rejects_offset(%x: offset, %y: offset) -> (offset) {
+  // ERROR@+3: TYPE/003 "lhs"
+  // ERROR@+2: TYPE/003 "rhs"
+  // ERROR@+1: TYPE/004 "result"
+  %r = index.min %x, %y : offset
+  func.return %r : offset
+}
+
+// ====
+
+func.def @max_rejects_offset(%x: offset, %y: offset) -> (offset) {
+  // ERROR@+3: TYPE/003 "lhs"
+  // ERROR@+2: TYPE/003 "rhs"
+  // ERROR@+1: TYPE/004 "result"
+  %r = index.max %x, %y : offset
+  func.return %r : offset
+}
+
+// ====
+
 func.def @madd_rejects_offset(%x: offset, %y: offset, %z: offset) -> (offset) {
   // ERROR@+4: TYPE/003 "a"
   // ERROR@+3: TYPE/003 "b"

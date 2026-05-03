@@ -358,6 +358,11 @@ static iree_status_t loom_index_replace_single_result_with_scaled_add(
 // Arithmetic
 //===----------------------------------------------------------------------===//
 
+typedef enum loom_index_minmax_kind_e {
+  LOOM_INDEX_MINMAX_MIN,
+  LOOM_INDEX_MINMAX_MAX,
+} loom_index_minmax_kind_t;
+
 iree_status_t loom_index_add_canonicalize(loom_op_t* op,
                                           loom_rewriter_t* rewriter) {
   loom_value_id_t lhs = loom_index_add_lhs(op);
@@ -526,6 +531,41 @@ iree_status_t loom_index_rem_canonicalize(loom_op_t* op,
                                                                 result_type, 0);
   }
   return iree_ok_status();
+}
+
+static iree_status_t loom_index_minmax_canonicalize(
+    loom_op_t* op, loom_rewriter_t* rewriter, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_index_minmax_kind_t kind) {
+  if (lhs == rhs) {
+    return loom_index_replace_single_result_with_value(op, rewriter, lhs);
+  }
+
+  loom_value_facts_t lhs_facts = loom_rewriter_value_facts(rewriter, lhs);
+  loom_value_facts_t rhs_facts = loom_rewriter_value_facts(rewriter, rhs);
+  bool lhs_le_rhs = false;
+  if (!loom_index_cmp_result_from_facts(LOOM_INDEX_CMP_PREDICATE_SLE,
+                                        &lhs_facts, &rhs_facts, &lhs_le_rhs)) {
+    return iree_ok_status();
+  }
+
+  loom_value_id_t replacement = kind == LOOM_INDEX_MINMAX_MIN
+                                    ? (lhs_le_rhs ? lhs : rhs)
+                                    : (lhs_le_rhs ? rhs : lhs);
+  return loom_index_replace_single_result_with_value(op, rewriter, replacement);
+}
+
+iree_status_t loom_index_min_canonicalize(loom_op_t* op,
+                                          loom_rewriter_t* rewriter) {
+  return loom_index_minmax_canonicalize(op, rewriter, loom_index_min_lhs(op),
+                                        loom_index_min_rhs(op),
+                                        LOOM_INDEX_MINMAX_MIN);
+}
+
+iree_status_t loom_index_max_canonicalize(loom_op_t* op,
+                                          loom_rewriter_t* rewriter) {
+  return loom_index_minmax_canonicalize(op, rewriter, loom_index_max_lhs(op),
+                                        loom_index_max_rhs(op),
+                                        LOOM_INDEX_MINMAX_MAX);
 }
 
 iree_status_t loom_index_madd_canonicalize(loom_op_t* op,

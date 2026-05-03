@@ -62,6 +62,22 @@ iree_status_t loom_vector_to_scalar_build_index_binary(
       *out_result = loom_index_rem_result(op);
       return iree_ok_status();
     }
+    case LOOM_OP_INDEX_MIN: {
+      loom_op_t* op = NULL;
+      IREE_RETURN_IF_ERROR(loom_index_min_build(
+          &state->rewriter->builder, lhs, rhs,
+          loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), state->location, &op));
+      *out_result = loom_index_min_result(op);
+      return iree_ok_status();
+    }
+    case LOOM_OP_INDEX_MAX: {
+      loom_op_t* op = NULL;
+      IREE_RETURN_IF_ERROR(loom_index_max_build(
+          &state->rewriter->builder, lhs, rhs,
+          loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), state->location, &op));
+      *out_result = loom_index_max_result(op);
+      return iree_ok_status();
+    }
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unsupported index binary op kind %u",
@@ -188,6 +204,14 @@ iree_status_t loom_vector_to_scalar_build_term_binary(
         }
         *out_term = loom_vector_to_scalar_static_term(lhs.static_value %
                                                       rhs.static_value);
+        return iree_ok_status();
+      case LOOM_OP_INDEX_MIN:
+        *out_term = loom_vector_to_scalar_static_term(
+            loom_min_i64(lhs.static_value, rhs.static_value));
+        return iree_ok_status();
+      case LOOM_OP_INDEX_MAX:
+        *out_term = loom_vector_to_scalar_static_term(
+            loom_max_i64(lhs.static_value, rhs.static_value));
         return iree_ok_status();
       default:
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

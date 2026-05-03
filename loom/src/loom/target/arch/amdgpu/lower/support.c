@@ -353,6 +353,16 @@ bool loom_amdgpu_module_value_prefers_vgpr(const loom_module_t* module,
                  module, loom_index_mul_lhs(defining_op)) ||
              loom_amdgpu_module_value_prefers_vgpr(
                  module, loom_index_mul_rhs(defining_op));
+    case LOOM_OP_INDEX_MIN:
+      return loom_amdgpu_module_value_prefers_vgpr(
+                 module, loom_index_min_lhs(defining_op)) ||
+             loom_amdgpu_module_value_prefers_vgpr(
+                 module, loom_index_min_rhs(defining_op));
+    case LOOM_OP_INDEX_MAX:
+      return loom_amdgpu_module_value_prefers_vgpr(
+                 module, loom_index_max_lhs(defining_op)) ||
+             loom_amdgpu_module_value_prefers_vgpr(
+                 module, loom_index_max_rhs(defining_op));
     case LOOM_OP_INDEX_MADD:
       return loom_amdgpu_module_value_prefers_vgpr(
                  module, loom_index_madd_a(defining_op)) ||

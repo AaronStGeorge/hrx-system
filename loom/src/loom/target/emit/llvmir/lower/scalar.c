@@ -329,6 +329,58 @@ iree_status_t loom_llvmir_lowering_lower_index_madd(
   return loom_llvmir_lowering_map_single_result(state, op, result);
 }
 
+iree_status_t loom_llvmir_lowering_lower_index_minmax(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op) {
+  loom_llvmir_value_id_t operands[2] = {LOOM_LLVMIR_VALUE_ID_INVALID,
+                                        LOOM_LLVMIR_VALUE_ID_INVALID};
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_lookup_operands(state, op, operands));
+
+  loom_llvmir_type_id_t condition_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lower_scalar_type(
+      state, LOOM_SCALAR_TYPE_I1, &condition_type));
+  loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lower_type(
+      state,
+      loom_module_value_type(state->source_module,
+                             loom_op_const_results(op)[0]),
+      &result_type));
+
+  loom_llvmir_icmp_desc_t cmp_desc = {0};
+  cmp_desc.result_name = iree_string_view_empty();
+  cmp_desc.result_type = condition_type;
+  cmp_desc.predicate = LOOM_LLVMIR_ICMP_SLE;
+  cmp_desc.lhs = operands[0];
+  cmp_desc.rhs = operands[1];
+  loom_llvmir_value_id_t condition = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_icmp(target_block, &cmp_desc, &condition));
+
+  loom_llvmir_select_desc_t select_desc = {0};
+  select_desc.result_name =
+      loom_llvmir_lowering_value_name(state, loom_op_const_results(op)[0]);
+  select_desc.result_type = result_type;
+  select_desc.condition = condition;
+  switch (op->kind) {
+    case LOOM_OP_INDEX_MIN:
+      select_desc.true_value = operands[0];
+      select_desc.false_value = operands[1];
+      break;
+    case LOOM_OP_INDEX_MAX:
+      select_desc.true_value = operands[1];
+      select_desc.false_value = operands[0];
+      break;
+    default:
+      return loom_llvmir_lowering_unsupported_op(
+          state, op, "index min/max lowering only accepts index.min/max");
+  }
+  loom_llvmir_value_id_t result = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_select(target_block, &select_desc, &result));
+  return loom_llvmir_lowering_map_single_result(state, op, result);
+}
+
 static iree_status_t loom_llvmir_lowering_icmp_predicate(
     const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
     uint8_t source_predicate, loom_llvmir_icmp_predicate_t* out_predicate) {

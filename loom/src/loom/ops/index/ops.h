@@ -27,20 +27,22 @@ enum {
   LOOM_OP_INDEX_MUL = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 5),
   LOOM_OP_INDEX_DIV = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 6),
   LOOM_OP_INDEX_REM = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 7),
-  LOOM_OP_INDEX_MADD = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 8),
-  LOOM_OP_INDEX_ANDI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 9),
-  LOOM_OP_INDEX_ORI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 10),
-  LOOM_OP_INDEX_XORI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 11),
-  LOOM_OP_INDEX_SHLI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 12),
-  LOOM_OP_INDEX_SHRSI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 13),
-  LOOM_OP_INDEX_SHRUI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 14),
-  LOOM_OP_INDEX_ROTLI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 15),
-  LOOM_OP_INDEX_ROTRI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 16),
-  LOOM_OP_INDEX_CTLZI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 17),
-  LOOM_OP_INDEX_CTTZI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 18),
-  LOOM_OP_INDEX_CTPOPI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 19),
-  LOOM_OP_INDEX_CMP = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 20),
-  LOOM_OP_INDEX_COUNT_ = 21,
+  LOOM_OP_INDEX_MIN = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 8),
+  LOOM_OP_INDEX_MAX = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 9),
+  LOOM_OP_INDEX_MADD = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 10),
+  LOOM_OP_INDEX_ANDI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 11),
+  LOOM_OP_INDEX_ORI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 12),
+  LOOM_OP_INDEX_XORI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 13),
+  LOOM_OP_INDEX_SHLI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 14),
+  LOOM_OP_INDEX_SHRSI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 15),
+  LOOM_OP_INDEX_SHRUI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 16),
+  LOOM_OP_INDEX_ROTLI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 17),
+  LOOM_OP_INDEX_ROTRI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 18),
+  LOOM_OP_INDEX_CTLZI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 19),
+  LOOM_OP_INDEX_CTTZI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 20),
+  LOOM_OP_INDEX_CTPOPI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 21),
+  LOOM_OP_INDEX_CMP = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 22),
+  LOOM_OP_INDEX_COUNT_ = 23,
 };
 
 // Address-domain comparison predicates.
@@ -198,6 +200,40 @@ iree_status_t loom_index_rem_build(
     loom_location_id_t location, loom_op_t** out_op);
 iree_status_t loom_index_rem_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_index_rem_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_INDEX_MIN: Signed minimum of two logical coordinate values.
+// %r = index.min %lhs, %rhs : index
+LOOM_DEFINE_ISA(loom_index_min_isa, LOOM_OP_INDEX_MIN)
+LOOM_DEFINE_OPERAND(loom_index_min_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_index_min_rhs, 1)
+LOOM_DEFINE_RESULT(loom_index_min_result, 0)
+iree_status_t loom_index_min_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_min_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_index_min_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_INDEX_MAX: Signed maximum of two logical coordinate values.
+// %r = index.max %lhs, %rhs : index
+LOOM_DEFINE_ISA(loom_index_max_isa, LOOM_OP_INDEX_MAX)
+LOOM_DEFINE_OPERAND(loom_index_max_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_index_max_rhs, 1)
+LOOM_DEFINE_RESULT(loom_index_max_result, 0)
+iree_status_t loom_index_max_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_max_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_index_max_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,

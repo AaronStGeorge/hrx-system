@@ -1239,11 +1239,12 @@ r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
 kernel.def target(@hip_mcpu_gfx1100) export("expand_to_fused_kernel") @expand_to_fused_kernel(%x_handle: buffer, %expanded_x_handle: buffer, %token_topk_to_pos_handle: buffer, %pos_to_expert_handle: buffer, %num_tokens: i32, %num_expanded_tokens: i32) {
-  %maxsi = scalar.maxsi %num_tokens, %num_expanded_tokens : i32
-  %idx = index.cast %maxsi : i32 to index
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %num_expanded_tokens_idx = index.cast %num_expanded_tokens : i32 to index
+  %max = index.max %num_tokens_idx, %num_expanded_tokens_idx : index
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
-  kernel.launch.config workgroups(%idx, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+  kernel.launch.config workgroups(%max, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>

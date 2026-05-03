@@ -634,6 +634,8 @@ static bool loom_llvmir_target_legality_op_is_supported_core(
     case LOOM_OP_INDEX_REM:
     case LOOM_OP_INDEX_CONSTANT:
     case LOOM_OP_INDEX_MADD:
+    case LOOM_OP_INDEX_MIN:
+    case LOOM_OP_INDEX_MAX:
     case LOOM_OP_INDEX_CMP:
     case LOOM_OP_INDEX_CAST:
     case LOOM_OP_VECTOR_ADDF:

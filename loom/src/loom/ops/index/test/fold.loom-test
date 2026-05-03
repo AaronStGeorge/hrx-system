@@ -373,6 +373,73 @@ func.def @rem_maybe_negative_is_preserved(%x: index) -> (index) {
 
 // ====
 
+// index.min/max propagate signed range and common-divisor facts in the index
+// domain.
+func.def @minmax_facts(%x: index, %y: index) -> (i64, i64, i64, i64, i64, i64) {
+  %lo = index.assume %x [range(%x, 4, 20), mul(%x, 4)] : index
+  %hi = index.assume %y [range(%y, 8, 16), mul(%y, 8)] : index
+  %min = index.min %lo, %hi : index
+  %max = index.max %lo, %hi : index
+  %min_lo = test.fact_range_lo %min : index -> i64
+  %min_hi = test.fact_range_hi %min : index -> i64
+  %min_div = test.fact_divisor %min : index -> i64
+  %max_lo = test.fact_range_lo %max : index -> i64
+  %max_hi = test.fact_range_hi %max : index -> i64
+  %max_div = test.fact_divisor %max : index -> i64
+  func.return %min_lo, %min_hi, %min_div, %max_lo, %max_hi, %max_div : i64, i64, i64, i64, i64, i64
+}
+// ----
+func.def @minmax_facts(%x: index, %y: index) -> (i64, i64, i64, i64, i64, i64) {
+  %min_lo = scalar.constant 4 : i64
+  %min_hi = scalar.constant 16 : i64
+  %min_div = scalar.constant 4 : i64
+  %max_lo = scalar.constant 8 : i64
+  %max_hi = scalar.constant 20 : i64
+  %max_div = scalar.constant 4 : i64
+  func.return %min_lo, %min_hi, %min_div, %max_lo, %max_hi, %max_div : i64, i64, i64, i64, i64, i64
+}
+
+// ====
+
+// Range-proven ordering selects the known lower or upper coordinate without
+// expanding into cmp/select IR.
+func.def @minmax_range_canonicalizes(%x: index, %y: index) -> (index, index) {
+  %lo = index.assume %x [range(%x, 0, 4)] : index
+  %hi = index.assume %y [range(%y, 8, 16)] : index
+  %min = index.min %lo, %hi : index
+  %max = index.max %lo, %hi : index
+  func.return %min, %max : index, index
+}
+// ----
+func.def @minmax_range_canonicalizes(%x: index, %y: index) -> (index, index) {
+  %lo = index.assume %x [range(%x, 0, 4)] : index
+  %hi = index.assume %y [range(%y, 8, 16)] : index
+  func.return %lo, %hi : index, index
+}
+
+// ====
+
+// Self and exact-constant min/max fold through the normal fact path.
+func.def @minmax_identities() -> (index, index, index, index) {
+  %a = index.constant 3 : index
+  %b = index.constant 7 : index
+  %min = index.min %a, %b : index
+  %max = index.max %a, %b : index
+  %self_min = index.min %a, %a : index
+  %self_max = index.max %b, %b : index
+  func.return %min, %max, %self_min, %self_max : index, index, index, index
+}
+// ----
+func.def @minmax_identities() -> (index, index, index, index) {
+  %min = index.constant 3 : index
+  %max = index.constant 7 : index
+  %self_min = index.constant 3 : index
+  %self_max = index.constant 7 : index
+  func.return %min, %max, %self_min, %self_max : index, index, index, index
+}
+
+// ====
+
 // index-domain bitwise ops reuse integer fact transfer in the index dialect.
 func.def @bitwise_facts(%x: index) -> (i64, i64, i1, i64, i64) {
   %mask_aligned = index.constant -4 : index

@@ -1,16 +1,18 @@
 // RUN: roundtrip
 
-func.def @index_arithmetic(%i: index, %j: index, %cond: i1) -> (index, index, i1, i64) {
+func.def @index_arithmetic(%i: index, %j: index, %cond: i1) -> (index, index, index, index, i1, i64) {
   %c4 = index.constant 4 : index
   %add = index.add %i, %c4 : index
   %mul = index.mul %add, %j : index
   %madd = index.madd %i, %c4, %mul : index
   %div = index.div %madd, %c4 : index
   %rem = index.rem %madd, %c4 : index
+  %min = index.min %div, %rem : index
+  %max = index.max %div, %rem : index
   %cmp = index.cmp slt, %madd, %j : index
   %sel = scf.select %cond, %madd, %j : index
   %payload = index.cast %sel : index to i64
-  func.return %div, %rem, %cmp, %payload : index, index, i1, i64
+  func.return %div, %rem, %min, %max, %cmp, %payload : index, index, index, index, i1, i64
 }
 
 // ====

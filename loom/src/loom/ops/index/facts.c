@@ -105,6 +105,9 @@ iree_status_t loom_index_rem_facts(loom_fact_context_t* context,
   return iree_ok_status();
 }
 
+LOOM_INDEX_BINARY_FACTS(loom_index_min_facts, loom_value_facts_minsi)
+LOOM_INDEX_BINARY_FACTS(loom_index_max_facts, loom_value_facts_maxsi)
+
 iree_status_t loom_index_madd_facts(loom_fact_context_t* context,
                                     const loom_module_t* module,
                                     const loom_op_t* op,
