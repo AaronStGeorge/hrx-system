@@ -79,6 +79,76 @@ func.def @lowers_counted_for(%n: index, %seed: i32, %x: i32) -> (i32) {
 
 // ====
 
+func.def @preserves_static_for_iv_facts() {
+  %zero = index.constant 0 : index
+  %four = index.constant 4 : index
+  %two = index.constant 2 : index
+  scf.for %i = [%zero to %four step %two] {
+    test.use %i : index
+    scf.yield
+  }
+  func.return
+}
+
+// ----
+func.def @preserves_static_for_iv_facts() {
+^_bb0:
+  %zero = index.constant 0 : index
+  %four = index.constant 4 : index
+  %two = index.constant 2 : index
+  cfg.br ^_bb1(%zero: index)
+^_bb1(%4: index):
+  %6 = index.cmp slt, %4, %four : index
+  cfg.cond_br %6, ^_bb2, ^_bb3 : i1
+^_bb2:
+  %i = index.assume %4 [range(%4, 0, 3), mul(%4, 2)] : index
+  test.use %i : index
+  %7 = index.add %i, %two : index
+  cfg.br ^_bb1(%7: index)
+^_bb3:
+  func.return
+}
+
+// ====
+
+kernel.def @preserves_kernel_for_iv_facts() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch {
+  %zero = index.constant 0 : index
+  %four = index.constant 4 : index
+  %two = index.constant 2 : index
+  scf.for %i = [%zero to %four step %two] {
+    test.use %i : index
+    scf.yield
+  }
+  kernel.return
+}
+
+// ----
+kernel.def @preserves_kernel_for_iv_facts() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch {
+^_bb0:
+  %zero = index.constant 0 : index
+  %four = index.constant 4 : index
+  %two = index.constant 2 : index
+  cfg.br ^_bb1(%zero: index)
+^_bb1(%5: index):
+  %7 = index.cmp slt, %5, %four : index
+  cfg.cond_br %7, ^_bb2, ^_bb3 : i1
+^_bb2:
+  %i = index.assume %5 [range(%5, 0, 3), mul(%5, 2)] : index
+  test.use %i : index
+  %8 = index.add %i, %two : index
+  cfg.br ^_bb1(%8: index)
+^_bb3:
+  kernel.return
+}
+
+// ====
+
 func.def @lowers_while(%cond: i1, %seed: i32, %x: i32) -> (i32) {
   %result = scf.while(%before = %seed : i32) -> (i32) {
     %forwarded = test.addi %before, %x : i32
