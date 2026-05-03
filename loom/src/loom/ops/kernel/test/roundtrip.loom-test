@@ -57,6 +57,15 @@ func.def @workgroup_barrier() {
 
 test.target<low_core> @test_target
 
+func.def @subgroup_barrier() {
+  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = subgroup}
+  func.return
+}
+
+// ====
+
+test.target<low_core> @test_target
+
 kernel.def @workitem_coordinates() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index

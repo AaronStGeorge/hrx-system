@@ -150,6 +150,55 @@ kernel.def target(@hip_mcpu_gfx1100) export("shared_storage_sync") @shared_stora
 
 
 # ====
+@tilelang_case(
+    name="warp_sync",
+    category="op",
+    tags=("topology", "subgroup", "barrier"),
+)
+def warp_sync(T: Any) -> TileLangImportInput:
+    @T.prim_func  # type: ignore[untyped-decorator]
+    def warp_sync_kernel(
+        src: T.Tensor[(32,), T.float32],
+        dst: T.Tensor[(32,), T.float32],
+    ) -> None:
+        with T.Kernel(1, threads=32):
+            thread_index = T.get_thread_binding()
+            dst[thread_index] = src[thread_index]
+            T.sync_warp()
+
+    return TileLangImportInput(
+        source=warp_sync_kernel,
+        target="hip -mcpu=gfx1100",
+        name="warp_sync_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("warp_sync_kernel") @warp_sync_kernel(%src_handle: buffer, %dst_handle: buffer) {
+  %c1 = index.constant 1 : index
+  %c32 = index.constant 32 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<32xf32, %layout>
+  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<32xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %thread_index = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %load = view.load %src[%thread_index] : view<32xf32, %layout> -> f32
+  view.store %load, %dst[%thread_index] : f32, view<32xf32, %layout>
+  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = subgroup}
+  kernel.return
+}
+"""
+
+
+# ====
 @tilelang_case(name="thread_binding_loop", category="op", tags=("topology",))
 def thread_binding_loop(tir: Any, tvm: Any) -> TileLangImportInput:
     src, dst, src_buffer, dst_buffer = _buffer_pair(tir, shape=(128,))

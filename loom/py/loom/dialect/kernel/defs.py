@@ -980,7 +980,7 @@ kernel_tensor_lds_descriptor = Op(
 )
 
 # ============================================================================
-# kernel.barrier — workgroup execution barrier with an explicit memory fence
+# kernel.barrier — scoped execution barrier with an explicit memory fence
 # ============================================================================
 
 kernel_barrier = Op(
@@ -989,11 +989,12 @@ kernel_barrier = Op(
     contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
     doc=(
         "Synchronize invocations in an explicit execution scope and fence a "
-        "named memory space with a required ordering. The supported kernel "
-        "barrier is a workgroup execution barrier over workgroup memory with "
-        "acquire-release ordering. Async-copy completion is modeled by "
-        "kernel.async.wait; use kernel.barrier only when invocations must "
-        "rendezvous before consuming shared memory."
+        "named memory space with a required ordering. Supported source-level "
+        "kernel barriers synchronize either the current subgroup or workgroup "
+        "while fencing workgroup memory with acquire-release ordering. "
+        "Async-copy completion is modeled by kernel.async.wait; use "
+        "kernel.barrier only when invocations must rendezvous before "
+        "consuming shared memory."
     ),
     attrs=[
         AttrDef(
@@ -1019,6 +1020,7 @@ kernel_barrier = Op(
     verify="loom_kernel_barrier_verify",
     format=[AttrDict()],
     examples=[
+        "kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = subgroup}",
         "kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}",
     ],
 )

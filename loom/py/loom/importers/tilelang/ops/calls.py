@@ -895,6 +895,9 @@ def _convert_effect_call(
     if op_name in _STORAGE_SYNC_CALLS:
         _convert_storage_sync_call(expr, context, op_name)
         return None
+    if op_name in _WARP_SYNC_CALLS:
+        _convert_warp_sync_call(expr, context, op_name)
+        return None
     if op_name in _THREAD_RETURN_CALLS:
         context.record_blocked(
             node_text(expr),
@@ -1223,6 +1226,33 @@ def _convert_storage_sync_call(
     context.record_converted(node_text(expr), "kernel.barrier")
 
 
+def _convert_warp_sync_call(
+    expr: object,
+    context: TileLangConversionContext,
+    op_name: str,
+) -> None:
+    args = _args(expr)
+    if len(args) > 1:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` expects zero or one mask operands",
+        )
+        return
+    mask = _FULL_WARP_MASK if not args else integer_value(args[0])
+    if mask != _FULL_WARP_MASK:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` mask must be the full warp mask",
+        )
+        return
+    context.builder.kernel.barrier(
+        memory_space="workgroup",
+        ordering="acq_rel",
+        scope="subgroup",
+    )
+    context.record_converted(node_text(expr), "kernel.barrier<subgroup>")
+
+
 def _call_result_type(
     expr: object,
     context: TileLangConversionContext,
@@ -1537,6 +1567,10 @@ _STORAGE_SYNC_CALLS = {
     "tir.tvm_storage_sync",
 }
 
+_WARP_SYNC_CALLS = {
+    "tl.sync_warp",
+}
+
 _ASSUME_CALLS = {
     "tir.assume",
 }
@@ -1545,7 +1579,9 @@ _THREAD_RETURN_CALLS = {
     "tir.thread_return",
 }
 
-_EFFECT_CALLS = _STORAGE_SYNC_CALLS | _ASSUME_CALLS | _THREAD_RETURN_CALLS
+_EFFECT_CALLS = (
+    _STORAGE_SYNC_CALLS | _WARP_SYNC_CALLS | _ASSUME_CALLS | _THREAD_RETURN_CALLS
+)
 
 _WORKGROUP_STORAGE_SCOPES = {
     "shared",

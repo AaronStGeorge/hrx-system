@@ -887,9 +887,11 @@ iree_status_t loom_kernel_barrier_verify(const loom_module_t* module,
   }
 
   loom_atomic_scope_t scope = loom_kernel_barrier_scope(op);
-  if (scope != LOOM_ATOMIC_SCOPE_WORKGROUP) {
+  if (scope != LOOM_ATOMIC_SCOPE_SUBGROUP &&
+      scope != LOOM_ATOMIC_SCOPE_WORKGROUP) {
     return loom_kernel_emit_attribute_value_constraint(
-        emitter, op, IREE_SV("scope"), scope, IREE_SV("workgroup scope"));
+        emitter, op, IREE_SV("scope"), scope,
+        IREE_SV("subgroup or workgroup scope"));
   }
   return iree_ok_status();
 }

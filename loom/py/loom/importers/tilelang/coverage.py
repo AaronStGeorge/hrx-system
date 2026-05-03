@@ -684,8 +684,8 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
     OpCoverage(
         "tl.sync_warp",
         OpFamily.TILELANG_OP,
-        CoverageState.DEFERRED,
-        "Warp synchronization needs a reviewed subgroup barrier/fence representation.",
+        CoverageState.SUPPORTED,
+        "Full-mask warp synchronization; maps to subgroup-scoped kernel.barrier.",
     ),
     OpCoverage(
         "tl.shfl_xor_sync",

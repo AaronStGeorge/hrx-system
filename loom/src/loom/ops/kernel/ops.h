@@ -193,8 +193,8 @@ iree_status_t loom_kernel_exit_build(
     loom_op_t** out_op);
 iree_status_t loom_kernel_exit_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 
-// LOOM_OP_KERNEL_BARRIER: Synchronize invocations in an explicit execution scope and fence a named memory space with a required ordering. The supported kernel barrier is a workgroup execution barrier over workgroup memory with acquire-release ordering. Async-copy completion is modeled by kernel.async.wait; use kernel.barrier only when invocations must rendezvous before consuming shared memory.
-// kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+// LOOM_OP_KERNEL_BARRIER: Synchronize invocations in an explicit execution scope and fence a named memory space with a required ordering. Supported source-level kernel barriers synchronize either the current subgroup or workgroup while fencing workgroup memory with acquire-release ordering. Async-copy completion is modeled by kernel.async.wait; use kernel.barrier only when invocations must rendezvous before consuming shared memory.
+// kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = subgroup}
 LOOM_DEFINE_ISA(loom_kernel_barrier_isa, LOOM_OP_KERNEL_BARRIER)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_barrier_memory_space, 0, loom_value_fact_memory_space_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_barrier_ordering, 1, loom_atomic_ordering_t)

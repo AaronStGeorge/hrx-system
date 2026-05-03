@@ -128,3 +128,38 @@ def masked_warp_shuffle(tir: Any, tvm: Any) -> TileLangImportInput:
         target="hip -mcpu=gfx1100",
         name="masked_warp_shuffle_kernel",
     )
+
+
+# ====
+# ERROR@+1: "call `tl.sync_warp` mask must be the full warp mask"
+@tilelang_case(
+    name="masked_warp_sync",
+    category="diagnostic",
+    tags=("topology", "subgroup", "barrier"),
+)
+def masked_warp_sync(tir: Any, tvm: Any) -> TileLangImportInput:
+    src = tir.Var("src", "handle")
+    src_buffer = tir.decl_buffer((32,), "float32", name="src")
+    thread_index = tvm.te.thread_axis("threadIdx.x")
+    body = tir.AttrStmt(
+        thread_index,
+        "thread_extent",
+        tir.IntImm("int32", 32),
+        tir.Evaluate(
+            tir.call_intrin(
+                "void",
+                tir.op.Op.get("tl.sync_warp"),
+                tir.IntImm("uint32", 0xFFFF),
+            )
+        ),
+    )
+    prim_func = tir.PrimFunc(
+        [src],
+        body,
+        buffer_map={src: src_buffer},
+    ).with_attr("global_symbol", "masked_warp_sync_kernel")
+    return TileLangImportInput(
+        source=prim_func,
+        target="hip -mcpu=gfx1100",
+        name="masked_warp_sync_kernel",
+    )
