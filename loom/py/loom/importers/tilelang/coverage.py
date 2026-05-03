@@ -1001,8 +1001,10 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         CoverageState.SUPPORTED,
         (
             "Region-to-region copy; imports as structured scf.for plus "
-            "view.load/store. disable_tma normalizes to this explicit copy; "
-            "other scheduling annotations remain deferred."
+            "view.load/store. Singleton dimensions normalize across source "
+            "and destination regions, and scalar integer widening/truncation "
+            "is explicit. disable_tma normalizes to this copy path; other "
+            "scheduling annotations remain deferred."
         ),
     ),
     OpCoverage(
@@ -1024,10 +1026,10 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
     OpCoverage(
         "tl.tileop.finalize_reducer",
         OpFamily.TILELANG_TILEOP,
-        CoverageState.DEFERRED,
+        CoverageState.SUPPORTED,
         (
             "replication=none finalizers normalize to no-op; replication=all "
-            "needs explicit cross-thread allreduce representation."
+            "maps scalar sum/min/max reducers through kernel.workgroup.reduce."
         ),
     ),
     OpCoverage(

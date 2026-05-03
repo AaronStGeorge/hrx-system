@@ -226,10 +226,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_kernel") @tileop_
   %identity = scalar.constant 0 : f32
   %reduce = vector.reduce<addf> %load, %identity : vector<4xf32>, f32
   view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
-  scf.for %i0 = [%c0 to %c1 step %c1] {
-    %copy_2 = view.load %out[%i0] : view<1xf32, %layout> -> f32
-    view.store %copy_2, %dst[%i0] : f32, view<1xf32, %layout>
-  }
+  %copy_2 = view.load %out[%c0] : view<1xf32, %layout> -> f32
+  view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
 }
 """
@@ -295,10 +293,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_abssum_kernel") @tile
   %abs = vector.absf %load : vector<4xf32>
   %reduce = vector.reduce<addf> %abs, %identity : vector<4xf32>, f32
   view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
-  scf.for %i0 = [%c0 to %c1 step %c1] {
-    %copy_2 = view.load %out[%i0] : view<1xf32, %layout> -> f32
-    view.store %copy_2, %dst[%i0] : f32, view<1xf32, %layout>
-  }
+  %copy_2 = view.load %out[%c0] : view<1xf32, %layout> -> f32
+  view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
 }
 """
@@ -364,10 +360,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_kernel") @tile
   %abs = vector.absf %load : vector<4xf32>
   %reduce = vector.reduce<maxnumf> %abs, %identity : vector<4xf32>, f32
   view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
-  scf.for %i0 = [%c0 to %c1 step %c1] {
-    %copy_2 = view.load %out[%i0] : view<1xf32, %layout> -> f32
-    view.store %copy_2, %dst[%i0] : f32, view<1xf32, %layout>
-  }
+  %copy_2 = view.load %out[%c0] : view<1xf32, %layout> -> f32
+  view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
 }
 """
@@ -511,6 +505,73 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_finalize_reducer_none_kernel
     %copy = view.load %reducer[%i0] : view<4xf32, %layout> -> f32
     view.store %copy, %dst[%i0] : f32, view<4xf32, %layout>
   }
+  kernel.return
+}
+"""
+
+
+# ====
+@tilelang_case(
+    name="tileop_finalize_reducer_all",
+    category="op",
+    tags=("tileop", "finalize_reducer", "workgroup"),
+)
+def tileop_finalize_reducer_all(T: Any) -> TileLangImportInput:
+    @T.prim_func  # type: ignore[untyped-decorator]
+    def tileop_finalize_reducer_all_kernel(
+        src: T.Tensor[(4,), T.float32],
+        dst: T.Tensor[(4,), T.float32],
+    ) -> None:
+        with T.Kernel(1, threads=4):
+            thread_index = T.get_thread_binding()
+            reducer = T.alloc_reducer(
+                (1,),
+                T.float32,
+                "sum",
+                replication="all",
+            )
+            reducer[0] = src[thread_index]
+            T.finalize_reducer(reducer)
+            dst[thread_index] = reducer[0]
+
+    return TileLangImportInput(
+        source=tileop_finalize_reducer_all_kernel,
+        target="hip -mcpu=gfx1100",
+        name="tileop_finalize_reducer_all_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_finalize_reducer_all_kernel") @tileop_finalize_reducer_all_kernel(%src_handle: buffer, %dst_handle: buffer) {
+  %c1 = index.constant 1 : index
+  %c4 = index.constant 4 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c4, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %thread_index = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %reducer_bytes = index.constant 4 : offset
+  %reducer_buffer = buffer.alloca %reducer_bytes {base_alignment = 4, memory_space = private} : buffer
+  %reducer = buffer.view %reducer_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %load = view.load %src[%thread_index] : view<4xf32, %layout> -> f32
+  %c0 = index.constant 0 : index
+  view.store %load, %reducer[%c0] : f32, view<1xf32, %layout>
+  %c1 = index.constant 1 : index
+  scf.for %i0 = [%c0 to %c1 step %c1] {
+    %reducer_value = view.load %reducer[%i0] : view<1xf32, %layout> -> f32
+    %reducer_all = kernel.workgroup.reduce<addf> %reducer_value : f32
+    view.store %reducer_all, %reducer[%i0] : f32, view<1xf32, %layout>
+  }
+  %load_2 = view.load %reducer[%c0] : view<1xf32, %layout> -> f32
+  view.store %load_2, %dst[%thread_index] : f32, view<4xf32, %layout>
   kernel.return
 }
 """

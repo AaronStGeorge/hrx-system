@@ -19,7 +19,7 @@ from loom.importers.tilelang.converter import (
 from loom.importers.tilelang.nodes import dtype, node_kind, node_text, source_name
 from loom.importers.tilelang.ops.topology import integer_value
 from loom.importers.tilelang.ops.vector import vector_lanes
-from loom.ir import BUFFER_TYPE, DynamicDim, ShapedType, StaticDim, TypeKind
+from loom.ir import BUFFER_TYPE, DynamicDim, ShapedType, StaticDim, Type, TypeKind
 
 
 def register(registry: TileLangConverterRegistry) -> None:
@@ -131,6 +131,9 @@ def convert_buffer_store(
     if any(index is None for index in indices):
         context.record_blocked(node_text(stmt), "buffer store operands are not mapped")
         return
+    value = _coerce_store_value(value, view, stmt, context)
+    if value is None:
+        return
     mapped_indices: list[int | ValueRef] = [
         index for index in indices if index is not None
     ]
@@ -241,6 +244,67 @@ def _convert_index(
     if isinstance(index, ValueRef):
         return index
     return converter.convert_expr(index, context, index_like=True)
+
+
+def _coerce_store_value(
+    value: ValueRef,
+    view: ValueRef,
+    owner: object,
+    context: TileLangConversionContext,
+) -> ValueRef | None:
+    view_type = _view_type(view, context)
+    if not isinstance(view_type, ShapedType):
+        context.record_blocked(node_text(owner), "buffer store target is not shaped")
+        return None
+    return _cast_store_value(value, view_type.element_type, owner, context)
+
+
+def _cast_store_value(
+    value: ValueRef,
+    target_type: Type,
+    owner: object,
+    context: TileLangConversionContext,
+) -> ValueRef | None:
+    source_type = value.type
+    if str(source_type) == str(target_type):
+        return value
+    source_text = str(source_type)
+    target_text = str(target_type)
+    if (
+        source_text in ("index", "offset")
+        and _integer_bit_width(target_text) is not None
+    ):
+        return context.builder.index.cast(
+            input=value,
+            results=[target_type],
+            name=context.fresh_name("store_cast"),
+        )
+    source_width = _integer_bit_width(source_text)
+    target_width = _integer_bit_width(target_text)
+    if source_width is not None and target_width is not None:
+        if source_width < target_width:
+            return context.builder.scalar.extsi(
+                input=value,
+                results=[target_type],
+                name=context.fresh_name("store_ext"),
+            )
+        if source_width > target_width:
+            return context.builder.scalar.trunci(
+                input=value,
+                results=[target_type],
+                name=context.fresh_name("store_trunc"),
+            )
+    context.record_blocked(
+        node_text(owner),
+        f"buffer store value conversion {source_type} to {target_type} is not imported",
+    )
+    return None
+
+
+def _integer_bit_width(type_text: str) -> int | None:
+    if not type_text.startswith("i") or not type_text[1:].isdecimal():
+        return None
+    return int(type_text[1:])
 
 
 def remap_flattened_indices(

@@ -103,17 +103,25 @@ def _convert_copy_call(
     target = _decode_region(args[1], expr, context, converter, expected_access=2)
     if source is None or target is None:
         return None
-    if not _same_region_shape(source, target):
+    loop_extents = _copy_loop_extents(source, target, context)
+    if loop_extents is None:
         context.record_blocked(
             node_text(expr),
             f"call `{op_name}` source and destination extents differ",
         )
         return None
-    element_type = _view_element_type(source.view, context)
-    if element_type is None:
+    source_element_type = _view_element_type(source.view, context)
+    if source_element_type is None:
         context.record_blocked(
             node_text(expr),
             f"call `{op_name}` source region is not a shaped view",
+        )
+        return None
+    target_element_type = _view_element_type(target.view, context)
+    if target_element_type is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` destination region is not a shaped view",
         )
         return None
 
@@ -121,21 +129,32 @@ def _convert_copy_call(
         indices: tuple[ValueRef, ...],
         body_context: TileLangConversionContext,
     ) -> None:
-        source_indices = _region_indices(source, indices, body_context)
-        target_indices = _region_indices(target, indices, body_context)
+        source_indices = _project_region_indices(source, indices, expr, body_context)
+        target_indices = _project_region_indices(target, indices, expr, body_context)
+        if source_indices is None or target_indices is None:
+            return
         value = body_context.builder.view.load(
             view=source.view,
             indices=list(source_indices),
-            results=[element_type],
+            results=[source_element_type],
             name=body_context.fresh_name("copy"),
         )
+        converted_value = _copy_value_cast(
+            value,
+            source_element_type,
+            target_element_type,
+            expr,
+            body_context,
+        )
+        if converted_value is None:
+            return
         body_context.builder.view.store(
-            value=value,
+            value=converted_value,
             view=target.view,
             indices=list(target_indices),
         )
 
-    if not _emit_region_loops(source.extents, context, emit_copy):
+    if not _emit_region_loops(loop_extents, context, emit_copy):
         context.record_blocked(
             node_text(expr), f"call `{op_name}` region is not mapped"
         )
@@ -481,17 +500,94 @@ def _convert_finalize_reducer_call(
         )
         return None
     if reducer_info.replication == "all":
-        context.record_blocked(
-            node_text(expr),
-            "replication `all` requires cross-thread allreduce import",
+        return _convert_finalize_reducer_all(
+            expr,
+            context,
+            converter,
+            op_name,
+            args=args,
+            operation=reducer_info.operation,
+            data_source=data_source,
         )
-        return None
     context.record_blocked(
         node_text(expr),
         (
             "tl.tileop.finalize_reducer replication "
             f"`{reducer_info.replication}` is not imported"
         ),
+    )
+    return None
+
+
+def _convert_finalize_reducer_all(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    op_name: str,
+    *,
+    args: tuple[object, ...],
+    operation: str,
+    data_source: object,
+) -> ValueRef | None:
+    target = _decode_region_arg(
+        args=args,
+        position=0,
+        expr=expr,
+        context=context,
+        converter=converter,
+    )
+    if target is None:
+        return None
+    element_type = _view_element_type(target.view, context)
+    if element_type is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` reducer region is not a shaped view",
+        )
+        return None
+    source_dtype = _reducer_source_dtype(data_source, context)
+    reduce_spec = _reducer_reduce_spec(operation, source_dtype, element_type)
+    if reduce_spec is None:
+        context.record_blocked(
+            node_text(expr),
+            (
+                f"tl.tileop.finalize_reducer operation `{operation}` "
+                f"is not imported for {element_type}"
+            ),
+        )
+        return None
+
+    def emit_reduce(
+        indices: tuple[ValueRef, ...],
+        body_context: TileLangConversionContext,
+    ) -> None:
+        target_indices = _region_indices(target, indices, body_context)
+        value = body_context.builder.view.load(
+            view=target.view,
+            indices=list(target_indices),
+            results=[element_type],
+            name=body_context.fresh_name("reducer_value"),
+        )
+        result = body_context.builder.kernel.workgroup_reduce(
+            kind=reduce_spec.combiner,
+            value=value,
+            results=[element_type],
+            name=body_context.fresh_name("reducer_all"),
+        )
+        body_context.builder.view.store(
+            value=result,
+            view=target.view,
+            indices=list(target_indices),
+        )
+
+    if not _emit_region_loops(target.extents, context, emit_reduce):
+        context.record_blocked(
+            node_text(expr), f"call `{op_name}` reducer region is not mapped"
+        )
+        return None
+    context.record_converted(
+        node_text(expr),
+        f"tl.tileop.finalize_reducer<{operation}, all>",
     )
     return None
 
@@ -804,13 +900,38 @@ def _convert_index_sequence(
     return converted
 
 
-def _same_region_shape(source: TileRegion, target: TileRegion) -> bool:
-    if len(source.extents) != len(target.extents):
-        return False
-    return all(
+def _copy_loop_extents(
+    source: TileRegion,
+    target: TileRegion,
+    context: TileLangConversionContext,
+) -> tuple[ValueRef, ...] | None:
+    source_extents = _squeezed_singleton_extents(source.extents, context)
+    target_extents = _squeezed_singleton_extents(target.extents, context)
+    if len(source_extents) != len(target_extents):
+        return None
+    if all(
         lhs.id == rhs.id
-        for lhs, rhs in zip(source.extents, target.extents, strict=False)
+        for lhs, rhs in zip(source_extents, target_extents, strict=False)
+    ):
+        return source_extents
+    return None
+
+
+def _squeezed_singleton_extents(
+    extents: tuple[ValueRef, ...],
+    context: TileLangConversionContext,
+) -> tuple[ValueRef, ...]:
+    return tuple(
+        extent for extent in extents if not _is_static_one_extent(extent, context)
     )
+
+
+def _is_static_one_extent(
+    extent: ValueRef,
+    context: TileLangConversionContext,
+) -> bool:
+    one = context.constants.get(("index", "1"))
+    return one is not None and extent.id == one.id
 
 
 def _emit_region_loops(
@@ -858,6 +979,36 @@ def _region_indices(
     for base, offset in zip(region.indices, loop_indices, strict=True):
         indices.append(_add_region_index(base, offset, context))
     return tuple(indices)
+
+
+def _project_region_indices(
+    region: TileRegion,
+    loop_indices: tuple[ValueRef, ...],
+    owner: object,
+    context: TileLangConversionContext,
+) -> tuple[ValueRef, ...] | None:
+    zero = context.ensure_constant("0", "index", "c0")
+    offsets: list[ValueRef] = []
+    loop_index = 0
+    for extent in region.extents:
+        if _is_static_one_extent(extent, context):
+            offsets.append(zero)
+            continue
+        if loop_index >= len(loop_indices):
+            context.record_blocked(
+                node_text(owner),
+                "tile operation copy projected rank does not match loop rank",
+            )
+            return None
+        offsets.append(loop_indices[loop_index])
+        loop_index += 1
+    if loop_index != len(loop_indices):
+        context.record_blocked(
+            node_text(owner),
+            "tile operation copy loop rank does not match projected rank",
+        )
+        return None
+    return _region_indices(region, tuple(offsets), context)
 
 
 def _reduction_target_indices(
@@ -1014,6 +1165,40 @@ def _build_scalar_combiner(
     )
 
 
+def _copy_value_cast(
+    value: ValueRef,
+    source_element_type: Type,
+    target_element_type: Type,
+    owner: object,
+    context: TileLangConversionContext,
+) -> ValueRef | None:
+    if str(source_element_type) == str(target_element_type):
+        return value
+    source_width = _integer_bit_width(str(source_element_type))
+    target_width = _integer_bit_width(str(target_element_type))
+    if source_width is not None and target_width is not None:
+        if source_width < target_width:
+            return context.builder.scalar.extsi(
+                input=value,
+                results=[target_element_type],
+                name=context.fresh_name("copy_ext"),
+            )
+        if source_width > target_width:
+            return context.builder.scalar.trunci(
+                input=value,
+                results=[target_element_type],
+                name=context.fresh_name("copy_trunc"),
+            )
+    context.record_blocked(
+        node_text(owner),
+        (
+            "tl.tileop.copy element conversion "
+            f"{source_element_type} to {target_element_type} is not imported"
+        ),
+    )
+    return None
+
+
 def _add_region_index(
     base: ValueRef,
     offset: ValueRef,
@@ -1138,6 +1323,39 @@ def _reduce_spec(
         f"tl.tileop.reduce kind `{reduce_type}` is not imported",
     )
     return None
+
+
+def _reducer_reduce_spec(
+    operation: str,
+    source_dtype: str | None,
+    element_type: Type,
+) -> TileReduceSpec | None:
+    element_text = str(element_type)
+    is_float = _is_float_type(element_type)
+    is_unsigned = source_dtype is not None and _scalar_dtype_text(
+        source_dtype
+    ).startswith(("uint", "u"))
+    if operation == "sum":
+        return TileReduceSpec(operation, "addf" if is_float else "addi")
+    if operation == "max":
+        if is_float:
+            return TileReduceSpec(operation, "maxnumf")
+        if _integer_bit_width(element_text) is not None:
+            return TileReduceSpec(operation, "maxui" if is_unsigned else "maxsi")
+    if operation == "min":
+        if is_float:
+            return TileReduceSpec(operation, "minnumf")
+        if _integer_bit_width(element_text) is not None:
+            return TileReduceSpec(operation, "minui" if is_unsigned else "minsi")
+    return None
+
+
+def _reducer_source_dtype(
+    data_source: object,
+    context: TileLangConversionContext,
+) -> str | None:
+    buffer = context.mapped_buffer_for_data(data_source)
+    return None if buffer is None else dtype(buffer)
 
 
 def _reduce_init(

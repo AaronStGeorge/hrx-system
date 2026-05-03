@@ -164,6 +164,7 @@ filegroup(
         "testdata/scalar_calls.py",
         "testdata/tilekernels/engram.py",
         "testdata/tilekernels/moe_expand.py",
+        "testdata/tilekernels/moe_gate.py",
         "testdata/tilekernels/moe_histogram.py",
         "testdata/tilekernels/moe_normalize.py",
         "testdata/tilekernels/moe_routing.py",
