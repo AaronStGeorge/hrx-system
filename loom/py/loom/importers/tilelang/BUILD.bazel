@@ -163,6 +163,7 @@ filegroup(
         "testdata/memory_effects.py",
         "testdata/scalar_calls.py",
         "testdata/tilekernels/engram.py",
+        "testdata/tilekernels/mhc.py",
         "testdata/tilekernels/moe_expand.py",
         "testdata/tilekernels/moe_gate.py",
         "testdata/tilekernels/moe_histogram.py",
