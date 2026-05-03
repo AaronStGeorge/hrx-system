@@ -51,9 +51,9 @@ func.def @lowers_if_without_else(%cond: i1, %a: i32, %b: i32) {
 // ====
 
 func.def @lowers_counted_for(%n: index, %seed: i32, %x: i32) -> (i32) {
-  %zero = index.constant 0 : index
-  %one = index.constant 1 : index
-  %sum = scf.for %i = [%zero to %n step %one](%acc = %seed : i32) -> (i32) {
+  %start = index.constant 0 : index
+  %step = index.constant 1 : index
+  %sum = scf.for %i = [%start to %n step %step](%acc = %seed : i32) -> (i32) {
     %next = test.addi %acc, %x : i32
     scf.yield %next : i32
   }
@@ -63,15 +63,15 @@ func.def @lowers_counted_for(%n: index, %seed: i32, %x: i32) -> (i32) {
 // ----
 func.def @lowers_counted_for(%n: index, %seed: i32, %x: i32) -> (i32) {
 ^_bb0(%n: index, %seed: i32, %x: i32):
-  %zero = index.constant 0 : index
-  %one = index.constant 1 : index
-  cfg.br ^_bb1(%zero: index, %seed: i32)
+  %start = index.constant 0 : index
+  %step = index.constant 1 : index
+  cfg.br ^_bb1(%start: index, %seed: i32)
 ^_bb1(%i: index, %sum: i32):
   %12 = index.cmp slt, %i, %n : index
   cfg.cond_br %12, ^_bb2, ^_bb3 : i1
 ^_bb2:
   %next = test.addi %sum, %x : i32
-  %13 = index.add %i, %one : index
+  %13 = index.add %i, %step : index
   cfg.br ^_bb1(%13: index, %next: i32)
 ^_bb3:
   func.return %sum : i32
@@ -80,10 +80,10 @@ func.def @lowers_counted_for(%n: index, %seed: i32, %x: i32) -> (i32) {
 // ====
 
 func.def @preserves_static_for_iv_facts() {
-  %zero = index.constant 0 : index
-  %four = index.constant 4 : index
-  %two = index.constant 2 : index
-  scf.for %i = [%zero to %four step %two] {
+  %start = index.constant 0 : index
+  %limit = index.constant 4 : index
+  %step = index.constant 2 : index
+  scf.for %i = [%start to %limit step %step] {
     test.use %i : index
     scf.yield
   }
@@ -93,17 +93,17 @@ func.def @preserves_static_for_iv_facts() {
 // ----
 func.def @preserves_static_for_iv_facts() {
 ^_bb0:
-  %zero = index.constant 0 : index
-  %four = index.constant 4 : index
-  %two = index.constant 2 : index
-  cfg.br ^_bb1(%zero: index)
+  %start = index.constant 0 : index
+  %limit = index.constant 4 : index
+  %step = index.constant 2 : index
+  cfg.br ^_bb1(%start: index)
 ^_bb1(%4: index):
-  %6 = index.cmp slt, %4, %four : index
+  %6 = index.cmp slt, %4, %limit : index
   cfg.cond_br %6, ^_bb2, ^_bb3 : i1
 ^_bb2:
   %i = index.assume %4 [range(%4, 0, 3), mul(%4, 2)] : index
   test.use %i : index
-  %7 = index.add %i, %two : index
+  %7 = index.add %i, %step : index
   cfg.br ^_bb1(%7: index)
 ^_bb3:
   func.return
@@ -112,13 +112,13 @@ func.def @preserves_static_for_iv_facts() {
 // ====
 
 kernel.def @preserves_kernel_for_iv_facts() {
-  %one = index.constant 1 : index
-  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
 } launch {
-  %zero = index.constant 0 : index
-  %four = index.constant 4 : index
-  %two = index.constant 2 : index
-  scf.for %i = [%zero to %four step %two] {
+  %start = index.constant 0 : index
+  %limit = index.constant 4 : index
+  %step = index.constant 2 : index
+  scf.for %i = [%start to %limit step %step] {
     test.use %i : index
     scf.yield
   }
@@ -127,21 +127,21 @@ kernel.def @preserves_kernel_for_iv_facts() {
 
 // ----
 kernel.def @preserves_kernel_for_iv_facts() {
-  %one = index.constant 1 : index
-  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
 } launch {
 ^_bb0:
-  %zero = index.constant 0 : index
-  %four = index.constant 4 : index
-  %two = index.constant 2 : index
-  cfg.br ^_bb1(%zero: index)
+  %start = index.constant 0 : index
+  %limit = index.constant 4 : index
+  %step = index.constant 2 : index
+  cfg.br ^_bb1(%start: index)
 ^_bb1(%5: index):
-  %7 = index.cmp slt, %5, %four : index
+  %7 = index.cmp slt, %5, %limit : index
   cfg.cond_br %7, ^_bb2, ^_bb3 : i1
 ^_bb2:
   %i = index.assume %5 [range(%5, 0, 3), mul(%5, 2)] : index
   test.use %i : index
-  %8 = index.add %i, %two : index
+  %8 = index.add %i, %step : index
   cfg.br ^_bb1(%8: index)
 ^_bb3:
   kernel.return
