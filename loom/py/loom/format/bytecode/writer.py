@@ -153,7 +153,7 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 13
+FORMAT_VERSION = 14
 PRODUCER = "loom-py"
 
 SYMBOL_FLAG_PUBLIC = 0x0001
@@ -317,10 +317,7 @@ class BytecodeWriter:
         self._ctx.intern_string(op.name)
 
         # Arg names/types: entry block args for defs, operands for decls.
-        if op.regions and op.regions[0].blocks:
-            arg_ids = op.regions[0].blocks[0].arg_ids
-        else:
-            arg_ids = op.operands
+        arg_ids = self._func_arg_ids(op)
         for arg_id in arg_ids:
             value = module.values[arg_id]
             self._ctx.intern_string(value.name)
@@ -349,9 +346,56 @@ class BytecodeWriter:
             self._ctx.intern_string(key)
             self._number_attr_value(value, self._attr_def_for_op_attr(op.name, key))
 
-        # Body region.
-        if op.regions:
-            self._number_region(op.regions[0])
+        for region_index in self._root_region_write_order(op):
+            self._number_region(op.regions[region_index])
+
+    def _func_body_region_index(self, op: Operation) -> int | None:
+        """Return op's FuncLike body region index, if it has one."""
+        func_like = func_like_interface_for_op(self._op_decls_by_name, op.name)
+        if func_like is None or func_like.args_as_operands or func_like.body is None:
+            return None
+        op_decl = self._op_decls_by_name.get(op.name)
+        if op_decl is None:
+            return None
+        for region_index, region_def in enumerate(getattr(op_decl, "regions", ())):
+            if region_def.name == func_like.body:
+                return region_index
+        return None
+
+    def _func_arg_ids(self, op: Operation) -> list[int]:
+        """Return the logical FuncLike signature argument value ids."""
+        body_region_index = self._func_body_region_index(op)
+        if body_region_index is None:
+            return list(op.operands)
+        if body_region_index >= len(op.regions):
+            return []
+        body = op.regions[body_region_index]
+        if not body.blocks:
+            return []
+        return list(body.blocks[0].arg_ids)
+
+    def _root_region_write_order(self, op: Operation) -> list[int]:
+        """Return root region indices in deterministic bytecode order.
+
+        The FuncLike body region is serialized first so its entry arguments
+        occupy the first function-local value numbers. The payload still writes
+        each root region's declared index, so the reader reconstructs the
+        operation's region slots instead of relying on serialized order.
+        """
+        if not op.regions:
+            return []
+        body_region_index = self._func_body_region_index(op)
+        ordered: list[int] = []
+        if body_region_index is not None:
+            if body_region_index >= len(op.regions):
+                raise ValueError(
+                    f"func-like op {op.name!r} has root regions but is missing "
+                    "its FuncLike body region"
+                )
+            ordered.append(body_region_index)
+        seen = set(ordered)
+        ordered.extend(i for i in range(len(op.regions)) if i not in seen)
+        return ordered
 
     def _shared_func_metadata_attr_keys(self, op: Operation) -> frozenset[str]:
         """Return func-like attrs encoded by fixed symbol metadata fields."""
@@ -790,26 +834,32 @@ class BytecodeWriter:
         for symbol_index, symbol in enumerate(self._module.symbols):
             if symbol.op is not None and symbol.op.regions:
                 start = buf.position
-                self._write_func_op_body(buf, symbol.op)
+                self._write_op_region_payload(buf, symbol.op)
                 length = buf.position - start
                 ir_offsets[symbol_index] = (start, length)
 
         return buf.get_bytes(), ir_offsets
 
-    def _write_func_op_body(self, buf: ByteBuffer, op: Operation) -> None:
-        """Write a func-like op's body region with value numbering."""
-        assert op.regions, "cannot write body for bodyless op"
-        body = op.regions[0]
-        # Build value number map for this function.
-        value_numbers: dict[int, int] = {}
-        self._assign_value_numbers(body, value_numbers)
+    def _write_op_region_payload(self, buf: ByteBuffer, op: Operation) -> None:
+        """Write a symbol op's root regions with value numbering."""
+        root_region_indices = self._root_region_write_order(op)
+        assert root_region_indices, "cannot write region payload for bodyless op"
 
-        value_count, region_count, block_count, op_count = self._count_region_tree(body)
+        value_numbers: dict[int, int] = {}
+        for region_index in root_region_indices:
+            self._assign_value_numbers(op.regions[region_index], value_numbers)
+
+        value_count, region_count, block_count, op_count = self._count_region_forest(
+            op, root_region_indices
+        )
         buf.write_varint(value_count)
         buf.write_varint(region_count)
         buf.write_varint(block_count)
         buf.write_varint(op_count)
-        self._write_region(buf, body, value_numbers)
+        buf.write_varint(len(root_region_indices))
+        for region_index in root_region_indices:
+            buf.write_varint(region_index)
+            self._write_region(buf, op.regions[region_index], value_numbers)
 
     def _assign_value_numbers(self, region: Region, numbers: dict[int, int]) -> None:
         """Assign sequential value numbers within a function."""
@@ -847,6 +897,24 @@ class BytecodeWriter:
                     op_count += nested_counts[3]
         return value_count, region_count, block_count, op_count
 
+    def _count_region_forest(
+        self, op: Operation, region_indices: list[int] | None = None
+    ) -> tuple[int, int, int, int]:
+        """Return value, region, block, and op counts for root regions."""
+        value_count = 0
+        region_count = 0
+        block_count = 0
+        op_count = 0
+        for region_index in (
+            region_indices if region_indices is not None else range(len(op.regions))
+        ):
+            counts = self._count_region_tree(op.regions[region_index])
+            value_count += counts[0]
+            region_count += counts[1]
+            block_count += counts[2]
+            op_count += counts[3]
+        return value_count, region_count, block_count, op_count
+
     def _module_allocation_counts(self) -> tuple[int, int, int, int]:
         """Return module value, serialized region, block, and op counts."""
         value_count = 0
@@ -861,7 +929,7 @@ class BytecodeWriter:
                     value_count += len(symbol.op.operands) + len(symbol.op.results)
                 continue
             value_count += len(symbol.op.results)
-            counts = self._count_region_tree(symbol.op.regions[0])
+            counts = self._count_region_forest(symbol.op)
             value_count += counts[0]
             region_count += counts[1]
             block_count += counts[2]

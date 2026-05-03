@@ -85,7 +85,7 @@ extern "C" {
 
 #define LOOM_BYTECODE_MAGIC "LOOM"
 #define LOOM_BYTECODE_MAGIC_LENGTH 4
-#define LOOM_BYTECODE_FORMAT_VERSION 13
+#define LOOM_BYTECODE_FORMAT_VERSION 14
 
 // File-level source-location mode stored in the file header.
 enum loom_bytecode_location_mode_e {
@@ -552,9 +552,9 @@ typedef enum loom_bytecode_section_kind_e {
 //       [value_kind: byte]
 //       [value_data: ...]
 //
-//     // IR body reference. A has_body byte precedes the offset/length
-//     // pair so that declarations-only modules and stripped modules
-//     // can omit IR references even for nominally-bodied kinds.
+//     // IR root-region payload reference. A has_body byte precedes the
+//     // offset/length pair so that declarations-only modules and stripped
+//     // modules can omit IR references even for nominally-bodied kinds.
 //     [has_body: byte]
 //     (if has_body:
 //       [ir_offset: u64]    (from IR section start)
@@ -619,12 +619,12 @@ typedef enum loom_bytecode_section_kind_e {
 // IR section
 // ==========================================================================
 //
-// Function bodies: the actual operations, blocks, and regions.
-// Each function's IR is a contiguous byte range addressable by
-// (ir_offset, ir_length) from its symbol table entry. This enables
-// function-level lazy loading.
+// Symbol region payloads: the actual operations, blocks, and regions attached
+// to function-like or record symbols. Each symbol's IR is a contiguous byte
+// range addressable by (ir_offset, ir_length) from its symbol table entry. This
+// enables function-level lazy loading.
 //
-// Within a function's IR:
+// Within a symbol's IR:
 //
 // Value definition groups are reserved before their individual definitions are
 // decoded. Dynamic dim and SSA encoding bindings may therefore reference any
@@ -633,14 +633,19 @@ typedef enum loom_bytecode_section_kind_e {
 // and predicate value args still reference only values defined by earlier
 // definition groups.
 //
-//   [value_count: varint]   Function-local SSA values defined by block args
-//                           and operation results in this body.
-//   [region_count: varint]  Regions in this body, including nested regions.
-//   [block_count: varint]   Blocks in this body, including nested regions.
-//   [op_count: varint]      Live operations in this body, including nested
+//   [value_count: varint]   Symbol-local SSA values defined by block args
+//                           and operation results in this payload.
+//   [region_count: varint]  Regions in this payload, including nested regions.
+//   [block_count: varint]   Blocks in this payload, including nested regions.
+//   [op_count: varint]      Live operations in this payload, including nested
 //                           regions.
-//   // Root body region follows:
-//   [block_count: varint]
+//   [root_region_count: varint]
+//   For each root region:
+//     [region_index: varint]  Declared op region slot. Function-like payloads
+//                             serialize the FuncLike body region first when one
+//                             exists, then all other materialized root regions
+//                             in slot order.
+//     [block_count: varint]
 //   For each block:
 //     [has_label: byte]
 //     (if has_label: [label_id: varint])

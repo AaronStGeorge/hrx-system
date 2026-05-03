@@ -1020,6 +1020,10 @@ class ReaderTest : public ::testing::Test {
     ReadUVarint(bytes, &offset);  // region_count
     ReadUVarint(bytes, &offset);  // block_count
     ReadUVarint(bytes, &offset);  // op_count
+    uint64_t root_region_count = ReadUVarint(bytes, &offset);
+    EXPECT_GE(root_region_count, 1u);
+    uint64_t root_region_index = ReadUVarint(bytes, &offset);
+    EXPECT_EQ(root_region_index, 0u);
     uint64_t root_block_count = ReadUVarint(bytes, &offset);
     EXPECT_GE(root_block_count, 1u);
     uint8_t has_label = bytes[offset++];
@@ -1240,6 +1244,10 @@ class ReaderTest : public ::testing::Test {
     ReadUVarint(bytes, &offset);  // region_count
     ReadUVarint(bytes, &offset);  // block_count
     ReadUVarint(bytes, &offset);  // op_count
+    uint64_t root_region_count = ReadUVarint(bytes, &offset);
+    EXPECT_GE(root_region_count, 1u);
+    uint64_t root_region_index = ReadUVarint(bytes, &offset);
+    EXPECT_EQ(root_region_index, 0u);
     return LastOpRegionCountOffsetInRegion(bytes, &offset);
   }
 

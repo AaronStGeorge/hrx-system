@@ -785,6 +785,12 @@ TEST_F(WriterTest, FunctionBodySummaryAndOpTableRefsUseNewWireShape) {
   EXPECT_EQ(block_count, 1u);
   EXPECT_EQ(op_count, 1u);
 
+  uint64_t root_region_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &root_region_count));
+  ASSERT_EQ(root_region_count, 1u);
+  uint64_t root_region_index = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &root_region_index));
+  ASSERT_EQ(root_region_index, 0u);
   uint64_t root_block_count = 0;
   IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &root_block_count));
   ASSERT_EQ(root_block_count, 1u);
@@ -873,6 +879,12 @@ TEST_F(WriterTest, FunctionBodySuccessorsUseRegionBlockOrdinals) {
   EXPECT_EQ(block_count, 2u);
   EXPECT_EQ(op_count, 1u);
 
+  uint64_t root_region_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &root_region_count));
+  ASSERT_EQ(root_region_count, 1u);
+  uint64_t root_region_index = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &root_region_index));
+  ASSERT_EQ(root_region_index, 0u);
   uint64_t root_block_count = 0;
   IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &root_block_count));
   ASSERT_EQ(root_block_count, 2u);

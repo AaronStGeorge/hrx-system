@@ -1536,10 +1536,22 @@ static iree_status_t loom_bytecode_number_function(
   // Function metadata predicates reference signature SSA values. Their value
   // numbers are resolved while the metadata section is emitted.
 
-  // Body (recursive).
-  loom_region_t* body = loom_func_like_body(func_like);
-  if (body) {
-    IREE_RETURN_IF_ERROR(loom_bytecode_number_region(numbering, body, 0));
+  // Root regions. Write the FuncLike body first so its signature arguments are
+  // the first function-local value numbers, but preserve each declared region
+  // index in the IR payload.
+  loom_region_t** regions = loom_op_regions(func_like.op);
+  uint8_t body_region_index = func_like.vtable->body_region_index;
+  if (body_region_index != LOOM_REGION_INDEX_NONE &&
+      body_region_index < func_like.op->region_count &&
+      regions[body_region_index]) {
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_number_region(numbering, regions[body_region_index], 0));
+  }
+  for (uint8_t i = 0; i < func_like.op->region_count; ++i) {
+    if (i == body_region_index || !regions[i]) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_bytecode_number_region(numbering, regions[i], 0));
   }
 
   return iree_ok_status();
@@ -1801,6 +1813,36 @@ static void loom_bytecode_count_region_tree(
   }
 }
 
+static void loom_bytecode_count_op_region_forest(
+    const loom_op_t* op, uint8_t first_region_index,
+    loom_bytecode_body_counts_t* counts) {
+  if (op->region_count == 0) {
+    return;
+  }
+  loom_region_t** regions = loom_op_regions(op);
+  if (first_region_index != LOOM_REGION_INDEX_NONE &&
+      first_region_index < op->region_count && regions[first_region_index]) {
+    loom_bytecode_count_region_tree(regions[first_region_index], counts);
+  }
+  for (uint8_t i = 0; i < op->region_count; ++i) {
+    if (i == first_region_index || !regions[i]) {
+      continue;
+    }
+    loom_bytecode_count_region_tree(regions[i], counts);
+  }
+}
+
+static uint8_t loom_bytecode_count_root_regions(const loom_op_t* op) {
+  uint8_t count = 0;
+  loom_region_t** regions = loom_op_regions(op);
+  for (uint8_t i = 0; i < op->region_count; ++i) {
+    if (regions[i]) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 static iree_status_t loom_bytecode_count_serialized_bodies(
     loom_bytecode_numbering_t* numbering, loom_bytecode_body_counts_t* counts) {
   const loom_module_t* module = numbering->module;
@@ -1844,9 +1886,9 @@ static iree_status_t loom_bytecode_count_serialized_bodies(
       continue;
     }
     counts->value_count += func_like.op->result_count;
-    loom_region_t* body = loom_func_like_body(func_like);
-    if (body) {
-      loom_bytecode_count_region_tree(body, counts);
+    if (loom_bytecode_count_root_regions(func_like.op) != 0) {
+      loom_bytecode_count_op_region_forest(
+          func_like.op, func_like.vtable->body_region_index, counts);
     } else {
       uint16_t arg_count = 0;
       loom_func_like_arg_ids(func_like, &arg_count);
@@ -2550,7 +2592,8 @@ static iree_status_t loom_bytecode_write_ir_section(
       continue;
     }
 
-    loom_region_t* body = NULL;
+    uint8_t first_region_index = LOOM_REGION_INDEX_NONE;
+    uint8_t root_region_count = 0;
     if (is_function_like) {
       loom_func_like_t func_like =
           loom_func_like_cast(module, symbol->defining_op);
@@ -2559,18 +2602,28 @@ static iree_status_t loom_bytecode_write_ir_section(
         ir_offsets[symbol_index].length = 0;
         continue;
       }
-      body = loom_func_like_body(func_like);
-      if (!body) {
+      root_region_count = loom_bytecode_count_root_regions(func_like.op);
+      if (root_region_count == 0) {
         ir_offsets[symbol_index].offset = 0;
         ir_offsets[symbol_index].length = 0;
         continue;
       }
+      first_region_index = func_like.vtable->body_region_index;
+      if (first_region_index != LOOM_REGION_INDEX_NONE &&
+          (first_region_index >= func_like.op->region_count ||
+           !loom_op_regions(func_like.op)[first_region_index])) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "func-like symbol op kind 0x%04x has root regions but no body "
+            "region",
+            func_like.op->kind);
+      }
 
-      // Intern function signature and body (matching Python walk order).
+      // Intern function signature and regions (matching Python walk order).
       IREE_RETURN_IF_ERROR(loom_bytecode_number_function(numbering, func_like));
     } else if (is_record && symbol->defining_op->region_count == 1) {
-      body = loom_op_regions(symbol->defining_op)[0];
-      if (!body) {
+      root_region_count = loom_bytecode_count_root_regions(symbol->defining_op);
+      if (root_region_count == 0) {
         ir_offsets[symbol_index].offset = 0;
         ir_offsets[symbol_index].length = 0;
         continue;
@@ -2586,7 +2639,8 @@ static iree_status_t loom_bytecode_write_ir_section(
     }
 
     loom_bytecode_body_counts_t body_counts = {0};
-    loom_bytecode_count_region_tree(body, &body_counts);
+    loom_bytecode_count_op_region_forest(symbol->defining_op,
+                                         first_region_index, &body_counts);
 
     loom_bytecode_value_numbering_t value_numbering;
     loom_bytecode_value_numbering_initialize(&value_numbering, module,
@@ -2595,10 +2649,24 @@ static iree_status_t loom_bytecode_write_ir_section(
         &value_numbering, body_counts.value_count));
 
     // Assign value numbers in the same definition order used by the reader.
-    IREE_RETURN_IF_ERROR(
-        loom_bytecode_value_numbering_assign_region(&value_numbering, body));
+    loom_region_t** regions = loom_op_regions(symbol->defining_op);
+    if (first_region_index != LOOM_REGION_INDEX_NONE &&
+        first_region_index < symbol->defining_op->region_count &&
+        regions[first_region_index]) {
+      IREE_RETURN_IF_ERROR(loom_bytecode_value_numbering_assign_region(
+          &value_numbering, regions[first_region_index]));
+    }
+    for (uint8_t i = 0; i < symbol->defining_op->region_count; ++i) {
+      if (i == first_region_index || !regions[i]) {
+        continue;
+      }
+      IREE_RETURN_IF_ERROR(loom_bytecode_value_numbering_assign_region(
+          &value_numbering, regions[i]));
+    }
 
-    // Write the body summary and root region.
+    // Write the region summary and root region list. Each root region carries
+    // its declared op region index so source op region order survives even when
+    // the body is serialized first for signature value numbering.
     iree_host_size_t body_start = page_writer->total_written;
     IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
         page_writer, body_counts.value_count));
@@ -2608,8 +2676,26 @@ static iree_status_t loom_bytecode_write_ir_section(
         page_writer, body_counts.block_count));
     IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
         page_writer, body_counts.op_count));
-    IREE_RETURN_IF_ERROR(loom_bytecode_write_region(page_writer, numbering,
-                                                    &value_numbering, body, 0));
+    IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
+        page_writer, root_region_count));
+    if (first_region_index != LOOM_REGION_INDEX_NONE &&
+        first_region_index < symbol->defining_op->region_count &&
+        regions[first_region_index]) {
+      IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
+          page_writer, first_region_index));
+      IREE_RETURN_IF_ERROR(
+          loom_bytecode_write_region(page_writer, numbering, &value_numbering,
+                                     regions[first_region_index], 0));
+    }
+    for (uint8_t i = 0; i < symbol->defining_op->region_count; ++i) {
+      if (i == first_region_index || !regions[i]) {
+        continue;
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_bytecode_page_writer_write_uvarint(page_writer, i));
+      IREE_RETURN_IF_ERROR(loom_bytecode_write_region(
+          page_writer, numbering, &value_numbering, regions[i], 0));
+    }
     iree_host_size_t body_length = page_writer->total_written - body_start;
 
     if (body_length > UINT32_MAX) {

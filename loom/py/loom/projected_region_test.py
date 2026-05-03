@@ -9,6 +9,9 @@ from loom.builder import IRBuilder
 from loom.builtin_types import ALL_BUILTIN_TYPES
 from loom.dialect.test import ALL_TEST_OPS
 from loom.dsl import AttrDef, Op, RegionDef
+from loom.format.bytecode.reader import read_module
+from loom.format.bytecode.writer import write_module
+from loom.format.text.parser import Parser
 from loom.ir import I32, Block
 from loom.ir import Region as IRRegion
 
@@ -54,3 +57,31 @@ def test_builder_seeds_projected_func_args_region() -> None:
     assert builder.module.values[config_arg_id].name == "x"
     assert builder.module.values[config_arg_id].type == I32
     assert builder.module.values[config_arg_id].is_block_arg
+
+
+def test_bytecode_preserves_projected_func_regions() -> None:
+    parser = Parser()
+    parser.register_ops(ALL_TEST_OPS)
+    parser.register_types(ALL_BUILTIN_TYPES)
+    module = parser.parse(
+        "test.split_func @projected(%arg: i32, %other: index) {\n"
+        "  test.use %arg : i32\n"
+        "  test.use %other : index\n"
+        "  test.yield\n"
+        "} config(%cfg_arg: i32, %cfg_other: index) {\n"
+        "  test.use %cfg_arg : i32\n"
+        "  test.use %cfg_other : index\n"
+        "  test.yield\n"
+        "}\n"
+    )
+    loaded = read_module(write_module(module))
+
+    op = loaded.symbols[0].op
+    assert op is not None
+    assert len(op.regions) == 2
+    body_arg_ids = op.regions[0].blocks[0].arg_ids
+    config_arg_ids = op.regions[1].blocks[0].arg_ids
+    assert len(body_arg_ids) == len(config_arg_ids) == 2
+    assert body_arg_ids[0] != config_arg_ids[0]
+    assert loaded.values[body_arg_ids[0]].name == "arg"
+    assert loaded.values[config_arg_ids[0]].name == "cfg_arg"

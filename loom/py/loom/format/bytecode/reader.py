@@ -196,7 +196,7 @@ class BytecodeReader:
         for symbol in module.symbols:
             if symbol.op is None or not symbol.op.regions:
                 continue
-            counts = self._count_region_tree(symbol.op.regions[0])
+            counts = self._count_region_forest(symbol.op.regions)
             region_count += counts[1]
             block_count += counts[2]
             op_count += counts[3]
@@ -874,16 +874,19 @@ class BytecodeReader:
 
                 has_body = sym_data[offset]
                 offset += 1
-                body = None
+                regions: list[Region] = []
                 if has_body:
                     ir_offset = struct.unpack_from("<Q", sym_data, offset)[0]
                     offset += 8
                     ir_length = struct.unpack_from("<I", sym_data, offset)[0]
                     offset += 4
-                    body = self._read_function_body(
+                    body_region_index = self._func_body_region_index(op_name)
+                    regions = self._read_symbol_regions(
                         ir_data[ir_offset : ir_offset + ir_length],
                         module,
+                        root_region_count=self._op_region_count(op_name),
                         predefined_values=arg_ids,
+                        predefined_region_index=body_region_index,
                     )
 
                 # Build the attributes dict for this func-like op.
@@ -924,7 +927,7 @@ class BytecodeReader:
                 # For declaration-style ops (no body), args are operands.
                 # For definition-style ops (with body), args are entry block args.
                 operand_ids: list[int] = []
-                if body is None:
+                if not regions:
                     operand_ids = arg_ids
 
                 op = Operation(
@@ -933,7 +936,7 @@ class BytecodeReader:
                     results=result_ids,
                     tied_results=tied_results,
                     attributes=op_attrs,
-                    regions=[body] if body is not None else [],
+                    regions=regions,
                     comments=op_comments,
                 )
                 symbol = Symbol(
@@ -1055,7 +1058,7 @@ class BytecodeReader:
         offset += 1
         if has_body > 1:
             raise BytecodeError(f"invalid record has_body value: {has_body}")
-        record_body: Region | None = None
+        record_regions: list[Region] = []
         if has_body:
             if offset + 12 > len(sym_data):
                 raise BytecodeError("record body reference is truncated")
@@ -1065,8 +1068,10 @@ class BytecodeReader:
             offset += 4
             if ir_offset + ir_length > len(ir_data):
                 raise BytecodeError("record body range extends past IR section")
-            record_body = self._read_function_body(
-                ir_data[ir_offset : ir_offset + ir_length], module
+            record_regions = self._read_symbol_regions(
+                ir_data[ir_offset : ir_offset + ir_length],
+                module,
+                root_region_count=self._op_region_count(op_name),
             )
 
         op = Operation(
@@ -1074,7 +1079,7 @@ class BytecodeReader:
             operands=[],
             results=[],
             attributes=op_attrs,
-            regions=[record_body] if record_body is not None else [],
+            regions=record_regions,
             comments=op_comments,
         )
         symbol = Symbol(
@@ -1112,18 +1117,41 @@ class BytecodeReader:
                         keys.add(attr_name)
         return frozenset(keys)
 
-    def _read_function_body(
+    def _func_body_region_index(self, op_name: str) -> int | None:
+        """Return op_name's FuncLike body region index, if it has one."""
+        func_like = func_like_interface_for_op(self._op_decls_by_name, op_name)
+        if func_like is None or func_like.args_as_operands or func_like.body is None:
+            return None
+        op_decl = self._op_decls_by_name.get(op_name)
+        if op_decl is None:
+            return None
+        for region_index, region_def in enumerate(getattr(op_decl, "regions", ())):
+            if region_def.name == func_like.body:
+                return region_index
+        return None
+
+    def _op_region_count(self, op_name: str) -> int:
+        """Return the declared root region slot count for op_name."""
+        op_decl = self._op_decls_by_name.get(op_name)
+        if op_decl is None:
+            return 0
+        return len(getattr(op_decl, "regions", ()))
+
+    def _read_symbol_regions(
         self,
         data: bytes,
         module: Module,
+        root_region_count: int,
         predefined_values: list[int] | None = None,
-    ) -> Region:
-        """Read a function body region from IR section data.
+        predefined_region_index: int | None = None,
+    ) -> list[Region]:
+        """Read a symbol root-region payload from IR section data.
 
         The bytecode uses function-local sequential value numbers (0, 1, 2, ...)
-        for all SSA references within a function body. The value_map translates
-        these numbers to module-level value IDs as block args and op results are
-        created during reading.
+        for all SSA references within the symbol regions. The value_map
+        translates these numbers to module-level value IDs as block args and op
+        results are created during reading. When predefined_values are supplied,
+        they are bound only while reading predefined_region_index.
         """
         offset = 0
         value_map: list[int] = []
@@ -1131,17 +1159,56 @@ class BytecodeReader:
         _region_count, offset = decode_varint(data, offset)
         _block_count, offset = decode_varint(data, offset)
         _op_count, offset = decode_varint(data, offset)
-        region, offset = self._read_region(
-            data,
-            offset,
-            module,
-            value_map,
-            predefined_values=predefined_values or [],
-        )
-        parsed_counts = self._count_region_tree(region)
+        encoded_root_region_count, offset = decode_varint(data, offset)
+        regions_by_index: dict[int, Region] = {}
+        if encoded_root_region_count == 0:
+            raise BytecodeError("symbol root region count must be nonzero")
+        if encoded_root_region_count > root_region_count:
+            raise BytecodeError("symbol root region count exceeds op region slots")
+        for root_ordinal in range(encoded_root_region_count):
+            region_index, offset = decode_varint(data, offset)
+            if region_index >= root_region_count:
+                raise BytecodeError("symbol region index is out of range")
+            if region_index in regions_by_index:
+                raise BytecodeError("symbol region index appears more than once")
+            if (
+                predefined_region_index is not None
+                and root_ordinal == 0
+                and region_index != predefined_region_index
+            ):
+                raise BytecodeError("FuncLike body region must be first")
+            region_predefined_values = (
+                predefined_values or []
+                if predefined_region_index is not None
+                and region_index == predefined_region_index
+                else []
+            )
+            region, offset = self._read_region(
+                data,
+                offset,
+                module,
+                value_map,
+                predefined_values=region_predefined_values,
+            )
+            regions_by_index[region_index] = region
+        if offset != len(data):
+            raise BytecodeError("symbol region payload has trailing bytes")
+        if (
+            predefined_region_index is not None
+            and predefined_region_index not in regions_by_index
+        ):
+            raise BytecodeError("symbol region payload is missing the FuncLike body")
+
+        regions: list[Region] = []
+        if regions_by_index:
+            for region_index in range(max(regions_by_index.keys()) + 1):
+                if region_index not in regions_by_index:
+                    raise BytecodeError("symbol region payload has index gaps")
+                regions.append(regions_by_index[region_index])
+        parsed_counts = self._count_region_forest(regions)
         if parsed_counts != (_value_count, _region_count, _block_count, _op_count):
-            raise BytecodeError("function body allocation summary does not match IR")
-        return region
+            raise BytecodeError("symbol region allocation summary does not match IR")
+        return regions
 
     def _count_region_tree(self, region: Region) -> tuple[int, int, int, int]:
         """Return value, region, block, and op counts for a parsed region tree."""
@@ -1160,6 +1227,22 @@ class BytecodeReader:
                     region_count += nested_counts[1]
                     block_count += nested_counts[2]
                     op_count += nested_counts[3]
+        return value_count, region_count, block_count, op_count
+
+    def _count_region_forest(
+        self, regions: list[Region] | tuple[Region, ...]
+    ) -> tuple[int, int, int, int]:
+        """Return value, region, block, and op counts for root regions."""
+        value_count = 0
+        region_count = 0
+        block_count = 0
+        op_count = 0
+        for region in regions:
+            counts = self._count_region_tree(region)
+            value_count += counts[0]
+            region_count += counts[1]
+            block_count += counts[2]
+            op_count += counts[3]
         return value_count, region_count, block_count, op_count
 
     def _read_region(
