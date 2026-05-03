@@ -29,6 +29,39 @@ def unsupported_string_evaluate(tir: Any) -> TileLangImportInput:
 
 
 # ====
+# ERROR@+1: "target-independent kernel assert/trap op"
+@tilelang_case(
+    name="device_assert_with_msg",
+    category="diagnostic",
+    tags=("assert", "kernel"),
+)
+def device_assert_with_msg(tilelang: Any, T: Any) -> TileLangImportInput:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_kernel() -> Any:
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def device_assert_with_msg_kernel(
+            src: T.Tensor[(1,), T.float32],
+            dst: T.Tensor[(1,), T.float32],
+        ) -> None:
+            with T.Kernel(1, threads=1):
+                value = src[0]
+                T.device_assert(T.isfinite(value), msg="finite input required")
+                dst[0] = value
+
+        return device_assert_with_msg_kernel
+
+    return TileLangImportInput(
+        source=get_kernel,
+        target="hip -mcpu=gfx1100",
+        name="device_assert_with_msg_kernel",
+    )
+
+
+# ====
 # ERROR@+1: "copy annotation `coalesced_width` needs scheduling import"
 @tilelang_case(
     name="tileop_copy_coalesced_width",
