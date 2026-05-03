@@ -57,11 +57,9 @@ func.def @fuses_resultless_effectful_branches(%cond: i1, %pool: pool<16>, %tile:
   scf.if %cond {
     test.write_resource %pool, %tile : pool<16>, tile<4xf32>
     test.use %value : i32
-    scf.yield
   } else {
     test.use %value : i32
     test.write_resource %pool, %tile : pool<16>, tile<4xf32>
-    scf.yield
   }
   func.return
 }

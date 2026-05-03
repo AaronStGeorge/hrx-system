@@ -24,7 +24,6 @@ func.def @hoists_invariant_chain(%n: index) {
   %sum = test.addi %a, %b : i32
   scf.for %iv = [%zero to %n step %one] {
     test.use %sum : i32
-    scf.yield
   }
   func.return
 }
@@ -54,6 +53,16 @@ func.def @keeps_unknown_effects_inside_loop(%n: index, %value: i32) {
   scf.for %iv = [%zero to %n step %one] {
     test.use %value : i32
     scf.yield
+  }
+  func.return
+}
+
+// ----
+func.def @keeps_unknown_effects_inside_loop(%n: index, %value: i32) {
+  %zero = index.constant 0 : index
+  %one = index.constant 1 : index
+  scf.for %iv = [%zero to %n step %one] {
+    test.use %value : i32
   }
   func.return
 }
@@ -90,7 +99,6 @@ func.def @hoists_pure_region_op(%cond: i1, %n: index, %a: i32, %b: i32) {
   }
   scf.for %iv = [%zero to %n step %one] {
     test.use %selected : i32
-    scf.yield
   }
   func.return
 }
@@ -123,11 +131,8 @@ func.def @hoists_from_nested_pure_region(%cond: i1, %n: index, %value: i32) {
   scf.for %iv = [%zero to %n step %one] {
     scf.if %cond {
       test.use %doubled : i32
-      scf.yield
     } else {
-      scf.yield
     }
-    scf.yield
   }
   func.return
 }
@@ -144,6 +149,18 @@ func.def @keeps_type_ref_to_loop_local_layout(%buffer: buffer, %offset: offset, 
     %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
     test.use %view : view<1xf32, %layout>
     scf.yield
+  }
+  func.return
+}
+
+// ----
+func.def @keeps_type_ref_to_loop_local_layout(%buffer: buffer, %offset: offset, %n: index) {
+  %zero = index.constant 0 : index
+  %one = index.constant 1 : index
+  scf.for %iv = [%zero to %n step %one] {
+    %layout = encoding.layout.strided [%iv] : encoding<layout>
+    %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+    test.use %view : view<1xf32, %layout>
   }
   func.return
 }

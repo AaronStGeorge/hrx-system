@@ -8,6 +8,13 @@ func.def @simple_loop(%lo: index, %hi: index, %step: index) {
   func.return
 }
 
+// ----
+func.def @simple_loop(%lo: index, %hi: index, %step: index) {
+  scf.for %iv = [%lo to %hi step %step] {
+  }
+  func.return
+}
+
 // ====
 
 // scf.for with a single iter_arg accumulating a constant.
@@ -76,6 +83,13 @@ func.def @void_if_no_else(%cond: i1) {
   func.return
 }
 
+// ----
+func.def @void_if_no_else(%cond: i1) {
+  scf.if %cond {
+  }
+  func.return
+}
+
 // ====
 
 // scf.if without results and with both branches present.
@@ -84,6 +98,14 @@ func.def @void_if(%cond: i1) {
     scf.yield
   } else {
     scf.yield
+  }
+  func.return
+}
+
+// ----
+func.def @void_if(%cond: i1) {
+  scf.if %cond {
+  } else {
   }
   func.return
 }

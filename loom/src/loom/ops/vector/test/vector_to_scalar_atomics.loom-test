@@ -45,9 +45,7 @@ func.def @atomic_reduce_mask_static(%buffer: buffer, %byte_offset: offset, %valu
     %11 = index.constant 3 : index
     %12 = index.add %11, %10 : index
     view.atomic.reduce<addf> %8, %view[%12] {cache_scope = device, cache_temporal = non_temporal, ordering = relaxed, scope = device} : f32, view<8xf32, %layout>
-    scf.yield
   } else {
-    scf.yield
   }
   %13 = vector.extract %mask[1] : vector<2xi1> -> i1
   scf.if %13 {
@@ -57,9 +55,7 @@ func.def @atomic_reduce_mask_static(%buffer: buffer, %byte_offset: offset, %valu
     %17 = index.constant 3 : index
     %18 = index.add %17, %16 : index
     view.atomic.reduce<addf> %14, %view[%18] {cache_scope = device, cache_temporal = non_temporal, ordering = relaxed, scope = device} : f32, view<8xf32, %layout>
-    scf.yield
   } else {
-    scf.yield
   }
   func.return
 }
@@ -154,7 +150,6 @@ func.def @atomic_reduce_dynamic(%n: index, %buffer: buffer, %byte_offset: offset
     %12 = vector.extract %offsets[%10] : vector<[%n]xindex> -> index
     %13 = index.add %origin, %12 : index
     view.atomic.reduce<addi> %11, %view[%13] {ordering = relaxed, scope = workgroup} : i32, view<[%n]xi32, %layout>
-    scf.yield
   }
   func.return
 }
@@ -181,11 +176,8 @@ func.def @atomic_reduce_mask_dynamic(%n: index, %buffer: buffer, %byte_offset: o
       %14 = vector.extract %offsets[%11] : vector<[%n]xindex> -> index
       %15 = index.add %origin, %14 : index
       view.atomic.reduce<addf> %13, %view[%15] {ordering = release, scope = device} : f32, view<[%n]xf32, %layout>
-      scf.yield
     } else {
-      scf.yield
     }
-    scf.yield
   }
   func.return
 }

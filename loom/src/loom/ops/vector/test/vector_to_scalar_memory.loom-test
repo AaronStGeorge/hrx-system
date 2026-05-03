@@ -368,7 +368,6 @@ func.def @store_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, %origi
     %10 = vector.extract %value[%9] : vector<[%n]xf32> -> f32
     %11 = index.add %origin, %9 : index
     view.store %10, %view[%11] : f32, view<[%n]xf32, %layout>
-    scf.yield
   }
   func.return
 }
@@ -390,17 +389,13 @@ func.def @store_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vector
   scf.if %6 {
     %7 = vector.extract %value[0] : vector<2xf32> -> f32
     view.store %7, %view[3] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
-    scf.yield
   } else {
-    scf.yield
   }
   %8 = vector.extract %mask[1] : vector<2xi1> -> i1
   scf.if %8 {
     %9 = vector.extract %value[1] : vector<2xf32> -> f32
     view.store %9, %view[4] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
-    scf.yield
   } else {
-    scf.yield
   }
   func.return
 }
@@ -426,11 +421,8 @@ func.def @store_mask_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, %
       %12 = vector.extract %value[%10] : vector<[%n]xf32> -> f32
       %13 = index.add %origin, %10 : index
       view.store %12, %view[%13] : f32, view<[%n]xf32, %layout>
-      scf.yield
     } else {
-      scf.yield
     }
-    scf.yield
   }
   func.return
 }
@@ -452,9 +444,7 @@ func.def @store_compress_static(%buffer: buffer, %byte_offset: offset, %mask: ve
   scf.if %6 {
     %7 = vector.extract %value[0] : vector<3xf32> -> f32
     view.store %7, %view[3] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
-    scf.yield
   } else {
-    scf.yield
   }
   %8 = vector.extract %mask[0] : vector<3xi1> -> i1
   %9 = index.constant 0 : index
@@ -466,9 +456,7 @@ func.def @store_compress_static(%buffer: buffer, %byte_offset: offset, %mask: ve
     %14 = index.constant 3 : index
     %15 = index.add %14, %11 : index
     view.store %13, %view[%15] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
-    scf.yield
   } else {
-    scf.yield
   }
   %16 = vector.extract %mask[0] : vector<3xi1> -> i1
   %17 = index.constant 0 : index
@@ -485,9 +473,7 @@ func.def @store_compress_static(%buffer: buffer, %byte_offset: offset, %mask: ve
     %27 = index.constant 3 : index
     %28 = index.add %27, %24 : index
     view.store %26, %view[%28] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
-    scf.yield
   } else {
-    scf.yield
   }
   func.return
 }
@@ -523,11 +509,8 @@ func.def @store_compress_dynamic(%n: index, %buffer: buffer, %byte_offset: offse
       %22 = vector.extract %value[%10] : vector<[%n]xf32> -> f32
       %23 = index.add %origin, %15 : index
       view.store %22, %view[%23] : f32, view<[%n]xf32, %layout>
-      scf.yield
     } else {
-      scf.yield
     }
-    scf.yield
   }
   func.return
 }
@@ -578,7 +561,6 @@ func.def @scatter_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, %ori
     %12 = vector.extract %offsets[%10] : vector<[%n]xindex> -> index
     %13 = index.add %origin, %12 : index
     view.store %11, %view[%13] : f32, view<[%n]xf32, %layout>
-    scf.yield
   }
   func.return
 }
@@ -604,9 +586,7 @@ func.def @scatter_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vect
     %11 = index.constant 3 : index
     %12 = index.add %11, %10 : index
     view.store %8, %view[%12] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
-    scf.yield
   } else {
-    scf.yield
   }
   %13 = vector.extract %mask[1] : vector<2xi1> -> i1
   scf.if %13 {
@@ -616,9 +596,7 @@ func.def @scatter_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vect
     %17 = index.constant 3 : index
     %18 = index.add %17, %16 : index
     view.store %14, %view[%18] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
-    scf.yield
   } else {
-    scf.yield
   }
   func.return
 }
@@ -645,11 +623,8 @@ func.def @scatter_mask_dynamic(%n: index, %buffer: buffer, %byte_offset: offset,
       %14 = vector.extract %offsets[%11] : vector<[%n]xindex> -> index
       %15 = index.add %origin, %14 : index
       view.store %13, %view[%15] : f32, view<[%n]xf32, %layout>
-      scf.yield
     } else {
-      scf.yield
     }
-    scf.yield
   }
   func.return
 }

@@ -120,6 +120,19 @@ func.def @nested_write_blocks_outer_load_cse(%cond: i1, %buffer: buffer, %offset
   func.return %after : f32
 }
 
+// ----
+func.def @nested_write_blocks_outer_load_cse(%cond: i1, %buffer: buffer, %offset: offset, %value: f32) -> (f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  %before = view.load %view[0] : view<1xf32, %layout> -> f32
+  scf.if %cond {
+    view.store %value, %view[0] : f32, view<1xf32, %layout>
+  } else {
+  }
+  %after = view.load %view[0] : view<1xf32, %layout> -> f32
+  func.return %after : f32
+}
+
 // ====
 
 // scf.while contributes both before/after region effects to the parent op's
