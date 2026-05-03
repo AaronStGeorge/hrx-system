@@ -24,6 +24,7 @@ from loom.importers.core import (
     KernelModuleSpec,
     create_kernel_module,
     kernel_module_ops,
+    normalize_launch_tuple,
     sanitize_symbol,
 )
 from loom.importers.tilelang.abi import extract_bindings
@@ -34,6 +35,7 @@ from loom.importers.tilelang.model import TileLangBinding, TileLangKernelFacts
 from loom.importers.tilelang.nodes import (
     attrs,
     mapping_items,
+    node_text,
     source_name,
 )
 from loom.importers.tilelang.ops.topology import collect_thread_extents, integer_value
@@ -59,6 +61,14 @@ class _NormalizedInput:
     name: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _LaunchTopology:
+    """TileLang launch topology before conversion into Loom SSA."""
+
+    workgroup_count: tuple[object, object, object]
+    workgroup_size: tuple[object, object, object]
+
+
 def import_tilelang(
     source: object,
     *,
@@ -76,13 +86,14 @@ def import_tilelang(
     target_preset = options.target_preset or normalized.target or "tilelang.generic"
     type_converter = TileLangTypeConverter()
     bindings = extract_bindings(prim_func, type_converter)
-    workgroup_size = _workgroup_size(prim_func)
+    launch_topology = _launch_topology(prim_func)
+    workgroup_size = _static_workgroup_size(launch_topology)
     loom_module, body_report, operation_counts = _build_loom_module(
         prim_func,
         bindings,
         function_name=function_name,
         target_preset=target_preset,
-        workgroup_size=workgroup_size,
+        launch_topology=launch_topology,
         diagnostics=diagnostics,
         type_converter=type_converter,
     )
@@ -172,7 +183,7 @@ def _build_loom_module(
     *,
     function_name: str,
     target_preset: str,
-    workgroup_size: tuple[int, int, int],
+    launch_topology: _LaunchTopology,
     diagnostics: DiagnosticEngine,
     type_converter: TileLangTypeConverter,
 ) -> tuple[Module, ImportBodyReport, Counter[str]]:
@@ -182,7 +193,7 @@ def _build_loom_module(
             target_symbol=sanitize_symbol(target_preset, fallback="target"),
             export_symbol=function_name,
             callee=function_name,
-            workgroup_size=workgroup_size,
+            launch_config=None,
             arguments=[
                 KernelArgumentSpec(
                     ordinal=binding.ordinal,
@@ -193,6 +204,15 @@ def _build_loom_module(
             ],
         )
     )
+    converter = TileLangConverter(build_default_registry())
+    _build_launch_config(
+        shell,
+        bindings,
+        launch_topology,
+        diagnostics=diagnostics,
+        type_converter=type_converter,
+        converter=converter,
+    )
     context = TileLangConversionContext(
         builder=shell.builder,
         diagnostics=diagnostics,
@@ -200,8 +220,7 @@ def _build_loom_module(
         type_converter=type_converter,
         kernel_body_block=shell.body_block,
     )
-    context.capture_existing_value_names()
-    converter = TileLangConverter(build_default_registry())
+    _capture_block_value_names(context, shell.body_block)
     with shell.builder.insertion_block(shell.body_block):
         _map_kernel_arguments(shell, bindings, context)
         converter.convert_stmt(getattr(prim_func, "body", None), context)
@@ -210,24 +229,115 @@ def _build_loom_module(
     return shell.module, context.finish(), converter.operation_counts
 
 
+def _build_launch_config(
+    shell: KernelModuleShell,
+    bindings: tuple[TileLangBinding, ...],
+    launch_topology: _LaunchTopology,
+    *,
+    diagnostics: DiagnosticEngine,
+    type_converter: TileLangTypeConverter,
+    converter: TileLangConverter,
+) -> None:
+    context = TileLangConversionContext(
+        builder=shell.builder,
+        diagnostics=diagnostics,
+        preview_block=shell.config_block,
+        type_converter=type_converter,
+    )
+    _capture_block_value_names(context, shell.config_block)
+    with shell.builder.insertion_block(shell.config_block):
+        _map_scalar_kernel_arguments(
+            shell.config_arguments_by_ordinal,
+            bindings,
+            context,
+        )
+        workgroup_count = tuple(
+            _convert_launch_extent(
+                extent,
+                context,
+                converter,
+                fallback_name=f"wg_count_{axis}",
+            )
+            for axis, extent in zip(
+                ("x", "y", "z"),
+                launch_topology.workgroup_count,
+                strict=True,
+            )
+        )
+        workgroup_size = tuple(
+            _convert_launch_extent(
+                extent,
+                context,
+                converter,
+                fallback_name=f"wg_size_{axis}",
+            )
+            for axis, extent in zip(
+                ("x", "y", "z"),
+                launch_topology.workgroup_size,
+                strict=True,
+            )
+        )
+        shell.builder.kernel.config(
+            workgroup_count_x=workgroup_count[0],
+            workgroup_count_y=workgroup_count[1],
+            workgroup_count_z=workgroup_count[2],
+            workgroup_size_x=workgroup_size[0],
+            workgroup_size_y=workgroup_size[1],
+            workgroup_size_z=workgroup_size[2],
+        )
+
+
+def _convert_launch_extent(
+    extent: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    *,
+    fallback_name: str,
+) -> ValueRef:
+    immediate = integer_value(extent)
+    if immediate is not None:
+        return context.ensure_constant(
+            str(immediate),
+            "index",
+            _index_constant_base_name(immediate),
+        )
+    converted = converter.convert_expr(extent, context, index_like=True)
+    if converted is not None:
+        return converted
+    context.record_blocked(
+        node_text(extent),
+        f"launch extent `{fallback_name}` could not be imported",
+    )
+    return context.ensure_constant("1", "index", "c1")
+
+
+def _index_constant_base_name(value: int) -> str:
+    if value >= 0:
+        return f"c{value}"
+    return f"cm{-value}"
+
+
+def _capture_block_value_names(
+    context: TileLangConversionContext,
+    block: object,
+) -> None:
+    for value_id in getattr(block, "arg_ids", ()):
+        value = context.builder.module.values[value_id]
+        if value.name:
+            context.names.capture(value.name)
+
+
 def _map_kernel_arguments(
     shell: KernelModuleShell,
     bindings: tuple[TileLangBinding, ...],
     context: TileLangConversionContext,
 ) -> None:
     zero = context.ensure_constant("0", "offset", "c0_bytes")
-    for binding in bindings:
-        argument = shell.arguments_by_ordinal[binding.ordinal]
-        if binding.buffer is not None:
-            continue
-        context.map_value(binding.source, argument, str(argument.type))
-        for alias in binding.aliases:
-            context.map_value(alias, argument, str(argument.type))
-
+    _map_scalar_kernel_arguments(shell.body_arguments_by_ordinal, bindings, context)
     for binding in bindings:
         if binding.buffer is None:
             continue
-        argument = shell.arguments_by_ordinal[binding.ordinal]
+        argument = shell.body_arguments_by_ordinal[binding.ordinal]
         view_type = context.buffer_view_type(binding.buffer)
         view = context.builder.buffer.view(
             buffer=argument,
@@ -246,6 +356,21 @@ def _map_kernel_arguments(
             f"param {binding.name}",
             f"{context.ssa(view)} = buffer.view",
         )
+
+
+def _map_scalar_kernel_arguments(
+    arguments_by_ordinal: Mapping[int, ValueRef],
+    bindings: tuple[TileLangBinding, ...],
+    context: TileLangConversionContext,
+) -> None:
+    for binding in bindings:
+        argument = arguments_by_ordinal[binding.ordinal]
+        if binding.buffer is not None:
+            context.map_value(binding.source, argument, str(argument.type))
+            continue
+        context.map_value(binding.source, argument, str(argument.type))
+        for alias in binding.aliases:
+            context.map_value(alias, argument, str(argument.type))
 
 
 def _buffer_view_name(
@@ -286,28 +411,33 @@ def _bind_dynamic_view_dimensions(
         context.builder.module.values[view.id].dim_bindings = dim_bindings
 
 
-def _workgroup_size(prim_func: object) -> tuple[int, int, int]:
+def _launch_topology(prim_func: object) -> _LaunchTopology:
     source_attrs = attrs(prim_func)
     body_extents = collect_thread_extents(getattr(prim_func, "body", None))
     thread_extent = source_attrs.get("thread_extent")
     thread_extent_items = mapping_items(thread_extent)
-    if thread_extent_items or body_extents:
-        extents = {str(key): value for key, value in body_extents.items()}
-        for key, value in thread_extent_items:
-            extent = integer_value(value)
-            if extent is None:
-                raise ValueError(f"TileLang thread extent `{key}` is not static")
-            extents[str(key)] = extent
-        return (
-            int(extents.get("threadIdx.x", 1)),
-            int(extents.get("threadIdx.y", 1)),
-            int(extents.get("threadIdx.z", 1)),
-        )
-    launch = source_attrs.get("tir.kernel_launch_params")
-    if isinstance(launch, Mapping):
-        return (
-            int(launch.get("block_dim_x", 1)),
-            int(launch.get("block_dim_y", 1)),
-            int(launch.get("block_dim_z", 1)),
-        )
-    return (1, 1, 1)
+    extents = {str(key): value for key, value in body_extents.items()}
+    for key, value in thread_extent_items:
+        extents[str(key)] = value
+    return _LaunchTopology(
+        workgroup_count=(
+            extents.get("blockIdx.x", 1),
+            extents.get("blockIdx.y", 1),
+            extents.get("blockIdx.z", 1),
+        ),
+        workgroup_size=(
+            extents.get("threadIdx.x", 1),
+            extents.get("threadIdx.y", 1),
+            extents.get("threadIdx.z", 1),
+        ),
+    )
+
+
+def _static_workgroup_size(topology: _LaunchTopology) -> tuple[int, int, int]:
+    values: list[int] = []
+    for axis, extent in zip(("x", "y", "z"), topology.workgroup_size, strict=True):
+        value = integer_value(extent)
+        if value is None:
+            raise ValueError(f"TileLang threadIdx.{axis} extent is not static")
+        values.append(value)
+    return normalize_launch_tuple(tuple(values))

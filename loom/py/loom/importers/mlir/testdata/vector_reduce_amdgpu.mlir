@@ -37,7 +37,15 @@ hal.executable private @smoke {
 // ----
 target.generic<reference> @rocm_hsaco_fb
 
-kernel.def target(@rocm_hsaco_fb) export("vector_reduce_amdgpu") ordinal(0) workgroup_size(1, 1, 1) @vector_reduce_amdgpu(%binding0: buffer, %binding1: buffer) {
+kernel.def target(@rocm_hsaco_fb) export("vector_reduce_amdgpu") ordinal(0) @vector_reduce_amdgpu(%binding0: buffer, %binding1: buffer) {
+  %wg_count_x = index.constant 1 : index
+  %wg_count_y = index.constant 1 : index
+  %wg_count_z = index.constant 1 : index
+  %wg_size_x = index.constant 1 : index
+  %wg_size_y = index.constant 1 : index
+  %wg_size_z = index.constant 1 : index
+  kernel.launch.config workgroups(%wg_count_x, %wg_count_y, %wg_count_z) workgroup_size(%wg_size_x, %wg_size_y, %wg_size_z) : index
+} launch {
   %c0 = index.constant 0 : index
   %c1 = index.constant 1 : index
   %c4 = index.constant 4 : index
@@ -84,7 +92,15 @@ hal.executable private @barrier_smoke {
 // ----
 target.generic<reference> @rocm_hsaco_fb
 
-kernel.def target(@rocm_hsaco_fb) export("barrier_smoke") ordinal(0) workgroup_size(1, 1, 1) @barrier_smoke(%binding0: buffer) {
+kernel.def target(@rocm_hsaco_fb) export("barrier_smoke") ordinal(0) @barrier_smoke(%binding0: buffer) {
+  %wg_count_x = index.constant 1 : index
+  %wg_count_y = index.constant 1 : index
+  %wg_count_z = index.constant 1 : index
+  %wg_size_x = index.constant 1 : index
+  %wg_size_y = index.constant 1 : index
+  %wg_size_z = index.constant 1 : index
+  kernel.launch.config workgroups(%wg_count_x, %wg_count_y, %wg_count_z) workgroup_size(%wg_size_x, %wg_size_y, %wg_size_z) : index
+} launch {
   %c0 = index.constant 0 : index
   %c0_bytes = index.cast %c0 : index to offset
   %input = buffer.view %binding0[%c0_bytes] : buffer -> view<4xf32, #dense>

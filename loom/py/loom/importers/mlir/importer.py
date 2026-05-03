@@ -20,6 +20,7 @@ from loom.importers.core import (
     ImportOptions,
     ImportResult,
     KernelArgumentSpec,
+    KernelLaunchConfigSpec,
     KernelModuleSpec,
     create_kernel_module,
     kernel_module_ops,
@@ -361,7 +362,7 @@ def build_loom_module(
             target_symbol=target_symbol,
             export_symbol=kernel_name,
             export_ordinal=export_ordinal,
-            workgroup_size=workgroup,
+            launch_config=KernelLaunchConfigSpec(workgroup_size=workgroup),
             callee=kernel_name,
             arguments=[
                 KernelArgumentSpec(
@@ -374,7 +375,7 @@ def build_loom_module(
     )
     module = shell.module
     builder = shell.builder
-    binding_args = shell.arguments_by_ordinal
+    binding_args = shell.body_arguments_by_ordinal
 
     topology_values: dict[tuple[str, str], ValueRef] = {}
     prelude_values: dict[Any, tuple[ValueRef, str | None]] = {}

@@ -240,6 +240,18 @@ def convert_binary_expr(
         )
         if madd is not None:
             return madd
+        if kind not in _BINARY_INDEX_OPS:
+            result = _convert_index_like_binary_via_scalar(
+                expr,
+                source_lhs,
+                source_rhs,
+                context,
+                converter,
+                kind,
+            )
+            if result is None:
+                context.record_blocked(node_text(expr), f"no index builder for {kind}")
+            return result
     lhs = converter.convert_expr(
         source_lhs,
         context,
@@ -271,10 +283,7 @@ def convert_binary_expr(
     if _is_vector_type(lhs.type) or _is_vector_type(rhs.type):
         return _convert_vector_binary_expr(expr, context, lhs, rhs)
     if index_like:
-        builder_name = _BINARY_INDEX_OPS.get(kind)
-        if builder_name is None:
-            context.record_blocked(node_text(expr), f"no index builder for {kind}")
-            return None
+        builder_name = _BINARY_INDEX_OPS[kind]
         builder = getattr(context.builder.index, builder_name)
         result = cast(
             ValueRef,
@@ -308,6 +317,48 @@ def convert_binary_expr(
         ),
     )
     context.map_value(expr, result, str(result_type))
+    return result
+
+
+def _convert_index_like_binary_via_scalar(
+    expr: object,
+    source_lhs: object,
+    source_rhs: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    kind: str,
+) -> ValueRef | None:
+    if _is_unsigned_dtype(dtype(expr)):
+        scalar_builder_name = _BINARY_UNSIGNED_INTEGER_OPS.get(kind)
+    else:
+        scalar_builder_name = _BINARY_INTEGER_OPS.get(kind)
+    if scalar_builder_name is None:
+        return None
+    lhs = converter.convert_expr(source_lhs, context)
+    rhs = converter.convert_expr(source_rhs, context)
+    if lhs is None or rhs is None:
+        return None
+    result_type = context.type_converter.map_dtype(dtype(expr))
+    if not _is_integer_type(str(result_type)):
+        return None
+    if str(lhs.type) != str(result_type) or str(rhs.type) != str(result_type):
+        return None
+    builder = getattr(context.builder.scalar, scalar_builder_name)
+    scalar_result = cast(
+        ValueRef,
+        builder(
+            lhs=lhs,
+            rhs=rhs,
+            results=[result_type],
+            name=context.fresh_name(scalar_builder_name),
+        ),
+    )
+    result = context.builder.index.cast(
+        input=scalar_result,
+        results=[INDEX],
+        name=context.fresh_name("idx"),
+    )
+    context.map_value(expr, result, "index")
     return result
 
 

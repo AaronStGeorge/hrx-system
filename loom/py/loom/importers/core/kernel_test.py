@@ -5,12 +5,39 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from loom.importers.core import (
+    KernelArgumentSpec,
     KernelModuleSpec,
     create_kernel_module,
     kernel_module_ops,
     print_loom_module,
 )
+from loom.ir import I32
 from loom.verify import verify_module
+
+
+def test_create_kernel_module_exposes_projected_region_arguments() -> None:
+    shell = create_kernel_module(
+        KernelModuleSpec(
+            target_preset="hip -mcpu=gfx1100",
+            export_symbol="kernel",
+            callee="kernel",
+            arguments=[
+                KernelArgumentSpec(
+                    ordinal=0,
+                    name="n",
+                    type=I32,
+                )
+            ],
+        )
+    )
+
+    config_arg = shell.config_arguments_by_ordinal[0]
+    body_arg = shell.body_arguments_by_ordinal[0]
+    assert config_arg.id != body_arg.id
+    assert config_arg.name == "n"
+    assert body_arg.name == "n"
+    assert config_arg.type == I32
+    assert body_arg.type == I32
 
 
 def test_create_kernel_module_uses_supported_amdgpu_target_record() -> None:

@@ -118,10 +118,10 @@ def build_thread_axis_id(
     raise ValueError(f"unsupported TileLang thread axis scope `{axis.loom_scope}`")
 
 
-def collect_thread_extents(stmt: object) -> Mapping[str, int]:
-    """Collects static thread extents from nested AttrStmt/For wrappers."""
+def collect_thread_extents(stmt: object) -> Mapping[str, object]:
+    """Collects thread extents from nested AttrStmt/For wrappers."""
 
-    extents: dict[str, int] = {}
+    extents: dict[str, object] = {}
     _collect_thread_extents(stmt, extents)
     return extents
 
@@ -136,21 +136,19 @@ def integer_value(value: object) -> int | None:
         return None
 
 
-def _collect_thread_extents(stmt: object, extents: dict[str, int]) -> None:
+def _collect_thread_extents(stmt: object, extents: dict[str, object]) -> None:
     kind = node_kind(stmt)
     if kind == "AttrStmt":
         if str(getattr(stmt, "attr_key", "")) == "thread_extent":
             tag = thread_tag(getattr(stmt, "node", None))
-            extent = integer_value(getattr(stmt, "value", None))
-            if tag is not None and extent is not None:
-                extents.setdefault(tag, extent)
+            if tag is not None:
+                extents.setdefault(tag, getattr(stmt, "value", None))
         _collect_thread_extents(getattr(stmt, "body", None), extents)
         return
     if kind == "For":
         axis = thread_axis_from_binding(getattr(stmt, "thread_binding", None))
-        extent = integer_value(getattr(stmt, "extent", None))
-        if axis is not None and extent is not None:
-            extents.setdefault(axis.source_tag, extent)
+        if axis is not None:
+            extents.setdefault(axis.source_tag, getattr(stmt, "extent", None))
         _collect_thread_extents(getattr(stmt, "body", None), extents)
         return
     if kind == "SeqStmt":

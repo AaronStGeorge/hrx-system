@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import shlex
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import loom
 from loom.builder import ValueRef
@@ -29,6 +29,14 @@ class KernelArgumentSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class KernelLaunchConfigSpec:
+    """Static launch configuration for simple kernel importers."""
+
+    workgroup_count: tuple[int, ...] = (1, 1, 1)
+    workgroup_size: tuple[int, ...] = (1, 1, 1)
+
+
+@dataclass(frozen=True, slots=True)
 class KernelModuleSpec:
     """Top-level target/kernel facts shared by foreign importers."""
 
@@ -38,7 +46,9 @@ class KernelModuleSpec:
     arguments: Sequence[KernelArgumentSpec]
     target_symbol: str | None = None
     export_ordinal: int | None = None
-    workgroup_size: tuple[int, int, int] = (1, 1, 1)
+    launch_config: KernelLaunchConfigSpec | None = field(
+        default_factory=KernelLaunchConfigSpec
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +59,8 @@ class KernelModuleShell:
     builder: loom.LoomBuilder
     config: Region
     body: Region
-    arguments_by_ordinal: dict[int, ValueRef]
+    config_arguments_by_ordinal: dict[int, ValueRef]
+    body_arguments_by_ordinal: dict[int, ValueRef]
     target_symbol: str
     kernel_symbol: str
 
@@ -77,7 +88,6 @@ def create_kernel_module(spec: KernelModuleSpec) -> KernelModuleShell:
         )
         for argument in spec.arguments
     }
-    workgroup = normalize_workgroup_size(spec.workgroup_size)
     config = builder.region()
     body = builder.region()
     builder.kernel.def_(
@@ -89,27 +99,53 @@ def create_kernel_module(spec: KernelModuleSpec) -> KernelModuleShell:
         config=config,
         body=body,
     )
-    _build_launch_config(builder, config, workgroup)
+    if spec.launch_config is not None:
+        build_static_launch_config(builder, config, spec.launch_config)
     return KernelModuleShell(
         module=module,
         builder=builder,
         config=config,
         body=body,
-        arguments_by_ordinal=arguments_by_ordinal,
+        config_arguments_by_ordinal=_region_arguments_by_ordinal(
+            builder,
+            config,
+            spec.arguments,
+        ),
+        body_arguments_by_ordinal=_region_arguments_by_ordinal(
+            builder,
+            body,
+            spec.arguments,
+        ),
         target_symbol=target_symbol,
         kernel_symbol=spec.callee,
     )
 
 
-def _build_launch_config(
+def build_static_launch_config(
     builder: loom.LoomBuilder,
     config: Region,
-    workgroup_size: tuple[int, int, int],
+    launch_config: KernelLaunchConfigSpec,
 ) -> None:
+    """Build a static kernel.launch.config terminator."""
+
+    workgroup_count = normalize_launch_tuple(launch_config.workgroup_count)
+    workgroup_size = normalize_launch_tuple(launch_config.workgroup_size)
     with builder.insertion_block(config.blocks[0]):
-        count_x = builder.index.constant(value=1, results=[INDEX], name="wg_count_x")
-        count_y = builder.index.constant(value=1, results=[INDEX], name="wg_count_y")
-        count_z = builder.index.constant(value=1, results=[INDEX], name="wg_count_z")
+        count_x = builder.index.constant(
+            value=workgroup_count[0],
+            results=[INDEX],
+            name="wg_count_x",
+        )
+        count_y = builder.index.constant(
+            value=workgroup_count[1],
+            results=[INDEX],
+            name="wg_count_y",
+        )
+        count_z = builder.index.constant(
+            value=workgroup_count[2],
+            results=[INDEX],
+            name="wg_count_z",
+        )
         size_x = builder.index.constant(
             value=workgroup_size[0],
             results=[INDEX],
@@ -137,12 +173,30 @@ def _build_launch_config(
 
 def normalize_workgroup_size(workgroup_size: tuple[int, ...]) -> tuple[int, int, int]:
     """Normalize source workgroup size facts to Loom's x/y/z tuple."""
-    if len(workgroup_size) > 3:
-        raise ValueError(f"unsupported workgroup rank: {workgroup_size}")
-    values = list(workgroup_size)
-    while len(values) < 3:
-        values.append(1)
-    return (int(values[0]), int(values[1]), int(values[2]))
+    return normalize_launch_tuple(workgroup_size)
+
+
+def normalize_launch_tuple(values: tuple[int, ...]) -> tuple[int, int, int]:
+    """Normalize launch dimension facts to Loom's x/y/z tuple."""
+
+    if len(values) > 3:
+        raise ValueError(f"unsupported launch rank: {values}")
+    normalized = list(values)
+    while len(normalized) < 3:
+        normalized.append(1)
+    return (int(normalized[0]), int(normalized[1]), int(normalized[2]))
+
+
+def _region_arguments_by_ordinal(
+    builder: loom.LoomBuilder,
+    region: Region,
+    arguments: Sequence[KernelArgumentSpec],
+) -> dict[int, ValueRef]:
+    block = region.blocks[0]
+    return {
+        argument.ordinal: ValueRef(block.arg_ids[index], builder.ir)
+        for index, argument in enumerate(arguments)
+    }
 
 
 def kernel_module_ops(target_preset: str) -> tuple[Op, ...]:

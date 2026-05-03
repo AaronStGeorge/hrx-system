@@ -137,9 +137,15 @@ r"""
 amdgpu.target<gfx950> @hip_mcpu_gfx950
 
 kernel.def target(@hip_mcpu_gfx950) export("batched_transpose_kernel") @batched_transpose_kernel(%x_handle: buffer, %out_handle: buffer, %num_batches: i32, %shape_x: i32, %shape_y: i32, %stride_x: i32) {
-  %c1 = index.constant 1 : index
+  %shape_y_idx = index.cast %shape_y : i32 to index
+  %c128 = index.constant 128 : index
+  %div = index.div %shape_y_idx, %c128 : index
+  %shape_x_idx = index.cast %shape_x : i32 to index
+  %div_2 = index.div %shape_x_idx, %c128 : index
+  %num_batches_idx = index.cast %num_batches : i32 to index
   %c256 = index.constant 256 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c256, %c1, %c1) : index
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%div, %div_2, %num_batches_idx) workgroup_size(%c256, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
@@ -302,9 +308,10 @@ r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
 kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") @group_count_kernel(%group_idx_handle: buffer, %out_handle: buffer, %num_tokens: i32) {
+  %c8 = index.constant 8 : index
   %c1 = index.constant 1 : index
   %c128 = index.constant 128 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
+  kernel.launch.config workgroups(%c8, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
@@ -455,9 +462,14 @@ r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
 kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") @mask_indices_by_tp_kernel(%indices_handle: buffer, %masked_indices_handle: buffer, %per_gpu: i32, %per_dp: i32, %num_tp_ranks: i32, %tp_rank: i32, %num_tokens: i32) {
-  %c1 = index.constant 1 : index
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %c2 = index.constant 2 : index
   %c128 = index.constant 128 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
+  %madd = index.madd %num_tokens_idx, %c2, %c128 : index
+  %c1 = index.constant 1 : index
+  %sub = index.sub %madd, %c1 : index
+  %div = index.div %sub, %c128 : index
+  kernel.launch.config workgroups(%div, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
@@ -596,9 +608,13 @@ r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
 kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") @normalize_weight_kernel(%topk_weights_handle: buffer, %denominator_handle: buffer, %normalized_weights_handle: buffer, %num_tokens: i32) {
-  %c1 = index.constant 1 : index
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c128 = index.constant 128 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
+  %add = index.add %num_tokens_idx, %c128 : index
+  %c1 = index.constant 1 : index
+  %sub = index.sub %add, %c1 : index
+  %div = index.div %sub, %c128 : index
+  kernel.launch.config workgroups(%div, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
@@ -738,9 +754,10 @@ r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
 kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") @aux_fi_kernel(%topk_idx_handle: buffer, %out_handle: buffer, %num_aux_topk: i32, %num_tokens: i32) {
+  %c8 = index.constant 8 : index
   %c1 = index.constant 1 : index
   %c128 = index.constant 128 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
+  kernel.launch.config workgroups(%c8, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
@@ -905,9 +922,10 @@ r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
 kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel") @inplace_unique_group_indices_kernel(%group_indices_handle: buffer, %num_tokens: i32) {
+  %c8 = index.constant 8 : index
   %c1 = index.constant 1 : index
   %c128 = index.constant 128 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
+  kernel.launch.config workgroups(%c8, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
@@ -1079,9 +1097,14 @@ r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
 kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_kernel(%ngram_token_ids_handle: buffer, %multipliers_handle: buffer, %vocab_sizes_handle: buffer, %offsets_handle: buffer, %output_handle: buffer, %num_tokens: i32) {
-  %c1 = index.constant 1 : index
+  %c2 = index.constant 2 : index
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c32 = index.constant 32 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
+  %add = index.add %num_tokens_idx, %c32 : index
+  %c1 = index.constant 1 : index
+  %sub = index.sub %add, %c1 : index
+  %div = index.div %sub, %c32 : index
+  kernel.launch.config workgroups(%c2, %div, %c1) workgroup_size(%c32, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
@@ -1216,9 +1239,11 @@ r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
 kernel.def target(@hip_mcpu_gfx1100) export("expand_to_fused_kernel") @expand_to_fused_kernel(%x_handle: buffer, %expanded_x_handle: buffer, %token_topk_to_pos_handle: buffer, %pos_to_expert_handle: buffer, %num_tokens: i32, %num_expanded_tokens: i32) {
+  %maxsi = scalar.maxsi %num_tokens, %num_expanded_tokens : i32
+  %idx = index.cast %maxsi : i32 to index
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+  kernel.launch.config workgroups(%idx, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>

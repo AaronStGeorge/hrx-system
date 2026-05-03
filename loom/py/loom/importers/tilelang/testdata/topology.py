@@ -78,9 +78,10 @@ r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
 kernel.def target(@hip_mcpu_gfx1100) export("launch_thread_attrs") @launch_thread_attrs(%src: buffer, %dst: buffer) {
+  %c8 = index.constant 8 : index
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+  kernel.launch.config workgroups(%c8, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>

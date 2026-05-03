@@ -20,10 +20,13 @@ from loom.diagnostics import (
 )
 from loom.importers.core.kernel import (
     KernelArgumentSpec,
+    KernelLaunchConfigSpec,
     KernelModuleShell,
     KernelModuleSpec,
+    build_static_launch_config,
     create_kernel_module,
     kernel_module_ops,
+    normalize_launch_tuple,
     normalize_workgroup_size,
 )
 from loom.importers.core.names import (
@@ -54,6 +57,7 @@ __all__ = [
     "ImportOptions",
     "ImportResult",
     "KernelArgumentSpec",
+    "KernelLaunchConfigSpec",
     "KernelModuleShell",
     "KernelModuleSpec",
     "LoomDiagnosticError",
@@ -61,8 +65,10 @@ __all__ = [
     "SourceImportSession",
     "SourceProvenance",
     "SourceRange",
+    "build_static_launch_config",
     "create_kernel_module",
     "kernel_module_ops",
+    "normalize_launch_tuple",
     "normalize_workgroup_size",
     "print_loom_module",
     "sanitize_identifier",
