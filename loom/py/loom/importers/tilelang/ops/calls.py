@@ -900,6 +900,9 @@ def _convert_effect_call(
     if op_name in _WARP_SYNC_CALLS:
         _convert_warp_sync_call(expr, context, op_name)
         return None
+    if op_name in _DEVICE_ASSERT_CALLS:
+        _convert_device_assert_call(expr, context, converter, op_name)
+        return None
     if op_name in _THREAD_RETURN_CALLS:
         context.record_blocked(
             node_text(expr),
@@ -911,6 +914,40 @@ def _convert_effect_call(
         return None
     _record_unsupported_call(expr, context, op_name)
     return None
+
+
+def _convert_device_assert_call(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    op_name: str,
+) -> None:
+    args = _args(expr)
+    if len(args) not in (1, 2):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` expects a condition and optional message",
+        )
+        return
+    condition_value = converter.convert_expr(args[0], context)
+    if condition_value is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` condition is not mapped",
+        )
+        return
+    condition = coerce_condition(condition_value, context, expr)
+    if condition is None:
+        return
+    message: str | None = None
+    if len(args) == 2:
+        message = _string_value(args[1])
+    assert_builder = context.builder.kernel.assert_
+    assert_builder(
+        condition=condition,
+        message=message,
+    )
+    context.record_converted(node_text(expr), "kernel.assert")
 
 
 def _convert_atomic_add_call(
@@ -1544,12 +1581,21 @@ _ASSUME_CALLS = {
     "tir.assume",
 }
 
+_DEVICE_ASSERT_CALLS = {
+    "tl.device_assert",
+    "tl.device_assert_with_msg",
+}
+
 _THREAD_RETURN_CALLS = {
     "tir.thread_return",
 }
 
 _EFFECT_CALLS = (
-    _STORAGE_SYNC_CALLS | _WARP_SYNC_CALLS | _ASSUME_CALLS | _THREAD_RETURN_CALLS
+    _STORAGE_SYNC_CALLS
+    | _WARP_SYNC_CALLS
+    | _ASSUME_CALLS
+    | _DEVICE_ASSERT_CALLS
+    | _THREAD_RETURN_CALLS
 )
 
 _WORKGROUP_STORAGE_SCOPES = {

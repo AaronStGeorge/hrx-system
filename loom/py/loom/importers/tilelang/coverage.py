@@ -687,20 +687,14 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
     OpCoverage(
         "tl.device_assert",
         OpFamily.TILELANG_OP,
-        CoverageState.DEFERRED,
-        (
-            "Runtime kernel assertion needs a target-independent kernel "
-            "assert/trap op; do not import as an assume."
-        ),
+        CoverageState.SUPPORTED,
+        "Runtime kernel assertion imports to kernel.assert, not an assume.",
     ),
     OpCoverage(
         "tl.device_assert_with_msg",
         OpFamily.TILELANG_OP,
-        CoverageState.DEFERRED,
-        (
-            "Runtime kernel assertion with message needs a target-independent "
-            "kernel assert/trap op; do not import as an assume."
-        ),
+        CoverageState.SUPPORTED,
+        "Runtime kernel assertion with message imports to kernel.assert.",
     ),
     OpCoverage(
         "tl.sync_warp",

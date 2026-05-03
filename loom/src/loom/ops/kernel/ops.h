@@ -64,7 +64,8 @@ enum {
   LOOM_OP_KERNEL_WORKGROUP_VOTE_ANY = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 37),
   LOOM_OP_KERNEL_WORKGROUP_VOTE_ALL = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 38),
   LOOM_OP_KERNEL_WORKGROUP_VOTE_COUNT = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 39),
-  LOOM_OP_KERNEL_COUNT_ = 40,
+  LOOM_OP_KERNEL_ASSERT = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 40),
+  LOOM_OP_KERNEL_COUNT_ = 41,
 };
 
 // Required async copy direction.
@@ -840,6 +841,23 @@ iree_status_t loom_kernel_workgroup_vote_count_build(
 iree_status_t loom_kernel_workgroup_vote_count_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_ASSERT: Runtime assertion inside a dispatchable kernel. The condition is expected to be true; if it is false, target lowering must preserve runtime failure semantics through a trap/assert path or reject the kernel when assertions cannot be represented. This is not an optimization assume.
+// kernel.assert %ok : i1
+LOOM_DEFINE_ISA(loom_kernel_assert_isa, LOOM_OP_KERNEL_ASSERT)
+LOOM_DEFINE_OPERAND(loom_kernel_assert_condition, 0)
+LOOM_DEFINE_ATTR_STRING(loom_kernel_assert_message, 0)
+enum loom_kernel_assert_build_flag_bits_e {
+  LOOM_KERNEL_ASSERT_BUILD_FLAG_HAS_MESSAGE = 1u << 0,
+};
+typedef uint32_t loom_kernel_assert_build_flags_t;
+iree_status_t loom_kernel_assert_build(
+    loom_builder_t* builder,
+    loom_kernel_assert_build_flags_t build_flags,
+    loom_value_id_t condition,
+    loom_optional loom_string_id_t message,
+    loom_location_id_t location,
+    loom_op_t** out_op);
 
 // Returns the vtable array for the kernel dialect.
 const loom_op_vtable_t* const* loom_kernel_dialect_vtables(

@@ -447,3 +447,10 @@ class KernelBuilder(DialectBuilder):
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
     ) -> ValueRef: ...
+    def assert_(
+        self,
+        *,
+        condition: ValueRef,
+        message: str | None = ...,
+        location_id: int | None = ...,
+    ) -> None: ...

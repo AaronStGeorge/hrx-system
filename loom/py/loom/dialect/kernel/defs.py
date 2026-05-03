@@ -40,6 +40,7 @@ from loom.dsl import (
     ANY,
     ATTR_TYPE_ENUM,
     ATTR_TYPE_I64,
+    ATTR_TYPE_STRING,
     CONVERGENT,
     I1,
     INDEX,
@@ -415,6 +416,43 @@ kernel_exit = Op(
     examples=[
         "kernel.exit %done : i1",
         "kernel.exit %done : i1 {\n  kernel.return\n}",
+    ],
+)
+
+
+kernel_assert = Op(
+    "kernel.assert",
+    group=kernel_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Runtime assertion inside a dispatchable kernel. The condition is "
+        "expected to be true; if it is false, target lowering must preserve "
+        "runtime failure semantics through a trap/assert path or reject the "
+        "kernel when assertions cannot be represented. This is not an "
+        "optimization assume."
+    ),
+    operands=[Operand("condition", I1, doc="Predicate that must hold.")],
+    attrs=[
+        AttrDef(
+            "message",
+            ATTR_TYPE_STRING,
+            optional=True,
+            doc="Optional human-readable assertion message.",
+        ),
+    ],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("kernel.def")],
+    format=[
+        Ref("condition"),
+        OptionalGroup(
+            [Attr("message")],
+            anchor="message",
+        ),
+        COLON,
+        TypeOf("condition"),
+    ],
+    examples=[
+        "kernel.assert %ok : i1",
+        'kernel.assert %ok "finite input required" : i1',
     ],
 )
 
@@ -1566,4 +1604,5 @@ ALL_KERNEL_OPS: tuple[Op, ...] = (
     kernel_workgroup_vote_any,
     kernel_workgroup_vote_all,
     kernel_workgroup_vote_count,
+    kernel_assert,
 )

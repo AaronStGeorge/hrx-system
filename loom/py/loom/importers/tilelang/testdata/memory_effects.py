@@ -126,3 +126,60 @@ kernel.def target(@hip_mcpu_gfx1100) export("scalar_atomic_add_return") @scalar_
   kernel.return
 }
 """
+
+
+# ====
+@tilelang_case(name="device_asserts", category="op", tags=("assert", "kernel"))
+def device_asserts(tilelang: Any, T: Any) -> TileLangImportInput:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_kernel() -> Any:
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def device_asserts_kernel(
+            src: T.Tensor[(1,), T.float32],
+            dst: T.Tensor[(1,), T.float32],
+        ) -> None:
+            with T.Kernel(1, threads=1):
+                value = src[0]
+                T.device_assert(T.isfinite(value))
+                T.device_assert(T.isfinite(value), msg="finite input required")
+                dst[0] = value
+
+        return device_asserts_kernel
+
+    return TileLangImportInput(
+        source=get_kernel,
+        target="hip -mcpu=gfx1100",
+        name="device_asserts_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("device_asserts_kernel") @device_asserts_kernel(%src_handle: buffer, %dst_handle: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %tx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %c0 = index.constant 0 : index
+  %load = view.load %src[%c0] : view<1xf32, %layout> -> f32
+  %isfinitef = scalar.isfinitef %load : f32
+  kernel.assert %isfinitef "\n  at memory_effects.py:147 in device_asserts_kernel\n" : i1
+  %isfinitef_2 = scalar.isfinitef %load : f32
+  kernel.assert %isfinitef_2 "finite input required\n  at memory_effects.py:148 in device_asserts_kernel\n" : i1
+  view.store %load, %dst[%c0] : f32, view<1xf32, %layout>
+  kernel.return
+}
+"""

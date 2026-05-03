@@ -13,6 +13,7 @@ model so builder behavior and type tooling stay aligned.
 
 from __future__ import annotations
 
+import keyword
 from dataclasses import dataclass
 from enum import Enum, auto
 
@@ -64,29 +65,7 @@ __all__ = [
 ]
 
 
-_PYTHON_KEYWORDS = frozenset(
-    {
-        "yield",
-        "return",
-        "for",
-        "if",
-        "else",
-        "while",
-        "import",
-        "from",
-        "class",
-        "def",
-        "pass",
-        "break",
-        "continue",
-        "and",
-        "or",
-        "not",
-        "in",
-        "is",
-        "global",
-    }
-)
+_PYTHON_KEYWORDS = frozenset(keyword.kwlist)
 
 
 class BuilderParamKind(Enum):
