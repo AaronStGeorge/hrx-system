@@ -206,7 +206,11 @@ iree_status_t loom_llvmir_lowering_lower_index_madd(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
     const loom_op_t* op);
 
-iree_status_t loom_llvmir_lowering_lower_index_minmax(
+iree_status_t loom_llvmir_lowering_lower_index_min(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op);
+
+iree_status_t loom_llvmir_lowering_lower_index_max(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
     const loom_op_t* op);
 

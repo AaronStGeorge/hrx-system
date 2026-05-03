@@ -329,9 +329,14 @@ iree_status_t loom_llvmir_lowering_lower_index_madd(
   return loom_llvmir_lowering_map_single_result(state, op, result);
 }
 
-iree_status_t loom_llvmir_lowering_lower_index_minmax(
+typedef enum loom_llvmir_index_minmax_kind_e {
+  LOOM_LLVMIR_INDEX_MINMAX_MIN,
+  LOOM_LLVMIR_INDEX_MINMAX_MAX,
+} loom_llvmir_index_minmax_kind_t;
+
+static iree_status_t loom_llvmir_lowering_lower_index_minmax(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
-    const loom_op_t* op) {
+    const loom_op_t* op, loom_llvmir_index_minmax_kind_t kind) {
   loom_llvmir_value_id_t operands[2] = {LOOM_LLVMIR_VALUE_ID_INVALID,
                                         LOOM_LLVMIR_VALUE_ID_INVALID};
   IREE_RETURN_IF_ERROR(
@@ -362,23 +367,27 @@ iree_status_t loom_llvmir_lowering_lower_index_minmax(
       loom_llvmir_lowering_value_name(state, loom_op_const_results(op)[0]);
   select_desc.result_type = result_type;
   select_desc.condition = condition;
-  switch (op->kind) {
-    case LOOM_OP_INDEX_MIN:
-      select_desc.true_value = operands[0];
-      select_desc.false_value = operands[1];
-      break;
-    case LOOM_OP_INDEX_MAX:
-      select_desc.true_value = operands[1];
-      select_desc.false_value = operands[0];
-      break;
-    default:
-      return loom_llvmir_lowering_unsupported_op(
-          state, op, "index min/max lowering only accepts index.min/max");
-  }
+  const bool select_lhs_on_true = kind == LOOM_LLVMIR_INDEX_MINMAX_MIN;
+  select_desc.true_value = select_lhs_on_true ? operands[0] : operands[1];
+  select_desc.false_value = select_lhs_on_true ? operands[1] : operands[0];
   loom_llvmir_value_id_t result = LOOM_LLVMIR_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_build_select(target_block, &select_desc, &result));
   return loom_llvmir_lowering_map_single_result(state, op, result);
+}
+
+iree_status_t loom_llvmir_lowering_lower_index_min(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op) {
+  return loom_llvmir_lowering_lower_index_minmax(state, target_block, op,
+                                                 LOOM_LLVMIR_INDEX_MINMAX_MIN);
+}
+
+iree_status_t loom_llvmir_lowering_lower_index_max(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op) {
+  return loom_llvmir_lowering_lower_index_minmax(state, target_block, op,
+                                                 LOOM_LLVMIR_INDEX_MINMAX_MAX);
 }
 
 static iree_status_t loom_llvmir_lowering_icmp_predicate(
