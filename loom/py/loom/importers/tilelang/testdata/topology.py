@@ -197,6 +197,73 @@ kernel.def target(@hip_mcpu_gfx1100) export("thread_binding_loop") @thread_bindi
 
 # ====
 @tilelang_case(
+    name="warp_shuffle",
+    category="op",
+    tags=("topology", "subgroup", "shuffle"),
+)
+def warp_shuffle(T: Any) -> TileLangImportInput:
+    @T.prim_func  # type: ignore[untyped-decorator]
+    def warp_shuffle_kernel(
+        src: T.Tensor[(32,), T.float32],
+        dst: T.Tensor[(128,), T.float32],
+    ) -> None:
+        with T.Kernel(1, threads=32):
+            thread_index = T.get_thread_binding()
+            value = src[thread_index]
+            dst[thread_index] = T.shfl_xor(value, 1)
+            dst[thread_index + 32] = T.shfl_down(value, 1)
+            dst[thread_index + 64] = T.shfl_up(value, 1)
+            dst[thread_index + 96] = T.shfl_sync(value, 0)
+
+    return TileLangImportInput(
+        source=warp_shuffle_kernel,
+        target="hip -mcpu=gfx1100",
+        name="warp_shuffle_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("warp_shuffle_kernel") @warp_shuffle_kernel(%src_handle: buffer, %dst_handle: buffer) {
+  %c1 = index.constant 1 : index
+  %c32 = index.constant 32 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<32xf32, %layout>
+  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<128xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %thread_index = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %load = view.load %src[%thread_index] : view<32xf32, %layout> -> f32
+  %const = scalar.constant 1 : i32
+  %const_2 = scalar.constant 32 : i32
+  %shuffle, %shuffle_valid = kernel.subgroup.shuffle<xor> %load, %const, %const_2 : f32, i32, i32
+  view.store %shuffle, %dst[%thread_index] : f32, view<128xf32, %layout>
+  %shuffle_2, %shuffle_valid_2 = kernel.subgroup.shuffle<down> %load, %const, %const_2 : f32, i32, i32
+  %c32 = index.constant 32 : index
+  %add = index.add %thread_index, %c32 : index
+  view.store %shuffle_2, %dst[%add] : f32, view<128xf32, %layout>
+  %shuffle_3, %shuffle_valid_3 = kernel.subgroup.shuffle<up> %load, %const, %const_2 : f32, i32, i32
+  %c64 = index.constant 64 : index
+  %add_2 = index.add %thread_index, %c64 : index
+  view.store %shuffle_3, %dst[%add_2] : f32, view<128xf32, %layout>
+  %const_3 = scalar.constant 0 : i32
+  %shuffle_4, %shuffle_valid_4 = kernel.subgroup.shuffle<index> %load, %const_3, %const_2 : f32, i32, i32
+  %c96 = index.constant 96 : index
+  %add_3 = index.add %thread_index, %c96 : index
+  view.store %shuffle_4, %dst[%add_3] : f32, view<128xf32, %layout>
+  kernel.return
+}
+"""
+
+
+# ====
+@tilelang_case(
     name="warp_reduce_float",
     category="op",
     tags=("topology", "subgroup", "reduce"),

@@ -688,6 +688,30 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         "Warp synchronization needs a reviewed subgroup barrier/fence representation.",
     ),
     OpCoverage(
+        "tl.shfl_xor_sync",
+        OpFamily.TILELANG_OP,
+        CoverageState.SUPPORTED,
+        "Full-mask warp xor shuffle; maps to kernel.subgroup.shuffle<xor>.",
+    ),
+    OpCoverage(
+        "tl.shfl_down_sync",
+        OpFamily.TILELANG_OP,
+        CoverageState.SUPPORTED,
+        "Full-mask warp down shuffle; maps to kernel.subgroup.shuffle<down>.",
+    ),
+    OpCoverage(
+        "tl.shfl_up_sync",
+        OpFamily.TILELANG_OP,
+        CoverageState.SUPPORTED,
+        "Full-mask warp up shuffle; maps to kernel.subgroup.shuffle<up>.",
+    ),
+    OpCoverage(
+        "tl.shfl_sync",
+        OpFamily.TILELANG_OP,
+        CoverageState.SUPPORTED,
+        "Full-mask warp index shuffle; maps to kernel.subgroup.shuffle<index>.",
+    ),
+    OpCoverage(
         "tl.warp_reduce_sum",
         OpFamily.TILELANG_OP,
         CoverageState.SUPPORTED,

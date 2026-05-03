@@ -90,3 +90,41 @@ def tileop_copy_coalesced_width(tilelang: Any, T: Any) -> TileLangImportInput:
         target="hip -mcpu=gfx1100",
         name="tileop_copy_coalesced_width_kernel",
     )
+
+
+# ====
+# ERROR@+1: "call `tl.shfl_xor_sync` mask must be the full warp mask"
+@tilelang_case(
+    name="masked_warp_shuffle",
+    category="diagnostic",
+    tags=("topology", "subgroup", "shuffle"),
+)
+def masked_warp_shuffle(tir: Any, tvm: Any) -> TileLangImportInput:
+    src = tir.Var("src", "handle")
+    src_buffer = tir.decl_buffer((32,), "float32", name="src")
+    thread_index = tvm.te.thread_axis("threadIdx.x")
+    body = tir.AttrStmt(
+        thread_index,
+        "thread_extent",
+        tir.IntImm("int32", 32),
+        tir.Evaluate(
+            tir.call_intrin(
+                "float32",
+                tir.op.Op.get("tl.shfl_xor_sync"),
+                tir.IntImm("uint32", 0xFFFF),
+                tir.BufferLoad(src_buffer, [thread_index.var]),
+                tir.IntImm("int32", 1),
+                tir.IntImm("int32", 32),
+            )
+        ),
+    )
+    prim_func = tir.PrimFunc(
+        [src],
+        body,
+        buffer_map={src: src_buffer},
+    ).with_attr("global_symbol", "masked_warp_shuffle_kernel")
+    return TileLangImportInput(
+        source=prim_func,
+        target="hip -mcpu=gfx1100",
+        name="masked_warp_shuffle_kernel",
+    )

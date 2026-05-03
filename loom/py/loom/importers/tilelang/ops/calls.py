@@ -144,6 +144,8 @@ def convert_call(
         return _convert_ceildiv_call(expr, context, converter, op_name, options=options)
     if op_name in _IF_THEN_ELSE_CALLS:
         return _convert_if_then_else_call(expr, context, converter, op_name)
+    if op_name in _WARP_SHUFFLE_CALLS:
+        return _convert_warp_shuffle_call(expr, context, converter, op_name)
     if op_name in _WARP_REDUCE_CALLS:
         return _convert_warp_reduce_call(expr, context, converter, op_name)
     if op_name in _INFINITY_CALLS:
@@ -658,6 +660,57 @@ def _convert_warp_reduce_call(
         results=[value.type],
         name=context.fresh_name("warp_reduce"),
     )
+    _map_call_result(expr, context, result, op_name)
+    return result
+
+
+def _convert_warp_shuffle_call(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    op_name: str,
+) -> ValueRef | None:
+    args = _args(expr)
+    if len(args) != 4:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` expects mask, value, offset/lane, and width",
+        )
+        return None
+    mask = integer_value(args[0])
+    if mask != _FULL_WARP_MASK:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` mask must be the full warp mask",
+        )
+        return None
+    value = converter.convert_expr(args[1], context)
+    offset = converter.convert_expr(args[2], context)
+    width = converter.convert_expr(args[3], context)
+    if value is None or offset is None or width is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` operands are not mapped",
+        )
+        return None
+    if _is_vector_type(value.type):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` vector operands are not imported by the scalar path",
+        )
+        return None
+    results = context.builder.kernel.shuffle(
+        mode=_WARP_SHUFFLE_CALLS[op_name],
+        value=value,
+        offset=offset,
+        width=width,
+        results=[value.type, I1],
+        names=[
+            context.fresh_name("shuffle"),
+            context.fresh_name("shuffle_valid"),
+        ],
+    )
+    result = results[0]
     _map_call_result(expr, context, result, op_name)
     return result
 
@@ -1431,6 +1484,15 @@ _CEILDIV_CALLS = {
 
 _IF_THEN_ELSE_CALLS = {
     "tir.if_then_else",
+}
+
+_FULL_WARP_MASK = 0xFFFFFFFF
+
+_WARP_SHUFFLE_CALLS = {
+    "tl.shfl_down_sync": "down",
+    "tl.shfl_sync": "index",
+    "tl.shfl_up_sync": "up",
+    "tl.shfl_xor_sync": "xor",
 }
 
 _WARP_REDUCE_CALLS = {
