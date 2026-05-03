@@ -188,6 +188,62 @@ func.def @cast_preserves_exact() -> (i64) {
 
 // ====
 
+// Fixed-width integer inputs bound address-domain cast results.
+func.def @cast_i32_to_index_uses_source_domain(%raw: i32) -> (i64, i64) {
+  %idx = index.cast %raw : i32 to index
+  %lo = test.fact_range_lo %idx : index -> i64
+  %hi = test.fact_range_hi %idx : index -> i64
+  func.return %lo, %hi : i64, i64
+}
+// ----
+func.def @cast_i32_to_index_uses_source_domain(%raw: i32) -> (i64, i64) {
+  %lo = scalar.constant -2147483648 : i64
+  %hi = scalar.constant 2147483647 : i64
+  func.return %lo, %hi : i64, i64
+}
+
+// ====
+
+// Dynamic extent facts combine with the fixed-width source domain before the
+// value enters index arithmetic.
+func.def @cast_i32_extent_to_index_uses_extent_domain(%buffer: buffer, %offset: offset, %n: i32, %layout: encoding<layout>) -> (i64, i64, i1) {
+  %view = buffer.view %buffer[%offset] : buffer -> view<[%n]xf32, %layout>
+  test.use %view : view<[%n]xf32, %layout>
+  %idx = index.cast %n : i32 to index
+  %lo = test.fact_range_lo %idx : index -> i64
+  %hi = test.fact_range_hi %idx : index -> i64
+  %non_negative = test.fact_non_negative %idx : index -> i1
+  func.return %lo, %hi, %non_negative : i64, i64, i1
+}
+// ----
+func.def @cast_i32_extent_to_index_uses_extent_domain(%buffer: buffer, %offset: offset, %n: i32, %layout: encoding<layout>) -> (i64, i64, i1) {
+  %view = buffer.view %buffer[%offset] : buffer -> view<[%n]xf32, %layout>
+  test.use %view : view<[%n]xf32, %layout>
+  %lo = scalar.constant 0 : i64
+  %hi = scalar.constant 2147483647 : i64
+  %non_negative = scalar.constant true : i1
+  func.return %lo, %hi, %non_negative : i64, i64, i1
+}
+
+// ====
+
+// Truncating casts only preserve source facts when the source range proves that
+// truncation cannot wrap.
+func.def @cast_index_to_i8_uses_result_domain(%raw: index) -> (i64, i64) {
+  %narrow = index.cast %raw : index to i8
+  %lo = test.fact_range_lo %narrow : i8 -> i64
+  %hi = test.fact_range_hi %narrow : i8 -> i64
+  func.return %lo, %hi : i64, i64
+}
+// ----
+func.def @cast_index_to_i8_uses_result_domain(%raw: index) -> (i64, i64) {
+  %lo = scalar.constant -128 : i64
+  %hi = scalar.constant 127 : i64
+  func.return %lo, %hi : i64, i64
+}
+
+// ====
+
 // index.add removes a fact-proven zero operand without requiring the other
 // operand to be constant.
 func.def @add_zero_identity(%x: index) -> (index) {
