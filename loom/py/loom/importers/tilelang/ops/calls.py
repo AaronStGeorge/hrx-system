@@ -22,13 +22,14 @@ from loom.importers.tilelang.converter import (
 from loom.importers.tilelang.coverage import coverage_row
 from loom.importers.tilelang.nodes import dtype, mapping_items, node_kind, node_text
 from loom.importers.tilelang.ops.assumptions import convert_assume_call
+from loom.importers.tilelang.ops.coercions import coerce_integer_operand
 from loom.importers.tilelang.ops.conditions import coerce_condition
 from loom.importers.tilelang.ops.tileops import (
     convert_tileop_call,
     is_tileop_call,
 )
 from loom.importers.tilelang.ops.topology import integer_value
-from loom.ir import I1, INDEX, ScalarType, ShapedType, StaticDim, Type, TypeKind
+from loom.ir import I1, I32, INDEX, ScalarType, ShapedType, StaticDim, Type, TypeKind
 
 
 @dataclass(frozen=True, slots=True)
@@ -487,13 +488,32 @@ def _convert_binary_integer_call(
         )
         _map_call_result(expr, context, result, op_name, value_type="index")
         return result
+    result_type = context.type_converter.map_dtype(dtype(expr))
+    lhs = coerce_integer_operand(
+        lhs,
+        result_type,
+        context,
+        expr,
+        name="lhs_cast",
+        operand_name="lhs",
+    )
+    rhs = coerce_integer_operand(
+        rhs,
+        result_type,
+        context,
+        expr,
+        name="rhs_cast",
+        operand_name="rhs",
+    )
+    if lhs is None or rhs is None:
+        return None
     scalar_builder_name = _scalar_integer_builder(builder_name, dtype(expr))
     result = cast(
         ValueRef,
         getattr(context.builder.scalar, scalar_builder_name)(
             lhs=lhs,
             rhs=rhs,
-            results=[context.type_converter.map_dtype(dtype(expr))],
+            results=[result_type],
             name=context.fresh_name(scalar_builder_name),
         ),
     )
@@ -693,6 +713,24 @@ def _convert_warp_shuffle_call(
             node_text(expr),
             f"call `{op_name}` operands are not mapped",
         )
+        return None
+    offset = coerce_integer_operand(
+        offset,
+        I32,
+        context,
+        expr,
+        name="shuffle_offset",
+        operand_name="offset",
+    )
+    width = coerce_integer_operand(
+        width,
+        I32,
+        context,
+        expr,
+        name="shuffle_width",
+        operand_name="width",
+    )
+    if offset is None or width is None:
         return None
     if _is_vector_type(value.type):
         context.record_blocked(

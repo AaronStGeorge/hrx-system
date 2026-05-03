@@ -146,6 +146,14 @@ def convert_cast(
             result_type,
             value,
         )
+    if _is_index_type(input_type) or _is_index_type(result_type):
+        result = context.builder.index.cast(
+            input=input_value,
+            results=[result_type],
+            name=context.fresh_name("cast"),
+        )
+        context.map_value(expr, result, str(result_type))
+        return result
     builder_name = _cast_builder_name(
         dtype(value), input_type, dtype(expr), result_type
     )

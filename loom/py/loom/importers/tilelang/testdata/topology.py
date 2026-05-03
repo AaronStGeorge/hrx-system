@@ -245,6 +245,45 @@ kernel.def target(@hip_mcpu_gfx1100) export("thread_binding_loop") @thread_bindi
 
 
 # ====
+@tilelang_case(name="thread_index_to_i64", category="op", tags=("topology", "cast"))
+def thread_index_to_i64(T: Any) -> TileLangImportInput:
+    @T.prim_func  # type: ignore[untyped-decorator]
+    def thread_index_to_i64_kernel(dst: T.Tensor[(32,), T.int64]) -> None:
+        with T.Kernel(1, threads=32):
+            thread_index = T.get_thread_binding()
+            dst[thread_index] = T.cast(thread_index, T.int64)
+
+    return TileLangImportInput(
+        source=thread_index_to_i64_kernel,
+        target="hip -mcpu=gfx1100",
+        name="thread_index_to_i64_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("thread_index_to_i64_kernel") @thread_index_to_i64_kernel(%dst_handle: buffer) {
+  %c1 = index.constant 1 : index
+  %c32 = index.constant 32 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<32xi64, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %thread_index = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %cast = index.cast %thread_index : index to i64
+  view.store %cast, %dst[%thread_index] : i64, view<32xi64, %layout>
+  kernel.return
+}
+"""
+
+
+# ====
 @tilelang_case(
     name="warp_shuffle",
     category="op",
@@ -306,6 +345,76 @@ kernel.def target(@hip_mcpu_gfx1100) export("warp_shuffle_kernel") @warp_shuffle
   %c96 = index.constant 96 : index
   %add_3 = index.add %thread_index, %c96 : index
   view.store %shuffle_4, %dst[%add_3] : f32, view<128xf32, %layout>
+  kernel.return
+}
+"""
+
+
+# ====
+@tilelang_case(
+    name="warp_shuffle_loop_offsets",
+    category="op",
+    tags=("topology", "subgroup", "shuffle", "cast"),
+)
+def warp_shuffle_loop_offsets(T: Any) -> TileLangImportInput:
+    @T.prim_func  # type: ignore[untyped-decorator]
+    def warp_shuffle_loop_offsets_kernel(
+        src: T.Tensor[(32,), T.float32],
+        dst: T.Tensor[(128,), T.float32],
+    ) -> None:
+        with T.Kernel(1, threads=32):
+            thread_index = T.get_thread_binding()
+            value = src[thread_index]
+            for i in T.unroll(2):
+                dst[thread_index + i * 32] = T.shfl_sync(value, i)
+                dst[thread_index + 64 + i * 32] = T.shfl_xor(value, 1 << (4 - i))
+
+    return TileLangImportInput(
+        source=warp_shuffle_loop_offsets_kernel,
+        target="hip -mcpu=gfx1100",
+        name="warp_shuffle_loop_offsets_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("warp_shuffle_loop_offsets_kernel") @warp_shuffle_loop_offsets_kernel(%src_handle: buffer, %dst_handle: buffer) {
+  %c1 = index.constant 1 : index
+  %c32 = index.constant 32 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<32xf32, %layout>
+  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<128xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %thread_index = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %load = view.load %src[%thread_index] : view<32xf32, %layout> -> f32
+  %c0 = index.constant 0 : index
+  %c2 = index.constant 2 : index
+  %c1 = index.constant 1 : index
+  scf.for %i = [%c0 to %c2 step %c1] {
+    %const = scalar.constant 32 : i32
+    %shuffle_offset = index.cast %i : index to i32
+    %shuffle, %shuffle_valid = kernel.subgroup.shuffle<index> %load, %shuffle_offset, %const : f32, i32, i32
+    %c32 = index.constant 32 : index
+    %madd = index.madd %i, %c32, %thread_index : index
+    view.store %shuffle, %dst[%madd] : f32, view<128xf32, %layout>
+    %const_2 = scalar.constant 1 : i32
+    %c4 = index.constant 4 : index
+    %sub = index.sub %c4, %i : index
+    %rhs_cast = index.cast %sub : index to i32
+    %shli = scalar.shli %const_2, %rhs_cast : i32
+    %shuffle_2, %shuffle_valid_2 = kernel.subgroup.shuffle<xor> %load, %shli, %const : f32, i32, i32
+    %c64 = index.constant 64 : index
+    %add = index.add %thread_index, %c64 : index
+    %madd_2 = index.madd %i, %c32, %add : index
+    view.store %shuffle_2, %dst[%madd_2] : f32, view<128xf32, %layout>
+  }
   kernel.return
 }
 """

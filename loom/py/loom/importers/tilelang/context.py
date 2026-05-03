@@ -93,6 +93,8 @@ class TileLangConversionContext(SourceImportSession):
                 results=[result_type],
                 name=name,
             )
+        if str(result_type).startswith("i"):
+            value = _integer_constant_value(value)
         return self.builder.scalar.constant(
             value=value,
             results=[result_type],
@@ -285,6 +287,23 @@ def _semantic_value(value: object) -> object:
         dtype(value),
         str(value),
     )
+
+
+def _integer_constant_value(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        lower_value = value.lower()
+        if lower_value == "true":
+            return 1
+        if lower_value == "false":
+            return 0
+        return int(value, 0)
+    if isinstance(value, float):
+        return int(value)
+    raise TypeError(f"integer constant value must be integer-like, got {value!r}")
 
 
 def _buffer_scope(buffer: object) -> str:
