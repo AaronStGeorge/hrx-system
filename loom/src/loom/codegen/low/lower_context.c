@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <inttypes.h>
+
 #include "loom/codegen/low/lower_internal.h"
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/error/error_defs.h"
@@ -114,6 +116,17 @@ iree_status_t loom_low_lower_emit_reject(loom_low_lower_context_t* context,
   return loom_low_lower_emit(
       context, source_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 1),
       params, IREE_ARRAYSIZE(params));
+}
+
+iree_status_t loom_low_lower_emit_source_type_unsupported(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    iree_string_view_t field_name, loom_type_t actual_type) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(field_name),
+      loom_param_type(actual_type),
+  };
+  return loom_low_lower_emit_target_context_error(
+      context, source_op, 70, params, IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_low_lower_emit_error_ref(
@@ -304,12 +317,32 @@ iree_status_t loom_low_lower_make_register_type(
 iree_status_t loom_low_lower_resolve_descriptor(
     loom_low_lower_context_t* context, uint64_t descriptor_id,
     loom_low_lower_resolved_descriptor_t* out_descriptor) {
-  bool present = false;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
-      context, descriptor_id, out_descriptor, &present));
-  IREE_ASSERT(present);
-  (void)present;
-  return iree_ok_status();
+  *out_descriptor = (loom_low_lower_resolved_descriptor_t){
+      .descriptor = NULL,
+      .opcode_id = LOOM_STRING_ID_INVALID,
+  };
+  IREE_ASSERT_NE(descriptor_id, LOOM_LOW_DESCRIPTOR_ID_NONE);
+
+  const uint32_t descriptor_ordinal =
+      loom_low_descriptor_set_lookup_descriptor_by_id(context->descriptor_set,
+                                                      descriptor_id);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "generated target-low policy references missing "
+                            "descriptor ID 0x%016" PRIx64,
+                            descriptor_id);
+  }
+  const loom_low_descriptor_t* descriptor =
+      loom_low_descriptor_set_descriptor_at(context->descriptor_set,
+                                            descriptor_ordinal);
+  if (descriptor == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "generated target-low descriptor ID 0x%016" PRIx64
+                            " mapped to invalid ordinal %" PRIu32,
+                            descriptor_id, descriptor_ordinal);
+  }
+  return loom_low_lower_resolve_descriptor_row(context, descriptor,
+                                               out_descriptor);
 }
 
 iree_status_t loom_low_lower_resolve_descriptor_row(

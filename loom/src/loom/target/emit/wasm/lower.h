@@ -27,8 +27,8 @@ extern "C" {
 // values to reg<wasm.f32>, and vector<4xi32>/vector<4xi1>/vector<4xf32> source
 // values to reg<wasm.v128>. It lowers the scalar and fixed-width SIMD
 // arithmetic subset described by the Wasm descriptor tables.
-// Unsupported source ops are rejected through the generic backend diagnostic
-// sink instead of producing partial low IR.
+// Unsupported source ops are rejected through structured target-low diagnostics
+// instead of producing partial low IR.
 const loom_low_lower_policy_t* loom_wasm_low_lower_policy(void);
 
 // Initializes a target-owned registry mapping Wasm target-contract keys to

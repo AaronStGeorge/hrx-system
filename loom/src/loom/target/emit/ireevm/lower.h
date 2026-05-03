@@ -23,8 +23,8 @@ extern "C" {
 //
 // The policy maps i1/i32 source values to reg<vm.i32> and currently lowers
 // scalar.constant, scalar.addi, scalar.subi, and scalar.cmpi eq over i32
-// values. Unsupported source ops are rejected through the generic backend
-// diagnostic sink instead of producing partial low IR.
+// values. Unsupported source ops are rejected through structured target-low
+// diagnostics instead of producing partial low IR.
 const loom_low_lower_policy_t* loom_ireevm_low_lower_policy(void);
 
 // Initializes a target-owned registry mapping IREE VM target-contract keys to

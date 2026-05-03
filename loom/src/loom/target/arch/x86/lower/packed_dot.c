@@ -76,8 +76,6 @@ iree_status_t loom_x86_map_packed_dot_type(void* user_data,
         break;
     }
   }
-  return loom_low_lower_emit_reject(
-      context, source_op, IREE_SV("type"), IREE_SV("source"),
-      IREE_SV("x86 packed-dot lowering requires a static 128-, 256-, or "
-              "512-bit i8/i16/f16/bf16/i32/f32 vector"));
+  return loom_low_lower_emit_source_type_unsupported(
+      context, source_op, IREE_SV("source"), source_type);
 }

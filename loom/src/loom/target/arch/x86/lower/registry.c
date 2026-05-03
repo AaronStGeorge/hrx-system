@@ -157,12 +157,8 @@ static iree_status_t loom_x86_map_avx512_type(void* user_data,
   if (loom_x86_type_is_vector_16xi1(source_type)) {
     return loom_x86_make_k_register_type(context, out_low_type);
   }
-  return loom_low_lower_emit_reject(
-      context, source_op, IREE_SV("type"), IREE_SV("source"),
-      IREE_SV("x86 AVX512 lowering currently supports only index/offset "
-              "address values, i32/f32 scalar splat values, and "
-              "vector<4xi1>/vector<4xi32>/vector<4xf32>/vector<16xi1>/"
-              "vector<16xi32>/vector<16xf32> values"));
+  return loom_low_lower_emit_source_type_unsupported(
+      context, source_op, IREE_SV("source"), source_type);
 }
 
 static iree_status_t loom_x86_map_avx512_argument(

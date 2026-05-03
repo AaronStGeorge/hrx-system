@@ -114,11 +114,8 @@ iree_status_t loom_test_low_lower_map_type(void* user_data,
     return loom_test_low_make_register_type(context, IREE_SV("test.i8"), 16,
                                             out_low_type);
   }
-  return loom_low_lower_emit_reject(
-      context, source_op, IREE_SV("type"), IREE_SV("source"),
-      IREE_SV("test lowering only maps i1, i8, i32, f32, index, offset, "
-              "vector<4xi1>, vector<4xi32>, vector<4xf32>, and "
-              "vector<16xi8>"));
+  return loom_low_lower_emit_source_type_unsupported(
+      context, source_op, IREE_SV("source"), source_type);
 }
 
 iree_status_t loom_test_low_lower_map_argument(

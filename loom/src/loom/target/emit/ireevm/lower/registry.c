@@ -33,9 +33,8 @@ static iree_status_t loom_ireevm_map_type(void* user_data,
   if (loom_ireevm_type_is_i1_or_i32(source_type)) {
     return loom_ireevm_make_vm_i32_register_type(context, out_low_type);
   }
-  return loom_low_lower_emit_reject(
-      context, source_op, IREE_SV("type"), IREE_SV("source"),
-      IREE_SV("IREE VM lowering currently supports only i1/i32 scalar values"));
+  return loom_low_lower_emit_source_type_unsupported(
+      context, source_op, IREE_SV("source"), source_type);
 }
 
 static const loom_low_lower_rule_set_t* const kIreeVmRuleSets[] = {

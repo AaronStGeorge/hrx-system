@@ -621,10 +621,12 @@ iree_status_t loom_low_lower_make_register_type(
     loom_low_lower_context_t* context, uint16_t reg_class_id,
     uint32_t unit_count, loom_type_t* out_type);
 
-// Resolves a stable descriptor ID against the selected descriptor set.
+// Resolves a required stable descriptor ID against the selected descriptor set.
 //
 // Planning paths should resolve once and store the resulting row in their
-// selected plan instead of making emission perform descriptor lookup.
+// selected plan instead of making emission perform descriptor lookup. Missing
+// descriptors are generated policy/table invariant failures; optional planning
+// and feature probing must use loom_low_lower_resolve_descriptor_if_present.
 iree_status_t loom_low_lower_resolve_descriptor(
     loom_low_lower_context_t* context, uint64_t descriptor_id,
     loom_low_lower_resolved_descriptor_t* out_descriptor);
@@ -641,7 +643,8 @@ iree_status_t loom_low_lower_resolve_descriptor_row(
 // Resolves a stable descriptor ID when it is present in the selected descriptor
 // set.
 //
-// Missing descriptors are target capability misses and set |out_present| false.
+// Missing descriptors set |out_present| false. Use this only for optional
+// planning and target feature selection where absence is a normal false branch.
 // Malformed descriptor rows and allocation failures are infrastructure errors.
 iree_status_t loom_low_lower_resolve_descriptor_if_present(
     loom_low_lower_context_t* context, uint64_t descriptor_id,
@@ -707,6 +710,12 @@ iree_status_t loom_low_lower_emit_reject(loom_low_lower_context_t* context,
                                          iree_string_view_t subject_kind,
                                          iree_string_view_t subject_name,
                                          iree_string_view_t reason);
+
+// Emits ERR_TARGET_070 for a source value type rejected by the active
+// target-low policy.
+iree_status_t loom_low_lower_emit_source_type_unsupported(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    iree_string_view_t field_name, loom_type_t actual_type);
 
 // Emits a generated structured lowering diagnostic.
 iree_status_t loom_low_lower_emit_error_ref(

@@ -573,16 +573,8 @@ iree_status_t loom_amdgpu_map_type(void* user_data,
                                           LOOM_AMDGPU_REG_CLASS_ID_VGPR,
                                           packed_register_count, out_low_type);
   }
-  return loom_low_lower_emit_reject(
-      context, source_op, IREE_SV("type"), IREE_SV("source"),
-      IREE_SV("AMDGPU lowering currently supports only i1, i32, f16, bf16, "
-              "and f32 scalar values, "
-              "address scalar values, rank-1 static i32/f32 vectors with "
-              "1 to 8 lanes, rank-1 static i1 mask vectors with 1 to 8 lanes, "
-              "rank-1 static f16/bf16 vectors that fit in 1 to 8 packed "
-              "32-bit registers, "
-              "and rank-1 static integer vectors that fit in 1 to 4 packed "
-              "32-bit registers"));
+  return loom_low_lower_emit_source_type_unsupported(
+      context, source_op, IREE_SV("source"), source_type);
 }
 
 iree_status_t loom_amdgpu_map_value(void* user_data,

@@ -1220,6 +1220,25 @@ ERR_TARGET_069 = ErrorDef(
     params=_TARGET_CONTEXT_PARAMS,
 )
 
+# ERR_TARGET_070: Target-low policy has no source value type mapping.
+ERR_TARGET_070 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=70,
+    severity=Severity.ERROR,
+    summary="Target-low policy has no source value type mapping.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' field '{field_name}' in '@{function_name}': "
+        "source type {actual_type} has no target-low register mapping in the "
+        "selected policy"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("field_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -1290,4 +1309,5 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_067,
     ERR_TARGET_068,
     ERR_TARGET_069,
+    ERR_TARGET_070,
 )
