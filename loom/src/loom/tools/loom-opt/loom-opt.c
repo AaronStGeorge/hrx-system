@@ -657,8 +657,8 @@ static iree_status_t loom_opt_write_pass_reproducer(
 static iree_status_t loom_opt_run_passes(
     const loom_target_low_descriptor_registry_t* low_registry,
     iree_arena_block_pool_t* block_pool, loom_run_module_t* run_module,
-    loom_pass_report_t* report, bool* out_execution_started,
-    iree_allocator_t allocator) {
+    loom_diagnostic_sink_t diagnostic_sink, loom_pass_report_t* report,
+    bool* out_execution_started, iree_allocator_t allocator) {
   loom_module_t* module = run_module->module;
   *out_execution_started = false;
   iree_flag_string_list_t passes = FLAG_pass_list();
@@ -679,6 +679,7 @@ static iree_status_t loom_opt_run_passes(
   loom_opt_diagnostic_emitter_t pass_emitter = {
       .module = module,
       .source_resolver = source_resolver,
+      .diagnostic_sink = diagnostic_sink,
       .emitter = LOOM_EMITTER_PASS,
   };
 
@@ -980,7 +981,7 @@ int main(int argc, char** argv) {
   if (iree_status_is_ok(status) && !metadata_only) {
     pass_pipeline_status = loom_opt_run_passes(
         loom_run_session_low_descriptor_registry(&run_session),
-        loom_run_session_block_pool(&run_session), &run_module,
+        loom_run_session_block_pool(&run_session), &run_module, diagnostic_sink,
         pass_report_initialized ? &pass_report : NULL, &pass_execution_started,
         allocator);
     status = pass_pipeline_status;
