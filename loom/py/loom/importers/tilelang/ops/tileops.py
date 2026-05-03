@@ -1455,14 +1455,19 @@ def _reduce_identity(
     reduce_spec: TileReduceSpec,
     element_type: Type,
 ) -> int | float | None:
+    is_float = _is_float_type(element_type)
     if reduce_spec.source_kind == "absmax":
-        return 0
+        return 0.0 if is_float else 0
     kind = reduce_spec.combiner
     element_text = str(element_type)
     bit_width = _integer_bit_width(element_text)
-    if kind in ("addf", "addi", "ori", "xori"):
+    if kind == "addf":
+        return 0.0
+    if kind in ("addi", "ori", "xori"):
         return 0
-    if kind in ("mulf", "muli"):
+    if kind == "mulf":
+        return 1.0
+    if kind == "muli":
         return 1
     if kind == "andi":
         return -1

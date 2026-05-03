@@ -223,7 +223,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_kernel") @tileop_
     view.store %copy, %local[%i0] : f32, view<4xf32, %layout>
   }
   %load = vector.load %local[%c0] : view<4xf32, %layout> -> vector<4xf32>
-  %identity = scalar.constant 0 : f32
+  %identity = scalar.constant 0.0 : f32
   %reduce = vector.reduce<addf> %load, %identity : vector<4xf32>, f32
   view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
   %copy_2 = view.load %out[%c0] : view<1xf32, %layout> -> f32
@@ -289,7 +289,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_abssum_kernel") @tile
     view.store %copy, %local[%i0] : f32, view<4xf32, %layout>
   }
   %load = vector.load %local[%c0] : view<4xf32, %layout> -> vector<4xf32>
-  %identity = scalar.constant 0 : f32
+  %identity = scalar.constant 0.0 : f32
   %abs = vector.absf %load : vector<4xf32>
   %reduce = vector.reduce<addf> %abs, %identity : vector<4xf32>, f32
   view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
@@ -356,7 +356,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_kernel") @tile
     view.store %copy, %local[%i0] : f32, view<4xf32, %layout>
   }
   %load = vector.load %local[%c0] : view<4xf32, %layout> -> vector<4xf32>
-  %identity = scalar.constant 0 : f32
+  %identity = scalar.constant 0.0 : f32
   %abs = vector.absf %load : vector<4xf32>
   %reduce = vector.reduce<maxnumf> %abs, %identity : vector<4xf32>, f32
   view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
@@ -422,7 +422,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_2d_kernel") @tile
     }
   }
   scf.for %i0 = [%c0 to %c2 step %c1] {
-    %identity = scalar.constant 0 : f32
+    %identity = scalar.constant 0.0 : f32
     %reduce = scf.for %r = [%c0 to %c4 step %c1](%acc = %identity : f32) -> (f32) {
       %reduce_value = view.load %local[%i0, %r] : view<2x4xf32, %layout> -> f32
       %addf = scalar.addf %acc, %reduce_value : f32

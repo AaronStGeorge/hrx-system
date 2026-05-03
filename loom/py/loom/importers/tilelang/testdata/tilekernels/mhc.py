@@ -524,7 +524,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_sinkhorn_kernel") @mhc_sinkhorn
   }
   scf.for %i0 = [%c0 to %c1 step %c1] {
     scf.for %i1 = [%c0 to %c2 step %c1] {
-      %identity_2 = scalar.constant 0 : f32
+      %identity_2 = scalar.constant 0.0 : f32
       %reduce_2 = scf.for %r = [%c0 to %c2 step %c1](%acc = %identity_2 : f32) -> (f32) {
         %reduce_value_2 = view.load %comb_frag[%i0, %i1, %r] : view<1x2x2xf32, %layout> -> f32
         %addf = scalar.addf %acc, %reduce_value_2 : f32
@@ -547,7 +547,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_sinkhorn_kernel") @mhc_sinkhorn
   }
   scf.for %i0 = [%c0 to %c1 step %c1] {
     scf.for %i1 = [%c0 to %c2 step %c1] {
-      %identity_3 = scalar.constant 0 : f32
+      %identity_3 = scalar.constant 0.0 : f32
       %reduce_3 = scf.for %r = [%c0 to %c2 step %c1](%acc = %identity_3 : f32) -> (f32) {
         %reduce_value_3 = view.load %comb_frag[%i0, %r, %i1] : view<1x2x2xf32, %layout> -> f32
         %addf_3 = scalar.addf %acc, %reduce_value_3 : f32
@@ -571,7 +571,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_sinkhorn_kernel") @mhc_sinkhorn
   scf.for %v = [%c0 to %c1 step %c1] {
     scf.for %i0 = [%c0 to %c1 step %c1] {
       scf.for %i1 = [%c0 to %c2 step %c1] {
-        %identity_4 = scalar.constant 0 : f32
+        %identity_4 = scalar.constant 0.0 : f32
         %reduce_4 = scf.for %r = [%c0 to %c2 step %c1](%acc = %identity_4 : f32) -> (f32) {
           %reduce_value_4 = view.load %comb_frag[%i0, %i1, %r] : view<1x2x2xf32, %layout> -> f32
           %addf_5 = scalar.addf %acc, %reduce_value_4 : f32
@@ -594,7 +594,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_sinkhorn_kernel") @mhc_sinkhorn
     }
     scf.for %i0 = [%c0 to %c1 step %c1] {
       scf.for %i1 = [%c0 to %c2 step %c1] {
-        %identity_5 = scalar.constant 0 : f32
+        %identity_5 = scalar.constant 0.0 : f32
         %reduce_5 = scf.for %r = [%c0 to %c2 step %c1](%acc = %identity_5 : f32) -> (f32) {
           %reduce_value_5 = view.load %comb_frag[%i0, %r, %i1] : view<1x2x2xf32, %layout> -> f32
           %addf_7 = scalar.addf %acc, %reduce_value_5 : f32
