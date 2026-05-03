@@ -124,6 +124,7 @@ def _import_parsed_module(
         function_operation,
         bindings,
         target_format=target_format,
+        artifact_symbol=symbol_name(executable_operation),
         export_name=export_name,
         export_ordinal=parse_export_ordinal(export_operation),
         function_name=function_name,
@@ -344,6 +345,7 @@ def build_loom_module(
     bindings: tuple[Binding, ...],
     *,
     target_format: str | None,
+    artifact_symbol: str | None,
     export_name: str | None,
     export_ordinal: int | None,
     function_name: str,
@@ -360,6 +362,7 @@ def build_loom_module(
         KernelModuleSpec(
             target_preset=target_preset,
             target_symbol=target_symbol,
+            artifact_symbol=artifact_symbol,
             export_symbol=kernel_name,
             export_ordinal=export_ordinal,
             launch_config=KernelLaunchConfigSpec(workgroup_size=workgroup),

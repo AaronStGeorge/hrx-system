@@ -97,6 +97,7 @@ iree_py_test(
   ARGS
     "tilelang"
     "--fail-on-skip"
+    "--loom-opt=$<TARGET_FILE:loom_src_loom_tools_loom-opt_loom-opt>"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/allocations.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/analysis.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/importers/tilelang/testdata/control_flow.py"

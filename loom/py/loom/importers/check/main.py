@@ -170,7 +170,8 @@ iree-bazel-test --config=asan --config=<importer-config> \\
 
 `iree-bazel-test` detects this flag and uses Bazel's standalone TestRunner
 strategy so update-capable tests can rewrite checked-in fixture files. The
-fixture runner still fails if an importer crashes or produces a failed case.
+fixture runner still fails if an importer crashes, produces a failed case, or
+emits Loom IR rejected by the production verifier.
 
 ### Fixture shape
 
@@ -184,6 +185,11 @@ the expected Loom IR by hand.
 Importer check file sets belong in BUILD filegroups under the importer they
 exercise and are passed to the test runner with `$(locations ...)`. Do not
 hardcode testdata paths in Python tests.
+
+Checked-in importer tests also provide `loom-opt` to the check tool so
+generated Loom IR is verified before expected-output comparison or `--update`
+rewrites. Direct `iree-bazel-run` use tries to resolve the bundled tool from
+runfiles, and `--loom-opt` can be passed explicitly for non-Bazel debugging.
 
 Expected diagnostics use loom-check-style source annotations:
 
@@ -242,6 +248,14 @@ def _add_common_check_arguments(parser: argparse.ArgumentParser) -> None:
         "--json",
         action="store_true",
         help="emit machine-readable check results",
+    )
+    parser.add_argument(
+        "--loom-opt",
+        type=Path,
+        help=(
+            "path to loom-opt used to verify generated Loom IR before "
+            "comparing or updating expected output"
+        ),
     )
 
 

@@ -17,6 +17,7 @@ iree_py_library(
     "__init__.py"
     "annotations.py"
     "cases.py"
+    "loom_verifier.py"
     "main.py"
     "python.py"
     "registry.py"

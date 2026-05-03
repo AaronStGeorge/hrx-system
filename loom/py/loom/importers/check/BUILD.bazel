@@ -35,6 +35,7 @@ py_library(
         "__init__.py",
         "annotations.py",
         "cases.py",
+        "loom_verifier.py",
         "main.py",
         "python.py",
         "registry.py",
@@ -47,6 +48,8 @@ py_library(
 py_binary(
     name = "loom_import_check",
     srcs = ["__main__.py"],
+    data = ["//loom/src/loom/tools/loom-opt"],
+    legacy_create_init = False,
     main = "__main__.py",
     deps = [
         ":check",

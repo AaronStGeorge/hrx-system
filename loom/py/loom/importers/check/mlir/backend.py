@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from loom.importers.check.loom_verifier import LoomOutputVerifier
 from loom.importers.check.registry import Availability, has_module
 from loom.importers.check.results import CheckResult
 
@@ -61,6 +62,7 @@ class MlirBackend:
             prefer_abi3_extensions=args.prefer_abi3_extensions,
             update=args.update,
             case_filter=args.case_filter,
+            output_verifier=LoomOutputVerifier.resolve(args.loom_opt),
         )
         return tuple(
             result

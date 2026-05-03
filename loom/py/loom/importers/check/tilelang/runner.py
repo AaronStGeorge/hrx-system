@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from loom.importers.check.loom_verifier import LoomOutputVerifier
 from loom.importers.check.python import (
     PythonCheckCase,
     PythonCheckOptions,
@@ -38,6 +39,7 @@ class TileLangCheckOptions:
     target_preset: str | None = None
     case_filter: str | None = None
     verify_structure: bool = True
+    output_verifier: LoomOutputVerifier | None = None
 
 
 def run_tilelang_check(
@@ -50,6 +52,7 @@ def run_tilelang_check(
         options=PythonCheckOptions(
             update=options.update,
             case_filter=options.case_filter,
+            output_verifier=options.output_verifier,
         ),
         is_case=is_tilelang_case,
         invoke=lambda case: _invoke_tilelang_case(case, options),

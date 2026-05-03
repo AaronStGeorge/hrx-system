@@ -22,6 +22,7 @@ from loom.importers.check.cases import (
     case_matches_filter,
     parse_inline_cases,
 )
+from loom.importers.check.loom_verifier import LoomOutputVerifier
 from loom.importers.check.results import CheckResult, unified_diff
 from loom.importers.check.updates import format_updated_source
 
@@ -34,6 +35,7 @@ class MlirCheckOptions:
     prefer_abi3_extensions: bool = False
     update: bool = False
     case_filter: str | None = None
+    output_verifier: LoomOutputVerifier | None = None
 
 
 def run_mlir_check(
@@ -182,6 +184,10 @@ def import_mlir_case(
             actual_diagnostics=(),
             stdout=stdout,
         )
+    if options.output_verifier is not None:
+        verify_result = options.output_verifier.verify(case, stdout)
+        if verify_result is not None:
+            return verify_result
     if stdout == case.expected:
         return CheckResult(
             path=case.path,

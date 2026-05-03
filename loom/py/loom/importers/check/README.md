@@ -49,7 +49,8 @@ standalone TestRunner strategy so update-capable tests can rewrite checked-in
 fixture files. The `--update` flag is consumed by the tiny pytest-style runner
 so it is not treated as another module name. Fixture tests that support update
 mode then rewrite their inline `# ----` expected-output blocks and still fail
-if the importer crashes or reports a failed case.
+if the importer crashes, reports a failed case, or emits Loom IR rejected by
+the production verifier.
 
 Python fixture files keep shared imports at the top, split cases with
 `# ====`, and compare imported Loom IR against the inline `# ----` block.
@@ -62,6 +63,11 @@ Importer check file sets are owned by BUILD filegroups under the importer they
 exercise. Add new checked fixture files to the relevant importer filegroup and
 pass them through the test target with `$(locations ...)`; do not hardcode
 testdata paths inside Python tests.
+
+Checked-in importer tests should provide `loom-opt` to the check tool so
+generated Loom IR is verified before expected output comparison or `--update`
+rewrites. Bazel tests pass the tool with `--loom-opt=$(location ...)`; direct
+`iree-bazel-run` use also tries to resolve the bundled tool from runfiles.
 
 Expected diagnostics use source annotations instead of bespoke test callbacks:
 

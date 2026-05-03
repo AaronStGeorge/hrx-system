@@ -37,7 +37,9 @@ hal.executable private @smoke {
 // ----
 target.generic<reference> @rocm_hsaco_fb
 
-kernel.def target(@rocm_hsaco_fb) export("vector_reduce_amdgpu") ordinal(0) @vector_reduce_amdgpu(%binding0: buffer, %binding1: buffer) {
+target.artifact @smoke target(@rocm_hsaco_fb) {abi = hal_executable, artifact_format = elf}
+
+kernel.def target(@rocm_hsaco_fb) export("vector_reduce_amdgpu") artifact(@smoke) ordinal(0) @vector_reduce_amdgpu(%binding0: buffer, %binding1: buffer) {
   %wg_count_x = index.constant 1 : index
   %wg_count_y = index.constant 1 : index
   %wg_count_z = index.constant 1 : index
@@ -92,7 +94,9 @@ hal.executable private @barrier_smoke {
 // ----
 target.generic<reference> @rocm_hsaco_fb
 
-kernel.def target(@rocm_hsaco_fb) export("barrier_smoke") ordinal(0) @barrier_smoke(%binding0: buffer) {
+target.artifact @barrier_smoke_artifact target(@rocm_hsaco_fb) {abi = hal_executable, artifact_format = elf}
+
+kernel.def target(@rocm_hsaco_fb) export("barrier_smoke") artifact(@barrier_smoke_artifact) ordinal(0) @barrier_smoke(%binding0: buffer) {
   %wg_count_x = index.constant 1 : index
   %wg_count_y = index.constant 1 : index
   %wg_count_z = index.constant 1 : index

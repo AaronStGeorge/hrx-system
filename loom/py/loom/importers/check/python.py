@@ -27,6 +27,7 @@ from loom.importers.check.cases import (
     case_matches_filter,
     parse_inline_cases,
 )
+from loom.importers.check.loom_verifier import LoomOutputVerifier
 from loom.importers.check.results import CheckResult, unified_diff
 from loom.importers.check.updates import format_updated_source
 
@@ -44,6 +45,7 @@ class PythonCheckOptions:
 
     update: bool = False
     case_filter: str | None = None
+    output_verifier: LoomOutputVerifier | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,6 +235,10 @@ def run_python_case(
             actual_diagnostics=(),
             stdout=stdout,
         )
+    if options.output_verifier is not None:
+        verify_result = options.output_verifier.verify(check_case, stdout)
+        if verify_result is not None:
+            return verify_result
     if stdout == check_case.expected:
         return CheckResult(
             path=check_case.path,

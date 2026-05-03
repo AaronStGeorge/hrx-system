@@ -68,6 +68,7 @@ if(LOOM_IMPORTER_MLIR)
 py_binary(
     name = "loom_import_mlir",
     srcs = ["__main__.py"],
+    legacy_create_init = False,
     main = "__main__.py",
     target_compatible_with = _MLIR_IMPORTER_COMPATIBLE,
     deps = [
@@ -95,6 +96,7 @@ py_test(
         "loom.importers.mlir.names_test",
         "loom.importers.mlir.types_test",
     ],
+    legacy_create_init = False,
     main = "pytest_style_runner.py",
     target_compatible_with = _MLIR_IMPORTER_COMPATIBLE,
     deps = [":mlir"],
@@ -113,9 +115,14 @@ py_test(
     args = [
         "mlir",
         "--fail-on-skip",
+        "--loom-opt=$(location //loom/src/loom/tools/loom-opt:loom-opt)",
         "$(locations :import_tests)",
     ],
-    data = [":import_tests"],
+    data = [
+        ":import_tests",
+        "//loom/src/loom/tools/loom-opt",
+    ],
+    legacy_create_init = False,
     main = "import_test.py",
     target_compatible_with = _MLIR_IMPORTER_COMPATIBLE,
     deps = [
