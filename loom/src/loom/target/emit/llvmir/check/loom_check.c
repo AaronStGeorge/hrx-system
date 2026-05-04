@@ -141,13 +141,10 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_check_requirements(
     loom_llvmir_target_registry_t target_registry;
     loom_llvmir_target_registry_initialize(&target_registry);
     const loom_llvmir_target_profile_provider_t* profile_provider = NULL;
-    iree_status_t status = loom_llvmir_target_registry_lookup_profile_provider(
-        &target_registry, profile_name, NULL, &profile_provider);
-    if (iree_status_is_ok(status)) {
+    if (loom_llvmir_target_registry_lookup_profile_provider(
+            &target_registry, profile_name, NULL, &profile_provider)) {
       IREE_RETURN_IF_ERROR(loom_llvmir_loom_check_require_llc_provider(
           test_case, profile_provider, result, out_continue_execution));
-    } else {
-      iree_status_free(status);
     }
   }
   return iree_ok_status();
@@ -562,8 +559,13 @@ static iree_status_t loom_llvmir_loom_check_resolve_bundle(
     return loom_llvmir_loom_check_resolve_target_bundle(
         request, symbol_name, out_symbol_storage, out_bundle, out_target_op);
   }
-  return loom_llvmir_target_registry_lookup_bundle(
-      &target_registry, request->target_options, out_bundle);
+  if (loom_llvmir_target_registry_lookup_bundle(
+          &target_registry, request->target_options, out_bundle)) {
+    return iree_ok_status();
+  }
+  return iree_make_status(
+      IREE_STATUS_INVALID_ARGUMENT, "unknown LLVMIR target profile '%.*s'",
+      (int)request->target_options.size, request->target_options.data);
 }
 
 static iree_status_t loom_llvmir_loom_check_emit_provider_execute(
@@ -578,6 +580,9 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_execute(
   const loom_op_t* target_op = NULL;
   IREE_RETURN_IF_ERROR(loom_llvmir_loom_check_resolve_bundle(
       request, &symbol_bundle_storage, &target_bundle, &target_op));
+  if (target_bundle == NULL) {
+    return iree_ok_status();
+  }
 
   loom_llvmir_target_registry_t target_registry;
   loom_llvmir_target_registry_initialize(&target_registry);
@@ -614,8 +619,8 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_execute(
   const loom_llvmir_target_profile_t* profile = &profile_storage.profile;
 
   loom_llvmir_lowering_provider_list_t lowering_providers;
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_registry_select_lowering_providers(
-      &target_registry, profile, &lowering_providers));
+  loom_llvmir_lowering_provider_list_select(projected_provider,
+                                            &lowering_providers);
 
   loom_llvmir_lowering_options_t options = {
       .target_profile = profile,

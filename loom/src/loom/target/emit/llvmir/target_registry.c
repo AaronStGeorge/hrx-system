@@ -54,9 +54,6 @@ bool loom_llvmir_target_registry_project_bundle(
        ++provider_ordinal) {
     const loom_llvmir_target_profile_provider_t* provider =
         registry->profile_registry.providers[provider_ordinal];
-    if (provider->project_bundle == NULL) {
-      continue;
-    }
     const loom_llvmir_target_profile_t* profile = NULL;
     if (provider->project_bundle(bundle, &profile)) {
       *out_profile = profile;
@@ -69,30 +66,24 @@ bool loom_llvmir_target_registry_project_bundle(
   return false;
 }
 
-iree_status_t loom_llvmir_target_registry_lookup_bundle(
+bool loom_llvmir_target_registry_lookup_bundle(
     const loom_llvmir_target_registry_t* registry, iree_string_view_t name,
     const loom_target_bundle_t** out_bundle) {
   *out_bundle = NULL;
-  if (registry->bundle_count == 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "LLVMIR target registry has no bundles");
-  }
 
   name = iree_string_view_trim(name);
   if (iree_string_view_is_empty(name)) {
     *out_bundle = registry->bundles[0];
-    return iree_ok_status();
+    return *out_bundle != NULL;
   }
   for (iree_host_size_t i = 0; i < registry->bundle_count; ++i) {
     const loom_target_bundle_t* bundle = registry->bundles[i];
     if (iree_string_view_equal(name, bundle->name)) {
       *out_bundle = bundle;
-      return iree_ok_status();
+      return true;
     }
   }
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "unknown LLVMIR target profile '%.*s'",
-                          (int)name.size, name.data);
+  return false;
 }
 
 void loom_llvmir_target_legality_provider_list_select(
@@ -112,32 +103,24 @@ void loom_llvmir_target_legality_provider_list_select(
   }
 }
 
-iree_status_t loom_llvmir_target_registry_select_lowering_providers(
-    const loom_llvmir_target_registry_t* registry,
-    const loom_llvmir_target_profile_t* profile,
+void loom_llvmir_lowering_provider_list_select(
+    const loom_llvmir_target_profile_provider_t* profile_provider,
     loom_llvmir_lowering_provider_list_t* out_providers) {
   *out_providers = (loom_llvmir_lowering_provider_list_t){0};
-
-  const loom_llvmir_target_profile_provider_t* provider = NULL;
-  if (registry->profile_registry.default_profile != NULL &&
-      iree_string_view_equal(
-          profile->name, registry->profile_registry.default_profile->name)) {
-    return iree_ok_status();
+  if (profile_provider == NULL) {
+    return;
   }
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_registry_lookup_profile_provider(
-      registry, profile->name, NULL, &provider));
-  if (provider == loom_llvmir_x86_target_profile_provider()) {
+  if (profile_provider == loom_llvmir_x86_target_profile_provider()) {
     out_providers->providers[out_providers->provider_count++] =
         loom_llvmir_x86_lowering_provider();
   }
-  if (provider == loom_llvmir_amdgpu_target_profile_provider()) {
+  if (profile_provider == loom_llvmir_amdgpu_target_profile_provider()) {
     out_providers->providers[out_providers->provider_count++] =
         loom_llvmir_amdgpu_lowering_provider();
   }
-  return iree_ok_status();
 }
 
-iree_status_t loom_llvmir_target_registry_lookup_profile(
+bool loom_llvmir_target_registry_lookup_profile(
     const loom_llvmir_target_registry_t* registry,
     iree_string_view_t profile_name,
     const loom_llvmir_target_profile_t** out_profile) {
@@ -145,7 +128,7 @@ iree_status_t loom_llvmir_target_registry_lookup_profile(
                                                     profile_name, out_profile);
 }
 
-iree_status_t loom_llvmir_target_registry_lookup_profile_provider(
+bool loom_llvmir_target_registry_lookup_profile_provider(
     const loom_llvmir_target_registry_t* registry,
     iree_string_view_t profile_name,
     const loom_llvmir_target_profile_t** out_profile,
@@ -156,8 +139,10 @@ iree_status_t loom_llvmir_target_registry_lookup_profile_provider(
   *out_provider = NULL;
 
   const loom_llvmir_target_profile_t* profile = NULL;
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_registry_lookup_profile(
-      registry, profile_name, &profile));
+  if (!loom_llvmir_target_registry_lookup_profile(registry, profile_name,
+                                                  &profile)) {
+    return false;
+  }
 
   for (iree_host_size_t provider_ordinal = 0;
        provider_ordinal < registry->profile_registry.provider_count;
@@ -174,15 +159,11 @@ iree_status_t loom_llvmir_target_registry_lookup_profile_provider(
           *out_profile = profile;
         }
         *out_provider = provider;
-        return iree_ok_status();
+        return true;
       }
     }
   }
-
-  return iree_make_status(
-      IREE_STATUS_INVALID_ARGUMENT,
-      "LLVMIR target profile '%.*s' is not owned by a registered provider",
-      (int)profile->name.size, profile->name.data);
+  return false;
 }
 
 bool loom_llvmir_target_registry_llc_requirement_provider(
@@ -191,9 +172,6 @@ bool loom_llvmir_target_registry_llc_requirement_provider(
     const loom_llvmir_target_profile_provider_t** out_provider) {
   if (out_provider != NULL) {
     *out_provider = NULL;
-  }
-  if (registry == NULL) {
-    return false;
   }
   requirement = iree_string_view_trim(requirement);
   if (!iree_string_view_consume_prefix(&requirement, IREE_SV("llc-"))) {
@@ -204,9 +182,6 @@ bool loom_llvmir_target_registry_llc_requirement_provider(
        ++i) {
     const loom_llvmir_target_profile_provider_t* provider =
         registry->profile_registry.providers[i];
-    if (provider == NULL) {
-      continue;
-    }
     if (iree_string_view_is_empty(provider->llc_target_name)) {
       continue;
     }

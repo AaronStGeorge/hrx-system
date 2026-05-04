@@ -48,8 +48,8 @@ typedef struct loom_llvmir_target_profile_registry_t {
 } loom_llvmir_target_profile_registry_t;
 
 // Looks up a target profile by name in |registry|. Empty names resolve to the
-// registry default profile.
-iree_status_t loom_llvmir_target_profile_registry_lookup(
+// registry default profile. Returns false when no linked profile matches.
+bool loom_llvmir_target_profile_registry_lookup(
     const loom_llvmir_target_profile_registry_t* registry,
     iree_string_view_t profile_name,
     const loom_llvmir_target_profile_t** out_profile);

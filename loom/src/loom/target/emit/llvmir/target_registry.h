@@ -64,8 +64,8 @@ void loom_llvmir_target_registry_initialize(
     loom_llvmir_target_registry_t* out_registry);
 
 // Looks up a generic target bundle by profile/bundle name. Empty names resolve
-// to the registry default bundle.
-iree_status_t loom_llvmir_target_registry_lookup_bundle(
+// to the registry default bundle. Returns false when no linked bundle matches.
+bool loom_llvmir_target_registry_lookup_bundle(
     const loom_llvmir_target_registry_t* registry, iree_string_view_t name,
     const loom_target_bundle_t** out_bundle);
 
@@ -83,21 +83,22 @@ bool loom_llvmir_target_registry_project_bundle(
     const loom_llvmir_target_profile_t** out_profile,
     const loom_llvmir_target_profile_provider_t** out_provider);
 
-// Selects target-specific lowering providers required by |profile|.
-iree_status_t loom_llvmir_target_registry_select_lowering_providers(
-    const loom_llvmir_target_registry_t* registry,
-    const loom_llvmir_target_profile_t* profile,
+// Selects target-specific lowering providers owned by |profile_provider|.
+void loom_llvmir_lowering_provider_list_select(
+    const loom_llvmir_target_profile_provider_t* profile_provider,
     loom_llvmir_lowering_provider_list_t* out_providers);
 
-// Looks up a target profile in |registry|.
-iree_status_t loom_llvmir_target_registry_lookup_profile(
+// Looks up a target profile in |registry|. Returns false when no linked profile
+// matches.
+bool loom_llvmir_target_registry_lookup_profile(
     const loom_llvmir_target_registry_t* registry,
     iree_string_view_t profile_name,
     const loom_llvmir_target_profile_t** out_profile);
 
 // Looks up the provider that owns |profile_name| in |registry|. The profile
-// output is optional.
-iree_status_t loom_llvmir_target_registry_lookup_profile_provider(
+// output is optional. Returns false when the profile is unknown or not owned by
+// a linked provider.
+bool loom_llvmir_target_registry_lookup_profile_provider(
     const loom_llvmir_target_registry_t* registry,
     iree_string_view_t profile_name,
     const loom_llvmir_target_profile_t** out_profile,

@@ -6,7 +6,7 @@
 
 #include "loom/target/emit/llvmir/target_presets.h"
 
-iree_status_t loom_llvmir_target_profile_registry_lookup(
+bool loom_llvmir_target_profile_registry_lookup(
     const loom_llvmir_target_profile_registry_t* registry,
     iree_string_view_t profile_name,
     const loom_llvmir_target_profile_t** out_profile) {
@@ -14,17 +14,8 @@ iree_status_t loom_llvmir_target_profile_registry_lookup(
 
   profile_name = iree_string_view_trim(profile_name);
   if (iree_string_view_is_empty(profile_name)) {
-    if (registry->default_profile == NULL) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "LLVM target profile registry has no default");
-    }
     *out_profile = registry->default_profile;
-    return iree_ok_status();
-  }
-
-  if (registry->provider_count > 0 && registry->providers == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "LLVM target profile registry has no providers");
+    return *out_profile != NULL;
   }
 
   for (iree_host_size_t provider_ordinal = 0;
@@ -37,12 +28,9 @@ iree_status_t loom_llvmir_target_profile_registry_lookup(
           provider->profiles[profile_ordinal];
       if (iree_string_view_equal(profile_name, profile->name)) {
         *out_profile = profile;
-        return iree_ok_status();
+        return true;
       }
     }
   }
-
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "unknown LLVMIR target profile '%.*s'",
-                          (int)profile_name.size, profile_name.data);
+  return false;
 }

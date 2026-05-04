@@ -41,9 +41,8 @@ std::string WriteText(const loom_llvmir_module_t* module) {
   return text;
 }
 
-iree_status_t LookupRegisteredProfile(
-    iree_string_view_t profile_name,
-    const loom_llvmir_target_profile_t** out_profile) {
+bool LookupRegisteredProfile(iree_string_view_t profile_name,
+                             const loom_llvmir_target_profile_t** out_profile) {
   const loom_llvmir_target_profile_provider_t* providers[] = {
       loom_llvmir_x86_target_profile_provider(),
       loom_llvmir_amdgpu_target_profile_provider(),
@@ -327,23 +326,21 @@ TEST(LlvmIrTargetEnvTest, DerivesAmdgpuHalProfileFromGenericBundle) {
 
 TEST(LlvmIrTargetEnvTest, LooksUpRegisteredProfilesByName) {
   const loom_llvmir_target_profile_t* profile = nullptr;
-  IREE_ASSERT_OK(LookupRegisteredProfile(IREE_SV(""), &profile));
+  ASSERT_TRUE(LookupRegisteredProfile(IREE_SV(""), &profile));
   EXPECT_EQ(profile, loom_llvmir_target_profile_x86_64_object());
 
   profile = nullptr;
-  IREE_ASSERT_OK(LookupRegisteredProfile(IREE_SV("x86_64-object"), &profile));
+  ASSERT_TRUE(LookupRegisteredProfile(IREE_SV("x86_64-object"), &profile));
   EXPECT_EQ(profile, loom_llvmir_target_profile_x86_64_object());
 
   profile = nullptr;
-  IREE_ASSERT_OK(LookupRegisteredProfile(IREE_SV("amdgpu-hal"), &profile));
+  ASSERT_TRUE(LookupRegisteredProfile(IREE_SV("amdgpu-hal"), &profile));
   EXPECT_EQ(profile, loom_llvmir_target_profile_amdgpu_hal());
 }
 
 TEST(LlvmIrTargetEnvTest, RejectsUnknownRegisteredProfileName) {
   const loom_llvmir_target_profile_t* profile = nullptr;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      LookupRegisteredProfile(IREE_SV("spirv-vulkan"), &profile));
+  EXPECT_FALSE(LookupRegisteredProfile(IREE_SV("spirv-vulkan"), &profile));
   EXPECT_EQ(profile, nullptr);
 }
 
@@ -357,14 +354,13 @@ TEST(LlvmIrTargetEnvTest, RegistryOnlySeesExplicitProviders) {
   registry.provider_count = IREE_ARRAYSIZE(providers);
 
   const loom_llvmir_target_profile_t* profile = nullptr;
-  IREE_ASSERT_OK(loom_llvmir_target_profile_registry_lookup(
+  ASSERT_TRUE(loom_llvmir_target_profile_registry_lookup(
       &registry, IREE_SV("x86_64-object"), &profile));
   EXPECT_EQ(profile, loom_llvmir_target_profile_x86_64_object());
 
   profile = nullptr;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        loom_llvmir_target_profile_registry_lookup(
-                            &registry, IREE_SV("amdgpu-hal"), &profile));
+  EXPECT_FALSE(loom_llvmir_target_profile_registry_lookup(
+      &registry, IREE_SV("amdgpu-hal"), &profile));
   EXPECT_EQ(profile, nullptr);
 }
 
@@ -501,7 +497,7 @@ TEST(LlvmIrTargetEnvTest, BuildsLlcArgumentsFromTargetProfile) {
   ASSERT_EQ(arguments.count, 1u);
   EXPECT_EQ(ToString(arguments.values[0]), "-mtriple=x86_64-unknown-linux-gnu");
 
-  IREE_ASSERT_OK(
+  ASSERT_TRUE(
       LookupRegisteredProfile(IREE_SV("x86_64-packed-dot-object"), &profile));
   IREE_ASSERT_OK(loom_llvmir_target_profile_llc_arguments(profile, &arguments));
   ASSERT_EQ(arguments.count, 2u);

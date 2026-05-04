@@ -7,7 +7,6 @@
 #include "loom/target/emit/llvmir/target_registry.h"
 
 #include "iree/testing/gtest.h"
-#include "iree/testing/status_matchers.h"
 
 namespace loom {
 namespace {
@@ -45,14 +44,14 @@ TEST(LlvmIrTargetRegistryTest, LooksUpDefaultAndNativeBundles) {
   };
   for (const char* name : names) {
     const loom_target_bundle_t* bundle = nullptr;
-    IREE_ASSERT_OK(loom_llvmir_target_registry_lookup_bundle(
+    ASSERT_TRUE(loom_llvmir_target_registry_lookup_bundle(
         &registry, iree_make_cstring_view(name), &bundle));
     ASSERT_NE(bundle, nullptr) << name;
     EXPECT_TRUE(StringViewEqual(bundle->name, name)) << name;
   }
 
   const loom_target_bundle_t* default_bundle = nullptr;
-  IREE_ASSERT_OK(loom_llvmir_target_registry_lookup_bundle(
+  ASSERT_TRUE(loom_llvmir_target_registry_lookup_bundle(
       &registry, iree_string_view_empty(), &default_bundle));
   ASSERT_NE(default_bundle, nullptr);
   EXPECT_TRUE(StringViewEqual(default_bundle->name, "test-object"));
@@ -64,14 +63,14 @@ TEST(LlvmIrTargetRegistryTest, LooksUpNativeProfilesAndOwners) {
 
   const loom_llvmir_target_profile_t* profile = nullptr;
   const loom_llvmir_target_profile_provider_t* provider = nullptr;
-  IREE_ASSERT_OK(loom_llvmir_target_registry_lookup_profile_provider(
+  ASSERT_TRUE(loom_llvmir_target_registry_lookup_profile_provider(
       &registry, IREE_SV("x86_64-packed-dot-object"), &profile, &provider));
   ASSERT_NE(profile, nullptr);
   ASSERT_NE(provider, nullptr);
   EXPECT_TRUE(StringViewEqual(profile->name, "x86_64-packed-dot-object"));
   EXPECT_TRUE(StringViewEqual(provider->name, "x86"));
 
-  IREE_ASSERT_OK(loom_llvmir_target_registry_lookup_profile_provider(
+  ASSERT_TRUE(loom_llvmir_target_registry_lookup_profile_provider(
       &registry, IREE_SV("amdgpu-hal"), &profile, &provider));
   ASSERT_NE(profile, nullptr);
   ASSERT_NE(provider, nullptr);
@@ -84,7 +83,7 @@ TEST(LlvmIrTargetRegistryTest, SelectsLegalityAndLoweringProvidersByTarget) {
   loom_llvmir_target_registry_initialize(&registry);
 
   const loom_target_bundle_t* x86_bundle = nullptr;
-  IREE_ASSERT_OK(loom_llvmir_target_registry_lookup_bundle(
+  ASSERT_TRUE(loom_llvmir_target_registry_lookup_bundle(
       &registry, IREE_SV("x86_64-packed-dot-object"), &x86_bundle));
   const loom_llvmir_target_profile_t* profile = nullptr;
   const loom_llvmir_target_profile_provider_t* provider = nullptr;
@@ -96,17 +95,13 @@ TEST(LlvmIrTargetRegistryTest, SelectsLegalityAndLoweringProvidersByTarget) {
   EXPECT_TRUE(HasLegalityProvider(legality_providers, "x86"));
   EXPECT_FALSE(HasLegalityProvider(legality_providers, "amdgpu"));
 
-  loom_llvmir_target_profile_storage_t profile_storage;
-  loom_llvmir_target_profile_storage_initialize_from_bundle(x86_bundle, profile,
-                                                            &profile_storage);
   loom_llvmir_lowering_provider_list_t lowering_providers = {};
-  IREE_ASSERT_OK(loom_llvmir_target_registry_select_lowering_providers(
-      &registry, &profile_storage.profile, &lowering_providers));
+  loom_llvmir_lowering_provider_list_select(provider, &lowering_providers);
   EXPECT_TRUE(HasLoweringProvider(lowering_providers, "x86"));
   EXPECT_FALSE(HasLoweringProvider(lowering_providers, "amdgpu"));
 
   const loom_target_bundle_t* amdgpu_bundle = nullptr;
-  IREE_ASSERT_OK(loom_llvmir_target_registry_lookup_bundle(
+  ASSERT_TRUE(loom_llvmir_target_registry_lookup_bundle(
       &registry, IREE_SV("amdgpu-hal"), &amdgpu_bundle));
   EXPECT_TRUE(loom_llvmir_target_registry_project_bundle(
       &registry, amdgpu_bundle, &profile, &provider));
