@@ -428,7 +428,7 @@ static iree_status_t loom_llvmir_loom_check_emit_missing_projection(
   };
   const loom_diagnostic_emission_t emission = {
       .op = target_op,
-      .error = LOOM_ERR_TARGET_054,
+      .error = LOOM_ERR_TARGET_043,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
@@ -466,7 +466,7 @@ static iree_status_t loom_llvmir_loom_check_emit_legality_failure(
     };
     const loom_diagnostic_emission_t emission = {
         .op = diagnostic->op,
-        .error = LOOM_ERR_TARGET_056,
+        .error = LOOM_ERR_TARGET_045,
         .params = params,
         .param_count = IREE_ARRAYSIZE(params),
     };
@@ -495,7 +495,7 @@ static iree_status_t loom_llvmir_loom_check_emit_legality_failure(
   };
   const loom_diagnostic_emission_t emission = {
       .op = target_op,
-      .error = LOOM_ERR_TARGET_055,
+      .error = LOOM_ERR_TARGET_044,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };

@@ -201,7 +201,7 @@ func.def target(@test_target) abi(object_function) export("second", {artifact = 
 }
 )");
 
-  ExpectArtifactPlanError(module.get(), LOOM_ERR_TARGET_018);
+  ExpectArtifactPlanError(module.get(), LOOM_ERR_TARGET_017);
 }
 
 TEST_F(ArtifactPlanTest, RejectsEntryTargetMismatchingArtifactTarget) {
@@ -215,7 +215,7 @@ func.def target(@other) abi(object_function) export("entry", {artifact = @module
 }
 )");
 
-  ExpectArtifactPlanError(module.get(), LOOM_ERR_TARGET_017);
+  ExpectArtifactPlanError(module.get(), LOOM_ERR_TARGET_016);
 }
 
 TEST_F(ArtifactPlanTest, RejectsClosureCrossingIntoAnotherArtifact) {
@@ -234,7 +234,7 @@ func.def target(@test_target) abi(object_function) export("other", {artifact = @
 }
 )");
 
-  ExpectArtifactPlanError(module.get(), LOOM_ERR_TARGET_015);
+  ExpectArtifactPlanError(module.get(), LOOM_ERR_TARGET_014);
 }
 
 TEST_F(ArtifactPlanTest, AllowsExternalDeclarationCalls) {

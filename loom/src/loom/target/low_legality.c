@@ -168,14 +168,25 @@ static iree_status_t loom_target_low_legality_emit_no_target_contract(
       /*extra_param_count=*/0);
 }
 
-static iree_status_t loom_target_low_legality_emit_type_error(
+static iree_status_t loom_target_low_legality_emit_type_constraint(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
-    const loom_error_def_t* error, loom_type_t type) {
+    loom_type_t type, iree_string_view_t type_constraint) {
   const loom_diagnostic_param_t params[] = {
       loom_param_type(type),
+      loom_param_string(type_constraint),
   };
   return loom_target_low_legality_emit_target_context_error(
-      context, op, error, params, IREE_ARRAYSIZE(params));
+      context, op, LOOM_ERR_TARGET_038, params, IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_target_low_legality_emit_op_constraint(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    iree_string_view_t op_constraint) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(op_constraint),
+  };
+  return loom_target_low_legality_emit_target_context_error(
+      context, op, LOOM_ERR_TARGET_039, params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_target_low_legality_reject_error_ref(
@@ -332,20 +343,18 @@ static iree_status_t loom_target_low_legality_verify_scalar_type(
       return iree_ok_status();
     case LOOM_SCALAR_TYPE_F8E4M3:
     case LOOM_SCALAR_TYPE_F8E5M2:
-      return loom_target_low_legality_emit_type_error(
-          context, op, LOOM_ERR_TARGET_039, type);
+      return loom_target_low_legality_emit_type_constraint(
+          context, op, type, IREE_SV("scalar.fp8_decode_or_contract"));
     case LOOM_SCALAR_TYPE_COUNT_:
       break;
   }
-  return loom_target_low_legality_emit_type_error(context, op,
-                                                  LOOM_ERR_TARGET_040, type);
+  return loom_target_low_legality_emit_type_constraint(context, op, type,
+                                                       IREE_SV("scalar.known"));
 }
 
 static const loom_type_descriptor_t*
 loom_target_low_legality_resolve_dialect_type(const loom_module_t* module,
-                                              loom_type_t type,
-                                              iree_string_view_t* out_name) {
-  *out_name = IREE_SV("<unknown>");
+                                              loom_type_t type) {
   if (!loom_type_is_dialect(type)) {
     return NULL;
   }
@@ -354,7 +363,6 @@ loom_target_low_legality_resolve_dialect_type(const loom_module_t* module,
     return NULL;
   }
   iree_string_view_t name = module->strings.entries[name_id];
-  *out_name = name;
   const loom_type_descriptor_t* descriptor = loom_type_registry_lookup(name);
   if (descriptor == NULL ||
       descriptor->param_count != loom_type_dialect_param_count(type)) {
@@ -371,27 +379,12 @@ static bool loom_target_low_legality_op_accepts_type_contract(
       op_semantics.contract_families, descriptor->semantics.contract_families);
 }
 
-static iree_string_view_t loom_target_low_legality_type_semantic_name(
-    loom_type_semantic_t semantic) {
-  switch (semantic) {
-    case LOOM_TYPE_SEMANTIC_CONTROL_TOKEN:
-      return IREE_SV("control token");
-    case LOOM_TYPE_SEMANTIC_TARGET_CONTRACT_VALUE:
-      return IREE_SV("target contract value");
-    case LOOM_TYPE_SEMANTIC_ORDINARY:
-    default:
-      return IREE_SV("registered");
-  }
-}
-
 static iree_status_t loom_target_low_legality_verify_registered_type(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     loom_type_t type, bool* out_handled) {
   *out_handled = false;
-  iree_string_view_t type_name = iree_string_view_empty();
   const loom_type_descriptor_t* descriptor =
-      loom_target_low_legality_resolve_dialect_type(context->module, type,
-                                                    &type_name);
+      loom_target_low_legality_resolve_dialect_type(context->module, type);
   if (descriptor == NULL ||
       descriptor->semantics.semantic == LOOM_TYPE_SEMANTIC_ORDINARY) {
     return iree_ok_status();
@@ -404,19 +397,12 @@ static iree_status_t loom_target_low_legality_verify_registered_type(
   }
   switch (descriptor->semantics.semantic) {
     case LOOM_TYPE_SEMANTIC_CONTROL_TOKEN:
-    case LOOM_TYPE_SEMANTIC_TARGET_CONTRACT_VALUE: {
-      (void)type_name;
-      const loom_diagnostic_param_t params[] = {
-          loom_param_type(type),
-          loom_param_string(loom_target_low_legality_type_semantic_name(
-              descriptor->semantics.semantic)),
-      };
-      return loom_target_low_legality_emit_target_context_error(
-          context, op, LOOM_ERR_TARGET_041, params, IREE_ARRAYSIZE(params));
-    }
+    case LOOM_TYPE_SEMANTIC_TARGET_CONTRACT_VALUE:
+      return loom_target_low_legality_emit_type_constraint(
+          context, op, type, IREE_SV("type.matching_contract_family"));
     default:
-      return loom_target_low_legality_emit_type_error(
-          context, op, LOOM_ERR_TARGET_044, type);
+      return loom_target_low_legality_emit_type_constraint(
+          context, op, type, IREE_SV("type.target_low_mapping"));
   }
 }
 
@@ -438,32 +424,25 @@ static iree_status_t loom_target_low_legality_verify_type(
   }
   if (loom_type_is_vector(type)) {
     if (!loom_type_is_all_static(type) || loom_type_rank(type) != 1) {
-      return loom_target_low_legality_emit_type_error(
-          context, op, LOOM_ERR_TARGET_042, type);
+      return loom_target_low_legality_emit_type_constraint(
+          context, op, type, IREE_SV("vector.static_rank1"));
     }
     uint64_t element_count = 0;
     if (!loom_type_static_element_count(type, &element_count) ||
         element_count > UINT32_MAX) {
-      return loom_target_low_legality_emit_type_error(
-          context, op, LOOM_ERR_TARGET_043, type);
+      return loom_target_low_legality_emit_type_constraint(
+          context, op, type, IREE_SV("vector.lane_count_u32"));
     }
     return loom_target_low_legality_verify_scalar_type(
         context, op, loom_type_scalar(loom_type_element_type(type)));
   }
-  return loom_target_low_legality_emit_type_error(context, op,
-                                                  LOOM_ERR_TARGET_044, type);
+  return loom_target_low_legality_emit_type_constraint(
+      context, op, type, IREE_SV("type.target_low_mapping"));
 }
 
 static iree_status_t loom_target_low_legality_verify_value(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     loom_value_id_t value_id) {
-  if (value_id >= context->module->values.count) {
-    const loom_diagnostic_param_t params[] = {
-        loom_param_u64(value_id),
-    };
-    return loom_target_low_legality_emit_target_context_error(
-        context, op, LOOM_ERR_TARGET_045, params, IREE_ARRAYSIZE(params));
-  }
   const loom_type_t type = loom_module_value_type(context->module, value_id);
   return loom_target_low_legality_verify_type(context, op, type);
 }
@@ -564,18 +543,15 @@ static iree_status_t loom_target_low_legality_reject_source_only_op(
     case LOOM_OP_SCF_FOR:
     case LOOM_OP_SCF_WHILE:
     case LOOM_OP_SCF_SWITCH:
-      return loom_target_low_legality_emit_target_context_error(
-          context, op, LOOM_ERR_TARGET_047, /*extra_params=*/NULL,
-          /*extra_param_count=*/0);
+      return loom_target_low_legality_emit_op_constraint(
+          context, op, IREE_SV("source_structure.lower_to_cfg"));
     case LOOM_OP_SCF_CONDITION:
     case LOOM_OP_SCF_YIELD:
-      return loom_target_low_legality_emit_target_context_error(
-          context, op, LOOM_ERR_TARGET_048, /*extra_params=*/NULL,
-          /*extra_param_count=*/0);
+      return loom_target_low_legality_emit_op_constraint(
+          context, op, IREE_SV("source_structure.parent_lowering"));
     default:
-      return loom_target_low_legality_emit_target_context_error(
-          context, op, LOOM_ERR_TARGET_049, /*extra_params=*/NULL,
-          /*extra_param_count=*/0);
+      return loom_target_low_legality_emit_op_constraint(
+          context, op, IREE_SV("source_phase.lower_before_target_low"));
   }
 }
 
@@ -624,15 +600,13 @@ static iree_status_t loom_target_low_legality_verify_op_class(
     case LOOM_TARGET_LOW_LEGALITY_CORE:
       return iree_ok_status();
     case LOOM_TARGET_LOW_LEGALITY_PROVIDER:
-      return loom_target_low_legality_emit_target_context_error(
-          context, op, LOOM_ERR_TARGET_046, /*extra_params=*/NULL,
-          /*extra_param_count=*/0);
+      return loom_target_low_legality_emit_op_constraint(
+          context, op, IREE_SV("target_contract.provider_required"));
     case LOOM_TARGET_LOW_LEGALITY_SOURCE_ONLY:
       return loom_target_low_legality_reject_source_only_op(context, op);
     case LOOM_TARGET_LOW_LEGALITY_MODULE_METADATA:
-      return loom_target_low_legality_emit_target_context_error(
-          context, op, LOOM_ERR_TARGET_050, /*extra_params=*/NULL,
-          /*extra_param_count=*/0);
+      return loom_target_low_legality_emit_op_constraint(
+          context, op, IREE_SV("module_metadata.outside_executable_region"));
     case LOOM_TARGET_LOW_LEGALITY_UNSUPPORTED:
       return loom_target_low_legality_emit_no_target_contract(context, op);
     default: {
@@ -683,7 +657,6 @@ static bool loom_target_low_legality_skip_children_after_rejection(
 static iree_status_t loom_target_low_legality_walk_op(
     void* user_data, loom_op_t* op, const loom_walk_context_t* walk_context,
     loom_walk_result_t* out_result) {
-  (void)walk_context;
   loom_target_low_legality_context_t* context =
       (loom_target_low_legality_context_t*)user_data;
   *out_result = LOOM_WALK_CONTINUE;

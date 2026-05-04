@@ -126,7 +126,7 @@ static iree_status_t loom_low_lower_map_argument(
           loom_param_u64(source_argument_id),
       };
       IREE_RETURN_IF_ERROR(loom_low_lower_emit_target_context_error(
-          context, context->source_function.op, LOOM_ERR_TARGET_035, params,
+          context, context->source_function.op, LOOM_ERR_TARGET_034, params,
           IREE_ARRAYSIZE(params)));
     }
     return iree_ok_status();
@@ -222,7 +222,7 @@ static iree_status_t loom_low_lower_check_mapped_value(
           loom_param_u64(source_value_id),
       };
       IREE_RETURN_IF_ERROR(loom_low_lower_emit_target_context_error(
-          context, source_op, LOOM_ERR_TARGET_035, params,
+          context, source_op, LOOM_ERR_TARGET_034, params,
           IREE_ARRAYSIZE(params)));
     }
   }
@@ -248,7 +248,7 @@ static iree_status_t loom_low_lower_check_function_signature(
         loom_param_u32(predicate_count),
     };
     IREE_RETURN_IF_ERROR(loom_low_lower_emit_target_context_error(
-        context, context->source_function.op, LOOM_ERR_TARGET_036, params,
+        context, context->source_function.op, LOOM_ERR_TARGET_035, params,
         IREE_ARRAYSIZE(params)));
   }
   if (context->source_function.op->tied_result_count != 0) {
@@ -256,7 +256,7 @@ static iree_status_t loom_low_lower_check_function_signature(
         loom_param_u32(context->source_function.op->tied_result_count),
     };
     IREE_RETURN_IF_ERROR(loom_low_lower_emit_target_context_error(
-        context, context->source_function.op, LOOM_ERR_TARGET_037, params,
+        context, context->source_function.op, LOOM_ERR_TARGET_036, params,
         IREE_ARRAYSIZE(params)));
   }
   return iree_ok_status();
@@ -923,7 +923,7 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
         loom_param_u32(source_op->region_count),
     };
     return loom_low_lower_emit_target_context_error(context, source_op,
-                                                    LOOM_ERR_TARGET_038, params,
+                                                    LOOM_ERR_TARGET_037, params,
                                                     IREE_ARRAYSIZE(params));
   }
   if (loom_low_lower_op_is_structural(context->module, source_op)) {

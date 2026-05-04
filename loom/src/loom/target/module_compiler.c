@@ -301,7 +301,7 @@ static iree_status_t loom_target_module_compile_emit_missing_target_record(
       loom_param_string(function_name),
   };
   return loom_target_module_compile_emit(diagnostic_emitter, op,
-                                         LOOM_ERR_TARGET_010, params,
+                                         LOOM_ERR_TARGET_009, params,
                                          IREE_ARRAYSIZE(params));
 }
 
@@ -334,7 +334,7 @@ static iree_status_t loom_target_module_compile_emit_incompatible_bundle(
           export_plan ? export_plan->abi_kind : LOOM_TARGET_ABI_UNKNOWN)),
   };
   return loom_target_module_compile_emit(diagnostic_emitter, entry->func.op,
-                                         LOOM_ERR_TARGET_011, params,
+                                         LOOM_ERR_TARGET_010, params,
                                          IREE_ARRAYSIZE(params));
 }
 
@@ -345,7 +345,7 @@ static iree_status_t loom_target_module_compile_emit_no_compatible_entry(
       loom_param_string(pipeline_name),
   };
   return loom_target_module_compile_emit(diagnostic_emitter, NULL,
-                                         LOOM_ERR_TARGET_012, params,
+                                         LOOM_ERR_TARGET_011, params,
                                          IREE_ARRAYSIZE(params));
 }
 
@@ -357,7 +357,7 @@ static iree_status_t loom_target_module_compile_emit_ambiguous_entry(
       loom_param_u32(candidate_count),
   };
   return loom_target_module_compile_emit(diagnostic_emitter, NULL,
-                                         LOOM_ERR_TARGET_013, params,
+                                         LOOM_ERR_TARGET_012, params,
                                          IREE_ARRAYSIZE(params));
 }
 
@@ -370,7 +370,7 @@ static iree_status_t loom_target_module_compile_emit_empty_artifact(
       loom_param_string(artifact_name),
   };
   return loom_target_module_compile_emit(diagnostic_emitter, op,
-                                         LOOM_ERR_TARGET_014, params,
+                                         LOOM_ERR_TARGET_013, params,
                                          IREE_ARRAYSIZE(params));
 }
 
