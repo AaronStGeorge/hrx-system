@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "iree/base/internal/arena.h"
+#include "loom/analysis/contract_vector.h"
 #include "loom/analysis/kernel_async_legality.h"
 #include "loom/analysis/vector_memory_footprint.h"
 #include "loom/codegen/low/contract_query.h"
@@ -29,6 +30,8 @@ typedef struct loom_low_lower_descriptor_matrix_plan_t {
   loom_target_contract_descriptor_matrix_source_t source;
   // Descriptor row selected by the target matrix projection.
   loom_low_lower_resolved_descriptor_t descriptor;
+  // Target-independent request facts used to materialize descriptor operands.
+  loom_contract_request_t contract_request;
 } loom_low_lower_descriptor_matrix_plan_t;
 
 static bool loom_low_lower_type_is_none(loom_type_t type) {
@@ -626,6 +629,49 @@ static iree_status_t loom_low_lower_emit_contract_query_rejection(
   return loom_low_lower_emit_no_target_contract(context, source_op);
 }
 
+static iree_status_t loom_low_lower_descriptor_matrix_request_from_source(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_target_contract_descriptor_matrix_rule_t* matrix_rule,
+    loom_contract_request_t* out_request) {
+  *out_request = (loom_contract_request_t){0};
+  if (context->policy->descriptor_matrix.options == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "descriptor-matrix plan has no source adapter options callback");
+  }
+
+  switch (matrix_rule->source) {
+    case LOOM_TARGET_CONTRACT_DESCRIPTOR_MATRIX_SOURCE_VECTOR_MMA: {
+      if (!loom_vector_mma_isa(source_op)) {
+        return iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "descriptor-matrix vector.mma plan cannot lower a non-vector.mma "
+            "source op");
+      }
+      const loom_target_contract_query_environment_t environment =
+          loom_low_lower_query_environment_from_context(
+              context, context->descriptor_set);
+      loom_contract_vector_mma_options_t options = {0};
+      IREE_RETURN_IF_ERROR(context->policy->descriptor_matrix.options(
+          context->policy->descriptor_matrix.user_data, &environment,
+          matrix_rule, &options));
+      loom_contract_diagnostic_t diagnostic = {0};
+      if (!loom_contract_request_from_vector_mma_op(
+              context->module, context->lowering.fact_table, source_op,
+              &options, out_request, &diagnostic)) {
+        return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                                "descriptor-matrix plan cannot reconstruct the "
+                                "selected vector.mma contract request");
+      }
+      return iree_ok_status();
+    }
+    case LOOM_TARGET_CONTRACT_DESCRIPTOR_MATRIX_SOURCE_NONE:
+    default:
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "unknown descriptor-matrix source");
+  }
+}
+
 static iree_status_t loom_low_lower_record_descriptor_matrix_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_target_contract_descriptor_matrix_rule_t* matrix_rule,
@@ -641,6 +687,8 @@ static iree_status_t loom_low_lower_record_descriptor_matrix_plan(
   }
   IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_row(
       context, query_result->selected_descriptor, &plan_data->descriptor));
+  IREE_RETURN_IF_ERROR(loom_low_lower_descriptor_matrix_request_from_source(
+      context, source_op, matrix_rule, &plan_data->contract_request));
   loom_low_lower_record_selected_plan(
       context, (loom_low_lower_selected_plan_t){
                    .source_op = source_op,
@@ -1431,9 +1479,205 @@ static iree_status_t loom_low_lower_emit_elided_selected_plan(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_lower_descriptor_matrix_sparse_source_value(
+    const loom_contract_request_t* request, loom_value_id_t* out_source_value) {
+  *out_source_value = LOOM_VALUE_ID_INVALID;
+  const loom_contract_operand_t* operands[] = {
+      &request->lhs,
+      &request->rhs,
+      &request->accumulator,
+      &request->result,
+  };
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(operands); ++i) {
+    const loom_contract_value_ref_t ref =
+        operands[i]->encoded.auxiliary_value_refs
+            [LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_SPARSE_METADATA];
+    if (!loom_contract_value_ref_is_present(ref)) {
+      continue;
+    }
+    const loom_value_id_t source_value = loom_contract_value_ref_value_id(ref);
+    if (*out_source_value == LOOM_VALUE_ID_INVALID) {
+      *out_source_value = source_value;
+      continue;
+    }
+    if (*out_source_value != source_value) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "descriptor-matrix sparse metadata source is ambiguous");
+    }
+  }
+  if (*out_source_value == LOOM_VALUE_ID_INVALID) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "selected descriptor requires sparse metadata, but the source matrix "
+        "contract does not provide it");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_lower_descriptor_matrix_packet_value(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_descriptor_matrix_plan_t* plan,
+    iree_string_view_t field_name, loom_value_id_t low_lhs,
+    loom_value_id_t low_rhs, loom_value_id_t low_init,
+    loom_value_id_t* out_low_value) {
+  if (iree_string_view_equal(field_name, IREE_SV("a"))) {
+    *out_low_value = low_lhs;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(field_name, IREE_SV("b"))) {
+    *out_low_value = low_rhs;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(field_name, IREE_SV("acc"))) {
+    *out_low_value = low_init;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(field_name, IREE_SV("index")) ||
+      iree_string_view_equal(field_name, IREE_SV("metadata")) ||
+      iree_string_view_equal(field_name, IREE_SV("sparsity"))) {
+    loom_value_id_t source_value = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_low_lower_descriptor_matrix_sparse_source_value(
+        &plan->contract_request, &source_value));
+    return loom_low_lower_lookup_value(context, source_value, out_low_value);
+  }
+  return iree_make_status(
+      IREE_STATUS_FAILED_PRECONDITION,
+      "descriptor-matrix emitter cannot map descriptor packet field '%.*s'",
+      (int)field_name.size, field_name.data);
+}
+
+static iree_status_t loom_low_lower_descriptor_matrix_packet_operands(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_descriptor_matrix_plan_t* plan,
+    loom_value_id_t low_lhs, loom_value_id_t low_rhs, loom_value_id_t low_init,
+    const loom_value_id_t** out_operands, iree_host_size_t* out_operand_count,
+    const uint16_t** out_descriptor_operand_packet_indices) {
+  *out_operands = NULL;
+  *out_operand_count = 0;
+  *out_descriptor_operand_packet_indices = NULL;
+  const loom_low_descriptor_set_t* descriptor_set = context->descriptor_set;
+  const loom_low_descriptor_t* descriptor = plan->descriptor.descriptor;
+
+  uint16_t* descriptor_operand_packet_indices = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(&context->arena, descriptor->operand_count,
+                                sizeof(*descriptor_operand_packet_indices),
+                                (void**)&descriptor_operand_packet_indices));
+  for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
+    descriptor_operand_packet_indices[i] = UINT16_MAX;
+  }
+
+  iree_host_size_t operand_count = 0;
+  for (uint16_t i = descriptor->result_count; i < descriptor->operand_count;
+       ++i) {
+    const uint32_t row = descriptor->operand_start + i;
+    if (row >= descriptor_set->operand_count) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low descriptor operand row is out of range");
+    }
+    const loom_low_operand_t* operand = &descriptor_set->operands[row];
+    if (operand->role != LOOM_LOW_OPERAND_ROLE_IMPLICIT) {
+      descriptor_operand_packet_indices[i] = (uint16_t)operand_count++;
+    }
+  }
+
+  loom_value_id_t* operands = NULL;
+  if (operand_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        &context->arena, operand_count, sizeof(*operands), (void**)&operands));
+  }
+
+  for (uint16_t i = descriptor->result_count; i < descriptor->operand_count;
+       ++i) {
+    if (descriptor_operand_packet_indices[i] == UINT16_MAX) {
+      continue;
+    }
+    const loom_low_operand_t* operand =
+        &descriptor_set->operands[descriptor->operand_start + i];
+    iree_string_view_t field_name = loom_low_descriptor_set_string(
+        descriptor_set, operand->field_name_string_offset);
+    IREE_RETURN_IF_ERROR(loom_low_lower_descriptor_matrix_packet_value(
+        context, plan, field_name, low_lhs, low_rhs, low_init,
+        &operands[descriptor_operand_packet_indices[i]]));
+  }
+
+  *out_operands = operands;
+  *out_operand_count = operand_count;
+  *out_descriptor_operand_packet_indices = descriptor_operand_packet_indices;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_lower_descriptor_matrix_tied_results(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_descriptor_matrix_plan_t* plan,
+    const uint16_t* descriptor_operand_packet_indices,
+    const loom_tied_result_t** out_tied_results,
+    iree_host_size_t* out_tied_result_count) {
+  *out_tied_results = NULL;
+  *out_tied_result_count = 0;
+  const loom_low_descriptor_set_t* descriptor_set = context->descriptor_set;
+  const loom_low_descriptor_t* descriptor = plan->descriptor.descriptor;
+  iree_host_size_t tied_result_count = 0;
+  for (uint16_t i = 0; i < descriptor->constraint_count; ++i) {
+    const uint32_t row = descriptor->constraint_start + i;
+    if (row >= descriptor_set->constraint_count) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low descriptor constraint row is out of range");
+    }
+    if (descriptor_set->constraints[row].kind ==
+        LOOM_LOW_CONSTRAINT_KIND_TIED) {
+      ++tied_result_count;
+    }
+  }
+  if (tied_result_count == 0) {
+    return iree_ok_status();
+  }
+
+  loom_tied_result_t* tied_results = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(&context->arena, tied_result_count,
+                                sizeof(*tied_results), (void**)&tied_results));
+  iree_host_size_t tied_result_index = 0;
+  for (uint16_t i = 0; i < descriptor->constraint_count; ++i) {
+    const loom_low_constraint_t* constraint =
+        &descriptor_set->constraints[descriptor->constraint_start + i];
+    if (constraint->kind != LOOM_LOW_CONSTRAINT_KIND_TIED) {
+      continue;
+    }
+    if (constraint->lhs_operand_index >= descriptor->result_count ||
+        constraint->rhs_operand_index == LOOM_LOW_ID_NONE ||
+        constraint->rhs_operand_index >= descriptor->operand_count ||
+        descriptor_operand_packet_indices[constraint->rhs_operand_index] ==
+            UINT16_MAX) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "descriptor-matrix selected descriptor has an invalid tied result "
+          "constraint");
+    }
+    tied_results[tied_result_index++] = (loom_tied_result_t){
+        .result_index = constraint->lhs_operand_index,
+        .operand_index =
+            descriptor_operand_packet_indices[constraint->rhs_operand_index],
+        .has_type_change = false,
+    };
+  }
+
+  *out_tied_results = tied_results;
+  *out_tied_result_count = tied_result_count;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_lower_emit_descriptor_matrix_vector_mma(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_low_lower_descriptor_matrix_plan_t* plan) {
+  const loom_low_descriptor_t* descriptor = plan->descriptor.descriptor;
+  if (descriptor->result_count != 1) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "descriptor-matrix vector.mma lowering requires one descriptor result");
+  }
+
   loom_value_id_t low_lhs = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
       context, loom_vector_mma_lhs(source_op), &low_lhs));
@@ -1449,19 +1693,24 @@ static iree_status_t loom_low_lower_emit_descriptor_matrix_vector_mma(
   IREE_RETURN_IF_ERROR(
       loom_low_lower_map_value(context, source_op, result, &result_low_type));
   IREE_ASSERT(loom_type_is_register(result_low_type));
-  const loom_value_id_t operands[] = {low_lhs, low_rhs, low_init};
-  const loom_tied_result_t tied_results[] = {
-      {
-          .result_index = 0,
-          .operand_index = 2,
-          .has_type_change = false,
-      },
-  };
+
+  const loom_value_id_t* operands = NULL;
+  iree_host_size_t operand_count = 0;
+  const uint16_t* descriptor_operand_packet_indices = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_descriptor_matrix_packet_operands(
+      context, plan, low_lhs, low_rhs, low_init, &operands, &operand_count,
+      &descriptor_operand_packet_indices));
+  const loom_tied_result_t* tied_results = NULL;
+  iree_host_size_t tied_result_count = 0;
+  IREE_RETURN_IF_ERROR(loom_low_lower_descriptor_matrix_tied_results(
+      context, plan, descriptor_operand_packet_indices, &tied_results,
+      &tied_result_count));
+
   loom_op_t* low_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
-      context, &plan->descriptor, operands, IREE_ARRAYSIZE(operands),
+      context, &plan->descriptor, operands, operand_count,
       loom_make_named_attr_slice(NULL, 0), &result_low_type, 1, tied_results,
-      IREE_ARRAYSIZE(tied_results), source_op->location, &low_op));
+      tied_result_count, source_op->location, &low_op));
   return loom_low_lower_bind_value(
       context, result, loom_value_slice_get(loom_low_op_results(low_op), 0));
 }

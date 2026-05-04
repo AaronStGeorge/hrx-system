@@ -1203,6 +1203,7 @@ _DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS = (
     Constraint(ConstraintKind.EARLY_CLOBBER, 0),
 )
 _BUFFER_ATOMIC_VDATA_INPUT_REASON = "xml-models-buffer-atomic-vdata-as-output-only"
+_SMFMAC_VDST_ACCUMULATOR_REASON = "xml-models-smfmac-accumulator-as-vdst"
 _DESTRUCTIVE_BUFFER_ATOMIC_CONSTRAINTS = (
     Constraint(ConstraintKind.TIED, 0, 1),
     Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
@@ -5485,6 +5486,105 @@ def _v_mfma_f32_16x16x16_f16_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_mfma_f32_16x16x16_bf16_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_mfma_f32_16x16x16_bf16",
+        instruction_name="V_MFMA_F32_16X16X16_BF16",
+        mnemonic="v_mfma_f32_16x16x16_bf16",
+        encoding_name="VOP3P_MFMA",
+        semantic_tag="matrix.mfma.f32.16x16x16.bf16.1k",
+        schedule_class=_SCHEDULE_MFMA,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_agpr_result(units=4)),
+            AmdgpuOperandOverlay("SRC0", _vgpr_agpr_operand("a", units=2)),
+            AmdgpuOperandOverlay("SRC1", _vgpr_agpr_operand("b", units=2)),
+            AmdgpuOperandOverlay("SRC2", _vgpr_agpr_const_operand("acc", units=4)),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_smfmac_f32_16x16x32_bf16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_smfmac_f32_overlay(
+        descriptor_key="amdgpu.v_smfmac_f32_16x16x32_bf16",
+        instruction_name="V_SMFMAC_F32_16X16X32_BF16",
+        mnemonic="v_smfmac_f32_16x16x32_bf16",
+        semantic_tag="matrix.smfmac.f32.16x16x32.bf16",
+        accumulator_units=4,
+        lhs_units=2,
+        rhs_units=4,
+    )
+
+
+def _v_smfmac_f32_16x16x32_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_smfmac_f32_overlay(
+        descriptor_key="amdgpu.v_smfmac_f32_16x16x32_f16",
+        instruction_name="V_SMFMAC_F32_16X16X32_F16",
+        mnemonic="v_smfmac_f32_16x16x32_f16",
+        semantic_tag="matrix.smfmac.f32.16x16x32.f16",
+        accumulator_units=4,
+        lhs_units=2,
+        rhs_units=4,
+    )
+
+
+def _v_smfmac_f32_32x32x16_bf16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_smfmac_f32_overlay(
+        descriptor_key="amdgpu.v_smfmac_f32_32x32x16_bf16",
+        instruction_name="V_SMFMAC_F32_32X32X16_BF16",
+        mnemonic="v_smfmac_f32_32x32x16_bf16",
+        semantic_tag="matrix.smfmac.f32.32x32x16.bf16",
+        accumulator_units=16,
+        lhs_units=2,
+        rhs_units=4,
+    )
+
+
+def _v_smfmac_f32_32x32x16_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_smfmac_f32_overlay(
+        descriptor_key="amdgpu.v_smfmac_f32_32x32x16_f16",
+        instruction_name="V_SMFMAC_F32_32X32X16_F16",
+        mnemonic="v_smfmac_f32_32x32x16_f16",
+        semantic_tag="matrix.smfmac.f32.32x32x16.f16",
+        accumulator_units=16,
+        lhs_units=2,
+        rhs_units=4,
+    )
+
+
+def _v_smfmac_f32_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+    accumulator_units: int,
+    lhs_units: int,
+    rhs_units: int,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="VOP3P_MFMA",
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_MFMA,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_agpr_result(units=accumulator_units)),
+            AmdgpuOperandOverlay(
+                "VDST",
+                _vgpr_agpr_operand("acc", units=accumulator_units),
+                role_exception_reason=_SMFMAC_VDST_ACCUMULATOR_REASON,
+            ),
+            AmdgpuOperandOverlay("SRC0", _vgpr_agpr_operand("a", units=lhs_units)),
+            AmdgpuOperandOverlay("SRC1", _vgpr_agpr_operand("b", units=rhs_units)),
+            AmdgpuOperandOverlay("SRC2", _vgpr_operand("index")),
+        ),
+        constraints=_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _vop3p_packed_dot_fixed_fields(
     *,
     op_sel_hi_field: str = "OP_SEL_HI",
@@ -6370,6 +6470,11 @@ def _cdna_core_overlays(
         _v_dot8_u32_u4_overlay(),
         *(_gfx950_ds_transpose_read_overlays() if include_ds_transpose_reads else ()),
         _v_mfma_f32_16x16x16_f16_overlay(),
+        _v_mfma_f32_16x16x16_bf16_overlay(),
+        _v_smfmac_f32_16x16x32_f16_overlay(),
+        _v_smfmac_f32_16x16x32_bf16_overlay(),
+        _v_smfmac_f32_32x32x16_f16_overlay(),
+        _v_smfmac_f32_32x32x16_bf16_overlay(),
         _s_barrier_overlay(),
         *_gfx950_cache_control_overlays(),
         _s_waitcnt_overlay(

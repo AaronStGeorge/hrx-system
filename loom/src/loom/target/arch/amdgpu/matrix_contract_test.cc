@@ -478,6 +478,36 @@ TEST(MatrixContractTest, WmmaDescriptorsExposeTargetLowIds) {
             LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_REF_NONE);
 }
 
+TEST(MatrixContractTest, Cdna3DescriptorsExposeTargetLowIds) {
+  const loom_amdgpu_matrix_contract_descriptor_t* mfma_f32_f16 =
+      FindDescriptor("mfma.f32.16x16x16.f16");
+  ASSERT_NE(mfma_f32_f16, nullptr);
+  EXPECT_EQ(mfma_f32_f16->low_descriptor_ref,
+            LOOM_AMDGPU_DESCRIPTOR_REF_V_MFMA_F32_16X16X16_F16);
+
+  const loom_amdgpu_matrix_contract_descriptor_t* mfma_f32_bf16 =
+      FindDescriptor("mfma.f32.16x16x16.bf16.1k");
+  ASSERT_NE(mfma_f32_bf16, nullptr);
+  EXPECT_EQ(mfma_f32_bf16->low_descriptor_ref,
+            LOOM_AMDGPU_DESCRIPTOR_REF_V_MFMA_F32_16X16X16_BF16);
+
+  const loom_amdgpu_matrix_contract_descriptor_t* smfmac_f32_bf16 =
+      FindDescriptor("smfmac.f32.16x16x32.bf16");
+  ASSERT_NE(smfmac_f32_bf16, nullptr);
+  EXPECT_EQ(smfmac_f32_bf16->low_descriptor_ref,
+            LOOM_AMDGPU_DESCRIPTOR_REF_V_SMFMAC_F32_16X16X32_BF16);
+  EXPECT_EQ(smfmac_f32_bf16->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE);
+
+  const loom_amdgpu_matrix_contract_descriptor_t* smfmac_f32_f16 =
+      FindDescriptor("smfmac.f32.32x32x16.f16");
+  ASSERT_NE(smfmac_f32_f16, nullptr);
+  EXPECT_EQ(smfmac_f32_f16->low_descriptor_ref,
+            LOOM_AMDGPU_DESCRIPTOR_REF_V_SMFMAC_F32_32X32X16_F16);
+  EXPECT_EQ(smfmac_f32_f16->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE);
+}
+
 TEST(MatrixContractTest, Rdna3Wmmar3F32F16LayoutMapsFragments) {
   const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
       FindDescriptor("wmma.f32.16x16x16.f16");
