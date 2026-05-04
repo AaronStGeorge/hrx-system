@@ -147,10 +147,6 @@ iree_status_t loom_vector_to_scalar_build_integer_mask(
     loom_vector_to_scalar_state_t* state, loom_type_t type, int64_t used_bits,
     loom_value_id_t* out_mask) {
   int32_t bit_width = loom_scalar_type_bitwidth(loom_type_element_type(type));
-  if (bit_width <= 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected fixed-width integer scalar type");
-  }
   return loom_vector_to_scalar_build_scalar_constant(
       &state->rewriter->builder, type, state->location,
       loom_vector_to_scalar_integer_mask_value(bit_width, used_bits), out_mask);
@@ -169,10 +165,6 @@ iree_status_t loom_vector_to_scalar_cast_integer_lane(
       loom_scalar_type_bitwidth(loom_type_element_type(input_type));
   int32_t result_width =
       loom_scalar_type_bitwidth(loom_type_element_type(result_type));
-  if (input_width <= 0 || result_width <= 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected fixed-width integer scalar types");
-  }
 
   loom_op_t* cast_op = NULL;
   if (input_width < result_width) {
