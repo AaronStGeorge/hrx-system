@@ -20,6 +20,7 @@ AMDGPU_AMDHSA_TARGET_TRIPLE = "amdgcn-amd-amdhsa"
 AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE = (2**16) - 1
 
 AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE = "none"
+AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9 = "gfx9"
 AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11 = "gfx11"
 
 AMDGPU_MATRIX_FEATURE_PROFILE_NONE = "none"
@@ -38,6 +39,13 @@ AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE = "none"
 AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC = "gfx9_11_glc_slc_dlc"
 AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH = "gfx12_nv_scope_th"
 AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1 = "gfx950_nt_sc0_sc1"
+
+AMDGPU_ELF_FEATURE_XNACK_ANY_V4 = 0x100
+AMDGPU_ELF_FEATURE_SRAMECC_ANY_V4 = 0x400
+AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4 = (
+    AMDGPU_ELF_FEATURE_XNACK_ANY_V4 | AMDGPU_ELF_FEATURE_SRAMECC_ANY_V4
+)
+AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6 = 0x01000000
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +105,39 @@ class AmdgpuIsaArchitectureInfo(Protocol):
     def architecture_id(self) -> int: ...
 
 
+def processor_info(
+    target_cpu: str,
+    elf_machine_flags: int,
+    *,
+    elf_feature_flags: int = 0,
+    default_wavefront_size: int = 64,
+    descriptor_set_key: str = "",
+    kernel_descriptor_profile: str = AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+    matrix_feature_profile: str = AMDGPU_MATRIX_FEATURE_PROFILE_NONE,
+    kernel_descriptor_vgpr_encoding_granule_wave32: int = 0,
+    kernel_descriptor_vgpr_encoding_granule_wave64: int = 0,
+    kernel_descriptor_has_architected_flat_scratch: bool = False,
+    kernel_descriptor_uses_gfx10_sgpr_encoding: bool = False,
+    kernel_descriptor_has_dx10_clamp_and_ieee_mode: bool = False,
+    kernel_descriptor_has_packed_workitem_id: bool = False,
+) -> AmdgpuProcessorInfo:
+    return AmdgpuProcessorInfo(
+        target_cpu=target_cpu,
+        descriptor_set_key=descriptor_set_key,
+        elf_machine_flags=elf_machine_flags,
+        elf_feature_flags=elf_feature_flags,
+        default_wavefront_size=default_wavefront_size,
+        kernel_descriptor_profile=kernel_descriptor_profile,
+        matrix_feature_profile=matrix_feature_profile,
+        kernel_descriptor_vgpr_encoding_granule_wave32=kernel_descriptor_vgpr_encoding_granule_wave32,
+        kernel_descriptor_vgpr_encoding_granule_wave64=kernel_descriptor_vgpr_encoding_granule_wave64,
+        kernel_descriptor_has_architected_flat_scratch=kernel_descriptor_has_architected_flat_scratch,
+        kernel_descriptor_uses_gfx10_sgpr_encoding=kernel_descriptor_uses_gfx10_sgpr_encoding,
+        kernel_descriptor_has_dx10_clamp_and_ieee_mode=kernel_descriptor_has_dx10_clamp_and_ieee_mode,
+        kernel_descriptor_has_packed_workitem_id=kernel_descriptor_has_packed_workitem_id,
+    )
+
+
 def rdna3_processor_info(
     target_cpu: str, elf_machine_flags: int
 ) -> AmdgpuProcessorInfo:
@@ -117,20 +158,29 @@ def rdna3_processor_info(
     )
 
 
-def gfx1170_processor_info() -> AmdgpuProcessorInfo:
-    return AmdgpuProcessorInfo(
-        target_cpu="gfx1170",
+def gfx117x_processor_info(
+    target_cpu: str, elf_machine_flags: int
+) -> AmdgpuProcessorInfo:
+    return processor_info(
+        target_cpu=target_cpu,
         descriptor_set_key="",
-        elf_machine_flags=0x05D,
-        elf_feature_flags=0,
+        elf_machine_flags=elf_machine_flags,
         default_wavefront_size=32,
-        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
         kernel_descriptor_has_packed_workitem_id=True,
     )
 
 
 AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
+    AmdgpuDescriptorSetInfo(
+        generator_target="cdna3",
+        key="amdgpu.cdna3.core",
+        isa_xml_key="cdna3",
+        isa_architecture_name="AMD CDNA 3",
+        isa_architecture_id=2,
+        supports_descriptor_packet_encoding=True,
+        vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,
+    ),
     AmdgpuDescriptorSetInfo(
         generator_target="rdna4_gfx125x",
         key="amdgpu.rdna4.gfx125x.core",
@@ -172,55 +222,81 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
 
 
 AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
-    AmdgpuProcessorInfo(
-        target_cpu="gfx908",
-        descriptor_set_key="",
-        elf_machine_flags=0x030,
-        elf_feature_flags=0,
-        default_wavefront_size=64,
-        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+    processor_info("gfx900", 0x02C, elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_ANY_V4),
+    processor_info("gfx902", 0x02D, elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_ANY_V4),
+    processor_info("gfx904", 0x02E, elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_ANY_V4),
+    processor_info(
+        "gfx906",
+        0x02F,
+        elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
+    ),
+    processor_info(
+        "gfx908",
+        0x030,
+        elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908,
     ),
-    AmdgpuProcessorInfo(
-        target_cpu="gfx90a",
-        descriptor_set_key="",
-        elf_machine_flags=0x03F,
-        elf_feature_flags=0,
-        default_wavefront_size=64,
-        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+    processor_info("gfx909", 0x031, elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_ANY_V4),
+    processor_info(
+        "gfx90a",
+        0x03F,
+        elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A,
         kernel_descriptor_has_packed_workitem_id=True,
     ),
-    AmdgpuProcessorInfo(
-        target_cpu="gfx940",
-        descriptor_set_key="",
-        elf_machine_flags=0,
-        elf_feature_flags=0,
-        default_wavefront_size=64,
-        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+    processor_info("gfx90c", 0x032, elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_ANY_V4),
+    processor_info(
+        "gfx942",
+        0x04C,
+        descriptor_set_key="amdgpu.cdna3.core",
+        elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
+        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940,
+        kernel_descriptor_vgpr_encoding_granule_wave32=8,
+        kernel_descriptor_vgpr_encoding_granule_wave64=8,
+        kernel_descriptor_has_architected_flat_scratch=True,
+        kernel_descriptor_has_dx10_clamp_and_ieee_mode=True,
         kernel_descriptor_has_packed_workitem_id=True,
     ),
-    AmdgpuProcessorInfo(
-        target_cpu="gfx941",
-        descriptor_set_key="",
-        elf_machine_flags=0,
-        elf_feature_flags=0,
-        default_wavefront_size=64,
-        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
-        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940,
+    processor_info(
+        "gfx950",
+        0x04F,
+        descriptor_set_key="amdgpu.cdna4.core",
+        elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950,
         kernel_descriptor_has_packed_workitem_id=True,
     ),
-    AmdgpuProcessorInfo(
-        target_cpu="gfx942",
-        descriptor_set_key="",
-        elf_machine_flags=0x04C,
-        elf_feature_flags=0,
-        default_wavefront_size=64,
-        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
-        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940,
-        kernel_descriptor_has_packed_workitem_id=True,
+    processor_info(
+        "gfx1010",
+        0x033,
+        elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_ANY_V4,
+        default_wavefront_size=32,
     ),
+    processor_info(
+        "gfx1011",
+        0x034,
+        elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_ANY_V4,
+        default_wavefront_size=32,
+    ),
+    processor_info(
+        "gfx1012",
+        0x035,
+        elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_ANY_V4,
+        default_wavefront_size=32,
+    ),
+    processor_info(
+        "gfx1013",
+        0x042,
+        elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_ANY_V4,
+        default_wavefront_size=32,
+    ),
+    processor_info("gfx1030", 0x036, default_wavefront_size=32),
+    processor_info("gfx1031", 0x037, default_wavefront_size=32),
+    processor_info("gfx1032", 0x038, default_wavefront_size=32),
+    processor_info("gfx1033", 0x039, default_wavefront_size=32),
+    processor_info("gfx1034", 0x03E, default_wavefront_size=32),
+    processor_info("gfx1035", 0x03D, default_wavefront_size=32),
+    processor_info("gfx1036", 0x045, default_wavefront_size=32),
     rdna3_processor_info(target_cpu="gfx1100", elf_machine_flags=0x041),
     rdna3_processor_info(target_cpu="gfx1101", elf_machine_flags=0x046),
     rdna3_processor_info(target_cpu="gfx1102", elf_machine_flags=0x047),
@@ -229,71 +305,110 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     rdna3_processor_info(target_cpu="gfx1151", elf_machine_flags=0x04A),
     rdna3_processor_info(target_cpu="gfx1152", elf_machine_flags=0x055),
     rdna3_processor_info(target_cpu="gfx1153", elf_machine_flags=0x058),
-    gfx1170_processor_info(),
-    AmdgpuProcessorInfo(
-        target_cpu="gfx1200",
+    gfx117x_processor_info("gfx1170", 0x05D),
+    gfx117x_processor_info("gfx1171", 0x05E),
+    gfx117x_processor_info("gfx1172", 0x05C),
+    processor_info(
+        "gfx1200",
         descriptor_set_key="amdgpu.rdna4.core",
         elf_machine_flags=0x048,
-        elf_feature_flags=0,
         default_wavefront_size=32,
-        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
         kernel_descriptor_has_packed_workitem_id=True,
     ),
-    AmdgpuProcessorInfo(
-        target_cpu="gfx1201",
+    processor_info(
+        "gfx1201",
         descriptor_set_key="amdgpu.rdna4.core",
         elf_machine_flags=0x04E,
-        elf_feature_flags=0,
         default_wavefront_size=32,
-        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
         kernel_descriptor_has_packed_workitem_id=True,
     ),
-    AmdgpuProcessorInfo(
-        target_cpu="gfx1250",
+    processor_info(
+        "gfx1250",
         descriptor_set_key="amdgpu.rdna4.gfx125x.core",
         elf_machine_flags=0x049,
-        elf_feature_flags=0,
+        elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
         default_wavefront_size=32,
-        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
         kernel_descriptor_has_packed_workitem_id=True,
     ),
-    AmdgpuProcessorInfo(
-        target_cpu="gfx1251",
+    processor_info(
+        "gfx1251",
         descriptor_set_key="amdgpu.rdna4.gfx125x.core",
         elf_machine_flags=0x05A,
-        elf_feature_flags=0,
+        elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
         default_wavefront_size=32,
-        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
         kernel_descriptor_has_packed_workitem_id=True,
     ),
-    AmdgpuProcessorInfo(
-        target_cpu="gfx1252",
-        descriptor_set_key="amdgpu.rdna4.gfx125x.core",
-        elf_machine_flags=0,
-        elf_feature_flags=0,
+    processor_info(
+        "gfx1310",
+        0x050,
         default_wavefront_size=32,
-        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
-        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
         kernel_descriptor_has_packed_workitem_id=True,
     ),
-    AmdgpuProcessorInfo(
-        target_cpu="gfx950",
-        descriptor_set_key="amdgpu.cdna4.core",
-        elf_machine_flags=0x04F,
-        elf_feature_flags=0,
-        default_wavefront_size=64,
-        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
-        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950,
-        kernel_descriptor_has_packed_workitem_id=True,
+    processor_info(
+        "gfx9-generic",
+        0x051,
+        elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_ANY_V4
+        | AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6,
+    ),
+    processor_info(
+        "gfx10-1-generic",
+        0x052,
+        elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_ANY_V4
+        | AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6,
+        default_wavefront_size=32,
+    ),
+    processor_info(
+        "gfx10-3-generic",
+        0x053,
+        elf_feature_flags=AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6,
+        default_wavefront_size=32,
+    ),
+    processor_info(
+        "gfx11-generic",
+        0x054,
+        elf_feature_flags=AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6,
+        default_wavefront_size=32,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11,
+    ),
+    processor_info(
+        "gfx12-generic",
+        0x059,
+        elf_feature_flags=AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6,
+        default_wavefront_size=32,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
+    ),
+    processor_info(
+        "gfx9-4-generic",
+        0x05F,
+        elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4
+        | AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940,
+    ),
+    processor_info(
+        "gfx12-5-generic",
+        0x05B,
+        elf_feature_flags=AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6,
+        default_wavefront_size=32,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
     ),
 )
 
 
 AMDGPU_OCCUPANCY_MODEL_INFOS: tuple[AmdgpuOccupancyModelInfo, ...] = (
+    AmdgpuOccupancyModelInfo(
+        descriptor_set_key="amdgpu.cdna3.core",
+        wave_size=64,
+        max_waves_per_simd=16,
+        register_classes=(
+            AmdgpuOccupancyRegisterClassInfo("amdgpu.sgpr", 800, 16),
+            AmdgpuOccupancyRegisterClassInfo("amdgpu.vgpr", 512, 8),
+            AmdgpuOccupancyRegisterClassInfo("amdgpu.agpr", 256, 4),
+        ),
+    ),
     AmdgpuOccupancyModelInfo(
         descriptor_set_key="amdgpu.cdna4.core",
         wave_size=64,

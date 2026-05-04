@@ -40,8 +40,10 @@ extern "C" {
 typedef enum loom_amdgpu_kernel_descriptor_profile_e {
   // No kernel descriptor writer is implemented for this processor yet.
   LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE = 0,
+  // GFX9/CDNA AMDHSA code-object v5 kernel descriptor packing.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9 = 1,
   // GFX11 AMDHSA code-object v5 kernel descriptor packing.
-  LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11 = 1,
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11 = 2,
 } loom_amdgpu_kernel_descriptor_profile_t;
 
 typedef enum loom_amdgpu_matrix_feature_profile_e {

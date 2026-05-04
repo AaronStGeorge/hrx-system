@@ -52,10 +52,11 @@ loom_assert_no_dependencies(
         "//loom/src/loom/target/emit/llvmir:llvmir",
     ],
     targets = [
+        ":cdna3_descriptors",
+        ":cdna4_descriptors",
         ":rdna3_descriptors",
         ":rdna4_gfx125x_descriptors",
         ":rdna4_descriptors",
-        ":cdna4_descriptors",
         ":hal_kernel_abi",
         ":hal_binding_materialization",
         ":low_registry",
@@ -88,20 +89,22 @@ loom_assert_no_dependencies(
     name = "amdgpu_descriptor_shards_no_matrix_contract_dep",
     dependencies = [":matrix_contract"],
     targets = [
+        ":cdna3_descriptors",
+        ":cdna4_descriptors",
         ":rdna3_descriptors",
         ":rdna4_gfx125x_descriptors",
         ":rdna4_descriptors",
-        ":cdna4_descriptors",
     ],
 )
 
 loom_assert_no_dependencies(
     name = "core_target_interfaces_no_amdgpu_target_deps",
     dependencies = [
+        ":cdna3_descriptors",
+        ":cdna4_descriptors",
         ":rdna3_descriptors",
         ":rdna4_gfx125x_descriptors",
         ":rdna4_descriptors",
-        ":cdna4_descriptors",
         ":low_registry",
         ":matrix_contract",
         ":matrix_contract_projection",
@@ -118,6 +121,7 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "amdgpu_target_refs_no_descriptor_shard_deps",
     dependencies = [
+        ":cdna3_descriptors",
         ":rdna3_descriptors",
         ":cdna4_descriptors",
     ],
@@ -130,6 +134,7 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "amdgpu_lower_no_registry_or_descriptor_deps",
     dependencies = [
+        ":cdna3_descriptors",
         ":rdna3_descriptors",
         ":cdna4_descriptors",
         ":low_registry",
@@ -140,10 +145,11 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "amdgpu_hal_abi_no_backend_runtime_or_descriptor_deps",
     dependencies = [
+        ":cdna3_descriptors_ids",
+        ":cdna4_descriptors_ids",
         ":rdna3_descriptors_ids",
         ":rdna4_gfx125x_descriptors_ids",
         ":rdna4_descriptors_ids",
-        ":cdna4_descriptors_ids",
         ":low_registry",
         "//loom/src/loom/target/tool:llvm",
         "//runtime/src/iree/hal/drivers/amdgpu",
@@ -154,6 +160,7 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "amdgpu_hal_binding_materialization_no_backend_runtime_or_descriptor_deps",
     dependencies = [
+        ":cdna3_descriptors",
         ":rdna3_descriptors",
         ":cdna4_descriptors",
         ":low_registry",
@@ -210,12 +217,14 @@ loom_cc_library(
 loom_target_table_cc_library(
     name = "target_info",
     args = [
+        "--isa-xml=cdna3:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna3.xml)",
+        "--isa-xml=cdna4:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna4.xml)",
         "--isa-xml=rdna3:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna3.xml)",
         "--isa-xml=rdna4:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
-        "--isa-xml=cdna4:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna4.xml)",
     ],
     generator = _AMDGPU_TARGET_INFO_GENERATOR,
     inputs = [
+        "@amdgpu_isa_xml//:amdgpu_isa_cdna3.xml",
         "@amdgpu_isa_xml//:amdgpu_isa_cdna4.xml",
         "@amdgpu_isa_xml//:amdgpu_isa_rdna3.xml",
         "@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml",
@@ -297,13 +306,15 @@ loom_cc_library(
 loom_target_table_cc_library(
     name = "target_refs",
     args = [
+        "--isa-xml=cdna3:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna3.xml)",
+        "--isa-xml=cdna4:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna4.xml)",
         "--isa-xml=rdna3:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna3.xml)",
         "--isa-xml=rdna4:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
-        "--isa-xml=cdna4:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna4.xml)",
         "--public-header=loom/target/arch/amdgpu/target_refs.h",
     ],
     generator = _AMDGPU_TARGET_REF_GENERATOR,
     inputs = [
+        "@amdgpu_isa_xml//:amdgpu_isa_cdna3.xml",
         "@amdgpu_isa_xml//:amdgpu_isa_cdna4.xml",
         "@amdgpu_isa_xml//:amdgpu_isa_rdna3.xml",
         "@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml",
@@ -321,6 +332,23 @@ loom_target_table_cc_library(
         ":target_refs",
         "//loom/src/loom/ops:atomic",
         "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_target_table_cc_library(
+    name = "cdna3_encoding_tables",
+    args = [
+        "--target=cdna3",
+        "--descriptor-set-key=amdgpu.cdna3.core",
+        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna3.xml)",
+        "--public-header=loom/target/arch/amdgpu/cdna3_encoding_tables.h",
+    ],
+    exclude_from_cmake_all = True,
+    generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
+    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_cdna3.xml"],
+    deps = [
+        ":encoding_defs",
         "//runtime/src/iree/base",
     ],
 )
@@ -398,6 +426,7 @@ loom_cc_library(
     srcs = ["encoding.c"],
     hdrs = ["encoding.h"],
     deps = [
+        ":cdna3_encoding_tables",
         ":cdna4_encoding_tables",
         ":encoding_defs",
         ":rdna3_encoding_tables",
@@ -406,6 +435,18 @@ loom_cc_library(
         ":target_info",
         "//runtime/src/iree/base",
     ],
+)
+
+loom_low_descriptor_cc_library(
+    name = "cdna3_descriptors",
+    args = [
+        "--target=cdna3",
+        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna3.xml)",
+    ],
+    exclude_from_cmake_all = True,
+    generator = _AMDGPU_DESCRIPTOR_GENERATOR,
+    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_cdna3.xml"],
+    deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
 loom_low_descriptor_cc_library(
@@ -472,6 +513,7 @@ loom_cc_library(
     srcs = ["low_registry.c"],
     hdrs = ["low_registry.h"],
     deps = [
+        ":cdna3_descriptors",
         ":cdna4_descriptors",
         ":rdna3_descriptors",
         ":rdna4_descriptors",

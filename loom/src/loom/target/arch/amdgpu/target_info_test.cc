@@ -42,10 +42,10 @@ TEST(AmdgpuTargetInfoTest, IteratesProcessors) {
 TEST(AmdgpuTargetInfoTest, LooksUpDescriptorSetEncodingProfile) {
   const loom_amdgpu_descriptor_set_info_t* descriptor_set = nullptr;
   IREE_ASSERT_OK(loom_amdgpu_target_info_lookup_descriptor_set(
-      IREE_SV("amdgpu.cdna4.core"), &descriptor_set));
+      IREE_SV("amdgpu.cdna3.core"), &descriptor_set));
   ASSERT_NE(descriptor_set, nullptr);
   ASSERT_EQ(descriptor_set->descriptor_set_ordinal,
-            LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA4);
+            LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA3);
   const loom_amdgpu_descriptor_set_info_t* descriptor_set_by_ordinal = nullptr;
   IREE_ASSERT_OK(loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
       descriptor_set->descriptor_set_ordinal, &descriptor_set_by_ordinal));
@@ -53,7 +53,7 @@ TEST(AmdgpuTargetInfoTest, LooksUpDescriptorSetEncodingProfile) {
   EXPECT_NE(descriptor_set->s_endpgm_opcode, 0u);
   EXPECT_TRUE(descriptor_set->supports_descriptor_packet_encoding);
   EXPECT_EQ(descriptor_set->buffer_resource_cache_swizzle,
-            LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT);
+            LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE);
   EXPECT_EQ(descriptor_set->vector_memory_cache_policy_encoding,
             LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1);
 }
@@ -65,19 +65,87 @@ TEST(AmdgpuTargetInfoTest, DescriptorSetAtReturnsNullForUnknownOrdinal) {
   EXPECT_EQ(loom_amdgpu_target_info_descriptor_set_at(UINT16_MAX - 1), nullptr);
 }
 
-TEST(AmdgpuTargetInfoTest, LooksUpMatrixOnlyProcessor) {
+TEST(AmdgpuTargetInfoTest, LooksUpGfx942Processor) {
   const loom_amdgpu_processor_info_t* processor = nullptr;
   IREE_ASSERT_OK(
       loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx942"), &processor));
   ASSERT_NE(processor, nullptr);
-  EXPECT_TRUE(iree_string_view_is_empty(processor->descriptor_set_key));
+  EXPECT_TRUE(iree_string_view_equal(processor->descriptor_set_key,
+                                     IREE_SV("amdgpu.cdna3.core")));
   EXPECT_EQ(processor->descriptor_set_ordinal,
-            LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE);
+            LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA3);
   EXPECT_EQ(processor->elf_machine_flags, 0x04Cu);
+  EXPECT_EQ(processor->elf_feature_flags, 0x500u);
   EXPECT_EQ(processor->default_wavefront_size, 64u);
+  EXPECT_EQ(processor->kernel_descriptor_profile,
+            LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9);
   EXPECT_EQ(processor->matrix_feature_profile,
             LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940);
+  EXPECT_EQ(processor->kernel_descriptor_vgpr_encoding_granule_wave32, 8u);
+  EXPECT_EQ(processor->kernel_descriptor_vgpr_encoding_granule_wave64, 8u);
+  EXPECT_TRUE(processor->kernel_descriptor_has_architected_flat_scratch);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
+}
+
+TEST(AmdgpuTargetInfoTest, MatchesLlvmCanonicalGfx9PlusProcessorElfFlags) {
+  const struct {
+    iree_string_view_t target_cpu;
+    uint32_t elf_flags;
+  } cases[] = {
+      {IREE_SV("gfx900"), 0x12Cu},
+      {IREE_SV("gfx902"), 0x12Du},
+      {IREE_SV("gfx904"), 0x12Eu},
+      {IREE_SV("gfx906"), 0x52Fu},
+      {IREE_SV("gfx908"), 0x530u},
+      {IREE_SV("gfx909"), 0x131u},
+      {IREE_SV("gfx90a"), 0x53Fu},
+      {IREE_SV("gfx90c"), 0x132u},
+      {IREE_SV("gfx942"), 0x54Cu},
+      {IREE_SV("gfx950"), 0x54Fu},
+      {IREE_SV("gfx1010"), 0x133u},
+      {IREE_SV("gfx1011"), 0x134u},
+      {IREE_SV("gfx1012"), 0x135u},
+      {IREE_SV("gfx1013"), 0x142u},
+      {IREE_SV("gfx1030"), 0x036u},
+      {IREE_SV("gfx1031"), 0x037u},
+      {IREE_SV("gfx1032"), 0x038u},
+      {IREE_SV("gfx1033"), 0x039u},
+      {IREE_SV("gfx1034"), 0x03Eu},
+      {IREE_SV("gfx1035"), 0x03Du},
+      {IREE_SV("gfx1036"), 0x045u},
+      {IREE_SV("gfx1100"), 0x041u},
+      {IREE_SV("gfx1101"), 0x046u},
+      {IREE_SV("gfx1102"), 0x047u},
+      {IREE_SV("gfx1103"), 0x044u},
+      {IREE_SV("gfx1150"), 0x043u},
+      {IREE_SV("gfx1151"), 0x04Au},
+      {IREE_SV("gfx1152"), 0x055u},
+      {IREE_SV("gfx1153"), 0x058u},
+      {IREE_SV("gfx1170"), 0x05Du},
+      {IREE_SV("gfx1171"), 0x05Eu},
+      {IREE_SV("gfx1172"), 0x05Cu},
+      {IREE_SV("gfx1200"), 0x048u},
+      {IREE_SV("gfx1201"), 0x04Eu},
+      {IREE_SV("gfx1250"), 0x549u},
+      {IREE_SV("gfx1251"), 0x55Au},
+      {IREE_SV("gfx1310"), 0x050u},
+      {IREE_SV("gfx9-generic"), 0x01000151u},
+      {IREE_SV("gfx10-1-generic"), 0x01000152u},
+      {IREE_SV("gfx10-3-generic"), 0x01000053u},
+      {IREE_SV("gfx11-generic"), 0x01000054u},
+      {IREE_SV("gfx12-generic"), 0x01000059u},
+      {IREE_SV("gfx9-4-generic"), 0x0100055Fu},
+      {IREE_SV("gfx12-5-generic"), 0x0100005Bu},
+  };
+  for (const auto& c : cases) {
+    const loom_amdgpu_processor_info_t* processor = nullptr;
+    IREE_ASSERT_OK(
+        loom_amdgpu_target_info_lookup_processor(c.target_cpu, &processor));
+    ASSERT_NE(processor, nullptr);
+    EXPECT_TRUE(iree_string_view_equal(processor->target_cpu, c.target_cpu));
+    EXPECT_EQ(processor->elf_machine_flags | processor->elf_feature_flags,
+              c.elf_flags);
+  }
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx1170AsMatrixOnlyProcessor) {

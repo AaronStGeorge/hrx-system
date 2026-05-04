@@ -48,6 +48,7 @@
       },                                                                     \
   }
 
+LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuCdna3Snapshot, "amdgpu-cdna3-low", "gfx942", 64);
 LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuCdna4Snapshot, "amdgpu-cdna4-low", "gfx950", 64);
 LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuRdna3Snapshot, "amdgpu-rdna3-low", "gfx1100", 32);
 LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuRdna4Snapshot, "amdgpu-rdna4-low", "gfx1200", 32);
@@ -72,10 +73,18 @@ static const loom_target_export_plan_t kAmdgpuHalExportPlan = {
       .contract_set_key = IREE_SVL(key), \
   }
 
+LOOM_AMDGPU_LOW_CONFIG(kAmdgpuCdna3Config, "amdgpu.cdna3.core");
 LOOM_AMDGPU_LOW_CONFIG(kAmdgpuCdna4Config, "amdgpu.cdna4.core");
 LOOM_AMDGPU_LOW_CONFIG(kAmdgpuRdna3Config, "amdgpu.rdna3.core");
 LOOM_AMDGPU_LOW_CONFIG(kAmdgpuRdna4Config, "amdgpu.rdna4.core");
 LOOM_AMDGPU_LOW_CONFIG(kAmdgpuRdna4Gfx125xConfig, "amdgpu.rdna4.gfx125x.core");
+
+static const loom_target_bundle_t kAmdgpuLowTargetBundleCdna3Core = {
+  .name = IREE_SVL("amdgpu-cdna3"),
+  .snapshot = &kAmdgpuCdna3Snapshot,
+  .export_plan = &kAmdgpuHalExportPlan,
+  .config = &kAmdgpuCdna3Config,
+};
 
 static const loom_target_bundle_t kAmdgpuLowTargetBundleCdna4Core = {
   .name = IREE_SVL("amdgpu-cdna4"),
@@ -107,6 +116,7 @@ static const loom_target_bundle_t kAmdgpuLowTargetBundleRdna4Gfx125xCore = {
 
 static const loom_target_bundle_t* const kAmdgpuTargetBundleValues[] = {
   NULL,
+  &kAmdgpuLowTargetBundleCdna3Core,
   &kAmdgpuLowTargetBundleCdna4Core,
   &kAmdgpuLowTargetBundleRdna3Core,
   &kAmdgpuLowTargetBundleRdna4Core,
@@ -124,6 +134,8 @@ const loom_target_bundle_t* loom_amdgpu_target_bundle_for_descriptor_set(
     uint16_t descriptor_set_ordinal) {
   const loom_target_bundle_t* const
       bundles[LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_COUNT] = {
+          [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA3] =
+              &kAmdgpuLowTargetBundleCdna3Core,
           [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA4] =
               &kAmdgpuLowTargetBundleCdna4Core,
           [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3] =

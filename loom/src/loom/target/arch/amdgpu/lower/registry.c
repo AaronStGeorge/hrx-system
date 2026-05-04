@@ -550,6 +550,7 @@ void loom_amdgpu_low_lower_policy_registry_initialize(
     loom_low_lower_policy_registry_t* out_registry) {
   // clang-format off
   static const loom_low_lower_policy_registry_entry_t kEntries[] = {
+    {.contract_set_key = IREE_SVL("amdgpu.cdna3.core"), .policy = &kAmdgpuLowLowerPolicy},
     {.contract_set_key = IREE_SVL("amdgpu.cdna4.core"), .policy = &kAmdgpuLowLowerPolicy},
     {.contract_set_key = IREE_SVL("amdgpu.rdna3.core"), .policy = &kAmdgpuLowLowerPolicy},
     {.contract_set_key = IREE_SVL("amdgpu.rdna4.core"), .policy = &kAmdgpuLowLowerPolicy},

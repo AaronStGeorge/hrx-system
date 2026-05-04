@@ -26,11 +26,12 @@ enum {
 
 // AMDGPU target row selected by amdgpu.target.
 typedef enum loom_amdgpu_target_kind_e {
-  LOOM_AMDGPU_TARGET_KIND_GFX950 = 1,
-  LOOM_AMDGPU_TARGET_KIND_GFX1100 = 2,
-  LOOM_AMDGPU_TARGET_KIND_GFX1200 = 3,
-  LOOM_AMDGPU_TARGET_KIND_GFX1250 = 4,
-  LOOM_AMDGPU_TARGET_KIND_COUNT_ = 5,
+  LOOM_AMDGPU_TARGET_KIND_GFX942 = 1,
+  LOOM_AMDGPU_TARGET_KIND_GFX950 = 2,
+  LOOM_AMDGPU_TARGET_KIND_GFX1100 = 3,
+  LOOM_AMDGPU_TARGET_KIND_GFX1200 = 4,
+  LOOM_AMDGPU_TARGET_KIND_GFX1250 = 5,
+  LOOM_AMDGPU_TARGET_KIND_COUNT_ = 6,
 } loom_amdgpu_target_kind_t;
 
 // LOOM_OP_AMDGPU_TARGET: AMDGPU target-family record. The selector chooses a generated processor/family row; optional attrs structurally override authored common target fields.

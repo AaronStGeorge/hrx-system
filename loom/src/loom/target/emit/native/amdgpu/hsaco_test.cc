@@ -220,7 +220,7 @@ TEST(AmdgpuHsacoTest, WritesGfx1100CodeObjectEnvelope) {
                                             "ELF",
                                             4));
   EXPECT_EQ((uint8_t)bytes[7], LOOM_NATIVE_ELF_OS_ABI_AMDGPU_HSA);
-  EXPECT_EQ((uint8_t)bytes[8], LOOM_NATIVE_ELF_ABI_VERSION_AMDGPU_HSA_V5);
+  EXPECT_EQ((uint8_t)bytes[8], LOOM_NATIVE_ELF_ABI_VERSION_AMDGPU_HSA_V6);
   EXPECT_EQ(LoadLeU16(bytes, 16), LOOM_NATIVE_ELF_FILE_TYPE_DYN);
   EXPECT_EQ(LoadLeU16(bytes, 18), LOOM_NATIVE_ELF_MACHINE_AMDGPU);
   EXPECT_EQ(LoadLeU32(bytes, 48), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1100);
@@ -356,6 +356,37 @@ TEST(AmdgpuHsacoTest, WritesGfx1100CodeObjectEnvelope) {
   EXPECT_NE(note_contents.find("amdgcn-amd-amdhsa--gfx1100"),
             std::string::npos);
   EXPECT_NE(note_contents.find("loom_kernel.kd"), std::string::npos);
+}
+
+TEST(AmdgpuHsacoTest, WritesGfx942CodeObjectTargetFlags) {
+  const uint8_t s_endpgm[] = {0x00, 0x00, 0x81, 0xbf};
+  loom_amdgpu_metadata_kernel_t metadata =
+      MinimalKernel(IREE_SV("loom_kernel"), IREE_SV("loom_kernel.kd"));
+  metadata.wavefront_size = 64;
+  const loom_amdgpu_hsaco_kernel_t kernel = {
+      .metadata = metadata,
+      .text = iree_make_const_byte_span(s_endpgm, sizeof(s_endpgm)),
+  };
+  const loom_amdgpu_hsaco_file_t file = {
+      .target = IREE_SV("amdgcn-amd-amdhsa--gfx942"),
+      .target_cpu = IREE_SV("gfx942"),
+      .kernels = &kernel,
+      .kernel_count = 1,
+  };
+
+  StreamPtr stream = CreateStream();
+  TestArena arena;
+  IREE_ASSERT_OK(
+      loom_amdgpu_hsaco_write_file(&file, stream.get(), arena.arena()));
+  const std::string bytes = StreamBytes(stream.get());
+
+  ASSERT_GE(bytes.size(), 64u);
+  EXPECT_EQ((uint8_t)bytes[7], LOOM_NATIVE_ELF_OS_ABI_AMDGPU_HSA);
+  EXPECT_EQ((uint8_t)bytes[8], LOOM_NATIVE_ELF_ABI_VERSION_AMDGPU_HSA_V6);
+  EXPECT_EQ(LoadLeU32(bytes, 48),
+            LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX942 |
+                LOOM_NATIVE_ELF_AMDGPU_FLAG_FEATURE_XNACK_ANY_V4 |
+                LOOM_NATIVE_ELF_AMDGPU_FLAG_FEATURE_SRAMECC_ANY_V4);
 }
 
 TEST(AmdgpuHsacoTest, RejectsMismatchedTargetCpu) {

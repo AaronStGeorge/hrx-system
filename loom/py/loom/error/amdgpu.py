@@ -70,7 +70,7 @@ ERR_AMDGPU_003 = ErrorDef(
     summary="AMDGPU target CPU override is unknown.",
     message="AMDGPU target CPU override '{target_cpu}' is not a known processor",
     params=(ErrorParam("target_cpu", ParamKind.STRING),),
-    fix_hint="Use a known AMDGPU processor name such as gfx1100 or gfx950",
+    fix_hint="Use a known AMDGPU processor name such as gfx942, gfx950, or gfx1100",
 )
 
 # ERR_AMDGPU_004: AMDGPU target CPU override has no native descriptor set.

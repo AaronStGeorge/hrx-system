@@ -79,7 +79,7 @@ kernel.def target(@hip_mcpu_gfx1100) export(\"kernel\") @kernel() {
     )
 
 
-def test_create_kernel_module_uses_generic_target_when_cpu_has_no_row() -> None:
+def test_create_kernel_module_uses_gfx942_amdgpu_target_record() -> None:
     shell = create_kernel_module(
         KernelModuleSpec(
             target_preset="hip -mcpu=gfx942",
@@ -101,7 +101,7 @@ def test_create_kernel_module_uses_generic_target_when_cpu_has_no_row() -> None:
             shell.module,
             ops=kernel_module_ops("hip -mcpu=gfx942"),
         )
-        == """target.generic<reference> @hip_mcpu_gfx942
+        == """amdgpu.target<gfx942> @hip_mcpu_gfx942
 
 kernel.def target(@hip_mcpu_gfx942) export(\"kernel\") @kernel() {
   %wg_count_x = index.constant 1 : index

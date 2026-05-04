@@ -294,6 +294,22 @@ low.func.def target(@gfx11_target) @gfx11_ds_load_u16_d16_pair(%addr: reg<amdgpu
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx942_global_load_lds waits=none
+amdgpu.target<gfx942> @gfx942_target
+low.func.def target(@gfx942_target) @gfx942_global_load_lds(%addr64: reg<amdgpu.vgpr x2>, %addr32: reg<amdgpu.vgpr>, %saddr: reg<amdgpu.sgpr x2>, %m0: reg<amdgpu.m0>) {
+  low.op<amdgpu.global_load_lds_dword>(%addr64, %m0) {offset = 4} : (reg<amdgpu.vgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.global_load_lds_dword_saddr>(%addr32, %saddr, %m0) {offset = 16} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.return
+}
+
+// ----
+.Lbb0:
+  global_load_lds_dword v[0:1], off offset:4
+  global_load_lds_dword v2, s[0:1] offset:16
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx950_global_load_lds waits=none
 amdgpu.target<gfx950> @gfx950_target
 low.func.def target(@gfx950_target) @gfx950_global_load_lds(%addr64: reg<amdgpu.vgpr x2>, %addr32: reg<amdgpu.vgpr>, %saddr: reg<amdgpu.sgpr x2>, %m0: reg<amdgpu.m0>) {
@@ -415,9 +431,9 @@ low.func.def target(@gfx_target) @wait_fragment(%value: reg<amdgpu.vgpr>, %resou
 // ----
 .Lbb0:
   buffer_load_dword v1, v0, s[0:3], s4 offen offset:0
-  s_waitcnt vmcnt(0) lgkmcnt(63)
+  s_waitcnt vmcnt(0) lgkmcnt(15)
   buffer_store_dword v1, v0, s[0:3], s4 offen offset:4
-  s_waitcnt vmcnt(0) lgkmcnt(63)
+  s_waitcnt vmcnt(0) lgkmcnt(15)
   s_endpgm
 
 // ====

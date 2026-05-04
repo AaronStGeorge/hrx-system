@@ -305,6 +305,11 @@ _IDLE_WAIT_HAZARDS = (
     _ALU_COUNTER_HAZARD,
 )
 
+_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS = (
+    ("IMM", 1),
+    ("SOFFSET_EN", 1),
+)
+
 _ADDRESS_OFFSET_BYTE_ENCODING_ID = 1
 _ADDRESS_OFFSET_DWORD_ENCODING_ID = 2
 _ADDRESS_OFFSET_QWORD_ENCODING_ID = 3
@@ -911,7 +916,17 @@ _VMCNT_IMMEDIATE = Immediate(
     default_value=(2**6) - 1,
 )
 
-_LGKMCNT_IMMEDIATE = Immediate(
+_LGKMCNT_4BIT_IMMEDIATE = Immediate(
+    "lgkmcnt",
+    ImmediateKind.UNSIGNED,
+    flags=(ImmediateFlag.DEFAULT_VALUE,),
+    bit_width=4,
+    encoding_id=_WAIT_COUNTER_LGKM_ENCODING_ID,
+    unsigned_max=(2**4) - 1,
+    default_value=(2**4) - 1,
+)
+
+_LGKMCNT_6BIT_IMMEDIATE = Immediate(
     "lgkmcnt",
     ImmediateKind.UNSIGNED,
     flags=(ImmediateFlag.DEFAULT_VALUE,),
@@ -2480,7 +2495,9 @@ def _v_mov_b32_copy_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _s_buffer_load_dword_overlay(
-    offset_field_name: str = "OFFSET", offset_bit_width: int = 21
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.s_buffer_load_dword",
@@ -2497,6 +2514,7 @@ def _s_buffer_load_dword_overlay(
         implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
         immediate_fields=(offset_field_name,),
         immediates=(_offset_immediate(offset_bit_width),),
+        fixed_encoding_fields=fixed_encoding_fields,
         effects=(_GLOBAL_LOAD_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
@@ -2509,6 +2527,7 @@ def _s_buffer_load_64_overlay(
     mnemonic: str = "s_buffer_load_b64",
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -2525,13 +2544,16 @@ def _s_buffer_load_64_overlay(
         implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY_B64,),
         immediate_fields=(offset_field_name,),
         immediates=(_offset_immediate(offset_bit_width),),
+        fixed_encoding_fields=fixed_encoding_fields,
         effects=(_GLOBAL_LOAD_B64_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
 
 
 def _s_load_dwordx2_overlay(
-    offset_field_name: str = "OFFSET", offset_bit_width: int = 21
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.s_load_dwordx2",
@@ -2548,6 +2570,7 @@ def _s_load_dwordx2_overlay(
         implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY_B64,),
         immediate_fields=(offset_field_name,),
         immediates=(_offset_immediate(offset_bit_width),),
+        fixed_encoding_fields=fixed_encoding_fields,
         effects=(_GLOBAL_LOAD_B64_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
@@ -3221,18 +3244,23 @@ def _global_load_lds_overlay(
     )
 
 
+_GLOBAL_LOAD_LDS_DWORD_VARIANTS = (("DWORD", "dword", 32),)
+
+_GLOBAL_LOAD_LDS_GFX950_VARIANTS = (
+    ("DWORD", "dword", 32),
+    ("DWORDX3", "dwordx3", 96),
+    ("DWORDX4", "dwordx4", 128),
+)
+
+
 def _global_load_lds_overlays(
     *,
     descriptor_key_suffix: str = "",
     address_units: int,
     saddr_off: AmdgpuFixedEncodingValue | None,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    variants: tuple[tuple[str, str, int], ...] = _GLOBAL_LOAD_LDS_GFX950_VARIANTS,
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
-    variants = (
-        ("DWORD", "dword", 32),
-        ("DWORDX3", "dwordx3", 96),
-        ("DWORDX4", "dwordx4", 128),
-    )
     return tuple(
         _global_load_lds_overlay(
             descriptor_key=(
@@ -5694,6 +5722,7 @@ def _v_dot8_u32_u4_overlay(
 def _s_waitcnt_overlay(
     *,
     effects: tuple[Effect, ...],
+    lgkmcnt_immediate: Immediate = _LGKMCNT_6BIT_IMMEDIATE,
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.s_waitcnt",
@@ -5704,7 +5733,7 @@ def _s_waitcnt_overlay(
         schedule_class=_SCHEDULE_WAIT_MEMORY,
         operands=(),
         immediate_fields=("VM", "LGKM"),
-        immediates=(_VMCNT_IMMEDIATE, _LGKMCNT_IMMEDIATE),
+        immediates=(_VMCNT_IMMEDIATE, lgkmcnt_immediate),
         fixed_encoding_fields=(("EXP", AmdgpuEncodingFieldAllOnes()),),
         effects=effects,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -6141,7 +6170,12 @@ def _gfx12_cache_control_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     )
 
 
-def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+def _cdna_core_overlays(
+    *,
+    global_load_lds_variants: tuple[tuple[str, str, int], ...],
+    include_v_dot2_f32_bf16: bool,
+    include_ds_transpose_reads: bool,
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
         _s_sub_u32_overlay(),
@@ -6170,12 +6204,15 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_cvt_f32_u32_overlay(),
         *_v_cmp_overlays(),
         _v_cndmask_b32_overlay(),
-        _s_load_dwordx2_overlay(),
-        _s_buffer_load_dword_overlay(),
+        _s_load_dwordx2_overlay(fixed_encoding_fields=_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS),
+        _s_buffer_load_dword_overlay(
+            fixed_encoding_fields=_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS
+        ),
         _s_buffer_load_64_overlay(
             descriptor_key="amdgpu.s_buffer_load_dwordx2",
             instruction_name="S_BUFFER_LOAD_DWORDX2",
             mnemonic="s_buffer_load_dwordx2",
+            fixed_encoding_fields=_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS,
         ),
         _buffer_load_dword_overlay(
             encoding_name="ENC_MUBUF",
@@ -6292,12 +6329,14 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             address_units=2,
             saddr_off=_GLOBAL_GFX950_SADDR_OFF,
             cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            variants=global_load_lds_variants,
         ),
         *_global_load_lds_overlays(
             address_units=1,
             saddr_off=None,
             descriptor_key_suffix="_saddr",
             cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            variants=global_load_lds_variants,
         ),
         *_flat_atomic_overlays(
             rows=_FLAT_ATOMIC_GFX950_ROWS,
@@ -6318,12 +6357,12 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         *_ds_memory_overlays(include_packed_half_atomic_add=True),
         *_ds_crosslane_overlays(),
         _v_dot2_f32_f16_overlay(),
-        _v_dot2_f32_bf16_overlay(),
+        *((_v_dot2_f32_bf16_overlay(),) if include_v_dot2_f32_bf16 else ()),
         _v_dot4_i32_i8_overlay(signedness_modifiers=False),
         _v_dot4_u32_u8_overlay(),
         _v_dot8_i32_i4_overlay(signedness_modifiers=False),
         _v_dot8_u32_u4_overlay(),
-        *_gfx950_ds_transpose_read_overlays(),
+        *(_gfx950_ds_transpose_read_overlays() if include_ds_transpose_reads else ()),
         _v_mfma_f32_16x16x16_f16_overlay(),
         _s_barrier_overlay(),
         *_gfx950_cache_control_overlays(),
@@ -6333,9 +6372,32 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
                 _VMEM_STORE_WAIT_EFFECT,
                 _LDS_WAIT_EFFECT,
                 _SMEM_WAIT_EFFECT,
-            )
+            ),
+            lgkmcnt_immediate=_LGKMCNT_4BIT_IMMEDIATE,
         ),
     )
+
+
+def _gfx940_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return _cdna_core_overlays(
+        global_load_lds_variants=_GLOBAL_LOAD_LDS_DWORD_VARIANTS,
+        include_v_dot2_f32_bf16=False,
+        include_ds_transpose_reads=False,
+    )
+
+
+def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return _cdna_core_overlays(
+        global_load_lds_variants=_GLOBAL_LOAD_LDS_GFX950_VARIANTS,
+        include_v_dot2_f32_bf16=True,
+        include_ds_transpose_reads=True,
+    )
+
+
+def _gfx940_core_overlay_descriptors(
+    spec: AmdgpuIsaFactSource,
+) -> tuple[Descriptor, ...]:
+    return materialize_amdgpu_descriptor_overlays(spec, _gfx940_core_overlays())
 
 
 def _gfx950_core_overlay_descriptors(
@@ -7122,6 +7184,59 @@ _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
 )
 
 
+_AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
+    key="amdgpu.cdna3.core",
+    reg_classes=(
+        RegClass(
+            _REG_SGPR,
+            32,
+            SpillSlotSpace.SCRATCH,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=102,
+        ),
+        RegClass(
+            _REG_VGPR,
+            32,
+            SpillSlotSpace.SCRATCH,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=512,
+            full_register_part_mask=_REG_PART_VGPR_FULL32_MASK,
+        ),
+        RegClass(
+            _REG_SCC,
+            1,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            physical_count=1,
+        ),
+        RegClass(
+            _REG_EXEC,
+            64,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            physical_count=1,
+        ),
+        RegClass(
+            _REG_AGPR,
+            32,
+            SpillSlotSpace.SCRATCH,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=256,
+        ),
+        RegClass(
+            _REG_M0,
+            32,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            physical_count=1,
+        ),
+    ),
+    register_parts=_AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE.register_parts,
+    resources=_AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE.resources,
+    schedule_classes=_AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE.schedule_classes,
+)
+
+
 _AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
     key="amdgpu.rdna3.core",
     reg_classes=(
@@ -7609,6 +7724,7 @@ _AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
 
 def _amdgpu_core_descriptor_set_bases() -> tuple[DescriptorSet, ...]:
     return (
+        _AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE,
         _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE,
         _AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE,
         _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE,
@@ -7623,6 +7739,7 @@ def _amdgpu_descriptor_ref_key_set() -> set[str]:
     for descriptor_set in _amdgpu_core_descriptor_set_bases():
         keys.update(descriptor.key for descriptor in descriptor_set.descriptors)
     for overlays in (
+        _gfx940_core_overlays(),
         _gfx950_core_overlays(),
         _gfx11_core_overlays(),
         _gfx12_core_overlays(),
@@ -7782,6 +7899,7 @@ def amdgpu_atomic_descriptor_candidates() -> tuple[
 
     candidates_by_key: dict[str, AmdgpuAtomicDescriptorCandidate] = {}
     for overlays in (
+        _gfx940_core_overlays(),
         _gfx950_core_overlays(),
         _gfx11_core_overlays(),
         _gfx12_core_overlays(),
@@ -8147,6 +8265,20 @@ def build_amdgpu_cdna4_core_descriptor_set(
     )
 
 
+def build_amdgpu_cdna3_core_descriptor_set(
+    xml_path: str | Path,
+) -> DescriptorSet:
+    spec = parse_amdgpu_isa_xml_path(xml_path)
+    validate_amdgpu_descriptor_set_isa_xml(
+        amdgpu_descriptor_set_info_by_generator_target("cdna3"), spec
+    )
+    return _with_overlay_descriptors(
+        _AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE,
+        spec,
+        _gfx940_core_overlay_descriptors(spec),
+    )
+
+
 def build_amdgpu_rdna3_core_descriptor_set(
     xml_path: str | Path,
 ) -> DescriptorSet:
@@ -8190,6 +8322,7 @@ def build_amdgpu_rdna4_gfx125x_core_descriptor_set(
 
 
 AMDGPU_DESCRIPTOR_SET_BUILDERS = {
+    "cdna3": build_amdgpu_cdna3_core_descriptor_set,
     "cdna4": build_amdgpu_cdna4_core_descriptor_set,
     "rdna3": build_amdgpu_rdna3_core_descriptor_set,
     "rdna4": build_amdgpu_rdna4_core_descriptor_set,

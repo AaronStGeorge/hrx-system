@@ -31,10 +31,11 @@ amdgpu_ops = Dialect(
 AmdgpuTargetKind = EnumDef(
     "AmdgpuTargetKind",
     [
-        EnumCase("gfx950", 1, doc="CDNA 4 gfx950 target row."),
-        EnumCase("gfx1100", 2, doc="RDNA 3 gfx1100 target row."),
-        EnumCase("gfx1200", 3, doc="RDNA 4 gfx1200 target row."),
-        EnumCase("gfx1250", 4, doc="RDNA 4 gfx1250 target row."),
+        EnumCase("gfx942", 1, doc="CDNA 3 gfx942 target row."),
+        EnumCase("gfx950", 2, doc="CDNA 4 gfx950 target row."),
+        EnumCase("gfx1100", 3, doc="RDNA 3 gfx1100 target row."),
+        EnumCase("gfx1200", 4, doc="RDNA 4 gfx1200 target row."),
+        EnumCase("gfx1250", 5, doc="RDNA 4 gfx1250 target row."),
     ],
     doc="AMDGPU target row selected by amdgpu.target.",
 )
@@ -71,6 +72,7 @@ amdgpu_target = Op(
     ],
     examples=[
         "amdgpu.target<gfx1100> @gfx11",
+        "amdgpu.target<gfx942> @gfx942 {subgroup_size = 64}",
         "amdgpu.target<gfx950> @gfx950 {subgroup_size = 64}",
     ],
 )

@@ -138,6 +138,49 @@ TEST(AmdgpuDescriptorTest, EncodesResourceAndAbiFields) {
   EXPECT_EQ(LoadLeU16(bytes, 56), 0x0c08u);
 }
 
+TEST(AmdgpuDescriptorTest, EncodesGfx942ResourceAndAbiFields) {
+  loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
+  metadata.wavefront_size = 64;
+  metadata.group_segment_fixed_size = 128;
+  metadata.private_segment_fixed_size = 16;
+  metadata.kernarg_segment_size = 24;
+  metadata.sgpr_count = 20;
+  metadata.vgpr_count = 9;
+
+  loom_amdgpu_kernel_descriptor_t descriptor = {};
+  IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_initialize_from_metadata(
+      IREE_SV("gfx942"), &metadata, 256, &descriptor));
+  descriptor.user_sgpr_count = 2;
+  descriptor.flags |=
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_KERNARG_SEGMENT_PTR |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_X |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Y |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Z |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_USES_DYNAMIC_STACK;
+
+  std::array<uint8_t, 65> bytes;
+  bytes.fill(0);
+  IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_write(
+      &descriptor, iree_make_byte_span(bytes.data(), bytes.size())));
+
+  EXPECT_EQ(LoadLeU32(bytes, 0), 128u);
+  EXPECT_EQ(LoadLeU32(bytes, 4), 16u);
+  EXPECT_EQ(LoadLeU32(bytes, 8), 24u);
+  EXPECT_EQ(LoadLeI64(bytes, 16), 256);
+  EXPECT_EQ(LoadLeU32(bytes, 48), 0x00af0081u);
+  EXPECT_EQ(LoadLeU32(bytes, 52), 0x00001084u);
+  EXPECT_EQ(LoadLeU16(bytes, 56), 0x0808u);
+}
+
+TEST(AmdgpuDescriptorTest, RejectsWave32MetadataOnGfx942) {
+  loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
+  loom_amdgpu_kernel_descriptor_t descriptor = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_amdgpu_kernel_descriptor_initialize_from_metadata(
+                            IREE_SV("gfx942"), &metadata, 0, &descriptor));
+}
+
 TEST(AmdgpuDescriptorTest, RejectsSparseWorkitemIdFlags) {
   loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
   loom_amdgpu_kernel_descriptor_t descriptor = {};

@@ -19,6 +19,7 @@
 #define LOOM_AMDGPU_COMPUTE_PGM_RSRC1_VGPR_COUNT_WIDTH 6u
 #define LOOM_AMDGPU_COMPUTE_PGM_RSRC1_SGPR_COUNT_SHIFT 6u
 #define LOOM_AMDGPU_COMPUTE_PGM_RSRC1_SGPR_COUNT_WIDTH 4u
+#define LOOM_AMDGPU_COMPUTE_PGM_RSRC1_DENORM_32_SHIFT 16u
 #define LOOM_AMDGPU_COMPUTE_PGM_RSRC1_DENORM_16_64_SHIFT 18u
 #define LOOM_AMDGPU_COMPUTE_PGM_RSRC1_DX10_CLAMP_SHIFT 21u
 #define LOOM_AMDGPU_COMPUTE_PGM_RSRC1_IEEE_MODE_SHIFT 23u
@@ -75,15 +76,18 @@ static iree_status_t loom_amdgpu_kernel_descriptor_resolve_target(
   const loom_amdgpu_processor_info_t* target = NULL;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_target_info_lookup_processor(target_cpu, &target));
-  if (target->kernel_descriptor_profile !=
-      LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU kernel descriptor target CPU '%.*s' is not supported yet",
-        (int)target_cpu.size, target_cpu.data);
+  switch (target->kernel_descriptor_profile) {
+    case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9:
+    case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11:
+      *out_target = target;
+      return iree_ok_status();
+    case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE:
+      break;
   }
-  *out_target = target;
-  return iree_ok_status();
+  return iree_make_status(
+      IREE_STATUS_UNIMPLEMENTED,
+      "AMDGPU kernel descriptor target CPU '%.*s' is not supported yet",
+      (int)target_cpu.size, target_cpu.data);
 }
 
 static uint32_t loom_amdgpu_kernel_descriptor_bit_mask(uint32_t width) {
@@ -272,6 +276,14 @@ static iree_status_t loom_amdgpu_kernel_descriptor_validate(
         "AMDGPU kernel descriptor flat scratch init user SGPR is invalid with "
         "architected flat scratch");
   }
+  if ((*out_target)->kernel_descriptor_profile ==
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9 &&
+      iree_any_bit_set(descriptor->flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_WAVEFRONT_SIZE32)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU GFX9 kernel descriptors require wavefront-size-64 metadata");
+  }
   return iree_ok_status();
 }
 
@@ -322,8 +334,7 @@ iree_status_t loom_amdgpu_kernel_descriptor_initialize_from_metadata(
                ? LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_WAVEFRONT_SIZE32
                : 0),
   };
-  (void)target;
-  return iree_ok_status();
+  return loom_amdgpu_kernel_descriptor_validate(out_descriptor, &target);
 }
 
 iree_status_t loom_amdgpu_kernel_descriptor_validate_metadata(
@@ -420,7 +431,7 @@ iree_status_t loom_amdgpu_kernel_descriptor_write(
   uint32_t sgpr_block_count = 0;
   if (!target->kernel_descriptor_uses_gfx10_sgpr_encoding) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_descriptor_granulated_blocks(
-        descriptor->next_free_sgpr, 16,
+        descriptor->next_free_sgpr, 8,
         LOOM_AMDGPU_COMPUTE_PGM_RSRC1_SGPR_COUNT_WIDTH, &sgpr_block_count));
   }
 
@@ -431,6 +442,12 @@ iree_status_t loom_amdgpu_kernel_descriptor_write(
   loom_amdgpu_kernel_descriptor_set_bits_u32(
       &compute_pgm_rsrc1, LOOM_AMDGPU_COMPUTE_PGM_RSRC1_SGPR_COUNT_SHIFT,
       LOOM_AMDGPU_COMPUTE_PGM_RSRC1_SGPR_COUNT_WIDTH, sgpr_block_count);
+  if (target->kernel_descriptor_profile ==
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9) {
+    loom_amdgpu_kernel_descriptor_set_bits_u32(
+        &compute_pgm_rsrc1, LOOM_AMDGPU_COMPUTE_PGM_RSRC1_DENORM_32_SHIFT, 2,
+        3);
+  }
   loom_amdgpu_kernel_descriptor_set_bits_u32(
       &compute_pgm_rsrc1, LOOM_AMDGPU_COMPUTE_PGM_RSRC1_DENORM_16_64_SHIFT, 2,
       3);
@@ -440,14 +457,18 @@ iree_status_t loom_amdgpu_kernel_descriptor_write(
   loom_amdgpu_kernel_descriptor_set_bit_u32(
       &compute_pgm_rsrc1, LOOM_AMDGPU_COMPUTE_PGM_RSRC1_IEEE_MODE_SHIFT,
       target->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
+  const bool has_gfx10_pgm_rsrc1_features =
+      target->kernel_descriptor_profile ==
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11;
   loom_amdgpu_kernel_descriptor_set_bit_u32(
-      &compute_pgm_rsrc1, LOOM_AMDGPU_COMPUTE_PGM_RSRC1_WGP_MODE_SHIFT, true);
+      &compute_pgm_rsrc1, LOOM_AMDGPU_COMPUTE_PGM_RSRC1_WGP_MODE_SHIFT,
+      has_gfx10_pgm_rsrc1_features);
   loom_amdgpu_kernel_descriptor_set_bit_u32(
       &compute_pgm_rsrc1, LOOM_AMDGPU_COMPUTE_PGM_RSRC1_MEM_ORDERED_SHIFT,
-      true);
+      has_gfx10_pgm_rsrc1_features);
   loom_amdgpu_kernel_descriptor_set_bit_u32(
       &compute_pgm_rsrc1, LOOM_AMDGPU_COMPUTE_PGM_RSRC1_FWD_PROGRESS_SHIFT,
-      true);
+      has_gfx10_pgm_rsrc1_features);
 
   uint32_t compute_pgm_rsrc2 = 0;
   loom_amdgpu_kernel_descriptor_set_bit_u32(

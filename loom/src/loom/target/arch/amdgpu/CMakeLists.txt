@@ -39,12 +39,14 @@ loom_target_table_cc_library(
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_target_info
   ARGS
+    "--isa-xml=cdna3:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna3.xml"
+    "--isa-xml=cdna4:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
     "--isa-xml=rdna3:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
     "--isa-xml=rdna4:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
-    "--isa-xml=cdna4:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
   INPUTS
-    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna3.xml"
     "loom_amdgpu_isa_xml"
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
   DEPS
@@ -131,13 +133,15 @@ loom_target_table_cc_library(
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_target_refs
   ARGS
+    "--isa-xml=cdna3:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna3.xml"
+    "--isa-xml=cdna4:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
     "--isa-xml=rdna3:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
     "--isa-xml=rdna4:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
-    "--isa-xml=cdna4:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
     "--public-header=loom/target/arch/amdgpu/target_refs.h"
   INPUTS
-    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna3.xml"
     "loom_amdgpu_isa_xml"
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
   DEPS
@@ -155,6 +159,25 @@ loom_target_table_cc_library(
     iree::base
     loom::src::loom::ops::atomic
     loom::src::loom::util::fact_table
+)
+
+loom_target_table_cc_library(
+  NAME
+    cdna3_encoding_tables
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_encoding_tables
+  ARGS
+    "--target=cdna3"
+    "--descriptor-set-key=amdgpu.cdna3.core"
+    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna3.xml"
+    "--public-header=loom/target/arch/amdgpu/cdna3_encoding_tables.h"
+  INPUTS
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna3.xml"
+    "loom_amdgpu_isa_xml"
+  DEPS
+    ::encoding_defs
+    iree::base
+  EXCLUDE_FROM_ALL
 )
 
 loom_target_table_cc_library(
@@ -241,6 +264,7 @@ loom_cc_library(
   SRCS
     "encoding.c"
   DEPS
+    ::cdna3_encoding_tables
     ::cdna4_encoding_tables
     ::encoding_defs
     ::rdna3_encoding_tables
@@ -249,6 +273,22 @@ loom_cc_library(
     ::target_info
     iree::base
   PUBLIC
+)
+
+loom_low_descriptor_cc_library(
+  NAME
+    cdna3_descriptors
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_descriptors
+  ARGS
+    "--target=cdna3"
+    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna3.xml"
+  INPUTS
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna3.xml"
+    "loom_amdgpu_isa_xml"
+  DEPS
+    loom::src::loom::codegen::low::descriptors
+  EXCLUDE_FROM_ALL
 )
 
 loom_low_descriptor_cc_library(
@@ -337,6 +377,7 @@ loom_cc_library(
   SRCS
     "low_registry.c"
   DEPS
+    ::cdna3_descriptors
     ::cdna4_descriptors
     ::rdna3_descriptors
     ::rdna4_descriptors

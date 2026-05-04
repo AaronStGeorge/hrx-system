@@ -930,13 +930,13 @@ TEST(MatrixContractTest, ProcessorFeatureBitsUseTargetInfoAliases) {
                                   LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX12 |
                                   LOOM_AMDGPU_MATRIX_FEATURE_SWMMAC_GFX12);
 
-  loom_amdgpu_matrix_feature_bits_t gfx1252_features = 0;
+  loom_amdgpu_matrix_feature_bits_t gfx1251_features = 0;
   IREE_ASSERT_OK(loom_amdgpu_matrix_feature_bits_for_processor(
-      IREE_SV("gfx1252"), &gfx1252_features));
-  EXPECT_NE(gfx1252_features & LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX1250,
+      IREE_SV("gfx1251"), &gfx1251_features));
+  EXPECT_NE(gfx1251_features & LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX1250,
             UINT64_C(0));
   EXPECT_NE(
-      gfx1252_features & LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX1250_SCALE_F8F6F4,
+      gfx1251_features & LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX1250_SCALE_F8F6F4,
       UINT64_C(0));
 }
 

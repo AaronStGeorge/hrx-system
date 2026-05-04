@@ -1041,7 +1041,7 @@ iree_status_t loom_amdgpu_hsaco_write_file(
       .type = LOOM_NATIVE_ELF_FILE_TYPE_DYN,
       .machine = LOOM_NATIVE_ELF_MACHINE_AMDGPU,
       .os_abi = LOOM_NATIVE_ELF_OS_ABI_AMDGPU_HSA,
-      .abi_version = LOOM_NATIVE_ELF_ABI_VERSION_AMDGPU_HSA_V5,
+      .abi_version = LOOM_NATIVE_ELF_ABI_VERSION_AMDGPU_HSA_V6,
       .flags = elf_flags,
       .entry = 0,
       .sections = payloads.sections,

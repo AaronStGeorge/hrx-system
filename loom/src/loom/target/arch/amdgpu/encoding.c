@@ -8,6 +8,7 @@
 
 #include <inttypes.h>
 
+#include "loom/target/arch/amdgpu/cdna3_encoding_tables.h"
 #include "loom/target/arch/amdgpu/cdna4_encoding_tables.h"
 #include "loom/target/arch/amdgpu/rdna3_encoding_tables.h"
 #include "loom/target/arch/amdgpu/rdna4_encoding_tables.h"
@@ -223,6 +224,8 @@ loom_amdgpu_encoding_table_for_descriptor_set_ordinal(
     uint16_t descriptor_set_ordinal) {
   const loom_amdgpu_encoding_table_t* const
       tables[LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_COUNT] = {
+          [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA3] =
+              loom_amdgpu_cdna3_encoding_table(),
           [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA4] =
               loom_amdgpu_cdna4_encoding_table(),
           [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3] =

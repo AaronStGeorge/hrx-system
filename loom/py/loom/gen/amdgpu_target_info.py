@@ -34,6 +34,7 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE,
     AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT,
     AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE,
+    AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9,
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11,
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
     AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A,
@@ -100,6 +101,8 @@ def _descriptor_set_ordinal_constant_name(key: str) -> str:
 def _kernel_descriptor_profile_expr(profile: str) -> str:
     if profile == AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE:
         return "LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE"
+    if profile == AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9:
+        return "LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9"
     if profile == AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11:
         return "LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11"
     raise ValueError(f"unknown AMDGPU kernel descriptor profile '{profile}'")
@@ -247,10 +250,14 @@ def _validate_processors(
             raise ValueError(f"AMDGPU processor {info.target_cpu} references unknown descriptor set {info.descriptor_set_key}")
         if info.elf_machine_flags < 0 or info.elf_machine_flags > 0x0FF:
             raise ValueError(f"AMDGPU ELF machine flags for {info.target_cpu} must fit EF_AMDGPU_MACH")
+        if info.elf_feature_flags < 0 or info.elf_feature_flags > 0xFFFFFFFF:
+            raise ValueError(f"AMDGPU ELF feature flags for {info.target_cpu} must fit u32")
+        if info.elf_feature_flags & 0x0FF:
+            raise ValueError(f"AMDGPU ELF feature flags for {info.target_cpu} must not overlap EF_AMDGPU_MACH")
         if info.default_wavefront_size not in (32, 64):
             raise ValueError(f"AMDGPU default wavefront size for {info.target_cpu} must be 32 or 64")
         _matrix_feature_profile_expr(info.matrix_feature_profile)
-        if info.kernel_descriptor_profile == AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11 and (
+        if info.kernel_descriptor_profile != AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE and (
             info.kernel_descriptor_vgpr_encoding_granule_wave32 == 0 or info.kernel_descriptor_vgpr_encoding_granule_wave64 == 0
         ):
             raise ValueError(f"AMDGPU processor {info.target_cpu} has descriptor profile but no VGPR encoding granules")
