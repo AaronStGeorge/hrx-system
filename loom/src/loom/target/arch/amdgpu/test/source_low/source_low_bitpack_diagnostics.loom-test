@@ -2,7 +2,7 @@
 
 amdgpu.target<gfx1100> @target
 func.def target(@target) @bitpack_width_rejected(%codes: vector<8xi32>) -> (vector<4xi8>) {
-  // ERROR@+1: BACKEND/001 "AMDGPU vector.bitpack currently lowers byte packing width 8"
+  // ERROR@+1: AMDGPU/023 {constraint_key="bitpack.width"}
   %packed = vector.bitpack<4> %codes : vector<8xi32> -> vector<4xi8>
   func.return %packed : vector<4xi8>
 }
@@ -12,7 +12,7 @@ func.def target(@target) @bitpack_width_rejected(%codes: vector<8xi32>) -> (vect
 amdgpu.target<gfx1100> @target
 
 func.def target(@target) @bitpack_source_type_rejected(%codes: vector<4xi8>) -> (vector<4xi8>) {
-  // ERROR@+1: BACKEND/001 "static rank-1 i32 source vector"
+  // ERROR@+1: AMDGPU/023 {constraint_key="bitpack.source_type"}
   %packed = vector.bitpack<8> %codes : vector<4xi8> -> vector<4xi8>
   func.return %packed : vector<4xi8>
 }

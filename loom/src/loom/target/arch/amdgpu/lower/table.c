@@ -245,10 +245,6 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_table(
   if (loom_amdgpu_table_lookup_plan_from_op(module, op, &unused_plan)) {
     return iree_ok_status();
   }
-  return loom_target_low_legality_reject(
-      context, provider, op, IREE_SV("shape"), loom_op_name(module, op),
-      IREE_SV("AMDGPU vector.table.lookup currently requires a static rank-1 "
-              "f32 table, static rank-1 i32 or packed i8 indices, and a "
-              "static rank-1 f32 result within the scalarized register lane "
-              "limit"));
+  return loom_amdgpu_low_legality_reject(context, op,
+                                         IREE_SV("table_lookup.shape"));
 }

@@ -14,6 +14,7 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
+#include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
 #include "loom/util/math.h"
@@ -173,6 +174,39 @@ bool loom_amdgpu_type_is_byte_addressable_view(loom_type_t type) {
   const int32_t element_bit_count =
       loom_scalar_type_bitwidth(loom_type_element_type(type));
   return element_bit_count > 0 && (element_bit_count % 8) == 0;
+}
+
+static iree_string_view_t loom_amdgpu_nonempty(iree_string_view_t value,
+                                               iree_string_view_t placeholder) {
+  return iree_string_view_is_empty(value) ? placeholder : value;
+}
+
+void loom_amdgpu_low_legality_make_context_params(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    loom_diagnostic_param_t* params) {
+  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
+  params[0] =
+      loom_param_string(loom_amdgpu_nonempty(bundle->name, IREE_SV("<empty>")));
+  params[1] = loom_param_string(
+      loom_amdgpu_nonempty(bundle->export_plan->name, IREE_SV("<empty>")));
+  params[2] = loom_param_string(
+      loom_amdgpu_nonempty(bundle->config->name, IREE_SV("<empty>")));
+  params[3] =
+      loom_param_string(loom_target_low_legality_function_name(context));
+  params[4] = loom_param_string(
+      loom_op_name(loom_target_low_legality_module(context), op));
+}
+
+iree_status_t loom_amdgpu_low_legality_reject(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    iree_string_view_t constraint_key) {
+  loom_diagnostic_param_t
+      params[LOOM_AMDGPU_LOW_LEGALITY_CONTEXT_PARAM_COUNT + 1];
+  loom_amdgpu_low_legality_make_context_params(context, op, params);
+  params[LOOM_AMDGPU_LOW_LEGALITY_CONTEXT_PARAM_COUNT] =
+      loom_param_string(constraint_key);
+  return loom_target_low_legality_emit_error_ref(
+      context, op, LOOM_ERR_AMDGPU_023_REF, params, IREE_ARRAYSIZE(params));
 }
 
 bool loom_amdgpu_value_is_i32(loom_low_lower_context_t* context,

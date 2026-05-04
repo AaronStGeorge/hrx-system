@@ -397,12 +397,10 @@ static iree_status_t loom_amdgpu_append_memory_cache_attrs(
   }
   const loom_low_descriptor_set_t* descriptor_set =
       loom_low_lower_context_descriptor_set(context);
-  loom_amdgpu_memory_cache_policy_attrs_t cache_attrs;
-  if (!loom_amdgpu_memory_cache_policy_encode(descriptor_set, access,
-                                              &cache_attrs)) {
-    return loom_amdgpu_memory_cache_policy_rejected_status(descriptor_set,
-                                                           access, policy);
-  }
+  loom_amdgpu_memory_cache_policy_attrs_t cache_attrs = {0};
+  const bool encoded = loom_amdgpu_memory_cache_policy_encode(
+      descriptor_set, access, &cache_attrs);
+  IREE_ASSERT(encoded);
 
   if (iree_any_bit_set(cache_attrs.flags,
                        LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_SCOPE)) {

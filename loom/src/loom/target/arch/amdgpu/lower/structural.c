@@ -309,21 +309,16 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_structural(
       if (loom_amdgpu_vector_bitcast_plan_from_op(module, op, &plan)) {
         return iree_ok_status();
       }
-      return loom_target_low_legality_reject(
-          context, provider, op, IREE_SV("shape"), loom_op_name(module, op),
-          IREE_SV("AMDGPU vector.bitcast requires source and result payloads "
-                  "with identical 32-bit register storage"));
+      return loom_amdgpu_low_legality_reject(context, op,
+                                             IREE_SV("bitcast.storage"));
     }
     case LOOM_OP_VECTOR_SLICE: {
       loom_amdgpu_vector_slice_plan_t unused_plan = {0};
       if (loom_amdgpu_vector_slice_plan_from_op(module, op, &unused_plan)) {
         return iree_ok_status();
       }
-      return loom_target_low_legality_reject(
-          context, provider, op, IREE_SV("shape"), loom_op_name(module, op),
-          IREE_SV("AMDGPU vector.slice currently requires static rank-1 "
-                  "32-bit lane slices or packed bit windows contained within "
-                  "each selected 32-bit register"));
+      return loom_amdgpu_low_legality_reject(context, op,
+                                             IREE_SV("slice.shape"));
     }
     default:
       *out_handled = false;

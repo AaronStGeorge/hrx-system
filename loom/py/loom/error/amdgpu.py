@@ -428,6 +428,54 @@ ERR_AMDGPU_022 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_023: AMDGPU source-to-low constraint is not satisfied.
+ERR_AMDGPU_023 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=23,
+    severity=Severity.ERROR,
+    summary="AMDGPU source-to-low constraint is not satisfied.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' in '@{function_name}': "
+        "source-to-low constraint '{constraint_key}' is not satisfied"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("constraint_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Legalize, refine, or decompose the operation before AMDGPU "
+        "source-to-low lowering"
+    ),
+)
+
+# ERR_AMDGPU_024: AMDGPU memory cache policy is not encodable.
+ERR_AMDGPU_024 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=24,
+    severity=Severity.ERROR,
+    summary="AMDGPU memory cache policy is not encodable.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' in '@{function_name}': memory "
+        "cache policy {cache_scope}/{cache_temporal} for {memory_space} "
+        "memory is not encodable by descriptor set '{descriptor_set_key}' "
+        "because constraint '{constraint_key}' is not satisfied"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("constraint_key", ParamKind.STRING),
+        ErrorParam("memory_space", ParamKind.STRING),
+        ErrorParam("cache_scope", ParamKind.STRING),
+        ErrorParam("cache_temporal", ParamKind.STRING),
+        ErrorParam("descriptor_set_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use an AMDGPU cache policy supported by the selected descriptor set "
+        "or legalize the access before source-to-low lowering"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_002,
@@ -451,4 +499,6 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_020,
     ERR_AMDGPU_021,
     ERR_AMDGPU_022,
+    ERR_AMDGPU_023,
+    ERR_AMDGPU_024,
 )

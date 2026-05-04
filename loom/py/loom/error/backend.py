@@ -8,34 +8,6 @@
 
 from loom.errors import ErrorDef, ErrorDomain, ErrorParam, ParamKind, Severity
 
-# ERR_BACKEND_001: Deprecated catch-all target legality rejection.
-#
-# Do not add new uses. Target-owned legality failures need domain-specific
-# diagnostics with stable error identities and typed parameters.
-ERR_BACKEND_001 = ErrorDef(
-    domain=ErrorDomain.BACKEND,
-    code=1,
-    severity=Severity.ERROR,
-    summary="Target legality rejected codegen input.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected {subject_kind} '{subject_name}' in '@{function_name}': {reason}"
-    ),
-    params=(
-        ErrorParam("target_key", ParamKind.STRING),
-        ErrorParam("export_name", ParamKind.STRING),
-        ErrorParam("config_key", ParamKind.STRING),
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("subject_kind", ParamKind.STRING),
-        ErrorParam("subject_name", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Specialize, decompose, or retarget {subject_kind} '{subject_name}' "
-        "before backend codegen for target '{target_key}'"
-    ),
-)
-
 # ERR_BACKEND_003: Register pressure peak was observed.
 ERR_BACKEND_003 = ErrorDef(
     domain=ErrorDomain.BACKEND,
@@ -401,7 +373,6 @@ ERR_BACKEND_018 = ErrorDef(
 )
 
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
-    ERR_BACKEND_001,
     ERR_BACKEND_003,
     ERR_BACKEND_005,
     ERR_BACKEND_006,

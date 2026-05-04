@@ -119,28 +119,6 @@ static iree_status_t loom_target_low_legality_emit(
   return iree_diagnostic_emit(context->options->emitter, &emission);
 }
 
-iree_status_t loom_target_low_legality_reject(
-    loom_target_low_legality_context_t* context,
-    const loom_target_low_legality_provider_t* provider, const loom_op_t* op,
-    iree_string_view_t subject_kind, iree_string_view_t subject_name,
-    iree_string_view_t reason) {
-  (void)provider;
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(
-          loom_target_low_legality_target_key(context->options->bundle)),
-      loom_param_string(
-          loom_target_low_legality_export_name(context->options->bundle)),
-      loom_param_string(
-          loom_target_low_legality_config_key(context->options->bundle)),
-      loom_param_string(loom_target_low_legality_function_name(context)),
-      loom_param_string(subject_kind),
-      loom_param_string(subject_name),
-      loom_param_string(reason),
-  };
-  return loom_target_low_legality_emit(context, op, LOOM_ERR_BACKEND_001,
-                                       params, IREE_ARRAYSIZE(params));
-}
-
 iree_status_t loom_target_low_legality_emit_error_ref(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     loom_error_ref_t error_ref, const loom_diagnostic_param_t* params,

@@ -60,21 +60,16 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_barrier(
   *out_handled = true;
 
   if (!loom_amdgpu_kernel_barrier_maps_to_s_barrier(op)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("barrier"),
-        IREE_SV("subgroup/workgroup"),
-        IREE_SV("AMDGPU source-to-low currently lowers only workgroup-scope "
-                "barriers"));
+    return loom_amdgpu_low_legality_reject(context, op,
+                                           IREE_SV("barrier.workgroup_scope"));
   }
 
   const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
       loom_target_low_legality_descriptor_set(context),
       LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER);
   if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("descriptor"), IREE_SV("s_barrier"),
-        IREE_SV("selected descriptor set does not provide a workgroup barrier "
-                "packet"));
+    return loom_amdgpu_low_legality_reject(context, op,
+                                           IREE_SV("descriptor.s_barrier"));
   }
 
   return iree_ok_status();
@@ -90,9 +85,6 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_collective(
   }
   *out_handled = true;
 
-  return loom_target_low_legality_reject(
-      context, provider, op, IREE_SV("collective"),
-      loom_op_name(loom_target_low_legality_module(context), op),
-      IREE_SV("AMDGPU source-to-low needs target packet lowering for this "
-              "collective form"));
+  return loom_amdgpu_low_legality_reject(context, op,
+                                         IREE_SV("collective.packet_lowering"));
 }

@@ -627,102 +627,94 @@ iree_status_t loom_amdgpu_lower_kernel_async_wait(
   return loom_amdgpu_emit_explicit_packet_plan(context, source_op, &plan->wait);
 }
 
-static iree_string_view_t loom_amdgpu_async_gather_rejection_detail(
+static iree_string_view_t loom_amdgpu_async_gather_rejection_key(
     const loom_amdgpu_async_gather_diagnostic_t* diagnostic) {
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_GATHER_REJECTION_SOURCE_PLAN)) {
-    return loom_low_source_memory_access_rejection_detail(
+    return loom_low_source_memory_access_rejection_key(
         diagnostic->source_diagnostic.rejection_bits);
   }
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_GATHER_REJECTION_SOURCE_ADDRESS)) {
-    return loom_amdgpu_memory_access_rejection_detail(
+    return loom_amdgpu_memory_access_rejection_key(
         diagnostic->memory_diagnostic.rejection_bits);
   }
   if (iree_any_bit_set(
           diagnostic->rejection_bits,
           LOOM_AMDGPU_ASYNC_GATHER_REJECTION_SOURCE_MEMORY_SPACE)) {
-    return IREE_SV("source must be global-like memory");
+    return IREE_SV("async_gather.source_memory_space");
   }
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_GATHER_REJECTION_DEST_VIEW)) {
-    return IREE_SV("destination must carry view-reference facts");
+    return IREE_SV("async_gather.dest_view");
   }
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_GATHER_REJECTION_DEST_MEMORY_SPACE)) {
-    return IREE_SV("destination must be workgroup memory");
+    return IREE_SV("async_gather.dest_memory_space");
   }
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_GATHER_REJECTION_DEST_SLOT_BASE)) {
-    return IREE_SV("destination LDS root must have a known slot base");
+    return IREE_SV("async_gather.dest_slot_base");
   }
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_GATHER_REJECTION_DEST_OFFSET)) {
-    return IREE_SV("destination LDS byte offset must be exact u32");
+    return IREE_SV("async_gather.dest_offset");
   }
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_GATHER_REJECTION_PACKET_WIDTH)) {
-    return IREE_SV(
-        "source payload must match a supported global_load_lds width");
+    return IREE_SV("async_gather.packet_width");
   }
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_GATHER_REJECTION_DESCRIPTOR_MISSING)) {
-    return IREE_SV("selected descriptor set does not provide global_load_lds");
+    return IREE_SV("async_gather.descriptor_missing");
   }
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_GATHER_REJECTION_OFFSET_IMMEDIATE)) {
-    return IREE_SV("source byte offset must fit the descriptor immediate");
+    return IREE_SV("async_gather.offset_immediate");
   }
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_GATHER_REJECTION_CACHE_POLICY)) {
-    return IREE_SV(
-        "cache policy is not encodable by the selected descriptor set");
+    return IREE_SV("async_gather.cache_policy");
   }
-  return IREE_SV("unsupported async gather shape");
+  return IREE_SV("async_gather.shape");
 }
 
-static iree_string_view_t loom_amdgpu_async_wait_rejection_detail(
+static iree_string_view_t loom_amdgpu_async_wait_rejection_key(
     const loom_amdgpu_async_wait_diagnostic_t* diagnostic) {
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_WAIT_REJECTION_LOCAL_GROUP)) {
-    return IREE_SV(
-        "waited async group must be local to the current straight-line block");
+    return IREE_SV("async_wait.local_group");
   }
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_WAIT_REJECTION_COMPLETED_GROUP)) {
-    return IREE_SV("async group was already completed by an earlier wait");
+    return IREE_SV("async_wait.completed_group");
   }
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_WAIT_REJECTION_NEWER_GROUPS)) {
-    return IREE_SV(
-        "newer_groups must match the current straight-line async stream");
+    return IREE_SV("async_wait.newer_groups");
   }
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_WAIT_REJECTION_GROUP_TOKEN)) {
-    return IREE_SV("AMDGPU async waits currently support local gather tokens");
+    return IREE_SV("async_wait.group_token");
   }
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_WAIT_REJECTION_PACKET_COUNT)) {
-    return IREE_SV("newer async packet count is not encodable by s_waitcnt");
+    return IREE_SV("async_wait.packet_count");
   }
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_WAIT_REJECTION_DESCRIPTOR)) {
-    return IREE_SV("selected descriptor set cannot encode the async wait");
+    return IREE_SV("async_wait.descriptor");
   }
-  return IREE_SV("unsupported async wait stream");
+  return IREE_SV("async_wait.stream");
 }
 
 static iree_status_t loom_amdgpu_low_legality_reject_async_transfer(
-    const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op) {
-  return loom_target_low_legality_reject(
-      context, provider, op, IREE_SV("async"), IREE_SV("transfer"),
-      IREE_SV("AMDGPU source-to-low needs async transfer packet lowering "
-              "before this async form is supported"));
+  return loom_amdgpu_low_legality_reject(context, op,
+                                         IREE_SV("async.transfer_packet"));
 }
 
 static iree_status_t loom_amdgpu_low_legality_verify_kernel_async_gather(
-    const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op) {
   loom_amdgpu_async_gather_selection_t selection = {0};
   loom_amdgpu_async_gather_diagnostic_t diagnostic = {0};
@@ -734,38 +726,32 @@ static iree_status_t loom_amdgpu_low_legality_verify_kernel_async_gather(
           &diagnostic)) {
     return iree_ok_status();
   }
-  return loom_target_low_legality_reject(
-      context, provider, op, IREE_SV("async"), IREE_SV("gather"),
-      loom_amdgpu_async_gather_rejection_detail(&diagnostic));
+  return loom_amdgpu_low_legality_reject(
+      context, op, loom_amdgpu_async_gather_rejection_key(&diagnostic));
 }
 
 static iree_status_t loom_amdgpu_low_legality_verify_kernel_async_group(
-    const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op) {
   loom_value_slice_t tokens = loom_kernel_async_group_tokens(op);
   const loom_module_t* module = loom_target_low_legality_module(context);
   for (iree_host_size_t i = 0; i < tokens.count; ++i) {
     const loom_value_id_t token_id = tokens.values[i];
     if (token_id >= module->values.count) {
-      return loom_target_low_legality_reject(
-          context, provider, op, IREE_SV("async"), IREE_SV("group"),
-          IREE_SV("async group token is outside the source module"));
+      return loom_amdgpu_low_legality_reject(
+          context, op, IREE_SV("async_group.token_value"));
     }
     const loom_value_t* token = loom_module_value(module, token_id);
     const loom_op_t* defining_op =
         loom_value_is_block_arg(token) ? NULL : loom_value_def_op(token);
     if (defining_op == NULL || !loom_kernel_async_gather_isa(defining_op)) {
-      return loom_target_low_legality_reject(
-          context, provider, op, IREE_SV("async"), IREE_SV("group"),
-          IREE_SV("AMDGPU source-to-low currently supports groups containing "
-                  "only local async gather tokens"));
+      return loom_amdgpu_low_legality_reject(
+          context, op, IREE_SV("async_group.local_gather_tokens"));
     }
   }
   return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_low_legality_verify_kernel_async_wait(
-    const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op) {
   uint16_t target_count = 0;
   bool needs_wait_packet = false;
@@ -773,9 +759,8 @@ static iree_status_t loom_amdgpu_low_legality_verify_kernel_async_wait(
   if (!loom_amdgpu_async_wait_stream_counts(
           loom_target_low_legality_module(context), op, &target_count,
           &needs_wait_packet, &diagnostic)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("async"), IREE_SV("wait"),
-        loom_amdgpu_async_wait_rejection_detail(&diagnostic));
+    return loom_amdgpu_low_legality_reject(
+        context, op, loom_amdgpu_async_wait_rejection_key(&diagnostic));
   }
   if (!needs_wait_packet) {
     return iree_ok_status();
@@ -789,9 +774,8 @@ static iree_status_t loom_amdgpu_low_legality_verify_kernel_async_wait(
   }
   iree_status_free(status);
   diagnostic.rejection_bits |= LOOM_AMDGPU_ASYNC_WAIT_REJECTION_DESCRIPTOR;
-  return loom_target_low_legality_reject(
-      context, provider, op, IREE_SV("async"), IREE_SV("wait"),
-      loom_amdgpu_async_wait_rejection_detail(&diagnostic));
+  return loom_amdgpu_low_legality_reject(
+      context, op, loom_amdgpu_async_wait_rejection_key(&diagnostic));
 }
 
 iree_status_t loom_amdgpu_low_legality_verify_kernel_async(
@@ -806,14 +790,11 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_async(
 
   switch (op->kind) {
     case LOOM_OP_KERNEL_ASYNC_GROUP:
-      return loom_amdgpu_low_legality_verify_kernel_async_group(provider,
-                                                                context, op);
+      return loom_amdgpu_low_legality_verify_kernel_async_group(context, op);
     case LOOM_OP_KERNEL_ASYNC_WAIT:
-      return loom_amdgpu_low_legality_verify_kernel_async_wait(provider,
-                                                               context, op);
+      return loom_amdgpu_low_legality_verify_kernel_async_wait(context, op);
     case LOOM_OP_KERNEL_ASYNC_GATHER:
-      return loom_amdgpu_low_legality_verify_kernel_async_gather(provider,
-                                                                 context, op);
+      return loom_amdgpu_low_legality_verify_kernel_async_gather(context, op);
     case LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER:
     case LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER_MASK:
     case LOOM_OP_KERNEL_ASYNC_COPY:
@@ -821,8 +802,7 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_async(
     case LOOM_OP_KERNEL_ASYNC_GATHER_MASK:
     case LOOM_OP_KERNEL_ASYNC_TENSOR_LOAD_TO_LDS:
     case LOOM_OP_KERNEL_ASYNC_TENSOR_STORE_FROM_LDS:
-      return loom_amdgpu_low_legality_reject_async_transfer(provider, context,
-                                                            op);
+      return loom_amdgpu_low_legality_reject_async_transfer(context, op);
     default:
       IREE_CHECK_UNREACHABLE();
   }

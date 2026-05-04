@@ -32,90 +32,69 @@ typedef enum loom_amdgpu_bitunpack_rejection_e {
   LOOM_AMDGPU_BITUNPACK_REJECTION_RESULT_TYPE = 7,
 } loom_amdgpu_bitunpack_rejection_t;
 
-typedef struct loom_amdgpu_bitpack_rejection_detail_t {
+typedef struct loom_amdgpu_bitpack_rejection_key_t {
   // Rejection kind matched by this row.
   loom_amdgpu_bitpack_rejection_t rejection;
-  // Stable diagnostic detail returned for the rejection kind.
-  iree_string_view_t detail;
-} loom_amdgpu_bitpack_rejection_detail_t;
+  // Stable diagnostic constraint key returned for the rejection kind.
+  iree_string_view_t constraint_key;
+} loom_amdgpu_bitpack_rejection_key_t;
 
-static const loom_amdgpu_bitpack_rejection_detail_t
-    kAmdgpuBitpackRejectionDetails[] = {
+static const loom_amdgpu_bitpack_rejection_key_t kAmdgpuBitpackRejectionKeys[] =
+    {
         {
             .rejection = LOOM_AMDGPU_BITPACK_REJECTION_WIDTH,
-            .detail = IREE_SVL(
-                "AMDGPU vector.bitpack currently lowers byte packing width 8"),
+            .constraint_key = IREE_SVL("bitpack.width"),
         },
         {
             .rejection = LOOM_AMDGPU_BITPACK_REJECTION_SOURCE_TYPE,
-            .detail =
-                IREE_SVL("AMDGPU vector.bitpack requires a static rank-1 i32 "
-                         "source vector with at most eight lanes"),
+            .constraint_key = IREE_SVL("bitpack.source_type"),
         },
         {
             .rejection = LOOM_AMDGPU_BITPACK_REJECTION_RESULT_TYPE,
-            .detail =
-                IREE_SVL("AMDGPU vector.bitpack requires a static rank-1 i8 "
-                         "result vector that fits packed 32-bit registers"),
+            .constraint_key = IREE_SVL("bitpack.result_type"),
         },
         {
             .rejection = LOOM_AMDGPU_BITPACK_REJECTION_LANE_COUNT,
-            .detail =
-                IREE_SVL("AMDGPU vector.bitpack source and result lane counts "
-                         "must match"),
+            .constraint_key = IREE_SVL("bitpack.lane_count"),
         },
         {
             .rejection = LOOM_AMDGPU_BITPACK_REJECTION_LANE_GROUP,
-            .detail =
-                IREE_SVL("AMDGPU vector.bitpack requires result lanes grouped "
-                         "into complete 32-bit packed registers"),
+            .constraint_key = IREE_SVL("bitpack.lane_group"),
         },
 };
 
-typedef struct loom_amdgpu_bitunpack_rejection_detail_t {
+typedef struct loom_amdgpu_bitunpack_rejection_key_t {
   // Rejection kind matched by this row.
   loom_amdgpu_bitunpack_rejection_t rejection;
-  // Stable diagnostic detail returned for the rejection kind.
-  iree_string_view_t detail;
-} loom_amdgpu_bitunpack_rejection_detail_t;
+  // Stable diagnostic constraint key returned for the rejection kind.
+  iree_string_view_t constraint_key;
+} loom_amdgpu_bitunpack_rejection_key_t;
 
-static const loom_amdgpu_bitunpack_rejection_detail_t
-    kAmdgpuBitunpackRejectionDetails[] = {
+static const loom_amdgpu_bitunpack_rejection_key_t
+    kAmdgpuBitunpackRejectionKeys[] = {
         {
             .rejection = LOOM_AMDGPU_BITUNPACK_REJECTION_WIDTH_RANGE,
-            .detail = IREE_SVL(
-                "AMDGPU vector.bitunpack width must be in the range [1, 32]"),
+            .constraint_key = IREE_SVL("bitunpack.width_range"),
         },
         {
             .rejection = LOOM_AMDGPU_BITUNPACK_REJECTION_WIDTH_DWORD_DIVISOR,
-            .detail = IREE_SVL(
-                "AMDGPU vector.bitunpack width must evenly partition a "
-                "32-bit backing register"),
+            .constraint_key = IREE_SVL("bitunpack.width_dword_divisor"),
         },
         {
             .rejection = LOOM_AMDGPU_BITUNPACK_REJECTION_SOURCE_STORAGE,
-            .detail = IREE_SVL(
-                "AMDGPU vector.bitunpack requires static integer source "
-                "payload storage fitting one to four packed 32-bit "
-                "registers"),
+            .constraint_key = IREE_SVL("bitunpack.source_storage"),
         },
         {
             .rejection = LOOM_AMDGPU_BITUNPACK_REJECTION_PAYLOAD_DIVISIBILITY,
-            .detail = IREE_SVL(
-                "AMDGPU vector.bitunpack source payload bit count must "
-                "be divisible by the unpack width"),
+            .constraint_key = IREE_SVL("bitunpack.payload_divisibility"),
         },
         {
             .rejection = LOOM_AMDGPU_BITUNPACK_REJECTION_LANE_COUNT,
-            .detail = IREE_SVL(
-                "AMDGPU vector.bitunpack requires one to eight unpacked "
-                "result lanes"),
+            .constraint_key = IREE_SVL("bitunpack.lane_count"),
         },
         {
             .rejection = LOOM_AMDGPU_BITUNPACK_REJECTION_RESULT_TYPE,
-            .detail =
-                IREE_SVL("AMDGPU vector.bitunpack requires a static rank-1 i32 "
-                         "result vector matching the unpacked lane count"),
+            .constraint_key = IREE_SVL("bitunpack.result_type"),
         },
 };
 
@@ -428,30 +407,30 @@ iree_status_t loom_amdgpu_lower_vector_bitunpack(
                                    loom_low_concat_result(concat_op));
 }
 
-static iree_string_view_t loom_amdgpu_bitpack_rejection_detail(
+static iree_string_view_t loom_amdgpu_bitpack_rejection_key(
     loom_amdgpu_bitpack_rejection_t rejection) {
-  for (iree_host_size_t i = 0;
-       i < IREE_ARRAYSIZE(kAmdgpuBitpackRejectionDetails); ++i) {
-    const loom_amdgpu_bitpack_rejection_detail_t* row =
-        &kAmdgpuBitpackRejectionDetails[i];
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kAmdgpuBitpackRejectionKeys);
+       ++i) {
+    const loom_amdgpu_bitpack_rejection_key_t* row =
+        &kAmdgpuBitpackRejectionKeys[i];
     if (row->rejection == rejection) {
-      return row->detail;
+      return row->constraint_key;
     }
   }
-  return IREE_SV("AMDGPU vector.bitpack unsupported bitstream shape");
+  return IREE_SV("bitpack.shape");
 }
 
-static iree_string_view_t loom_amdgpu_bitunpack_rejection_detail(
+static iree_string_view_t loom_amdgpu_bitunpack_rejection_key(
     loom_amdgpu_bitunpack_rejection_t rejection) {
   for (iree_host_size_t i = 0;
-       i < IREE_ARRAYSIZE(kAmdgpuBitunpackRejectionDetails); ++i) {
-    const loom_amdgpu_bitunpack_rejection_detail_t* row =
-        &kAmdgpuBitunpackRejectionDetails[i];
+       i < IREE_ARRAYSIZE(kAmdgpuBitunpackRejectionKeys); ++i) {
+    const loom_amdgpu_bitunpack_rejection_key_t* row =
+        &kAmdgpuBitunpackRejectionKeys[i];
     if (row->rejection == rejection) {
-      return row->detail;
+      return row->constraint_key;
     }
   }
-  return IREE_SV("AMDGPU vector.bitunpack unsupported bitstream shape");
+  return IREE_SV("bitunpack.shape");
 }
 
 iree_status_t loom_amdgpu_low_legality_verify_vector_bitstream(
@@ -474,9 +453,8 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_bitstream(
                                            &rejection)) {
         return iree_ok_status();
       }
-      return loom_target_low_legality_reject(
-          context, provider, op, IREE_SV("bitstream"), loom_op_name(module, op),
-          loom_amdgpu_bitpack_rejection_detail(rejection));
+      return loom_amdgpu_low_legality_reject(
+          context, op, loom_amdgpu_bitpack_rejection_key(rejection));
     }
     case LOOM_OP_VECTOR_BITUNPACKS:
     case LOOM_OP_VECTOR_BITUNPACKU: {
@@ -487,9 +465,8 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_bitstream(
                                              &rejection)) {
         return iree_ok_status();
       }
-      return loom_target_low_legality_reject(
-          context, provider, op, IREE_SV("bitstream"), loom_op_name(module, op),
-          loom_amdgpu_bitunpack_rejection_detail(rejection));
+      return loom_amdgpu_low_legality_reject(
+          context, op, loom_amdgpu_bitunpack_rejection_key(rejection));
     }
     default:
       *out_handled = false;

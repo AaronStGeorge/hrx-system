@@ -2,7 +2,7 @@
 
 amdgpu.target<gfx1100> @target
 func.def target(@target) @dynamic_slice_rejected(%offset: index, %values: vector<4xi32>) -> (vector<2xi32>) {
-  // ERROR@+1: BACKEND/001 "AMDGPU vector.slice currently requires static rank-1"
+  // ERROR@+1: AMDGPU/023 {constraint_key="slice.shape"}
   %middle = vector.slice %values[%offset] : vector<4xi32> -> vector<2xi32>
   func.return %middle : vector<2xi32>
 }
@@ -12,7 +12,7 @@ func.def target(@target) @dynamic_slice_rejected(%offset: index, %values: vector
 amdgpu.target<gfx1100> @target
 
 func.def target(@target) @i8_cross_register_slice_rejected(%bytes: vector<8xi8>) -> (vector<4xi8>) {
-  // ERROR@+1: BACKEND/001 "packed bit windows contained within each selected 32-bit register"
+  // ERROR@+1: AMDGPU/023 {constraint_key="slice.shape"}
   %middle = vector.slice %bytes[2] : vector<8xi8> -> vector<4xi8>
   func.return %middle : vector<4xi8>
 }

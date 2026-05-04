@@ -18,11 +18,11 @@ func.def target(@target) @async_copy_transfer_rejected(%input: buffer) {
   %source = buffer.view %global[%zero] : buffer -> view<16xi8, #dense>
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
   %dest = buffer.view %scratch[%zero] : buffer -> view<16xi8, #dense>
-  // ERROR@+1: BACKEND/001 "AMDGPU source-to-low needs async transfer packet lowering before this async form is supported"
+  // ERROR@+1: AMDGPU/023 {constraint_key="async.transfer_packet"}
   %copy = kernel.async.copy %source to %dest {cache_scope = cu, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8, #dense> to view<16xi8, #dense> -> kernel.async.token
-  // ERROR@+1: BACKEND/001 "AMDGPU source-to-low currently supports groups containing only local async gather tokens"
+  // ERROR@+1: AMDGPU/023 {constraint_key="async_group.local_gather_tokens"}
   %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
-  // ERROR@+1: BACKEND/001 "AMDGPU async waits currently support local gather tokens"
+  // ERROR@+1: AMDGPU/023 {constraint_key="async_wait.group_token"}
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group
   func.return
 }
@@ -76,7 +76,7 @@ kernel.def target(@target) @async_gather_dynamic_offset_sum_rejected(%input: buf
   %source = view.subview %source_base[%x, %y, 0] : view<4294967296x4096x4xi8, %layout> -> view<1x1x4xi8, %layout>
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
   %dest = buffer.view %scratch[%zero] : buffer -> view<64x1x1x4xi8, #dense>
-  // ERROR@+1: BACKEND/001 "AMDGPU memory lowering requires dynamic byte offsets to be proven non-negative and 32-bit"
+  // ERROR@+1: AMDGPU/023 {constraint_key="memory_access.dynamic_offset_range"}
   %copy = kernel.async.gather %source to %dest {cache_scope = device, cache_temporal = regular} : view<1x1x4xi8, %layout> to view<64x1x1x4xi8, #dense> -> kernel.async.token
   %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group

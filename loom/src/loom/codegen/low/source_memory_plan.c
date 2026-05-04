@@ -817,76 +817,74 @@ bool loom_low_source_memory_access_plan_build_view(
       out_diagnostic);
 }
 
-iree_string_view_t loom_low_source_memory_access_rejection_detail(
+iree_string_view_t loom_low_source_memory_access_rejection_key(
     loom_low_source_memory_access_rejection_flags_t rejection_bits) {
   if (iree_any_bit_set(
           rejection_bits,
           LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_UNSUPPORTED_OP)) {
-    return IREE_SV("source op is not a supported memory access");
+    return IREE_SV("source_memory.unsupported_op");
   }
   if (iree_any_bit_set(
           rejection_bits,
           LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_DESCRIBE_FAILED)) {
-    return IREE_SV("source view/vector types do not form a memory access");
+    return IREE_SV("source_memory.describe_failed");
   }
   if (iree_any_bit_set(rejection_bits,
                        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_LAYOUT)) {
-    return IREE_SV("source view memory layout is unknown");
+    return IREE_SV("source_memory.layout");
   }
   if (iree_any_bit_set(rejection_bits,
                        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_ELEMENT_WIDTH)) {
-    return IREE_SV("source memory element width is not byte-addressable");
+    return IREE_SV("source_memory.element_width");
   }
   if (iree_any_bit_set(rejection_bits,
                        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VECTOR_RANK)) {
-    return IREE_SV("source memory lowering requires a rank-1 vector payload");
+    return IREE_SV("source_memory.vector_rank");
   }
   if (iree_any_bit_set(
           rejection_bits,
           LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VECTOR_LANE_COUNT)) {
-    return IREE_SV(
-        "source memory lowering requires a static vector lane count");
+    return IREE_SV("source_memory.vector_lane_count");
   }
   if (iree_any_bit_set(
           rejection_bits,
           LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VECTOR_AXIS_STRIDE)) {
-    return IREE_SV("source vector lane stride is not statically known");
+    return IREE_SV("source_memory.vector_axis_stride");
   }
   if (iree_any_bit_set(rejection_bits,
                        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_STATIC_OFFSET)) {
-    return IREE_SV("source static memory offset is not statically known");
+    return IREE_SV("source_memory.static_offset");
   }
   if (iree_any_bit_set(
           rejection_bits,
           LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_DYNAMIC_INDEX_COUNT)) {
-    return IREE_SV(
-        "source memory access dynamic index list does not match dynamic axes");
+    return IREE_SV("source_memory.dynamic_index_count");
   }
   if (iree_any_bit_set(rejection_bits,
                        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_DYNAMIC_AXIS)) {
-    return IREE_SV("source memory access does not identify one dynamic axis");
+    return IREE_SV("source_memory.dynamic_axis");
   }
   if (iree_any_bit_set(
           rejection_bits,
           LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_DYNAMIC_STRIDE)) {
-    return IREE_SV("source dynamic memory stride is not statically known");
+    return IREE_SV("source_memory.dynamic_stride");
   }
   if (iree_any_bit_set(rejection_bits,
                        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VIEW_SOURCE)) {
-    return IREE_SV("source view does not have a known storage root");
+    return IREE_SV("source_memory.view_source");
   }
   if (iree_any_bit_set(rejection_bits,
                        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VIEW_BASE)) {
-    return IREE_SV("source view base byte offset is not exact");
+    return IREE_SV("source_memory.view_base");
   }
   if (iree_any_bit_set(
           rejection_bits,
           LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VIEW_BASE_OVERFLOW)) {
-    return IREE_SV("source view base byte offset overflows the access offset");
+    return IREE_SV("source_memory.view_base_overflow");
   }
   if (iree_any_bit_set(rejection_bits,
                        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_CACHE_POLICY)) {
-    return IREE_SV("source memory cache policy is malformed");
+    return IREE_SV("source_memory.cache_policy");
   }
-  return IREE_SV("source memory access is not representable");
+  return IREE_SV("source_memory.representability");
 }

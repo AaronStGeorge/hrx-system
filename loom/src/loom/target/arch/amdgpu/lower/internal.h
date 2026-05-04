@@ -270,6 +270,22 @@ bool loom_amdgpu_required_flat_workgroup_size(
     const loom_module_t* module, loom_func_like_t function,
     const loom_target_bundle_t* bundle, uint32_t* out_flat_size);
 
+enum {
+  // target_key, export_name, config_key, function_name, and op_name.
+  LOOM_AMDGPU_LOW_LEGALITY_CONTEXT_PARAM_COUNT = 5,
+};
+
+// Populates the common AMDGPU legality diagnostic context params.
+void loom_amdgpu_low_legality_make_context_params(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    loom_diagnostic_param_t* params);
+
+// Emits ERR_AMDGPU_023 for a source-to-low legality constraint owned by the
+// AMDGPU lowering provider.
+iree_status_t loom_amdgpu_low_legality_reject(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    iree_string_view_t constraint_key);
+
 // Emits the current invocation lane id within its subgroup as a VGPR value.
 iree_status_t loom_amdgpu_emit_current_subgroup_lane_id(
     loom_low_lower_context_t* context, const loom_op_t* source_op,

@@ -11,7 +11,7 @@ kernel.def target(@target) @subgroup_broadcast_dynamic_lane_rejected(%input: buf
   %lane_vector = vector.load %input_view[0] : view<1xi32, #dense> -> vector<1xi32>
   %lane = vector.extract %lane_vector[0] : vector<1xi32> -> i32
   %value = scalar.constant 1 : i32
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup broadcast requires an exact source lane"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_broadcast.exact_lane"}
   %broadcast = kernel.subgroup.broadcast %value from %lane : i32, i32
   kernel.return
 }
@@ -27,7 +27,7 @@ kernel.def target(@target) @subgroup_broadcast_lane_out_of_range_rejected() {
 } launch {
   %value = scalar.constant 1 : i32
   %lane = scalar.constant 32 : i32
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup broadcast source lane must be within the selected wave32 or wave64 subgroup"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_broadcast.lane_range"}
   %broadcast = kernel.subgroup.broadcast %value from %lane : i32, i32
   kernel.return
 }
@@ -43,7 +43,7 @@ kernel.def target(@target) @subgroup_broadcast_payload_rejected() {
 } launch {
   %value = vector.constant 1 : vector<4xi8>
   %lane = scalar.constant 0 : i32
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup broadcast requires an i32 or f32 scalar"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_broadcast.payload"}
   %broadcast = kernel.subgroup.broadcast %value from %lane : vector<4xi8>, i32
   kernel.return
 }
@@ -58,7 +58,7 @@ kernel.def target(@target) @subgroup_broadcast_first_payload_rejected() {
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
   %value = vector.constant 1 : vector<4xi8>
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup broadcast.first requires an i32 or f32 scalar"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_broadcast_first.payload"}
   %broadcast = kernel.subgroup.broadcast.first %value : vector<4xi8>
   kernel.return
 }
@@ -78,7 +78,7 @@ kernel.def target(@target) @subgroup_shuffle_dynamic_offset_rejected(%input: buf
   %offset = vector.extract %offset_vector[0] : vector<1xi32> -> i32
   %width = scalar.constant 32 : i32
   %value = scalar.constant 1 : i32
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup shuffle requires an exact lane offset"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_shuffle.exact_lane"}
   %shuffle, %valid = kernel.subgroup.shuffle<xor> %value, %offset, %width : i32, i32, i32
   kernel.return
 }
@@ -95,7 +95,7 @@ kernel.def target(@target) @subgroup_shuffle_partial_width_rejected() {
   %value = scalar.constant 1 : i32
   %offset = scalar.constant 1 : i32
   %width = scalar.constant 16 : i32
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup shuffle currently requires full selected wave32 or wave64 width"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_shuffle.full_wave_width"}
   %shuffle, %valid = kernel.subgroup.shuffle<down> %value, %offset, %width : i32, i32, i32
   kernel.return
 }
@@ -112,7 +112,7 @@ kernel.def target(@target) @subgroup_shuffle_offset_out_of_range_rejected() {
   %value = scalar.constant 1 : i32
   %offset = scalar.constant 32 : i32
   %width = scalar.constant 32 : i32
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup shuffle offset/index must be within the selected wave32 or wave64 subgroup"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_shuffle.lane_range"}
   %shuffle, %valid = kernel.subgroup.shuffle<index> %value, %offset, %width : i32, i32, i32
   kernel.return
 }
@@ -129,7 +129,7 @@ kernel.def target(@target) @subgroup_shuffle_payload_rejected() {
   %value = vector.constant 1 : vector<4xi8>
   %offset = scalar.constant 0 : i32
   %width = scalar.constant 32 : i32
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup shuffle requires an i32 or f32 scalar"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_shuffle.payload"}
   %shuffle, %valid = kernel.subgroup.shuffle<index> %value, %offset, %width : vector<4xi8>, i32, i32
   kernel.return
 }
@@ -144,7 +144,7 @@ kernel.def target(@target) @subgroup_reduce_cluster_rejected() {
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
   %value = scalar.constant 1 : i32
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup reduce lowering requires full subgroup reductions with cluster_size and cluster_stride absent"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_reduce.full_subgroup"}
   %sum = kernel.subgroup.reduce<addi> %value {cluster_size = 16} : i32
   kernel.return
 }
@@ -159,7 +159,7 @@ kernel.def target(@target) @subgroup_reduce_kind_rejected() {
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
   %value = scalar.constant 1 : i32
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup reduce requires an i32 add/mul/and/or/xor or f32 add/mul/minnum/maxnum combining kind"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_reduce.combining_kind"}
   %min = kernel.subgroup.reduce<minsi> %value : i32
   kernel.return
 }
@@ -174,7 +174,7 @@ kernel.def target(@target) @subgroup_reduce_partial_wave_rejected() {
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c48, %c1, %c1) : index
 } launch {
   %value = scalar.constant 1 : i32
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup reduce lowering requires a fixed workgroup size that is an exact multiple"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_reduce.fixed_workgroup_wave_multiple"}
   %sum = kernel.subgroup.reduce<addi> %value : i32
   kernel.return
 }
@@ -189,7 +189,7 @@ kernel.def target(@target) @subgroup_reduce_payload_rejected() {
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
   %value = vector.constant 1 : vector<4xi8>
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup reduce requires an i32 or f32 scalar"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_reduce.payload"}
   %sum = kernel.subgroup.reduce<addi> %value : vector<4xi8>
   kernel.return
 }
@@ -204,7 +204,7 @@ kernel.def target(@target) @subgroup_scan_cluster_rejected() {
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
   %value = scalar.constant 1 : i32
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup scan lowering requires full subgroup scans with cluster_size and cluster_stride absent"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_scan.full_subgroup"}
   %prefix = kernel.subgroup.scan<addi> %value {cluster_size = 16, direction = forward, mode = inclusive} : i32
   kernel.return
 }
@@ -219,7 +219,7 @@ kernel.def target(@target) @subgroup_scan_kind_rejected() {
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
   %value = scalar.constant 1 : i32
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup scan requires an i32 add/mul/and/or/xor or f32 add/mul/minnum/maxnum combining kind"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_scan.combining_kind"}
   %prefix = kernel.subgroup.scan<minsi> %value {direction = forward, mode = inclusive} : i32
   kernel.return
 }
@@ -234,7 +234,7 @@ kernel.def target(@target) @subgroup_scan_partial_wave_rejected() {
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c48, %c1, %c1) : index
 } launch {
   %value = scalar.constant 1 : i32
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup scan lowering requires a fixed workgroup size that is an exact multiple"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_scan.fixed_workgroup_wave_multiple"}
   %prefix = kernel.subgroup.scan<addi> %value {direction = forward, mode = inclusive} : i32
   kernel.return
 }
@@ -249,7 +249,7 @@ kernel.def target(@target) @subgroup_scan_payload_rejected() {
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
   %value = vector.constant 1 : vector<4xi8>
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup scan requires an i32 or f32 scalar"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_scan.payload"}
   %prefix = kernel.subgroup.scan<addi> %value {direction = forward, mode = inclusive} : vector<4xi8>
   kernel.return
 }
@@ -264,7 +264,7 @@ kernel.def target(@target) @subgroup_match_any_requires_legalization() {
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
   %value = scalar.constant 1 : i32
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup match requires target legalization before source-to-low"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_match.target_legalization"}
   %mask = kernel.subgroup.match.any %value : i32 -> i64
   kernel.return
 }
@@ -279,7 +279,7 @@ kernel.def target(@target) @subgroup_match_all_requires_legalization() {
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
   %value = scalar.constant 1 : i32
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup match requires target legalization before source-to-low"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_match.target_legalization"}
   %mask, %all = kernel.subgroup.match.all %value : i32 -> i64, i1
   kernel.return
 }
@@ -296,7 +296,7 @@ kernel.def target(@target) @subgroup_vote_ballot_uniform_predicate_rejected() {
   %lhs = scalar.constant 1 : i32
   %rhs = scalar.constant 2 : i32
   %predicate = scalar.cmpi slt, %lhs, %rhs : i32
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup vote.ballot lowering requires a divergent i1 predicate"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_ballot.native_predicate"}
   %mask = kernel.subgroup.vote.ballot %predicate : i1 -> i32
   kernel.return
 }
@@ -310,7 +310,7 @@ kernel.def target(@target) @subgroup_active_mask_i32_wave64_rejected() {
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
-  // ERROR@+1: BACKEND/001 "AMDGPU subgroup mask lowering requires an i64 mask result on wave64 targets"
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_mask.wavefront_coverage"}
   %mask = kernel.subgroup.active.mask : i32
   kernel.return
 }

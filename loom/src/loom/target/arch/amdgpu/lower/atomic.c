@@ -40,12 +40,12 @@ typedef struct loom_amdgpu_atomic_diagnostic_t {
   loom_amdgpu_atomic_rejection_flags_t rejection_bits;
 } loom_amdgpu_atomic_diagnostic_t;
 
-typedef struct loom_amdgpu_atomic_rejection_detail_t {
+typedef struct loom_amdgpu_atomic_rejection_key_t {
   // Rejection bit matched by this diagnostic row.
   loom_amdgpu_atomic_rejection_flags_t rejection_bit;
-  // User-facing diagnostic detail for the matched rejection bit.
-  iree_string_view_t detail;
-} loom_amdgpu_atomic_rejection_detail_t;
+  // Stable diagnostic constraint key for the matched rejection bit.
+  iree_string_view_t constraint_key;
+} loom_amdgpu_atomic_rejection_key_t;
 
 typedef struct loom_amdgpu_atomic_wait_packet_template_t {
   // Stable descriptor ref emitted for this wait packet.
@@ -109,83 +109,63 @@ typedef struct loom_amdgpu_atomic_selection_t {
   loom_amdgpu_atomic_ordering_selection_t ordering;
 } loom_amdgpu_atomic_selection_t;
 
-static const loom_amdgpu_atomic_rejection_detail_t
-    kAmdgpuAtomicRejectionDetails[] = {
-        {
-            .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_SOURCE_OP,
-            .detail = IREE_SVL("source op is not a supported atomic access"),
-        },
-        {
-            .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_OPERATION_KIND,
-            .detail =
-                IREE_SVL("source atomic operation kind is not representable"),
-        },
-        {
-            .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_MEMORY_SPACE,
-            .detail = IREE_SVL(
-                "AMDGPU atomic lowering currently supports workgroup, global, "
-                "and generic memory"),
-        },
-        {
-            .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_WORKGROUP_ROOT,
-            .detail = IREE_SVL(
-                "AMDGPU LDS atomic lowering requires an LDS buffer root"),
-        },
-        {
-            .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_SHAPE,
-            .detail =
-                IREE_SVL("AMDGPU atomic lowering requires one 32-bit element"),
-        },
-        {
-            .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_ATOMIC_KIND,
-            .detail =
-                IREE_SVL("AMDGPU atomic lowering currently supports 32-bit "
-                         "add/sub/min/max/and/or/xor/exchange/"
-                         "compare-exchange plus f32 add/minnum/maxnum"),
-        },
-        {
-            .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_VALUE_TYPE,
-            .detail = IREE_SVL(
-                "AMDGPU atomic kind does not match the source value type"),
-        },
-        {
-            .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_VALUE_PLACEMENT,
-            .detail =
-                IREE_SVL("AMDGPU atomic value must be available as a VGPR"),
-        },
-        {
-            .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_ORDERING,
-            .detail = IREE_SVL("AMDGPU atomic lowering currently supports "
-                               "relaxed global atomics, GFX11 global "
-                               "acquire/release atomics, GFX12 global "
-                               "acquire/release atomics, and "
-                               "workgroup-scope LDS atomics"),
-        },
-        {
-            .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_SCOPE,
-            .detail = IREE_SVL("AMDGPU atomic lowering currently supports "
-                               "workgroup scope for workgroup memory and "
-                               "device scope for global memory"),
-        },
-        {
-            .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_CACHE_POLICY,
-            .detail = IREE_SVL(
-                "AMDGPU atomic lowering does not support cache policies"),
-        },
-        {
-            .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_DESCRIPTOR_MISSING,
-            .detail = IREE_SVL("selected descriptor set does not provide an "
-                               "atomic packet"),
-        },
-        {
-            .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_OFFSET_IMMEDIATE,
-            .detail = IREE_SVL(
-                "AMDGPU atomic descriptor has no usable offset immediate"),
-        },
-        {
-            .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_OFFSET_RANGE,
-            .detail = IREE_SVL("AMDGPU atomic static offset cannot be encoded"),
-        },
+static const loom_amdgpu_atomic_rejection_key_t kAmdgpuAtomicRejectionKeys[] = {
+    {
+        .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_SOURCE_OP,
+        .constraint_key = IREE_SVL("atomic.source_op"),
+    },
+    {
+        .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_OPERATION_KIND,
+        .constraint_key = IREE_SVL("atomic.operation_kind"),
+    },
+    {
+        .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_MEMORY_SPACE,
+        .constraint_key = IREE_SVL("atomic.memory_space"),
+    },
+    {
+        .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_WORKGROUP_ROOT,
+        .constraint_key = IREE_SVL("atomic.workgroup_root"),
+    },
+    {
+        .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_SHAPE,
+        .constraint_key = IREE_SVL("atomic.shape"),
+    },
+    {
+        .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_ATOMIC_KIND,
+        .constraint_key = IREE_SVL("atomic.kind"),
+    },
+    {
+        .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_VALUE_TYPE,
+        .constraint_key = IREE_SVL("atomic.value_type"),
+    },
+    {
+        .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_VALUE_PLACEMENT,
+        .constraint_key = IREE_SVL("atomic.value_placement"),
+    },
+    {
+        .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_ORDERING,
+        .constraint_key = IREE_SVL("atomic.ordering"),
+    },
+    {
+        .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_SCOPE,
+        .constraint_key = IREE_SVL("atomic.scope"),
+    },
+    {
+        .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_CACHE_POLICY,
+        .constraint_key = IREE_SVL("atomic.cache_policy"),
+    },
+    {
+        .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_DESCRIPTOR_MISSING,
+        .constraint_key = IREE_SVL("atomic.descriptor_missing"),
+    },
+    {
+        .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_OFFSET_IMMEDIATE,
+        .constraint_key = IREE_SVL("atomic.offset_immediate"),
+    },
+    {
+        .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_OFFSET_RANGE,
+        .constraint_key = IREE_SVL("atomic.offset_range"),
+    },
 };
 
 // GFX11 VMEM load drain used by global atomic acquire/release ordering.
@@ -1095,17 +1075,17 @@ static iree_status_t loom_amdgpu_atomic_resolve_selection(
       context, &selection->ordering, &out_plan->ordering);
 }
 
-static iree_string_view_t loom_amdgpu_atomic_rejection_detail(
+static iree_string_view_t loom_amdgpu_atomic_rejection_key(
     loom_amdgpu_atomic_rejection_flags_t rejection_bits) {
-  for (iree_host_size_t i = 0;
-       i < IREE_ARRAYSIZE(kAmdgpuAtomicRejectionDetails); ++i) {
-    const loom_amdgpu_atomic_rejection_detail_t* row =
-        &kAmdgpuAtomicRejectionDetails[i];
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kAmdgpuAtomicRejectionKeys);
+       ++i) {
+    const loom_amdgpu_atomic_rejection_key_t* row =
+        &kAmdgpuAtomicRejectionKeys[i];
     if (iree_any_bit_set(rejection_bits, row->rejection_bit)) {
-      return row->detail;
+      return row->constraint_key;
     }
   }
-  return IREE_SV("source atomic is not representable");
+  return IREE_SV("atomic.representability");
 }
 
 iree_status_t loom_amdgpu_select_view_atomic_plan(
@@ -1503,9 +1483,9 @@ iree_status_t loom_amdgpu_low_legality_verify_view_atomic(
     return iree_ok_status();
   }
 
-  iree_string_view_t detail = IREE_SV("source atomic is not representable");
+  iree_string_view_t constraint_key = IREE_SV("atomic.representability");
   if (source_diagnostic.rejection_bits != 0) {
-    detail = loom_low_source_memory_access_rejection_detail(
+    constraint_key = loom_low_source_memory_access_rejection_key(
         source_diagnostic.rejection_bits);
   } else if (memory_diagnostic.rejection_bits != 0) {
     bool handled = false;
@@ -1514,12 +1494,11 @@ iree_status_t loom_amdgpu_low_legality_verify_view_atomic(
     if (handled) {
       return iree_ok_status();
     }
-    detail = loom_amdgpu_memory_access_rejection_detail(
+    constraint_key = loom_amdgpu_memory_access_rejection_key(
         memory_diagnostic.rejection_bits);
   } else {
-    detail = loom_amdgpu_atomic_rejection_detail(diagnostic.rejection_bits);
+    constraint_key =
+        loom_amdgpu_atomic_rejection_key(diagnostic.rejection_bits);
   }
-  return loom_target_low_legality_reject(context, provider, op,
-                                         IREE_SV("atomic"),
-                                         loom_op_name(module, op), detail);
+  return loom_amdgpu_low_legality_reject(context, op, constraint_key);
 }

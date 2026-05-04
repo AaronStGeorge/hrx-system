@@ -34,7 +34,7 @@ static uint32_t loom_amdgpu_gcd_u32(uint32_t lhs, uint32_t rhs) {
   return lhs;
 }
 
-static iree_string_view_t loom_amdgpu_memory_space_name(
+iree_string_view_t loom_amdgpu_memory_space_name(
     loom_value_fact_memory_space_t memory_space) {
   switch (memory_space) {
     case LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN:
@@ -168,154 +168,115 @@ iree_status_t loom_amdgpu_emit_memory_access_rejection_diagnostic(
   return iree_ok_status();
 }
 
-typedef struct loom_amdgpu_memory_access_rejection_detail_t {
+typedef struct loom_amdgpu_memory_access_rejection_key_t {
   // Rejection flag tested by this row.
   loom_amdgpu_memory_access_rejection_flags_t rejection_bit;
-  // Stable diagnostic detail returned when rejection_bit is present.
-  iree_string_view_t detail;
-} loom_amdgpu_memory_access_rejection_detail_t;
+  // Stable diagnostic constraint key returned when rejection_bit is present.
+  iree_string_view_t constraint_key;
+} loom_amdgpu_memory_access_rejection_key_t;
 
-static const loom_amdgpu_memory_access_rejection_detail_t
-    kAmdgpuMemoryAccessRejectionDetails[] = {
+static const loom_amdgpu_memory_access_rejection_key_t
+    kAmdgpuMemoryAccessRejectionKeys[] = {
         {
             .rejection_bit = LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_TYPE,
-            .detail = IREE_SVL(
-                "AMDGPU buffer memory lowering currently supports up to four "
-                "32-bit memory registers"),
+            .constraint_key = IREE_SVL("memory_access.vector_type"),
         },
         {
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_AXIS_STRIDE,
-            .detail = IREE_SVL(
-                "AMDGPU buffer memory lowering requires unit stride along "
-                "the vector axis"),
+            .constraint_key = IREE_SVL("memory_access.vector_axis_stride"),
         },
         {
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_INDEX_SOURCE,
-            .detail = IREE_SVL(
-                "AMDGPU buffer memory lowering currently requires dynamic "
-                "indices to come from kernel.workitem.id, kernel.workgroup.id, "
-                "or materializable 32-bit address values"),
+            .constraint_key = IREE_SVL("memory_access.dynamic_index_source"),
         },
         {
             .rejection_bit = LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_STRIDE,
-            .detail = IREE_SVL(
-                "AMDGPU buffer memory lowering requires a non-negative "
-                "32-bit dynamic byte stride"),
+            .constraint_key = IREE_SVL("memory_access.dynamic_stride"),
         },
         {
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_SCALAR_DYNAMIC_STRIDE,
-            .detail = IREE_SVL(
-                "AMDGPU scalar dynamic buffer offsets currently require a "
-                "power-of-two dynamic byte stride"),
+            .constraint_key = IREE_SVL("memory_access.scalar_dynamic_stride"),
         },
         {
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_WORKGROUP_DYNAMIC_INDEX_SOURCE,
-            .detail = IREE_SVL(
-                "AMDGPU workgroup memory lowering currently requires dynamic "
-                "indices to come from kernel.workitem.id"),
+            .constraint_key =
+                IREE_SVL("memory_access.workgroup_dynamic_index_source"),
         },
         {
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_GLOBAL_FALLBACK_UNAVAILABLE,
-            .detail = IREE_SVL(
-                "AMDGPU buffer memory lowering rejected this access and global "
-                "pointer fallback is unavailable in the selected descriptor "
-                "set"),
+            .constraint_key =
+                IREE_SVL("memory_access.global_fallback_unavailable"),
         },
         {
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_GLOBAL_FALLBACK_ADDRESS,
-            .detail = IREE_SVL(
-                "AMDGPU buffer memory lowering rejected this access and global "
-                "pointer fallback is blocked by missing vector address facts"),
+            .constraint_key = IREE_SVL("memory_access.global_fallback_address"),
         },
         {
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_GLOBAL_FALLBACK_OFFSET_RANGE,
-            .detail = IREE_SVL(
-                "AMDGPU buffer memory lowering rejected this access and global "
-                "pointer fallback cannot encode the static byte offset"),
+            .constraint_key =
+                IREE_SVL("memory_access.global_fallback_offset_range"),
         },
         {
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_PACKED_REGISTER_FOOTPRINT,
-            .detail = IREE_SVL(
-                "AMDGPU packed memory lowering requires vector footprints to "
-                "fill complete 32-bit memory registers, except scalar "
-                "f16/bf16 D16 accesses"),
+            .constraint_key =
+                IREE_SVL("memory_access.packed_register_footprint"),
         },
         {
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_FLAT_DYNAMIC_ADDRESS,
-            .detail = IREE_SVL(
-                "AMDGPU flat memory lowering requires dynamic byte offsets to "
-                "be non-negative u32 values scaled by power-of-two byte "
-                "strides"),
+            .constraint_key = IREE_SVL("memory_access.flat_dynamic_address"),
         },
         {
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_OFFSET_RANGE,
-            .detail = IREE_SVL(
-                "AMDGPU memory lowering requires dynamic byte offsets to be "
-                "proven non-negative and 32-bit"),
+            .constraint_key = IREE_SVL("memory_access.dynamic_offset_range"),
         },
         {
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_B128_DYNAMIC_ALIGNMENT,
-            .detail = IREE_SVL(
-                "128-bit AMDGPU buffer memory accesses currently require "
-                "16-byte aligned dynamic byte strides"),
+            .constraint_key = IREE_SVL("memory_access.b128_dynamic_alignment"),
         },
         {
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_NEGATIVE_STATIC_OFFSET,
-            .detail = IREE_SVL(
-                "AMDGPU buffer memory lowering requires non-negative static "
-                "byte offsets"),
+            .constraint_key = IREE_SVL("memory_access.negative_static_offset"),
         },
         {
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_B128_STATIC_ALIGNMENT,
-            .detail = IREE_SVL(
-                "128-bit AMDGPU buffer memory accesses currently require "
-                "16-byte aligned static byte offsets"),
+            .constraint_key = IREE_SVL("memory_access.b128_static_alignment"),
         },
         {
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIPTOR_MISSING,
-            .detail =
-                IREE_SVL("selected AMDGPU descriptor set has no buffer memory "
-                         "descriptor for this access width"),
+            .constraint_key = IREE_SVL("memory_access.descriptor_missing"),
         },
         {
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIPTOR_OFFSET_IMMEDIATE,
-            .detail = IREE_SVL(
-                "selected AMDGPU buffer memory descriptor does not expose one "
-                "unsigned offset immediate"),
+            .constraint_key =
+                IREE_SVL("memory_access.descriptor_offset_immediate"),
         },
         {
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIPTOR_OFFSET_RANGE,
-            .detail = IREE_SVL(
-                "AMDGPU memory static byte offset is outside the "
-                "selected descriptor's immediate/address operand range"),
+            .constraint_key = IREE_SVL("memory_access.descriptor_offset_range"),
         },
         {
             .rejection_bit = LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_MEMORY_SPACE,
-            .detail = IREE_SVL(
-                "AMDGPU memory lowering currently supports HAL/global buffer "
-                "resources and workgroup LDS roots"),
+            .constraint_key = IREE_SVL("memory_access.memory_space"),
         },
         {
             .rejection_bit = LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_WORKGROUP_ROOT,
-            .detail = IREE_SVL(
-                "AMDGPU workgroup memory lowering currently requires a "
-                "buffer.alloca root"),
+            .constraint_key = IREE_SVL("memory_access.workgroup_root"),
         },
 };
 
@@ -394,15 +355,15 @@ iree_status_t loom_amdgpu_record_memory_access_diagnostic(
       bank_summary.conflict_degree, bank_summary.conflict_kind);
 }
 
-iree_string_view_t loom_amdgpu_memory_access_rejection_detail(
+iree_string_view_t loom_amdgpu_memory_access_rejection_key(
     loom_amdgpu_memory_access_rejection_flags_t rejection_bits) {
   for (iree_host_size_t i = 0;
-       i < IREE_ARRAYSIZE(kAmdgpuMemoryAccessRejectionDetails); ++i) {
-    const loom_amdgpu_memory_access_rejection_detail_t* row =
-        &kAmdgpuMemoryAccessRejectionDetails[i];
+       i < IREE_ARRAYSIZE(kAmdgpuMemoryAccessRejectionKeys); ++i) {
+    const loom_amdgpu_memory_access_rejection_key_t* row =
+        &kAmdgpuMemoryAccessRejectionKeys[i];
     if (iree_any_bit_set(rejection_bits, row->rejection_bit)) {
-      return row->detail;
+      return row->constraint_key;
     }
   }
-  return IREE_SV("AMDGPU buffer memory access is not target-legal");
+  return IREE_SV("memory_access.target_legal");
 }

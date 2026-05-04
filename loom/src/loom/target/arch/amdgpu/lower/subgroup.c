@@ -1460,66 +1460,53 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_vote_all(
 }
 
 static iree_status_t loom_amdgpu_low_legality_verify_subgroup_wavefront(
-    const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
-    iree_string_view_t message, uint32_t* out_wavefront_size) {
+    iree_string_view_t constraint_key, uint32_t* out_wavefront_size) {
   *out_wavefront_size = 0;
   const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_target_wavefront_size(bundle, out_wavefront_size));
   if (!loom_amdgpu_subgroup_wavefront_size_is_supported(*out_wavefront_size)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("subgroup"),
-        loom_op_name(loom_target_low_legality_module(context), op), message);
+    return loom_amdgpu_low_legality_reject(context, op, constraint_key);
   }
   return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_low_legality_verify_subgroup_native_predicate(
-    const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
-    loom_value_id_t predicate, iree_string_view_t message) {
+    loom_value_id_t predicate, iree_string_view_t constraint_key) {
   if (!loom_amdgpu_module_value_is_native_i1_mask(
           loom_target_low_legality_module(context), predicate)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("predicate"),
-        loom_op_name(loom_target_low_legality_module(context), op), message);
+    return loom_amdgpu_low_legality_reject(context, op, constraint_key);
   }
   return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_low_legality_verify_subgroup_mask_result(
-    const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     loom_value_id_t mask, uint32_t wavefront_size,
     uint32_t* out_mask_bit_count) {
   *out_mask_bit_count = 0;
   const loom_module_t* module = loom_target_low_legality_module(context);
   if (!loom_amdgpu_subgroup_mask_bit_count(module, mask, out_mask_bit_count)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("mask"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup mask lowering requires an i32 or i64 integer "
-                "mask result"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_mask.result_type"));
   }
   if (!loom_amdgpu_subgroup_mask_covers_wavefront(*out_mask_bit_count,
                                                   wavefront_size)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("mask"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup mask lowering requires an i64 mask result on "
-                "wave64 targets"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_mask.wavefront_coverage"));
   }
   return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_low_legality_verify_subgroup_descriptor(
-    const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     loom_amdgpu_descriptor_ref_t descriptor_ref,
-    iree_string_view_t descriptor_name, iree_string_view_t message) {
+    iree_string_view_t constraint_key) {
   if (!loom_amdgpu_descriptor_set_has_ref(
           loom_target_low_legality_descriptor_set(context), descriptor_ref)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("descriptor"), descriptor_name, message);
+    return loom_amdgpu_low_legality_reject(context, op, constraint_key);
   }
   return iree_ok_status();
 }
@@ -1536,19 +1523,15 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_active_mask(
 
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_wavefront(
-      provider, context, op,
-      IREE_SV("AMDGPU subgroup active.mask lowering requires a wave32 or "
-              "wave64 target subgroup"),
+      context, op, IREE_SV("subgroup_active_mask.wavefront_size"),
       &wavefront_size));
   uint32_t unused_mask_bit_count = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_mask_result(
-      provider, context, op, loom_kernel_subgroup_active_mask_mask(op),
-      wavefront_size, &unused_mask_bit_count));
+      context, op, loom_kernel_subgroup_active_mask_mask(op), wavefront_size,
+      &unused_mask_bit_count));
   return loom_amdgpu_low_legality_verify_subgroup_descriptor(
-      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_READ,
-      IREE_SV("amdgpu.s_mov_b64_exec_read"),
-      IREE_SV("selected descriptor set does not provide a native EXEC mask "
-              "read packet"));
+      context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_READ,
+      IREE_SV("descriptor.s_mov_b64_exec_read"));
 }
 
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_ballot(
@@ -1563,19 +1546,15 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_ballot(
 
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_wavefront(
-      provider, context, op,
-      IREE_SV("AMDGPU subgroup vote.ballot lowering requires a wave32 or "
-              "wave64 target subgroup"),
-      &wavefront_size));
+      context, op, IREE_SV("subgroup_ballot.wavefront_size"), &wavefront_size));
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_low_legality_verify_subgroup_native_predicate(
-          provider, context, op, loom_kernel_subgroup_vote_ballot_predicate(op),
-          IREE_SV("AMDGPU subgroup vote.ballot lowering requires a divergent "
-                  "i1 predicate that maps to a native EXEC-width mask")));
+          context, op, loom_kernel_subgroup_vote_ballot_predicate(op),
+          IREE_SV("subgroup_ballot.native_predicate")));
   uint32_t unused_mask_bit_count = 0;
   return loom_amdgpu_low_legality_verify_subgroup_mask_result(
-      provider, context, op, loom_kernel_subgroup_vote_ballot_mask(op),
-      wavefront_size, &unused_mask_bit_count);
+      context, op, loom_kernel_subgroup_vote_ballot_mask(op), wavefront_size,
+      &unused_mask_bit_count);
 }
 
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_vote_any(
@@ -1590,25 +1569,18 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_vote_any(
 
   uint32_t unused_wavefront_size = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_wavefront(
-      provider, context, op,
-      IREE_SV("AMDGPU subgroup vote.any lowering requires a wave32 or wave64 "
-              "target subgroup"),
+      context, op, IREE_SV("subgroup_vote_any.wavefront_size"),
       &unused_wavefront_size));
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_low_legality_verify_subgroup_native_predicate(
-          provider, context, op, loom_kernel_subgroup_vote_any_predicate(op),
-          IREE_SV("AMDGPU subgroup vote.any lowering requires a divergent i1 "
-                  "predicate that maps to a native EXEC-width mask")));
+          context, op, loom_kernel_subgroup_vote_any_predicate(op),
+          IREE_SV("subgroup_vote_any.native_predicate")));
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_descriptor(
-      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_LG_U64,
-      IREE_SV("amdgpu.s_cmp_lg_u64"),
-      IREE_SV("selected descriptor set does not provide a native 64-bit SALU "
-              "mask compare packet")));
+      context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_LG_U64,
+      IREE_SV("descriptor.s_cmp_lg_u64")));
   return loom_amdgpu_low_legality_verify_subgroup_descriptor(
-      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32,
-      IREE_SV("amdgpu.s_mov_b32"),
-      IREE_SV("selected descriptor set does not provide a native SGPR zero "
-              "materialization packet"));
+      context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32,
+      IREE_SV("descriptor.s_mov_b32"));
 }
 
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_vote_all(
@@ -1623,25 +1595,18 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_vote_all(
 
   uint32_t unused_wavefront_size = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_wavefront(
-      provider, context, op,
-      IREE_SV("AMDGPU subgroup vote.all lowering requires a wave32 or wave64 "
-              "target subgroup"),
+      context, op, IREE_SV("subgroup_vote_all.wavefront_size"),
       &unused_wavefront_size));
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_low_legality_verify_subgroup_native_predicate(
-          provider, context, op, loom_kernel_subgroup_vote_all_predicate(op),
-          IREE_SV("AMDGPU subgroup vote.all lowering requires a divergent i1 "
-                  "predicate that maps to a native EXEC-width mask")));
+          context, op, loom_kernel_subgroup_vote_all_predicate(op),
+          IREE_SV("subgroup_vote_all.native_predicate")));
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_descriptor(
-      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_EQ_U64,
-      IREE_SV("amdgpu.s_cmp_eq_u64"),
-      IREE_SV("selected descriptor set does not provide a native 64-bit SALU "
-              "mask compare packet")));
+      context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_EQ_U64,
+      IREE_SV("descriptor.s_cmp_eq_u64")));
   return loom_amdgpu_low_legality_verify_subgroup_descriptor(
-      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_READ,
-      IREE_SV("amdgpu.s_mov_b64_exec_read"),
-      IREE_SV("selected descriptor set does not provide a native EXEC mask "
-              "read packet"));
+      context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_READ,
+      IREE_SV("descriptor.s_mov_b64_exec_read"));
 }
 
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_shuffle(
@@ -1661,64 +1626,48 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_shuffle(
   uint32_t unused_register_count = 0;
   if (!loom_amdgpu_subgroup_payload_is_supported(
           module, value, &unused_payload_kind, &unused_register_count)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("collective"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup shuffle requires an i32 or f32 scalar, or a "
-                "rank-1 static i32/f32 vector payload"));
+    return loom_amdgpu_low_legality_reject(context, op,
+                                           IREE_SV("subgroup_shuffle.payload"));
   }
 
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_target_wavefront_size(bundle, &wavefront_size));
   if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("subgroup"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup shuffle lowering requires a wave32 or wave64 "
-                "target subgroup"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_shuffle.wavefront_size"));
   }
 
   int64_t width = 0;
   if (!loom_amdgpu_subgroup_exact_i32_value(
           module, loom_target_low_legality_fact_table(context),
           loom_kernel_subgroup_shuffle_width(op), &width)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("collective"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup shuffle requires an exact width so validity "
-                "maps to native wave32/wave64 lane masks"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_shuffle.exact_width"));
   }
   if (width != (int64_t)wavefront_size) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("collective"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup shuffle currently requires full selected "
-                "wave32 or wave64 width"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_shuffle.full_wave_width"));
   }
 
   int64_t offset = 0;
   if (!loom_amdgpu_subgroup_exact_i32_value(
           module, loom_target_low_legality_fact_table(context),
           loom_kernel_subgroup_shuffle_offset(op), &offset)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("collective"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup shuffle requires an exact lane offset or "
-                "index so each 32-bit payload register maps to one native "
-                "ds_bpermute packet"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_shuffle.exact_lane"));
   }
   if (offset < 0 || offset >= (int64_t)wavefront_size) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("collective"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup shuffle offset/index must be within the "
-                "selected wave32 or wave64 subgroup"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_shuffle.lane_range"));
   }
 
   const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
       loom_target_low_legality_descriptor_set(context),
       LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32);
   if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("descriptor"),
-        IREE_SV("amdgpu.ds_bpermute_b32"),
-        IREE_SV("selected descriptor set does not provide a native subgroup "
-                "shuffle cross-lane packet"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("descriptor.ds_bpermute_b32"));
   }
 
   return iree_ok_status();
@@ -1736,10 +1685,8 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(
 
   const loom_module_t* module = loom_target_low_legality_module(context);
   if (loom_amdgpu_subgroup_reduce_has_cluster_attrs(op)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("cluster"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup reduce lowering requires full subgroup "
-                "reductions with cluster_size and cluster_stride absent"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_reduce.full_subgroup"));
   }
 
   const loom_value_id_t value = loom_kernel_subgroup_reduce_value(op);
@@ -1748,10 +1695,8 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(
   uint32_t unused_register_count = 0;
   if (!loom_amdgpu_subgroup_payload_is_supported(module, value, &payload_kind,
                                                  &unused_register_count)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("collective"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup reduce requires an i32 or f32 scalar, or a "
-                "rank-1 static i32/f32 vector payload"));
+    return loom_amdgpu_low_legality_reject(context, op,
+                                           IREE_SV("subgroup_reduce.payload"));
   }
 
   loom_amdgpu_descriptor_ref_t combine_descriptor_ref =
@@ -1759,48 +1704,35 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(
   if (!loom_amdgpu_subgroup_combine_descriptor_ref(
           loom_kernel_subgroup_reduce_kind(op), payload_kind,
           &combine_descriptor_ref)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("kind"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup reduce requires an i32 add/mul/and/or/xor "
-                "or f32 add/mul/minnum/maxnum combining kind"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_reduce.combining_kind"));
   }
 
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_target_wavefront_size(bundle, &wavefront_size));
   if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("subgroup"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup reduce lowering requires a wave32 or wave64 "
-                "target subgroup"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_reduce.wavefront_size"));
   }
   if (!loom_amdgpu_subgroup_full_wave_workgroups(
           module, loom_target_low_legality_function(context), bundle,
           wavefront_size)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("workgroup"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup reduce lowering requires a fixed workgroup "
-                "size that is an exact multiple of the selected wave32 or "
-                "wave64 subgroup"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_reduce.fixed_workgroup_wave_multiple"));
   }
 
   const loom_low_descriptor_set_t* descriptor_set =
       loom_target_low_legality_descriptor_set(context);
   if (!loom_amdgpu_descriptor_set_has_ref(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("descriptor"),
-        IREE_SV("amdgpu.ds_bpermute_b32"),
-        IREE_SV("selected descriptor set does not provide a native subgroup "
-                "reduce cross-lane packet"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("descriptor.ds_bpermute_b32"));
   }
   if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
                                           combine_descriptor_ref)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("descriptor"),
-        IREE_SV("amdgpu.reduce.combine"),
-        IREE_SV("selected descriptor set does not provide the native subgroup "
-                "reduce combine packet"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("descriptor.reduce_combine"));
   }
 
   return iree_ok_status();
@@ -1818,10 +1750,8 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_scan(
 
   const loom_module_t* module = loom_target_low_legality_module(context);
   if (loom_amdgpu_subgroup_scan_has_cluster_attrs(op)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("cluster"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup scan lowering requires full subgroup scans "
-                "with cluster_size and cluster_stride absent"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_scan.full_subgroup"));
   }
 
   const loom_value_id_t value = loom_kernel_subgroup_scan_value(op);
@@ -1830,10 +1760,8 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_scan(
   uint32_t unused_register_count = 0;
   if (!loom_amdgpu_subgroup_payload_is_supported(module, value, &payload_kind,
                                                  &unused_register_count)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("collective"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup scan requires an i32 or f32 scalar, or a "
-                "rank-1 static i32/f32 vector payload"));
+    return loom_amdgpu_low_legality_reject(context, op,
+                                           IREE_SV("subgroup_scan.payload"));
   }
 
   loom_amdgpu_descriptor_ref_t combine_descriptor_ref =
@@ -1841,10 +1769,8 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_scan(
   const loom_combining_kind_t kind = loom_kernel_subgroup_scan_kind(op);
   if (!loom_amdgpu_subgroup_combine_descriptor_ref(kind, payload_kind,
                                                    &combine_descriptor_ref)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("kind"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup scan requires an i32 add/mul/and/or/xor or "
-                "f32 add/mul/minnum/maxnum combining kind"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_scan.combining_kind"));
   }
 
   switch (loom_kernel_subgroup_scan_mode(op)) {
@@ -1854,17 +1780,14 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_scan(
       uint32_t unused_identity_bits = 0;
       if (!loom_amdgpu_subgroup_combine_identity_bits(kind,
                                                       &unused_identity_bits)) {
-        return loom_target_low_legality_reject(
-            context, provider, op, IREE_SV("kind"), loom_op_name(module, op),
-            IREE_SV("AMDGPU subgroup exclusive scan requires a native identity "
-                    "for the combining kind"));
+        return loom_amdgpu_low_legality_reject(
+            context, op, IREE_SV("subgroup_scan.identity"));
       }
       break;
     }
     case LOOM_KERNEL_SUBGROUP_SCAN_MODE_COUNT_:
-      return loom_target_low_legality_reject(
-          context, provider, op, IREE_SV("mode"), loom_op_name(module, op),
-          IREE_SV("AMDGPU subgroup scan requires inclusive or exclusive mode"));
+      return loom_amdgpu_low_legality_reject(context, op,
+                                             IREE_SV("subgroup_scan.mode"));
   }
 
   loom_amdgpu_descriptor_ref_t guard_descriptor_ref =
@@ -1877,64 +1800,45 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_scan(
       guard_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_U32;
       break;
     case LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_COUNT_:
-      return loom_target_low_legality_reject(
-          context, provider, op, IREE_SV("direction"), loom_op_name(module, op),
-          IREE_SV("AMDGPU subgroup scan requires forward or reverse "
-                  "direction"));
+      return loom_amdgpu_low_legality_reject(
+          context, op, IREE_SV("subgroup_scan.direction"));
   }
 
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_target_wavefront_size(bundle, &wavefront_size));
   if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("subgroup"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup scan lowering requires a wave32 or wave64 "
-                "target subgroup"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_scan.wavefront_size"));
   }
   if (!loom_amdgpu_subgroup_full_wave_workgroups(
           module, loom_target_low_legality_function(context), bundle,
           wavefront_size)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("workgroup"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup scan lowering requires a fixed workgroup size "
-                "that is an exact multiple of the selected wave32 or wave64 "
-                "subgroup"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_scan.fixed_workgroup_wave_multiple"));
   }
 
   const loom_low_descriptor_set_t* descriptor_set =
       loom_target_low_legality_descriptor_set(context);
   if (!loom_amdgpu_descriptor_set_has_ref(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("descriptor"),
-        IREE_SV("amdgpu.ds_bpermute_b32"),
-        IREE_SV("selected descriptor set does not provide a native subgroup "
-                "scan cross-lane packet"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("descriptor.ds_bpermute_b32"));
   }
   if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
                                           combine_descriptor_ref)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("descriptor"),
-        IREE_SV("amdgpu.scan.combine"),
-        IREE_SV("selected descriptor set does not provide the native subgroup "
-                "scan combine packet"));
+    return loom_amdgpu_low_legality_reject(context, op,
+                                           IREE_SV("descriptor.scan_combine"));
   }
   if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
                                           guard_descriptor_ref)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("descriptor"),
-        IREE_SV("amdgpu.scan.guard"),
-        IREE_SV("selected descriptor set does not provide the native subgroup "
-                "scan lane-bound compare packet"));
+    return loom_amdgpu_low_legality_reject(context, op,
+                                           IREE_SV("descriptor.scan_guard"));
   }
   if (!loom_amdgpu_descriptor_set_has_ref(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("descriptor"),
-        IREE_SV("amdgpu.v_cndmask_b32"),
-        IREE_SV("selected descriptor set does not provide the native subgroup "
-                "scan guarded-select packet"));
+    return loom_amdgpu_low_legality_reject(context, op,
+                                           IREE_SV("descriptor.v_cndmask_b32"));
   }
 
   return iree_ok_status();
@@ -1957,48 +1861,36 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_broadcast(
   uint32_t unused_register_count = 0;
   if (!loom_amdgpu_subgroup_payload_is_supported(
           module, value, &unused_payload_kind, &unused_register_count)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("collective"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup broadcast requires an i32 or f32 scalar, or a "
-                "rank-1 static i32/f32 vector payload"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_broadcast.payload"));
   }
 
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_target_wavefront_size(bundle, &wavefront_size));
   if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("subgroup"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup broadcast lowering requires a wave32 or "
-                "wave64 target subgroup"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_broadcast.wavefront_size"));
   }
 
   int64_t source_lane = 0;
   if (!loom_amdgpu_subgroup_exact_i32_value(
           module, loom_target_low_legality_fact_table(context),
           loom_kernel_subgroup_broadcast_lane(op), &source_lane)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("collective"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup broadcast requires an exact source lane so "
-                "each 32-bit payload register maps to one native ds_bpermute "
-                "packet"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_broadcast.exact_lane"));
   }
   if (source_lane < 0 || source_lane >= (int64_t)wavefront_size) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("collective"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup broadcast source lane must be within the "
-                "selected wave32 or wave64 subgroup"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_broadcast.lane_range"));
   }
 
   const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
       loom_target_low_legality_descriptor_set(context),
       LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32);
   if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("descriptor"),
-        IREE_SV("amdgpu.ds_bpermute_b32"),
-        IREE_SV("selected descriptor set does not provide a native subgroup "
-                "broadcast cross-lane packet"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("descriptor.ds_bpermute_b32"));
   }
 
   return iree_ok_status();
@@ -2021,23 +1913,17 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_broadcast_first(
   uint32_t unused_register_count = 0;
   if (!loom_amdgpu_subgroup_payload_is_supported(
           module, value, &unused_payload_kind, &unused_register_count)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("collective"), loom_op_name(module, op),
-        IREE_SV("AMDGPU subgroup broadcast.first requires an i32 or f32 "
-                "scalar, or a rank-1 static i32/f32 vector payload"));
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_broadcast_first.payload"));
   }
 
   uint32_t unused_wavefront_size = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_wavefront(
-      provider, context, op,
-      IREE_SV("AMDGPU subgroup broadcast.first lowering requires a wave32 or "
-              "wave64 target subgroup"),
+      context, op, IREE_SV("subgroup_broadcast_first.wavefront_size"),
       &unused_wavefront_size));
   return loom_amdgpu_low_legality_verify_subgroup_descriptor(
-      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_REF_V_READFIRSTLANE_B32,
-      IREE_SV("amdgpu.v_readfirstlane_b32"),
-      IREE_SV("selected descriptor set does not provide a native first-active "
-              "lane read packet"));
+      context, op, LOOM_AMDGPU_DESCRIPTOR_REF_V_READFIRSTLANE_B32,
+      IREE_SV("descriptor.v_readfirstlane_b32"));
 }
 
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_match(
@@ -2050,12 +1936,8 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_match(
   }
   *out_handled = true;
 
-  return loom_target_low_legality_reject(
-      context, provider, op, IREE_SV("collective"),
-      loom_op_name(loom_target_low_legality_module(context), op),
-      IREE_SV("AMDGPU subgroup match requires target legalization before "
-              "source-to-low because equality masks are lane-varying and do "
-              "not map to uniform EXEC masks"));
+  return loom_amdgpu_low_legality_reject(
+      context, op, IREE_SV("subgroup_match.target_legalization"));
 }
 
 #undef LOOM_AMDGPU_MAX_SUBGROUP_TREE_STEPS

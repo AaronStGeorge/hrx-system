@@ -1148,16 +1148,12 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_preamble(
               &unused_workgroup_size)) {
         return iree_ok_status();
       }
-      return loom_target_low_legality_reject(
-          context, provider, op, IREE_SV("launch"), loom_op_name(module, op),
-          IREE_SV("AMDGPU source-to-low currently requires a fixed workgroup "
-                  "size for workgroup.size"));
+      return loom_amdgpu_low_legality_reject(
+          context, op, IREE_SV("launch.workgroup_size_fixed"));
     }
     case LOOM_OP_KERNEL_WORKGROUP_COUNT:
-      return loom_target_low_legality_reject(
-          context, provider, op, IREE_SV("launch"), loom_op_name(module, op),
-          IREE_SV("AMDGPU HAL kernel ABI does not expose dispatch workgroup "
-                  "count live-ins yet"));
+      return loom_amdgpu_low_legality_reject(
+          context, op, IREE_SV("launch.workgroup_count_liveins"));
     case LOOM_OP_KERNEL_WORKITEM_DISPATCH_ID: {
       uint32_t unused_workgroup_size = 0;
       if (loom_amdgpu_required_workgroup_size_dim(
@@ -1166,10 +1162,9 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_preamble(
               &unused_workgroup_size)) {
         return iree_ok_status();
       }
-      return loom_target_low_legality_reject(
-          context, provider, op, IREE_SV("launch"), loom_op_name(module, op),
-          IREE_SV("AMDGPU source-to-low currently requires a fixed workgroup "
-                  "size for workitem.dispatch.id"));
+      return loom_amdgpu_low_legality_reject(
+          context, op,
+          IREE_SV("launch.workitem_dispatch_fixed_workgroup_size"));
     }
     case LOOM_OP_KERNEL_SUBGROUP_SIZE: {
       uint32_t unused_wavefront_size = 0;
@@ -1187,10 +1182,8 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_preamble(
               &unused_flat_workgroup_size)) {
         return iree_ok_status();
       }
-      return loom_target_low_legality_reject(
-          context, provider, op, IREE_SV("launch"), loom_op_name(module, op),
-          IREE_SV("AMDGPU source-to-low currently requires a fixed workgroup "
-                  "size for subgroup.count"));
+      return loom_amdgpu_low_legality_reject(
+          context, op, IREE_SV("launch.subgroup_count_fixed_workgroup_size"));
     }
     case LOOM_OP_KERNEL_SUBGROUP_ID:
     case LOOM_OP_KERNEL_SUBGROUP_LANE_ID: {
@@ -1198,10 +1191,8 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_preamble(
       IREE_RETURN_IF_ERROR(
           loom_amdgpu_target_wavefront_size(bundle, &wavefront_size));
       if (!loom_amdgpu_u32_is_power_of_two(wavefront_size)) {
-        return loom_target_low_legality_reject(
-            context, provider, op, IREE_SV("launch"), loom_op_name(module, op),
-            IREE_SV("AMDGPU source-to-low currently requires a power-of-two "
-                    "subgroup size for subgroup index queries"));
+        return loom_amdgpu_low_legality_reject(
+            context, op, IREE_SV("launch.subgroup_size_power_of_two"));
       }
       uint32_t unused_flat_workgroup_size = 0;
       if (loom_amdgpu_required_flat_workgroup_size(
@@ -1209,10 +1200,8 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_preamble(
               &unused_flat_workgroup_size)) {
         return iree_ok_status();
       }
-      return loom_target_low_legality_reject(
-          context, provider, op, IREE_SV("launch"), loom_op_name(module, op),
-          IREE_SV("AMDGPU source-to-low currently requires a fixed workgroup "
-                  "size for subgroup index queries"));
+      return loom_amdgpu_low_legality_reject(
+          context, op, IREE_SV("launch.subgroup_index_fixed_workgroup_size"));
     }
     default:
       *out_handled = false;

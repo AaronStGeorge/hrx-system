@@ -184,13 +184,6 @@ loom_target_low_legality_diagnostic_flags_t
 loom_target_low_legality_diagnostic_flags(
     const loom_target_low_legality_context_t* context);
 
-// Emits ERR_BACKEND_001 for an unsupported legality subject.
-iree_status_t loom_target_low_legality_reject(
-    loom_target_low_legality_context_t* context,
-    const loom_target_low_legality_provider_t* provider, const loom_op_t* op,
-    iree_string_view_t subject_kind, iree_string_view_t subject_name,
-    iree_string_view_t reason);
-
 // Emits a generated structured legality diagnostic.
 iree_status_t loom_target_low_legality_emit_error_ref(
     loom_target_low_legality_context_t* context, const loom_op_t* op,

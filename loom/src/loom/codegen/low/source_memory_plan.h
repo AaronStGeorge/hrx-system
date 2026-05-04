@@ -202,8 +202,9 @@ bool loom_low_source_memory_access_plan_build_view(
     loom_low_source_memory_access_plan_t* out_plan,
     loom_low_source_memory_access_diagnostic_t* out_diagnostic);
 
-// Returns a diagnostic detail string for source memory access rejection flags.
-iree_string_view_t loom_low_source_memory_access_rejection_detail(
+// Returns a stable diagnostic constraint key for source memory access rejection
+// flags.
+iree_string_view_t loom_low_source_memory_access_rejection_key(
     loom_low_source_memory_access_rejection_flags_t rejection_bits);
 
 #ifdef __cplusplus

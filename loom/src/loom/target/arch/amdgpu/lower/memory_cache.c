@@ -4,7 +4,6 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include <inttypes.h>
 #include <stdint.h>
 
 #include "iree/base/api.h"
@@ -12,7 +11,15 @@
 #include "loom/target/arch/amdgpu/lower/memory_internal.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 
-static iree_string_view_t loom_amdgpu_cache_scope_name(uint8_t scope) {
+bool loom_amdgpu_memory_cache_policy_is_present(
+    const loom_vector_memory_cache_policy_t* policy) {
+  return iree_any_bit_set(
+      policy->build_flags,
+      LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_SCOPE |
+          LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_TEMPORAL);
+}
+
+iree_string_view_t loom_amdgpu_cache_scope_name(uint8_t scope) {
   switch (scope) {
     case LOOM_CACHE_SCOPE_CU:
       return IREE_SV("cu");
@@ -26,7 +33,7 @@ static iree_string_view_t loom_amdgpu_cache_scope_name(uint8_t scope) {
   return IREE_SV("invalid");
 }
 
-static iree_string_view_t loom_amdgpu_cache_temporal_name(uint8_t temporal) {
+iree_string_view_t loom_amdgpu_cache_temporal_name(uint8_t temporal) {
   switch (temporal) {
     case LOOM_CACHE_TEMPORAL_REGULAR:
       return IREE_SV("regular");
@@ -50,14 +57,6 @@ static iree_string_view_t loom_amdgpu_cache_temporal_name(uint8_t temporal) {
       return IREE_SV("bypass");
   }
   return IREE_SV("invalid");
-}
-
-bool loom_amdgpu_memory_cache_policy_is_present(
-    const loom_vector_memory_cache_policy_t* policy) {
-  return iree_any_bit_set(
-      policy->build_flags,
-      LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_SCOPE |
-          LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_TEMPORAL);
 }
 
 static bool loom_amdgpu_memory_cache_policy_is_complete(
@@ -220,74 +219,21 @@ bool loom_amdgpu_memory_cache_policy_can_lower(
   return loom_amdgpu_memory_cache_policy_encode(descriptor_set, access, &attrs);
 }
 
-static iree_status_code_t loom_amdgpu_memory_cache_policy_rejection_code(
-    const loom_vector_memory_cache_policy_t* policy) {
-  return loom_amdgpu_memory_cache_policy_is_complete(policy)
-             ? IREE_STATUS_UNIMPLEMENTED
-             : IREE_STATUS_INVALID_ARGUMENT;
-}
-
-iree_status_t loom_amdgpu_memory_cache_policy_format_rejection_detail(
+iree_string_view_t loom_amdgpu_memory_cache_policy_rejection_key(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_memory_access_t* access,
-    const loom_vector_memory_cache_policy_t* policy,
-    iree_string_builder_t* builder) {
+    const loom_vector_memory_cache_policy_t* policy) {
   if (!loom_amdgpu_memory_cache_policy_is_complete(policy)) {
-    return iree_string_builder_append_cstring(
-        builder,
-        "AMDGPU vector memory cache policy requires both cache_scope and "
-        "cache_temporal");
+    return IREE_SV("memory_cache_policy.incomplete");
   }
-
-  const iree_string_view_t scope_name =
-      loom_amdgpu_cache_scope_name(policy->cache_scope);
-  const iree_string_view_t temporal_name =
-      loom_amdgpu_cache_temporal_name(policy->cache_temporal);
   if (access->source.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
-    return iree_string_builder_append_format(
-        builder,
-        "AMDGPU workgroup memory packets cannot encode cache policy "
-        "%.*s/%.*s",
-        (int)scope_name.size, scope_name.data, (int)temporal_name.size,
-        temporal_name.data);
+    return IREE_SV("memory_cache_policy.workgroup");
   }
-
   const loom_amdgpu_descriptor_set_info_t* descriptor_set_info =
       loom_amdgpu_target_info_descriptor_set_at(
           descriptor_set->descriptor_set_ordinal);
   if (descriptor_set_info == NULL) {
-    return iree_string_builder_append_format(
-        builder,
-        "AMDGPU descriptor set ordinal %" PRIu16
-        " has no cache-policy target-info row",
-        descriptor_set->descriptor_set_ordinal);
+    return IREE_SV("memory_cache_policy.descriptor_set_info");
   }
-
-  return iree_string_builder_append_format(
-      builder,
-      "AMDGPU descriptor set '%.*s' cannot faithfully encode vector memory "
-      "cache policy %.*s/%.*s",
-      (int)descriptor_set_info->descriptor_set_key.size,
-      descriptor_set_info->descriptor_set_key.data, (int)scope_name.size,
-      scope_name.data, (int)temporal_name.size, temporal_name.data);
-}
-
-iree_status_t loom_amdgpu_memory_cache_policy_rejected_status(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_amdgpu_memory_access_t* access,
-    const loom_vector_memory_cache_policy_t* policy) {
-  const iree_status_code_t rejection_code =
-      loom_amdgpu_memory_cache_policy_rejection_code(policy);
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(iree_allocator_system(), &builder);
-  iree_status_t status =
-      loom_amdgpu_memory_cache_policy_format_rejection_detail(
-          descriptor_set, access, policy, &builder);
-  if (iree_status_is_ok(status)) {
-    const iree_string_view_t detail = iree_string_builder_view(&builder);
-    status =
-        iree_make_status(rejection_code, "%.*s", (int)detail.size, detail.data);
-  }
-  iree_string_builder_deinitialize(&builder);
-  return status;
+  return IREE_SV("memory_cache_policy.descriptor_encoding");
 }

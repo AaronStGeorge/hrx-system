@@ -179,6 +179,16 @@ bool loom_amdgpu_memory_cache_policy_can_lower(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_memory_access_t* access);
 
+// Returns the stable diagnostic name for a memory space.
+iree_string_view_t loom_amdgpu_memory_space_name(
+    loom_value_fact_memory_space_t memory_space);
+
+// Returns the stable diagnostic name for a cache scope.
+iree_string_view_t loom_amdgpu_cache_scope_name(uint8_t scope);
+
+// Returns the stable diagnostic name for a cache temporal policy.
+iree_string_view_t loom_amdgpu_cache_temporal_name(uint8_t temporal);
+
 // Encodes the target-specific cache-policy attributes for a selected memory
 // access plan. Missing source cache policy encodes as an empty attrs struct.
 bool loom_amdgpu_memory_cache_policy_encode(
@@ -186,23 +196,16 @@ bool loom_amdgpu_memory_cache_policy_encode(
     const loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_cache_policy_attrs_t* out_attrs);
 
-// Returns a status explaining why the access cache policy cannot be encoded.
-iree_status_t loom_amdgpu_memory_cache_policy_rejected_status(
+// Returns a stable diagnostic constraint key for the cache policy selected by
+// the memory access.
+iree_string_view_t loom_amdgpu_memory_cache_policy_rejection_key(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_memory_access_t* access,
     const loom_vector_memory_cache_policy_t* policy);
 
-// Appends a diagnostic detail explaining why the access cache policy cannot be
-// encoded.
-iree_status_t loom_amdgpu_memory_cache_policy_format_rejection_detail(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_amdgpu_memory_access_t* access,
-    const loom_vector_memory_cache_policy_t* policy,
-    struct iree_string_builder_t* builder);
-
-// Returns the diagnostic detail for target-specific memory-access rejection
-// bits.
-iree_string_view_t loom_amdgpu_memory_access_rejection_detail(
+// Returns the stable diagnostic constraint key for target-specific
+// memory-access rejection bits.
+iree_string_view_t loom_amdgpu_memory_access_rejection_key(
     loom_amdgpu_memory_access_rejection_flags_t rejection_bits);
 
 // Records the first source dynamic term relevant to a flat-address rejection.
