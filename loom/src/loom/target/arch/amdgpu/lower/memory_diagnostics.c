@@ -21,8 +21,8 @@ typedef struct loom_amdgpu_memory_access_bank_summary_t {
   // Estimated conflict degree across a 32-lane bank cycle, or zero when the
   // bank pattern is unknown from the current facts.
   uint32_t conflict_degree;
-  // Stable diagnostic reason token.
-  iree_string_view_t reason;
+  // Stable bank-conflict classification token.
+  iree_string_view_t conflict_kind;
 } loom_amdgpu_memory_access_bank_summary_t;
 
 static uint32_t loom_amdgpu_gcd_u32(uint32_t lhs, uint32_t rhs) {
@@ -323,7 +323,7 @@ static loom_amdgpu_memory_access_bank_summary_t
 loom_amdgpu_memory_access_bank_summary(
     const loom_amdgpu_memory_access_t* access) {
   loom_amdgpu_memory_access_bank_summary_t summary = {
-      .reason = IREE_SV("bank-pattern-unknown"),
+      .conflict_kind = IREE_SV("bank-pattern-unknown"),
   };
   const loom_low_source_memory_dynamic_term_t* term =
       loom_low_source_memory_access_single_dynamic_term(&access->source);
@@ -344,11 +344,11 @@ loom_amdgpu_memory_access_bank_summary(
                                      : access->source.element_byte_count *
                                            iree_max(access->vgpr_count, 1u);
   if (summary.conflict_degree == 1) {
-    summary.reason = term->byte_stride > vector_footprint_bytes
-                         ? IREE_SV("padded-bank-conflict-free")
-                         : IREE_SV("bank-conflict-free");
+    summary.conflict_kind = term->byte_stride > vector_footprint_bytes
+                                ? IREE_SV("padded-bank-conflict-free")
+                                : IREE_SV("bank-conflict-free");
   } else {
-    summary.reason = IREE_SV("bank-conflict-risk");
+    summary.conflict_kind = IREE_SV("bank-conflict-risk");
   }
   return summary;
 }
@@ -368,7 +368,6 @@ static iree_status_t loom_amdgpu_memory_access_descriptor_key(
 }
 
 iree_status_t loom_amdgpu_record_memory_access_diagnostic(
-    const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_memory_access_t* access,
@@ -385,15 +384,14 @@ iree_status_t loom_amdgpu_record_memory_access_diagnostic(
   const loom_amdgpu_memory_access_bank_summary_t bank_summary =
       loom_amdgpu_memory_access_bank_summary(access);
   return loom_target_low_legality_record_memory_access(
-      context, provider, op,
-      loom_amdgpu_memory_space_name(access->source.memory_space),
+      context, op, loom_amdgpu_memory_space_name(access->source.memory_space),
       loom_amdgpu_memory_operation_name(kind), packet_key, IREE_SV("selected"),
       access->source.element_byte_count, access->vgpr_count,
       access->source.dynamic_term_count == 1
           ? access->source.dynamic_terms[0].byte_stride
           : 0,
       access->source.vector_lane_byte_stride, bank_summary.bank_stride_words,
-      bank_summary.conflict_degree, bank_summary.reason);
+      bank_summary.conflict_degree, bank_summary.conflict_kind);
 }
 
 iree_string_view_t loom_amdgpu_memory_access_rejection_detail(

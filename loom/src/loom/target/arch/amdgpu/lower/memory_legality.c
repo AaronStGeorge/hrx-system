@@ -73,5 +73,5 @@ iree_status_t loom_amdgpu_low_legality_verify_memory(
   const loom_amdgpu_memory_operation_kind_t kind =
       loom_amdgpu_memory_operation_kind_from_source(&access.source);
   return loom_amdgpu_record_memory_access_diagnostic(
-      provider, context, op, descriptor_set, &access, kind);
+      context, op, descriptor_set, &access, kind);
 }

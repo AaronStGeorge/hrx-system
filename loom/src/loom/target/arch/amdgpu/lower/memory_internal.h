@@ -220,7 +220,6 @@ iree_status_t loom_amdgpu_emit_memory_access_rejection_diagnostic(
 
 // Records optional memory diagnostics for a selected memory access plan.
 iree_status_t loom_amdgpu_record_memory_access_diagnostic(
-    const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_memory_access_t* access,
