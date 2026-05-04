@@ -31,6 +31,34 @@ struct loom_encoding_define_param_view_t {
   loom_named_attr_slice_t dynamic_names;
 };
 
+// Resolves a dynamic parameter name entry to the operand it names. False means
+// the entry is absent or the operand dictionary is structurally invalid.
+// Semantic verifiers still own missing-entry diagnostics; the structural
+// verifier owns malformed dictionary diagnostics.
+static inline bool loom_encoding_define_dynamic_param_ordinal(
+    const loom_encoding_define_param_view_t* params,
+    const loom_named_attr_t* name_entry, uint16_t* out_ordinal) {
+  *out_ordinal = 0;
+  if (!name_entry || name_entry->value.kind != LOOM_ATTR_I64) return false;
+  int64_t ordinal = name_entry->value.i64;
+  if (ordinal < 0 || ordinal >= params->dynamic_values.count) return false;
+  *out_ordinal = (uint16_t)ordinal;
+  return true;
+}
+
+static inline bool loom_encoding_define_dynamic_param_value(
+    const loom_encoding_define_param_view_t* params,
+    const loom_named_attr_t* name_entry, loom_value_id_t* out_value) {
+  uint16_t ordinal = 0;
+  *out_value = LOOM_VALUE_ID_INVALID;
+  if (!loom_encoding_define_dynamic_param_ordinal(params, name_entry,
+                                                  &ordinal)) {
+    return false;
+  }
+  *out_value = params->dynamic_values.values[ordinal];
+  return true;
+}
+
 static inline loom_encoding_define_param_view_t loom_encoding_define_param_view(
     const loom_module_t* module, const loom_op_t* op) {
   const loom_encoding_t* spec =

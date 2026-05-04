@@ -51,17 +51,6 @@ static const loom_named_attr_t* loom_encoding_find_param(
   return NULL;
 }
 
-static bool loom_encoding_dynamic_param_value(
-    const loom_encoding_define_param_view_t* params,
-    const loom_named_attr_t* name_entry, loom_value_id_t* out_value) {
-  *out_value = LOOM_VALUE_ID_INVALID;
-  if (!name_entry || name_entry->value.kind != LOOM_ATTR_I64) return false;
-  int64_t ordinal = name_entry->value.i64;
-  if (ordinal < 0 || ordinal >= params->dynamic_values.count) return false;
-  *out_value = params->dynamic_values.values[ordinal];
-  return true;
-}
-
 static bool loom_encoding_string_attr_value(const loom_module_t* module,
                                             loom_attribute_t attr,
                                             iree_string_view_t* out_value) {
@@ -776,11 +765,8 @@ static iree_status_t loom_encoding_numeric_transform_verify_dynamic_params(
     }
 
     loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
-    if (!loom_encoding_dynamic_param_value(params, entry, &value_id)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "malformed encoding.define operand dictionary for parameter '%.*s'",
-          (int)param_name.size, param_name.data);
+    if (!loom_encoding_define_dynamic_param_value(params, entry, &value_id)) {
+      return iree_ok_status();
     }
 
     loom_type_t actual_type = loom_module_value_type(module, value_id);
@@ -1152,11 +1138,8 @@ static iree_status_t loom_encoding_turboquant_verify_dynamic_view(
   if (!entry) return iree_ok_status();
 
   loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
-  if (!loom_encoding_dynamic_param_value(params, entry, &value_id)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "malformed encoding.define operand dictionary for parameter '%.*s'",
-        (int)param_name.size, param_name.data);
+  if (!loom_encoding_define_dynamic_param_value(params, entry, &value_id)) {
+    return iree_ok_status();
   }
 
   loom_type_t actual_type = loom_module_value_type(module, value_id);
@@ -1191,11 +1174,8 @@ static iree_status_t loom_encoding_turboquant_verify_dynamic_transform(
   if (!entry) return iree_ok_status();
 
   loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
-  if (!loom_encoding_dynamic_param_value(params, entry, &value_id)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "malformed encoding.define operand dictionary for parameter '%.*s'",
-        (int)param_name.size, param_name.data);
+  if (!loom_encoding_define_dynamic_param_value(params, entry, &value_id)) {
+    return iree_ok_status();
   }
 
   loom_type_t actual_type = loom_module_value_type(module, value_id);
@@ -1254,11 +1234,8 @@ static iree_status_t loom_encoding_turboquant_verify_transform_family(
   }
 
   loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
-  if (!loom_encoding_dynamic_param_value(params, entry, &value_id)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "malformed encoding.define operand dictionary for parameter '%.*s'",
-        (int)param_name.size, param_name.data);
+  if (!loom_encoding_define_dynamic_param_value(params, entry, &value_id)) {
+    return iree_ok_status();
   }
 
   iree_string_view_t actual_family = iree_string_view_empty();

@@ -50,8 +50,15 @@ static iree_status_t loom_vector_to_scalar_read_transform_descriptor(
       *out_descriptor = read.descriptor;
       return iree_ok_status();
     case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_VALUE_OUT_OF_RANGE:
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "vector.transform operand id is out of range");
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_MISSING_FAMILY:
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_NON_STRING_FAMILY:
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_UNKNOWN_FAMILY:
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_NON_STRING_NORMALIZATION:
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_UNKNOWN_NORMALIZATION:
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_MALFORMED_DYNAMIC_PARAM:
+      return loom_vector_to_scalar_emit_transform_unimplemented(
+          state, IREE_SV("invalid numeric_transform descriptor reached "
+                         "vector-to-scalar lowering"));
     case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_NOT_LOCALLY_DEFINED:
       return loom_vector_to_scalar_emit_transform_unimplemented(
           state, IREE_SV("transform descriptor is not locally defined"));
@@ -61,26 +68,6 @@ static iree_status_t loom_vector_to_scalar_read_transform_descriptor(
     case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_NOT_NUMERIC_TRANSFORM:
       return loom_vector_to_scalar_emit_transform_unimplemented(
           state, IREE_SV("transform descriptor is not #numeric_transform"));
-    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_MISSING_FAMILY:
-    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_NON_STRING_FAMILY:
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "vector.transform numeric_transform family must be a static string");
-    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_UNKNOWN_FAMILY:
-      return loom_vector_to_scalar_emit_transform_unimplemented(
-          state, IREE_SV("unknown numeric_transform family"));
-    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_NON_STRING_NORMALIZATION:
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "numeric_transform normalization must be a "
-                              "static string");
-    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_UNKNOWN_NORMALIZATION:
-      return loom_vector_to_scalar_emit_transform_unimplemented(
-          state, IREE_SV("unknown numeric_transform normalization"));
-    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_MALFORMED_DYNAMIC_PARAM:
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "malformed encoding.define operand dictionary for parameter '%.*s'",
-          (int)read.parameter_name.size, read.parameter_name.data);
   }
   return loom_vector_to_scalar_emit_transform_unimplemented(
       state, IREE_SV("unrecognized numeric_transform descriptor"));
@@ -405,10 +392,6 @@ static iree_status_t loom_vector_to_scalar_transform_source_indices_from_term(
     loom_vector_to_scalar_index_term_t last_index,
     loom_vector_to_scalar_index_list_t* out_indices) {
   uint8_t rank = result_indices.rank;
-  if (rank == 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.transform requires rank >= 1");
-  }
   loom_vector_to_scalar_index_term_t* source_terms = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       state->rewriter->arena, rank, sizeof(loom_vector_to_scalar_index_term_t),

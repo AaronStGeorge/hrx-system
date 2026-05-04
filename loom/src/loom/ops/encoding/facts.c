@@ -45,17 +45,6 @@ static const loom_named_attr_t* loom_encoding_facts_find_param(
   return NULL;
 }
 
-static bool loom_encoding_facts_dynamic_param_ordinal(
-    const loom_encoding_define_param_view_t* params,
-    const loom_named_attr_t* name_entry, uint16_t* out_ordinal) {
-  *out_ordinal = 0;
-  if (!name_entry || name_entry->value.kind != LOOM_ATTR_I64) return false;
-  int64_t ordinal = name_entry->value.i64;
-  if (ordinal < 0 || ordinal >= params->dynamic_values.count) return false;
-  *out_ordinal = (uint16_t)ordinal;
-  return true;
-}
-
 static loom_value_fact_address_layout_t loom_encoding_facts_dense_layout(void) {
   return (loom_value_fact_address_layout_t){
       .kind = LOOM_VALUE_FACT_ADDRESS_LAYOUT_DENSE,
@@ -221,8 +210,8 @@ iree_status_t loom_encoding_define_facts(
     const loom_named_attr_t* dynamic_layout = loom_encoding_facts_find_param(
         module, params.dynamic_names, loom_encoding_facts_layout_param_name());
     uint16_t dynamic_ordinal = 0;
-    if (loom_encoding_facts_dynamic_param_ordinal(&params, dynamic_layout,
-                                                  &dynamic_ordinal)) {
+    if (loom_encoding_define_dynamic_param_ordinal(&params, dynamic_layout,
+                                                   &dynamic_ordinal)) {
       loom_value_fact_encoding_summary_t layout_summary = {0};
       if (loom_value_facts_query_encoding_summary(
               context, operand_facts[dynamic_ordinal], &layout_summary)) {
@@ -236,8 +225,8 @@ iree_status_t loom_encoding_define_facts(
 
     const loom_named_attr_t* dynamic_schema = loom_encoding_facts_find_param(
         module, params.dynamic_names, loom_encoding_facts_schema_param_name());
-    if (loom_encoding_facts_dynamic_param_ordinal(&params, dynamic_schema,
-                                                  &dynamic_ordinal)) {
+    if (loom_encoding_define_dynamic_param_ordinal(&params, dynamic_schema,
+                                                   &dynamic_ordinal)) {
       loom_value_fact_encoding_summary_t schema_summary = {0};
       if (loom_value_facts_query_encoding_summary(
               context, operand_facts[dynamic_ordinal], &schema_summary)) {

@@ -212,16 +212,6 @@ static bool loom_encoding_static_bool_param_or_default(
   return true;
 }
 
-static bool loom_encoding_dynamic_param_value(
-    const loom_encoding_define_param_view_t* params,
-    const loom_named_attr_t* name_entry, loom_value_id_t* out_value) {
-  if (!name_entry || name_entry->value.kind != LOOM_ATTR_I64) return false;
-  int64_t ordinal = name_entry->value.i64;
-  if (ordinal < 0 || ordinal >= params->dynamic_values.count) return false;
-  *out_value = params->dynamic_values.values[ordinal];
-  return true;
-}
-
 static loom_value_fact_address_layout_t loom_encoding_dense_address_layout(
     void) {
   return (loom_value_fact_address_layout_t){
@@ -354,8 +344,8 @@ static bool loom_encoding_query_value_address_layout_rec(
   const loom_named_attr_t* layout_entry = loom_encoding_find_param(
       module, params.dynamic_names, loom_encoding_layout_param_name());
   loom_value_id_t layout_value = LOOM_VALUE_ID_INVALID;
-  if (!loom_encoding_dynamic_param_value(&params, layout_entry,
-                                         &layout_value)) {
+  if (!loom_encoding_define_dynamic_param_value(&params, layout_entry,
+                                                &layout_value)) {
     return false;
   }
   return loom_encoding_query_value_address_layout_rec(
@@ -795,11 +785,8 @@ static iree_status_t loom_encoding_physical_storage_verify_dynamic_param(
     const loom_named_attr_t* entry, iree_string_view_t param_name,
     loom_encoding_role_t expected_role, iree_string_view_t expected_role_name) {
   loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
-  if (!loom_encoding_dynamic_param_value(params, entry, &value_id)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "malformed encoding.define operand dictionary for parameter '%.*s'",
-        (int)param_name.size, param_name.data);
+  if (!loom_encoding_define_dynamic_param_value(params, entry, &value_id)) {
+    return iree_ok_status();
   }
 
   if (!loom_type_is_encoding(loom_module_value_type(module, value_id))) {

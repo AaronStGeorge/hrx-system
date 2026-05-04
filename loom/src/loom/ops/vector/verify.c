@@ -1559,17 +1559,6 @@ static const loom_named_attr_t* loom_vector_find_named_attr(
   return NULL;
 }
 
-static bool loom_vector_encoding_dynamic_param_value(
-    const loom_encoding_define_param_view_t* params,
-    const loom_named_attr_t* name_entry, loom_value_id_t* out_value) {
-  *out_value = LOOM_VALUE_ID_INVALID;
-  if (!name_entry || name_entry->value.kind != LOOM_ATTR_I64) return false;
-  int64_t ordinal = name_entry->value.i64;
-  if (ordinal < 0 || ordinal >= params->dynamic_values.count) return false;
-  *out_value = params->dynamic_values.values[ordinal];
-  return true;
-}
-
 static iree_status_t loom_vector_emit_auxiliary_key_error(
     const loom_module_t* module, iree_diagnostic_emitter_t emitter,
     const loom_op_t* op, const loom_error_def_t* error,
@@ -1846,12 +1835,9 @@ static iree_status_t loom_vector_transform_verify_extent_param(
   }
 
   loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
-  if (!loom_vector_encoding_dynamic_param_value(params, dynamic_param,
+  if (!loom_encoding_define_dynamic_param_value(params, dynamic_param,
                                                 &value_id)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "malformed encoding.define operand dictionary for parameter '%.*s'",
-        (int)param_name.size, param_name.data);
+    return iree_ok_status();
   }
   if (!loom_type_equal(loom_module_value_type(module, value_id),
                        loom_type_scalar(LOOM_SCALAR_TYPE_INDEX))) {
@@ -1938,11 +1924,9 @@ static iree_status_t loom_vector_transform_verify_dynamic_param_shapes(
       module, params->dynamic_names, loom_vector_transform_signs_param_name());
   if (signs_param) {
     loom_value_id_t signs_value = LOOM_VALUE_ID_INVALID;
-    if (!loom_vector_encoding_dynamic_param_value(params, signs_param,
+    if (!loom_encoding_define_dynamic_param_value(params, signs_param,
                                                   &signs_value)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "malformed encoding.define operand dictionary for parameter 'signs'");
+      return iree_ok_status();
     }
     loom_type_t signs_type = loom_module_value_type(module, signs_value);
     if (loom_type_is_vector(signs_type) &&
@@ -1960,12 +1944,9 @@ static iree_status_t loom_vector_transform_verify_dynamic_param_shapes(
       loom_vector_transform_permutation_param_name());
   if (permutation_param) {
     loom_value_id_t permutation_value = LOOM_VALUE_ID_INVALID;
-    if (!loom_vector_encoding_dynamic_param_value(params, permutation_param,
+    if (!loom_encoding_define_dynamic_param_value(params, permutation_param,
                                                   &permutation_value)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "malformed encoding.define operand dictionary for parameter "
-          "'permutation'");
+      return iree_ok_status();
     }
     loom_type_t permutation_type =
         loom_module_value_type(module, permutation_value);
@@ -1988,11 +1969,9 @@ static iree_status_t loom_vector_transform_verify_dynamic_param_shapes(
   if (!matrix_param) return iree_ok_status();
 
   loom_value_id_t matrix_value = LOOM_VALUE_ID_INVALID;
-  if (!loom_vector_encoding_dynamic_param_value(params, matrix_param,
+  if (!loom_encoding_define_dynamic_param_value(params, matrix_param,
                                                 &matrix_value)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "malformed encoding.define operand dictionary for parameter 'matrix'");
+    return iree_ok_status();
   }
   loom_type_t matrix_type = loom_module_value_type(module, matrix_value);
   if (!loom_type_is_vector(matrix_type) ||

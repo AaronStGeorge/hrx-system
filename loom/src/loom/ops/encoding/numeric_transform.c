@@ -79,17 +79,6 @@ static bool loom_encoding_numeric_transform_string_attr_value(
   return true;
 }
 
-static bool loom_encoding_numeric_transform_dynamic_param_value(
-    const loom_encoding_define_param_view_t* params,
-    const loom_named_attr_t* name_entry, loom_value_id_t* out_value) {
-  *out_value = LOOM_VALUE_ID_INVALID;
-  if (!name_entry || name_entry->value.kind != LOOM_ATTR_I64) return false;
-  int64_t ordinal = name_entry->value.i64;
-  if (ordinal < 0 || ordinal >= params->dynamic_values.count) return false;
-  *out_value = params->dynamic_values.values[ordinal];
-  return true;
-}
-
 loom_encoding_numeric_transform_family_t
 loom_encoding_numeric_transform_family_from_name(iree_string_view_t name) {
   if (iree_string_view_equal(name, IREE_SV("hadamard"))) {
@@ -189,8 +178,7 @@ loom_encoding_numeric_transform_read_dynamic_param(
         LOOM_ENCODING_NUMERIC_TRANSFORM_READ_OK, iree_string_view_empty(),
         descriptor);
   }
-  if (!loom_encoding_numeric_transform_dynamic_param_value(params, param,
-                                                           out_value)) {
+  if (!loom_encoding_define_dynamic_param_value(params, param, out_value)) {
     return loom_encoding_numeric_transform_make_read(
         LOOM_ENCODING_NUMERIC_TRANSFORM_READ_MALFORMED_DYNAMIC_PARAM,
         param_name, descriptor);
