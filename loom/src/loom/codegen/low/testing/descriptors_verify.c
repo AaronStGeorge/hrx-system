@@ -173,9 +173,6 @@ static iree_status_t loom_low_verify_tables_present(
       descriptor_set->descriptor_refs, descriptor_set->descriptor_ref_count,
       "descriptor_refs"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
-      descriptor_set->descriptor_id_refs,
-      descriptor_set->descriptor_id_ref_count, "descriptor_id_refs"));
-  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->asm_forms, descriptor_set->asm_form_count, "asm_forms"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->asm_operand_indices,
@@ -289,62 +286,6 @@ static iree_status_t loom_low_verify_descriptor_refs(
                               (int)descriptor_key.size, descriptor_key.data);
     }
     previous_key = ref_key;
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_verify_descriptor_id_refs(
-    const loom_low_descriptor_set_t* descriptor_set) {
-  if (descriptor_set->descriptor_id_ref_count !=
-      descriptor_set->descriptor_count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low descriptor ID reference map count %" PRIu32
-                            " does not match descriptor count %" PRIu32,
-                            descriptor_set->descriptor_id_ref_count,
-                            descriptor_set->descriptor_count);
-  }
-  uint64_t previous_stable_id = 0;
-  for (uint32_t i = 0; i < descriptor_set->descriptor_id_ref_count; ++i) {
-    const loom_low_descriptor_id_ref_t* descriptor_id_ref =
-        &descriptor_set->descriptor_id_refs[i];
-    if (descriptor_id_ref->stable_id == LOOM_LOW_DESCRIPTOR_ID_NONE) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low descriptor ID reference map contains absent ID at row %" PRIu32,
-          i);
-    }
-    if (i > 0 && previous_stable_id >= descriptor_id_ref->stable_id) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low descriptor ID reference map is not strictly sorted near "
-          "0x%016" PRIx64,
-          descriptor_id_ref->stable_id);
-    }
-    if (descriptor_id_ref->descriptor_ordinal >=
-        descriptor_set->descriptor_count) {
-      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "low descriptor ID reference 0x%016" PRIx64
-                              " points at descriptor ordinal %" PRIu32
-                              " but only %" PRIu32 " descriptors exist",
-                              descriptor_id_ref->stable_id,
-                              descriptor_id_ref->descriptor_ordinal,
-                              descriptor_set->descriptor_count);
-    }
-    const loom_low_descriptor_t* descriptor =
-        &descriptor_set->descriptors[descriptor_id_ref->descriptor_ordinal];
-    if (descriptor->stable_id != descriptor_id_ref->stable_id) {
-      iree_string_view_t descriptor_key = iree_string_view_empty();
-      IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string_impl(
-          descriptor_set, descriptor->key_string_offset, /*allow_none=*/false,
-          &descriptor_key));
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low descriptor ID reference 0x%016" PRIx64
-          " does not match descriptor %" PRIu32 " key '%.*s' ID 0x%016" PRIx64,
-          descriptor_id_ref->stable_id, descriptor_id_ref->descriptor_ordinal,
-          (int)descriptor_key.size, descriptor_key.data, descriptor->stable_id);
-    }
-    previous_stable_id = descriptor_id_ref->stable_id;
   }
   return iree_ok_status();
 }
@@ -1255,7 +1196,7 @@ static iree_status_t loom_low_verify_descriptor(
   IREE_RETURN_IF_ERROR(loom_low_verify_non_empty_required_string(
       descriptor_set, descriptor->key_string_offset, "descriptor.key",
       &descriptor_key));
-  if (descriptor->stable_id == LOOM_LOW_DESCRIPTOR_ID_NONE) {
+  if (descriptor->stable_id == LOOM_LOW_STABLE_ID_NONE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor %" PRIu32
                             " has no stable descriptor ID",
@@ -2023,8 +1964,7 @@ iree_status_t loom_low_descriptor_set_verify(
     IREE_RETURN_IF_ERROR(loom_low_verify_pressure_delta(descriptor_set, i));
   }
   IREE_RETURN_IF_ERROR(loom_low_verify_asm_forms(descriptor_set));
-  IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_refs(descriptor_set));
-  return loom_low_verify_descriptor_id_refs(descriptor_set);
+  return loom_low_verify_descriptor_refs(descriptor_set);
 }
 
 static iree_status_t loom_low_descriptor_set_key(

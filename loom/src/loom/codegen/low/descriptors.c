@@ -230,26 +230,6 @@ uint32_t loom_low_descriptor_set_lookup_descriptor(
   return LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
 }
 
-uint32_t loom_low_descriptor_set_lookup_descriptor_by_id(
-    const loom_low_descriptor_set_t* descriptor_set, uint64_t stable_id) {
-  uint32_t low = 0;
-  uint32_t high = descriptor_set->descriptor_id_ref_count;
-  while (low < high) {
-    const uint32_t mid = low + (high - low) / 2;
-    const loom_low_descriptor_id_ref_t* descriptor_id_ref =
-        &descriptor_set->descriptor_id_refs[mid];
-    if (descriptor_id_ref->stable_id == stable_id) {
-      return descriptor_id_ref->descriptor_ordinal;
-    }
-    if (descriptor_id_ref->stable_id < stable_id) {
-      low = mid + 1;
-    } else {
-      high = mid;
-    }
-  }
-  return LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-}
-
 uint32_t loom_low_descriptor_set_lookup_asm_form(
     const loom_low_descriptor_set_t* descriptor_set,
     iree_string_view_t mnemonic) {

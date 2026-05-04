@@ -1002,13 +1002,23 @@ static iree_status_t loom_x86_append_descriptor_packet(
   if (uses_tied_ternary_form) {
     return loom_x86_append_tied_ternary_packet(state, context);
   }
-  if (descriptor->stable_id ==
-      X86_AVX512_CORE_DESCRIPTOR_ID_AVX512_LEA_ADD_GPR64) {
-    return loom_x86_append_lea_add_packet(state, context);
-  }
-  if (descriptor->stable_id ==
-      X86_AVX512_PACKED_DOT_CORE_DESCRIPTOR_ID_AVX512_LEA_ADD_GPR64) {
-    return loom_x86_append_lea_add_packet(state, context);
+  const uint32_t descriptor_ref =
+      loom_low_descriptor_set_descriptor_ordinal(descriptor_set, descriptor);
+  switch (state->descriptor_set_kind) {
+    case LOOM_X86_DESCRIPTOR_SET_AVX512_CORE:
+      if (descriptor_ref ==
+          X86_AVX512_CORE_DESCRIPTOR_REF_AVX512_LEA_ADD_GPR64) {
+        return loom_x86_append_lea_add_packet(state, context);
+      }
+      break;
+    case LOOM_X86_DESCRIPTOR_SET_AVX512_PACKED_DOT_CORE:
+      if (descriptor_ref ==
+          X86_AVX512_PACKED_DOT_CORE_DESCRIPTOR_REF_AVX512_LEA_ADD_GPR64) {
+        return loom_x86_append_lea_add_packet(state, context);
+      }
+      break;
+    case LOOM_X86_DESCRIPTOR_SET_PACKED_DOT_CORE:
+      break;
   }
   return loom_x86_append_canonical_asm_form_packet(state, context);
 }

@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 19u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 20u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -41,9 +41,6 @@ extern "C" {
 
 // Sentinel for absent descriptor ordinals.
 #define LOOM_LOW_DESCRIPTOR_ORDINAL_NONE UINT32_MAX
-
-// Sentinel for absent stable descriptor IDs.
-#define LOOM_LOW_DESCRIPTOR_ID_NONE UINT64_C(0)
 
 // Sentinel for absent asm-form ordinals.
 #define LOOM_LOW_ASM_FORM_ORDINAL_NONE UINT32_MAX
@@ -634,13 +631,6 @@ typedef struct loom_low_descriptor_ref_t {
   uint32_t descriptor_ordinal;
 } loom_low_descriptor_ref_t;
 
-typedef struct loom_low_descriptor_id_ref_t {
-  // Stable descriptor identity.
-  uint64_t stable_id;
-  // Ordinal of the referenced descriptor row.
-  uint32_t descriptor_ordinal;
-} loom_low_descriptor_id_ref_t;
-
 typedef struct loom_low_asm_immediate_t {
   // Descriptor-local immediate index printed or parsed by this asm field.
   uint16_t immediate_index;
@@ -695,10 +685,6 @@ typedef struct loom_low_descriptor_set_t {
   const loom_low_descriptor_ref_t* descriptor_refs;
   // Number of symbolic descriptor-key reference rows.
   uint32_t descriptor_ref_count;
-  // Sorted stable descriptor-ID reference rows.
-  const loom_low_descriptor_id_ref_t* descriptor_id_refs;
-  // Number of stable descriptor-ID reference rows.
-  uint32_t descriptor_id_ref_count;
   // Sorted asm forms keyed by unqualified mnemonic.
   const loom_low_asm_form_t* asm_forms;
   // Number of asm form rows owned by this set.
@@ -925,13 +911,6 @@ iree_string_view_t loom_low_hazard_reference_kind_name(
 // returns LOOM_LOW_DESCRIPTOR_ORDINAL_NONE when no descriptor matches.
 uint32_t loom_low_descriptor_set_lookup_descriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key);
-
-// Returns the descriptor ordinal for |stable_id| or
-// LOOM_LOW_DESCRIPTOR_ORDINAL_NONE when the selected target has no descriptor
-// with that identity. This is the compiled-path lookup after text or bytecode
-// import has resolved descriptor spellings.
-uint32_t loom_low_descriptor_set_lookup_descriptor_by_id(
-    const loom_low_descriptor_set_t* descriptor_set, uint64_t stable_id);
 
 // Resolves an unqualified asm mnemonic to an asm form ordinal in
 // |descriptor_set|, or returns LOOM_LOW_ASM_FORM_ORDINAL_NONE when no mnemonic

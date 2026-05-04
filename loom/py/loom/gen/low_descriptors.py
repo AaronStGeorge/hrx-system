@@ -155,7 +155,6 @@ class _CompiledDescriptorSet:
     operand_form_operand_indices: list[int]
     descriptor_rows: list[dict[str, int]]
     descriptor_refs: list[tuple[str, int]]
-    descriptor_id_refs: list[tuple[int, int]]
     canonical_asm_form_ordinals: list[int | None]
     asm_forms: list[_CompiledAsmForm]
     asm_operand_indices: list[int]
@@ -246,13 +245,13 @@ def _u16_literal(value: int) -> str:
     return f"UINT16_C({value})"
 
 
-def _descriptor_id_constant_name(spec: DescriptorSet, descriptor_key: str) -> str:
+def _descriptor_ref_constant_name(spec: DescriptorSet, descriptor_key: str) -> str:
     descriptor_name = descriptor_set_relative_name(spec, descriptor_key)
-    return f"{spec.c_enum_prefix}_DESCRIPTOR_ID_{_c_identifier(descriptor_name).upper()}"
+    return f"{spec.c_enum_prefix}_DESCRIPTOR_REF_{_c_identifier(descriptor_name).upper()}"
 
 
-def _descriptor_id_define(spec: DescriptorSet, descriptor_key: str) -> str:
-    return f"#define {_descriptor_id_constant_name(spec, descriptor_key)} {_hex_u64_literal(descriptor_stable_id(descriptor_key))}"
+def _descriptor_ref_define(spec: DescriptorSet, descriptor_key: str, descriptor_ordinal: int) -> str:
+    return f"#define {_descriptor_ref_constant_name(spec, descriptor_key)} {descriptor_ordinal}u"
 
 
 def _reg_class_id_constant_name(spec: DescriptorSet, reg_class_name: str) -> str:
@@ -1111,16 +1110,13 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         )
 
     descriptor_refs = sorted((descriptor.key, i) for i, descriptor in enumerate(selected_descriptors))
-    seen_descriptor_ids: dict[int, str] = {}
-    descriptor_id_refs: list[tuple[int, int]] = []
-    for descriptor_ordinal, descriptor in enumerate(selected_descriptors):
+    seen_stable_ids: dict[int, str] = {}
+    for descriptor in selected_descriptors:
         stable_id = descriptor_stable_id(descriptor.key)
-        previous_key = seen_descriptor_ids.get(stable_id)
+        previous_key = seen_stable_ids.get(stable_id)
         if previous_key is not None:
             raise ValueError(f"descriptor '{descriptor.key}' stable ID collides with '{previous_key}'")
-        seen_descriptor_ids[stable_id] = descriptor.key
-        descriptor_id_refs.append((stable_id, descriptor_ordinal))
-    descriptor_id_refs.sort()
+        seen_stable_ids[stable_id] = descriptor.key
 
     return _CompiledDescriptorSet(
         spec=spec,
@@ -1155,7 +1151,6 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         operand_form_operand_indices=operand_form_operand_indices,
         descriptor_rows=descriptor_rows,
         descriptor_refs=descriptor_refs,
-        descriptor_id_refs=descriptor_id_refs,
         canonical_asm_form_ordinals=canonical_asm_form_ordinals,
         asm_forms=asm_forms,
         asm_operand_indices=asm_operand_indices,
@@ -1182,7 +1177,7 @@ def _emit_header(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         '#include "loom/codegen/low/descriptors.h"',
         "",
     ]
-    lines.extend(_descriptor_id_define(spec, descriptor.key) for descriptor in compiled.descriptors)
+    lines.extend(_descriptor_ref_define(spec, descriptor.key, i) for i, descriptor in enumerate(compiled.descriptors))
     lines.append(f"#define {spec.c_enum_prefix}_DESCRIPTOR_SET_ID UINT64_C(0x{descriptor_stable_id(spec.key):016x})")
     lines.append(f"#define {spec.c_enum_prefix}_DESCRIPTOR_SET_ORDINAL {_u16_literal(spec.descriptor_set_ordinal if spec.descriptor_set_ordinal is not None else LOW_DESCRIPTOR_SET_ORDINAL_NONE)}")
     if spec.target_key is not None:
@@ -1597,7 +1592,7 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         [
             [
                 f".key_string_offset = {pool.ref(f'descriptor_{descriptor.key}')},",
-                f".stable_id = {_descriptor_id_constant_name(spec, descriptor.key)},",
+                f".stable_id = {_hex_u64_literal(descriptor_stable_id(descriptor.key))},",
                 f".mnemonic_string_offset = {_optional_string_expr(pool, f'mnemonic_{descriptor.key}' if descriptor.mnemonic is not None else None)},",
                 f".semantic_tag_string_offset = {_optional_string_expr(pool, f'semantic_{descriptor.key}' if descriptor.semantic_tag is not None else None)},",
                 f".feature_mask_word_start = {compiled.descriptor_rows[i]['feature_mask_word_start']},",
@@ -1635,19 +1630,6 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
                 f".descriptor_ordinal = {descriptor_ordinal},",
             ]
             for descriptor_key, descriptor_ordinal in compiled.descriptor_refs
-        ],
-    )
-    _emit_array(
-        lines,
-        "loom_low_descriptor_id_ref_t",
-        spec.c_table_prefix,
-        "DescriptorIdRefs",
-        [
-            [
-                f".stable_id = {_hex_u64_literal(stable_id)},",
-                f".descriptor_ordinal = {descriptor_ordinal},",
-            ]
-            for stable_id, descriptor_ordinal in compiled.descriptor_id_refs
         ],
     )
     if compiled.asm_operand_indices:
@@ -1708,8 +1690,6 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
             f"    .descriptor_count = IREE_ARRAYSIZE(k{spec.c_table_prefix}Descriptors),",
             f"    .descriptor_refs = k{spec.c_table_prefix}DescriptorRefs,",
             f"    .descriptor_ref_count = IREE_ARRAYSIZE(k{spec.c_table_prefix}DescriptorRefs),",
-            f"    .descriptor_id_refs = k{spec.c_table_prefix}DescriptorIdRefs,",
-            f"    .descriptor_id_ref_count = IREE_ARRAYSIZE(k{spec.c_table_prefix}DescriptorIdRefs),",
         ]
     )
 
@@ -1839,7 +1819,6 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
         "table_counts": {
             "descriptors": len(compiled.descriptors),
             "descriptor_refs": len(compiled.descriptor_refs),
-            "descriptor_id_refs": len(compiled.descriptor_id_refs),
             "operands": len(compiled.operands),
             "immediates": len(compiled.immediates),
             "immediate_encoding_slices": len(compiled.immediate_encoding_slices),

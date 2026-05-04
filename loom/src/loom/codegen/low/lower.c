@@ -833,7 +833,7 @@ static void loom_low_lower_record_report_row(
       .rule_set_index = UINT16_MAX,
       .rule_index = UINT16_MAX,
       .plan_id = selected_plan->plan.id,
-      .descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
+      .descriptor_id = LOOM_LOW_STABLE_ID_NONE,
       .emitted_low_op_count = emitted_low_op_count,
   };
   if (selected_plan->rule != NULL) {

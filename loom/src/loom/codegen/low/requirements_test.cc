@@ -67,8 +67,6 @@ struct RequirementTables {
   loom_low_descriptor_t descriptors[1];
   // Sorted descriptor key map owned by the test descriptor set.
   loom_low_descriptor_ref_t descriptor_refs[1];
-  // Sorted descriptor stable-ID map owned by the test descriptor set.
-  loom_low_descriptor_id_ref_t descriptor_id_refs[1];
   // Operand/result rows referenced by the test descriptor.
   loom_low_operand_t operands[3];
   // Register class rows accepted by the test operands.
@@ -162,8 +160,6 @@ void InitializeRequirementTables(RequirementTables* tables) {
   tables->descriptor_refs[0].key_string_offset =
       REQUIREMENT_STRING_OFFSET(descriptor_add);
   tables->descriptor_refs[0].descriptor_ordinal = 0;
-  tables->descriptor_id_refs[0].stable_id = tables->descriptors[0].stable_id;
-  tables->descriptor_id_refs[0].descriptor_ordinal = 0;
 
   tables->set.abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION;
   tables->set.generator_version = 7;
@@ -181,9 +177,6 @@ void InitializeRequirementTables(RequirementTables* tables) {
   tables->set.descriptor_count = IREE_ARRAYSIZE(tables->descriptors);
   tables->set.descriptor_refs = tables->descriptor_refs;
   tables->set.descriptor_ref_count = IREE_ARRAYSIZE(tables->descriptor_refs);
-  tables->set.descriptor_id_refs = tables->descriptor_id_refs;
-  tables->set.descriptor_id_ref_count =
-      IREE_ARRAYSIZE(tables->descriptor_id_refs);
   tables->set.operands = tables->operands;
   tables->set.operand_count = IREE_ARRAYSIZE(tables->operands);
   tables->set.reg_classes = tables->reg_classes;

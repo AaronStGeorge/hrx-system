@@ -121,7 +121,6 @@ def test_allowlist_closes_over_referenced_descriptor_tables() -> None:
     assert [descriptor["key"] for descriptor in manifest["descriptors"]] == ["test.add.i32"]
     assert manifest["table_counts"]["descriptors"] == 1
     assert manifest["table_counts"]["descriptor_refs"] == 1
-    assert manifest["table_counts"]["descriptor_id_refs"] == 1
     assert manifest["table_counts"]["asm_forms"] == 1
     assert manifest["table_counts"]["reg_classes"] == len(TEST_LOW_CORE_DESCRIPTOR_SET.reg_classes)
     assert manifest["table_counts"]["reg_class_alts"] == 1

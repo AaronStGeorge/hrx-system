@@ -81,7 +81,6 @@ static_assert(TEST_STRING_END == sizeof(kTestStrings) - 1,
 struct TestTables {
   loom_low_descriptor_t descriptors[2];
   loom_low_descriptor_ref_t descriptor_refs[2];
-  loom_low_descriptor_id_ref_t descriptor_id_refs[2];
   loom_low_asm_form_t asm_forms[2];
   uint16_t asm_operand_indices[4];
   loom_low_asm_immediate_t asm_immediates[1];
@@ -238,10 +237,6 @@ void InitializeTestTables(TestTables* tables) {
   tables->descriptor_refs[1].key_string_offset =
       TEST_STRING_OFFSET(descriptor_const);
   tables->descriptor_refs[1].descriptor_ordinal = 0;
-  tables->descriptor_id_refs[0].stable_id = tables->descriptors[0].stable_id;
-  tables->descriptor_id_refs[0].descriptor_ordinal = 0;
-  tables->descriptor_id_refs[1].stable_id = tables->descriptors[1].stable_id;
-  tables->descriptor_id_refs[1].descriptor_ordinal = 1;
 
   tables->set.abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION;
   tables->set.generator_version = 7;
@@ -258,9 +253,6 @@ void InitializeTestTables(TestTables* tables) {
   tables->set.descriptor_count = IREE_ARRAYSIZE(tables->descriptors);
   tables->set.descriptor_refs = tables->descriptor_refs;
   tables->set.descriptor_ref_count = IREE_ARRAYSIZE(tables->descriptor_refs);
-  tables->set.descriptor_id_refs = tables->descriptor_id_refs;
-  tables->set.descriptor_id_ref_count =
-      IREE_ARRAYSIZE(tables->descriptor_id_refs);
   tables->set.asm_forms = tables->asm_forms;
   tables->set.asm_operand_indices = tables->asm_operand_indices;
   tables->set.asm_immediates = tables->asm_immediates;
@@ -581,10 +573,6 @@ TEST(LowDescriptorsTest, VerifiesAndLooksUpDescriptors) {
       &tables.set, IREE_SV("test.add.i32"));
   EXPECT_EQ(descriptor_ordinal, 1u);
 
-  descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
-      &tables.set, tables.descriptors[1].stable_id);
-  EXPECT_EQ(descriptor_ordinal, 1u);
-
   const loom_low_descriptor_t* descriptor =
       loom_low_descriptor_set_descriptor_at(&tables.set, descriptor_ordinal);
   ASSERT_NE(descriptor, nullptr);
@@ -597,10 +585,6 @@ TEST(LowDescriptorsTest, VerifiesAndLooksUpDescriptors) {
 
   descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor(
       &tables.set, IREE_SV("test.missing"));
-  EXPECT_EQ(descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
-
-  descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
-      &tables.set, UINT64_C(0x7));
   EXPECT_EQ(descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
 }
 
@@ -1272,18 +1256,6 @@ TEST(LowDescriptorsTest, RejectsUnsortedDescriptorReferences) {
   tables.descriptor_refs[1].key_string_offset =
       TEST_STRING_OFFSET(descriptor_add);
   tables.descriptor_refs[1].descriptor_ordinal = 1;
-
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        loom_low_descriptor_set_verify(&tables.set));
-}
-
-TEST(LowDescriptorsTest, RejectsUnsortedDescriptorIdReferences) {
-  TestTables tables;
-  InitializeTestTables(&tables);
-  tables.descriptor_id_refs[0].stable_id = tables.descriptors[1].stable_id;
-  tables.descriptor_id_refs[0].descriptor_ordinal = 1;
-  tables.descriptor_id_refs[1].stable_id = tables.descriptors[0].stable_id;
-  tables.descriptor_id_refs[1].descriptor_ordinal = 0;
 
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_low_descriptor_set_verify(&tables.set));
