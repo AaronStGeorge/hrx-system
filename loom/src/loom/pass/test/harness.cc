@@ -298,7 +298,9 @@ iree_status_t PassTestHarness::RunModulePipeline(
                                &storage.program, predicate_provider));
   loom_pass_interpreter_options_t options =
       InterpreterOptions(trace, {}, nullptr, predicate_provider);
-  return loom_pass_interpreter_run_module(&storage.program, module, &options);
+  loom_pass_run_result_t result = {0};
+  return loom_pass_interpreter_run_module(&storage.program, module, &options,
+                                          &result);
 }
 
 iree_status_t PassTestHarness::RunFunctionPipeline(
@@ -310,22 +312,27 @@ iree_status_t PassTestHarness::RunFunctionPipeline(
                                &storage.program, predicate_provider));
   loom_pass_interpreter_options_t options =
       InterpreterOptions(trace, {}, nullptr, predicate_provider);
-  return loom_pass_interpreter_run_function(
-      &storage.program, module, Function(module, function_index), &options);
+  loom_pass_run_result_t result = {0};
+  return loom_pass_interpreter_run_function(&storage.program, module,
+                                            Function(module, function_index),
+                                            &options, &result);
 }
 
 iree_status_t PassTestHarness::RunPipelineSymbol(
     loom_module_t* module, iree_string_view_t pipeline_symbol,
     loom_test_pass_trace_t* trace) {
   loom_pass_tool_run_options_t options = ToolOptions(trace);
-  return loom_pass_tool_run_pipeline_symbol(module, pipeline_symbol, &options);
+  loom_pass_run_result_t result = {0};
+  return loom_pass_tool_run_pipeline_symbol(module, pipeline_symbol, &options,
+                                            &result);
 }
 
 iree_status_t PassTestHarness::RunFlatPipeline(loom_module_t* module,
                                                iree_string_view_t pass_list,
                                                loom_test_pass_trace_t* trace) {
   loom_pass_tool_run_options_t options = ToolOptions(trace);
-  return loom_pass_tool_run_flat_pipeline(module, pass_list, &options);
+  loom_pass_run_result_t result = {0};
+  return loom_pass_tool_run_flat_pipeline(module, pass_list, &options, &result);
 }
 
 }  // namespace loom

@@ -46,15 +46,25 @@ typedef struct loom_pass_interpreter_state_t {
   loom_module_t* module;
   // Caller-supplied execution options.
   const loom_pass_interpreter_options_t* options;
+  // Aggregate diagnostic result for the current program execution.
+  loom_pass_run_result_t* result;
   // Scoped value-fact workspace shared across pass invocations.
   loom_pass_value_fact_owner_t value_facts;
 } loom_pass_interpreter_state_t;
 
 typedef struct loom_pass_interpreter_diagnostic_counter_t {
+  // Pass invocation receiving callback-local diagnostic counts.
+  loom_pass_t* pass;
   // Caller-provided emitter that receives pass diagnostics.
   iree_diagnostic_emitter_t target;
   // Number of diagnostics emitted by the current pass invocation.
   iree_host_size_t emission_count;
+  // Number of error diagnostics emitted by the current pass invocation.
+  uint32_t error_count;
+  // Number of warning diagnostics emitted by the current pass invocation.
+  uint32_t warning_count;
+  // Number of remark diagnostics emitted by the current pass invocation.
+  uint32_t remark_count;
 } loom_pass_interpreter_diagnostic_counter_t;
 
 typedef struct loom_pass_interpreter_symbol_snapshot_entry_t {
@@ -127,7 +137,36 @@ static iree_status_t loom_pass_interpreter_count_diagnostic(
   loom_pass_interpreter_diagnostic_counter_t* counter =
       (loom_pass_interpreter_diagnostic_counter_t*)user_data;
   ++counter->emission_count;
+  switch (emission->error->severity) {
+    case LOOM_DIAGNOSTIC_ERROR:
+      ++counter->error_count;
+      ++counter->pass->error_diagnostic_count;
+      break;
+    case LOOM_DIAGNOSTIC_WARNING:
+      ++counter->warning_count;
+      ++counter->pass->warning_diagnostic_count;
+      break;
+    case LOOM_DIAGNOSTIC_REMARK:
+      ++counter->remark_count;
+      ++counter->pass->remark_diagnostic_count;
+      break;
+    case LOOM_DIAGNOSTIC_COUNT_:
+      break;
+  }
   return iree_diagnostic_emit(counter->target, emission);
+}
+
+static bool loom_pass_interpreter_has_errors(
+    const loom_pass_interpreter_state_t* state) {
+  return state->result->error_count != 0;
+}
+
+static void loom_pass_interpreter_accumulate_diagnostics(
+    loom_pass_interpreter_state_t* state,
+    const loom_pass_interpreter_diagnostic_counter_t* counter) {
+  state->result->error_count += counter->error_count;
+  state->result->warning_count += counter->warning_count;
+  state->result->remark_count += counter->remark_count;
 }
 
 static iree_string_view_t loom_pass_interpreter_pipeline_name(
@@ -275,18 +314,15 @@ static iree_status_t loom_pass_interpreter_invoke(
   loom_pass_interpreter_diagnostic_counter_t diagnostic_counter = {
       .target = state->options->diagnostic_emitter,
   };
-  iree_diagnostic_emitter_t pass_diagnostic_emitter =
-      state->options->diagnostic_emitter;
-  if (state->options->diagnostic_emitter.fn) {
-    pass_diagnostic_emitter = (iree_diagnostic_emitter_t){
-        .fn = loom_pass_interpreter_count_diagnostic,
-        .user_data = &diagnostic_counter,
-    };
-  }
+  iree_diagnostic_emitter_t pass_diagnostic_emitter = {
+      .fn = loom_pass_interpreter_count_diagnostic,
+      .user_data = &diagnostic_counter,
+  };
 
   loom_pass_t pass = {0};
   iree_status_t status = loom_pass_interpreter_make_pass(
       state, instruction, pass_diagnostic_emitter, &instance_arena, &pass);
+  diagnostic_counter.pass = &pass;
 
   bool created = false;
   if (iree_status_is_ok(status) && invoke->descriptor->create) {
@@ -320,8 +356,14 @@ static iree_status_t loom_pass_interpreter_invoke(
 
   iree_status_t pass_status = status;
   iree_status_t report_status = iree_ok_status();
+  loom_pass_interpreter_accumulate_diagnostics(state, &diagnostic_counter);
+
   if (state->options->report) {
     iree_duration_t duration_nanoseconds = iree_time_now() - start_time;
+    iree_status_code_t status_code = iree_status_code(pass_status);
+    if (iree_status_is_ok(pass_status) && diagnostic_counter.error_count != 0) {
+      status_code = IREE_STATUS_FAILED_PRECONDITION;
+    }
     report_status = loom_pass_report_append_invocation(
         state->options->report,
         &(loom_pass_report_invocation_options_t){
@@ -333,7 +375,7 @@ static iree_status_t loom_pass_interpreter_invoke(
             .symbol_name = loom_pass_interpreter_symbol_name(state, frame),
             .duration_nanoseconds = duration_nanoseconds,
             .changed = invocation_changed,
-            .status_code = iree_status_code(pass_status),
+            .status_code = status_code,
             .statistics = pass.statistics,
         });
   }
@@ -425,7 +467,9 @@ static iree_status_t loom_pass_interpreter_execute_for(
   iree_host_size_t count = 0;
   iree_status_t status = loom_pass_interpreter_build_function_snapshot(
       state, &snapshot_arena, &entries, &count);
-  for (iree_host_size_t i = 0; i < count && iree_status_is_ok(status); ++i) {
+  for (iree_host_size_t i = 0; i < count && iree_status_is_ok(status) &&
+                               !loom_pass_interpreter_has_errors(state);
+       ++i) {
     loom_pass_interpreter_frame_t body_frame = {
         .kind = LOOM_PASS_FUNCTION,
         .symbol = entries[i].symbol,
@@ -705,7 +749,8 @@ static iree_status_t loom_pass_interpreter_execute_repeat(
     const loom_pass_program_instruction_t* instruction, bool* out_changed) {
   const loom_pass_program_repeat_t* repeat = &instruction->repeat;
   if (repeat->mode == LOOM_PASS_REPEAT_MODE_FIXED) {
-    for (int64_t i = 0; i < repeat->count; ++i) {
+    for (int64_t i = 0;
+         i < repeat->count && !loom_pass_interpreter_has_errors(state); ++i) {
       bool body_changed = false;
       IREE_RETURN_IF_ERROR(loom_pass_interpreter_execute_range(
           state, frame, repeat->body_start, repeat->body_end, &body_changed));
@@ -719,7 +764,9 @@ static iree_status_t loom_pass_interpreter_execute_repeat(
   }
 
   bool ever_changed = false;
-  for (int64_t i = 0; i < repeat->max_iterations; ++i) {
+  for (int64_t i = 0;
+       i < repeat->max_iterations && !loom_pass_interpreter_has_errors(state);
+       ++i) {
     bool body_changed = false;
     IREE_RETURN_IF_ERROR(loom_pass_interpreter_execute_range(
         state, frame, repeat->body_start, repeat->body_end, &body_changed));
@@ -730,6 +777,9 @@ static iree_status_t loom_pass_interpreter_execute_repeat(
     }
   }
   *out_changed |= ever_changed;
+  if (loom_pass_interpreter_has_errors(state)) {
+    return iree_ok_status();
+  }
   return iree_make_status(
       IREE_STATUS_RESOURCE_EXHAUSTED,
       "pass.repeat<until_converged> exceeded max_iterations=%" PRId64,
@@ -740,7 +790,8 @@ static iree_status_t loom_pass_interpreter_execute_range(
     loom_pass_interpreter_state_t* state,
     const loom_pass_interpreter_frame_t* frame, iree_host_size_t start,
     iree_host_size_t end, bool* out_changed) {
-  for (iree_host_size_t pc = start; pc < end; ++pc) {
+  for (iree_host_size_t pc = start;
+       pc < end && !loom_pass_interpreter_has_errors(state); ++pc) {
     const loom_pass_program_instruction_t* instruction =
         &state->program->instructions[pc];
     if (instruction->anchor_kind != frame->kind) {
@@ -795,16 +846,19 @@ static iree_status_t loom_pass_interpreter_options_verify(
 
 iree_status_t loom_pass_interpreter_run_module(
     const loom_pass_program_t* program, loom_module_t* module,
-    const loom_pass_interpreter_options_t* options) {
+    const loom_pass_interpreter_options_t* options,
+    loom_pass_run_result_t* out_result) {
   IREE_RETURN_IF_ERROR(loom_pass_interpreter_options_verify(options));
   if (program->root_kind != LOOM_PASS_MODULE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected module-root pass program");
   }
+  *out_result = (loom_pass_run_result_t){0};
   loom_pass_interpreter_state_t state = {
       .program = program,
       .module = module,
       .options = options,
+      .result = out_result,
   };
   loom_pass_value_fact_owner_initialize(options->block_pool,
                                         &state.value_facts);
@@ -820,16 +874,19 @@ iree_status_t loom_pass_interpreter_run_module(
 
 iree_status_t loom_pass_interpreter_run_function(
     const loom_pass_program_t* program, loom_module_t* module,
-    loom_func_like_t function, const loom_pass_interpreter_options_t* options) {
+    loom_func_like_t function, const loom_pass_interpreter_options_t* options,
+    loom_pass_run_result_t* out_result) {
   IREE_RETURN_IF_ERROR(loom_pass_interpreter_options_verify(options));
   if (program->root_kind != LOOM_PASS_FUNCTION) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected function-root pass program");
   }
+  *out_result = (loom_pass_run_result_t){0};
   loom_pass_interpreter_state_t state = {
       .program = program,
       .module = module,
       .options = options,
+      .result = out_result,
   };
   loom_pass_value_fact_owner_initialize(options->block_pool,
                                         &state.value_facts);

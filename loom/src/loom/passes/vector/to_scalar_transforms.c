@@ -35,12 +35,7 @@ static iree_status_t loom_vector_to_scalar_emit_transform_unimplemented(
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
-  IREE_RETURN_IF_ERROR(
-      iree_diagnostic_emit(state->pass->diagnostic_emitter, &emission));
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "vector-to-scalar cannot lower vector.transform: "
-                          "%.*s",
-                          (int)reason.size, reason.data);
+  return iree_diagnostic_emit(state->pass->diagnostic_emitter, &emission);
 }
 
 static iree_status_t loom_vector_to_scalar_read_transform_descriptor(

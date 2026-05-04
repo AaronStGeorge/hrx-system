@@ -383,6 +383,7 @@ iree_status_t loom_check_execute_pass(
       .fn = loom_check_diagnostic_emitter_capture_emit,
       .user_data = &pass_diagnostic_capture,
   };
+  loom_pass_run_result_t run_result = {0};
   if (iree_status_is_ok(status)) {
     loom_low_lower_policy_registry_t low_lower_policy_registry = {0};
     const loom_low_lower_policy_registry_t* low_lower_policy_registry_ref =
@@ -407,7 +408,7 @@ iree_status_t loom_check_execute_pass(
     };
     if (iree_status_is_ok(status)) {
       status = loom_pass_tool_run_flat_pipeline(module, test_case->pipeline,
-                                                &run_options);
+                                                &run_options, &run_result);
     }
   }
   if (!iree_status_is_ok(status)) {
@@ -418,6 +419,15 @@ iree_status_t loom_check_execute_pass(
           &diagnostic_collector, test_case, case_index, report, allocator,
           result);
     }
+    loom_module_free(module);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
+  }
+  if (run_result.error_count > 0) {
+    bool diagnostics_failed = false;
+    status = loom_check_finish_diagnostics_if_needed(
+        &diagnostic_collector, test_case, case_index, report, allocator, result,
+        &diagnostics_failed);
     loom_module_free(module);
     iree_arena_deinitialize(&diagnostic_arena);
     return status;

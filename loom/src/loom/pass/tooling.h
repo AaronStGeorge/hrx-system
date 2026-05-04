@@ -40,25 +40,34 @@ typedef struct loom_pass_tool_run_options_t {
 
 // Compiles and executes one pass.pipeline op on |module|. Module-root pipelines
 // run once on the module. Function-root pipelines run once per bodyful
-// function-like symbol using a deterministic symbol snapshot.
+// function-like symbol using a deterministic symbol snapshot. Status is
+// reserved for tooling and interpreter infrastructure failures; pass-emitted
+// diagnostics are counted in |out_result|.
 iree_status_t loom_pass_tool_run_pipeline_op(
     loom_module_t* module, const loom_op_t* pipeline_op,
-    const loom_pass_tool_run_options_t* options);
+    const loom_pass_tool_run_options_t* options,
+    loom_pass_run_result_t* out_result);
 
 // Looks up a module-local pass.pipeline symbol by name and executes it. The
-// symbol may be spelled with or without a leading '@'.
+// symbol may be spelled with or without a leading '@'. Status is reserved for
+// tooling and interpreter infrastructure failures; pass-emitted diagnostics are
+// counted in |out_result|.
 iree_status_t loom_pass_tool_run_pipeline_symbol(
     loom_module_t* module, iree_string_view_t pipeline_symbol,
-    const loom_pass_tool_run_options_t* options);
+    const loom_pass_tool_run_options_t* options,
+    loom_pass_run_result_t* out_result);
 
 // Parses a shallow comma-separated pass list such as
 // `canonicalize{max-iterations=20},dce`, converts it into a synthetic
 // module-root pass.pipeline backed by descriptor options, and executes it.
 // Adjacent function passes are grouped in one pass.for<func> so all grouped
 // passes run on the current function before advancing to the next function.
+// Status is reserved for tooling and interpreter infrastructure failures;
+// pass-emitted diagnostics are counted in |out_result|.
 iree_status_t loom_pass_tool_run_flat_pipeline(
     loom_module_t* module, iree_string_view_t pipeline,
-    const loom_pass_tool_run_options_t* options);
+    const loom_pass_tool_run_options_t* options,
+    loom_pass_run_result_t* out_result);
 
 #ifdef __cplusplus
 }  // extern "C"

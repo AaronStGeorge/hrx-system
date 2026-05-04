@@ -6,8 +6,6 @@
 
 #include "loom/passes/vector/memory_footprint.h"
 
-#include <inttypes.h>
-
 #include "loom/analysis/vector_memory_footprint.h"
 #include "loom/ops/op_defs.h"
 #include "loom/pass/value_facts.h"
@@ -60,12 +58,6 @@ iree_status_t loom_vector_memory_footprint_run(loom_pass_t* pass,
                             result.checked_op_count);
     loom_pass_statistic_add(pass, LOOM_VECTOR_MEMORY_FOOTPRINT_STAT_OPS_SKIPPED,
                             result.skipped_op_count);
-  }
-  if (result.error_count != 0) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "vector memory footprint proof failed with %" PRIu32 " error%s",
-        result.error_count, result.error_count == 1 ? "" : "s");
   }
   return iree_ok_status();
 }

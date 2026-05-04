@@ -658,9 +658,11 @@ static iree_status_t loom_opt_run_passes(
     const loom_target_low_descriptor_registry_t* low_registry,
     iree_arena_block_pool_t* block_pool, loom_run_module_t* run_module,
     loom_diagnostic_sink_t diagnostic_sink, loom_pass_report_t* report,
-    bool* out_execution_started, iree_allocator_t allocator) {
+    bool* out_execution_started, loom_pass_run_result_t* out_result,
+    iree_allocator_t allocator) {
   loom_module_t* module = run_module->module;
   *out_execution_started = false;
+  *out_result = (loom_pass_run_result_t){0};
   iree_flag_string_list_t passes = FLAG_pass_list();
   iree_string_view_t pipeline_symbol =
       iree_string_view_trim(iree_make_cstring_view(FLAG_pipeline));
@@ -702,7 +704,7 @@ static iree_status_t loom_opt_run_passes(
   if (has_pipeline_symbol) {
     *out_execution_started = true;
     return loom_pass_tool_run_pipeline_symbol(module, pipeline_symbol,
-                                              &run_options);
+                                              &run_options, out_result);
   }
 
   iree_string_builder_t pipeline_builder;
@@ -711,7 +713,8 @@ static iree_status_t loom_opt_run_passes(
   if (iree_status_is_ok(status)) {
     *out_execution_started = true;
     status = loom_pass_tool_run_flat_pipeline(
-        module, iree_string_builder_view(&pipeline_builder), &run_options);
+        module, iree_string_builder_view(&pipeline_builder), &run_options,
+        out_result);
   }
   iree_string_builder_deinitialize(&pipeline_builder);
   return status;
@@ -893,6 +896,7 @@ int main(int argc, char** argv) {
   loom_pass_report_t pass_report = {0};
   bool pass_report_initialized = false;
   bool pass_execution_started = false;
+  loom_pass_run_result_t pass_run_result = {0};
   iree_status_t pass_pipeline_status = iree_ok_status();
 
   iree_status_t status = loom_opt_parse_pass_report_mode(
@@ -983,23 +987,28 @@ int main(int argc, char** argv) {
         loom_run_session_low_descriptor_registry(&run_session),
         loom_run_session_block_pool(&run_session), &run_module, diagnostic_sink,
         pass_report_initialized ? &pass_report : NULL, &pass_execution_started,
-        allocator);
+        &pass_run_result, allocator);
     status = pass_pipeline_status;
   }
-  if (!metadata_only && pass_execution_started &&
-      !iree_status_is_ok(pass_pipeline_status)) {
+  bool pass_pipeline_failed = !iree_status_is_ok(pass_pipeline_status) ||
+                              pass_run_result.error_count != 0;
+  if (!metadata_only && pass_execution_started && pass_pipeline_failed) {
     status = iree_status_join(
-        status,
-        loom_opt_write_pass_reproducer(
-            iree_make_cstring_view(FLAG_pass_reproducer), filename, source,
-            pass_registry, iree_status_code(pass_pipeline_status), allocator));
+        status, loom_opt_write_pass_reproducer(
+                    iree_make_cstring_view(FLAG_pass_reproducer), filename,
+                    source, pass_registry,
+                    !iree_status_is_ok(pass_pipeline_status)
+                        ? iree_status_code(pass_pipeline_status)
+                        : IREE_STATUS_FAILED_PRECONDITION,
+                    allocator));
   }
   if (!metadata_only && pass_report_initialized && pass_execution_started) {
     iree_status_t report_status =
         loom_opt_write_pass_report(pass_report_mode, &pass_report);
     status = iree_status_join(status, report_status);
   }
-  if (iree_status_is_ok(status) && !metadata_only && FLAG_verify) {
+  if (iree_status_is_ok(status) && pass_run_result.error_count == 0 &&
+      !metadata_only && FLAG_verify) {
     status = loom_opt_verify_module(
         loom_run_session_low_descriptor_registry(&run_session), &run_module,
         diagnostic_sink);
@@ -1012,15 +1021,17 @@ int main(int argc, char** argv) {
               pass_registry, iree_status_code(status), allocator));
     }
   }
-  if (iree_status_is_ok(status) && !metadata_only) {
+  if (iree_status_is_ok(status) && pass_run_result.error_count == 0 &&
+      !metadata_only) {
     status = loom_opt_print_module(
         iree_make_cstring_view(FLAG_output),
         loom_run_session_low_descriptor_registry(&run_session),
         run_module.module, allocator);
   }
 
-  bool had_error = !iree_status_is_ok(status);
-  if (had_error) {
+  bool had_status_error = !iree_status_is_ok(status);
+  bool had_error = had_status_error || pass_run_result.error_count != 0;
+  if (had_status_error) {
     iree_status_fprint(stderr, status);
     iree_status_free(status);
   }

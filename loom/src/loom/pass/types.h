@@ -35,6 +35,15 @@ typedef enum loom_pass_kind_e {
   LOOM_PASS_COUNT_,
 } loom_pass_kind_t;
 
+typedef struct loom_pass_run_result_t {
+  // Number of error diagnostics emitted while running the pass program.
+  uint32_t error_count;
+  // Number of warning diagnostics emitted while running the pass program.
+  uint32_t warning_count;
+  // Number of remark diagnostics emitted while running the pass program.
+  uint32_t remark_count;
+} loom_pass_run_result_t;
+
 // Describes one named option a pass accepts.
 typedef struct loom_pass_option_def_t {
   // Stable option key accepted by the pass.
@@ -103,6 +112,12 @@ struct loom_pass_t {
   const loom_pass_decoded_options_t* decoded_options;
   // Optional structured diagnostic emitter for pass-specific failures.
   iree_diagnostic_emitter_t diagnostic_emitter;
+  // Error diagnostics emitted during this pass callback invocation.
+  uint32_t error_diagnostic_count;
+  // Warning diagnostics emitted during this pass callback invocation.
+  uint32_t warning_diagnostic_count;
+  // Remark diagnostics emitted during this pass callback invocation.
+  uint32_t remark_diagnostic_count;
   // Caller-owned execution environment capabilities.
   const loom_pass_environment_t* environment;
   // Interpreter-owned scoped value-fact workspace for this module execution.
@@ -121,6 +136,13 @@ static inline void loom_pass_statistic_add(loom_pass_t* pass,
 // Records that the current pass invocation changed IR or semantic module state.
 static inline void loom_pass_mark_changed(loom_pass_t* pass) {
   pass->changed = true;
+}
+
+// Returns true when the current callback has emitted a terminal error
+// diagnostic. Passes use this to stop local work without converting the
+// diagnostic into an iree_status_t failure.
+static inline bool loom_pass_has_error_diagnostics(const loom_pass_t* pass) {
+  return pass->error_diagnostic_count != 0;
 }
 
 #ifdef __cplusplus

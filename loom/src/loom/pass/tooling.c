@@ -21,9 +21,18 @@ static iree_status_t loom_pass_tool_verify_options(
   return loom_pass_environment_verify(&options->environment);
 }
 
+static void loom_pass_tool_accumulate_result(
+    loom_pass_run_result_t* result,
+    const loom_pass_run_result_t* invocation_result) {
+  result->error_count += invocation_result->error_count;
+  result->warning_count += invocation_result->warning_count;
+  result->remark_count += invocation_result->remark_count;
+}
+
 static iree_status_t loom_pass_tool_run_program(
     loom_module_t* module, const loom_pass_program_t* program,
-    const loom_pass_tool_run_options_t* options) {
+    const loom_pass_tool_run_options_t* options,
+    loom_pass_run_result_t* out_result) {
   loom_pass_interpreter_options_t interpreter_options = {
       .block_pool = options->block_pool,
       .predicate_provider = options->predicate_provider,
@@ -33,7 +42,7 @@ static iree_status_t loom_pass_tool_run_program(
   };
   if (program->root_kind == LOOM_PASS_MODULE) {
     return loom_pass_interpreter_run_module(program, module,
-                                            &interpreter_options);
+                                            &interpreter_options, out_result);
   }
   if (program->root_kind != LOOM_PASS_FUNCTION) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -63,7 +72,8 @@ static iree_status_t loom_pass_tool_run_program(
     }
   }
 
-  for (iree_host_size_t i = 0; i < symbol_count && iree_status_is_ok(status);
+  for (iree_host_size_t i = 0; i < symbol_count && iree_status_is_ok(status) &&
+                               out_result->error_count == 0;
        ++i) {
     uint16_t symbol_id = symbol_ids[i];
     if (symbol_id >= module->symbols.count) {
@@ -78,8 +88,10 @@ static iree_status_t loom_pass_tool_run_program(
     if (!loom_func_like_body(function)) {
       continue;
     }
-    status = loom_pass_interpreter_run_function(program, module, function,
-                                                &interpreter_options);
+    loom_pass_run_result_t invocation_result = {0};
+    status = loom_pass_interpreter_run_function(
+        program, module, function, &interpreter_options, &invocation_result);
+    loom_pass_tool_accumulate_result(out_result, &invocation_result);
   }
 
   iree_arena_deinitialize(&snapshot_arena);
@@ -88,7 +100,9 @@ static iree_status_t loom_pass_tool_run_program(
 
 iree_status_t loom_pass_tool_run_pipeline_op(
     loom_module_t* module, const loom_op_t* pipeline_op,
-    const loom_pass_tool_run_options_t* options) {
+    const loom_pass_tool_run_options_t* options,
+    loom_pass_run_result_t* out_result) {
+  *out_result = (loom_pass_run_result_t){0};
   IREE_RETURN_IF_ERROR(loom_pass_tool_verify_options(options));
 
   loom_pass_program_compile_options_t compile_options = {
@@ -100,7 +114,7 @@ iree_status_t loom_pass_tool_run_pipeline_op(
   iree_status_t status = loom_pass_program_compile_pipeline(
       module, pipeline_op, &compile_options, options->block_pool, &program);
   if (iree_status_is_ok(status)) {
-    status = loom_pass_tool_run_program(module, &program, options);
+    status = loom_pass_tool_run_program(module, &program, options, out_result);
   }
   loom_pass_program_deinitialize(&program);
   return status;
@@ -117,7 +131,9 @@ static iree_string_view_t loom_pass_tool_trim_symbol_sigils(
 
 iree_status_t loom_pass_tool_run_pipeline_symbol(
     loom_module_t* module, iree_string_view_t pipeline_symbol,
-    const loom_pass_tool_run_options_t* options) {
+    const loom_pass_tool_run_options_t* options,
+    loom_pass_run_result_t* out_result) {
+  *out_result = (loom_pass_run_result_t){0};
   IREE_RETURN_IF_ERROR(loom_pass_tool_verify_options(options));
 
   iree_string_view_t name = loom_pass_tool_trim_symbol_sigils(pipeline_symbol);
@@ -143,7 +159,8 @@ iree_status_t loom_pass_tool_run_pipeline_symbol(
                             "symbol @%.*s does not define a pass.pipeline",
                             (int)name.size, name.data);
   }
-  return loom_pass_tool_run_pipeline_op(module, symbol->defining_op, options);
+  return loom_pass_tool_run_pipeline_op(module, symbol->defining_op, options,
+                                        out_result);
 }
 
 static const loom_pass_option_schema_t* loom_pass_tool_find_option_schema(
@@ -449,7 +466,9 @@ static iree_status_t loom_pass_tool_build_synthetic_pipeline(
 
 iree_status_t loom_pass_tool_run_flat_pipeline(
     loom_module_t* module, iree_string_view_t pipeline,
-    const loom_pass_tool_run_options_t* options) {
+    const loom_pass_tool_run_options_t* options,
+    loom_pass_run_result_t* out_result) {
+  *out_result = (loom_pass_run_result_t){0};
   IREE_RETURN_IF_ERROR(loom_pass_tool_verify_options(options));
 
   loom_module_t* pipeline_module = NULL;
@@ -470,7 +489,8 @@ iree_status_t loom_pass_tool_run_flat_pipeline(
                                                 &compile_options,
                                                 options->block_pool, &program);
     if (iree_status_is_ok(status)) {
-      status = loom_pass_tool_run_program(module, &program, options);
+      status =
+          loom_pass_tool_run_program(module, &program, options, out_result);
     }
     loom_pass_program_deinitialize(&program);
   }

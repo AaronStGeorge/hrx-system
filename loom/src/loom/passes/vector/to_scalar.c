@@ -557,10 +557,16 @@ static iree_status_t loom_vector_to_scalar_lower_descriptor_op(
       pass, rewriter, op, descriptor, 0, &state));
   if (descriptor->lane_kind == LOOM_VECTOR_TO_SCALAR_LANE_TRANSFORM) {
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_validate_transform(&state));
+    if (loom_pass_has_error_diagnostics(pass)) {
+      return iree_ok_status();
+    }
   }
   loom_value_id_t replacement = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_vector_to_scalar_lower_aggregate(&state, &replacement));
+  if (loom_pass_has_error_diagnostics(pass)) {
+    return iree_ok_status();
+  }
   return loom_vector_to_scalar_replace_one_result(&state, replacement);
 }
 

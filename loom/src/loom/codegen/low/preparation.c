@@ -159,9 +159,13 @@ iree_status_t loom_low_prepare_functions_for_packetization(
     };
     for (iree_host_size_t i = 0;
          i < low_func_count && iree_status_is_ok(status); ++i) {
+      loom_pass_run_result_t run_result = {0};
       status = loom_pass_interpreter_run_function(
           &program, module, loom_func_like_cast(module, low_func_ops[i]),
-          &interpreter_options);
+          &interpreter_options, &run_result);
+      if (iree_status_is_ok(status) && run_result.error_count != 0) {
+        break;
+      }
     }
   }
 

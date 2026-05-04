@@ -41,6 +41,9 @@ static iree_status_t loom_vector_to_scalar_lower_static_aggregate(
     };
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_lane(state, index_list,
                                                           &elements[ordinal]));
+    if (loom_pass_has_error_diagnostics(state->pass)) {
+      return iree_ok_status();
+    }
   }
 
   loom_op_t* from_elements_op = NULL;
@@ -95,6 +98,10 @@ static iree_status_t loom_vector_to_scalar_aggregate_loop_axis(
     loom_value_id_t lane = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(
         loom_vector_to_scalar_build_lane(state, index_list, &lane));
+    if (loom_pass_has_error_diagnostics(state->pass)) {
+      loom_builder_restore(&state->rewriter->builder, saved);
+      return iree_ok_status();
+    }
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_insert_lane(
         state, lane, aggregate_arg, state->vector_type, index_list,
         &yielded_aggregate));
@@ -102,6 +109,10 @@ static iree_status_t loom_vector_to_scalar_aggregate_loop_axis(
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_aggregate_loop_axis(
         state, (uint8_t)(axis + 1), aggregate_arg, dynamic_indices,
         &yielded_aggregate));
+    if (loom_pass_has_error_diagnostics(state->pass)) {
+      loom_builder_restore(&state->rewriter->builder, saved);
+      return iree_ok_status();
+    }
   }
   loom_op_t* yield_op = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_yield_build(&state->rewriter->builder,
@@ -142,6 +153,9 @@ static iree_status_t loom_vector_to_scalar_lower_dynamic_aggregate(
                                                  (void**)&dynamic_indices));
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_aggregate_loop_axis(
       state, 0, seed, dynamic_indices, out_replacement));
+  if (loom_pass_has_error_diagnostics(state->pass)) {
+    return iree_ok_status();
+  }
   return iree_ok_status();
 }
 

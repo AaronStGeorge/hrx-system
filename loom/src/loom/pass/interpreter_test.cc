@@ -109,8 +109,9 @@ TEST_F(PassInterpreterTest, AppendsExecutionReportRecords) {
   loom_test_pass_trace_t trace = {};
   loom_pass_interpreter_options_t options =
       InterpreterOptions(&trace, {}, &report_storage.report);
-  IREE_ASSERT_OK(
-      loom_pass_interpreter_run_module(&storage.program, module, &options));
+  loom_pass_run_result_t result = {};
+  IREE_ASSERT_OK(loom_pass_interpreter_run_module(&storage.program, module,
+                                                  &options, &result));
 
   ASSERT_EQ(report_storage.report.invocation_count, 2u);
   const loom_pass_report_invocation_t& module_record =
@@ -357,9 +358,10 @@ TEST_F(PassInterpreterTest, PropagatesDescriptorCallbackFailure) {
                                      .fn = CaptureDiagnostic,
                                      .user_data = &diagnostic_capture,
                                  });
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INTERNAL,
-      loom_pass_interpreter_run_module(&storage.program, module, &options));
+  loom_pass_run_result_t result = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL,
+                        loom_pass_interpreter_run_module(
+                            &storage.program, module, &options, &result));
   EXPECT_EQ(trace.fail_invocation_count, 1);
   EXPECT_EQ(diagnostic_capture.emission_count, 1);
   ASSERT_NE(diagnostic_capture.error, nullptr);
@@ -393,9 +395,11 @@ TEST_F(PassInterpreterTest, ExecutesPassFailAndHalt) {
 
   loom_test_pass_trace_t trace = {};
   loom_pass_interpreter_options_t options = InterpreterOptions(&trace);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
-                        loom_pass_interpreter_run_module(
-                            &fail_storage.program, fail_module, &options));
+  loom_pass_run_result_t fail_result = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_pass_interpreter_run_module(&fail_storage.program, fail_module,
+                                       &options, &fail_result));
 
   loom_module_t* halt_module =
       Parse(IREE_SV("pass.pipeline<module> @pipeline pipeline {\n"
@@ -406,9 +410,11 @@ TEST_F(PassInterpreterTest, ExecutesPassFailAndHalt) {
   IREE_ASSERT_OK(
       Compile(halt_module, Pipeline(halt_module, 0), &halt_storage.program));
 
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_ABORTED,
-                        loom_pass_interpreter_run_module(
-                            &halt_storage.program, halt_module, &options));
+  loom_pass_run_result_t halt_result = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_ABORTED,
+      loom_pass_interpreter_run_module(&halt_storage.program, halt_module,
+                                       &options, &halt_result));
 }
 
 }  // namespace

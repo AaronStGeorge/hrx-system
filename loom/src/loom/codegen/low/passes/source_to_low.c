@@ -207,14 +207,11 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
                             lower_result.error_count);
     loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_REMARKS,
                             lower_result.remark_count);
-    if (iree_status_is_ok(status) &&
-        (lower_result.error_count > 0 || lower_result.low_func_op == NULL)) {
-      status = iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "source-to-low lowering failed with %" PRIu32 " error%s",
-          lower_result.error_count, lower_result.error_count == 1 ? "" : "s");
+    if (iree_status_is_ok(status) && lower_result.error_count > 0) {
+      break;
     }
     if (iree_status_is_ok(status)) {
+      IREE_ASSERT(lower_result.low_func_op != NULL);
       ++function_count;
     }
   }

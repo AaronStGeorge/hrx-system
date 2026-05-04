@@ -41,14 +41,24 @@ typedef struct loom_pass_interpreter_options_t {
 } loom_pass_interpreter_options_t;
 
 // Executes a module-root compiled pass program.
+//
+// Status is reserved for infrastructure failure while compiling or running the
+// interpreter. Pass-emitted diagnostics are counted in |out_result| and do not
+// become iree_status_t failures.
 iree_status_t loom_pass_interpreter_run_module(
     const loom_pass_program_t* program, loom_module_t* module,
-    const loom_pass_interpreter_options_t* options);
+    const loom_pass_interpreter_options_t* options,
+    loom_pass_run_result_t* out_result);
 
 // Executes a function-root compiled pass program on one function-like symbol.
+//
+// Status is reserved for infrastructure failure while compiling or running the
+// interpreter. Pass-emitted diagnostics are counted in |out_result| and do not
+// become iree_status_t failures.
 iree_status_t loom_pass_interpreter_run_function(
     const loom_pass_program_t* program, loom_module_t* module,
-    loom_func_like_t function, const loom_pass_interpreter_options_t* options);
+    loom_func_like_t function, const loom_pass_interpreter_options_t* options,
+    loom_pass_run_result_t* out_result);
 
 #ifdef __cplusplus
 }  // extern "C"

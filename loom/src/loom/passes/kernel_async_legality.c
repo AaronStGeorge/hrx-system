@@ -92,9 +92,5 @@ iree_status_t loom_kernel_async_legality_run(loom_pass_t* pass,
   loom_kernel_async_legality_add_stat(
       pass, LOOM_KERNEL_ASYNC_LEGALITY_STAT_WAITS_CHECKED,
       result.waits_checked);
-  if (result.error_count != 0) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "kernel async stream legality failed");
-  }
   return iree_ok_status();
 }
