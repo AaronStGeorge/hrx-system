@@ -66,6 +66,13 @@ class _CompiledFormat:
     word_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class _EncodingTableView:
+    descriptor_set_key: str
+    table_prefix: str
+    table_function: str
+
+
 def _clang_format_source(source: str, assume_filename: Path) -> str:
     result = subprocess.run(
         ["clang-format", f"--assume-filename={assume_filename}"],
@@ -341,6 +348,7 @@ def _emit_source(
     public_header: str,
     table_prefix: str,
     table_function: str,
+    table_views: tuple[_EncodingTableView, ...] = (),
     encodings: tuple[AmdgpuIsaEncoding, ...],
     instructions: tuple[AmdgpuIsaInstruction, ...],
     operand_types: tuple[AmdgpuIsaOperandType, ...],
@@ -381,8 +389,11 @@ def _emit_source(
         "",
         "#include <stdint.h>",
         "",
-        f"static const loom_amdgpu_encoding_bit_range_t k{table_prefix}BitRanges[] = {{",
     ]
+    lines.extend(f"const loom_amdgpu_encoding_table_t* {table_view.table_function}(void);" for table_view in table_views if table_view.table_function != table_function)
+    if len(table_views) > 1:
+        lines.append("")
+    lines.append(f"static const loom_amdgpu_encoding_bit_range_t k{table_prefix}BitRanges[] = {{")
     for bit_range, source_bit_offset in compiled_ranges:
         lines.extend(
             [
@@ -441,29 +452,43 @@ def _emit_source(
         [
             "};",
             "",
-            f"static const loom_amdgpu_encoding_table_t k{table_prefix}Table = {{",
-            f"    .descriptor_set_ordinal = UINT16_C({amdgpu_descriptor_set_ordinal(descriptor_set_key)}),",
-            f'    .descriptor_set_key = IREE_SVL("{descriptor_set_key}"),',
-            f"    .s_mov_b32_opcode = {s_mov_b32_opcode},",
-            f"    .v_mov_b32_opcode = {v_mov_b32_opcode},",
-            f"    .source_literal = {source_literal},",
-            f"    .scalar_inline_u32_zero = {scalar_inline_u32_zero},",
-            f"    .scalar_inline_u32_count = {scalar_inline_u32_count},",
-            f"    .vector_source_vgpr0 = {vector_source_vgpr0},",
-            f"    .vector_source_vgpr_count = {vector_source_vgpr_count},",
-            f"    .formats = k{table_prefix}Formats,",
-            f"    .format_count = IREE_ARRAYSIZE(k{table_prefix}Formats),",
-            f"    .fields = k{table_prefix}Fields,",
-            f"    .field_count = IREE_ARRAYSIZE(k{table_prefix}Fields),",
-            f"    .bit_ranges = k{table_prefix}BitRanges,",
-            f"    .bit_range_count = IREE_ARRAYSIZE(k{table_prefix}BitRanges),",
-            "};",
-            "",
-            f"const loom_amdgpu_encoding_table_t* {table_function}(void) {{",
-            f"  return &k{table_prefix}Table;",
-            "}",
         ]
     )
+    if not table_views:
+        table_views = (
+            _EncodingTableView(
+                descriptor_set_key=descriptor_set_key,
+                table_prefix=table_prefix,
+                table_function=table_function,
+            ),
+        )
+    for table_view in table_views:
+        lines.extend(
+            [
+                f"static const loom_amdgpu_encoding_table_t k{table_view.table_prefix}Table = {{",
+                f"    .descriptor_set_ordinal = UINT16_C({amdgpu_descriptor_set_ordinal(table_view.descriptor_set_key)}),",
+                f'    .descriptor_set_key = IREE_SVL("{table_view.descriptor_set_key}"),',
+                f"    .s_mov_b32_opcode = {s_mov_b32_opcode},",
+                f"    .v_mov_b32_opcode = {v_mov_b32_opcode},",
+                f"    .source_literal = {source_literal},",
+                f"    .scalar_inline_u32_zero = {scalar_inline_u32_zero},",
+                f"    .scalar_inline_u32_count = {scalar_inline_u32_count},",
+                f"    .vector_source_vgpr0 = {vector_source_vgpr0},",
+                f"    .vector_source_vgpr_count = {vector_source_vgpr_count},",
+                f"    .formats = k{table_prefix}Formats,",
+                f"    .format_count = IREE_ARRAYSIZE(k{table_prefix}Formats),",
+                f"    .fields = k{table_prefix}Fields,",
+                f"    .field_count = IREE_ARRAYSIZE(k{table_prefix}Fields),",
+                f"    .bit_ranges = k{table_prefix}BitRanges,",
+                f"    .bit_range_count = IREE_ARRAYSIZE(k{table_prefix}BitRanges),",
+                "};",
+                "",
+                f"const loom_amdgpu_encoding_table_t* {table_view.table_function}(void) {{",
+                f"  return &k{table_view.table_prefix}Table;",
+                "}",
+                "",
+            ]
+        )
     source = "\n".join(lines) + "\n"
     if not format_output:
         return source
@@ -521,12 +546,49 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
         encoding="utf-8",
     )
+    if args.target == "rdna4_gfx125x":
+        args.source.write_text(
+            "\n".join(
+                [
+                    "// Copyright 2026 The IREE Authors",
+                    "//",
+                    "// Licensed under the Apache License v2.0 with LLVM Exceptions.",
+                    "// See https://llvm.org/LICENSE.txt for license information.",
+                    "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
+                    "",
+                    f'#include "{args.public_header}"',
+                    "",
+                    "// The gfx125x encoding-table provider and backing storage are",
+                    "// emitted with the shared RDNA4 encoding-table source.",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        return 0
+
+    table_views: tuple[_EncodingTableView, ...] = ()
+    if args.target == "rdna4":
+        gfx125x_descriptor_set_key = amdgpu_descriptor_set_info_by_generator_target("rdna4_gfx125x").key
+        table_views = (
+            _EncodingTableView(
+                descriptor_set_key=descriptor_set_info.key,
+                table_prefix=table_prefix,
+                table_function=table_function,
+            ),
+            _EncodingTableView(
+                descriptor_set_key=gfx125x_descriptor_set_key,
+                table_prefix="AmdgpuRdna4Gfx125X",
+                table_function="loom_amdgpu_rdna4_gfx125x_encoding_table",
+            ),
+        )
     args.source.write_text(
         _emit_source(
             descriptor_set_key=args.descriptor_set_key,
             public_header=args.public_header,
             table_prefix=table_prefix,
             table_function=table_function,
+            table_views=table_views,
             encodings=spec.encodings,
             instructions=spec.instructions,
             operand_types=spec.operand_types,

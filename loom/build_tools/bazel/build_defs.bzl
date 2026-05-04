@@ -275,6 +275,7 @@ def loom_low_descriptor_cc_library(
         args = [],
         inputs = [],
         deps = [],
+        ids_deps = None,
         exclude_from_cmake_all = False,
         tags = [],
         testonly = False,
@@ -303,7 +304,7 @@ def loom_low_descriptor_cc_library(
     loom_cc_library(
         name = name + "_ids",
         hdrs = [generated_header],
-        deps = deps,
+        deps = ids_deps if ids_deps != None else deps,
         testonly = testonly,
         visibility = visibility,
     )

@@ -400,6 +400,7 @@ loom_target_table_cc_library(
     inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
     deps = [
         ":encoding_defs",
+        ":rdna4_encoding_tables",
         "//runtime/src/iree/base",
     ],
 )
@@ -481,8 +482,12 @@ loom_low_descriptor_cc_library(
     ],
     exclude_from_cmake_all = True,
     generator = _AMDGPU_DESCRIPTOR_GENERATOR,
+    ids_deps = ["//loom/src/loom/codegen/low:descriptors"],
     inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
-    deps = ["//loom/src/loom/codegen/low:descriptors"],
+    deps = [
+        ":rdna4_descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+    ],
 )
 
 loom_low_descriptor_cc_library(

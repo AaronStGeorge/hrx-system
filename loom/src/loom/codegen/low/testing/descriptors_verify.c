@@ -467,9 +467,19 @@ static iree_status_t loom_low_verify_asm_forms(
   }
   iree_string_view_t previous_mnemonic = iree_string_view_empty();
   for (uint32_t i = 0; i < descriptor_set->asm_form_count; ++i) {
+    const loom_low_asm_form_t* asm_form = &descriptor_set->asm_forms[i];
     iree_string_view_t mnemonic = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(
-        loom_low_verify_asm_form(descriptor_set, i, &mnemonic));
+    if (asm_form->descriptor_ordinal >= descriptor_set->descriptor_count) {
+      // Shared backing storage may carry extension rows for larger descriptor
+      // set views. Smaller views keep those rows sorted for lookup, but the
+      // extension view owns full payload validation.
+      IREE_RETURN_IF_ERROR(loom_low_verify_non_empty_required_string(
+          descriptor_set, asm_form->mnemonic_string_offset, "asm_form.mnemonic",
+          &mnemonic));
+    } else {
+      IREE_RETURN_IF_ERROR(
+          loom_low_verify_asm_form(descriptor_set, i, &mnemonic));
+    }
     if (i > 0 && iree_string_view_compare(previous_mnemonic, mnemonic) >= 0) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "low asm forms are not strictly sorted near "

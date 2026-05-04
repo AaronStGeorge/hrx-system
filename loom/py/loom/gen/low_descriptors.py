@@ -164,6 +164,13 @@ class _CompiledDescriptorSet:
 
 
 @dataclass(frozen=True, slots=True)
+class _DescriptorSetView:
+    spec: DescriptorSet
+    descriptor_count: int
+    descriptor_refs: list[tuple[str, int]]
+
+
+@dataclass(frozen=True, slots=True)
 class _CompiledAsmImmediate:
     immediate_index: int
     name_label: str | None
@@ -1272,9 +1279,63 @@ def _emit_array(
     lines.append("")
 
 
-def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> str:
+def _metadata_string_label(storage_spec: DescriptorSet, view_spec: DescriptorSet, field_name: str) -> str:
+    if view_spec.key == storage_spec.key and view_spec.target_key == storage_spec.target_key and view_spec.feature_key == storage_spec.feature_key:
+        return field_name
+    return f"{field_name}_{_c_identifier(view_spec.key)}"
+
+
+def _descriptor_refs_for_prefix(descriptors: Sequence[Descriptor], descriptor_count: int) -> list[tuple[str, int]]:
+    return sorted((descriptor.key, i) for i, descriptor in enumerate(descriptors[:descriptor_count]))
+
+
+def _descriptor_set_view_for_spec(
+    compiled: _CompiledDescriptorSet,
+    view_spec: DescriptorSet,
+    descriptor_count: int,
+) -> _DescriptorSetView:
+    if descriptor_count <= 0 or descriptor_count > len(compiled.descriptors):
+        raise ValueError(f"descriptor set view '{view_spec.key}' selects invalid descriptor count {descriptor_count} from storage count {len(compiled.descriptors)}")
+    for i, descriptor in enumerate(view_spec.descriptors):
+        if i >= descriptor_count:
+            break
+        if descriptor.key != compiled.descriptors[i].key:
+            raise ValueError(
+                f"descriptor set view '{view_spec.key}' is not a prefix of storage set '{compiled.spec.key}' at descriptor {i}: found '{descriptor.key}', expected '{compiled.descriptors[i].key}'"
+            )
+    return _DescriptorSetView(
+        spec=view_spec,
+        descriptor_count=descriptor_count,
+        descriptor_refs=_descriptor_refs_for_prefix(compiled.descriptors, descriptor_count),
+    )
+
+
+def _intern_descriptor_set_view_metadata(compiled: _CompiledDescriptorSet, view_spec: DescriptorSet) -> None:
+    pool = compiled.string_pool
+    storage_spec = compiled.spec
+    pool.intern(_metadata_string_label(storage_spec, view_spec, "set_key"), view_spec.key)
+    if view_spec.target_key is not None:
+        pool.intern(
+            _metadata_string_label(storage_spec, view_spec, "target_key"),
+            view_spec.target_key,
+        )
+    if view_spec.feature_key is not None:
+        pool.intern(
+            _metadata_string_label(storage_spec, view_spec, "feature_key"),
+            view_spec.feature_key,
+        )
+
+
+def _emit_source_for_views(
+    compiled: _CompiledDescriptorSet,
+    *,
+    views: Sequence[_DescriptorSetView],
+    format_output: bool,
+) -> str:
     spec = compiled.spec
     pool = compiled.string_pool
+    for view in views:
+        _intern_descriptor_set_view_metadata(compiled, view.spec)
     lines = [
         "// Copyright 2026 The IREE Authors",
         "//",
@@ -1289,6 +1350,12 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         "#include <stdint.h>",
         "",
     ]
+    for view in views:
+        if view.spec is spec:
+            continue
+        lines.append(f"const loom_low_descriptor_set_t* {view.spec.function_name}(void);")
+    if len(views) > 1:
+        lines.append("")
     _emit_string_table(compiled, lines)
 
     _emit_array(
@@ -1619,19 +1686,20 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
             for i, descriptor in enumerate(compiled.descriptors)
         ],
     )
-    _emit_array(
-        lines,
-        "loom_low_descriptor_ref_t",
-        spec.c_table_prefix,
-        "DescriptorRefs",
-        [
+    for view in views:
+        _emit_array(
+            lines,
+            "loom_low_descriptor_ref_t",
+            view.spec.c_table_prefix,
+            "DescriptorRefs",
             [
-                f".key_string_offset = {pool.ref(f'descriptor_{descriptor_key}')},",
-                f".descriptor_ordinal = {descriptor_ordinal},",
-            ]
-            for descriptor_key, descriptor_ordinal in compiled.descriptor_refs
-        ],
-    )
+                [
+                    f".key_string_offset = {pool.ref(f'descriptor_{descriptor_key}')},",
+                    f".descriptor_ordinal = {descriptor_ordinal},",
+                ]
+                for descriptor_key, descriptor_ordinal in view.descriptor_refs
+            ],
+        )
     if compiled.asm_operand_indices:
         lines.append(f"static const uint16_t k{spec.c_table_prefix}AsmOperandIndices[] = {{")
         lines.extend(f"    {operand_index}," for operand_index in compiled.asm_operand_indices)
@@ -1670,29 +1738,6 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         ],
     )
 
-    lines.append(f"static const loom_low_descriptor_set_t k{spec.c_table_prefix}Set = {{")
-    lines.extend(
-        [
-            "    .abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION,",
-            f"    .generator_version = {spec.generator_version},",
-            f"    .stable_id = UINT64_C(0x{descriptor_stable_id(spec.key):016x}),",
-            f"    .target_stable_id = {_hex_u64_literal(descriptor_stable_id(spec.target_key)) if spec.target_key is not None else 'LOOM_LOW_STABLE_ID_NONE'},",
-            f"    .descriptor_set_ordinal = {_u16_literal(spec.descriptor_set_ordinal if spec.descriptor_set_ordinal is not None else LOW_DESCRIPTOR_SET_ORDINAL_NONE)},",
-            f"    .key_string_offset = {pool.ref('set_key')},",
-            f"    .target_key_string_offset = {_optional_string_expr(pool, 'target_key' if spec.target_key is not None else None)},",
-            f"    .feature_key_string_offset = {_optional_string_expr(pool, 'feature_key' if spec.feature_key is not None else None)},",
-            "    .string_table =",
-            "        {",
-            f"            .data = k{spec.c_table_prefix}StringData,",
-            f"            .data_length = sizeof(k{spec.c_table_prefix}StringData) - 1,",
-            "        },",
-            f"    .descriptors = k{spec.c_table_prefix}Descriptors,",
-            f"    .descriptor_count = IREE_ARRAYSIZE(k{spec.c_table_prefix}Descriptors),",
-            f"    .descriptor_refs = k{spec.c_table_prefix}DescriptorRefs,",
-            f"    .descriptor_ref_count = IREE_ARRAYSIZE(k{spec.c_table_prefix}DescriptorRefs),",
-        ]
-    )
-
     table_count_fields = {
         "operands": "operand_count",
         "immediates": "immediate_count",
@@ -1717,45 +1762,88 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         "operand_form_operand_indices": "operand_form_operand_index_count",
     }
 
-    def append_optional_table(field_name: str, table_name: str) -> None:
+    def append_optional_table(field_name: str, table_name: str, view_lines: list[str]) -> None:
         rows = getattr(compiled, field_name)
         if rows:
-            lines.append(f"    .{field_name} = k{spec.c_table_prefix}{table_name},")
-            lines.append(f"    .{table_count_fields[field_name]} = IREE_ARRAYSIZE(k{spec.c_table_prefix}{table_name}),")
+            view_lines.append(f"    .{field_name} = k{spec.c_table_prefix}{table_name},")
+            view_lines.append(f"    .{table_count_fields[field_name]} = IREE_ARRAYSIZE(k{spec.c_table_prefix}{table_name}),")
 
-    append_optional_table("operands", "Operands")
-    append_optional_table("immediates", "Immediates")
-    append_optional_table("immediate_encoding_slices", "ImmediateEncodingSlices")
-    append_optional_table("enum_domains", "EnumDomains")
-    append_optional_table("enum_values", "EnumValues")
-    append_optional_table("effects", "Effects")
-    append_optional_table("constraints", "Constraints")
-    append_optional_table("reg_classes", "RegClasses")
-    append_optional_table("register_parts", "RegisterParts")
-    append_optional_table("reg_class_alts", "RegClassAlts")
-    append_optional_table("schedule_classes", "ScheduleClasses")
-    append_optional_table("issue_uses", "IssueUses")
-    append_optional_table("resources", "Resources")
-    append_optional_table("hazards", "Hazards")
-    append_optional_table("pressure_deltas", "PressureDeltas")
-    append_optional_table("asm_forms", "AsmForms")
-    append_optional_table("asm_operand_indices", "AsmOperandIndices")
-    append_optional_table("asm_immediates", "AsmImmediates")
-    append_optional_table("encoding_field_values", "EncodingFieldValues")
-    append_optional_table("operand_forms", "OperandForms")
-    append_optional_table("operand_form_operand_indices", "OperandFormOperandIndices")
-    if compiled.feature_mask_words:
-        lines.append(f"    .feature_mask_words = k{spec.c_table_prefix}FeatureMaskWords,")
-        lines.append(f"    .feature_mask_word_count = IREE_ARRAYSIZE(k{spec.c_table_prefix}FeatureMaskWords),")
-    lines.append("};")
-    lines.append("")
-    lines.append(f"const loom_low_descriptor_set_t* {spec.function_name}(void) {{")
-    lines.append(f"  return &k{spec.c_table_prefix}Set;")
-    lines.append("}")
+    for view in views:
+        view_spec = view.spec
+        view_lines = [
+            f"static const loom_low_descriptor_set_t k{view_spec.c_table_prefix}Set = {{",
+            "    .abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION,",
+            f"    .generator_version = {view_spec.generator_version},",
+            f"    .stable_id = UINT64_C(0x{descriptor_stable_id(view_spec.key):016x}),",
+            f"    .target_stable_id = {_hex_u64_literal(descriptor_stable_id(view_spec.target_key)) if view_spec.target_key is not None else 'LOOM_LOW_STABLE_ID_NONE'},",
+            f"    .descriptor_set_ordinal = {_u16_literal(view_spec.descriptor_set_ordinal if view_spec.descriptor_set_ordinal is not None else LOW_DESCRIPTOR_SET_ORDINAL_NONE)},",
+            f"    .key_string_offset = {pool.ref(_metadata_string_label(spec, view_spec, 'set_key'))},",
+            f"    .target_key_string_offset = {_optional_string_expr(pool, _metadata_string_label(spec, view_spec, 'target_key') if view_spec.target_key is not None else None)},",
+            f"    .feature_key_string_offset = {_optional_string_expr(pool, _metadata_string_label(spec, view_spec, 'feature_key') if view_spec.feature_key is not None else None)},",
+            "    .string_table =",
+            "        {",
+            f"            .data = k{spec.c_table_prefix}StringData,",
+            f"            .data_length = sizeof(k{spec.c_table_prefix}StringData) - 1,",
+            "        },",
+            f"    .descriptors = k{spec.c_table_prefix}Descriptors,",
+            f"    .descriptor_count = {view.descriptor_count},",
+            f"    .descriptor_refs = k{view_spec.c_table_prefix}DescriptorRefs,",
+            f"    .descriptor_ref_count = IREE_ARRAYSIZE(k{view_spec.c_table_prefix}DescriptorRefs),",
+        ]
+
+        append_optional_table("operands", "Operands", view_lines)
+        append_optional_table("immediates", "Immediates", view_lines)
+        append_optional_table("immediate_encoding_slices", "ImmediateEncodingSlices", view_lines)
+        append_optional_table("enum_domains", "EnumDomains", view_lines)
+        append_optional_table("enum_values", "EnumValues", view_lines)
+        append_optional_table("effects", "Effects", view_lines)
+        append_optional_table("constraints", "Constraints", view_lines)
+        append_optional_table("reg_classes", "RegClasses", view_lines)
+        append_optional_table("register_parts", "RegisterParts", view_lines)
+        append_optional_table("reg_class_alts", "RegClassAlts", view_lines)
+        append_optional_table("schedule_classes", "ScheduleClasses", view_lines)
+        append_optional_table("issue_uses", "IssueUses", view_lines)
+        append_optional_table("resources", "Resources", view_lines)
+        append_optional_table("hazards", "Hazards", view_lines)
+        append_optional_table("pressure_deltas", "PressureDeltas", view_lines)
+        append_optional_table("asm_forms", "AsmForms", view_lines)
+        append_optional_table("asm_operand_indices", "AsmOperandIndices", view_lines)
+        append_optional_table("asm_immediates", "AsmImmediates", view_lines)
+        append_optional_table("encoding_field_values", "EncodingFieldValues", view_lines)
+        append_optional_table("operand_forms", "OperandForms", view_lines)
+        append_optional_table(
+            "operand_form_operand_indices",
+            "OperandFormOperandIndices",
+            view_lines,
+        )
+        if compiled.feature_mask_words:
+            view_lines.append(f"    .feature_mask_words = k{spec.c_table_prefix}FeatureMaskWords,")
+            view_lines.append(f"    .feature_mask_word_count = IREE_ARRAYSIZE(k{spec.c_table_prefix}FeatureMaskWords),")
+        view_lines.append("};")
+        view_lines.append("")
+        view_lines.append(f"const loom_low_descriptor_set_t* {view_spec.function_name}(void) {{")
+        view_lines.append(f"  return &k{view_spec.c_table_prefix}Set;")
+        view_lines.append("}")
+        lines.extend(view_lines)
+        lines.append("")
     source = "\n".join(lines) + "\n"
     if not format_output:
         return source
     return _clang_format_source(source, spec.c_source_path)
+
+
+def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> str:
+    return _emit_source_for_views(
+        compiled,
+        views=[
+            _DescriptorSetView(
+                spec=compiled.spec,
+                descriptor_count=len(compiled.descriptors),
+                descriptor_refs=compiled.descriptor_refs,
+            )
+        ],
+        format_output=format_output,
+    )
 
 
 def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
@@ -1860,6 +1948,28 @@ def generate_descriptor_set(
         source=_emit_source(compiled, format_output=format_output),
         manifest_json=_emit_manifest_json(compiled),
     )
+
+
+def generate_descriptor_set_shared_source(
+    storage_spec: DescriptorSet,
+    view_specs: Sequence[DescriptorSet],
+    *,
+    format_output: bool = True,
+) -> str:
+    """Generates one C source containing shared storage and multiple set views.
+
+    Each view must be a descriptor prefix of |storage_spec|. The emitted
+    descriptor-set wrapper keeps the view's own identity and descriptor-ref
+    lookup table while pointing at the storage spec's dense backing arrays.
+    Supporting tables are shared as a storage superset, so extension rows must
+    only be reachable through descriptors that are hidden from smaller views.
+    Hidden asm rows may exist after descriptor_count; lookup helpers keep those
+    rows unreachable from smaller views.
+    """
+
+    compiled = _compile_descriptor_set(storage_spec, allowlist=None)
+    views = tuple(_descriptor_set_view_for_spec(compiled, view_spec, len(view_spec.descriptors)) for view_spec in view_specs)
+    return _emit_source_for_views(compiled, views=views, format_output=format_output)
 
 
 def write_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist | None = None) -> None:

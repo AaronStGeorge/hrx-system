@@ -233,6 +233,7 @@ loom_target_table_cc_library(
     "loom_amdgpu_isa_xml"
   DEPS
     ::encoding_defs
+    ::rdna4_encoding_tables
     iree::base
   EXCLUDE_FROM_ALL
 )
@@ -335,6 +336,7 @@ loom_low_descriptor_cc_library(
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
     "loom_amdgpu_isa_xml"
   DEPS
+    ::rdna4_descriptors
     loom::src::loom::codegen::low::descriptors
   EXCLUDE_FROM_ALL
 )

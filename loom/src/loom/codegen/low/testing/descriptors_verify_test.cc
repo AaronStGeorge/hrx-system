@@ -1299,6 +1299,40 @@ TEST(LowDescriptorsTest, AcceptsAsmFormsAndLookup) {
   EXPECT_EQ(asm_form_ordinal, LOOM_LOW_ASM_FORM_ORDINAL_NONE);
 }
 
+TEST(LowDescriptorsTest, HidesSharedExtensionAsmFormsFromBaseView) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAsmForms(&tables);
+  tables.set.descriptor_count = 1;
+  tables.descriptor_refs[0].key_string_offset =
+      TEST_STRING_OFFSET(descriptor_const);
+  tables.descriptor_refs[0].descriptor_ordinal = 0;
+  tables.set.descriptor_ref_count = 1;
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+
+  EXPECT_EQ(loom_low_descriptor_set_descriptor_at(&tables.set, 1), nullptr);
+  EXPECT_EQ(loom_low_descriptor_set_descriptor_ordinal(&tables.set,
+                                                       &tables.descriptors[1]),
+            LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
+  EXPECT_EQ(loom_low_descriptor_set_lookup_descriptor(
+                &tables.set, IREE_SV("test.const.i32")),
+            0u);
+  EXPECT_EQ(loom_low_descriptor_set_lookup_descriptor(&tables.set,
+                                                      IREE_SV("test.add.i32")),
+            LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
+  EXPECT_EQ(loom_low_descriptor_set_lookup_asm_form(&tables.set,
+                                                    IREE_SV("const.i32")),
+            1u);
+  EXPECT_EQ(
+      loom_low_descriptor_set_lookup_asm_form(&tables.set, IREE_SV("add.i32")),
+      LOOM_LOW_ASM_FORM_ORDINAL_NONE);
+  EXPECT_EQ(loom_low_descriptor_set_lookup_canonical_asm_form(&tables.set, 0),
+            1u);
+  EXPECT_EQ(loom_low_descriptor_set_lookup_canonical_asm_form(&tables.set, 1),
+            LOOM_LOW_ASM_FORM_ORDINAL_NONE);
+}
+
 TEST(LowDescriptorsTest, RejectsUnsortedAsmForms) {
   TestTables tables;
   InitializeTestTables(&tables);

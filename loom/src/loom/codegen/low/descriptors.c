@@ -242,6 +242,9 @@ uint32_t loom_low_descriptor_set_lookup_asm_form(
         descriptor_set, asm_form->mnemonic_string_offset);
     const int comparison = iree_string_view_compare(asm_mnemonic, mnemonic);
     if (comparison == 0) {
+      if (asm_form->descriptor_ordinal >= descriptor_set->descriptor_count) {
+        return LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+      }
       return mid;
     }
     if (comparison < 0) {

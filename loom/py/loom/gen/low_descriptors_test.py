@@ -12,7 +12,11 @@ from typing import cast
 
 import pytest
 
-from loom.gen.low_descriptors import DescriptorAllowlist, generate_descriptor_set
+from loom.gen.low_descriptors import (
+    DescriptorAllowlist,
+    generate_descriptor_set,
+    generate_descriptor_set_shared_source,
+)
 from loom.target.low_descriptors import (
     LOW_DESCRIPTOR_ENCODING_ID_NONE,
     AsmForm,
@@ -169,6 +173,40 @@ def test_allowlist_closes_over_operand_form_replacements() -> None:
     assert manifest["descriptors"][0]["operand_forms"] == 1
     assert manifest["descriptors"][1]["operand_forms"] == 0
     assert ".match_kind = LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_I64" in generated.source
+
+
+def test_shared_source_emits_one_storage_table_with_multiple_views() -> None:
+    base_view = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=TEST_LOW_CORE_DESCRIPTOR_SET.descriptors[:1],
+    )
+    extension_view = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        key="test.low.extension.core",
+        function_name="loom_test_low_extension_core_descriptor_set",
+        c_table_prefix="TestLowExtensionCore",
+        c_enum_prefix="TEST_LOW_EXTENSION_CORE",
+        descriptors=TEST_LOW_CORE_DESCRIPTOR_SET.descriptors[:2],
+    )
+    storage_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=extension_view.descriptors,
+    )
+
+    source = generate_descriptor_set_shared_source(
+        storage_set,
+        (base_view, extension_view),
+        format_output=False,
+    )
+
+    assert source.count("static const loom_low_descriptor_t kTestLowCoreDescriptors[]") == 1
+    assert "kTestLowExtensionCoreDescriptors" not in source
+    assert ".descriptors = kTestLowCoreDescriptors," in source
+    assert ".descriptor_refs = kTestLowCoreDescriptorRefs," in source
+    assert ".descriptor_refs = kTestLowExtensionCoreDescriptorRefs," in source
+    assert ".descriptor_count = 1," in source
+    assert ".descriptor_count = 2," in source
+    assert ("const loom_low_descriptor_set_t* loom_test_low_extension_core_descriptor_set(void)") in source
 
 
 def test_generate_test_low_core_descriptor_set() -> None:
