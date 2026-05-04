@@ -176,6 +176,27 @@ func.def @dynamic_float_math(%n: index, %a: vector<[%n]xf32>, %b: vector<[%n]xf3
 
 // ====
 
+// Vector value-domain assumptions project onto the matching scalar fast-math
+// bits when the lanewise op is scalarized.
+func.def @static_float_assumptions_wave2(%a: vector<2xf32>, %b: vector<2xf32>) -> (vector<2xf32>) {
+  %r = vector.mulf<nnan|ninf|nsz> %a, %b : vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ----
+func.def @static_float_assumptions_wave2(%a: vector<2xf32>, %b: vector<2xf32>) -> (vector<2xf32>) {
+  %4 = vector.extract %a[0] : vector<2xf32> -> f32
+  %5 = vector.extract %b[0] : vector<2xf32> -> f32
+  %6 = scalar.mulf<nnan|ninf|nsz> %4, %5 : f32
+  %7 = vector.extract %a[1] : vector<2xf32> -> f32
+  %8 = vector.extract %b[1] : vector<2xf32> -> f32
+  %9 = scalar.mulf<nnan|ninf|nsz> %7, %8 : f32
+  %r = vector.from_elements %6, %9 : vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ====
+
 // Integer subtraction keeps overflow flags on the scalarized operation.
 func.def @static_integer_sub_wave2(%a: vector<2xi32>, %b: vector<2xi32>) -> (vector<2xi32>) {
   %r = vector.subi<nuw> %a, %b : vector<2xi32>

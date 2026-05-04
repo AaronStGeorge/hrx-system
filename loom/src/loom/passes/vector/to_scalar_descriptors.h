@@ -54,6 +54,12 @@ typedef enum loom_vector_to_scalar_lane_kind_e {
   LOOM_VECTOR_TO_SCALAR_LANE_COUNT,
 } loom_vector_to_scalar_lane_kind_t;
 
+typedef enum loom_vector_to_scalar_instance_flag_mode_e {
+  LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_DROP = 0,
+  LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FORWARD,
+  LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FLOAT_ASSUMPTIONS,
+} loom_vector_to_scalar_instance_flag_mode_t;
+
 typedef struct loom_vector_to_scalar_descriptor_t {
   // Vector op kind matched by this descriptor.
   loom_op_kind_t vector_kind;
@@ -65,10 +71,8 @@ typedef struct loom_vector_to_scalar_descriptor_t {
   uint8_t lane_operand_count;
   // Number of leading attrs copied from the vector op to the scalar op.
   uint8_t copied_attr_count;
-  // Whether op->instance_flags may be forwarded to the scalar op.
-  bool forward_instance_flags;
-  // Whether non-zero op->instance_flags must be rejected.
-  bool reject_instance_flags;
+  // Projection applied to op->instance_flags before emitting scalar ops.
+  loom_vector_to_scalar_instance_flag_mode_t instance_flag_mode;
   // Whether the scalar result type is i1 instead of the vector element type.
   bool result_is_i1;
   // Operand that can seed a dynamic aggregate loop, or UINT8_MAX.

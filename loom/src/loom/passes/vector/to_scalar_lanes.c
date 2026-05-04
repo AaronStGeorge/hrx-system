@@ -6,7 +6,6 @@
 
 #include "loom/passes/vector/to_scalar_lanes.h"
 
-#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/index/ops.h"
@@ -34,6 +33,29 @@ static loom_attribute_t loom_vector_to_scalar_zero_attr(
   if (scalar_type == LOOM_SCALAR_TYPE_I1) return loom_attr_bool(false);
   if (loom_scalar_type_is_float(scalar_type)) return loom_attr_f64(0.0);
   return loom_attr_i64(0);
+}
+
+static_assert((LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NNAN << 1) ==
+                  LOOM_SCALAR_FASTMATHFLAGS_NNAN,
+              "vector nnan must project onto scalar nnan");
+static_assert((LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NINF << 1) ==
+                  LOOM_SCALAR_FASTMATHFLAGS_NINF,
+              "vector ninf must project onto scalar ninf");
+static_assert((LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NSZ << 1) ==
+                  LOOM_SCALAR_FASTMATHFLAGS_NSZ,
+              "vector nsz must project onto scalar nsz");
+
+static uint8_t loom_vector_to_scalar_project_instance_flags(
+    loom_vector_to_scalar_instance_flag_mode_t mode, uint8_t instance_flags) {
+  switch (mode) {
+    case LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_DROP:
+      return 0;
+    case LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FORWARD:
+      return instance_flags;
+    case LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FLOAT_ASSUMPTIONS:
+      return (uint8_t)(instance_flags << 1);
+  }
+  return 0;
 }
 
 iree_status_t loom_vector_to_scalar_build_scalar_constant(
@@ -494,15 +516,6 @@ static iree_status_t loom_vector_to_scalar_build_generic_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
   const loom_vector_to_scalar_descriptor_t* descriptor = state->descriptor;
-  if (descriptor->reject_instance_flags && state->op->instance_flags != 0) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "vector-to-scalar cannot lower %.*s with instance flags because vector "
-        "value-domain assumptions are not scalar fast-math flags",
-        (int)loom_op_name(state->rewriter->module, state->op).size,
-        loom_op_name(state->rewriter->module, state->op).data);
-  }
-
   loom_value_id_t lane_operands[4] = {0};
   const loom_value_id_t* operands = loom_op_const_operands(state->op);
   for (uint8_t i = 0; i < descriptor->lane_operand_count; ++i) {
@@ -510,8 +523,8 @@ static iree_status_t loom_vector_to_scalar_build_generic_lane(
         state, operands[i], indices, &lane_operands[i]));
   }
 
-  uint8_t instance_flags =
-      descriptor->forward_instance_flags ? state->op->instance_flags : 0;
+  uint8_t instance_flags = loom_vector_to_scalar_project_instance_flags(
+      descriptor->instance_flag_mode, state->op->instance_flags);
   const loom_attribute_t* attrs = loom_op_attrs(state->op);
   return loom_vector_to_scalar_build_generic_lane_op(
       state, descriptor->lane_op_kind, instance_flags, lane_operands,
