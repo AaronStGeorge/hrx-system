@@ -623,13 +623,19 @@ def _m0_implicit_resource(field_name: str = "m0") -> Operand:
         field_name,
         OperandRole.RESOURCE,
         _M0_ALT,
-        flags=(OperandFlag.IMPLICIT,),
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
         unit_count=1,
     )
 
 
 def _m0_result(field_name: str = "dst") -> Operand:
-    return Operand(field_name, OperandRole.RESULT, _M0_ALT, unit_count=1)
+    return Operand(
+        field_name,
+        OperandRole.RESULT,
+        _M0_ALT,
+        flags=(OperandFlag.STATE_WRITE,),
+        unit_count=1,
+    )
 
 
 def _scc_result(field_name: str = "scc") -> Operand:

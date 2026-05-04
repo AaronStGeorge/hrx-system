@@ -87,6 +87,16 @@ static iree_status_t loom_amdgpu_append_assignment(
           assignment->descriptor_reg_class_id)) {
     return loom_amdgpu_append_register_range(context, "acc", assignment);
   }
+  if (loom_amdgpu_register_class_is_m0(
+          context->allocation->target.descriptor_set,
+          assignment->descriptor_reg_class_id)) {
+    if (assignment->location_base != 0 || assignment->location_count != 1) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU assembly M0 assignment must name physical register 0");
+    }
+    return iree_string_builder_append_cstring(context->builder, "m0");
+  }
   iree_string_view_t register_class = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
       context->allocation, assignment, &register_class));
@@ -112,6 +122,16 @@ static iree_status_t loom_amdgpu_append_move_location(
           location->descriptor_reg_class_id)) {
     return iree_string_builder_append_format(context->builder, "acc%" PRIu32,
                                              location->location);
+  }
+  if (loom_amdgpu_register_class_is_m0(
+          context->allocation->target.descriptor_set,
+          location->descriptor_reg_class_id)) {
+    if (location->location != 0) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU assembly M0 move location must name physical register 0");
+    }
+    return iree_string_builder_append_cstring(context->builder, "m0");
   }
   return iree_make_status(
       IREE_STATUS_UNIMPLEMENTED,
