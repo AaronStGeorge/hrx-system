@@ -117,22 +117,22 @@ def _batched_transpose_input(
 
 # ====
 @tilelang_case(
-    name="tilekernels_batched_transpose_gfx950",
+    name="tilekernels_batched_transpose_gfx942",
     category="kernel",
     tags=("tilekernels", "transpose", "amdgpu"),
 )
-def tilekernels_batched_transpose_gfx950(
+def tilekernels_batched_transpose_gfx942(
     tilelang: Any,
     T: Any,
 ) -> TileLangImportInput:
-    return _batched_transpose_input(tilelang, T, target="hip -mcpu=gfx950")
+    return _batched_transpose_input(tilelang, T, target="hip -mcpu=gfx942")
 
 
 # ----
 r"""
-amdgpu.target<gfx950> @hip_mcpu_gfx950
+amdgpu.target<gfx942> @hip_mcpu_gfx942
 
-kernel.def target(@hip_mcpu_gfx950) export("batched_transpose_kernel") @batched_transpose_kernel(%x_handle: buffer, %out_handle: buffer, %num_batches: i32, %shape_x: i32, %shape_y: i32, %stride_x: i32) {
+kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") @batched_transpose_kernel(%x_handle: buffer, %out_handle: buffer, %num_batches: i32, %shape_x: i32, %shape_y: i32, %stride_x: i32) {
   %shape_y_idx = index.cast %shape_y : i32 to index
   %c128 = index.constant 128 : index
   %div = index.div %shape_y_idx, %c128 : index
