@@ -161,8 +161,8 @@ TEST(LlvmIrTargetEnvTest, X86ObjectProfileNamesObjectAbi) {
   EXPECT_EQ(profile->exported_linkage, LOOM_LLVMIR_LINKAGE_DSO_LOCAL);
 
   loom_llvmir_target_config_t config = {};
-  IREE_ASSERT_OK(loom_llvmir_target_profile_module_config(
-      profile, IREE_SV("x86-source"), &config));
+  loom_llvmir_target_profile_module_config(profile, IREE_SV("x86-source"),
+                                           &config);
   EXPECT_EQ(ToString(config.source_name), "x86-source");
   EXPECT_EQ(ToString(config.target_triple), "x86_64-unknown-linux-gnu");
   EXPECT_EQ(ToString(config.data_layout),
@@ -217,24 +217,24 @@ TEST(LlvmIrTargetEnvTest, X86PackedDotProfileHasGenericTargetBundle) {
 
 TEST(LlvmIrTargetEnvTest, DerivesX86ObjectProfileFromGenericBundle) {
   loom_llvmir_target_profile_storage_t storage = {};
-  IREE_ASSERT_OK(loom_llvmir_target_profile_storage_initialize_from_bundle(
+  loom_llvmir_target_profile_storage_initialize_from_bundle(
       loom_llvmir_target_bundle_x86_64_object(),
-      loom_llvmir_target_profile_x86_64_object(), &storage));
+      loom_llvmir_target_profile_x86_64_object(), &storage);
   ExpectDerivedProfileMatchesStatic(&storage.profile,
                                     loom_llvmir_target_profile_x86_64_object());
 
   loom_llvmir_target_config_t config = {};
-  IREE_ASSERT_OK(loom_llvmir_target_profile_module_config(
-      &storage.profile, IREE_SV("derived-x86-source"), &config));
+  loom_llvmir_target_profile_module_config(
+      &storage.profile, IREE_SV("derived-x86-source"), &config);
   EXPECT_EQ(ToString(config.source_name), "derived-x86-source");
   EXPECT_EQ(ToString(config.target_triple), "x86_64-unknown-linux-gnu");
 }
 
 TEST(LlvmIrTargetEnvTest, DerivesX86PackedDotProfileFromGenericBundle) {
   loom_llvmir_target_profile_storage_t storage = {};
-  IREE_ASSERT_OK(loom_llvmir_target_profile_storage_initialize_from_bundle(
+  loom_llvmir_target_profile_storage_initialize_from_bundle(
       loom_llvmir_target_bundle_x86_64_packed_dot_object(),
-      loom_llvmir_target_profile_x86_64_packed_dot_object(), &storage));
+      loom_llvmir_target_profile_x86_64_packed_dot_object(), &storage);
   ExpectDerivedProfileMatchesStatic(
       &storage.profile, loom_llvmir_target_profile_x86_64_packed_dot_object());
 }
@@ -273,9 +273,8 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileNamesKernelAbi) {
   loom_llvmir_attr_t
       binding_attrs[LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT];
   iree_host_size_t binding_attr_count = 0;
-  IREE_ASSERT_OK(loom_llvmir_target_profile_kernel_binding_attrs(
-      profile, binding_attrs, IREE_ARRAYSIZE(binding_attrs),
-      &binding_attr_count));
+  loom_llvmir_target_profile_kernel_binding_attrs(profile, binding_attrs,
+                                                  &binding_attr_count);
   EXPECT_EQ(binding_attr_count, 5u);
   EXPECT_EQ(binding_attrs[4].kind, LOOM_LLVMIR_ATTR_ALIGN);
   EXPECT_EQ(binding_attrs[4].value, 16u);
@@ -319,99 +318,11 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileHasGenericTargetBundle) {
 
 TEST(LlvmIrTargetEnvTest, DerivesAmdgpuHalProfileFromGenericBundle) {
   loom_llvmir_target_profile_storage_t storage = {};
-  IREE_ASSERT_OK(loom_llvmir_target_profile_storage_initialize_from_bundle(
+  loom_llvmir_target_profile_storage_initialize_from_bundle(
       loom_llvmir_target_bundle_amdgpu_hal(),
-      loom_llvmir_target_profile_amdgpu_hal(), &storage));
+      loom_llvmir_target_profile_amdgpu_hal(), &storage);
   ExpectDerivedProfileMatchesStatic(&storage.profile,
                                     loom_llvmir_target_profile_amdgpu_hal());
-}
-
-TEST(LlvmIrTargetEnvTest, RejectsMalformedDerivedAmdgpuHalProfile) {
-  const loom_target_bundle_t* fixture_bundle =
-      loom_llvmir_target_bundle_amdgpu_hal();
-  loom_target_snapshot_t snapshot = *fixture_bundle->snapshot;
-  loom_target_export_plan_t export_plan = *fixture_bundle->export_plan;
-  loom_target_config_t config = *fixture_bundle->config;
-  export_plan.hal_kernel.required_workgroup_size.x = 0;
-  export_plan.hal_kernel.required_workgroup_size.y = 1;
-  export_plan.hal_kernel.required_workgroup_size.z = 1;
-
-  loom_target_bundle_t broken_bundle = {};
-  broken_bundle.name = fixture_bundle->name;
-  broken_bundle.snapshot = &snapshot;
-  broken_bundle.export_plan = &export_plan;
-  broken_bundle.config = &config;
-
-  loom_llvmir_target_profile_storage_t storage = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_llvmir_target_profile_storage_initialize_from_bundle(
-          &broken_bundle, loom_llvmir_target_profile_amdgpu_hal(), &storage));
-}
-
-TEST(LlvmIrTargetEnvTest, RejectsDerivedAmdgpuHalProfileWithoutFlatLimit) {
-  const loom_target_bundle_t* fixture_bundle =
-      loom_llvmir_target_bundle_amdgpu_hal();
-  loom_target_snapshot_t snapshot = *fixture_bundle->snapshot;
-  loom_target_export_plan_t export_plan = *fixture_bundle->export_plan;
-  loom_target_config_t config = *fixture_bundle->config;
-  snapshot.max_flat_workgroup_size = 0;
-
-  loom_target_bundle_t broken_bundle = {};
-  broken_bundle.name = fixture_bundle->name;
-  broken_bundle.snapshot = &snapshot;
-  broken_bundle.export_plan = &export_plan;
-  broken_bundle.config = &config;
-
-  loom_llvmir_target_profile_storage_t storage = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_llvmir_target_profile_storage_initialize_from_bundle(
-          &broken_bundle, loom_llvmir_target_profile_amdgpu_hal(), &storage));
-}
-
-TEST(LlvmIrTargetEnvTest, RejectsUnsupportedDerivedProfileArtifactFormat) {
-  const loom_target_bundle_t* fixture_bundle =
-      loom_llvmir_target_bundle_x86_64_object();
-  loom_target_snapshot_t snapshot = *fixture_bundle->snapshot;
-  loom_target_export_plan_t export_plan = *fixture_bundle->export_plan;
-  loom_target_config_t config = *fixture_bundle->config;
-  snapshot.artifact_format = static_cast<loom_target_artifact_format_t>(255);
-
-  loom_target_bundle_t broken_bundle = {};
-  broken_bundle.name = fixture_bundle->name;
-  broken_bundle.snapshot = &snapshot;
-  broken_bundle.export_plan = &export_plan;
-  broken_bundle.config = &config;
-
-  loom_llvmir_target_profile_storage_t storage = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_llvmir_target_profile_storage_initialize_from_bundle(
-          &broken_bundle, loom_llvmir_target_profile_x86_64_object(),
-          &storage));
-}
-
-TEST(LlvmIrTargetEnvTest, RejectsUnsupportedDerivedProfileAbiKind) {
-  const loom_target_bundle_t* fixture_bundle =
-      loom_llvmir_target_bundle_x86_64_object();
-  loom_target_snapshot_t snapshot = *fixture_bundle->snapshot;
-  loom_target_export_plan_t export_plan = *fixture_bundle->export_plan;
-  loom_target_config_t config = *fixture_bundle->config;
-  export_plan.abi_kind = static_cast<loom_target_abi_kind_t>(255);
-
-  loom_target_bundle_t broken_bundle = {};
-  broken_bundle.name = fixture_bundle->name;
-  broken_bundle.snapshot = &snapshot;
-  broken_bundle.export_plan = &export_plan;
-  broken_bundle.config = &config;
-
-  loom_llvmir_target_profile_storage_t storage = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_UNIMPLEMENTED,
-      loom_llvmir_target_profile_storage_initialize_from_bundle(
-          &broken_bundle, loom_llvmir_target_profile_x86_64_object(),
-          &storage));
 }
 
 TEST(LlvmIrTargetEnvTest, LooksUpRegisteredProfilesByName) {
@@ -459,13 +370,13 @@ TEST(LlvmIrTargetEnvTest, RegistryOnlySeesExplicitProviders) {
 
 TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileMaterializesKernelDecorations) {
   loom_llvmir_target_profile_storage_t storage = {};
-  IREE_ASSERT_OK(loom_llvmir_target_profile_storage_initialize_from_bundle(
+  loom_llvmir_target_profile_storage_initialize_from_bundle(
       loom_llvmir_target_bundle_amdgpu_hal(),
-      loom_llvmir_target_profile_amdgpu_hal(), &storage));
+      loom_llvmir_target_profile_amdgpu_hal(), &storage);
   const loom_llvmir_target_profile_t* profile = &storage.profile;
   loom_llvmir_target_config_t config = {};
-  IREE_ASSERT_OK(loom_llvmir_target_profile_module_config(
-      profile, IREE_SV("kernel-source"), &config));
+  loom_llvmir_target_profile_module_config(profile, IREE_SV("kernel-source"),
+                                           &config);
 
   loom_llvmir_module_t* module = nullptr;
   IREE_ASSERT_OK(
@@ -519,8 +430,8 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileCopyControlsKernelDecorations) {
   profile.amdgpu_hal.flat_workgroup_size_max = 256;
 
   loom_llvmir_target_config_t config = {};
-  IREE_ASSERT_OK(loom_llvmir_target_profile_module_config(
-      &profile, IREE_SV("kernel-variant-source"), &config));
+  loom_llvmir_target_profile_module_config(
+      &profile, IREE_SV("kernel-variant-source"), &config);
   loom_llvmir_module_t* module = nullptr;
   IREE_ASSERT_OK(
       loom_llvmir_module_allocate(&config, iree_allocator_system(), &module));
@@ -551,9 +462,8 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileCopyControlsKernelDecorations) {
   loom_llvmir_attr_t
       binding_attrs[LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT];
   iree_host_size_t binding_attr_count = 0;
-  IREE_ASSERT_OK(loom_llvmir_target_profile_kernel_binding_attrs(
-      &profile, binding_attrs, IREE_ARRAYSIZE(binding_attrs),
-      &binding_attr_count));
+  loom_llvmir_target_profile_kernel_binding_attrs(&profile, binding_attrs,
+                                                  &binding_attr_count);
   loom_llvmir_value_id_t parameter = LOOM_LLVMIR_VALUE_ID_INVALID;
   loom_llvmir_parameter_desc_t parameter_desc = {};
   parameter_desc.type_id = global_pointer_type;
@@ -598,57 +508,6 @@ TEST(LlvmIrTargetEnvTest, BuildsLlcArgumentsFromTargetProfile) {
   EXPECT_EQ(ToString(arguments.values[0]), "-mtriple=x86_64-unknown-linux-gnu");
   EXPECT_EQ(ToString(arguments.values[1]),
             "-mattr=+avx512bf16,+avx512vl,+avxvnni,+avxvnniint8");
-}
-
-TEST(LlvmIrTargetEnvTest, RejectsInvalidAmdgpuHalProfileValues) {
-  loom_llvmir_target_profile_t profile = {};
-  IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_amdgpu_hal(&profile));
-  loom_llvmir_attr_t
-      binding_attrs[LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT];
-  iree_host_size_t binding_attr_count = 0;
-
-  profile.amdgpu_hal.binding_alignment = 0;
-  iree_status_t status = loom_llvmir_target_profile_kernel_binding_attrs(
-      &profile, binding_attrs, IREE_ARRAYSIZE(binding_attrs),
-      &binding_attr_count);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
-
-  IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_amdgpu_hal(&profile));
-  loom_llvmir_target_config_t config = {};
-  IREE_ASSERT_OK(loom_llvmir_target_profile_module_config(
-      &profile, IREE_SV("bad-kernel-profile"), &config));
-  loom_llvmir_module_t* module = nullptr;
-  IREE_ASSERT_OK(
-      loom_llvmir_module_allocate(&config, iree_allocator_system(), &module));
-  ModulePtr module_ptr(module, loom_llvmir_module_free);
-
-  profile.amdgpu_hal.flat_workgroup_size_min = 256;
-  profile.amdgpu_hal.flat_workgroup_size_max = 128;
-  loom_llvmir_attr_group_id_t attr_group = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
-  status = loom_llvmir_target_profile_add_kernel_attr_group(
-      module_ptr.get(), &profile, &attr_group);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
-
-  IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_amdgpu_hal(&profile));
-  loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_llvmir_module_get_void_type(module_ptr.get(), &void_type));
-  loom_llvmir_function_desc_t function_desc = {};
-  function_desc.kind = LOOM_LLVMIR_FUNCTION_DEFINITION;
-  function_desc.name = IREE_SV("dispatch");
-  function_desc.return_type = void_type;
-  function_desc.linkage = profile.exported_linkage;
-  function_desc.calling_convention = profile.kernel_calling_convention;
-  function_desc.attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
-  loom_llvmir_function_t* function = nullptr;
-  IREE_ASSERT_OK(loom_llvmir_module_add_function(module_ptr.get(),
-                                                 &function_desc, &function));
-  profile.amdgpu_hal.required_workgroup_size.x = 0;
-  profile.amdgpu_hal.required_workgroup_size.y = 1;
-  profile.amdgpu_hal.required_workgroup_size.z = 1;
-  status =
-      loom_llvmir_target_profile_attach_kernel_metadata(function, &profile);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 }  // namespace

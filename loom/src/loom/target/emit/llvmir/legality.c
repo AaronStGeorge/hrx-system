@@ -22,6 +22,7 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/emit/llvmir/target_env.h"
+#include "loom/target/launch.h"
 
 struct loom_llvmir_target_legality_context_t {
   // Source Loom module being checked.
@@ -285,6 +286,171 @@ iree_status_t loom_llvmir_target_legality_expect_constant_operand(
   return iree_ok_status();
 }
 
+static bool loom_llvmir_target_legality_artifact_is_object(
+    loom_target_artifact_format_t artifact_format) {
+  switch (artifact_format) {
+    case LOOM_TARGET_ARTIFACT_FORMAT_ELF:
+    case LOOM_TARGET_ARTIFACT_FORMAT_COFF:
+    case LOOM_TARGET_ARTIFACT_FORMAT_MACHO:
+      return true;
+    case LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN:
+    case LOOM_TARGET_ARTIFACT_FORMAT_SPIRV_BINARY:
+    case LOOM_TARGET_ARTIFACT_FORMAT_VM_BYTECODE:
+    case LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY:
+      return false;
+  }
+  return false;
+}
+
+static bool loom_llvmir_target_legality_linkage_is_supported(
+    loom_target_linkage_t linkage) {
+  switch (linkage) {
+    case LOOM_TARGET_LINKAGE_DEFAULT:
+    case LOOM_TARGET_LINKAGE_DSO_LOCAL:
+      return true;
+  }
+  return false;
+}
+
+static bool loom_llvmir_target_legality_mul_u64_overflows(uint64_t lhs,
+                                                          uint64_t rhs,
+                                                          uint64_t* out_value) {
+  if (lhs != 0 && rhs > UINT64_MAX / lhs) {
+    *out_value = 0;
+    return true;
+  }
+  *out_value = lhs * rhs;
+  return false;
+}
+
+static bool loom_llvmir_target_legality_workgroup_flat_size(
+    const loom_target_workgroup_size_t* size, uint64_t* out_flat_size) {
+  uint64_t flat_size = 1;
+  const uint64_t factors[] = {size->x, size->y, size->z};
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(factors); ++i) {
+    if (loom_llvmir_target_legality_mul_u64_overflows(flat_size, factors[i],
+                                                      &flat_size)) {
+      *out_flat_size = 0;
+      return false;
+    }
+  }
+  *out_flat_size = flat_size;
+  return true;
+}
+
+static iree_status_t loom_llvmir_target_legality_verify_hal_kernel_launch(
+    loom_llvmir_target_legality_context_t* context) {
+  const loom_target_snapshot_t* snapshot = context->options->snapshot;
+  const loom_target_hal_kernel_abi_t* hal_kernel =
+      &context->options->export_plan->hal_kernel;
+  const loom_target_workgroup_size_t* required =
+      &hal_kernel->required_workgroup_size;
+  if (context->options->profile->kind !=
+      LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_ABI, NULL,
+        IREE_SV("LLVMIR target projection does not support HAL kernel ABI"),
+        context->options->profile->name);
+  }
+  if (snapshot->memory_spaces.global == UINT32_MAX) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
+        IREE_SV("HAL kernel target global address space is unavailable"),
+        snapshot->name);
+  }
+  if (hal_kernel->binding_alignment == 0) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
+        IREE_SV("HAL kernel binding alignment must be non-zero"),
+        context->options->export_plan->name);
+  }
+  if (loom_target_workgroup_size_is_partial(required)) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
+        IREE_SV("HAL kernel required workgroup size must be all zero or all "
+                "non-zero"),
+        context->options->export_plan->name);
+  }
+
+  const uint32_t flat_min = hal_kernel->flat_workgroup_size_min;
+  const uint32_t flat_max = hal_kernel->flat_workgroup_size_max;
+  const uint32_t max_flat = snapshot->max_flat_workgroup_size;
+  if ((flat_min == 0) != (flat_max == 0)) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
+        IREE_SV(
+            "HAL kernel flat workgroup size range must be both zero or both "
+            "non-zero"),
+        context->options->export_plan->name);
+  }
+  if (flat_min != 0) {
+    if (flat_min > flat_max) {
+      return loom_llvmir_target_legality_fail(
+          context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
+          IREE_SV("HAL kernel flat workgroup size range must be ordered"),
+          context->options->export_plan->name);
+    }
+    if (max_flat != 0 && flat_max > max_flat) {
+      return loom_llvmir_target_legality_fail(
+          context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
+          IREE_SV("HAL kernel flat workgroup size max exceeds target limit"),
+          snapshot->name);
+    }
+  } else if (max_flat == 0) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
+        IREE_SV("LLVMIR HAL kernel requires a flat workgroup size limit"),
+        snapshot->name);
+  }
+
+  if (loom_target_workgroup_size_is_empty(required)) {
+    return iree_ok_status();
+  }
+  if (snapshot->max_workgroup_size.x != 0 &&
+      required->x > snapshot->max_workgroup_size.x) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
+        IREE_SV("HAL kernel required workgroup x size exceeds target limit"),
+        snapshot->name);
+  }
+  if (snapshot->max_workgroup_size.y != 0 &&
+      required->y > snapshot->max_workgroup_size.y) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
+        IREE_SV("HAL kernel required workgroup y size exceeds target limit"),
+        snapshot->name);
+  }
+  if (snapshot->max_workgroup_size.z != 0 &&
+      required->z > snapshot->max_workgroup_size.z) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
+        IREE_SV("HAL kernel required workgroup z size exceeds target limit"),
+        snapshot->name);
+  }
+  uint64_t flat_size = 0;
+  if (!loom_llvmir_target_legality_workgroup_flat_size(required, &flat_size)) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
+        IREE_SV("HAL kernel required flat workgroup size overflows uint64"),
+        context->options->export_plan->name);
+  }
+  if (max_flat != 0 && flat_size > max_flat) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
+        IREE_SV("HAL kernel required flat workgroup size exceeds target limit"),
+        snapshot->name);
+  }
+  if (flat_min != 0 && (flat_size < flat_min || flat_size > flat_max)) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
+        IREE_SV(
+            "HAL kernel required flat workgroup size must be inside selected "
+            "range"),
+        context->options->export_plan->name);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_target_legality_validate_options(
     loom_llvmir_target_legality_context_t* context) {
   const loom_llvmir_target_legality_options_t* options = context->options;
@@ -293,6 +459,13 @@ static iree_status_t loom_llvmir_target_legality_validate_options(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
         IREE_SV("target snapshot is not an LLVMIR codegen target"),
         options->snapshot->name);
+  }
+  if (!loom_llvmir_target_legality_artifact_is_object(
+          options->snapshot->artifact_format)) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
+        IREE_SV("target artifact format is not an LLVM object"),
+        loom_target_artifact_format_name(options->snapshot->artifact_format));
   }
   if (options->snapshot->default_pointer_bitwidth == 0 ||
       options->snapshot->index_bitwidth == 0 ||
@@ -309,13 +482,16 @@ static iree_status_t loom_llvmir_target_legality_validate_options(
         IREE_SV("target generic pointer address space is unavailable"),
         options->snapshot->name);
   }
+  if (!loom_llvmir_target_legality_linkage_is_supported(
+          options->export_plan->linkage)) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_ABI, NULL,
+        IREE_SV("target linkage has no LLVMIR mapping"),
+        loom_target_linkage_name(options->export_plan->linkage));
+  }
   if (options->export_plan->abi_kind == LOOM_TARGET_ABI_HAL_KERNEL) {
-    if (options->snapshot->memory_spaces.global == UINT32_MAX) {
-      return loom_llvmir_target_legality_fail(
-          context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-          IREE_SV("HAL kernel target global address space is unavailable"),
-          options->snapshot->name);
-    }
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_target_legality_verify_hal_kernel_launch(context));
   } else if (options->export_plan->abi_kind !=
              LOOM_TARGET_ABI_OBJECT_FUNCTION) {
     return loom_llvmir_target_legality_fail(
@@ -329,16 +505,8 @@ static iree_status_t loom_llvmir_target_legality_validate_options(
       .export_plan = options->export_plan,
       .config = options->config,
   };
-  iree_status_t status =
-      loom_llvmir_target_profile_storage_initialize_from_bundle(
-          &context->bundle, options->profile, &context->profile_storage);
-  if (!iree_status_is_ok(status)) {
-    iree_status_free(status);
-    return loom_llvmir_target_legality_fail(
-        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("target records cannot derive an LLVMIR profile"),
-        options->snapshot->name);
-  }
+  loom_llvmir_target_profile_storage_initialize_from_bundle(
+      &context->bundle, options->profile, &context->profile_storage);
   return iree_ok_status();
 }
 

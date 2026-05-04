@@ -519,9 +519,9 @@ static iree_status_t loom_llvmir_lowering_add_function_signature(
         [LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT];
     iree_host_size_t kernel_binding_attr_count = 0;
     if (is_kernel_entry && loom_type_is_buffer(source_arg_type)) {
-      IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_kernel_binding_attrs(
+      loom_llvmir_target_profile_kernel_binding_attrs(
           state->target_profile, kernel_binding_attrs,
-          IREE_ARRAYSIZE(kernel_binding_attrs), &kernel_binding_attr_count));
+          &kernel_binding_attr_count);
       parameter_desc.attrs = kernel_binding_attrs;
       parameter_desc.attr_count = kernel_binding_attr_count;
       pointer_alignment = state->target_profile->amdgpu_hal.binding_alignment;
@@ -1322,8 +1322,8 @@ static iree_status_t loom_llvmir_lowering_state_initialize(
     source_name = loom_llvmir_lowering_module_name(source_module);
   }
   loom_llvmir_target_config_t target_config = {0};
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_module_config(
-      options->target_profile, source_name, &target_config));
+  loom_llvmir_target_profile_module_config(options->target_profile, source_name,
+                                           &target_config);
   IREE_RETURN_IF_ERROR(loom_llvmir_module_allocate(&target_config, allocator,
                                                    &state->target_module));
 

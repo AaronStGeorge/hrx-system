@@ -138,18 +138,18 @@ typedef struct loom_llvmir_target_profile_llc_arguments_t {
   iree_host_size_t count;
 } loom_llvmir_target_profile_llc_arguments_t;
 
-iree_status_t loom_llvmir_target_env_module_config(
+void loom_llvmir_target_env_module_config(
     const loom_llvmir_target_env_t* target_env, iree_string_view_t source_name,
     loom_llvmir_target_config_t* out_config);
 
-iree_status_t loom_llvmir_target_profile_module_config(
+void loom_llvmir_target_profile_module_config(
     const loom_llvmir_target_profile_t* profile, iree_string_view_t source_name,
     loom_llvmir_target_config_t* out_config);
 
 // Derives an LLVMIR adapter profile from generic target records and an
 // LLVM-owned projection row. The returned |out_storage->profile.target_env|
 // points at |out_storage->target_env|.
-iree_status_t loom_llvmir_target_profile_storage_initialize_from_bundle(
+void loom_llvmir_target_profile_storage_initialize_from_bundle(
     const loom_target_bundle_t* bundle,
     const loom_llvmir_target_profile_t* projected_profile,
     loom_llvmir_target_profile_storage_t* out_storage);
@@ -163,9 +163,9 @@ iree_status_t loom_llvmir_target_profile_llc_arguments(
 // Writes ABI-required parameter attrs for a HAL kernel binding pointer.
 // The caller provides temporary storage; loom_llvmir_function_add_parameter()
 // copies the attrs into the target module when attaching them to a parameter.
-iree_status_t loom_llvmir_target_profile_kernel_binding_attrs(
+void loom_llvmir_target_profile_kernel_binding_attrs(
     const loom_llvmir_target_profile_t* profile, loom_llvmir_attr_t* attrs,
-    iree_host_size_t attr_capacity, iree_host_size_t* out_attr_count);
+    iree_host_size_t* out_attr_count);
 
 // Adds the ABI and optimization attr group for a HAL kernel entry point.
 // Attribute values are derived from |profile| at materialization time so

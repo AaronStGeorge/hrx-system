@@ -522,12 +522,6 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_execute(
     return loom_llvmir_loom_check_emit_missing_projection(request, target_op,
                                                           target_bundle);
   }
-  loom_llvmir_target_profile_storage_t profile_storage;
-  IREE_RETURN_IF_ERROR(
-      loom_llvmir_target_profile_storage_initialize_from_bundle(
-          target_bundle, projected_profile, &profile_storage));
-  const loom_llvmir_target_profile_t* profile = &profile_storage.profile;
-
   loom_llvmir_target_legality_provider_list_t legality_providers;
   loom_llvmir_target_legality_provider_list_select(projected_provider,
                                                    &legality_providers);
@@ -536,12 +530,17 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_execute(
       .snapshot = target_bundle->snapshot,
       .export_plan = target_bundle->export_plan,
       .config = target_bundle->config,
-      .profile = profile,
+      .profile = projected_profile,
       .providers = legality_providers.providers,
       .provider_count = legality_providers.provider_count,
   };
   IREE_RETURN_IF_ERROR(loom_llvmir_verify_target_legality(
       request->module, &legality_options, NULL));
+
+  loom_llvmir_target_profile_storage_t profile_storage;
+  loom_llvmir_target_profile_storage_initialize_from_bundle(
+      target_bundle, projected_profile, &profile_storage);
+  const loom_llvmir_target_profile_t* profile = &profile_storage.profile;
 
   loom_llvmir_lowering_provider_list_t lowering_providers;
   IREE_RETURN_IF_ERROR(loom_llvmir_target_registry_select_lowering_providers(

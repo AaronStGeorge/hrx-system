@@ -1668,9 +1668,8 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
   loom_llvmir_attr_t
       binding_attrs[LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT];
   iree_host_size_t binding_attr_count = 0;
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_kernel_binding_attrs(
-      profile, binding_attrs, IREE_ARRAYSIZE(binding_attrs),
-      &binding_attr_count));
+  loom_llvmir_target_profile_kernel_binding_attrs(profile, binding_attrs,
+                                                  &binding_attr_count);
   loom_llvmir_value_id_t x = LOOM_LLVMIR_VALUE_ID_INVALID;
   loom_llvmir_value_id_t y = LOOM_LLVMIR_VALUE_ID_INVALID;
   loom_llvmir_value_id_t z = LOOM_LLVMIR_VALUE_ID_INVALID;
@@ -2150,48 +2149,48 @@ static iree_status_t loom_llvmir_test_module_target_config(
     case LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4: {
       const loom_llvmir_target_profile_t* profile =
           loom_llvmir_test_target_profile_x86_64_object();
-      IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_module_config(
-          profile, IREE_SV("loom-object"), out_target_config));
+      loom_llvmir_target_profile_module_config(profile, IREE_SV("loom-object"),
+                                               out_target_config);
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
     case LOOM_LLVMIR_TEST_MODULE_CALL_CONSTANTS: {
       const loom_llvmir_target_profile_t* profile =
           loom_llvmir_test_target_profile_x86_64_object();
-      IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_module_config(
-          profile, IREE_SV("loom-call-constants"), out_target_config));
+      loom_llvmir_target_profile_module_config(
+          profile, IREE_SV("loom-call-constants"), out_target_config);
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
     case LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS: {
       const loom_llvmir_target_profile_t* profile =
           loom_llvmir_test_target_profile_x86_64_object();
-      IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_module_config(
-          profile, IREE_SV("loom-builtins"), out_target_config));
+      loom_llvmir_target_profile_module_config(
+          profile, IREE_SV("loom-builtins"), out_target_config);
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
     case LOOM_LLVMIR_TEST_MODULE_X86_INTRINSICS: {
       const loom_llvmir_target_profile_t* profile =
           loom_llvmir_test_target_profile_x86_64_object();
-      IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_module_config(
-          profile, IREE_SV("loom-x86"), out_target_config));
+      loom_llvmir_target_profile_module_config(profile, IREE_SV("loom-x86"),
+                                               out_target_config);
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
     case LOOM_LLVMIR_TEST_MODULE_STACK_ALLOCA: {
       const loom_llvmir_target_profile_t* profile =
           loom_llvmir_test_target_profile_x86_64_object();
-      IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_module_config(
-          profile, IREE_SV("loom-stack"), out_target_config));
+      loom_llvmir_target_profile_module_config(profile, IREE_SV("loom-stack"),
+                                               out_target_config);
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
     case LOOM_LLVMIR_TEST_MODULE_GLOBAL_CONSTANT: {
       const loom_llvmir_target_profile_t* profile =
           loom_llvmir_test_target_profile_x86_64_object();
-      IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_module_config(
-          profile, IREE_SV("loom-global"), out_target_config));
+      loom_llvmir_target_profile_module_config(profile, IREE_SV("loom-global"),
+                                               out_target_config);
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
@@ -2199,8 +2198,8 @@ static iree_status_t loom_llvmir_test_module_target_config(
     case LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS: {
       const loom_llvmir_target_profile_t* profile =
           loom_llvmir_target_profile_amdgpu_hal();
-      IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_module_config(
-          profile, IREE_SV("loom-amdgpu"), out_target_config));
+      loom_llvmir_target_profile_module_config(profile, IREE_SV("loom-amdgpu"),
+                                               out_target_config);
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }

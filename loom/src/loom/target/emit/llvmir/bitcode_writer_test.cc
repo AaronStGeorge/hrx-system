@@ -107,8 +107,8 @@ TEST(LlvmIrBitcodeWriterTest, WritesModuleHeaderAndTypeBlock) {
   const loom_llvmir_target_env_t* target_env =
       TestX86_64UnknownLinuxGnuTargetEnv();
   loom_llvmir_target_config_t target_config = {};
-  IREE_ASSERT_OK(loom_llvmir_target_env_module_config(
-      target_env, IREE_SV("loom-empty"), &target_config));
+  loom_llvmir_target_env_module_config(target_env, IREE_SV("loom-empty"),
+                                       &target_config);
 
   loom_llvmir_module_t* module = NULL;
   IREE_ASSERT_OK(loom_llvmir_module_allocate(&target_config,
@@ -144,8 +144,8 @@ TEST(LlvmIrBitcodeWriterTest, WritesFunctionDeclarationsAndRetVoidBodies) {
   const loom_llvmir_target_env_t* target_env =
       TestX86_64UnknownLinuxGnuTargetEnv();
   loom_llvmir_target_config_t target_config = {};
-  IREE_ASSERT_OK(loom_llvmir_target_env_module_config(
-      target_env, IREE_SV("loom-functions"), &target_config));
+  loom_llvmir_target_env_module_config(target_env, IREE_SV("loom-functions"),
+                                       &target_config);
 
   loom_llvmir_module_t* module = NULL;
   IREE_ASSERT_OK(loom_llvmir_module_allocate(&target_config,
@@ -237,9 +237,9 @@ TEST(LlvmIrBitcodeWriterTest,
   const loom_llvmir_target_env_t* target_env =
       TestX86_64UnknownLinuxGnuTargetEnv();
   loom_llvmir_target_config_t target_config = {};
-  IREE_ASSERT_OK(loom_llvmir_target_env_module_config(
+  loom_llvmir_target_env_module_config(
       target_env, IREE_SV("loom-unsupported-declaration-metadata"),
-      &target_config));
+      &target_config);
 
   loom_llvmir_module_t* module = NULL;
   IREE_ASSERT_OK(loom_llvmir_module_allocate(&target_config,
@@ -284,9 +284,9 @@ TEST(LlvmIrBitcodeWriterTest,
   const loom_llvmir_target_env_t* target_env =
       TestX86_64UnknownLinuxGnuTargetEnv();
   loom_llvmir_target_config_t target_config = {};
-  IREE_ASSERT_OK(loom_llvmir_target_env_module_config(
+  loom_llvmir_target_env_module_config(
       target_env, IREE_SV("loom-unsupported-instruction-metadata"),
-      &target_config));
+      &target_config);
 
   loom_llvmir_module_t* module = NULL;
   IREE_ASSERT_OK(loom_llvmir_module_allocate(&target_config,

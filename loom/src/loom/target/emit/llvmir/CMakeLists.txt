@@ -194,6 +194,7 @@ loom_cc_library(
     loom::src::loom::ops::target
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
+    loom::src::loom::target::launch
     loom::src::loom::target::types
   PUBLIC
 )
