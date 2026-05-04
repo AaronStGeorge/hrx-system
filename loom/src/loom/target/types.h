@@ -63,6 +63,100 @@ typedef enum loom_target_linkage_e {
   LOOM_TARGET_LINKAGE_DSO_LOCAL = 1,
 } loom_target_linkage_t;
 
+// Returns the assembly spelling for |format| used in diagnostics.
+static inline iree_string_view_t loom_target_codegen_format_name(
+    loom_target_codegen_format_t format) {
+  switch (format) {
+    case LOOM_TARGET_CODEGEN_FORMAT_LLVMIR:
+      return IREE_SV("llvmir");
+    case LOOM_TARGET_CODEGEN_FORMAT_SPIRV:
+      return IREE_SV("spirv");
+    case LOOM_TARGET_CODEGEN_FORMAT_VM:
+      return IREE_SV("vm");
+    case LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE:
+      return IREE_SV("low_native");
+    case LOOM_TARGET_CODEGEN_FORMAT_WASM:
+      return IREE_SV("wasm");
+    case LOOM_TARGET_CODEGEN_FORMAT_UNKNOWN:
+      return IREE_SV("unknown");
+  }
+  return IREE_SV("unknown");
+}
+
+// Returns the assembly spelling for |format| used in diagnostics.
+static inline iree_string_view_t loom_target_artifact_format_name(
+    loom_target_artifact_format_t format) {
+  switch (format) {
+    case LOOM_TARGET_ARTIFACT_FORMAT_ELF:
+      return IREE_SV("elf");
+    case LOOM_TARGET_ARTIFACT_FORMAT_COFF:
+      return IREE_SV("coff");
+    case LOOM_TARGET_ARTIFACT_FORMAT_MACHO:
+      return IREE_SV("macho");
+    case LOOM_TARGET_ARTIFACT_FORMAT_SPIRV_BINARY:
+      return IREE_SV("spirv_binary");
+    case LOOM_TARGET_ARTIFACT_FORMAT_VM_BYTECODE:
+      return IREE_SV("vm_bytecode");
+    case LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY:
+      return IREE_SV("wasm_binary");
+    case LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN:
+      return IREE_SV("unknown");
+  }
+  return IREE_SV("unknown");
+}
+
+// Returns the assembly spelling for |abi_kind| used in diagnostics.
+static inline iree_string_view_t loom_target_artifact_abi_kind_name(
+    loom_target_artifact_abi_kind_t abi_kind) {
+  switch (abi_kind) {
+    case LOOM_TARGET_ARTIFACT_ABI_KIND_OBJECT_FILE:
+      return IREE_SV("object_file");
+    case LOOM_TARGET_ARTIFACT_ABI_KIND_HAL_EXECUTABLE:
+      return IREE_SV("hal_executable");
+    case LOOM_TARGET_ARTIFACT_ABI_KIND_VM_MODULE:
+      return IREE_SV("vm_module");
+    case LOOM_TARGET_ARTIFACT_ABI_KIND_WASM_MODULE:
+      return IREE_SV("wasm_module");
+    case LOOM_TARGET_ARTIFACT_ABI_KIND_SPIRV_MODULE:
+      return IREE_SV("spirv_module");
+    case LOOM_TARGET_ARTIFACT_ABI_KIND_UNKNOWN:
+      return IREE_SV("unknown");
+  }
+  return IREE_SV("unknown");
+}
+
+// Returns the assembly spelling for |abi_kind| used in diagnostics.
+static inline iree_string_view_t loom_target_abi_kind_name(
+    loom_target_abi_kind_t abi_kind) {
+  switch (abi_kind) {
+    case LOOM_TARGET_ABI_OBJECT_FUNCTION:
+      return IREE_SV("object_function");
+    case LOOM_TARGET_ABI_HAL_KERNEL:
+      return IREE_SV("hal_kernel");
+    case LOOM_TARGET_ABI_VM_MODULE_FUNCTION:
+      return IREE_SV("vm_module_function");
+    case LOOM_TARGET_ABI_SHADER_ENTRY_POINT:
+      return IREE_SV("shader_entry_point");
+    case LOOM_TARGET_ABI_WASM_FUNCTION:
+      return IREE_SV("wasm_function");
+    case LOOM_TARGET_ABI_UNKNOWN:
+      return IREE_SV("unknown");
+  }
+  return IREE_SV("unknown");
+}
+
+// Returns the assembly spelling for |linkage| used in diagnostics.
+static inline iree_string_view_t loom_target_linkage_name(
+    loom_target_linkage_t linkage) {
+  switch (linkage) {
+    case LOOM_TARGET_LINKAGE_DSO_LOCAL:
+      return IREE_SV("dso_local");
+    case LOOM_TARGET_LINKAGE_DEFAULT:
+      return IREE_SV("default");
+  }
+  return IREE_SV("unknown");
+}
+
 typedef struct loom_target_memory_space_map_t {
   // Generic/default pointer address space.
   uint32_t generic;

@@ -1272,6 +1272,31 @@ ERR_TARGET_072 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_073: Target has no projection for an emitter.
+ERR_TARGET_073 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=73,
+    severity=Severity.ERROR,
+    summary="Target has no projection for an emitter.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "has no '{emitter_key}' projection for codegen format "
+        "'{codegen_format}' and ABI '{abi_kind}'"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("emitter_key", ParamKind.STRING),
+        ErrorParam("codegen_format", ParamKind.STRING),
+        ErrorParam("abi_kind", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Select a target with a '{emitter_key}' projection or link a provider "
+        "that projects this target record"
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -1345,4 +1370,5 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_070,
     ERR_TARGET_071,
     ERR_TARGET_072,
+    ERR_TARGET_073,
 )

@@ -236,6 +236,7 @@ loom_cc_library(
     iree::base
     iree::io::stream
     loom::src::loom::analysis::symbol_facts
+    loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::target
     loom::src::loom::target::tool::llvm

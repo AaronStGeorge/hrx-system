@@ -8,6 +8,7 @@
 
 #include "iree/io/vec_stream.h"
 #include "loom/analysis/symbol_facts.h"
+#include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/target/facts.h"
 #include "loom/target/emit/llvmir/bitcode_writer.h"
@@ -17,6 +18,7 @@
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/verify.h"
 #include "loom/target/tool/llvm.h"
+#include "loom/tools/loom-check/diagnostics.h"
 #include "loom/util/stream.h"
 
 typedef enum loom_llvmir_loom_check_emit_format_e {
@@ -408,11 +410,44 @@ static bool loom_llvmir_loom_check_lookup_symbol_id(
   return true;
 }
 
+static iree_status_t loom_llvmir_loom_check_emit_missing_projection(
+    const loom_check_emit_provider_request_t* request,
+    const loom_op_t* target_op, const loom_target_bundle_t* bundle) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(bundle->name),
+      loom_param_string(bundle->export_plan->name),
+      loom_param_string(bundle->config->name),
+      loom_param_string(IREE_SV("llvmir")),
+      loom_param_string(
+          loom_target_codegen_format_name(bundle->snapshot->codegen_format)),
+      loom_param_string(
+          loom_target_abi_kind_name(bundle->export_plan->abi_kind)),
+  };
+  loom_check_diagnostic_emitter_capture_t capture = {
+      .diagnostic_collector = request->diagnostic_collector,
+      .module = request->module,
+      .source_resolver = request->source_resolver,
+      .emitter = LOOM_EMITTER_PASS,
+  };
+  const loom_diagnostic_emission_t emission = {
+      .op = target_op,
+      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 73),
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  return iree_diagnostic_emit(
+      (iree_diagnostic_emitter_t){
+          .fn = loom_check_diagnostic_emitter_capture_emit,
+          .user_data = &capture,
+      },
+      &emission);
+}
+
 static iree_status_t loom_llvmir_loom_check_resolve_target_bundle(
     const loom_check_emit_provider_request_t* request,
     iree_string_view_t symbol_name,
     loom_target_bundle_storage_t* out_symbol_storage,
-    const loom_target_bundle_t** out_bundle) {
+    const loom_target_bundle_t** out_bundle, const loom_op_t** out_target_op) {
   loom_symbol_id_t symbol_id = LOOM_SYMBOL_ID_INVALID;
   if (!loom_llvmir_loom_check_lookup_symbol_id(request->module, symbol_name,
                                                &symbol_id)) {
@@ -434,6 +469,7 @@ static iree_status_t loom_llvmir_loom_check_resolve_target_bundle(
                             "symbol @%.*s is not a target",
                             (int)symbol_name.size, symbol_name.data);
   }
+  *out_target_op = request->module->symbols.entries[symbol_id].defining_op;
   *out_symbol_storage = target_facts->storage;
   loom_target_bundle_storage_rebind(out_symbol_storage);
   *out_bundle = &out_symbol_storage->bundle;
@@ -443,9 +479,10 @@ static iree_status_t loom_llvmir_loom_check_resolve_target_bundle(
 static iree_status_t loom_llvmir_loom_check_resolve_bundle(
     const loom_check_emit_provider_request_t* request,
     loom_target_bundle_storage_t* out_symbol_storage,
-    const loom_target_bundle_t** out_bundle) {
+    const loom_target_bundle_t** out_bundle, const loom_op_t** out_target_op) {
   *out_symbol_storage = (loom_target_bundle_storage_t){0};
   *out_bundle = NULL;
+  *out_target_op = NULL;
   loom_llvmir_target_registry_t target_registry;
   loom_llvmir_target_registry_initialize(&target_registry);
   if (iree_string_view_starts_with(request->target_options, IREE_SV("@"))) {
@@ -456,7 +493,7 @@ static iree_status_t loom_llvmir_loom_check_resolve_bundle(
                               "target symbol name is required");
     }
     return loom_llvmir_loom_check_resolve_target_bundle(
-        request, symbol_name, out_symbol_storage, out_bundle);
+        request, symbol_name, out_symbol_storage, out_bundle, out_target_op);
   }
   return loom_llvmir_target_registry_lookup_bundle(
       &target_registry, request->target_options, out_bundle);
@@ -471,20 +508,29 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_execute(
 
   loom_target_bundle_storage_t symbol_bundle_storage = {0};
   const loom_target_bundle_t* target_bundle = NULL;
+  const loom_op_t* target_op = NULL;
   IREE_RETURN_IF_ERROR(loom_llvmir_loom_check_resolve_bundle(
-      request, &symbol_bundle_storage, &target_bundle));
+      request, &symbol_bundle_storage, &target_bundle, &target_op));
 
   loom_llvmir_target_registry_t target_registry;
   loom_llvmir_target_registry_initialize(&target_registry);
+  const loom_llvmir_target_profile_t* projected_profile = NULL;
+  const loom_llvmir_target_profile_provider_t* projected_provider = NULL;
+  if (!loom_llvmir_target_registry_project_bundle(
+          &target_registry, target_bundle, &projected_profile,
+          &projected_provider)) {
+    return loom_llvmir_loom_check_emit_missing_projection(request, target_op,
+                                                          target_bundle);
+  }
   loom_llvmir_target_profile_storage_t profile_storage;
   IREE_RETURN_IF_ERROR(
-      loom_llvmir_target_registry_initialize_profile_from_bundle(
-          &target_registry, target_bundle, &profile_storage));
+      loom_llvmir_target_profile_storage_initialize_from_bundle(
+          target_bundle, projected_profile, &profile_storage));
   const loom_llvmir_target_profile_t* profile = &profile_storage.profile;
 
   loom_llvmir_target_legality_provider_list_t legality_providers;
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_registry_select_legality_providers(
-      &target_registry, target_bundle, &legality_providers));
+  loom_llvmir_target_legality_provider_list_select(projected_provider,
+                                                   &legality_providers);
 
   loom_llvmir_target_legality_options_t legality_options = {
       .snapshot = target_bundle->snapshot,

@@ -86,15 +86,19 @@ TEST(LlvmIrTargetRegistryTest, SelectsLegalityAndLoweringProvidersByTarget) {
   const loom_target_bundle_t* x86_bundle = nullptr;
   IREE_ASSERT_OK(loom_llvmir_target_registry_lookup_bundle(
       &registry, IREE_SV("x86_64-packed-dot-object"), &x86_bundle));
+  const loom_llvmir_target_profile_t* profile = nullptr;
+  const loom_llvmir_target_profile_provider_t* provider = nullptr;
+  EXPECT_TRUE(loom_llvmir_target_registry_project_bundle(&registry, x86_bundle,
+                                                         &profile, &provider));
   loom_llvmir_target_legality_provider_list_t legality_providers = {};
-  IREE_ASSERT_OK(loom_llvmir_target_registry_select_legality_providers(
-      &registry, x86_bundle, &legality_providers));
+  loom_llvmir_target_legality_provider_list_select(provider,
+                                                   &legality_providers);
   EXPECT_TRUE(HasLegalityProvider(legality_providers, "x86"));
   EXPECT_FALSE(HasLegalityProvider(legality_providers, "amdgpu"));
 
   loom_llvmir_target_profile_storage_t profile_storage;
-  IREE_ASSERT_OK(loom_llvmir_target_registry_initialize_profile_from_bundle(
-      &registry, x86_bundle, &profile_storage));
+  IREE_ASSERT_OK(loom_llvmir_target_profile_storage_initialize_from_bundle(
+      x86_bundle, profile, &profile_storage));
   loom_llvmir_lowering_provider_list_t lowering_providers = {};
   IREE_ASSERT_OK(loom_llvmir_target_registry_select_lowering_providers(
       &registry, &profile_storage.profile, &lowering_providers));
@@ -104,8 +108,10 @@ TEST(LlvmIrTargetRegistryTest, SelectsLegalityAndLoweringProvidersByTarget) {
   const loom_target_bundle_t* amdgpu_bundle = nullptr;
   IREE_ASSERT_OK(loom_llvmir_target_registry_lookup_bundle(
       &registry, IREE_SV("amdgpu-hal"), &amdgpu_bundle));
-  IREE_ASSERT_OK(loom_llvmir_target_registry_select_legality_providers(
-      &registry, amdgpu_bundle, &legality_providers));
+  EXPECT_TRUE(loom_llvmir_target_registry_project_bundle(
+      &registry, amdgpu_bundle, &profile, &provider));
+  loom_llvmir_target_legality_provider_list_select(provider,
+                                                   &legality_providers);
   EXPECT_TRUE(HasLegalityProvider(legality_providers, "amdgpu"));
   EXPECT_FALSE(HasLegalityProvider(legality_providers, "x86"));
 }

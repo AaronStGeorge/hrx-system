@@ -113,3 +113,16 @@ func.def @scf_for_before_cfg(%n: index) {
 func.def @unknown_profile() {
   func.return
 }
+
+// ====
+
+// RUN: emit llvmir @generic_target
+
+// Target records without an LLVMIR projection report a structured target
+// diagnostic.
+// ERROR@+1: TARGET/073 {emitter_key="llvmir", codegen_format="llvmir", abi_kind="object_function"}
+target.generic<reference> @generic_target {codegen_format = llvmir, abi = object_function}
+
+func.def @missing_llvmir_projection() {
+  func.return
+}

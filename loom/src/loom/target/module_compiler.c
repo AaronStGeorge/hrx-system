@@ -49,65 +49,6 @@ static iree_string_view_t loom_target_module_compile_nonempty(
   return iree_string_view_is_empty(value) ? placeholder : value;
 }
 
-static iree_string_view_t loom_target_module_compile_codegen_format_name(
-    loom_target_codegen_format_t format) {
-  switch (format) {
-    case LOOM_TARGET_CODEGEN_FORMAT_LLVMIR:
-      return IREE_SV("llvmir");
-    case LOOM_TARGET_CODEGEN_FORMAT_SPIRV:
-      return IREE_SV("spirv");
-    case LOOM_TARGET_CODEGEN_FORMAT_VM:
-      return IREE_SV("vm");
-    case LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE:
-      return IREE_SV("low_native");
-    case LOOM_TARGET_CODEGEN_FORMAT_WASM:
-      return IREE_SV("wasm");
-    case LOOM_TARGET_CODEGEN_FORMAT_UNKNOWN:
-      return IREE_SV("unknown");
-  }
-  return IREE_SV("unknown");
-}
-
-static iree_string_view_t loom_target_module_compile_artifact_format_name(
-    loom_target_artifact_format_t format) {
-  switch (format) {
-    case LOOM_TARGET_ARTIFACT_FORMAT_ELF:
-      return IREE_SV("elf");
-    case LOOM_TARGET_ARTIFACT_FORMAT_COFF:
-      return IREE_SV("coff");
-    case LOOM_TARGET_ARTIFACT_FORMAT_MACHO:
-      return IREE_SV("macho");
-    case LOOM_TARGET_ARTIFACT_FORMAT_SPIRV_BINARY:
-      return IREE_SV("spirv_binary");
-    case LOOM_TARGET_ARTIFACT_FORMAT_VM_BYTECODE:
-      return IREE_SV("vm_bytecode");
-    case LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY:
-      return IREE_SV("wasm_binary");
-    case LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN:
-      return IREE_SV("unknown");
-  }
-  return IREE_SV("unknown");
-}
-
-static iree_string_view_t loom_target_module_compile_abi_kind_name(
-    loom_target_abi_kind_t abi_kind) {
-  switch (abi_kind) {
-    case LOOM_TARGET_ABI_OBJECT_FUNCTION:
-      return IREE_SV("object_function");
-    case LOOM_TARGET_ABI_HAL_KERNEL:
-      return IREE_SV("hal_kernel");
-    case LOOM_TARGET_ABI_VM_MODULE_FUNCTION:
-      return IREE_SV("vm_module_function");
-    case LOOM_TARGET_ABI_SHADER_ENTRY_POINT:
-      return IREE_SV("shader_entry_point");
-    case LOOM_TARGET_ABI_WASM_FUNCTION:
-      return IREE_SV("wasm_function");
-    case LOOM_TARGET_ABI_UNKNOWN:
-      return IREE_SV("unknown");
-  }
-  return IREE_SV("unknown");
-}
-
 static bool loom_target_module_compile_lookup_symbol_id(
     const loom_module_t* module, iree_string_view_t symbol_name,
     uint16_t* out_symbol_id) {
@@ -424,13 +365,13 @@ static iree_status_t loom_target_module_compile_emit_incompatible_bundle(
           config ? config->name : iree_string_view_empty(),
           IREE_SV("<empty>"))),
       loom_param_string(entry->func_name),
-      loom_param_string(loom_target_module_compile_codegen_format_name(
+      loom_param_string(loom_target_codegen_format_name(
           snapshot ? snapshot->codegen_format
                    : LOOM_TARGET_CODEGEN_FORMAT_UNKNOWN)),
-      loom_param_string(loom_target_module_compile_artifact_format_name(
+      loom_param_string(loom_target_artifact_format_name(
           snapshot ? snapshot->artifact_format
                    : LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN)),
-      loom_param_string(loom_target_module_compile_abi_kind_name(
+      loom_param_string(loom_target_abi_kind_name(
           export_plan ? export_plan->abi_kind : LOOM_TARGET_ABI_UNKNOWN)),
   };
   return loom_target_module_compile_emit(
