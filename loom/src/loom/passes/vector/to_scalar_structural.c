@@ -25,10 +25,6 @@ iree_status_t loom_vector_to_scalar_build_broadcast_lane(
       loom_module_value_type(state->rewriter->module, source);
   uint8_t source_rank = loom_type_rank(source_type);
   uint8_t result_rank = loom_type_rank(state->vector_type);
-  if (source_rank > result_rank) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.broadcast source rank exceeds result rank");
-  }
 
   loom_vector_to_scalar_index_term_t* source_terms = NULL;
   if (source_rank > 0) {
@@ -69,10 +65,6 @@ iree_status_t loom_vector_to_scalar_build_extract_lane(
       &explicit_count));
 
   uint8_t source_rank = loom_type_rank(source_type);
-  if ((uint16_t)explicit_count + indices.rank != source_rank) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.extract index rank mismatch");
-  }
   loom_vector_to_scalar_index_term_t* source_terms = NULL;
   if (source_rank > 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -102,10 +94,6 @@ iree_status_t loom_vector_to_scalar_build_insert_lane(
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_terms_from_explicit_indices(
       state, loom_vector_insert_static_indices(state->op),
       loom_vector_insert_indices(state->op), &explicit_terms, &explicit_count));
-  if (explicit_count > indices.rank) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.insert index rank mismatch");
-  }
 
   bool condition_is_statically_true = true;
   loom_value_id_t dynamic_condition = LOOM_VALUE_ID_INVALID;
@@ -171,10 +159,6 @@ iree_status_t loom_vector_to_scalar_build_slice_lane(
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_terms_from_explicit_indices(
       state, loom_vector_slice_static_offsets(state->op),
       loom_vector_slice_offsets(state->op), &offset_terms, &offset_count));
-  if (offset_count != indices.rank) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.slice offset rank mismatch");
-  }
   loom_vector_to_scalar_index_term_t* source_terms = NULL;
   if (indices.rank > 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -279,10 +263,6 @@ iree_status_t loom_vector_to_scalar_build_concat_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
   int64_t axis = loom_vector_concat_axis(state->op);
-  if (axis < 0 || axis >= indices.rank) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.concat axis out of range");
-  }
   uint8_t axis_u8 = (uint8_t)axis;
   loom_value_slice_t inputs = loom_vector_concat_inputs(state->op);
   if (loom_vector_to_scalar_indices_are_dynamic(indices) ||
@@ -301,40 +281,36 @@ iree_status_t loom_vector_to_scalar_build_concat_lane(
     loom_type_t input_type =
         loom_module_value_type(state->rewriter->module, input);
     int64_t extent = (int64_t)loom_type_dim_static_size_at(input_type, axis_u8);
-    if (axis_index < prefix + extent) {
-      loom_vector_to_scalar_index_term_t* source_terms = NULL;
-      if (indices.rank > 0) {
-        IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-            state->rewriter->arena, indices.rank,
-            sizeof(loom_vector_to_scalar_index_term_t), (void**)&source_terms));
-      }
-      for (uint8_t i = 0; i < indices.rank; ++i) {
-        source_terms[i] =
-            loom_vector_to_scalar_static_term(indices.static_indices[i]);
-      }
-      source_terms[axis_u8] =
-          loom_vector_to_scalar_static_term(axis_index - prefix);
-      loom_vector_to_scalar_index_list_t source_indices = {0};
-      IREE_RETURN_IF_ERROR(loom_vector_to_scalar_terms_to_index_list(
-          state, source_terms, indices.rank, &source_indices));
-      return loom_vector_to_scalar_materialize_lane(state, input,
-                                                    source_indices, out_lane);
+    if (input_ordinal + 1 < inputs.count && axis_index >= prefix + extent) {
+      prefix += extent;
+      continue;
     }
-    prefix += extent;
+
+    loom_vector_to_scalar_index_term_t* source_terms = NULL;
+    if (indices.rank > 0) {
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+          state->rewriter->arena, indices.rank,
+          sizeof(loom_vector_to_scalar_index_term_t), (void**)&source_terms));
+    }
+    for (uint8_t i = 0; i < indices.rank; ++i) {
+      source_terms[i] =
+          loom_vector_to_scalar_static_term(indices.static_indices[i]);
+    }
+    source_terms[axis_u8] =
+        loom_vector_to_scalar_static_term(axis_index - prefix);
+    loom_vector_to_scalar_index_list_t source_indices = {0};
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_terms_to_index_list(
+        state, source_terms, indices.rank, &source_indices));
+    return loom_vector_to_scalar_materialize_lane(state, input, source_indices,
+                                                  out_lane);
   }
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "vector.concat lane index is outside inputs");
+  return iree_ok_status();
 }
 
 iree_status_t loom_vector_to_scalar_build_transpose_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
   loom_attribute_t permutation = loom_vector_transpose_permutation(state->op);
-  if (permutation.kind != LOOM_ATTR_I64_ARRAY ||
-      permutation.count != indices.rank) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.transpose permutation rank mismatch");
-  }
   loom_vector_to_scalar_index_term_t* source_terms = NULL;
   if (indices.rank > 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -343,10 +319,6 @@ iree_status_t loom_vector_to_scalar_build_transpose_lane(
   }
   for (uint8_t result_axis = 0; result_axis < indices.rank; ++result_axis) {
     int64_t source_axis = permutation.i64_array[result_axis];
-    if (source_axis < 0 || source_axis >= indices.rank) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "vector.transpose source axis out of range");
-    }
     source_terms[source_axis] =
         loom_vector_to_scalar_lane_term(state, indices, result_axis);
   }
@@ -360,21 +332,8 @@ iree_status_t loom_vector_to_scalar_build_transpose_lane(
 iree_status_t loom_vector_to_scalar_build_shuffle_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
-  if (loom_vector_to_scalar_indices_are_dynamic(indices)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector-to-scalar cannot lower dynamic "
-                            "vector.shuffle lane selection");
-  }
   loom_attribute_t source_lanes = loom_vector_shuffle_source_lanes(state->op);
-  if (source_lanes.kind != LOOM_ATTR_I64_ARRAY || indices.rank != 1) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.shuffle requires a rank-1 lane map");
-  }
   int64_t result_lane = indices.static_indices[0];
-  if (result_lane < 0 || result_lane >= source_lanes.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.shuffle result lane is out of range");
-  }
   int64_t source_lane = source_lanes.i64_array[result_lane];
   loom_vector_to_scalar_index_list_t source_indices = {
       .static_indices = &source_lane,
@@ -388,10 +347,6 @@ iree_status_t loom_vector_to_scalar_build_interleave_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
   int64_t axis = loom_vector_interleave_axis(state->op);
-  if (axis < 0 || axis >= indices.rank) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.interleave axis out of range");
-  }
   uint8_t axis_u8 = (uint8_t)axis;
   loom_vector_to_scalar_index_term_t* source_terms = NULL;
   if (indices.rank > 0) {
@@ -454,10 +409,6 @@ iree_status_t loom_vector_to_scalar_build_deinterleave_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
   int64_t axis = loom_vector_deinterleave_axis(state->op);
-  if (axis < 0 || axis >= indices.rank) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.deinterleave axis out of range");
-  }
   uint8_t axis_u8 = (uint8_t)axis;
   loom_vector_to_scalar_index_term_t* source_terms = NULL;
   if (indices.rank > 0) {
@@ -486,30 +437,31 @@ iree_status_t loom_vector_to_scalar_build_deinterleave_lane(
       out_lane);
 }
 
-static bool loom_vector_to_scalar_bitcast_integer_type(int32_t bit_width,
-                                                       loom_type_t* out_type) {
-  loom_scalar_type_t scalar_type = LOOM_SCALAR_TYPE_COUNT_;
-  switch (bit_width) {
-    case 1:
-      scalar_type = LOOM_SCALAR_TYPE_I1;
-      break;
-    case 8:
-      scalar_type = LOOM_SCALAR_TYPE_I8;
-      break;
-    case 16:
-      scalar_type = LOOM_SCALAR_TYPE_I16;
-      break;
-    case 32:
-      scalar_type = LOOM_SCALAR_TYPE_I32;
-      break;
-    case 64:
-      scalar_type = LOOM_SCALAR_TYPE_I64;
-      break;
+static loom_type_t loom_vector_to_scalar_bitcast_integer_type(
+    loom_scalar_type_t scalar_type) {
+  switch (scalar_type) {
+    case LOOM_SCALAR_TYPE_I1:
+      return loom_type_scalar(LOOM_SCALAR_TYPE_I1);
+    case LOOM_SCALAR_TYPE_I8:
+    case LOOM_SCALAR_TYPE_F8E4M3:
+    case LOOM_SCALAR_TYPE_F8E5M2:
+      return loom_type_scalar(LOOM_SCALAR_TYPE_I8);
+    case LOOM_SCALAR_TYPE_I16:
+    case LOOM_SCALAR_TYPE_F16:
+    case LOOM_SCALAR_TYPE_BF16:
+      return loom_type_scalar(LOOM_SCALAR_TYPE_I16);
+    case LOOM_SCALAR_TYPE_I32:
+    case LOOM_SCALAR_TYPE_F32:
+      return loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+    case LOOM_SCALAR_TYPE_INDEX:
+    case LOOM_SCALAR_TYPE_OFFSET:
+    case LOOM_SCALAR_TYPE_I64:
+    case LOOM_SCALAR_TYPE_F64:
+      return loom_type_scalar(LOOM_SCALAR_TYPE_I64);
     default:
-      return false;
+      IREE_CHECK_UNREACHABLE("unknown scalar type");
   }
-  *out_type = loom_type_scalar(scalar_type);
-  return true;
+  return loom_type_scalar(LOOM_SCALAR_TYPE_I64);
 }
 
 static iree_status_t loom_vector_to_scalar_bitcast_lane_to_integer(
@@ -611,27 +563,24 @@ static iree_status_t loom_vector_to_scalar_build_dynamic_bitcast_bit(
       result_integer_type, out_accumulator);
 }
 
-static iree_status_t loom_vector_to_scalar_build_dynamic_aggregate_bitcast_lane(
+static iree_status_t
+loom_vector_to_scalar_build_dynamic_shape_changing_bitcast_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
   loom_value_id_t input = loom_vector_bitcast_input(state->op);
   loom_type_t input_type =
       loom_module_value_type(state->rewriter->module, input);
   loom_type_t source_scalar_type = loom_vector_to_scalar_lane_type(input_type);
-  int32_t source_width =
-      loom_scalar_type_bitwidth(loom_type_element_type(source_scalar_type));
-  int32_t result_width = loom_scalar_type_bitwidth(
-      loom_type_element_type(state->result_scalar_type));
-  loom_type_t source_integer_type = {0};
-  loom_type_t result_integer_type = {0};
-  if (source_width <= 0 || result_width <= 0 ||
-      !loom_vector_to_scalar_bitcast_integer_type(source_width,
-                                                  &source_integer_type) ||
-      !loom_vector_to_scalar_bitcast_integer_type(result_width,
-                                                  &result_integer_type)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "unsupported vector.bitcast scalar bit width");
-  }
+  loom_scalar_type_t source_element_type =
+      loom_type_element_type(source_scalar_type);
+  loom_scalar_type_t result_element_type =
+      loom_type_element_type(state->result_scalar_type);
+  int32_t source_width = loom_scalar_type_bitwidth(source_element_type);
+  int32_t result_width = loom_scalar_type_bitwidth(result_element_type);
+  loom_type_t source_integer_type =
+      loom_vector_to_scalar_bitcast_integer_type(source_element_type);
+  loom_type_t result_integer_type =
+      loom_vector_to_scalar_bitcast_integer_type(result_element_type);
 
   loom_vector_to_scalar_index_term_t result_ordinal = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_linear_ordinal_term(
@@ -708,44 +657,28 @@ static iree_status_t loom_vector_to_scalar_build_dynamic_aggregate_bitcast_lane(
 
 // Shape-changing bitcasts reinterpret the source vector as a row-major linear
 // bitstream, with lane ordinal 0 providing the least-significant source bits.
-static iree_status_t loom_vector_to_scalar_build_static_aggregate_bitcast_lane(
-    loom_vector_to_scalar_state_t* state,
-    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
-  if (loom_vector_to_scalar_indices_are_dynamic(indices)) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "vector-to-scalar cannot lower dynamic shape-changing vector.bitcast");
-  }
-
+static iree_status_t
+loom_vector_to_scalar_build_static_shape_changing_bitcast_lane(
+    loom_vector_to_scalar_state_t* state, const int64_t* result_indices,
+    loom_value_id_t* out_lane) {
   loom_value_id_t input = loom_vector_bitcast_input(state->op);
   loom_type_t input_type =
       loom_module_value_type(state->rewriter->module, input);
-  if (!loom_type_is_all_static(input_type) ||
-      !loom_type_is_all_static(state->vector_type)) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "vector-to-scalar can only lower shape-changing vector.bitcast for "
-        "all-static vector types");
-  }
 
   loom_type_t source_scalar_type = loom_vector_to_scalar_lane_type(input_type);
-  int32_t source_width =
-      loom_scalar_type_bitwidth(loom_type_element_type(source_scalar_type));
-  int32_t result_width = loom_scalar_type_bitwidth(
-      loom_type_element_type(state->result_scalar_type));
-  loom_type_t source_integer_type = {0};
-  loom_type_t result_integer_type = {0};
-  if (source_width <= 0 || result_width <= 0 ||
-      !loom_vector_to_scalar_bitcast_integer_type(source_width,
-                                                  &source_integer_type) ||
-      !loom_vector_to_scalar_bitcast_integer_type(result_width,
-                                                  &result_integer_type)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "unsupported vector.bitcast scalar bit width");
-  }
+  loom_scalar_type_t source_element_type =
+      loom_type_element_type(source_scalar_type);
+  loom_scalar_type_t result_element_type =
+      loom_type_element_type(state->result_scalar_type);
+  int32_t source_width = loom_scalar_type_bitwidth(source_element_type);
+  int32_t result_width = loom_scalar_type_bitwidth(result_element_type);
+  loom_type_t source_integer_type =
+      loom_vector_to_scalar_bitcast_integer_type(source_element_type);
+  loom_type_t result_integer_type =
+      loom_vector_to_scalar_bitcast_integer_type(result_element_type);
 
   int64_t result_ordinal = loom_vector_to_scalar_linear_ordinal_static(
-      state->vector_type, indices.static_indices);
+      state->vector_type, result_indices);
   int64_t result_start = 0;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_position(
       result_ordinal, result_width, &result_start));
@@ -795,10 +728,7 @@ static iree_status_t loom_vector_to_scalar_build_static_aggregate_bitcast_lane(
         overlap_start - source_start, bit_count, overlap_start - result_start,
         result_integer_type, accumulator, &accumulator));
   }
-  if (accumulator == LOOM_VALUE_ID_INVALID) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.bitcast lane has no source bits");
-  }
+  IREE_ASSERT_NE(accumulator, LOOM_VALUE_ID_INVALID);
 
   if (loom_type_equal(result_integer_type, state->result_scalar_type)) {
     *out_lane = accumulator;
@@ -822,21 +752,15 @@ iree_status_t loom_vector_to_scalar_build_bitcast_lane(
     if (loom_vector_to_scalar_indices_are_dynamic(indices) ||
         !loom_type_is_all_static(input_type) ||
         !loom_type_is_all_static(state->vector_type)) {
-      return loom_vector_to_scalar_build_dynamic_aggregate_bitcast_lane(
+      return loom_vector_to_scalar_build_dynamic_shape_changing_bitcast_lane(
           state, indices, out_lane);
     }
-    return loom_vector_to_scalar_build_static_aggregate_bitcast_lane(
-        state, indices, out_lane);
+    return loom_vector_to_scalar_build_static_shape_changing_bitcast_lane(
+        state, indices.static_indices, out_lane);
   }
   loom_scalar_type_t input_element_type = loom_type_element_type(input_type);
   loom_scalar_type_t result_element_type =
       loom_type_element_type(state->vector_type);
-  if (loom_scalar_type_bitwidth(input_element_type) !=
-      loom_scalar_type_bitwidth(result_element_type)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "same-shape vector.bitcast element bit widths must match");
-  }
 
   loom_value_id_t input_lane = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
