@@ -615,6 +615,7 @@ loom_cc_test(
   DEPS
     ::execution_provider
     ::amdgpu_hal_testdata
+    ::low_registry
     ::amdgpu_hal_backend
     ::target_info_defs
     ::target_record_table
@@ -909,6 +910,17 @@ iree_executable_test(
     "source_low_dot"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_dot.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_dot_cdna3"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_dot_cdna3.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

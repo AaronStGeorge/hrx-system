@@ -92,12 +92,36 @@ _PACKED_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
         "packed dot packet"
     ),
 )
-_DOT2_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
+_DOT4I_MIXED_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="descriptor",
-    subject_name="amdgpu.v_dot2_f32",
+    subject_name="amdgpu.v_dot4_i32_iu8",
     reason=(
         "the selected AMDGPU descriptor set does not contain the required "
-        "f16/bf16 dot2 packet"
+        "mixed signed i8 packed dot packet"
+    ),
+)
+_DOT8I4_MIXED_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="descriptor",
+    subject_name="amdgpu.v_dot8_i32_iu4",
+    reason=(
+        "the selected AMDGPU descriptor set does not contain the required "
+        "mixed signed i4 packed dot packet"
+    ),
+)
+_DOT2F_F16_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="descriptor",
+    subject_name="amdgpu.v_dot2_f32_f16",
+    reason=(
+        "the selected AMDGPU descriptor set does not contain the required "
+        "f16 VALU dot2 packet"
+    ),
+)
+_DOT2F_BF16_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="descriptor",
+    subject_name="amdgpu.v_dot2_f32_bf16",
+    reason=(
+        "the selected AMDGPU descriptor set does not contain the required "
+        "bf16 VALU dot2 packet"
     ),
 )
 _DOT4F8_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
@@ -374,6 +398,7 @@ def _dot2f_rule(
     lhs_diagnostic: GuardDiagnostic,
     rhs_diagnostic: GuardDiagnostic,
     descriptor_key: str,
+    descriptor_diagnostic: GuardDiagnostic,
 ) -> DescriptorRule:
     return _packed_dot_rule(
         source_op=vector.vector_dot2f,
@@ -401,11 +426,16 @@ def _dot2f_rule(
             _vgpr("acc", _PACKED_ACC_VGPR_DIAGNOSTIC),
             _vgpr("result", _PACKED_RESULT_VGPR_DIAGNOSTIC),
         ),
-        descriptor_diagnostic=_DOT2_DESCRIPTOR_DIAGNOSTIC,
+        descriptor_diagnostic=descriptor_diagnostic,
     )
 
 
-def _dot4i_rule(kind: str, descriptor_key: str) -> DescriptorRule:
+def _dot4i_rule(
+    kind: str,
+    descriptor_key: str,
+    *,
+    descriptor_diagnostic: GuardDiagnostic = _PACKED_DESCRIPTOR_DIAGNOSTIC,
+) -> DescriptorRule:
     return _packed_dot_rule(
         source_op=vector.vector_dot4i,
         descriptor_key=descriptor_key,
@@ -433,11 +463,16 @@ def _dot4i_rule(kind: str, descriptor_key: str) -> DescriptorRule:
             _vgpr("acc", _PACKED_ACC_VGPR_DIAGNOSTIC),
             _vgpr("result", _PACKED_RESULT_VGPR_DIAGNOSTIC),
         ),
-        descriptor_diagnostic=_PACKED_DESCRIPTOR_DIAGNOSTIC,
+        descriptor_diagnostic=descriptor_diagnostic,
     )
 
 
-def _dot8i4_rule(kind: str, descriptor_key: str) -> DescriptorRule:
+def _dot8i4_rule(
+    kind: str,
+    descriptor_key: str,
+    *,
+    descriptor_diagnostic: GuardDiagnostic = _PACKED_DESCRIPTOR_DIAGNOSTIC,
+) -> DescriptorRule:
     return _packed_dot_rule(
         source_op=vector.vector_dot8i4,
         descriptor_key=descriptor_key,
@@ -455,7 +490,7 @@ def _dot8i4_rule(kind: str, descriptor_key: str) -> DescriptorRule:
             _vgpr("acc", _PACKED_ACC_VGPR_DIAGNOSTIC),
             _vgpr("result", _PACKED_RESULT_VGPR_DIAGNOSTIC),
         ),
-        descriptor_diagnostic=_PACKED_DESCRIPTOR_DIAGNOSTIC,
+        descriptor_diagnostic=descriptor_diagnostic,
     )
 
 
@@ -529,20 +564,38 @@ AMDGPU_DOT_CONTRACT_FRAGMENT = ContractFragment(
             lhs_diagnostic=_DOT2F_F16_LHS_DIAGNOSTIC,
             rhs_diagnostic=_DOT2F_F16_RHS_DIAGNOSTIC,
             descriptor_key="amdgpu.v_dot2_f32_f16",
+            descriptor_diagnostic=_DOT2F_F16_DESCRIPTOR_DIAGNOSTIC,
         ),
         _dot2f_rule(
             source_type=_VEC_BF16_PACKED,
             lhs_diagnostic=_DOT2F_BF16_LHS_DIAGNOSTIC,
             rhs_diagnostic=_DOT2F_BF16_RHS_DIAGNOSTIC,
             descriptor_key="amdgpu.v_dot2_f32_bf16",
+            descriptor_diagnostic=_DOT2F_BF16_DESCRIPTOR_DIAGNOSTIC,
         ),
         _dot4i_rule("s8s8", "amdgpu.v_dot4_i32_i8"),
         _dot4i_rule("u8u8", "amdgpu.v_dot4_u32_u8"),
-        _dot4i_rule("u8s8", "amdgpu.v_dot4_i32_iu8.u8s8"),
-        _dot4i_rule("s8u8", "amdgpu.v_dot4_i32_iu8.s8u8"),
+        _dot4i_rule(
+            "u8s8",
+            "amdgpu.v_dot4_i32_iu8.u8s8",
+            descriptor_diagnostic=_DOT4I_MIXED_DESCRIPTOR_DIAGNOSTIC,
+        ),
+        _dot4i_rule(
+            "s8u8",
+            "amdgpu.v_dot4_i32_iu8.s8u8",
+            descriptor_diagnostic=_DOT4I_MIXED_DESCRIPTOR_DIAGNOSTIC,
+        ),
         _dot8i4_rule("s4s4", "amdgpu.v_dot8_i32_i4"),
-        _dot8i4_rule("s4u4", "amdgpu.v_dot8_i32_iu4.s4u4"),
-        _dot8i4_rule("u4s4", "amdgpu.v_dot8_i32_iu4.u4s4"),
+        _dot8i4_rule(
+            "s4u4",
+            "amdgpu.v_dot8_i32_iu4.s4u4",
+            descriptor_diagnostic=_DOT8I4_MIXED_DESCRIPTOR_DIAGNOSTIC,
+        ),
+        _dot8i4_rule(
+            "u4s4",
+            "amdgpu.v_dot8_i32_iu4.u4s4",
+            descriptor_diagnostic=_DOT8I4_MIXED_DESCRIPTOR_DIAGNOSTIC,
+        ),
         _dot8i4_rule("u4u4", "amdgpu.v_dot8_u32_u4"),
         _dot4f8_rule("fp8bf8", "amdgpu.v_dot4_f32_fp8_bf8"),
         _dot4f8_rule("bf8fp8", "amdgpu.v_dot4_f32_bf8_fp8"),

@@ -744,6 +744,7 @@ loom_cc_test(
     deps = [
         ":execution_provider",
         ":amdgpu_hal_testdata",
+        ":low_registry",
         ":amdgpu_hal_backend",
         ":target_info_defs",
         ":target_record_table",
@@ -828,6 +829,7 @@ loom_check_test_suite(
         "test/source_low/source_low_conversion.loom-test",
         "test/source_low/source_low_diagnostics.loom-test",
         "test/source_low/source_low_dot.loom-test",
+        "test/source_low/source_low_dot_cdna3.loom-test",
         "test/source_low/source_low_index.loom-test",
         "test/source_low/source_low_index_amdgpu.loom-test",
         "test/source_low/source_low_launch_config.loom-test",
