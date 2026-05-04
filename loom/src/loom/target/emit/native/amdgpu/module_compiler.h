@@ -35,9 +35,10 @@ typedef struct loom_amdgpu_module_compile_options_t {
   // command-line ergonomics.
   iree_string_view_t artifact_symbol;
   // Optional AMDHSA processor name such as `gfx1100` overriding the selected
-  // target snapshot CPU. This preserves the target record's descriptor-set
-  // family while letting JIT runners specialize to the concrete HAL device ISA.
-  iree_string_view_t target_cpu;
+  // target record's processor. This preserves the target record's
+  // descriptor-set family while letting JIT runners specialize to the concrete
+  // HAL device ISA.
+  iree_string_view_t processor;
   // Diagnostic sink used for verification, materialization, scheduling, and
   // allocation diagnostics. A NULL callback still counts diagnostics.
   loom_diagnostic_sink_t diagnostic_sink;

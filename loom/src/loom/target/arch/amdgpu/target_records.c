@@ -20,14 +20,14 @@
       "2048-n32:64-S32-A5-G1-ni:7:8:9")
 
 // clang-format off
-#define LOOM_AMDGPU_LOW_SNAPSHOT(symbol, snapshot_name, cpu, wavefront_size) \
+#define LOOM_AMDGPU_LOW_SNAPSHOT(symbol, snapshot_name, processor, wavefront_size) \
   static const loom_target_snapshot_t symbol = {                             \
       .name = IREE_SVL(snapshot_name),                                       \
       .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,               \
       .target_triple = LOOM_AMDGPU_TARGET_TRIPLE,                            \
       .data_layout = LOOM_AMDGPU_DATA_LAYOUT,                                \
       .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,                    \
-      .target_cpu = IREE_SVL(cpu),                                           \
+      .target_cpu = IREE_SVL(processor),                                     \
       .default_pointer_bitwidth = 64,                                        \
       .index_bitwidth = 32,                                                  \
       .offset_bitwidth = 64,                                                 \

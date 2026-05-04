@@ -177,7 +177,7 @@ loom_amdgpu_kernel_hsaco_contribution_t Contribution(
     iree_const_byte_span_t text) {
   return {
       .target = IREE_SV("amdgcn-amd-amdhsa--gfx1100"),
-      .target_cpu = IREE_SV("gfx1100"),
+      .processor = IREE_SV("gfx1100"),
       .kernel =
           {
               .metadata = MinimalKernel(name, descriptor_symbol),
@@ -257,7 +257,7 @@ TEST(AmdgpuKernelHsacoTest, JoinsMultipleContributionsIntoOneCodeObject) {
   EXPECT_NE(note_contents.find("second_kernel"), std::string::npos);
 }
 
-TEST(AmdgpuKernelHsacoTest, RejectsMismatchedContributionTargetCpu) {
+TEST(AmdgpuKernelHsacoTest, RejectsMismatchedContributionProcessor) {
   const uint8_t text[] = {0x00, 0x00, 0x81, 0xbf};
   loom_amdgpu_kernel_hsaco_contribution_t contributions[] = {
       Contribution(IREE_SV("first_kernel"), IREE_SV("first_kernel.kd"),
@@ -265,7 +265,7 @@ TEST(AmdgpuKernelHsacoTest, RejectsMismatchedContributionTargetCpu) {
       Contribution(IREE_SV("second_kernel"), IREE_SV("second_kernel.kd"),
                    iree_make_const_byte_span(text, sizeof(text))),
   };
-  contributions[1].target_cpu = IREE_SV("gfx1101");
+  contributions[1].processor = IREE_SV("gfx1101");
 
   StreamPtr stream = CreateStream();
   TestArena arena;

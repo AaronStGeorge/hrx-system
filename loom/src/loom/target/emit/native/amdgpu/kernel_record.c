@@ -206,7 +206,7 @@ static iree_status_t loom_amdgpu_kernel_record_validate_target(
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_validate_target_id_component(
       snapshot->target_triple, IREE_SV("target_triple")));
   return loom_amdgpu_kernel_record_validate_target_id_component(
-      snapshot->target_cpu, IREE_SV("target_cpu"));
+      snapshot->target_cpu, IREE_SV("processor"));
 }
 
 static iree_status_t loom_amdgpu_kernel_record_validate_function_shape(

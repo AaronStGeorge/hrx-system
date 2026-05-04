@@ -62,44 +62,44 @@ ERR_AMDGPU_002 = ErrorDef(
     ),
 )
 
-# ERR_AMDGPU_003: AMDGPU target CPU override is unknown.
+# ERR_AMDGPU_003: AMDGPU processor override is unknown.
 ERR_AMDGPU_003 = ErrorDef(
     domain=ErrorDomain.AMDGPU,
     code=3,
     severity=Severity.ERROR,
-    summary="AMDGPU target CPU override is unknown.",
-    message="AMDGPU target CPU override '{target_cpu}' is not a known processor",
-    params=(ErrorParam("target_cpu", ParamKind.STRING),),
+    summary="AMDGPU processor override is unknown.",
+    message="AMDGPU processor override '{processor}' is not known",
+    params=(ErrorParam("processor", ParamKind.STRING),),
     fix_hint="Use a known AMDGPU processor name such as gfx942, gfx950, or gfx1100",
 )
 
-# ERR_AMDGPU_004: AMDGPU target CPU override has no native descriptor set.
+# ERR_AMDGPU_004: AMDGPU processor override has no native descriptor set.
 ERR_AMDGPU_004 = ErrorDef(
     domain=ErrorDomain.AMDGPU,
     code=4,
     severity=Severity.ERROR,
-    summary="AMDGPU target CPU override has no native descriptor set.",
+    summary="AMDGPU processor override has no native descriptor set.",
     message=(
-        "AMDGPU target CPU override '{target_cpu}' is known but has no "
+        "AMDGPU processor override '{processor}' is known but has no "
         "native target-low descriptor set"
     ),
-    params=(ErrorParam("target_cpu", ParamKind.STRING),),
+    params=(ErrorParam("processor", ParamKind.STRING),),
     fix_hint="Use an AMDGPU processor with native target-low descriptor coverage",
 )
 
-# ERR_AMDGPU_005: AMDGPU target CPU override changes descriptor set.
+# ERR_AMDGPU_005: AMDGPU processor override changes descriptor set.
 ERR_AMDGPU_005 = ErrorDef(
     domain=ErrorDomain.AMDGPU,
     code=5,
     severity=Severity.ERROR,
-    summary="AMDGPU target CPU override changes descriptor set.",
+    summary="AMDGPU processor override changes descriptor set.",
     message=(
-        "AMDGPU target CPU override '{target_cpu}' selects descriptor set "
+        "AMDGPU processor override '{processor}' selects descriptor set "
         "'{target_descriptor_set}' but target record '@{target_name}' uses "
         "descriptor set '{record_descriptor_set}'"
     ),
     params=(
-        ErrorParam("target_cpu", ParamKind.STRING),
+        ErrorParam("processor", ParamKind.STRING),
         ErrorParam("target_descriptor_set", ParamKind.STRING),
         ErrorParam("target_name", ParamKind.STRING),
         ErrorParam("record_descriptor_set", ParamKind.STRING),

@@ -105,7 +105,7 @@ typedef struct loom_amdgpu_descriptor_set_info_t {
 
 typedef struct loom_amdgpu_processor_info_t {
   // Processor name used in AMDHSA target IDs, such as `gfx1100`.
-  iree_string_view_t target_cpu;
+  iree_string_view_t processor;
   // Target-low descriptor set key selected for this processor.
   iree_string_view_t descriptor_set_key;
   // Dense generated descriptor-set ordinal selected for this processor.
@@ -156,11 +156,11 @@ iree_host_size_t loom_amdgpu_target_info_descriptor_set_count(void);
 const loom_amdgpu_descriptor_set_info_t*
 loom_amdgpu_target_info_descriptor_set_at(uint16_t descriptor_set_ordinal);
 
-// Looks up known AMDGPU processor facts by target CPU name.
+// Looks up known AMDGPU processor facts by processor name.
 //
 // Some known processors do not yet have target-low or HSACO support.
 iree_status_t loom_amdgpu_target_info_lookup_processor(
-    iree_string_view_t target_cpu,
+    iree_string_view_t processor,
     const loom_amdgpu_processor_info_t** out_processor);
 
 // Looks up a supported AMDGPU target-low descriptor set by key.

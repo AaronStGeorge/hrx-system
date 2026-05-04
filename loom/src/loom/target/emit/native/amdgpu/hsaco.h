@@ -43,8 +43,8 @@ typedef struct loom_amdgpu_hsaco_kernel_t {
 typedef struct loom_amdgpu_hsaco_file_t {
   // Full AMDHSA target id such as `amdgcn-amd-amdhsa--gfx1100`.
   iree_string_view_t target;
-  // Target CPU such as `gfx1100`, used for ELF flags and descriptor packing.
-  iree_string_view_t target_cpu;
+  // Processor such as `gfx1100`, used for ELF flags and descriptor packing.
+  iree_string_view_t processor;
   // Kernel entries emitted into this code object.
   const loom_amdgpu_hsaco_kernel_t* kernels;
   // Number of entries in |kernels|.

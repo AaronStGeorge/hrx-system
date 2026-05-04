@@ -237,32 +237,32 @@ def _validate_processors(
     processors: Sequence[AmdgpuProcessorInfo],
     descriptor_sets: Sequence[AmdgpuDescriptorSetInfo],
 ) -> None:
-    target_cpus = [info.target_cpu for info in processors]
-    if target_cpus != sorted(target_cpus):
+    processor_names = [info.processor for info in processors]
+    if processor_names != sorted(processor_names):
         raise ValueError("AMDGPU processor target-info keys must be sorted")
-    if len(target_cpus) != len(set(target_cpus)):
+    if len(processor_names) != len(set(processor_names)):
         raise ValueError("AMDGPU processor target-info keys must be unique")
     descriptor_set_keys = {info.key for info in descriptor_sets}
     for info in processors:
-        if not info.target_cpu:
-            raise ValueError("AMDGPU target CPU is required")
+        if not info.processor:
+            raise ValueError("AMDGPU processor is required")
         if info.descriptor_set_key and info.descriptor_set_key not in descriptor_set_keys:
-            raise ValueError(f"AMDGPU processor {info.target_cpu} references unknown descriptor set {info.descriptor_set_key}")
+            raise ValueError(f"AMDGPU processor {info.processor} references unknown descriptor set {info.descriptor_set_key}")
         if info.elf_machine_flags < 0 or info.elf_machine_flags > 0x0FF:
-            raise ValueError(f"AMDGPU ELF machine flags for {info.target_cpu} must fit EF_AMDGPU_MACH")
+            raise ValueError(f"AMDGPU ELF machine flags for {info.processor} must fit EF_AMDGPU_MACH")
         if info.elf_feature_flags < 0 or info.elf_feature_flags > 0xFFFFFFFF:
-            raise ValueError(f"AMDGPU ELF feature flags for {info.target_cpu} must fit u32")
+            raise ValueError(f"AMDGPU ELF feature flags for {info.processor} must fit u32")
         if info.elf_feature_flags & 0x0FF:
-            raise ValueError(f"AMDGPU ELF feature flags for {info.target_cpu} must not overlap EF_AMDGPU_MACH")
+            raise ValueError(f"AMDGPU ELF feature flags for {info.processor} must not overlap EF_AMDGPU_MACH")
         if info.default_wavefront_size not in (32, 64):
-            raise ValueError(f"AMDGPU default wavefront size for {info.target_cpu} must be 32 or 64")
+            raise ValueError(f"AMDGPU default wavefront size for {info.processor} must be 32 or 64")
         _matrix_feature_profile_expr(info.matrix_feature_profile)
         if info.kernel_descriptor_profile != AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE and (
             info.kernel_descriptor_vgpr_encoding_granule_wave32 == 0 or info.kernel_descriptor_vgpr_encoding_granule_wave64 == 0
         ):
-            raise ValueError(f"AMDGPU processor {info.target_cpu} has descriptor profile but no VGPR encoding granules")
+            raise ValueError(f"AMDGPU processor {info.processor} has descriptor profile but no VGPR encoding granules")
         if info.kernel_descriptor_profile != AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE and info.elf_machine_flags == 0:
-            raise ValueError(f"AMDGPU processor {info.target_cpu} has a kernel descriptor profile but no ELF machine flags")
+            raise ValueError(f"AMDGPU processor {info.processor} has a kernel descriptor profile but no ELF machine flags")
 
 
 def _emit_header(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]) -> str:
@@ -341,7 +341,7 @@ def _emit_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> list[s
 
 
 def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]:
-    target_cpu_width = max(len(_c_string_arg(info.target_cpu)) for info in processors)
+    processor_width = max(len(_c_string_arg(info.processor)) for info in processors)
     descriptor_set_width = max(len(_c_string_arg(info.descriptor_set_key)) for info in processors)
     ordinal_width = len("UINT16_C(65535)")
     machine_flags_width = len("0x000")
@@ -352,9 +352,9 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
     register_granule_width = 1
     bool_width = len("false")
     lines = [
-        "#define LOOM_AMDGPU_PROCESSOR_INFO(target_cpu_, descriptor_set_key_, descriptor_set_ordinal_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, kernel_descriptor_profile_, matrix_feature_profile_, vgpr_granule_wave32_, vgpr_granule_wave64_, has_flat_scratch_, uses_gfx10_sgpr_, has_dx10_ieee_, has_packed_tid_) \\",
+        "#define LOOM_AMDGPU_PROCESSOR_INFO(processor_, descriptor_set_key_, descriptor_set_ordinal_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, kernel_descriptor_profile_, matrix_feature_profile_, vgpr_granule_wave32_, vgpr_granule_wave64_, has_flat_scratch_, uses_gfx10_sgpr_, has_dx10_ieee_, has_packed_tid_) \\",
         "  { \\",
-        "    .target_cpu = IREE_SVL(target_cpu_), \\",
+        "    .processor = IREE_SVL(processor_), \\",
         "    .descriptor_set_key = IREE_SVL(descriptor_set_key_), \\",
         "    .descriptor_set_ordinal = descriptor_set_ordinal_, \\",
         "    .elf_machine_flags = UINT32_C(elf_machine_flags_), \\",
@@ -371,12 +371,12 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
         "  }",
         "",
         "static const loom_amdgpu_processor_info_t kAmdgpuProcessorInfos[] = {",
-        "  // target_cpu descriptor_set_key    ordinal         mach  feat wave kernel_profile                             matrix_profile                             vgpr32 vgpr64 flat_scratch gfx10_sgpr dx10_ieee packed_tid",
+        "  // processor descriptor_set_key    ordinal         mach  feat wave kernel_profile                             matrix_profile                             vgpr32 vgpr64 flat_scratch gfx10_sgpr dx10_ieee packed_tid",
     ]
     lines.extend(
         (
             "  LOOM_AMDGPU_PROCESSOR_INFO("
-            f"{_padded_arg(_c_string_arg(info.target_cpu), target_cpu_width)}"
+            f"{_padded_arg(_c_string_arg(info.processor), processor_width)}"
             f"{_padded_arg(_c_string_arg(info.descriptor_set_key), descriptor_set_width)}"
             f"{_padded_arg(_u16_expr(amdgpu_descriptor_set_ordinal(info.descriptor_set_key)) if info.descriptor_set_key else 'LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE', ordinal_width)}"
             f"{_padded_arg(f'0x{info.elf_machine_flags:03x}', machine_flags_width)}"
@@ -451,13 +451,13 @@ def _emit_source(
             "}",
             "",
             "iree_status_t loom_amdgpu_target_info_lookup_processor(",
-            "    iree_string_view_t target_cpu,",
+            "    iree_string_view_t processor_name,",
             "    const loom_amdgpu_processor_info_t** out_processor) {",
             "  IREE_ASSERT_ARGUMENT(out_processor);",
             "  *out_processor = NULL;",
-            "  if (iree_string_view_is_empty(target_cpu)) {",
+            "  if (iree_string_view_is_empty(processor_name)) {",
             "    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,",
-            '                            "AMDGPU target CPU is required");',
+            '                            "AMDGPU processor is required");',
             "  }",
             "  iree_host_size_t low = 0;",
             "  iree_host_size_t high = IREE_ARRAYSIZE(kAmdgpuProcessorInfos);",
@@ -466,7 +466,7 @@ def _emit_source(
             "    const loom_amdgpu_processor_info_t* processor =",
             "        &kAmdgpuProcessorInfos[mid];",
             "    const int comparison =",
-            "        iree_string_view_compare(processor->target_cpu, target_cpu);",
+            "        iree_string_view_compare(processor->processor, processor_name);",
             "    if (comparison == 0) {",
             "      *out_processor = processor;",
             "      return iree_ok_status();",
@@ -478,8 +478,9 @@ def _emit_source(
             "    }",
             "  }",
             "  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,",
-            "                          \"AMDGPU target CPU '%.*s' is not supported\",",
-            "                          (int)target_cpu.size, target_cpu.data);",
+            "                          \"AMDGPU processor '%.*s' is not supported\",",
+            "                          (int)processor_name.size,",
+            "                          processor_name.data);",
             "}",
             "",
             "iree_status_t loom_amdgpu_target_info_lookup_descriptor_set(",
@@ -576,12 +577,12 @@ def _emit_source(
             "        (int)kAmdgpuAmdhsaTargetIdPrefix.size,",
             "        kAmdgpuAmdhsaTargetIdPrefix.data);",
             "  }",
-            "  iree_string_view_t target_cpu = iree_string_view_empty();",
+            "  iree_string_view_t processor_name = iree_string_view_empty();",
             "  iree_string_view_t feature_suffix = iree_string_view_empty();",
             "  const intptr_t split = iree_string_view_split(",
-            "      processor_and_features, ':', &target_cpu, &feature_suffix);",
+            "      processor_and_features, ':', &processor_name, &feature_suffix);",
             "  if (split == -1) {",
-            "    target_cpu = processor_and_features;",
+            "    processor_name = processor_and_features;",
             "  } else if (iree_string_view_is_empty(feature_suffix)) {",
             "    return iree_make_status(",
             "        IREE_STATUS_INVALID_ARGUMENT,",
@@ -590,7 +591,8 @@ def _emit_source(
             "  }",
             "  const loom_amdgpu_processor_info_t* processor = NULL;",
             "  IREE_RETURN_IF_ERROR(",
-            "      loom_amdgpu_target_info_lookup_processor(target_cpu, &processor));",
+            "      loom_amdgpu_target_info_lookup_processor(processor_name,",
+            "                                             &processor));",
             "  *out_target_id = (loom_amdgpu_amdhsa_target_id_t){",
             "      .processor = processor,",
             "      .feature_suffix = feature_suffix,",

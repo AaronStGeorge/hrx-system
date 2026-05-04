@@ -101,14 +101,14 @@ class AmdgpuModuleCompilerTest : public ::testing::Test {
     ASSERT_NE(*out_module, nullptr);
   }
 
-  void CompileWithTargetCpu(iree_string_view_t target_cpu,
+  void CompileWithProcessor(iree_string_view_t processor,
                             DiagnosticCapture* capture, bool* out_compiled) {
     loom_module_t* module = nullptr;
     ASSERT_NO_FATAL_FAILURE(ParseGfx11Kernel(&module));
 
     loom_amdgpu_hal_executable_t executable = {};
     loom_amdgpu_module_compile_options_t options = {
-        .target_cpu = target_cpu,
+        .processor = processor,
         .diagnostic_sink = capture->sink(),
         .max_errors = 20,
     };
@@ -126,7 +126,7 @@ class AmdgpuModuleCompilerTest : public ::testing::Test {
 
     loom_amdgpu_hal_executable_t executable = {};
     loom_amdgpu_module_compile_options_t options = {
-        .target_cpu = IREE_SV("gfx942"),
+        .processor = IREE_SV("gfx942"),
         .diagnostic_sink = capture->sink(),
         .max_errors = 20,
     };
@@ -142,11 +142,11 @@ class AmdgpuModuleCompilerTest : public ::testing::Test {
   loom_context_t context_ = {};
 };
 
-TEST_F(AmdgpuModuleCompilerTest, UnknownTargetCpuEmitsDiagnostic) {
+TEST_F(AmdgpuModuleCompilerTest, UnknownProcessorEmitsDiagnostic) {
   DiagnosticCapture capture;
   bool compiled = true;
   ASSERT_NO_FATAL_FAILURE(
-      CompileWithTargetCpu(IREE_SV("gfx9999"), &capture, &compiled));
+      CompileWithProcessor(IREE_SV("gfx9999"), &capture, &compiled));
 
   EXPECT_FALSE(compiled);
   ASSERT_EQ(capture.diagnostics.size(), 1u);
@@ -156,11 +156,11 @@ TEST_F(AmdgpuModuleCompilerTest, UnknownTargetCpuEmitsDiagnostic) {
   EXPECT_EQ(GetStringParam(*diagnostic, 0), "gfx9999");
 }
 
-TEST_F(AmdgpuModuleCompilerTest, TargetCpuWithoutDescriptorSetEmitsDiagnostic) {
+TEST_F(AmdgpuModuleCompilerTest, ProcessorWithoutDescriptorSetEmitsDiagnostic) {
   DiagnosticCapture capture;
   bool compiled = true;
   ASSERT_NO_FATAL_FAILURE(
-      CompileWithTargetCpu(IREE_SV("gfx908"), &capture, &compiled));
+      CompileWithProcessor(IREE_SV("gfx908"), &capture, &compiled));
 
   EXPECT_FALSE(compiled);
   ASSERT_EQ(capture.diagnostics.size(), 1u);
@@ -183,7 +183,7 @@ TEST_F(AmdgpuModuleCompilerTest, DescriptorSetMismatchEmitsDiagnostic) {
   DiagnosticCapture capture;
   bool compiled = true;
   ASSERT_NO_FATAL_FAILURE(
-      CompileWithTargetCpu(IREE_SV("gfx950"), &capture, &compiled));
+      CompileWithProcessor(IREE_SV("gfx950"), &capture, &compiled));
 
   EXPECT_FALSE(compiled);
   ASSERT_EQ(capture.diagnostics.size(), 1u);

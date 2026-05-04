@@ -43,9 +43,9 @@
 
 enum {
   LOOM_AMDGPU_MODULE_COMPILE_DEFAULT_MAX_ERRORS = 20,
-  LOOM_AMDGPU_ERROR_TARGET_CPU_UNKNOWN = 3,
-  LOOM_AMDGPU_ERROR_TARGET_CPU_NO_DESCRIPTOR_SET = 4,
-  LOOM_AMDGPU_ERROR_TARGET_CPU_DESCRIPTOR_SET_MISMATCH = 5,
+  LOOM_AMDGPU_ERROR_PROCESSOR_UNKNOWN = 3,
+  LOOM_AMDGPU_ERROR_PROCESSOR_NO_DESCRIPTOR_SET = 4,
+  LOOM_AMDGPU_ERROR_PROCESSOR_DESCRIPTOR_SET_MISMATCH = 5,
 };
 
 static bool loom_amdgpu_module_compile_bundle_is_compatible(
@@ -100,13 +100,13 @@ static iree_status_t loom_amdgpu_module_compile_symbol_name(
 }
 
 static const loom_amdgpu_processor_info_t*
-loom_amdgpu_module_compile_find_processor(iree_string_view_t target_cpu) {
+loom_amdgpu_module_compile_find_processor(iree_string_view_t processor_name) {
   const iree_host_size_t processor_count =
       loom_amdgpu_target_info_processor_count();
   for (iree_host_size_t i = 0; i < processor_count; ++i) {
     const loom_amdgpu_processor_info_t* processor =
         loom_amdgpu_target_info_processor_at(i);
-    if (iree_string_view_equal(processor->target_cpu, target_cpu)) {
+    if (iree_string_view_equal(processor->processor, processor_name)) {
       return processor;
     }
   }
@@ -138,32 +138,32 @@ static const loom_op_t* loom_amdgpu_module_compile_target_record_op(
   return module->symbols.entries[entry->target_ref.symbol_id].defining_op;
 }
 
-static iree_status_t loom_amdgpu_module_compile_emit_unknown_target_cpu(
+static iree_status_t loom_amdgpu_module_compile_emit_unknown_processor(
     const loom_module_t* module,
     const loom_target_module_compile_entry_t* entry,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    iree_string_view_t target_cpu) {
+    iree_string_view_t processor_name) {
   const loom_diagnostic_param_t params[] = {
-      loom_param_string(target_cpu),
+      loom_param_string(processor_name),
   };
   return loom_amdgpu_module_compile_emit(
       diagnostic_emitter,
       loom_amdgpu_module_compile_target_record_op(module, entry),
-      LOOM_AMDGPU_ERROR_TARGET_CPU_UNKNOWN, params, IREE_ARRAYSIZE(params));
+      LOOM_AMDGPU_ERROR_PROCESSOR_UNKNOWN, params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_amdgpu_module_compile_emit_no_descriptor_set(
     const loom_module_t* module,
     const loom_target_module_compile_entry_t* entry,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    iree_string_view_t target_cpu) {
+    iree_string_view_t processor_name) {
   const loom_diagnostic_param_t params[] = {
-      loom_param_string(target_cpu),
+      loom_param_string(processor_name),
   };
   return loom_amdgpu_module_compile_emit(
       diagnostic_emitter,
       loom_amdgpu_module_compile_target_record_op(module, entry),
-      LOOM_AMDGPU_ERROR_TARGET_CPU_NO_DESCRIPTOR_SET, params,
+      LOOM_AMDGPU_ERROR_PROCESSOR_NO_DESCRIPTOR_SET, params,
       IREE_ARRAYSIZE(params));
 }
 
@@ -174,7 +174,7 @@ static iree_status_t loom_amdgpu_module_compile_emit_descriptor_set_mismatch(
     const loom_amdgpu_processor_info_t* processor,
     iree_string_view_t target_name) {
   const loom_diagnostic_param_t params[] = {
-      loom_param_string(processor->target_cpu),
+      loom_param_string(processor->processor),
       loom_param_string(processor->descriptor_set_key),
       loom_param_string(target_name),
       loom_param_string(entry->bundle_storage.config.contract_set_key),
@@ -182,18 +182,18 @@ static iree_status_t loom_amdgpu_module_compile_emit_descriptor_set_mismatch(
   return loom_amdgpu_module_compile_emit(
       diagnostic_emitter,
       loom_amdgpu_module_compile_target_record_op(module, entry),
-      LOOM_AMDGPU_ERROR_TARGET_CPU_DESCRIPTOR_SET_MISMATCH, params,
+      LOOM_AMDGPU_ERROR_PROCESSOR_DESCRIPTOR_SET_MISMATCH, params,
       IREE_ARRAYSIZE(params));
 }
 
-static iree_status_t loom_amdgpu_module_compile_set_target_record_cpu(
+static iree_status_t loom_amdgpu_module_compile_set_target_record_processor(
     loom_module_t* module, const loom_target_module_compile_entry_t* entry,
-    iree_string_view_t target_cpu) {
+    iree_string_view_t processor_name) {
   if (!loom_symbol_ref_is_valid(entry->target_ref) ||
       entry->target_ref.module_id != 0 ||
       entry->target_ref.symbol_id >= module->symbols.count) {
     return iree_make_status(IREE_STATUS_INTERNAL,
-                            "AMDGPU target CPU override requires a valid "
+                            "AMDGPU processor override requires a valid "
                             "target symbol");
   }
   loom_symbol_t* symbol = &module->symbols.entries[entry->target_ref.symbol_id];
@@ -203,45 +203,45 @@ static iree_status_t loom_amdgpu_module_compile_set_target_record_cpu(
       loom_target_like_descriptor(target);
   if (!loom_target_like_isa(target) || descriptor == NULL) {
     return iree_make_status(IREE_STATUS_INTERNAL,
-                            "AMDGPU target CPU override requires a "
+                            "AMDGPU processor override requires a "
                             "target record");
   }
-  loom_string_id_t target_cpu_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t processor_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
-      loom_module_intern_string(module, target_cpu, &target_cpu_id));
-  const uint16_t target_cpu_storage_offset =
+      loom_module_intern_string(module, processor_name, &processor_id));
+  const uint16_t processor_storage_offset =
       offsetof(loom_target_bundle_storage_t, snapshot.target_cpu);
   for (uint8_t i = 0; i < descriptor->projection_count; ++i) {
     const loom_target_projection_t* projection = &descriptor->projections[i];
-    if (projection->storage_offset == target_cpu_storage_offset &&
+    if (projection->storage_offset == processor_storage_offset &&
         projection->value_kind == LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW) {
       loom_op_attrs(symbol->defining_op)[projection->attr_index] =
-          loom_attr_string(target_cpu_id);
+          loom_attr_string(processor_id);
       return iree_ok_status();
     }
   }
   return iree_make_status(IREE_STATUS_INTERNAL,
-                          "AMDGPU target record has no target_cpu projection");
+                          "AMDGPU target record has no processor projection");
 }
 
-static iree_status_t loom_amdgpu_module_compile_apply_target_cpu(
+static iree_status_t loom_amdgpu_module_compile_apply_processor(
     loom_module_t* module, loom_target_module_compile_entry_t* entry,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    iree_string_view_t target_cpu) {
-  if (iree_string_view_is_empty(target_cpu)) {
+    iree_string_view_t processor_name) {
+  if (iree_string_view_is_empty(processor_name)) {
     return iree_ok_status();
   }
   const loom_amdgpu_processor_info_t* processor =
-      loom_amdgpu_module_compile_find_processor(target_cpu);
+      loom_amdgpu_module_compile_find_processor(processor_name);
   if (processor == NULL) {
-    return loom_amdgpu_module_compile_emit_unknown_target_cpu(
-        module, entry, diagnostic_emitter, target_cpu);
+    return loom_amdgpu_module_compile_emit_unknown_processor(
+        module, entry, diagnostic_emitter, processor_name);
   }
   if (processor->descriptor_set_ordinal ==
           LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE ||
       iree_string_view_is_empty(processor->descriptor_set_key)) {
     return loom_amdgpu_module_compile_emit_no_descriptor_set(
-        module, entry, diagnostic_emitter, processor->target_cpu);
+        module, entry, diagnostic_emitter, processor->processor);
   }
   if (!iree_string_view_equal(processor->descriptor_set_key,
                               entry->bundle_storage.config.contract_set_key)) {
@@ -252,9 +252,9 @@ static iree_status_t loom_amdgpu_module_compile_apply_target_cpu(
         module, entry, diagnostic_emitter, processor, target_name);
   }
 
-  IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_set_target_record_cpu(
-      module, entry, processor->target_cpu));
-  entry->bundle_storage.snapshot.target_cpu = processor->target_cpu;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_set_target_record_processor(
+      module, entry, processor->processor));
+  entry->bundle_storage.snapshot.target_cpu = processor->processor;
   entry->bundle_storage.snapshot.subgroup_size =
       processor->default_wavefront_size;
   loom_target_bundle_storage_rebind(&entry->bundle_storage);
@@ -844,8 +844,8 @@ iree_status_t loom_amdgpu_compile_hal_executable(
   }
   if (iree_status_is_ok(status) && selected && options != NULL) {
     for (uint16_t i = 0; i < entries.count && iree_status_is_ok(status); ++i) {
-      status = loom_amdgpu_module_compile_apply_target_cpu(
-          module, &entries.values[i], &diagnostic_emitter, options->target_cpu);
+      status = loom_amdgpu_module_compile_apply_processor(
+          module, &entries.values[i], &diagnostic_emitter, options->processor);
     }
   }
   if (iree_status_is_ok(status) && selected &&

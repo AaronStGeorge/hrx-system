@@ -64,7 +64,7 @@ class AmdgpuDescriptorSetInfo:
 
 @dataclass(frozen=True, slots=True)
 class AmdgpuProcessorInfo:
-    target_cpu: str
+    processor: str
     descriptor_set_key: str
     elf_machine_flags: int
     elf_feature_flags: int
@@ -106,7 +106,7 @@ class AmdgpuIsaArchitectureInfo(Protocol):
 
 
 def processor_info(
-    target_cpu: str,
+    processor: str,
     elf_machine_flags: int,
     *,
     elf_feature_flags: int = 0,
@@ -122,7 +122,7 @@ def processor_info(
     kernel_descriptor_has_packed_workitem_id: bool = False,
 ) -> AmdgpuProcessorInfo:
     return AmdgpuProcessorInfo(
-        target_cpu=target_cpu,
+        processor=processor,
         descriptor_set_key=descriptor_set_key,
         elf_machine_flags=elf_machine_flags,
         elf_feature_flags=elf_feature_flags,
@@ -138,11 +138,9 @@ def processor_info(
     )
 
 
-def rdna3_processor_info(
-    target_cpu: str, elf_machine_flags: int
-) -> AmdgpuProcessorInfo:
+def rdna3_processor_info(processor: str, elf_machine_flags: int) -> AmdgpuProcessorInfo:
     return AmdgpuProcessorInfo(
-        target_cpu=target_cpu,
+        processor=processor,
         descriptor_set_key="amdgpu.rdna3.core",
         elf_machine_flags=elf_machine_flags,
         elf_feature_flags=0,
@@ -159,10 +157,10 @@ def rdna3_processor_info(
 
 
 def gfx117x_processor_info(
-    target_cpu: str, elf_machine_flags: int
+    processor: str, elf_machine_flags: int
 ) -> AmdgpuProcessorInfo:
     return processor_info(
-        target_cpu=target_cpu,
+        processor=processor,
         descriptor_set_key="",
         elf_machine_flags=elf_machine_flags,
         default_wavefront_size=32,
@@ -297,14 +295,14 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     processor_info("gfx1034", 0x03E, default_wavefront_size=32),
     processor_info("gfx1035", 0x03D, default_wavefront_size=32),
     processor_info("gfx1036", 0x045, default_wavefront_size=32),
-    rdna3_processor_info(target_cpu="gfx1100", elf_machine_flags=0x041),
-    rdna3_processor_info(target_cpu="gfx1101", elf_machine_flags=0x046),
-    rdna3_processor_info(target_cpu="gfx1102", elf_machine_flags=0x047),
-    rdna3_processor_info(target_cpu="gfx1103", elf_machine_flags=0x044),
-    rdna3_processor_info(target_cpu="gfx1150", elf_machine_flags=0x043),
-    rdna3_processor_info(target_cpu="gfx1151", elf_machine_flags=0x04A),
-    rdna3_processor_info(target_cpu="gfx1152", elf_machine_flags=0x055),
-    rdna3_processor_info(target_cpu="gfx1153", elf_machine_flags=0x058),
+    rdna3_processor_info(processor="gfx1100", elf_machine_flags=0x041),
+    rdna3_processor_info(processor="gfx1101", elf_machine_flags=0x046),
+    rdna3_processor_info(processor="gfx1102", elf_machine_flags=0x047),
+    rdna3_processor_info(processor="gfx1103", elf_machine_flags=0x044),
+    rdna3_processor_info(processor="gfx1150", elf_machine_flags=0x043),
+    rdna3_processor_info(processor="gfx1151", elf_machine_flags=0x04A),
+    rdna3_processor_info(processor="gfx1152", elf_machine_flags=0x055),
+    rdna3_processor_info(processor="gfx1153", elf_machine_flags=0x058),
     gfx117x_processor_info("gfx1170", 0x05D),
     gfx117x_processor_info("gfx1171", 0x05E),
     gfx117x_processor_info("gfx1172", 0x05C),
@@ -461,7 +459,7 @@ def amdgpu_descriptor_set_ordinal(key: str) -> int:
 
 
 def sorted_processor_infos() -> tuple[AmdgpuProcessorInfo, ...]:
-    return tuple(sorted(AMDGPU_PROCESSOR_INFOS, key=lambda info: info.target_cpu))
+    return tuple(sorted(AMDGPU_PROCESSOR_INFOS, key=lambda info: info.processor))
 
 
 def sorted_occupancy_model_infos() -> tuple[AmdgpuOccupancyModelInfo, ...]:

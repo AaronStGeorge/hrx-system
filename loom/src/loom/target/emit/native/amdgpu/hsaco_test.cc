@@ -204,7 +204,7 @@ TEST(AmdgpuHsacoTest, WritesGfx1100CodeObjectEnvelope) {
   };
   const loom_amdgpu_hsaco_file_t file = {
       .target = IREE_SV("amdgcn-amd-amdhsa--gfx1100"),
-      .target_cpu = IREE_SV("gfx1100"),
+      .processor = IREE_SV("gfx1100"),
       .kernels = &kernel,
       .kernel_count = 1,
   };
@@ -369,7 +369,7 @@ TEST(AmdgpuHsacoTest, WritesGfx942CodeObjectTargetFlags) {
   };
   const loom_amdgpu_hsaco_file_t file = {
       .target = IREE_SV("amdgcn-amd-amdhsa--gfx942"),
-      .target_cpu = IREE_SV("gfx942"),
+      .processor = IREE_SV("gfx942"),
       .kernels = &kernel,
       .kernel_count = 1,
   };
@@ -389,7 +389,7 @@ TEST(AmdgpuHsacoTest, WritesGfx942CodeObjectTargetFlags) {
                 LOOM_NATIVE_ELF_AMDGPU_FLAG_FEATURE_SRAMECC_ANY_V4);
 }
 
-TEST(AmdgpuHsacoTest, RejectsMismatchedTargetCpu) {
+TEST(AmdgpuHsacoTest, RejectsMismatchedProcessor) {
   const uint8_t text[] = {0x00, 0x00, 0x81, 0xbf};
   const loom_amdgpu_hsaco_kernel_t kernel = {
       .metadata =
@@ -398,7 +398,7 @@ TEST(AmdgpuHsacoTest, RejectsMismatchedTargetCpu) {
   };
   const loom_amdgpu_hsaco_file_t file = {
       .target = IREE_SV("amdgcn-amd-amdhsa--gfx1100"),
-      .target_cpu = IREE_SV("gfx1200"),
+      .processor = IREE_SV("gfx1200"),
       .kernels = &kernel,
       .kernel_count = 1,
   };
@@ -419,7 +419,7 @@ TEST(AmdgpuHsacoTest, RejectsTargetFeatureSuffixesUntilFlagsAreEncoded) {
   };
   const loom_amdgpu_hsaco_file_t file = {
       .target = IREE_SV("amdgcn-amd-amdhsa--gfx1100:sramecc+:xnack-"),
-      .target_cpu = IREE_SV("gfx1100"),
+      .processor = IREE_SV("gfx1100"),
       .kernels = &kernel,
       .kernel_count = 1,
   };

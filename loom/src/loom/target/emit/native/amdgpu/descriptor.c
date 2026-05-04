@@ -70,12 +70,12 @@ static const loom_amdgpu_kernel_descriptor_flags_t
         LOOM_AMDGPU_KERNEL_DESCRIPTOR_USES_DYNAMIC_STACK;
 
 static iree_status_t loom_amdgpu_kernel_descriptor_resolve_target(
-    iree_string_view_t target_cpu,
+    iree_string_view_t processor_name,
     const loom_amdgpu_processor_info_t** out_target) {
   *out_target = NULL;
   const loom_amdgpu_processor_info_t* target = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_amdgpu_target_info_lookup_processor(target_cpu, &target));
+      loom_amdgpu_target_info_lookup_processor(processor_name, &target));
   switch (target->kernel_descriptor_profile) {
     case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9:
     case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11:
@@ -86,8 +86,8 @@ static iree_status_t loom_amdgpu_kernel_descriptor_resolve_target(
   }
   return iree_make_status(
       IREE_STATUS_UNIMPLEMENTED,
-      "AMDGPU kernel descriptor target CPU '%.*s' is not supported yet",
-      (int)target_cpu.size, target_cpu.data);
+      "AMDGPU kernel descriptor processor '%.*s' is not supported yet",
+      (int)processor_name.size, processor_name.data);
 }
 
 static uint32_t loom_amdgpu_kernel_descriptor_bit_mask(uint32_t width) {
@@ -230,7 +230,7 @@ static iree_status_t loom_amdgpu_kernel_descriptor_validate(
     const loom_amdgpu_kernel_descriptor_t* descriptor,
     const loom_amdgpu_processor_info_t** out_target) {
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_descriptor_resolve_target(
-      descriptor->target_cpu, out_target));
+      descriptor->processor, out_target));
   if (iree_any_bit_set(descriptor->flags, ~kAmdgpuKernelDescriptorKnownFlags)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -303,18 +303,18 @@ static iree_status_t loom_amdgpu_kernel_descriptor_validate_metadata_kernel(
 //===----------------------------------------------------------------------===//
 
 iree_status_t loom_amdgpu_kernel_descriptor_initialize_from_metadata(
-    iree_string_view_t target_cpu,
+    iree_string_view_t processor_name,
     const loom_amdgpu_metadata_kernel_t* metadata_kernel,
     int64_t kernel_code_entry_byte_offset,
     loom_amdgpu_kernel_descriptor_t* out_descriptor) {
   *out_descriptor = (loom_amdgpu_kernel_descriptor_t){0};
   const loom_amdgpu_processor_info_t* target = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_amdgpu_kernel_descriptor_resolve_target(target_cpu, &target));
+      loom_amdgpu_kernel_descriptor_resolve_target(processor_name, &target));
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_kernel_descriptor_validate_metadata_kernel(metadata_kernel));
   *out_descriptor = (loom_amdgpu_kernel_descriptor_t){
-      .target_cpu = target_cpu,
+      .processor = processor_name,
       .group_segment_fixed_size = metadata_kernel->group_segment_fixed_size,
       .private_segment_fixed_size = metadata_kernel->private_segment_fixed_size,
       .kernarg_size = metadata_kernel->kernarg_segment_size,

@@ -69,8 +69,8 @@ typedef enum loom_amdgpu_kernel_descriptor_bits_e {
 typedef uint32_t loom_amdgpu_kernel_descriptor_flags_t;
 
 typedef struct loom_amdgpu_kernel_descriptor_t {
-  // Target CPU string such as `gfx1100`.
-  iree_string_view_t target_cpu;
+  // Processor name such as `gfx1100`.
+  iree_string_view_t processor;
   // Fixed LDS/group segment size in bytes.
   uint32_t group_segment_fixed_size;
   // Fixed scratch/private segment size in bytes.
@@ -97,7 +97,7 @@ typedef struct loom_amdgpu_kernel_descriptor_t {
 // state, workitem IDs, or code properties must OR the corresponding flags
 // before calling loom_amdgpu_kernel_descriptor_write.
 iree_status_t loom_amdgpu_kernel_descriptor_initialize_from_metadata(
-    iree_string_view_t target_cpu,
+    iree_string_view_t processor,
     const loom_amdgpu_metadata_kernel_t* metadata_kernel,
     int64_t kernel_code_entry_byte_offset,
     loom_amdgpu_kernel_descriptor_t* out_descriptor);

@@ -536,14 +536,14 @@ bool TryFindFirstGpuAgent(const HsaApi& api, hsa_agent_t* out_agent,
   return true;
 }
 
-bool TryParseAmdhsaTargetCpu(const std::string& target_id,
-                             std::string* out_target_cpu,
+bool TryParseAmdhsaProcessor(const std::string& target_id,
+                             std::string* out_processor,
                              std::string* out_feature_suffix,
                              std::string* out_error) {
-  IREE_ASSERT_ARGUMENT(out_target_cpu);
+  IREE_ASSERT_ARGUMENT(out_processor);
   IREE_ASSERT_ARGUMENT(out_feature_suffix);
   IREE_ASSERT_ARGUMENT(out_error);
-  *out_target_cpu = {};
+  *out_processor = {};
   *out_feature_suffix = {};
   *out_error = {};
   loom_amdgpu_amdhsa_target_id_t parsed_target_id = {};
@@ -554,8 +554,8 @@ bool TryParseAmdhsaTargetCpu(const std::string& target_id,
     *out_error = StatusToStringAndFree(status);
     return false;
   }
-  out_target_cpu->assign(parsed_target_id.processor->target_cpu.data,
-                         parsed_target_id.processor->target_cpu.size);
+  out_processor->assign(parsed_target_id.processor->processor.data,
+                        parsed_target_id.processor->processor.size);
   out_feature_suffix->assign(parsed_target_id.feature_suffix.data,
                              parsed_target_id.feature_suffix.size);
   return true;
@@ -568,8 +568,8 @@ struct AmdgpuHsaTarget {
   std::string agent_name;
   // Full HSA target id reported by the runtime for |agent|.
   std::string isa_name;
-  // Target CPU parsed out of |isa_name|.
-  std::string target_cpu;
+  // AMDGPU processor parsed out of |isa_name|.
+  std::string processor;
   // Target-feature suffix parsed out of |isa_name|.
   std::string feature_suffix;
 };
@@ -604,11 +604,11 @@ bool TryDiscoverCurrentAmdgpuTarget(const HsaApi& api,
     return false;
   }
 
-  std::string target_cpu;
+  std::string processor;
   std::string feature_suffix;
   std::string parse_error;
-  if (!TryParseAmdhsaTargetCpu(isa_search.isa_name, &target_cpu,
-                               &feature_suffix, &parse_error)) {
+  if (!TryParseAmdhsaProcessor(isa_search.isa_name, &processor, &feature_suffix,
+                               &parse_error)) {
     *out_skip_reason = parse_error;
     return false;
   }
@@ -617,7 +617,7 @@ bool TryDiscoverCurrentAmdgpuTarget(const HsaApi& api,
       .agent = agent,
       .agent_name = std::move(agent_name),
       .isa_name = std::move(isa_search.isa_name),
-      .target_cpu = std::move(target_cpu),
+      .processor = std::move(processor),
       .feature_suffix = std::move(feature_suffix),
   };
   return true;
@@ -781,20 +781,20 @@ iree_status_t PrepareTargetProcessorForLowHsaco(
   }
   const loom_amdgpu_processor_info_t* processor = nullptr;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_processor(
-      iree_make_string_view(target.target_cpu.data(), target.target_cpu.size()),
+      iree_make_string_view(target.processor.data(), target.processor.size()),
       &processor));
   if (processor->descriptor_set_ordinal ==
           LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE ||
       loom_amdgpu_target_bundle_for_descriptor_set(
           processor->descriptor_set_ordinal) == nullptr) {
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "AMDGPU target CPU '%s' has no target-low record",
-                            target.target_cpu.c_str());
+                            "AMDGPU processor '%s' has no target-low record",
+                            target.processor.c_str());
   }
   if (processor->elf_machine_flags == 0) {
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "AMDGPU target CPU '%s' has no ELF e_flags mapping",
-                            target.target_cpu.c_str());
+                            "AMDGPU processor '%s' has no ELF e_flags mapping",
+                            target.processor.c_str());
   }
   const loom_amdgpu_descriptor_set_info_t* descriptor_set = nullptr;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
@@ -802,9 +802,9 @@ iree_status_t PrepareTargetProcessorForLowHsaco(
   if (!descriptor_set->supports_descriptor_packet_encoding) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU target CPU '%s' does not have native descriptor packet "
+        "AMDGPU processor '%s' does not have native descriptor packet "
         "encoding",
-        target.target_cpu.c_str());
+        target.processor.c_str());
   }
   *out_processor = processor;
   return iree_ok_status();

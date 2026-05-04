@@ -479,7 +479,7 @@ iree_status_t loom_amdgpu_occupancy_build(
 
   loom_amdgpu_occupancy_table_t table = {
       .allocation = allocation,
-      .target_cpu = allocation->target.bundle_storage.snapshot.target_cpu,
+      .processor = allocation->target.bundle_storage.snapshot.target_cpu,
       .wave_size = model->wave_size,
       .max_waves_per_simd = model->max_waves_per_simd,
       .resident_waves_per_simd = model->max_waves_per_simd,
@@ -585,9 +585,9 @@ iree_status_t loom_amdgpu_occupancy_format_json(
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
       &stream, table->allocation->target.descriptor_set_key));
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"target_cpu\":"));
+      loom_output_stream_write_cstring(&stream, ",\"processor\":"));
   IREE_RETURN_IF_ERROR(
-      loom_json_write_escaped_string(&stream, table->target_cpu));
+      loom_json_write_escaped_string(&stream, table->processor));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream,
       ",\"wave_size\":%" PRIu32 ",\"max_waves_per_simd\":%" PRIu32

@@ -81,8 +81,8 @@ typedef struct loom_amdgpu_occupancy_register_class_t {
 typedef struct loom_amdgpu_occupancy_table_t {
   // Allocation table this occupancy estimate was built from.
   const loom_low_allocation_table_t* allocation;
-  // Target CPU selected by the low target snapshot.
-  iree_string_view_t target_cpu;
+  // AMDGPU processor selected by the low target snapshot.
+  iree_string_view_t processor;
   // AMDGPU wave size used by this model.
   uint32_t wave_size;
   // Maximum resident waves per SIMD in this model.

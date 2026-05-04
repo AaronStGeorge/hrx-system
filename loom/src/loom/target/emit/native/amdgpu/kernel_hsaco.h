@@ -55,8 +55,8 @@ typedef struct loom_amdgpu_kernel_hsaco_options_t {
 typedef struct loom_amdgpu_kernel_hsaco_contribution_t {
   // Full AMDHSA target id such as `amdgcn-amd-amdhsa--gfx1100`.
   iree_string_view_t target;
-  // Target CPU such as `gfx1100`, used for ELF flags and descriptor packing.
-  iree_string_view_t target_cpu;
+  // Processor such as `gfx1100`, used for ELF flags and descriptor packing.
+  iree_string_view_t processor;
   // Kernel entry metadata, descriptor flags, and encoded native text.
   loom_amdgpu_hsaco_kernel_t kernel;
   // Emission summary for this kernel contribution.
@@ -77,10 +77,10 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
 
 // Writes one code object containing all |contributions|.
 //
-// Contributions must all target the same AMDHSA target id and CPU. The writer
-// uses |scratch_arena| only for final layout tables and can run after kernel
-// contributions were produced independently, provided their backing storage
-// remains live for the duration of this call.
+// Contributions must all target the same AMDHSA target id and processor. The
+// writer uses |scratch_arena| only for final layout tables and can run after
+// kernel contributions were produced independently, provided their backing
+// storage remains live for the duration of this call.
 iree_status_t loom_amdgpu_write_kernel_hsaco_contributions(
     const loom_amdgpu_kernel_hsaco_contribution_t* contributions,
     iree_host_size_t contribution_count, iree_io_stream_t* stream,

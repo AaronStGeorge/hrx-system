@@ -54,7 +54,7 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
       wait_packets ? wait_packets->packet_count : 0;
   *out_contribution = (loom_amdgpu_kernel_hsaco_contribution_t){
       .target = record.target_id,
-      .target_cpu = snapshot->target_cpu,
+      .processor = snapshot->target_cpu,
       .kernel = kernel,
       .summary =
           {
@@ -86,7 +86,7 @@ iree_status_t loom_amdgpu_write_kernel_hsaco_contributions(
   }
 
   const iree_string_view_t target = contributions[0].target;
-  const iree_string_view_t target_cpu = contributions[0].target_cpu;
+  const iree_string_view_t processor = contributions[0].processor;
   loom_amdgpu_hsaco_kernel_t* kernels = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       scratch_arena, contribution_count, sizeof(kernels[0]), (void**)&kernels));
@@ -101,20 +101,20 @@ iree_status_t loom_amdgpu_write_kernel_hsaco_contributions(
           i, (int)contribution->target.size, contribution->target.data,
           (int)target.size, target.data);
     }
-    if (!iree_string_view_equal(contribution->target_cpu, target_cpu)) {
+    if (!iree_string_view_equal(contribution->processor, processor)) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "AMDGPU kernel contribution %" PRIhsz
-          " target CPU '%.*s' does not match batch target CPU '%.*s'",
-          i, (int)contribution->target_cpu.size, contribution->target_cpu.data,
-          (int)target_cpu.size, target_cpu.data);
+          " processor '%.*s' does not match batch processor '%.*s'",
+          i, (int)contribution->processor.size, contribution->processor.data,
+          (int)processor.size, processor.data);
     }
     kernels[i] = contribution->kernel;
   }
 
   const loom_amdgpu_hsaco_file_t file = {
       .target = target,
-      .target_cpu = target_cpu,
+      .processor = processor,
       .kernels = kernels,
       .kernel_count = contribution_count,
   };

@@ -36,7 +36,7 @@ TEST(AmdgpuTargetInfoTest, IteratesProcessors) {
   const loom_amdgpu_processor_info_t* first =
       loom_amdgpu_target_info_processor_at(0);
   ASSERT_NE(first, nullptr);
-  EXPECT_FALSE(iree_string_view_is_empty(first->target_cpu));
+  EXPECT_FALSE(iree_string_view_is_empty(first->processor));
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpDescriptorSetEncodingProfile) {
@@ -87,9 +87,9 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx942Processor) {
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
 }
 
-TEST(AmdgpuTargetInfoTest, MatchesLlvmCanonicalGfx9PlusProcessorElfFlags) {
+TEST(AmdgpuTargetInfoTest, MatchesAmdhsaGfx9PlusProcessorElfFlags) {
   const struct {
-    iree_string_view_t target_cpu;
+    iree_string_view_t processor;
     uint32_t elf_flags;
   } cases[] = {
       {IREE_SV("gfx900"), 0x12Cu},
@@ -140,9 +140,9 @@ TEST(AmdgpuTargetInfoTest, MatchesLlvmCanonicalGfx9PlusProcessorElfFlags) {
   for (const auto& c : cases) {
     const loom_amdgpu_processor_info_t* processor = nullptr;
     IREE_ASSERT_OK(
-        loom_amdgpu_target_info_lookup_processor(c.target_cpu, &processor));
+        loom_amdgpu_target_info_lookup_processor(c.processor, &processor));
     ASSERT_NE(processor, nullptr);
-    EXPECT_TRUE(iree_string_view_equal(processor->target_cpu, c.target_cpu));
+    EXPECT_TRUE(iree_string_view_equal(processor->processor, c.processor));
     EXPECT_EQ(processor->elf_machine_flags | processor->elf_feature_flags,
               c.elf_flags);
   }
@@ -167,7 +167,7 @@ TEST(AmdgpuTargetInfoTest, ParsesAmdhsaTargetIdWithFeatureSuffix) {
   IREE_ASSERT_OK(loom_amdgpu_target_info_parse_amdhsa_target_id(
       IREE_SV("amdgcn-amd-amdhsa--gfx1100:sramecc+:xnack-"), &target_id));
   ASSERT_NE(target_id.processor, nullptr);
-  EXPECT_TRUE(iree_string_view_equal(target_id.processor->target_cpu,
+  EXPECT_TRUE(iree_string_view_equal(target_id.processor->processor,
                                      IREE_SV("gfx1100")));
   EXPECT_TRUE(iree_string_view_equal(target_id.feature_suffix,
                                      IREE_SV("sramecc+:xnack-")));
