@@ -78,8 +78,8 @@ typedef struct loom_target_contract_query_result_t {
   uint16_t diagnostic_index;
   // Number of guards matched before the selected rejected guard.
   uint16_t matched_guard_count;
-  // Stable low descriptor ID selected by the accepted rule.
-  uint64_t selected_descriptor_id;
+  // Low descriptor row selected by the accepted rule, or NULL.
+  const loom_low_descriptor_t* selected_descriptor;
   // Compact target-independent rejection flags.
   uint32_t source_rejection_bits;
   // Compact target-owned rejection flags.
@@ -304,7 +304,7 @@ loom_target_contract_query_result_empty(void) {
       /*.rule_index=*/UINT16_MAX,
       /*.diagnostic_index=*/UINT16_MAX,
       /*.matched_guard_count=*/0,
-      /*.selected_descriptor_id=*/LOOM_LOW_DESCRIPTOR_ID_NONE,
+      /*.selected_descriptor=*/NULL,
       /*.source_rejection_bits=*/0,
       /*.target_rejection_bits=*/0,
       /*.missing_feature_bits=*/0,

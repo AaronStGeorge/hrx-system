@@ -224,17 +224,6 @@ py_binary(
 )
 
 py_binary(
-    name = "amdgpu_descriptor_ids",
-    srcs = ["amdgpu_descriptor_ids.py"],
-    main = "amdgpu_descriptor_ids.py",
-    deps = [
-        ":generated_file",
-        "//loom/py/loom/target:low_descriptors",
-        "//loom/py/loom/target/arch/amdgpu:descriptors",
-    ],
-)
-
-py_binary(
     name = "amdgpu_target_refs",
     srcs = ["amdgpu_target_refs.py"],
     main = "amdgpu_target_refs.py",

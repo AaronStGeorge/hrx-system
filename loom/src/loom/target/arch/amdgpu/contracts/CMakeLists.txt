@@ -33,7 +33,6 @@ loom_target_table_cc_library(
     loom::src::loom::ops::index
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector
-    loom::src::loom::target::arch::amdgpu::descriptor_ids
     loom::src::loom::target::arch::amdgpu::lower_kinds
     loom::src::loom::target::arch::amdgpu::lower_materializers
 )
@@ -106,7 +105,6 @@ loom_target_table_cc_library(
     loom::src::loom::codegen::low::lower
     loom::src::loom::ops::index
     loom::src::loom::ops::scalar
-    loom::src::loom::target::arch::amdgpu::descriptor_ids
     loom::src::loom::target::arch::amdgpu::lower_materializers
 )
 
@@ -131,7 +129,6 @@ loom_target_table_cc_library(
   DEPS
     loom::src::loom::codegen::low::lower
     loom::src::loom::ops::vector
-    loom::src::loom::target::arch::amdgpu::descriptor_ids
     loom::src::loom::target::arch::amdgpu::lower_kinds
 )
 
@@ -157,7 +154,6 @@ loom_target_table_cc_library(
     loom::src::loom::codegen::low::lower
     loom::src::loom::ops::index
     loom::src::loom::ops::scalar
-    loom::src::loom::target::arch::amdgpu::descriptor_ids
     loom::src::loom::target::arch::amdgpu::lower_materializers
 )
 
@@ -193,7 +189,6 @@ loom_target_table_cc_library(
   DEPS
     loom::src::loom::codegen::low::lower
     loom::src::loom::ops::vector
-    loom::src::loom::target::arch::amdgpu::descriptor_ids
     loom::src::loom::target::arch::amdgpu::lower_kinds
     loom::src::loom::target::arch::amdgpu::lower_materializers
 )

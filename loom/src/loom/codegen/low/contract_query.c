@@ -231,6 +231,22 @@ static iree_status_t loom_low_lower_query_target_contract_index(
         loom_low_lower_rule_set_select_rule_range_with_match_context(
             match_context, rule_set, source_op, rule_index, 1, &selection));
     if (selection.rule != NULL) {
+      const loom_low_lower_descriptor_ref_t descriptor_ref =
+          loom_low_lower_rule_first_descriptor_ref(rule_set, selection.rule);
+      const loom_low_descriptor_t* selected_descriptor = NULL;
+      if (descriptor_ref != LOOM_LOW_LOWER_DESCRIPTOR_REF_NONE) {
+        IREE_RETURN_IF_ERROR(loom_low_lower_rule_resolve_descriptor_ref(
+            match_context, rule_set, descriptor_ref, &selected_descriptor));
+        if (selected_descriptor == NULL) {
+          const iree_string_view_t key =
+              rule_set->descriptor_refs[descriptor_ref].key;
+          return iree_make_status(
+              IREE_STATUS_FAILED_PRECONDITION,
+              "generated target-low contract selected missing descriptor "
+              "'%.*s'",
+              (int)key.size, key.data);
+        }
+      }
       *out_result = (loom_target_contract_query_result_t){
           .outcome = LOOM_TARGET_CONTRACT_QUERY_LEGAL,
           .binding_index = contract_case->binding_index,
@@ -239,8 +255,7 @@ static iree_status_t loom_low_lower_query_target_contract_index(
           .rule_index = selection.rule_index,
           .diagnostic_index = LOOM_LOW_LOWER_DIAGNOSTIC_NONE,
           .matched_guard_count = selection.rule->guard_count,
-          .selected_descriptor_id =
-              loom_low_lower_rule_first_descriptor_id(rule_set, selection.rule),
+          .selected_descriptor = selected_descriptor,
           .source_rejection_bits = 0,
           .target_rejection_bits = 0,
           .missing_feature_bits = 0,
@@ -279,7 +294,7 @@ static iree_status_t loom_low_lower_query_target_contract_index(
       .rule_index = UINT16_MAX,
       .diagnostic_index = failed_selection.diagnostic_index,
       .matched_guard_count = failed_selection.matched_guard_count,
-      .selected_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
+      .selected_descriptor = NULL,
       .source_rejection_bits = 0,
       .target_rejection_bits = 0,
       .missing_feature_bits = 0,
@@ -312,6 +327,7 @@ iree_status_t loom_low_lower_query_target_contract(
       .map_value = options->map_value,
       .register_class = options->register_class,
       .can_materialize = options->can_materialize,
+      .descriptor_ref = options->descriptor_ref,
       .fact_table = environment->fact_table,
   };
 

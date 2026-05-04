@@ -260,8 +260,6 @@ loom_cc_library(
 
 _AMDGPU_DESCRIPTOR_GENERATOR = "//loom/py/loom/gen:amdgpu_descriptors"
 
-_AMDGPU_DESCRIPTOR_ID_GENERATOR = "//loom/py/loom/gen:amdgpu_descriptor_ids"
-
 _AMDGPU_TARGET_REF_GENERATOR = "//loom/py/loom/gen:amdgpu_target_refs"
 
 _AMDGPU_ATOMIC_CANDIDATE_GENERATOR = "//loom/py/loom/gen:amdgpu_atomic_candidates"
@@ -294,14 +292,6 @@ loom_cc_library(
     name = "register_class",
     hdrs = ["register_class.h"],
     deps = ["//loom/src/loom/codegen/low:descriptors"],
-)
-
-loom_target_table_cc_library(
-    name = "descriptor_ids",
-    args = [
-        "--public-header=loom/target/arch/amdgpu/descriptor_ids.h",
-    ],
-    generator = _AMDGPU_DESCRIPTOR_ID_GENERATOR,
 )
 
 loom_target_table_cc_library(

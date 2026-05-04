@@ -20,6 +20,23 @@ namespace {
 constexpr loom_op_kind_t kSourceOpKind = LOOM_OP_KIND(7, 3);
 constexpr uint64_t kDescriptorId = UINT64_C(0x123456789abcdef0);
 
+const loom_low_descriptor_t kDescriptor = {
+    /*.key_string_offset=*/0,
+    /*.stable_id=*/kDescriptorId,
+};
+
+iree_status_t ResolveTestDescriptorRef(
+    void* user_data, const loom_low_lower_rule_match_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set,
+    loom_low_lower_descriptor_ref_t descriptor_ref,
+    const loom_low_descriptor_t** out_descriptor) {
+  (void)user_data;
+  (void)context;
+  (void)rule_set;
+  *out_descriptor = descriptor_ref == 0 ? &kDescriptor : nullptr;
+  return iree_ok_status();
+}
+
 const loom_target_config_t kTargetConfig = {
     /*.name=*/IREE_SV("test-config"),
     /*.contract_set_key=*/{},
@@ -63,15 +80,20 @@ loom_target_contract_fragment_t MakeContractFragment(
 }
 
 TEST(LowContractQueryTest, ContractIndexDescriptorRuleSelectsLegalCase) {
+  loom_low_lower_rule_descriptor_ref_t descriptor_ref = {
+      /*.key=*/IREE_SV("test.descriptor"),
+  };
   loom_low_lower_emit_t emit = {};
   emit.kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP;
-  emit.descriptor_id = kDescriptorId;
+  emit.descriptor_ref = 0;
   loom_low_lower_rule_t rule = {};
   rule.source_op_kind = kSourceOpKind;
   rule.emit_count = 1;
   loom_low_lower_rule_set_t rule_set = {};
   rule_set.rules = &rule;
   rule_set.rule_count = 1;
+  rule_set.descriptor_refs = &descriptor_ref;
+  rule_set.descriptor_ref_count = 1;
   rule_set.emits = &emit;
   rule_set.emit_count = 1;
   const loom_low_lower_rule_set_t* rule_sets[] = {&rule_set};
@@ -104,6 +126,14 @@ TEST(LowContractQueryTest, ContractIndexDescriptorRuleSelectsLegalCase) {
           /*.count=*/IREE_ARRAYSIZE(rule_sets),
           /*.values=*/rule_sets,
       },
+      /*.map_value=*/{},
+      /*.register_class=*/{},
+      /*.can_materialize=*/{},
+      /*.descriptor_ref=*/
+      {
+          /*.fn=*/ResolveTestDescriptorRef,
+          /*.user_data=*/nullptr,
+      },
   };
   const loom_target_contract_query_environment_t environment = {
       /*.module=*/nullptr,
@@ -125,7 +155,7 @@ TEST(LowContractQueryTest, ContractIndexDescriptorRuleSelectsLegalCase) {
   EXPECT_EQ(result.case_index, 0);
   EXPECT_EQ(result.rule_set_index, 0);
   EXPECT_EQ(result.rule_index, 0);
-  EXPECT_EQ(result.selected_descriptor_id, kDescriptorId);
+  EXPECT_EQ(result.selected_descriptor, &kDescriptor);
 
   iree_arena_deinitialize(&arena);
   iree_arena_block_pool_deinitialize(&block_pool);

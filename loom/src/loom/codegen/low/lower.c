@@ -634,8 +634,13 @@ static iree_status_t loom_low_lower_record_descriptor_matrix_plan(
   IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
       context, sizeof(*plan_data), (void**)&plan_data));
   plan_data->source = matrix_rule->source;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor(
-      context, query_result->selected_descriptor_id, &plan_data->descriptor));
+  if (query_result->selected_descriptor == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "descriptor-matrix contract returned LEGAL without a descriptor");
+  }
+  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_row(
+      context, query_result->selected_descriptor, &plan_data->descriptor));
   loom_low_lower_record_selected_plan(
       context, (loom_low_lower_selected_plan_t){
                    .source_op = source_op,
@@ -791,6 +796,11 @@ static iree_status_t loom_low_lower_query_target_contract_from_context(
               .fn = loom_low_lower_contract_query_can_materialize,
               .user_data = &state,
           },
+      .descriptor_ref =
+          {
+              .fn = loom_low_lower_rule_match_descriptor_ref_from_lowering,
+              .user_data = context,
+          },
       .descriptor_matrix = context->policy->descriptor_matrix,
   };
 
@@ -831,8 +841,11 @@ static void loom_low_lower_record_report_row(
     row->rule_set_index = selected_plan->rule_set_index;
     row->rule_index = selected_plan->rule_index;
     row->plan_id = LOOM_LOW_LOWER_PLAN_ID_NONE;
-    row->descriptor_id = loom_low_lower_rule_first_descriptor_id(
-        selected_plan->rule_set, selected_plan->rule);
+    if (selected_plan->rule->emit_count != 0 &&
+        selected_plan->resolved_emits != NULL) {
+      row->descriptor_id =
+          selected_plan->resolved_emits[0].descriptor.descriptor->stable_id;
+    }
   } else if (selected_plan->kind ==
              LOOM_LOW_LOWER_SELECTED_PLAN_DESCRIPTOR_MATRIX) {
     const loom_low_lower_descriptor_matrix_plan_t* plan =

@@ -59,41 +59,9 @@ static iree_status_t loom_low_build_resolved_descriptor_opcode_id(
       descriptor_set, descriptor->key_string_offset);
   if (iree_string_view_is_empty(key)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low descriptor ID 0x%016" PRIx64
-                            " has no descriptor key",
-                            descriptor->stable_id);
+                            "target-low descriptor has no descriptor key");
   }
   return loom_module_intern_string(builder->module, key, out_opcode_id);
-}
-
-static iree_status_t loom_low_build_lookup_descriptor(
-    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    uint64_t descriptor_id, const loom_low_descriptor_t** out_descriptor,
-    loom_string_id_t* out_opcode_id) {
-  *out_descriptor = NULL;
-  *out_opcode_id = LOOM_STRING_ID_INVALID;
-  const uint32_t descriptor_ordinal =
-      loom_low_descriptor_set_lookup_descriptor_by_id(descriptor_set,
-                                                      descriptor_id);
-  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "target-low descriptor ID 0x%016" PRIx64
-                            " is not present in the selected descriptor set",
-                            descriptor_id);
-  }
-  const loom_low_descriptor_t* descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set, descriptor_ordinal);
-  if (descriptor == NULL) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "target-low descriptor ID 0x%016" PRIx64
-        " mapped to an out-of-range descriptor ordinal %" PRIu32,
-        descriptor_id, descriptor_ordinal);
-  }
-  IREE_RETURN_IF_ERROR(loom_low_build_resolved_descriptor_opcode_id(
-      builder, descriptor_set, descriptor, out_opcode_id));
-  *out_descriptor = descriptor;
-  return iree_ok_status();
 }
 
 iree_status_t loom_low_build_resolved_descriptor_op(
@@ -195,36 +163,4 @@ iree_status_t loom_low_build_resolved_descriptor_const(
       loom_builder_define_value(builder, result_type, &result_id));
   loom_op_results(*out_op)[0] = result_id;
   return loom_builder_finalize_op(builder, *out_op);
-}
-
-iree_status_t loom_low_build_descriptor_op(
-    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    uint64_t descriptor_id, const loom_value_id_t* operands,
-    iree_host_size_t operand_count, loom_named_attr_slice_t attrs,
-    const loom_type_t* result_types, iree_host_size_t result_count,
-    const loom_tied_result_t* tied_results, iree_host_size_t tied_result_count,
-    loom_location_id_t location, loom_op_t** out_op) {
-  *out_op = NULL;
-  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
-  const loom_low_descriptor_t* descriptor = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_build_lookup_descriptor(
-      builder, descriptor_set, descriptor_id, &descriptor, &opcode_id));
-  return loom_low_build_resolved_descriptor_op(
-      builder, descriptor_set, descriptor, opcode_id, operands, operand_count,
-      attrs, result_types, result_count, tied_results, tied_result_count,
-      location, out_op);
-}
-
-iree_status_t loom_low_build_descriptor_const(
-    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    uint64_t descriptor_id, loom_named_attr_slice_t attrs,
-    loom_type_t result_type, loom_location_id_t location, loom_op_t** out_op) {
-  *out_op = NULL;
-  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
-  const loom_low_descriptor_t* descriptor = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_build_lookup_descriptor(
-      builder, descriptor_set, descriptor_id, &descriptor, &opcode_id));
-  return loom_low_build_resolved_descriptor_const(
-      builder, descriptor_set, descriptor, opcode_id, attrs, result_type,
-      location, out_op);
 }

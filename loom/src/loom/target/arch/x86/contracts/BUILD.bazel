@@ -32,7 +32,6 @@ loom_target_table_cc_library(
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/vector",
-        "//loom/src/loom/target/arch/x86:avx512_descriptors_ids",
     ],
 )
 
@@ -50,6 +49,5 @@ loom_target_table_cc_library(
     deps = [
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ops/vector",
-        "//loom/src/loom/target/arch/x86:packed_dot_descriptors_ids",
     ],
 )

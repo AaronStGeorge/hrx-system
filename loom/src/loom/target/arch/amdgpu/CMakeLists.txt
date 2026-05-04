@@ -127,15 +127,6 @@ loom_cc_library(
 
 loom_target_table_cc_library(
   NAME
-    descriptor_ids
-  GENERATOR
-    iree::runtime::py::loom::gen::amdgpu_descriptor_ids
-  ARGS
-    "--public-header=loom/target/arch/amdgpu/descriptor_ids.h"
-)
-
-loom_target_table_cc_library(
-  NAME
     target_refs
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_target_refs

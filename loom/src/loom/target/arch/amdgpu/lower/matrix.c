@@ -272,7 +272,7 @@ iree_status_t loom_amdgpu_descriptor_matrix_query(
 
   *out_result = loom_target_contract_query_result_empty();
   out_result->outcome = LOOM_TARGET_CONTRACT_QUERY_LEGAL;
-  out_result->selected_descriptor_id = descriptor->stable_id;
+  out_result->selected_descriptor = descriptor;
   out_result->source_rejection_bits = contract_diagnostic.rejection_bits;
   out_result->target_rejection_bits = match_diagnostic.rejection_bits;
   return iree_ok_status();

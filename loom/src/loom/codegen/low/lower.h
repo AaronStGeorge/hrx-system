@@ -621,16 +621,6 @@ iree_status_t loom_low_lower_make_register_type(
     loom_low_lower_context_t* context, uint16_t reg_class_id,
     uint32_t unit_count, loom_type_t* out_type);
 
-// Resolves a required stable descriptor ID against the selected descriptor set.
-//
-// Planning paths should resolve once and store the resulting row in their
-// selected plan instead of making emission perform descriptor lookup. Missing
-// descriptors are generated policy/table invariant failures; optional planning
-// and feature probing must use loom_low_lower_resolve_descriptor_if_present.
-iree_status_t loom_low_lower_resolve_descriptor(
-    loom_low_lower_context_t* context, uint64_t descriptor_id,
-    loom_low_lower_resolved_descriptor_t* out_descriptor);
-
 // Resolves a descriptor row from the selected descriptor set.
 //
 // This is for selectors that already walked a descriptor-set table and selected
@@ -639,37 +629,6 @@ iree_status_t loom_low_lower_resolve_descriptor(
 iree_status_t loom_low_lower_resolve_descriptor_row(
     loom_low_lower_context_t* context, const loom_low_descriptor_t* descriptor,
     loom_low_lower_resolved_descriptor_t* out_descriptor);
-
-// Resolves a stable descriptor ID when it is present in the selected descriptor
-// set.
-//
-// Missing descriptors set |out_present| false. Use this only for optional
-// planning and target feature selection where absence is a normal false branch.
-// Malformed descriptor rows and allocation failures are infrastructure errors.
-iree_status_t loom_low_lower_resolve_descriptor_if_present(
-    loom_low_lower_context_t* context, uint64_t descriptor_id,
-    loom_low_lower_resolved_descriptor_t* out_descriptor, bool* out_present);
-
-// Emits a descriptor-backed low.op selected by stable descriptor ID.
-//
-// The selected descriptor set on |context| is the authority for converting the
-// durable ID into the packet's textual descriptor spelling. This is for
-// construction paths that naturally only have a descriptor ID at the emission
-// boundary; planned source lowerings should prefer resolve_descriptor followed
-// by the resolved emit helpers.
-iree_status_t loom_low_lower_emit_descriptor_op(
-    loom_low_lower_context_t* context, uint64_t descriptor_id,
-    const loom_value_id_t* operands, iree_host_size_t operand_count,
-    loom_named_attr_slice_t attrs, const loom_type_t* result_types,
-    iree_host_size_t result_count, const loom_tied_result_t* tied_results,
-    iree_host_size_t tied_result_count, loom_location_id_t location,
-    loom_op_t** out_op);
-
-// Emits a descriptor-backed low.const selected by stable descriptor ID.
-iree_status_t loom_low_lower_emit_descriptor_const(
-    loom_low_lower_context_t* context, uint64_t descriptor_id,
-    loom_named_attr_slice_t attrs, loom_type_t result_type,
-    loom_location_id_t location, loom_op_t** out_op);
 
 // Emits a descriptor-backed low.op from a descriptor row resolved during
 // selection.

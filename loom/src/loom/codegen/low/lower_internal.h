@@ -13,6 +13,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/builder.h"
 #include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower_rules.h"
 #include "loom/codegen/low/memory_access.h"
 #include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
@@ -22,9 +23,6 @@ extern "C" {
 #endif
 
 #define LOOM_LOW_LOWER_VALUE_ID_ELIDED ((loom_value_id_t)(UINT32_MAX - 1))
-
-typedef struct loom_low_lower_rule_t loom_low_lower_rule_t;
-typedef struct loom_low_lower_resolved_emit_t loom_low_lower_resolved_emit_t;
 
 enum loom_low_lower_value_storage_flag_bits_e {
   // The source value must be materialized as a low SSA value.
@@ -69,6 +67,15 @@ typedef struct loom_low_lower_selected_plan_t {
   loom_low_lower_plan_t plan;
 } loom_low_lower_selected_plan_t;
 
+typedef struct loom_low_lower_rule_descriptor_map_t {
+  // Rule set whose local descriptor refs are resolved by descriptors.
+  const loom_low_lower_rule_set_t* rule_set;
+  // Descriptor rows indexed by rule-set-local descriptor ref.
+  const loom_low_descriptor_t* const* descriptors;
+  // Number of entries in descriptors.
+  uint16_t descriptor_count;
+} loom_low_lower_rule_descriptor_map_t;
+
 typedef struct loom_low_lowering_frame_t {
   // Active source-function value domain for dense per-value lowering state.
   loom_local_value_domain_t value_domain;
@@ -100,6 +107,12 @@ typedef struct loom_low_lowering_frame_t {
   iree_host_size_t memory_access_record_count;
   // Capacity of memory_access_records.
   iree_host_size_t memory_access_record_capacity;
+  // Descriptor set used to build rule_descriptor_maps.
+  const loom_low_descriptor_set_t* rule_descriptor_map_set;
+  // Per-policy-rule-set descriptor-ref to descriptor-row maps.
+  loom_low_lower_rule_descriptor_map_t* rule_descriptor_maps;
+  // Number of entries in rule_descriptor_maps.
+  uint16_t rule_descriptor_map_count;
 } loom_low_lowering_frame_t;
 
 static inline loom_value_ordinal_t loom_low_lowering_frame_value_ordinal(
@@ -135,6 +148,13 @@ struct loom_low_lower_context_t {
 // Returns the source function name used in source-to-low diagnostics/reports.
 iree_string_view_t loom_low_lower_context_function_name(
     const loom_low_lower_context_t* context);
+
+// Resolves descriptor refs through the lowering context's cached rule maps.
+iree_status_t loom_low_lower_rule_match_descriptor_ref_from_lowering(
+    void* user_data, const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set,
+    loom_low_lower_descriptor_ref_t descriptor_ref,
+    const loom_low_descriptor_t** out_descriptor);
 
 // Returns true when the lowering context has reached its diagnostic limit.
 bool loom_low_lower_context_should_stop(

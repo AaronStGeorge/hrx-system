@@ -28,6 +28,10 @@ extern "C" {
 typedef struct loom_low_lower_rule_match_context_t
     loom_low_lower_rule_match_context_t;
 
+typedef uint16_t loom_low_lower_descriptor_ref_t;
+
+#define LOOM_LOW_LOWER_DESCRIPTOR_REF_NONE UINT16_MAX
+
 // Returns a scalar element-type bit for type-pattern masks.
 #define LOOM_LOW_LOWER_SCALAR_TYPE_BIT(type) (UINT64_C(1) << (uint32_t)(type))
 
@@ -130,6 +134,19 @@ typedef struct loom_low_lower_rule_match_can_materialize_value_callback_t {
   void* user_data;
 } loom_low_lower_rule_match_can_materialize_value_callback_t;
 
+typedef iree_status_t (*loom_low_lower_rule_match_descriptor_ref_fn_t)(
+    void* user_data, const loom_low_lower_rule_match_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set,
+    loom_low_lower_descriptor_ref_t descriptor_ref,
+    const loom_low_descriptor_t** out_descriptor);
+
+typedef struct loom_low_lower_rule_match_descriptor_ref_callback_t {
+  // Callback invoked to resolve a rule-set-local descriptor ref.
+  loom_low_lower_rule_match_descriptor_ref_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_rule_match_descriptor_ref_callback_t;
+
 struct loom_low_lower_rule_match_context_t {
   // Source module being matched.
   const loom_module_t* module;
@@ -147,9 +164,17 @@ struct loom_low_lower_rule_match_context_t {
   loom_low_lower_rule_match_register_class_callback_t register_class;
   // Optional source value materializer predicate bridge.
   loom_low_lower_rule_match_can_materialize_value_callback_t can_materialize;
+  // Optional rule-local descriptor-ref resolver. Missing uses descriptor keys
+  // directly and is intended for tests and cold standalone queries.
+  loom_low_lower_rule_match_descriptor_ref_callback_t descriptor_ref;
   // Optional dense source value facts used by fact-backed guard rows.
   const loom_value_fact_table_t* fact_table;
 };
+
+typedef struct loom_low_lower_rule_descriptor_ref_t {
+  // Stable descriptor key resolved once against the selected descriptor set.
+  iree_string_view_t key;
+} loom_low_lower_rule_descriptor_ref_t;
 
 typedef struct loom_low_lower_value_ref_t {
   // Source value namespace being referenced.
@@ -344,7 +369,7 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_ATTR_ENUM_EQ = 3,
   // Source i64 attribute value must fall in [minimum_i64, maximum_i64].
   LOOM_LOW_LOWER_GUARD_ATTR_I64_RANGE = 4,
-  // Selected descriptor set must contain descriptor_id and its required
+  // Selected descriptor set must contain descriptor_ref and its required
   // features must be enabled by the target bundle.
   LOOM_LOW_LOWER_GUARD_DESCRIPTOR_AVAILABLE = 5,
   // Source value ref must be accepted by its configured materializer.
@@ -395,10 +420,10 @@ typedef struct loom_low_lower_guard_t {
   loom_attr_kind_t attr_kind;
   // Required enum value, divisor, count, element index, or bit-count payload.
   uint64_t u64;
-  // Stable descriptor ID used by DESCRIPTOR_AVAILABLE guards.
-  uint64_t descriptor_id;
   // Descriptor-set register-class ID used by LOW_VALUE_REGISTER_CLASS guards.
   uint16_t register_class_id;
+  // Rule-set-local descriptor ref used by DESCRIPTOR_AVAILABLE guards.
+  loom_low_lower_descriptor_ref_t descriptor_ref;
   // Inclusive lower i64 bound for ATTR_I64_RANGE guards.
   int64_t minimum_i64;
   // Inclusive upper i64 bound for ATTR_I64_RANGE guards.
@@ -437,8 +462,8 @@ typedef struct loom_low_lower_emit_t {
   loom_low_lower_emit_kind_t kind;
   // Emit behavior flags.
   loom_low_lower_emit_flags_t flags;
-  // Stable low descriptor ID consumed by the selected descriptor set.
-  uint64_t descriptor_id;
+  // Rule-set-local low descriptor ref consumed by the selected descriptor set.
+  loom_low_lower_descriptor_ref_t descriptor_ref;
   // First value-ref table row copied as a low operand.
   uint16_t operand_ref_start;
   // Number of low operands to copy from value-ref rows.
@@ -552,6 +577,10 @@ typedef struct loom_low_lower_rule_set_t {
   const loom_low_lower_source_memory_t* source_memories;
   // Number of rows in source_memories.
   uint16_t source_memory_count;
+  // Descriptor refs referenced by guards and emits.
+  const loom_low_lower_rule_descriptor_ref_t* descriptor_refs;
+  // Number of rows in descriptor_refs.
+  uint16_t descriptor_ref_count;
   // Diagnostic parameter projection rows referenced by diagnostics.
   const loom_low_lower_diagnostic_param_t* diagnostic_params;
   // Number of rows in diagnostic_params.
@@ -639,10 +668,18 @@ void loom_low_lower_rule_materialize_diagnostic_params(
     const loom_low_lower_diagnostic_t* diagnostic,
     loom_diagnostic_param_t* out_params);
 
-// Returns the first descriptor ID emitted by |rule|, or
-// LOOM_LOW_DESCRIPTOR_ID_NONE when the rule does not emit a descriptor-backed
-// packet.
-uint64_t loom_low_lower_rule_first_descriptor_id(
+// Resolves a rule-set-local descriptor ref against |match_context|'s selected
+// descriptor set. Missing optional descriptors return NULL.
+iree_status_t loom_low_lower_rule_resolve_descriptor_ref(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set,
+    loom_low_lower_descriptor_ref_t descriptor_ref,
+    const loom_low_descriptor_t** out_descriptor);
+
+// Returns the first descriptor ref emitted by |rule|, or
+// LOOM_LOW_LOWER_DESCRIPTOR_REF_NONE when the rule does not emit a
+// descriptor-backed packet.
+loom_low_lower_descriptor_ref_t loom_low_lower_rule_first_descriptor_ref(
     const loom_low_lower_rule_set_t* rule_set,
     const loom_low_lower_rule_t* rule);
 

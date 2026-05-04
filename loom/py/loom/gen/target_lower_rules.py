@@ -47,7 +47,7 @@ from loom.target.contracts.diagnostics import (
     MAX_TARGET_DIAGNOSTIC_PARAMS,
     DiagnosticParamKind,
 )
-from loom.target.low_descriptors import Descriptor, descriptor_set_relative_name
+from loom.target.low_descriptors import Descriptor
 
 _SCALAR_TYPE_C_NAMES = {
     "index": "LOOM_SCALAR_TYPE_INDEX",
@@ -306,8 +306,6 @@ def _generate_source(
             "",
         ]
     )
-    if table.emits:
-        lines.append(f'#include "{source_contract.descriptor_set.public_header}"')
     lines.extend(f'#include "{include}"' for include in source_contract.c_source_includes)
     lines.extend(f'#include "{include}"' for include in _materializer_includes(source_contract))
     lines.extend(f'#include "{include}"' for include in _op_header_includes(table))
@@ -363,6 +361,17 @@ def _generate_source(
         )
     )
 
+    descriptor_ref_keys = _descriptor_ref_keys(table, source_contract)
+    descriptor_refs = {key: index for index, key in enumerate(descriptor_ref_keys)}
+    descriptor_refs_name = f"k{c_table_prefix}DescriptorRefs"
+    lines.extend(
+        _emit_optional_array(
+            descriptor_refs_name,
+            "loom_low_lower_rule_descriptor_ref_t",
+            [_descriptor_ref_row(key) for key in descriptor_ref_keys],
+        )
+    )
+
     diagnostic_param_rows: list[LowerDiagnosticParam] = []
     diagnostic_rows: list[list[str]] = []
     for row in table.diagnostics:
@@ -399,7 +408,7 @@ def _generate_source(
         _emit_optional_array(
             guards_name,
             "loom_low_lower_guard_t",
-            [_guard_row(source_contract, row) for row in table.guards],
+            [_guard_row(descriptor_refs, row) for row in table.guards],
         )
     )
 
@@ -426,7 +435,7 @@ def _generate_source(
         _emit_optional_array(
             emits_name,
             "loom_low_lower_emit_t",
-            [_emit_row(source_contract, row) for row in table.emits],
+            [_emit_row(descriptor_refs, row) for row in table.emits],
         )
     )
 
@@ -460,6 +469,8 @@ def _generate_source(
             value_refs_name=value_refs_name,
             materializers_name=materializers_name,
             source_memories_name=source_memories_name,
+            descriptor_ref_keys=descriptor_ref_keys,
+            descriptor_refs_name=descriptor_refs_name,
             diagnostic_params_name=diagnostic_params_name,
             guards_name=guards_name,
             attr_copies_name=attr_copies_name,
@@ -587,7 +598,23 @@ def _source_memory_row(row: LowerSourceMemory) -> list[str]:
     return fields
 
 
-def _guard_row(table: ContractFragment, row: LowerGuard) -> list[str]:
+def _descriptor_ref_keys(table: CompiledLowerRuleSet, source_contract: ContractFragment) -> tuple[str, ...]:
+    used_keys = {row.descriptor.key for row in table.guards if row.kind == GuardKind.DESCRIPTOR_AVAILABLE and row.descriptor is not None}
+    used_keys.update(row.descriptor.key for row in table.emits)
+    return tuple(descriptor.key for descriptor in source_contract.descriptor_set.descriptors if descriptor.key in used_keys)
+
+
+def _descriptor_ref_row(key: str) -> list[str]:
+    return [f'.key = IREE_SVL("{_c_string_literal(key)}")']
+
+
+def _descriptor_ref_index(descriptor_refs: Mapping[str, int], descriptor: Descriptor | None) -> int:
+    if descriptor is None:
+        return 0xFFFF
+    return descriptor_refs[descriptor.key]
+
+
+def _guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]:
     fields: list[str] = []
     _append_field(fields, "kind", _GUARD_KIND_C_NAMES[row.kind], always=True)
 
@@ -646,8 +673,8 @@ def _guard_row(table: ContractFragment, row: LowerGuard) -> list[str]:
     if row.kind == GuardKind.DESCRIPTOR_AVAILABLE:
         _append_field(
             fields,
-            "descriptor_id",
-            _guard_descriptor_id(table, row.descriptor),
+            "descriptor_ref",
+            _descriptor_ref_index(descriptor_refs, row.descriptor),
             always=True,
         )
     if row.kind == GuardKind.LOW_VALUE_REGISTER_CLASS:
@@ -737,15 +764,15 @@ def _tied_result_row(row: LowerTiedResult) -> list[str]:
     return fields
 
 
-def _emit_row(table: ContractFragment, row: LowerEmit) -> list[str]:
+def _emit_row(descriptor_refs: Mapping[str, int], row: LowerEmit) -> list[str]:
     fields: list[str] = []
     flags = _emit_flags(row.flags)
     _append_field(fields, "kind", _EMIT_KIND_C_NAMES[row.kind], always=True)
     _append_field(fields, "flags", flags)
     _append_field(
         fields,
-        "descriptor_id",
-        _descriptor_id_constant_name(table, row.descriptor.key),
+        "descriptor_ref",
+        _descriptor_ref_index(descriptor_refs, row.descriptor),
         always=True,
     )
     if row.operand_ref_count:
@@ -830,6 +857,8 @@ def _rule_set_row(
     value_refs_name: str,
     materializers_name: str,
     source_memories_name: str,
+    descriptor_ref_keys: tuple[str, ...],
+    descriptor_refs_name: str,
     diagnostic_params_name: str,
     guards_name: str,
     attr_copies_name: str,
@@ -860,6 +889,12 @@ def _rule_set_row(
         "source_memories",
         table.source_memories,
         source_memories_name,
+    )
+    _append_table_fields(
+        fields,
+        "descriptor_refs",
+        descriptor_ref_keys,
+        descriptor_refs_name,
     )
     diagnostic_param_rows = tuple(param for diagnostic in table.diagnostics for param in diagnostic.params)
     _append_table_fields(
@@ -1011,12 +1046,6 @@ def _attr_kind_c_name(attr_kind: str | None) -> str:
     return c_name
 
 
-def _guard_descriptor_id(table: ContractFragment, descriptor: Descriptor | None) -> str:
-    if descriptor is None:
-        return "LOOM_LOW_DESCRIPTOR_ID_NONE"
-    return _descriptor_id_constant_name(table, descriptor.key)
-
-
 def _emit_flags(flags: int) -> str:
     if flags == 0:
         return "0"
@@ -1042,11 +1071,6 @@ def _materializer_includes(table: ContractFragment) -> tuple[str, ...]:
 
 def _op_c_name(op: Op) -> str:
     return "LOOM_OP_" + _c_identifier(op.name).upper()
-
-
-def _descriptor_id_constant_name(table: ContractFragment, descriptor_key: str) -> str:
-    descriptor_name = descriptor_set_relative_name(table.descriptor_set, descriptor_key)
-    return f"{table.descriptor_set.c_enum_prefix}_DESCRIPTOR_ID_{_c_identifier(descriptor_name).upper()}"
 
 
 def _generated_public_header(table: ContractFragment) -> str:

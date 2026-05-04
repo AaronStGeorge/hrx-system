@@ -34,7 +34,6 @@ loom_target_table_cc_library(
     loom::src::loom::ops::index
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector
-    loom::src::loom::target::arch::x86::avx512_descriptors_ids
 )
 
 loom_target_table_cc_library(
@@ -58,7 +57,6 @@ loom_target_table_cc_library(
   DEPS
     loom::src::loom::codegen::low::lower
     loom::src::loom::ops::vector
-    loom::src::loom::target::arch::x86::packed_dot_descriptors_ids
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
