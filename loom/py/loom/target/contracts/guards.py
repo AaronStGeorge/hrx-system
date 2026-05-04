@@ -20,7 +20,7 @@ from loom.dsl import (
     EnumCase,
     Op,
 )
-from loom.error.target import ERR_TARGET_009
+from loom.error.target import ERR_TARGET_003
 from loom.target.contracts.diagnostics import (
     DiagnosticRef,
     string_param,
@@ -65,7 +65,8 @@ class GuardDiagnostic:
     ref: DiagnosticRef | None = None
     subject_kind: str = ""
     subject_name: str = ""
-    reason: str = ""
+    expected_text: str = ""
+    constraint_key: str = ""
 
     def __post_init__(self) -> None:
         if self.ref is not None:
@@ -74,16 +75,18 @@ class GuardDiagnostic:
             raise ValueError("guard diagnostic subject kind must be non-empty")
         if not self.subject_name:
             raise ValueError("guard diagnostic subject name must be non-empty")
-        if not self.reason:
-            raise ValueError("guard diagnostic reason must be non-empty")
+        if not self.expected_text:
+            raise ValueError("guard diagnostic expected text must be non-empty")
+        constraint_key = self.constraint_key or self.subject_kind
         object.__setattr__(
             self,
             "ref",
             target_diagnostic(
-                ERR_TARGET_009,
+                ERR_TARGET_003,
                 string_param("subject_kind", self.subject_kind),
                 string_param("subject_name", self.subject_name),
-                string_param("detail", self.reason),
+                string_param("constraint_key", constraint_key),
+                string_param("expected_text", self.expected_text),
             ),
         )
 

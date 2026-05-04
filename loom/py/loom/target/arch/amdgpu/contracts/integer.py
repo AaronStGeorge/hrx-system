@@ -67,7 +67,7 @@ _RESULT = ValueRef.result("result")
 _ADDRESS_U32_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="address-width",
     subject_name="u32",
-    reason=(
+    expected_text=(
         "AMDGPU index lowering requires address results proven non-negative and 32-bit"
     ),
 )

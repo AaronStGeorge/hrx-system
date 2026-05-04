@@ -201,7 +201,7 @@ def _vector_reduce_rule(
 _TEST_LOW_SOURCE_MEMORY_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="source-memory",
     subject_name="test-low",
-    reason=(
+    expected_text=(
         "test-low requires a contiguous 4-lane zero-offset global or generic "
         "source memory access"
     ),
@@ -309,7 +309,7 @@ TEST_LOW_CORE_CONTRACT_FRAGMENT = ContractFragment(
                     diagnostic=GuardDiagnostic(
                         subject_kind="value",
                         subject_name="byte_offset",
-                        reason="test-low requires zero buffer view offset",
+                        expected_text="test-low requires zero buffer view offset",
                     ),
                 ),
             ),

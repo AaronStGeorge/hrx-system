@@ -81,7 +81,7 @@
 // RUN:   | loom-opt --diagnostic-format=json --pass=source-to-low \
 // RUN:       --output=%t.unused > %t.source-low-diagnostic.err 2>&1; test $? -ne 0
 // RUN: FileCheck --check-prefix=SOURCE-LOW-DIAGNOSTIC %s < %t.source-low-diagnostic.err
-// SOURCE-LOW-DIAGNOSTIC: "error_id":"ERR_TARGET_009"
+// SOURCE-LOW-DIAGNOSTIC: "error_id":"ERR_TARGET_003"
 // SOURCE-LOW-DIAGNOSTIC: "emitter":"pass"
 // SOURCE-LOW-DIAGNOSTIC: "op_name":"index.add"
 // SOURCE-LOW-DIAGNOSTIC: source-to-low lowering failed with

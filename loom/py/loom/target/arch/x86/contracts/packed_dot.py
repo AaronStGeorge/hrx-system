@@ -44,13 +44,13 @@ _DOT_TYPE_FIELD_NAMES = {
 _DOT_KIND_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="attr",
     subject_name="kind",
-    reason="x86 packed-dot lowering requires a supported vector dot kind",
+    expected_text="x86 packed-dot lowering requires a supported vector dot kind",
 )
 
 _DOT_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="descriptor",
     subject_name="x86.packed_dot",
-    reason=(
+    expected_text=(
         "x86 packed-dot lowering requires a descriptor available in the active "
         "target contract and enabled by target features"
     ),
@@ -119,7 +119,7 @@ def _type_diagnostic(field: str) -> GuardDiagnostic:
     return GuardDiagnostic(
         subject_kind="type",
         subject_name=field,
-        reason=(
+        expected_text=(
             "x86 packed-dot lowering requires a descriptor-compatible "
             f"{field_name} vector"
         ),

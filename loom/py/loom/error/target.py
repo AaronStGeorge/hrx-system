@@ -180,25 +180,6 @@ ERR_TARGET_008 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_009: Target contract rejected a named subject.
-ERR_TARGET_009 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=9,
-    severity=Severity.ERROR,
-    summary="Target contract rejected a named subject.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' {subject_kind} '{subject_name}' in "
-        "'@{function_name}': {detail}"
-    ),
-    params=(
-        *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("subject_kind", ParamKind.STRING),
-        ErrorParam("subject_name", ParamKind.STRING),
-        ErrorParam("detail", ParamKind.STRING),
-    ),
-)
-
 # ERR_TARGET_010: Target pipeline entry has no target record.
 ERR_TARGET_010 = ErrorDef(
     domain=ErrorDomain.TARGET,
@@ -1043,7 +1024,6 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_006,
     ERR_TARGET_007,
     ERR_TARGET_008,
-    ERR_TARGET_009,
     ERR_TARGET_010,
     ERR_TARGET_011,
     ERR_TARGET_012,

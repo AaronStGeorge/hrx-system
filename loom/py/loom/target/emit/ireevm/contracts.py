@@ -35,32 +35,32 @@ _I32 = Scalar("i32")
 _I1_OR_I32_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="source",
-    reason="IREE VM lowering currently supports only i1/i32 scalar values",
+    expected_text="IREE VM lowering currently supports only i1/i32 scalar values",
 )
 _I32_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="i32",
-    reason="IREE VM lowering requires i32 scalar operands",
+    expected_text="IREE VM lowering requires i32 scalar operands",
 )
 _I64_ATTR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="attr",
     subject_name="value",
-    reason="IREE VM constant lowering requires an i64 value",
+    expected_text="IREE VM constant lowering requires an i64 value",
 )
 _I1_CONSTANT_RANGE_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="attr",
     subject_name="value",
-    reason="IREE VM i1 constants must be either zero or one",
+    expected_text="IREE VM i1 constants must be either zero or one",
 )
 _I32_CONSTANT_RANGE_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="attr",
     subject_name="value",
-    reason="IREE VM i32 constants must fit in signed i32",
+    expected_text="IREE VM i32 constants must fit in signed i32",
 )
 _CMPI_EQ_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="attr",
     subject_name="predicate",
-    reason="IREE VM scalar.cmpi lowering supports eq only",
+    expected_text="IREE VM scalar.cmpi lowering supports eq only",
 )
 
 
