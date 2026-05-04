@@ -8,6 +8,8 @@
 
 #include <string.h>
 
+#include "loom/error/error_catalog.h"
+
 //===----------------------------------------------------------------------===//
 // Target-low asm packet parsing
 //===----------------------------------------------------------------------===//
@@ -85,9 +87,8 @@ iree_status_t loom_parser_emit_low_asm_error(loom_parser_t* parser,
   loom_diagnostic_param_t params[] = {
       loom_param_string(detail),
   };
-  return loom_parser_emit(parser,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 34),
-                          params, IREE_ARRAYSIZE(params), token);
+  return loom_parser_emit(parser, LOOM_ERR_PARSE_034, params,
+                          IREE_ARRAYSIZE(params), token);
 }
 
 iree_status_t loom_parser_emit_low_asm_result_count_mismatch(
@@ -98,9 +99,8 @@ iree_status_t loom_parser_emit_low_asm_result_count_mismatch(
       loom_param_u32(expected_count),
       loom_param_u32(actual_count),
   };
-  return loom_parser_emit(parser,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 9),
-                          params, IREE_ARRAYSIZE(params), mnemonic_token);
+  return loom_parser_emit(parser, LOOM_ERR_PARSE_009, params,
+                          IREE_ARRAYSIZE(params), mnemonic_token);
 }
 
 iree_status_t loom_parser_emit_low_asm_operand_count_mismatch(
@@ -111,9 +111,8 @@ iree_status_t loom_parser_emit_low_asm_operand_count_mismatch(
       loom_param_u32(expected_count),
       loom_param_u32(actual_count),
   };
-  return loom_parser_emit(parser,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 10),
-                          params, IREE_ARRAYSIZE(params), mnemonic_token);
+  return loom_parser_emit(parser, LOOM_ERR_PARSE_010, params,
+                          IREE_ARRAYSIZE(params), mnemonic_token);
 }
 
 static iree_status_t loom_parse_low_asm_descriptor_set_key(

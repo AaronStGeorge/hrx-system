@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/error/emitter.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/target/ops.h"
@@ -33,9 +33,8 @@ static iree_status_t loom_target_emit_attr_constraint(
       loom_param_i64(actual_value),
       loom_param_string(expected_constraint),
   };
-  return loom_target_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14),
-      params, IREE_ARRAYSIZE(params));
+  return loom_target_emit(emitter, op, LOOM_ERR_STRUCTURE_014, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static iree_string_view_t loom_target_attr_name(const loom_module_t* module,

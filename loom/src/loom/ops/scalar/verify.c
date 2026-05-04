@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/error/emitter.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
 #include "loom/ops/scalar/ops.h"
 
@@ -31,9 +31,8 @@ static iree_status_t loom_scalar_emit_assume_count_mismatch(
       loom_param_string(IREE_SV("results")),
       loom_param_u32(op->result_count),
   };
-  return loom_scalar_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 13),
-      params, IREE_ARRAYSIZE(params));
+  return loom_scalar_emit(emitter, op, LOOM_ERR_STRUCTURE_013, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static void loom_scalar_format_assume_field_name(
@@ -62,9 +61,8 @@ static iree_status_t loom_scalar_emit_assume_type_mismatch(
           loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, field_index)),
       loom_param_type(result_type),
   };
-  return loom_scalar_emit(emitter, op,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1),
-                          params, IREE_ARRAYSIZE(params));
+  return loom_scalar_emit(emitter, op, LOOM_ERR_TYPE_001, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static bool loom_scalar_type_is_integer_payload(loom_type_t type) {
@@ -91,7 +89,7 @@ iree_status_t loom_scalar_constant_verify(const loom_module_t* module,
     };
     loom_diagnostic_emission_t emission = {
         .op = op,
-        .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4),
+        .error = LOOM_ERR_TYPE_004,
         .params = params,
         .param_count = IREE_ARRAYSIZE(params),
     };
@@ -112,7 +110,7 @@ iree_status_t loom_scalar_constant_verify(const loom_module_t* module,
   };
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 5),
+      .error = LOOM_ERR_TYPE_005,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };

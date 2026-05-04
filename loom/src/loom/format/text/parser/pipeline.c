@@ -6,6 +6,7 @@
 
 #include "loom/format/text/parser/pipeline.h"
 
+#include "loom/error/error_catalog.h"
 #include "loom/format/text/parser/attrs.h"
 #include "loom/format/text/parser/diagnostics.h"
 #include "loom/format/text/parser/regions.h"
@@ -70,9 +71,8 @@ static iree_status_t loom_pipeline_emit_duplicate_attr(
       loom_param_string(key_token.text),
   };
   return loom_parser_emit_related(
-      parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 20), params,
-      IREE_ARRAYSIZE(params), key_token, IREE_SV("previously defined here"),
-      previous_key_token);
+      parser, LOOM_ERR_PARSE_020, params, IREE_ARRAYSIZE(params), key_token,
+      IREE_SV("previously defined here"), previous_key_token);
 }
 
 static iree_status_t loom_parse_pipeline_attr_parens(
@@ -92,8 +92,8 @@ static iree_status_t loom_parse_pipeline_attr_parens(
     }
     if (count >= IREE_ARRAYSIZE(stack_entries)) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-      return loom_parser_emit_token_text_error(
-          parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 4), peek);
+      return loom_parser_emit_token_text_error(parser, LOOM_ERR_PARSE_004,
+                                               peek);
     }
 
     loom_token_t key_token = loom_token_none();
@@ -148,9 +148,8 @@ static iree_status_t loom_pipeline_lookup_op(
   loom_diagnostic_param_t params[] = {
       loom_param_string(op_name),
   };
-  return loom_parser_emit(parser,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 6),
-                          params, IREE_ARRAYSIZE(params), token);
+  return loom_parser_emit(parser, LOOM_ERR_PARSE_006, params,
+                          IREE_ARRAYSIZE(params), token);
 }
 
 static const loom_attr_descriptor_t* loom_pipeline_find_attr(
@@ -241,9 +240,8 @@ static iree_status_t loom_pipeline_set_enum_attr(loom_parser_t* parser,
       loom_param_string(attr_name),
       loom_param_string(value_token.text),
   };
-  return loom_parser_emit(parser,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 17),
-                          params, IREE_ARRAYSIZE(params), value_token);
+  return loom_parser_emit(parser, LOOM_ERR_PARSE_017, params,
+                          IREE_ARRAYSIZE(params), value_token);
 }
 
 static iree_status_t loom_pipeline_alloc_op(
@@ -334,9 +332,8 @@ static iree_status_t loom_parse_pipeline_repeat_options(
           loom_param_string(IREE_SV("pass repeat option value")),
           loom_param_string(name),
       };
-      return loom_parser_emit(
-          parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 18), params,
-          IREE_ARRAYSIZE(params), start_token);
+      return loom_parser_emit(parser, LOOM_ERR_PARSE_018, params,
+                              IREE_ARRAYSIZE(params), start_token);
     }
     if (iree_string_view_equal(name, IREE_SV("count")) ||
         iree_string_view_equal(name, IREE_SV("max_iterations"))) {
@@ -348,9 +345,8 @@ static iree_status_t loom_parse_pipeline_repeat_options(
         loom_param_string(IREE_SV("pass repeat option")),
         loom_param_string(name),
     };
-    return loom_parser_emit(parser,
-                            loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 18),
-                            params, IREE_ARRAYSIZE(params), start_token);
+    return loom_parser_emit(parser, LOOM_ERR_PARSE_018, params,
+                            IREE_ARRAYSIZE(params), start_token);
   }
   return iree_ok_status();
 }

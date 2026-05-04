@@ -8,7 +8,7 @@
 
 #include <stdint.h>
 
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
 
@@ -47,9 +47,8 @@ static iree_status_t loom_ops_successor_emit_arg_count_mismatch(
       loom_param_u32(loom_ops_successor_saturating_u32(actual_count)),
       loom_param_u32(loom_ops_successor_saturating_u32(expected_count)),
   };
-  return loom_ops_successor_verify_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 25),
-      params, IREE_ARRAYSIZE(params));
+  return loom_ops_successor_verify_emit(emitter, op, LOOM_ERR_STRUCTURE_025,
+                                        params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_ops_successor_emit_arg_type_mismatch(
@@ -66,9 +65,8 @@ static iree_status_t loom_ops_successor_emit_arg_type_mismatch(
       loom_param_type(actual_type),
       loom_param_type(expected_type),
   };
-  return loom_ops_successor_verify_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 26),
-      params, IREE_ARRAYSIZE(params));
+  return loom_ops_successor_verify_emit(emitter, op, LOOM_ERR_STRUCTURE_026,
+                                        params, IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_ops_verify_successor_args(

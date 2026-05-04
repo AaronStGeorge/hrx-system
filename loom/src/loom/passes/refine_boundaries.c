@@ -12,7 +12,7 @@
 
 #include "loom/analysis/scc.h"
 #include "loom/analysis/type_refinement.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
@@ -160,7 +160,7 @@ static iree_status_t loom_refine_boundaries_fail(
   };
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 2),
+      .error = LOOM_ERR_LOWERING_002,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };

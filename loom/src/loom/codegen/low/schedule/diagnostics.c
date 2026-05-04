@@ -9,7 +9,7 @@
 #include <inttypes.h>
 
 #include "loom/codegen/low/diagnostics.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ops/op_defs.h"
 
@@ -37,9 +37,8 @@ iree_status_t loom_low_schedule_emit_missing_descriptor(
       loom_param_string(opcode),
       loom_param_string(state->target.descriptor_set_key),
   };
-  return loom_low_schedule_emit(
-      state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 4), params,
-      IREE_ARRAYSIZE(params));
+  return loom_low_schedule_emit(state, op, LOOM_ERR_LOWERING_004, params,
+                                IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_low_schedule_emit_missing_schedule_class(
@@ -52,9 +51,8 @@ iree_status_t loom_low_schedule_emit_missing_schedule_class(
       loom_param_string(IREE_SV("descriptor has no schedule class")),
   };
   (void)opcode;
-  return loom_low_schedule_emit(
-      state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1), params,
-      IREE_ARRAYSIZE(params));
+  return loom_low_schedule_emit(state, op, LOOM_ERR_LOWERING_001, params,
+                                IREE_ARRAYSIZE(params));
 }
 
 static bool loom_low_schedule_interval_contains_point(
@@ -198,9 +196,8 @@ static iree_status_t loom_low_schedule_emit_pressure_summary(
       loom_param_string(operation_name),
       loom_param_string_list(contributors, contributor_count),
   };
-  return loom_low_schedule_emit(
-      state, origin_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 3),
-      params, IREE_ARRAYSIZE(params));
+  return loom_low_schedule_emit(state, origin_op, LOOM_ERR_BACKEND_003, params,
+                                IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_low_schedule_emit_pressure_diagnostics(
@@ -285,9 +282,8 @@ static iree_status_t loom_low_schedule_emit_candidate_decision(
   };
   const loom_op_t* origin_op =
       chosen_node && chosen_node->op ? chosen_node->op : state->function_op;
-  return loom_low_schedule_emit(
-      state, origin_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 15),
-      params, IREE_ARRAYSIZE(params));
+  return loom_low_schedule_emit(state, origin_op, LOOM_ERR_BACKEND_015, params,
+                                IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_low_schedule_emit_candidate_decision_diagnostics(
@@ -325,9 +321,8 @@ static iree_status_t loom_low_schedule_emit_model_summary(
   };
   const loom_op_t* origin_op =
       first_node && first_node->op ? first_node->op : state->function_op;
-  return loom_low_schedule_emit(
-      state, origin_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 16),
-      params, IREE_ARRAYSIZE(params));
+  return loom_low_schedule_emit(state, origin_op, LOOM_ERR_BACKEND_016, params,
+                                IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_low_schedule_emit_model_diagnostics(
@@ -356,10 +351,8 @@ static iree_status_t loom_low_schedule_emit_resource_bottleneck(
       loom_param_u64(summary->estimated_min_cycles),
       loom_param_u32(summary->peak_units_per_cycle),
   };
-  return loom_low_schedule_emit(
-      state, state->function_op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 13), params,
-      IREE_ARRAYSIZE(params));
+  return loom_low_schedule_emit(state, state->function_op, LOOM_ERR_BACKEND_013,
+                                params, IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_low_schedule_emit_resource_diagnostics(
@@ -462,9 +455,8 @@ static iree_status_t loom_low_schedule_emit_hazard_gap(
   };
   const loom_op_t* origin_op =
       consumer_node ? consumer_node->op : state->function_op;
-  return loom_low_schedule_emit(
-      state, origin_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 14),
-      params, IREE_ARRAYSIZE(params));
+  return loom_low_schedule_emit(state, origin_op, LOOM_ERR_BACKEND_014, params,
+                                IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_low_schedule_emit_hazard_gap_diagnostics(

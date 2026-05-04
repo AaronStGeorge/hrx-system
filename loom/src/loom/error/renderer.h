@@ -29,9 +29,8 @@
 //   loom_output_stream_t stream;
 //   loom_output_stream_for_builder(&builder, &stream);
 //   loom_type_formatter_t formatter = {loom_type_format_minimal, NULL};
-//   loom_diagnostic_render_message(
-//       loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1), params, 4, formatter,
-//       &stream);
+//   const loom_error_def_t* error = ...;
+//   loom_diagnostic_render_message(error, params, 4, formatter, &stream);
 //   // builder now contains: "'lhs' type f32 does not match 'rhs' type i32"
 //   iree_string_builder_deinitialize(&builder);
 

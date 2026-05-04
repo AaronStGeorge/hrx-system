@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/error/error_catalog.h"
 #include "loom/format/text/parser/low_asm.h"
 
 //===----------------------------------------------------------------------===//
@@ -178,8 +179,8 @@ static iree_status_t loom_parse_low_asm_structural_attr_dict(
     }
     if (count >= IREE_ARRAYSIZE(stack_entries)) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-      return loom_parser_emit_token_text_error(
-          parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 4), peek);
+      return loom_parser_emit_token_text_error(parser, LOOM_ERR_PARSE_004,
+                                               peek);
     }
 
     loom_token_t key_token = loom_token_none();
@@ -377,9 +378,8 @@ static iree_status_t loom_parse_low_asm_structural_slice(
     loom_diagnostic_param_t params[] = {
         loom_param_string(offset_token.text),
     };
-    return loom_parser_emit(parser,
-                            loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 15),
-                            params, IREE_ARRAYSIZE(params), offset_token);
+    return loom_parser_emit(parser, LOOM_ERR_PARSE_015, params,
+                            IREE_ARRAYSIZE(params), offset_token);
   }
   LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RBRACKET, NULL);
 

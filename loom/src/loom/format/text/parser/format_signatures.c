@@ -6,6 +6,7 @@
 
 #include "loom/format/text/parser/format_signatures.h"
 
+#include "loom/error/error_catalog.h"
 #include "loom/format/text/parser/accumulator.h"
 #include "loom/format/text/parser/diagnostics.h"
 #include "loom/format/text/parser/regions.h"
@@ -94,9 +95,8 @@ static iree_status_t loom_parse_format_resolve_tied_result_operand(
   loom_diagnostic_param_t params[] = {
       loom_param_string(ssa_token.text),
   };
-  return loom_parser_emit(parser,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1),
-                          params, IREE_ARRAYSIZE(params), ssa_token);
+  return loom_parser_emit(parser, LOOM_ERR_PARSE_001, params,
+                          IREE_ARRAYSIZE(params), ssa_token);
 }
 
 static iree_status_t loom_parse_format_resolve_symbol_tied_result_operand(
@@ -132,9 +132,8 @@ static iree_status_t loom_parse_format_resolve_symbol_tied_result_operand(
   loom_diagnostic_param_t params[] = {
       loom_param_string(ssa_token.text),
   };
-  return loom_parser_emit(parser,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1),
-                          params, IREE_ARRAYSIZE(params), ssa_token);
+  return loom_parser_emit(parser, LOOM_ERR_PARSE_001, params,
+                          IREE_ARRAYSIZE(params), ssa_token);
 }
 
 // Parses a body-op result type list: (type, %operand as type, ...).

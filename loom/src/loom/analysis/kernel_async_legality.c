@@ -10,7 +10,7 @@
 #include <stdio.h>
 
 #include "loom/analysis/movement.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/kernel/ops.h"
@@ -171,7 +171,7 @@ static iree_status_t loom_kernel_async_legality_fail(
   };
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1),
+      .error = LOOM_ERR_LOWERING_001,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };

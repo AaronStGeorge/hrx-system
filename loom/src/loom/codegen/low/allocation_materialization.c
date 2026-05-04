@@ -11,7 +11,7 @@
 
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
@@ -53,7 +53,7 @@ static iree_status_t loom_low_allocation_emit_materialized_spill(
   loom_diagnostic_emission_t emission = {
       .op = loom_low_diagnostic_value_origin_op(table->module, plan->value_id,
                                                 table->function_op),
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 9),
+      .error = LOOM_ERR_BACKEND_009,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };

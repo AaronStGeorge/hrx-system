@@ -12,7 +12,7 @@
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/register_class_map.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
@@ -2279,7 +2279,7 @@ static iree_status_t loom_low_allocation_emit_failure(
   };
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 5),
+      .error = LOOM_ERR_BACKEND_005,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
@@ -3414,7 +3414,7 @@ static iree_status_t loom_low_allocation_emit_predicted_spills(
     loom_diagnostic_emission_t emission = {
         .op = loom_low_diagnostic_value_origin_op(
             table->module, spill_plan->value_id, table->function_op),
-        .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 8),
+        .error = LOOM_ERR_BACKEND_008,
         .params = params,
         .param_count = IREE_ARRAYSIZE(params),
     };
@@ -3479,7 +3479,7 @@ static iree_status_t loom_low_allocation_emit_copy_decisions(
     loom_diagnostic_emission_t emission = {
         .op = loom_low_diagnostic_value_origin_op(
             table->module, copy_decision->result_value_id, table->function_op),
-        .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 6),
+        .error = LOOM_ERR_BACKEND_006,
         .params = params,
         .param_count = IREE_ARRAYSIZE(params),
     };

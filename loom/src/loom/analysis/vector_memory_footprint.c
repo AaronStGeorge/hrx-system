@@ -10,7 +10,7 @@
 #include <stdio.h>
 
 #include "loom/analysis/symbolic_expr.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
@@ -140,7 +140,7 @@ static iree_status_t loom_vector_memory_footprint_emit_failure(
   };
   loom_diagnostic_emission_t emission = {
       .op = access->op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 5),
+      .error = LOOM_ERR_SUBRANGE_005,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
@@ -188,7 +188,7 @@ static iree_status_t loom_vector_memory_footprint_fail_linear_span(
   };
   loom_diagnostic_emission_t emission = {
       .op = access->op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 6),
+      .error = LOOM_ERR_SUBRANGE_006,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };

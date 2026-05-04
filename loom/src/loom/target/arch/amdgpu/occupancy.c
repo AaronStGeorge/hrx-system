@@ -10,7 +10,7 @@
 #include <string.h>
 
 #include "loom/codegen/low/diagnostics.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
 #include "loom/target/arch/amdgpu/occupancy_tables.h"
 #include "loom/target/arch/amdgpu/target_id.h"
@@ -449,7 +449,7 @@ static iree_status_t loom_amdgpu_occupancy_emit_summary(
     };
     loom_diagnostic_emission_t emission = {
         .op = table->allocation->function_op,
-        .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 10),
+        .error = LOOM_ERR_BACKEND_010,
         .params = params,
         .param_count = IREE_ARRAYSIZE(params),
     };

@@ -7,7 +7,7 @@
 #include "loom/target/low_packet_diagnostics.h"
 
 #include "loom/codegen/low/diagnostics.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 
 struct loom_target_low_packet_diagnostic_context_t {
   // Emission frame being diagnosed.
@@ -98,8 +98,7 @@ iree_status_t loom_target_low_packet_diagnostics_record_packet(
       loom_param_string(reason),
   };
   return loom_target_low_packet_diagnostics_emit(
-      context, packet, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 18),
-      params, IREE_ARRAYSIZE(params));
+      context, packet, LOOM_ERR_BACKEND_018, params, IREE_ARRAYSIZE(params));
 }
 
 const loom_module_t* loom_target_low_packet_diagnostics_module(

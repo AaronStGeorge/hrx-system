@@ -6,6 +6,8 @@
 
 #include "loom/format/bytecode/diagnostic.h"
 
+#include "loom/error/error_catalog.h"
+
 static loom_source_range_t loom_bytecode_reader_make_source_range(
     const loom_bytecode_reader_diagnostic_context_t* context,
     loom_bytecode_reader_byte_range_t byte_range) {
@@ -59,8 +61,8 @@ iree_status_t loom_bytecode_reader_emit_invalid_record_field(
       loom_param_u64(offset),          loom_param_string(reason),
   };
   return loom_bytecode_reader_emit_diagnostic(
-      context, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 6), params,
-      IREE_ARRAYSIZE(params), loom_bytecode_reader_byte_range(offset, 1));
+      context, LOOM_ERR_BYTECODE_006, params, IREE_ARRAYSIZE(params),
+      loom_bytecode_reader_byte_range(offset, 1));
 }
 
 iree_status_t loom_bytecode_reader_emit_invalid_range(
@@ -74,6 +76,6 @@ iree_status_t loom_bytecode_reader_emit_invalid_range(
       loom_param_u64(container_length),
   };
   return loom_bytecode_reader_emit_diagnostic(
-      context, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 7), params,
-      IREE_ARRAYSIZE(params), loom_bytecode_reader_byte_range(offset, length));
+      context, LOOM_ERR_BYTECODE_007, params, IREE_ARRAYSIZE(params),
+      loom_bytecode_reader_byte_range(offset, length));
 }

@@ -6,7 +6,7 @@
 
 #include "loom/ops/function_contract_verify.h"
 
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ops/op_defs.h"
 
 static iree_status_t loom_function_contract_emit_attr_constraint(
@@ -19,7 +19,7 @@ static iree_status_t loom_function_contract_emit_attr_constraint(
   };
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14),
+      .error = LOOM_ERR_STRUCTURE_014,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };

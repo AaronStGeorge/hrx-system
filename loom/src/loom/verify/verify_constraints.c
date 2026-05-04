@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/error/error_catalog.h"
 #include "loom/verify/verify_diagnostics.h"
 #include "loom/verify/verify_structure.h"
 
@@ -43,22 +44,22 @@ static const loom_error_def_t* loom_pairwise_eq_default_error(
     loom_constraint_property_t property) {
   switch ((enum loom_constraint_property_e)property) {
     case LOOM_PROPERTY_TYPE:
-      return loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1);
+      return LOOM_ERR_TYPE_001;
     case LOOM_PROPERTY_KIND:
-      return loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1);
+      return LOOM_ERR_TYPE_001;
     case LOOM_PROPERTY_ELEMENT_TYPE:
-      return loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 2);
+      return LOOM_ERR_TYPE_002;
     case LOOM_PROPERTY_ENCODING:
-      return loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 1);
+      return LOOM_ERR_ENCODING_001;
     case LOOM_PROPERTY_SHAPE:
-      return loom_error_def_lookup(LOOM_ERROR_DOMAIN_SHAPE, 2);
+      return LOOM_ERR_SHAPE_002;
     case LOOM_PROPERTY_RANK:
-      return loom_error_def_lookup(LOOM_ERROR_DOMAIN_SHAPE, 1);
+      return LOOM_ERR_SHAPE_001;
     case LOOM_PROPERTY_REGISTER_CLASS:
     case LOOM_PROPERTY_REGISTER_UNIT_COUNT:
-      return loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1);
+      return LOOM_ERR_TYPE_001;
     default:
-      return loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1);
+      return LOOM_ERR_TYPE_001;
   }
 }
 
@@ -301,8 +302,8 @@ static void loom_verify_relation_all_same(loom_verify_state_t* state,
                                         constraint->property)) {
       continue;
     }
-    const loom_error_def_t* error = loom_verify_constraint_error_or(
-        constraint, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SHAPE, 3));
+    const loom_error_def_t* error =
+        loom_verify_constraint_error_or(constraint, LOOM_ERR_SHAPE_003);
     loom_diagnostic_param_t params[] = {
         loom_param_type(first_type),
         loom_param_u32(i),
@@ -339,8 +340,8 @@ static void loom_verify_relation_field_satisfies(
           vtable, field_ref, name_buffer, sizeof(name_buffer));
       const loom_error_def_t* error =
           LOOM_FIELD_REF_CATEGORY(field_ref) == LOOM_FIELD_RESULT
-              ? loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4)
-              : loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 3);
+              ? LOOM_ERR_TYPE_004
+              : LOOM_ERR_TYPE_003;
       loom_diagnostic_param_t params[] = {
           loom_verify_param_string_for_field(field_name, field_ref),
           loom_param_type(value_type),
@@ -365,8 +366,8 @@ static void loom_verify_relation_field_satisfies(
           vtable, field_ref, j, name_buffer, sizeof(name_buffer));
       const loom_error_def_t* error =
           LOOM_FIELD_REF_CATEGORY(field_ref) == LOOM_FIELD_RESULT
-              ? loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4)
-              : loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 3);
+              ? LOOM_ERR_TYPE_004
+              : LOOM_ERR_TYPE_003;
       loom_diagnostic_param_t params[] = {
           loom_verify_param_string_for_indexed_field(field_name, field_ref, j),
           loom_param_type(value_type),
@@ -409,8 +410,8 @@ static void loom_verify_relation_region_args_satisfy(
     char argument_name_buffer[64];
     iree_snprintf(argument_name_buffer, sizeof(argument_name_buffer),
                   "%.*s.args[%u]", (int)region_name.size, region_name.data, i);
-    const loom_error_def_t* error = loom_verify_constraint_error_or(
-        constraint, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 14));
+    const loom_error_def_t* error =
+        loom_verify_constraint_error_or(constraint, LOOM_ERR_TYPE_014);
     loom_diagnostic_param_t params[] = {
         loom_verify_param_string_for_field(
             iree_make_cstring_view(argument_name_buffer), region_ref),
@@ -488,9 +489,8 @@ static void loom_verify_emit_i64_attr_constraint(
       loom_param_i64(actual_value),
       loom_param_string(expected_constraint),
   };
-  loom_verify_emit_structured(
-      state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14), params,
-      IREE_ARRAYSIZE(params));
+  loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_014, params,
+                              IREE_ARRAYSIZE(params));
 }
 
 static void loom_verify_emit_attr_kind_mismatch(
@@ -501,7 +501,7 @@ static void loom_verify_emit_attr_kind_mismatch(
   char attr_name_buffer[32];
   iree_string_view_t attr_name = loom_verify_field_name(
       vtable, attr_ref, attr_name_buffer, sizeof(attr_name_buffer));
-  if (!error) error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 5);
+  if (!error) error = LOOM_ERR_TYPE_005;
   loom_diagnostic_param_t params[] = {
       loom_verify_param_string_for_field(attr_name, attr_ref),
       loom_param_u32(actual_kind),
@@ -520,8 +520,8 @@ static void loom_verify_emit_value_field_constraint(
       vtable, field_ref, field_name_buffer, sizeof(field_name_buffer));
   const loom_error_def_t* error =
       LOOM_FIELD_REF_CATEGORY(field_ref) == LOOM_FIELD_RESULT
-          ? loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4)
-          : loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 3);
+          ? LOOM_ERR_TYPE_004
+          : LOOM_ERR_TYPE_003;
   loom_diagnostic_param_t params[] = {
       loom_verify_param_string_for_field(field_name, field_ref),
       loom_param_type(actual_type),
@@ -648,8 +648,8 @@ static void loom_verify_relation_element_width_order(
                 (int)reference_name.size, reference_name.data);
   const loom_error_def_t* error =
       LOOM_FIELD_REF_CATEGORY(field_ref) == LOOM_FIELD_RESULT
-          ? loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4)
-          : loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 3);
+          ? LOOM_ERR_TYPE_004
+          : LOOM_ERR_TYPE_003;
   loom_diagnostic_param_t params[] = {
       loom_verify_param_string_for_field(field_name, field_ref),
       loom_param_type(value_type),
@@ -697,8 +697,8 @@ static void loom_verify_relation_element_width_at_least_attr(
                 attr_name.data);
   const loom_error_def_t* error =
       LOOM_FIELD_REF_CATEGORY(field_ref) == LOOM_FIELD_RESULT
-          ? loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4)
-          : loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 3);
+          ? LOOM_ERR_TYPE_004
+          : LOOM_ERR_TYPE_003;
   loom_diagnostic_param_t params[] = {
       loom_verify_param_string_for_field(field_name, field_ref),
       loom_param_type(value_type),
@@ -1070,9 +1070,8 @@ static void loom_verify_relation_last_axis_grouped_by(
         loom_verify_param_string_for_field(source_name, source_ref),
         loom_param_i64(source_rank),
     };
-    loom_verify_emit_structured(
-        state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SHAPE, 1), params,
-        IREE_ARRAYSIZE(params));
+    loom_verify_emit_structured(state, op, LOOM_ERR_SHAPE_001, params,
+                                IREE_ARRAYSIZE(params));
     return;
   }
 
@@ -1085,9 +1084,8 @@ static void loom_verify_relation_last_axis_grouped_by(
         loom_verify_param_string_for_field(result_name, result_ref),
         loom_verify_param_string_for_field(source_name, source_ref),
     };
-    loom_verify_emit_structured(
-        state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SHAPE, 2), params,
-        IREE_ARRAYSIZE(params));
+    loom_verify_emit_structured(state, op, LOOM_ERR_SHAPE_002, params,
+                                IREE_ARRAYSIZE(params));
     return;
   }
 
@@ -1103,9 +1101,8 @@ static void loom_verify_relation_last_axis_grouped_by(
         loom_param_string(
             loom_verify_grouped_last_axis_divisibility_constraint(group_size)),
     };
-    loom_verify_emit_structured(
-        state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 3), params,
-        IREE_ARRAYSIZE(params));
+    loom_verify_emit_structured(state, op, LOOM_ERR_TYPE_003, params,
+                                IREE_ARRAYSIZE(params));
     return;
   }
 
@@ -1121,9 +1118,8 @@ static void loom_verify_relation_last_axis_grouped_by(
       loom_param_string(
           loom_verify_grouped_last_axis_result_constraint(group_size)),
   };
-  loom_verify_emit_structured(state, op,
-                              loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4),
-                              params, IREE_ARRAYSIZE(params));
+  loom_verify_emit_structured(state, op, LOOM_ERR_TYPE_004, params,
+                              IREE_ARRAYSIZE(params));
 }
 
 // COUNT_MATCHES_RANK: a variadic value field's element count equals
@@ -1142,8 +1138,8 @@ static void loom_verify_relation_count_matches_rank(
   char name_buffer[32];
   iree_string_view_t operand_name = loom_verify_field_name(
       vtable, constraint->args[0], name_buffer, sizeof(name_buffer));
-  const loom_error_def_t* error = loom_verify_constraint_error_or(
-      constraint, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 1));
+  const loom_error_def_t* error =
+      loom_verify_constraint_error_or(constraint, LOOM_ERR_SUBRANGE_001);
   loom_diagnostic_param_t params[] = {
       loom_verify_param_string_for_field(operand_name, constraint->args[0]),
       loom_param_u32(variadic_count),
@@ -1176,8 +1172,8 @@ static void loom_verify_relation_count_matches_static_element_count(
         vtable, shaped_ref, shaped_name_buffer, sizeof(shaped_name_buffer));
     const loom_error_def_t* error =
         LOOM_FIELD_REF_CATEGORY(shaped_ref) == LOOM_FIELD_RESULT
-            ? loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4)
-            : loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 3);
+            ? LOOM_ERR_TYPE_004
+            : LOOM_ERR_TYPE_003;
     loom_diagnostic_param_t params[] = {
         loom_verify_param_string_for_field(shaped_name, shaped_ref),
         loom_param_type(shaped_type),
@@ -1204,8 +1200,8 @@ static void loom_verify_relation_count_matches_static_element_count(
                 shaped_name.data);
   uint32_t expected_count_param =
       expected_count > UINT32_MAX ? UINT32_MAX : (uint32_t)expected_count;
-  const loom_error_def_t* error = loom_verify_constraint_error_or(
-      constraint, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 13));
+  const loom_error_def_t* error =
+      loom_verify_constraint_error_or(constraint, LOOM_ERR_STRUCTURE_013);
   loom_diagnostic_param_t params[] = {
       loom_verify_param_string_for_field(values_name, values_ref),
       loom_param_u32(value_count),
@@ -1231,8 +1227,8 @@ static void loom_verify_relation_attr_in_range_rank(
   int64_t dim_index = loom_attr_as_i64(loom_op_attrs(op)[attr_index]);
   uint8_t rank = loom_type_rank(shaped_type);
   if (dim_index >= 0 && dim_index < rank) return;
-  const loom_error_def_t* error = loom_verify_constraint_error_or(
-      constraint, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 2));
+  const loom_error_def_t* error =
+      loom_verify_constraint_error_or(constraint, LOOM_ERR_SUBRANGE_002);
   loom_diagnostic_param_t params[] = {
       loom_param_i64(dim_index),
       loom_param_i64(rank),
@@ -1266,8 +1262,8 @@ static void loom_verify_relation_region_arg_count(
         loom_verify_variadic_count(op, vtable, constraint->args[1]);
   }
   if (block_arg_count == expected_count) return;
-  const loom_error_def_t* error = loom_verify_constraint_error_or(
-      constraint, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 7));
+  const loom_error_def_t* error =
+      loom_verify_constraint_error_or(constraint, LOOM_ERR_STRUCTURE_007);
   loom_diagnostic_param_t params[] = {
       loom_param_u32(block_arg_count),
       loom_param_u32(expected_count),
@@ -1304,8 +1300,8 @@ static void loom_verify_relation_region_arg_match(
                                         constraint->property)) {
       continue;
     }
-    const loom_error_def_t* error = loom_verify_constraint_error_or(
-        constraint, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 8));
+    const loom_error_def_t* error =
+        loom_verify_constraint_error_or(constraint, LOOM_ERR_TYPE_008);
     loom_type_t expected_type =
         constraint->property == LOOM_PROPERTY_ELEMENT_TYPE
             ? loom_type_scalar(loom_type_element_type(input_type))
@@ -1343,8 +1339,8 @@ static void loom_verify_relation_yield_count(
     result_count = 1;
   }
   if (yield_count == result_count) return;
-  const loom_error_def_t* error = loom_verify_constraint_error_or(
-      constraint, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 8));
+  const loom_error_def_t* error =
+      loom_verify_constraint_error_or(constraint, LOOM_ERR_STRUCTURE_008);
   loom_diagnostic_param_t params[] = {
       loom_param_u32(yield_count),
       loom_param_u32(result_count),
@@ -1394,8 +1390,8 @@ static void loom_verify_relation_yield_match(
     if (matched) {
       continue;
     }
-    const loom_error_def_t* error = loom_verify_constraint_error_or(
-        constraint, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 9));
+    const loom_error_def_t* error =
+        loom_verify_constraint_error_or(constraint, LOOM_ERR_TYPE_009);
     loom_type_t expected_type =
         loom_type_scalar(loom_type_element_type(result_type));
     loom_diagnostic_param_t params[] = {
@@ -1433,8 +1429,8 @@ static void loom_verify_relation_variadic_match(
         vtable, ref_a, name_a_buffer, sizeof(name_a_buffer));
     iree_string_view_t name_b = loom_verify_field_name(
         vtable, ref_b, name_b_buffer, sizeof(name_b_buffer));
-    const loom_error_def_t* error = loom_verify_constraint_error_or(
-        constraint, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 13));
+    const loom_error_def_t* error =
+        loom_verify_constraint_error_or(constraint, LOOM_ERR_STRUCTURE_013);
     loom_diagnostic_param_t params[] = {
         loom_verify_param_string_for_field(name_a, ref_a),
         loom_param_u32(count_a),

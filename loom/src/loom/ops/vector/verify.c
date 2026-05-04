@@ -7,7 +7,7 @@
 #include <math.h>
 
 #include "loom/error/emitter.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/attribute.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -54,9 +54,8 @@ static iree_status_t loom_vector_emit_attribute_kind_mismatch(
       loom_param_u32(actual_kind),
       loom_param_u32(expected_kind),
   };
-  return loom_vector_emit(emitter, op,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 5),
-                          params, IREE_ARRAYSIZE(params));
+  return loom_vector_emit(emitter, op, LOOM_ERR_TYPE_005, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_vector_emit_attribute_value_constraint(
@@ -68,9 +67,8 @@ static iree_status_t loom_vector_emit_attribute_value_constraint(
       loom_param_i64(actual_value),
       loom_param_string(expected_constraint),
   };
-  return loom_vector_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14),
-      params, IREE_ARRAYSIZE(params));
+  return loom_vector_emit(emitter, op, LOOM_ERR_STRUCTURE_014, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_vector_emit_operand_constraint(
@@ -82,9 +80,8 @@ static iree_status_t loom_vector_emit_operand_constraint(
       loom_param_type(actual_type),
       loom_param_string(expected_constraint),
   };
-  return loom_vector_emit(emitter, op,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 3),
-                          params, IREE_ARRAYSIZE(params));
+  return loom_vector_emit(emitter, op, LOOM_ERR_TYPE_003, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_vector_emit_result_constraint(
@@ -96,9 +93,8 @@ static iree_status_t loom_vector_emit_result_constraint(
       loom_param_type(actual_type),
       loom_param_string(expected_constraint),
   };
-  return loom_vector_emit(emitter, op,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4),
-                          params, IREE_ARRAYSIZE(params));
+  return loom_vector_emit(emitter, op, LOOM_ERR_TYPE_004, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_vector_emit_result_code_capacity(
@@ -111,9 +107,8 @@ static iree_status_t loom_vector_emit_result_code_capacity(
       loom_param_i64(threshold_count),
       loom_param_i64(threshold_count),
   };
-  return loom_vector_emit(emitter, op,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 11),
-                          params, IREE_ARRAYSIZE(params));
+  return loom_vector_emit(emitter, op, LOOM_ERR_TYPE_011, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_vector_emit_static_threshold_order(
@@ -124,9 +119,8 @@ static iree_status_t loom_vector_emit_static_threshold_order(
       loom_param_u32(left_index),
       loom_param_u32(right_index),
   };
-  return loom_vector_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 15),
-      params, IREE_ARRAYSIZE(params));
+  return loom_vector_emit(emitter, op, LOOM_ERR_STRUCTURE_015, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_vector_emit_field_constraint(
@@ -151,9 +145,8 @@ static iree_status_t loom_vector_emit_rank_mismatch(
       loom_param_string(expected_field_name),
       loom_param_i64(expected_rank),
   };
-  return loom_vector_emit(emitter, op,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_SHAPE, 1),
-                          params, IREE_ARRAYSIZE(params));
+  return loom_vector_emit(emitter, op, LOOM_ERR_SHAPE_001, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_vector_emit_shape_mismatch(
@@ -163,9 +156,8 @@ static iree_status_t loom_vector_emit_shape_mismatch(
       loom_param_string(field_name),
       loom_param_string(expected_field_name),
   };
-  return loom_vector_emit(emitter, op,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_SHAPE, 2),
-                          params, IREE_ARRAYSIZE(params));
+  return loom_vector_emit(emitter, op, LOOM_ERR_SHAPE_002, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_vector_emit_count_mismatch(
@@ -178,9 +170,8 @@ static iree_status_t loom_vector_emit_count_mismatch(
       loom_param_string(expected_field_name),
       loom_param_u32(loom_vector_saturating_count(expected_count)),
   };
-  return loom_vector_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 13),
-      params, IREE_ARRAYSIZE(params));
+  return loom_vector_emit(emitter, op, LOOM_ERR_STRUCTURE_013, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static uint16_t loom_vector_dynamic_sentinel_count(loom_attribute_t values) {
@@ -227,9 +218,8 @@ static iree_status_t loom_vector_emit_static_index_out_of_bounds(
       loom_param_i64(axis),  loom_param_i64(static_index), loom_param_i64(1),
       loom_param_i64(total), loom_param_i64(bound),
   };
-  return loom_vector_emit(emitter, op,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 4),
-                          params, IREE_ARRAYSIZE(params));
+  return loom_vector_emit(emitter, op, LOOM_ERR_SUBRANGE_004, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static int64_t loom_vector_saturating_add_i64(int64_t lhs, int64_t rhs) {
@@ -248,9 +238,8 @@ static iree_status_t loom_vector_emit_static_access_out_of_bounds(
       loom_param_i64(loom_vector_saturating_add_i64(offset, size)),
       loom_param_i64(bound),
   };
-  return loom_vector_emit(emitter, op,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 4),
-                          params, IREE_ARRAYSIZE(params));
+  return loom_vector_emit(emitter, op, LOOM_ERR_SUBRANGE_004, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static bool loom_vector_tail_shape_equals(loom_type_t source_type,
@@ -351,9 +340,8 @@ static iree_status_t loom_vector_emit_offset_count_mismatch(
       loom_param_u32(offset_count),
       loom_param_i64(rank),
   };
-  return loom_vector_emit(emitter, op,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 1),
-                          params, IREE_ARRAYSIZE(params));
+  return loom_vector_emit(emitter, op, LOOM_ERR_SUBRANGE_001, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_vector_verify_dynamic_sentinel_count(
@@ -668,9 +656,8 @@ iree_status_t loom_vector_broadcast_verify(const loom_module_t* module,
         loom_param_u32(result_axis),
         loom_param_i64(result_size),
     };
-    return loom_vector_emit(emitter, op,
-                            loom_error_def_lookup(LOOM_ERROR_DOMAIN_SHAPE, 4),
-                            params, IREE_ARRAYSIZE(params));
+    return loom_vector_emit(emitter, op, LOOM_ERR_SHAPE_004, params,
+                            IREE_ARRAYSIZE(params));
   }
   return iree_ok_status();
 }
@@ -1186,9 +1173,8 @@ iree_status_t loom_vector_transpose_verify(const loom_module_t* module,
           loom_param_i64(source_axis),
           loom_param_i64(source_rank),
       };
-      return loom_vector_emit(
-          emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 2),
-          params, IREE_ARRAYSIZE(params));
+      return loom_vector_emit(emitter, op, LOOM_ERR_SUBRANGE_002, params,
+                              IREE_ARRAYSIZE(params));
     }
 
     uint32_t axis_bit = 1u << (uint32_t)source_axis;
@@ -1598,17 +1584,15 @@ static iree_status_t loom_vector_emit_auxiliary_key_error(
 static iree_status_t loom_vector_emit_unknown_auxiliary_key(
     const loom_module_t* module, iree_diagnostic_emitter_t emitter,
     const loom_op_t* op, iree_string_view_t key_name) {
-  return loom_vector_emit_auxiliary_key_error(
-      module, emitter, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 15), key_name);
+  return loom_vector_emit_auxiliary_key_error(module, emitter, op,
+                                              LOOM_ERR_ENCODING_015, key_name);
 }
 
 static iree_status_t loom_vector_emit_missing_auxiliary_key(
     const loom_module_t* module, iree_diagnostic_emitter_t emitter,
     const loom_op_t* op, iree_string_view_t key_name) {
-  return loom_vector_emit_auxiliary_key_error(
-      module, emitter, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 16), key_name);
+  return loom_vector_emit_auxiliary_key_error(module, emitter, op,
+                                              LOOM_ERR_ENCODING_016, key_name);
 }
 
 static bool loom_vector_query_static_storage_schema_for_schema_value(
@@ -1821,9 +1805,8 @@ static iree_status_t loom_vector_emit_encoding_dynamic_type_error(
       loom_param_type(actual_type),
       loom_param_string(expected_type),
   };
-  return loom_vector_emit(emitter, op,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 9),
-                          params, IREE_ARRAYSIZE(params));
+  return loom_vector_emit(emitter, op, LOOM_ERR_ENCODING_009, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static bool loom_vector_i64_is_power_of_two(int64_t value) {

@@ -9,7 +9,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/attribute.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -132,7 +132,7 @@ static iree_status_t loom_scf_to_cfg_fail(loom_scf_to_cfg_state_t* state,
   };
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1),
+      .error = LOOM_ERR_LOWERING_001,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };

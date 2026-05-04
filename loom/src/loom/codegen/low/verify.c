@@ -11,7 +11,7 @@
 
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/register_class_map.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
@@ -159,10 +159,8 @@ static iree_status_t loom_low_verify_emit_missing_descriptor(
                                     opcode_attr_index)),
       loom_param_string(target->descriptor_set_key),
   };
-  return loom_low_verify_emit(
-      function_state->state, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 4), params,
-      IREE_ARRAYSIZE(params), NULL, 0);
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_004,
+                              params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
 static iree_status_t loom_low_verify_emit_missing_immediate(
@@ -180,10 +178,8 @@ static iree_status_t loom_low_verify_emit_missing_immediate(
           loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
                                     attrs_attr_index)),
   };
-  return loom_low_verify_emit(
-      function_state->state, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 7), params,
-      IREE_ARRAYSIZE(params), NULL, 0);
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_007,
+                              params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
 static iree_status_t loom_low_verify_emit_unexpected_immediate_attr(
@@ -201,10 +197,8 @@ static iree_status_t loom_low_verify_emit_unexpected_immediate_attr(
           loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
                                     attrs_attr_index)),
   };
-  return loom_low_verify_emit(
-      function_state->state, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 8), params,
-      IREE_ARRAYSIZE(params), NULL, 0);
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_008,
+                              params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
 static iree_status_t loom_low_verify_emit_immediate_kind_mismatch(
@@ -225,10 +219,8 @@ static iree_status_t loom_low_verify_emit_immediate_kind_mismatch(
       loom_param_u32(actual_kind),
       loom_param_string(expected_kind),
   };
-  return loom_low_verify_emit(
-      function_state->state, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 9), params,
-      IREE_ARRAYSIZE(params), NULL, 0);
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_009,
+                              params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
 static iree_status_t loom_low_verify_emit_immediate_range_mismatch(
@@ -249,10 +241,8 @@ static iree_status_t loom_low_verify_emit_immediate_range_mismatch(
       loom_param_i64(actual_value),
       loom_param_string(expected_range),
   };
-  return loom_low_verify_emit(
-      function_state->state, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 10), params,
-      IREE_ARRAYSIZE(params), NULL, 0);
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_010,
+                              params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
 static iree_status_t loom_low_verify_emit_enum_domain_mismatch(
@@ -273,10 +263,8 @@ static iree_status_t loom_low_verify_emit_enum_domain_mismatch(
       loom_param_string(actual_value),
       loom_param_string(enum_domain),
   };
-  return loom_low_verify_emit(
-      function_state->state, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 12), params,
-      IREE_ARRAYSIZE(params), NULL, 0);
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_012,
+                              params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
 static iree_status_t loom_low_verify_emit_constraint_type_mismatch(
@@ -301,10 +289,8 @@ static iree_status_t loom_low_verify_emit_constraint_type_mismatch(
                                 rhs_field->field_ref),
       loom_param_type(rhs_field->type),
   };
-  return loom_low_verify_emit(
-      function_state->state, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 11), params,
-      IREE_ARRAYSIZE(params), NULL, 0);
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_011,
+                              params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
 static iree_status_t loom_low_verify_emit_count_mismatch(
@@ -339,10 +325,8 @@ static iree_status_t loom_low_verify_emit_missing_features(
       loom_param_u32(feature_word_index),
       loom_param_u64(missing_bits),
   };
-  return loom_low_verify_emit(
-      function_state->state, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 5), params,
-      IREE_ARRAYSIZE(params), NULL, 0);
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_005,
+                              params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
 static const loom_named_attr_t* loom_low_verify_find_named_attr(
@@ -949,10 +933,8 @@ static iree_status_t loom_low_verify_emit_register_type_mismatch(
       loom_param_string(expected_reg_classes),
       loom_param_u32(expected_unit_count),
   };
-  return loom_low_verify_emit(
-      function_state->state, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 6), params,
-      IREE_ARRAYSIZE(params), NULL, 0);
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_006,
+                              params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
 static iree_status_t loom_low_verify_emit_undefined_register_part(
@@ -967,10 +949,8 @@ static iree_status_t loom_low_verify_emit_undefined_register_part(
       loom_param_u64(required_mask),
       loom_param_u64(defined_mask),
   };
-  return loom_low_verify_emit(
-      function_state->state, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 19), params,
-      IREE_ARRAYSIZE(params), NULL, 0);
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_019,
+                              params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
 static loom_low_register_part_mask_t loom_low_verify_value_defined_mask(
@@ -1087,10 +1067,8 @@ static iree_status_t loom_low_verify_emit_resource_register_rejected(
       loom_param_string(target->descriptor_set_key),
       loom_param_string(reason),
   };
-  return loom_low_verify_emit(
-      function_state->state, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 18), params,
-      IREE_ARRAYSIZE(params), NULL, 0);
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_018,
+                              params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
 static iree_status_t loom_low_verify_resource(
@@ -1453,15 +1431,13 @@ static iree_status_t loom_low_verify_packet(
       function_state->state->result->error_count;
   if (op->result_count != expected_result_count) {
     IREE_RETURN_IF_ERROR(loom_low_verify_emit_count_mismatch(
-        function_state, op,
-        loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 2), opcode,
-        opcode_attr_index, op->result_count, expected_result_count));
+        function_state, op, LOOM_ERR_STRUCTURE_002, opcode, opcode_attr_index,
+        op->result_count, expected_result_count));
   }
   if (op->operand_count != expected_operand_count) {
     IREE_RETURN_IF_ERROR(loom_low_verify_emit_count_mismatch(
-        function_state, op,
-        loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1), opcode,
-        opcode_attr_index, op->operand_count, expected_operand_count));
+        function_state, op, LOOM_ERR_STRUCTURE_001, opcode, opcode_attr_index,
+        op->operand_count, expected_operand_count));
   }
   if (loom_low_verify_should_stop(function_state->state)) {
     return iree_ok_status();

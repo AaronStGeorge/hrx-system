@@ -6,6 +6,7 @@
 
 #include "loom/verify/verify_structure.h"
 
+#include "loom/error/error_catalog.h"
 #include "loom/verify/verify_diagnostics.h"
 
 static void loom_verify_emit_symbol_definition_diagnostic(
@@ -22,7 +23,7 @@ static void loom_verify_emit_symbol_definition_diagnostic(
   }};
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 5),
+      .error = LOOM_ERR_SYMBOL_005,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
       .related_ops = related_ops,
@@ -187,9 +188,8 @@ static void loom_verify_op_trait_flags_consistency(
       loom_param_string(trait_a),
       loom_param_string(trait_b),
   };
-  loom_verify_emit_structured(
-      state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 16), params,
-      IREE_ARRAYSIZE(params));
+  loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_016, params,
+                              IREE_ARRAYSIZE(params));
 }
 
 void loom_verify_op_declared_trait_consistency(loom_verify_state_t* state,
@@ -239,9 +239,8 @@ static void loom_verify_emit_placement_diagnostic(
       loom_param_string(loom_verify_kind_name(state, ancestor_kind)),
       loom_param_string(actual_ancestor),
   };
-  loom_verify_emit_structured(
-      state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 29), params,
-      IREE_ARRAYSIZE(params));
+  loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_029, params,
+                              IREE_ARRAYSIZE(params));
 }
 
 void loom_verify_op_placement(loom_verify_state_t* state, const loom_op_t* op,
@@ -314,9 +313,8 @@ void loom_verify_func_purity_body_effects(loom_verify_state_t* state,
       loom_param_u32(body ? body->write_effect_count : 0),
       loom_param_u32(body ? body->convergent_effect_count : 0),
   };
-  loom_verify_emit_structured(
-      state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 17), params,
-      IREE_ARRAYSIZE(params));
+  loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_017, params,
+                              IREE_ARRAYSIZE(params));
 }
 void loom_verify_op_structure(loom_verify_state_t* state, const loom_op_t* op,
                               const loom_op_vtable_t* vtable) {
@@ -332,9 +330,8 @@ void loom_verify_op_structure(loom_verify_state_t* state, const loom_op_t* op,
           loom_param_u32(op->operand_count),
           loom_param_u32(vtable->fixed_operand_count),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_001, params,
+                                  IREE_ARRAYSIZE(params));
     }
   } else {
     if (op->operand_count != vtable->fixed_operand_count) {
@@ -343,9 +340,8 @@ void loom_verify_op_structure(loom_verify_state_t* state, const loom_op_t* op,
           loom_param_u32(op->operand_count),
           loom_param_u32(vtable->fixed_operand_count),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_001, params,
+                                  IREE_ARRAYSIZE(params));
     }
   }
 
@@ -359,9 +355,8 @@ void loom_verify_op_structure(loom_verify_state_t* state, const loom_op_t* op,
           loom_param_u32(op->result_count),
           loom_param_u32(vtable->fixed_result_count),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 2),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_002, params,
+                                  IREE_ARRAYSIZE(params));
     }
   } else {
     if (op->result_count != vtable->fixed_result_count) {
@@ -370,9 +365,8 @@ void loom_verify_op_structure(loom_verify_state_t* state, const loom_op_t* op,
           loom_param_u32(op->result_count),
           loom_param_u32(vtable->fixed_result_count),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 2),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_002, params,
+                                  IREE_ARRAYSIZE(params));
     }
   }
 
@@ -383,9 +377,8 @@ void loom_verify_op_structure(loom_verify_state_t* state, const loom_op_t* op,
         loom_param_u32(op->attribute_count),
         loom_param_u32(vtable->attribute_count),
     };
-    loom_verify_emit_structured(
-        state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 3),
-        params, IREE_ARRAYSIZE(params));
+    loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_003, params,
+                                IREE_ARRAYSIZE(params));
   }
 
   // Check region count.
@@ -405,9 +398,8 @@ void loom_verify_op_structure(loom_verify_state_t* state, const loom_op_t* op,
         loom_param_u32(op->region_count),
         loom_param_u32(expected_region_count),
     };
-    loom_verify_emit_structured(
-        state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 4),
-        params, IREE_ARRAYSIZE(params));
+    loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_004, params,
+                                IREE_ARRAYSIZE(params));
   }
 }
 
@@ -436,9 +428,8 @@ void loom_verify_successor_targets(loom_verify_state_t* state,
           loom_param_string(op_name),
           loom_param_with_field_ref(loom_param_u32(i), successor_ref),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 23),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_023, params,
+                                  IREE_ARRAYSIZE(params));
       continue;
     }
     if (successors[i]->parent_region != parent_region ||
@@ -448,9 +439,8 @@ void loom_verify_successor_targets(loom_verify_state_t* state,
           loom_param_string(op_name),
           loom_param_with_field_ref(loom_param_u32(i), successor_ref),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 24),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_024, params,
+                                  IREE_ARRAYSIZE(params));
     }
   }
 }
@@ -478,9 +468,8 @@ static void loom_verify_predicate_list_attr(loom_verify_state_t* state,
         attr_name_param,
         loom_param_u32(attr.count),
     };
-    loom_verify_emit_structured(
-        state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 19),
-        params, IREE_ARRAYSIZE(params));
+    loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_019, params,
+                                IREE_ARRAYSIZE(params));
     return;
   }
   for (uint16_t predicate_index = 0; predicate_index < attr.count;
@@ -494,9 +483,8 @@ static void loom_verify_predicate_list_attr(loom_verify_state_t* state,
           loom_param_u32(predicate->kind),
           loom_param_u32(LOOM_PREDICATE_COUNT_),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 20),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_020, params,
+                                  IREE_ARRAYSIZE(params));
       continue;
     }
 
@@ -510,9 +498,8 @@ static void loom_verify_predicate_list_attr(loom_verify_state_t* state,
           loom_param_u32(expected_argument_count),
           loom_param_u32(predicate->arg_count),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 21),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_021, params,
+                                  IREE_ARRAYSIZE(params));
     }
 
     uint8_t argument_count = predicate->arg_count;
@@ -530,9 +517,8 @@ static void loom_verify_predicate_list_attr(loom_verify_state_t* state,
           loom_param_u32(tag),
           loom_param_u32(LOOM_PRED_ARG_COUNT_),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 22),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_022, params,
+                                  IREE_ARRAYSIZE(params));
     }
   }
 }
@@ -587,9 +573,8 @@ void loom_verify_type_constraints(loom_verify_state_t* state,
               loom_param_string(iree_make_cstring_view(
                   loom_type_constraint_name(constraint))),
           };
-          loom_verify_emit_structured(
-              state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 3),
-              params, IREE_ARRAYSIZE(params));
+          loom_verify_emit_structured(state, op, LOOM_ERR_TYPE_003, params,
+                                      IREE_ARRAYSIZE(params));
         }
       }
     }
@@ -638,9 +623,8 @@ void loom_verify_type_constraints(loom_verify_state_t* state,
               loom_param_string(iree_make_cstring_view(
                   loom_type_constraint_name(constraint))),
           };
-          loom_verify_emit_structured(
-              state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4),
-              params, IREE_ARRAYSIZE(params));
+          loom_verify_emit_structured(state, op, LOOM_ERR_TYPE_004, params,
+                                      IREE_ARRAYSIZE(params));
         }
       }
     }
@@ -662,9 +646,8 @@ void loom_verify_type_constraints(loom_verify_state_t* state,
             loom_param_u32(attrs[i].kind),
             loom_param_u32(descriptor->attr_kind),
         };
-        loom_verify_emit_structured(
-            state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 5), params,
-            IREE_ARRAYSIZE(params));
+        loom_verify_emit_structured(state, op, LOOM_ERR_TYPE_005, params,
+                                    IREE_ARRAYSIZE(params));
       }
       if (attrs[i].kind == LOOM_ATTR_ENUM && descriptor->enum_case_count > 0 &&
           (descriptor->flags & LOOM_ATTR_OPEN_ENUM) == 0) {
@@ -676,9 +659,8 @@ void loom_verify_type_constraints(loom_verify_state_t* state,
               loom_param_u32(case_index),
               loom_param_u32(descriptor->enum_case_count),
           };
-          loom_verify_emit_structured(
-              state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 10),
-              params, IREE_ARRAYSIZE(params));
+          loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_010, params,
+                                      IREE_ARRAYSIZE(params));
         }
       }
       loom_verify_predicate_list_attr(state, op, attr_name, i, attrs[i]);
@@ -711,9 +693,8 @@ static void loom_verify_emit_operand_dict_count_mismatch(
       loom_param_string(IREE_SV("operand dictionary operands")),
       loom_param_u32(operand_count),
   };
-  loom_verify_emit_structured(
-      state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 13), params,
-      IREE_ARRAYSIZE(params));
+  loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_013, params,
+                              IREE_ARRAYSIZE(params));
 }
 
 static void loom_verify_emit_operand_dict_attr_violation(
@@ -726,9 +707,8 @@ static void loom_verify_emit_operand_dict_attr_violation(
       loom_param_i64(actual_value),
       loom_param_string(expected_constraint),
   };
-  loom_verify_emit_structured(
-      state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14), params,
-      IREE_ARRAYSIZE(params));
+  loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_014, params,
+                              IREE_ARRAYSIZE(params));
 }
 
 void loom_verify_operand_dicts(loom_verify_state_t* state, const loom_op_t* op,
@@ -803,9 +783,8 @@ void loom_verify_operand_dicts(loom_verify_state_t* state, const loom_op_t* op,
             loom_param_u32(entry->value.kind),
             loom_param_u32(LOOM_ATTR_I64),
         };
-        loom_verify_emit_structured(
-            state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 5), params,
-            IREE_ARRAYSIZE(params));
+        loom_verify_emit_structured(state, op, LOOM_ERR_TYPE_005, params,
+                                    IREE_ARRAYSIZE(params));
         continue;
       }
       int64_t ordinal = entry->value.i64;
@@ -866,9 +845,8 @@ static void loom_verify_type_well_formed(
       loom_param_type(type),
       loom_param_string(detail),
   };
-  loom_verify_emit_structured(state, op,
-                              loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 10),
-                              params, IREE_ARRAYSIZE(params));
+  loom_verify_emit_structured(state, op, LOOM_ERR_TYPE_010, params,
+                              IREE_ARRAYSIZE(params));
 }
 
 static void loom_verify_value_type_well_formed(
@@ -963,9 +941,8 @@ static void loom_verify_encoding_ref(
         loom_param_u32(encoding_value_id),
         loom_param_u32((uint32_t)state->module->values.count),
     };
-    loom_verify_emit_structured(
-        state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 3), params,
-        IREE_ARRAYSIZE(params));
+    loom_verify_emit_structured(state, op, LOOM_ERR_ENCODING_003, params,
+                                IREE_ARRAYSIZE(params));
     return;
   }
   if (!loom_bitset_test(state->defined_bits, state->defined_bits_length,
@@ -984,9 +961,8 @@ static void loom_verify_encoding_ref(
           loom_param_with_field_ref(loom_param_string(field_name), field_ref),
           loom_param_string(value_name),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 4),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_ENCODING_004, params,
+                                  IREE_ARRAYSIZE(params));
       return;
     }
   }
@@ -1000,9 +976,8 @@ static void loom_verify_encoding_ref(
         loom_param_string(value_name),
         loom_param_type(encoding_type),
     };
-    loom_verify_emit_structured(
-        state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 5), params,
-        IREE_ARRAYSIZE(params));
+    loom_verify_emit_structured(state, op, LOOM_ERR_ENCODING_005, params,
+                                IREE_ARRAYSIZE(params));
   }
 }
 
@@ -1081,9 +1056,8 @@ void loom_verify_symbol_references(loom_verify_state_t* state,
               loom_param_u32(ref.module_id),
               loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, i)),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 4), params,
-          IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_SYMBOL_004, params,
+                                  IREE_ARRAYSIZE(params));
       continue;
     }
 
@@ -1094,9 +1068,8 @@ void loom_verify_symbol_references(loom_verify_state_t* state,
               loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, i)),
           loom_param_u32((uint32_t)state->module->symbols.count),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 1), params,
-          IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_SYMBOL_001, params,
+                                  IREE_ARRAYSIZE(params));
       continue;
     }
 
@@ -1108,9 +1081,8 @@ void loom_verify_symbol_references(loom_verify_state_t* state,
               loom_verify_symbol_name(state, ref),
               LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, i),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 2), params,
-          IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_SYMBOL_002, params,
+                                  IREE_ARRAYSIZE(params));
       continue;
     }
 
@@ -1130,7 +1102,7 @@ void loom_verify_symbol_references(loom_verify_state_t* state,
       }};
       loom_diagnostic_emission_t emission = {
           .op = op,
-          .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3),
+          .error = LOOM_ERR_SYMBOL_003,
           .params = params,
           .param_count = IREE_ARRAYSIZE(params),
           .related_ops = related_ops,
@@ -1233,9 +1205,8 @@ static void loom_verify_region_terminator_kind(
           loom_verify_op_kind_name(state, region_descriptor->terminator)),
       loom_param_string(loom_verify_op_kind_name(state, terminator_op->kind)),
   };
-  loom_verify_emit_structured(
-      state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 18), params,
-      IREE_ARRAYSIZE(params));
+  loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_018, params,
+                              IREE_ARRAYSIZE(params));
 }
 
 void loom_verify_region_structure(loom_verify_state_t* state,
@@ -1258,9 +1229,8 @@ void loom_verify_region_structure(loom_verify_state_t* state,
           loom_param_u32(op->region_count),
           loom_param_u32(vtable->region_count),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 4),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_004, params,
+                                  IREE_ARRAYSIZE(params));
       continue;
     }
     if ((region_descriptor->flags & LOOM_REGION_SINGLE_BLOCK) &&
@@ -1270,9 +1240,8 @@ void loom_verify_region_structure(loom_verify_state_t* state,
           loom_param_u32(i),
           loom_param_u32(region->block_count),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 6),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_006, params,
+                                  IREE_ARRAYSIZE(params));
     }
     bool region_uses_cfg_successors =
         loom_verify_region_has_cfg_successors(region);
@@ -1296,7 +1265,7 @@ void loom_verify_region_structure(loom_verify_state_t* state,
           }};
           loom_diagnostic_emission_t emission = {
               .op = current_op,
-              .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 12),
+              .error = LOOM_ERR_STRUCTURE_012,
               .params = params,
               .param_count = IREE_ARRAYSIZE(params),
               .related_ops = related_ops,
@@ -1314,9 +1283,8 @@ void loom_verify_region_structure(loom_verify_state_t* state,
             loom_param_string(op_name),
             loom_param_u32(i),
         };
-        loom_verify_emit_structured(
-            state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 5),
-            params, IREE_ARRAYSIZE(params));
+        loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_005, params,
+                                    IREE_ARRAYSIZE(params));
       }
       loom_verify_region_terminator_kind(state, op, vtable, i,
                                          region_uses_cfg_successors,

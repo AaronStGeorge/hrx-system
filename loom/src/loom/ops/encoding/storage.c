@@ -8,7 +8,7 @@
 
 #include <stdint.h>
 
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ops/encoding/matrix_operand.h"
 #include "loom/ops/encoding/ops.h"
@@ -736,9 +736,8 @@ static iree_status_t loom_encoding_emit_static_kind_error(
       loom_param_u32(actual_kind),
       loom_param_string(expected_kind),
   };
-  return loom_encoding_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 10),
-      params, IREE_ARRAYSIZE(params));
+  return loom_encoding_emit(emitter, op, LOOM_ERR_ENCODING_010, params,
+                            IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_encoding_emit_dynamic_type_error(
@@ -752,9 +751,8 @@ static iree_status_t loom_encoding_emit_dynamic_type_error(
       loom_param_type(actual_type),
       loom_param_string(IREE_SV("encoding")),
   };
-  return loom_encoding_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 9), params,
-      IREE_ARRAYSIZE(params));
+  return loom_encoding_emit(emitter, op, LOOM_ERR_ENCODING_009, params,
+                            IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_encoding_emit_role_error(
@@ -765,9 +763,8 @@ static iree_status_t loom_encoding_emit_role_error(
       loom_param_string(param_name),
       loom_param_string(expected_role),
   };
-  return loom_encoding_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 11),
-      params, IREE_ARRAYSIZE(params));
+  return loom_encoding_emit(emitter, op, LOOM_ERR_ENCODING_011, params,
+                            IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_encoding_physical_storage_verify_static_param(
@@ -829,9 +826,8 @@ static iree_status_t loom_encoding_physical_storage_verify_define(
         !loom_encoding_string_id_equal(module, entry->name_id,
                                        loom_encoding_schema_param_name())) {
       iree_string_view_t param_name = module->strings.entries[entry->name_id];
-      return loom_encoding_emit_param_error(
-          emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 8),
-          param_name);
+      return loom_encoding_emit_param_error(emitter, op, LOOM_ERR_ENCODING_008,
+                                            param_name);
     }
   }
   for (iree_host_size_t i = 0; i < params->dynamic_names.count; ++i) {
@@ -841,9 +837,8 @@ static iree_status_t loom_encoding_physical_storage_verify_define(
         !loom_encoding_string_id_equal(module, entry->name_id,
                                        loom_encoding_schema_param_name())) {
       iree_string_view_t param_name = module->strings.entries[entry->name_id];
-      return loom_encoding_emit_param_error(
-          emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 8),
-          param_name);
+      return loom_encoding_emit_param_error(emitter, op, LOOM_ERR_ENCODING_008,
+                                            param_name);
     }
   }
 
@@ -852,9 +847,8 @@ static iree_status_t loom_encoding_physical_storage_verify_define(
   const loom_named_attr_t* dynamic_layout = loom_encoding_find_param(
       module, params->dynamic_names, loom_encoding_layout_param_name());
   if (!static_layout && !dynamic_layout) {
-    return loom_encoding_emit_param_error(
-        emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 7),
-        loom_encoding_layout_param_name());
+    return loom_encoding_emit_param_error(emitter, op, LOOM_ERR_ENCODING_007,
+                                          loom_encoding_layout_param_name());
   }
 
   const loom_named_attr_t* static_schema = loom_encoding_find_param(
@@ -862,9 +856,8 @@ static iree_status_t loom_encoding_physical_storage_verify_define(
   const loom_named_attr_t* dynamic_schema = loom_encoding_find_param(
       module, params->dynamic_names, loom_encoding_schema_param_name());
   if (!static_schema && !dynamic_schema) {
-    return loom_encoding_emit_param_error(
-        emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 7),
-        loom_encoding_schema_param_name());
+    return loom_encoding_emit_param_error(emitter, op, LOOM_ERR_ENCODING_007,
+                                          loom_encoding_schema_param_name());
   }
 
   if (static_layout) {

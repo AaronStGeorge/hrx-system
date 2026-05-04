@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/error/emitter.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/test/ops.h"
@@ -70,10 +70,9 @@ static iree_status_t loom_test_emit_callee_kind_mismatch(
       loom_param_string(loom_test_symbol_definition_name(symbol)),
       loom_param_string(IREE_SV("function")),
   };
-  return loom_test_emit_callee_diagnostic(
-      emitter, call_op, symbol->defining_op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3), params,
-      IREE_ARRAYSIZE(params));
+  return loom_test_emit_callee_diagnostic(emitter, call_op, symbol->defining_op,
+                                          LOOM_ERR_SYMBOL_003, params,
+                                          IREE_ARRAYSIZE(params));
 }
 
 static const loom_symbol_t* loom_test_lookup_callee_symbol(
@@ -264,7 +263,7 @@ static iree_status_t loom_test_emit_constant_kind_mismatch(
   };
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 5),
+      .error = LOOM_ERR_TYPE_005,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
@@ -281,7 +280,7 @@ static iree_status_t loom_test_emit_constant_result_type_mismatch(
   };
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4),
+      .error = LOOM_ERR_TYPE_004,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
@@ -297,8 +296,8 @@ static iree_status_t loom_test_verify_call_like_argument_count(
   }
   return loom_test_emit_call_like_count_mismatch(
       module, call_op, signature->definition_op, emitter,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1),
-      call_op->operand_count, signature->argument_count);
+      LOOM_ERR_STRUCTURE_001, call_op->operand_count,
+      signature->argument_count);
 }
 
 static iree_status_t loom_test_verify_call_like_result_count(
@@ -310,8 +309,7 @@ static iree_status_t loom_test_verify_call_like_result_count(
   }
   return loom_test_emit_call_like_count_mismatch(
       module, call_op, signature->definition_op, emitter,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 2),
-      call_op->result_count, signature->result_count);
+      LOOM_ERR_STRUCTURE_002, call_op->result_count, signature->result_count);
 }
 
 static void loom_test_format_field_name(char* buffer,
@@ -341,10 +339,9 @@ static iree_status_t loom_test_emit_call_like_type_mismatch(
       loom_param_string(iree_make_cstring_view(callee_field_name)),
       loom_param_type(callee_type),
   };
-  return loom_test_emit_callee_diagnostic(
-      emitter, call_op, definition_op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1), params,
-      IREE_ARRAYSIZE(params));
+  return loom_test_emit_callee_diagnostic(emitter, call_op, definition_op,
+                                          LOOM_ERR_TYPE_001, params,
+                                          IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_test_verify_call_like_argument_types(

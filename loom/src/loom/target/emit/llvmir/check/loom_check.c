@@ -9,7 +9,6 @@
 #include "iree/io/vec_stream.h"
 #include "loom/analysis/symbol_facts.h"
 #include "loom/error/error_catalog.h"
-#include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/target/facts.h"
 #include "loom/target/emit/llvmir/bitcode_writer.h"

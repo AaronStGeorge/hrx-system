@@ -8,7 +8,7 @@
 
 #include <string.h>
 
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
@@ -176,8 +176,7 @@ static iree_status_t loom_pass_interpreter_emit_failure_diagnostic(
   if (!state->options->diagnostic_emitter.fn) {
     return iree_ok_status();
   }
-  const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 28);
+  const loom_error_def_t* error = LOOM_ERR_STRUCTURE_028;
   if (!error) {
     return iree_make_status(
         IREE_STATUS_INTERNAL,

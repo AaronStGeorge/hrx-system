@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/error/emitter.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/encoding/storage.h"
@@ -51,9 +51,8 @@ static iree_status_t loom_buffer_verify_strided_layout_rank(
       loom_param_string(IREE_SV("layout stride list")),
       loom_param_i64(layout.rank),
   };
-  return loom_buffer_emit(emitter, op,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_SHAPE, 1),
-                          params, IREE_ARRAYSIZE(params));
+  return loom_buffer_emit(emitter, op, LOOM_ERR_SHAPE_001, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_buffer_emit_attribute_value_constraint(
@@ -65,9 +64,8 @@ static iree_status_t loom_buffer_emit_attribute_value_constraint(
       loom_param_i64(actual_value),
       loom_param_string(expected_constraint),
   };
-  return loom_buffer_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14),
-      params, IREE_ARRAYSIZE(params));
+  return loom_buffer_emit(emitter, op, LOOM_ERR_STRUCTURE_014, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_buffer_verify_concrete_memory_space(
@@ -171,9 +169,8 @@ iree_status_t loom_buffer_view_verify(const loom_module_t* module,
         loom_param_string(IREE_SV("result type layout")),
         loom_param_string(IREE_SV("view result type")),
     };
-    return loom_buffer_emit(
-        emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 1),
-        params, IREE_ARRAYSIZE(params));
+    return loom_buffer_emit(emitter, op, LOOM_ERR_ENCODING_001, params,
+                            IREE_ARRAYSIZE(params));
   }
 
   if (!loom_type_has_ssa_encoding(result_type)) return iree_ok_status();

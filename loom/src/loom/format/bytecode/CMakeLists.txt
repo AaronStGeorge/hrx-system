@@ -86,6 +86,7 @@ loom_cc_library(
     iree::base::internal::arena
     iree::base::internal::unicode
     loom::src::loom::error::diagnostic
+    loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::verify

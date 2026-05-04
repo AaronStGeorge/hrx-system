@@ -6,6 +6,7 @@
 
 #include <string.h>
 
+#include "loom/error/error_catalog.h"
 #include "loom/verify/verify_constraints.h"
 #include "loom/verify/verify_diagnostics.h"
 #include "loom/verify/verify_ownership.h"
@@ -63,9 +64,8 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
         loom_param_u32(op->kind),
         loom_param_string(iree_make_cstring_view(kind_buffer)),
     };
-    loom_verify_emit_structured(
-        state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 9),
-        params, IREE_ARRAYSIZE(params));
+    loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_009, params,
+                                IREE_ARRAYSIZE(params));
     IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
     // Still define results so downstream dominance checks don't cascade.
     for (uint16_t i = 0; i < op->result_count; ++i) {
@@ -354,10 +354,8 @@ iree_status_t loom_verify_module(const loom_module_t* module,
           loom_diagnostic_param_t params[] = {
               loom_param_string(op_name),
           };
-          loom_verify_emit_structured(
-              &state, op,
-              loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 11), params,
-              IREE_ARRAYSIZE(params));
+          loom_verify_emit_structured(&state, op, LOOM_ERR_STRUCTURE_011,
+                                      params, IREE_ARRAYSIZE(params));
           iree_status_t diagnostic_status =
               loom_verify_pending_diagnostic_status(&state);
           if (!iree_status_is_ok(diagnostic_status)) {

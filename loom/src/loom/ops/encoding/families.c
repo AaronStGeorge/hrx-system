@@ -8,7 +8,7 @@
 
 #include <stdint.h>
 
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/encoding/matrix_operand.h"
@@ -137,9 +137,8 @@ static iree_status_t loom_encoding_emit_static_kind_error(
       loom_param_u32(actual_kind),
       loom_param_string(expected_kind),
   };
-  return loom_encoding_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 10),
-      params, IREE_ARRAYSIZE(params));
+  return loom_encoding_emit(emitter, op, LOOM_ERR_ENCODING_010, params,
+                            IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_encoding_emit_static_value_error(
@@ -152,9 +151,8 @@ static iree_status_t loom_encoding_emit_static_value_error(
       loom_param_string(actual_value),
       loom_param_string(expected_values),
   };
-  return loom_encoding_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 13),
-      params, IREE_ARRAYSIZE(params));
+  return loom_encoding_emit(emitter, op, LOOM_ERR_ENCODING_013, params,
+                            IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_encoding_emit_attribute_constraint_error(
@@ -166,9 +164,8 @@ static iree_status_t loom_encoding_emit_attribute_constraint_error(
       loom_param_i64(actual_value),
       loom_param_string(expected_constraint),
   };
-  return loom_encoding_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14),
-      params, IREE_ARRAYSIZE(params));
+  return loom_encoding_emit(emitter, op, LOOM_ERR_STRUCTURE_014, params,
+                            IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_encoding_emit_dynamic_type_error(
@@ -183,9 +180,8 @@ static iree_status_t loom_encoding_emit_dynamic_type_error(
       loom_param_type(actual_type),
       loom_param_string(expected_type),
   };
-  return loom_encoding_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 9), params,
-      IREE_ARRAYSIZE(params));
+  return loom_encoding_emit(emitter, op, LOOM_ERR_ENCODING_009, params,
+                            IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_encoding_emit_role_error(
@@ -197,9 +193,8 @@ static iree_status_t loom_encoding_emit_role_error(
       loom_param_string(param_name),
       loom_param_string(expected_role),
   };
-  return loom_encoding_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 11),
-      params, IREE_ARRAYSIZE(params));
+  return loom_encoding_emit(emitter, op, LOOM_ERR_ENCODING_011, params,
+                            IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_encoding_emit_mutually_exclusive_param_error(
@@ -211,9 +206,8 @@ static iree_status_t loom_encoding_emit_mutually_exclusive_param_error(
       loom_param_string(param_a),
       loom_param_string(param_b),
   };
-  return loom_encoding_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 14),
-      params, IREE_ARRAYSIZE(params));
+  return loom_encoding_emit(emitter, op, LOOM_ERR_ENCODING_014, params,
+                            IREE_ARRAYSIZE(params));
 }
 
 typedef enum loom_encoding_matrix_param_requirement_e {
@@ -236,9 +230,9 @@ static iree_status_t loom_encoding_matrix_static_i64(
       *out_ok = true;
       return iree_ok_status();
     }
-    return loom_encoding_emit_param_error(
-        emitter, op, loom_encoding_matrix_operand_name(),
-        loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 7), param_name);
+    return loom_encoding_emit_param_error(emitter, op,
+                                          loom_encoding_matrix_operand_name(),
+                                          LOOM_ERR_ENCODING_007, param_name);
   }
   if (entry->value.kind != LOOM_ATTR_I64) {
     return loom_encoding_emit_static_kind_error(
@@ -289,9 +283,9 @@ static iree_status_t loom_encoding_matrix_static_symbol(
       *out_ok = true;
       return iree_ok_status();
     }
-    return loom_encoding_emit_param_error(
-        emitter, op, loom_encoding_matrix_operand_name(),
-        loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 7), param_name);
+    return loom_encoding_emit_param_error(emitter, op,
+                                          loom_encoding_matrix_operand_name(),
+                                          LOOM_ERR_ENCODING_007, param_name);
   }
   if (entry->value.kind != LOOM_ATTR_STRING) {
     return loom_encoding_emit_static_kind_error(
@@ -324,17 +318,17 @@ static iree_status_t loom_encoding_matrix_verify_param_names(
     if (!loom_encoding_matrix_static_param_name_is_supported(module,
                                                              entry->name_id)) {
       iree_string_view_t param_name = module->strings.entries[entry->name_id];
-      return loom_encoding_emit_param_error(
-          emitter, op, loom_encoding_matrix_operand_name(),
-          loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 8), param_name);
+      return loom_encoding_emit_param_error(emitter, op,
+                                            loom_encoding_matrix_operand_name(),
+                                            LOOM_ERR_ENCODING_008, param_name);
     }
   }
   for (iree_host_size_t i = 0; i < params->dynamic_names.count; ++i) {
     const loom_named_attr_t* entry = &params->dynamic_names.entries[i];
     iree_string_view_t param_name = module->strings.entries[entry->name_id];
-    return loom_encoding_emit_param_error(
-        emitter, op, loom_encoding_matrix_operand_name(),
-        loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 8), param_name);
+    return loom_encoding_emit_param_error(emitter, op,
+                                          loom_encoding_matrix_operand_name(),
+                                          LOOM_ERR_ENCODING_008, param_name);
   }
   *out_ok = true;
   return iree_ok_status();
@@ -570,9 +564,9 @@ static iree_status_t loom_encoding_turboquant_require_static_param(
   const loom_named_attr_t* entry =
       loom_encoding_find_param(module, params->static_attrs, param_name);
   if (!entry) {
-    return loom_encoding_emit_param_error(
-        emitter, op, loom_encoding_turboquant_kv_name(),
-        loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 7), param_name);
+    return loom_encoding_emit_param_error(emitter, op,
+                                          loom_encoding_turboquant_kv_name(),
+                                          LOOM_ERR_ENCODING_007, param_name);
   }
   *out_param = entry;
   return iree_ok_status();
@@ -587,9 +581,9 @@ static iree_status_t loom_encoding_turboquant_require_dynamic_param(
   const loom_named_attr_t* entry =
       loom_encoding_find_param(module, params->dynamic_names, param_name);
   if (!entry) {
-    return loom_encoding_emit_param_error(
-        emitter, op, loom_encoding_turboquant_kv_name(),
-        loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 7), param_name);
+    return loom_encoding_emit_param_error(emitter, op,
+                                          loom_encoding_turboquant_kv_name(),
+                                          LOOM_ERR_ENCODING_007, param_name);
   }
   *out_param = entry;
   return iree_ok_status();
@@ -718,7 +712,7 @@ static iree_status_t loom_encoding_numeric_transform_verify_static_params(
             module, entry->name_id)) {
       return loom_encoding_emit_param_error(
           emitter, op, loom_encoding_numeric_transform_name(),
-          loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 8), param_name);
+          LOOM_ERR_ENCODING_008, param_name);
     }
 
     if (loom_encoding_numeric_transform_param_is_extent(module,
@@ -778,7 +772,7 @@ static iree_status_t loom_encoding_numeric_transform_verify_dynamic_params(
             module, entry->name_id)) {
       return loom_encoding_emit_param_error(
           emitter, op, loom_encoding_numeric_transform_name(),
-          loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 8), param_name);
+          LOOM_ERR_ENCODING_008, param_name);
     }
 
     loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
@@ -857,9 +851,9 @@ static iree_status_t loom_encoding_numeric_transform_require_param(
     *out_ok = true;
     return iree_ok_status();
   }
-  return loom_encoding_emit_param_error(
-      emitter, op, loom_encoding_numeric_transform_name(),
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 7), param_name);
+  return loom_encoding_emit_param_error(emitter, op,
+                                        loom_encoding_numeric_transform_name(),
+                                        LOOM_ERR_ENCODING_007, param_name);
 }
 
 static iree_status_t loom_encoding_numeric_transform_require_dynamic_param(
@@ -872,9 +866,9 @@ static iree_status_t loom_encoding_numeric_transform_require_dynamic_param(
     *out_ok = true;
     return iree_ok_status();
   }
-  return loom_encoding_emit_param_error(
-      emitter, op, loom_encoding_numeric_transform_name(),
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 7), param_name);
+  return loom_encoding_emit_param_error(emitter, op,
+                                        loom_encoding_numeric_transform_name(),
+                                        LOOM_ERR_ENCODING_007, param_name);
 }
 
 static bool loom_encoding_numeric_transform_has_dynamic_param(
@@ -895,9 +889,9 @@ static iree_status_t loom_encoding_numeric_transform_reject_dynamic_param(
     *out_ok = true;
     return iree_ok_status();
   }
-  return loom_encoding_emit_param_error(
-      emitter, op, loom_encoding_numeric_transform_name(),
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 8), param_name);
+  return loom_encoding_emit_param_error(emitter, op,
+                                        loom_encoding_numeric_transform_name(),
+                                        LOOM_ERR_ENCODING_008, param_name);
 }
 
 static iree_status_t loom_encoding_numeric_transform_verify_no_dynamic_payload(
@@ -938,8 +932,7 @@ loom_encoding_numeric_transform_verify_hadamard_sign_payload(
   if (!has_signs && !has_seed) {
     return loom_encoding_emit_param_error(
         emitter, op, loom_encoding_numeric_transform_name(),
-        loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 7),
-        IREE_SV("signs or seed"));
+        LOOM_ERR_ENCODING_007, IREE_SV("signs or seed"));
   }
   if (has_signs && has_seed) {
     return loom_encoding_emit_mutually_exclusive_param_error(
@@ -1083,9 +1076,9 @@ static iree_status_t loom_encoding_turboquant_verify_static_param_kinds(
     iree_string_view_t param_name = module->strings.entries[entry->name_id];
     if (!loom_encoding_turboquant_static_param_name_is_supported(
             module, entry->name_id)) {
-      return loom_encoding_emit_param_error(
-          emitter, op, loom_encoding_turboquant_kv_name(),
-          loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 8), param_name);
+      return loom_encoding_emit_param_error(emitter, op,
+                                            loom_encoding_turboquant_kv_name(),
+                                            LOOM_ERR_ENCODING_008, param_name);
     }
   }
   *out_ok = true;
@@ -1102,9 +1095,9 @@ static iree_status_t loom_encoding_turboquant_verify_dynamic_param_names(
     iree_string_view_t param_name = module->strings.entries[entry->name_id];
     if (!loom_encoding_turboquant_dynamic_param_name_is_supported(
             module, entry->name_id)) {
-      return loom_encoding_emit_param_error(
-          emitter, op, loom_encoding_turboquant_kv_name(),
-          loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 8), param_name);
+      return loom_encoding_emit_param_error(emitter, op,
+                                            loom_encoding_turboquant_kv_name(),
+                                            LOOM_ERR_ENCODING_008, param_name);
     }
   }
   *out_ok = true;

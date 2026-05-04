@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/error/emitter.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
@@ -38,9 +38,8 @@ static iree_status_t loom_kernel_emit_integer_field_constraint(
       loom_param_i64(actual_value),
       loom_param_string(expected_constraint),
   };
-  return loom_kernel_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14),
-      params, IREE_ARRAYSIZE(params));
+  return loom_kernel_emit(emitter, op, LOOM_ERR_STRUCTURE_014, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_kernel_emit_attribute_value_constraint(
@@ -119,9 +118,8 @@ static iree_status_t loom_kernel_emit_operand_constraint(
       loom_param_type(actual_type),
       loom_param_string(expected_constraint),
   };
-  return loom_kernel_emit(emitter, op,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 3),
-                          params, IREE_ARRAYSIZE(params));
+  return loom_kernel_emit(emitter, op, LOOM_ERR_TYPE_003, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_kernel_emit_result_constraint(
@@ -133,9 +131,8 @@ static iree_status_t loom_kernel_emit_result_constraint(
       loom_param_type(actual_type),
       loom_param_string(expected_constraint),
   };
-  return loom_kernel_emit(emitter, op,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4),
-                          params, IREE_ARRAYSIZE(params));
+  return loom_kernel_emit(emitter, op, LOOM_ERR_TYPE_004, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static iree_string_view_t loom_kernel_value_name(const loom_module_t* module,
@@ -165,9 +162,8 @@ static iree_status_t loom_kernel_emit_value_use_count_constraint(
       loom_param_u32(actual_count),
       loom_param_string(expected_constraint),
   };
-  return loom_kernel_emit(emitter, op,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 9),
-                          params, IREE_ARRAYSIZE(params));
+  return loom_kernel_emit(emitter, op, LOOM_ERR_DOMINANCE_009, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_kernel_emit_value_user_constraint(
@@ -179,9 +175,8 @@ static iree_status_t loom_kernel_emit_value_user_constraint(
       loom_param_string(loom_kernel_op_name(module, user_op)),
       loom_param_string(expected_constraint),
   };
-  return loom_kernel_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 10),
-      params, IREE_ARRAYSIZE(params));
+  return loom_kernel_emit(emitter, op, LOOM_ERR_DOMINANCE_010, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 static bool loom_kernel_type_is_opaque_dialect(const loom_module_t* module,

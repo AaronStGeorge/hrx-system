@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/error/error_catalog.h"
 #include "loom/format/text/parser/context.h"
 #include "loom/format/text/parser/diagnostics.h"
 
@@ -260,9 +261,9 @@ iree_status_t loom_parser_definition_scope_pop_if_needed(
     loom_diagnostic_param_t params[] = {
         loom_param_string(placeholder.name_token.text),
     };
-    iree_status_t status = loom_parser_emit(
-        parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 22), params,
-        IREE_ARRAYSIZE(params), placeholder.name_token);
+    iree_status_t status =
+        loom_parser_emit(parser, LOOM_ERR_PARSE_022, params,
+                         IREE_ARRAYSIZE(params), placeholder.name_token);
     loom_parser_definition_scope_discard(parser);
     return status;
   }
@@ -395,9 +396,8 @@ iree_status_t loom_parser_emit_duplicate_value_name(loom_parser_t* parser,
   loom_diagnostic_param_t params[] = {
       loom_param_string(name_token.text),
   };
-  return loom_parser_emit(parser,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 2),
-                          params, IREE_ARRAYSIZE(params), name_token);
+  return loom_parser_emit(parser, LOOM_ERR_PARSE_002, params,
+                          IREE_ARRAYSIZE(params), name_token);
 }
 
 iree_status_t loom_parser_define_value_name(loom_parser_t* parser,
@@ -472,9 +472,8 @@ iree_status_t loom_parser_resolve_value(loom_parser_t* parser,
   loom_diagnostic_param_t params[] = {
       loom_param_string(name_token.text),
   };
-  return loom_parser_emit(parser,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1),
-                          params, IREE_ARRAYSIZE(params), name_token);
+  return loom_parser_emit(parser, LOOM_ERR_PARSE_001, params,
+                          IREE_ARRAYSIZE(params), name_token);
 }
 
 iree_status_t loom_parser_emit_result_count_mismatch(
@@ -486,7 +485,6 @@ iree_status_t loom_parser_emit_result_count_mismatch(
       loom_param_u32(expected_count),
       loom_param_u32(actual_count),
   };
-  return loom_parser_emit(parser,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 9),
-                          params, IREE_ARRAYSIZE(params), op_name_token);
+  return loom_parser_emit(parser, LOOM_ERR_PARSE_009, params,
+                          IREE_ARRAYSIZE(params), op_name_token);
 }

@@ -22,7 +22,6 @@
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/error/error_catalog.h"
-#include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
 #include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
@@ -753,8 +752,7 @@ static iree_status_t loom_check_emit_collect_status_diagnostic(
     loom_check_diagnostic_collector_t* collector,
     const loom_check_case_t* test_case, iree_string_view_t filename,
     iree_string_view_t emit_target_name, iree_status_t failure_status) {
-  const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1);
+  const loom_error_def_t* error = LOOM_ERR_LOWERING_001;
   if (!error) {
     iree_status_free(failure_status);
     return iree_make_status(IREE_STATUS_INTERNAL,

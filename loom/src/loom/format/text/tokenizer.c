@@ -11,6 +11,7 @@
 
 #include "iree/base/internal/arena.h"
 #include "iree/base/internal/unicode.h"
+#include "loom/error/error_catalog.h"
 
 //===----------------------------------------------------------------------===//
 // UTF-8 helpers
@@ -396,9 +397,9 @@ static iree_status_t loom_tokenizer_consume_hex4(loom_tokenizer_t* t,
       loom_diagnostic_param_t params[] = {
           loom_param_string(IREE_SV("truncated unicode escape")),
       };
-      return loom_tokenizer_set_current_error(
-          t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23), params,
-          IREE_ARRAYSIZE(params), t->position, t->line, t->column);
+      return loom_tokenizer_set_current_error(t, LOOM_ERR_PARSE_023, params,
+                                              IREE_ARRAYSIZE(params),
+                                              t->position, t->line, t->column);
     }
     iree_host_size_t digit_position = t->position;
     uint32_t digit_column = t->column;
@@ -408,8 +409,8 @@ static iree_status_t loom_tokenizer_consume_hex4(loom_tokenizer_t* t,
           loom_param_string(IREE_SV("truncated unicode escape")),
       };
       return loom_tokenizer_set_one_char_error(
-          t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23), params,
-          IREE_ARRAYSIZE(params), digit_position, t->line, digit_column);
+          t, LOOM_ERR_PARSE_023, params, IREE_ARRAYSIZE(params), digit_position,
+          t->line, digit_column);
     }
     int32_t value = loom_hex_digit_value(digit);
     if (value < 0) {
@@ -417,8 +418,8 @@ static iree_status_t loom_tokenizer_consume_hex4(loom_tokenizer_t* t,
           loom_param_string(IREE_SV("invalid hex digit in unicode escape")),
       };
       return loom_tokenizer_set_one_char_error(
-          t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23), params,
-          IREE_ARRAYSIZE(params), digit_position, t->line, digit_column);
+          t, LOOM_ERR_PARSE_023, params, IREE_ARRAYSIZE(params), digit_position,
+          t->line, digit_column);
     }
     codepoint = (codepoint << 4) | (uint32_t)value;
     ++t->position;
@@ -441,9 +442,9 @@ static iree_status_t loom_tokenizer_consume_string_escape(
   ++t->position;
   ++t->column;
   if (t->position >= t->source.size) {
-    return loom_tokenizer_set_one_char_error(
-        t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 5), NULL, 0,
-        escape_start, escape_line, escape_column);
+    return loom_tokenizer_set_one_char_error(t, LOOM_ERR_PARSE_005, NULL, 0,
+                                             escape_start, escape_line,
+                                             escape_column);
   }
 
   char escaped = t->source.data[t->position];
@@ -499,9 +500,8 @@ static iree_status_t loom_tokenizer_consume_string_escape(
                   IREE_SV("high surrogate not followed by low surrogate")),
           };
           return loom_tokenizer_set_current_error(
-              t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23), params,
-              IREE_ARRAYSIZE(params), unicode_escape_start, escape_line,
-              escape_column);
+              t, LOOM_ERR_PARSE_023, params, IREE_ARRAYSIZE(params),
+              unicode_escape_start, escape_line, escape_column);
         }
         t->position += 2;
         t->column += 2;
@@ -519,10 +519,9 @@ static iree_status_t loom_tokenizer_consume_string_escape(
               loom_param_string(IREE_SV("invalid low surrogate")),
           };
           return loom_tokenizer_set_error(
-              t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23), params,
-              IREE_ARRAYSIZE(params), low_surrogate_position,
-              low_surrogate_end_position, escape_line, low_surrogate_column,
-              low_surrogate_end_column);
+              t, LOOM_ERR_PARSE_023, params, IREE_ARRAYSIZE(params),
+              low_surrogate_position, low_surrogate_end_position, escape_line,
+              low_surrogate_column, low_surrogate_end_column);
         }
         codepoint = 0x10000u + ((codepoint - 0xD800u) << 10) +
                     (low_surrogate - 0xDC00u);
@@ -535,9 +534,9 @@ static iree_status_t loom_tokenizer_consume_string_escape(
             loom_param_string(IREE_SV("unexpected low surrogate")),
         };
         return loom_tokenizer_set_error(
-            t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23), params,
-            IREE_ARRAYSIZE(params), codepoint_position, codepoint_end_position,
-            escape_line, codepoint_column, codepoint_end_column);
+            t, LOOM_ERR_PARSE_023, params, IREE_ARRAYSIZE(params),
+            codepoint_position, codepoint_end_position, escape_line,
+            codepoint_column, codepoint_end_column);
       }
 
       int length = iree_unicode_utf8_encode(codepoint, out_bytes);
@@ -550,9 +549,9 @@ static iree_status_t loom_tokenizer_consume_string_escape(
             loom_param_string(IREE_SV("invalid unicode codepoint")),
         };
         return loom_tokenizer_set_error(
-            t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23), params,
-            IREE_ARRAYSIZE(params), codepoint_position, codepoint_end_position,
-            escape_line, codepoint_column, codepoint_end_column);
+            t, LOOM_ERR_PARSE_023, params, IREE_ARRAYSIZE(params),
+            codepoint_position, codepoint_end_position, escape_line,
+            codepoint_column, codepoint_end_column);
       }
       *out_length = (iree_host_size_t)length;
       return iree_ok_status();
@@ -562,9 +561,8 @@ static iree_status_t loom_tokenizer_consume_string_escape(
           loom_param_string(IREE_SV("unknown escape sequence")),
       };
       return loom_tokenizer_set_error(
-          t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23), params,
-          IREE_ARRAYSIZE(params), escape_start, t->position, escape_line,
-          escape_column, t->column);
+          t, LOOM_ERR_PARSE_023, params, IREE_ARRAYSIZE(params), escape_start,
+          t->position, escape_line, escape_column, t->column);
     }
   }
 }
@@ -660,8 +658,8 @@ static iree_status_t loom_tokenizer_scan_string_content(
             loom_param_u32((uint32_t)byte_position),
         };
         IREE_RETURN_IF_ERROR(loom_tokenizer_set_one_char_error(
-            t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 19), params,
-            IREE_ARRAYSIZE(params), byte_position, t->line, byte_column));
+            t, LOOM_ERR_PARSE_019, params, IREE_ARRAYSIZE(params),
+            byte_position, t->line, byte_column));
         loom_tokenizer_skip_to_string_recovery_point(t);
         return iree_ok_status();
       }
@@ -673,8 +671,8 @@ static iree_status_t loom_tokenizer_scan_string_content(
               IREE_SV("unescaped control character in string literal")),
       };
       IREE_RETURN_IF_ERROR(loom_tokenizer_set_one_char_error(
-          t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23), params,
-          IREE_ARRAYSIZE(params), t->position, t->line, t->column));
+          t, LOOM_ERR_PARSE_023, params, IREE_ARRAYSIZE(params), t->position,
+          t->line, t->column));
       loom_tokenizer_skip_to_string_recovery_point(t);
       return iree_ok_status();
     }
@@ -682,8 +680,7 @@ static iree_status_t loom_tokenizer_scan_string_content(
     ++t->position;
   }
   return loom_tokenizer_set_one_char_error(
-      t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 5), NULL, 0,
-      string_start, string_line, string_column);
+      t, LOOM_ERR_PARSE_005, NULL, 0, string_start, string_line, string_column);
 }
 
 // Scans a string literal (opening '"' already matched at position).
@@ -834,8 +831,8 @@ static iree_status_t loom_tokenizer_scan_ssa_value(loom_tokenizer_t* t,
         loom_param_string(IREE_SV("%")),
     };
     IREE_RETURN_IF_ERROR(loom_tokenizer_set_one_char_error(
-        t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 24), params,
-        IREE_ARRAYSIZE(params), source_start, start_line, start_column));
+        t, LOOM_ERR_PARSE_024, params, IREE_ARRAYSIZE(params), source_start,
+        start_line, start_column));
     *out_token = loom_tokenizer_make_error_token(t);
     return iree_ok_status();
   }
@@ -870,8 +867,8 @@ static iree_status_t loom_tokenizer_scan_symbol(loom_tokenizer_t* t,
         loom_param_string(IREE_SV("@")),
     };
     IREE_RETURN_IF_ERROR(loom_tokenizer_set_one_char_error(
-        t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 24), params,
-        IREE_ARRAYSIZE(params), source_start, start_line, start_column));
+        t, LOOM_ERR_PARSE_024, params, IREE_ARRAYSIZE(params), source_start,
+        start_line, start_column));
     *out_token = loom_tokenizer_make_error_token(t);
     return iree_ok_status();
   }
@@ -901,8 +898,8 @@ static iree_status_t loom_tokenizer_scan_hash(loom_tokenizer_t* t,
         loom_param_string(IREE_SV("#")),
     };
     IREE_RETURN_IF_ERROR(loom_tokenizer_set_one_char_error(
-        t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 24), params,
-        IREE_ARRAYSIZE(params), source_start, start_line, start_column));
+        t, LOOM_ERR_PARSE_024, params, IREE_ARRAYSIZE(params), source_start,
+        start_line, start_column));
     *out_token = loom_tokenizer_make_error_token(t);
     return iree_ok_status();
   }
@@ -940,8 +937,8 @@ static iree_status_t loom_tokenizer_scan_block_label(loom_tokenizer_t* t,
         loom_param_string(IREE_SV("^")),
     };
     IREE_RETURN_IF_ERROR(loom_tokenizer_set_one_char_error(
-        t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 24), params,
-        IREE_ARRAYSIZE(params), source_start, start_line, start_column));
+        t, LOOM_ERR_PARSE_024, params, IREE_ARRAYSIZE(params), source_start,
+        start_line, start_column));
     *out_token = loom_tokenizer_make_error_token(t);
     return iree_ok_status();
   }
@@ -1136,8 +1133,8 @@ static iree_status_t loom_tokenizer_scan(loom_tokenizer_t* t,
           loom_param_u32((uint32_t)saved_position),
       };
       IREE_RETURN_IF_ERROR(loom_tokenizer_set_one_char_error(
-          t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 19), params,
-          IREE_ARRAYSIZE(params), start, start_line, start_column));
+          t, LOOM_ERR_PARSE_019, params, IREE_ARRAYSIZE(params), start,
+          start_line, start_column));
       ++t->position;
       ++t->column;
       *out_token = loom_tokenizer_make_error_token(t);
@@ -1148,8 +1145,8 @@ static iree_status_t loom_tokenizer_scan(loom_tokenizer_t* t,
     t->position = decoded_position;
     t->column = saved_column + 1;
     IREE_RETURN_IF_ERROR(loom_tokenizer_set_error(
-        t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 25), NULL, 0, start,
-        t->position, start_line, start_column, t->column));
+        t, LOOM_ERR_PARSE_025, NULL, 0, start, t->position, start_line,
+        start_column, t->column));
     *out_token = loom_tokenizer_make_error_token(t);
     return iree_ok_status();
   }
@@ -1157,8 +1154,7 @@ static iree_status_t loom_tokenizer_scan(loom_tokenizer_t* t,
   ++t->position;
   ++t->column;
   IREE_RETURN_IF_ERROR(loom_tokenizer_set_one_char_error(
-      t, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 25), NULL, 0, start,
-      start_line, start_column));
+      t, LOOM_ERR_PARSE_025, NULL, 0, start, start_line, start_column));
   *out_token = loom_tokenizer_make_error_token(t);
   return iree_ok_status();
 }
@@ -1282,9 +1278,8 @@ iree_status_t loom_tokenizer_scan_angle_interior(
             loom_param_u32((uint32_t)byte_position),
         };
         IREE_RETURN_IF_ERROR(loom_tokenizer_set_one_char_error(
-            tokenizer, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 19),
-            params, IREE_ARRAYSIZE(params), byte_position, byte_line,
-            byte_column));
+            tokenizer, LOOM_ERR_PARSE_019, params, IREE_ARRAYSIZE(params),
+            byte_position, byte_line, byte_column));
         tokenizer->peeked = loom_tokenizer_make_error_token(tokenizer);
         return iree_ok_status();
       }
@@ -1295,8 +1290,8 @@ iree_status_t loom_tokenizer_scan_angle_interior(
     ++tokenizer->position;
   }
   IREE_RETURN_IF_ERROR(loom_tokenizer_set_error(
-      tokenizer, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 26), NULL, 0,
-      start, tokenizer->position, start_line, start_column, tokenizer->column));
+      tokenizer, LOOM_ERR_PARSE_026, NULL, 0, start, tokenizer->position,
+      start_line, start_column, tokenizer->column));
   tokenizer->peeked = loom_tokenizer_make_error_token(tokenizer);
   return iree_ok_status();
 }

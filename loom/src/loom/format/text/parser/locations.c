@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/error/error_catalog.h"
 #include "loom/format/text/parser/attrs.h"
 #include "loom/format/text/parser/diagnostics.h"
 #include "loom/format/text/parser/regions.h"
@@ -30,9 +31,8 @@ static iree_status_t loom_parser_emit_location_error(loom_parser_t* parser,
   loom_diagnostic_param_t params[] = {
       loom_param_string(detail),
   };
-  return loom_parser_emit(parser,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 11),
-                          params, IREE_ARRAYSIZE(params), token);
+  return loom_parser_emit(parser, LOOM_ERR_PARSE_011, params,
+                          IREE_ARRAYSIZE(params), token);
 }
 
 static iree_status_t loom_parser_resolve_location_source(

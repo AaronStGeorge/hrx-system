@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "loom/error/error_catalog.h"
 #include "loom/verify/verify_diagnostics.h"
 
 static int loom_compare_value_ids(const void* lhs, const void* rhs) {
@@ -185,9 +186,8 @@ void loom_verify_operand_dominance(loom_verify_state_t* state,
           loom_param_u32(value_id),
           loom_param_u32((uint32_t)state->module->values.count),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 3),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_DOMINANCE_003, params,
+                                  IREE_ARRAYSIZE(params));
       continue;
     }
     if (!loom_bitset_test(state->defined_bits, state->defined_bits_length,
@@ -198,9 +198,8 @@ void loom_verify_operand_dominance(loom_verify_state_t* state,
       loom_diagnostic_param_t params[] = {
           loom_param_with_field_ref(loom_param_string(value_name), operand_ref),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 1),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_DOMINANCE_001, params,
+                                  IREE_ARRAYSIZE(params));
     }
     if (loom_bitset_test(state->consumed_bits, state->defined_bits_length,
                          value_id)) {
@@ -224,7 +223,7 @@ void loom_verify_operand_dominance(loom_verify_state_t* state,
       }};
       loom_diagnostic_emission_t emission = {
           .op = op,
-          .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 2),
+          .error = LOOM_ERR_DOMINANCE_002,
           .params = params,
           .param_count = IREE_ARRAYSIZE(params),
           .related_ops = related_ops,
@@ -291,7 +290,7 @@ void loom_verify_poison_boundaries(loom_verify_state_t* state,
     }};
     loom_diagnostic_emission_t emission = {
         .op = op,
-        .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 12),
+        .error = LOOM_ERR_TYPE_012,
         .params = params,
         .param_count = IREE_ARRAYSIZE(params),
         .related_ops = related_ops,
@@ -322,7 +321,7 @@ static void loom_verify_emit_duplicate_tied_result(loom_verify_state_t* state,
   }};
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 6),
+      .error = LOOM_ERR_DOMINANCE_006,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
       .related_ops = related_ops,
@@ -352,7 +351,7 @@ static void loom_verify_emit_duplicate_tied_operand(loom_verify_state_t* state,
   }};
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 7),
+      .error = LOOM_ERR_DOMINANCE_007,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
       .related_ops = related_ops,
@@ -411,9 +410,8 @@ iree_status_t loom_verify_tied_results(loom_verify_state_t* state,
           loom_param_string(op_name),
           loom_param_u32(op->result_count),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 4),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_DOMINANCE_004, params,
+                                  IREE_ARRAYSIZE(params));
     } else {
       uint16_t current_occurrence = 0;
       uint16_t first_occurrence = 0;
@@ -434,9 +432,8 @@ iree_status_t loom_verify_tied_results(loom_verify_state_t* state,
           loom_param_string(op_name),
           loom_param_u32(tied_operand_count),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 5),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_DOMINANCE_005, params,
+                                  IREE_ARRAYSIZE(params));
       continue;
     }
     uint16_t current_operand_occurrence = 0;
@@ -467,9 +464,8 @@ iree_status_t loom_verify_tied_results(loom_verify_state_t* state,
               loom_param_string(loom_verify_value_name(state, consumed_id)),
               operand_ref),
       };
-      loom_verify_emit_structured(
-          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 8),
-          params, IREE_ARRAYSIZE(params));
+      loom_verify_emit_structured(state, op, LOOM_ERR_DOMINANCE_008, params,
+                                  IREE_ARRAYSIZE(params));
     }
 
     // Ties on regular body ops consume the operand's storage. Func-like symbol

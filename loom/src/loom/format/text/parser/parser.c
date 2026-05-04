@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/error/error_catalog.h"
 #include "loom/format/text/parser/accumulator.h"
 #include "loom/format/text/parser/aliases.h"
 #include "loom/format/text/parser/context.h"
@@ -258,9 +259,8 @@ static iree_status_t loom_parser_resolve_pending_successor_refs(
       loom_diagnostic_param_t params[] = {
           loom_param_string(ref.label_token.text),
       };
-      return loom_parser_emit(
-          parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 32), params,
-          IREE_ARRAYSIZE(params), ref.label_token);
+      return loom_parser_emit(parser, LOOM_ERR_PARSE_032, params,
+                              IREE_ARRAYSIZE(params), ref.label_token);
     }
     loom_op_successors(ref.op)[ref.successor_index] = target;
   }
@@ -553,9 +553,8 @@ static iree_status_t loom_parse_op_into(loom_parser_t* parser,
     loom_diagnostic_param_t params[] = {
         loom_param_string(op_name_token.text),
     };
-    return loom_parser_emit(parser,
-                            loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 6),
-                            params, IREE_ARRAYSIZE(params), op_name_token);
+    return loom_parser_emit(parser, LOOM_ERR_PARSE_006, params,
+                            IREE_ARRAYSIZE(params), op_name_token);
   }
 
   uint16_t pending_func_arg_start = parser->pending_func_args.count;
@@ -762,9 +761,8 @@ iree_status_t loom_parser_parse_optional_block_label(loom_parser_t* parser,
     loom_diagnostic_param_t params[] = {
         loom_param_string(label_token.text),
     };
-    return loom_parser_emit(parser,
-                            loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 33),
-                            params, IREE_ARRAYSIZE(params), label_token);
+    return loom_parser_emit(parser, LOOM_ERR_PARSE_033, params,
+                            IREE_ARRAYSIZE(params), label_token);
   }
   block->label_id = label_id;
   IREE_RETURN_IF_ERROR(loom_module_attach_block_comments(
@@ -980,9 +978,9 @@ static iree_status_t loom_parse_module_body(loom_parser_t* parser) {
               loom_param_string(
                   IREE_SV("alias name shadows a registered encoding family")),
           };
-          IREE_RETURN_IF_ERROR(loom_parser_emit(
-              parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 14),
-              params, IREE_ARRAYSIZE(params), alias_token));
+          IREE_RETURN_IF_ERROR(loom_parser_emit(parser, LOOM_ERR_PARSE_014,
+                                                params, IREE_ARRAYSIZE(params),
+                                                alias_token));
           loom_parser_sync_to_newline(parser);
           continue;
         }
@@ -990,9 +988,9 @@ static iree_status_t loom_parse_module_body(loom_parser_t* parser) {
           loom_diagnostic_param_t params[] = {
               loom_param_string(IREE_SV("duplicate encoding alias name")),
           };
-          IREE_RETURN_IF_ERROR(loom_parser_emit(
-              parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 14),
-              params, IREE_ARRAYSIZE(params), alias_token));
+          IREE_RETURN_IF_ERROR(loom_parser_emit(parser, LOOM_ERR_PARSE_014,
+                                                params, IREE_ARRAYSIZE(params),
+                                                alias_token));
           loom_parser_sync_to_newline(parser);
           continue;
         }
@@ -1018,8 +1016,7 @@ static iree_status_t loom_parse_module_body(loom_parser_t* parser) {
       }
       // Not an alias; this is an error.
       IREE_RETURN_IF_ERROR(loom_parser_emit_token_text_error(
-          parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 14),
-          alias_token));
+          parser, LOOM_ERR_PARSE_014, alias_token));
       loom_parser_sync_to_newline(parser);
       continue;
     }

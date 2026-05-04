@@ -8,6 +8,8 @@
 
 #include <string.h>
 
+#include "loom/error/error_catalog.h"
+
 //===----------------------------------------------------------------------===//
 // Diagnostic emission
 //===----------------------------------------------------------------------===//
@@ -157,7 +159,7 @@ static iree_status_t loom_parser_emit_diagnostic(
     };
     loom_diagnostic_t limit_diagnostic = {
         .severity = LOOM_DIAGNOSTIC_ERROR,
-        .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 12),
+        .error = LOOM_ERR_PARSE_012,
         .params = limit_params,
         .param_count = IREE_ARRAYSIZE(limit_params),
         .emitter = LOOM_EMITTER_PARSER,
@@ -216,9 +218,8 @@ iree_status_t loom_parser_emit_unexpected_token(loom_parser_t* parser,
       loom_param_string(actual_text),
       loom_param_string(expected),
   };
-  return loom_parser_emit(parser,
-                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 3),
-                          params, IREE_ARRAYSIZE(params), token);
+  return loom_parser_emit(parser, LOOM_ERR_PARSE_003, params,
+                          IREE_ARRAYSIZE(params), token);
 }
 
 iree_status_t loom_parser_emit_token_text_error(loom_parser_t* parser,

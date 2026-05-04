@@ -11,7 +11,7 @@
 
 #include "iree/base/internal/arena.h"
 #include "loom/analysis/symbol_facts.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func_symbol_facts.h"
 #include "loom/ops/low/kernel.h"
@@ -112,8 +112,7 @@ static iree_status_t loom_low_emit_symbol_kind_mismatch(
       .op = symbol ? symbol->defining_op : NULL,
   }};
   return loom_low_emit(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3), params,
-      IREE_ARRAYSIZE(params), related,
+      emitter, op, LOOM_ERR_SYMBOL_003, params, IREE_ARRAYSIZE(params), related,
       symbol && symbol->defining_op ? IREE_ARRAYSIZE(related) : 0);
 }
 
@@ -126,9 +125,8 @@ static iree_status_t loom_low_emit_unresolved_symbol(
           loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
                                     attr_index)),
   };
-  return loom_low_emit(emitter, op,
-                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 2),
-                       params, IREE_ARRAYSIZE(params), NULL, 0);
+  return loom_low_emit(emitter, op, LOOM_ERR_SYMBOL_002, params,
+                       IREE_ARRAYSIZE(params), NULL, 0);
 }
 
 static iree_status_t loom_low_emit_missing_descriptor_set(
@@ -149,9 +147,8 @@ static iree_status_t loom_low_emit_missing_descriptor_set(
       .op = target_context_op,
       .field_ref = loom_diagnostic_field_ref_none(),
   }};
-  return loom_low_emit(emitter, low_func_op,
-                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 3),
-                       params, IREE_ARRAYSIZE(params), related,
+  return loom_low_emit(emitter, low_func_op, LOOM_ERR_LOWERING_003, params,
+                       IREE_ARRAYSIZE(params), related,
                        target_context_op ? IREE_ARRAYSIZE(related) : 0);
 }
 

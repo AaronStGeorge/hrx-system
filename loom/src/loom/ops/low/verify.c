@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 #include "loom/error/emitter.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/function_contract_verify.h"
@@ -236,9 +236,8 @@ static iree_status_t loom_low_emit_function_contract_error(
                                     attr_index)),
       loom_param_string(reason),
   };
-  return loom_low_emit(emitter, op,
-                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 16),
-                       params, IREE_ARRAYSIZE(params));
+  return loom_low_emit(emitter, op, LOOM_ERR_LOWERING_016, params,
+                       IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_low_emit_symbol_kind_mismatch(
@@ -258,8 +257,7 @@ static iree_status_t loom_low_emit_symbol_kind_mismatch(
       .op = symbol ? symbol->defining_op : NULL,
   }};
   return loom_low_emit_related(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3), params,
-      IREE_ARRAYSIZE(params), related,
+      emitter, op, LOOM_ERR_SYMBOL_003, params, IREE_ARRAYSIZE(params), related,
       symbol && symbol->defining_op ? IREE_ARRAYSIZE(related) : 0);
 }
 
@@ -480,9 +478,8 @@ static iree_status_t loom_low_emit_descriptor_key_error(
       loom_param_string(key),
       loom_param_string(expected),
   };
-  return loom_low_emit(emitter, op,
-                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 27),
-                       params, IREE_ARRAYSIZE(params));
+  return loom_low_emit(emitter, op, LOOM_ERR_STRUCTURE_027, params,
+                       IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_low_verify_qualified_key_attr(
@@ -522,9 +519,8 @@ static iree_status_t loom_low_emit_structural_storage_error(
       loom_param_with_field_ref(loom_param_string(field_name), field_ref),
       loom_param_string(reason),
   };
-  return loom_low_emit_related(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 17),
-      params, IREE_ARRAYSIZE(params), related, related_count);
+  return loom_low_emit_related(emitter, op, LOOM_ERR_LOWERING_017, params,
+                               IREE_ARRAYSIZE(params), related, related_count);
 }
 
 static iree_status_t loom_low_emit_structural_storage_attr_error(
@@ -1033,10 +1029,9 @@ static iree_status_t loom_low_emit_call_callee_kind_mismatch(
       loom_param_string(loom_low_symbol_definition_name(symbol)),
       loom_param_string(IREE_SV("low function")),
   };
-  return loom_low_emit_callee_related(
-      emitter, call_op, symbol->defining_op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3), params,
-      IREE_ARRAYSIZE(params));
+  return loom_low_emit_callee_related(emitter, call_op, symbol->defining_op,
+                                      LOOM_ERR_SYMBOL_003, params,
+                                      IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_low_emit_call_count_mismatch(
@@ -1051,8 +1046,7 @@ static iree_status_t loom_low_emit_call_count_mismatch(
       loom_param_u32(expected_count),
   };
   return loom_low_emit_callee_related(
-      emitter, call_op, signature->definition_op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 13), params,
+      emitter, call_op, signature->definition_op, LOOM_ERR_LOWERING_013, params,
       IREE_ARRAYSIZE(params));
 }
 
@@ -1074,8 +1068,7 @@ static iree_status_t loom_low_emit_call_type_mismatch(
       loom_param_type(expected_type),
   };
   return loom_low_emit_callee_related(
-      emitter, call_op, signature->definition_op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 14), params,
+      emitter, call_op, signature->definition_op, LOOM_ERR_LOWERING_014, params,
       IREE_ARRAYSIZE(params));
 }
 
@@ -1096,10 +1089,9 @@ static iree_status_t loom_low_emit_call_purity_effect_error(
       .label = related_label,
       .op = related_op,
   }};
-  return loom_low_emit_related(
-      emitter, call_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 15),
-      params, IREE_ARRAYSIZE(params), related,
-      related_op ? IREE_ARRAYSIZE(related) : 0);
+  return loom_low_emit_related(emitter, call_op, LOOM_ERR_LOWERING_015, params,
+                               IREE_ARRAYSIZE(params), related,
+                               related_op ? IREE_ARRAYSIZE(related) : 0);
 }
 
 static bool loom_low_func_like_is_pure(const loom_module_t* module,
