@@ -8,7 +8,7 @@ func.def target(@target) @i32_to_i8x4_bitcast(%word: vector<1xi32>) -> (vector<4
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @i32_to_i8x4_bitcast(%bytes: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @i32_to_i8x4_bitcast(%bytes: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
   return %bytes
 }
 
@@ -21,7 +21,7 @@ func.def target(@target) @i32x2_to_i8x8_bitcast(%words: vector<2xi32>) -> (vecto
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @i32x2_to_i8x8_bitcast(%bytes: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @i32x2_to_i8x8_bitcast(%bytes: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
   return %bytes
 }
 
@@ -34,7 +34,7 @@ func.def target(@target) @f32x2_to_i32x2_bitcast(%floats: vector<2xf32>) -> (vec
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @f32x2_to_i32x2_bitcast(%bits: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @f32x2_to_i32x2_bitcast(%bits: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
   return %bits
 }
 
@@ -47,7 +47,7 @@ func.def target(@target) @f16x2_to_i32_bitcast(%halves: vector<2xf16>) -> (vecto
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @f16x2_to_i32_bitcast(%bits: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @f16x2_to_i32_bitcast(%bits: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
   return %bits
 }
 
@@ -60,6 +60,6 @@ func.def target(@target) @bf16x2_to_i32_bitcast(%halves: vector<2xbf16>) -> (vec
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @bf16x2_to_i32_bitcast(%bits: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @bf16x2_to_i32_bitcast(%bits: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
   return %bits
 }

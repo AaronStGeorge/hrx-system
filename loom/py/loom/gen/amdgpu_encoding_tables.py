@@ -44,9 +44,9 @@ from loom.target.arch.amdgpu.isa_xml import (  # noqa: E402
 )
 from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     amdgpu_descriptor_set_info_by_generator_target,
+    amdgpu_descriptor_set_ordinal,
     validate_amdgpu_descriptor_set_isa_xml,
 )
-from loom.target.low_descriptors import descriptor_stable_id  # noqa: E402
 
 
 @dataclass(frozen=True, slots=True)
@@ -442,7 +442,7 @@ def _emit_source(
             "};",
             "",
             f"static const loom_amdgpu_encoding_table_t k{table_prefix}Table = {{",
-            f"    .descriptor_set_stable_id = UINT64_C(0x{descriptor_stable_id(descriptor_set_key):016x}),",
+            f"    .descriptor_set_ordinal = UINT16_C({amdgpu_descriptor_set_ordinal(descriptor_set_key)}),",
             f'    .descriptor_set_key = IREE_SVL("{descriptor_set_key}"),',
             f"    .s_mov_b32_opcode = {s_mov_b32_opcode},",
             f"    .v_mov_b32_opcode = {v_mov_b32_opcode},",

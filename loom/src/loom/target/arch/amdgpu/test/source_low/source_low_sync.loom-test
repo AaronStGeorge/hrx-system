@@ -8,16 +8,7 @@ func.def target(@target) @workgroup_barrier() {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @workgroup_barrier() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @workgroup_barrier() asm<amdgpu.rdna3.core> {
   s_barrier
   return
-}
-
-// ====
-
-amdgpu.target<gfx1100> @target
-func.def target(@target) @subgroup_barrier_rejected() {
-  // ERROR@+1: BACKEND/001 "AMDGPU source-to-low currently lowers only workgroup-scope barriers"
-  kernel.barrier<workgroup> {ordering = acq_rel, scope = subgroup}
-  func.return
 }

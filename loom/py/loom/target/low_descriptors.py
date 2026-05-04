@@ -14,8 +14,9 @@ from pathlib import Path
 
 from loom.stable_id import stable_id_from_string
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 18
+LOW_DESCRIPTOR_SET_ABI_VERSION = 19
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
+LOW_DESCRIPTOR_SET_ORDINAL_NONE = (2**16) - 1
 
 
 def descriptor_stable_id(key: str) -> int:
@@ -402,6 +403,7 @@ class DescriptorSet:
     resources: tuple[Resource, ...]
     schedule_classes: tuple[ScheduleClass, ...]
     descriptors: tuple[Descriptor, ...]
+    descriptor_set_ordinal: int | None = None
     register_parts: tuple[RegisterPart, ...] = ()
     enum_domains: tuple[EnumDomain, ...] = ()
     categories: tuple[DescriptorCategory, ...] = ()

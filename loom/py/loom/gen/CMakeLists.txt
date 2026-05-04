@@ -66,6 +66,18 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    amdgpu_occupancy_tables
+  MAIN
+    "amdgpu_occupancy_tables.py"
+  SRCS
+    "amdgpu_occupancy_tables.py"
+  DEPS
+    iree::runtime::py::loom::gen::generated_file
+    iree::runtime::py::loom::target::arch::amdgpu::target_info
+)
+
+iree_py_library(
+  NAME
     ireevm_low_descriptor_shard
   MAIN
     "low_descriptor_shard.py"

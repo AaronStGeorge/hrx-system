@@ -295,7 +295,8 @@ static loom_amdgpu_vector_memory_cache_policy_encoding_t
 loom_amdgpu_atomic_vector_cache_encoding(
     const loom_low_descriptor_set_t* descriptor_set) {
   const loom_amdgpu_descriptor_set_info_t* descriptor_set_info =
-      loom_amdgpu_target_info_descriptor_set_by_id(descriptor_set->stable_id);
+      loom_amdgpu_target_info_descriptor_set_at(
+          descriptor_set->descriptor_set_ordinal);
   return descriptor_set_info == NULL
              ? LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE
              : descriptor_set_info->vector_memory_cache_policy_encoding;

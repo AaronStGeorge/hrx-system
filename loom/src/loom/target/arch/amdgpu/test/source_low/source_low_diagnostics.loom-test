@@ -68,7 +68,7 @@ kernel.def target(@target) @lds_padded_diagnostics(%output: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_padded_diagnostics() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_padded_diagnostics() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
   %bytes = s_mov_b32 2048
@@ -119,7 +119,7 @@ kernel.def target(@target) @lds_read2_write2_diagnostics(%output: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_read2_write2_diagnostics() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_read2_write2_diagnostics() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
   %bytes = s_mov_b32 2048
@@ -167,7 +167,7 @@ kernel.def target(@target) @lds_conflict_risk_diagnostics(%output: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_conflict_risk_diagnostics() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_conflict_risk_diagnostics() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
   %bytes = s_mov_b32 1024
@@ -254,7 +254,7 @@ kernel.def target(@target) @cache_policy_non_temporal_load_rejected(%input: buff
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>
-  // ERROR@+1: BACKEND/001 "descriptor set 'amdgpu.gfx11.core' cannot faithfully encode vector memory cache policy device/non_temporal"
+  // ERROR@+1: BACKEND/001 "descriptor set 'amdgpu.rdna3.core' cannot faithfully encode vector memory cache policy device/non_temporal"
   %loaded = vector.load %input_view[%tid, 0] {cache_scope = device, cache_temporal = non_temporal} : view<64x4xi32, #dense> -> vector<4xi32>
   kernel.return
 }
@@ -366,7 +366,7 @@ kernel.def target(@target) @index_add_result_width_rejected() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @index_add_result_width_rejected() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @index_add_result_width_rejected() asm<amdgpu.rdna3.core> {
   %x = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %base = s_mov_b32 4294967000
   return
@@ -390,7 +390,7 @@ kernel.def target(@target) @index_madd_result_width_rejected() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @index_madd_result_width_rejected() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @index_madd_result_width_rejected() asm<amdgpu.rdna3.core> {
   %x = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %scale = s_mov_b32 2
   return
@@ -423,7 +423,7 @@ kernel.def target(@target) @subgroup_id_rejected(%size: index) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @subgroup_id_rejected() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @subgroup_id_rejected() asm<amdgpu.rdna3.core> {
   return
 }
 
@@ -441,7 +441,7 @@ kernel.def target(@target) @subgroup_lane_id_rejected(%size: index) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @subgroup_lane_id_rejected() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @subgroup_lane_id_rejected() asm<amdgpu.rdna3.core> {
   return
 }
 

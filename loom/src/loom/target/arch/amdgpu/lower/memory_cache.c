@@ -176,7 +176,8 @@ bool loom_amdgpu_memory_cache_policy_encode(
   }
 
   const loom_amdgpu_descriptor_set_info_t* descriptor_set_info =
-      loom_amdgpu_target_info_descriptor_set_by_id(descriptor_set->stable_id);
+      loom_amdgpu_target_info_descriptor_set_at(
+          descriptor_set->descriptor_set_ordinal);
   if (descriptor_set_info == NULL) {
     return false;
   }
@@ -252,13 +253,14 @@ iree_status_t loom_amdgpu_memory_cache_policy_format_rejection_detail(
   }
 
   const loom_amdgpu_descriptor_set_info_t* descriptor_set_info =
-      loom_amdgpu_target_info_descriptor_set_by_id(descriptor_set->stable_id);
+      loom_amdgpu_target_info_descriptor_set_at(
+          descriptor_set->descriptor_set_ordinal);
   if (descriptor_set_info == NULL) {
     return iree_string_builder_append_format(
         builder,
-        "AMDGPU descriptor set stable ID 0x%016" PRIx64
+        "AMDGPU descriptor set ordinal %" PRIu16
         " has no cache-policy target-info row",
-        descriptor_set->stable_id);
+        descriptor_set->descriptor_set_ordinal);
   }
 
   return iree_string_builder_append_format(

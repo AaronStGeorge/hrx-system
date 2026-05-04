@@ -33,6 +33,7 @@ from loom.target.arch.amdgpu.isa_xml import (
 )
 from loom.target.arch.amdgpu.target_info import (
     amdgpu_descriptor_set_info_by_generator_target,
+    amdgpu_descriptor_set_ordinal,
     validate_amdgpu_descriptor_set_isa_xml,
 )
 from loom.target.low_descriptors import (
@@ -181,6 +182,63 @@ AMDGPU_DESCRIPTOR_CATEGORIES = (
     AMDGPU_CACHE_DESCRIPTOR_CATEGORY,
     AMDGPU_MISC_DESCRIPTOR_CATEGORY,
 )
+
+_AMDGPU_DESCRIPTOR_SOURCE_DIR = Path("loom/src/loom/target/arch/amdgpu")
+_AMDGPU_DESCRIPTOR_PUBLIC_HEADER_DIR = "loom/target/arch/amdgpu"
+
+
+def _amdgpu_descriptor_set_file_stem(key: str) -> str:
+    key_prefix = "amdgpu."
+    key_suffix = ".core"
+    if not key.startswith(key_prefix) or not key.endswith(key_suffix):
+        raise ValueError(
+            f"AMDGPU core descriptor set key '{key}' must have form "
+            "'amdgpu.<family>.core'"
+        )
+    return key.removeprefix(key_prefix).removesuffix(key_suffix).replace(".", "_")
+
+
+def _amdgpu_camel_case(value: str) -> str:
+    return "".join(part[:1].upper() + part[1:] for part in value.split("_") if part)
+
+
+def _amdgpu_core_descriptor_set(
+    *,
+    key: str,
+    reg_classes: tuple[RegClass, ...],
+    resources: tuple[Resource, ...],
+    schedule_classes: tuple[ScheduleClass, ...],
+    descriptors: tuple[Descriptor, ...] = (),
+    register_parts: tuple[RegisterPart, ...] = (),
+    categories: tuple[DescriptorCategory, ...] = AMDGPU_DESCRIPTOR_CATEGORIES,
+) -> DescriptorSet:
+    file_stem = _amdgpu_descriptor_set_file_stem(key)
+    c_suffix = _amdgpu_camel_case(file_stem)
+    c_enum_stem = file_stem.upper()
+    feature_stem = key.removesuffix(".core")
+    return DescriptorSet(
+        key=key,
+        target_key="amdgpu",
+        feature_key=f"{feature_stem}.v1",
+        c_header_path=_AMDGPU_DESCRIPTOR_SOURCE_DIR / f"{file_stem}_descriptors.h",
+        c_source_path=_AMDGPU_DESCRIPTOR_SOURCE_DIR / f"{file_stem}_descriptors.c",
+        header_guard=f"LOOM_TARGET_ARCH_AMDGPU_{c_enum_stem}_DESCRIPTORS_H_",
+        public_header=(
+            f"{_AMDGPU_DESCRIPTOR_PUBLIC_HEADER_DIR}/{file_stem}_descriptors.h"
+        ),
+        function_name=f"loom_amdgpu_{file_stem}_core_descriptor_set",
+        c_table_prefix=f"Amdgpu{c_suffix}Core",
+        c_enum_prefix=f"AMDGPU_{c_enum_stem}_CORE",
+        generator_version=1,
+        reg_classes=reg_classes,
+        register_parts=register_parts,
+        resources=resources,
+        schedule_classes=schedule_classes,
+        descriptors=descriptors,
+        descriptor_set_ordinal=amdgpu_descriptor_set_ordinal(key),
+        categories=categories,
+    )
+
 
 _COUNTER_VMEM_LOAD = 1
 _COUNTER_VMEM_STORE = 2
@@ -6968,18 +7026,8 @@ def _gfx1250_core_overlay_descriptors(
     return materialize_amdgpu_descriptor_overlays(spec, _gfx1250_core_overlays())
 
 
-_AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
-    key="amdgpu.gfx950.core",
-    target_key="amdgpu",
-    feature_key="amdgpu.gfx950.v1",
-    c_header_path=Path("loom/src/loom/target/arch/amdgpu/gfx950_descriptors.h"),
-    c_source_path=Path("loom/src/loom/target/arch/amdgpu/gfx950_descriptors.c"),
-    header_guard="LOOM_TARGET_ARCH_AMDGPU_GFX950_DESCRIPTORS_H_",
-    public_header="loom/target/arch/amdgpu/gfx950_descriptors.h",
-    function_name="loom_amdgpu_gfx950_core_descriptor_set",
-    c_table_prefix="AmdgpuGfx950Core",
-    c_enum_prefix="AMDGPU_GFX950_CORE",
-    generator_version=1,
+_AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
+    key="amdgpu.cdna4.core",
     reg_classes=(
         RegClass(
             _REG_SGPR,
@@ -7071,23 +7119,11 @@ _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             model_quality=ModelQuality.FALLBACK,
         ),
     ),
-    descriptors=(),
-    categories=AMDGPU_DESCRIPTOR_CATEGORIES,
 )
 
 
-_AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
-    key="amdgpu.gfx11.core",
-    target_key="amdgpu",
-    feature_key="amdgpu.gfx11.v1",
-    c_header_path=Path("loom/src/loom/target/arch/amdgpu/gfx11_descriptors.h"),
-    c_source_path=Path("loom/src/loom/target/arch/amdgpu/gfx11_descriptors.c"),
-    header_guard="LOOM_TARGET_ARCH_AMDGPU_GFX11_DESCRIPTORS_H_",
-    public_header="loom/target/arch/amdgpu/gfx11_descriptors.h",
-    function_name="loom_amdgpu_gfx11_core_descriptor_set",
-    c_table_prefix="AmdgpuGfx11Core",
-    c_enum_prefix="AMDGPU_GFX11_CORE",
-    generator_version=1,
+_AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
+    key="amdgpu.rdna3.core",
     reg_classes=(
         RegClass(
             _REG_SGPR,
@@ -7187,22 +7223,10 @@ _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             model_quality=ModelQuality.FALLBACK,
         ),
     ),
-    descriptors=(),
-    categories=AMDGPU_DESCRIPTOR_CATEGORIES,
 )
 
-_AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
-    key="amdgpu.gfx12.core",
-    target_key="amdgpu",
-    feature_key="amdgpu.gfx12.v1",
-    c_header_path=Path("loom/src/loom/target/arch/amdgpu/gfx12_descriptors.h"),
-    c_source_path=Path("loom/src/loom/target/arch/amdgpu/gfx12_descriptors.c"),
-    header_guard="LOOM_TARGET_ARCH_AMDGPU_GFX12_DESCRIPTORS_H_",
-    public_header="loom/target/arch/amdgpu/gfx12_descriptors.h",
-    function_name="loom_amdgpu_gfx12_core_descriptor_set",
-    c_table_prefix="AmdgpuGfx12Core",
-    c_enum_prefix="AMDGPU_GFX12_CORE",
-    generator_version=1,
+_AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
+    key="amdgpu.rdna4.core",
     reg_classes=(
         RegClass(
             _REG_SGPR,
@@ -7320,22 +7344,10 @@ _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             model_quality=ModelQuality.FALLBACK,
         ),
     ),
-    descriptors=(),
-    categories=AMDGPU_DESCRIPTOR_CATEGORIES,
 )
 
-_AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
-    key="amdgpu.gfx1250.core",
-    target_key="amdgpu",
-    feature_key="amdgpu.gfx1250.v1",
-    c_header_path=Path("loom/src/loom/target/arch/amdgpu/gfx1250_descriptors.h"),
-    c_source_path=Path("loom/src/loom/target/arch/amdgpu/gfx1250_descriptors.c"),
-    header_guard="LOOM_TARGET_ARCH_AMDGPU_GFX1250_DESCRIPTORS_H_",
-    public_header="loom/target/arch/amdgpu/gfx1250_descriptors.h",
-    function_name="loom_amdgpu_gfx1250_core_descriptor_set",
-    c_table_prefix="AmdgpuGfx1250Core",
-    c_enum_prefix="AMDGPU_GFX1250_CORE",
-    generator_version=1,
+_AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
+    key="amdgpu.rdna4.gfx125x.core",
     reg_classes=(
         RegClass(
             _REG_SGPR,
@@ -7592,16 +7604,15 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             flags=_PSEUDO_DEAD_REMOVABLE_FLAGS,
         ),
     ),
-    categories=AMDGPU_DESCRIPTOR_CATEGORIES,
 )
 
 
 def _amdgpu_core_descriptor_set_bases() -> tuple[DescriptorSet, ...]:
     return (
-        _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE,
-        _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE,
-        _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE,
-        _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE,
+        _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE,
+        _AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE,
+        _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE,
+        _AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE,
     )
 
 
@@ -7883,7 +7894,7 @@ def build_amdgpu_contract_descriptor_set(
             ) from exc
         descriptors.append(_amdgpu_contract_descriptor_from_overlay(overlay))
     return replace(
-        _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE,
+        _AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE,
         key=key,
         feature_key=None,
         c_header_path=Path("loom/src/loom/target/arch/amdgpu/descriptor_ids.h"),
@@ -8116,67 +8127,67 @@ def _with_overlay_descriptors(
     return descriptor_set
 
 
-def build_amdgpu_gfx950_core_descriptor_set(
+def build_amdgpu_cdna4_core_descriptor_set(
     xml_path: str | Path,
 ) -> DescriptorSet:
     spec = parse_amdgpu_isa_xml_path(xml_path)
     validate_amdgpu_descriptor_set_isa_xml(
-        amdgpu_descriptor_set_info_by_generator_target("gfx950"), spec
+        amdgpu_descriptor_set_info_by_generator_target("cdna4"), spec
     )
     return _with_overlay_descriptors(
-        _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE,
+        _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE,
         spec,
         _gfx950_core_overlay_descriptors(spec),
     )
 
 
-def build_amdgpu_gfx11_core_descriptor_set(
+def build_amdgpu_rdna3_core_descriptor_set(
     xml_path: str | Path,
 ) -> DescriptorSet:
     spec = parse_amdgpu_isa_xml_path(xml_path)
     validate_amdgpu_descriptor_set_isa_xml(
-        amdgpu_descriptor_set_info_by_generator_target("gfx11"), spec
+        amdgpu_descriptor_set_info_by_generator_target("rdna3"), spec
     )
     return _with_overlay_descriptors(
-        _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE,
+        _AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE,
         spec,
         _gfx11_core_overlay_descriptors(spec),
     )
 
 
-def build_amdgpu_gfx12_core_descriptor_set(
+def build_amdgpu_rdna4_core_descriptor_set(
     xml_path: str | Path,
 ) -> DescriptorSet:
     spec = parse_amdgpu_isa_xml_path(xml_path)
     validate_amdgpu_descriptor_set_isa_xml(
-        amdgpu_descriptor_set_info_by_generator_target("gfx12"), spec
+        amdgpu_descriptor_set_info_by_generator_target("rdna4"), spec
     )
     return _with_overlay_descriptors(
-        _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE,
+        _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE,
         spec,
         _gfx12_core_overlay_descriptors(spec),
     )
 
 
-def build_amdgpu_gfx1250_core_descriptor_set(
+def build_amdgpu_rdna4_gfx125x_core_descriptor_set(
     xml_path: str | Path,
 ) -> DescriptorSet:
     spec = parse_amdgpu_isa_xml_path(xml_path)
     validate_amdgpu_descriptor_set_isa_xml(
-        amdgpu_descriptor_set_info_by_generator_target("gfx1250"), spec
+        amdgpu_descriptor_set_info_by_generator_target("rdna4_gfx125x"), spec
     )
     return _with_overlay_descriptors(
-        _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE,
+        _AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE,
         spec,
         _gfx1250_core_overlay_descriptors(spec),
     )
 
 
 AMDGPU_DESCRIPTOR_SET_BUILDERS = {
-    "gfx950": build_amdgpu_gfx950_core_descriptor_set,
-    "gfx11": build_amdgpu_gfx11_core_descriptor_set,
-    "gfx12": build_amdgpu_gfx12_core_descriptor_set,
-    "gfx1250": build_amdgpu_gfx1250_core_descriptor_set,
+    "cdna4": build_amdgpu_cdna4_core_descriptor_set,
+    "rdna3": build_amdgpu_rdna3_core_descriptor_set,
+    "rdna4": build_amdgpu_rdna4_core_descriptor_set,
+    "rdna4_gfx125x": build_amdgpu_rdna4_gfx125x_core_descriptor_set,
 }
 
 

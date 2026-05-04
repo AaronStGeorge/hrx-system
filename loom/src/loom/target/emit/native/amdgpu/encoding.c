@@ -1318,8 +1318,8 @@ static iree_status_t loom_amdgpu_resolve_encoding_target(
     const loom_low_schedule_table_t* schedule,
     const loom_amdgpu_descriptor_set_info_t** out_target) {
   *out_target = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_id(
-      schedule->target.descriptor_set->stable_id, out_target));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
+      schedule->target.descriptor_set->descriptor_set_ordinal, out_target));
   return iree_ok_status();
 }
 
@@ -1407,8 +1407,8 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
   const loom_amdgpu_descriptor_set_info_t* target = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_encoding_target(schedule, &target));
   const loom_amdgpu_encoding_table_t* encoding_table =
-      loom_amdgpu_encoding_table_for_descriptor_set_id(
-          target->descriptor_set_stable_id);
+      loom_amdgpu_encoding_table_for_descriptor_set_ordinal(
+          target->descriptor_set_ordinal);
   const loom_string_id_t* immediate_name_ids = NULL;
   iree_host_size_t immediate_name_id_count = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_immediate_name_ids(

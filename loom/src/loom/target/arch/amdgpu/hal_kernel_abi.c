@@ -721,8 +721,8 @@ loom_amdgpu_hal_kernel_abi_verify_hal_buffer_descriptor_pseudos(
   loom_amdgpu_buffer_resource_cache_swizzle_t cache_swizzle_kind =
       LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE;
   const loom_amdgpu_descriptor_set_info_t* descriptor_set_info = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_id(
-      descriptor_set->stable_id, &descriptor_set_info));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
+      descriptor_set->descriptor_set_ordinal, &descriptor_set_info));
   cache_swizzle_kind = descriptor_set_info->buffer_resource_cache_swizzle;
   const bool supports_cache_swizzle =
       cache_swizzle_kind ==

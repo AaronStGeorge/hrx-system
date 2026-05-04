@@ -12,97 +12,10 @@
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
-#include "loom/target/arch/amdgpu/gfx11_descriptors.h"
-#include "loom/target/arch/amdgpu/gfx1250_descriptors.h"
-#include "loom/target/arch/amdgpu/gfx12_descriptors.h"
-#include "loom/target/arch/amdgpu/gfx950_descriptors.h"
+#include "loom/target/arch/amdgpu/occupancy_tables.h"
 #include "loom/target/types.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
-
-typedef struct loom_amdgpu_occupancy_register_class_model_t {
-  // Stable register-class name.
-  iree_string_view_t register_class;
-  // Descriptor-set-local register class ID.
-  uint16_t descriptor_reg_class_id;
-  // Occupancy register-file pool shared by resident waves.
-  uint32_t pool_units;
-  // Allocation granularity used by occupancy calculations.
-  uint32_t allocation_granularity;
-} loom_amdgpu_occupancy_register_class_model_t;
-
-typedef struct loom_amdgpu_occupancy_model_t {
-  // Stable descriptor-set identity selected by the target bundle.
-  uint64_t descriptor_set_stable_id;
-  // AMDGPU wave size used by this model.
-  uint32_t wave_size;
-  // Maximum resident waves per SIMD.
-  uint32_t max_waves_per_simd;
-  // Register-class occupancy models in diagnostic order.
-  const loom_amdgpu_occupancy_register_class_model_t* register_classes;
-  // Number of entries in |register_classes|.
-  iree_host_size_t register_class_count;
-} loom_amdgpu_occupancy_model_t;
-
-static const loom_amdgpu_occupancy_register_class_model_t
-    kAmdgpuGfx950RegisterClasses[] = {
-        {IREE_SVL("amdgpu.sgpr"), AMDGPU_GFX950_CORE_REG_CLASS_ID_SGPR, 800,
-         16},
-        {IREE_SVL("amdgpu.vgpr"), AMDGPU_GFX950_CORE_REG_CLASS_ID_VGPR, 1024,
-         4},
-        {IREE_SVL("amdgpu.agpr"), AMDGPU_GFX950_CORE_REG_CLASS_ID_AGPR, 256, 4},
-};
-
-static const loom_amdgpu_occupancy_register_class_model_t
-    kAmdgpuGfx11RegisterClasses[] = {
-        {IREE_SVL("amdgpu.sgpr"), AMDGPU_GFX11_CORE_REG_CLASS_ID_SGPR, 800, 16},
-        {IREE_SVL("amdgpu.vgpr"), AMDGPU_GFX11_CORE_REG_CLASS_ID_VGPR, 1024, 4},
-};
-
-static const loom_amdgpu_occupancy_register_class_model_t
-    kAmdgpuGfx12RegisterClasses[] = {
-        {IREE_SVL("amdgpu.sgpr"), AMDGPU_GFX12_CORE_REG_CLASS_ID_SGPR, 800, 16},
-        {IREE_SVL("amdgpu.vgpr"), AMDGPU_GFX12_CORE_REG_CLASS_ID_VGPR, 1024, 4},
-};
-
-static const loom_amdgpu_occupancy_register_class_model_t
-    kAmdgpuGfx1250RegisterClasses[] = {
-        {IREE_SVL("amdgpu.sgpr"), AMDGPU_GFX1250_CORE_REG_CLASS_ID_SGPR, 800,
-         16},
-        {IREE_SVL("amdgpu.vgpr"), AMDGPU_GFX1250_CORE_REG_CLASS_ID_VGPR, 1024,
-         4},
-};
-
-static const loom_amdgpu_occupancy_model_t kAmdgpuOccupancyModels[] = {
-    {
-        .descriptor_set_stable_id = AMDGPU_GFX950_CORE_DESCRIPTOR_SET_ID,
-        .wave_size = 64,
-        .max_waves_per_simd = 16,
-        .register_classes = kAmdgpuGfx950RegisterClasses,
-        .register_class_count = IREE_ARRAYSIZE(kAmdgpuGfx950RegisterClasses),
-    },
-    {
-        .descriptor_set_stable_id = AMDGPU_GFX11_CORE_DESCRIPTOR_SET_ID,
-        .wave_size = 64,
-        .max_waves_per_simd = 16,
-        .register_classes = kAmdgpuGfx11RegisterClasses,
-        .register_class_count = IREE_ARRAYSIZE(kAmdgpuGfx11RegisterClasses),
-    },
-    {
-        .descriptor_set_stable_id = AMDGPU_GFX12_CORE_DESCRIPTOR_SET_ID,
-        .wave_size = 64,
-        .max_waves_per_simd = 16,
-        .register_classes = kAmdgpuGfx12RegisterClasses,
-        .register_class_count = IREE_ARRAYSIZE(kAmdgpuGfx12RegisterClasses),
-    },
-    {
-        .descriptor_set_stable_id = AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_ID,
-        .wave_size = 64,
-        .max_waves_per_simd = 16,
-        .register_classes = kAmdgpuGfx1250RegisterClasses,
-        .register_class_count = IREE_ARRAYSIZE(kAmdgpuGfx1250RegisterClasses),
-    },
-};
 
 static iree_status_t loom_amdgpu_occupancy_round_up_u32(
     uint32_t value, uint32_t multiple, uint32_t* out_rounded_value) {
@@ -180,23 +93,53 @@ static iree_status_t loom_amdgpu_occupancy_next_cliff_units(
 }
 
 static iree_status_t loom_amdgpu_occupancy_select_model(
-    uint64_t descriptor_set_stable_id, iree_string_view_t descriptor_set_key,
+    uint16_t descriptor_set_ordinal, iree_string_view_t descriptor_set_key,
     const loom_amdgpu_occupancy_model_t** out_model) {
   *out_model = NULL;
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kAmdgpuOccupancyModels);
-       ++i) {
-    const loom_amdgpu_occupancy_model_t* model = &kAmdgpuOccupancyModels[i];
-    if (model->descriptor_set_stable_id == descriptor_set_stable_id) {
-      *out_model = model;
-      return iree_ok_status();
-    }
+  const loom_amdgpu_occupancy_model_t* model =
+      loom_amdgpu_occupancy_model_for_descriptor_set_ordinal(
+          descriptor_set_ordinal);
+  if (model != NULL) {
+    *out_model = model;
+    return iree_ok_status();
   }
   return iree_make_status(
       IREE_STATUS_FAILED_PRECONDITION,
       "AMDGPU occupancy model is not defined for descriptor set '%.*s' "
-      "(stable ID 0x%016" PRIx64 ")",
+      "(ordinal %" PRIu16 ")",
       (int)descriptor_set_key.size, descriptor_set_key.data,
-      descriptor_set_stable_id);
+      descriptor_set_ordinal);
+}
+
+static iree_status_t loom_amdgpu_occupancy_lookup_register_class(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_view_t register_class, uint16_t* out_descriptor_reg_class_id) {
+  *out_descriptor_reg_class_id = LOOM_LOW_ID_NONE;
+  for (uint32_t i = 0; i < descriptor_set->reg_class_count; ++i) {
+    const loom_low_reg_class_t* descriptor_reg_class =
+        &descriptor_set->reg_classes[i];
+    iree_string_view_t descriptor_register_class =
+        loom_low_descriptor_set_string(
+            descriptor_set, descriptor_reg_class->name_string_offset);
+    if (!iree_string_view_equal(descriptor_register_class, register_class)) {
+      continue;
+    }
+    if (i > UINT16_MAX) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "AMDGPU occupancy descriptor register class ordinal overflows");
+    }
+    *out_descriptor_reg_class_id = (uint16_t)i;
+    return iree_ok_status();
+  }
+  iree_string_view_t descriptor_set_key = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset);
+  return iree_make_status(
+      IREE_STATUS_FAILED_PRECONDITION,
+      "AMDGPU descriptor set '%.*s' does not define occupancy register class "
+      "'%.*s'",
+      (int)descriptor_set_key.size, descriptor_set_key.data,
+      (int)register_class.size, register_class.data);
 }
 
 iree_status_t loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
@@ -209,7 +152,7 @@ iree_status_t loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
       descriptor_set, descriptor_set->key_string_offset);
   const loom_amdgpu_occupancy_model_t* model = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_select_model(
-      descriptor_set->stable_id, descriptor_set_key, &model));
+      descriptor_set->descriptor_set_ordinal, descriptor_set_key, &model));
   if (model->register_class_count == 0 || model->max_waves_per_simd == 0) {
     return iree_ok_status();
   }
@@ -231,6 +174,9 @@ iree_status_t loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
        class_index < model->register_class_count; ++class_index) {
     const loom_amdgpu_occupancy_register_class_model_t* class_model =
         &model->register_classes[class_index];
+    uint16_t descriptor_reg_class_id = LOOM_LOW_ID_NONE;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_lookup_register_class(
+        descriptor_set, class_model->register_class, &descriptor_reg_class_id));
     uint32_t previous_wave_limit = model->max_waves_per_simd;
     uint64_t stop_candidate =
         (uint64_t)class_model->pool_units + class_model->allocation_granularity;
@@ -252,7 +198,7 @@ iree_status_t loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
             "AMDGPU schedule pressure cliff capacity was underestimated");
       }
       cliffs[cliff_count++] = (loom_low_schedule_pressure_cliff_t){
-          .descriptor_reg_class_id = class_model->descriptor_reg_class_id,
+          .descriptor_reg_class_id = descriptor_reg_class_id,
           .cliff_units = (uint32_t)candidate,
           .tier_before = previous_wave_limit,
           .tier_after = candidate_wave_limit,
@@ -519,7 +465,7 @@ iree_status_t loom_amdgpu_occupancy_build(
 
   const loom_amdgpu_occupancy_model_t* model = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_select_model(
-      allocation->target.descriptor_set->stable_id,
+      allocation->target.descriptor_set->descriptor_set_ordinal,
       allocation->target.descriptor_set_key, &model));
 
   loom_amdgpu_occupancy_register_class_t* register_classes = NULL;
@@ -549,10 +495,13 @@ iree_status_t loom_amdgpu_occupancy_build(
         (table.flat_workgroup_size + table.wave_size - 1) / table.wave_size;
   }
   for (iree_host_size_t i = 0; i < model->register_class_count; ++i) {
+    uint16_t descriptor_reg_class_id = LOOM_LOW_ID_NONE;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_lookup_register_class(
+        allocation->target.descriptor_set,
+        model->register_classes[i].register_class, &descriptor_reg_class_id));
     register_classes[i] = (loom_amdgpu_occupancy_register_class_t){
         .register_class = model->register_classes[i].register_class,
-        .descriptor_reg_class_id =
-            model->register_classes[i].descriptor_reg_class_id,
+        .descriptor_reg_class_id = descriptor_reg_class_id,
         .pool_units = model->register_classes[i].pool_units,
         .allocation_granularity =
             model->register_classes[i].allocation_granularity,

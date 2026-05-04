@@ -26,6 +26,7 @@ from loom.gen.generated_file import line_comment_header
 from loom.target.low_descriptors import (
     LOW_DESCRIPTOR_ENCODING_ID_NONE,
     LOW_DESCRIPTOR_SET_ABI_VERSION,
+    LOW_DESCRIPTOR_SET_ORDINAL_NONE,
     AsmForm,
     CEnum,
     Constraint,
@@ -239,6 +240,10 @@ def _u64_literal(value: int) -> str:
 
 def _hex_u64_literal(value: int) -> str:
     return f"UINT64_C(0x{value:x})"
+
+
+def _u16_literal(value: int) -> str:
+    return f"UINT16_C({value})"
 
 
 def _descriptor_id_constant_name(spec: DescriptorSet, descriptor_key: str) -> str:
@@ -1179,6 +1184,7 @@ def _emit_header(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
     ]
     lines.extend(_descriptor_id_define(spec, descriptor.key) for descriptor in compiled.descriptors)
     lines.append(f"#define {spec.c_enum_prefix}_DESCRIPTOR_SET_ID UINT64_C(0x{descriptor_stable_id(spec.key):016x})")
+    lines.append(f"#define {spec.c_enum_prefix}_DESCRIPTOR_SET_ORDINAL {_u16_literal(spec.descriptor_set_ordinal if spec.descriptor_set_ordinal is not None else LOW_DESCRIPTOR_SET_ORDINAL_NONE)}")
     if spec.target_key is not None:
         lines.append(f"#define {spec.c_enum_prefix}_TARGET_ID UINT64_C(0x{descriptor_stable_id(spec.target_key):016x})")
     if compiled.reg_classes:
@@ -1689,6 +1695,7 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
             f"    .generator_version = {spec.generator_version},",
             f"    .stable_id = UINT64_C(0x{descriptor_stable_id(spec.key):016x}),",
             f"    .target_stable_id = {_hex_u64_literal(descriptor_stable_id(spec.target_key)) if spec.target_key is not None else 'LOOM_LOW_STABLE_ID_NONE'},",
+            f"    .descriptor_set_ordinal = {_u16_literal(spec.descriptor_set_ordinal if spec.descriptor_set_ordinal is not None else LOW_DESCRIPTOR_SET_ORDINAL_NONE)},",
             f"    .key_string_offset = {pool.ref('set_key')},",
             f"    .target_key_string_offset = {_optional_string_expr(pool, 'target_key' if spec.target_key is not None else None)},",
             f"    .feature_key_string_offset = {_optional_string_expr(pool, 'feature_key' if spec.feature_key is not None else None)},",

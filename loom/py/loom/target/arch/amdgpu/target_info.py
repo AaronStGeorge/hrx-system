@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 AMDGPU_AMDHSA_TARGET_TRIPLE = "amdgcn-amd-amdhsa"
+AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE = (2**16) - 1
 
 AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE = "none"
 AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11 = "gfx11"
@@ -70,6 +71,21 @@ class AmdgpuProcessorInfo:
     kernel_descriptor_has_packed_workitem_id: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class AmdgpuOccupancyRegisterClassInfo:
+    register_class: str
+    pool_units: int
+    allocation_granularity: int
+
+
+@dataclass(frozen=True, slots=True)
+class AmdgpuOccupancyModelInfo:
+    descriptor_set_key: str
+    wave_size: int
+    max_waves_per_simd: int
+    register_classes: tuple[AmdgpuOccupancyRegisterClassInfo, ...]
+
+
 class AmdgpuIsaArchitectureInfo(Protocol):
     @property
     def source_name(self) -> str: ...
@@ -81,12 +97,12 @@ class AmdgpuIsaArchitectureInfo(Protocol):
     def architecture_id(self) -> int: ...
 
 
-def gfx11_processor_info(
+def rdna3_processor_info(
     target_cpu: str, elf_machine_flags: int
 ) -> AmdgpuProcessorInfo:
     return AmdgpuProcessorInfo(
         target_cpu=target_cpu,
-        descriptor_set_key="amdgpu.gfx11.core",
+        descriptor_set_key="amdgpu.rdna3.core",
         elf_machine_flags=elf_machine_flags,
         elf_feature_flags=0,
         default_wavefront_size=32,
@@ -116,8 +132,8 @@ def gfx1170_processor_info() -> AmdgpuProcessorInfo:
 
 AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
     AmdgpuDescriptorSetInfo(
-        generator_target="gfx1250",
-        key="amdgpu.gfx1250.core",
+        generator_target="rdna4_gfx125x",
+        key="amdgpu.rdna4.gfx125x.core",
         isa_xml_key="rdna4",
         isa_architecture_name="AMD RDNA 4",
         isa_architecture_id=10,
@@ -125,8 +141,8 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
     ),
     AmdgpuDescriptorSetInfo(
-        generator_target="gfx11",
-        key="amdgpu.gfx11.core",
+        generator_target="rdna3",
+        key="amdgpu.rdna3.core",
         isa_xml_key="rdna3",
         isa_architecture_name="AMD RDNA 3",
         isa_architecture_id=8,
@@ -134,8 +150,8 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
     ),
     AmdgpuDescriptorSetInfo(
-        generator_target="gfx12",
-        key="amdgpu.gfx12.core",
+        generator_target="rdna4",
+        key="amdgpu.rdna4.core",
         isa_xml_key="rdna4",
         isa_architecture_name="AMD RDNA 4",
         isa_architecture_id=10,
@@ -143,8 +159,8 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
     ),
     AmdgpuDescriptorSetInfo(
-        generator_target="gfx950",
-        key="amdgpu.gfx950.core",
+        generator_target="cdna4",
+        key="amdgpu.cdna4.core",
         isa_xml_key="cdna4",
         isa_architecture_name="AMD CDNA 4",
         isa_architecture_id=3,
@@ -205,18 +221,18 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940,
         kernel_descriptor_has_packed_workitem_id=True,
     ),
-    gfx11_processor_info(target_cpu="gfx1100", elf_machine_flags=0x041),
-    gfx11_processor_info(target_cpu="gfx1101", elf_machine_flags=0x046),
-    gfx11_processor_info(target_cpu="gfx1102", elf_machine_flags=0x047),
-    gfx11_processor_info(target_cpu="gfx1103", elf_machine_flags=0x044),
-    gfx11_processor_info(target_cpu="gfx1150", elf_machine_flags=0x043),
-    gfx11_processor_info(target_cpu="gfx1151", elf_machine_flags=0x04A),
-    gfx11_processor_info(target_cpu="gfx1152", elf_machine_flags=0x055),
-    gfx11_processor_info(target_cpu="gfx1153", elf_machine_flags=0x058),
+    rdna3_processor_info(target_cpu="gfx1100", elf_machine_flags=0x041),
+    rdna3_processor_info(target_cpu="gfx1101", elf_machine_flags=0x046),
+    rdna3_processor_info(target_cpu="gfx1102", elf_machine_flags=0x047),
+    rdna3_processor_info(target_cpu="gfx1103", elf_machine_flags=0x044),
+    rdna3_processor_info(target_cpu="gfx1150", elf_machine_flags=0x043),
+    rdna3_processor_info(target_cpu="gfx1151", elf_machine_flags=0x04A),
+    rdna3_processor_info(target_cpu="gfx1152", elf_machine_flags=0x055),
+    rdna3_processor_info(target_cpu="gfx1153", elf_machine_flags=0x058),
     gfx1170_processor_info(),
     AmdgpuProcessorInfo(
         target_cpu="gfx1200",
-        descriptor_set_key="amdgpu.gfx12.core",
+        descriptor_set_key="amdgpu.rdna4.core",
         elf_machine_flags=0x048,
         elf_feature_flags=0,
         default_wavefront_size=32,
@@ -226,7 +242,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx1201",
-        descriptor_set_key="amdgpu.gfx12.core",
+        descriptor_set_key="amdgpu.rdna4.core",
         elf_machine_flags=0x04E,
         elf_feature_flags=0,
         default_wavefront_size=32,
@@ -236,7 +252,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx1250",
-        descriptor_set_key="amdgpu.gfx1250.core",
+        descriptor_set_key="amdgpu.rdna4.gfx125x.core",
         elf_machine_flags=0x049,
         elf_feature_flags=0,
         default_wavefront_size=32,
@@ -246,7 +262,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx1251",
-        descriptor_set_key="amdgpu.gfx1250.core",
+        descriptor_set_key="amdgpu.rdna4.gfx125x.core",
         elf_machine_flags=0x05A,
         elf_feature_flags=0,
         default_wavefront_size=32,
@@ -256,7 +272,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx1252",
-        descriptor_set_key="amdgpu.gfx1250.core",
+        descriptor_set_key="amdgpu.rdna4.gfx125x.core",
         elf_machine_flags=0,
         elf_feature_flags=0,
         default_wavefront_size=32,
@@ -266,7 +282,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx950",
-        descriptor_set_key="amdgpu.gfx950.core",
+        descriptor_set_key="amdgpu.cdna4.core",
         elf_machine_flags=0x04F,
         elf_feature_flags=0,
         default_wavefront_size=64,
@@ -277,12 +293,69 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
 )
 
 
+AMDGPU_OCCUPANCY_MODEL_INFOS: tuple[AmdgpuOccupancyModelInfo, ...] = (
+    AmdgpuOccupancyModelInfo(
+        descriptor_set_key="amdgpu.cdna4.core",
+        wave_size=64,
+        max_waves_per_simd=16,
+        register_classes=(
+            AmdgpuOccupancyRegisterClassInfo("amdgpu.sgpr", 800, 16),
+            AmdgpuOccupancyRegisterClassInfo("amdgpu.vgpr", 1024, 4),
+            AmdgpuOccupancyRegisterClassInfo("amdgpu.agpr", 256, 4),
+        ),
+    ),
+    AmdgpuOccupancyModelInfo(
+        descriptor_set_key="amdgpu.rdna3.core",
+        wave_size=64,
+        max_waves_per_simd=16,
+        register_classes=(
+            AmdgpuOccupancyRegisterClassInfo("amdgpu.sgpr", 800, 16),
+            AmdgpuOccupancyRegisterClassInfo("amdgpu.vgpr", 1024, 4),
+        ),
+    ),
+    AmdgpuOccupancyModelInfo(
+        descriptor_set_key="amdgpu.rdna4.core",
+        wave_size=64,
+        max_waves_per_simd=16,
+        register_classes=(
+            AmdgpuOccupancyRegisterClassInfo("amdgpu.sgpr", 800, 16),
+            AmdgpuOccupancyRegisterClassInfo("amdgpu.vgpr", 1024, 4),
+        ),
+    ),
+    AmdgpuOccupancyModelInfo(
+        descriptor_set_key="amdgpu.rdna4.gfx125x.core",
+        wave_size=64,
+        max_waves_per_simd=16,
+        register_classes=(
+            AmdgpuOccupancyRegisterClassInfo("amdgpu.sgpr", 800, 16),
+            AmdgpuOccupancyRegisterClassInfo("amdgpu.vgpr", 1024, 4),
+        ),
+    ),
+)
+
+
 def sorted_descriptor_set_infos() -> tuple[AmdgpuDescriptorSetInfo, ...]:
     return tuple(sorted(AMDGPU_DESCRIPTOR_SET_INFOS, key=lambda info: info.key))
 
 
+def amdgpu_descriptor_set_ordinal(key: str) -> int:
+    for ordinal, info in enumerate(sorted_descriptor_set_infos()):
+        if info.key == key:
+            return ordinal
+    raise ValueError(f"unknown AMDGPU descriptor set '{key}'")
+
+
 def sorted_processor_infos() -> tuple[AmdgpuProcessorInfo, ...]:
     return tuple(sorted(AMDGPU_PROCESSOR_INFOS, key=lambda info: info.target_cpu))
+
+
+def sorted_occupancy_model_infos() -> tuple[AmdgpuOccupancyModelInfo, ...]:
+    return tuple(
+        sorted(
+            AMDGPU_OCCUPANCY_MODEL_INFOS,
+            key=lambda info: amdgpu_descriptor_set_ordinal(info.descriptor_set_key),
+        )
+    )
 
 
 def amdgpu_descriptor_set_info_by_generator_target(

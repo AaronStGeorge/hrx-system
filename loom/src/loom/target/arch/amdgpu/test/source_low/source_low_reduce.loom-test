@@ -15,7 +15,7 @@ func.def target(@target) @i32_reduce_add(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @i32_reduce_add() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @i32_reduce_add() asm<amdgpu.rdna3.core> {
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x2>
   %11 = v_mov_b32 0
@@ -51,7 +51,7 @@ func.def target(@target) @f32_reduce_add(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @f32_reduce_add() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @f32_reduce_add() asm<amdgpu.rdna3.core> {
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x2>
   %11 = v_mov_b32 0

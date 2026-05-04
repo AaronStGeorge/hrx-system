@@ -141,9 +141,9 @@ TEST_F(AmdgpuModuleCompilerTest, DescriptorSetMismatchEmitsDiagnostic) {
       capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_AMDGPU, 5));
   ASSERT_NE(diagnostic, nullptr);
   EXPECT_EQ(GetStringParam(*diagnostic, 0), "gfx950");
-  EXPECT_EQ(GetStringParam(*diagnostic, 1), "amdgpu.gfx950.core");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "amdgpu.cdna4.core");
   EXPECT_EQ(GetStringParam(*diagnostic, 2), "gfx_target");
-  EXPECT_EQ(GetStringParam(*diagnostic, 3), "amdgpu.gfx11.core");
+  EXPECT_EQ(GetStringParam(*diagnostic, 3), "amdgpu.rdna3.core");
 }
 
 }  // namespace

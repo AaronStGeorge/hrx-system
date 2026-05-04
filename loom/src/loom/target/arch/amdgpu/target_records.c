@@ -8,7 +8,7 @@
 
 #include <stdint.h>
 
-#include "loom/target/arch/amdgpu/target_info_defs.h"
+#include "loom/target/arch/amdgpu/target_info.h"
 
 #define LOOM_AMDGPU_TARGET_TRIPLE IREE_SVL("amdgcn-amd-amdhsa")
 #define LOOM_AMDGPU_DATA_LAYOUT                              \
@@ -48,10 +48,10 @@
       },                                                                     \
   }
 
-LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuGfx950Snapshot, "amdgpu-gfx950-low", "gfx950", 64);
-LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuGfx11Snapshot, "amdgpu-gfx11-low", "gfx1100", 32);
-LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuGfx12Snapshot, "amdgpu-gfx12-low", "gfx1200", 32);
-LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuGfx1250Snapshot, "amdgpu-gfx1250-low", "gfx1250", 32);
+LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuCdna4Snapshot, "amdgpu-cdna4-low", "gfx950", 64);
+LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuRdna3Snapshot, "amdgpu-rdna3-low", "gfx1100", 32);
+LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuRdna4Snapshot, "amdgpu-rdna4-low", "gfx1200", 32);
+LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuRdna4Gfx125xSnapshot, "amdgpu-rdna4-gfx125x-low", "gfx1250", 32);
 
 static const loom_target_export_plan_t kAmdgpuHalExportPlan = {
   .name = IREE_SVL("amdgpu-hal"),
@@ -72,45 +72,45 @@ static const loom_target_export_plan_t kAmdgpuHalExportPlan = {
       .contract_set_key = IREE_SVL(key), \
   }
 
-LOOM_AMDGPU_LOW_CONFIG(kAmdgpuGfx950Config, "amdgpu.gfx950.core");
-LOOM_AMDGPU_LOW_CONFIG(kAmdgpuGfx11Config, "amdgpu.gfx11.core");
-LOOM_AMDGPU_LOW_CONFIG(kAmdgpuGfx12Config, "amdgpu.gfx12.core");
-LOOM_AMDGPU_LOW_CONFIG(kAmdgpuGfx1250Config, "amdgpu.gfx1250.core");
+LOOM_AMDGPU_LOW_CONFIG(kAmdgpuCdna4Config, "amdgpu.cdna4.core");
+LOOM_AMDGPU_LOW_CONFIG(kAmdgpuRdna3Config, "amdgpu.rdna3.core");
+LOOM_AMDGPU_LOW_CONFIG(kAmdgpuRdna4Config, "amdgpu.rdna4.core");
+LOOM_AMDGPU_LOW_CONFIG(kAmdgpuRdna4Gfx125xConfig, "amdgpu.rdna4.gfx125x.core");
 
-static const loom_target_bundle_t kAmdgpuLowTargetBundleGfx950Core = {
-  .name = IREE_SVL("amdgpu-gfx950"),
-  .snapshot = &kAmdgpuGfx950Snapshot,
+static const loom_target_bundle_t kAmdgpuLowTargetBundleCdna4Core = {
+  .name = IREE_SVL("amdgpu-cdna4"),
+  .snapshot = &kAmdgpuCdna4Snapshot,
   .export_plan = &kAmdgpuHalExportPlan,
-  .config = &kAmdgpuGfx950Config,
+  .config = &kAmdgpuCdna4Config,
 };
 
-static const loom_target_bundle_t kAmdgpuLowTargetBundleGfx11Core = {
-  .name = IREE_SVL("amdgpu-gfx11"),
-  .snapshot = &kAmdgpuGfx11Snapshot,
+static const loom_target_bundle_t kAmdgpuLowTargetBundleRdna3Core = {
+  .name = IREE_SVL("amdgpu-rdna3"),
+  .snapshot = &kAmdgpuRdna3Snapshot,
   .export_plan = &kAmdgpuHalExportPlan,
-  .config = &kAmdgpuGfx11Config,
+  .config = &kAmdgpuRdna3Config,
 };
 
-static const loom_target_bundle_t kAmdgpuLowTargetBundleGfx12Core = {
-  .name = IREE_SVL("amdgpu-gfx12"),
-  .snapshot = &kAmdgpuGfx12Snapshot,
+static const loom_target_bundle_t kAmdgpuLowTargetBundleRdna4Core = {
+  .name = IREE_SVL("amdgpu-rdna4"),
+  .snapshot = &kAmdgpuRdna4Snapshot,
   .export_plan = &kAmdgpuHalExportPlan,
-  .config = &kAmdgpuGfx12Config,
+  .config = &kAmdgpuRdna4Config,
 };
 
-static const loom_target_bundle_t kAmdgpuLowTargetBundleGfx1250Core = {
-  .name = IREE_SVL("amdgpu-gfx1250"),
-  .snapshot = &kAmdgpuGfx1250Snapshot,
+static const loom_target_bundle_t kAmdgpuLowTargetBundleRdna4Gfx125xCore = {
+  .name = IREE_SVL("amdgpu-rdna4-gfx125x"),
+  .snapshot = &kAmdgpuRdna4Gfx125xSnapshot,
   .export_plan = &kAmdgpuHalExportPlan,
-  .config = &kAmdgpuGfx1250Config,
+  .config = &kAmdgpuRdna4Gfx125xConfig,
 };
 
 static const loom_target_bundle_t* const kAmdgpuTargetBundleValues[] = {
   NULL,
-  &kAmdgpuLowTargetBundleGfx950Core,
-  &kAmdgpuLowTargetBundleGfx11Core,
-  &kAmdgpuLowTargetBundleGfx12Core,
-  &kAmdgpuLowTargetBundleGfx1250Core,
+  &kAmdgpuLowTargetBundleCdna4Core,
+  &kAmdgpuLowTargetBundleRdna3Core,
+  &kAmdgpuLowTargetBundleRdna4Core,
+  &kAmdgpuLowTargetBundleRdna4Gfx125xCore,
 };
 
 const loom_target_bundle_table_t loom_amdgpu_target_bundles = {
@@ -121,17 +121,20 @@ const loom_target_bundle_table_t loom_amdgpu_target_bundles = {
 // clang-format on
 
 const loom_target_bundle_t* loom_amdgpu_target_bundle_for_descriptor_set(
-    uint64_t descriptor_set_stable_id) {
-  switch (descriptor_set_stable_id) {
-    case UINT64_C(0x7538ee370027c8cb):
-      return &kAmdgpuLowTargetBundleGfx950Core;
-    case UINT64_C(0x6045d6ec69a46863):
-      return &kAmdgpuLowTargetBundleGfx11Core;
-    case UINT64_C(0x3c2608cb56c4ba08):
-      return &kAmdgpuLowTargetBundleGfx12Core;
-    case UINT64_C(0x4a41dc4c340e882b):
-      return &kAmdgpuLowTargetBundleGfx1250Core;
-    default:
-      return NULL;
+    uint16_t descriptor_set_ordinal) {
+  const loom_target_bundle_t* const
+      bundles[LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_COUNT] = {
+          [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA4] =
+              &kAmdgpuLowTargetBundleCdna4Core,
+          [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3] =
+              &kAmdgpuLowTargetBundleRdna3Core,
+          [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4] =
+              &kAmdgpuLowTargetBundleRdna4Core,
+          [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4_GFX125X] =
+              &kAmdgpuLowTargetBundleRdna4Gfx125xCore,
+      };
+  if (descriptor_set_ordinal >= IREE_ARRAYSIZE(bundles)) {
+    return NULL;
   }
+  return bundles[descriptor_set_ordinal];
 }

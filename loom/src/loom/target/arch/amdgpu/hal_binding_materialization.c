@@ -45,8 +45,8 @@ static iree_status_t loom_amdgpu_hal_binding_cache_swizzle_kind(
     loom_amdgpu_buffer_resource_cache_swizzle_t* out_kind) {
   *out_kind = LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE;
   const loom_amdgpu_descriptor_set_info_t* descriptor_set_info = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_id(
-      descriptor_set->stable_id, &descriptor_set_info));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
+      descriptor_set->descriptor_set_ordinal, &descriptor_set_info));
   *out_kind = descriptor_set_info->buffer_resource_cache_swizzle;
   return iree_ok_status();
 }

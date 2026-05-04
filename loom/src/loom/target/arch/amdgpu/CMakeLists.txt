@@ -121,7 +121,6 @@ loom_cc_library(
   HDRS
     "register_class.h"
   DEPS
-    ::gfx950_descriptors_ids
     loom::src::loom::codegen::low::descriptors
   PUBLIC
 )
@@ -150,14 +149,14 @@ loom_target_table_cc_library(
 
 loom_target_table_cc_library(
   NAME
-    gfx11_encoding_tables
+    rdna3_encoding_tables
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_encoding_tables
   ARGS
-    "--target=gfx11"
-    "--descriptor-set-key=amdgpu.gfx11.core"
+    "--target=rdna3"
+    "--descriptor-set-key=amdgpu.rdna3.core"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
-    "--public-header=loom/target/arch/amdgpu/gfx11_encoding_tables.h"
+    "--public-header=loom/target/arch/amdgpu/rdna3_encoding_tables.h"
   INPUTS
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
     "loom_amdgpu_isa_xml"
@@ -169,14 +168,14 @@ loom_target_table_cc_library(
 
 loom_target_table_cc_library(
   NAME
-    gfx12_encoding_tables
+    rdna4_encoding_tables
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_encoding_tables
   ARGS
-    "--target=gfx12"
-    "--descriptor-set-key=amdgpu.gfx12.core"
+    "--target=rdna4"
+    "--descriptor-set-key=amdgpu.rdna4.core"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
-    "--public-header=loom/target/arch/amdgpu/gfx12_encoding_tables.h"
+    "--public-header=loom/target/arch/amdgpu/rdna4_encoding_tables.h"
   INPUTS
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
     "loom_amdgpu_isa_xml"
@@ -188,14 +187,14 @@ loom_target_table_cc_library(
 
 loom_target_table_cc_library(
   NAME
-    gfx1250_encoding_tables
+    rdna4_gfx125x_encoding_tables
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_encoding_tables
   ARGS
-    "--target=gfx1250"
-    "--descriptor-set-key=amdgpu.gfx1250.core"
+    "--target=rdna4_gfx125x"
+    "--descriptor-set-key=amdgpu.rdna4.gfx125x.core"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
-    "--public-header=loom/target/arch/amdgpu/gfx1250_encoding_tables.h"
+    "--public-header=loom/target/arch/amdgpu/rdna4_gfx125x_encoding_tables.h"
   INPUTS
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
     "loom_amdgpu_isa_xml"
@@ -207,14 +206,14 @@ loom_target_table_cc_library(
 
 loom_target_table_cc_library(
   NAME
-    gfx950_encoding_tables
+    cdna4_encoding_tables
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_encoding_tables
   ARGS
-    "--target=gfx950"
-    "--descriptor-set-key=amdgpu.gfx950.core"
+    "--target=cdna4"
+    "--descriptor-set-key=amdgpu.cdna4.core"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
-    "--public-header=loom/target/arch/amdgpu/gfx950_encoding_tables.h"
+    "--public-header=loom/target/arch/amdgpu/cdna4_encoding_tables.h"
   INPUTS
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
     "loom_amdgpu_isa_xml"
@@ -232,22 +231,23 @@ loom_cc_library(
   SRCS
     "encoding.c"
   DEPS
+    ::cdna4_encoding_tables
     ::encoding_defs
-    ::gfx11_encoding_tables
-    ::gfx1250_encoding_tables
-    ::gfx12_encoding_tables
-    ::gfx950_encoding_tables
+    ::rdna3_encoding_tables
+    ::rdna4_encoding_tables
+    ::rdna4_gfx125x_encoding_tables
+    ::target_info
     iree::base
   PUBLIC
 )
 
 loom_low_descriptor_cc_library(
   NAME
-    gfx11_descriptors
+    rdna3_descriptors
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_descriptors
   ARGS
-    "--target=gfx11"
+    "--target=rdna3"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
   INPUTS
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
@@ -259,11 +259,11 @@ loom_low_descriptor_cc_library(
 
 loom_low_descriptor_cc_library(
   NAME
-    gfx12_descriptors
+    rdna4_descriptors
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_descriptors
   ARGS
-    "--target=gfx12"
+    "--target=rdna4"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
   INPUTS
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
@@ -275,11 +275,11 @@ loom_low_descriptor_cc_library(
 
 loom_low_descriptor_cc_library(
   NAME
-    gfx1250_descriptors
+    rdna4_gfx125x_descriptors
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_descriptors
   ARGS
-    "--target=gfx1250"
+    "--target=rdna4_gfx125x"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
   INPUTS
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
@@ -291,11 +291,11 @@ loom_low_descriptor_cc_library(
 
 loom_low_descriptor_cc_library(
   NAME
-    gfx950_descriptors
+    cdna4_descriptors
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_descriptors
   ARGS
-    "--target=gfx950"
+    "--target=cdna4"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
   INPUTS
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
@@ -313,7 +313,7 @@ loom_cc_library(
   SRCS
     "target_records.c"
   DEPS
-    ::target_info_defs
+    ::target_info
     iree::base
     loom::src::loom::target::types
   PUBLIC
@@ -327,10 +327,10 @@ loom_cc_library(
   SRCS
     "low_registry.c"
   DEPS
-    ::gfx11_descriptors
-    ::gfx1250_descriptors
-    ::gfx12_descriptors
-    ::gfx950_descriptors
+    ::cdna4_descriptors
+    ::rdna3_descriptors
+    ::rdna4_descriptors
+    ::rdna4_gfx125x_descriptors
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::target::low_descriptor_registry
@@ -877,6 +877,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "source_low_index_amdgpu"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_index_amdgpu.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "source_low_launch_config"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_launch_config.loom-test"
@@ -1291,6 +1302,16 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_target_table_cc_library(
+  NAME
+    occupancy_tables
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_occupancy_tables
+  DEPS
+    ::target_info
+    iree::base
+)
+
 loom_cc_library(
   NAME
     occupancy
@@ -1299,10 +1320,7 @@ loom_cc_library(
   SRCS
     "occupancy.c"
   DEPS
-    ::gfx11_descriptors_ids
-    ::gfx1250_descriptors_ids
-    ::gfx12_descriptors_ids
-    ::gfx950_descriptors_ids
+    ::occupancy_tables
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation

@@ -21,7 +21,7 @@ kernel.def target(@target) @index_madd_global_b32(%input: buffer, %output: buffe
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @index_madd_global_b32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @index_madd_global_b32() asm<amdgpu.rdna3.core> {
   %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x2>
@@ -60,7 +60,7 @@ kernel.def target(@target) @index_madd_constant_addend_global_b32(%input: buffer
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @index_madd_constant_addend_global_b32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @index_madd_constant_addend_global_b32() asm<amdgpu.rdna3.core> {
   %x = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x2>
@@ -97,7 +97,7 @@ kernel.def target(@target) @workitem_y_lds_uses_explicit_vaddr(%output: buffer) 
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @workitem_y_lds_uses_explicit_vaddr() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @workitem_y_lds_uses_explicit_vaddr() asm<amdgpu.rdna3.core> {
   %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
   %14 = v_lshrrev_b32_lit %packed_tid, 10
@@ -136,7 +136,7 @@ kernel.def target(@target) @dispatch_id_xy_global_b32(%output: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(8, 4, 1) @dispatch_id_xy_global_b32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(8, 4, 1) @dispatch_id_xy_global_b32() asm<amdgpu.rdna3.core> {
   %14 = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
   %15 = live_in<amdgpu.workgroup_id.y> : reg<amdgpu.sgpr>
   %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
@@ -157,50 +157,5 @@ low.kernel.def target(@target) workgroup_size(8, 4, 1) @dispatch_id_xy_global_b3
   %one = v_mov_b32 1
   %32 = v_lshlrev_b32_lit %linear, 2
   global_store_b32 %32, %one, %output_view
-  return
-}
-
-// ====
-
-amdgpu.target<gfx1100> @target
-func.def target(@target) @index_cast_compare_uniform(%lhs: i32, %rhs: i32) -> (i1) {
-  %lhs_index = index.cast %lhs : i32 to index
-  %rhs_index = index.cast %rhs : i32 to index
-  %result = index.cmp slt, %lhs_index, %rhs_index : index
-  func.return %result : i1
-}
-
-// ----
-low.func.def target(@target) abi(hal_kernel) @index_cast_compare_uniform(%lhs_index: reg<amdgpu.sgpr>, %rhs_index: reg<amdgpu.sgpr>) -> (reg<amdgpu.scc>) asm<amdgpu.gfx11.core> {
-  %result = s_cmp_lt_i32 %lhs_index, %rhs_index
-  return %result
-}
-
-// ====
-
-amdgpu.target<gfx1100> @target
-func.def target(@target) @index_cast_compare_divergent(%values: vector<2xi32>, %limit: i32) {
-  %lane_i32 = vector.extract %values[0] : vector<2xi32> -> i32
-  %lane = index.cast %lane_i32 : i32 to index
-  %limit_index = index.cast %limit : i32 to index
-  %condition = index.cmp slt, %lane, %limit_index : index
-  cfg.cond_br %condition, ^then, ^join : i1
-^then:
-  cfg.br ^join
-^join:
-  func.return
-}
-
-// ----
-low.func.def target(@target) abi(hal_kernel) @index_cast_compare_divergent(%values: reg<amdgpu.vgpr x2>, %limit_index: reg<amdgpu.sgpr>) asm<amdgpu.gfx11.core> {
-  %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %9 = v_mov_b32_copy %limit_index
-  %condition = v_cmp_lt_i32 %lane, %9
-  %11, %12 = s_and_saveexec_b64 %condition
-  low.cond_br %12, ^then, ^join : reg<amdgpu.scc>
-^then:
-  low.br ^join
-^join:
-  s_mov_b64_exec %11
   return
 }

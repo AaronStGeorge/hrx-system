@@ -26,6 +26,9 @@ extern "C" {
 // Stable target-family identity for AMDGPU low descriptor sets.
 #define LOOM_AMDGPU_TARGET_STABLE_ID UINT64_C(0x6c46df5542915cc5)
 
+// Sentinel for processors or descriptor sets without target-low support.
+#define LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE UINT16_MAX
+
 // Default raw buffer-resource descriptor control word for global HAL bindings.
 //
 // This is the final descriptor word consumed by MUBUF/MTBUF packets. It matches
@@ -79,10 +82,10 @@ typedef enum loom_amdgpu_vector_memory_cache_policy_encoding_e {
 } loom_amdgpu_vector_memory_cache_policy_encoding_t;
 
 typedef struct loom_amdgpu_descriptor_set_info_t {
-  // Durable descriptor-set identity derived from the descriptor-set key.
-  uint64_t descriptor_set_stable_id;
-  // Target-low descriptor set key such as `amdgpu.gfx11.core`.
+  // Target-low descriptor set key such as `amdgpu.rdna3.core`.
   iree_string_view_t descriptor_set_key;
+  // Dense generated descriptor-set ordinal within the AMDGPU target package.
+  uint16_t descriptor_set_ordinal;
   // SOPP opcode used when lowering structural `low.return` to `s_endpgm`.
   uint16_t s_endpgm_opcode;
   // SOPP opcode used when lowering structural `low.br` to `s_branch`.
@@ -103,8 +106,8 @@ typedef struct loom_amdgpu_processor_info_t {
   iree_string_view_t target_cpu;
   // Target-low descriptor set key selected for this processor.
   iree_string_view_t descriptor_set_key;
-  // Durable descriptor-set identity selected for this processor.
-  uint64_t descriptor_set_stable_id;
+  // Dense generated descriptor-set ordinal selected for this processor.
+  uint16_t descriptor_set_ordinal;
   // ELF EF_AMDGPU_MACH bits for this processor, or 0 when unknown.
   uint32_t elf_machine_flags;
   // ELF EF_AMDGPU_FEATURE_* bits implied by the selected target-id policy.
@@ -143,6 +146,14 @@ iree_host_size_t loom_amdgpu_target_info_processor_count(void);
 const loom_amdgpu_processor_info_t* loom_amdgpu_target_info_processor_at(
     iree_host_size_t index);
 
+// Returns the number of supported AMDGPU target-low descriptor-set rows.
+iree_host_size_t loom_amdgpu_target_info_descriptor_set_count(void);
+
+// Returns the generated descriptor-set facts for |descriptor_set_ordinal|, or
+// NULL when the ordinal is NONE or outside the generated table.
+const loom_amdgpu_descriptor_set_info_t*
+loom_amdgpu_target_info_descriptor_set_at(uint16_t descriptor_set_ordinal);
+
 // Looks up known AMDGPU processor facts by target CPU name.
 //
 // Some known processors do not yet have target-low or HSACO support.
@@ -155,14 +166,10 @@ iree_status_t loom_amdgpu_target_info_lookup_descriptor_set(
     iree_string_view_t descriptor_set_key,
     const loom_amdgpu_descriptor_set_info_t** out_descriptor_set);
 
-// Looks up a supported AMDGPU target-low descriptor set by stable ID.
-iree_status_t loom_amdgpu_target_info_lookup_descriptor_set_by_id(
-    uint64_t descriptor_set_stable_id,
+// Looks up a supported AMDGPU target-low descriptor set by generated ordinal.
+iree_status_t loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
+    uint16_t descriptor_set_ordinal,
     const loom_amdgpu_descriptor_set_info_t** out_descriptor_set);
-
-// Returns descriptor-set facts by stable ID, or NULL when unsupported.
-const loom_amdgpu_descriptor_set_info_t*
-loom_amdgpu_target_info_descriptor_set_by_id(uint64_t descriptor_set_stable_id);
 
 // Parses an AMDHSA target ID such as `amdgcn-amd-amdhsa--gfx1100`.
 iree_status_t loom_amdgpu_target_info_parse_amdhsa_target_id(

@@ -18,7 +18,7 @@ kernel.def target(@target) @lds_atomic_add_i32() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_add_i32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_add_i32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %bytes = s_mov_b32 256
   %10 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
@@ -53,7 +53,7 @@ kernel.def target(@target) @lds_atomic_ordering_i32() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_ordering_i32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_ordering_i32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %bytes = s_mov_b32 256
   %13 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
@@ -91,7 +91,7 @@ kernel.def target(@target) @lds_atomic_add_f32() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_add_f32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_add_f32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %bytes = s_mov_b32 256
   %10 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
@@ -123,7 +123,7 @@ kernel.def target(@target) @lds_atomic_minnum_maxnum_f32() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_minnum_maxnum_f32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_minnum_maxnum_f32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %bytes = s_mov_b32 256
   %11 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
@@ -159,7 +159,7 @@ kernel.def target(@target) @lds_atomic_bitwise_i32() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_bitwise_i32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_bitwise_i32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %bytes = s_mov_b32 256
   %12 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
@@ -199,7 +199,7 @@ kernel.def target(@target) @lds_atomic_sub_i32() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_sub_i32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_sub_i32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %bytes = s_mov_b32 256
   %10 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
@@ -230,7 +230,7 @@ kernel.def target(@target) @lds_atomic_exchange_i32() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_exchange_i32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_exchange_i32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %bytes = s_mov_b32 256
   %10 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
@@ -260,7 +260,7 @@ kernel.def target(@target) @lds_atomic_cmpxchg_i32() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_cmpxchg_i32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_cmpxchg_i32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %bytes = s_mov_b32 256
   %11 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
@@ -298,7 +298,7 @@ kernel.def target(@target) @lds_atomic_minmax_i32() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_minmax_i32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_minmax_i32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %bytes = s_mov_b32 256
   %13 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>

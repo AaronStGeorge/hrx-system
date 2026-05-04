@@ -237,7 +237,8 @@ static iree_status_t loom_amdgpu_module_compile_apply_target_cpu(
     return loom_amdgpu_module_compile_emit_unknown_target_cpu(
         module, entry, diagnostic_emitter, target_cpu);
   }
-  if (processor->descriptor_set_stable_id == 0 ||
+  if (processor->descriptor_set_ordinal ==
+          LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE ||
       iree_string_view_is_empty(processor->descriptor_set_key)) {
     return loom_amdgpu_module_compile_emit_no_descriptor_set(
         module, entry, diagnostic_emitter, processor->target_cpu);

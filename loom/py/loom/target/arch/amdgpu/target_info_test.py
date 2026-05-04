@@ -20,10 +20,10 @@ def test_descriptor_set_isa_xml_validation_accepts_matching_architecture() -> No
     spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="rdna4.xml")
 
     validate_amdgpu_descriptor_set_isa_xml(
-        amdgpu_descriptor_set_info_by_generator_target("gfx12"), spec
+        amdgpu_descriptor_set_info_by_generator_target("rdna4"), spec
     )
     validate_amdgpu_descriptor_set_isa_xml(
-        amdgpu_descriptor_set_info_by_generator_target("gfx1250"), spec
+        amdgpu_descriptor_set_info_by_generator_target("rdna4_gfx125x"), spec
     )
 
 
@@ -33,12 +33,12 @@ def test_descriptor_set_isa_xml_validation_rejects_mismatched_architecture() -> 
     with pytest.raises(
         ValueError,
         match=(
-            "amdgpu.gfx11.core expects AMD RDNA 3 architecture id 8, "
+            "amdgpu.rdna3.core expects AMD RDNA 3 architecture id 8, "
             "found AMD RDNA 4 architecture id 10"
         ),
     ):
         validate_amdgpu_descriptor_set_isa_xml(
-            amdgpu_descriptor_set_info_by_generator_target("gfx11"), spec
+            amdgpu_descriptor_set_info_by_generator_target("rdna3"), spec
         )
 
 

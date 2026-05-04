@@ -61,6 +61,16 @@ py_binary(
 )
 
 py_binary(
+    name = "amdgpu_occupancy_tables",
+    srcs = ["amdgpu_occupancy_tables.py"],
+    main = "amdgpu_occupancy_tables.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
+    ],
+)
+
+py_binary(
     name = "ireevm_low_descriptor_shard",
     srcs = ["low_descriptor_shard.py"],
     main = "low_descriptor_shard.py",

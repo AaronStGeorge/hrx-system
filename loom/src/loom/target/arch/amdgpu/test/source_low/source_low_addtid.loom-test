@@ -20,7 +20,7 @@ kernel.def target(@target) @workgroup_memory_workitem_x_b32() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @workgroup_memory_workitem_x_b32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @workgroup_memory_workitem_x_b32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %bytes = s_mov_b32 256
   %11 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>

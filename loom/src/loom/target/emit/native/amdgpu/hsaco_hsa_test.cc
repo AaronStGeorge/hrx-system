@@ -661,12 +661,12 @@ class LowKernelCompiler {
     *out_hsaco = {};
     const loom_target_bundle_t* target_bundle =
         loom_amdgpu_target_bundle_for_descriptor_set(
-            processor->descriptor_set_stable_id);
+            processor->descriptor_set_ordinal);
     if (target_bundle == nullptr) {
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                               "AMDGPU HSA processor has no target record for "
-                              "descriptor set 0x%" PRIx64,
-                              processor->descriptor_set_stable_id);
+                              "descriptor set ordinal %" PRIu16,
+                              processor->descriptor_set_ordinal);
     }
     iree_string_view_t target_kind = target_bundle->snapshot->target_cpu;
     std::string source = "amdgpu.target<";
@@ -783,9 +783,10 @@ iree_status_t PrepareTargetProcessorForLowHsaco(
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_processor(
       iree_make_string_view(target.target_cpu.data(), target.target_cpu.size()),
       &processor));
-  if (processor->descriptor_set_stable_id == 0 ||
+  if (processor->descriptor_set_ordinal ==
+          LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE ||
       loom_amdgpu_target_bundle_for_descriptor_set(
-          processor->descriptor_set_stable_id) == nullptr) {
+          processor->descriptor_set_ordinal) == nullptr) {
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                             "AMDGPU target CPU '%s' has no target-low record",
                             target.target_cpu.c_str());
@@ -796,8 +797,8 @@ iree_status_t PrepareTargetProcessorForLowHsaco(
                             target.target_cpu.c_str());
   }
   const loom_amdgpu_descriptor_set_info_t* descriptor_set = nullptr;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_id(
-      processor->descriptor_set_stable_id, &descriptor_set));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
+      processor->descriptor_set_ordinal, &descriptor_set));
   if (!descriptor_set->supports_descriptor_packet_encoding) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,

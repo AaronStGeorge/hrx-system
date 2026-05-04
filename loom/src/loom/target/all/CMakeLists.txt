@@ -22,12 +22,12 @@ loom_cc_library(
     iree::base::threading
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::lower
-    loom::src::loom::target::arch::amdgpu::gfx11_descriptors
-    loom::src::loom::target::arch::amdgpu::gfx1250_descriptors
-    loom::src::loom::target::arch::amdgpu::gfx12_descriptors
-    loom::src::loom::target::arch::amdgpu::gfx950_descriptors
+    loom::src::loom::target::arch::amdgpu::cdna4_descriptors
     loom::src::loom::target::arch::amdgpu::low_registry
     loom::src::loom::target::arch::amdgpu::lower
+    loom::src::loom::target::arch::amdgpu::rdna3_descriptors
+    loom::src::loom::target::arch::amdgpu::rdna4_descriptors
+    loom::src::loom::target::arch::amdgpu::rdna4_gfx125x_descriptors
     loom::src::loom::target::arch::wasm::descriptors
     loom::src::loom::target::arch::wasm::low_registry
     loom::src::loom::target::arch::x86::avx512_descriptors

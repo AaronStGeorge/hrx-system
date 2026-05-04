@@ -17,8 +17,9 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx11Processor) {
       loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx1100"), &processor));
   ASSERT_NE(processor, nullptr);
   EXPECT_TRUE(iree_string_view_equal(processor->descriptor_set_key,
-                                     IREE_SV("amdgpu.gfx11.core")));
-  EXPECT_NE(processor->descriptor_set_stable_id, 0u);
+                                     IREE_SV("amdgpu.rdna3.core")));
+  EXPECT_EQ(processor->descriptor_set_ordinal,
+            LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3);
   EXPECT_NE(processor->elf_machine_flags, 0u);
   EXPECT_EQ(processor->default_wavefront_size, 32u);
   EXPECT_EQ(processor->kernel_descriptor_profile,
@@ -41,13 +42,14 @@ TEST(AmdgpuTargetInfoTest, IteratesProcessors) {
 TEST(AmdgpuTargetInfoTest, LooksUpDescriptorSetEncodingProfile) {
   const loom_amdgpu_descriptor_set_info_t* descriptor_set = nullptr;
   IREE_ASSERT_OK(loom_amdgpu_target_info_lookup_descriptor_set(
-      IREE_SV("amdgpu.gfx950.core"), &descriptor_set));
+      IREE_SV("amdgpu.cdna4.core"), &descriptor_set));
   ASSERT_NE(descriptor_set, nullptr);
-  ASSERT_NE(descriptor_set->descriptor_set_stable_id, 0u);
-  const loom_amdgpu_descriptor_set_info_t* descriptor_set_by_id = nullptr;
-  IREE_ASSERT_OK(loom_amdgpu_target_info_lookup_descriptor_set_by_id(
-      descriptor_set->descriptor_set_stable_id, &descriptor_set_by_id));
-  EXPECT_EQ(descriptor_set_by_id, descriptor_set);
+  ASSERT_EQ(descriptor_set->descriptor_set_ordinal,
+            LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA4);
+  const loom_amdgpu_descriptor_set_info_t* descriptor_set_by_ordinal = nullptr;
+  IREE_ASSERT_OK(loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
+      descriptor_set->descriptor_set_ordinal, &descriptor_set_by_ordinal));
+  EXPECT_EQ(descriptor_set_by_ordinal, descriptor_set);
   EXPECT_NE(descriptor_set->s_endpgm_opcode, 0u);
   EXPECT_TRUE(descriptor_set->supports_descriptor_packet_encoding);
   EXPECT_EQ(descriptor_set->buffer_resource_cache_swizzle,
@@ -56,9 +58,11 @@ TEST(AmdgpuTargetInfoTest, LooksUpDescriptorSetEncodingProfile) {
             LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1);
 }
 
-TEST(AmdgpuTargetInfoTest, DescriptorSetByIdReturnsNullForUnknownId) {
-  EXPECT_EQ(loom_amdgpu_target_info_descriptor_set_by_id(0), nullptr);
-  EXPECT_EQ(loom_amdgpu_target_info_descriptor_set_by_id(UINT64_MAX), nullptr);
+TEST(AmdgpuTargetInfoTest, DescriptorSetAtReturnsNullForUnknownOrdinal) {
+  EXPECT_EQ(loom_amdgpu_target_info_descriptor_set_at(
+                LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE),
+            nullptr);
+  EXPECT_EQ(loom_amdgpu_target_info_descriptor_set_at(UINT16_MAX - 1), nullptr);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpMatrixOnlyProcessor) {
@@ -67,7 +71,8 @@ TEST(AmdgpuTargetInfoTest, LooksUpMatrixOnlyProcessor) {
       loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx942"), &processor));
   ASSERT_NE(processor, nullptr);
   EXPECT_TRUE(iree_string_view_is_empty(processor->descriptor_set_key));
-  EXPECT_EQ(processor->descriptor_set_stable_id, 0u);
+  EXPECT_EQ(processor->descriptor_set_ordinal,
+            LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE);
   EXPECT_EQ(processor->elf_machine_flags, 0x04Cu);
   EXPECT_EQ(processor->default_wavefront_size, 64u);
   EXPECT_EQ(processor->matrix_feature_profile,
@@ -81,7 +86,8 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx1170AsMatrixOnlyProcessor) {
       loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx1170"), &processor));
   ASSERT_NE(processor, nullptr);
   EXPECT_TRUE(iree_string_view_is_empty(processor->descriptor_set_key));
-  EXPECT_EQ(processor->descriptor_set_stable_id, 0u);
+  EXPECT_EQ(processor->descriptor_set_ordinal,
+            LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE);
   EXPECT_EQ(processor->elf_machine_flags, 0x05Du);
   EXPECT_EQ(processor->default_wavefront_size, 32u);
   EXPECT_EQ(processor->matrix_feature_profile,

@@ -15,7 +15,7 @@ kernel.def target(@target) @subgroup_id_x_wave32(%output: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_id_x_wave32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_id_x_wave32() asm<amdgpu.rdna3.core> {
   %8 = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 8} : reg<amdgpu.sgpr x2>
   %subgroup_id = v_lshrrev_b32_lit %8, 5
@@ -43,7 +43,7 @@ kernel.def target(@target) @subgroup_id_single_wave_gfx11(%output: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(32, 1, 1) @subgroup_id_single_wave_gfx11() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(32, 1, 1) @subgroup_id_single_wave_gfx11() asm<amdgpu.rdna3.core> {
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x2>
   %subgroup_id = v_mov_b32 0
   %one = v_mov_b32 1
@@ -72,7 +72,7 @@ kernel.def target(@target) @subgroup_lane_id_xyz_wave32(%output: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wave32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wave32() asm<amdgpu.rdna3.core> {
   %packed_tid = live_in<amdgpu.workitem_id.packed.xyz> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
   %12 = v_and_b32_lit %packed_tid, 1023
@@ -111,7 +111,7 @@ kernel.def target(@target) @subgroup_lane_id_xyz_wave32_gfx12(%output: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wave32_gfx12() asm<amdgpu.gfx12.core> {
+low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wave32_gfx12() asm<amdgpu.rdna4.core> {
   %packed_tid = live_in<amdgpu.workitem_id.packed.xyz> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
   %12 = v_and_b32_lit %packed_tid, 1023

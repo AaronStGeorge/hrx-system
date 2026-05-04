@@ -22,7 +22,7 @@ kernel.def target(@target) @i32_bitwise(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_bitwise() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_bitwise() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
@@ -60,7 +60,7 @@ kernel.def target(@target) @i32_shift(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_shift() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_shift() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
@@ -96,7 +96,7 @@ kernel.def target(@target) @i32_negative_literal(%input: buffer, %output: buffer
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_negative_literal() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_negative_literal() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
@@ -137,7 +137,7 @@ kernel.def target(@target) @i32_scalarized(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_scalarized() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_scalarized() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>

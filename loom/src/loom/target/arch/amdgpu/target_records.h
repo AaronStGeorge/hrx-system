@@ -9,6 +9,8 @@
 #ifndef LOOM_TARGET_ARCH_AMDGPU_TARGET_RECORDS_H_
 #define LOOM_TARGET_ARCH_AMDGPU_TARGET_RECORDS_H_
 
+#include <stdint.h>
+
 #include "loom/target/types.h"
 
 #ifdef __cplusplus
@@ -17,10 +19,10 @@ extern "C" {
 
 extern const loom_target_bundle_table_t loom_amdgpu_target_bundles;
 
-// Returns the target bundle selected by an AMDGPU descriptor-set stable ID, or
+// Returns the target bundle selected by an AMDGPU descriptor-set ordinal, or
 // NULL when no target record is supported for that descriptor set.
 const loom_target_bundle_t* loom_amdgpu_target_bundle_for_descriptor_set(
-    uint64_t descriptor_set_stable_id);
+    uint16_t descriptor_set_ordinal);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -8,10 +8,11 @@
 
 #include <inttypes.h>
 
-#include "loom/target/arch/amdgpu/gfx11_encoding_tables.h"
-#include "loom/target/arch/amdgpu/gfx1250_encoding_tables.h"
-#include "loom/target/arch/amdgpu/gfx12_encoding_tables.h"
-#include "loom/target/arch/amdgpu/gfx950_encoding_tables.h"
+#include "loom/target/arch/amdgpu/cdna4_encoding_tables.h"
+#include "loom/target/arch/amdgpu/rdna3_encoding_tables.h"
+#include "loom/target/arch/amdgpu/rdna4_encoding_tables.h"
+#include "loom/target/arch/amdgpu/rdna4_gfx125x_encoding_tables.h"
+#include "loom/target/arch/amdgpu/target_info.h"
 
 static uint64_t loom_amdgpu_encoding_u64_mask(uint8_t bit_count) {
   if (bit_count == 0) {
@@ -218,21 +219,23 @@ static bool loom_amdgpu_encoding_sisrc_inline_u32(
 }
 
 const loom_amdgpu_encoding_table_t*
-loom_amdgpu_encoding_table_for_descriptor_set_id(
-    uint64_t descriptor_set_stable_id) {
-  const loom_amdgpu_encoding_table_t* tables[] = {
-      loom_amdgpu_gfx950_encoding_table(),
-      loom_amdgpu_gfx11_encoding_table(),
-      loom_amdgpu_gfx12_encoding_table(),
-      loom_amdgpu_gfx1250_encoding_table(),
-  };
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(tables); ++i) {
-    const loom_amdgpu_encoding_table_t* table = tables[i];
-    if (descriptor_set_stable_id == table->descriptor_set_stable_id) {
-      return table;
-    }
+loom_amdgpu_encoding_table_for_descriptor_set_ordinal(
+    uint16_t descriptor_set_ordinal) {
+  const loom_amdgpu_encoding_table_t* const
+      tables[LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_COUNT] = {
+          [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA4] =
+              loom_amdgpu_cdna4_encoding_table(),
+          [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3] =
+              loom_amdgpu_rdna3_encoding_table(),
+          [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4] =
+              loom_amdgpu_rdna4_encoding_table(),
+          [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4_GFX125X] =
+              loom_amdgpu_rdna4_gfx125x_encoding_table(),
+      };
+  if (descriptor_set_ordinal >= IREE_ARRAYSIZE(tables)) {
+    return NULL;
   }
-  return NULL;
+  return tables[descriptor_set_ordinal];
 }
 
 iree_status_t loom_amdgpu_encoding_pack(

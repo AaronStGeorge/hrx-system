@@ -12,6 +12,6 @@ kernel.def target(@target) @computed_launch_config_workgroup_size() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(64, 1, 1) @computed_launch_config_workgroup_size() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @computed_launch_config_workgroup_size() asm<amdgpu.rdna3.core> {
   return
 }

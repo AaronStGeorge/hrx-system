@@ -52,16 +52,17 @@ loom_assert_no_dependencies(
         "//loom/src/loom/target/emit/llvmir:llvmir",
     ],
     targets = [
-        ":gfx11_descriptors",
-        ":gfx1250_descriptors",
-        ":gfx12_descriptors",
-        ":gfx950_descriptors",
+        ":rdna3_descriptors",
+        ":rdna4_gfx125x_descriptors",
+        ":rdna4_descriptors",
+        ":cdna4_descriptors",
         ":hal_kernel_abi",
         ":hal_binding_materialization",
         ":low_registry",
         ":matrix_contract",
         ":matrix_contract_projection",
         ":occupancy",
+        ":occupancy_tables",
         ":packet_diagnostics",
         ":register_class",
         ":target_info",
@@ -75,6 +76,7 @@ loom_assert_no_dependencies(
     dependencies = [":low_registry"],
     targets = [
         ":occupancy",
+        ":occupancy_tables",
         ":packet_diagnostics",
         ":target_info",
         ":wait_packets",
@@ -86,20 +88,20 @@ loom_assert_no_dependencies(
     name = "amdgpu_descriptor_shards_no_matrix_contract_dep",
     dependencies = [":matrix_contract"],
     targets = [
-        ":gfx11_descriptors",
-        ":gfx1250_descriptors",
-        ":gfx12_descriptors",
-        ":gfx950_descriptors",
+        ":rdna3_descriptors",
+        ":rdna4_gfx125x_descriptors",
+        ":rdna4_descriptors",
+        ":cdna4_descriptors",
     ],
 )
 
 loom_assert_no_dependencies(
     name = "core_target_interfaces_no_amdgpu_target_deps",
     dependencies = [
-        ":gfx11_descriptors",
-        ":gfx1250_descriptors",
-        ":gfx12_descriptors",
-        ":gfx950_descriptors",
+        ":rdna3_descriptors",
+        ":rdna4_gfx125x_descriptors",
+        ":rdna4_descriptors",
+        ":cdna4_descriptors",
         ":low_registry",
         ":matrix_contract",
         ":matrix_contract_projection",
@@ -116,8 +118,8 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "amdgpu_descriptor_ids_no_descriptor_shard_deps",
     dependencies = [
-        ":gfx11_descriptors",
-        ":gfx950_descriptors",
+        ":rdna3_descriptors",
+        ":cdna4_descriptors",
     ],
     targets = [
         ":descriptor_ids",
@@ -128,8 +130,8 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "amdgpu_lower_no_registry_or_descriptor_deps",
     dependencies = [
-        ":gfx11_descriptors",
-        ":gfx950_descriptors",
+        ":rdna3_descriptors",
+        ":cdna4_descriptors",
         ":low_registry",
     ],
     targets = [":lower"],
@@ -138,10 +140,10 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "amdgpu_hal_abi_no_backend_runtime_or_descriptor_deps",
     dependencies = [
-        ":gfx11_descriptors_ids",
-        ":gfx1250_descriptors_ids",
-        ":gfx12_descriptors_ids",
-        ":gfx950_descriptors_ids",
+        ":rdna3_descriptors_ids",
+        ":rdna4_gfx125x_descriptors_ids",
+        ":rdna4_descriptors_ids",
+        ":cdna4_descriptors_ids",
         ":low_registry",
         "//loom/src/loom/target/tool:llvm",
         "//runtime/src/iree/hal/drivers/amdgpu",
@@ -152,8 +154,8 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "amdgpu_hal_binding_materialization_no_backend_runtime_or_descriptor_deps",
     dependencies = [
-        ":gfx11_descriptors",
-        ":gfx950_descriptors",
+        ":rdna3_descriptors",
+        ":cdna4_descriptors",
         ":low_registry",
         "//loom/src/loom/target/tool:llvm",
         "//runtime/src/iree/hal/drivers/amdgpu",
@@ -264,6 +266,8 @@ _AMDGPU_ATOMIC_CANDIDATE_GENERATOR = "//loom/py/loom/gen:amdgpu_atomic_candidate
 
 _AMDGPU_ENCODING_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_encoding_tables"
 
+_AMDGPU_OCCUPANCY_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_occupancy_tables"
+
 loom_cc_library(
     name = "encoding_defs",
     hdrs = ["encoding.h"],
@@ -287,10 +291,7 @@ loom_cc_library(
 loom_cc_library(
     name = "register_class",
     hdrs = ["register_class.h"],
-    deps = [
-        ":gfx950_descriptors_ids",
-        "//loom/src/loom/codegen/low:descriptors",
-    ],
+    deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
 loom_target_table_cc_library(
@@ -314,12 +315,12 @@ loom_target_table_cc_library(
 )
 
 loom_target_table_cc_library(
-    name = "gfx11_encoding_tables",
+    name = "rdna3_encoding_tables",
     args = [
-        "--target=gfx11",
-        "--descriptor-set-key=amdgpu.gfx11.core",
+        "--target=rdna3",
+        "--descriptor-set-key=amdgpu.rdna3.core",
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna3.xml)",
-        "--public-header=loom/target/arch/amdgpu/gfx11_encoding_tables.h",
+        "--public-header=loom/target/arch/amdgpu/rdna3_encoding_tables.h",
     ],
     exclude_from_cmake_all = True,
     generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
@@ -331,12 +332,12 @@ loom_target_table_cc_library(
 )
 
 loom_target_table_cc_library(
-    name = "gfx12_encoding_tables",
+    name = "rdna4_encoding_tables",
     args = [
-        "--target=gfx12",
-        "--descriptor-set-key=amdgpu.gfx12.core",
+        "--target=rdna4",
+        "--descriptor-set-key=amdgpu.rdna4.core",
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
-        "--public-header=loom/target/arch/amdgpu/gfx12_encoding_tables.h",
+        "--public-header=loom/target/arch/amdgpu/rdna4_encoding_tables.h",
     ],
     exclude_from_cmake_all = True,
     generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
@@ -348,12 +349,12 @@ loom_target_table_cc_library(
 )
 
 loom_target_table_cc_library(
-    name = "gfx1250_encoding_tables",
+    name = "rdna4_gfx125x_encoding_tables",
     args = [
-        "--target=gfx1250",
-        "--descriptor-set-key=amdgpu.gfx1250.core",
+        "--target=rdna4_gfx125x",
+        "--descriptor-set-key=amdgpu.rdna4.gfx125x.core",
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
-        "--public-header=loom/target/arch/amdgpu/gfx1250_encoding_tables.h",
+        "--public-header=loom/target/arch/amdgpu/rdna4_gfx125x_encoding_tables.h",
     ],
     exclude_from_cmake_all = True,
     generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
@@ -365,12 +366,12 @@ loom_target_table_cc_library(
 )
 
 loom_target_table_cc_library(
-    name = "gfx950_encoding_tables",
+    name = "cdna4_encoding_tables",
     args = [
-        "--target=gfx950",
-        "--descriptor-set-key=amdgpu.gfx950.core",
+        "--target=cdna4",
+        "--descriptor-set-key=amdgpu.cdna4.core",
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna4.xml)",
-        "--public-header=loom/target/arch/amdgpu/gfx950_encoding_tables.h",
+        "--public-header=loom/target/arch/amdgpu/cdna4_encoding_tables.h",
     ],
     exclude_from_cmake_all = True,
     generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
@@ -386,19 +387,20 @@ loom_cc_library(
     srcs = ["encoding.c"],
     hdrs = ["encoding.h"],
     deps = [
+        ":cdna4_encoding_tables",
         ":encoding_defs",
-        ":gfx11_encoding_tables",
-        ":gfx1250_encoding_tables",
-        ":gfx12_encoding_tables",
-        ":gfx950_encoding_tables",
+        ":rdna3_encoding_tables",
+        ":rdna4_encoding_tables",
+        ":rdna4_gfx125x_encoding_tables",
+        ":target_info",
         "//runtime/src/iree/base",
     ],
 )
 
 loom_low_descriptor_cc_library(
-    name = "gfx11_descriptors",
+    name = "rdna3_descriptors",
     args = [
-        "--target=gfx11",
+        "--target=rdna3",
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna3.xml)",
     ],
     exclude_from_cmake_all = True,
@@ -408,9 +410,9 @@ loom_low_descriptor_cc_library(
 )
 
 loom_low_descriptor_cc_library(
-    name = "gfx12_descriptors",
+    name = "rdna4_descriptors",
     args = [
-        "--target=gfx12",
+        "--target=rdna4",
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
     ],
     exclude_from_cmake_all = True,
@@ -420,9 +422,9 @@ loom_low_descriptor_cc_library(
 )
 
 loom_low_descriptor_cc_library(
-    name = "gfx1250_descriptors",
+    name = "rdna4_gfx125x_descriptors",
     args = [
-        "--target=gfx1250",
+        "--target=rdna4_gfx125x",
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
     ],
     exclude_from_cmake_all = True,
@@ -432,9 +434,9 @@ loom_low_descriptor_cc_library(
 )
 
 loom_low_descriptor_cc_library(
-    name = "gfx950_descriptors",
+    name = "cdna4_descriptors",
     args = [
-        "--target=gfx950",
+        "--target=cdna4",
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna4.xml)",
     ],
     exclude_from_cmake_all = True,
@@ -448,7 +450,7 @@ loom_cc_library(
     srcs = ["target_records.c"],
     hdrs = ["target_records.h"],
     deps = [
-        ":target_info_defs",
+        ":target_info",
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
     ],
@@ -459,10 +461,10 @@ loom_cc_library(
     srcs = ["low_registry.c"],
     hdrs = ["low_registry.h"],
     deps = [
-        ":gfx11_descriptors",
-        ":gfx1250_descriptors",
-        ":gfx12_descriptors",
-        ":gfx950_descriptors",
+        ":cdna4_descriptors",
+        ":rdna3_descriptors",
+        ":rdna4_descriptors",
+        ":rdna4_gfx125x_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:types",
@@ -774,6 +776,7 @@ loom_check_test_suite(
         "test/source_low/source_low_diagnostics.loom-test",
         "test/source_low/source_low_dot.loom-test",
         "test/source_low/source_low_index.loom-test",
+        "test/source_low/source_low_index_amdgpu.loom-test",
         "test/source_low/source_low_launch_config.loom-test",
         "test/source_low/source_low_mask.loom-test",
         "test/source_low/source_low_memory_generic_atomic.loom-test",
@@ -882,15 +885,21 @@ loom_cc_library(
     ],
 )
 
+loom_target_table_cc_library(
+    name = "occupancy_tables",
+    generator = _AMDGPU_OCCUPANCY_TABLE_GENERATOR,
+    deps = [
+        ":target_info",
+        "//runtime/src/iree/base",
+    ],
+)
+
 loom_cc_library(
     name = "occupancy",
     srcs = ["occupancy.c"],
     hdrs = ["occupancy.h"],
     deps = [
-        ":gfx11_descriptors_ids",
-        ":gfx1250_descriptors_ids",
-        ":gfx12_descriptors_ids",
-        ":gfx950_descriptors_ids",
+        ":occupancy_tables",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/codegen/low/schedule",

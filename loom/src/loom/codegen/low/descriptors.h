@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 18u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 19u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -35,6 +35,9 @@ extern "C" {
 
 // Sentinel for absent 16-bit table identifiers.
 #define LOOM_LOW_ID_NONE UINT16_MAX
+
+// Sentinel for descriptor sets that are not part of a target-owned dense table.
+#define LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE UINT16_MAX
 
 // Sentinel for absent descriptor ordinals.
 #define LOOM_LOW_DESCRIPTOR_ORDINAL_NONE UINT32_MAX
@@ -673,6 +676,9 @@ typedef struct loom_low_descriptor_set_t {
   uint64_t stable_id;
   // Durable target-family identity derived from the target-family key, or NONE.
   uint64_t target_stable_id;
+  // Target-generated dense descriptor-set ordinal, or NONE when this set is not
+  // part of a target-owned dense descriptor-set table.
+  uint16_t descriptor_set_ordinal;
   // String-table offset for the descriptor-set key.
   loom_bstring_table_offset_t key_string_offset;
   // String-table offset for the target-family key.

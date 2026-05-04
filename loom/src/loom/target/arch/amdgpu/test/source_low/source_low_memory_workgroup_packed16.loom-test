@@ -22,7 +22,7 @@ kernel.def target(@target) @lds_f16x4_b64_roundtrip(%input: buffer, %output: buf
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16x4_b64_roundtrip() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16x4_b64_roundtrip() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
@@ -61,7 +61,7 @@ kernel.def target(@target) @lds_f16x8_b128_roundtrip(%input: buffer, %output: bu
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16x8_b128_roundtrip() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16x8_b128_roundtrip() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
@@ -100,7 +100,7 @@ kernel.def target(@target) @lds_bf16x4_b64_roundtrip(%input: buffer, %output: bu
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_bf16x4_b64_roundtrip() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_bf16x4_b64_roundtrip() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
@@ -139,7 +139,7 @@ kernel.def target(@target) @lds_bf16x8_b128_roundtrip(%input: buffer, %output: b
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_bf16x8_b128_roundtrip() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_bf16x8_b128_roundtrip() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>

@@ -33,6 +33,7 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_AMDHSA_TARGET_TRIPLE,
     AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE,
     AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT,
+    AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE,
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11,
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
     AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A,
@@ -49,11 +50,11 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE,
     AmdgpuDescriptorSetInfo,
     AmdgpuProcessorInfo,
+    amdgpu_descriptor_set_ordinal,
     sorted_descriptor_set_infos,
     sorted_processor_infos,
     validate_amdgpu_descriptor_set_isa_xml,
 )
-from loom.target.low_descriptors import descriptor_stable_id  # noqa: E402
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,12 +77,24 @@ def _bool_literal(value: bool) -> str:
     return "true" if value else "false"
 
 
-def _u64_expr(value: int) -> str:
-    return f"UINT64_C(0x{value:016x})"
+def _u16_expr(value: int) -> str:
+    return f"UINT16_C({value})"
 
 
 def _padded_arg(value: str, width: int) -> str:
     return f"{value},{' ' * (width - len(value) + 1)}"
+
+
+def _descriptor_set_ordinal_suffix(key: str) -> str:
+    prefix = "amdgpu."
+    suffix = ".core"
+    if not key.startswith(prefix) or not key.endswith(suffix):
+        raise ValueError(f"AMDGPU descriptor-set key '{key}' must be a core key")
+    return key.removeprefix(prefix).removesuffix(suffix).replace(".", "_").upper()
+
+
+def _descriptor_set_ordinal_constant_name(key: str) -> str:
+    return f"LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_{_descriptor_set_ordinal_suffix(key)}"
 
 
 def _kernel_descriptor_profile_expr(profile: str) -> str:
@@ -187,9 +200,8 @@ def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
         raise ValueError("AMDGPU descriptor-set target-info keys must be sorted")
     if len(keys) != len(set(keys)):
         raise ValueError("AMDGPU descriptor-set target-info keys must be unique")
-    stable_ids = [descriptor_stable_id(key) for key in keys]
-    if len(stable_ids) != len(set(stable_ids)):
-        raise ValueError("AMDGPU descriptor-set target-info stable IDs must be unique")
+    if len(keys) >= AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE:
+        raise ValueError("AMDGPU descriptor-set ordinals must fit uint16_t")
     generator_targets = [info.generator_target for info in descriptor_sets]
     if len(generator_targets) != len(set(generator_targets)):
         raise ValueError("AMDGPU descriptor generator targets must be unique")
@@ -246,7 +258,7 @@ def _validate_processors(
             raise ValueError(f"AMDGPU processor {info.target_cpu} has a kernel descriptor profile but no ELF machine flags")
 
 
-def _emit_header() -> str:
+def _emit_header(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]) -> str:
     guard = "LOOM_TARGET_ARCH_AMDGPU_TARGET_INFO_H_"
     lines = [
         "// Copyright 2026 The IREE Authors",
@@ -262,20 +274,33 @@ def _emit_header() -> str:
         "",
         '#include "loom/target/arch/amdgpu/target_info_defs.h"',
         "",
-        f"#endif  // {guard}",
+        "// Generated dense descriptor-set ordinals.",
     ]
+    lines.extend(f"#define {_descriptor_set_ordinal_constant_name(info.key)} {_u16_expr(amdgpu_descriptor_set_ordinal(info.key))}" for info in descriptor_sets)
+    lines.extend(
+        [
+            f"#define LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_COUNT {_u16_expr(len(descriptor_sets))}",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            f"#endif  // {guard}",
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 
 def _emit_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> list[str]:
     key_width = max(len(_c_string_arg(row.info.key)) for row in rows)
+    ordinal_width = len("UINT16_C(65535)")
     opcode_width = len("0x000")
     packet_encoding_width = len("packet_encoding")
     cache_swizzle_width = len("LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT")
     lines = [
-        "#define LOOM_AMDGPU_DESCRIPTOR_SET_INFO(stable_id_, descriptor_set_key_, s_endpgm_opcode_, s_branch_opcode_, s_cbranch_scc1_opcode_, supports_descriptor_packet_encoding_, buffer_resource_cache_swizzle_, vector_memory_cache_policy_encoding_) \\",
+        "#define LOOM_AMDGPU_DESCRIPTOR_SET_INFO(ordinal_, descriptor_set_key_, s_endpgm_opcode_, s_branch_opcode_, s_cbranch_scc1_opcode_, supports_descriptor_packet_encoding_, buffer_resource_cache_swizzle_, vector_memory_cache_policy_encoding_) \\",
         "  { \\",
-        "    .descriptor_set_stable_id = stable_id_, \\",
+        "    .descriptor_set_ordinal = ordinal_, \\",
         "    .descriptor_set_key = IREE_SVL(descriptor_set_key_), \\",
         "    .s_endpgm_opcode = UINT16_C(s_endpgm_opcode_), \\",
         "    .s_branch_opcode = UINT16_C(s_branch_opcode_), \\",
@@ -286,12 +311,12 @@ def _emit_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> list[s
         "  }",
         "",
         "static const loom_amdgpu_descriptor_set_info_t kAmdgpuDescriptorSetInfos[] = {",
-        "  // stable_id            descriptor_set_key     s_endpgm s_branch s_cbranch_scc1 packet_encoding cache_swizzle cache_policy",
+        "  // ordinal         descriptor_set_key     s_endpgm s_branch s_cbranch_scc1 packet_encoding cache_swizzle cache_policy",
     ]
     lines.extend(
         (
             "  LOOM_AMDGPU_DESCRIPTOR_SET_INFO("
-            f"{_padded_arg(_u64_expr(descriptor_stable_id(info.key)), len('UINT64_C(0xffffffffffffffff)'))}"
+            f"{_padded_arg(_u16_expr(amdgpu_descriptor_set_ordinal(info.key)), ordinal_width)}"
             f"{_padded_arg(_c_string_arg(info.key), key_width)}"
             f"{_padded_arg(f'0x{row.s_endpgm_opcode:03x}', opcode_width)}"
             f"{_padded_arg(f'0x{row.s_branch_opcode:03x}', opcode_width)}"
@@ -311,6 +336,7 @@ def _emit_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> list[s
 def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]:
     target_cpu_width = max(len(_c_string_arg(info.target_cpu)) for info in processors)
     descriptor_set_width = max(len(_c_string_arg(info.descriptor_set_key)) for info in processors)
+    ordinal_width = len("UINT16_C(65535)")
     machine_flags_width = len("0x000")
     feature_flags_width = len("0x0")
     wavefront_width = 2
@@ -319,11 +345,11 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
     register_granule_width = 1
     bool_width = len("false")
     lines = [
-        "#define LOOM_AMDGPU_PROCESSOR_INFO(target_cpu_, descriptor_set_key_, descriptor_set_stable_id_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, kernel_descriptor_profile_, matrix_feature_profile_, vgpr_granule_wave32_, vgpr_granule_wave64_, has_flat_scratch_, uses_gfx10_sgpr_, has_dx10_ieee_, has_packed_tid_) \\",
+        "#define LOOM_AMDGPU_PROCESSOR_INFO(target_cpu_, descriptor_set_key_, descriptor_set_ordinal_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, kernel_descriptor_profile_, matrix_feature_profile_, vgpr_granule_wave32_, vgpr_granule_wave64_, has_flat_scratch_, uses_gfx10_sgpr_, has_dx10_ieee_, has_packed_tid_) \\",
         "  { \\",
         "    .target_cpu = IREE_SVL(target_cpu_), \\",
         "    .descriptor_set_key = IREE_SVL(descriptor_set_key_), \\",
-        "    .descriptor_set_stable_id = descriptor_set_stable_id_, \\",
+        "    .descriptor_set_ordinal = descriptor_set_ordinal_, \\",
         "    .elf_machine_flags = UINT32_C(elf_machine_flags_), \\",
         "    .elf_feature_flags = UINT32_C(elf_feature_flags_), \\",
         "    .default_wavefront_size = default_wavefront_size_, \\",
@@ -338,14 +364,14 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
         "  }",
         "",
         "static const loom_amdgpu_processor_info_t kAmdgpuProcessorInfos[] = {",
-        "  // target_cpu descriptor_set_key    stable_id            mach  feat wave kernel_profile                             matrix_profile                             vgpr32 vgpr64 flat_scratch gfx10_sgpr dx10_ieee packed_tid",
+        "  // target_cpu descriptor_set_key    ordinal         mach  feat wave kernel_profile                             matrix_profile                             vgpr32 vgpr64 flat_scratch gfx10_sgpr dx10_ieee packed_tid",
     ]
     lines.extend(
         (
             "  LOOM_AMDGPU_PROCESSOR_INFO("
             f"{_padded_arg(_c_string_arg(info.target_cpu), target_cpu_width)}"
             f"{_padded_arg(_c_string_arg(info.descriptor_set_key), descriptor_set_width)}"
-            f"{_padded_arg(_u64_expr(descriptor_stable_id(info.descriptor_set_key)) if info.descriptor_set_key else _u64_expr(0), len('UINT64_C(0xffffffffffffffff)'))}"
+            f"{_padded_arg(_u16_expr(amdgpu_descriptor_set_ordinal(info.descriptor_set_key)) if info.descriptor_set_key else 'LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE', ordinal_width)}"
             f"{_padded_arg(f'0x{info.elf_machine_flags:03x}', machine_flags_width)}"
             f"{_padded_arg(f'0x{info.elf_feature_flags:x}', feature_flags_width)}"
             f"{_padded_arg(str(info.default_wavefront_size), wavefront_width)}"
@@ -402,6 +428,19 @@ def _emit_source(
             "    return NULL;",
             "  }",
             "  return &kAmdgpuProcessorInfos[index];",
+            "}",
+            "",
+            "iree_host_size_t loom_amdgpu_target_info_descriptor_set_count(void) {",
+            "  return IREE_ARRAYSIZE(kAmdgpuDescriptorSetInfos);",
+            "}",
+            "",
+            "const loom_amdgpu_descriptor_set_info_t*",
+            "loom_amdgpu_target_info_descriptor_set_at(",
+            "    uint16_t descriptor_set_ordinal) {",
+            "  if (descriptor_set_ordinal >= IREE_ARRAYSIZE(kAmdgpuDescriptorSetInfos)) {",
+            "    return NULL;",
+            "  }",
+            "  return &kAmdgpuDescriptorSetInfos[descriptor_set_ordinal];",
             "}",
             "",
             "iree_status_t loom_amdgpu_target_info_lookup_processor(",
@@ -469,49 +508,32 @@ def _emit_source(
             "      (int)descriptor_set_key.size, descriptor_set_key.data);",
             "}",
             "",
-            "const loom_amdgpu_descriptor_set_info_t*",
-            "loom_amdgpu_target_info_descriptor_set_by_id(",
-            "    uint64_t descriptor_set_stable_id) {",
-            "  switch (descriptor_set_stable_id) {",
-        ]
-    )
-    for index, row in enumerate(descriptor_set_rows):
-        lines.extend(
-            [
-                f"    case {_u64_expr(descriptor_stable_id(row.info.key))}:",
-                f"      return &kAmdgpuDescriptorSetInfos[{index}];",
-            ]
-        )
-    lines.extend(
-        [
-            "    default:",
-            "      break;",
-            "  }",
-            "  return NULL;",
-            "}",
-            "",
-            "iree_status_t loom_amdgpu_target_info_lookup_descriptor_set_by_id(",
-            "    uint64_t descriptor_set_stable_id,",
+            "iree_status_t loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(",
+            "    uint16_t descriptor_set_ordinal,",
             "    const loom_amdgpu_descriptor_set_info_t** out_descriptor_set) {",
             "  IREE_ASSERT_ARGUMENT(out_descriptor_set);",
             "  *out_descriptor_set = NULL;",
-            "  if (descriptor_set_stable_id == 0) {",
+            "  if (descriptor_set_ordinal == LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE) {",
             "    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,",
-            '                            "AMDGPU descriptor set stable ID is required");',
+            '                            "AMDGPU descriptor set ordinal is required");',
             "  }",
             "  const loom_amdgpu_descriptor_set_info_t* descriptor_set =",
-            "      loom_amdgpu_target_info_descriptor_set_by_id(",
-            "          descriptor_set_stable_id);",
+            "      loom_amdgpu_target_info_descriptor_set_at(",
+            "          descriptor_set_ordinal);",
             "  if (descriptor_set != NULL) {",
             "    *out_descriptor_set = descriptor_set;",
             "    return iree_ok_status();",
             "  }",
             "  return iree_make_status(",
             "      IREE_STATUS_UNIMPLEMENTED,",
-            '      "AMDGPU descriptor set stable ID 0x%016" PRIx64',
+            '      "AMDGPU descriptor set ordinal %" PRIu16',
             '      " is not supported by native emission",',
-            "      descriptor_set_stable_id);",
+            "      descriptor_set_ordinal);",
             "}",
+        ]
+    )
+    lines.extend(
+        [
             "",
             "static iree_status_t loom_amdgpu_target_info_validate_target_id_chars(",
             "    iree_string_view_t target_id) {",
@@ -585,7 +607,7 @@ def write_target_info_to_paths(
     _validate_descriptor_sets(descriptor_sets)
     _validate_descriptor_set_rows(descriptor_set_rows)
     _validate_processors(processors, descriptor_sets)
-    header = _emit_header()
+    header = _emit_header(descriptor_sets)
     source = _emit_source(processors, descriptor_set_rows)
     header_path.parent.mkdir(parents=True, exist_ok=True)
     source_path.parent.mkdir(parents=True, exist_ok=True)

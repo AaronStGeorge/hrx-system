@@ -1,6 +1,6 @@
 // RUN: emit amdgpu-assembly @gfx11_wmma_base waits=none
 amdgpu.target<gfx1100> @gfx11_target
-low.func.def target(@gfx11_target) @gfx11_wmma_base(%a8: reg<amdgpu.vgpr x8>, %b8: reg<amdgpu.vgpr x8>, %a4: reg<amdgpu.vgpr x4>, %b4: reg<amdgpu.vgpr x4>, %a2: reg<amdgpu.vgpr x2>, %b2: reg<amdgpu.vgpr x2>, %acc: reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_target) @gfx11_wmma_base(%a8: reg<amdgpu.vgpr x8>, %b8: reg<amdgpu.vgpr x8>, %a4: reg<amdgpu.vgpr x4>, %b4: reg<amdgpu.vgpr x4>, %a2: reg<amdgpu.vgpr x2>, %b2: reg<amdgpu.vgpr x2>, %acc: reg<amdgpu.vgpr x8>) asm<amdgpu.rdna3.core> {
   %f32_f16 = v_wmma_f32_16x16x16_f16 %a8, %b8, %acc
   %f32_bf16 = v_wmma_f32_16x16x16_bf16 %a8, %b8, %f32_f16
   %f16 = v_wmma_f16_16x16x16_f16 %a8, %b8, %f32_bf16
@@ -24,7 +24,7 @@ low.func.def target(@gfx11_target) @gfx11_wmma_base(%a8: reg<amdgpu.vgpr x8>, %b
 
 // RUN: emit amdgpu-assembly @gfx12_wmma_base waits=none
 amdgpu.target<gfx1200> @gfx12_target
-low.func.def target(@gfx12_target) @gfx12_wmma_base(%a4: reg<amdgpu.vgpr x4>, %b4: reg<amdgpu.vgpr x4>, %a2: reg<amdgpu.vgpr x2>, %b2: reg<amdgpu.vgpr x2>, %a1: reg<amdgpu.vgpr>, %b1: reg<amdgpu.vgpr>, %acc8: reg<amdgpu.vgpr x8>, %acc4: reg<amdgpu.vgpr x4>) asm<amdgpu.gfx12.core> {
+low.func.def target(@gfx12_target) @gfx12_wmma_base(%a4: reg<amdgpu.vgpr x4>, %b4: reg<amdgpu.vgpr x4>, %a2: reg<amdgpu.vgpr x2>, %b2: reg<amdgpu.vgpr x2>, %a1: reg<amdgpu.vgpr>, %b1: reg<amdgpu.vgpr>, %acc8: reg<amdgpu.vgpr x8>, %acc4: reg<amdgpu.vgpr x4>) asm<amdgpu.rdna4.core> {
   %f32_f16 = v_wmma_f32_16x16x16_f16 %a4, %b4, %acc8
   %f32_bf16 = v_wmma_f32_16x16x16_bf16 %a4, %b4, %f32_f16
   %f16 = v_wmma_f16_16x16x16_f16 %a4, %b4, %acc4
@@ -58,7 +58,7 @@ low.func.def target(@gfx12_target) @gfx12_wmma_base(%a4: reg<amdgpu.vgpr x4>, %b
 
 // RUN: emit amdgpu-assembly @gfx1250_wmma_base waits=none
 amdgpu.target<gfx1250> @gfx1250_target
-low.func.def target(@gfx1250_target) @gfx1250_wmma_base(%a4: reg<amdgpu.vgpr x4>, %b4: reg<amdgpu.vgpr x4>, %a2: reg<amdgpu.vgpr x2>, %b2: reg<amdgpu.vgpr x2>, %a1: reg<amdgpu.vgpr>, %b1: reg<amdgpu.vgpr>, %acc8: reg<amdgpu.vgpr x8>, %acc4: reg<amdgpu.vgpr x4>) asm<amdgpu.gfx1250.core> {
+low.func.def target(@gfx1250_target) @gfx1250_wmma_base(%a4: reg<amdgpu.vgpr x4>, %b4: reg<amdgpu.vgpr x4>, %a2: reg<amdgpu.vgpr x2>, %b2: reg<amdgpu.vgpr x2>, %a1: reg<amdgpu.vgpr>, %b1: reg<amdgpu.vgpr>, %acc8: reg<amdgpu.vgpr x8>, %acc4: reg<amdgpu.vgpr x4>) asm<amdgpu.rdna4.gfx125x.core> {
   %f32_f16 = v_wmma_f32_16x16x16_f16 %a4, %b4, %acc8
   %f32_bf16 = v_wmma_f32_16x16x16_bf16 %a4, %b4, %f32_f16
   %f16 = v_wmma_f16_16x16x16_f16 %a4, %b4, %acc4
