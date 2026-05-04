@@ -21,16 +21,6 @@ from loom.error.target import (
     ERR_TARGET_006,
     ERR_TARGET_007,
     ERR_TARGET_008,
-    ERR_TARGET_009,
-    ERR_TARGET_010,
-    ERR_TARGET_011,
-    ERR_TARGET_012,
-    ERR_TARGET_013,
-    ERR_TARGET_014,
-    ERR_TARGET_015,
-    ERR_TARGET_016,
-    ERR_TARGET_017,
-    ERR_TARGET_018,
 )
 from loom.errors import ErrorDef
 from loom.target.contracts.diagnostics import (
@@ -1485,11 +1475,7 @@ def _value_type_diagnostic(field: str, type_pattern: TypePattern) -> DiagnosticR
 
 
 def _enum_attr_diagnostic(field: str, enum_keyword: str) -> DiagnosticRef:
-    return target_diagnostic(
-        ERR_TARGET_004,
-        string_param("field_name", field),
-        string_param("expected_case", enum_keyword),
-    )
+    return _named_constraint_diagnostic("field", field, "enum_case", enum_keyword)
 
 
 def _i64_attr_range_diagnostic(
@@ -1497,42 +1483,39 @@ def _i64_attr_range_diagnostic(
     minimum: int,
     maximum: int,
 ) -> DiagnosticRef:
-    return target_diagnostic(
-        ERR_TARGET_005,
-        string_param("field_name", field),
-        i64_param("minimum", minimum),
-        i64_param("maximum", maximum),
+    return _range_constraint_diagnostic(
+        "field", field, "i64_attr_range", minimum, maximum
     )
 
 
 def _descriptor_available_diagnostic(descriptor: Descriptor) -> DiagnosticRef:
-    return target_diagnostic(
-        ERR_TARGET_006,
-        string_param("descriptor_key", descriptor.key),
+    return _named_constraint_diagnostic(
+        "descriptor",
+        descriptor.key,
+        "descriptor_available",
+        "enabled",
     )
 
 
 def _materializer_diagnostic(field: str, materializer: str) -> DiagnosticRef:
-    return target_diagnostic(
-        ERR_TARGET_007,
-        string_param("field_name", field),
-        string_param("materializer_key", materializer),
-    )
+    return _named_constraint_diagnostic("field", field, "materializer", materializer)
 
 
 def _register_class_diagnostic(field: str, register_class: str) -> DiagnosticRef:
-    return target_diagnostic(
-        ERR_TARGET_008,
-        string_param("field_name", field),
-        string_param("register_class", register_class),
+    return _named_constraint_diagnostic(
+        "field",
+        field,
+        "low_register_class",
+        register_class,
     )
 
 
 def _static_dim0_multiple_diagnostic(field: str, multiple: int) -> DiagnosticRef:
-    return target_diagnostic(
-        ERR_TARGET_009,
-        string_param("field_name", field),
-        u32_param("multiple", multiple),
+    return _count_constraint_diagnostic(
+        "field",
+        field,
+        "static_dim0_multiple",
+        multiple,
     )
 
 
@@ -1540,27 +1523,25 @@ def _register_unit_count_diagnostic(
     field: str,
     other_field: str,
 ) -> DiagnosticRef:
-    return target_diagnostic(
-        ERR_TARGET_010,
-        string_param("field_name", field),
-        string_param("other_field_name", other_field),
+    return _relation_constraint_diagnostic(
+        "field",
+        field,
+        other_field,
+        "low_register_unit_count_eq",
     )
 
 
 def _operand_segment_count_diagnostic(field: str, count: int) -> DiagnosticRef:
-    return target_diagnostic(
-        ERR_TARGET_011,
-        string_param("field_name", field),
-        u32_param("expected_count", count),
+    return _count_constraint_diagnostic(
+        "operand_segment",
+        field,
+        "operand_segment_count",
+        count,
     )
 
 
 def _i64_array_count_diagnostic(field: str, count: int) -> DiagnosticRef:
-    return target_diagnostic(
-        ERR_TARGET_012,
-        string_param("field_name", field),
-        u32_param("expected_count", count),
-    )
+    return _count_constraint_diagnostic("i64_array", field, "array_count", count)
 
 
 def _i64_array_element_range_diagnostic(
@@ -1569,12 +1550,13 @@ def _i64_array_element_range_diagnostic(
     minimum: int,
     maximum: int,
 ) -> DiagnosticRef:
-    return target_diagnostic(
-        ERR_TARGET_013,
-        string_param("field_name", field),
-        u32_param("element", element),
-        i64_param("minimum", minimum),
-        i64_param("maximum", maximum),
+    return _element_range_constraint_diagnostic(
+        "i64_array",
+        field,
+        "element_range",
+        element,
+        minimum,
+        maximum,
     )
 
 
@@ -1583,11 +1565,12 @@ def _i64_array_elements_range_diagnostic(
     minimum: int,
     maximum: int,
 ) -> DiagnosticRef:
-    return target_diagnostic(
-        ERR_TARGET_014,
-        string_param("field_name", field),
-        i64_param("minimum", minimum),
-        i64_param("maximum", maximum),
+    return _range_constraint_diagnostic(
+        "i64_array",
+        field,
+        "elements_range",
+        minimum,
+        maximum,
     )
 
 
@@ -1595,19 +1578,16 @@ def _bounded_integer_diagnostic(field: str, guard: Guard) -> DiagnosticRef:
     signedness = (
         "signed" if guard.kind == GuardKind.VALUE_SIGNED_BIT_COUNT else "unsigned"
     )
-    return target_diagnostic(
-        ERR_TARGET_015,
-        string_param("field_name", field),
-        string_param("signedness", signedness),
-        u32_param("bit_count", guard.count or 0),
+    return _count_constraint_diagnostic(
+        "value_fact",
+        field,
+        f"{signedness}_bit_count",
+        guard.count or 0,
     )
 
 
 def _exact_integer_diagnostic(field: str) -> DiagnosticRef:
-    return target_diagnostic(
-        ERR_TARGET_016,
-        string_param("field_name", field),
-    )
+    return _named_constraint_diagnostic("value_fact", field, "exact_i64", "exact")
 
 
 def _integer_range_diagnostic(
@@ -1615,11 +1595,8 @@ def _integer_range_diagnostic(
     minimum: int,
     maximum: int,
 ) -> DiagnosticRef:
-    return target_diagnostic(
-        ERR_TARGET_017,
-        string_param("field_name", field),
-        i64_param("minimum", minimum),
-        i64_param("maximum", maximum),
+    return _range_constraint_diagnostic(
+        "value_fact", field, "i64_range", minimum, maximum
     )
 
 
@@ -1632,16 +1609,93 @@ def _source_memory_diagnostic(
             raise ValueError("source-memory diagnostic is missing an error ref")
         return ref
     return target_diagnostic(
-        ERR_TARGET_018,
+        ERR_TARGET_008,
         string_param("operation_kind", constraint.operation.value),
     )
 
 
 def _attr_diagnostic(field: str, attr_type: str) -> DiagnosticRef:
+    return _named_constraint_diagnostic("field", field, "attr_kind", attr_type)
+
+
+def _named_constraint_diagnostic(
+    subject_kind: str,
+    subject_name: str,
+    constraint_key: str,
+    expected_text: str,
+) -> DiagnosticRef:
     return target_diagnostic(
         ERR_TARGET_003,
-        string_param("field_name", field),
-        string_param("expected_attr_kind", attr_type),
+        string_param("subject_kind", subject_kind),
+        string_param("subject_name", subject_name),
+        string_param("constraint_key", constraint_key),
+        string_param("expected_text", expected_text),
+    )
+
+
+def _count_constraint_diagnostic(
+    subject_kind: str,
+    subject_name: str,
+    constraint_key: str,
+    expected_count: int,
+) -> DiagnosticRef:
+    return target_diagnostic(
+        ERR_TARGET_004,
+        string_param("subject_kind", subject_kind),
+        string_param("subject_name", subject_name),
+        string_param("constraint_key", constraint_key),
+        u32_param("expected_count", expected_count),
+    )
+
+
+def _range_constraint_diagnostic(
+    subject_kind: str,
+    subject_name: str,
+    constraint_key: str,
+    minimum: int,
+    maximum: int,
+) -> DiagnosticRef:
+    return target_diagnostic(
+        ERR_TARGET_005,
+        string_param("subject_kind", subject_kind),
+        string_param("subject_name", subject_name),
+        string_param("constraint_key", constraint_key),
+        i64_param("minimum", minimum),
+        i64_param("maximum", maximum),
+    )
+
+
+def _element_range_constraint_diagnostic(
+    subject_kind: str,
+    subject_name: str,
+    constraint_key: str,
+    element: int,
+    minimum: int,
+    maximum: int,
+) -> DiagnosticRef:
+    return target_diagnostic(
+        ERR_TARGET_006,
+        string_param("subject_kind", subject_kind),
+        string_param("subject_name", subject_name),
+        u32_param("element", element),
+        string_param("constraint_key", constraint_key),
+        i64_param("minimum", minimum),
+        i64_param("maximum", maximum),
+    )
+
+
+def _relation_constraint_diagnostic(
+    subject_kind: str,
+    subject_name: str,
+    other_subject_name: str,
+    constraint_key: str,
+) -> DiagnosticRef:
+    return target_diagnostic(
+        ERR_TARGET_007,
+        string_param("subject_kind", subject_kind),
+        string_param("subject_name", subject_name),
+        string_param("other_subject_name", other_subject_name),
+        string_param("constraint_key", constraint_key),
     )
 
 

@@ -16,7 +16,7 @@ low.func.def target(@target) abi(hal_kernel) @f16_dot2f(%lhs: reg<amdgpu.vgpr>, 
 
 amdgpu.target<gfx942> @target
 func.def target(@target) @bf16_dot2f(%lhs: vector<2xbf16>, %rhs: vector<2xbf16>, %acc: vector<1xf32>) -> (vector<1xf32>) {
-  // ERROR@+1: TARGET/019 {subject_kind="descriptor", subject_name="amdgpu.v_dot2_f32_bf16"}
+  // ERROR@+1: TARGET/009 {subject_kind="descriptor", subject_name="amdgpu.v_dot2_f32_bf16"}
   %dot = vector.dot2f %lhs, %rhs, %acc : vector<2xbf16>, vector<2xbf16>, vector<1xf32>
   func.return %dot : vector<1xf32>
 }
@@ -39,7 +39,7 @@ low.func.def target(@target) abi(hal_kernel) @dot4i_s8s8(%lhs: reg<amdgpu.vgpr>,
 
 amdgpu.target<gfx942> @target
 func.def target(@target) @dot4i_u8s8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
-  // ERROR@+1: TARGET/019 {subject_kind="descriptor", subject_name="amdgpu.v_dot4_i32_iu8"}
+  // ERROR@+1: TARGET/009 {subject_kind="descriptor", subject_name="amdgpu.v_dot4_i32_iu8"}
   %dot = vector.dot4i<u8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
   func.return %dot : vector<1xi32>
 }
@@ -62,7 +62,7 @@ low.func.def target(@target) abi(hal_kernel) @dot8i4_s4s4(%lhs: reg<amdgpu.vgpr>
 
 amdgpu.target<gfx942> @target
 func.def target(@target) @dot8i4_u4s4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi32>) -> (vector<1xi32>) {
-  // ERROR@+1: TARGET/019 {subject_kind="descriptor", subject_name="amdgpu.v_dot8_i32_iu4"}
+  // ERROR@+1: TARGET/009 {subject_kind="descriptor", subject_name="amdgpu.v_dot8_i32_iu4"}
   %dot = vector.dot8i4<u4s4> %lhs, %rhs, %acc : vector<1xi32>
   func.return %dot : vector<1xi32>
 }

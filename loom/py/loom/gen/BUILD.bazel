@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -53,6 +53,22 @@ py_binary(
     name = "c_errors",
     srcs = ["c_errors.py"],
     main = "c_errors.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom:core",
+        "//loom/py/loom/error",
+    ],
+)
+
+py_test(
+    name = "c_errors_test",
+    srcs = [
+        "c_errors.py",
+        "c_errors_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.c_errors_test"],
+    main = "pytest_style_runner.py",
     deps = [
         ":generated_file",
         "//loom/py/loom:core",

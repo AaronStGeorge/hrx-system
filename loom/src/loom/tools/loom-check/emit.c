@@ -21,6 +21,7 @@
 #include "loom/codegen/low/target_binding.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
+#include "loom/error/error_catalog.h"
 #include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
 #include "loom/format/text/printer.h"
@@ -1167,7 +1168,7 @@ static iree_status_t loom_check_emit_write_source_low_text(
         loom_param_string(IREE_SV("source-to-low")),
     };
     const loom_diagnostic_emission_t emission = {
-        .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 22),
+        .error = LOOM_ERR_TARGET_012,
         .params = params,
         .param_count = IREE_ARRAYSIZE(params),
     };

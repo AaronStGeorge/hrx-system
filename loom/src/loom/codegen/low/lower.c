@@ -13,6 +13,7 @@
 #include "loom/codegen/low/contract_query.h"
 #include "loom/codegen/low/lower_internal.h"
 #include "loom/codegen/low/lower_rules.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
@@ -125,7 +126,7 @@ static iree_status_t loom_low_lower_map_argument(
           loom_param_u64(source_argument_id),
       };
       IREE_RETURN_IF_ERROR(loom_low_lower_emit_target_context_error(
-          context, context->source_function.op, 54, params,
+          context, context->source_function.op, LOOM_ERR_TARGET_035, params,
           IREE_ARRAYSIZE(params)));
     }
     return iree_ok_status();
@@ -221,7 +222,8 @@ static iree_status_t loom_low_lower_check_mapped_value(
           loom_param_u64(source_value_id),
       };
       IREE_RETURN_IF_ERROR(loom_low_lower_emit_target_context_error(
-          context, source_op, 54, params, IREE_ARRAYSIZE(params)));
+          context, source_op, LOOM_ERR_TARGET_035, params,
+          IREE_ARRAYSIZE(params)));
     }
   }
   return iree_ok_status();
@@ -246,7 +248,7 @@ static iree_status_t loom_low_lower_check_function_signature(
         loom_param_u32(predicate_count),
     };
     IREE_RETURN_IF_ERROR(loom_low_lower_emit_target_context_error(
-        context, context->source_function.op, 55, params,
+        context, context->source_function.op, LOOM_ERR_TARGET_036, params,
         IREE_ARRAYSIZE(params)));
   }
   if (context->source_function.op->tied_result_count != 0) {
@@ -254,7 +256,7 @@ static iree_status_t loom_low_lower_check_function_signature(
         loom_param_u32(context->source_function.op->tied_result_count),
     };
     IREE_RETURN_IF_ERROR(loom_low_lower_emit_target_context_error(
-        context, context->source_function.op, 56, params,
+        context, context->source_function.op, LOOM_ERR_TARGET_037, params,
         IREE_ARRAYSIZE(params)));
   }
   return iree_ok_status();
@@ -925,8 +927,9 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
     const loom_diagnostic_param_t params[] = {
         loom_param_u32(source_op->region_count),
     };
-    return loom_low_lower_emit_target_context_error(
-        context, source_op, 57, params, IREE_ARRAYSIZE(params));
+    return loom_low_lower_emit_target_context_error(context, source_op,
+                                                    LOOM_ERR_TARGET_038, params,
+                                                    IREE_ARRAYSIZE(params));
   }
   if (loom_low_lower_op_is_structural(context->module, source_op)) {
     return iree_ok_status();

@@ -5,12 +5,30 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from loom.error.type import ERR_TYPE_001
-from loom.gen.c_errors import generate_error_tables_c
+from loom.gen.c_errors import generate_error_catalog_c, generate_error_catalog_h
 
 
-def test_generate_error_tables_keeps_definitions_private() -> None:
-    tables_c = generate_error_tables_c([ERR_TYPE_001])
+def test_generate_error_catalog_exports_canonical_definitions() -> None:
+    catalog_c = generate_error_catalog_c(
+        [ERR_TYPE_001],
+        catalog_symbol="loom_error_catalog_test",
+        public_header="loom/error/error_catalog.h",
+    )
 
-    assert "static const loom_error_def_t loom_err_type_001" in tables_c
-    assert "extern const loom_error_def_t" not in tables_c
-    assert "loom_error_def_lookup_ref" in tables_c
+    assert "const loom_error_def_t loom_err_type_001" in catalog_c
+    assert "static const loom_error_def_t loom_err_type_001" not in catalog_c
+    assert "const loom_error_catalog_t loom_error_catalog_test" in catalog_c
+    assert "loom_error_catalog_lookup_ref" in catalog_c
+
+
+def test_generate_error_catalog_header_uses_canonical_names() -> None:
+    catalog_h = generate_error_catalog_h(
+        [ERR_TYPE_001],
+        catalog_symbol="loom_error_catalog_test",
+        public_header="loom/error/error_catalog.h",
+    )
+
+    assert "extern const loom_error_def_t loom_err_type_001" in catalog_h
+    assert "#define LOOM_ERR_TYPE_001 (&loom_err_type_001)" in catalog_h
+    assert "#define LOOM_ERR_TYPE_001_REF" in catalog_h
+    assert "LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_TYPE, 1)" in catalog_h

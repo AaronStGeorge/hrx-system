@@ -8,7 +8,7 @@
 
 #include "loom/codegen/low/lower_internal.h"
 #include "loom/codegen/low/source_memory_plan.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/cfg/ops.h"
@@ -113,9 +113,8 @@ iree_status_t loom_low_lower_emit_reject(loom_low_lower_context_t* context,
       loom_param_string(subject_name),
       loom_param_string(reason),
   };
-  return loom_low_lower_emit(
-      context, source_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 1),
-      params, IREE_ARRAYSIZE(params));
+  return loom_low_lower_emit(context, source_op, LOOM_ERR_BACKEND_001, params,
+                             IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_low_lower_emit_source_type_unsupported(
@@ -126,7 +125,7 @@ iree_status_t loom_low_lower_emit_source_type_unsupported(
       loom_param_type(actual_type),
   };
   return loom_low_lower_emit_target_context_error(
-      context, source_op, 61, params, IREE_ARRAYSIZE(params));
+      context, source_op, LOOM_ERR_TARGET_051, params, IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_low_lower_emit_branch_constraint(
@@ -136,7 +135,7 @@ iree_status_t loom_low_lower_emit_branch_constraint(
       loom_param_string(branch_constraint),
   };
   return loom_low_lower_emit_target_context_error(
-      context, source_op, 62, params, IREE_ARRAYSIZE(params));
+      context, source_op, LOOM_ERR_TARGET_052, params, IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_low_lower_emit_branch_condition_type_unsupported(
@@ -147,7 +146,7 @@ iree_status_t loom_low_lower_emit_branch_condition_type_unsupported(
       loom_param_string(type_constraint),
   };
   return loom_low_lower_emit_target_context_error(
-      context, source_op, 63, params, IREE_ARRAYSIZE(params));
+      context, source_op, LOOM_ERR_TARGET_053, params, IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_low_lower_emit_error_ref(
@@ -176,7 +175,7 @@ static void loom_low_lower_make_target_context_params(
 
 iree_status_t loom_low_lower_emit_target_context_error(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    uint16_t error_code, const loom_diagnostic_param_t* extra_params,
+    const loom_error_def_t* error, const loom_diagnostic_param_t* extra_params,
     iree_host_size_t extra_param_count) {
   IREE_ASSERT_LE(extra_param_count, 4);
   loom_diagnostic_param_t params[LOOM_LOW_LOWER_TARGET_CONTEXT_PARAM_COUNT + 4];
@@ -185,15 +184,15 @@ iree_status_t loom_low_lower_emit_target_context_error(
     params[LOOM_LOW_LOWER_TARGET_CONTEXT_PARAM_COUNT + i] = extra_params[i];
   }
   return loom_low_lower_emit(
-      context, source_op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, error_code), params,
+      context, source_op, error, params,
       LOOM_LOW_LOWER_TARGET_CONTEXT_PARAM_COUNT + extra_param_count);
 }
 
 iree_status_t loom_low_lower_emit_no_target_contract(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
   return loom_low_lower_emit_target_context_error(
-      context, source_op, 1, /*extra_params=*/NULL, /*extra_param_count=*/0);
+      context, source_op, LOOM_ERR_TARGET_001, /*extra_params=*/NULL,
+      /*extra_param_count=*/0);
 }
 
 loom_module_t* loom_low_lower_context_module(

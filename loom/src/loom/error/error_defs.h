@@ -163,6 +163,25 @@ typedef struct loom_error_def_t {
   uint8_t param_count;
 } loom_error_def_t;
 
+// Generated domain-local catalog. Code zero is unused so diagnostic code N is a
+// direct index into errors_by_code[N].
+typedef struct loom_error_domain_catalog_t {
+  // Domain owned by this catalog.
+  loom_error_domain_t domain;
+  // Number of entries in errors_by_code, including the unused code zero slot.
+  uint16_t code_count;
+  // Code-indexed error definition table. Missing codes have NULL entries.
+  const loom_error_def_t* const* errors_by_code;
+} loom_error_domain_catalog_t;
+
+// Composed error catalog used to resolve compact refs carried by generated
+// tables. Composition happens at package/provider boundaries so core code can
+// resolve injected target refs without depending on optional target catalogs.
+typedef struct loom_error_catalog_t {
+  // Domain-indexed catalog shards. Absent domains have NULL entries.
+  const loom_error_domain_catalog_t* domains[LOOM_ERROR_DOMAIN_COUNT_];
+} loom_error_catalog_t;
+
 typedef struct loom_diagnostic_string_list_t {
   // Values in stable display and serialization order.
   const iree_string_view_t* values;
@@ -258,6 +277,17 @@ static inline loom_diagnostic_param_t loom_param_with_field_ref(
   param.field_ref = field_ref;
   return param;
 }
+
+// Returns the error def for a (domain, code) pair in |catalog|, or NULL if
+// |catalog| is NULL or does not contain that domain/code.
+const loom_error_def_t* loom_error_catalog_lookup(
+    const loom_error_catalog_t* catalog, loom_error_domain_t domain,
+    uint16_t code);
+
+// Returns the error def for a compact reference in |catalog|, or NULL if |ref|
+// is LOOM_ERROR_REF_NONE or names a definition not present in |catalog|.
+const loom_error_def_t* loom_error_catalog_lookup_ref(
+    const loom_error_catalog_t* catalog, loom_error_ref_t ref);
 
 // Returns the error def for a (domain, code) pair, or NULL if not found.
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

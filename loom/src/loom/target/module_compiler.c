@@ -8,7 +8,7 @@
 
 #include "loom/analysis/symbol_facts.h"
 #include "loom/codegen/low/verify.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func_symbol_facts.h"
 #include "loom/ops/op_defs.h"
@@ -300,10 +300,9 @@ static iree_status_t loom_target_module_compile_emit_missing_target_record(
       loom_param_string(pipeline_name),
       loom_param_string(function_name),
   };
-  return loom_target_module_compile_emit(
-      diagnostic_emitter, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 20), params,
-      IREE_ARRAYSIZE(params));
+  return loom_target_module_compile_emit(diagnostic_emitter, op,
+                                         LOOM_ERR_TARGET_010, params,
+                                         IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_target_module_compile_emit_incompatible_bundle(
@@ -334,10 +333,9 @@ static iree_status_t loom_target_module_compile_emit_incompatible_bundle(
       loom_param_string(loom_target_abi_kind_name(
           export_plan ? export_plan->abi_kind : LOOM_TARGET_ABI_UNKNOWN)),
   };
-  return loom_target_module_compile_emit(
-      diagnostic_emitter, entry->func.op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 21), params,
-      IREE_ARRAYSIZE(params));
+  return loom_target_module_compile_emit(diagnostic_emitter, entry->func.op,
+                                         LOOM_ERR_TARGET_011, params,
+                                         IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_target_module_compile_emit_no_compatible_entry(
@@ -346,10 +344,9 @@ static iree_status_t loom_target_module_compile_emit_no_compatible_entry(
   const loom_diagnostic_param_t params[] = {
       loom_param_string(pipeline_name),
   };
-  return loom_target_module_compile_emit(
-      diagnostic_emitter, NULL,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 22), params,
-      IREE_ARRAYSIZE(params));
+  return loom_target_module_compile_emit(diagnostic_emitter, NULL,
+                                         LOOM_ERR_TARGET_012, params,
+                                         IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_target_module_compile_emit_ambiguous_entry(
@@ -359,10 +356,9 @@ static iree_status_t loom_target_module_compile_emit_ambiguous_entry(
       loom_param_string(pipeline_name),
       loom_param_u32(candidate_count),
   };
-  return loom_target_module_compile_emit(
-      diagnostic_emitter, NULL,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 23), params,
-      IREE_ARRAYSIZE(params));
+  return loom_target_module_compile_emit(diagnostic_emitter, NULL,
+                                         LOOM_ERR_TARGET_013, params,
+                                         IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_target_module_compile_emit_empty_artifact(
@@ -373,10 +369,9 @@ static iree_status_t loom_target_module_compile_emit_empty_artifact(
       loom_param_string(pipeline_name),
       loom_param_string(artifact_name),
   };
-  return loom_target_module_compile_emit(
-      diagnostic_emitter, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 24), params,
-      IREE_ARRAYSIZE(params));
+  return loom_target_module_compile_emit(diagnostic_emitter, op,
+                                         LOOM_ERR_TARGET_014, params,
+                                         IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_target_module_compile_try_entry(

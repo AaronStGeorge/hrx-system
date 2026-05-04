@@ -4,7 +4,7 @@ amdgpu.target<gfx1100> @target
 func.def target(@target) @divergent_then_return_rejected(%values: vector<2xi32>, %limit: i32) {
   %lane = vector.extract %values[0] : vector<2xi32> -> i32
   %cond = scalar.cmpi slt, %lane, %limit : i32
-  // ERROR@+1: TARGET/062 {branch_constraint="then_only_or_if_else_diamond"}
+  // ERROR@+1: TARGET/052 {branch_constraint="then_only_or_if_else_diamond"}
   cfg.cond_br %cond, ^then, ^else : i1
 ^then:
   func.return
@@ -19,7 +19,7 @@ amdgpu.target<gfx1100> @target
 func.def target(@target) @divergent_merge_argument_rejected(%values: vector<2xi32>, %limit: i32) {
   %lane = vector.extract %values[0] : vector<2xi32> -> i32
   %cond = scalar.cmpi slt, %lane, %limit : i32
-  // ERROR@+1: TARGET/062 {branch_constraint="merge_block_arguments_absent"}
+  // ERROR@+1: TARGET/052 {branch_constraint="merge_block_arguments_absent"}
   cfg.cond_br %cond, ^then, ^else : i1
 ^then:
   cfg.br ^join(%lane: i32)

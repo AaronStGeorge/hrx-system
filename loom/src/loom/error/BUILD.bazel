@@ -48,11 +48,28 @@ loom_cc_test(
 
 loom_generated_cc_library(
     name = "error_defs",
-    hdrs = ["error_defs.h"],
-    extra_output_flags = ["--catalog"],
-    extra_outputs = ["error_catalog.json"],
+    hdrs = [
+        "error_defs.h",
+    ],
+    args = [
+        "--catalog-symbol=loom_error_catalog_all",
+        "--public-header=loom/error/error_catalog.h",
+        "--shard=all",
+    ],
+    extra_output_flags = [
+        "--catalog",
+    ],
+    extra_outputs = [
+        "error_catalog.json",
+    ],
+    generated_hdr_flags = [
+        "--header",
+    ],
+    generated_hdrs = [
+        "error_catalog.h",
+    ],
     generator = "//loom/py/loom/gen:c_errors",
-    source = "error_tables.c",
+    source = "error_catalog.c",
     deps = [
         ":emitter",
         "//loom/src/loom/ir",

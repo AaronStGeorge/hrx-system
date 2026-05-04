@@ -20,7 +20,7 @@ from loom.dsl import (
     EnumCase,
     Op,
 )
-from loom.error.target import ERR_TARGET_019
+from loom.error.target import ERR_TARGET_009
 from loom.target.contracts.diagnostics import (
     DiagnosticRef,
     string_param,
@@ -80,7 +80,7 @@ class GuardDiagnostic:
             self,
             "ref",
             target_diagnostic(
-                ERR_TARGET_019,
+                ERR_TARGET_009,
                 string_param("subject_kind", self.subject_kind),
                 string_param("subject_name", self.subject_name),
                 string_param("detail", self.reason),

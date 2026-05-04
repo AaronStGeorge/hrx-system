@@ -463,6 +463,7 @@ loom_cc_test(
     ::lower
     iree::base
     iree::base::internal::arena
+    loom::src::loom::error::error_defs
     loom::src::loom::ir
     iree::testing::gtest
     iree::testing::gtest_main

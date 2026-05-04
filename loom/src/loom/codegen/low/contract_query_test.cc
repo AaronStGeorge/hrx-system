@@ -12,6 +12,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/attribute.h"
 #include "loom/ir/ir.h"
 
@@ -186,7 +187,15 @@ TEST(LowContractQueryTest, ContractIndexDescriptorRuleReportsRejectedCase) {
       },
       {
           /*.kind=*/LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_STRING_LITERAL,
+          /*.string_value=*/IREE_SV("field"),
+      },
+      {
+          /*.kind=*/LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_STRING_LITERAL,
           /*.string_value=*/IREE_SV("value"),
+      },
+      {
+          /*.kind=*/LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_STRING_LITERAL,
+          /*.string_value=*/IREE_SV("attr_kind"),
       },
       {
           /*.kind=*/LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_STRING_LITERAL,
@@ -194,7 +203,7 @@ TEST(LowContractQueryTest, ContractIndexDescriptorRuleReportsRejectedCase) {
       },
   };
   loom_low_lower_diagnostic_t diagnostic = {};
-  diagnostic.error_ref = LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_TARGET, 3);
+  diagnostic.error_ref = LOOM_ERR_TARGET_003_REF;
   diagnostic.param_count = IREE_ARRAYSIZE(diagnostic_params);
   loom_low_lower_rule_t rule = {};
   rule.source_op_kind = kSourceOpKind;
@@ -262,14 +271,17 @@ TEST(LowContractQueryTest, ContractIndexDescriptorRuleReportsRejectedCase) {
   EXPECT_EQ(result.rule_index, UINT16_MAX);
   EXPECT_EQ(result.diagnostic_index, 0);
   ASSERT_NE(result.rejection, nullptr);
-  EXPECT_EQ(result.rejection->error_ref,
-            LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_TARGET, 3));
-  ASSERT_EQ(result.rejection->param_count, 7);
+  EXPECT_EQ(result.rejection->error_ref, LOOM_ERR_TARGET_003_REF);
+  ASSERT_EQ(result.rejection->param_count, 9);
   EXPECT_TRUE(iree_string_view_equal(result.rejection->params[4].string,
                                      IREE_SV("test.source")));
   EXPECT_TRUE(iree_string_view_equal(result.rejection->params[5].string,
-                                     IREE_SV("value")));
+                                     IREE_SV("field")));
   EXPECT_TRUE(iree_string_view_equal(result.rejection->params[6].string,
+                                     IREE_SV("value")));
+  EXPECT_TRUE(iree_string_view_equal(result.rejection->params[7].string,
+                                     IREE_SV("attr_kind")));
+  EXPECT_TRUE(iree_string_view_equal(result.rejection->params[8].string,
                                      IREE_SV("i64")));
 
   iree_arena_deinitialize(&arena);

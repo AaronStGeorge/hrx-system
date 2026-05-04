@@ -467,6 +467,7 @@ loom_cc_test(
     srcs = ["contract_query_test.cc"],
     deps = [
         ":lower",
+        "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",

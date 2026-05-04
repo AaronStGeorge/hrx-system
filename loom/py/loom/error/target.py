@@ -33,12 +33,12 @@ ERR_TARGET_001 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_002: Target contract rejected a value type.
+# ERR_TARGET_002: Target contract rejected a value type constraint.
 ERR_TARGET_002 = ErrorDef(
     domain=ErrorDomain.TARGET,
     code=2,
     severity=Severity.ERROR,
-    summary="Target contract rejected a value type.",
+    summary="Target contract rejected a value type constraint.",
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
         "rejected '{op_name}' field '{field_name}' in '@{function_name}': "
@@ -55,284 +55,118 @@ ERR_TARGET_002 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_003: Target contract rejected an attribute kind.
+# ERR_TARGET_003: Target contract rejected a named constraint.
 ERR_TARGET_003 = ErrorDef(
     domain=ErrorDomain.TARGET,
     code=3,
     severity=Severity.ERROR,
-    summary="Target contract rejected an attribute kind.",
+    summary="Target contract rejected a named constraint.",
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' field '{field_name}' in '@{function_name}': "
-        "expected a {expected_attr_kind} attribute"
+        "rejected '{op_name}' {subject_kind} '{subject_name}' in "
+        "'@{function_name}': constraint '{constraint_key}' requires "
+        "'{expected_text}'"
     ),
     params=(
         *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("field_name", ParamKind.STRING),
-        ErrorParam("expected_attr_kind", ParamKind.STRING),
+        ErrorParam("subject_kind", ParamKind.STRING),
+        ErrorParam("subject_name", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
+        ErrorParam("expected_text", ParamKind.STRING),
     ),
 )
 
-# ERR_TARGET_004: Target contract rejected an enum attribute case.
+# ERR_TARGET_004: Target contract rejected a count constraint.
 ERR_TARGET_004 = ErrorDef(
     domain=ErrorDomain.TARGET,
     code=4,
     severity=Severity.ERROR,
-    summary="Target contract rejected an enum attribute case.",
+    summary="Target contract rejected a count constraint.",
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' enum attribute '{field_name}' in "
-        "'@{function_name}': expected '{expected_case}'"
+        "rejected '{op_name}' {subject_kind} '{subject_name}' in "
+        "'@{function_name}': constraint '{constraint_key}' requires count "
+        "{expected_count}"
     ),
     params=(
         *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("field_name", ParamKind.STRING),
-        ErrorParam("expected_case", ParamKind.STRING),
+        ErrorParam("subject_kind", ParamKind.STRING),
+        ErrorParam("subject_name", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
+        ErrorParam("expected_count", ParamKind.U32),
     ),
 )
 
-# ERR_TARGET_005: Target contract rejected an i64 attribute range.
+# ERR_TARGET_005: Target contract rejected a range constraint.
 ERR_TARGET_005 = ErrorDef(
     domain=ErrorDomain.TARGET,
     code=5,
     severity=Severity.ERROR,
-    summary="Target contract rejected an i64 attribute range.",
+    summary="Target contract rejected a range constraint.",
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' i64 attribute '{field_name}' in "
-        "'@{function_name}': expected range [{minimum}, {maximum}]"
+        "rejected '{op_name}' {subject_kind} '{subject_name}' in "
+        "'@{function_name}': constraint '{constraint_key}' requires range "
+        "[{minimum}, {maximum}]"
     ),
     params=(
         *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("field_name", ParamKind.STRING),
+        ErrorParam("subject_kind", ParamKind.STRING),
+        ErrorParam("subject_name", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
         ErrorParam("minimum", ParamKind.I64),
         ErrorParam("maximum", ParamKind.I64),
     ),
 )
 
-# ERR_TARGET_006: Target descriptor is unavailable.
+# ERR_TARGET_006: Target contract rejected an element range constraint.
 ERR_TARGET_006 = ErrorDef(
     domain=ErrorDomain.TARGET,
     code=6,
     severity=Severity.ERROR,
-    summary="Target descriptor is unavailable.",
+    summary="Target contract rejected an element range constraint.",
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "cannot lower '{op_name}' in '@{function_name}': descriptor "
-        "'{descriptor_key}' is unavailable or requires disabled features"
+        "rejected '{op_name}' {subject_kind} '{subject_name}' element "
+        "{element} in '@{function_name}': constraint '{constraint_key}' "
+        "requires range [{minimum}, {maximum}]"
     ),
     params=(
         *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("descriptor_key", ParamKind.STRING),
+        ErrorParam("subject_kind", ParamKind.STRING),
+        ErrorParam("subject_name", ParamKind.STRING),
+        ErrorParam("element", ParamKind.U32),
+        ErrorParam("constraint_key", ParamKind.STRING),
+        ErrorParam("minimum", ParamKind.I64),
+        ErrorParam("maximum", ParamKind.I64),
     ),
 )
 
-# ERR_TARGET_007: Target contract required a materializable value.
+# ERR_TARGET_007: Target contract rejected a relation constraint.
 ERR_TARGET_007 = ErrorDef(
     domain=ErrorDomain.TARGET,
     code=7,
     severity=Severity.ERROR,
-    summary="Target contract required a materializable value.",
+    summary="Target contract rejected a relation constraint.",
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' field '{field_name}' in '@{function_name}': "
-        "materializer '{materializer_key}' cannot produce the value"
+        "rejected '{op_name}' {subject_kind} '{subject_name}' and "
+        "'{other_subject_name}' in '@{function_name}': constraint "
+        "'{constraint_key}' was not satisfied"
     ),
     params=(
         *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("field_name", ParamKind.STRING),
-        ErrorParam("materializer_key", ParamKind.STRING),
+        ErrorParam("subject_kind", ParamKind.STRING),
+        ErrorParam("subject_name", ParamKind.STRING),
+        ErrorParam("other_subject_name", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
     ),
 )
 
-# ERR_TARGET_008: Target contract rejected a low register class.
+# ERR_TARGET_008: Target contract rejected a source memory access.
 ERR_TARGET_008 = ErrorDef(
     domain=ErrorDomain.TARGET,
     code=8,
-    severity=Severity.ERROR,
-    summary="Target contract rejected a low register class.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' field '{field_name}' in '@{function_name}': "
-        "expected low register class '{register_class}'"
-    ),
-    params=(
-        *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("field_name", ParamKind.STRING),
-        ErrorParam("register_class", ParamKind.STRING),
-    ),
-)
-
-# ERR_TARGET_009: Target contract rejected a static dimension multiple.
-ERR_TARGET_009 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=9,
-    severity=Severity.ERROR,
-    summary="Target contract rejected a static dimension multiple.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' field '{field_name}' in '@{function_name}': "
-        "static dimension 0 must be divisible by {multiple}"
-    ),
-    params=(
-        *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("field_name", ParamKind.STRING),
-        ErrorParam("multiple", ParamKind.U32),
-    ),
-)
-
-# ERR_TARGET_010: Target contract rejected low register unit counts.
-ERR_TARGET_010 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=10,
-    severity=Severity.ERROR,
-    summary="Target contract rejected low register unit counts.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' fields '{field_name}' and '{other_field_name}' "
-        "in '@{function_name}': low register unit counts must match"
-    ),
-    params=(
-        *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("field_name", ParamKind.STRING),
-        ErrorParam("other_field_name", ParamKind.STRING),
-    ),
-)
-
-# ERR_TARGET_011: Target contract rejected an operand segment count.
-ERR_TARGET_011 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=11,
-    severity=Severity.ERROR,
-    summary="Target contract rejected an operand segment count.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' operand segment '{field_name}' in "
-        "'@{function_name}': expected {expected_count} value(s)"
-    ),
-    params=(
-        *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("field_name", ParamKind.STRING),
-        ErrorParam("expected_count", ParamKind.U32),
-    ),
-)
-
-# ERR_TARGET_012: Target contract rejected an i64 array count.
-ERR_TARGET_012 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=12,
-    severity=Severity.ERROR,
-    summary="Target contract rejected an i64 array count.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' i64 array '{field_name}' in '@{function_name}': "
-        "expected {expected_count} element(s)"
-    ),
-    params=(
-        *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("field_name", ParamKind.STRING),
-        ErrorParam("expected_count", ParamKind.U32),
-    ),
-)
-
-# ERR_TARGET_013: Target contract rejected an i64 array element range.
-ERR_TARGET_013 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=13,
-    severity=Severity.ERROR,
-    summary="Target contract rejected an i64 array element range.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' i64 array '{field_name}' element {element} in "
-        "'@{function_name}': expected range [{minimum}, {maximum}]"
-    ),
-    params=(
-        *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("field_name", ParamKind.STRING),
-        ErrorParam("element", ParamKind.U32),
-        ErrorParam("minimum", ParamKind.I64),
-        ErrorParam("maximum", ParamKind.I64),
-    ),
-)
-
-# ERR_TARGET_014: Target contract rejected an i64 array element set.
-ERR_TARGET_014 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=14,
-    severity=Severity.ERROR,
-    summary="Target contract rejected an i64 array element set.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' i64 array '{field_name}' in '@{function_name}': "
-        "all elements must be in range [{minimum}, {maximum}]"
-    ),
-    params=(
-        *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("field_name", ParamKind.STRING),
-        ErrorParam("minimum", ParamKind.I64),
-        ErrorParam("maximum", ParamKind.I64),
-    ),
-)
-
-# ERR_TARGET_015: Target contract required a bounded integer value fact.
-ERR_TARGET_015 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=15,
-    severity=Severity.ERROR,
-    summary="Target contract required a bounded integer value fact.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' value '{field_name}' in '@{function_name}': "
-        "requires a {signedness} {bit_count}-bit bound"
-    ),
-    params=(
-        *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("field_name", ParamKind.STRING),
-        ErrorParam("signedness", ParamKind.STRING),
-        ErrorParam("bit_count", ParamKind.U32),
-    ),
-)
-
-# ERR_TARGET_016: Target contract required an exact integer value fact.
-ERR_TARGET_016 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=16,
-    severity=Severity.ERROR,
-    summary="Target contract required an exact integer value fact.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' value '{field_name}' in '@{function_name}': "
-        "requires an exact integer value fact"
-    ),
-    params=(
-        *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("field_name", ParamKind.STRING),
-    ),
-)
-
-# ERR_TARGET_017: Target contract rejected an integer value fact range.
-ERR_TARGET_017 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=17,
-    severity=Severity.ERROR,
-    summary="Target contract rejected an integer value fact range.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' value '{field_name}' in '@{function_name}': "
-        "requires value range [{minimum}, {maximum}]"
-    ),
-    params=(
-        *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("field_name", ParamKind.STRING),
-        ErrorParam("minimum", ParamKind.I64),
-        ErrorParam("maximum", ParamKind.I64),
-    ),
-)
-
-# ERR_TARGET_018: Target contract rejected a source memory access.
-ERR_TARGET_018 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=18,
     severity=Severity.ERROR,
     summary="Target contract rejected a source memory access.",
     message=(
@@ -346,10 +180,10 @@ ERR_TARGET_018 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_019: Target contract rejected a named subject.
-ERR_TARGET_019 = ErrorDef(
+# ERR_TARGET_009: Target contract rejected a named subject.
+ERR_TARGET_009 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=19,
+    code=9,
     severity=Severity.ERROR,
     summary="Target contract rejected a named subject.",
     message=(
@@ -365,10 +199,10 @@ ERR_TARGET_019 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_020: Target pipeline entry has no target record.
-ERR_TARGET_020 = ErrorDef(
+# ERR_TARGET_010: Target pipeline entry has no target record.
+ERR_TARGET_010 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=20,
+    code=10,
     severity=Severity.ERROR,
     summary="Target pipeline entry has no target record.",
     message=(
@@ -385,10 +219,10 @@ ERR_TARGET_020 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_021: Target pipeline rejected the selected target bundle.
-ERR_TARGET_021 = ErrorDef(
+# ERR_TARGET_011: Target pipeline rejected the selected target bundle.
+ERR_TARGET_011 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=21,
+    code=11,
     severity=Severity.ERROR,
     summary="Target pipeline rejected the selected target bundle.",
     message=(
@@ -412,10 +246,10 @@ ERR_TARGET_021 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_022: Target pipeline found no compatible entry.
-ERR_TARGET_022 = ErrorDef(
+# ERR_TARGET_012: Target pipeline found no compatible entry.
+ERR_TARGET_012 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=22,
+    code=12,
     severity=Severity.ERROR,
     summary="Target pipeline found no compatible entry.",
     message=(
@@ -429,10 +263,10 @@ ERR_TARGET_022 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_023: Target pipeline found multiple compatible entries.
-ERR_TARGET_023 = ErrorDef(
+# ERR_TARGET_013: Target pipeline found multiple compatible entries.
+ERR_TARGET_013 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=23,
+    code=13,
     severity=Severity.ERROR,
     summary="Target pipeline found multiple compatible entries.",
     message=(
@@ -446,10 +280,10 @@ ERR_TARGET_023 = ErrorDef(
     fix_hint="Select one entry symbol explicitly for pipeline '{pipeline_name}'",
 )
 
-# ERR_TARGET_024: Target artifact exports no entries.
-ERR_TARGET_024 = ErrorDef(
+# ERR_TARGET_014: Target artifact exports no entries.
+ERR_TARGET_014 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=24,
+    code=14,
     severity=Severity.ERROR,
     summary="Target artifact exports no entries.",
     message=(
@@ -462,10 +296,10 @@ ERR_TARGET_024 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_025: Target artifact closure crosses into another artifact.
-ERR_TARGET_025 = ErrorDef(
+# ERR_TARGET_015: Target artifact closure crosses into another artifact.
+ERR_TARGET_015 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=25,
+    code=15,
     severity=Severity.ERROR,
     summary="Target artifact closure crosses into another artifact.",
     message=(
@@ -482,10 +316,10 @@ ERR_TARGET_025 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_026: Target artifact entry has no function body.
-ERR_TARGET_026 = ErrorDef(
+# ERR_TARGET_016: Target artifact entry has no function body.
+ERR_TARGET_016 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=26,
+    code=16,
     severity=Severity.ERROR,
     summary="Target artifact entry has no function body.",
     message=(
@@ -498,10 +332,10 @@ ERR_TARGET_026 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_027: Target artifact entry target mismatches the artifact target.
-ERR_TARGET_027 = ErrorDef(
+# ERR_TARGET_017: Target artifact entry target mismatches the artifact target.
+ERR_TARGET_017 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=27,
+    code=17,
     severity=Severity.ERROR,
     summary="Target artifact entry target mismatches the artifact target.",
     message=(
@@ -520,10 +354,10 @@ ERR_TARGET_027 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_028: Target artifact export ordinals are partially assigned.
-ERR_TARGET_028 = ErrorDef(
+# ERR_TARGET_018: Target artifact export ordinals are partially assigned.
+ERR_TARGET_018 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=28,
+    code=18,
     severity=Severity.ERROR,
     summary="Target artifact export ordinals are partially assigned.",
     message=(
@@ -541,10 +375,10 @@ ERR_TARGET_028 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_029: Target artifact export ordinal is outside the dense range.
-ERR_TARGET_029 = ErrorDef(
+# ERR_TARGET_019: Target artifact export ordinal is outside the dense range.
+ERR_TARGET_019 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=29,
+    code=19,
     severity=Severity.ERROR,
     summary="Target artifact export ordinal is outside the dense range.",
     message=(
@@ -559,10 +393,10 @@ ERR_TARGET_029 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_030: Target artifact export ordinal is assigned more than once.
-ERR_TARGET_030 = ErrorDef(
+# ERR_TARGET_020: Target artifact export ordinal is assigned more than once.
+ERR_TARGET_020 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=30,
+    code=20,
     severity=Severity.ERROR,
     summary="Target artifact export ordinal is assigned more than once.",
     message=(
@@ -578,10 +412,10 @@ ERR_TARGET_030 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_031: Target artifact export ordinal is not assigned.
-ERR_TARGET_031 = ErrorDef(
+# ERR_TARGET_021: Target artifact export ordinal is not assigned.
+ERR_TARGET_021 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=31,
+    code=21,
     severity=Severity.ERROR,
     summary="Target artifact export ordinal is not assigned.",
     message=(
@@ -594,10 +428,10 @@ ERR_TARGET_031 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_032: Function ABI override field is unsupported.
-ERR_TARGET_032 = ErrorDef(
+# ERR_TARGET_022: Function ABI override field is unsupported.
+ERR_TARGET_022 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=32,
+    code=22,
     severity=Severity.ERROR,
     summary="Function ABI override field is unsupported.",
     message=(
@@ -609,10 +443,10 @@ ERR_TARGET_032 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_033: Function target contract has no concrete ABI.
-ERR_TARGET_033 = ErrorDef(
+# ERR_TARGET_023: Function target contract has no concrete ABI.
+ERR_TARGET_023 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=33,
+    code=23,
     severity=Severity.ERROR,
     summary="Function target contract has no concrete ABI.",
     message=(
@@ -625,10 +459,10 @@ ERR_TARGET_033 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_034: Kernel entry target contract is not a HAL kernel ABI.
-ERR_TARGET_034 = ErrorDef(
+# ERR_TARGET_024: Kernel entry target contract is not a HAL kernel ABI.
+ERR_TARGET_024 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=34,
+    code=24,
     severity=Severity.ERROR,
     summary="Kernel entry target contract is not a HAL kernel ABI.",
     message=(
@@ -641,10 +475,10 @@ ERR_TARGET_034 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_035: HAL kernel binding alignment is zero.
-ERR_TARGET_035 = ErrorDef(
+# ERR_TARGET_025: HAL kernel binding alignment is zero.
+ERR_TARGET_025 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=35,
+    code=25,
     severity=Severity.ERROR,
     summary="HAL kernel binding alignment is zero.",
     message=(
@@ -657,10 +491,10 @@ ERR_TARGET_035 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_036: HAL kernel workgroup size is partial.
-ERR_TARGET_036 = ErrorDef(
+# ERR_TARGET_026: HAL kernel workgroup size is partial.
+ERR_TARGET_026 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=36,
+    code=26,
     severity=Severity.ERROR,
     summary="HAL kernel workgroup size is partial.",
     message=(
@@ -673,10 +507,10 @@ ERR_TARGET_036 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_037: HAL kernel flat workgroup range is partial.
-ERR_TARGET_037 = ErrorDef(
+# ERR_TARGET_027: HAL kernel flat workgroup range is partial.
+ERR_TARGET_027 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=37,
+    code=27,
     severity=Severity.ERROR,
     summary="HAL kernel flat workgroup range is partial.",
     message=(
@@ -690,10 +524,10 @@ ERR_TARGET_037 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_038: HAL kernel flat workgroup range is unordered.
-ERR_TARGET_038 = ErrorDef(
+# ERR_TARGET_028: HAL kernel flat workgroup range is unordered.
+ERR_TARGET_028 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=38,
+    code=28,
     severity=Severity.ERROR,
     summary="HAL kernel flat workgroup range is unordered.",
     message=(
@@ -708,10 +542,10 @@ ERR_TARGET_038 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_039: HAL kernel flat workgroup max exceeds target limit.
-ERR_TARGET_039 = ErrorDef(
+# ERR_TARGET_029: HAL kernel flat workgroup max exceeds target limit.
+ERR_TARGET_029 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=39,
+    code=29,
     severity=Severity.ERROR,
     summary="HAL kernel flat workgroup max exceeds target limit.",
     message=(
@@ -726,10 +560,10 @@ ERR_TARGET_039 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_040: HAL kernel required workgroup dimension exceeds target limit.
-ERR_TARGET_040 = ErrorDef(
+# ERR_TARGET_030: HAL kernel required workgroup dimension exceeds target limit.
+ERR_TARGET_030 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=40,
+    code=30,
     severity=Severity.ERROR,
     summary="HAL kernel required workgroup dimension exceeds target limit.",
     message=(
@@ -745,10 +579,10 @@ ERR_TARGET_040 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_041: HAL kernel required flat workgroup size overflows.
-ERR_TARGET_041 = ErrorDef(
+# ERR_TARGET_031: HAL kernel required flat workgroup size overflows.
+ERR_TARGET_031 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=41,
+    code=31,
     severity=Severity.ERROR,
     summary="HAL kernel required flat workgroup size overflows.",
     message=(
@@ -761,10 +595,10 @@ ERR_TARGET_041 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_042: HAL kernel required flat workgroup size exceeds target limit.
-ERR_TARGET_042 = ErrorDef(
+# ERR_TARGET_032: HAL kernel required flat workgroup size exceeds target limit.
+ERR_TARGET_032 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=42,
+    code=32,
     severity=Severity.ERROR,
     summary="HAL kernel required flat workgroup size exceeds target limit.",
     message=(
@@ -779,10 +613,10 @@ ERR_TARGET_042 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_043: HAL kernel required flat workgroup size is outside range.
-ERR_TARGET_043 = ErrorDef(
+# ERR_TARGET_033: HAL kernel required flat workgroup size is outside range.
+ERR_TARGET_033 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=43,
+    code=33,
     severity=Severity.ERROR,
     summary="HAL kernel required flat workgroup size is outside range.",
     message=(
@@ -799,20 +633,20 @@ ERR_TARGET_043 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_044: Function has no target record.
-ERR_TARGET_044 = ErrorDef(
+# ERR_TARGET_034: Function has no target record.
+ERR_TARGET_034 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=44,
+    code=34,
     severity=Severity.ERROR,
     summary="Function has no target record.",
     message="function '@{function_name}' must declare a target record",
     params=(ErrorParam("function_name", ParamKind.STRING),),
 )
 
-# ERR_TARGET_045: Target-low ABI policy did not map a value.
-ERR_TARGET_045 = ErrorDef(
+# ERR_TARGET_035: Target-low ABI policy did not map a value.
+ERR_TARGET_035 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=45,
+    code=35,
     severity=Severity.ERROR,
     summary="Target-low ABI policy did not map a value.",
     message=(
@@ -828,10 +662,10 @@ ERR_TARGET_045 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_046: Function predicates reached target-low lowering.
-ERR_TARGET_046 = ErrorDef(
+# ERR_TARGET_036: Function predicates reached target-low lowering.
+ERR_TARGET_036 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=46,
+    code=36,
     severity=Severity.ERROR,
     summary="Function predicates reached target-low lowering.",
     message=(
@@ -846,10 +680,10 @@ ERR_TARGET_046 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_047: Tied function results reached target-low lowering.
-ERR_TARGET_047 = ErrorDef(
+# ERR_TARGET_037: Tied function results reached target-low lowering.
+ERR_TARGET_037 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=47,
+    code=37,
     severity=Severity.ERROR,
     summary="Tied function results reached target-low lowering.",
     message=(
@@ -863,10 +697,10 @@ ERR_TARGET_047 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_048: Operation with regions reached target-low source lowering.
-ERR_TARGET_048 = ErrorDef(
+# ERR_TARGET_038: Operation with regions reached target-low source lowering.
+ERR_TARGET_038 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=48,
+    code=38,
     severity=Severity.ERROR,
     summary="Operation with regions reached target-low source lowering.",
     message=(
@@ -880,10 +714,10 @@ ERR_TARGET_048 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_049: FP8 scalar type reached target-low legality.
-ERR_TARGET_049 = ErrorDef(
+# ERR_TARGET_039: FP8 scalar type reached target-low legality.
+ERR_TARGET_039 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=49,
+    code=39,
     severity=Severity.ERROR,
     summary="FP8 scalar type reached target-low legality.",
     message=(
@@ -898,10 +732,10 @@ ERR_TARGET_049 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_050: Unknown scalar type reached target-low legality.
-ERR_TARGET_050 = ErrorDef(
+# ERR_TARGET_040: Unknown scalar type reached target-low legality.
+ERR_TARGET_040 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=50,
+    code=40,
     severity=Severity.ERROR,
     summary="Unknown scalar type reached target-low legality.",
     message=(
@@ -915,10 +749,10 @@ ERR_TARGET_050 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_051: Contract-owned type escaped its contract family.
-ERR_TARGET_051 = ErrorDef(
+# ERR_TARGET_041: Contract-owned type escaped its contract family.
+ERR_TARGET_041 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=51,
+    code=41,
     severity=Severity.ERROR,
     summary="Contract-owned type escaped its contract family.",
     message=(
@@ -934,10 +768,10 @@ ERR_TARGET_051 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_052: Vector type shape is not target-low legal.
-ERR_TARGET_052 = ErrorDef(
+# ERR_TARGET_042: Vector type shape is not target-low legal.
+ERR_TARGET_042 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=52,
+    code=42,
     severity=Severity.ERROR,
     summary="Vector type shape is not target-low legal.",
     message=(
@@ -952,10 +786,10 @@ ERR_TARGET_052 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_053: Vector lane count is not target-low representable.
-ERR_TARGET_053 = ErrorDef(
+# ERR_TARGET_043: Vector lane count is not target-low representable.
+ERR_TARGET_043 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=53,
+    code=43,
     severity=Severity.ERROR,
     summary="Vector lane count is not target-low representable.",
     message=(
@@ -969,10 +803,10 @@ ERR_TARGET_053 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_054: Type has no target-low legality mapping.
-ERR_TARGET_054 = ErrorDef(
+# ERR_TARGET_044: Type has no target-low legality mapping.
+ERR_TARGET_044 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=54,
+    code=44,
     severity=Severity.ERROR,
     summary="Type has no target-low legality mapping.",
     message=(
@@ -986,10 +820,10 @@ ERR_TARGET_054 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_055: Operation references an invalid SSA value.
-ERR_TARGET_055 = ErrorDef(
+# ERR_TARGET_045: Operation references an invalid SSA value.
+ERR_TARGET_045 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=55,
+    code=45,
     severity=Severity.ERROR,
     summary="Operation references an invalid SSA value.",
     message=(
@@ -1003,10 +837,10 @@ ERR_TARGET_055 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_056: Target-low legality requires a target provider.
-ERR_TARGET_056 = ErrorDef(
+# ERR_TARGET_046: Target-low legality requires a target provider.
+ERR_TARGET_046 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=56,
+    code=46,
     severity=Severity.ERROR,
     summary="Target-low legality requires a target provider.",
     message=(
@@ -1017,10 +851,10 @@ ERR_TARGET_056 = ErrorDef(
     params=_TARGET_CONTEXT_PARAMS,
 )
 
-# ERR_TARGET_057: Structured control flow reached target-low legality.
-ERR_TARGET_057 = ErrorDef(
+# ERR_TARGET_047: Structured control flow reached target-low legality.
+ERR_TARGET_047 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=57,
+    code=47,
     severity=Severity.ERROR,
     summary="Structured control flow reached target-low legality.",
     message=(
@@ -1031,10 +865,10 @@ ERR_TARGET_057 = ErrorDef(
     params=_TARGET_CONTEXT_PARAMS,
 )
 
-# ERR_TARGET_058: Structured control-flow terminator reached target-low legality.
-ERR_TARGET_058 = ErrorDef(
+# ERR_TARGET_048: Structured control-flow terminator reached target-low legality.
+ERR_TARGET_048 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=58,
+    code=48,
     severity=Severity.ERROR,
     summary="Structured control-flow terminator reached target-low legality.",
     message=(
@@ -1046,10 +880,10 @@ ERR_TARGET_058 = ErrorDef(
     params=_TARGET_CONTEXT_PARAMS,
 )
 
-# ERR_TARGET_059: Source-only operation reached target-low legality.
-ERR_TARGET_059 = ErrorDef(
+# ERR_TARGET_049: Source-only operation reached target-low legality.
+ERR_TARGET_049 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=59,
+    code=49,
     severity=Severity.ERROR,
     summary="Source-only operation reached target-low legality.",
     message=(
@@ -1060,10 +894,10 @@ ERR_TARGET_059 = ErrorDef(
     params=_TARGET_CONTEXT_PARAMS,
 )
 
-# ERR_TARGET_060: Module metadata operation reached executable target-low legality.
-ERR_TARGET_060 = ErrorDef(
+# ERR_TARGET_050: Module metadata operation reached executable target-low legality.
+ERR_TARGET_050 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=60,
+    code=50,
     severity=Severity.ERROR,
     summary="Module metadata operation reached executable target-low legality.",
     message=(
@@ -1074,10 +908,10 @@ ERR_TARGET_060 = ErrorDef(
     params=_TARGET_CONTEXT_PARAMS,
 )
 
-# ERR_TARGET_061: Target-low policy has no source value type mapping.
-ERR_TARGET_061 = ErrorDef(
+# ERR_TARGET_051: Target-low policy has no source value type mapping.
+ERR_TARGET_051 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=61,
+    code=51,
     severity=Severity.ERROR,
     summary="Target-low policy has no source value type mapping.",
     message=(
@@ -1093,10 +927,10 @@ ERR_TARGET_061 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_062: Target branch lowering constraint is not satisfied.
-ERR_TARGET_062 = ErrorDef(
+# ERR_TARGET_052: Target branch lowering constraint is not satisfied.
+ERR_TARGET_052 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=62,
+    code=52,
     severity=Severity.ERROR,
     summary="Target branch lowering constraint is not satisfied.",
     message=(
@@ -1110,10 +944,10 @@ ERR_TARGET_062 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_063: Target branch condition type constraint is not satisfied.
-ERR_TARGET_063 = ErrorDef(
+# ERR_TARGET_053: Target branch condition type constraint is not satisfied.
+ERR_TARGET_053 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=63,
+    code=53,
     severity=Severity.ERROR,
     summary="Target branch condition type constraint is not satisfied.",
     message=(
@@ -1128,10 +962,10 @@ ERR_TARGET_063 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_064: Target has no projection for an emitter.
-ERR_TARGET_064 = ErrorDef(
+# ERR_TARGET_054: Target has no projection for an emitter.
+ERR_TARGET_054 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=64,
+    code=54,
     severity=Severity.ERROR,
     summary="Target has no projection for an emitter.",
     message=(
@@ -1153,10 +987,10 @@ ERR_TARGET_064 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_065: Target emitter preflight constraint failed.
-ERR_TARGET_065 = ErrorDef(
+# ERR_TARGET_055: Target emitter preflight constraint failed.
+ERR_TARGET_055 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=65,
+    code=55,
     severity=Severity.ERROR,
     summary="Target emitter preflight constraint failed.",
     message=(
@@ -1175,10 +1009,10 @@ ERR_TARGET_065 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_066: Target emitter rejected an operation.
-ERR_TARGET_066 = ErrorDef(
+# ERR_TARGET_056: Target emitter rejected an operation.
+ERR_TARGET_056 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=66,
+    code=56,
     severity=Severity.ERROR,
     summary="Target emitter rejected an operation.",
     message=(
@@ -1257,14 +1091,4 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_054,
     ERR_TARGET_055,
     ERR_TARGET_056,
-    ERR_TARGET_057,
-    ERR_TARGET_058,
-    ERR_TARGET_059,
-    ERR_TARGET_060,
-    ERR_TARGET_061,
-    ERR_TARGET_062,
-    ERR_TARGET_063,
-    ERR_TARGET_064,
-    ERR_TARGET_065,
-    ERR_TARGET_066,
 )

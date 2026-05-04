@@ -64,6 +64,18 @@ iree_py_library(
     iree::runtime::py::loom::error::error
 )
 
+iree_py_test(
+  NAME
+    c_errors_test
+  SRCS
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.gen.c_errors_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
+)
+
 iree_py_library(
   NAME
     amdgpu_occupancy_tables

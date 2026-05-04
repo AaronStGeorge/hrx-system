@@ -56,9 +56,17 @@ loom_generated_cc_library(
   GENERATOR
     iree::runtime::py::loom::gen::c_errors
   SOURCE
-    "error_tables.c"
+    "error_catalog.c"
   HDRS
     "error_defs.h"
+  GENERATED_HDR_FLAGS
+    "--header"
+  GENERATED_HDRS
+    "error_catalog.h"
+  ARGS
+    "--catalog-symbol=loom_error_catalog_all"
+    "--public-header=loom/error/error_catalog.h"
+    "--shard=all"
   EXTRA_OUTPUT_FLAGS
     "--catalog"
   EXTRA_OUTPUTS

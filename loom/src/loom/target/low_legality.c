@@ -9,7 +9,7 @@
 #include <stdint.h>
 
 #include "iree/base/internal/arena.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
@@ -137,9 +137,8 @@ iree_status_t loom_target_low_legality_reject(
       loom_param_string(subject_name),
       loom_param_string(reason),
   };
-  return loom_target_low_legality_emit(
-      context, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 1), params,
-      IREE_ARRAYSIZE(params));
+  return loom_target_low_legality_emit(context, op, LOOM_ERR_BACKEND_001,
+                                       params, IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_target_low_legality_emit_error_ref(
@@ -169,7 +168,7 @@ static void loom_target_low_legality_make_context_params(
 
 static iree_status_t loom_target_low_legality_emit_target_context_error(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
-    uint16_t error_code, const loom_diagnostic_param_t* extra_params,
+    const loom_error_def_t* error, const loom_diagnostic_param_t* extra_params,
     iree_host_size_t extra_param_count) {
   IREE_ASSERT_LE(extra_param_count, 4);
   loom_diagnostic_param_t
@@ -179,24 +178,25 @@ static iree_status_t loom_target_low_legality_emit_target_context_error(
     params[LOOM_TARGET_LOW_LEGALITY_CONTEXT_PARAM_COUNT + i] = extra_params[i];
   }
   return loom_target_low_legality_emit(
-      context, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, error_code),
-      params, LOOM_TARGET_LOW_LEGALITY_CONTEXT_PARAM_COUNT + extra_param_count);
+      context, op, error, params,
+      LOOM_TARGET_LOW_LEGALITY_CONTEXT_PARAM_COUNT + extra_param_count);
 }
 
 static iree_status_t loom_target_low_legality_emit_no_target_contract(
     loom_target_low_legality_context_t* context, const loom_op_t* op) {
   return loom_target_low_legality_emit_target_context_error(
-      context, op, 1, /*extra_params=*/NULL, /*extra_param_count=*/0);
+      context, op, LOOM_ERR_TARGET_001, /*extra_params=*/NULL,
+      /*extra_param_count=*/0);
 }
 
 static iree_status_t loom_target_low_legality_emit_type_error(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
-    uint16_t error_code, loom_type_t type) {
+    const loom_error_def_t* error, loom_type_t type) {
   const loom_diagnostic_param_t params[] = {
       loom_param_type(type),
   };
   return loom_target_low_legality_emit_target_context_error(
-      context, op, error_code, params, IREE_ARRAYSIZE(params));
+      context, op, error, params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_target_low_legality_reject_error_ref(
@@ -227,9 +227,8 @@ iree_status_t loom_target_low_legality_record_contract(
       loom_param_string(decision),
       loom_param_string(reason),
   };
-  return loom_target_low_legality_emit(
-      context, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 2), params,
-      IREE_ARRAYSIZE(params));
+  return loom_target_low_legality_emit(context, op, LOOM_ERR_BACKEND_002,
+                                       params, IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_target_low_legality_record_memory_access(
@@ -262,9 +261,8 @@ iree_status_t loom_target_low_legality_record_memory_access(
       loom_param_u32(bank_conflict_degree),
       loom_param_string(reason),
   };
-  return loom_target_low_legality_emit(
-      context, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 17), params,
-      IREE_ARRAYSIZE(params));
+  return loom_target_low_legality_emit(context, op, LOOM_ERR_BACKEND_017,
+                                       params, IREE_ARRAYSIZE(params));
 }
 
 const loom_module_t* loom_target_low_legality_module(
@@ -379,11 +377,13 @@ static iree_status_t loom_target_low_legality_verify_scalar_type(
       return iree_ok_status();
     case LOOM_SCALAR_TYPE_F8E4M3:
     case LOOM_SCALAR_TYPE_F8E5M2:
-      return loom_target_low_legality_emit_type_error(context, op, 49, type);
+      return loom_target_low_legality_emit_type_error(
+          context, op, LOOM_ERR_TARGET_039, type);
     case LOOM_SCALAR_TYPE_COUNT_:
       break;
   }
-  return loom_target_low_legality_emit_type_error(context, op, 50, type);
+  return loom_target_low_legality_emit_type_error(context, op,
+                                                  LOOM_ERR_TARGET_040, type);
 }
 
 static const loom_type_descriptor_t*
@@ -457,10 +457,11 @@ static iree_status_t loom_target_low_legality_verify_registered_type(
               descriptor->semantics.semantic)),
       };
       return loom_target_low_legality_emit_target_context_error(
-          context, op, 51, params, IREE_ARRAYSIZE(params));
+          context, op, LOOM_ERR_TARGET_041, params, IREE_ARRAYSIZE(params));
     }
     default:
-      return loom_target_low_legality_emit_type_error(context, op, 54, type);
+      return loom_target_low_legality_emit_type_error(
+          context, op, LOOM_ERR_TARGET_044, type);
   }
 }
 
@@ -482,17 +483,20 @@ static iree_status_t loom_target_low_legality_verify_type(
   }
   if (loom_type_is_vector(type)) {
     if (!loom_type_is_all_static(type) || loom_type_rank(type) != 1) {
-      return loom_target_low_legality_emit_type_error(context, op, 52, type);
+      return loom_target_low_legality_emit_type_error(
+          context, op, LOOM_ERR_TARGET_042, type);
     }
     uint64_t element_count = 0;
     if (!loom_type_static_element_count(type, &element_count) ||
         element_count > UINT32_MAX) {
-      return loom_target_low_legality_emit_type_error(context, op, 53, type);
+      return loom_target_low_legality_emit_type_error(
+          context, op, LOOM_ERR_TARGET_043, type);
     }
     return loom_target_low_legality_verify_scalar_type(
         context, op, loom_type_scalar(loom_type_element_type(type)));
   }
-  return loom_target_low_legality_emit_type_error(context, op, 54, type);
+  return loom_target_low_legality_emit_type_error(context, op,
+                                                  LOOM_ERR_TARGET_044, type);
 }
 
 static iree_status_t loom_target_low_legality_verify_value(
@@ -503,7 +507,7 @@ static iree_status_t loom_target_low_legality_verify_value(
         loom_param_u64(value_id),
     };
     return loom_target_low_legality_emit_target_context_error(
-        context, op, 55, params, IREE_ARRAYSIZE(params));
+        context, op, LOOM_ERR_TARGET_045, params, IREE_ARRAYSIZE(params));
   }
   const loom_type_t type = loom_module_value_type(context->module, value_id);
   return loom_target_low_legality_verify_type(context, op, type);
@@ -611,14 +615,17 @@ static iree_status_t loom_target_low_legality_reject_source_only_op(
     case LOOM_OP_SCF_WHILE:
     case LOOM_OP_SCF_SWITCH:
       return loom_target_low_legality_emit_target_context_error(
-          context, op, 57, /*extra_params=*/NULL, /*extra_param_count=*/0);
+          context, op, LOOM_ERR_TARGET_047, /*extra_params=*/NULL,
+          /*extra_param_count=*/0);
     case LOOM_OP_SCF_CONDITION:
     case LOOM_OP_SCF_YIELD:
       return loom_target_low_legality_emit_target_context_error(
-          context, op, 58, /*extra_params=*/NULL, /*extra_param_count=*/0);
+          context, op, LOOM_ERR_TARGET_048, /*extra_params=*/NULL,
+          /*extra_param_count=*/0);
     default:
       return loom_target_low_legality_emit_target_context_error(
-          context, op, 59, /*extra_params=*/NULL, /*extra_param_count=*/0);
+          context, op, LOOM_ERR_TARGET_049, /*extra_params=*/NULL,
+          /*extra_param_count=*/0);
   }
 }
 
@@ -668,12 +675,14 @@ static iree_status_t loom_target_low_legality_verify_op_class(
       return iree_ok_status();
     case LOOM_TARGET_LOW_LEGALITY_PROVIDER:
       return loom_target_low_legality_emit_target_context_error(
-          context, op, 56, /*extra_params=*/NULL, /*extra_param_count=*/0);
+          context, op, LOOM_ERR_TARGET_046, /*extra_params=*/NULL,
+          /*extra_param_count=*/0);
     case LOOM_TARGET_LOW_LEGALITY_SOURCE_ONLY:
       return loom_target_low_legality_reject_source_only_op(context, op);
     case LOOM_TARGET_LOW_LEGALITY_MODULE_METADATA:
       return loom_target_low_legality_emit_target_context_error(
-          context, op, 60, /*extra_params=*/NULL, /*extra_param_count=*/0);
+          context, op, LOOM_ERR_TARGET_050, /*extra_params=*/NULL,
+          /*extra_param_count=*/0);
     case LOOM_TARGET_LOW_LEGALITY_UNSUPPORTED:
       return loom_target_low_legality_emit_no_target_contract(context, op);
     default: {

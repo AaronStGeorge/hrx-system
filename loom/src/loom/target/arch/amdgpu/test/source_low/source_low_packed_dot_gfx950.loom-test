@@ -3,7 +3,7 @@
 
 amdgpu.target<gfx950> @target
 func.def target(@target) @dot8i4_u4s4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi32>) -> (vector<1xi32>) {
-  // ERROR@+1: TARGET/019 {subject_kind="descriptor", subject_name="amdgpu.v_dot8_i32_iu4"}
+  // ERROR@+1: TARGET/009 {subject_kind="descriptor", subject_name="amdgpu.v_dot8_i32_iu4"}
   %dot = vector.dot8i4<u4s4> %lhs, %rhs, %acc : vector<1xi32>
   func.return %dot : vector<1xi32>
 }

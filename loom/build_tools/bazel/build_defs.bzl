@@ -195,6 +195,8 @@ def loom_generated_cc_library(
         generator,
         source = None,
         hdrs = [],
+        generated_hdr_flags = [],
+        generated_hdrs = [],
         args = [],
         inputs = [],
         extra_output_flags = [],
@@ -206,16 +208,17 @@ def loom_generated_cc_library(
         **kwargs):
     """Generates a C source table and wraps it in a runtime library.
 
-    This is the common build-system contract for generated C data that has a
-    checked-in public header. Generators receive --source=<path> for the C
-    output plus optional flag/output pairs such as --catalog=<path> for sidecar
-    generated artifacts.
+    This is the common build-system contract for generated C data. Generators
+    receive --source=<path> for the C output plus optional flag/output pairs
+    for generated headers and sidecar generated artifacts.
 
     Args:
       name: Runtime C library target name.
       generator: Python executable label that writes the generated outputs.
       source: Generated C source filename. Defaults to <name>.c.
       hdrs: Checked-in public/private headers for the C library.
+      generated_hdr_flags: Generator flags paired with generated_hdrs.
+      generated_hdrs: Generated public/private headers for the C library.
       args: Generator arguments before the output flags.
       inputs: Source data labels consumed by the generator.
       extra_output_flags: Generator flags paired with extra_outputs.
@@ -226,6 +229,8 @@ def loom_generated_cc_library(
       visibility: Passed through to the generator action and runtime library.
       **kwargs: Additional arguments passed through to loom_cc_library.
     """
+    if len(generated_hdr_flags) != len(generated_hdrs):
+        fail("generated_hdr_flags and generated_hdrs must have the same length")
     if len(extra_output_flags) != len(extra_outputs):
         fail("extra_output_flags and extra_outputs must have the same length")
 
@@ -236,6 +241,10 @@ def loom_generated_cc_library(
     source = source or (name + ".c")
     bazel_args = [arg.replace("$(rootpath ", "$(execpath ") for arg in args]
     output_args = ["--source=$(execpath %s)" % source]
+    for i in range(len(generated_hdrs)):
+        flag = generated_hdr_flags[i]
+        header = generated_hdrs[i]
+        output_args.append("%s=$(execpath %s)" % (flag, header))
     for i in range(len(extra_outputs)):
         flag = extra_output_flags[i]
         output = extra_outputs[i]
@@ -244,7 +253,7 @@ def loom_generated_cc_library(
     iree_genrule(
         name = name + "_gen",
         srcs = inputs,
-        outs = [source] + extra_outputs,
+        outs = [source] + generated_hdrs + extra_outputs,
         cmd = " ".join(
             ["$(location %s)" % generator] +
             bazel_args +
@@ -257,10 +266,14 @@ def loom_generated_cc_library(
 
     package_name = native.package_name()
     generated_source = "//%s:%s" % (package_name, source)
+    generated_headers = [
+        "//%s:%s" % (package_name, header)
+        for header in generated_hdrs
+    ]
     loom_cc_library(
         name = name,
         srcs = [generated_source],
-        hdrs = hdrs,
+        hdrs = hdrs + generated_headers,
         deps = deps,
         testonly = testonly,
         visibility = visibility,

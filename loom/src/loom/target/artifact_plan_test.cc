@@ -10,7 +10,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/analysis/symbol_facts.h"
-#include "loom/error/error_defs.h"
+#include "loom/error/error_catalog.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -100,7 +100,8 @@ class ArtifactPlanTest : public ::testing::Test {
         diagnostic_emitter, &analysis_arena_, out_valid, out_plan);
   }
 
-  void ExpectArtifactPlanError(const loom_module_t* module, uint16_t code) {
+  void ExpectArtifactPlanError(const loom_module_t* module,
+                               const loom_error_def_t* error) {
     testing::DiagnosticEmissionCapture capture;
     loom_target_artifact_plan_t plan;
     bool valid = true;
@@ -108,8 +109,7 @@ class ArtifactPlanTest : public ::testing::Test {
         BuildArtifactPlan(module, IREE_SV("module"), &capture, &valid, &plan));
     EXPECT_FALSE(valid);
     ASSERT_EQ(capture.emissions.size(), 1u);
-    EXPECT_EQ(capture.emissions[0].error,
-              loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, code));
+    EXPECT_EQ(capture.emissions[0].error, error);
   }
 
   // Block pool shared by parser, module allocation, and analysis storage.
@@ -201,7 +201,7 @@ func.def target(@test_target) abi(object_function) export("second", {artifact = 
 }
 )");
 
-  ExpectArtifactPlanError(module.get(), 28);
+  ExpectArtifactPlanError(module.get(), LOOM_ERR_TARGET_018);
 }
 
 TEST_F(ArtifactPlanTest, RejectsEntryTargetMismatchingArtifactTarget) {
@@ -215,7 +215,7 @@ func.def target(@other) abi(object_function) export("entry", {artifact = @module
 }
 )");
 
-  ExpectArtifactPlanError(module.get(), 27);
+  ExpectArtifactPlanError(module.get(), LOOM_ERR_TARGET_017);
 }
 
 TEST_F(ArtifactPlanTest, RejectsClosureCrossingIntoAnotherArtifact) {
@@ -234,7 +234,7 @@ func.def target(@test_target) abi(object_function) export("other", {artifact = @
 }
 )");
 
-  ExpectArtifactPlanError(module.get(), 25);
+  ExpectArtifactPlanError(module.get(), LOOM_ERR_TARGET_015);
 }
 
 TEST_F(ArtifactPlanTest, AllowsExternalDeclarationCalls) {

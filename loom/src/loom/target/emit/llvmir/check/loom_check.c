@@ -8,6 +8,7 @@
 
 #include "iree/io/vec_stream.h"
 #include "loom/analysis/symbol_facts.h"
+#include "loom/error/error_catalog.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/target/facts.h"
@@ -428,7 +429,7 @@ static iree_status_t loom_llvmir_loom_check_emit_missing_projection(
   };
   const loom_diagnostic_emission_t emission = {
       .op = target_op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 64),
+      .error = LOOM_ERR_TARGET_054,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
@@ -466,7 +467,7 @@ static iree_status_t loom_llvmir_loom_check_emit_legality_failure(
     };
     const loom_diagnostic_emission_t emission = {
         .op = diagnostic->op,
-        .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 66),
+        .error = LOOM_ERR_TARGET_056,
         .params = params,
         .param_count = IREE_ARRAYSIZE(params),
     };
@@ -495,7 +496,7 @@ static iree_status_t loom_llvmir_loom_check_emit_legality_failure(
   };
   const loom_diagnostic_emission_t emission = {
       .op = target_op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 65),
+      .error = LOOM_ERR_TARGET_055,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };

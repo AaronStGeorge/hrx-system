@@ -4,20 +4,21 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Generator: Error definitions -> C error tables and JSON catalog.
+"""Generator: Error definitions -> C error catalog tables and JSON catalog.
 
 Reads ErrorDef instances from the Python error catalog and emits:
 
-  error_tables.c      — .rodata: param def arrays, error def structs,
-                         lookup table, name tables
-  error_catalog.json  — full catalog for tooling/documentation
+  error_catalog.c     - .rodata: param def arrays, error def structs,
+                         lookup tables, name tables
+  error_catalog.h     - canonical C names for direct defs and compact refs
+  error_catalog.json  - JSON catalog for tooling/documentation
 
 The generated files are build outputs. The Python error catalog is the source
 of truth.
 
 Usage:
     python3 loom/py/loom/gen/run.py c_errors --check
-    bazel run //loom/py/loom/gen:c_errors -- --source=/tmp/error_tables.c
+    bazel run //loom/py/loom/gen:c_errors -- --source=/tmp/error_catalog.c
 """
 
 from __future__ import annotations
@@ -82,8 +83,33 @@ DOMAIN_MAP: dict[ErrorDomain, str] = {
 
 
 def _c_symbol(error: ErrorDef) -> str:
-    """Returns the C symbol name: loom_err_type_001."""
+    """Returns the public C symbol name for an error definition."""
     return f"loom_err_{error.domain.name.lower()}_{error.code:03d}"
+
+
+def _error_def_macro(error: ErrorDef) -> str:
+    """Returns the public C macro for an error definition pointer."""
+    return f"LOOM_ERR_{error.domain.name}_{error.code:03d}"
+
+
+def _error_ref_macro(error: ErrorDef) -> str:
+    """Returns the public C macro for a compact error reference."""
+    return f"LOOM_ERR_{error.domain.name}_{error.code:03d}_REF"
+
+
+def _header_guard_from_public_header(public_header: str) -> str:
+    guard = "".join(c.upper() if c.isalnum() else "_" for c in public_header)
+    while "__" in guard:
+        guard = guard.replace("__", "_")
+    return guard.strip("_") + "_"
+
+
+def _catalog_domain_symbol(catalog_symbol: str, domain: ErrorDomain) -> str:
+    return f"{catalog_symbol}_{domain.name.lower()}"
+
+
+def _catalog_domain_defs_symbol(catalog_symbol: str, domain: ErrorDomain) -> str:
+    return f"{_catalog_domain_symbol(catalog_symbol, domain)}_defs"
 
 
 def _escape_c_string(text: str) -> str:
@@ -91,8 +117,30 @@ def _escape_c_string(text: str) -> str:
     return text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
-def generate_error_tables_c(errors: list[ErrorDef]) -> str:
-    """Generates error_tables.c with all .rodata and utility functions."""
+def _group_errors_by_domain(
+    errors: Sequence[ErrorDef],
+) -> dict[ErrorDomain, list[ErrorDef]]:
+    domains: dict[ErrorDomain, list[ErrorDef]] = {}
+    seen: set[tuple[ErrorDomain, int]] = set()
+    for error in sorted(errors, key=lambda e: (e.domain.value, e.code)):
+        key = (error.domain, error.code)
+        if key in seen:
+            raise ValueError(f"{error.error_id}: duplicate error code")
+        seen.add(key)
+        if error.code > ((1 << 10) - 1):
+            raise ValueError(f"{error.error_id}: compact error ref code overflow")
+        domains.setdefault(error.domain, []).append(error)
+    return domains
+
+
+def generate_error_catalog_c(
+    errors: list[ErrorDef],
+    *,
+    catalog_symbol: str,
+    public_header: str,
+    include_runtime: bool = True,
+) -> str:
+    """Generates error_catalog.c with .rodata and optional runtime functions."""
     lines = [
         *line_comment_header(
             "//",
@@ -100,68 +148,69 @@ def generate_error_tables_c(errors: list[ErrorDef]) -> str:
             regenerate="iree-bazel-build //loom/src/loom/error:error_defs",
         ),
         "",
-        '#include "loom/error/error_defs.h"',
+        f'#include "{public_header}"',
         "",
     ]
 
-    # Severity name table.
-    lines.append("static const char* const")
-    lines.append("    loom_diagnostic_severity_names[LOOM_DIAGNOSTIC_COUNT_] = {")
-    lines.extend(f'        [{SEVERITY_MAP[sev]}] = "{sev.name.lower()}",' for sev in Severity)
-    lines.append("};")
-    lines.append("")
-    lines.append("const char* loom_diagnostic_severity_name(loom_diagnostic_severity_t severity) {")
-    lines.append("  if (severity < LOOM_DIAGNOSTIC_COUNT_) {")
-    lines.append("    return loom_diagnostic_severity_names[severity];")
-    lines.append("  }")
-    lines.append('  return "unknown";')
-    lines.append("}")
-    lines.append("")
+    if include_runtime:
+        # Severity name table.
+        lines.append("static const char* const")
+        lines.append("    loom_diagnostic_severity_names[LOOM_DIAGNOSTIC_COUNT_] = {")
+        lines.extend(f'        [{SEVERITY_MAP[sev]}] = "{sev.name.lower()}",' for sev in Severity)
+        lines.append("};")
+        lines.append("")
+        lines.append("const char* loom_diagnostic_severity_name(loom_diagnostic_severity_t severity) {")
+        lines.append("  if (severity < LOOM_DIAGNOSTIC_COUNT_) {")
+        lines.append("    return loom_diagnostic_severity_names[severity];")
+        lines.append("  }")
+        lines.append('  return "unknown";')
+        lines.append("}")
+        lines.append("")
 
-    # Domain name table.
-    lines.append("static const char* const loom_error_domain_names[LOOM_ERROR_DOMAIN_COUNT_] = {")
-    lines.extend(f'    [{DOMAIN_MAP[domain]}] = "{domain.name}",' for domain in ErrorDomain)
-    lines.append("};")
-    lines.append("")
-    lines.append("const char* loom_error_domain_name(loom_error_domain_t domain) {")
-    lines.append("  if (domain < LOOM_ERROR_DOMAIN_COUNT_) {")
-    lines.append("    return loom_error_domain_names[domain];")
-    lines.append("  }")
-    lines.append('  return "UNKNOWN";')
-    lines.append("}")
-    lines.append("")
-    lines.append("bool loom_error_domain_from_name(iree_string_view_t name,")
-    lines.append("                                 loom_error_domain_t* out_domain) {")
-    lines.append("  for (int i = 0; i < LOOM_ERROR_DOMAIN_COUNT_; ++i) {")
-    lines.append("    if (iree_string_view_equal(name,")
-    lines.append("            iree_make_cstring_view(loom_error_domain_names[i]))) {")
-    lines.append("      *out_domain = (loom_error_domain_t)i;")
-    lines.append("      return true;")
-    lines.append("    }")
-    lines.append("  }")
-    lines.append("  return false;")
-    lines.append("}")
-    lines.append("")
+        # Domain name table.
+        lines.append("static const char* const loom_error_domain_names[LOOM_ERROR_DOMAIN_COUNT_] = {")
+        lines.extend(f'    [{DOMAIN_MAP[domain]}] = "{domain.name}",' for domain in ErrorDomain)
+        lines.append("};")
+        lines.append("")
+        lines.append("const char* loom_error_domain_name(loom_error_domain_t domain) {")
+        lines.append("  if (domain < LOOM_ERROR_DOMAIN_COUNT_) {")
+        lines.append("    return loom_error_domain_names[domain];")
+        lines.append("  }")
+        lines.append('  return "UNKNOWN";')
+        lines.append("}")
+        lines.append("")
+        lines.append("bool loom_error_domain_from_name(iree_string_view_t name,")
+        lines.append("                                 loom_error_domain_t* out_domain) {")
+        lines.append("  for (int i = 0; i < LOOM_ERROR_DOMAIN_COUNT_; ++i) {")
+        lines.append("    if (iree_string_view_equal(name,")
+        lines.append("            iree_make_cstring_view(loom_error_domain_names[i]))) {")
+        lines.append("      *out_domain = (loom_error_domain_t)i;")
+        lines.append("      return true;")
+        lines.append("    }")
+        lines.append("  }")
+        lines.append("  return false;")
+        lines.append("}")
+        lines.append("")
 
-    # Emitter name table.
-    emitter_c_map = {
-        Emitter.VERIFIER: "LOOM_EMITTER_VERIFIER",
-        Emitter.PARSER: "LOOM_EMITTER_PARSER",
-        Emitter.BYTECODE_READER: "LOOM_EMITTER_BYTECODE_READER",
-        Emitter.PASS: "LOOM_EMITTER_PASS",
-        Emitter.BUILDER: "LOOM_EMITTER_BUILDER",
-    }
-    lines.append("static const char* const loom_emitter_names[LOOM_EMITTER_COUNT_] = {")
-    lines.extend(f'    [{emitter_c_map[emitter]}] = "{emitter.name.lower()}",' for emitter in Emitter)
-    lines.append("};")
-    lines.append("")
-    lines.append("const char* loom_emitter_name(loom_emitter_t emitter) {")
-    lines.append("  if (emitter < LOOM_EMITTER_COUNT_) {")
-    lines.append("    return loom_emitter_names[emitter];")
-    lines.append("  }")
-    lines.append('  return "unknown";')
-    lines.append("}")
-    lines.append("")
+        # Emitter name table.
+        emitter_c_map = {
+            Emitter.VERIFIER: "LOOM_EMITTER_VERIFIER",
+            Emitter.PARSER: "LOOM_EMITTER_PARSER",
+            Emitter.BYTECODE_READER: "LOOM_EMITTER_BYTECODE_READER",
+            Emitter.PASS: "LOOM_EMITTER_PASS",
+            Emitter.BUILDER: "LOOM_EMITTER_BUILDER",
+        }
+        lines.append("static const char* const loom_emitter_names[LOOM_EMITTER_COUNT_] = {")
+        lines.extend(f'    [{emitter_c_map[emitter]}] = "{emitter.name.lower()}",' for emitter in Emitter)
+        lines.append("};")
+        lines.append("")
+        lines.append("const char* loom_emitter_name(loom_emitter_t emitter) {")
+        lines.append("  if (emitter < LOOM_EMITTER_COUNT_) {")
+        lines.append("    return loom_emitter_names[emitter];")
+        lines.append("  }")
+        lines.append('  return "unknown";')
+        lines.append("}")
+        lines.append("")
 
     # Per-error param def arrays and error def structs.
     for error in errors:
@@ -174,7 +223,7 @@ def generate_error_tables_c(errors: list[ErrorDef]) -> str:
                 name_escaped = _escape_c_string(param.name)
                 lines.append(f'    {{"{name_escaped}", {PARAM_KIND_MAP[param.kind]}}},')
             lines.append("};")
-        lines.append(f"static const loom_error_def_t {symbol} = {{")
+        lines.append(f"const loom_error_def_t {symbol} = {{")
         lines.append(f'    .error_id = "{_escape_c_string(error.error_id)}",')
         lines.append(f"    .domain = {DOMAIN_MAP[error.domain]},")
         lines.append(f"    .severity = {SEVERITY_MAP[error.severity]},")
@@ -193,31 +242,112 @@ def generate_error_tables_c(errors: list[ErrorDef]) -> str:
         lines.append("};")
         lines.append("")
 
-    # Lookup function.
-    lines.append("static const loom_error_def_t* const loom_all_error_defs[] = {")
-    lines.extend(f"    &{_c_symbol(error)}," for error in errors)
+    grouped_errors = _group_errors_by_domain(errors)
+    for domain, domain_errors in grouped_errors.items():
+        max_code = max(error.code for error in domain_errors)
+        defs_symbol = _catalog_domain_defs_symbol(catalog_symbol, domain)
+        lines.append(f"static const loom_error_def_t* const {defs_symbol}[{max_code + 1}] = {{")
+        lines.extend(f"    [{error.code}] = &{_c_symbol(error)}," for error in domain_errors)
+        lines.append("};")
+        lines.append("")
+        lines.append(f"const loom_error_domain_catalog_t {_catalog_domain_symbol(catalog_symbol, domain)} = {{")
+        lines.append(f"    .domain = {DOMAIN_MAP[domain]},")
+        lines.append(f"    .code_count = {max_code + 1},")
+        lines.append(f"    .errors_by_code = {defs_symbol},")
+        lines.append("};")
+        lines.append("")
+
+    lines.append(f"const loom_error_catalog_t {catalog_symbol} = {{")
+    lines.append("    .domains = {")
+    lines.extend(f"        [{DOMAIN_MAP[domain]}] = &{_catalog_domain_symbol(catalog_symbol, domain)}," for domain in grouped_errors)
+    lines.append("    },")
     lines.append("};")
     lines.append("")
-    lines.append("const loom_error_def_t* loom_error_def_lookup(")
-    lines.append("    loom_error_domain_t domain, uint16_t code) {")
-    lines.append("  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(loom_all_error_defs); ++i) {")
-    lines.append("    if (loom_all_error_defs[i]->domain == domain &&")
-    lines.append("        loom_all_error_defs[i]->code == code) {")
-    lines.append("      return loom_all_error_defs[i];")
-    lines.append("    }")
-    lines.append("  }")
-    lines.append("  return NULL;")
-    lines.append("}")
-    lines.append("")
-    lines.append("const loom_error_def_t* loom_error_def_lookup_ref(")
-    lines.append("    loom_error_ref_t ref) {")
-    lines.append("  if (!loom_error_ref_is_set(ref)) return NULL;")
-    lines.append("  return loom_error_def_lookup(loom_error_ref_domain(ref),")
-    lines.append("                               loom_error_ref_code(ref));")
-    lines.append("}")
-    lines.append("")
+
+    if include_runtime:
+        lines.append("const loom_error_def_t* loom_error_catalog_lookup(")
+        lines.append("    const loom_error_catalog_t* catalog, loom_error_domain_t domain,")
+        lines.append("    uint16_t code) {")
+        lines.append("  if (!catalog || domain >= LOOM_ERROR_DOMAIN_COUNT_) {")
+        lines.append("    return NULL;")
+        lines.append("  }")
+        lines.append("  const loom_error_domain_catalog_t* domain_catalog =")
+        lines.append("      catalog->domains[domain];")
+        lines.append("  if (!domain_catalog || code >= domain_catalog->code_count) {")
+        lines.append("    return NULL;")
+        lines.append("  }")
+        lines.append("  return domain_catalog->errors_by_code[code];")
+        lines.append("}")
+        lines.append("")
+        lines.append("const loom_error_def_t* loom_error_catalog_lookup_ref(")
+        lines.append("    const loom_error_catalog_t* catalog, loom_error_ref_t ref) {")
+        lines.append("  if (!loom_error_ref_is_set(ref)) {")
+        lines.append("    return NULL;")
+        lines.append("  }")
+        lines.append("  return loom_error_catalog_lookup(")
+        lines.append("      catalog, loom_error_ref_domain(ref), loom_error_ref_code(ref));")
+        lines.append("}")
+        lines.append("")
+        lines.append("const loom_error_def_t* loom_error_def_lookup(")
+        lines.append("    loom_error_domain_t domain, uint16_t code) {")
+        lines.append(f"  return loom_error_catalog_lookup(&{catalog_symbol}, domain, code);")
+        lines.append("}")
+        lines.append("")
+        lines.append("const loom_error_def_t* loom_error_def_lookup_ref(")
+        lines.append("    loom_error_ref_t ref) {")
+        lines.append(f"  return loom_error_catalog_lookup_ref(&{catalog_symbol}, ref);")
+        lines.append("}")
+        lines.append("")
 
     return "\n".join(lines) + "\n"
+
+
+def generate_error_catalog_h(errors: list[ErrorDef], *, catalog_symbol: str, public_header: str) -> str:
+    """Generates error_catalog.h with canonical C error references."""
+
+    seen_def_macros: set[str] = set()
+    seen_ref_macros: set[str] = set()
+    seen_symbols: set[str] = set()
+    lines = [
+        *line_comment_header(
+            "//",
+            generator="loom.gen.c_errors",
+            regenerate="iree-bazel-build //loom/src/loom/error:error_defs",
+        ),
+        "",
+        f"#ifndef {_header_guard_from_public_header(public_header)}",
+        f"#define {_header_guard_from_public_header(public_header)}",
+        "",
+        '#include "loom/error/error_defs.h"',
+        "",
+        f"extern const loom_error_catalog_t {catalog_symbol};",
+        "",
+    ]
+    lines.extend(f"extern const loom_error_domain_catalog_t {_catalog_domain_symbol(catalog_symbol, domain)};" for domain in _group_errors_by_domain(errors))
+    if errors:
+        lines.append("")
+    for error in errors:
+        symbol = _c_symbol(error)
+        def_macro = _error_def_macro(error)
+        ref_macro = _error_ref_macro(error)
+        if symbol in seen_symbols:
+            raise ValueError(f"{error.error_id}: duplicate error symbol {symbol}")
+        if def_macro in seen_def_macros:
+            raise ValueError(f"{error.error_id}: duplicate error def macro {def_macro}")
+        if ref_macro in seen_ref_macros:
+            raise ValueError(f"{error.error_id}: duplicate error ref macro {ref_macro}")
+        seen_symbols.add(symbol)
+        seen_def_macros.add(def_macro)
+        seen_ref_macros.add(ref_macro)
+        lines.append(f"// {error.error_id}: {error.summary}")
+        lines.append(f"extern const loom_error_def_t {symbol};")
+        lines.append(f"#define {def_macro} (&{symbol})")
+        lines.append(f"#define {ref_macro} \\")
+        lines.append(f"  LOOM_ERROR_REF({DOMAIN_MAP[error.domain]}, {error.code})")
+        lines.append("")
+    lines.append(f"#endif  // {_header_guard_from_public_header(public_header)}")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def generate_error_catalog_json(errors: list[ErrorDef]) -> str:
@@ -273,13 +403,65 @@ def _write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+_OPTIONAL_TARGET_DOMAINS = frozenset(
+    {
+        ErrorDomain.AMDGPU,
+        ErrorDomain.X86,
+        ErrorDomain.WASM,
+        ErrorDomain.SPIRV,
+    }
+)
+
+
+def _catalog_shard_errors(shard: str) -> list[ErrorDef]:
+    from loom.error import ALL_ERRORS
+
+    errors = list(ALL_ERRORS)
+    if shard == "all":
+        return errors
+    if shard == "core":
+        return [error for error in errors if error.domain not in _OPTIONAL_TARGET_DOMAINS]
+    domain_by_shard = {
+        "amdgpu": ErrorDomain.AMDGPU,
+        "x86": ErrorDomain.X86,
+        "wasm": ErrorDomain.WASM,
+        "spirv": ErrorDomain.SPIRV,
+    }
+    return [error for error in errors if error.domain == domain_by_shard[shard]]
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    """Generate C error tables and JSON catalog."""
-    parser = argparse.ArgumentParser(description="Generate Loom error tables from Python definitions.")
+    """Generate C error catalog tables and JSON catalog."""
+    parser = argparse.ArgumentParser(description="Generate Loom error catalogs from Python definitions.")
+    parser.add_argument(
+        "--shard",
+        choices=("all", "core", "amdgpu", "x86", "wasm", "spirv"),
+        default="all",
+        help="Named error catalog shard to generate.",
+    )
+    parser.add_argument(
+        "--catalog-symbol",
+        help="C symbol name for the generated loom_error_catalog_t.",
+    )
+    parser.add_argument(
+        "--public-header",
+        default="loom/error/error_catalog.h",
+        help="Public include path for the generated catalog header.",
+    )
+    parser.add_argument(
+        "--no-runtime",
+        action="store_true",
+        help="Do not emit shared runtime lookup/name functions.",
+    )
     parser.add_argument(
         "--source",
         type=Path,
-        help="Generated C error table path.",
+        help="Generated C error catalog source path.",
+    )
+    parser.add_argument(
+        "--header",
+        type=Path,
+        help="Generated C error catalog header path.",
     )
     parser.add_argument(
         "--catalog",
@@ -293,22 +475,33 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if not args.check and args.source is None and args.catalog is None:
-        parser.error("at least one of --source, --catalog, or --check is required")
+    if not args.check and args.source is None and args.header is None and args.catalog is None:
+        parser.error("at least one of --source, --header, --catalog, or --check is required")
 
-    from loom.error import ALL_ERRORS
-
-    errors = list(ALL_ERRORS)
-    tables_c = generate_error_tables_c(errors)
+    errors = _catalog_shard_errors(args.shard)
+    catalog_symbol = args.catalog_symbol or f"loom_error_catalog_{args.shard}"
+    tables_c = generate_error_catalog_c(
+        errors,
+        catalog_symbol=catalog_symbol,
+        public_header=args.public_header,
+        include_runtime=not args.no_runtime,
+    )
+    header_h = generate_error_catalog_h(
+        errors,
+        catalog_symbol=catalog_symbol,
+        public_header=args.public_header,
+    )
     catalog_json = generate_error_catalog_json(errors)
 
     if args.source is not None:
         _write_text(args.source, tables_c)
+    if args.header is not None:
+        _write_text(args.header, header_h)
     if args.catalog is not None:
         _write_text(args.catalog, catalog_json)
 
     if args.check:
-        print(f"Validated {len(errors)} error definitions")
+        print(f"Validated {len(errors)} error definitions in {args.shard} shard")
     return 0
 
 

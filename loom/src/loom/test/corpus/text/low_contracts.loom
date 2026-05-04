@@ -21,7 +21,7 @@ low.func.def target(@low_vm_resource_target) abi(vm_module_function) export("low
   low.return %state : reg<vm.i32>
 }
 
-test.target<low_core> @low_native_resource_target {target_triple = "x86_64-unknown-linux-gnu"}
+test.target<low_core> @low_native_resource_target
 
 low.func.def target(@low_native_resource_target) abi(object_function) export("low_native_resource", {linkage = "dso_local"}) @low_native_resource() -> (reg<native.ptr>) {
   %ptr = low.resource<native_pointer> {index = 0, source_type = buffer} : reg<native.ptr>

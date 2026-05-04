@@ -164,7 +164,7 @@ bool loom_low_lower_context_should_stop(
 // context followed by |extra_params|.
 iree_status_t loom_low_lower_emit_target_context_error(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    uint16_t error_code, const loom_diagnostic_param_t* extra_params,
+    const loom_error_def_t* error, const loom_diagnostic_param_t* extra_params,
     iree_host_size_t extra_param_count);
 
 // Emits ERR_TARGET_001 for a source op with no selected target-low contract.
