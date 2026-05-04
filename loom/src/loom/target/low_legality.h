@@ -197,13 +197,6 @@ iree_status_t loom_target_low_legality_emit_error_ref(
     loom_error_ref_t error_ref, const loom_diagnostic_param_t* params,
     iree_host_size_t param_count);
 
-// Emits ERR_BACKEND_002 for a target contract decision.
-iree_status_t loom_target_low_legality_record_contract(
-    loom_target_low_legality_context_t* context,
-    const loom_target_low_legality_provider_t* provider, const loom_op_t* op,
-    iree_string_view_t contract_key, iree_string_view_t decision,
-    iree_string_view_t reason);
-
 // Emits ERR_BACKEND_017 for a target memory-access selection decision.
 iree_status_t loom_target_low_legality_record_memory_access(
     loom_target_low_legality_context_t* context, const loom_op_t* op,

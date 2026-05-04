@@ -210,28 +210,6 @@ static iree_status_t loom_target_low_legality_reject_error_ref(
                                        rejection->param_count);
 }
 
-iree_status_t loom_target_low_legality_record_contract(
-    loom_target_low_legality_context_t* context,
-    const loom_target_low_legality_provider_t* provider, const loom_op_t* op,
-    iree_string_view_t contract_key, iree_string_view_t decision,
-    iree_string_view_t reason) {
-  (void)provider;
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(
-          loom_target_low_legality_target_key(context->options->bundle)),
-      loom_param_string(
-          loom_target_low_legality_export_name(context->options->bundle)),
-      loom_param_string(
-          loom_target_low_legality_config_key(context->options->bundle)),
-      loom_param_string(loom_target_low_legality_function_name(context)),
-      loom_param_string(contract_key),
-      loom_param_string(decision),
-      loom_param_string(reason),
-  };
-  return loom_target_low_legality_emit(context, op, LOOM_ERR_BACKEND_002,
-                                       params, IREE_ARRAYSIZE(params));
-}
-
 iree_status_t loom_target_low_legality_record_memory_access(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     iree_string_view_t memory_space, iree_string_view_t operation_kind,

@@ -36,27 +36,6 @@ ERR_BACKEND_001 = ErrorDef(
     ),
 )
 
-# ERR_BACKEND_002: Target contract selection or rejection was recorded.
-ERR_BACKEND_002 = ErrorDef(
-    domain=ErrorDomain.BACKEND,
-    code=2,
-    severity=Severity.REMARK,
-    summary="Target contract decision recorded.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "{decision} contract '{contract_key}' for '@{function_name}': {reason}"
-    ),
-    params=(
-        ErrorParam("target_key", ParamKind.STRING),
-        ErrorParam("export_name", ParamKind.STRING),
-        ErrorParam("config_key", ParamKind.STRING),
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("contract_key", ParamKind.STRING),
-        ErrorParam("decision", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
-    ),
-)
-
 # ERR_BACKEND_003: Register pressure peak was observed.
 ERR_BACKEND_003 = ErrorDef(
     domain=ErrorDomain.BACKEND,
@@ -499,7 +478,6 @@ ERR_BACKEND_018 = ErrorDef(
 
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_001,
-    ERR_BACKEND_002,
     ERR_BACKEND_003,
     ERR_BACKEND_004,
     ERR_BACKEND_005,
