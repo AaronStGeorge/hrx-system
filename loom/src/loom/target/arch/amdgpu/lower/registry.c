@@ -522,6 +522,7 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
         {
             .options = loom_amdgpu_descriptor_matrix_options,
             .query = loom_amdgpu_descriptor_matrix_query,
+            .attrs = loom_amdgpu_descriptor_matrix_attrs,
             .user_data = NULL,
         },
     .select_op = {.fn = loom_amdgpu_select_op, .user_data = NULL},

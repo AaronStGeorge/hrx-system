@@ -24,10 +24,13 @@ extern "C" {
 #define LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES \
   (LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES * 2u)
 
-// Maximum number of packed 32-bit registers accepted for packed byte payloads.
-#define LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS 4u
+// Maximum number of opaque packed 32-bit registers accepted as a register
+// payload. This covers wide matrix operands that are passed through as an
+// already-packed VGPR tuple, not scalarized vector arithmetic.
+#define LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS 16u
 
-// Maximum number of packed i8 lanes accepted for packed dot payloads.
+// Maximum number of packed i8 lanes accepted by opaque packed-register
+// helpers.
 #define LOOM_AMDGPU_MAX_PACKED_I8_LANES \
   (LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS * 4u)
 

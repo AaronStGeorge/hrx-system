@@ -271,8 +271,12 @@ TEST(MatrixContractTest, Gfx1250WmmaScale16Descriptor) {
   EXPECT_EQ(descriptor->scale_kind, LOOM_AMDGPU_MATRIX_SCALE_16);
   EXPECT_EQ(descriptor->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALE_FORMATS,
             LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALE_FORMATS);
-  EXPECT_EQ(descriptor->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_REUSE,
-            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_REUSE);
+  EXPECT_EQ(descriptor->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_MATRIX_FORMATS,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_MATRIX_FORMATS);
+  EXPECT_EQ(descriptor->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_REUSE, 0u);
+  EXPECT_EQ(
+      descriptor->low_descriptor_ref,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_SCALE16_F32_16X16X128_F8F6F4_F8_F8);
 }
 
 TEST(MatrixContractTest, Gfx1250WmmaModifierDescriptors) {
@@ -475,7 +479,7 @@ TEST(MatrixContractTest, WmmaDescriptorsExposeTargetLowIds) {
       FindDescriptor("wmma.scale.f32.16x16x128.f8f6f4");
   ASSERT_NE(scaled, nullptr);
   EXPECT_EQ(scaled->low_descriptor_ref,
-            LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_REF_NONE);
+            LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_SCALE_F32_16X16X128_F8F6F4_F8_F8);
 }
 
 TEST(MatrixContractTest, Cdna3DescriptorsExposeTargetLowIds) {

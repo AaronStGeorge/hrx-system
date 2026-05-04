@@ -32,6 +32,8 @@ typedef struct loom_low_lower_descriptor_matrix_plan_t {
   loom_low_lower_resolved_descriptor_t descriptor;
   // Target-independent request facts used to materialize descriptor operands.
   loom_contract_request_t contract_request;
+  // Target-owned immediate attributes materialized from request facts.
+  loom_named_attr_slice_t attrs;
 } loom_low_lower_descriptor_matrix_plan_t;
 
 static bool loom_low_lower_type_is_none(loom_type_t type) {
@@ -689,6 +691,19 @@ static iree_status_t loom_low_lower_record_descriptor_matrix_plan(
       context, query_result->selected_descriptor, &plan_data->descriptor));
   IREE_RETURN_IF_ERROR(loom_low_lower_descriptor_matrix_request_from_source(
       context, source_op, matrix_rule, &plan_data->contract_request));
+  plan_data->attrs = loom_named_attr_slice_empty();
+  if (plan_data->descriptor.descriptor->immediate_count != 0) {
+    if (context->policy->descriptor_matrix.attrs == NULL) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "descriptor-matrix selected descriptor has immediates, but the "
+          "target policy has no attribute materializer");
+    }
+    IREE_RETURN_IF_ERROR(context->policy->descriptor_matrix.attrs(
+        context->policy->descriptor_matrix.user_data, context, matrix_rule,
+        &plan_data->contract_request, plan_data->descriptor.descriptor,
+        &plan_data->attrs));
+  }
   loom_low_lower_record_selected_plan(
       context, (loom_low_lower_selected_plan_t){
                    .source_op = source_op,
@@ -1515,6 +1530,24 @@ static iree_status_t loom_low_lower_descriptor_matrix_sparse_source_value(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_lower_descriptor_matrix_auxiliary_source_value(
+    const loom_contract_operand_t* operand,
+    loom_contract_auxiliary_operand_key_t key, iree_string_view_t field_name,
+    loom_value_id_t* out_source_value) {
+  *out_source_value = LOOM_VALUE_ID_INVALID;
+  const loom_contract_value_ref_t ref =
+      operand->encoded.auxiliary_value_refs[key];
+  if (!loom_contract_value_ref_is_present(ref)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "selected descriptor requires matrix auxiliary operand '%.*s', but "
+        "the source matrix contract does not provide it",
+        (int)field_name.size, field_name.data);
+  }
+  *out_source_value = loom_contract_value_ref_value_id(ref);
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_lower_descriptor_matrix_packet_value(
     loom_low_lower_context_t* context,
     const loom_low_lower_descriptor_matrix_plan_t* plan,
@@ -1539,6 +1572,24 @@ static iree_status_t loom_low_lower_descriptor_matrix_packet_value(
     loom_value_id_t source_value = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_low_lower_descriptor_matrix_sparse_source_value(
         &plan->contract_request, &source_value));
+    return loom_low_lower_lookup_value(context, source_value, out_low_value);
+  }
+  if (iree_string_view_equal(field_name, IREE_SV("scale_src0"))) {
+    loom_value_id_t source_value = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_low_lower_descriptor_matrix_auxiliary_source_value(
+            &plan->contract_request.lhs,
+            LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_SCALE, field_name,
+            &source_value));
+    return loom_low_lower_lookup_value(context, source_value, out_low_value);
+  }
+  if (iree_string_view_equal(field_name, IREE_SV("scale_src1"))) {
+    loom_value_id_t source_value = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_low_lower_descriptor_matrix_auxiliary_source_value(
+            &plan->contract_request.rhs,
+            LOOM_CONTRACT_AUXILIARY_OPERAND_KEY_SCALE, field_name,
+            &source_value));
     return loom_low_lower_lookup_value(context, source_value, out_low_value);
   }
   return iree_make_status(
@@ -1708,9 +1759,9 @@ static iree_status_t loom_low_lower_emit_descriptor_matrix_vector_mma(
 
   loom_op_t* low_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
-      context, &plan->descriptor, operands, operand_count,
-      loom_make_named_attr_slice(NULL, 0), &result_low_type, 1, tied_results,
-      tied_result_count, source_op->location, &low_op));
+      context, &plan->descriptor, operands, operand_count, plan->attrs,
+      &result_low_type, 1, tied_results, tied_result_count, source_op->location,
+      &low_op));
   return loom_low_lower_bind_value(
       context, result, loom_value_slice_get(loom_low_op_results(low_op), 0));
 }

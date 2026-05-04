@@ -703,6 +703,14 @@ iree_status_t loom_amdgpu_descriptor_matrix_query(
     const loom_contract_request_t* contract_request,
     loom_target_contract_query_result_t* out_result);
 
+// Materializes AMDGPU matrix descriptor immediate attributes.
+iree_status_t loom_amdgpu_descriptor_matrix_attrs(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_target_contract_descriptor_matrix_rule_t* rule,
+    const loom_contract_request_t* contract_request,
+    const loom_low_descriptor_t* descriptor,
+    loom_named_attr_slice_t* out_attrs);
+
 // Selects an AMDGPU register-table lookup plan.
 iree_status_t loom_amdgpu_select_vector_table_lookup_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,

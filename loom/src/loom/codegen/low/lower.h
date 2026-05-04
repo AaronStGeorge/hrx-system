@@ -246,11 +246,20 @@ typedef iree_status_t (*loom_low_lower_descriptor_matrix_query_fn_t)(
     const loom_contract_request_t* request,
     loom_target_contract_query_result_t* out_result);
 
+typedef iree_status_t (*loom_low_lower_descriptor_matrix_attrs_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_target_contract_descriptor_matrix_rule_t* rule,
+    const loom_contract_request_t* request,
+    const loom_low_descriptor_t* descriptor,
+    loom_named_attr_slice_t* out_attrs);
+
 typedef struct loom_low_lower_descriptor_matrix_t {
   // Supplies target-specific options for shared source-to-matrix adapters.
   loom_low_lower_descriptor_matrix_options_fn_t options;
   // Projects a generic matrix contract request to a target descriptor.
   loom_low_lower_descriptor_matrix_query_fn_t query;
+  // Materializes target-owned immediate attributes for the selected descriptor.
+  loom_low_lower_descriptor_matrix_attrs_fn_t attrs;
   // Caller-owned payload passed to descriptor-matrix callbacks.
   void* user_data;
 } loom_low_lower_descriptor_matrix_t;

@@ -129,17 +129,24 @@ typedef enum loom_amdgpu_matrix_scale_kind_e {
 } loom_amdgpu_matrix_scale_kind_t;
 
 typedef enum loom_amdgpu_matrix_format_selector_e {
-  // LLVM selector value for FP8 matrix payloads.
+  // LLVM selector value for FP8 E4M3-family matrix payloads.
   LOOM_AMDGPU_MATRIX_FORMAT_SELECTOR_FP8 = 0,
-  // LLVM selector value for BF8 matrix payloads.
+  // LLVM selector value for BF8/E5M2-family matrix payloads.
   LOOM_AMDGPU_MATRIX_FORMAT_SELECTOR_BF8 = 1,
-  // LLVM selector value for FP6 matrix payloads.
+  // LLVM selector value for FP6 E2M3-family matrix payloads.
   LOOM_AMDGPU_MATRIX_FORMAT_SELECTOR_FP6 = 2,
-  // LLVM selector value for BF6 matrix payloads.
+  // LLVM selector value for BF6/E3M2-family matrix payloads.
   LOOM_AMDGPU_MATRIX_FORMAT_SELECTOR_BF6 = 3,
   // LLVM selector value for FP4 matrix payloads.
   LOOM_AMDGPU_MATRIX_FORMAT_SELECTOR_FP4 = 4,
 } loom_amdgpu_matrix_format_selector_t;
+
+typedef enum loom_amdgpu_matrix_scale_format_selector_e {
+  // LLVM selector value for E8M0 scale payloads.
+  LOOM_AMDGPU_MATRIX_SCALE_FORMAT_SELECTOR_E8M0 = 0,
+  // LLVM selector value for FP8 E4M3-family scale payloads.
+  LOOM_AMDGPU_MATRIX_SCALE_FORMAT_SELECTOR_FP8_E4M3 = 2,
+} loom_amdgpu_matrix_scale_format_selector_t;
 
 typedef enum loom_amdgpu_matrix_operand_role_e {
   // Unknown or uninitialized matrix operand role.
