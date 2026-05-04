@@ -51,6 +51,7 @@ typedef enum loom_vector_to_scalar_lane_kind_e {
   LOOM_VECTOR_TO_SCALAR_LANE_GATHER,
   LOOM_VECTOR_TO_SCALAR_LANE_GATHER_MASK,
   LOOM_VECTOR_TO_SCALAR_LANE_LOAD_EXPAND,
+  LOOM_VECTOR_TO_SCALAR_LANE_COUNT,
 } loom_vector_to_scalar_lane_kind_t;
 
 typedef struct loom_vector_to_scalar_descriptor_t {
