@@ -65,7 +65,6 @@ class GuardDiagnostic:
     ref: DiagnosticRef | None = None
     subject_kind: str = ""
     subject_name: str = ""
-    expected_text: str = ""
     constraint_key: str = ""
 
     def __post_init__(self) -> None:
@@ -75,9 +74,8 @@ class GuardDiagnostic:
             raise ValueError("guard diagnostic subject kind must be non-empty")
         if not self.subject_name:
             raise ValueError("guard diagnostic subject name must be non-empty")
-        if not self.expected_text:
-            raise ValueError("guard diagnostic expected text must be non-empty")
-        constraint_key = self.constraint_key or self.subject_kind
+        if not self.constraint_key:
+            raise ValueError("guard diagnostic constraint key must be non-empty")
         object.__setattr__(
             self,
             "ref",
@@ -85,8 +83,7 @@ class GuardDiagnostic:
                 ERR_TARGET_003,
                 string_param("subject_kind", self.subject_kind),
                 string_param("subject_name", self.subject_name),
-                string_param("constraint_key", constraint_key),
-                string_param("expected_text", self.expected_text),
+                string_param("constraint_key", self.constraint_key),
             ),
         )
 

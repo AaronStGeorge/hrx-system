@@ -65,10 +65,7 @@ _DISP32_MAX = (2**31) - 1
 _SOURCE_MEMORY_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="source-memory",
     subject_name="x86-avx512",
-    expected_text=(
-        "x86 AVX512 memory lowering requires a contiguous i32/f32 vector "
-        "access with an ABI argument base and a disp32-compatible offset"
-    ),
+    constraint_key="x86.avx512.source_memory",
 )
 
 

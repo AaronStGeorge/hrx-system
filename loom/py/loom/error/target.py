@@ -55,24 +55,22 @@ ERR_TARGET_002 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_003: Target contract rejected a named constraint.
+# ERR_TARGET_003: Target contract guard constraint is not satisfied.
 ERR_TARGET_003 = ErrorDef(
     domain=ErrorDomain.TARGET,
     code=3,
     severity=Severity.ERROR,
-    summary="Target contract rejected a named constraint.",
+    summary="Target contract guard constraint is not satisfied.",
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
         "rejected '{op_name}' {subject_kind} '{subject_name}' in "
-        "'@{function_name}': constraint '{constraint_key}' requires "
-        "'{expected_text}'"
+        "'@{function_name}': constraint '{constraint_key}' is not satisfied"
     ),
     params=(
         *_TARGET_CONTEXT_PARAMS,
         ErrorParam("subject_kind", ParamKind.STRING),
         ErrorParam("subject_name", ParamKind.STRING),
         ErrorParam("constraint_key", ParamKind.STRING),
-        ErrorParam("expected_text", ParamKind.STRING),
     ),
 )
 

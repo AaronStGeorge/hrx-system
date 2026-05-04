@@ -82,261 +82,174 @@ _VGPR = "amdgpu.vgpr"
 _KIND_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="kind",
     subject_name="vector.dot",
-    expected_text=(
-        "AMDGPU packed vector dot lowering requires a supported signedness kind"
-    ),
+    constraint_key="amdgpu.dot.kind",
 )
 _PACKED_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="descriptor",
     subject_name="amdgpu.packed_dot",
-    expected_text=(
-        "the selected AMDGPU descriptor set does not contain the required "
-        "packed dot packet"
-    ),
+    constraint_key="amdgpu.dot.packed_descriptor",
 )
 _DOT4I_MIXED_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="descriptor",
     subject_name="amdgpu.v_dot4_i32_iu8",
-    expected_text=(
-        "the selected AMDGPU descriptor set does not contain the required "
-        "mixed signed i8 packed dot packet"
-    ),
+    constraint_key="amdgpu.dot4i.mixed_descriptor",
 )
 _DOT8I4_MIXED_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="descriptor",
     subject_name="amdgpu.v_dot8_i32_iu4",
-    expected_text=(
-        "the selected AMDGPU descriptor set does not contain the required "
-        "mixed signed i4 packed dot packet"
-    ),
+    constraint_key="amdgpu.dot8i4.mixed_descriptor",
 )
 _DOT2F_F16_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="descriptor",
     subject_name="amdgpu.v_dot2_f32_f16",
-    expected_text=(
-        "the selected AMDGPU descriptor set does not contain the required "
-        "f16 VALU dot2 packet"
-    ),
+    constraint_key="amdgpu.dot2f.f16_descriptor",
 )
 _DOT2F_BF16_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="descriptor",
     subject_name="amdgpu.v_dot2_f32_bf16",
-    expected_text=(
-        "the selected AMDGPU descriptor set does not contain the required "
-        "bf16 VALU dot2 packet"
-    ),
+    constraint_key="amdgpu.dot2f.bf16_descriptor",
 )
 _DOT4F8_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="descriptor",
     subject_name="amdgpu.v_dot4_f32",
-    expected_text=(
-        "the selected AMDGPU descriptor set does not contain the required "
-        "FP8/BF8 dot4 packet"
-    ),
+    constraint_key="amdgpu.dot4f8.descriptor",
 )
 _DOTF_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="descriptor",
     subject_name="amdgpu.v_fma_f32",
-    expected_text=(
-        "the selected AMDGPU descriptor set does not contain the f32 FMA packet"
-    ),
+    constraint_key="amdgpu.dotf.descriptor",
 )
 
 _DOTF_LHS_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="lhs",
-    expected_text=(
-        "AMDGPU vector.dotf lowering requires a static rank-1 f32 lhs vector "
-        "with 1 to 8 lanes"
-    ),
+    constraint_key="amdgpu.dotf.lhs_type",
 )
 _DOTF_RHS_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="rhs",
-    expected_text=(
-        "AMDGPU vector.dotf lowering requires a static rank-1 f32 rhs vector "
-        "matching the lhs shape"
-    ),
+    constraint_key="amdgpu.dotf.rhs_type",
 )
 _DOTF_ACC_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="accumulator",
-    expected_text="AMDGPU vector.dotf lowering requires an f32 scalar accumulator",
+    constraint_key="amdgpu.dotf.accumulator_type",
 )
 _DOTF_RESULT_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="result",
-    expected_text="AMDGPU vector.dotf lowering requires an f32 scalar result",
+    constraint_key="amdgpu.dotf.result_type",
 )
 _ACC_VGPR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="register-class",
     subject_name="accumulator",
-    expected_text=(
-        "AMDGPU vector.dotf lowering requires the accumulator to map to a VGPR"
-    ),
+    constraint_key="amdgpu.dotf.accumulator_vgpr",
 )
 _RESULT_VGPR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="register-class",
     subject_name="result",
-    expected_text="AMDGPU vector.dotf lowering requires the result to map to a VGPR",
+    constraint_key="amdgpu.dotf.result_vgpr",
 )
 _PACKED_ACC_VGPR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="register-class",
     subject_name="accumulator",
-    expected_text=(
-        "AMDGPU packed vector dot lowering requires the accumulator to map to "
-        "VGPR storage"
-    ),
+    constraint_key="amdgpu.packed_dot.accumulator_vgpr",
 )
 _PACKED_RESULT_VGPR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="register-class",
     subject_name="result",
-    expected_text=(
-        "AMDGPU packed vector dot lowering requires the result to map to VGPR storage"
-    ),
+    constraint_key="amdgpu.packed_dot.result_vgpr",
 )
 _LHS_VGPR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="register-class",
     subject_name="lhs",
-    expected_text=(
-        "AMDGPU packed vector dot lowering requires the lhs to map to VGPR storage"
-    ),
+    constraint_key="amdgpu.packed_dot.lhs_vgpr",
 )
 _RHS_VGPR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="register-class",
     subject_name="rhs",
-    expected_text=(
-        "AMDGPU packed vector dot lowering requires the rhs to map to VGPR storage"
-    ),
+    constraint_key="amdgpu.packed_dot.rhs_vgpr",
 )
 
 _DOT4I_LHS_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="lhs",
-    expected_text=(
-        "AMDGPU vector.dot4i lowering requires a static rank-1 i8 lhs vector "
-        "with a multiple-of-4 lane count from 4 to 16"
-    ),
+    constraint_key="amdgpu.dot4i.lhs_type",
 )
 _DOT4I_RHS_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="rhs",
-    expected_text=(
-        "AMDGPU vector.dot4i lowering requires a static rank-1 i8 rhs vector "
-        "with a multiple-of-4 lane count matching the lhs shape"
-    ),
+    constraint_key="amdgpu.dot4i.rhs_type",
 )
 _PACKED_I32_ACC_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="accumulator",
-    expected_text=(
-        "AMDGPU packed vector dot lowering requires a static rank-1 i32 "
-        "accumulator vector matching the result group count"
-    ),
+    constraint_key="amdgpu.packed_dot.i32_accumulator_type",
 )
 _PACKED_I32_RESULT_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="result",
-    expected_text=(
-        "AMDGPU packed vector dot lowering requires a static rank-1 i32 "
-        "result vector with 1 to 4 lanes"
-    ),
+    constraint_key="amdgpu.packed_dot.i32_result_type",
 )
 _DOT8I4_LHS_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="lhs",
-    expected_text=(
-        "AMDGPU vector.dot8i4 lowering requires a static rank-1 i32 lhs "
-        "vector with 1 to 4 lanes"
-    ),
+    constraint_key="amdgpu.dot8i4.lhs_type",
 )
 _DOT8I4_RHS_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="rhs",
-    expected_text=(
-        "AMDGPU vector.dot8i4 lowering requires a static rank-1 i32 rhs "
-        "vector matching the lhs shape"
-    ),
+    constraint_key="amdgpu.dot8i4.rhs_type",
 )
 _DOT2F_F16_LHS_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="lhs",
-    expected_text=(
-        "AMDGPU vector.dot2f f16 lowering requires a static rank-1 f16 lhs "
-        "vector with an even lane count from 2 to 16"
-    ),
+    constraint_key="amdgpu.dot2f.f16_lhs_type",
 )
 _DOT2F_F16_RHS_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="rhs",
-    expected_text=(
-        "AMDGPU vector.dot2f f16 lowering requires a static rank-1 f16 rhs "
-        "vector matching the lhs shape"
-    ),
+    constraint_key="amdgpu.dot2f.f16_rhs_type",
 )
 _DOT2F_BF16_LHS_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="lhs",
-    expected_text=(
-        "AMDGPU vector.dot2f bf16 lowering requires a static rank-1 bf16 lhs "
-        "vector with an even lane count from 2 to 16"
-    ),
+    constraint_key="amdgpu.dot2f.bf16_lhs_type",
 )
 _DOT2F_BF16_RHS_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="rhs",
-    expected_text=(
-        "AMDGPU vector.dot2f bf16 lowering requires a static rank-1 bf16 rhs "
-        "vector matching the lhs shape"
-    ),
+    constraint_key="amdgpu.dot2f.bf16_rhs_type",
 )
 _DOT2F_ACC_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="accumulator",
-    expected_text=(
-        "AMDGPU vector.dot2f lowering requires a static rank-1 f32 "
-        "accumulator vector matching the packed half register count"
-    ),
+    constraint_key="amdgpu.dot2f.accumulator_type",
 )
 _DOT2F_RESULT_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="result",
-    expected_text=(
-        "AMDGPU vector.dot2f lowering requires a static rank-1 f32 result "
-        "vector matching the packed half register count"
-    ),
+    constraint_key="amdgpu.dot2f.result_type",
 )
 _DOT4F8_LHS_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="lhs",
-    expected_text=(
-        "AMDGPU vector.dot4f8 lowering requires a static rank-1 i32 lhs "
-        "vector with 1 to 4 packed FP8/BF8 lanes"
-    ),
+    constraint_key="amdgpu.dot4f8.lhs_type",
 )
 _DOT4F8_RHS_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="rhs",
-    expected_text=(
-        "AMDGPU vector.dot4f8 lowering requires a static rank-1 i32 rhs "
-        "vector matching the lhs shape"
-    ),
+    constraint_key="amdgpu.dot4f8.rhs_type",
 )
 _DOT4F8_ACC_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="accumulator",
-    expected_text=(
-        "AMDGPU vector.dot4f8 lowering requires a static rank-1 f32 "
-        "accumulator vector matching the packed source register count"
-    ),
+    constraint_key="amdgpu.dot4f8.accumulator_type",
 )
 _DOT4F8_RESULT_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="result",
-    expected_text=(
-        "AMDGPU vector.dot4f8 lowering requires a static rank-1 f32 result "
-        "vector matching the packed source register count"
-    ),
+    constraint_key="amdgpu.dot4f8.result_type",
 )
 
 

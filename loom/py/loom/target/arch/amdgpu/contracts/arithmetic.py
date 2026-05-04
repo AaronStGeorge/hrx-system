@@ -85,75 +85,57 @@ _INDEX = Scalar("index")
 _VEC_I32_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="vector<i32>",
-    expected_text=(
-        "AMDGPU arithmetic lowering requires a rank-1 static i32 vector with "
-        "1 to 8 lanes"
-    ),
+    constraint_key="amdgpu.arithmetic.vector_i32",
 )
 _VEC_F32_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="vector<f32>",
-    expected_text=(
-        "AMDGPU arithmetic lowering requires a rank-1 static f32 vector with "
-        "1 to 8 lanes"
-    ),
+    constraint_key="amdgpu.arithmetic.vector_f32",
 )
 _I32_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="i32",
-    expected_text="AMDGPU arithmetic lowering requires an i32 scalar",
+    constraint_key="amdgpu.arithmetic.i32",
 )
 _F32_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="f32",
-    expected_text="AMDGPU arithmetic lowering requires an f32 scalar",
+    constraint_key="amdgpu.arithmetic.f32",
 )
 _INDEX_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="index",
-    expected_text="AMDGPU index lowering requires index scalar values",
+    constraint_key="amdgpu.index.scalar",
 )
 _ADDRESS_U32_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="address-width",
     subject_name="u32",
-    expected_text=(
-        "AMDGPU index lowering requires address results proven non-negative and 32-bit"
-    ),
+    constraint_key="amdgpu.address.u32",
 )
 _ADDRESS_EXACT_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="address-literal",
     subject_name="i64",
-    expected_text="AMDGPU literal address operands require exact integer value facts",
+    constraint_key="amdgpu.address.exact_i64",
 )
 _ADDRESS_VGPR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="materializer",
     subject_name="address-vgpr",
-    expected_text=(
-        "AMDGPU index lowering requires address values that can materialize as "
-        "VGPR operands"
-    ),
+    constraint_key="amdgpu.address.vgpr_materializer",
 )
 _RESULT_VGPR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="register-class",
     subject_name="vgpr",
-    expected_text=(
-        "AMDGPU arithmetic lowering requires a VGPR result for vector "
-        "descriptor emission"
-    ),
+    constraint_key="amdgpu.arithmetic.result_vgpr",
 )
 _LITERAL_EXACT_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="literal",
     subject_name="i64",
-    expected_text=(
-        "AMDGPU literal arithmetic operands require exact integer value facts"
-    ),
+    constraint_key="amdgpu.literal.exact_i64",
 )
 _LITERAL_I32_BITS_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="literal-bits",
     subject_name="i32",
-    expected_text=(
-        "AMDGPU literal arithmetic operands must fit in a signed i32 bit pattern"
-    ),
+    constraint_key="amdgpu.literal.i32_bits",
 )
 
 

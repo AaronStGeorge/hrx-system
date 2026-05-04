@@ -197,10 +197,6 @@ TEST(LowContractQueryTest, ContractIndexDescriptorRuleReportsRejectedCase) {
           /*.kind=*/LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_STRING_LITERAL,
           /*.string_value=*/IREE_SV("attr_kind"),
       },
-      {
-          /*.kind=*/LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_STRING_LITERAL,
-          /*.string_value=*/IREE_SV("i64"),
-      },
   };
   loom_low_lower_diagnostic_t diagnostic = {};
   diagnostic.error_ref = LOOM_ERR_TARGET_003_REF;
@@ -272,7 +268,7 @@ TEST(LowContractQueryTest, ContractIndexDescriptorRuleReportsRejectedCase) {
   EXPECT_EQ(result.diagnostic_index, 0);
   ASSERT_NE(result.rejection, nullptr);
   EXPECT_EQ(result.rejection->error_ref, LOOM_ERR_TARGET_003_REF);
-  ASSERT_EQ(result.rejection->param_count, 9);
+  ASSERT_EQ(result.rejection->param_count, 8);
   EXPECT_TRUE(iree_string_view_equal(result.rejection->params[4].string,
                                      IREE_SV("test.source")));
   EXPECT_TRUE(iree_string_view_equal(result.rejection->params[5].string,
@@ -281,8 +277,6 @@ TEST(LowContractQueryTest, ContractIndexDescriptorRuleReportsRejectedCase) {
                                      IREE_SV("value")));
   EXPECT_TRUE(iree_string_view_equal(result.rejection->params[7].string,
                                      IREE_SV("attr_kind")));
-  EXPECT_TRUE(iree_string_view_equal(result.rejection->params[8].string,
-                                     IREE_SV("i64")));
 
   iree_arena_deinitialize(&arena);
   iree_arena_block_pool_deinitialize(&block_pool);

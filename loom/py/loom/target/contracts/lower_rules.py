@@ -1475,7 +1475,11 @@ def _value_type_diagnostic(field: str, type_pattern: TypePattern) -> DiagnosticR
 
 
 def _enum_attr_diagnostic(field: str, enum_keyword: str) -> DiagnosticRef:
-    return _named_constraint_diagnostic("field", field, "enum_case", enum_keyword)
+    return _named_constraint_diagnostic(
+        "field",
+        field,
+        f"enum_case.{enum_keyword}",
+    )
 
 
 def _i64_attr_range_diagnostic(
@@ -1493,20 +1497,22 @@ def _descriptor_available_diagnostic(descriptor: Descriptor) -> DiagnosticRef:
         "descriptor",
         descriptor.key,
         "descriptor_available",
-        "enabled",
     )
 
 
 def _materializer_diagnostic(field: str, materializer: str) -> DiagnosticRef:
-    return _named_constraint_diagnostic("field", field, "materializer", materializer)
+    return _named_constraint_diagnostic(
+        "field",
+        field,
+        f"materializer.{materializer}",
+    )
 
 
 def _register_class_diagnostic(field: str, register_class: str) -> DiagnosticRef:
     return _named_constraint_diagnostic(
         "field",
         field,
-        "low_register_class",
-        register_class,
+        f"low_register_class.{register_class}",
     )
 
 
@@ -1587,7 +1593,7 @@ def _bounded_integer_diagnostic(field: str, guard: Guard) -> DiagnosticRef:
 
 
 def _exact_integer_diagnostic(field: str) -> DiagnosticRef:
-    return _named_constraint_diagnostic("value_fact", field, "exact_i64", "exact")
+    return _named_constraint_diagnostic("value_fact", field, "exact_i64")
 
 
 def _integer_range_diagnostic(
@@ -1615,21 +1621,19 @@ def _source_memory_diagnostic(
 
 
 def _attr_diagnostic(field: str, attr_type: str) -> DiagnosticRef:
-    return _named_constraint_diagnostic("field", field, "attr_kind", attr_type)
+    return _named_constraint_diagnostic("field", field, f"attr_kind.{attr_type}")
 
 
 def _named_constraint_diagnostic(
     subject_kind: str,
     subject_name: str,
     constraint_key: str,
-    expected_text: str,
 ) -> DiagnosticRef:
     return target_diagnostic(
         ERR_TARGET_003,
         string_param("subject_kind", subject_kind),
         string_param("subject_name", subject_name),
         string_param("constraint_key", constraint_key),
-        string_param("expected_text", expected_text),
     )
 
 
