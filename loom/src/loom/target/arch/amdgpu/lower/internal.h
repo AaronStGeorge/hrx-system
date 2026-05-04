@@ -700,7 +700,7 @@ iree_status_t loom_amdgpu_descriptor_matrix_query(
     void* user_data,
     const loom_target_contract_query_environment_t* environment,
     const loom_target_contract_descriptor_matrix_rule_t* rule,
-    const loom_contract_request_t* contract_request,
+    const loom_op_t* source_op, const loom_contract_request_t* contract_request,
     loom_target_contract_query_result_t* out_result);
 
 // Materializes AMDGPU matrix descriptor immediate attributes.

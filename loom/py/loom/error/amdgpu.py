@@ -381,6 +381,53 @@ ERR_AMDGPU_020 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_021: AMDGPU matrix descriptor selection rejected a source contract.
+ERR_AMDGPU_021 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=21,
+    severity=Severity.ERROR,
+    summary="AMDGPU matrix descriptor selection rejected a source contract.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' in '@{function_name}': matrix "
+        "constraint '{matrix_constraint}' is not satisfied "
+        "(source_bits={source_rejection_bits}, target_bits={target_rejection_bits})"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("matrix_constraint", ParamKind.STRING),
+        ErrorParam("source_rejection_bits", ParamKind.U32),
+        ErrorParam("target_rejection_bits", ParamKind.U32),
+    ),
+    fix_hint=(
+        "Select a matrix shape, payload, feature set, and fragment schema "
+        "supported by the AMDGPU descriptor set"
+    ),
+)
+
+# ERR_AMDGPU_022: AMDGPU matrix descriptor has no target-low packet mapping.
+ERR_AMDGPU_022 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=22,
+    severity=Severity.ERROR,
+    summary="AMDGPU matrix descriptor has no target-low packet mapping.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' descriptor '{descriptor_name}' "
+        "in '@{function_name}': descriptor constraint '{descriptor_constraint}' "
+        "is not satisfied"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("descriptor_name", ParamKind.STRING),
+        ErrorParam("descriptor_constraint", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use an AMDGPU matrix descriptor that has a selected target-low packet "
+        "mapping in the active descriptor set"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_002,
@@ -402,4 +449,6 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_018,
     ERR_AMDGPU_019,
     ERR_AMDGPU_020,
+    ERR_AMDGPU_021,
+    ERR_AMDGPU_022,
 )

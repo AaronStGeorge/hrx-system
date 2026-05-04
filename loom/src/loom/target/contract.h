@@ -54,13 +54,6 @@ typedef struct loom_target_contract_rejection_t {
   const loom_diagnostic_param_t* params;
   // Number of materialized diagnostic parameters.
   iree_host_size_t param_count;
-  // Diagnostic subject category for direct target-owned rejection paths.
-  iree_string_view_t subject_kind;
-  // Diagnostic subject name within subject_kind for direct target-owned
-  // rejection paths.
-  iree_string_view_t subject_name;
-  // Human-readable rejection reason for direct target-owned rejection paths.
-  iree_string_view_t reason;
 } loom_target_contract_rejection_t;
 
 typedef struct loom_target_contract_query_result_t {

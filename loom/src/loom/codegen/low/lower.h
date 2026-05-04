@@ -243,7 +243,7 @@ typedef iree_status_t (*loom_low_lower_descriptor_matrix_query_fn_t)(
     void* user_data,
     const loom_target_contract_query_environment_t* environment,
     const loom_target_contract_descriptor_matrix_rule_t* rule,
-    const loom_contract_request_t* request,
+    const loom_op_t* source_op, const loom_contract_request_t* request,
     loom_target_contract_query_result_t* out_result);
 
 typedef iree_status_t (*loom_low_lower_descriptor_matrix_attrs_fn_t)(
@@ -679,13 +679,6 @@ iree_status_t loom_low_lower_record_memory_access_summary(
 iree_status_t loom_low_lower_record_source_memory_access(
     loom_low_lower_context_t* context, const loom_op_t* low_op,
     const loom_low_source_memory_access_plan_t* source_plan);
-
-// Emits ERR_BACKEND_001 for an unsupported source-to-low lowering subject.
-iree_status_t loom_low_lower_emit_reject(loom_low_lower_context_t* context,
-                                         const loom_op_t* source_op,
-                                         iree_string_view_t subject_kind,
-                                         iree_string_view_t subject_name,
-                                         iree_string_view_t reason);
 
 // Emits ERR_TARGET_051 for a source value type rejected by the active
 // target-low policy.

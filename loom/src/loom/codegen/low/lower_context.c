@@ -99,24 +99,6 @@ static iree_status_t loom_low_lower_emit(loom_low_lower_context_t* context,
   return iree_diagnostic_emit(context->options->emitter, &emission);
 }
 
-iree_status_t loom_low_lower_emit_reject(loom_low_lower_context_t* context,
-                                         const loom_op_t* source_op,
-                                         iree_string_view_t subject_kind,
-                                         iree_string_view_t subject_name,
-                                         iree_string_view_t reason) {
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(loom_low_lower_target_key(context->options->bundle)),
-      loom_param_string(loom_low_lower_export_name(context->options->bundle)),
-      loom_param_string(loom_low_lower_config_key(context->options->bundle)),
-      loom_param_string(loom_low_lower_context_function_name(context)),
-      loom_param_string(subject_kind),
-      loom_param_string(subject_name),
-      loom_param_string(reason),
-  };
-  return loom_low_lower_emit(context, source_op, LOOM_ERR_BACKEND_001, params,
-                             IREE_ARRAYSIZE(params));
-}
-
 iree_status_t loom_low_lower_emit_source_type_unsupported(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     iree_string_view_t field_name, loom_type_t actual_type) {

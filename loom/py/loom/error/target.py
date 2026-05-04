@@ -1015,6 +1015,28 @@ ERR_TARGET_056 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_057: Matrix source contract did not satisfy target constraints.
+ERR_TARGET_057 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=57,
+    severity=Severity.ERROR,
+    summary="Matrix source contract did not satisfy target constraints.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' matrix contract source '{source_contract}' in "
+        "'@{function_name}': constraint '{matrix_constraint}' is not satisfied"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("source_contract", ParamKind.STRING),
+        ErrorParam("matrix_constraint", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Refine matrix fragment roles, shapes, schemas, numeric formats, and "
+        "capability facts before target matrix lowering"
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -1071,4 +1093,5 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_054,
     ERR_TARGET_055,
     ERR_TARGET_056,
+    ERR_TARGET_057,
 )

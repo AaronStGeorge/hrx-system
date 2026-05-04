@@ -622,14 +622,9 @@ static iree_status_t loom_low_lower_emit_contract_query_rejection(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_target_contract_query_result_t* result) {
   if (result->rejection != NULL) {
-    if (loom_error_ref_is_set(result->rejection->error_ref)) {
-      return loom_low_lower_emit_error_ref(
-          context, source_op, result->rejection->error_ref,
-          result->rejection->params, result->rejection->param_count);
-    }
-    return loom_low_lower_emit_reject(
-        context, source_op, result->rejection->subject_kind,
-        result->rejection->subject_name, result->rejection->reason);
+    return loom_low_lower_emit_error_ref(
+        context, source_op, result->rejection->error_ref,
+        result->rejection->params, result->rejection->param_count);
   }
   return loom_low_lower_emit_no_target_contract(context, source_op);
 }

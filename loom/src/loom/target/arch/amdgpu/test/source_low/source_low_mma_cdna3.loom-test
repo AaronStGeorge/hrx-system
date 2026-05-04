@@ -50,7 +50,7 @@ func.def target(@target) @bf16_mfma_wrong_tile(%lhs_data: vector<4xbf16>, %rhs_d
   %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : vector<4xbf16>
   %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : vector<4xbf16>
   %init = vector.fragment<init> %init_data shape [%m, %n] : vector<4xf32>
-  // ERROR@+1: BACKEND/001 "no AMDGPU matrix descriptor matches the exact M/N/K tile shape"
+  // ERROR@+1: AMDGPU/021 {matrix_constraint="tile_shape"}
   %result = vector.mma %lhs, %rhs, %init : vector<4xbf16>, vector<4xbf16>, vector<4xf32>
   func.return %result : vector<4xf32>
 }

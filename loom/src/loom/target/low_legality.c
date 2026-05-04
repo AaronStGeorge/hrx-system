@@ -532,13 +532,8 @@ static iree_status_t loom_target_low_legality_reject_contract_query(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     const loom_target_contract_query_result_t* result) {
   if (result->rejection != NULL) {
-    if (loom_error_ref_is_set(result->rejection->error_ref)) {
-      return loom_target_low_legality_reject_error_ref(context, op,
-                                                       result->rejection);
-    }
-    return loom_target_low_legality_reject(
-        context, NULL, op, result->rejection->subject_kind,
-        result->rejection->subject_name, result->rejection->reason);
+    return loom_target_low_legality_reject_error_ref(context, op,
+                                                     result->rejection);
   }
   return loom_target_low_legality_emit_no_target_contract(context, op);
 }

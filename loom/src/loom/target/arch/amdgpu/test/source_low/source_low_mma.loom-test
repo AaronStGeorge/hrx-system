@@ -29,7 +29,7 @@ func.def target(@target) @f16_wmmar3_wrong_payload(%lhs_data: vector<8xf16>, %rh
   %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : vector<8xf16>
   %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : vector<8xf16>
   %init = vector.fragment<init> %init_data shape [%m, %n] : vector<8xf32>
-  // ERROR@+1: BACKEND/001 "no AMDGPU matrix descriptor matches the physical operand payload shapes"
+  // ERROR@+1: AMDGPU/021 {matrix_constraint="payload_shape"}
   %result = vector.mma %lhs, %rhs, %init : vector<8xf16>, vector<8xf16>, vector<8xf32>
   func.return %result : vector<8xf32>
 }
@@ -67,7 +67,7 @@ func.def target(@target) @scaled_wmma_missing_scale_format(%lhs_data: vector<16x
   %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] using {scale = %scale : vector<1xi32>, schema = %schema : encoding<schema>} : vector<16xi32>
   %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] using {scale = %scale : vector<1xi32>, schema = %schema : encoding<schema>} : vector<16xi32>
   %init = vector.fragment<init> %init_data shape [%m, %n] : vector<8xf32>
-  // ERROR@+1: BACKEND/001 "the selected AMDGPU matrix descriptor requires scale format selector facts"
+  // ERROR@+1: AMDGPU/021 {matrix_constraint="format_selector.scale"}
   %result = vector.mma %lhs, %rhs, %init : vector<16xi32>, vector<16xi32>, vector<8xf32>
   func.return %result : vector<8xf32>
 }
