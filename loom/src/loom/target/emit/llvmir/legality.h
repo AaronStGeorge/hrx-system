@@ -41,18 +41,21 @@ typedef enum loom_llvmir_target_legality_code_e {
 typedef struct loom_llvmir_target_legality_diagnostic_t {
   // Stable diagnostic category.
   loom_llvmir_target_legality_code_t code;
+  // Source op associated with the diagnostic, or NULL for target-level
+  // diagnostics.
+  const loom_op_t* op;
   // Provider that produced the diagnostic, or empty for generic checks.
   iree_string_view_t provider_name;
   // Source op name associated with the diagnostic, or empty for target-level
   // diagnostics.
   iree_string_view_t op_name;
-  // Stable reason string.
-  iree_string_view_t detail;
-  // Optional target-family detail, such as a rejected contract family.
-  iree_string_view_t target_detail;
+  // Stable constraint token rejected by legality.
+  iree_string_view_t constraint_key;
+  // Stable subject token naming the rejected target, type, feature, or op kind.
+  iree_string_view_t subject_key;
 } loom_llvmir_target_legality_diagnostic_t;
 
-typedef iree_status_t (*loom_llvmir_target_legality_try_op_fn_t)(
+typedef bool (*loom_llvmir_target_legality_try_op_fn_t)(
     const loom_llvmir_target_legality_provider_t* provider,
     loom_llvmir_target_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
@@ -85,10 +88,14 @@ typedef struct loom_llvmir_target_legality_options_t {
 //
 // |out_diagnostic| is optional. When provided, it is always overwritten with
 // either OK or the first failing diagnostic.
-iree_status_t loom_llvmir_verify_target_legality(
+bool loom_llvmir_verify_target_legality(
     const loom_module_t* module,
     const loom_llvmir_target_legality_options_t* options,
     loom_llvmir_target_legality_diagnostic_t* out_diagnostic);
+
+// Returns a stable string token for |code|.
+iree_string_view_t loom_llvmir_target_legality_code_name(
+    loom_llvmir_target_legality_code_t code);
 
 // Returns the source module being checked.
 const loom_module_t* loom_llvmir_target_legality_module(
@@ -98,52 +105,52 @@ const loom_module_t* loom_llvmir_target_legality_module(
 const loom_llvmir_target_profile_t* loom_llvmir_target_legality_profile(
     const loom_llvmir_target_legality_context_t* context);
 
-// Emits a failing legality diagnostic and returns a matching status.
-iree_status_t loom_llvmir_target_legality_fail(
+// Emits a failing legality diagnostic and returns false.
+bool loom_llvmir_target_legality_fail(
     loom_llvmir_target_legality_context_t* context,
     const loom_llvmir_target_legality_provider_t* provider,
     loom_llvmir_target_legality_code_t code, const loom_op_t* op,
-    iree_string_view_t detail, iree_string_view_t target_detail);
+    iree_string_view_t constraint_key, iree_string_view_t subject_key);
 
 // Resolves a source string attribute from |string_id|.
-iree_status_t loom_llvmir_target_legality_string_attr(
+bool loom_llvmir_target_legality_string_attr(
     loom_llvmir_target_legality_context_t* context,
     const loom_llvmir_target_legality_provider_t* provider, const loom_op_t* op,
     iree_string_view_t attr_name, loom_string_id_t string_id,
     iree_string_view_t* out_string);
 
 // Verifies a structured llvmir.intrinsic operand/result shape.
-iree_status_t loom_llvmir_target_legality_expect_intrinsic_shape(
+bool loom_llvmir_target_legality_expect_intrinsic_shape(
     loom_llvmir_target_legality_context_t* context,
     const loom_llvmir_target_legality_provider_t* provider, const loom_op_t* op,
     iree_host_size_t operand_count, iree_host_size_t result_count,
-    iree_string_view_t detail);
+    iree_string_view_t constraint_key);
 
 // Verifies that |op| has exactly one result with |expected_type|.
-iree_status_t loom_llvmir_target_legality_expect_scalar_result(
+bool loom_llvmir_target_legality_expect_scalar_result(
     loom_llvmir_target_legality_context_t* context,
     const loom_llvmir_target_legality_provider_t* provider, const loom_op_t* op,
-    loom_scalar_type_t expected_type, iree_string_view_t detail);
+    loom_scalar_type_t expected_type, iree_string_view_t constraint_key);
 
 // Verifies that one operand is a scalar with |expected_type|.
-iree_status_t loom_llvmir_target_legality_expect_scalar_operand(
+bool loom_llvmir_target_legality_expect_scalar_operand(
     loom_llvmir_target_legality_context_t* context,
     const loom_llvmir_target_legality_provider_t* provider, const loom_op_t* op,
     iree_host_size_t operand_ordinal, loom_scalar_type_t expected_type,
-    iree_string_view_t detail);
+    iree_string_view_t constraint_key);
 
 // Resolves the lowered bit width of an integer-like scalar operand.
-iree_status_t loom_llvmir_target_legality_expect_integer_operand_bit_width(
+bool loom_llvmir_target_legality_expect_integer_operand_bit_width(
     loom_llvmir_target_legality_context_t* context,
     const loom_llvmir_target_legality_provider_t* provider, const loom_op_t* op,
-    iree_host_size_t operand_ordinal, iree_string_view_t detail,
+    iree_host_size_t operand_ordinal, iree_string_view_t constraint_key,
     uint32_t* out_bit_width);
 
 // Verifies that one operand is defined by a source scalar/index constant.
-iree_status_t loom_llvmir_target_legality_expect_constant_operand(
+bool loom_llvmir_target_legality_expect_constant_operand(
     loom_llvmir_target_legality_context_t* context,
     const loom_llvmir_target_legality_provider_t* provider, const loom_op_t* op,
-    iree_host_size_t operand_ordinal, iree_string_view_t detail);
+    iree_host_size_t operand_ordinal, iree_string_view_t constraint_key);
 
 #ifdef __cplusplus
 }

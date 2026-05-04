@@ -1297,6 +1297,53 @@ ERR_TARGET_073 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_074: Target emitter preflight constraint failed.
+ERR_TARGET_074 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=74,
+    severity=Severity.ERROR,
+    summary="Target emitter preflight constraint failed.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot run emitter '{emitter_key}': legality code '{legality_code}' "
+        "failed constraint '{constraint_key}' for subject '{subject_key}'"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("emitter_key", ParamKind.STRING),
+        ErrorParam("legality_code", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
+        ErrorParam("subject_key", ParamKind.STRING),
+    ),
+)
+
+# ERR_TARGET_075: Target emitter rejected an operation.
+ERR_TARGET_075 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=75,
+    severity=Severity.ERROR,
+    summary="Target emitter rejected an operation.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "emitter '{emitter_key}' provider '{provider_name}' rejected "
+        "'{op_name}': legality code '{legality_code}' failed constraint "
+        "'{constraint_key}' for subject '{subject_key}'"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("emitter_key", ParamKind.STRING),
+        ErrorParam("provider_name", ParamKind.STRING),
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("legality_code", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
+        ErrorParam("subject_key", ParamKind.STRING),
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -1371,4 +1418,6 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_071,
     ERR_TARGET_072,
     ERR_TARGET_073,
+    ERR_TARGET_074,
+    ERR_TARGET_075,
 )

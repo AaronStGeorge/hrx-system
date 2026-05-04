@@ -443,6 +443,73 @@ static iree_status_t loom_llvmir_loom_check_emit_missing_projection(
       &emission);
 }
 
+static iree_status_t loom_llvmir_loom_check_emit_legality_failure(
+    const loom_check_emit_provider_request_t* request,
+    const loom_op_t* target_op, const loom_target_bundle_t* bundle,
+    const loom_llvmir_target_legality_diagnostic_t* diagnostic) {
+  const iree_string_view_t legality_code =
+      loom_llvmir_target_legality_code_name(diagnostic->code);
+  if (diagnostic->op) {
+    const loom_diagnostic_param_t params[] = {
+        loom_param_string(bundle->name),
+        loom_param_string(bundle->export_plan->name),
+        loom_param_string(bundle->config->name),
+        loom_param_string(IREE_SV("llvmir")),
+        loom_param_string(diagnostic->provider_name),
+        loom_param_string(diagnostic->op_name),
+        loom_param_string(legality_code),
+        loom_param_string(diagnostic->constraint_key),
+        loom_param_string(diagnostic->subject_key),
+    };
+    loom_check_diagnostic_emitter_capture_t capture = {
+        .diagnostic_collector = request->diagnostic_collector,
+        .module = request->module,
+        .source_resolver = request->source_resolver,
+        .emitter = LOOM_EMITTER_PASS,
+    };
+    const loom_diagnostic_emission_t emission = {
+        .op = diagnostic->op,
+        .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 75),
+        .params = params,
+        .param_count = IREE_ARRAYSIZE(params),
+    };
+    return iree_diagnostic_emit(
+        (iree_diagnostic_emitter_t){
+            .fn = loom_check_diagnostic_emitter_capture_emit,
+            .user_data = &capture,
+        },
+        &emission);
+  }
+
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(bundle->name),
+      loom_param_string(bundle->export_plan->name),
+      loom_param_string(bundle->config->name),
+      loom_param_string(IREE_SV("llvmir")),
+      loom_param_string(legality_code),
+      loom_param_string(diagnostic->constraint_key),
+      loom_param_string(diagnostic->subject_key),
+  };
+  loom_check_diagnostic_emitter_capture_t capture = {
+      .diagnostic_collector = request->diagnostic_collector,
+      .module = request->module,
+      .source_resolver = request->source_resolver,
+      .emitter = LOOM_EMITTER_PASS,
+  };
+  const loom_diagnostic_emission_t emission = {
+      .op = target_op,
+      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 74),
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  return iree_diagnostic_emit(
+      (iree_diagnostic_emitter_t){
+          .fn = loom_check_diagnostic_emitter_capture_emit,
+          .user_data = &capture,
+      },
+      &emission);
+}
+
 static iree_status_t loom_llvmir_loom_check_resolve_target_bundle(
     const loom_check_emit_provider_request_t* request,
     iree_string_view_t symbol_name,
@@ -534,8 +601,12 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_execute(
       .providers = legality_providers.providers,
       .provider_count = legality_providers.provider_count,
   };
-  IREE_RETURN_IF_ERROR(loom_llvmir_verify_target_legality(
-      request->module, &legality_options, NULL));
+  loom_llvmir_target_legality_diagnostic_t legality_diagnostic = {0};
+  if (!loom_llvmir_verify_target_legality(request->module, &legality_options,
+                                          &legality_diagnostic)) {
+    return loom_llvmir_loom_check_emit_legality_failure(
+        request, target_op, target_bundle, &legality_diagnostic);
+  }
 
   loom_llvmir_target_profile_storage_t profile_storage;
   loom_llvmir_target_profile_storage_initialize_from_bundle(

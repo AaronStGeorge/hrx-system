@@ -84,9 +84,8 @@ class LlvmIrX86LegalityTest : public ::testing::Test {
     return builder;
   }
 
-  iree_status_t VerifyBundle(
-      const loom_target_bundle_t* bundle,
-      loom_llvmir_target_legality_diagnostic_t* diagnostic) {
+  bool VerifyBundle(const loom_target_bundle_t* bundle,
+                    loom_llvmir_target_legality_diagnostic_t* diagnostic) {
     const loom_llvmir_target_legality_provider_t* providers[] = {
         loom_llvmir_x86_legality_provider(),
     };
@@ -145,21 +144,21 @@ TEST_F(LlvmIrX86LegalityTest, ReportsPackedDotFeatureRejection) {
   BuildDot4S8S8Function();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_UNIMPLEMENTED,
+  EXPECT_FALSE(
       VerifyBundle(loom_llvmir_target_bundle_x86_64_object(), &diagnostic));
   EXPECT_EQ(diagnostic.code,
             LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TARGET_CONTRACT);
   EXPECT_EQ(ToString(diagnostic.provider_name), "x86");
-  EXPECT_EQ(ToString(diagnostic.target_detail), "features");
+  EXPECT_EQ(ToString(diagnostic.constraint_key), "x86-packed-dot-descriptor");
+  EXPECT_EQ(ToString(diagnostic.subject_key), "features");
 }
 
 TEST_F(LlvmIrX86LegalityTest, AcceptsPackedDotWithMatchingFeatures) {
   BuildDot4S8S8Function();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  IREE_ASSERT_OK(VerifyBundle(
-      loom_llvmir_target_bundle_x86_64_packed_dot_object(), &diagnostic));
+  ASSERT_TRUE(VerifyBundle(loom_llvmir_target_bundle_x86_64_packed_dot_object(),
+                           &diagnostic));
   EXPECT_EQ(diagnostic.code, LOOM_LLVMIR_TARGET_LEGALITY_OK);
 }
 

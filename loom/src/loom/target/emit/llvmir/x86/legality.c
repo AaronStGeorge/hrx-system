@@ -15,29 +15,33 @@ static bool loom_llvmir_x86_legality_intrinsic_is_x86(iree_string_view_t kind) {
          iree_string_view_equal(kind, IREE_SV("llvm.x86.sse2.pause"));
 }
 
-static iree_status_t loom_llvmir_x86_legality_verify_intrinsic(
+static bool loom_llvmir_x86_legality_verify_intrinsic(
     const loom_llvmir_target_legality_provider_t* provider,
     loom_llvmir_target_legality_context_t* context, const loom_op_t* op,
     bool* out_handled) {
   loom_string_id_t kind_id = loom_llvmir_intrinsic_kind(op);
   iree_string_view_t kind = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_string_attr(
-      context, provider, op, IREE_SV("kind"), kind_id, &kind));
+  if (!loom_llvmir_target_legality_string_attr(
+          context, provider, op, IREE_SV("kind"), kind_id, &kind)) {
+    return false;
+  }
   if (!loom_llvmir_x86_legality_intrinsic_is_x86(kind)) {
-    return iree_ok_status();
+    return true;
   }
   *out_handled = true;
 
   if (iree_string_view_equal(kind, IREE_SV("llvm.x86.rdtsc"))) {
-    iree_string_view_t detail = IREE_SV("llvm.x86.rdtsc expects () -> i64");
-    IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_expect_intrinsic_shape(
-        context, provider, op, 0, 1, detail));
+    iree_string_view_t constraint_key = IREE_SV("llvm.x86.rdtsc.signature");
+    if (!loom_llvmir_target_legality_expect_intrinsic_shape(
+            context, provider, op, 0, 1, constraint_key)) {
+      return false;
+    }
     return loom_llvmir_target_legality_expect_scalar_result(
-        context, provider, op, LOOM_SCALAR_TYPE_I64, detail);
+        context, provider, op, LOOM_SCALAR_TYPE_I64, constraint_key);
   }
-  iree_string_view_t detail = IREE_SV("llvm.x86.sse2.pause expects () -> ()");
-  return loom_llvmir_target_legality_expect_intrinsic_shape(context, provider,
-                                                            op, 0, 0, detail);
+  iree_string_view_t constraint_key = IREE_SV("llvm.x86.sse2.pause.signature");
+  return loom_llvmir_target_legality_expect_intrinsic_shape(
+      context, provider, op, 0, 0, constraint_key);
 }
 
 static iree_string_view_t loom_llvmir_x86_legality_rejection_name(
@@ -61,24 +65,7 @@ static iree_string_view_t loom_llvmir_x86_legality_rejection_name(
   return IREE_SV("invalid-request");
 }
 
-static iree_string_view_t loom_llvmir_x86_legality_rejection_detail(
-    loom_x86_packed_dot_rejection_bits_t rejection_bits) {
-  if (iree_any_bit_set(rejection_bits,
-                       LOOM_X86_PACKED_DOT_REJECTION_FEATURES)) {
-    return IREE_SV(
-        "target profile does not enable a matching x86 packed-dot feature");
-  }
-  if (iree_any_bit_set(rejection_bits, LOOM_X86_PACKED_DOT_REJECTION_PAYLOAD)) {
-    return IREE_SV(
-        "no x86 packed-dot descriptor matches the vector dot payload types");
-  }
-  if (iree_any_bit_set(rejection_bits, LOOM_X86_PACKED_DOT_REJECTION_SHAPE)) {
-    return IREE_SV("no x86 packed-dot descriptor matches the vector dot shape");
-  }
-  return IREE_SV("no x86 packed-dot descriptor matches this vector dot op");
-}
-
-static iree_status_t loom_llvmir_x86_legality_verify_packed_dot(
+static bool loom_llvmir_x86_legality_verify_packed_dot(
     const loom_llvmir_target_legality_provider_t* provider,
     loom_llvmir_target_legality_context_t* context, const loom_op_t* op,
     bool* out_handled) {
@@ -90,8 +77,7 @@ static iree_status_t loom_llvmir_x86_legality_verify_packed_dot(
     return loom_llvmir_target_legality_fail(
         context, provider,
         LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TARGET_CONTRACT, op,
-        IREE_SV("no x86 packed-dot match request can be inferred"),
-        IREE_SV("invalid-request"));
+        IREE_SV("x86-packed-dot-request"), IREE_SV("invalid-request"));
   }
   const loom_llvmir_target_profile_t* profile =
       loom_llvmir_target_legality_profile(context);
@@ -105,14 +91,14 @@ static iree_status_t loom_llvmir_x86_legality_verify_packed_dot(
     return loom_llvmir_target_legality_fail(
         context, provider,
         LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TARGET_CONTRACT, op,
-        loom_llvmir_x86_legality_rejection_detail(diagnostic.rejection_bits),
+        IREE_SV("x86-packed-dot-descriptor"),
         loom_llvmir_x86_legality_rejection_name(diagnostic.rejection_bits));
   }
 
-  return iree_ok_status();
+  return true;
 }
 
-static iree_status_t loom_llvmir_x86_legality_try_verify_op(
+static bool loom_llvmir_x86_legality_try_verify_op(
     const loom_llvmir_target_legality_provider_t* provider,
     loom_llvmir_target_legality_context_t* context, const loom_op_t* op,
     bool* out_handled) {
@@ -126,7 +112,7 @@ static iree_status_t loom_llvmir_x86_legality_try_verify_op(
       return loom_llvmir_x86_legality_verify_packed_dot(provider, context, op,
                                                         out_handled);
     default:
-      return iree_ok_status();
+      return true;
   }
 }
 

@@ -93,8 +93,7 @@ class LlvmIrLegalityTest : public ::testing::Test {
     return builder;
   }
 
-  iree_status_t VerifyTestObject(
-      loom_llvmir_target_legality_diagnostic_t* diagnostic) {
+  bool VerifyTestObject(loom_llvmir_target_legality_diagnostic_t* diagnostic) {
     const loom_target_bundle_t* bundle =
         loom_llvmir_target_bundle_test_object();
     loom_llvmir_target_legality_options_t options;
@@ -284,7 +283,7 @@ TEST_F(LlvmIrLegalityTest, AcceptsObjectArithmetic) {
   BuildAddI32Function();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  IREE_ASSERT_OK(VerifyTestObject(&diagnostic));
+  ASSERT_TRUE(VerifyTestObject(&diagnostic));
   EXPECT_EQ(diagnostic.code, LOOM_LLVMIR_TARGET_LEGALITY_OK);
 }
 
@@ -293,7 +292,7 @@ TEST_F(LlvmIrLegalityTest, AcceptsModuleTargetRecordsAsMetadata) {
   BuildAddI32Function();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  IREE_ASSERT_OK(VerifyTestObject(&diagnostic));
+  ASSERT_TRUE(VerifyTestObject(&diagnostic));
   EXPECT_EQ(diagnostic.code, LOOM_LLVMIR_TARGET_LEGALITY_OK);
 }
 
@@ -301,45 +300,41 @@ TEST_F(LlvmIrLegalityTest, RejectsStructuredScfBeforeLowering) {
   BuildStructuredIfFunction();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
-                        VerifyTestObject(&diagnostic));
+  EXPECT_FALSE(VerifyTestObject(&diagnostic));
   EXPECT_EQ(diagnostic.code,
             LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_CONTROL_FLOW);
   EXPECT_EQ(ToString(diagnostic.op_name), "scf.if");
-  EXPECT_NE(ToString(diagnostic.detail).find("lowered to CFG"),
-            std::string::npos);
+  EXPECT_EQ(ToString(diagnostic.constraint_key), "scf-cfg-lowering");
 }
 
 TEST_F(LlvmIrLegalityTest, RejectsUnknownIntrinsicKind) {
   BuildUnknownIntrinsicFunction();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
-                        VerifyTestObject(&diagnostic));
+  EXPECT_FALSE(VerifyTestObject(&diagnostic));
   EXPECT_EQ(diagnostic.code, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC);
-  EXPECT_EQ(ToString(diagnostic.target_detail), "llvm.imaginary");
+  EXPECT_EQ(ToString(diagnostic.constraint_key), "known-llvmir-intrinsic");
+  EXPECT_EQ(ToString(diagnostic.subject_key), "llvm.imaginary");
 }
 
 TEST_F(LlvmIrLegalityTest, RejectsFp8TypeBeforeLowering) {
   BuildF8Function();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
-                        VerifyTestObject(&diagnostic));
+  EXPECT_FALSE(VerifyTestObject(&diagnostic));
   EXPECT_EQ(diagnostic.code, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TYPE);
-  EXPECT_EQ(ToString(diagnostic.target_detail), "fp8");
+  EXPECT_EQ(ToString(diagnostic.constraint_key), "fp8-explicit-lowering");
+  EXPECT_EQ(ToString(diagnostic.subject_key), "fp8");
 }
 
 TEST_F(LlvmIrLegalityTest, RejectsTargetContractWithoutProvider) {
   BuildDot4S8S8Function();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
-                        VerifyTestObject(&diagnostic));
+  EXPECT_FALSE(VerifyTestObject(&diagnostic));
   EXPECT_EQ(diagnostic.code,
             LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TARGET_CONTRACT);
-  EXPECT_NE(ToString(diagnostic.detail).find("target legality provider"),
-            std::string::npos);
+  EXPECT_EQ(ToString(diagnostic.constraint_key), "vector-dot-target-provider");
 }
 
 }  // namespace

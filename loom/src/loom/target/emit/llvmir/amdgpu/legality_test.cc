@@ -84,8 +84,7 @@ class LlvmIrAmdgpuLegalityTest : public ::testing::Test {
     return builder;
   }
 
-  iree_status_t VerifyAmdgpuHal(
-      loom_llvmir_target_legality_diagnostic_t* diagnostic) {
+  bool VerifyAmdgpuHal(loom_llvmir_target_legality_diagnostic_t* diagnostic) {
     const loom_llvmir_target_legality_provider_t* providers[] = {
         loom_llvmir_amdgpu_legality_provider(),
     };
@@ -155,7 +154,7 @@ TEST_F(LlvmIrAmdgpuLegalityTest, AcceptsWorkitemKernel) {
   BuildWorkitemKernel();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  IREE_ASSERT_OK(VerifyAmdgpuHal(&diagnostic));
+  ASSERT_TRUE(VerifyAmdgpuHal(&diagnostic));
   EXPECT_EQ(diagnostic.code, LOOM_LLVMIR_TARGET_LEGALITY_OK);
 }
 
@@ -163,11 +162,9 @@ TEST_F(LlvmIrAmdgpuLegalityTest, RejectsHalViewParameter) {
   BuildViewParameterKernel();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
-                        VerifyAmdgpuHal(&diagnostic));
+  EXPECT_FALSE(VerifyAmdgpuHal(&diagnostic));
   EXPECT_EQ(diagnostic.code, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_ABI);
-  EXPECT_NE(ToString(diagnostic.detail).find("view parameters"),
-            std::string::npos);
+  EXPECT_EQ(ToString(diagnostic.constraint_key), "hal-kernel-view-parameter");
 }
 
 }  // namespace

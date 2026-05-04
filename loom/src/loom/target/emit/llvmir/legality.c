@@ -45,28 +45,34 @@ static void loom_llvmir_target_legality_reset_diagnostic(
   };
 }
 
-static iree_status_code_t loom_llvmir_target_legality_status_code(
+iree_string_view_t loom_llvmir_target_legality_code_name(
     loom_llvmir_target_legality_code_t code) {
   switch (code) {
-    case LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET:
-      return IREE_STATUS_INVALID_ARGUMENT;
     case LOOM_LLVMIR_TARGET_LEGALITY_OK:
-      return IREE_STATUS_OK;
+      return IREE_SV("ok");
+    case LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET:
+      return IREE_SV("invalid_target");
     case LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_ABI:
+      return IREE_SV("unsupported_abi");
     case LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_FUNCTION:
+      return IREE_SV("unsupported_function");
     case LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TYPE:
+      return IREE_SV("unsupported_type");
     case LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_CONTROL_FLOW:
+      return IREE_SV("unsupported_control_flow");
     case LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_OP:
+      return IREE_SV("unsupported_op");
     case LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC:
+      return IREE_SV("unsupported_intrinsic");
     case LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TARGET_CONTRACT:
-      return IREE_STATUS_UNIMPLEMENTED;
+      return IREE_SV("unsupported_target_contract");
   }
-  return IREE_STATUS_INVALID_ARGUMENT;
+  return IREE_SV("unknown");
 }
 
 static iree_string_view_t loom_llvmir_target_legality_provider_name(
     const loom_llvmir_target_legality_provider_t* provider) {
-  return provider ? provider->name : iree_string_view_empty();
+  return provider ? provider->name : IREE_SV("core");
 }
 
 static iree_string_view_t loom_llvmir_target_legality_op_name(
@@ -75,55 +81,28 @@ static iree_string_view_t loom_llvmir_target_legality_op_name(
   return loom_op_name(context->module, op);
 }
 
-iree_status_t loom_llvmir_target_legality_fail(
+bool loom_llvmir_target_legality_fail(
     loom_llvmir_target_legality_context_t* context,
     const loom_llvmir_target_legality_provider_t* provider,
     loom_llvmir_target_legality_code_t code, const loom_op_t* op,
-    iree_string_view_t detail, iree_string_view_t target_detail) {
+    iree_string_view_t constraint_key, iree_string_view_t subject_key) {
   iree_string_view_t provider_name =
       loom_llvmir_target_legality_provider_name(provider);
   iree_string_view_t op_name = loom_llvmir_target_legality_op_name(context, op);
+  if (iree_string_view_is_empty(subject_key)) {
+    subject_key = op_name;
+  }
   if (context->diagnostic) {
     *context->diagnostic = (loom_llvmir_target_legality_diagnostic_t){
         .code = code,
+        .op = op,
         .provider_name = provider_name,
         .op_name = op_name,
-        .detail = detail,
-        .target_detail = target_detail,
+        .constraint_key = constraint_key,
+        .subject_key = subject_key,
     };
   }
-  const char* target_separator =
-      iree_string_view_is_empty(target_detail) ? "" : ": ";
-  iree_status_code_t status_code =
-      loom_llvmir_target_legality_status_code(code);
-  if (!iree_string_view_is_empty(provider_name) &&
-      !iree_string_view_is_empty(op_name)) {
-    return iree_make_status(
-        status_code,
-        "LLVMIR target legality failed in provider %.*s for op %.*s: "
-        "%.*s%s%.*s",
-        (int)provider_name.size, provider_name.data, (int)op_name.size,
-        op_name.data, (int)detail.size, detail.data, target_separator,
-        (int)target_detail.size, target_detail.data);
-  }
-  if (!iree_string_view_is_empty(op_name)) {
-    return iree_make_status(
-        status_code, "LLVMIR target legality failed for op %.*s: %.*s%s%.*s",
-        (int)op_name.size, op_name.data, (int)detail.size, detail.data,
-        target_separator, (int)target_detail.size, target_detail.data);
-  }
-  if (!iree_string_view_is_empty(provider_name)) {
-    return iree_make_status(
-        status_code,
-        "LLVMIR target legality failed in provider %.*s: %.*s%s%.*s",
-        (int)provider_name.size, provider_name.data, (int)detail.size,
-        detail.data, target_separator, (int)target_detail.size,
-        target_detail.data);
-  }
-  return iree_make_status(status_code,
-                          "LLVMIR target legality failed: %.*s%s%.*s",
-                          (int)detail.size, detail.data, target_separator,
-                          (int)target_detail.size, target_detail.data);
+  return false;
 }
 
 const loom_module_t* loom_llvmir_target_legality_module(
@@ -136,7 +115,7 @@ const loom_llvmir_target_profile_t* loom_llvmir_target_legality_profile(
   return &context->profile_storage.profile;
 }
 
-iree_status_t loom_llvmir_target_legality_string_attr(
+bool loom_llvmir_target_legality_string_attr(
     loom_llvmir_target_legality_context_t* context,
     const loom_llvmir_target_legality_provider_t* provider, const loom_op_t* op,
     iree_string_view_t attr_name, loom_string_id_t string_id,
@@ -145,29 +124,28 @@ iree_status_t loom_llvmir_target_legality_string_attr(
       string_id >= context->module->strings.count) {
     return loom_llvmir_target_legality_fail(
         context, provider, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_OP, op,
-        IREE_SV("string attribute references an invalid string id"), attr_name);
+        IREE_SV("valid-string-attr"), attr_name);
   }
   *out_string = context->module->strings.entries[string_id];
-  return iree_ok_status();
+  return true;
 }
 
-iree_status_t loom_llvmir_target_legality_expect_intrinsic_shape(
+bool loom_llvmir_target_legality_expect_intrinsic_shape(
     loom_llvmir_target_legality_context_t* context,
     const loom_llvmir_target_legality_provider_t* provider, const loom_op_t* op,
     iree_host_size_t operand_count, iree_host_size_t result_count,
-    iree_string_view_t detail) {
+    iree_string_view_t constraint_key) {
   if (op->operand_count != operand_count || op->result_count != result_count) {
     return loom_llvmir_target_legality_fail(
         context, provider, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC,
-        op, detail, iree_string_view_empty());
+        op, constraint_key, iree_string_view_empty());
   }
   if (op->tied_result_count > 0) {
     return loom_llvmir_target_legality_fail(
         context, provider, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC,
-        op, IREE_SV("llvmir.intrinsic does not support tied results"),
-        iree_string_view_empty());
+        op, IREE_SV("llvmir-intrinsic-tied-results"), iree_string_view_empty());
   }
-  return iree_ok_status();
+  return true;
 }
 
 static loom_type_t loom_llvmir_target_legality_value_type(
@@ -176,14 +154,14 @@ static loom_type_t loom_llvmir_target_legality_value_type(
   return loom_module_value_type(context->module, value_id);
 }
 
-iree_status_t loom_llvmir_target_legality_expect_scalar_result(
+bool loom_llvmir_target_legality_expect_scalar_result(
     loom_llvmir_target_legality_context_t* context,
     const loom_llvmir_target_legality_provider_t* provider, const loom_op_t* op,
-    loom_scalar_type_t expected_type, iree_string_view_t detail) {
+    loom_scalar_type_t expected_type, iree_string_view_t constraint_key) {
   if (op->result_count != 1) {
     return loom_llvmir_target_legality_fail(
         context, provider, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC,
-        op, detail, iree_string_view_empty());
+        op, constraint_key, iree_string_view_empty());
   }
   loom_type_t result_type = loom_llvmir_target_legality_value_type(
       context, loom_op_const_results(op)[0]);
@@ -191,20 +169,20 @@ iree_status_t loom_llvmir_target_legality_expect_scalar_result(
       loom_type_element_type(result_type) != expected_type) {
     return loom_llvmir_target_legality_fail(
         context, provider, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC,
-        op, detail, iree_string_view_empty());
+        op, constraint_key, iree_string_view_empty());
   }
-  return iree_ok_status();
+  return true;
 }
 
-iree_status_t loom_llvmir_target_legality_expect_scalar_operand(
+bool loom_llvmir_target_legality_expect_scalar_operand(
     loom_llvmir_target_legality_context_t* context,
     const loom_llvmir_target_legality_provider_t* provider, const loom_op_t* op,
     iree_host_size_t operand_ordinal, loom_scalar_type_t expected_type,
-    iree_string_view_t detail) {
+    iree_string_view_t constraint_key) {
   if (operand_ordinal >= op->operand_count) {
     return loom_llvmir_target_legality_fail(
         context, provider, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC,
-        op, detail, iree_string_view_empty());
+        op, constraint_key, iree_string_view_empty());
   }
   loom_type_t operand_type = loom_llvmir_target_legality_value_type(
       context, loom_op_const_operands(op)[operand_ordinal]);
@@ -212,9 +190,9 @@ iree_status_t loom_llvmir_target_legality_expect_scalar_operand(
       loom_type_element_type(operand_type) != expected_type) {
     return loom_llvmir_target_legality_fail(
         context, provider, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC,
-        op, detail, iree_string_view_empty());
+        op, constraint_key, iree_string_view_empty());
   }
-  return iree_ok_status();
+  return true;
 }
 
 static bool loom_llvmir_target_legality_integer_bit_width(
@@ -241,15 +219,15 @@ static bool loom_llvmir_target_legality_integer_bit_width(
   }
 }
 
-iree_status_t loom_llvmir_target_legality_expect_integer_operand_bit_width(
+bool loom_llvmir_target_legality_expect_integer_operand_bit_width(
     loom_llvmir_target_legality_context_t* context,
     const loom_llvmir_target_legality_provider_t* provider, const loom_op_t* op,
-    iree_host_size_t operand_ordinal, iree_string_view_t detail,
+    iree_host_size_t operand_ordinal, iree_string_view_t constraint_key,
     uint32_t* out_bit_width) {
   if (operand_ordinal >= op->operand_count) {
     return loom_llvmir_target_legality_fail(
         context, provider, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC,
-        op, detail, iree_string_view_empty());
+        op, constraint_key, iree_string_view_empty());
   }
   loom_type_t operand_type = loom_llvmir_target_legality_value_type(
       context, loom_op_const_operands(op)[operand_ordinal]);
@@ -257,9 +235,9 @@ iree_status_t loom_llvmir_target_legality_expect_integer_operand_bit_width(
                                                      out_bit_width)) {
     return loom_llvmir_target_legality_fail(
         context, provider, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC,
-        op, detail, iree_string_view_empty());
+        op, constraint_key, iree_string_view_empty());
   }
-  return iree_ok_status();
+  return true;
 }
 
 static bool loom_llvmir_target_legality_value_is_source_constant(
@@ -272,18 +250,18 @@ static bool loom_llvmir_target_legality_value_is_source_constant(
          (loom_scalar_constant_isa(def_op) || loom_index_constant_isa(def_op));
 }
 
-iree_status_t loom_llvmir_target_legality_expect_constant_operand(
+bool loom_llvmir_target_legality_expect_constant_operand(
     loom_llvmir_target_legality_context_t* context,
     const loom_llvmir_target_legality_provider_t* provider, const loom_op_t* op,
-    iree_host_size_t operand_ordinal, iree_string_view_t detail) {
+    iree_host_size_t operand_ordinal, iree_string_view_t constraint_key) {
   if (operand_ordinal >= op->operand_count ||
       !loom_llvmir_target_legality_value_is_source_constant(
           context, loom_op_const_operands(op)[operand_ordinal])) {
     return loom_llvmir_target_legality_fail(
         context, provider, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC,
-        op, detail, iree_string_view_empty());
+        op, constraint_key, iree_string_view_empty());
   }
-  return iree_ok_status();
+  return true;
 }
 
 static bool loom_llvmir_target_legality_artifact_is_object(
@@ -338,7 +316,7 @@ static bool loom_llvmir_target_legality_workgroup_flat_size(
   return true;
 }
 
-static iree_status_t loom_llvmir_target_legality_verify_hal_kernel_launch(
+static bool loom_llvmir_target_legality_verify_hal_kernel_launch(
     loom_llvmir_target_legality_context_t* context) {
   const loom_target_snapshot_t* snapshot = context->options->snapshot;
   const loom_target_hal_kernel_abi_t* hal_kernel =
@@ -349,26 +327,22 @@ static iree_status_t loom_llvmir_target_legality_verify_hal_kernel_launch(
       LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_ABI, NULL,
-        IREE_SV("LLVMIR target projection does not support HAL kernel ABI"),
-        context->options->profile->name);
+        IREE_SV("hal-kernel-profile"), context->options->profile->name);
   }
   if (snapshot->memory_spaces.global == UINT32_MAX) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("HAL kernel target global address space is unavailable"),
-        snapshot->name);
+        IREE_SV("hal-global-address-space"), snapshot->name);
   }
   if (hal_kernel->binding_alignment == 0) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("HAL kernel binding alignment must be non-zero"),
-        context->options->export_plan->name);
+        IREE_SV("hal-binding-alignment"), context->options->export_plan->name);
   }
   if (loom_target_workgroup_size_is_partial(required)) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("HAL kernel required workgroup size must be all zero or all "
-                "non-zero"),
+        IREE_SV("hal-workgroup-size-shape"),
         context->options->export_plan->name);
   }
 
@@ -378,93 +352,80 @@ static iree_status_t loom_llvmir_target_legality_verify_hal_kernel_launch(
   if ((flat_min == 0) != (flat_max == 0)) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV(
-            "HAL kernel flat workgroup size range must be both zero or both "
-            "non-zero"),
-        context->options->export_plan->name);
+        IREE_SV("hal-flat-range-paired"), context->options->export_plan->name);
   }
   if (flat_min != 0) {
     if (flat_min > flat_max) {
       return loom_llvmir_target_legality_fail(
           context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-          IREE_SV("HAL kernel flat workgroup size range must be ordered"),
-          context->options->export_plan->name);
+          IREE_SV("hal-flat-range-order"), context->options->export_plan->name);
     }
     if (max_flat != 0 && flat_max > max_flat) {
       return loom_llvmir_target_legality_fail(
           context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-          IREE_SV("HAL kernel flat workgroup size max exceeds target limit"),
-          snapshot->name);
+          IREE_SV("hal-flat-range-target-limit"), snapshot->name);
     }
   } else if (max_flat == 0) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("LLVMIR HAL kernel requires a flat workgroup size limit"),
-        snapshot->name);
+        IREE_SV("hal-flat-limit"), snapshot->name);
   }
 
   if (loom_target_workgroup_size_is_empty(required)) {
-    return iree_ok_status();
+    return true;
   }
   if (snapshot->max_workgroup_size.x != 0 &&
       required->x > snapshot->max_workgroup_size.x) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("HAL kernel required workgroup x size exceeds target limit"),
-        snapshot->name);
+        IREE_SV("hal-workgroup-x-target-limit"), snapshot->name);
   }
   if (snapshot->max_workgroup_size.y != 0 &&
       required->y > snapshot->max_workgroup_size.y) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("HAL kernel required workgroup y size exceeds target limit"),
-        snapshot->name);
+        IREE_SV("hal-workgroup-y-target-limit"), snapshot->name);
   }
   if (snapshot->max_workgroup_size.z != 0 &&
       required->z > snapshot->max_workgroup_size.z) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("HAL kernel required workgroup z size exceeds target limit"),
-        snapshot->name);
+        IREE_SV("hal-workgroup-z-target-limit"), snapshot->name);
   }
   uint64_t flat_size = 0;
   if (!loom_llvmir_target_legality_workgroup_flat_size(required, &flat_size)) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("HAL kernel required flat workgroup size overflows uint64"),
+        IREE_SV("hal-flat-workgroup-overflow"),
         context->options->export_plan->name);
   }
   if (max_flat != 0 && flat_size > max_flat) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("HAL kernel required flat workgroup size exceeds target limit"),
-        snapshot->name);
+        IREE_SV("hal-flat-workgroup-target-limit"), snapshot->name);
   }
   if (flat_min != 0 && (flat_size < flat_min || flat_size > flat_max)) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV(
-            "HAL kernel required flat workgroup size must be inside selected "
-            "range"),
+        IREE_SV("hal-flat-workgroup-range"),
         context->options->export_plan->name);
   }
-  return iree_ok_status();
+  return true;
 }
 
-static iree_status_t loom_llvmir_target_legality_validate_options(
+static bool loom_llvmir_target_legality_validate_options(
     loom_llvmir_target_legality_context_t* context) {
   const loom_llvmir_target_legality_options_t* options = context->options;
   if (options->snapshot->codegen_format != LOOM_TARGET_CODEGEN_FORMAT_LLVMIR) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("target snapshot is not an LLVMIR codegen target"),
-        options->snapshot->name);
+        IREE_SV("llvmir-codegen-format"), options->snapshot->name);
   }
   if (!loom_llvmir_target_legality_artifact_is_object(
           options->snapshot->artifact_format)) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("target artifact format is not an LLVM object"),
+        IREE_SV("llvmir-object-artifact"),
         loom_target_artifact_format_name(options->snapshot->artifact_format));
   }
   if (options->snapshot->default_pointer_bitwidth == 0 ||
@@ -472,32 +433,29 @@ static iree_status_t loom_llvmir_target_legality_validate_options(
       options->snapshot->offset_bitwidth == 0) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV(
-            "target pointer, index, and offset bit widths must be non-zero"),
-        options->snapshot->name);
+        IREE_SV("llvmir-bitwidths"), options->snapshot->name);
   }
   if (options->snapshot->memory_spaces.generic == UINT32_MAX) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("target generic pointer address space is unavailable"),
-        options->snapshot->name);
+        IREE_SV("llvmir-generic-address-space"), options->snapshot->name);
   }
   if (!loom_llvmir_target_legality_linkage_is_supported(
           options->export_plan->linkage)) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_ABI, NULL,
-        IREE_SV("target linkage has no LLVMIR mapping"),
+        IREE_SV("llvmir-linkage"),
         loom_target_linkage_name(options->export_plan->linkage));
   }
   if (options->export_plan->abi_kind == LOOM_TARGET_ABI_HAL_KERNEL) {
-    IREE_RETURN_IF_ERROR(
-        loom_llvmir_target_legality_verify_hal_kernel_launch(context));
+    if (!loom_llvmir_target_legality_verify_hal_kernel_launch(context)) {
+      return false;
+    }
   } else if (options->export_plan->abi_kind !=
              LOOM_TARGET_ABI_OBJECT_FUNCTION) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_ABI, NULL,
-        IREE_SV("target ABI does not have an LLVMIR legality adapter"),
-        options->export_plan->name);
+        IREE_SV("llvmir-abi"), options->export_plan->name);
   }
   context->bundle = (loom_target_bundle_t){
       .name = options->snapshot->name,
@@ -507,10 +465,10 @@ static iree_status_t loom_llvmir_target_legality_validate_options(
   };
   loom_llvmir_target_profile_storage_initialize_from_bundle(
       &context->bundle, options->profile, &context->profile_storage);
-  return iree_ok_status();
+  return true;
 }
 
-static iree_status_t loom_llvmir_target_legality_verify_scalar_type(
+static bool loom_llvmir_target_legality_verify_scalar_type(
     loom_llvmir_target_legality_context_t* context, loom_type_t type) {
   loom_scalar_type_t scalar_type = loom_type_element_type(type);
   switch (scalar_type) {
@@ -525,60 +483,58 @@ static iree_status_t loom_llvmir_target_legality_verify_scalar_type(
     case LOOM_SCALAR_TYPE_BF16:
     case LOOM_SCALAR_TYPE_F32:
     case LOOM_SCALAR_TYPE_F64:
-      return iree_ok_status();
+      return true;
     case LOOM_SCALAR_TYPE_F8E4M3:
     case LOOM_SCALAR_TYPE_F8E5M2:
       return loom_llvmir_target_legality_fail(
           context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TYPE, NULL,
-          IREE_SV("FP8 scalar types require explicit decode or target contract "
-                  "lowering before LLVMIR"),
-          IREE_SV("fp8"));
+          IREE_SV("fp8-explicit-lowering"), IREE_SV("fp8"));
     case LOOM_SCALAR_TYPE_COUNT_:
       break;
   }
   return loom_llvmir_target_legality_fail(
       context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TYPE, NULL,
-      IREE_SV("unknown scalar type"), iree_string_view_empty());
+      IREE_SV("known-scalar-type"), iree_string_view_empty());
 }
 
-static iree_status_t loom_llvmir_target_legality_verify_type(
+static bool loom_llvmir_target_legality_verify_type(
     loom_llvmir_target_legality_context_t* context, loom_type_t type) {
   if (loom_type_is_scalar(type)) {
     return loom_llvmir_target_legality_verify_scalar_type(context, type);
   }
   if (loom_type_is_buffer(type) || loom_type_is_view(type)) {
-    return iree_ok_status();
+    return true;
   }
   if (loom_type_is_vector(type)) {
     if (!loom_type_is_all_static(type) || loom_type_rank(type) != 1) {
       return loom_llvmir_target_legality_fail(
           context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TYPE, NULL,
-          IREE_SV("only static one-dimensional vectors lower to LLVMIR today"),
-          IREE_SV("vector"));
+          IREE_SV("llvmir-vector-shape"), IREE_SV("vector"));
     }
     uint64_t element_count = 0;
     if (!loom_type_static_element_count(type, &element_count) ||
         element_count > UINT32_MAX) {
       return loom_llvmir_target_legality_fail(
           context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TYPE, NULL,
-          IREE_SV("vector lane count is not representable in LLVMIR"),
-          IREE_SV("vector"));
+          IREE_SV("llvmir-vector-lane-count"), IREE_SV("vector"));
     }
     return loom_llvmir_target_legality_verify_scalar_type(
         context, loom_type_scalar(loom_type_element_type(type)));
   }
   return loom_llvmir_target_legality_fail(
       context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TYPE, NULL,
-      IREE_SV("type has no LLVMIR mapping yet"), iree_string_view_empty());
+      IREE_SV("llvmir-type-mapping"), iree_string_view_empty());
 }
 
-static iree_status_t loom_llvmir_target_legality_verify_value_types(
+static bool loom_llvmir_target_legality_verify_value_types(
     loom_llvmir_target_legality_context_t* context) {
   for (iree_host_size_t i = 0; i < context->module->values.count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_verify_type(
-        context, context->module->values.entries[i].type));
+    if (!loom_llvmir_target_legality_verify_type(
+            context, context->module->values.entries[i].type)) {
+      return false;
+    }
   }
-  return iree_ok_status();
+  return true;
 }
 
 static bool loom_llvmir_target_legality_type_is_pointer_like(
@@ -587,86 +543,104 @@ static bool loom_llvmir_target_legality_type_is_pointer_like(
   return loom_type_is_buffer(type) || loom_type_is_view(type);
 }
 
-static iree_status_t loom_llvmir_target_legality_expect_pointer_operand(
+static bool loom_llvmir_target_legality_expect_pointer_operand(
     loom_llvmir_target_legality_context_t* context, const loom_op_t* op,
-    iree_host_size_t operand_ordinal, iree_string_view_t detail) {
+    iree_host_size_t operand_ordinal, iree_string_view_t constraint_key) {
   if (operand_ordinal >= op->operand_count ||
       !loom_llvmir_target_legality_type_is_pointer_like(
           context, loom_op_const_operands(op)[operand_ordinal])) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC, op,
-        detail, iree_string_view_empty());
+        constraint_key, iree_string_view_empty());
   }
-  return iree_ok_status();
+  return true;
 }
 
-static iree_status_t loom_llvmir_target_legality_verify_builtin_intrinsic(
+static bool loom_llvmir_target_legality_verify_builtin_intrinsic(
     loom_llvmir_target_legality_context_t* context, const loom_op_t* op,
     iree_string_view_t kind, bool* out_handled) {
   *out_handled = true;
   if (iree_string_view_equal(kind, IREE_SV("llvm.memcpy"))) {
-    iree_string_view_t detail = IREE_SV(
-        "llvm.memcpy expects (ptr target, ptr source, integer length, i1 "
-        "constant volatile) -> ()");
-    IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_expect_intrinsic_shape(
-        context, NULL, op, 4, 0, detail));
-    IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_expect_pointer_operand(
-        context, op, 0, detail));
-    IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_expect_pointer_operand(
-        context, op, 1, detail));
+    iree_string_view_t constraint_key = IREE_SV("llvm.memcpy.signature");
+    if (!loom_llvmir_target_legality_expect_intrinsic_shape(
+            context, NULL, op, 4, 0, constraint_key)) {
+      return false;
+    }
+    if (!loom_llvmir_target_legality_expect_pointer_operand(context, op, 0,
+                                                            constraint_key)) {
+      return false;
+    }
+    if (!loom_llvmir_target_legality_expect_pointer_operand(context, op, 1,
+                                                            constraint_key)) {
+      return false;
+    }
     uint32_t ignored_bit_width = 0;
-    IREE_RETURN_IF_ERROR(
-        loom_llvmir_target_legality_expect_integer_operand_bit_width(
-            context, NULL, op, 2, detail, &ignored_bit_width));
-    IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_expect_scalar_operand(
-        context, NULL, op, 3, LOOM_SCALAR_TYPE_I1, detail));
-    return loom_llvmir_target_legality_expect_constant_operand(context, NULL,
-                                                               op, 3, detail);
+    if (!loom_llvmir_target_legality_expect_integer_operand_bit_width(
+            context, NULL, op, 2, constraint_key, &ignored_bit_width)) {
+      return false;
+    }
+    if (!loom_llvmir_target_legality_expect_scalar_operand(
+            context, NULL, op, 3, LOOM_SCALAR_TYPE_I1, constraint_key)) {
+      return false;
+    }
+    return loom_llvmir_target_legality_expect_constant_operand(
+        context, NULL, op, 3, constraint_key);
   }
   if (iree_string_view_equal(kind, IREE_SV("llvm.memset"))) {
-    iree_string_view_t detail = IREE_SV(
-        "llvm.memset expects (ptr target, i8 value, integer length, i1 "
-        "constant volatile) -> ()");
-    IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_expect_intrinsic_shape(
-        context, NULL, op, 4, 0, detail));
-    IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_expect_pointer_operand(
-        context, op, 0, detail));
-    IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_expect_scalar_operand(
-        context, NULL, op, 1, LOOM_SCALAR_TYPE_I8, detail));
+    iree_string_view_t constraint_key = IREE_SV("llvm.memset.signature");
+    if (!loom_llvmir_target_legality_expect_intrinsic_shape(
+            context, NULL, op, 4, 0, constraint_key)) {
+      return false;
+    }
+    if (!loom_llvmir_target_legality_expect_pointer_operand(context, op, 0,
+                                                            constraint_key)) {
+      return false;
+    }
+    if (!loom_llvmir_target_legality_expect_scalar_operand(
+            context, NULL, op, 1, LOOM_SCALAR_TYPE_I8, constraint_key)) {
+      return false;
+    }
     uint32_t ignored_bit_width = 0;
-    IREE_RETURN_IF_ERROR(
-        loom_llvmir_target_legality_expect_integer_operand_bit_width(
-            context, NULL, op, 2, detail, &ignored_bit_width));
-    IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_expect_scalar_operand(
-        context, NULL, op, 3, LOOM_SCALAR_TYPE_I1, detail));
-    return loom_llvmir_target_legality_expect_constant_operand(context, NULL,
-                                                               op, 3, detail);
+    if (!loom_llvmir_target_legality_expect_integer_operand_bit_width(
+            context, NULL, op, 2, constraint_key, &ignored_bit_width)) {
+      return false;
+    }
+    if (!loom_llvmir_target_legality_expect_scalar_operand(
+            context, NULL, op, 3, LOOM_SCALAR_TYPE_I1, constraint_key)) {
+      return false;
+    }
+    return loom_llvmir_target_legality_expect_constant_operand(
+        context, NULL, op, 3, constraint_key);
   }
   if (iree_string_view_equal(kind, IREE_SV("llvm.lifetime.start")) ||
       iree_string_view_equal(kind, IREE_SV("llvm.lifetime.end"))) {
-    iree_string_view_t detail = IREE_SV(
-        "llvm.lifetime intrinsic expects (i64 constant size, ptr) -> ()");
-    IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_expect_intrinsic_shape(
-        context, NULL, op, 2, 0, detail));
+    iree_string_view_t constraint_key = IREE_SV("llvm.lifetime.signature");
+    if (!loom_llvmir_target_legality_expect_intrinsic_shape(
+            context, NULL, op, 2, 0, constraint_key)) {
+      return false;
+    }
     uint32_t size_bit_width = 0;
-    IREE_RETURN_IF_ERROR(
-        loom_llvmir_target_legality_expect_integer_operand_bit_width(
-            context, NULL, op, 0, detail, &size_bit_width));
+    if (!loom_llvmir_target_legality_expect_integer_operand_bit_width(
+            context, NULL, op, 0, constraint_key, &size_bit_width)) {
+      return false;
+    }
     if (size_bit_width != 64) {
       return loom_llvmir_target_legality_fail(
           context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC, op,
-          detail, iree_string_view_empty());
+          constraint_key, iree_string_view_empty());
     }
-    IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_expect_constant_operand(
-        context, NULL, op, 0, detail));
+    if (!loom_llvmir_target_legality_expect_constant_operand(
+            context, NULL, op, 0, constraint_key)) {
+      return false;
+    }
     return loom_llvmir_target_legality_expect_pointer_operand(context, op, 1,
-                                                              detail);
+                                                              constraint_key);
   }
   *out_handled = false;
-  return iree_ok_status();
+  return true;
 }
 
-static iree_status_t loom_llvmir_target_legality_try_provider_op(
+static bool loom_llvmir_target_legality_try_provider_op(
     loom_llvmir_target_legality_context_t* context, const loom_op_t* op,
     bool* out_handled) {
   *out_handled = false;
@@ -674,47 +648,51 @@ static iree_status_t loom_llvmir_target_legality_try_provider_op(
     const loom_llvmir_target_legality_provider_t* provider =
         context->options->providers[i];
     bool handled = false;
-    IREE_RETURN_IF_ERROR(
-        provider->try_verify_op(provider, context, op, &handled));
+    if (!provider->try_verify_op(provider, context, op, &handled)) {
+      return false;
+    }
     if (handled) {
       *out_handled = true;
-      return iree_ok_status();
+      return true;
     }
   }
-  return iree_ok_status();
+  return true;
 }
 
-static iree_status_t loom_llvmir_target_legality_verify_intrinsic(
+static bool loom_llvmir_target_legality_verify_intrinsic(
     loom_llvmir_target_legality_context_t* context, const loom_op_t* op) {
   loom_string_id_t kind_id = loom_llvmir_intrinsic_kind(op);
   iree_string_view_t kind = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_string_attr(
-      context, NULL, op, IREE_SV("kind"), kind_id, &kind));
+  if (!loom_llvmir_target_legality_string_attr(
+          context, NULL, op, IREE_SV("kind"), kind_id, &kind)) {
+    return false;
+  }
   bool handled = false;
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_verify_builtin_intrinsic(
-      context, op, kind, &handled));
-  if (handled) return iree_ok_status();
-  IREE_RETURN_IF_ERROR(
-      loom_llvmir_target_legality_try_provider_op(context, op, &handled));
-  if (handled) return iree_ok_status();
+  if (!loom_llvmir_target_legality_verify_builtin_intrinsic(context, op, kind,
+                                                            &handled)) {
+    return false;
+  }
+  if (handled) return true;
+  if (!loom_llvmir_target_legality_try_provider_op(context, op, &handled)) {
+    return false;
+  }
+  if (handled) return true;
   return loom_llvmir_target_legality_fail(
       context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC, op,
-      IREE_SV("unknown llvmir.intrinsic kind"), kind);
+      IREE_SV("known-llvmir-intrinsic"), kind);
 }
 
-static iree_status_t loom_llvmir_target_legality_verify_inline_asm(
+static bool loom_llvmir_target_legality_verify_inline_asm(
     loom_llvmir_target_legality_context_t* context, const loom_op_t* op) {
   if (op->result_count > 1) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_OP, op,
-        IREE_SV("inline asm supports at most one direct result"),
-        iree_string_view_empty());
+        IREE_SV("inline-asm-result-count"), iree_string_view_empty());
   }
   if (op->tied_result_count > 0) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_OP, op,
-        IREE_SV("inline asm does not support tied results"),
-        iree_string_view_empty());
+        IREE_SV("inline-asm-tied-results"), iree_string_view_empty());
   }
   uint8_t supported_flags = LOOM_LLVMIR_ASMFLAGS_SIDEEFFECT |
                             LOOM_LLVMIR_ASMFLAGS_ALIGNSTACK |
@@ -722,28 +700,30 @@ static iree_status_t loom_llvmir_target_legality_verify_inline_asm(
   if ((loom_llvmir_inline_asm_flags(op) & ~supported_flags) != 0) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_OP, op,
-        IREE_SV("inline asm has unknown instance flags"),
-        iree_string_view_empty());
+        IREE_SV("inline-asm-flags"), iree_string_view_empty());
   }
   iree_string_view_t ignored = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_string_attr(
-      context, NULL, op, IREE_SV("asm_template"),
-      loom_llvmir_inline_asm_asm_template(op), &ignored));
+  if (!loom_llvmir_target_legality_string_attr(
+          context, NULL, op, IREE_SV("asm_template"),
+          loom_llvmir_inline_asm_asm_template(op), &ignored)) {
+    return false;
+  }
   return loom_llvmir_target_legality_string_attr(
       context, NULL, op, IREE_SV("constraints"),
       loom_llvmir_inline_asm_constraints(op), &ignored);
 }
 
-static iree_status_t loom_llvmir_target_legality_verify_provider_contract_op(
+static bool loom_llvmir_target_legality_verify_provider_contract_op(
     loom_llvmir_target_legality_context_t* context, const loom_op_t* op,
-    iree_string_view_t unsupported_detail) {
+    iree_string_view_t constraint_key) {
   bool handled = false;
-  IREE_RETURN_IF_ERROR(
-      loom_llvmir_target_legality_try_provider_op(context, op, &handled));
-  if (handled) return iree_ok_status();
+  if (!loom_llvmir_target_legality_try_provider_op(context, op, &handled)) {
+    return false;
+  }
+  if (handled) return true;
   return loom_llvmir_target_legality_fail(
       context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TARGET_CONTRACT,
-      op, unsupported_detail, iree_string_view_empty());
+      op, constraint_key, iree_string_view_empty());
 }
 
 static bool loom_llvmir_target_legality_op_is_supported_core(
@@ -857,22 +837,20 @@ static bool loom_llvmir_target_legality_op_is_supported_core(
   }
 }
 
-static iree_status_t loom_llvmir_target_legality_verify_op(
+static bool loom_llvmir_target_legality_verify_op(
     loom_llvmir_target_legality_context_t* context, const loom_op_t* op) {
   switch (op->kind) {
     case LOOM_OP_FUNC_DEF:
     case LOOM_OP_FUNC_DECL:
-      return iree_ok_status();
+      return true;
     case LOOM_OP_TARGET_ARTIFACT:
     case LOOM_OP_TARGET_GENERIC:
       if (op->parent_op != NULL) {
         return loom_llvmir_target_legality_fail(
             context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_OP, op,
-            IREE_SV("target record ops are module metadata and cannot appear "
-                    "inside executable regions"),
-            iree_string_view_empty());
+            IREE_SV("module-metadata-placement"), iree_string_view_empty());
       }
-      return iree_ok_status();
+      return true;
     case LOOM_OP_LLVMIR_INLINE_ASM:
       return loom_llvmir_target_legality_verify_inline_asm(context, op);
     case LOOM_OP_LLVMIR_INTRINSIC:
@@ -880,123 +858,106 @@ static iree_status_t loom_llvmir_target_legality_verify_op(
     case LOOM_OP_VECTOR_DOT2F:
     case LOOM_OP_VECTOR_DOT4I:
       return loom_llvmir_target_legality_verify_provider_contract_op(
-          context, op,
-          IREE_SV("vector dot op requires an explicit target legality "
-                  "provider"));
+          context, op, IREE_SV("vector-dot-target-provider"));
     case LOOM_OP_VECTOR_DOT8I4:
       return loom_llvmir_target_legality_fail(
           context, NULL,
           LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TARGET_CONTRACT, op,
-          IREE_SV("packed i4 dot needs explicit unpack/reference expansion or "
-                  "target-contract lowering"),
-          iree_string_view_empty());
+          IREE_SV("packed-i4-dot-lowering"), iree_string_view_empty());
     case LOOM_OP_VECTOR_DOT4F8:
       return loom_llvmir_target_legality_fail(
           context, NULL,
           LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TARGET_CONTRACT, op,
-          IREE_SV("packed fp8/bf8 dot needs explicit decode/reference "
-                  "expansion or target-contract lowering"),
-          iree_string_view_empty());
+          IREE_SV("packed-fp8-dot-lowering"), iree_string_view_empty());
     case LOOM_OP_SCF_IF:
     case LOOM_OP_SCF_FOR:
     case LOOM_OP_SCF_WHILE:
     case LOOM_OP_SCF_SWITCH:
       return loom_llvmir_target_legality_fail(
           context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_CONTROL_FLOW,
-          op,
-          IREE_SV("structured SCF control flow must be lowered to CFG before "
-                  "LLVMIR lowering"),
-          iree_string_view_empty());
+          op, IREE_SV("scf-cfg-lowering"), iree_string_view_empty());
     case LOOM_OP_SCF_CONDITION:
     case LOOM_OP_SCF_YIELD:
       return loom_llvmir_target_legality_fail(
           context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_CONTROL_FLOW,
-          op,
-          IREE_SV("SCF terminators must be lowered with their parent "
-                  "structured control-flow op before LLVMIR lowering"),
+          op, IREE_SV("scf-terminator-parent-lowering"),
           iree_string_view_empty());
     default:
       break;
   }
   if (loom_llvmir_target_legality_op_is_supported_core(context, op)) {
-    return iree_ok_status();
+    return true;
   }
   return loom_llvmir_target_legality_fail(
       context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_OP, op,
-      IREE_SV("no LLVMIR lowering rule is registered"),
-      iree_string_view_empty());
+      IREE_SV("llvmir-lowering-rule"), iree_string_view_empty());
 }
 
-static iree_status_t loom_llvmir_target_legality_verify_region(
+static bool loom_llvmir_target_legality_verify_region(
     loom_llvmir_target_legality_context_t* context,
     const loom_region_t* region) {
-  if (!region) return iree_ok_status();
+  if (!region) return true;
   const loom_block_t* block = NULL;
   loom_region_for_each_block(region, block) {
     const loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
-      IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_verify_op(context, op));
+      if (!loom_llvmir_target_legality_verify_op(context, op)) {
+        return false;
+      }
       for (uint8_t i = 0; i < op->region_count; ++i) {
-        IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_verify_region(
-            context, loom_op_regions(op)[i]));
+        if (!loom_llvmir_target_legality_verify_region(
+                context, loom_op_regions(op)[i])) {
+          return false;
+        }
       }
     }
   }
-  return iree_ok_status();
+  return true;
 }
 
-static iree_status_t loom_llvmir_target_legality_verify_function_body(
+static bool loom_llvmir_target_legality_verify_function_body(
     loom_llvmir_target_legality_context_t* context, loom_func_like_t func) {
   loom_region_t* body = loom_func_like_body(func);
-  if (!body) return iree_ok_status();
+  if (!body) return true;
   if (iree_any_bit_set(body->flags, LOOM_REGION_INSTANCE_FLAG_CFG)) {
-    return iree_ok_status();
+    return true;
   }
   if (body->block_count != 1) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_CONTROL_FLOW,
-        func.op,
-        IREE_SV("multi-block function body must use CFG successor terminators "
-                "before LLVMIR lowering"),
-        iree_string_view_empty());
+        func.op, IREE_SV("cfg-function-body"), iree_string_view_empty());
   }
-  return iree_ok_status();
+  return true;
 }
 
-static iree_status_t loom_llvmir_target_legality_verify_function_abi(
+static bool loom_llvmir_target_legality_verify_function_abi(
     loom_llvmir_target_legality_context_t* context, loom_func_like_t func) {
   if (func.op->result_count > 1) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_FUNCTION,
-        func.op,
-        IREE_SV("LLVM functions with multiple direct results need an "
-                "aggregate or sret ABI decision"),
+        func.op, IREE_SV("llvmir-direct-result-count"),
         iree_string_view_empty());
   }
   if (context->profile_storage.profile.kind !=
       LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL) {
-    return iree_ok_status();
+    return true;
   }
   bool is_public = loom_func_like_visibility(func) != 0;
   if (is_public && loom_func_like_cc(func) != LOOM_FUNC_CC_DEVICE) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_ABI, func.op,
-        IREE_SV("HAL kernel profile can only export public device entry "
-                "points"),
-        iree_string_view_empty());
+        IREE_SV("hal-kernel-entry-cc"), iree_string_view_empty());
   }
-  if (!is_public) return iree_ok_status();
+  if (!is_public) return true;
   if (!loom_func_like_body(func)) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_ABI, func.op,
-        IREE_SV("HAL kernel entry points must be function definitions"),
-        iree_string_view_empty());
+        IREE_SV("hal-kernel-entry-definition"), iree_string_view_empty());
   }
   if (func.op->result_count != 0) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_ABI, func.op,
-        IREE_SV("HAL kernel entry points must return void"),
-        iree_string_view_empty());
+        IREE_SV("hal-kernel-entry-result-count"), iree_string_view_empty());
   }
   uint16_t arg_count = 0;
   const loom_value_id_t* arg_ids = loom_func_like_arg_ids(func, &arg_count);
@@ -1006,15 +967,13 @@ static iree_status_t loom_llvmir_target_legality_verify_function_abi(
     if (loom_type_is_view(arg_type)) {
       return loom_llvmir_target_legality_fail(
           context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_ABI, func.op,
-          IREE_SV("HAL kernel entry point view parameters need explicit "
-                  "resource materialization"),
-          iree_string_view_empty());
+          IREE_SV("hal-kernel-view-parameter"), iree_string_view_empty());
     }
   }
-  return iree_ok_status();
+  return true;
 }
 
-static iree_status_t loom_llvmir_target_legality_verify_functions(
+static bool loom_llvmir_target_legality_verify_functions(
     loom_llvmir_target_legality_context_t* context) {
   for (iree_host_size_t i = 0; i < context->module->symbols.count; ++i) {
     const loom_symbol_t* symbol = &context->module->symbols.entries[i];
@@ -1029,36 +988,33 @@ static iree_status_t loom_llvmir_target_legality_verify_functions(
     if (!symbol->defining_op) {
       return loom_llvmir_target_legality_fail(
           context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_FUNCTION, NULL,
-          IREE_SV("function-like symbol has no defining op"), symbol_name);
+          IREE_SV("func-like-defining-op"), symbol_name);
     }
     loom_symbol_kind_t bytecode_kind = loom_symbol_bytecode_kind(symbol);
     if (bytecode_kind != LOOM_SYMBOL_FUNC_DEF &&
         bytecode_kind != LOOM_SYMBOL_FUNC_DECL) {
       return loom_llvmir_target_legality_fail(
           context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_FUNCTION,
-          symbol->defining_op,
-          IREE_SV("LLVMIR lowering only supports func.def and func.decl "
-                  "symbols today"),
-          symbol_name);
+          symbol->defining_op, IREE_SV("llvmir-func-symbol-kind"), symbol_name);
     }
     loom_func_like_t func =
         loom_func_like_cast(context->module, symbol->defining_op);
     if (!loom_func_like_isa(func)) {
       return loom_llvmir_target_legality_fail(
           context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_FUNCTION,
-          symbol->defining_op,
-          IREE_SV("function-like symbol does not implement FuncLike"),
-          symbol_name);
+          symbol->defining_op, IREE_SV("func-like-interface"), symbol_name);
     }
-    IREE_RETURN_IF_ERROR(
-        loom_llvmir_target_legality_verify_function_abi(context, func));
-    IREE_RETURN_IF_ERROR(
-        loom_llvmir_target_legality_verify_function_body(context, func));
+    if (!loom_llvmir_target_legality_verify_function_abi(context, func)) {
+      return false;
+    }
+    if (!loom_llvmir_target_legality_verify_function_body(context, func)) {
+      return false;
+    }
   }
-  return iree_ok_status();
+  return true;
 }
 
-iree_status_t loom_llvmir_verify_target_legality(
+bool loom_llvmir_verify_target_legality(
     const loom_module_t* module,
     const loom_llvmir_target_legality_options_t* options,
     loom_llvmir_target_legality_diagnostic_t* out_diagnostic) {
@@ -1068,9 +1024,8 @@ iree_status_t loom_llvmir_verify_target_legality(
       .options = options,
       .diagnostic = out_diagnostic,
   };
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_validate_options(&context));
-  IREE_RETURN_IF_ERROR(
-      loom_llvmir_target_legality_verify_value_types(&context));
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_verify_functions(&context));
+  if (!loom_llvmir_target_legality_validate_options(&context)) return false;
+  if (!loom_llvmir_target_legality_verify_value_types(&context)) return false;
+  if (!loom_llvmir_target_legality_verify_functions(&context)) return false;
   return loom_llvmir_target_legality_verify_region(&context, module->body);
 }

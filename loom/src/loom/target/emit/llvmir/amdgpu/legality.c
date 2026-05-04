@@ -15,28 +15,31 @@ static bool loom_llvmir_amdgpu_legality_intrinsic_is_workitem_id(
          iree_string_view_equal(kind, IREE_SV("llvm.amdgcn.workitem.id.z"));
 }
 
-static iree_status_t loom_llvmir_amdgpu_legality_try_verify_op(
+static bool loom_llvmir_amdgpu_legality_try_verify_op(
     const loom_llvmir_target_legality_provider_t* provider,
     loom_llvmir_target_legality_context_t* context, const loom_op_t* op,
     bool* out_handled) {
   *out_handled = false;
-  if (!loom_llvmir_intrinsic_isa(op)) return iree_ok_status();
+  if (!loom_llvmir_intrinsic_isa(op)) return true;
 
   loom_string_id_t kind_id = loom_llvmir_intrinsic_kind(op);
   iree_string_view_t kind = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_string_attr(
-      context, provider, op, IREE_SV("kind"), kind_id, &kind));
+  if (!loom_llvmir_target_legality_string_attr(
+          context, provider, op, IREE_SV("kind"), kind_id, &kind)) {
+    return false;
+  }
   if (!loom_llvmir_amdgpu_legality_intrinsic_is_workitem_id(kind)) {
-    return iree_ok_status();
+    return true;
   }
   *out_handled = true;
 
-  iree_string_view_t detail =
-      IREE_SV("AMDGPU workitem.id intrinsic expects () -> i32");
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_expect_intrinsic_shape(
-      context, provider, op, 0, 1, detail));
+  iree_string_view_t constraint_key = IREE_SV("amdgpu-workitem-id-signature");
+  if (!loom_llvmir_target_legality_expect_intrinsic_shape(
+          context, provider, op, 0, 1, constraint_key)) {
+    return false;
+  }
   return loom_llvmir_target_legality_expect_scalar_result(
-      context, provider, op, LOOM_SCALAR_TYPE_I32, detail);
+      context, provider, op, LOOM_SCALAR_TYPE_I32, constraint_key);
 }
 
 static const loom_llvmir_target_legality_provider_t kAmdgpuLegalityProvider = {
