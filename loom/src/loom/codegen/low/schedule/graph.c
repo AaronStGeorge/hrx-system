@@ -66,7 +66,6 @@ static iree_status_t loom_low_schedule_resolve_descriptor(
   loom_low_resolved_descriptor_packet_t packet = {0};
   IREE_RETURN_IF_ERROR(loom_low_resolve_descriptor_packet(
       state->module, &state->target, op, &packet));
-  node->descriptor_id = packet.stable_id;
   if (packet.descriptor == NULL) {
     IREE_RETURN_IF_ERROR(
         loom_low_schedule_emit_missing_descriptor(state, op, packet.key));
@@ -75,7 +74,7 @@ static iree_status_t loom_low_schedule_resolve_descriptor(
                             (int)packet.key.size, packet.key.data);
   }
 
-  node->descriptor_ordinal = packet.descriptor_ordinal;
+  node->descriptor = packet.descriptor;
   node->effect_count = packet.descriptor->effect_count;
   node->schedule_class_id = packet.descriptor->schedule_class_id;
   if (packet.descriptor->schedule_class_id == LOOM_LOW_SCHEDULE_CLASS_NONE ||
@@ -389,10 +388,9 @@ iree_status_t loom_low_schedule_fill_nodes(
           .scheduled_ordinal = LOOM_LOW_SCHEDULE_NODE_NONE,
           .kind = LOOM_LOW_SCHEDULE_NODE_STRUCTURAL,
           .traits = loom_op_effective_traits(state->module, op),
-          .descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE,
+          .descriptor = NULL,
           .memory_access_record_index =
               LOOM_LOW_SCHEDULE_MEMORY_ACCESS_RECORD_NONE,
-          .descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
           .schedule_class_id = LOOM_LOW_SCHEDULE_CLASS_NONE,
       };
       if (loom_low_schedule_op_is_terminator(state->module, op)) {
@@ -772,11 +770,7 @@ iree_status_t loom_low_schedule_build_dependencies(
             state, node_index, operand_ordinal));
       }
 
-      const loom_low_descriptor_t* descriptor = NULL;
-      if (node->descriptor_ordinal != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-        descriptor = loom_low_descriptor_set_descriptor_at(
-            state->target.descriptor_set, node->descriptor_ordinal);
-      }
+      const loom_low_descriptor_t* descriptor = node->descriptor;
       IREE_RETURN_IF_ERROR(loom_low_schedule_note_descriptor_state_accesses(
           state, node_index, descriptor));
       if (descriptor != NULL) {

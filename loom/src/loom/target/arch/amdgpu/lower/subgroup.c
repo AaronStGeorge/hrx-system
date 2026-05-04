@@ -8,8 +8,8 @@
 
 #include "loom/ir/context.h"
 #include "loom/ops/kernel/ops.h"
-#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 
 #define LOOM_AMDGPU_MAX_SUBGROUP_TREE_STEPS 6u
 
@@ -110,65 +110,65 @@ static bool loom_amdgpu_subgroup_full_wave_workgroups(
          (flat_workgroup_size % wavefront_size) == 0;
 }
 
-static bool loom_amdgpu_subgroup_combine_descriptor_id(
+static bool loom_amdgpu_subgroup_combine_descriptor_ref(
     loom_combining_kind_t kind,
     loom_amdgpu_subgroup_payload_kind_t payload_kind,
-    uint64_t* out_descriptor_id) {
-  *out_descriptor_id = 0;
+    loom_amdgpu_descriptor_ref_t* out_descriptor_ref) {
+  *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
   switch (kind) {
     case LOOM_COMBINING_KIND_ADDI:
       if (!loom_amdgpu_subgroup_payload_is_integer(payload_kind)) {
         return false;
       }
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_U32;
+      *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32;
       return true;
     case LOOM_COMBINING_KIND_MULI:
       if (!loom_amdgpu_subgroup_payload_is_integer(payload_kind)) {
         return false;
       }
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MUL_LO_U32;
+      *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_MUL_LO_U32;
       return true;
     case LOOM_COMBINING_KIND_ANDI:
       if (!loom_amdgpu_subgroup_payload_is_integer(payload_kind)) {
         return false;
       }
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_AND_B32;
+      *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32;
       return true;
     case LOOM_COMBINING_KIND_ORI:
       if (!loom_amdgpu_subgroup_payload_is_integer(payload_kind)) {
         return false;
       }
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_OR_B32;
+      *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_OR_B32;
       return true;
     case LOOM_COMBINING_KIND_XORI:
       if (!loom_amdgpu_subgroup_payload_is_integer(payload_kind)) {
         return false;
       }
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_XOR_B32;
+      *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_XOR_B32;
       return true;
     case LOOM_COMBINING_KIND_ADDF:
       if (!loom_amdgpu_subgroup_payload_is_float(payload_kind)) {
         return false;
       }
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_F32;
+      *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_F32;
       return true;
     case LOOM_COMBINING_KIND_MULF:
       if (!loom_amdgpu_subgroup_payload_is_float(payload_kind)) {
         return false;
       }
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MUL_F32;
+      *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_MUL_F32;
       return true;
     case LOOM_COMBINING_KIND_MINNUMF:
       if (!loom_amdgpu_subgroup_payload_is_float(payload_kind)) {
         return false;
       }
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MIN_F32;
+      *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_MIN_F32;
       return true;
     case LOOM_COMBINING_KIND_MAXNUMF:
       if (!loom_amdgpu_subgroup_payload_is_float(payload_kind)) {
         return false;
       }
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MAX_F32;
+      *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_MAX_F32;
       return true;
     default:
       return false;
@@ -205,10 +205,11 @@ static bool loom_amdgpu_subgroup_combine_identity_bits(
   }
 }
 
-static bool loom_amdgpu_descriptor_set_has_id(
-    const loom_low_descriptor_set_t* descriptor_set, uint64_t descriptor_id) {
-  return loom_low_descriptor_set_lookup_descriptor_by_id(
-             descriptor_set, descriptor_id) != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+static bool loom_amdgpu_descriptor_set_has_ref(
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_descriptor_ref_t descriptor_ref) {
+  return loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref) !=
+         LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
 }
 
 static bool loom_amdgpu_subgroup_mask_bit_count(const loom_module_t* module,
@@ -267,9 +268,9 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_broadcast_plan(
   }
 
   bool descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
-      context, LOOM_AMDGPU_DESCRIPTOR_ID_DS_BPERMUTE_B32, &out_plan->descriptor,
-      &descriptor_present));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32,
+      &out_plan->descriptor, &descriptor_present));
   if (!descriptor_present) {
     return iree_ok_status();
   }
@@ -311,8 +312,8 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_broadcast_first_plan(
   }
 
   bool descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
-      context, LOOM_AMDGPU_DESCRIPTOR_ID_V_READFIRSTLANE_B32,
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_READFIRSTLANE_B32,
       &out_plan->descriptor, &descriptor_present));
   if (!descriptor_present) {
     return iree_ok_status();
@@ -369,9 +370,9 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_shuffle_plan(
   }
 
   bool descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
-      context, LOOM_AMDGPU_DESCRIPTOR_ID_DS_BPERMUTE_B32, &out_plan->descriptor,
-      &descriptor_present));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32,
+      &out_plan->descriptor, &descriptor_present));
   if (!descriptor_present) {
     return iree_ok_status();
   }
@@ -412,9 +413,10 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
 
   const loom_combining_kind_t kind =
       loom_kernel_subgroup_reduce_kind(source_op);
-  uint64_t combine_descriptor_id = 0;
-  if (!loom_amdgpu_subgroup_combine_descriptor_id(kind, payload_kind,
-                                                  &combine_descriptor_id)) {
+  loom_amdgpu_descriptor_ref_t combine_descriptor_ref =
+      LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
+  if (!loom_amdgpu_subgroup_combine_descriptor_ref(kind, payload_kind,
+                                                   &combine_descriptor_ref)) {
     return iree_ok_status();
   }
 
@@ -429,16 +431,16 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
   }
 
   bool bpermute_descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
-      context, LOOM_AMDGPU_DESCRIPTOR_ID_DS_BPERMUTE_B32,
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32,
       &out_plan->bpermute_descriptor, &bpermute_descriptor_present));
   if (!bpermute_descriptor_present) {
     return iree_ok_status();
   }
 
   bool combine_descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
-      context, combine_descriptor_id, &out_plan->combine_descriptor,
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, combine_descriptor_ref, &out_plan->combine_descriptor,
       &combine_descriptor_present));
   if (!combine_descriptor_present) {
     return iree_ok_status();
@@ -476,9 +478,10 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_scan_plan(
   }
 
   const loom_combining_kind_t kind = loom_kernel_subgroup_scan_kind(source_op);
-  uint64_t combine_descriptor_id = 0;
-  if (!loom_amdgpu_subgroup_combine_descriptor_id(kind, payload_kind,
-                                                  &combine_descriptor_id)) {
+  loom_amdgpu_descriptor_ref_t combine_descriptor_ref =
+      LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
+  if (!loom_amdgpu_subgroup_combine_descriptor_ref(kind, payload_kind,
+                                                   &combine_descriptor_ref)) {
     return iree_ok_status();
   }
   const loom_kernel_subgroup_scan_mode_t mode =
@@ -498,15 +501,16 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_scan_plan(
       return iree_ok_status();
   }
 
-  uint64_t guard_descriptor_id = 0;
+  loom_amdgpu_descriptor_ref_t guard_descriptor_ref =
+      LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
   const loom_kernel_subgroup_scan_direction_t direction =
       loom_kernel_subgroup_scan_direction(source_op);
   switch (direction) {
     case LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_FORWARD:
-      guard_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_UGE_U32;
+      guard_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGE_U32;
       break;
     case LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_REVERSE:
-      guard_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_ULT_U32;
+      guard_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_U32;
       break;
     case LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_COUNT_:
       return iree_ok_status();
@@ -523,32 +527,32 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_scan_plan(
   }
 
   bool bpermute_descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
-      context, LOOM_AMDGPU_DESCRIPTOR_ID_DS_BPERMUTE_B32,
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32,
       &out_plan->bpermute_descriptor, &bpermute_descriptor_present));
   if (!bpermute_descriptor_present) {
     return iree_ok_status();
   }
 
   bool combine_descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
-      context, combine_descriptor_id, &out_plan->combine_descriptor,
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, combine_descriptor_ref, &out_plan->combine_descriptor,
       &combine_descriptor_present));
   if (!combine_descriptor_present) {
     return iree_ok_status();
   }
 
   bool guard_descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
-      context, guard_descriptor_id, &out_plan->guard_descriptor,
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, guard_descriptor_ref, &out_plan->guard_descriptor,
       &guard_descriptor_present));
   if (!guard_descriptor_present) {
     return iree_ok_status();
   }
 
   bool select_descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
-      context, LOOM_AMDGPU_DESCRIPTOR_ID_V_CNDMASK_B32,
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32,
       &out_plan->select_descriptor, &select_descriptor_present));
   if (!select_descriptor_present) {
     return iree_ok_status();
@@ -592,8 +596,8 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_active_mask_plan(
   }
 
   bool descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
-      context, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B64_EXEC_READ,
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_READ,
       &out_plan->exec_read_descriptor, &descriptor_present));
   if (!descriptor_present) {
     return iree_ok_status();
@@ -667,16 +671,16 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_vote_any_plan(
   }
 
   bool compare_descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
-      context, LOOM_AMDGPU_DESCRIPTOR_ID_S_CMP_LG_U64,
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_LG_U64,
       &out_plan->compare_descriptor, &compare_descriptor_present));
   if (!compare_descriptor_present) {
     return iree_ok_status();
   }
 
   bool zero_descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
-      context, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32, &out_plan->zero_descriptor,
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32, &out_plan->zero_descriptor,
       &zero_descriptor_present));
   if (!zero_descriptor_present) {
     return iree_ok_status();
@@ -712,16 +716,16 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_vote_all_plan(
   }
 
   bool compare_descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
-      context, LOOM_AMDGPU_DESCRIPTOR_ID_S_CMP_EQ_U64,
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_EQ_U64,
       &out_plan->compare_descriptor, &compare_descriptor_present));
   if (!compare_descriptor_present) {
     return iree_ok_status();
   }
 
   bool exec_read_descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
-      context, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B64_EXEC_READ,
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_READ,
       &out_plan->exec_read_descriptor, &exec_read_descriptor_present));
   if (!exec_read_descriptor_present) {
     return iree_ok_status();
@@ -836,7 +840,7 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_broadcast(
 
   loom_value_id_t low_source_byte_offset = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32,
       plan->source_lane * 4u, lane_type, &low_source_byte_offset));
 
   loom_value_id_t result_registers[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
@@ -887,8 +891,8 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_broadcast_first(
 
 static iree_status_t loom_amdgpu_emit_subgroup_mask_compare(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    uint64_t descriptor_id, loom_value_id_t lhs, loom_value_id_t rhs,
-    loom_type_t mask_type, loom_value_id_t* out_mask) {
+    loom_amdgpu_descriptor_ref_t descriptor_ref, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t mask_type, loom_value_id_t* out_mask) {
   *out_mask = LOOM_VALUE_ID_INVALID;
   const loom_value_id_t operands[] = {
       lhs,
@@ -896,7 +900,7 @@ static iree_status_t loom_amdgpu_emit_subgroup_mask_compare(
   };
   loom_op_t* low_op = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-      context, source_op, descriptor_id, operands, IREE_ARRAYSIZE(operands),
+      context, source_op, descriptor_ref, operands, IREE_ARRAYSIZE(operands),
       loom_make_named_attr_slice(NULL, 0), &mask_type, 1, &low_op));
   *out_mask = loom_value_slice_get(loom_low_op_results(low_op), 0);
   return iree_ok_status();
@@ -907,10 +911,10 @@ static iree_status_t loom_amdgpu_emit_subgroup_valid_true(
     loom_type_t lane_type, loom_type_t valid_type, loom_value_id_t* out_valid) {
   loom_value_id_t zero = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32, 0, lane_type,
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, 0, lane_type,
       &zero));
   return loom_amdgpu_emit_subgroup_mask_compare(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_EQ_I32, zero, zero,
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32, zero, zero,
       valid_type, out_valid);
 }
 
@@ -919,7 +923,7 @@ static iree_status_t loom_amdgpu_emit_subgroup_lane_byte_offset(
     loom_value_id_t lane, loom_type_t lane_type,
     loom_value_id_t* out_byte_offset) {
   return loom_amdgpu_emit_vgpr_shift(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHLREV_B32_LIT, 2, lane,
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT, 2, lane,
       lane_type, out_byte_offset);
 }
 
@@ -935,7 +939,7 @@ static iree_status_t loom_amdgpu_emit_subgroup_shuffle_source_byte_offset(
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_valid_true(
         context, source_op, lane_type, valid_type, out_valid));
     return loom_amdgpu_emit_const_u32(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32,
         plan->offset * 4u, lane_type, out_source_byte_offset);
   }
 
@@ -950,7 +954,7 @@ static iree_status_t loom_amdgpu_emit_subgroup_shuffle_source_byte_offset(
         source_lane = lane_id;
       } else {
         IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
-            context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_XOR_B32_LIT,
+            context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_XOR_B32_LIT,
             lane_id, plan->offset, lane_type, &source_lane));
       }
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_valid_true(
@@ -959,30 +963,30 @@ static iree_status_t loom_amdgpu_emit_subgroup_shuffle_source_byte_offset(
     case LOOM_KERNEL_SUBGROUP_SHUFFLE_MODE_UP: {
       loom_value_id_t offset = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32, plan->offset,
-          lane_type, &offset));
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32,
+          plan->offset, lane_type, &offset));
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_SUB_U32, lane_id,
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_SUB_U32, lane_id,
           offset, lane_type, &source_lane));
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_mask_compare(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_UGE_U32, lane_id,
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGE_U32, lane_id,
           offset, valid_type, out_valid));
       break;
     }
     case LOOM_KERNEL_SUBGROUP_SHUFFLE_MODE_DOWN: {
       loom_value_id_t offset = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32, plan->offset,
-          lane_type, &offset));
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32,
+          plan->offset, lane_type, &offset));
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_U32, lane_id,
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32, lane_id,
           offset, lane_type, &source_lane));
       loom_value_id_t width = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32, plan->width,
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, plan->width,
           lane_type, &width));
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_mask_compare(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_ULT_U32,
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_U32,
           source_lane, width, valid_type, out_valid));
       break;
     }
@@ -1039,7 +1043,7 @@ static iree_status_t loom_amdgpu_emit_subgroup_xor_lane_byte_offset(
     loom_value_id_t* out_source_byte_offset) {
   loom_value_id_t source_lane = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_XOR_B32_LIT, lane_id,
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_XOR_B32_LIT, lane_id,
       offset, lane_type, &source_lane));
   return loom_amdgpu_emit_subgroup_lane_byte_offset(
       context, source_op, source_lane, lane_type, out_source_byte_offset);
@@ -1115,14 +1119,14 @@ static iree_status_t loom_amdgpu_emit_subgroup_scan_source(
 
   loom_value_id_t low_offset = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32, offset,
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, offset,
       lane_type, &low_offset));
 
   loom_value_id_t source_lane = LOOM_VALUE_ID_INVALID;
   switch (plan->direction) {
     case LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_FORWARD: {
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_SUB_U32, lane_id,
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_SUB_U32, lane_id,
           low_offset, lane_type, &source_lane));
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_scan_guard(
           context, source_op, &plan->guard_descriptor, lane_id, low_offset,
@@ -1131,7 +1135,7 @@ static iree_status_t loom_amdgpu_emit_subgroup_scan_source(
     }
     case LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_REVERSE: {
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_U32, lane_id,
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32, lane_id,
           low_offset, lane_type, &source_lane));
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_scan_guard(
           context, source_op, &plan->guard_descriptor, source_lane,
@@ -1229,7 +1233,7 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_scan(
   loom_value_id_t wavefront_size = LOOM_VALUE_ID_INVALID;
   if (plan->direction == LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_REVERSE) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32,
         plan->wavefront_size, lane_type, &wavefront_size));
   }
 
@@ -1300,7 +1304,7 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_scan(
           accumulator, lane_type, &shifted));
       loom_value_id_t identity = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32,
           identity_bits, lane_type, &identity));
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_scan_select(
           context, source_op, &plan->select_descriptor, identity, shifted,
@@ -1510,10 +1514,10 @@ static iree_status_t loom_amdgpu_low_legality_verify_subgroup_mask_result(
 static iree_status_t loom_amdgpu_low_legality_verify_subgroup_descriptor(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
-    uint64_t descriptor_id, iree_string_view_t descriptor_name,
-    iree_string_view_t message) {
-  if (!loom_amdgpu_descriptor_set_has_id(
-          loom_target_low_legality_descriptor_set(context), descriptor_id)) {
+    loom_amdgpu_descriptor_ref_t descriptor_ref,
+    iree_string_view_t descriptor_name, iree_string_view_t message) {
+  if (!loom_amdgpu_descriptor_set_has_ref(
+          loom_target_low_legality_descriptor_set(context), descriptor_ref)) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("descriptor"), descriptor_name, message);
   }
@@ -1541,7 +1545,7 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_active_mask(
       provider, context, op, loom_kernel_subgroup_active_mask_mask(op),
       wavefront_size, &unused_mask_bit_count));
   return loom_amdgpu_low_legality_verify_subgroup_descriptor(
-      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B64_EXEC_READ,
+      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_READ,
       IREE_SV("amdgpu.s_mov_b64_exec_read"),
       IREE_SV("selected descriptor set does not provide a native EXEC mask "
               "read packet"));
@@ -1596,12 +1600,12 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_vote_any(
           IREE_SV("AMDGPU subgroup vote.any lowering requires a divergent i1 "
                   "predicate that maps to a native EXEC-width mask")));
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_descriptor(
-      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_ID_S_CMP_LG_U64,
+      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_LG_U64,
       IREE_SV("amdgpu.s_cmp_lg_u64"),
       IREE_SV("selected descriptor set does not provide a native 64-bit SALU "
               "mask compare packet")));
   return loom_amdgpu_low_legality_verify_subgroup_descriptor(
-      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32,
+      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32,
       IREE_SV("amdgpu.s_mov_b32"),
       IREE_SV("selected descriptor set does not provide a native SGPR zero "
               "materialization packet"));
@@ -1629,12 +1633,12 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_vote_all(
           IREE_SV("AMDGPU subgroup vote.all lowering requires a divergent i1 "
                   "predicate that maps to a native EXEC-width mask")));
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_descriptor(
-      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_ID_S_CMP_EQ_U64,
+      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_EQ_U64,
       IREE_SV("amdgpu.s_cmp_eq_u64"),
       IREE_SV("selected descriptor set does not provide a native 64-bit SALU "
               "mask compare packet")));
   return loom_amdgpu_low_legality_verify_subgroup_descriptor(
-      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B64_EXEC_READ,
+      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_READ,
       IREE_SV("amdgpu.s_mov_b64_exec_read"),
       IREE_SV("selected descriptor set does not provide a native EXEC mask "
               "read packet"));
@@ -1706,10 +1710,9 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_shuffle(
                 "selected wave32 or wave64 subgroup"));
   }
 
-  const uint32_t descriptor_ordinal =
-      loom_low_descriptor_set_lookup_descriptor_by_id(
-          loom_target_low_legality_descriptor_set(context),
-          LOOM_AMDGPU_DESCRIPTOR_ID_DS_BPERMUTE_B32);
+  const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
+      loom_target_low_legality_descriptor_set(context),
+      LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32);
   if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("descriptor"),
@@ -1751,10 +1754,11 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(
                 "rank-1 static i32/f32 vector payload"));
   }
 
-  uint64_t combine_descriptor_id = 0;
-  if (!loom_amdgpu_subgroup_combine_descriptor_id(
+  loom_amdgpu_descriptor_ref_t combine_descriptor_ref =
+      LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
+  if (!loom_amdgpu_subgroup_combine_descriptor_ref(
           loom_kernel_subgroup_reduce_kind(op), payload_kind,
-          &combine_descriptor_id)) {
+          &combine_descriptor_ref)) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("kind"), loom_op_name(module, op),
         IREE_SV("AMDGPU subgroup reduce requires an i32 add/mul/and/or/xor "
@@ -1782,16 +1786,16 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(
 
   const loom_low_descriptor_set_t* descriptor_set =
       loom_target_low_legality_descriptor_set(context);
-  if (!loom_amdgpu_descriptor_set_has_id(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_DS_BPERMUTE_B32)) {
+  if (!loom_amdgpu_descriptor_set_has_ref(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32)) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("descriptor"),
         IREE_SV("amdgpu.ds_bpermute_b32"),
         IREE_SV("selected descriptor set does not provide a native subgroup "
                 "reduce cross-lane packet"));
   }
-  if (!loom_amdgpu_descriptor_set_has_id(descriptor_set,
-                                         combine_descriptor_id)) {
+  if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
+                                          combine_descriptor_ref)) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("descriptor"),
         IREE_SV("amdgpu.reduce.combine"),
@@ -1832,10 +1836,11 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_scan(
                 "rank-1 static i32/f32 vector payload"));
   }
 
-  uint64_t combine_descriptor_id = 0;
+  loom_amdgpu_descriptor_ref_t combine_descriptor_ref =
+      LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
   const loom_combining_kind_t kind = loom_kernel_subgroup_scan_kind(op);
-  if (!loom_amdgpu_subgroup_combine_descriptor_id(kind, payload_kind,
-                                                  &combine_descriptor_id)) {
+  if (!loom_amdgpu_subgroup_combine_descriptor_ref(kind, payload_kind,
+                                                   &combine_descriptor_ref)) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("kind"), loom_op_name(module, op),
         IREE_SV("AMDGPU subgroup scan requires an i32 add/mul/and/or/xor or "
@@ -1862,13 +1867,14 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_scan(
           IREE_SV("AMDGPU subgroup scan requires inclusive or exclusive mode"));
   }
 
-  uint64_t guard_descriptor_id = 0;
+  loom_amdgpu_descriptor_ref_t guard_descriptor_ref =
+      LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
   switch (loom_kernel_subgroup_scan_direction(op)) {
     case LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_FORWARD:
-      guard_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_UGE_U32;
+      guard_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGE_U32;
       break;
     case LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_REVERSE:
-      guard_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_ULT_U32;
+      guard_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_U32;
       break;
     case LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_COUNT_:
       return loom_target_low_legality_reject(
@@ -1898,31 +1904,32 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_scan(
 
   const loom_low_descriptor_set_t* descriptor_set =
       loom_target_low_legality_descriptor_set(context);
-  if (!loom_amdgpu_descriptor_set_has_id(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_DS_BPERMUTE_B32)) {
+  if (!loom_amdgpu_descriptor_set_has_ref(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32)) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("descriptor"),
         IREE_SV("amdgpu.ds_bpermute_b32"),
         IREE_SV("selected descriptor set does not provide a native subgroup "
                 "scan cross-lane packet"));
   }
-  if (!loom_amdgpu_descriptor_set_has_id(descriptor_set,
-                                         combine_descriptor_id)) {
+  if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
+                                          combine_descriptor_ref)) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("descriptor"),
         IREE_SV("amdgpu.scan.combine"),
         IREE_SV("selected descriptor set does not provide the native subgroup "
                 "scan combine packet"));
   }
-  if (!loom_amdgpu_descriptor_set_has_id(descriptor_set, guard_descriptor_id)) {
+  if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
+                                          guard_descriptor_ref)) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("descriptor"),
         IREE_SV("amdgpu.scan.guard"),
         IREE_SV("selected descriptor set does not provide the native subgroup "
                 "scan lane-bound compare packet"));
   }
-  if (!loom_amdgpu_descriptor_set_has_id(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_V_CNDMASK_B32)) {
+  if (!loom_amdgpu_descriptor_set_has_ref(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32)) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("descriptor"),
         IREE_SV("amdgpu.v_cndmask_b32"),
@@ -1983,10 +1990,9 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_broadcast(
                 "selected wave32 or wave64 subgroup"));
   }
 
-  const uint32_t descriptor_ordinal =
-      loom_low_descriptor_set_lookup_descriptor_by_id(
-          loom_target_low_legality_descriptor_set(context),
-          LOOM_AMDGPU_DESCRIPTOR_ID_DS_BPERMUTE_B32);
+  const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
+      loom_target_low_legality_descriptor_set(context),
+      LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32);
   if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("descriptor"),
@@ -2028,7 +2034,7 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_broadcast_first(
               "wave64 target subgroup"),
       &unused_wavefront_size));
   return loom_amdgpu_low_legality_verify_subgroup_descriptor(
-      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_ID_V_READFIRSTLANE_B32,
+      provider, context, op, LOOM_AMDGPU_DESCRIPTOR_REF_V_READFIRSTLANE_B32,
       IREE_SV("amdgpu.v_readfirstlane_b32"),
       IREE_SV("selected descriptor set does not provide a native first-active "
               "lane read packet"));

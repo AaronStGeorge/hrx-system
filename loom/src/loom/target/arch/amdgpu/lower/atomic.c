@@ -13,10 +13,10 @@
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/atomic_candidates.h"
-#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
 #include "loom/target/arch/amdgpu/lower/memory_internal.h"
 #include "loom/target/arch/amdgpu/target_info.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 
 typedef uint32_t loom_amdgpu_atomic_rejection_flags_t;
 
@@ -48,8 +48,8 @@ typedef struct loom_amdgpu_atomic_rejection_detail_t {
 } loom_amdgpu_atomic_rejection_detail_t;
 
 typedef struct loom_amdgpu_atomic_wait_packet_template_t {
-  // Stable descriptor ID emitted for this wait packet.
-  uint64_t descriptor_id;
+  // Stable descriptor ref emitted for this wait packet.
+  loom_amdgpu_descriptor_ref_t descriptor_ref;
   // Static immediate rows for draining the selected counter to zero.
   loom_amdgpu_explicit_packet_immediate_template_t
       immediates[LOOM_AMDGPU_EXPLICIT_PACKET_IMMEDIATE_CAPACITY];
@@ -58,8 +58,8 @@ typedef struct loom_amdgpu_atomic_wait_packet_template_t {
 } loom_amdgpu_atomic_wait_packet_template_t;
 
 typedef struct loom_amdgpu_atomic_explicit_packet_selection_t {
-  // Stable descriptor ID selected for this explicit packet.
-  uint64_t descriptor_id;
+  // Stable descriptor ref selected for this explicit packet.
+  loom_amdgpu_descriptor_ref_t descriptor_ref;
   // Immediate rows emitted on the descriptor.
   loom_amdgpu_explicit_packet_immediate_template_t
       immediates[LOOM_AMDGPU_EXPLICIT_PACKET_IMMEDIATE_CAPACITY];
@@ -101,8 +101,8 @@ typedef struct loom_amdgpu_atomic_selection_t {
   int64_t immediate_offset;
   // Static byte offset materialized through the scalar SOFFSET operand.
   uint32_t scalar_byte_offset;
-  // Stable descriptor ID selected for the active descriptor set.
-  uint64_t descriptor_id;
+  // Stable descriptor ref selected for the active descriptor set.
+  loom_amdgpu_descriptor_ref_t descriptor_ref;
   // Descriptor attrs emitted directly on the selected atomic packet.
   loom_amdgpu_atomic_packet_attrs_t packet_attrs;
   // Explicit packets required to implement source atomic ordering.
@@ -191,7 +191,7 @@ static const loom_amdgpu_atomic_rejection_detail_t
 // GFX11 VMEM load drain used by global atomic acquire/release ordering.
 static const loom_amdgpu_atomic_wait_packet_template_t
     kAmdgpuGfx11VmemLoadWaitPacket = {
-        .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_S_WAITCNT,
+        .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT,
         .immediates =
             {
                 {IREE_SVL("vmcnt"), 0},
@@ -203,7 +203,7 @@ static const loom_amdgpu_atomic_wait_packet_template_t
 // GFX11 VMEM store drain used by global atomic acquire/release ordering.
 static const loom_amdgpu_atomic_wait_packet_template_t
     kAmdgpuGfx11VmemStoreWaitPacket = {
-        .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_S_WAITCNT_VSCNT,
+        .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT_VSCNT,
         .immediates =
             {
                 {IREE_SVL("vscnt"), 0},
@@ -217,7 +217,7 @@ static const loom_amdgpu_atomic_wait_packet_template_t
 // GFX12 VMEM load drain used by global atomic acquire ordering.
 static const loom_amdgpu_atomic_wait_packet_template_t
     kAmdgpuGfx12VmemLoadWaitPacket = {
-        .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_S_WAIT_LOADCNT,
+        .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_WAIT_LOADCNT,
         .immediates =
             {
                 {IREE_SVL("loadcnt"), 0},
@@ -228,7 +228,7 @@ static const loom_amdgpu_atomic_wait_packet_template_t
 // GFX12 VMEM store drain used by global atomic acquire ordering.
 static const loom_amdgpu_atomic_wait_packet_template_t
     kAmdgpuGfx12VmemStoreWaitPacket = {
-        .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_S_WAIT_STORECNT,
+        .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_WAIT_STORECNT,
         .immediates =
             {
                 {IREE_SVL("storecnt"), 0},
@@ -286,9 +286,10 @@ static uint8_t loom_amdgpu_atomic_scope(const loom_op_t* op) {
 }
 
 static bool loom_amdgpu_atomic_descriptor_available(
-    const loom_low_descriptor_set_t* descriptor_set, uint64_t descriptor_id) {
-  return loom_low_descriptor_set_lookup_descriptor_by_id(
-             descriptor_set, descriptor_id) != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_descriptor_ref_t descriptor_ref) {
+  return loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref) !=
+         LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
 }
 
 static loom_amdgpu_vector_memory_cache_policy_encoding_t
@@ -474,7 +475,7 @@ static bool loom_amdgpu_atomic_select_descriptor(
     const loom_low_descriptor_set_t* descriptor_set, const loom_op_t* source_op,
     loom_amdgpu_atomic_selection_t* selection, loom_type_t value_type,
     loom_amdgpu_atomic_diagnostic_t* diagnostic) {
-  selection->descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
+  selection->descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
   const uint8_t atomic_kind = loom_amdgpu_atomic_kind(source_op);
   const bool prefer_global_saddr = loom_amdgpu_atomic_prefers_global_saddr(
       descriptor_set, selection->source.memory_space);
@@ -519,14 +520,13 @@ static bool loom_amdgpu_atomic_select_descriptor(
             LOOM_AMDGPU_ATOMIC_REJECTION_VALUE_PLACEMENT;
         return false;
       }
-      const uint32_t descriptor_ordinal =
-          loom_low_descriptor_set_lookup_descriptor_by_id(
-              descriptor_set, candidate->descriptor_id);
+      const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
+          descriptor_set, candidate->descriptor_ref);
       if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
         continue;
       }
       selection->address_form = candidate->address_form;
-      selection->descriptor_id = candidate->descriptor_id;
+      selection->descriptor_ref = candidate->descriptor_ref;
       if (loom_amdgpu_descriptor_has_implicit_resource(descriptor_set,
                                                        descriptor_ordinal)) {
         selection->flags |= LOOM_AMDGPU_ATOMIC_PLAN_REQUIRES_M0;
@@ -584,12 +584,12 @@ static iree_host_size_t loom_amdgpu_atomic_packet_operand_count(
 }
 
 static bool loom_amdgpu_atomic_select_offset(
-    const loom_low_descriptor_set_t* descriptor_set, uint64_t descriptor_id,
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_descriptor_ref_t descriptor_ref,
     loom_amdgpu_atomic_selection_t* selection,
     loom_amdgpu_atomic_diagnostic_t* diagnostic) {
   const uint32_t descriptor_ordinal =
-      loom_low_descriptor_set_lookup_descriptor_by_id(descriptor_set,
-                                                      descriptor_id);
+      loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref);
   if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
     diagnostic->rejection_bits |=
         LOOM_AMDGPU_ATOMIC_REJECTION_DESCRIPTOR_MISSING;
@@ -689,12 +689,14 @@ static bool loom_amdgpu_atomic_select_offset(
 }
 
 static bool loom_amdgpu_atomic_append_explicit_packet(
-    const loom_low_descriptor_set_t* descriptor_set, uint64_t descriptor_id,
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_descriptor_ref_t descriptor_ref,
     const loom_amdgpu_explicit_packet_immediate_template_t* immediates,
     iree_host_size_t immediate_count,
     loom_amdgpu_atomic_explicit_packet_selection_t* packets,
     iree_host_size_t packet_capacity, iree_host_size_t* inout_packet_count) {
-  if (!loom_amdgpu_atomic_descriptor_available(descriptor_set, descriptor_id)) {
+  if (!loom_amdgpu_atomic_descriptor_available(descriptor_set,
+                                               descriptor_ref)) {
     return false;
   }
   IREE_ASSERT(*inout_packet_count < packet_capacity);
@@ -703,7 +705,7 @@ static bool loom_amdgpu_atomic_append_explicit_packet(
   loom_amdgpu_atomic_explicit_packet_selection_t* packet =
       &packets[(*inout_packet_count)++];
   *packet = (loom_amdgpu_atomic_explicit_packet_selection_t){
-      .descriptor_id = descriptor_id,
+      .descriptor_ref = descriptor_ref,
       .immediate_count = immediate_count,
   };
   for (iree_host_size_t i = 0; i < immediate_count; ++i) {
@@ -721,22 +723,25 @@ static bool loom_amdgpu_atomic_append_wait_packet(
     loom_amdgpu_atomic_explicit_packet_selection_t* waits,
     iree_host_size_t wait_capacity, iree_host_size_t* inout_wait_count) {
   return loom_amdgpu_atomic_append_explicit_packet(
-      descriptor_set, wait_packet->descriptor_id, wait_packet->immediates,
+      descriptor_set, wait_packet->descriptor_ref, wait_packet->immediates,
       wait_packet->immediate_count, waits, wait_capacity, inout_wait_count);
 }
 
 static bool loom_amdgpu_atomic_append_cache_control_packet(
-    const loom_low_descriptor_set_t* descriptor_set, uint64_t descriptor_id,
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_descriptor_ref_t descriptor_ref,
     loom_amdgpu_atomic_explicit_packet_selection_t* cache_controls,
     iree_host_size_t cache_control_capacity,
     iree_host_size_t* inout_cache_control_count) {
   return loom_amdgpu_atomic_append_explicit_packet(
-      descriptor_set, descriptor_id, /*immediates=*/NULL, /*immediate_count=*/0,
-      cache_controls, cache_control_capacity, inout_cache_control_count);
+      descriptor_set, descriptor_ref, /*immediates=*/NULL,
+      /*immediate_count=*/0, cache_controls, cache_control_capacity,
+      inout_cache_control_count);
 }
 
 static bool loom_amdgpu_atomic_append_gfx12_global_cache_control_packet(
-    const loom_low_descriptor_set_t* descriptor_set, uint64_t descriptor_id,
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_descriptor_ref_t descriptor_ref,
     loom_amdgpu_atomic_explicit_packet_selection_t* cache_controls,
     iree_host_size_t cache_control_capacity,
     iree_host_size_t* inout_cache_control_count) {
@@ -744,7 +749,7 @@ static bool loom_amdgpu_atomic_append_gfx12_global_cache_control_packet(
       {IREE_SVL("scope"), LOOM_AMDGPU_GFX12_SCOPE_DEVICE},
   };
   return loom_amdgpu_atomic_append_explicit_packet(
-      descriptor_set, descriptor_id, immediates, IREE_ARRAYSIZE(immediates),
+      descriptor_set, descriptor_ref, immediates, IREE_ARRAYSIZE(immediates),
       cache_controls, cache_control_capacity, inout_cache_control_count);
 }
 
@@ -806,20 +811,20 @@ static bool loom_amdgpu_atomic_select_global_acquire_cache_controls(
   switch (encoding) {
     case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC:
       if (!loom_amdgpu_atomic_append_cache_control_packet(
-              descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_GL1_INV,
+              descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_GL1_INV,
               ordering->post_atomic_cache_controls,
               IREE_ARRAYSIZE(ordering->post_atomic_cache_controls),
               &ordering->post_atomic_cache_control_descriptor_count)) {
         return false;
       }
       return loom_amdgpu_atomic_append_cache_control_packet(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_GL0_INV,
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_GL0_INV,
           ordering->post_atomic_cache_controls,
           IREE_ARRAYSIZE(ordering->post_atomic_cache_controls),
           &ordering->post_atomic_cache_control_descriptor_count);
     case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH:
       return loom_amdgpu_atomic_append_gfx12_global_cache_control_packet(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_GLOBAL_INV,
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_INV,
           ordering->post_atomic_cache_controls,
           IREE_ARRAYSIZE(ordering->post_atomic_cache_controls),
           &ordering->post_atomic_cache_control_descriptor_count);
@@ -895,7 +900,7 @@ static bool loom_amdgpu_atomic_select(
     loom_amdgpu_memory_access_diagnostic_t* memory_diagnostic,
     loom_amdgpu_atomic_diagnostic_t* diagnostic) {
   *out_selection = (loom_amdgpu_atomic_selection_t){
-      .descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
+      .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
   };
   *source_diagnostic = (loom_low_source_memory_access_diagnostic_t){0};
   *memory_diagnostic = (loom_amdgpu_memory_access_diagnostic_t){0};
@@ -1015,7 +1020,7 @@ static bool loom_amdgpu_atomic_select(
     return false;
   }
   return loom_amdgpu_atomic_select_offset(
-      descriptor_set, out_selection->descriptor_id, out_selection, diagnostic);
+      descriptor_set, out_selection->descriptor_ref, out_selection, diagnostic);
 }
 
 static iree_status_t loom_amdgpu_atomic_resolve_explicit_packet_selection(
@@ -1024,7 +1029,7 @@ static iree_status_t loom_amdgpu_atomic_resolve_explicit_packet_selection(
     loom_amdgpu_explicit_packet_plan_t* out_plan) {
   bool present = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_explicit_packet_plan(
-      context, selection->descriptor_id, selection->immediates,
+      context, selection->descriptor_ref, selection->immediates,
       selection->immediate_count, out_plan, &present));
   if (!present) {
     return iree_make_status(IREE_STATUS_INTERNAL,
@@ -1079,8 +1084,8 @@ static iree_status_t loom_amdgpu_atomic_resolve_selection(
        ++i) {
     out_plan->dynamic_term_kinds[i] = selection->dynamic_term_kinds[i];
   }
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor(
-      context, selection->descriptor_id, &out_plan->descriptor));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref(
+      context, selection->descriptor_ref, &out_plan->descriptor));
   if (iree_any_bit_set(out_plan->packet_attrs.flags,
                        LOOM_AMDGPU_ATOMIC_PACKET_ATTR_SCOPE)) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_intern(
@@ -1163,7 +1168,7 @@ static iree_status_t loom_amdgpu_materialize_atomic_value_as_fresh_vgpr(
     loom_type_t vgpr_type = loom_type_none();
     IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
     return loom_amdgpu_emit_const_u32(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32,
         (uint32_t)(int32_t)i32_value, vgpr_type, out_low_value);
   }
   uint32_t f32_bits = 0;
@@ -1171,7 +1176,7 @@ static iree_status_t loom_amdgpu_materialize_atomic_value_as_fresh_vgpr(
     loom_type_t vgpr_type = loom_type_none();
     IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
     return loom_amdgpu_emit_const_u32(context, source_op,
-                                      LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
+                                      LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32,
                                       f32_bits, vgpr_type, out_low_value);
   }
 

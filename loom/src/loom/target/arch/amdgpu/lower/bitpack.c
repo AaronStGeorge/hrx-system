@@ -8,8 +8,8 @@
 
 #include "loom/ir/context.h"
 #include "loom/ops/vector/ops.h"
-#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 
 typedef enum loom_amdgpu_bitpack_rejection_e {
   LOOM_AMDGPU_BITPACK_REJECTION_NONE = 0,
@@ -290,18 +290,18 @@ iree_status_t loom_amdgpu_lower_vector_bitpack(
           &source_lane));
       loom_value_id_t low_bits = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_AND_B32_LIT,
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
           source_lane, UINT32_C(255), lane_type, &low_bits));
       loom_value_id_t shifted = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHLREV_B32_LIT,
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
           lane_index * 8u, low_bits, lane_type, &shifted));
       if (packed == LOOM_VALUE_ID_INVALID) {
         packed = shifted;
         continue;
       }
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary(
-          context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_OR_B32, packed,
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_OR_B32, packed,
           shifted, lane_type, &packed));
     }
     packed_registers[register_index] = packed;
@@ -337,7 +337,7 @@ static iree_status_t loom_amdgpu_emit_bitunpacku_lane(
 
   loom_value_id_t shifted = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHRREV_B32_LIT,
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT,
       source_bit_offset, low_source, lane_type, &shifted));
   if (plan->width == 32) {
     *out_lane = shifted;
@@ -345,7 +345,7 @@ static iree_status_t loom_amdgpu_emit_bitunpacku_lane(
   }
 
   return loom_amdgpu_emit_vgpr_binary_literal(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_AND_B32_LIT, shifted,
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT, shifted,
       loom_amdgpu_low_mask(plan->width), lane_type, out_lane);
 }
 
@@ -362,11 +362,11 @@ static iree_status_t loom_amdgpu_emit_bitunpacks_lane(
 
   loom_value_id_t shifted_left = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHLREV_B32_LIT,
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
       32u - source_bit_offset - plan->width, low_source, lane_type,
       &shifted_left));
   return loom_amdgpu_emit_vgpr_shift(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_ASHRREV_I32_LIT,
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT,
       32u - plan->width, shifted_left, lane_type, out_lane);
 }
 

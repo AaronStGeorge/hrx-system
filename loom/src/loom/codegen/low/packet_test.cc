@@ -62,13 +62,12 @@ void InitializePacketTestState(PacketTestState* state) {
   state->nodes[0].source_ordinal = 0;
   state->nodes[0].scheduled_ordinal = 1;
   state->nodes[0].kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR;
-  state->nodes[0].descriptor_ordinal = 1;
+  state->nodes[0].descriptor = &state->descriptors[1];
   state->nodes[1].block = &state->block;
   state->nodes[1].block_index = 0;
   state->nodes[1].source_ordinal = 1;
   state->nodes[1].scheduled_ordinal = 0;
   state->nodes[1].kind = LOOM_LOW_SCHEDULE_NODE_STRUCTURAL;
-  state->nodes[1].descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
 
   state->scheduled_node_indices[0] = 1;
   state->scheduled_node_indices[1] = 0;

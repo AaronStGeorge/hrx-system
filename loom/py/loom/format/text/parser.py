@@ -47,6 +47,7 @@ from loom.assembly import (
     ResultType,
     ResultTypeList,
     Scope,
+    StableKeyRef,
     SymbolRef,
     TemplateParam,
     TypedRefs,
@@ -1350,7 +1351,9 @@ class Parser:
                 return name == attr_name
             case TemplateParam(field=name) | PredicateList(field=name):
                 return name == attr_name
-            case DescriptorRef(key=key, stable_id=stable_id):
+            case DescriptorRef(key=key, ordinal=ordinal):
+                return key == attr_name or ordinal == attr_name
+            case StableKeyRef(key=key, stable_id=stable_id):
                 return key == attr_name or stable_id == attr_name
             case IndexList(static=name):
                 return name == attr_name
@@ -2196,7 +2199,17 @@ class Parser:
                         tok.expect(TokenKind.RANGLE)
                         parsed.attributes[name] = op_name_tok.text
 
-                case DescriptorRef(key=key, stable_id=stable_id):
+                case DescriptorRef(key=key, ordinal=ordinal):
+                    tok.expect(TokenKind.LANGLE)
+                    if tok.at(TokenKind.OP_NAME) or tok.at(TokenKind.BARE_IDENT):
+                        key_tok = tok.next()
+                    else:
+                        key_tok = tok.expect(TokenKind.OP_NAME)
+                    tok.expect(TokenKind.RANGLE)
+                    parsed.attributes[key] = key_tok.text
+                    parsed.attributes[ordinal] = -1
+
+                case StableKeyRef(key=key, stable_id=stable_id):
                     tok.expect(TokenKind.LANGLE)
                     if tok.at(TokenKind.OP_NAME) or tok.at(TokenKind.BARE_IDENT):
                         key_tok = tok.next()

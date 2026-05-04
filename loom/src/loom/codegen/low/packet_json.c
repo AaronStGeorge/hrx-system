@@ -600,9 +600,7 @@ static iree_status_t loom_low_packet_json_write_low_packet_attrs(
   const loom_low_descriptor_set_t* descriptor_set =
       schedule->target.descriptor_set;
   const loom_low_descriptor_t* descriptor =
-      descriptor_set ? loom_low_descriptor_set_descriptor_at(
-                           descriptor_set, node->descriptor_ordinal)
-                     : NULL;
+      descriptor_set ? node->descriptor : NULL;
   if (!descriptor) {
     return loom_output_stream_write_cstring(stream, "[]");
   }

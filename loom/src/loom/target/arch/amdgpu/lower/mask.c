@@ -7,16 +7,16 @@
 #include <stdint.h>
 
 #include "loom/ops/vector/ops.h"
-#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 
 typedef struct loom_amdgpu_vector_compare_descriptor_t {
   // Source compare op kind this descriptor row handles.
   loom_op_kind_t op_kind;
   // Source compare predicate value matched by this row.
   uint8_t predicate;
-  // Stable descriptor ID selected for the compare predicate.
-  uint64_t descriptor_id;
+  // Stable descriptor ref selected for the compare predicate.
+  loom_amdgpu_descriptor_ref_t descriptor_ref;
 } loom_amdgpu_vector_compare_descriptor_t;
 
 static const loom_amdgpu_vector_compare_descriptor_t
@@ -24,134 +24,135 @@ static const loom_amdgpu_vector_compare_descriptor_t
         {
             .op_kind = LOOM_OP_VECTOR_CMPI,
             .predicate = LOOM_VECTOR_CMPI_PREDICATE_EQ,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_EQ_I32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPI,
             .predicate = LOOM_VECTOR_CMPI_PREDICATE_NE,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_NE_I32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_NE_I32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPI,
             .predicate = LOOM_VECTOR_CMPI_PREDICATE_SLT,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_SLT_I32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_SLT_I32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPI,
             .predicate = LOOM_VECTOR_CMPI_PREDICATE_SLE,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_SLE_I32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_SLE_I32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPI,
             .predicate = LOOM_VECTOR_CMPI_PREDICATE_SGT,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_SGT_I32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_SGT_I32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPI,
             .predicate = LOOM_VECTOR_CMPI_PREDICATE_SGE,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_SGE_I32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_SGE_I32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPI,
             .predicate = LOOM_VECTOR_CMPI_PREDICATE_ULT,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_ULT_U32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_U32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPI,
             .predicate = LOOM_VECTOR_CMPI_PREDICATE_ULE,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_ULE_U32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULE_U32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPI,
             .predicate = LOOM_VECTOR_CMPI_PREDICATE_UGT,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_UGT_U32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGT_U32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPI,
             .predicate = LOOM_VECTOR_CMPI_PREDICATE_UGE,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_UGE_U32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGE_U32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPF,
             .predicate = LOOM_VECTOR_CMPF_PREDICATE_OEQ,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_OEQ_F32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_OEQ_F32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPF,
             .predicate = LOOM_VECTOR_CMPF_PREDICATE_OGT,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_OGT_F32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_OGT_F32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPF,
             .predicate = LOOM_VECTOR_CMPF_PREDICATE_OGE,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_OGE_F32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_OGE_F32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPF,
             .predicate = LOOM_VECTOR_CMPF_PREDICATE_OLT,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_OLT_F32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_OLT_F32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPF,
             .predicate = LOOM_VECTOR_CMPF_PREDICATE_OLE,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_OLE_F32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_OLE_F32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPF,
             .predicate = LOOM_VECTOR_CMPF_PREDICATE_ONE,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_ONE_F32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ONE_F32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPF,
             .predicate = LOOM_VECTOR_CMPF_PREDICATE_ORD,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_ORD_F32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ORD_F32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPF,
             .predicate = LOOM_VECTOR_CMPF_PREDICATE_UEQ,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_UEQ_F32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UEQ_F32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPF,
             .predicate = LOOM_VECTOR_CMPF_PREDICATE_UGT,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_UGT_F32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGT_F32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPF,
             .predicate = LOOM_VECTOR_CMPF_PREDICATE_UGE,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_UGE_F32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGE_F32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPF,
             .predicate = LOOM_VECTOR_CMPF_PREDICATE_ULT,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_ULT_F32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_F32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPF,
             .predicate = LOOM_VECTOR_CMPF_PREDICATE_ULE,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_ULE_F32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULE_F32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPF,
             .predicate = LOOM_VECTOR_CMPF_PREDICATE_UNE,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_UNE_F32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UNE_F32,
         },
         {
             .op_kind = LOOM_OP_VECTOR_CMPF,
             .predicate = LOOM_VECTOR_CMPF_PREDICATE_UNO,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_UNO_F32,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UNO_F32,
         },
 };
 
-static bool loom_amdgpu_vector_compare_descriptor_id(
-    loom_op_kind_t op_kind, uint8_t predicate, uint64_t* out_descriptor_id) {
-  *out_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
+static bool loom_amdgpu_vector_compare_descriptor_ref(
+    loom_op_kind_t op_kind, uint8_t predicate,
+    loom_amdgpu_descriptor_ref_t* out_descriptor_ref) {
+  *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
   for (iree_host_size_t i = 0;
        i < IREE_ARRAYSIZE(kAmdgpuVectorCompareDescriptors); ++i) {
     const loom_amdgpu_vector_compare_descriptor_t* row =
         &kAmdgpuVectorCompareDescriptors[i];
     if (row->op_kind == op_kind && row->predicate == predicate) {
-      *out_descriptor_id = row->descriptor_id;
+      *out_descriptor_ref = row->descriptor_ref;
       return true;
     }
   }
@@ -165,15 +166,15 @@ static iree_status_t loom_amdgpu_select_vector_compare_plan(
     loom_amdgpu_vector_compare_plan_t* out_plan, bool* out_selected) {
   *out_plan = (loom_amdgpu_vector_compare_plan_t){0};
   *out_selected = false;
-  uint64_t descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
-  if (!loom_amdgpu_vector_compare_descriptor_id(source_op->kind, predicate,
-                                                &descriptor_id)) {
+  loom_amdgpu_descriptor_ref_t descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
+  if (!loom_amdgpu_vector_compare_descriptor_ref(source_op->kind, predicate,
+                                                 &descriptor_ref)) {
     return iree_ok_status();
   }
   loom_low_lower_resolved_descriptor_t descriptor = {0};
   bool descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_low_lower_resolve_descriptor_if_present(
-      context, descriptor_id, &descriptor, &descriptor_present));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, descriptor_ref, &descriptor, &descriptor_present));
   if (!descriptor_present) {
     return iree_ok_status();
   }
@@ -373,7 +374,7 @@ iree_status_t loom_amdgpu_lower_vector_select(
     };
     loom_op_t* lane_op = NULL;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_CNDMASK_B32, operands,
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32, operands,
         IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(NULL, 0),
         &lane_type, 1, &lane_op));
     lane_results[i] = loom_value_slice_get(loom_low_op_results(lane_op), 0);

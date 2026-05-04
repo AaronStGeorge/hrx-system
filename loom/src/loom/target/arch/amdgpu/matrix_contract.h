@@ -18,6 +18,7 @@
 
 #include "iree/base/api.h"
 #include "loom/target/arch/amdgpu/target_info_defs.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -212,7 +213,8 @@ typedef enum loom_amdgpu_matrix_contract_flag_bits_e {
 typedef uint32_t loom_amdgpu_matrix_contract_flags_t;
 
 // Matrix contract does not have a target-low descriptor mapping yet.
-#define LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_ID_NONE UINT64_C(0)
+#define LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_REF_NONE \
+  LOOM_AMDGPU_DESCRIPTOR_REF_NONE
 
 typedef struct loom_amdgpu_matrix_tile_shape_t {
   // Contracted result rows in the target-native tile.
@@ -283,8 +285,8 @@ typedef struct loom_amdgpu_matrix_fragment_coordinate_t {
 typedef struct loom_amdgpu_matrix_contract_descriptor_t {
   // Stable Loom descriptor name used by tests, diagnostics, and target logs.
   iree_string_view_t name;
-  // Stable target-low descriptor ID selected by this descriptor, or zero.
-  uint64_t low_descriptor_id;
+  // Stable target-low descriptor ref selected by this descriptor, or NONE.
+  loom_amdgpu_descriptor_ref_t low_descriptor_ref;
   // LLVM AMDGPU intrinsic name selected by this descriptor for LLVM lowering.
   iree_string_view_t llvm_intrinsic_name;
   // AMDGPU instruction family used by this descriptor.

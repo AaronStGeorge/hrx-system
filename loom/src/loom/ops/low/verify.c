@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <stdint.h>
+
 #include "loom/error/emitter.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/context.h"
@@ -552,14 +554,21 @@ static iree_status_t loom_low_verify_stable_id_attr(
       stable_id_field_name, reason, NULL, 0, emitter);
 }
 
-static iree_status_t loom_low_verify_descriptor_id(
+static iree_status_t loom_low_verify_descriptor_ordinal(
     const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter, loom_string_id_t opcode_id,
-    int64_t descriptor_id, uint16_t descriptor_id_attr_index) {
-  return loom_low_verify_stable_id_attr(
-      module, op, emitter, opcode_id, descriptor_id, descriptor_id_attr_index,
-      IREE_SV("descriptor_id"),
-      IREE_SV("descriptor ID must match the stable ID derived from opcode"));
+    iree_diagnostic_emitter_t emitter, int64_t descriptor_ordinal,
+    uint16_t descriptor_ordinal_attr_index) {
+  if (descriptor_ordinal == -1 ||
+      (descriptor_ordinal >= 0 && (uint64_t)descriptor_ordinal <= UINT32_MAX)) {
+    return iree_ok_status();
+  }
+  return loom_low_emit_structural_storage_error(
+      module, op,
+      loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                descriptor_ordinal_attr_index),
+      IREE_SV("descriptor_ordinal"),
+      IREE_SV("descriptor ordinal must be -1 or a non-negative uint32_t"), NULL,
+      0, emitter);
 }
 
 static iree_status_t loom_low_verify_same_register_unit_count(
@@ -1241,9 +1250,9 @@ iree_status_t loom_low_op_verify(const loom_module_t* module,
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_key(
       module, op, emitter, loom_low_op_opcode(op),
       loom_low_op_opcode_ATTR_INDEX));
-  return loom_low_verify_descriptor_id(
-      module, op, emitter, loom_low_op_opcode(op),
-      loom_low_op_descriptor_id(op), loom_low_op_descriptor_id_ATTR_INDEX);
+  return loom_low_verify_descriptor_ordinal(
+      module, op, emitter, loom_low_op_descriptor_ordinal(op),
+      loom_low_op_descriptor_ordinal_ATTR_INDEX);
 }
 
 iree_status_t loom_low_const_verify(const loom_module_t* module,
@@ -1252,10 +1261,9 @@ iree_status_t loom_low_const_verify(const loom_module_t* module,
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_key(
       module, op, emitter, loom_low_const_opcode(op),
       loom_low_const_opcode_ATTR_INDEX));
-  return loom_low_verify_descriptor_id(module, op, emitter,
-                                       loom_low_const_opcode(op),
-                                       loom_low_const_descriptor_id(op),
-                                       loom_low_const_descriptor_id_ATTR_INDEX);
+  return loom_low_verify_descriptor_ordinal(
+      module, op, emitter, loom_low_const_descriptor_ordinal(op),
+      loom_low_const_descriptor_ordinal_ATTR_INDEX);
 }
 
 iree_status_t loom_low_copy_verify(const loom_module_t* module,

@@ -106,6 +106,13 @@ iree_status_t loom_low_build_resolved_descriptor_op(
     loom_op_t** out_op) {
   IREE_ASSERT(opcode_id != LOOM_STRING_ID_INVALID);
   *out_op = NULL;
+  const uint32_t descriptor_ordinal =
+      loom_low_descriptor_set_descriptor_ordinal(descriptor_set, descriptor);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low descriptor row does not belong to the "
+                            "selected descriptor set");
+  }
   if (operand_count > UINT16_MAX) {
     return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                             "low.op operand count exceeds uint16_t range");
@@ -131,8 +138,8 @@ iree_status_t loom_low_build_resolved_descriptor_op(
   }
   loom_op_attrs(*out_op)[loom_low_op_opcode_ATTR_INDEX] =
       loom_attr_string(opcode_id);
-  loom_op_attrs(*out_op)[loom_low_op_descriptor_id_ATTR_INDEX] =
-      loom_attr_i64((int64_t)descriptor->stable_id);
+  loom_op_attrs(*out_op)[loom_low_op_descriptor_ordinal_ATTR_INDEX] =
+      loom_attr_i64((int64_t)descriptor_ordinal);
   if (attrs.count > 0) {
     IREE_RETURN_IF_ERROR(loom_module_make_canonical_attr_dict(
         builder->module, attrs,
@@ -158,6 +165,13 @@ iree_status_t loom_low_build_resolved_descriptor_const(
     loom_location_id_t location, loom_op_t** out_op) {
   IREE_ASSERT(opcode_id != LOOM_STRING_ID_INVALID);
   *out_op = NULL;
+  const uint32_t descriptor_ordinal =
+      loom_low_descriptor_set_descriptor_ordinal(descriptor_set, descriptor);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low descriptor row does not belong to the "
+                            "selected descriptor set");
+  }
 
   IREE_RETURN_IF_ERROR(loom_builder_allocate_op(
       builder, LOOM_OP_LOW_CONST, /*operand_count=*/0, /*result_count=*/1,
@@ -169,8 +183,8 @@ iree_status_t loom_low_build_resolved_descriptor_const(
       LOOM_TRAIT_UNIQUE_IDENTITY;
   loom_op_attrs(*out_op)[loom_low_const_opcode_ATTR_INDEX] =
       loom_attr_string(opcode_id);
-  loom_op_attrs(*out_op)[loom_low_const_descriptor_id_ATTR_INDEX] =
-      loom_attr_i64((int64_t)descriptor->stable_id);
+  loom_op_attrs(*out_op)[loom_low_const_descriptor_ordinal_ATTR_INDEX] =
+      loom_attr_i64((int64_t)descriptor_ordinal);
   if (attrs.count > 0) {
     IREE_RETURN_IF_ERROR(loom_module_make_canonical_attr_dict(
         builder->module, attrs,

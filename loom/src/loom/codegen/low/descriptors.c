@@ -6,6 +6,8 @@
 
 #include "loom/codegen/low/descriptors.h"
 
+#include <stdint.h>
+
 #include "loom/util/stable_id.h"
 
 static iree_string_view_t loom_low_descriptor_set_string_view(
@@ -155,6 +157,29 @@ const loom_low_descriptor_t* loom_low_descriptor_set_descriptor_at(
     return NULL;
   }
   return &descriptor_set->descriptors[descriptor_ordinal];
+}
+
+uint32_t loom_low_descriptor_set_descriptor_ordinal(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  if (descriptor_set == NULL || descriptor_set->descriptors == NULL ||
+      descriptor == NULL) {
+    return LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  }
+  const uintptr_t base = (uintptr_t)descriptor_set->descriptors;
+  const uintptr_t address = (uintptr_t)descriptor;
+  if (address < base) {
+    return LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  }
+  const uintptr_t offset = address - base;
+  if (offset % sizeof(*descriptor_set->descriptors) != 0) {
+    return LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  }
+  const uintptr_t ordinal = offset / sizeof(*descriptor_set->descriptors);
+  if (ordinal >= descriptor_set->descriptor_count || ordinal > UINT32_MAX) {
+    return LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  }
+  return (uint32_t)ordinal;
 }
 
 const loom_low_asm_form_t* loom_low_descriptor_set_asm_form_at(

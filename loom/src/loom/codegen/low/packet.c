@@ -57,6 +57,25 @@ static iree_status_t loom_low_packet_validate_asm_form_ordinal(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_packet_descriptor_ordinal(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_schedule_node_t* node, uint32_t* out_descriptor_ordinal) {
+  *out_descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  if (node->descriptor == NULL) {
+    return iree_ok_status();
+  }
+  const uint32_t descriptor_ordinal =
+      loom_low_descriptor_set_descriptor_ordinal(
+          schedule->target.descriptor_set, node->descriptor);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "descriptor-backed packet references a descriptor "
+                            "outside the schedule descriptor set");
+  }
+  *out_descriptor_ordinal = descriptor_ordinal;
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_packet_validate_asm_form_table(
     const loom_low_schedule_table_t* schedule,
     const loom_low_packet_asm_form_table_t* asm_forms) {
@@ -101,7 +120,10 @@ iree_status_t loom_low_packet_validate_asm_form_table(
                               packet_index, node_index);
     }
     const loom_low_schedule_node_t* node = &schedule->nodes[node_index];
-    if (node->descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+    IREE_RETURN_IF_ERROR(loom_low_packet_descriptor_ordinal(
+        schedule, node, &descriptor_ordinal));
+    if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "selected asm form ordinal %" PRIu32
                               " was provided for structural "
@@ -109,8 +131,7 @@ iree_status_t loom_low_packet_validate_asm_form_table(
                               asm_form_ordinal, packet_index);
     }
     IREE_RETURN_IF_ERROR(loom_low_packet_validate_asm_form_ordinal(
-        schedule->target.descriptor_set, node->descriptor_ordinal,
-        asm_form_ordinal));
+        schedule->target.descriptor_set, descriptor_ordinal, asm_form_ordinal));
   }
   return iree_ok_status();
 }
@@ -156,19 +177,21 @@ iree_status_t loom_low_packet_view_at(
   }
 
   const loom_low_schedule_node_t* node = &schedule->nodes[node_index];
-  const loom_low_descriptor_t* descriptor = NULL;
-  if (node->descriptor_ordinal != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+  const loom_low_descriptor_t* descriptor = node->descriptor;
+  if (descriptor != NULL) {
     if (!schedule->target.descriptor_set) {
       return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                               "descriptor-backed packet has no descriptor set");
     }
-    descriptor = loom_low_descriptor_set_descriptor_at(
-        schedule->target.descriptor_set, node->descriptor_ordinal);
-    if (!descriptor) {
+    const uint32_t descriptor_ordinal =
+        loom_low_descriptor_set_descriptor_ordinal(
+            schedule->target.descriptor_set, descriptor);
+    if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "packet index %" PRIhsz
-                              " references descriptor ordinal %" PRIu32,
-                              packet_index, node->descriptor_ordinal);
+                              " references a descriptor outside the schedule "
+                              "descriptor set",
+                              packet_index);
     }
   }
 
@@ -186,11 +209,13 @@ iree_status_t loom_low_packet_lookup_asm_form(
     const loom_low_packet_asm_form_table_t* asm_forms,
     const loom_low_packet_view_t* packet, uint32_t* out_asm_form_ordinal) {
   *out_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
-  if (packet->node == NULL || packet->descriptor == NULL ||
-      packet->node->descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+  if (packet->node == NULL || packet->descriptor == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "packet has no descriptor-backed asm form");
   }
+  uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  IREE_RETURN_IF_ERROR(loom_low_packet_descriptor_ordinal(
+      schedule, packet->node, &descriptor_ordinal));
   if (asm_forms != NULL) {
     if (schedule->module != asm_forms->module ||
         schedule->function_op != asm_forms->function_op ||
@@ -210,14 +235,14 @@ iree_status_t loom_low_packet_lookup_asm_form(
         asm_forms->asm_form_ordinals[packet->packet_index];
     if (selected_asm_form_ordinal != LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
       IREE_RETURN_IF_ERROR(loom_low_packet_validate_asm_form_ordinal(
-          schedule->target.descriptor_set, packet->node->descriptor_ordinal,
+          schedule->target.descriptor_set, descriptor_ordinal,
           selected_asm_form_ordinal));
       *out_asm_form_ordinal = selected_asm_form_ordinal;
       return iree_ok_status();
     }
   }
   *out_asm_form_ordinal = loom_low_descriptor_set_lookup_canonical_asm_form(
-      schedule->target.descriptor_set, packet->node->descriptor_ordinal);
+      schedule->target.descriptor_set, descriptor_ordinal);
   return iree_ok_status();
 }
 

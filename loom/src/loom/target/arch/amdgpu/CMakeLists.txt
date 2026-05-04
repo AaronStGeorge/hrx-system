@@ -136,12 +136,31 @@ loom_target_table_cc_library(
 
 loom_target_table_cc_library(
   NAME
+    target_refs
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_target_refs
+  ARGS
+    "--isa-xml=rdna3:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
+    "--isa-xml=rdna4:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
+    "--isa-xml=cdna4:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
+    "--public-header=loom/target/arch/amdgpu/target_refs.h"
+  INPUTS
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
+    "loom_amdgpu_isa_xml"
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
+  DEPS
+    loom::src::loom::codegen::low::descriptors
+)
+
+loom_target_table_cc_library(
+  NAME
     atomic_candidates
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_atomic_candidates
   DEPS
-    ::descriptor_ids
     ::lower_kinds
+    ::target_refs
     iree::base
     loom::src::loom::ops::atomic
     loom::src::loom::util::fact_table
@@ -346,7 +365,7 @@ loom_cc_library(
   SRCS
     "packet_diagnostics.c"
   DEPS
-    ::descriptor_ids
+    ::target_refs
     iree::base
     loom::src::loom::codegen::low::packet
     loom::src::loom::target::low_packet_diagnostics
@@ -391,13 +410,13 @@ loom_cc_library(
     "lower/values.c"
   DEPS
     ::atomic_candidates
-    ::descriptor_ids
     ::hal_kernel_abi
     ::lower_kinds
     ::lower_materializers
     ::matrix_contract
     ::matrix_contract_projection
     ::target_info
+    ::target_refs
     ::wait_packets
     iree::base
     loom::src::loom::analysis::contract_vector
@@ -594,8 +613,8 @@ loom_cc_library(
   SRCS
     "hal_kernel_abi.c"
   DEPS
-    ::descriptor_ids
     ::target_info
+    ::target_refs
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
@@ -617,9 +636,9 @@ loom_cc_library(
   SRCS
     "hal_binding_materialization.c"
   DEPS
-    ::descriptor_ids
     ::hal_kernel_abi
     ::target_info
+    ::target_refs
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
@@ -1288,7 +1307,7 @@ loom_cc_library(
   SRCS
     "wait_packets.c"
   DEPS
-    ::descriptor_ids
+    ::target_refs
     ::wait_plan
     iree::base
     iree::base::internal::arena
@@ -1347,9 +1366,9 @@ loom_cc_library(
   SRCS
     "matrix_contract.c"
   DEPS
-    ::descriptor_ids
     ::target_info
     ::target_info_defs
+    ::target_refs
     iree::base
   PUBLIC
 )
@@ -1374,8 +1393,8 @@ loom_cc_test(
   SRCS
     "matrix_contract_test.cc"
   DEPS
-    ::descriptor_ids
     ::matrix_contract
+    ::target_refs
     iree::testing::gtest
     iree::testing::gtest_main
 )

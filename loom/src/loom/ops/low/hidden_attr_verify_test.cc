@@ -101,7 +101,7 @@ class LowHiddenAttrVerifyTest : public ::testing::Test {
   loom_context_t context_;
 };
 
-TEST_F(LowHiddenAttrVerifyTest, DescriptorIdMatchesOpcodeStableId) {
+TEST_F(LowHiddenAttrVerifyTest, DescriptorOrdinalRejectsInvalidNegative) {
   loom_module_t* module = ParseSource(
       "test.target<low_core> @target\n"
       "low.func.def target(@target) @add(%lhs: reg<test.i32>, "
@@ -113,8 +113,8 @@ TEST_F(LowHiddenAttrVerifyTest, DescriptorIdMatchesOpcodeStableId) {
   ASSERT_NE(module, nullptr);
   loom_op_t* packet_op = FirstLowFuncBodyOp(module, loom_low_op_isa);
   ASSERT_NE(packet_op, nullptr);
-  loom_op_attrs(packet_op)[loom_low_op_descriptor_id_ATTR_INDEX] =
-      loom_attr_i64(0);
+  loom_op_attrs(packet_op)[loom_low_op_descriptor_ordinal_ATTR_INDEX] =
+      loom_attr_i64(-2);
 
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifyParsedModule(module, &capture);
@@ -127,11 +127,11 @@ TEST_F(LowHiddenAttrVerifyTest, DescriptorIdMatchesOpcodeStableId) {
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
   EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.op");
-  EXPECT_EQ(GetStringParam(*diagnostic, 1), "descriptor_id");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "descriptor_ordinal");
   ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                      loom_low_op_descriptor_id_ATTR_INDEX);
+                      loom_low_op_descriptor_ordinal_ATTR_INDEX);
   EXPECT_EQ(GetStringParam(*diagnostic, 2),
-            "descriptor ID must match the stable ID derived from opcode");
+            "descriptor ordinal must be -1 or a non-negative uint32_t");
 }
 
 TEST_F(LowHiddenAttrVerifyTest, LiveInSourceIdMatchesSourceStableId) {

@@ -14,9 +14,9 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/encoding.h"
 #include "loom/target/arch/amdgpu/target_info.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 #include "loom/target/emit/native/amdgpu/storage_layout.h"
 #include "loom/target/emit/native/fragment.h"
 
@@ -597,8 +597,9 @@ static iree_status_t loom_amdgpu_read_immediate_encoding_field_value(
 
 static iree_status_t loom_amdgpu_encode_sop1_s_mov_b32(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
-  IREE_ASSERT(packet->descriptor->stable_id ==
-              LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32);
+  IREE_ASSERT(packet->descriptor == loom_amdgpu_descriptor_ref_descriptor(
+                                        state->schedule->target.descriptor_set,
+                                        LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32));
   uint16_t sdst = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_packet_result_sgpr(state, packet, 0, &sdst));
   uint32_t imm32 = 0;
@@ -911,8 +912,9 @@ static iree_status_t loom_amdgpu_encode_descriptor_packet(
   }
   switch (packet->descriptor->encoding_format_id) {
     case LOOM_AMDGPU_ENCODING_FORMAT_SOP1:
-      if (packet->descriptor->stable_id ==
-          LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32) {
+      if (packet->descriptor == loom_amdgpu_descriptor_ref_descriptor(
+                                    state->schedule->target.descriptor_set,
+                                    LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32)) {
         return loom_amdgpu_encode_sop1_s_mov_b32(state, packet);
       }
       return loom_amdgpu_encode_generic_descriptor_packet(state, packet);
@@ -1210,11 +1212,14 @@ static iree_status_t loom_amdgpu_encode_wait_packet(
     const loom_amdgpu_wait_packet_t* wait_packet) {
   const loom_low_descriptor_set_t* descriptor_set =
       state->schedule->target.descriptor_set;
-  if (wait_packet->descriptor_ordinal >= descriptor_set->descriptor_count) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU wait packet descriptor ordinal %" PRIu32
-                            " is out of range",
-                            wait_packet->descriptor_ordinal);
+  const uint32_t descriptor_ordinal =
+      loom_low_descriptor_set_descriptor_ordinal(descriptor_set,
+                                                 wait_packet->descriptor);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU wait packet descriptor row does not belong to the selected "
+        "descriptor set");
   }
   if (wait_packet->immediate_start > state->wait_packets->immediate_count ||
       wait_packet->immediate_count >
@@ -1224,7 +1229,7 @@ static iree_status_t loom_amdgpu_encode_wait_packet(
         "AMDGPU wait packet immediate range is out of range");
   }
   const loom_low_descriptor_t* descriptor =
-      &descriptor_set->descriptors[wait_packet->descriptor_ordinal];
+      loom_low_descriptor_set_descriptor_at(descriptor_set, descriptor_ordinal);
 
   if (descriptor->encoding_format_id == LOOM_AMDGPU_ENCODING_FORMAT_SOPP ||
       descriptor->encoding_format_id == LOOM_AMDGPU_ENCODING_FORMAT_SOPK) {

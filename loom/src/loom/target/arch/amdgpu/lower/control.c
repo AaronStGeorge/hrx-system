@@ -5,8 +5,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/ops/cfg/ops.h"
-#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 
 static iree_status_t loom_amdgpu_emit_plain_cond_branch(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
@@ -139,10 +139,9 @@ static iree_status_t loom_amdgpu_emit_else_dispatch(
   loom_builder_set_block(builder, dispatch_block);
 
   loom_op_t* else_active_op = NULL;
-  iree_status_t status = loom_low_lower_emit_descriptor_op(
-      context, LOOM_AMDGPU_DESCRIPTOR_ID_S_XOR_B64_EXEC, &saved_exec, 1,
-      loom_named_attr_slice_empty(), &active_type, 1,
-      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
+  iree_status_t status = loom_amdgpu_emit_low_op(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_XOR_B64_EXEC,
+      &saved_exec, 1, loom_named_attr_slice_empty(), &active_type, 1,
       &else_active_op);
   if (iree_status_is_ok(status)) {
     status = loom_amdgpu_emit_plain_cond_branch(
@@ -169,10 +168,9 @@ static iree_status_t loom_amdgpu_emit_exec_restore(
   loom_builder_ip_t saved_ip = loom_builder_save(builder);
   loom_builder_set_block(builder, low_merge_block);
   loom_op_t* restore_op = NULL;
-  iree_status_t status = loom_low_lower_emit_descriptor_op(
-      context, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B64_EXEC, &saved_exec, 1,
-      loom_named_attr_slice_empty(), /*result_types=*/NULL, 0,
-      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
+  iree_status_t status = loom_amdgpu_emit_low_op(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC,
+      &saved_exec, 1, loom_named_attr_slice_empty(), /*result_types=*/NULL, 0,
       &restore_op);
   loom_builder_restore(builder, saved_ip);
   return status;
@@ -194,11 +192,10 @@ static iree_status_t loom_amdgpu_emit_exec_mask_cond_branch(
   const loom_type_t result_types[] = {condition_type, active_type};
 
   loom_op_t* saveexec_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
-      context, LOOM_AMDGPU_DESCRIPTOR_ID_S_AND_SAVEEXEC_B64, &low_condition, 1,
-      loom_named_attr_slice_empty(), result_types, IREE_ARRAYSIZE(result_types),
-      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
-      &saveexec_op));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_SAVEEXEC_B64,
+      &low_condition, 1, loom_named_attr_slice_empty(), result_types,
+      IREE_ARRAYSIZE(result_types), &saveexec_op));
   const loom_value_id_t saved_exec = loom_op_const_results(saveexec_op)[0];
   const loom_value_id_t active = loom_op_const_results(saveexec_op)[1];
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_exec_restore(

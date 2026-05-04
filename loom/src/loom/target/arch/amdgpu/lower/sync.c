@@ -5,8 +5,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/ir/context.h"
-#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 
 static bool loom_amdgpu_kernel_barrier_maps_to_s_barrier(
     const loom_op_t* source_op) {
@@ -28,10 +28,9 @@ iree_status_t loom_amdgpu_select_kernel_barrier_plan(
     return iree_ok_status();
   }
 
-  const uint32_t descriptor_ordinal =
-      loom_low_descriptor_set_lookup_descriptor_by_id(
-          loom_low_lower_context_descriptor_set(context),
-          LOOM_AMDGPU_DESCRIPTOR_ID_S_BARRIER);
+  const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
+      loom_low_lower_context_descriptor_set(context),
+      LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER);
   if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
     return iree_ok_status();
   }
@@ -44,7 +43,7 @@ iree_status_t loom_amdgpu_lower_kernel_barrier(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
   loom_op_t* low_op = NULL;
   return loom_amdgpu_emit_low_op(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_S_BARRIER,
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER,
       /*operands=*/NULL, /*operand_count=*/0,
       loom_make_named_attr_slice(NULL, 0), /*result_types=*/NULL,
       /*result_count=*/0, &low_op);
@@ -68,10 +67,9 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_barrier(
                 "barriers"));
   }
 
-  const uint32_t descriptor_ordinal =
-      loom_low_descriptor_set_lookup_descriptor_by_id(
-          loom_target_low_legality_descriptor_set(context),
-          LOOM_AMDGPU_DESCRIPTOR_ID_S_BARRIER);
+  const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
+      loom_target_low_legality_descriptor_set(context),
+      LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER);
   if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("descriptor"), IREE_SV("s_barrier"),

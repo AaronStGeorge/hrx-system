@@ -6,27 +6,37 @@
 
 #include "loom/target/arch/amdgpu/packet_diagnostics.h"
 
-#include "loom/target/arch/amdgpu/descriptor_ids.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 
 static bool loom_amdgpu_packet_diagnostics_crosslane_reason(
-    uint64_t descriptor_id, iree_string_view_t* out_reason) {
-  switch (descriptor_id) {
-    case LOOM_AMDGPU_DESCRIPTOR_ID_DS_SWIZZLE_B32:
-      *out_reason = IREE_SV("uses LDS cross-lane swizzle address mapping");
-      return true;
-    case LOOM_AMDGPU_DESCRIPTOR_ID_DS_PERMUTE_B32:
-      *out_reason = IREE_SV("uses LDS cross-lane forward permute");
-      return true;
-    case LOOM_AMDGPU_DESCRIPTOR_ID_DS_BPERMUTE_B32:
-      *out_reason = IREE_SV("uses LDS cross-lane backward permute");
-      return true;
-    case LOOM_AMDGPU_DESCRIPTOR_ID_DS_BPERMUTE_FI_B32:
-      *out_reason = IREE_SV("uses LDS cross-lane backward permute with FI");
-      return true;
-    default:
-      *out_reason = iree_string_view_empty();
-      return false;
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, iree_string_view_t* out_reason) {
+  if (descriptor ==
+      loom_amdgpu_descriptor_ref_descriptor(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_DS_SWIZZLE_B32)) {
+    *out_reason = IREE_SV("uses LDS cross-lane swizzle address mapping");
+    return true;
   }
+  if (descriptor ==
+      loom_amdgpu_descriptor_ref_descriptor(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_DS_PERMUTE_B32)) {
+    *out_reason = IREE_SV("uses LDS cross-lane forward permute");
+    return true;
+  }
+  if (descriptor ==
+      loom_amdgpu_descriptor_ref_descriptor(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32)) {
+    *out_reason = IREE_SV("uses LDS cross-lane backward permute");
+    return true;
+  }
+  if (descriptor ==
+      loom_amdgpu_descriptor_ref_descriptor(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_FI_B32)) {
+    *out_reason = IREE_SV("uses LDS cross-lane backward permute with FI");
+    return true;
+  }
+  *out_reason = iree_string_view_empty();
+  return false;
 }
 
 static iree_status_t loom_amdgpu_low_packet_diagnostic_try_packet(
@@ -43,8 +53,10 @@ static iree_status_t loom_amdgpu_low_packet_diagnostic_try_packet(
     return iree_ok_status();
   }
   iree_string_view_t reason = iree_string_view_empty();
+  const loom_low_schedule_table_t* schedule =
+      loom_target_low_packet_diagnostics_schedule(context);
   if (!loom_amdgpu_packet_diagnostics_crosslane_reason(
-          packet->descriptor->stable_id, &reason)) {
+          schedule->target.descriptor_set, packet->descriptor, &reason)) {
     return iree_ok_status();
   }
   *out_handled = true;

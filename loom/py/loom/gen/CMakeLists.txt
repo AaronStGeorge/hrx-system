@@ -272,6 +272,20 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    amdgpu_target_refs
+  MAIN
+    "amdgpu_target_refs.py"
+  SRCS
+    "amdgpu_target_refs.py"
+  DEPS
+    iree::runtime::py::loom::gen::generated_file
+    iree::runtime::py::loom::target::low_descriptors
+    iree::runtime::py::loom::target::arch::amdgpu::descriptors
+    iree::runtime::py::loom::target::arch::amdgpu::target_info
+)
+
+iree_py_library(
+  NAME
     amdgpu_atomic_candidates
   MAIN
     "amdgpu_atomic_candidates.py"

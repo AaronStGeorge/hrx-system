@@ -7,9 +7,9 @@
 #include <stdint.h>
 
 #include "loom/ops/view/ops.h"
-#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
 #include "loom/target/arch/amdgpu/lower/memory_internal.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 
 static bool loom_amdgpu_prefetch_static_offset_split(
     const loom_amdgpu_descriptor_offset_immediate_info_t* offset_info,
@@ -120,9 +120,8 @@ static iree_status_t loom_amdgpu_prefetch_select(
 
   const loom_low_descriptor_set_t* descriptor_set =
       loom_low_lower_context_descriptor_set(context);
-  const uint32_t descriptor_ordinal =
-      loom_low_descriptor_set_lookup_descriptor_by_id(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_S_BUFFER_PREFETCH_DATA);
+  const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
+      descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_BUFFER_PREFETCH_DATA);
   if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
     return iree_ok_status();
   }

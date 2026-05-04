@@ -53,8 +53,8 @@ def _c_identifier(value: str) -> str:
     return identifier.upper()
 
 
-def _descriptor_id_constant_name(key: str) -> str:
-    return f"LOOM_AMDGPU_DESCRIPTOR_ID_{_c_identifier(target_relative_name('amdgpu', key))}"
+def _descriptor_ref_constant_name(key: str) -> str:
+    return f"LOOM_AMDGPU_DESCRIPTOR_REF_{_c_identifier(target_relative_name('amdgpu', key))}"
 
 
 def _emit_header(*, header_path: Path, format_output: bool) -> str:
@@ -73,6 +73,7 @@ def _emit_header(*, header_path: Path, format_output: bool) -> str:
         "#include <stdint.h>",
         "",
         '#include "iree/base/api.h"',
+        '#include "loom/target/arch/amdgpu/target_refs.h"',
         '#include "loom/target/arch/amdgpu/lower/kinds.h"',
         '#include "loom/util/fact_table.h"',
         "",
@@ -98,8 +99,8 @@ def _emit_header(*, header_path: Path, format_output: bool) -> str:
         "  uint8_t atomic_kind;",
         "  // Source scalar value type required by this row.",
         "  loom_amdgpu_atomic_value_kind_t value_kind;",
-        "  // Stable descriptor ID selected when present in the descriptor set.",
-        "  uint64_t descriptor_id;",
+        "  // Dense AMDGPU descriptor ref selected when present in the descriptor set.",
+        "  loom_amdgpu_descriptor_ref_t descriptor_ref;",
         "} loom_amdgpu_atomic_descriptor_candidate_t;",
         "",
         "extern const loom_amdgpu_atomic_descriptor_candidate_t",
@@ -127,7 +128,7 @@ def _candidate_initializer(candidate: AmdgpuAtomicDescriptorCandidate) -> str:
             f"        .operation_kind = {candidate.operation_kind.c_name},",
             f"        .atomic_kind = {candidate.atomic_kind.c_name},",
             f"        .value_kind = {candidate.value_kind.c_name},",
-            f"        .descriptor_id = {_descriptor_id_constant_name(candidate.descriptor_key)},",
+            f"        .descriptor_ref = {_descriptor_ref_constant_name(candidate.descriptor_key)},",
             "    },",
         ]
     )
@@ -147,7 +148,7 @@ def _emit_source(*, public_header: str, source_path: Path, format_output: bool) 
         f'#include "{public_header}"',
         "",
         '#include "loom/ops/atomic.h"',
-        '#include "loom/target/arch/amdgpu/descriptor_ids.h"',
+        '#include "loom/target/arch/amdgpu/target_refs.h"',
         "",
         "const loom_amdgpu_atomic_descriptor_candidate_t",
         "    kLoomAmdgpuAtomicDescriptorCandidates[] = {",

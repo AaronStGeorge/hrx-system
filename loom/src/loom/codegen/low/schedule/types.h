@@ -146,12 +146,10 @@ typedef struct loom_low_schedule_node_t {
   loom_low_schedule_node_kind_t kind;
   // Effective traits used for conservative structural ordering.
   loom_trait_flags_t traits;
-  // Descriptor ordinal for descriptor-backed nodes, or NONE.
-  uint32_t descriptor_ordinal;
+  // Descriptor row for descriptor-backed nodes, or NULL.
+  const loom_low_descriptor_t* descriptor;
   // Source memory-access record attached to this node, or NONE.
   uint32_t memory_access_record_index;
-  // Stable descriptor ID for descriptor-backed nodes, or NONE.
-  uint64_t descriptor_id;
   // Schedule-class id for descriptor-backed nodes, or NONE.
   uint16_t schedule_class_id;
   // Borrowed schedule-class name for descriptor-backed nodes.

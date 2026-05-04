@@ -14,9 +14,9 @@
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/hal_binding_descriptor.h"
 #include "loom/target/arch/amdgpu/target_info.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_COORDINATE_DIMENSION_COUNT 3u
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_MAX_FIXED_VALUE_COUNT \
@@ -108,6 +108,38 @@ loom_amdgpu_hal_kernel_abi_source_kind_from_stable_id(uint64_t source_id) {
     default:
       return LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_UNKNOWN;
   }
+}
+
+static iree_string_view_t loom_amdgpu_hal_kernel_abi_module_string(
+    const loom_module_t* module, loom_string_id_t string_id) {
+  if (string_id == LOOM_STRING_ID_INVALID ||
+      string_id >= module->strings.count) {
+    return iree_string_view_empty();
+  }
+  return module->strings.entries[string_id];
+}
+
+static const loom_low_descriptor_t*
+loom_amdgpu_hal_kernel_abi_resolve_low_op_descriptor(
+    const loom_module_t* module,
+    const loom_low_descriptor_set_t* descriptor_set, const loom_op_t* op) {
+  const int64_t packet_ordinal = loom_low_op_descriptor_ordinal(op);
+  if (packet_ordinal >= 0 && (uint64_t)packet_ordinal <= UINT32_MAX) {
+    return loom_low_descriptor_set_descriptor_at(descriptor_set,
+                                                 (uint32_t)packet_ordinal);
+  }
+  if (packet_ordinal != -1) {
+    return NULL;
+  }
+  iree_string_view_t key =
+      loom_amdgpu_hal_kernel_abi_module_string(module, loom_low_op_opcode(op));
+  const uint32_t descriptor_ordinal =
+      loom_low_descriptor_set_lookup_descriptor(descriptor_set, key);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return NULL;
+  }
+  return loom_low_descriptor_set_descriptor_at(descriptor_set,
+                                               descriptor_ordinal);
 }
 
 static bool loom_amdgpu_hal_kernel_abi_is_workgroup_source(
@@ -714,7 +746,7 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_resources(
 
 static iree_status_t
 loom_amdgpu_hal_kernel_abi_verify_hal_buffer_descriptor_pseudos(
-    const loom_op_t* function_op,
+    const loom_module_t* module, const loom_op_t* function_op,
     const loom_low_descriptor_set_t* descriptor_set, uint32_t max_errors,
     iree_diagnostic_emitter_t emitter,
     loom_amdgpu_hal_kernel_abi_verify_result_t* result) {
@@ -737,9 +769,16 @@ loom_amdgpu_hal_kernel_abi_verify_hal_buffer_descriptor_pseudos(
     const loom_block_t* block = loom_region_const_block(body, block_index);
     const loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
-      if (!loom_low_op_isa(op) ||
-          (uint64_t)loom_low_op_descriptor_id(op) !=
-              LOOM_AMDGPU_DESCRIPTOR_ID_HAL_BUFFER_DESCRIPTOR) {
+      if (!loom_low_op_isa(op)) {
+        continue;
+      }
+      const loom_low_descriptor_t* descriptor =
+          loom_amdgpu_hal_kernel_abi_resolve_low_op_descriptor(
+              module, descriptor_set, op);
+      if (descriptor == NULL ||
+          descriptor != loom_amdgpu_descriptor_ref_descriptor(
+                            descriptor_set,
+                            LOOM_AMDGPU_DESCRIPTOR_REF_HAL_BUFFER_DESCRIPTOR)) {
         continue;
       }
 
@@ -981,7 +1020,8 @@ iree_status_t loom_amdgpu_hal_kernel_abi_verify_low(
       arena));
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_hal_kernel_abi_verify_hal_buffer_descriptor_pseudos(
-          function_op, descriptor_set, max_errors, emitter, out_result));
+          module, function_op, descriptor_set, max_errors, emitter,
+          out_result));
   return loom_amdgpu_hal_kernel_abi_verify_live_ins(
       module, function_op, &register_class_map, max_errors, emitter,
       out_result);

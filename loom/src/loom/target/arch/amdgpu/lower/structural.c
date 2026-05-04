@@ -8,8 +8,8 @@
 
 #include "loom/ir/context.h"
 #include "loom/ops/vector/ops.h"
-#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 
 static bool loom_amdgpu_vector_bitcast_storage_shape(
     loom_type_t type, uint32_t* out_payload_bit_count,
@@ -251,7 +251,7 @@ static iree_status_t loom_amdgpu_lower_vector_slice_packed_register_bits(
       continue;
     }
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHRREV_B32_LIT,
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT,
         source_register_bit_offset, source_register, lane_type,
         &low_registers[i]));
   }

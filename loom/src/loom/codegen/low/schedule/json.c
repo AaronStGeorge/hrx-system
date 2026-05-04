@@ -107,20 +107,11 @@ static iree_status_t loom_low_schedule_json_descriptor_key(
     const loom_low_schedule_table_t* table,
     const loom_low_schedule_node_t* node, iree_string_view_t* out_key) {
   *out_key = iree_string_view_empty();
-  if (node->descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+  if (node->descriptor == NULL) {
     return iree_ok_status();
   }
-  const loom_low_descriptor_t* descriptor =
-      loom_low_descriptor_set_descriptor_at(table->target.descriptor_set,
-                                            node->descriptor_ordinal);
-  if (descriptor == NULL) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "schedule node references descriptor ordinal %" PRIu32,
-        node->descriptor_ordinal);
-  }
-  *out_key = loom_low_descriptor_set_string(table->target.descriptor_set,
-                                            descriptor->key_string_offset);
+  *out_key = loom_low_descriptor_set_string(
+      table->target.descriptor_set, node->descriptor->key_string_offset);
   return iree_ok_status();
 }
 

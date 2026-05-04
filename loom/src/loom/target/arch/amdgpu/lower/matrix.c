@@ -246,8 +246,8 @@ iree_status_t loom_amdgpu_descriptor_matrix_query(
                                                      match_diagnostic),
         out_result);
   }
-  if (contract_descriptor->low_descriptor_id ==
-      LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_ID_NONE) {
+  if (contract_descriptor->low_descriptor_ref ==
+      LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_REF_NONE) {
     return loom_amdgpu_matrix_contract_query_reject(
         environment, LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED,
         IREE_SV("contract"), contract_descriptor->name,
@@ -255,10 +255,9 @@ iree_status_t loom_amdgpu_descriptor_matrix_query(
                 "descriptor"),
         out_result);
   }
-  if (loom_low_descriptor_set_lookup_descriptor_by_id(
-          environment->descriptor_set,
-          contract_descriptor->low_descriptor_id) ==
-      LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+  const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
+      environment->descriptor_set, contract_descriptor->low_descriptor_ref);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
     return loom_amdgpu_matrix_contract_query_reject(
         environment, LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED,
         IREE_SV("descriptor"), contract_descriptor->name,
@@ -266,10 +265,14 @@ iree_status_t loom_amdgpu_descriptor_matrix_query(
                 "matrix packet"),
         out_result);
   }
+  const loom_low_descriptor_t* descriptor =
+      loom_low_descriptor_set_descriptor_at(environment->descriptor_set,
+                                            descriptor_ordinal);
+  IREE_ASSERT(descriptor != NULL);
 
   *out_result = loom_target_contract_query_result_empty();
   out_result->outcome = LOOM_TARGET_CONTRACT_QUERY_LEGAL;
-  out_result->selected_descriptor_id = contract_descriptor->low_descriptor_id;
+  out_result->selected_descriptor_id = descriptor->stable_id;
   out_result->source_rejection_bits = contract_diagnostic.rejection_bits;
   out_result->target_rejection_bits = match_diagnostic.rejection_bits;
   return iree_ok_status();

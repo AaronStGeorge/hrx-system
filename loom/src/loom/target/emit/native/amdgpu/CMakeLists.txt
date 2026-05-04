@@ -22,15 +22,16 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::move_sequence
     loom::src::loom::codegen::low::packet
     loom::src::loom::codegen::low::schedule
     loom::src::loom::ir
     loom::src::loom::ops::low
-    loom::src::loom::target::arch::amdgpu::descriptor_ids
     loom::src::loom::target::arch::amdgpu::encoding
     loom::src::loom::target::arch::amdgpu::register_class
     loom::src::loom::target::arch::amdgpu::target_info
+    loom::src::loom::target::arch::amdgpu::target_refs
     loom::src::loom::target::arch::amdgpu::wait_packets
     loom::src::loom::target::emit::native::assembly
   PUBLIC
@@ -138,9 +139,9 @@ loom_cc_library(
     loom::src::loom::codegen::low::schedule
     loom::src::loom::ir
     loom::src::loom::ops::low
-    loom::src::loom::target::arch::amdgpu::descriptor_ids
     loom::src::loom::target::arch::amdgpu::encoding
     loom::src::loom::target::arch::amdgpu::target_info
+    loom::src::loom::target::arch::amdgpu::target_refs
     loom::src::loom::target::arch::amdgpu::wait_packets
     loom::src::loom::target::emit::native::fragment
   PUBLIC
@@ -183,8 +184,8 @@ loom_cc_library(
     iree::base
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::schedule
-    loom::src::loom::target::arch::amdgpu::descriptor_ids
     loom::src::loom::target::arch::amdgpu::register_class
+    loom::src::loom::target::arch::amdgpu::target_refs
     loom::src::loom::target::emit::native::fragment
   PUBLIC
 )

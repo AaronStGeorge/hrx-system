@@ -8,11 +8,12 @@
 
 #include <inttypes.h>
 
+#include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/function.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/target_info.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 
@@ -33,8 +34,6 @@ typedef struct loom_amdgpu_wait_packet_descriptor_immediate_t {
 } loom_amdgpu_wait_packet_descriptor_immediate_t;
 
 typedef struct loom_amdgpu_wait_packet_descriptor_t {
-  // Descriptor ordinal in the target descriptor set.
-  uint32_t descriptor_ordinal;
   // Borrowed descriptor row.
   const loom_low_descriptor_t* descriptor;
   // Borrowed descriptor key string.
@@ -223,7 +222,7 @@ static iree_status_t loom_amdgpu_wait_packet_immediate_counter_mask(
 }
 
 static iree_status_t loom_amdgpu_wait_packet_append_target_descriptor(
-    loom_amdgpu_wait_packet_builder_t* builder, uint32_t descriptor_ordinal,
+    loom_amdgpu_wait_packet_builder_t* builder,
     const loom_low_descriptor_t* descriptor, uint32_t counter_mask) {
   if (builder->target.descriptor_count >=
       LOOM_AMDGPU_WAIT_PACKET_DESCRIPTOR_CAPACITY) {
@@ -241,7 +240,6 @@ static iree_status_t loom_amdgpu_wait_packet_append_target_descriptor(
   loom_amdgpu_wait_packet_descriptor_t* target_descriptor =
       &builder->target.descriptors[builder->target.descriptor_count++];
   *target_descriptor = (loom_amdgpu_wait_packet_descriptor_t){
-      .descriptor_ordinal = descriptor_ordinal,
       .descriptor = descriptor,
       .key = key,
       .counter_mask = counter_mask,
@@ -311,7 +309,7 @@ static iree_status_t loom_amdgpu_wait_packet_append_target_descriptor(
 }
 
 static iree_status_t loom_amdgpu_wait_packet_classify_descriptor(
-    loom_amdgpu_wait_packet_builder_t* builder, uint32_t descriptor_ordinal,
+    loom_amdgpu_wait_packet_builder_t* builder,
     const loom_low_descriptor_t* descriptor) {
   uint32_t counter_mask = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_descriptor_counter_mask(
@@ -319,8 +317,8 @@ static iree_status_t loom_amdgpu_wait_packet_classify_descriptor(
   if (counter_mask == 0) {
     return iree_ok_status();
   }
-  return loom_amdgpu_wait_packet_append_target_descriptor(
-      builder, descriptor_ordinal, descriptor, counter_mask);
+  return loom_amdgpu_wait_packet_append_target_descriptor(builder, descriptor,
+                                                          counter_mask);
 }
 
 static iree_status_t loom_amdgpu_wait_packet_analyze_target(
@@ -330,7 +328,7 @@ static iree_status_t loom_amdgpu_wait_packet_analyze_target(
   builder->target = (loom_amdgpu_wait_packet_target_t){0};
   for (uint32_t i = 0; i < builder->descriptor_set->descriptor_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_classify_descriptor(
-        builder, i, &builder->descriptor_set->descriptors[i]));
+        builder, &builder->descriptor_set->descriptors[i]));
   }
   return iree_ok_status();
 }
@@ -433,8 +431,7 @@ static iree_status_t loom_amdgpu_wait_packet_append_packet(
         builder, packet_descriptor, immediate, value));
   }
   builder->packets[builder->packet_count++] = (loom_amdgpu_wait_packet_t){
-      .descriptor_ordinal = packet_descriptor->descriptor_ordinal,
-      .descriptor_key = packet_descriptor->key,
+      .descriptor = packet_descriptor->descriptor,
       .block_index = group->block_index,
       .node_index = group->node_index,
       .scheduled_ordinal = group->scheduled_ordinal,
@@ -524,9 +521,7 @@ iree_status_t loom_amdgpu_wait_packet_select_counter_mask(
   }
 
   *out_selection = (loom_amdgpu_wait_packet_selection_t){
-      .descriptor_ordinal = descriptor->descriptor_ordinal,
-      .descriptor_id = descriptor->descriptor->stable_id,
-      .descriptor_key = descriptor->key,
+      .descriptor = descriptor->descriptor,
       .counter_mask = covered_counter_mask,
       .immediate_count = descriptor->immediate_count,
   };
@@ -760,8 +755,19 @@ iree_status_t loom_amdgpu_wait_packet_plan_format_json(
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(&stream, "\"descriptor\":"));
+    const uint32_t descriptor_ordinal =
+        loom_low_descriptor_set_descriptor_ordinal(
+            schedule->target.descriptor_set, packet->descriptor);
+    if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "AMDGPU wait packet descriptor row does not belong to the selected "
+          "descriptor set");
+    }
+    iree_string_view_t descriptor_key = loom_low_descriptor_set_string(
+        schedule->target.descriptor_set, packet->descriptor->key_string_offset);
     IREE_RETURN_IF_ERROR(
-        loom_json_write_escaped_string(&stream, packet->descriptor_key));
+        loom_json_write_escaped_string(&stream, descriptor_key));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
         &stream,
         ",\"block\":%" PRIu32 ",\"node\":%" PRIu32

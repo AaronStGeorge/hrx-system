@@ -53,11 +53,12 @@ typedef enum loom_low_descriptor_packet_kind_e {
   LOOM_LOW_DESCRIPTOR_PACKET_CONST = 2,
 } loom_low_descriptor_packet_kind_t;
 
-// Target-bound descriptor identity for one descriptor-backed low packet.
+// Target-bound descriptor row for one descriptor-backed low packet.
 //
-// Text IR names descriptor packets with stable spellings. Compiled in-memory
-// consumers resolve that source spelling through this boundary and carry
-// descriptor ordinals or pointers in their own dense tables.
+// Text IR names descriptor packets with stable spellings and stores an
+// unresolved ordinal sentinel. This boundary resolves the spelling through the
+// selected descriptor set; compiled in-memory consumers carry the descriptor
+// pointer directly.
 typedef struct loom_low_resolved_descriptor_packet_t {
   // Operation represented by this packet record.
   const loom_op_t* op;
@@ -67,10 +68,6 @@ typedef struct loom_low_resolved_descriptor_packet_t {
   iree_string_view_t key;
   // Attribute index containing |key| in text-form IR.
   uint16_t key_attr_index;
-  // Durable descriptor identity derived from |key|.
-  uint64_t stable_id;
-  // Dense descriptor ordinal in |target->descriptor_set|, or NONE.
-  uint32_t descriptor_ordinal;
   // Descriptor row in |target->descriptor_set|, or NULL when unresolved.
   const loom_low_descriptor_t* descriptor;
 } loom_low_resolved_descriptor_packet_t;

@@ -85,6 +85,7 @@ __all__ = [
     "Flags",
     "OpRef",
     "DescriptorRef",
+    "StableKeyRef",
     "TemplateParam",
     # Type-interior format elements.
     "ShapeOf",
@@ -690,15 +691,31 @@ class OpRef:
 
 @dataclass(frozen=True, slots=True)
 class DescriptorRef:
-    """Descriptor key reference in angle brackets after the op name.
+    """Descriptor key reference resolved to a dense row ordinal by targets.
 
-    Prints/parses: <target.descriptor> (glued to the op name), while storing
-    both the diagnostic key spelling and a durable stable descriptor ID.
+    Prints/parses: <target.descriptor> glued to the op name.
 
     The ``key`` field names a string attribute used for text and diagnostics.
-    The ``stable_id`` field names an i64 attribute derived from ``key``. The ID
-    is the compiled/durable identity; descriptor-set ordinals remain transient
-    row addresses selected by the active low target.
+    The ``ordinal`` field names an i64 attribute storing the descriptor-set
+    local row ordinal when the builder already has a selected descriptor set.
+    Text parsing has no target context, so parsed descriptor refs use the
+    unresolved ordinal sentinel and target binding resolves the key spelling at
+    that boundary.
+    """
+
+    key: str
+    ordinal: str
+
+
+@dataclass(frozen=True, slots=True)
+class StableKeyRef:
+    """Symbolic key reference resolved to a stable numeric key identity.
+
+    Prints/parses: <target.key> glued to the op name.
+
+    Use this only for non-descriptor symbolic domains that are still keyed by
+    stable string identity. Descriptor-backed low packets use DescriptorRef and
+    resolve through the active descriptor set instead.
     """
 
     key: str
@@ -813,6 +830,7 @@ type FormatElement = (
     | Flags
     | OpRef
     | DescriptorRef
+    | StableKeyRef
     | TemplateParam
     | ShapeOf
     | ScalarOf

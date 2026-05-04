@@ -8,8 +8,8 @@
 
 #include "loom/ir/context.h"
 #include "loom/ops/vector/ops.h"
-#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 
 static bool loom_amdgpu_table_lookup_plan_from_op(
     const loom_module_t* module, const loom_op_t* source_op,
@@ -110,11 +110,11 @@ static iree_status_t loom_amdgpu_table_lookup_extract_i8_index_lane(
 
   loom_value_id_t shifted = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHRREV_B32_LIT,
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT,
       byte_offset * 8u, source_register, lane_type, &shifted));
 
   return loom_amdgpu_emit_vgpr_binary_literal(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_AND_B32_LIT, shifted,
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT, shifted,
       0xFFu, lane_type, out_index_lane);
 }
 
@@ -158,7 +158,7 @@ static iree_status_t loom_amdgpu_table_lookup_select_table_lane(
     };
     loom_op_t* compare_op = NULL;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_CMP_EQ_I32,
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32,
         compare_operands, IREE_ARRAYSIZE(compare_operands),
         loom_make_named_attr_slice(NULL, 0), &mask_lane_type, 1, &compare_op));
     const loom_value_id_t select_operands[] = {
@@ -168,7 +168,7 @@ static iree_status_t loom_amdgpu_table_lookup_select_table_lane(
     };
     loom_op_t* select_op = NULL;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_CNDMASK_B32,
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32,
         select_operands, IREE_ARRAYSIZE(select_operands),
         loom_make_named_attr_slice(NULL, 0), &lane_type, 1, &select_op));
     selected_lane = loom_value_slice_get(loom_low_op_results(select_op), 0);
@@ -201,7 +201,7 @@ iree_status_t loom_amdgpu_lower_vector_table_lookup(
       continue;
     }
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32, i, lane_type,
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, i, lane_type,
         &ordinals[i]));
   }
 

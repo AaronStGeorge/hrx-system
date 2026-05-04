@@ -7616,7 +7616,7 @@ def _amdgpu_core_descriptor_set_bases() -> tuple[DescriptorSet, ...]:
     )
 
 
-def _amdgpu_descriptor_id_key_set() -> set[str]:
+def _amdgpu_descriptor_ref_key_set() -> set[str]:
     keys: set[str] = set()
     keys.update(_MANUAL_SCALAR_DESCRIPTOR_KEYS)
     keys.update(descriptor.key for descriptor in _hal_buffer_descriptor_pseudos())
@@ -8000,10 +8000,16 @@ def _validate_address_immediate_units(descriptor_set: DescriptorSet) -> None:
                 )
 
 
-def amdgpu_descriptor_id_keys() -> tuple[str, ...]:
+def amdgpu_descriptor_ref_keys() -> tuple[str, ...]:
     """Returns descriptor keys known to the AMDGPU target family."""
 
-    return tuple(sorted(_amdgpu_descriptor_id_key_set()))
+    return tuple(sorted(_amdgpu_descriptor_ref_key_set()))
+
+
+def amdgpu_descriptor_id_keys() -> tuple[str, ...]:
+    """Returns descriptor keys that still need stable-ID compatibility refs."""
+
+    return amdgpu_descriptor_ref_keys()
 
 
 def amdgpu_immediate_encoding_id_items() -> tuple[tuple[str, int], ...]:

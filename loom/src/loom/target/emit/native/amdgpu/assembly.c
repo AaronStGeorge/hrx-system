@@ -8,13 +8,14 @@
 
 #include <inttypes.h>
 
+#include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/move_sequence.h"
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/encoding.h"
 #include "loom/target/arch/amdgpu/register_class.h"
 #include "loom/target/arch/amdgpu/target_info.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 #include "loom/target/emit/native/amdgpu/storage_layout.h"
 #include "loom/target/emit/native/assembly.h"
 
@@ -703,14 +704,18 @@ static iree_status_t loom_amdgpu_append_offset_suffix(
 
 static iree_status_t loom_amdgpu_append_mubuf_load_packet(
     const loom_native_assembly_packet_context_t* context) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
   const loom_low_descriptor_t* descriptor = context->packet->descriptor;
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, " "));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_result(context, 0));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
-  if (descriptor->stable_id ==
-      LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_LOAD_DWORD_OFF_ZERO) {
+  if (descriptor ==
+      loom_amdgpu_descriptor_ref_descriptor(
+          descriptor_set,
+          LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_DWORD_OFF_ZERO)) {
     IREE_RETURN_IF_ERROR(
         iree_string_builder_append_cstring(context->builder, "off"));
     IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
@@ -732,14 +737,18 @@ static iree_status_t loom_amdgpu_append_mubuf_load_packet(
 
 static iree_status_t loom_amdgpu_append_mubuf_store_packet(
     const loom_native_assembly_packet_context_t* context) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
   const loom_low_descriptor_t* descriptor = context->packet->descriptor;
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, " "));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
-  if (descriptor->stable_id ==
-      LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_STORE_DWORD_OFF_ZERO) {
+  if (descriptor ==
+      loom_amdgpu_descriptor_ref_descriptor(
+          descriptor_set,
+          LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_DWORD_OFF_ZERO)) {
     IREE_RETURN_IF_ERROR(
         iree_string_builder_append_cstring(context->builder, "off"));
     IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
@@ -892,11 +901,14 @@ static iree_status_t loom_amdgpu_append_materialized_wait_packet(
     const loom_amdgpu_wait_packet_plan_t* wait_packets) {
   const loom_low_descriptor_set_t* descriptor_set =
       context->schedule->target.descriptor_set;
-  if (wait_packet->descriptor_ordinal >= descriptor_set->descriptor_count) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU wait packet descriptor ordinal %" PRIu32
-                            " is out of range",
-                            wait_packet->descriptor_ordinal);
+  const uint32_t descriptor_ordinal =
+      loom_low_descriptor_set_descriptor_ordinal(descriptor_set,
+                                                 wait_packet->descriptor);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU wait packet descriptor row does not belong to the selected "
+        "descriptor set");
   }
   if (wait_packet->immediate_start > wait_packets->immediate_count ||
       wait_packet->immediate_count >
@@ -906,7 +918,7 @@ static iree_status_t loom_amdgpu_append_materialized_wait_packet(
         "AMDGPU wait packet immediate range is out of range");
   }
   const loom_low_descriptor_t* descriptor =
-      &descriptor_set->descriptors[wait_packet->descriptor_ordinal];
+      loom_low_descriptor_set_descriptor_at(descriptor_set, descriptor_ordinal);
   iree_string_view_t mnemonic = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
       descriptor_set, descriptor->mnemonic_string_offset, &mnemonic));
@@ -1280,7 +1292,9 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
   const loom_low_descriptor_set_t* descriptor_set =
       context->schedule->target.descriptor_set;
   const loom_low_descriptor_t* descriptor = context->packet->descriptor;
-  if (descriptor->stable_id == LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B64_EXEC) {
+  if (descriptor ==
+      loom_amdgpu_descriptor_ref_descriptor(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC)) {
     return loom_amdgpu_append_exec_restore_packet(context);
   }
   bool has_read_effect = false;

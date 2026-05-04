@@ -57,6 +57,7 @@ from loom.assembly import (
     ResultType,
     ResultTypeList,
     Scope,
+    StableKeyRef,
     SymbolRef,
     TemplateParam,
     TypedRefs,
@@ -1504,7 +1505,14 @@ class Printer:
                     if value:
                         stream.emit(f"<{value}>", glue=True)
 
-                case DescriptorRef(key=key, stable_id=stable_id):
+                case DescriptorRef(key=key, ordinal=ordinal):
+                    covered_attrs.add(key)
+                    covered_attrs.add(ordinal)
+                    value = fields.attr(key)
+                    if value:
+                        stream.emit(f"<{value}>", glue=True)
+
+                case StableKeyRef(key=key, stable_id=stable_id):
                     covered_attrs.add(key)
                     covered_attrs.add(stable_id)
                     value = fields.attr(key)

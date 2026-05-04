@@ -256,17 +256,7 @@ iree_status_t loom_low_schedule_note_descriptor_rows_for_node(
   }
   const loom_low_schedule_class_t* schedule_class =
       &state->target.descriptor_set->schedule_classes[node->schedule_class_id];
-  const loom_low_descriptor_t* descriptor = NULL;
-  if (node->descriptor_ordinal != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    descriptor = loom_low_descriptor_set_descriptor_at(
-        state->target.descriptor_set, node->descriptor_ordinal);
-    if (!descriptor) {
-      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "low schedule node references invalid "
-                              "descriptor ordinal %" PRIu32,
-                              node->descriptor_ordinal);
-    }
-  }
+  const loom_low_descriptor_t* descriptor = node->descriptor;
   if (state->model_summaries) {
     loom_low_schedule_model_summary_t* model_summary =
         &state->model_summaries[node->schedule_class_id];

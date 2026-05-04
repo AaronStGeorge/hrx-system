@@ -42,6 +42,7 @@ from loom.assembly import (
     ResultType,
     ResultTypeList,
     Scope,
+    StableKeyRef,
     SymbolRef,
     TemplateParam,
     TypedRefs,
@@ -100,6 +101,7 @@ class BuilderParam:
     binding_kind: str | None = None
     names_field: str | None = None
     stable_id_field: str | None = None
+    ordinal_field: str | None = None
     static_field: str | None = None
 
     @property
@@ -309,10 +311,12 @@ def _extract_params(op: Op) -> list[BuilderParam]:  # noqa: C901
                         )
                     )
 
-                case Attr(field=name):
-                    append_attr_param(name)
-
-                case SymbolRef(field=name):
+                case (
+                    Attr(field=name)
+                    | SymbolRef(field=name)
+                    | OpRef(field=name)
+                    | TemplateParam(field=name)
+                ):
                     append_attr_param(name)
 
                 case IndexList(dynamic=dynamic_field, static=static_field):
@@ -454,20 +458,43 @@ def _extract_params(op: Op) -> list[BuilderParam]:  # noqa: C901
                     )
                     covered_attrs.add(name)
 
-                case OpRef(field=name):
-                    append_attr_param(name)
-
-                case DescriptorRef(key=name, stable_id=stable_id):
+                case DescriptorRef(key=name, ordinal=ordinal):
                     attr_def = op.attr(name)
-                    stable_id_attr = op.attr(stable_id)
+                    ordinal_attr = op.attr(ordinal)
                     if attr_def is None or attr_def.attr_type != "string":
                         raise ValueError(
                             f"Op '{op.name}': DescriptorRef key field "
                             f"'{name}' must be a string attr"
                         )
+                    if ordinal_attr is None or ordinal_attr.attr_type != "i64":
+                        raise ValueError(
+                            f"Op '{op.name}': DescriptorRef ordinal field "
+                            f"'{ordinal}' must be an i64 attr"
+                        )
+                    params.append(
+                        BuilderParam(
+                            name=name,
+                            kind=BuilderParamKind.DESCRIPTOR_REF,
+                            type_hint=attr_type_hint(attr_def),
+                            attr_def=attr_def,
+                            ordinal_field=ordinal,
+                            doc=attr_def.doc,
+                        )
+                    )
+                    covered_attrs.add(name)
+                    covered_attrs.add(ordinal)
+
+                case StableKeyRef(key=name, stable_id=stable_id):
+                    attr_def = op.attr(name)
+                    stable_id_attr = op.attr(stable_id)
+                    if attr_def is None or attr_def.attr_type != "string":
+                        raise ValueError(
+                            f"Op '{op.name}': StableKeyRef key field "
+                            f"'{name}' must be a string attr"
+                        )
                     if stable_id_attr is None or stable_id_attr.attr_type != "i64":
                         raise ValueError(
-                            f"Op '{op.name}': DescriptorRef stable ID field "
+                            f"Op '{op.name}': StableKeyRef stable ID field "
                             f"'{stable_id}' must be an i64 attr"
                         )
                     params.append(
@@ -482,9 +509,6 @@ def _extract_params(op: Op) -> list[BuilderParam]:  # noqa: C901
                     )
                     covered_attrs.add(name)
                     covered_attrs.add(stable_id)
-
-                case TemplateParam(field=name):
-                    append_attr_param(name)
 
                 case PredicateList(field=name):
                     attr_def = op.attr(name)

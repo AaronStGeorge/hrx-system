@@ -10,7 +10,7 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/target/arch/amdgpu/descriptor_ids.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 
 namespace {
 
@@ -446,14 +446,14 @@ TEST(MatrixContractTest, WmmaDescriptorsExposeTargetLowIds) {
   const loom_amdgpu_matrix_contract_descriptor_t* f32_f16 =
       FindDescriptor("wmma.f32.16x16x16.f16");
   ASSERT_NE(f32_f16, nullptr);
-  EXPECT_EQ(f32_f16->low_descriptor_id,
-            LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_F32_16X16X16_F16);
+  EXPECT_EQ(f32_f16->low_descriptor_ref,
+            LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_F32_16X16X16_F16);
 
   const loom_amdgpu_matrix_contract_descriptor_t* i32_iu8 =
       FindDescriptor("wmma.i32.16x16x16.iu8");
   ASSERT_NE(i32_iu8, nullptr);
-  EXPECT_EQ(i32_iu8->low_descriptor_id,
-            LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_I32_16X16X16_IU8);
+  EXPECT_EQ(i32_iu8->low_descriptor_ref,
+            LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_I32_16X16X16_IU8);
   EXPECT_EQ(i32_iu8->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SIGN_SELECT,
             LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SIGN_SELECT);
   EXPECT_EQ(i32_iu8->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_CLAMP,
@@ -462,20 +462,20 @@ TEST(MatrixContractTest, WmmaDescriptorsExposeTargetLowIds) {
   const loom_amdgpu_matrix_contract_descriptor_t* i32_iu4 =
       FindDescriptor("wmma.i32.16x16x16.iu4");
   ASSERT_NE(i32_iu4, nullptr);
-  EXPECT_EQ(i32_iu4->low_descriptor_id,
-            LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_I32_16X16X16_IU4);
+  EXPECT_EQ(i32_iu4->low_descriptor_ref,
+            LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_I32_16X16X16_IU4);
 
   const loom_amdgpu_matrix_contract_descriptor_t* f32_f16_gfx1250 =
       FindDescriptor("wmma.f32.16x16x32.f16");
   ASSERT_NE(f32_f16_gfx1250, nullptr);
-  EXPECT_EQ(f32_f16_gfx1250->low_descriptor_id,
-            LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_F32_16X16X32_F16);
+  EXPECT_EQ(f32_f16_gfx1250->low_descriptor_ref,
+            LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_F32_16X16X32_F16);
 
   const loom_amdgpu_matrix_contract_descriptor_t* scaled =
       FindDescriptor("wmma.scale.f32.16x16x128.f8f6f4");
   ASSERT_NE(scaled, nullptr);
-  EXPECT_EQ(scaled->low_descriptor_id,
-            LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_ID_NONE);
+  EXPECT_EQ(scaled->low_descriptor_ref,
+            LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_REF_NONE);
 }
 
 TEST(MatrixContractTest, Rdna3Wmmar3F32F16LayoutMapsFragments) {
@@ -569,8 +569,8 @@ TEST(MatrixContractTest, MatcherSelectedWmmar3DescriptorCarriesLayoutFacts) {
   const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
       loom_amdgpu_matrix_contract_select(&request, &diagnostic);
   ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(descriptor->low_descriptor_id,
-            LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_F32_16X16X16_F16);
+  EXPECT_EQ(descriptor->low_descriptor_ref,
+            LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_F32_16X16X16_F16);
   EXPECT_EQ(diagnostic.rejection_bits,
             LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_NONE);
   const loom_amdgpu_matrix_fragment_layout_t* layout =
@@ -646,14 +646,14 @@ TEST(MatrixContractTest, MatcherSelectsRdnaIntegerWmmaLowDescriptors) {
   struct Case {
     // Matrix input numeric type requested by the source contract.
     loom_amdgpu_matrix_numeric_type_t numeric_type;
-    // Expected target-low descriptor ID for native lowering.
-    uint64_t expected_low_descriptor_id;
+    // Expected target-low descriptor ref for native lowering.
+    loom_amdgpu_descriptor_ref_t expected_low_descriptor_ref;
   };
   const Case cases[] = {
       {LOOM_AMDGPU_MATRIX_NUMERIC_IU8,
-       LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_I32_16X16X16_IU8},
+       LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_I32_16X16X16_IU8},
       {LOOM_AMDGPU_MATRIX_NUMERIC_IU4,
-       LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_I32_16X16X16_IU4},
+       LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_I32_16X16X16_IU4},
   };
   for (loom_amdgpu_matrix_feature_bits_t feature_bits :
        {LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11, gfx12_features}) {
@@ -670,8 +670,8 @@ TEST(MatrixContractTest, MatcherSelectsRdnaIntegerWmmaLowDescriptors) {
       EXPECT_EQ(descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_WMMA);
       EXPECT_EQ(descriptor->lhs_payload.numeric_type, test_case.numeric_type);
       EXPECT_EQ(descriptor->rhs_payload.numeric_type, test_case.numeric_type);
-      EXPECT_EQ(descriptor->low_descriptor_id,
-                test_case.expected_low_descriptor_id);
+      EXPECT_EQ(descriptor->low_descriptor_ref,
+                test_case.expected_low_descriptor_ref);
       EXPECT_EQ(diagnostic.rejection_bits,
                 LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_NONE);
     }

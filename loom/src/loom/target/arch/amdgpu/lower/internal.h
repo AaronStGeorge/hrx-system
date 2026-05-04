@@ -23,6 +23,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/lower/materializers.h"
 #include "loom/target/arch/amdgpu/lower/plan.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 #include "loom/target/low_legality.h"
 
 #ifdef __cplusplus
@@ -560,20 +561,40 @@ iree_status_t loom_amdgpu_low_result_type(loom_low_lower_context_t* context,
                                           loom_value_id_t source_result,
                                           loom_type_t* out_low_type);
 
+// Resolves an optional AMDGPU descriptor ref against the active descriptor set.
+iree_status_t loom_amdgpu_resolve_descriptor_ref_if_present(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_descriptor_ref_t descriptor_ref,
+    loom_low_lower_resolved_descriptor_t* out_descriptor, bool* out_present);
+
+// Resolves a required AMDGPU descriptor ref against the active descriptor set.
+iree_status_t loom_amdgpu_resolve_descriptor_ref(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_descriptor_ref_t descriptor_ref,
+    loom_low_lower_resolved_descriptor_t* out_descriptor);
+
 // Resolves one optional explicit packet descriptor and its immediate names.
 iree_status_t loom_amdgpu_resolve_explicit_packet_plan(
-    loom_low_lower_context_t* context, uint64_t descriptor_id,
+    loom_low_lower_context_t* context,
+    loom_amdgpu_descriptor_ref_t descriptor_ref,
     const loom_amdgpu_explicit_packet_immediate_template_t* immediates,
     iree_host_size_t immediate_count,
     loom_amdgpu_explicit_packet_plan_t* out_plan, bool* out_present);
 
+// Resolves one explicit packet descriptor row and its immediate names.
+iree_status_t loom_amdgpu_resolve_explicit_packet_row_plan(
+    loom_low_lower_context_t* context, const loom_low_descriptor_t* descriptor,
+    const loom_amdgpu_explicit_packet_immediate_template_t* immediates,
+    iree_host_size_t immediate_count,
+    loom_amdgpu_explicit_packet_plan_t* out_plan);
+
 // Emits one descriptor-backed low.op with source provenance.
 iree_status_t loom_amdgpu_emit_low_op(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    uint64_t descriptor_id, const loom_value_id_t* operands,
-    iree_host_size_t operand_count, loom_named_attr_slice_t attrs,
-    const loom_type_t* result_types, iree_host_size_t result_count,
-    loom_op_t** out_low_op);
+    loom_amdgpu_descriptor_ref_t descriptor_ref,
+    const loom_value_id_t* operands, iree_host_size_t operand_count,
+    loom_named_attr_slice_t attrs, const loom_type_t* result_types,
+    iree_host_size_t result_count, loom_op_t** out_low_op);
 
 // Emits one explicit descriptor packet selected during source-to-low planning.
 iree_status_t loom_amdgpu_emit_explicit_packet_plan(
@@ -581,11 +602,10 @@ iree_status_t loom_amdgpu_emit_explicit_packet_plan(
     const loom_amdgpu_explicit_packet_plan_t* plan);
 
 // Emits one descriptor-backed low.const with an imm32 attribute.
-iree_status_t loom_amdgpu_emit_const_u32(loom_low_lower_context_t* context,
-                                         const loom_op_t* source_op,
-                                         uint64_t descriptor_id, uint32_t value,
-                                         loom_type_t result_type,
-                                         loom_value_id_t* out_value_id);
+iree_status_t loom_amdgpu_emit_const_u32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_descriptor_ref_t descriptor_ref, uint32_t value,
+    loom_type_t result_type, loom_value_id_t* out_value_id);
 
 // Emits one resolved descriptor-backed low.const with an imm32 attribute.
 iree_status_t loom_amdgpu_emit_resolved_const_u32(
@@ -603,23 +623,21 @@ iree_status_t loom_amdgpu_emit_vgpr_b32_copy(loom_low_lower_context_t* context,
 // Emits one binary VGPR descriptor op.
 iree_status_t loom_amdgpu_emit_vgpr_binary(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    uint64_t descriptor_id, loom_value_id_t lhs, loom_value_id_t rhs,
-    loom_type_t lane_type, loom_value_id_t* out_value);
+    loom_amdgpu_descriptor_ref_t descriptor_ref, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t lane_type, loom_value_id_t* out_value);
 
 // Emits one VGPR descriptor op with one VGPR operand and one imm32 literal.
 iree_status_t loom_amdgpu_emit_vgpr_binary_literal(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    uint64_t descriptor_id, loom_value_id_t value, uint32_t literal,
-    loom_type_t lane_type, loom_value_id_t* out_value);
+    loom_amdgpu_descriptor_ref_t descriptor_ref, loom_value_id_t value,
+    uint32_t literal, loom_type_t lane_type, loom_value_id_t* out_value);
 
 // Emits one VGPR literal-shift descriptor op. If |shift| is zero, returns
 // |value| unchanged.
-iree_status_t loom_amdgpu_emit_vgpr_shift(loom_low_lower_context_t* context,
-                                          const loom_op_t* source_op,
-                                          uint64_t literal_descriptor_id,
-                                          uint32_t shift, loom_value_id_t value,
-                                          loom_type_t lane_type,
-                                          loom_value_id_t* out_value);
+iree_status_t loom_amdgpu_emit_vgpr_shift(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_descriptor_ref_t literal_descriptor_ref, uint32_t shift,
+    loom_value_id_t value, loom_type_t lane_type, loom_value_id_t* out_value);
 
 // Emits a low.slice from a register range.
 iree_status_t loom_amdgpu_emit_low_slice(loom_low_lower_context_t* context,

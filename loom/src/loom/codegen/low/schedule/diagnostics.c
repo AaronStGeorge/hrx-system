@@ -220,15 +220,10 @@ static iree_status_t loom_low_schedule_node_diagnostic_label(
   if (node == NULL) {
     return iree_ok_status();
   }
-  if (node->descriptor_ordinal != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    const loom_low_descriptor_t* descriptor =
-        loom_low_descriptor_set_descriptor_at(state->target.descriptor_set,
-                                              node->descriptor_ordinal);
-    if (descriptor != NULL) {
-      *out_label = loom_low_descriptor_set_string(
-          state->target.descriptor_set, descriptor->key_string_offset);
-      return iree_ok_status();
-    }
+  if (node->descriptor != NULL) {
+    *out_label = loom_low_descriptor_set_string(
+        state->target.descriptor_set, node->descriptor->key_string_offset);
+    return iree_ok_status();
   }
   *out_label = loom_op_name(state->module, node->op);
   return iree_ok_status();

@@ -66,29 +66,6 @@ const loom_op_t* FindLowFuncBodyOp(const loom_op_t* low_func_op,
   return nullptr;
 }
 
-const loom_op_t* FindLowFuncDescriptorOp(const loom_op_t* low_func_op,
-                                         uint64_t descriptor_id) {
-  loom_region_t* body = loom_low_func_def_body(low_func_op);
-  if (body == nullptr) {
-    return nullptr;
-  }
-  loom_block_t* block = nullptr;
-  loom_region_for_each_block(body, block) {
-    loom_op_t* op = nullptr;
-    loom_block_for_each_op(block, op) {
-      if (loom_low_op_isa(op) &&
-          (uint64_t)loom_low_op_descriptor_id(op) == descriptor_id) {
-        return op;
-      }
-      if (loom_low_const_isa(op) &&
-          (uint64_t)loom_low_const_descriptor_id(op) == descriptor_id) {
-        return op;
-      }
-    }
-  }
-  return nullptr;
-}
-
 bool RegisterTypeEquals(const loom_module_t* module, loom_type_t type,
                         iree_string_view_t register_class,
                         uint32_t unit_count) {

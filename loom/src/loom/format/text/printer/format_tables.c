@@ -26,6 +26,7 @@ static bool loom_print_format_element_covers_attr(
     case LOOM_FORMAT_KIND_PREDICATE_LIST:
       return element->field_index == attr_index;
     case LOOM_FORMAT_KIND_DESCRIPTOR_REF:
+    case LOOM_FORMAT_KIND_STABLE_KEY_REF:
       return element->field_index == attr_index || element->data == attr_index;
     case LOOM_FORMAT_KIND_INDEX_LIST:
       return LOOM_FORMAT_INDEX_LIST_STATIC_ATTR_INDEX(element->data) ==

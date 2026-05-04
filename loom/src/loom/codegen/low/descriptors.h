@@ -846,6 +846,13 @@ const loom_low_descriptor_t* loom_low_descriptor_set_descriptor_at(
     const loom_low_descriptor_set_t* descriptor_set,
     uint32_t descriptor_ordinal);
 
+// Returns the descriptor-set-local ordinal for |descriptor|, or
+// LOOM_LOW_DESCRIPTOR_ORDINAL_NONE when |descriptor| is not a row in
+// |descriptor_set|.
+uint32_t loom_low_descriptor_set_descriptor_ordinal(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor);
+
 // Returns the durable descriptor identity derived from a descriptor key.
 uint64_t loom_low_descriptor_stable_id_from_key(iree_string_view_t key);
 

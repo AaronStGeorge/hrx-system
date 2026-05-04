@@ -7,6 +7,7 @@
 #include "loom/codegen/low/target_binding.h"
 
 #include <inttypes.h>
+#include <stdint.h>
 
 #include "iree/base/internal/arena.h"
 #include "loom/analysis/symbol_facts.h"
@@ -291,34 +292,47 @@ iree_status_t loom_low_resolve_descriptor_packet(
   *out_packet = (loom_low_resolved_descriptor_packet_t){
       .op = op,
       .kind = LOOM_LOW_DESCRIPTOR_PACKET_NONE,
-      .stable_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
-      .descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE,
   };
 
   loom_string_id_t key_id = LOOM_STRING_ID_INVALID;
-  int64_t stable_id = (int64_t)LOOM_LOW_DESCRIPTOR_ID_NONE;
+  int64_t packet_descriptor_ordinal = -1;
   if (loom_low_op_isa(op)) {
     out_packet->kind = LOOM_LOW_DESCRIPTOR_PACKET_OP;
     out_packet->key_attr_index = loom_low_op_opcode_ATTR_INDEX;
     key_id = loom_low_op_opcode(op);
-    stable_id = loom_low_op_descriptor_id(op);
+    packet_descriptor_ordinal = loom_low_op_descriptor_ordinal(op);
   } else if (loom_low_const_isa(op)) {
     out_packet->kind = LOOM_LOW_DESCRIPTOR_PACKET_CONST;
     out_packet->key_attr_index = loom_low_const_opcode_ATTR_INDEX;
     key_id = loom_low_const_opcode(op);
-    stable_id = loom_low_const_descriptor_id(op);
+    packet_descriptor_ordinal = loom_low_const_descriptor_ordinal(op);
   } else {
     return iree_ok_status();
   }
 
   out_packet->key = loom_low_string_or_empty(module, key_id);
-  if (stable_id <= 0) {
+  if (target->descriptor_set == NULL) {
     return iree_ok_status();
   }
-  out_packet->stable_id = (uint64_t)stable_id;
-  const uint32_t descriptor_ordinal =
-      loom_low_descriptor_set_lookup_descriptor_by_id(target->descriptor_set,
-                                                      out_packet->stable_id);
+  if (packet_descriptor_ordinal < -1) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low descriptor ordinal %" PRId64
+                            " is below the unresolved sentinel",
+                            packet_descriptor_ordinal);
+  }
+  uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  if (packet_descriptor_ordinal >= 0) {
+    if ((uint64_t)packet_descriptor_ordinal > UINT32_MAX) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low descriptor ordinal %" PRId64
+                              " exceeds uint32_t range",
+                              packet_descriptor_ordinal);
+    }
+    descriptor_ordinal = (uint32_t)packet_descriptor_ordinal;
+  } else {
+    descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor(
+        target->descriptor_set, out_packet->key);
+  }
   if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
     return iree_ok_status();
   }
@@ -332,8 +346,18 @@ iree_status_t loom_low_resolve_descriptor_packet(
                             " is out of range",
                             descriptor_ordinal);
   }
-  IREE_ASSERT(descriptor->stable_id == out_packet->stable_id);
-  out_packet->descriptor_ordinal = descriptor_ordinal;
+  if (packet_descriptor_ordinal >= 0) {
+    iree_string_view_t descriptor_key = loom_low_descriptor_set_string(
+        target->descriptor_set, descriptor->key_string_offset);
+    if (!iree_string_view_equal(out_packet->key, descriptor_key)) {
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "low packet descriptor ordinal %" PRIu32
+                              " names '%.*s' but packet key is '%.*s'",
+                              descriptor_ordinal, (int)descriptor_key.size,
+                              descriptor_key.data, (int)out_packet->key.size,
+                              out_packet->key.data);
+    }
+  }
   out_packet->descriptor = descriptor;
   return iree_ok_status();
 }

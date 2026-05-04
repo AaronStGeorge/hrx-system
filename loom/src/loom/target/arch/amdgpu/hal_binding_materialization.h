@@ -42,7 +42,7 @@ typedef struct loom_amdgpu_hal_binding_materialization_result_t {
 // |function_op|.
 //
 // |descriptor_set| must be the target-low descriptor set selected for
-// |target_bundle|. Materialized packets are selected by stable descriptor ID
+// |target_bundle|. Materialized packets are selected by stable descriptor ref
 // and verified against that concrete set.
 //
 // The expansion inserts or reuses a low.live_in<amdgpu.kernarg_segment_ptr>
