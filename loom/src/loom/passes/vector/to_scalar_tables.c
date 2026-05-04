@@ -126,10 +126,6 @@ static iree_status_t loom_vector_to_scalar_build_table_quantize_static_lane(
     loom_type_t input_scalar_type, loom_value_id_t thresholds,
     loom_vector_to_scalar_index_term_t threshold_count,
     loom_value_id_t* out_lane) {
-  if (threshold_count.is_dynamic) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected static threshold count");
-  }
   loom_value_id_t accumulator = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_zero_lane(
       state, state->result_scalar_type, &accumulator));
@@ -225,10 +221,6 @@ iree_status_t loom_vector_to_scalar_build_table_quantize_lane(
   loom_value_id_t thresholds = loom_vector_table_quantize_thresholds(state->op);
   loom_type_t thresholds_type =
       loom_module_value_type(state->rewriter->module, thresholds);
-  if (loom_type_rank(thresholds_type) != 1) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.table.quantize thresholds must be rank-1");
-  }
   loom_vector_to_scalar_index_term_t threshold_count =
       loom_vector_to_scalar_dim_bound_term(state, thresholds_type, 0);
   if (threshold_count.is_dynamic) {

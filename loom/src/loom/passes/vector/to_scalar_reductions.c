@@ -16,57 +16,31 @@
 // Reduction lowering
 //===----------------------------------------------------------------------===//
 
-static bool loom_vector_to_scalar_reduce_scalar_kind(
-    loom_combining_kind_t reduce_kind, loom_op_kind_t* out_scalar_kind) {
-  switch (reduce_kind) {
-    case LOOM_COMBINING_KIND_ADDI:
-      *out_scalar_kind = LOOM_OP_SCALAR_ADDI;
-      return true;
-    case LOOM_COMBINING_KIND_ADDF:
-      *out_scalar_kind = LOOM_OP_SCALAR_ADDF;
-      return true;
-    case LOOM_COMBINING_KIND_MULI:
-      *out_scalar_kind = LOOM_OP_SCALAR_MULI;
-      return true;
-    case LOOM_COMBINING_KIND_MULF:
-      *out_scalar_kind = LOOM_OP_SCALAR_MULF;
-      return true;
-    case LOOM_COMBINING_KIND_MINSI:
-      *out_scalar_kind = LOOM_OP_SCALAR_MINSI;
-      return true;
-    case LOOM_COMBINING_KIND_MAXSI:
-      *out_scalar_kind = LOOM_OP_SCALAR_MAXSI;
-      return true;
-    case LOOM_COMBINING_KIND_MINUI:
-      *out_scalar_kind = LOOM_OP_SCALAR_MINUI;
-      return true;
-    case LOOM_COMBINING_KIND_MAXUI:
-      *out_scalar_kind = LOOM_OP_SCALAR_MAXUI;
-      return true;
-    case LOOM_COMBINING_KIND_ANDI:
-      *out_scalar_kind = LOOM_OP_SCALAR_ANDI;
-      return true;
-    case LOOM_COMBINING_KIND_ORI:
-      *out_scalar_kind = LOOM_OP_SCALAR_ORI;
-      return true;
-    case LOOM_COMBINING_KIND_XORI:
-      *out_scalar_kind = LOOM_OP_SCALAR_XORI;
-      return true;
-    case LOOM_COMBINING_KIND_MINIMUMF:
-      *out_scalar_kind = LOOM_OP_SCALAR_MINIMUMF;
-      return true;
-    case LOOM_COMBINING_KIND_MAXIMUMF:
-      *out_scalar_kind = LOOM_OP_SCALAR_MAXIMUMF;
-      return true;
-    case LOOM_COMBINING_KIND_MINNUMF:
-      *out_scalar_kind = LOOM_OP_SCALAR_MINNUMF;
-      return true;
-    case LOOM_COMBINING_KIND_MAXNUMF:
-      *out_scalar_kind = LOOM_OP_SCALAR_MAXNUMF;
-      return true;
-    default:
-      return false;
-  }
+static const loom_op_kind_t kVectorToScalarReduceScalarOps[] = {
+    [LOOM_COMBINING_KIND_ADDI] = LOOM_OP_SCALAR_ADDI,
+    [LOOM_COMBINING_KIND_ADDF] = LOOM_OP_SCALAR_ADDF,
+    [LOOM_COMBINING_KIND_MULI] = LOOM_OP_SCALAR_MULI,
+    [LOOM_COMBINING_KIND_MULF] = LOOM_OP_SCALAR_MULF,
+    [LOOM_COMBINING_KIND_MINSI] = LOOM_OP_SCALAR_MINSI,
+    [LOOM_COMBINING_KIND_MAXSI] = LOOM_OP_SCALAR_MAXSI,
+    [LOOM_COMBINING_KIND_MINUI] = LOOM_OP_SCALAR_MINUI,
+    [LOOM_COMBINING_KIND_MAXUI] = LOOM_OP_SCALAR_MAXUI,
+    [LOOM_COMBINING_KIND_ANDI] = LOOM_OP_SCALAR_ANDI,
+    [LOOM_COMBINING_KIND_ORI] = LOOM_OP_SCALAR_ORI,
+    [LOOM_COMBINING_KIND_XORI] = LOOM_OP_SCALAR_XORI,
+    [LOOM_COMBINING_KIND_MINIMUMF] = LOOM_OP_SCALAR_MINIMUMF,
+    [LOOM_COMBINING_KIND_MAXIMUMF] = LOOM_OP_SCALAR_MAXIMUMF,
+    [LOOM_COMBINING_KIND_MINNUMF] = LOOM_OP_SCALAR_MINNUMF,
+    [LOOM_COMBINING_KIND_MAXNUMF] = LOOM_OP_SCALAR_MAXNUMF,
+};
+static_assert(IREE_ARRAYSIZE(kVectorToScalarReduceScalarOps) ==
+                  LOOM_COMBINING_KIND_COUNT_,
+              "vector-to-scalar reduction op table must match the combining "
+              "kind enum");
+
+static loom_op_kind_t loom_vector_to_scalar_reduce_scalar_kind(
+    loom_combining_kind_t reduce_kind) {
+  return kVectorToScalarReduceScalarOps[reduce_kind];
 }
 
 typedef struct loom_vector_to_scalar_accumulator_state_t {
@@ -104,11 +78,7 @@ static iree_status_t loom_vector_to_scalar_lower_static_accumulator(
     loom_vector_to_scalar_accumulator_state_t* state,
     loom_value_id_t* out_replacement) {
   iree_host_size_t element_count = 0;
-  if (!loom_type_static_element_count(state->lane_state.vector_type,
-                                      &element_count)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected all-static vector input type");
-  }
+  loom_type_static_element_count(state->lane_state.vector_type, &element_count);
   loom_value_id_t accumulator = state->init;
   uint8_t rank = loom_type_rank(state->lane_state.vector_type);
   int64_t* indices = NULL;
@@ -220,13 +190,8 @@ static iree_status_t loom_vector_to_scalar_lower_accumulator(
 
 iree_status_t loom_vector_to_scalar_lower_reduce(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
-  loom_op_kind_t scalar_kind = LOOM_OP_KIND_UNKNOWN;
-  if (!loom_vector_to_scalar_reduce_scalar_kind(
-          loom_vector_reduce_kind(state->op), &scalar_kind)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "unsupported vector.reduce kind %u",
-                            (unsigned)loom_vector_reduce_kind(state->op));
-  }
+  loom_op_kind_t scalar_kind = loom_vector_to_scalar_reduce_scalar_kind(
+      loom_vector_reduce_kind(state->op));
   loom_vector_to_scalar_accumulator_state_t accumulator_state = {
       .lane_state = *state,
       .input = loom_vector_reduce_input(state->op),
@@ -386,10 +351,7 @@ static iree_status_t loom_vector_to_scalar_reduce_axes_static_result(
     loom_vector_to_scalar_reduce_axes_state_t* state,
     loom_value_id_t* out_replacement) {
   iree_host_size_t element_count = 0;
-  if (!loom_type_static_element_count(state->result_type, &element_count)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected all-static vector result type");
-  }
+  loom_type_static_element_count(state->result_type, &element_count);
   if (element_count == 0) {
     *out_replacement = state->init;
     return iree_ok_status();
@@ -501,13 +463,8 @@ static iree_status_t loom_vector_to_scalar_reduce_axes_dynamic_result(
 
 iree_status_t loom_vector_to_scalar_lower_reduce_axes(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
-  loom_op_kind_t scalar_kind = LOOM_OP_KIND_UNKNOWN;
-  if (!loom_vector_to_scalar_reduce_scalar_kind(
-          loom_vector_reduce_axes_kind(state->op), &scalar_kind)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "unsupported vector.reduce.axes kind %u",
-                            (unsigned)loom_vector_reduce_axes_kind(state->op));
-  }
+  loom_op_kind_t scalar_kind = loom_vector_to_scalar_reduce_scalar_kind(
+      loom_vector_reduce_axes_kind(state->op));
 
   loom_type_t result_type = loom_module_value_type(
       state->rewriter->module, loom_vector_reduce_axes_result(state->op));
@@ -525,10 +482,6 @@ iree_status_t loom_vector_to_scalar_lower_reduce_axes(
     loom_vector_to_scalar_index_list_t index_list = {0};
     return loom_vector_to_scalar_reduce_axes_lane(&reduce_state, index_list,
                                                   out_replacement);
-  }
-  if (!loom_type_is_vector(result_type)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected scalar or vector reduce.axes result");
   }
   if (loom_type_is_all_static(result_type)) {
     return loom_vector_to_scalar_reduce_axes_static_result(&reduce_state,

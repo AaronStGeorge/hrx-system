@@ -37,11 +37,6 @@ iree_status_t loom_vector_to_scalar_build_bitfield_extract_lane(
   loom_type_t source_scalar_type = loom_vector_to_scalar_lane_type(source_type);
   int32_t source_width =
       loom_scalar_type_bitwidth(loom_type_element_type(source_scalar_type));
-  if (source_width <= 0 || offset < 0 || width <= 0 || offset > source_width ||
-      width > source_width - offset) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "invalid vector bitfield extract range");
-  }
 
   loom_value_id_t source_lane = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
@@ -87,11 +82,6 @@ iree_status_t loom_vector_to_scalar_build_bitfield_insert_lane(
   loom_type_t base_scalar_type = state->result_scalar_type;
   int32_t base_width =
       loom_scalar_type_bitwidth(loom_type_element_type(base_scalar_type));
-  if (base_width <= 0 || offset < 0 || width <= 0 || offset > base_width ||
-      width > base_width - offset) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "invalid vector bitfield insert range");
-  }
 
   loom_value_id_t field_lane = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
@@ -200,11 +190,6 @@ static iree_status_t loom_vector_to_scalar_build_grouped_source_indices(
 iree_status_t loom_vector_to_scalar_build_dot2f_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
-  if (indices.rank == 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.dot2f requires rank-1-or-higher vectors");
-  }
-
   loom_value_id_t accumulator = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
       state, loom_vector_dot2f_acc(state->op), indices, &accumulator));
@@ -250,14 +235,6 @@ iree_status_t loom_vector_to_scalar_build_dot4i_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
   uint8_t kind = loom_vector_dot4i_kind(state->op);
-  if (kind >= LOOM_VECTOR_DOT4I_KIND_COUNT_) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "unsupported vector.dot4i kind %u", (unsigned)kind);
-  }
-  if (indices.rank == 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.dot4i requires rank-1-or-higher vectors");
-  }
 
   loom_value_id_t accumulator = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
@@ -342,11 +319,6 @@ iree_status_t loom_vector_to_scalar_build_dot8i4_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
   uint8_t kind = loom_vector_dot8i4_kind(state->op);
-  if (kind >= LOOM_VECTOR_DOT8I4_KIND_COUNT_) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "unsupported vector.dot8i4 kind %u",
-                            (unsigned)kind);
-  }
 
   loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
   loom_value_id_t lhs_storage = LOOM_VALUE_ID_INVALID;
@@ -439,11 +411,6 @@ iree_status_t loom_vector_to_scalar_build_dot4f8_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
   uint8_t kind = loom_vector_dot4f8_kind(state->op);
-  if (kind >= LOOM_VECTOR_DOT4F8_KIND_COUNT_) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "unsupported vector.dot4f8 kind %u",
-                            (unsigned)kind);
-  }
 
   loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
   loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
@@ -599,10 +566,6 @@ static iree_status_t loom_vector_to_scalar_build_bitpack_divisible_lane(
   loom_type_t storage_scalar_type = state->result_scalar_type;
   int32_t storage_width =
       loom_scalar_type_bitwidth(loom_type_element_type(storage_scalar_type));
-  if (storage_width <= 0 || (storage_width % width) != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "invalid divisible bitpack widths");
-  }
   int64_t fields_per_storage = storage_width / width;
 
   loom_vector_to_scalar_index_term_t storage_ordinal = {0};
@@ -752,10 +715,6 @@ iree_status_t loom_vector_to_scalar_build_bitpack_lane(
   int64_t width = loom_vector_bitpack_width(state->op);
   int32_t storage_width = loom_scalar_type_bitwidth(
       loom_type_element_type(state->result_scalar_type));
-  if (width <= 0 || storage_width <= 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "invalid vector.bitpack bit width");
-  }
 
   if (!loom_vector_to_scalar_indices_are_dynamic(indices) &&
       loom_type_is_all_static(source_type)) {
@@ -808,10 +767,6 @@ static iree_status_t loom_vector_to_scalar_finish_bitunpack_lane(
   }
   int32_t result_width = loom_scalar_type_bitwidth(
       loom_type_element_type(state->result_scalar_type));
-  if (result_width <= 0 || width > result_width) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "invalid vector.bitunpack result width");
-  }
   loom_value_id_t shifted_left = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_shift(
       state, LOOM_OP_SCALAR_SHLI, unsigned_lane, state->result_scalar_type,
@@ -892,10 +847,6 @@ static iree_status_t loom_vector_to_scalar_build_bitunpack_divisible_lane(
   loom_type_t result_scalar_type = state->result_scalar_type;
   int32_t storage_width =
       loom_scalar_type_bitwidth(loom_type_element_type(storage_scalar_type));
-  if (storage_width <= 0 || (storage_width % width) != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "invalid divisible bitunpack widths");
-  }
   int64_t fields_per_storage = storage_width / width;
   loom_vector_to_scalar_index_term_t result_ordinal = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_linear_ordinal_term(
@@ -1060,10 +1011,6 @@ iree_status_t loom_vector_to_scalar_build_bitunpack_lane(
       loom_vector_to_scalar_lane_type(source_type);
   int32_t storage_width =
       loom_scalar_type_bitwidth(loom_type_element_type(storage_scalar_type));
-  if (width <= 0 || storage_width <= 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "invalid vector.bitunpack bit width");
-  }
 
   if (!loom_vector_to_scalar_indices_are_dynamic(indices) &&
       loom_type_is_all_static(source_type)) {
