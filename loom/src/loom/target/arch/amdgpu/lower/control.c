@@ -18,13 +18,6 @@ static iree_status_t loom_amdgpu_emit_plain_cond_branch(
                                 source_op->location, &low_cond_br_op);
 }
 
-static iree_status_t loom_amdgpu_emit_cond_branch_reject(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    iree_string_view_t reason) {
-  return loom_low_lower_emit_reject(context, source_op, IREE_SV("branch"),
-                                    IREE_SV("cfg.cond_br"), reason);
-}
-
 static iree_status_t loom_amdgpu_condition_is_reg_class(
     loom_low_lower_context_t* context, loom_type_t low_type,
     uint16_t reg_class_id, uint32_t unit_count, bool* out_match) {
@@ -38,8 +31,9 @@ static iree_status_t loom_amdgpu_condition_is_reg_class(
 }
 
 typedef enum loom_amdgpu_divergent_branch_shape_e {
-  LOOM_AMDGPU_DIVERGENT_BRANCH_SHAPE_THEN_ONLY = 0,
-  LOOM_AMDGPU_DIVERGENT_BRANCH_SHAPE_IF_ELSE = 1,
+  LOOM_AMDGPU_DIVERGENT_BRANCH_SHAPE_UNSUPPORTED = 0,
+  LOOM_AMDGPU_DIVERGENT_BRANCH_SHAPE_THEN_ONLY = 1,
+  LOOM_AMDGPU_DIVERGENT_BRANCH_SHAPE_IF_ELSE = 2,
 } loom_amdgpu_divergent_branch_shape_t;
 
 typedef struct loom_amdgpu_divergent_branch_t {
@@ -51,12 +45,12 @@ typedef struct loom_amdgpu_divergent_branch_t {
 static iree_status_t loom_amdgpu_require_empty_branch_to(
     loom_low_lower_context_t* context, const loom_op_t* source_cond_branch_op,
     const loom_op_t* source_branch_op, loom_block_t* expected_dest,
-    iree_string_view_t reason) {
+    iree_string_view_t branch_constraint) {
   if (!loom_cfg_br_isa(source_branch_op) ||
       loom_cfg_br_dest(source_branch_op) != expected_dest ||
       loom_cfg_br_args(source_branch_op).count != 0) {
-    return loom_amdgpu_emit_cond_branch_reject(context, source_cond_branch_op,
-                                               reason);
+    return loom_low_lower_emit_branch_constraint(context, source_cond_branch_op,
+                                                 branch_constraint);
   }
   return iree_ok_status();
 }
@@ -68,16 +62,12 @@ static iree_status_t loom_amdgpu_analyze_divergent_branch_shape(
   loom_block_t* source_true_dest = loom_cfg_cond_br_true_dest(source_op);
   loom_block_t* source_false_dest = loom_cfg_cond_br_false_dest(source_op);
   if (source_true_dest->arg_count != 0 || source_false_dest->arg_count != 0) {
-    return loom_amdgpu_emit_cond_branch_reject(
-        context, source_op,
-        IREE_SV("AMDGPU divergent branch lowering currently requires "
-                "destination blocks without arguments"));
+    return loom_low_lower_emit_branch_constraint(
+        context, source_op, IREE_SV("destination_block_arguments_absent"));
   }
   if (source_true_dest->op_count == 0) {
-    return loom_amdgpu_emit_cond_branch_reject(
-        context, source_op,
-        IREE_SV("AMDGPU divergent branch lowering requires a then block "
-                "terminator"));
+    return loom_low_lower_emit_branch_constraint(
+        context, source_op, IREE_SV("then_block_terminator_present"));
   }
 
   const loom_op_t* true_terminator = loom_block_const_last_op(source_true_dest);
@@ -97,41 +87,31 @@ static iree_status_t loom_amdgpu_analyze_divergent_branch_shape(
   }
 
   if (source_false_dest->op_count == 0) {
-    return loom_amdgpu_emit_cond_branch_reject(
-        context, source_op,
-        IREE_SV("AMDGPU divergent branch lowering currently requires a "
-                "then-only or if/else diamond"));
+    return loom_low_lower_emit_branch_constraint(
+        context, source_op, IREE_SV("then_only_or_if_else_diamond"));
   }
   if (!loom_cfg_br_isa(true_terminator)) {
-    return loom_amdgpu_emit_cond_branch_reject(
-        context, source_op,
-        IREE_SV("AMDGPU divergent branch lowering currently requires a "
-                "then-only or if/else diamond"));
+    return loom_low_lower_emit_branch_constraint(
+        context, source_op, IREE_SV("then_only_or_if_else_diamond"));
   }
   loom_block_t* source_merge_block = loom_cfg_br_dest(true_terminator);
   if (source_merge_block == source_true_dest ||
       source_merge_block == source_false_dest) {
-    return loom_amdgpu_emit_cond_branch_reject(
-        context, source_op,
-        IREE_SV("AMDGPU divergent if/else lowering requires a distinct merge "
-                "block"));
+    return loom_low_lower_emit_branch_constraint(
+        context, source_op, IREE_SV("distinct_merge_block"));
   }
   if (source_merge_block->arg_count != 0) {
-    return loom_amdgpu_emit_cond_branch_reject(
-        context, source_op,
-        IREE_SV("AMDGPU divergent branch lowering currently requires a merge "
-                "block without arguments"));
+    return loom_low_lower_emit_branch_constraint(
+        context, source_op, IREE_SV("merge_block_arguments_absent"));
   }
   const loom_op_t* false_terminator =
       loom_block_const_last_op(source_false_dest);
   IREE_RETURN_IF_ERROR(loom_amdgpu_require_empty_branch_to(
       context, source_op, true_terminator, source_merge_block,
-      IREE_SV("AMDGPU divergent branch lowering currently requires a "
-              "then-only or if/else diamond")));
+      IREE_SV("then_only_or_if_else_diamond")));
   IREE_RETURN_IF_ERROR(loom_amdgpu_require_empty_branch_to(
       context, source_op, false_terminator, source_merge_block,
-      IREE_SV("AMDGPU divergent if/else lowering requires both arms to merge "
-              "without arguments")));
+      IREE_SV("branch_arms_merge_without_arguments")));
 
   loom_block_t* low_merge_block = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_block(context, source_merge_block,
@@ -181,10 +161,8 @@ static iree_status_t loom_amdgpu_emit_exec_restore(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t saved_exec, loom_block_t* low_merge_block) {
   if (low_merge_block->op_count != 0) {
-    return loom_amdgpu_emit_cond_branch_reject(
-        context, source_op,
-        IREE_SV("AMDGPU divergent branch lowering requires the merge block to "
-                "be emitted after the branch"));
+    return loom_low_lower_emit_branch_constraint(
+        context, source_op, IREE_SV("merge_block_emitted_after_branch"));
   }
 
   loom_builder_t* builder = loom_low_lower_context_builder(context);
@@ -207,6 +185,9 @@ static iree_status_t loom_amdgpu_emit_exec_mask_cond_branch(
   loom_amdgpu_divergent_branch_t branch = {0};
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_analyze_divergent_branch_shape(context, source_op, &branch));
+  if (branch.shape == LOOM_AMDGPU_DIVERGENT_BRANCH_SHAPE_UNSUPPORTED) {
+    return iree_ok_status();
+  }
 
   loom_type_t active_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_scc_type(context, &active_type));
@@ -264,8 +245,6 @@ iree_status_t loom_amdgpu_emit_cond_branch(void* user_data,
         condition_type);
   }
 
-  return loom_amdgpu_emit_cond_branch_reject(
-      context, source_op,
-      IREE_SV("AMDGPU conditional branch lowering requires an SCC condition or "
-              "an SGPR-pair lane mask"));
+  return loom_low_lower_emit_branch_condition_type_unsupported(
+      context, source_op, condition_type, IREE_SV("amdgpu.branch_condition"));
 }

@@ -717,6 +717,18 @@ iree_status_t loom_low_lower_emit_source_type_unsupported(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     iree_string_view_t field_name, loom_type_t actual_type);
 
+// Emits ERR_TARGET_071 for a CFG branch shape rejected by the active
+// target-low policy.
+iree_status_t loom_low_lower_emit_branch_constraint(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    iree_string_view_t branch_constraint);
+
+// Emits ERR_TARGET_072 for a branch condition type rejected by the active
+// target-low policy.
+iree_status_t loom_low_lower_emit_branch_condition_type_unsupported(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_type_t actual_type, iree_string_view_t type_constraint);
+
 // Emits a generated structured lowering diagnostic.
 iree_status_t loom_low_lower_emit_error_ref(
     loom_low_lower_context_t* context, const loom_op_t* source_op,

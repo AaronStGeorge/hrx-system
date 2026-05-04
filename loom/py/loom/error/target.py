@@ -1239,6 +1239,41 @@ ERR_TARGET_070 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_071: Target branch lowering constraint is not satisfied.
+ERR_TARGET_071 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=71,
+    severity=Severity.ERROR,
+    summary="Target branch lowering constraint is not satisfied.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' in '@{function_name}': branch lowering "
+        "constraint '{branch_constraint}' is not satisfied"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("branch_constraint", ParamKind.STRING),
+    ),
+)
+
+# ERR_TARGET_072: Target branch condition type constraint is not satisfied.
+ERR_TARGET_072 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=72,
+    severity=Severity.ERROR,
+    summary="Target branch condition type constraint is not satisfied.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' field 'condition' in '@{function_name}': "
+        "type {actual_type} does not satisfy '{type_constraint}'"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("type_constraint", ParamKind.STRING),
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -1310,4 +1345,6 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_068,
     ERR_TARGET_069,
     ERR_TARGET_070,
+    ERR_TARGET_071,
+    ERR_TARGET_072,
 )

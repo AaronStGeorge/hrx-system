@@ -129,6 +129,27 @@ iree_status_t loom_low_lower_emit_source_type_unsupported(
       context, source_op, 70, params, IREE_ARRAYSIZE(params));
 }
 
+iree_status_t loom_low_lower_emit_branch_constraint(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    iree_string_view_t branch_constraint) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(branch_constraint),
+  };
+  return loom_low_lower_emit_target_context_error(
+      context, source_op, 71, params, IREE_ARRAYSIZE(params));
+}
+
+iree_status_t loom_low_lower_emit_branch_condition_type_unsupported(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_type_t actual_type, iree_string_view_t type_constraint) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_type(actual_type),
+      loom_param_string(type_constraint),
+  };
+  return loom_low_lower_emit_target_context_error(
+      context, source_op, 72, params, IREE_ARRAYSIZE(params));
+}
+
 iree_status_t loom_low_lower_emit_error_ref(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_error_ref_t error_ref, const loom_diagnostic_param_t* params,
