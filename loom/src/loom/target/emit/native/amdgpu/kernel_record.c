@@ -12,7 +12,7 @@
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/amdgpu/target_info.h"
+#include "loom/target/arch/amdgpu/target_id.h"
 #include "loom/target/emit/native/amdgpu/preflight.h"
 #include "loom/target/emit/native/amdgpu/storage_layout.h"
 #include "loom/target/launch.h"
@@ -111,27 +111,6 @@ static iree_status_t loom_amdgpu_kernel_record_validate_symbol(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_kernel_record_validate_target_id_component(
-    iree_string_view_t value, iree_string_view_t field_name) {
-  if (iree_string_view_is_empty(value)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU kernel emission target-id field '%.*s' is required",
-        (int)field_name.size, field_name.data);
-  }
-  for (iree_host_size_t i = 0; i < value.size; ++i) {
-    const unsigned char c = (unsigned char)value.data[i];
-    if (c <= ' ' || c == '"' || c == '\\') {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "AMDGPU kernel emission target-id field '%.*s' contains an "
-          "unsupported character",
-          (int)field_name.size, field_name.data);
-    }
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_amdgpu_kernel_record_symbol_name(
     const loom_module_t* module, const loom_op_t* function_op,
     iree_string_view_t* out_symbol) {
@@ -179,18 +158,6 @@ static iree_status_t loom_amdgpu_kernel_record_validate_target(
         IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU kernel emission requires low_native codegen snapshots");
   }
-  if (!iree_string_view_equal(snapshot->target_triple,
-                              IREE_SV("amdgcn-amd-amdhsa"))) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU kernel emission requires amdgcn-amd-amdhsa, got '%.*s'",
-        (int)snapshot->target_triple.size, snapshot->target_triple.data);
-  }
-  if (!iree_string_view_is_empty(snapshot->target_features)) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU kernel emission target-id feature strings are not encoded yet");
-  }
   if (snapshot->artifact_format != LOOM_TARGET_ARTIFACT_FORMAT_ELF) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU kernel emission requires ELF artifacts");
@@ -203,10 +170,7 @@ static iree_status_t loom_amdgpu_kernel_record_validate_target(
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU kernel emission requires default linkage");
   }
-  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_validate_target_id_component(
-      snapshot->target_triple, IREE_SV("target_triple")));
-  return loom_amdgpu_kernel_record_validate_target_id_component(
-      snapshot->target_cpu, IREE_SV("processor"));
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_kernel_record_validate_function_shape(
@@ -577,13 +541,16 @@ iree_status_t loom_amdgpu_kernel_record_build(
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_validate_kernarg_live_in(
       allocation, abi_layout));
 
-  const loom_target_snapshot_t* snapshot =
-      &schedule->target.bundle_storage.snapshot;
   const loom_target_hal_kernel_abi_t* hal_kernel =
       &schedule->target.bundle_storage.export_plan.hal_kernel;
-  const loom_amdgpu_processor_info_t* processor = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_processor(
-      snapshot->target_cpu, &processor));
+  const loom_amdgpu_processor_info_t* processor =
+      loom_amdgpu_target_processor_from_resolved_target(schedule->module,
+                                                        &schedule->target);
+  if (processor == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU kernel emission requires an AMDGPU "
+                            "processor target record");
+  }
 
   const uint32_t user_sgpr_count =
       abi_layout->uses_kernarg_segment_ptr
@@ -604,9 +571,8 @@ iree_status_t loom_amdgpu_kernel_record_build(
                                       : user_sgpr_count;
 
   iree_string_view_t target_id = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_concat3(
-      snapshot->target_triple, IREE_SV("--"), snapshot->target_cpu, &target_id,
-      scratch_arena));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_amdhsa_target_id_format(
+      processor, iree_string_view_empty(), scratch_arena, &target_id));
   iree_string_view_t descriptor_symbol = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_concat3(
       symbol, IREE_SV(".kd"), iree_string_view_empty(), &descriptor_symbol,
@@ -621,12 +587,13 @@ iree_status_t loom_amdgpu_kernel_record_build(
   const uint32_t max_flat_workgroup_size =
       hal_kernel->flat_workgroup_size_max != 0
           ? hal_kernel->flat_workgroup_size_max
-          : snapshot->max_flat_workgroup_size;
+          : schedule->target.bundle_storage.snapshot.max_flat_workgroup_size;
 
   *out_record = (loom_amdgpu_kernel_record_t){
       .symbol = symbol,
       .descriptor_symbol = descriptor_symbol,
       .target_id = target_id,
+      .processor = processor,
       .abi_layout = *abi_layout,
       .metadata =
           {

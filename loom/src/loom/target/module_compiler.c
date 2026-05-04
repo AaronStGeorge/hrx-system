@@ -336,6 +336,12 @@ static void loom_target_module_compile_entry_from_facts(
       .symbol_id = symbol_id,
   };
   out_entry->target_ref = func_facts->target_symbol;
+  if (func_facts->target_symbol.module_id == 0 &&
+      func_facts->target_symbol.symbol_id < module->symbols.count) {
+    out_entry->target_symbol =
+        &module->symbols.entries[func_facts->target_symbol.symbol_id];
+    out_entry->target_op = out_entry->target_symbol->defining_op;
+  }
 }
 
 static void loom_target_module_compile_assign_entry(

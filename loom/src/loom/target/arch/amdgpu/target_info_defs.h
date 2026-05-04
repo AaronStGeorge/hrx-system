@@ -148,6 +148,12 @@ iree_host_size_t loom_amdgpu_target_info_processor_count(void);
 const loom_amdgpu_processor_info_t* loom_amdgpu_target_info_processor_at(
     iree_host_size_t index);
 
+// Finds known AMDGPU processor facts by processor name, or NULL.
+//
+// Some known processors do not yet have target-low or HSACO support.
+const loom_amdgpu_processor_info_t* loom_amdgpu_target_info_find_processor(
+    iree_string_view_t processor);
+
 // Returns the number of supported AMDGPU target-low descriptor-set rows.
 iree_host_size_t loom_amdgpu_target_info_descriptor_set_count(void);
 

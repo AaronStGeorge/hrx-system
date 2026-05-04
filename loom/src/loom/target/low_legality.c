@@ -575,6 +575,7 @@ static iree_status_t loom_target_low_legality_try_contract_query_op(
       .module = context->module,
       .function = context->function,
       .bundle = context->options->bundle,
+      .target_ref = context->options->target_ref,
       .descriptor_set = context->descriptor_set,
       .fact_table = context->fact_table,
       .arena = &context->arena,

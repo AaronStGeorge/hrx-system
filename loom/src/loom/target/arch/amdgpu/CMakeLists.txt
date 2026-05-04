@@ -71,11 +71,14 @@ loom_cc_library(
   HDRS
     "ops/ops.h"
     "ops/registry.h"
+    "ops/target.h"
   SRCS
     "ops/builders.c"
     "ops/registry.c"
     "ops/tables.c"
+    "ops/target.c"
   DEPS
+    ::target_info
     ::target_record_table
     iree::base
     loom::src::loom::error::error_defs
@@ -83,6 +86,23 @@ loom_cc_library(
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::target
     loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    target_id
+  HDRS
+    "target_id.h"
+  SRCS
+    "target_id.c"
+  DEPS
+    ::ops
+    ::target_info
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::target_binding
+    loom::src::loom::ir
   PUBLIC
 )
 
@@ -449,6 +469,7 @@ loom_cc_library(
     ::lower_materializers
     ::matrix_contract
     ::matrix_contract_projection
+    ::target_id
     ::target_info
     ::target_refs
     ::wait_packets
@@ -504,6 +525,7 @@ loom_cc_library(
     "execution/amdgpu_hal_backend.c"
   DEPS
     ::low_registry
+    ::target_id
     ::target_info
     ::target_record_table
     iree::base
@@ -619,7 +641,7 @@ loom_cc_test(
     ::amdgpu_hal_testdata
     ::low_registry
     ::amdgpu_hal_backend
-    ::target_info_defs
+    ::target_info
     ::target_record_table
     iree::base
     loom::src::loom::ops::op_registry
@@ -1397,6 +1419,7 @@ loom_cc_library(
     "occupancy.c"
   DEPS
     ::occupancy_tables
+    ::target_id
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation

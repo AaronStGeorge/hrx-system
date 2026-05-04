@@ -609,6 +609,7 @@ loom_low_lower_query_environment_from_context(
       .module = context->module,
       .function = context->source_function,
       .bundle = context->options->bundle,
+      .target_ref = context->options->target_ref,
       .descriptor_set = descriptor_set,
       .fact_table = context->lowering.fact_table,
       .arena = &context->arena,
@@ -1948,6 +1949,7 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
   if (iree_status_is_ok(status)) {
     loom_target_low_legality_options_t legality_options = {
         .bundle = options->bundle,
+        .target_ref = options->target_ref,
         .descriptor_registry = options->descriptor_registry,
         .provider_list = options->legality_provider_list,
         .contract_query =

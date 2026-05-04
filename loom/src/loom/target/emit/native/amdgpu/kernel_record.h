@@ -17,6 +17,7 @@
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/schedule/types.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
+#include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/descriptor.h"
 #include "loom/target/emit/native/amdgpu/metadata.h"
 
@@ -33,6 +34,8 @@ typedef struct loom_amdgpu_kernel_record_t {
   iree_string_view_t descriptor_symbol;
   // Full AMDHSA target id such as `amdgcn-amd-amdhsa--gfx1100`.
   iree_string_view_t target_id;
+  // Processor facts selected by the AMDGPU target record.
+  const loom_amdgpu_processor_info_t* processor;
   // HAL kernel ABI layout derived from function-local low.resource imports.
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout;
   // Metadata row shared by assembly notes and direct HSACO notes.

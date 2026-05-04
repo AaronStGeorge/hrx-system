@@ -63,6 +63,39 @@ void InitializeLowKernelContext(loom_context_t* context) {
   IREE_ASSERT_OK(loom_context_finalize(context));
 }
 
+iree_string_view_t TargetKindForProcessor(
+    const loom_amdgpu_processor_info_t* processor) {
+  switch (processor->descriptor_set_ordinal) {
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA3:
+      return IREE_SV("gfx942");
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA4:
+      return IREE_SV("gfx950");
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3:
+      return IREE_SV("gfx1100");
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4:
+      return IREE_SV("gfx1200");
+    case LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4_GFX125X:
+      return IREE_SV("gfx1250");
+    default:
+      return iree_string_view_empty();
+  }
+}
+
+std::string TargetRecordForProcessor(
+    const loom_amdgpu_processor_info_t* processor) {
+  const iree_string_view_t target_kind = TargetKindForProcessor(processor);
+  std::string target_record = "amdgpu.target<";
+  target_record.append(target_kind.data, target_kind.size);
+  target_record += "> @gfx_target";
+  if (!iree_string_view_equal(processor->processor, target_kind)) {
+    target_record += " {processor = \"";
+    target_record.append(processor->processor.data, processor->processor.size);
+    target_record += "\"}";
+  }
+  target_record += "\n";
+  return target_record;
+}
+
 struct HsaApi {
   // Loaded HSA runtime shared library.
   iree_dynamic_library_t* library = nullptr;
@@ -668,10 +701,7 @@ class LowKernelCompiler {
                               "descriptor set ordinal %" PRIu16,
                               processor->descriptor_set_ordinal);
     }
-    iree_string_view_t target_kind = target_bundle->snapshot->target_cpu;
-    std::string source = "amdgpu.target<";
-    source.append(target_kind.data, target_kind.size);
-    source += "> @gfx_target\n";
+    std::string source = TargetRecordForProcessor(processor);
     source += kernel_source;
     IREE_RETURN_IF_ERROR(ParseSource(source));
 

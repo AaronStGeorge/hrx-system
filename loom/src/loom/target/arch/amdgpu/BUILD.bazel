@@ -66,6 +66,7 @@ loom_assert_no_dependencies(
         ":occupancy_tables",
         ":packet_diagnostics",
         ":register_class",
+        ":target_id",
         ":target_info",
         ":wait_packets",
         ":wait_plan",
@@ -251,12 +252,15 @@ loom_cc_library(
         "ops/builders.c",
         "ops/registry.c",
         "ops/tables.c",
+        "ops/target.c",
     ],
     hdrs = [
         "ops/ops.h",
         "ops/registry.h",
+        "ops/target.h",
     ],
     deps = [
+        ":target_info",
         ":target_record_table",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
@@ -264,6 +268,20 @@ loom_cc_library(
         "//loom/src/loom/ops/target",
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "target_id",
+    srcs = ["target_id.c"],
+    hdrs = ["target_id.h"],
+    deps = [
+        ":ops",
+        ":target_info",
+        "//loom/src/loom/codegen/low:target_binding",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 
@@ -587,6 +605,7 @@ loom_cc_library(
         ":lower_materializers",
         ":matrix_contract",
         ":matrix_contract_projection",
+        ":target_id",
         ":target_info",
         ":target_refs",
         ":wait_packets",
@@ -639,6 +658,7 @@ loom_cc_library(
     hdrs = ["execution/amdgpu_hal_backend.h"],
     deps = [
         ":low_registry",
+        ":target_id",
         ":target_info",
         ":target_record_table",
         "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
@@ -751,7 +771,7 @@ loom_cc_test(
         ":amdgpu_hal_testdata",
         ":low_registry",
         ":amdgpu_hal_backend",
-        ":target_info_defs",
+        ":target_info",
         ":target_record_table",
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/tooling/execution:compile_options",
@@ -961,6 +981,7 @@ loom_cc_library(
     hdrs = ["occupancy.h"],
     deps = [
         ":occupancy_tables",
+        ":target_id",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/codegen/low/schedule",

@@ -50,6 +50,10 @@ typedef struct loom_target_module_compile_entry_t {
   loom_symbol_ref_t func_ref;
   // Module-local target record symbol referenced by |func|.
   loom_symbol_ref_t target_ref;
+  // Borrowed target record symbol entry referenced by |target_ref|.
+  const loom_symbol_t* target_symbol;
+  // Borrowed target record op referenced by |target_ref|.
+  loom_op_t* target_op;
   // Materialized target bundle selected by |func|. The export plan is the
   // func-owned effective export plan, not a shared target-record backreference.
   loom_target_bundle_storage_t bundle_storage;

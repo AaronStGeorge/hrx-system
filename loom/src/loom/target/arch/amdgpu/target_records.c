@@ -10,7 +10,6 @@
 
 #include "loom/target/arch/amdgpu/target_info.h"
 
-#define LOOM_AMDGPU_TARGET_TRIPLE IREE_SVL("amdgcn-amd-amdhsa")
 #define LOOM_AMDGPU_DATA_LAYOUT                              \
   IREE_SVL(                                                  \
       "e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:" \
@@ -20,14 +19,12 @@
       "2048-n32:64-S32-A5-G1-ni:7:8:9")
 
 // clang-format off
-#define LOOM_AMDGPU_LOW_SNAPSHOT(symbol, snapshot_name, processor, wavefront_size) \
+#define LOOM_AMDGPU_LOW_SNAPSHOT(symbol, snapshot_name, wavefront_size)      \
   static const loom_target_snapshot_t symbol = {                             \
       .name = IREE_SVL(snapshot_name),                                       \
       .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,               \
-      .target_triple = LOOM_AMDGPU_TARGET_TRIPLE,                            \
       .data_layout = LOOM_AMDGPU_DATA_LAYOUT,                                \
       .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,                    \
-      .target_cpu = IREE_SVL(processor),                                     \
       .default_pointer_bitwidth = 64,                                        \
       .index_bitwidth = 32,                                                  \
       .offset_bitwidth = 64,                                                 \
@@ -48,11 +45,11 @@
       },                                                                     \
   }
 
-LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuCdna3Snapshot, "amdgpu-cdna3-low", "gfx942", 64);
-LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuCdna4Snapshot, "amdgpu-cdna4-low", "gfx950", 64);
-LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuRdna3Snapshot, "amdgpu-rdna3-low", "gfx1100", 32);
-LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuRdna4Snapshot, "amdgpu-rdna4-low", "gfx1200", 32);
-LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuRdna4Gfx125xSnapshot, "amdgpu-rdna4-gfx125x-low", "gfx1250", 32);
+LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuCdna3Snapshot, "amdgpu-cdna3-low", 64);
+LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuCdna4Snapshot, "amdgpu-cdna4-low", 64);
+LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuRdna3Snapshot, "amdgpu-rdna3-low", 32);
+LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuRdna4Snapshot, "amdgpu-rdna4-low", 32);
+LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpuRdna4Gfx125xSnapshot, "amdgpu-rdna4-gfx125x-low", 32);
 
 static const loom_target_export_plan_t kAmdgpuHalExportPlan = {
   .name = IREE_SVL("amdgpu-hal"),

@@ -13,6 +13,7 @@
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/target/arch/amdgpu/occupancy_tables.h"
+#include "loom/target/arch/amdgpu/target_id.h"
 #include "loom/target/types.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
@@ -476,10 +477,18 @@ iree_status_t loom_amdgpu_occupancy_build(
     memset(register_classes, 0,
            model->register_class_count * sizeof(*register_classes));
   }
+  const loom_amdgpu_processor_info_t* processor =
+      loom_amdgpu_target_processor_from_resolved_target(allocation->module,
+                                                        &allocation->target);
+  if (processor == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU occupancy requires an AMDGPU processor "
+                            "target record");
+  }
 
   loom_amdgpu_occupancy_table_t table = {
       .allocation = allocation,
-      .processor = allocation->target.bundle_storage.snapshot.target_cpu,
+      .processor = processor->processor,
       .wave_size = model->wave_size,
       .max_waves_per_simd = model->max_waves_per_simd,
       .resident_waves_per_simd = model->max_waves_per_simd,

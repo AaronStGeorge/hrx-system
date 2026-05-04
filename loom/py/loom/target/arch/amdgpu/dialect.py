@@ -9,7 +9,9 @@
 from loom.assembly import AttrDict, SymbolRef, TemplateParam
 from loom.dialect.target import target_record_attrs
 from loom.dsl import (
+    ATTR_TYPE_STRING,
     SYMBOL_DEFINE,
+    AttrDef,
     Dialect,
     EnumCase,
     EnumDef,
@@ -63,8 +65,11 @@ amdgpu_target = Op(
         bytecode_kind="LOOM_SYMBOL_RECORD",
         fact_domain="loom_target_symbol_fact_domain",
     ),
-    attrs=target_record_attrs(AmdgpuTargetKind),
-    verify="loom_target_record_verify",
+    attrs=[
+        *target_record_attrs(AmdgpuTargetKind),
+        AttrDef("processor", ATTR_TYPE_STRING, optional=True),
+    ],
+    verify="loom_amdgpu_target_record_verify",
     format=[
         TemplateParam("kind"),
         SymbolRef("symbol"),

@@ -106,6 +106,8 @@ static inline bool loom_target_low_legality_provider_list_is_empty(
 typedef struct loom_target_low_legality_options_t {
   // Target bundle selected for this source-to-low lowering attempt.
   const loom_target_bundle_t* bundle;
+  // Module-local target record symbol selected for this lowering attempt.
+  loom_symbol_ref_t target_ref;
   // Low descriptor registry linked into the current compiler binary.
   const loom_low_descriptor_registry_t* descriptor_registry;
   // Optional target-specific source legality providers.

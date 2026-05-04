@@ -12,7 +12,7 @@
 #include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
-#include "loom/target/arch/amdgpu/target_info.h"
+#include "loom/target/arch/amdgpu/target_id.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
 
 #define LOOM_AMDGPU_PACKED_WORKITEM_ID_DIMENSION_BITS 10u
@@ -96,15 +96,9 @@ iree_status_t loom_amdgpu_target_wavefront_size(
     *out_wavefront_size = bundle->snapshot->subgroup_size;
     return iree_ok_status();
   }
-  const loom_amdgpu_processor_info_t* processor = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_processor(
-      bundle->snapshot->target_cpu, &processor));
-  *out_wavefront_size = processor->default_wavefront_size;
-  if (*out_wavefront_size == 0) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU processor has no default wavefront size");
-  }
-  return iree_ok_status();
+  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                          "AMDGPU preamble lowering requires a fixed "
+                          "subgroup size");
 }
 
 static uint32_t loom_amdgpu_ceil_div_u32(uint32_t numerator,
@@ -296,15 +290,15 @@ static iree_string_view_t loom_amdgpu_packed_workitem_id_source(
 static iree_status_t loom_amdgpu_uses_packed_workitem_id(
     loom_low_lower_context_t* context, bool* out_uses_packed_workitem_id) {
   *out_uses_packed_workitem_id = false;
-  const loom_target_bundle_t* bundle = loom_low_lower_context_bundle(context);
-  if (bundle == NULL || bundle->snapshot == NULL) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU preamble lowering requires a target snapshot");
+  const loom_amdgpu_processor_info_t* processor =
+      loom_amdgpu_target_processor_from_ref(
+          loom_low_lower_context_module(context),
+          loom_low_lower_context_target_ref(context));
+  if (processor == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU preamble lowering requires an AMDGPU "
+                            "processor target record");
   }
-  const loom_amdgpu_processor_info_t* processor = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_processor(
-      bundle->snapshot->target_cpu, &processor));
   *out_uses_packed_workitem_id =
       processor->kernel_descriptor_has_packed_workitem_id;
   return iree_ok_status();

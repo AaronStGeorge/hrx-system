@@ -505,6 +505,11 @@ loom_op_t* loom_low_lower_context_low_function(
 const loom_target_bundle_t* loom_low_lower_context_bundle(
     const loom_low_lower_context_t* context);
 
+// Returns the module-local target record symbol used by the emitted low
+// function.
+loom_symbol_ref_t loom_low_lower_context_target_ref(
+    const loom_low_lower_context_t* context);
+
 // Returns the selected target bundle key used in generated diagnostics.
 iree_string_view_t loom_low_lower_context_target_key(
     const loom_low_lower_context_t* context);

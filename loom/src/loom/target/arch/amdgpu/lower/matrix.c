@@ -10,7 +10,7 @@
 #include "loom/target/arch/amdgpu/lower/internal.h"
 #include "loom/target/arch/amdgpu/matrix_contract.h"
 #include "loom/target/arch/amdgpu/matrix_contract_projection.h"
-#include "loom/target/arch/amdgpu/target_info.h"
+#include "loom/target/arch/amdgpu/target_id.h"
 
 typedef struct loom_amdgpu_matrix_target_facts_t {
   // Generic vector.mma adapter options for this AMDGPU target.
@@ -21,19 +21,19 @@ typedef struct loom_amdgpu_matrix_target_facts_t {
   uint32_t wave_size;
 } loom_amdgpu_matrix_target_facts_t;
 
-static iree_status_t loom_amdgpu_matrix_target_facts_from_bundle(
-    const loom_target_bundle_t* bundle,
+static iree_status_t loom_amdgpu_matrix_target_facts_from_environment(
+    const loom_target_contract_query_environment_t* environment,
     loom_amdgpu_matrix_target_facts_t* out_facts) {
   *out_facts = (loom_amdgpu_matrix_target_facts_t){0};
-  if (bundle == NULL || bundle->snapshot == NULL) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU matrix lowering requires a target "
-                            "snapshot");
-  }
 
-  const loom_amdgpu_processor_info_t* processor = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_processor(
-      bundle->snapshot->target_cpu, &processor));
+  const loom_amdgpu_processor_info_t* processor =
+      loom_amdgpu_target_processor_from_ref(environment->module,
+                                            environment->target_ref);
+  if (processor == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU matrix lowering requires an AMDGPU "
+                            "processor target record");
+  }
   loom_amdgpu_matrix_feature_bits_t feature_bits = 0;
   (void)loom_amdgpu_matrix_feature_bits_for_profile(
       processor->matrix_feature_profile, &feature_bits);
@@ -354,8 +354,8 @@ iree_status_t loom_amdgpu_descriptor_matrix_options(
   (void)rule;
   *out_options = (loom_contract_vector_mma_options_t){0};
   loom_amdgpu_matrix_target_facts_t target_facts = {0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_matrix_target_facts_from_bundle(
-      environment->bundle, &target_facts));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_matrix_target_facts_from_environment(
+      environment, &target_facts));
   *out_options = target_facts.options;
   return iree_ok_status();
 }
@@ -371,8 +371,8 @@ iree_status_t loom_amdgpu_descriptor_matrix_query(
   *out_result = loom_target_contract_query_result_empty();
 
   loom_amdgpu_matrix_target_facts_t target_facts = {0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_matrix_target_facts_from_bundle(
-      environment->bundle, &target_facts));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_matrix_target_facts_from_environment(
+      environment, &target_facts));
   loom_contract_diagnostic_t contract_diagnostic = {0};
   loom_amdgpu_matrix_contract_match_diagnostic_t match_diagnostic = {0};
   const loom_amdgpu_matrix_contract_descriptor_t* contract_descriptor = NULL;

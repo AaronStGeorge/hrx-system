@@ -48,13 +48,11 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
       .descriptor_options = {.flags = record.descriptor_flags},
       .text = text,
   };
-  const loom_target_snapshot_t* snapshot =
-      &schedule->target.bundle_storage.snapshot;
   const uint64_t wait_packet_count =
       wait_packets ? wait_packets->packet_count : 0;
   *out_contribution = (loom_amdgpu_kernel_hsaco_contribution_t){
       .target = record.target_id,
-      .processor = snapshot->target_cpu,
+      .processor = record.processor->processor,
       .kernel = kernel,
       .summary =
           {

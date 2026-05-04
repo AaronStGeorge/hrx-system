@@ -168,6 +168,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::target::arch::amdgpu::hal_kernel_abi
+    loom::src::loom::target::arch::amdgpu::target_id
     loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::launch
   PUBLIC
@@ -298,6 +299,7 @@ loom_cc_library(
     loom::src::loom::target::arch::amdgpu::low_registry
     loom::src::loom::target::arch::amdgpu::lower
     loom::src::loom::target::arch::amdgpu::occupancy
+    loom::src::loom::target::arch::amdgpu::ops
     loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::arch::amdgpu::wait_packets
     loom::src::loom::target::arch::amdgpu::wait_plan
