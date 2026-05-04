@@ -2264,7 +2264,7 @@ static iree_status_t loom_low_allocation_edge_copy_group_uses_location(
 static iree_status_t loom_low_allocation_emit_failure(
     const loom_low_allocation_build_state_t* state, const loom_op_t* op,
     loom_liveness_value_class_t value_class, uint32_t budget_units,
-    uint32_t peak_units, iree_string_view_t reason) {
+    uint32_t peak_units, iree_string_view_t failure_kind) {
   loom_diagnostic_param_t params[] = {
       loom_param_string(loom_low_diagnostic_target_key(&state->target)),
       loom_param_string(loom_low_diagnostic_export_name(&state->target)),
@@ -2275,7 +2275,7 @@ static iree_status_t loom_low_allocation_emit_failure(
           loom_low_diagnostic_value_class_name(state->module, value_class)),
       loom_param_u32(budget_units),
       loom_param_u32(peak_units),
-      loom_param_string(reason),
+      loom_param_string(failure_kind),
   };
   loom_diagnostic_emission_t emission = {
       .op = op,
@@ -2296,7 +2296,7 @@ static iree_status_t loom_low_allocation_find_edge_copy_temporary(
           storage_class->location_kind)) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
         state, group->terminator_op, storage_class->value_class, 0, 1,
-        IREE_SV("cyclic branch edge copies require register-like storage")));
+        IREE_SV("edge-copy-non-register-storage")));
     return iree_make_status(
         IREE_STATUS_RESOURCE_EXHAUSTED,
         "low allocation cannot reserve a branch edge-copy temporary for "
@@ -2310,8 +2310,7 @@ static iree_status_t loom_low_allocation_find_edge_copy_temporary(
     IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
         state, group->terminator_op, storage_class->value_class,
         capacity.is_bounded ? capacity.max_units : UINT32_MAX, 1,
-        IREE_SV("cyclic branch edge copies require a scratch unit in the "
-                "allocated storage kind")));
+        IREE_SV("edge-copy-storage-kind-mismatch")));
     return iree_make_status(
         IREE_STATUS_RESOURCE_EXHAUSTED,
         "low allocation cannot reserve a branch edge-copy temporary for a "
@@ -2323,8 +2322,7 @@ static iree_status_t loom_low_allocation_find_edge_copy_temporary(
     if (capacity.max_units == 0) {
       IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
           state, group->terminator_op, storage_class->value_class,
-          capacity.max_units, 1,
-          IREE_SV("cyclic branch edge copies need one scratch unit")));
+          capacity.max_units, 1, IREE_SV("edge-copy-empty-budget")));
       return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                               "low allocation cannot reserve a branch "
                               "edge-copy temporary from an empty budget");
@@ -2337,7 +2335,7 @@ static iree_status_t loom_low_allocation_find_edge_copy_temporary(
     if (last_location == UINT32_MAX) {
       IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
           state, group->terminator_op, storage_class->value_class, UINT32_MAX,
-          1, IREE_SV("cyclic branch edge copies need one scratch unit")));
+          1, IREE_SV("edge-copy-location-range-overflow")));
       return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                               "low allocation cannot reserve a branch "
                               "edge-copy temporary in uint32 range");
@@ -2372,8 +2370,7 @@ static iree_status_t loom_low_allocation_find_edge_copy_temporary(
   IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
       state, group->terminator_op, storage_class->value_class,
       capacity.is_bounded ? capacity.max_units : UINT32_MAX, 1,
-      IREE_SV("cyclic branch edge copies need one scratch unit live only on "
-              "the edge")));
+      IREE_SV("edge-copy-no-scratch-unit")));
   return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                           "low allocation cannot reserve a branch edge-copy "
                           "temporary");
@@ -3408,8 +3405,7 @@ static iree_status_t loom_low_allocation_emit_predicted_spills(
         loom_param_u32(spill_plan->byte_size),
         loom_param_u32(spill_plan->store_count),
         loom_param_u32(spill_plan->reload_count),
-        loom_param_string(IREE_SV(
-            "no available non-overlapping location within register budget")),
+        loom_param_string(IREE_SV("register-budget-conflict")),
     };
     loom_diagnostic_emission_t emission = {
         .op = loom_low_diagnostic_value_origin_op(
@@ -3435,7 +3431,7 @@ static iree_string_view_t loom_low_allocation_copy_decision_name(
   }
 }
 
-static iree_string_view_t loom_low_allocation_copy_decision_reason(
+static iree_string_view_t loom_low_allocation_coalescing_constraint(
     const loom_low_allocation_table_t* table,
     const loom_low_allocation_copy_decision_t* copy_decision) {
   const loom_low_allocation_assignment_t* source_assignment =
@@ -3443,16 +3439,16 @@ static iree_string_view_t loom_low_allocation_copy_decision_reason(
   const loom_low_allocation_assignment_t* result_assignment =
       &table->assignments[copy_decision->result_assignment_index];
   if (!loom_low_allocation_assignment_is_coalescable(source_assignment)) {
-    return IREE_SV("source value is not assigned to a register-like location");
+    return IREE_SV("source-not-register-like");
   }
   if (!loom_low_allocation_assignment_is_coalescable(result_assignment)) {
-    return IREE_SV("result value is not assigned to a register-like location");
+    return IREE_SV("result-not-register-like");
   }
   if (loom_low_allocation_assignment_locations_equal(source_assignment,
                                                      result_assignment)) {
-    return IREE_SV("assigned locations match and are register-like");
+    return IREE_SV("assigned-locations-match");
   }
-  return IREE_SV("assigned locations differ");
+  return IREE_SV("assigned-locations-differ");
 }
 
 static iree_status_t loom_low_allocation_emit_copy_decisions(
@@ -3474,7 +3470,7 @@ static iree_status_t loom_low_allocation_emit_copy_decisions(
         loom_param_string(
             loom_low_allocation_copy_decision_name(copy_decision->kind)),
         loom_param_string(
-            loom_low_allocation_copy_decision_reason(table, copy_decision)),
+            loom_low_allocation_coalescing_constraint(table, copy_decision)),
     };
     loom_diagnostic_emission_t emission = {
         .op = loom_low_diagnostic_value_origin_op(

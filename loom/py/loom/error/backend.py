@@ -62,34 +62,6 @@ ERR_BACKEND_003 = ErrorDef(
     ),
 )
 
-# ERR_BACKEND_004: Register pressure exceeded a requested budget.
-ERR_BACKEND_004 = ErrorDef(
-    domain=ErrorDomain.BACKEND,
-    code=4,
-    severity=Severity.WARNING,
-    summary="Register pressure budget exceeded.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "'@{function_name}' exceeded {value_class} pressure budget {budget} "
-        "with peak {peak} in '{region_name}': {reason}"
-    ),
-    params=(
-        ErrorParam("target_key", ParamKind.STRING),
-        ErrorParam("export_name", ParamKind.STRING),
-        ErrorParam("config_key", ParamKind.STRING),
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("value_class", ParamKind.STRING),
-        ErrorParam("budget", ParamKind.U32),
-        ErrorParam("peak", ParamKind.U32),
-        ErrorParam("region_name", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Reduce live values, unroll less, split accumulation, or select a "
-        "target contract with lower {value_class} pressure"
-    ),
-)
-
 # ERR_BACKEND_005: Register allocation failed.
 ERR_BACKEND_005 = ErrorDef(
     domain=ErrorDomain.BACKEND,
@@ -99,7 +71,7 @@ ERR_BACKEND_005 = ErrorDef(
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
         "failed to allocate {value_class} registers for '@{function_name}' "
-        "with budget {budget} and peak {peak}: {reason}"
+        "with budget {budget}, peak {peak}, and failure '{failure_kind}'"
     ),
     params=(
         ErrorParam("target_key", ParamKind.STRING),
@@ -109,7 +81,7 @@ ERR_BACKEND_005 = ErrorDef(
         ErrorParam("value_class", ParamKind.STRING),
         ErrorParam("budget", ParamKind.U32),
         ErrorParam("peak", ParamKind.U32),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("failure_kind", ParamKind.STRING),
     ),
     fix_hint=(
         "Lower pressure before allocation or allow spill codegen for "
@@ -126,7 +98,7 @@ ERR_BACKEND_006 = ErrorDef(
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
         "{decision} coalescing '{value_name}' with '{partner_value_name}' "
-        "in '@{function_name}': {reason}"
+        "in '@{function_name}' with constraint '{coalescing_constraint}'"
     ),
     params=(
         ErrorParam("target_key", ParamKind.STRING),
@@ -136,30 +108,7 @@ ERR_BACKEND_006 = ErrorDef(
         ErrorParam("value_name", ParamKind.STRING),
         ErrorParam("partner_value_name", ParamKind.STRING),
         ErrorParam("decision", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
-    ),
-)
-
-# ERR_BACKEND_007: Live range split was inserted.
-ERR_BACKEND_007 = ErrorDef(
-    domain=ErrorDomain.BACKEND,
-    code=7,
-    severity=Severity.REMARK,
-    summary="Live range split inserted.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "split {value_class} value '{value_name}' in '@{function_name}' into "
-        "{split_count} range(s): {reason}"
-    ),
-    params=(
-        ErrorParam("target_key", ParamKind.STRING),
-        ErrorParam("export_name", ParamKind.STRING),
-        ErrorParam("config_key", ParamKind.STRING),
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("value_name", ParamKind.STRING),
-        ErrorParam("value_class", ParamKind.STRING),
-        ErrorParam("split_count", ParamKind.U32),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("coalescing_constraint", ParamKind.STRING),
     ),
 )
 
@@ -173,7 +122,7 @@ ERR_BACKEND_008 = ErrorDef(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
         "predicts spilling {value_class} value '{value_name}' in "
         "'@{function_name}' for {spill_bytes} byte(s), {store_count} "
-        "store(s), and {reload_count} reload(s): {reason}"
+        "store(s), {reload_count} reload(s), and cause '{spill_cause}'"
     ),
     params=(
         ErrorParam("target_key", ParamKind.STRING),
@@ -185,7 +134,7 @@ ERR_BACKEND_008 = ErrorDef(
         ErrorParam("spill_bytes", ParamKind.U32),
         ErrorParam("store_count", ParamKind.U32),
         ErrorParam("reload_count", ParamKind.U32),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("spill_cause", ParamKind.STRING),
     ),
     fix_hint=(
         "Use the pressure contributors for '{value_name}' to shorten the "
@@ -241,31 +190,6 @@ ERR_BACKEND_010 = ErrorDef(
         ErrorParam("used", ParamKind.U32),
         ErrorParam("occupancy_percent", ParamKind.U32),
         ErrorParam("limiting_resource", ParamKind.STRING),
-    ),
-)
-
-# ERR_BACKEND_011: Scheduling hazard handling was recorded.
-ERR_BACKEND_011 = ErrorDef(
-    domain=ErrorDomain.BACKEND,
-    code=11,
-    severity=Severity.REMARK,
-    summary="Scheduling hazard decision recorded.",
-    message=(
-        "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "handled {hazard_kind} hazard for descriptor '{descriptor_key}' in "
-        "'@{function_name}' by '{inserted_action}' with cost {cycle_cost} "
-        "cycle(s): {reason}"
-    ),
-    params=(
-        ErrorParam("target_key", ParamKind.STRING),
-        ErrorParam("export_name", ParamKind.STRING),
-        ErrorParam("config_key", ParamKind.STRING),
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("descriptor_key", ParamKind.STRING),
-        ErrorParam("hazard_kind", ParamKind.STRING),
-        ErrorParam("inserted_action", ParamKind.STRING),
-        ErrorParam("cycle_cost", ParamKind.U32),
-        ErrorParam("reason", ParamKind.STRING),
     ),
 )
 
@@ -479,14 +403,11 @@ ERR_BACKEND_018 = ErrorDef(
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_001,
     ERR_BACKEND_003,
-    ERR_BACKEND_004,
     ERR_BACKEND_005,
     ERR_BACKEND_006,
-    ERR_BACKEND_007,
     ERR_BACKEND_008,
     ERR_BACKEND_009,
     ERR_BACKEND_010,
-    ERR_BACKEND_011,
     ERR_BACKEND_013,
     ERR_BACKEND_014,
     ERR_BACKEND_015,
