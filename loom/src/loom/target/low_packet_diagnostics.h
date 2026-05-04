@@ -127,9 +127,8 @@ loom_target_low_packet_diagnostics_diagnostic_flags(
 // Emits ERR_BACKEND_018 for a target-owned packet decision.
 iree_status_t loom_target_low_packet_diagnostics_record_packet(
     loom_target_low_packet_diagnostic_context_t* context,
-    const loom_target_low_packet_diagnostic_provider_t* provider,
     const loom_low_packet_view_t* packet, iree_string_view_t packet_category,
-    iree_string_view_t decision, iree_string_view_t reason);
+    iree_string_view_t decision);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -481,7 +481,7 @@ ERR_BACKEND_018 = ErrorDef(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
         "{decision} {packet_category} low packet '{packet_key}' for "
         "'@{function_name}': operands {operand_count}, results "
-        "{result_count}: {reason}"
+        "{result_count}"
     ),
     params=(
         ErrorParam("target_key", ParamKind.STRING),
@@ -493,7 +493,6 @@ ERR_BACKEND_018 = ErrorDef(
         ErrorParam("decision", ParamKind.STRING),
         ErrorParam("operand_count", ParamKind.U32),
         ErrorParam("result_count", ParamKind.U32),
-        ErrorParam("reason", ParamKind.STRING),
     ),
 )
 

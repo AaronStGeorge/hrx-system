@@ -73,10 +73,8 @@ static iree_status_t loom_target_low_packet_diagnostics_packet_key(
 
 iree_status_t loom_target_low_packet_diagnostics_record_packet(
     loom_target_low_packet_diagnostic_context_t* context,
-    const loom_target_low_packet_diagnostic_provider_t* provider,
     const loom_low_packet_view_t* packet, iree_string_view_t packet_category,
-    iree_string_view_t decision, iree_string_view_t reason) {
-  (void)provider;
+    iree_string_view_t decision) {
   iree_string_view_t packet_key = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_target_low_packet_diagnostics_packet_key(
       context, packet, &packet_key));
@@ -95,7 +93,6 @@ iree_status_t loom_target_low_packet_diagnostics_record_packet(
       loom_param_string(decision),
       loom_param_u32(operand_count),
       loom_param_u32(result_count),
-      loom_param_string(reason),
   };
   return loom_target_low_packet_diagnostics_emit(
       context, packet, LOOM_ERR_BACKEND_018, params, IREE_ARRAYSIZE(params));
