@@ -51,15 +51,13 @@ static loom_value_slice_t loom_vector_to_scalar_memory_dynamic_indices(
       loom_vector_to_scalar_memory_access(state));
 }
 
-static iree_status_t loom_vector_to_scalar_memory_cache_policy(
-    loom_vector_to_scalar_state_t* state,
-    loom_vector_memory_cache_policy_t* out_policy) {
-  if (loom_vector_memory_cache_policy_from_op(state->rewriter->module,
-                                              state->op, out_policy)) {
-    return iree_ok_status();
-  }
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "vector memory op has malformed cache policy");
+static loom_vector_memory_cache_policy_t
+loom_vector_to_scalar_memory_cache_policy(
+    loom_vector_to_scalar_state_t* state) {
+  loom_vector_memory_cache_policy_t policy = {0};
+  (void)loom_vector_memory_cache_policy_from_op(state->rewriter->module,
+                                                state->op, &policy);
+  return policy;
 }
 
 static uint8_t loom_vector_to_scalar_enum_attr_value(loom_attribute_t attr) {
@@ -131,19 +129,7 @@ static iree_status_t loom_vector_to_scalar_build_memory_terms(
       loom_vector_to_scalar_memory_dynamic_indices(state), &terms,
       &term_count));
 
-  loom_value_id_t view = loom_vector_to_scalar_memory_view(state);
-  loom_type_t view_type = loom_module_value_type(state->rewriter->module, view);
-  if (!loom_type_is_view(view_type) ||
-      term_count != loom_type_rank(view_type)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector memory op has malformed view indices");
-  }
-
   if (add_lane_indices) {
-    if (lane_indices.rank > term_count) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "vector memory lane rank exceeds view rank");
-    }
     uint8_t first_vector_axis = (uint8_t)(term_count - lane_indices.rank);
     for (uint8_t axis = 0; axis < lane_indices.rank; ++axis) {
       IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
@@ -154,10 +140,6 @@ static iree_status_t loom_vector_to_scalar_build_memory_terms(
   }
 
   if (offset_vector != LOOM_VALUE_ID_INVALID) {
-    if (term_count == 0) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "gather/scatter requires a ranked view");
-    }
     loom_value_id_t offset_lane = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
         state, offset_vector, lane_indices, &offset_lane));
@@ -172,10 +154,6 @@ static iree_status_t loom_vector_to_scalar_build_memory_terms(
   }
 
   if (add_last_axis_offset) {
-    if (term_count == 0) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "packed memory op requires a ranked view");
-    }
     uint8_t last_axis = (uint8_t)(term_count - 1);
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
         state, LOOM_OP_INDEX_ADD, terms[last_axis], last_axis_offset,
@@ -305,10 +283,6 @@ static iree_status_t loom_vector_to_scalar_build_active_prefix(
     loom_vector_to_scalar_state_t* state, loom_value_id_t mask_vector,
     loom_vector_to_scalar_index_list_t lane_indices,
     loom_vector_to_scalar_index_term_t* out_prefix) {
-  if (lane_indices.rank != 1) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "packed memory ops require rank-1 vectors");
-  }
   if (loom_vector_to_scalar_indices_are_dynamic(lane_indices)) {
     return loom_vector_to_scalar_build_dynamic_active_prefix(
         state, mask_vector, lane_indices.dynamic_indices[0], out_prefix);
@@ -331,9 +305,8 @@ static iree_status_t loom_vector_to_scalar_build_view_load_lane(
       /*add_last_axis_offset=*/false, (loom_vector_to_scalar_index_term_t){0},
       &view_indices));
   loom_op_t* load_op = NULL;
-  loom_vector_memory_cache_policy_t cache_policy = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_vector_to_scalar_memory_cache_policy(state, &cache_policy));
+  loom_vector_memory_cache_policy_t cache_policy =
+      loom_vector_to_scalar_memory_cache_policy(state);
   IREE_RETURN_IF_ERROR(loom_view_load_build(
       &state->rewriter->builder, cache_policy.build_flags,
       loom_vector_to_scalar_memory_view(state), view_indices.dynamic_indices,
@@ -449,9 +422,8 @@ iree_status_t loom_vector_to_scalar_build_load_expand_lane(
       state, indices, /*add_lane_indices=*/false, LOOM_VALUE_ID_INVALID,
       /*add_last_axis_offset=*/true, prefix, &view_indices));
   loom_op_t* load_op = NULL;
-  loom_vector_memory_cache_policy_t cache_policy = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_vector_to_scalar_memory_cache_policy(state, &cache_policy));
+  loom_vector_memory_cache_policy_t cache_policy =
+      loom_vector_to_scalar_memory_cache_policy(state);
   IREE_RETURN_IF_ERROR(loom_view_load_build(
       &state->rewriter->builder, cache_policy.build_flags,
       loom_vector_to_scalar_memory_view(state), view_indices.dynamic_indices,
@@ -526,9 +498,8 @@ static iree_status_t loom_vector_to_scalar_emit_view_store_lane(
       /*add_last_axis_offset=*/false, (loom_vector_to_scalar_index_term_t){0},
       &view_indices));
   loom_op_t* store_op = NULL;
-  loom_vector_memory_cache_policy_t cache_policy = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_vector_to_scalar_memory_cache_policy(state, &cache_policy));
+  loom_vector_memory_cache_policy_t cache_policy =
+      loom_vector_to_scalar_memory_cache_policy(state);
   return loom_view_store_build(
       &state->rewriter->builder, cache_policy.build_flags, lane,
       loom_vector_to_scalar_memory_view(state), view_indices.dynamic_indices,
@@ -604,9 +575,8 @@ static iree_status_t loom_vector_to_scalar_emit_store_compress_lane(
       state, indices, /*add_lane_indices=*/false, LOOM_VALUE_ID_INVALID,
       /*add_last_axis_offset=*/true, prefix, &view_indices));
   loom_op_t* store_op = NULL;
-  loom_vector_memory_cache_policy_t cache_policy = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_vector_to_scalar_memory_cache_policy(state, &cache_policy));
+  loom_vector_memory_cache_policy_t cache_policy =
+      loom_vector_to_scalar_memory_cache_policy(state);
   IREE_RETURN_IF_ERROR(loom_view_store_build(
       &state->rewriter->builder, cache_policy.build_flags, lane,
       loom_vector_to_scalar_memory_view(state), view_indices.dynamic_indices,
@@ -720,10 +690,6 @@ iree_status_t loom_vector_to_scalar_lower_memory_store(
 
 static iree_status_t loom_vector_to_scalar_lower_static_store_compress(
     loom_vector_to_scalar_state_t* state) {
-  if (loom_type_rank(state->vector_type) != 1) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.store.compress requires rank-1 vectors");
-  }
   iree_host_size_t element_count = 0;
   if (!loom_type_static_element_count(state->vector_type, &element_count)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -743,10 +709,6 @@ static iree_status_t loom_vector_to_scalar_lower_static_store_compress(
 
 static iree_status_t loom_vector_to_scalar_lower_dynamic_store_compress(
     loom_vector_to_scalar_state_t* state) {
-  if (loom_type_rank(state->vector_type) != 1) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.store.compress requires rank-1 vectors");
-  }
   loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
   loom_value_id_t lower_bound = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_constant(
@@ -850,9 +812,8 @@ static iree_status_t loom_vector_to_scalar_emit_view_atomic_reduce_lane(
       /*add_last_axis_offset=*/false, (loom_vector_to_scalar_index_term_t){0},
       &view_indices));
   loom_op_t* atomic_op = NULL;
-  loom_vector_memory_cache_policy_t cache_policy = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_vector_to_scalar_memory_cache_policy(state, &cache_policy));
+  loom_vector_memory_cache_policy_t cache_policy =
+      loom_vector_to_scalar_memory_cache_policy(state);
   return loom_view_atomic_reduce_build(
       &state->rewriter->builder, cache_policy.build_flags,
       loom_vector_to_scalar_atomic_reduce_kind(state), lane,
@@ -1062,9 +1023,8 @@ static iree_status_t loom_vector_to_scalar_build_view_atomic_rmw_lane(
       /*add_last_axis_offset=*/false, (loom_vector_to_scalar_index_term_t){0},
       &view_indices));
   loom_op_t* atomic_op = NULL;
-  loom_vector_memory_cache_policy_t cache_policy = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_vector_to_scalar_memory_cache_policy(state, &cache_policy));
+  loom_vector_memory_cache_policy_t cache_policy =
+      loom_vector_to_scalar_memory_cache_policy(state);
   IREE_RETURN_IF_ERROR(loom_view_atomic_rmw_build(
       &state->rewriter->builder, cache_policy.build_flags,
       loom_vector_to_scalar_atomic_rmw_kind(state), lane,
@@ -1286,9 +1246,8 @@ static iree_status_t loom_vector_to_scalar_build_view_atomic_cmpxchg_lane(
       /*add_last_axis_offset=*/false, (loom_vector_to_scalar_index_term_t){0},
       &view_indices));
   loom_op_t* atomic_op = NULL;
-  loom_vector_memory_cache_policy_t cache_policy = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_vector_to_scalar_memory_cache_policy(state, &cache_policy));
+  loom_vector_memory_cache_policy_t cache_policy =
+      loom_vector_to_scalar_memory_cache_policy(state);
   IREE_RETURN_IF_ERROR(loom_view_atomic_cmpxchg_build(
       &state->rewriter->builder, cache_policy.build_flags, expected_lane,
       replacement_lane, loom_vector_to_scalar_memory_view(state),

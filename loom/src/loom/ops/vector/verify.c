@@ -487,6 +487,10 @@ static iree_status_t loom_vector_verify_memory_access(
       emitter, op, static_indices, dynamic_index_count));
 
   uint8_t view_rank = loom_type_rank(view_type);
+  if (view_rank == 0) {
+    return loom_vector_emit_operand_constraint(
+        emitter, op, IREE_SV("view"), view_type, IREE_SV("rank >= 1 view"));
+  }
   if (static_indices.count != view_rank) {
     return loom_vector_emit_offset_count_mismatch(
         emitter, op, IREE_SV("view"), static_indices.count, view_rank);
@@ -536,6 +540,10 @@ static iree_status_t loom_vector_verify_gather_scatter_access(
       emitter, op, static_indices, dynamic_index_count));
 
   uint8_t view_rank = loom_type_rank(view_type);
+  if (view_rank == 0) {
+    return loom_vector_emit_operand_constraint(
+        emitter, op, IREE_SV("view"), view_type, IREE_SV("rank >= 1 view"));
+  }
   if (static_indices.count != view_rank) {
     return loom_vector_emit_offset_count_mismatch(
         emitter, op, IREE_SV("view"), static_indices.count, view_rank);
