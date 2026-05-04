@@ -153,7 +153,8 @@ iree_status_t loom_low_lower_emit_error_ref(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_error_ref_t error_ref, const loom_diagnostic_param_t* params,
     iree_host_size_t param_count) {
-  const loom_error_def_t* error = loom_error_def_lookup_ref(error_ref);
+  const loom_error_def_t* error = loom_error_catalog_lookup_ref(
+      context->options->policy->error_catalog, error_ref);
   IREE_ASSERT(error != NULL);
   return loom_low_lower_emit(context, source_op, error, params, param_count);
 }

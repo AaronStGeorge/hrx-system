@@ -14,8 +14,8 @@
 // Error definitions are .rodata tables generated from the Python error
 // DSL (loom/py/loom/error/*.py). Each error has a stable symbolic ID,
 // (domain, code) identity, typed parameter schema, message template, and
-// optional fix hint. The tables are checked in so the C build never requires
-// Python.
+// optional fix hint. The tables are generated from Python so readable catalogs
+// remain the source of truth while C consumers see compact rodata.
 //
 // Materialized diagnostics, lightweight emitters, and verifier hooks all
 // build on these definitions. A build that excludes the text format still
@@ -180,6 +180,8 @@ typedef struct loom_error_domain_catalog_t {
 typedef struct loom_error_catalog_t {
   // Domain-indexed catalog shards. Absent domains have NULL entries.
   const loom_error_domain_catalog_t* domains[LOOM_ERROR_DOMAIN_COUNT_];
+  // Optional catalog searched when this catalog does not contain a domain/code.
+  const struct loom_error_catalog_t* fallback_catalog;
 } loom_error_catalog_t;
 
 typedef struct loom_diagnostic_string_list_t {
@@ -278,14 +280,14 @@ static inline loom_diagnostic_param_t loom_param_with_field_ref(
   return param;
 }
 
-// Returns the error def for a (domain, code) pair in |catalog|, or NULL if
-// |catalog| is NULL or does not contain that domain/code.
+// Returns the error def for a (domain, code) pair in |catalog|'s fallback
+// chain, or NULL if no catalog in the chain contains that domain/code.
 const loom_error_def_t* loom_error_catalog_lookup(
     const loom_error_catalog_t* catalog, loom_error_domain_t domain,
     uint16_t code);
 
-// Returns the error def for a compact reference in |catalog|, or NULL if |ref|
-// is LOOM_ERROR_REF_NONE or names a definition not present in |catalog|.
+// Returns the error def for a compact reference in |catalog|'s fallback chain,
+// or NULL if |ref| is empty or names no definition in the chain.
 const loom_error_def_t* loom_error_catalog_lookup_ref(
     const loom_error_catalog_t* catalog, loom_error_ref_t ref);
 

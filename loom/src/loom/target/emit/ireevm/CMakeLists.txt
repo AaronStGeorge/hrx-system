@@ -165,6 +165,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::src::loom::codegen::low::lower
+    loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar

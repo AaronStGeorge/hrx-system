@@ -110,6 +110,9 @@ typedef struct loom_target_low_legality_options_t {
   loom_symbol_ref_t target_ref;
   // Low descriptor registry linked into the current compiler binary.
   const loom_low_descriptor_registry_t* descriptor_registry;
+  // Catalog resolving compact diagnostic refs emitted by target contract
+  // queries and target-owned legality providers.
+  const loom_error_catalog_t* error_catalog;
   // Optional target-specific source legality providers.
   loom_target_low_legality_provider_list_t provider_list;
   // Optional contract query over the selected target lowering policy. This is

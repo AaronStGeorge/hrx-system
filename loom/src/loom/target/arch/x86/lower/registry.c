@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
 #include "loom/target/arch/x86/avx512_descriptors.h"
 #include "loom/target/arch/x86/avx512_packed_dot_descriptors.h"
@@ -274,6 +275,7 @@ static const loom_target_contract_binding_t
 
 static const loom_low_lower_policy_t kX86Avx512LowLowerPolicy = {
     .name = IREE_SVL("x86-avx512-low-lower"),
+    .error_catalog = &loom_error_catalog_core,
     .map_type = {.fn = loom_x86_map_avx512_type, .user_data = NULL},
     .map_argument = {.fn = loom_x86_map_avx512_argument, .user_data = NULL},
     .rule_sets =
@@ -287,6 +289,7 @@ static const loom_low_lower_policy_t kX86Avx512LowLowerPolicy = {
 
 static const loom_low_lower_policy_t kX86PackedDotLowLowerPolicy = {
     .name = IREE_SVL("x86-packed-dot-low-lower"),
+    .error_catalog = &loom_error_catalog_core,
     .map_type = {.fn = loom_x86_map_packed_dot_type, .user_data = NULL},
     .rule_sets =
         {
@@ -299,6 +302,7 @@ static const loom_low_lower_policy_t kX86PackedDotLowLowerPolicy = {
 
 static const loom_low_lower_policy_t kX86Avx512PackedDotLowLowerPolicy = {
     .name = IREE_SVL("x86-avx512-packed-dot-low-lower"),
+    .error_catalog = &loom_error_catalog_core,
     .map_type = {.fn = loom_x86_map_avx512_packed_dot_type, .user_data = NULL},
     .map_argument = {.fn = loom_x86_map_avx512_packed_dot_argument,
                      .user_data = NULL},

@@ -64,9 +64,9 @@ loom_generated_cc_library(
   GENERATED_HDRS
     "error_catalog.h"
   ARGS
-    "--catalog-symbol=loom_error_catalog_all"
+    "--catalog-symbol=loom_error_catalog_core"
     "--public-header=loom/error/error_catalog.h"
-    "--shard=all"
+    "--shard=core"
   EXTRA_OUTPUT_FLAGS
     "--catalog"
   EXTRA_OUTPUTS

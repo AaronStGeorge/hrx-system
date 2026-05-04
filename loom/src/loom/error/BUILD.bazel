@@ -52,9 +52,9 @@ loom_generated_cc_library(
         "error_defs.h",
     ],
     args = [
-        "--catalog-symbol=loom_error_catalog_all",
+        "--catalog-symbol=loom_error_catalog_core",
         "--public-header=loom/error/error_catalog.h",
-        "--shard=all",
+        "--shard=core",
     ],
     extra_output_flags = [
         "--catalog",

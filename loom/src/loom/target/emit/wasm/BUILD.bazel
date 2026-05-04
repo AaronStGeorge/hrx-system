@@ -6,12 +6,10 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
-)
-load(
-    "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
+    "loom_generated_cc_library",
 )
 
 package(
@@ -54,6 +52,23 @@ loom_assert_no_dependencies(
 #===------------------------------------------------------------------------===#
 # Wasm emission
 #===------------------------------------------------------------------------===#
+
+loom_generated_cc_library(
+    name = "error_defs",
+    args = [
+        "--catalog-symbol=loom_wasm_error_catalog",
+        "--fallback-catalog-symbol=loom_error_catalog_core",
+        "--fallback-public-header=loom/error/error_catalog.h",
+        "--no-runtime",
+        "--public-header=loom/target/emit/wasm/error_catalog.h",
+        "--shard=wasm",
+    ],
+    generated_hdr_flags = ["--header"],
+    generated_hdrs = ["error_catalog.h"],
+    generator = "//loom/py/loom/gen:c_errors",
+    source = "error_catalog.c",
+    deps = ["//loom/src/loom/error:error_defs"],
+)
 
 loom_cc_library(
     name = "binary_writer",
@@ -115,6 +130,7 @@ loom_cc_library(
     srcs = ["lower/registry.c"],
     hdrs = ["lower.h"],
     deps = [
+        ":error_defs",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ir",
         "//loom/src/loom/target/arch/wasm:descriptors_ids",

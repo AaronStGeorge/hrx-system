@@ -123,6 +123,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::lower
+    loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::target::arch::x86::contracts::avx512
     loom::src::loom::target::arch::x86::contracts::avx512_lower_rules

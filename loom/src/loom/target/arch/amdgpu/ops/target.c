@@ -6,16 +6,10 @@
 
 #include "loom/target/arch/amdgpu/ops/target.h"
 
-#include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/target/ops.h"
+#include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/ops/ops.h"
-
-enum {
-  LOOM_AMDGPU_ERROR_PROCESSOR_UNKNOWN = 3,
-  LOOM_AMDGPU_ERROR_PROCESSOR_NO_DESCRIPTOR_SET = 4,
-  LOOM_AMDGPU_ERROR_PROCESSOR_DESCRIPTOR_SET_MISMATCH = 5,
-};
 
 static iree_string_view_t loom_amdgpu_target_record_default_processor_name(
     loom_amdgpu_target_kind_t kind) {
@@ -51,11 +45,12 @@ static iree_string_view_t loom_amdgpu_target_record_symbol_name(
 }
 
 static iree_status_t loom_amdgpu_target_record_emit(
-    iree_diagnostic_emitter_t emitter, const loom_op_t* op, uint16_t code,
-    const loom_diagnostic_param_t* params, iree_host_size_t param_count) {
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    const loom_error_def_t* error, const loom_diagnostic_param_t* params,
+    iree_host_size_t param_count) {
   const loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_AMDGPU, code),
+      .error = error,
       .params = params,
       .param_count = param_count,
   };
@@ -68,8 +63,7 @@ static iree_status_t loom_amdgpu_target_record_emit_unknown_processor(
   const loom_diagnostic_param_t params[] = {
       loom_param_string(processor_name),
   };
-  return loom_amdgpu_target_record_emit(emitter, op,
-                                        LOOM_AMDGPU_ERROR_PROCESSOR_UNKNOWN,
+  return loom_amdgpu_target_record_emit(emitter, op, LOOM_ERR_AMDGPU_003,
                                         params, IREE_ARRAYSIZE(params));
 }
 
@@ -83,9 +77,8 @@ static iree_status_t loom_amdgpu_target_record_emit_descriptor_set_mismatch(
       loom_param_string(loom_amdgpu_target_record_symbol_name(module, op)),
       loom_param_string(record_descriptor_set),
   };
-  return loom_amdgpu_target_record_emit(
-      emitter, op, LOOM_AMDGPU_ERROR_PROCESSOR_DESCRIPTOR_SET_MISMATCH, params,
-      IREE_ARRAYSIZE(params));
+  return loom_amdgpu_target_record_emit(emitter, op, LOOM_ERR_AMDGPU_005,
+                                        params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_amdgpu_target_record_emit_no_descriptor_set(
@@ -94,9 +87,8 @@ static iree_status_t loom_amdgpu_target_record_emit_no_descriptor_set(
   const loom_diagnostic_param_t params[] = {
       loom_param_string(processor->processor),
   };
-  return loom_amdgpu_target_record_emit(
-      emitter, op, LOOM_AMDGPU_ERROR_PROCESSOR_NO_DESCRIPTOR_SET, params,
-      IREE_ARRAYSIZE(params));
+  return loom_amdgpu_target_record_emit(emitter, op, LOOM_ERR_AMDGPU_004,
+                                        params, IREE_ARRAYSIZE(params));
 }
 
 static iree_string_view_t loom_amdgpu_target_record_string_attr(

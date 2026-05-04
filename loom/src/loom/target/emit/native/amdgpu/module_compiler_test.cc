@@ -11,11 +11,11 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
+#include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/ops/registry.h"
 #include "loom/testing/diagnostic_matchers.h"
 
@@ -150,8 +150,8 @@ TEST_F(AmdgpuModuleCompilerTest, UnknownProcessorEmitsDiagnostic) {
 
   EXPECT_FALSE(compiled);
   ASSERT_EQ(capture.diagnostics.size(), 1u);
-  const CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_AMDGPU, 3));
+  const CapturedDiagnostic* diagnostic =
+      FindDiagnostic(capture, LOOM_ERR_AMDGPU_003);
   ASSERT_NE(diagnostic, nullptr);
   EXPECT_EQ(GetStringParam(*diagnostic, 0), "gfx9999");
 }
@@ -164,8 +164,8 @@ TEST_F(AmdgpuModuleCompilerTest, ProcessorWithoutDescriptorSetEmitsDiagnostic) {
 
   EXPECT_FALSE(compiled);
   ASSERT_EQ(capture.diagnostics.size(), 1u);
-  const CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_AMDGPU, 4));
+  const CapturedDiagnostic* diagnostic =
+      FindDiagnostic(capture, LOOM_ERR_AMDGPU_004);
   ASSERT_NE(diagnostic, nullptr);
   EXPECT_EQ(GetStringParam(*diagnostic, 0), "gfx908");
 }
@@ -187,8 +187,8 @@ TEST_F(AmdgpuModuleCompilerTest, DescriptorSetMismatchEmitsDiagnostic) {
 
   EXPECT_FALSE(compiled);
   ASSERT_EQ(capture.diagnostics.size(), 1u);
-  const CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_AMDGPU, 5));
+  const CapturedDiagnostic* diagnostic =
+      FindDiagnostic(capture, LOOM_ERR_AMDGPU_005);
   ASSERT_NE(diagnostic, nullptr);
   EXPECT_EQ(GetStringParam(*diagnostic, 0), "gfx950");
   EXPECT_EQ(GetStringParam(*diagnostic, 1), "amdgpu.cdna4.core");

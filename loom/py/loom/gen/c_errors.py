@@ -138,6 +138,8 @@ def generate_error_catalog_c(
     *,
     catalog_symbol: str,
     public_header: str,
+    fallback_catalog_symbol: str | None = None,
+    fallback_public_header: str | None = None,
     include_runtime: bool = True,
 ) -> str:
     """Generates error_catalog.c with .rodata and optional runtime functions."""
@@ -145,12 +147,19 @@ def generate_error_catalog_c(
         *line_comment_header(
             "//",
             generator="loom.gen.c_errors",
-            regenerate="iree-bazel-build //loom/src/loom/error:error_defs",
+            regenerate="build the owning loom_generated_cc_library target",
         ),
         "",
         f'#include "{public_header}"',
         "",
     ]
+    if fallback_public_header is not None:
+        lines.extend(
+            [
+                f'#include "{fallback_public_header}"',
+                "",
+            ]
+        )
 
     if include_runtime:
         # Severity name table.
@@ -261,6 +270,10 @@ def generate_error_catalog_c(
     lines.append("    .domains = {")
     lines.extend(f"        [{DOMAIN_MAP[domain]}] = &{_catalog_domain_symbol(catalog_symbol, domain)}," for domain in grouped_errors)
     lines.append("    },")
+    if fallback_catalog_symbol is not None:
+        lines.append(f"    .fallback_catalog = &{fallback_catalog_symbol},")
+    else:
+        lines.append("    .fallback_catalog = NULL,")
     lines.append("};")
     lines.append("")
 
@@ -274,9 +287,15 @@ def generate_error_catalog_c(
         lines.append("  const loom_error_domain_catalog_t* domain_catalog =")
         lines.append("      catalog->domains[domain];")
         lines.append("  if (!domain_catalog || code >= domain_catalog->code_count) {")
-        lines.append("    return NULL;")
+        lines.append("    return loom_error_catalog_lookup(catalog->fallback_catalog,")
+        lines.append("                                     domain, code);")
         lines.append("  }")
-        lines.append("  return domain_catalog->errors_by_code[code];")
+        lines.append("  const loom_error_def_t* error = domain_catalog->errors_by_code[code];")
+        lines.append("  if (error) {")
+        lines.append("    return error;")
+        lines.append("  }")
+        lines.append("  return loom_error_catalog_lookup(catalog->fallback_catalog, domain,")
+        lines.append("                                   code);")
         lines.append("}")
         lines.append("")
         lines.append("const loom_error_def_t* loom_error_catalog_lookup_ref(")
@@ -312,7 +331,7 @@ def generate_error_catalog_h(errors: list[ErrorDef], *, catalog_symbol: str, pub
         *line_comment_header(
             "//",
             generator="loom.gen.c_errors",
-            regenerate="iree-bazel-build //loom/src/loom/error:error_defs",
+            regenerate="build the owning loom_generated_cc_library target",
         ),
         "",
         f"#ifndef {_header_guard_from_public_header(public_header)}",
@@ -449,6 +468,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Public include path for the generated catalog header.",
     )
     parser.add_argument(
+        "--fallback-catalog-symbol",
+        help="Catalog symbol searched when this shard misses a domain/code.",
+    )
+    parser.add_argument(
+        "--fallback-public-header",
+        help="Public include path declaring --fallback-catalog-symbol.",
+    )
+    parser.add_argument(
         "--no-runtime",
         action="store_true",
         help="Do not emit shared runtime lookup/name functions.",
@@ -484,6 +511,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         errors,
         catalog_symbol=catalog_symbol,
         public_header=args.public_header,
+        fallback_catalog_symbol=args.fallback_catalog_symbol,
+        fallback_public_header=args.fallback_public_header,
         include_runtime=not args.no_runtime,
     )
     header_h = generate_error_catalog_h(

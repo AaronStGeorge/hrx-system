@@ -8,16 +8,12 @@
 
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/context.h"
+#include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
 #include "loom/target/arch/amdgpu/lower/memory_internal.h"
 
 #define LOOM_AMDGPU_LDS_BANK_COUNT 32u
 #define LOOM_AMDGPU_LDS_BANK_WIDTH_BYTES 4u
-
-enum {
-  LOOM_AMDGPU_ERROR_MEMORY_PACKED_REGISTER_FOOTPRINT = 19,
-  LOOM_AMDGPU_ERROR_MEMORY_FLAT_DYNAMIC_ADDRESS = 20,
-};
 
 typedef struct loom_amdgpu_memory_access_bank_summary_t {
   // Distance between adjacent workitems in 32-bit LDS bank words.
@@ -115,10 +111,7 @@ static iree_status_t loom_amdgpu_emit_memory_access_packed_footprint_error(
       loom_param_u32(diagnostic->register_bit_count),
   };
   return loom_target_low_legality_emit_error_ref(
-      context, op,
-      LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_AMDGPU,
-                     LOOM_AMDGPU_ERROR_MEMORY_PACKED_REGISTER_FOOTPRINT),
-      params, IREE_ARRAYSIZE(params));
+      context, op, LOOM_ERR_AMDGPU_019_REF, params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_amdgpu_emit_memory_access_flat_dynamic_error(
@@ -150,10 +143,7 @@ static iree_status_t loom_amdgpu_emit_memory_access_flat_dynamic_error(
       loom_param_u32(term.byte_shift),
   };
   return loom_target_low_legality_emit_error_ref(
-      context, op,
-      LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_AMDGPU,
-                     LOOM_AMDGPU_ERROR_MEMORY_FLAT_DYNAMIC_ADDRESS),
-      params, IREE_ARRAYSIZE(params));
+      context, op, LOOM_ERR_AMDGPU_020_REF, params, IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_amdgpu_emit_memory_access_rejection_diagnostic(

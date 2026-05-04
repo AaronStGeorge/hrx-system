@@ -80,6 +80,13 @@ TEST(ErrorDefsTest, LookupNonExistentReturnsNull) {
   EXPECT_EQ(loom_error_def_lookup(LOOM_ERROR_DOMAIN_FOLD, 0), nullptr);
 }
 
+TEST(ErrorDefsTest, GlobalLookupExcludesOptionalTargetCatalogs) {
+  EXPECT_EQ(loom_error_def_lookup(LOOM_ERROR_DOMAIN_AMDGPU, 1), nullptr);
+  EXPECT_EQ(
+      loom_error_def_lookup_ref(LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_WASM, 1)),
+      nullptr);
+}
+
 TEST(ErrorDefsTest, LookupRefsResolve) {
   EXPECT_EQ(
       loom_error_def_lookup_ref(LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_TYPE, 1)),

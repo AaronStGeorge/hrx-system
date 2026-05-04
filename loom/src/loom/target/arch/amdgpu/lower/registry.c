@@ -29,6 +29,7 @@
 #include "loom/target/arch/amdgpu/contracts/reduce_lower_rules.h"
 #include "loom/target/arch/amdgpu/contracts/view.h"
 #include "loom/target/arch/amdgpu/contracts/view_lower_rules.h"
+#include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
 
 typedef struct loom_amdgpu_lower_dispatch_row_t
@@ -504,6 +505,7 @@ static_assert(IREE_ARRAYSIZE(kAmdgpuRuleSets) ==
 
 static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
     .name = IREE_SVL("amdgpu-register-lower"),
+    .error_catalog = &loom_amdgpu_error_catalog,
     .map_type = {.fn = loom_amdgpu_map_type, .user_data = NULL},
     .map_value = {.fn = loom_amdgpu_map_value, .user_data = NULL},
     .map_contract_value = {.fn = loom_amdgpu_map_contract_value,

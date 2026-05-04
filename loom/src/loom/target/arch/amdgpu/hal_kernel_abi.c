@@ -11,9 +11,9 @@
 
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/register_class_map.h"
-#include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/hal_binding_descriptor.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
@@ -23,22 +23,6 @@
   (3u + 2u * LOOM_AMDGPU_HAL_KERNEL_ABI_COORDINATE_DIMENSION_COUNT)
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_MAX_RESOURCE_COUNT \
   (UINT32_MAX / LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_SIZE)
-
-enum {
-  LOOM_AMDGPU_ERROR_HAL_ABI_RESOURCE_COUNT_OVERFLOW = 6,
-  LOOM_AMDGPU_ERROR_HAL_ABI_RESOURCE_IMPORT_KIND = 7,
-  LOOM_AMDGPU_ERROR_HAL_ABI_RESOURCE_RESULT_TYPE = 8,
-  LOOM_AMDGPU_ERROR_HAL_ABI_BINDING_INDEX_NEGATIVE = 9,
-  LOOM_AMDGPU_ERROR_HAL_ABI_BINDING_INDEX_SPARSE = 10,
-  LOOM_AMDGPU_ERROR_HAL_ABI_BINDING_INDEX_DUPLICATE = 11,
-  LOOM_AMDGPU_ERROR_HAL_ABI_BINDING_INDEX_MISSING = 12,
-  LOOM_AMDGPU_ERROR_HAL_ABI_DESCRIPTOR_ATTR = 13,
-  LOOM_AMDGPU_ERROR_HAL_ABI_DESCRIPTOR_CACHE_SWIZZLE = 14,
-  LOOM_AMDGPU_ERROR_HAL_ABI_LIVE_IN_DUPLICATE = 15,
-  LOOM_AMDGPU_ERROR_HAL_ABI_WORKITEM_LIVE_IN_MIX = 16,
-  LOOM_AMDGPU_ERROR_HAL_ABI_LIVE_IN_RESULT_TYPE = 17,
-  LOOM_AMDGPU_ERROR_HAL_ABI_M0_RESULT_TYPE = 18,
-};
 
 typedef enum loom_amdgpu_hal_kernel_abi_source_kind_e {
   LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_UNKNOWN = 0,
@@ -364,8 +348,9 @@ static bool loom_amdgpu_hal_kernel_abi_can_emit(
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_emit(
-    iree_diagnostic_emitter_t emitter, const loom_op_t* op, uint16_t code,
-    const loom_diagnostic_param_t* params, iree_host_size_t param_count,
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    const loom_error_def_t* error, const loom_diagnostic_param_t* params,
+    iree_host_size_t param_count,
     const loom_diagnostic_related_op_t* related_ops,
     iree_host_size_t related_op_count, uint32_t max_errors,
     loom_amdgpu_hal_kernel_abi_verify_result_t* result) {
@@ -374,7 +359,7 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_emit(
   }
   const loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_AMDGPU, code),
+      .error = error,
       .params = params,
       .param_count = param_count,
       .related_ops = related_ops,
@@ -394,8 +379,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_emit_resource_count_overflow(
       loom_param_u64(LOOM_AMDGPU_HAL_KERNEL_ABI_MAX_RESOURCE_COUNT),
   };
   return loom_amdgpu_hal_kernel_abi_emit(
-      emitter, function_op, LOOM_AMDGPU_ERROR_HAL_ABI_RESOURCE_COUNT_OVERFLOW,
-      params, IREE_ARRAYSIZE(params), NULL, 0, max_errors, result);
+      emitter, function_op, LOOM_ERR_AMDGPU_006, params, IREE_ARRAYSIZE(params),
+      NULL, 0, max_errors, result);
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_emit_resource_import_kind_error(
@@ -407,8 +392,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_emit_resource_import_kind_error(
       loom_param_u32(actual_import_kind),
   };
   return loom_amdgpu_hal_kernel_abi_emit(
-      emitter, resource_op, LOOM_AMDGPU_ERROR_HAL_ABI_RESOURCE_IMPORT_KIND,
-      params, IREE_ARRAYSIZE(params), NULL, 0, max_errors, result);
+      emitter, resource_op, LOOM_ERR_AMDGPU_007, params, IREE_ARRAYSIZE(params),
+      NULL, 0, max_errors, result);
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_emit_resource_result_type_error(
@@ -422,8 +407,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_emit_resource_result_type_error(
       loom_param_u32(2),
   };
   return loom_amdgpu_hal_kernel_abi_emit(
-      emitter, resource_op, LOOM_AMDGPU_ERROR_HAL_ABI_RESOURCE_RESULT_TYPE,
-      params, IREE_ARRAYSIZE(params), NULL, 0, max_errors, result);
+      emitter, resource_op, LOOM_ERR_AMDGPU_008, params, IREE_ARRAYSIZE(params),
+      NULL, 0, max_errors, result);
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_emit_binding_index_negative(
@@ -434,8 +419,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_emit_binding_index_negative(
       loom_param_i64(binding_index),
   };
   return loom_amdgpu_hal_kernel_abi_emit(
-      emitter, resource_op, LOOM_AMDGPU_ERROR_HAL_ABI_BINDING_INDEX_NEGATIVE,
-      params, IREE_ARRAYSIZE(params), NULL, 0, max_errors, result);
+      emitter, resource_op, LOOM_ERR_AMDGPU_009, params, IREE_ARRAYSIZE(params),
+      NULL, 0, max_errors, result);
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_emit_binding_index_sparse(
@@ -448,8 +433,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_emit_binding_index_sparse(
       loom_param_u64(resource_count),
   };
   return loom_amdgpu_hal_kernel_abi_emit(
-      emitter, resource_op, LOOM_AMDGPU_ERROR_HAL_ABI_BINDING_INDEX_SPARSE,
-      params, IREE_ARRAYSIZE(params), NULL, 0, max_errors, result);
+      emitter, resource_op, LOOM_ERR_AMDGPU_010, params, IREE_ARRAYSIZE(params),
+      NULL, 0, max_errors, result);
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_emit_binding_index_duplicate(
@@ -467,9 +452,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_emit_binding_index_duplicate(
           LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, loom_low_resource_index_ATTR_INDEX),
   }};
   return loom_amdgpu_hal_kernel_abi_emit(
-      emitter, resource_op, LOOM_AMDGPU_ERROR_HAL_ABI_BINDING_INDEX_DUPLICATE,
-      params, IREE_ARRAYSIZE(params), related, IREE_ARRAYSIZE(related),
-      max_errors, result);
+      emitter, resource_op, LOOM_ERR_AMDGPU_011, params, IREE_ARRAYSIZE(params),
+      related, IREE_ARRAYSIZE(related), max_errors, result);
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_emit_missing_binding(
@@ -480,8 +464,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_emit_missing_binding(
       loom_param_u64(binding_index),
   };
   return loom_amdgpu_hal_kernel_abi_emit(
-      emitter, function_op, LOOM_AMDGPU_ERROR_HAL_ABI_BINDING_INDEX_MISSING,
-      params, IREE_ARRAYSIZE(params), NULL, 0, max_errors, result);
+      emitter, function_op, LOOM_ERR_AMDGPU_012, params, IREE_ARRAYSIZE(params),
+      NULL, 0, max_errors, result);
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_emit_descriptor_attr_error(
@@ -494,9 +478,9 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_emit_descriptor_attr_error(
       loom_param_u32(LOOM_ATTR_I64),
       loom_param_u32((uint32_t)actual_kind),
   };
-  return loom_amdgpu_hal_kernel_abi_emit(
-      emitter, op, LOOM_AMDGPU_ERROR_HAL_ABI_DESCRIPTOR_ATTR, params,
-      IREE_ARRAYSIZE(params), NULL, 0, max_errors, result);
+  return loom_amdgpu_hal_kernel_abi_emit(emitter, op, LOOM_ERR_AMDGPU_013,
+                                         params, IREE_ARRAYSIZE(params), NULL,
+                                         0, max_errors, result);
 }
 
 static iree_status_t
@@ -509,9 +493,9 @@ loom_amdgpu_hal_kernel_abi_emit_descriptor_cache_swizzle_error(
       loom_param_string(descriptor_set_key),
       loom_param_u64(cache_swizzle_stride),
   };
-  return loom_amdgpu_hal_kernel_abi_emit(
-      emitter, op, LOOM_AMDGPU_ERROR_HAL_ABI_DESCRIPTOR_CACHE_SWIZZLE, params,
-      IREE_ARRAYSIZE(params), NULL, 0, max_errors, result);
+  return loom_amdgpu_hal_kernel_abi_emit(emitter, op, LOOM_ERR_AMDGPU_014,
+                                         params, IREE_ARRAYSIZE(params), NULL,
+                                         0, max_errors, result);
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_emit_live_in_duplicate(
@@ -529,9 +513,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_emit_live_in_duplicate(
           LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, loom_low_live_in_source_ATTR_INDEX),
   }};
   return loom_amdgpu_hal_kernel_abi_emit(
-      emitter, live_in_op, LOOM_AMDGPU_ERROR_HAL_ABI_LIVE_IN_DUPLICATE, params,
-      IREE_ARRAYSIZE(params), related, IREE_ARRAYSIZE(related), max_errors,
-      result);
+      emitter, live_in_op, LOOM_ERR_AMDGPU_015, params, IREE_ARRAYSIZE(params),
+      related, IREE_ARRAYSIZE(related), max_errors, result);
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_emit_workitem_live_in_mix(
@@ -550,9 +533,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_emit_workitem_live_in_mix(
           LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, loom_low_live_in_source_ATTR_INDEX),
   }};
   return loom_amdgpu_hal_kernel_abi_emit(
-      emitter, live_in_op, LOOM_AMDGPU_ERROR_HAL_ABI_WORKITEM_LIVE_IN_MIX,
-      params, IREE_ARRAYSIZE(params), related, IREE_ARRAYSIZE(related),
-      max_errors, result);
+      emitter, live_in_op, LOOM_ERR_AMDGPU_016, params, IREE_ARRAYSIZE(params),
+      related, IREE_ARRAYSIZE(related), max_errors, result);
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_emit_live_in_type_error(
@@ -569,8 +551,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_emit_live_in_type_error(
       loom_param_u32(expected_unit_count),
   };
   return loom_amdgpu_hal_kernel_abi_emit(
-      emitter, live_in_op, LOOM_AMDGPU_ERROR_HAL_ABI_LIVE_IN_RESULT_TYPE,
-      params, IREE_ARRAYSIZE(params), NULL, 0, max_errors, result);
+      emitter, live_in_op, LOOM_ERR_AMDGPU_017, params, IREE_ARRAYSIZE(params),
+      NULL, 0, max_errors, result);
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_emit_m0_type_error(
@@ -584,8 +566,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_emit_m0_type_error(
           loom_module_value_type(module, loom_low_live_in_result(live_in_op))),
   };
   return loom_amdgpu_hal_kernel_abi_emit(
-      emitter, live_in_op, LOOM_AMDGPU_ERROR_HAL_ABI_M0_RESULT_TYPE, params,
-      IREE_ARRAYSIZE(params), NULL, 0, max_errors, result);
+      emitter, live_in_op, LOOM_ERR_AMDGPU_018, params, IREE_ARRAYSIZE(params),
+      NULL, 0, max_errors, result);
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_format_resource_name(

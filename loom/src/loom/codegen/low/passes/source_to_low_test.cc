@@ -14,6 +14,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/lower_rules.h"
 #include "loom/codegen/low/pass_environment.h"
+#include "loom/error/error_catalog.h"
 #include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
@@ -95,6 +96,7 @@ static const loom_target_contract_binding_t kInvalidPreambleBindings[] = {
 
 static const loom_low_lower_policy_t kInvalidPreamblePolicy = {
     .name = IREE_SVL("invalid-preamble-policy"),
+    .error_catalog = &loom_error_catalog_core,
     .map_type = {.fn = loom_test_low_lower_map_type, .user_data = nullptr},
     .map_contract_value = {.fn = loom_test_low_lower_map_contract_value,
                            .user_data = nullptr},

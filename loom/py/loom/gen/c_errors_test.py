@@ -21,6 +21,20 @@ def test_generate_error_catalog_exports_canonical_definitions() -> None:
     assert "loom_error_catalog_lookup_ref" in catalog_c
 
 
+def test_generate_error_catalog_composes_fallback_catalog() -> None:
+    catalog_c = generate_error_catalog_c(
+        [ERR_TYPE_001],
+        catalog_symbol="loom_error_catalog_test",
+        public_header="loom/error/error_catalog.h",
+        fallback_catalog_symbol="loom_error_catalog_core",
+        fallback_public_header="loom/error/error_catalog.h",
+        include_runtime=False,
+    )
+
+    assert '#include "loom/error/error_catalog.h"' in catalog_c
+    assert ".fallback_catalog = &loom_error_catalog_core" in catalog_c
+
+
 def test_generate_error_catalog_header_uses_canonical_names() -> None:
     catalog_h = generate_error_catalog_h(
         [ERR_TYPE_001],

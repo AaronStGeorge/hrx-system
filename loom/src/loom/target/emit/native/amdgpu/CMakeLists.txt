@@ -294,6 +294,7 @@ loom_cc_library(
     loom::src::loom::ops::target
     loom::src::loom::pass::builtin_registry
     loom::src::loom::pass::value_facts
+    loom::src::loom::target::arch::amdgpu::error_defs
     loom::src::loom::target::arch::amdgpu::hal_binding_materialization
     loom::src::loom::target::arch::amdgpu::hal_kernel_abi
     loom::src::loom::target::arch::amdgpu::low_registry
@@ -325,6 +326,7 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::op_registry
+    loom::src::loom::target::arch::amdgpu::error_defs
     loom::src::loom::target::arch::amdgpu::ops
     loom::src::loom::testing::diagnostic_matchers
     iree::testing::gtest

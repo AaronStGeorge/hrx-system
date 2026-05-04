@@ -17,7 +17,6 @@
 #include "loom/codegen/low/preparation.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/codegen/low/verify.h"
-#include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func_symbol_facts.h"
 #include "loom/ops/kernel/ops.h"
@@ -26,6 +25,7 @@
 #include "loom/ops/target/ops.h"
 #include "loom/pass/builtin_registry.h"
 #include "loom/pass/value_facts.h"
+#include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/hal_binding_materialization.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
@@ -43,12 +43,7 @@
 #include "loom/target/launch.h"
 #include "loom/target/module_compiler.h"
 
-enum {
-  LOOM_AMDGPU_MODULE_COMPILE_DEFAULT_MAX_ERRORS = 20,
-  LOOM_AMDGPU_ERROR_PROCESSOR_UNKNOWN = 3,
-  LOOM_AMDGPU_ERROR_PROCESSOR_NO_DESCRIPTOR_SET = 4,
-  LOOM_AMDGPU_ERROR_PROCESSOR_DESCRIPTOR_SET_MISMATCH = 5,
-};
+#define LOOM_AMDGPU_MODULE_COMPILE_DEFAULT_MAX_ERRORS 20u
 
 static bool loom_amdgpu_module_compile_bundle_is_compatible(
     void* user_data, const loom_target_module_compile_entry_t* entry) {
@@ -102,11 +97,11 @@ static iree_status_t loom_amdgpu_module_compile_symbol_name(
 
 static iree_status_t loom_amdgpu_module_compile_emit(
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    const loom_op_t* op, uint16_t code, const loom_diagnostic_param_t* params,
-    iree_host_size_t param_count) {
+    const loom_op_t* op, const loom_error_def_t* error,
+    const loom_diagnostic_param_t* params, iree_host_size_t param_count) {
   const loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_AMDGPU, code),
+      .error = error,
       .params = params,
       .param_count = param_count,
   };
@@ -128,7 +123,7 @@ static iree_status_t loom_amdgpu_module_compile_emit_unknown_processor(
   };
   return loom_amdgpu_module_compile_emit(
       diagnostic_emitter, loom_amdgpu_module_compile_target_record_op(entry),
-      LOOM_AMDGPU_ERROR_PROCESSOR_UNKNOWN, params, IREE_ARRAYSIZE(params));
+      LOOM_ERR_AMDGPU_003, params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_amdgpu_module_compile_emit_no_descriptor_set(
@@ -140,8 +135,7 @@ static iree_status_t loom_amdgpu_module_compile_emit_no_descriptor_set(
   };
   return loom_amdgpu_module_compile_emit(
       diagnostic_emitter, loom_amdgpu_module_compile_target_record_op(entry),
-      LOOM_AMDGPU_ERROR_PROCESSOR_NO_DESCRIPTOR_SET, params,
-      IREE_ARRAYSIZE(params));
+      LOOM_ERR_AMDGPU_004, params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_amdgpu_module_compile_emit_descriptor_set_mismatch(
@@ -157,8 +151,7 @@ static iree_status_t loom_amdgpu_module_compile_emit_descriptor_set_mismatch(
   };
   return loom_amdgpu_module_compile_emit(
       diagnostic_emitter, loom_amdgpu_module_compile_target_record_op(entry),
-      LOOM_AMDGPU_ERROR_PROCESSOR_DESCRIPTOR_SET_MISMATCH, params,
-      IREE_ARRAYSIZE(params));
+      LOOM_ERR_AMDGPU_005, params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_amdgpu_module_compile_apply_processor(

@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/error/error_catalog.h"
 #include "loom/target/emit/ireevm/contracts/core.h"
 #include "loom/target/emit/ireevm/contracts/core_lower_rules.h"
 #include "loom/target/emit/ireevm/descriptors.h"
@@ -47,6 +48,7 @@ static const loom_target_contract_binding_t kIreeVmContractBindings[] = {
 
 static const loom_low_lower_policy_t kIreeVmLowLowerPolicy = {
     .name = IREE_SVL("iree-vm-lower"),
+    .error_catalog = &loom_error_catalog_core,
     .map_type = {.fn = loom_ireevm_map_type, .user_data = NULL},
     .rule_sets =
         {

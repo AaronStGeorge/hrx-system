@@ -145,7 +145,8 @@ iree_status_t loom_target_low_legality_emit_error_ref(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     loom_error_ref_t error_ref, const loom_diagnostic_param_t* params,
     iree_host_size_t param_count) {
-  const loom_error_def_t* error = loom_error_def_lookup_ref(error_ref);
+  const loom_error_def_t* error =
+      loom_error_catalog_lookup_ref(context->options->error_catalog, error_ref);
   IREE_ASSERT(error != NULL);
   return loom_target_low_legality_emit(context, op, error, params, param_count);
 }
@@ -202,8 +203,8 @@ static iree_status_t loom_target_low_legality_emit_type_error(
 static iree_status_t loom_target_low_legality_reject_error_ref(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     const loom_target_contract_rejection_t* rejection) {
-  const loom_error_def_t* error =
-      loom_error_def_lookup_ref(rejection->error_ref);
+  const loom_error_def_t* error = loom_error_catalog_lookup_ref(
+      context->options->error_catalog, rejection->error_ref);
   IREE_ASSERT(error != NULL);
   return loom_target_low_legality_emit(context, op, error, rejection->params,
                                        rejection->param_count);

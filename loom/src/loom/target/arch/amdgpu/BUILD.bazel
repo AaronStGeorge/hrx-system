@@ -19,6 +19,7 @@ load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_assert_no_dependencies",
+    "loom_generated_cc_library",
     "loom_low_descriptor_cc_library",
     "loom_low_descriptor_data_archive",
     "loom_low_descriptor_exclude_from_cmake_all",
@@ -202,6 +203,23 @@ loom_assert_no_dependencies(
 
 _AMDGPU_TARGET_INFO_GENERATOR = "//loom/py/loom/gen:amdgpu_target_info"
 
+loom_generated_cc_library(
+    name = "error_defs",
+    args = [
+        "--catalog-symbol=loom_amdgpu_error_catalog",
+        "--fallback-catalog-symbol=loom_error_catalog_core",
+        "--fallback-public-header=loom/error/error_catalog.h",
+        "--no-runtime",
+        "--public-header=loom/target/arch/amdgpu/error_catalog.h",
+        "--shard=amdgpu",
+    ],
+    generated_hdr_flags = ["--header"],
+    generated_hdrs = ["error_catalog.h"],
+    generator = "//loom/py/loom/gen:c_errors",
+    source = "error_catalog.c",
+    deps = ["//loom/src/loom/error:error_defs"],
+)
+
 loom_low_descriptor_data_archive(
     name = "amdgpu_isa_xml",
     repo_name = AMDGPU_ISA_XML_ARCHIVE["repo_name"],
@@ -260,6 +278,7 @@ loom_cc_library(
         "ops/target.h",
     ],
     deps = [
+        ":error_defs",
         ":target_info",
         ":target_record_table",
         "//loom/src/loom/error:error_defs",
@@ -600,6 +619,7 @@ loom_cc_library(
     ],
     deps = [
         ":atomic_candidates",
+        ":error_defs",
         ":hal_kernel_abi",
         ":lower_kinds",
         ":lower_materializers",
@@ -794,13 +814,13 @@ loom_cc_library(
         "hal_kernel_abi.h",
     ],
     deps = [
+        ":error_defs",
         ":target_info",
         ":target_refs",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:function",
         "//loom/src/loom/codegen/low:register_class_map",
         "//loom/src/loom/error:emitter",
-        "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:types",

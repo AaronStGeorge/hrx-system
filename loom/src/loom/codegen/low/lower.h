@@ -339,6 +339,9 @@ typedef struct loom_low_lower_emit_op_callback_t {
 typedef struct loom_low_lower_policy_t {
   // Stable policy name used in diagnostics and status messages.
   iree_string_view_t name;
+  // Catalog resolving compact diagnostic refs carried by this policy's
+  // generated rules and contract fragments.
+  const loom_error_catalog_t* error_catalog;
   // Maps source semantic types to target-low register types.
   loom_low_lower_map_type_callback_t map_type;
   // Optionally maps concrete source SSA values to target-low register types

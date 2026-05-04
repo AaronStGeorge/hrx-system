@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
 #include "loom/target/test/contracts/core.h"
 #include "loom/target/test/contracts/core_lower_rules.h"
@@ -211,6 +212,7 @@ static const loom_target_contract_binding_t kTestLowContractBindings[] = {
 
 static const loom_low_lower_policy_t kTestLowLowerPolicy = {
     .name = IREE_SVL("test-low-lower-policy"),
+    .error_catalog = &loom_error_catalog_core,
     .map_type = {.fn = loom_test_low_lower_map_type, .user_data = NULL},
     .map_contract_value = {.fn = loom_test_low_lower_map_contract_value,
                            .user_data = NULL},

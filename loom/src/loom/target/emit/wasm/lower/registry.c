@@ -8,6 +8,7 @@
 #include "loom/target/arch/wasm/descriptors.h"
 #include "loom/target/emit/wasm/contracts/core_simd128.h"
 #include "loom/target/emit/wasm/contracts/core_simd128_lower_rules.h"
+#include "loom/target/emit/wasm/error_catalog.h"
 #include "loom/target/emit/wasm/lower.h"
 
 static bool loom_wasm_type_is_address_i32(loom_type_t type) {
@@ -132,6 +133,7 @@ static const loom_target_contract_binding_t kWasmContractBindings[] = {
 
 static const loom_low_lower_policy_t kWasmLowLowerPolicy = {
     .name = IREE_SVL("wasm-lower"),
+    .error_catalog = &loom_wasm_error_catalog,
     .map_type = {.fn = loom_wasm_map_type, .user_data = NULL},
     .map_argument = {.fn = loom_wasm_map_argument, .user_data = NULL},
     .rule_sets =

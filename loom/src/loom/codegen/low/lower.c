@@ -1954,6 +1954,7 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
         .bundle = options->bundle,
         .target_ref = options->target_ref,
         .descriptor_registry = options->descriptor_registry,
+        .error_catalog = options->policy->error_catalog,
         .provider_list = options->legality_provider_list,
         .contract_query =
             {

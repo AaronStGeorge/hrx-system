@@ -23,6 +23,28 @@ loom_low_descriptor_data_archive(
 
 iree_add_all_subdirs()
 
+loom_generated_cc_library(
+  NAME
+    error_defs
+  GENERATOR
+    iree::runtime::py::loom::gen::c_errors
+  SOURCE
+    "error_catalog.c"
+  GENERATED_HDR_FLAGS
+    "--header"
+  GENERATED_HDRS
+    "error_catalog.h"
+  ARGS
+    "--catalog-symbol=loom_amdgpu_error_catalog"
+    "--fallback-catalog-symbol=loom_error_catalog_core"
+    "--fallback-public-header=loom/error/error_catalog.h"
+    "--no-runtime"
+    "--public-header=loom/target/arch/amdgpu/error_catalog.h"
+    "--shard=amdgpu"
+  DEPS
+    loom::src::loom::error::error_defs
+)
+
 loom_cc_library(
   NAME
     target_info_defs
@@ -78,6 +100,7 @@ loom_cc_library(
     "ops/tables.c"
     "ops/target.c"
   DEPS
+    ::error_defs
     ::target_info
     ::target_record_table
     iree::base
@@ -464,6 +487,7 @@ loom_cc_library(
     "lower/values.c"
   DEPS
     ::atomic_candidates
+    ::error_defs
     ::hal_kernel_abi
     ::lower_kinds
     ::lower_materializers
@@ -670,6 +694,7 @@ loom_cc_library(
   SRCS
     "hal_kernel_abi.c"
   DEPS
+    ::error_defs
     ::target_info
     ::target_refs
     iree::base
@@ -678,7 +703,6 @@ loom_cc_library(
     loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::register_class_map
     loom::src::loom::error::emitter
-    loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::target::types
