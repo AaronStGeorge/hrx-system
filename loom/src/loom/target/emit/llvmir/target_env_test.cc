@@ -56,15 +56,13 @@ iree_status_t LookupRegisteredProfile(
                                                     out_profile);
 }
 
-void ExpectSnapshotMatchesLlvmEnv(const loom_target_snapshot_t* snapshot,
-                                  const loom_llvmir_target_env_t* target_env) {
+void ExpectSnapshotMatchesCommonEnv(
+    const loom_target_snapshot_t* snapshot,
+    const loom_llvmir_target_env_t* target_env) {
   ASSERT_NE(snapshot, nullptr);
   ASSERT_NE(target_env, nullptr);
   EXPECT_EQ(snapshot->codegen_format, LOOM_TARGET_CODEGEN_FORMAT_LLVMIR);
   EXPECT_EQ(snapshot->artifact_format, LOOM_TARGET_ARTIFACT_FORMAT_ELF);
-  EXPECT_EQ(ToString(snapshot->target_triple),
-            ToString(target_env->target_triple));
-  EXPECT_EQ(ToString(snapshot->data_layout), ToString(target_env->data_layout));
   EXPECT_EQ(snapshot->default_pointer_bitwidth,
             target_env->default_pointer_bitwidth);
   EXPECT_EQ(snapshot->index_bitwidth, target_env->index_bitwidth);
@@ -187,8 +185,7 @@ TEST(LlvmIrTargetEnvTest, X86ObjectProfileHasGenericTargetBundle) {
       loom_llvmir_target_bundle_x86_64_object();
   ASSERT_NE(bundle, nullptr);
   EXPECT_EQ(ToString(bundle->name), ToString(profile->name));
-  ExpectSnapshotMatchesLlvmEnv(bundle->snapshot, profile->target_env);
-  EXPECT_TRUE(iree_string_view_is_empty(bundle->snapshot->target_features));
+  ExpectSnapshotMatchesCommonEnv(bundle->snapshot, profile->target_env);
   EXPECT_EQ(bundle->snapshot->memory_spaces.host, 0u);
   ASSERT_NE(bundle->export_plan, nullptr);
   EXPECT_EQ(ToString(bundle->export_plan->name), ToString(profile->name));
@@ -205,9 +202,7 @@ TEST(LlvmIrTargetEnvTest, X86PackedDotProfileHasGenericTargetBundle) {
       loom_llvmir_target_bundle_x86_64_packed_dot_object();
   ASSERT_NE(bundle, nullptr);
   EXPECT_EQ(ToString(bundle->name), ToString(profile->name));
-  ExpectSnapshotMatchesLlvmEnv(bundle->snapshot, profile->target_env);
-  EXPECT_EQ(ToString(bundle->snapshot->target_features),
-            ToString(profile->target_features));
+  ExpectSnapshotMatchesCommonEnv(bundle->snapshot, profile->target_env);
   ASSERT_NE(bundle->export_plan, nullptr);
   EXPECT_EQ(bundle->export_plan->abi_kind, LOOM_TARGET_ABI_OBJECT_FUNCTION);
   EXPECT_EQ(bundle->export_plan->linkage, LOOM_TARGET_LINKAGE_DSO_LOCAL);
@@ -223,7 +218,8 @@ TEST(LlvmIrTargetEnvTest, X86PackedDotProfileHasGenericTargetBundle) {
 TEST(LlvmIrTargetEnvTest, DerivesX86ObjectProfileFromGenericBundle) {
   loom_llvmir_target_profile_storage_t storage = {};
   IREE_ASSERT_OK(loom_llvmir_target_profile_storage_initialize_from_bundle(
-      loom_llvmir_target_bundle_x86_64_object(), &storage));
+      loom_llvmir_target_bundle_x86_64_object(),
+      loom_llvmir_target_profile_x86_64_object(), &storage));
   ExpectDerivedProfileMatchesStatic(&storage.profile,
                                     loom_llvmir_target_profile_x86_64_object());
 
@@ -237,7 +233,8 @@ TEST(LlvmIrTargetEnvTest, DerivesX86ObjectProfileFromGenericBundle) {
 TEST(LlvmIrTargetEnvTest, DerivesX86PackedDotProfileFromGenericBundle) {
   loom_llvmir_target_profile_storage_t storage = {};
   IREE_ASSERT_OK(loom_llvmir_target_profile_storage_initialize_from_bundle(
-      loom_llvmir_target_bundle_x86_64_packed_dot_object(), &storage));
+      loom_llvmir_target_bundle_x86_64_packed_dot_object(),
+      loom_llvmir_target_profile_x86_64_packed_dot_object(), &storage));
   ExpectDerivedProfileMatchesStatic(
       &storage.profile, loom_llvmir_target_profile_x86_64_packed_dot_object());
 }
@@ -290,7 +287,7 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileHasGenericTargetBundle) {
   const loom_target_bundle_t* bundle = loom_llvmir_target_bundle_amdgpu_hal();
   ASSERT_NE(bundle, nullptr);
   EXPECT_EQ(ToString(bundle->name), ToString(profile->name));
-  ExpectSnapshotMatchesLlvmEnv(bundle->snapshot, profile->target_env);
+  ExpectSnapshotMatchesCommonEnv(bundle->snapshot, profile->target_env);
   EXPECT_EQ(bundle->snapshot->memory_spaces.host, UINT32_MAX);
   EXPECT_EQ(bundle->snapshot->max_workgroup_size.x, 1024u);
   EXPECT_EQ(bundle->snapshot->max_workgroup_size.y, 1024u);
@@ -323,7 +320,8 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileHasGenericTargetBundle) {
 TEST(LlvmIrTargetEnvTest, DerivesAmdgpuHalProfileFromGenericBundle) {
   loom_llvmir_target_profile_storage_t storage = {};
   IREE_ASSERT_OK(loom_llvmir_target_profile_storage_initialize_from_bundle(
-      loom_llvmir_target_bundle_amdgpu_hal(), &storage));
+      loom_llvmir_target_bundle_amdgpu_hal(),
+      loom_llvmir_target_profile_amdgpu_hal(), &storage));
   ExpectDerivedProfileMatchesStatic(&storage.profile,
                                     loom_llvmir_target_profile_amdgpu_hal());
 }
@@ -347,8 +345,8 @@ TEST(LlvmIrTargetEnvTest, RejectsMalformedDerivedAmdgpuHalProfile) {
   loom_llvmir_target_profile_storage_t storage = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
-      loom_llvmir_target_profile_storage_initialize_from_bundle(&broken_bundle,
-                                                                &storage));
+      loom_llvmir_target_profile_storage_initialize_from_bundle(
+          &broken_bundle, loom_llvmir_target_profile_amdgpu_hal(), &storage));
 }
 
 TEST(LlvmIrTargetEnvTest, RejectsDerivedAmdgpuHalProfileWithoutFlatLimit) {
@@ -368,8 +366,8 @@ TEST(LlvmIrTargetEnvTest, RejectsDerivedAmdgpuHalProfileWithoutFlatLimit) {
   loom_llvmir_target_profile_storage_t storage = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
-      loom_llvmir_target_profile_storage_initialize_from_bundle(&broken_bundle,
-                                                                &storage));
+      loom_llvmir_target_profile_storage_initialize_from_bundle(
+          &broken_bundle, loom_llvmir_target_profile_amdgpu_hal(), &storage));
 }
 
 TEST(LlvmIrTargetEnvTest, RejectsUnsupportedDerivedProfileArtifactFormat) {
@@ -389,8 +387,9 @@ TEST(LlvmIrTargetEnvTest, RejectsUnsupportedDerivedProfileArtifactFormat) {
   loom_llvmir_target_profile_storage_t storage = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
-      loom_llvmir_target_profile_storage_initialize_from_bundle(&broken_bundle,
-                                                                &storage));
+      loom_llvmir_target_profile_storage_initialize_from_bundle(
+          &broken_bundle, loom_llvmir_target_profile_x86_64_object(),
+          &storage));
 }
 
 TEST(LlvmIrTargetEnvTest, RejectsUnsupportedDerivedProfileAbiKind) {
@@ -410,8 +409,9 @@ TEST(LlvmIrTargetEnvTest, RejectsUnsupportedDerivedProfileAbiKind) {
   loom_llvmir_target_profile_storage_t storage = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_UNIMPLEMENTED,
-      loom_llvmir_target_profile_storage_initialize_from_bundle(&broken_bundle,
-                                                                &storage));
+      loom_llvmir_target_profile_storage_initialize_from_bundle(
+          &broken_bundle, loom_llvmir_target_profile_x86_64_object(),
+          &storage));
 }
 
 TEST(LlvmIrTargetEnvTest, LooksUpRegisteredProfilesByName) {
@@ -460,7 +460,8 @@ TEST(LlvmIrTargetEnvTest, RegistryOnlySeesExplicitProviders) {
 TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileMaterializesKernelDecorations) {
   loom_llvmir_target_profile_storage_t storage = {};
   IREE_ASSERT_OK(loom_llvmir_target_profile_storage_initialize_from_bundle(
-      loom_llvmir_target_bundle_amdgpu_hal(), &storage));
+      loom_llvmir_target_bundle_amdgpu_hal(),
+      loom_llvmir_target_profile_amdgpu_hal(), &storage));
   const loom_llvmir_target_profile_t* profile = &storage.profile;
   loom_llvmir_target_config_t config = {};
   IREE_ASSERT_OK(loom_llvmir_target_profile_module_config(

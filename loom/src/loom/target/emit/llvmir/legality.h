@@ -14,6 +14,7 @@
 #define LOOM_TARGET_LLVMIR_LEGALITY_H_
 
 #include "loom/ir/ir.h"
+#include "loom/target/emit/llvmir/target_env.h"
 #include "loom/target/types.h"
 
 #ifdef __cplusplus
@@ -72,6 +73,8 @@ typedef struct loom_llvmir_target_legality_options_t {
   // Legalization and target-contract config selected for this compilation
   // unit.
   const loom_target_config_t* config;
+  // LLVM projection profile selected for this target.
+  const loom_llvmir_target_profile_t* profile;
   // Optional target-specific legality providers consulted by generic checks.
   const loom_llvmir_target_legality_provider_t* const* providers;
   // Number of provider pointers in |providers|.
@@ -91,16 +94,8 @@ iree_status_t loom_llvmir_verify_target_legality(
 const loom_module_t* loom_llvmir_target_legality_module(
     const loom_llvmir_target_legality_context_t* context);
 
-// Returns the selected target snapshot.
-const loom_target_snapshot_t* loom_llvmir_target_legality_snapshot(
-    const loom_llvmir_target_legality_context_t* context);
-
-// Returns the selected export plan.
-const loom_target_export_plan_t* loom_llvmir_target_legality_export_plan(
-    const loom_llvmir_target_legality_context_t* context);
-
-// Returns the selected target config.
-const loom_target_config_t* loom_llvmir_target_legality_config(
+// Returns the selected LLVM target projection profile.
+const loom_llvmir_target_profile_t* loom_llvmir_target_legality_profile(
     const loom_llvmir_target_legality_context_t* context);
 
 // Emits a failing legality diagnostic and returns a matching status.

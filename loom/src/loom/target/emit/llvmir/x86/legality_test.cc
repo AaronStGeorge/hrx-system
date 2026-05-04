@@ -90,11 +90,16 @@ class LlvmIrX86LegalityTest : public ::testing::Test {
     const loom_llvmir_target_legality_provider_t* providers[] = {
         loom_llvmir_x86_legality_provider(),
     };
+    const loom_llvmir_target_profile_t* profile =
+        bundle == loom_llvmir_target_bundle_x86_64_packed_dot_object()
+            ? loom_llvmir_target_profile_x86_64_packed_dot_object()
+            : loom_llvmir_target_profile_x86_64_object();
     loom_llvmir_target_legality_options_t options;
     std::memset(&options, 0, sizeof(options));
     options.snapshot = bundle->snapshot;
     options.export_plan = bundle->export_plan;
     options.config = bundle->config;
+    options.profile = profile;
     options.providers = providers;
     options.provider_count = IREE_ARRAYSIZE(providers);
     return loom_llvmir_verify_target_legality(module_, &options, diagnostic);

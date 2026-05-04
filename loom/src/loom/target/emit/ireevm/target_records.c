@@ -11,9 +11,7 @@
 static const loom_target_snapshot_t kIreeVmSnapshot = {
     .name = IREE_SVL("iree-vm"),
     .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_VM,
-    .target_triple = IREE_SVL("iree-vm"),
     .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_VM_BYTECODE,
-    .target_cpu = IREE_SVL("iree-vm"),
     .default_pointer_bitwidth = 64,
     .index_bitwidth = 64,
     .offset_bitwidth = 64,

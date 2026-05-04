@@ -432,9 +432,6 @@ static iree_status_t loom_target_module_compile_emit_incompatible_bundle(
                    : LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN)),
       loom_param_string(loom_target_module_compile_abi_kind_name(
           export_plan ? export_plan->abi_kind : LOOM_TARGET_ABI_UNKNOWN)),
-      loom_param_string(loom_target_module_compile_nonempty(
-          snapshot ? snapshot->target_triple : iree_string_view_empty(),
-          IREE_SV("<empty>"))),
   };
   return loom_target_module_compile_emit(
       diagnostic_emitter, entry->func.op,

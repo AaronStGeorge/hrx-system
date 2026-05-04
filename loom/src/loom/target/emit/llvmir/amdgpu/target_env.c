@@ -18,6 +18,7 @@
       "256:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:"  \
       "256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-"  \
       "A5-G1-ni:7:8:9")
+#define LOOM_LLVMIR_AMDGPU_BUFFER_RESOURCE_ADDRESS_SPACE 7
 
 static const loom_llvmir_target_env_t kAmdgcnAmdAmdhsaTargetEnv = {
     .name = LOOM_LLVMIR_AMDGPU_TARGET_TRIPLE,
@@ -34,15 +35,13 @@ static const loom_llvmir_target_env_t kAmdgcnAmdAmdhsaTargetEnv = {
             .local = 3,
             .constant = 4,
             .private_memory = 5,
-            .buffer_resource = 7,
+            .buffer_resource = LOOM_LLVMIR_AMDGPU_BUFFER_RESOURCE_ADDRESS_SPACE,
         },
 };
 
 static const loom_target_snapshot_t kAmdgpuHalSnapshot = {
     .name = LOOM_LLVMIR_AMDGPU_TARGET_TRIPLE,
     .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LLVMIR,
-    .target_triple = LOOM_LLVMIR_AMDGPU_TARGET_TRIPLE,
-    .data_layout = LOOM_LLVMIR_AMDGPU_DATA_LAYOUT,
     .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
     .default_pointer_bitwidth = 64,
     .index_bitwidth = 32,
@@ -75,7 +74,7 @@ static const loom_target_snapshot_t kAmdgpuHalSnapshot = {
             .constant = 4,
             .private_memory = 5,
             .host = UINT32_MAX,
-            .descriptor = 7,
+            .descriptor = LOOM_LLVMIR_AMDGPU_BUFFER_RESOURCE_ADDRESS_SPACE,
         },
 };
 
@@ -127,12 +126,36 @@ static const loom_llvmir_target_profile_t* const kAmdgpuTargetProfiles[] = {
     &kAmdgpuHalProfile,
 };
 
+static bool loom_llvmir_amdgpu_project_bundle(
+    const loom_target_bundle_t* bundle,
+    const loom_llvmir_target_profile_t** out_profile) {
+  *out_profile = NULL;
+  if (iree_string_view_equal(bundle->name, kAmdgpuHalProfile.name)) {
+    *out_profile = &kAmdgpuHalProfile;
+    return true;
+  }
+  if (bundle->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
+    return false;
+  }
+  if (bundle->export_plan->hal_kernel.buffer_resource_flags !=
+      LOOM_AMDGPU_HAL_BUFFER_RESOURCE_FLAGS) {
+    return false;
+  }
+  if (bundle->snapshot->memory_spaces.descriptor !=
+      LOOM_LLVMIR_AMDGPU_BUFFER_RESOURCE_ADDRESS_SPACE) {
+    return false;
+  }
+  *out_profile = &kAmdgpuHalProfile;
+  return true;
+}
+
 static const loom_llvmir_target_profile_provider_t
     kAmdgpuTargetProfileProvider = {
         .name = IREE_SVL("amdgpu"),
         .profiles = kAmdgpuTargetProfiles,
         .profile_count = IREE_ARRAYSIZE(kAmdgpuTargetProfiles),
         .llc_target_name = IREE_SVL("amdgcn"),
+        .project_bundle = loom_llvmir_amdgpu_project_bundle,
 };
 
 const loom_target_bundle_t* loom_llvmir_target_bundle_amdgpu_hal(void) {

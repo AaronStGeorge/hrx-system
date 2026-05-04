@@ -953,11 +953,7 @@ _INTERFACES: tuple[InterfaceSpec, ...] = (
 
 _TARGET_PROJECTION_FIELDS: dict[str, tuple[str, str]] = {
     "codegen_format": ("LOOM_TARGET_PROJECTION_VALUE_ENUM_U32", "snapshot.codegen_format"),
-    "target_triple": ("LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW", "snapshot.target_triple"),
-    "data_layout": ("LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW", "snapshot.data_layout"),
     "artifact_format": ("LOOM_TARGET_PROJECTION_VALUE_ENUM_U32", "snapshot.artifact_format"),
-    "target_cpu": ("LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW", "snapshot.target_cpu"),
-    "target_features": ("LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW", "snapshot.target_features"),
     "default_pointer_bitwidth": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.default_pointer_bitwidth"),
     "index_bitwidth": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.index_bitwidth"),
     "offset_bitwidth": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.offset_bitwidth"),

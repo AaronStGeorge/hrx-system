@@ -67,6 +67,7 @@ loom_cc_library(
   DEPS
     ::target_env
     iree::base
+    loom::src::loom::target::types
   PUBLIC
 )
 

@@ -11,10 +11,7 @@
 static const loom_target_snapshot_t kWasmCoreSimd128Snapshot = {
     .name = IREE_SVL("wasm32-simd128"),
     .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_WASM,
-    .target_triple = IREE_SVL("wasm32-unknown-unknown"),
     .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY,
-    .target_cpu = IREE_SVL("generic"),
-    .target_features = IREE_SVL("+simd128"),
     .default_pointer_bitwidth = 32,
     .index_bitwidth = 32,
     .offset_bitwidth = 32,

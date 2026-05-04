@@ -146,10 +146,12 @@ iree_status_t loom_llvmir_target_profile_module_config(
     const loom_llvmir_target_profile_t* profile, iree_string_view_t source_name,
     loom_llvmir_target_config_t* out_config);
 
-// Derives an LLVMIR adapter profile from generic target records. The returned
-// |out_storage->profile.target_env| points at |out_storage->target_env|.
+// Derives an LLVMIR adapter profile from generic target records and an
+// LLVM-owned projection row. The returned |out_storage->profile.target_env|
+// points at |out_storage->target_env|.
 iree_status_t loom_llvmir_target_profile_storage_initialize_from_bundle(
     const loom_target_bundle_t* bundle,
+    const loom_llvmir_target_profile_t* projected_profile,
     loom_llvmir_target_profile_storage_t* out_storage);
 
 // Builds argv-style llc target arguments for |profile|. The returned views

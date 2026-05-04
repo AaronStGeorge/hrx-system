@@ -121,16 +121,8 @@ typedef struct loom_target_snapshot_t {
   iree_string_view_t name;
   // Primary emitter family for this snapshot.
   loom_target_codegen_format_t codegen_format;
-  // ISA, object, or toolchain target triple when the backend uses one.
-  iree_string_view_t target_triple;
-  // Target data layout string when the backend exposes one.
-  iree_string_view_t data_layout;
   // Linkable or loadable artifact format produced for this snapshot.
   loom_target_artifact_format_t artifact_format;
-  // Target CPU, GPU chip, or architecture variant name.
-  iree_string_view_t target_cpu;
-  // Downstream feature string used by emitter/tool adapters.
-  iree_string_view_t target_features;
   // Default pointer bit width for target-independent layout decisions.
   uint32_t default_pointer_bitwidth;
   // Index bit width chosen for lowered index values.

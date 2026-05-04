@@ -3,6 +3,6 @@
 // Generic target record.
 target.generic<reference> @reference
 
-target.generic<llvm_cpu> @host {subgroup_size = 0}
+target.generic<reference> @host {subgroup_size = 0}
 
 target.artifact @host_object target(@host) {abi = object_file, artifact_format = elf}

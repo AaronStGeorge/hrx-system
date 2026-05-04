@@ -10,14 +10,6 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/x86/packed_dot_vector.h"
 
-static bool loom_llvmir_x86_legality_target_is_x86(
-    loom_llvmir_target_legality_context_t* context) {
-  const loom_target_snapshot_t* snapshot =
-      loom_llvmir_target_legality_snapshot(context);
-  return iree_string_view_equal(snapshot->target_triple,
-                                IREE_SV("x86_64-unknown-linux-gnu"));
-}
-
 static bool loom_llvmir_x86_legality_intrinsic_is_x86(iree_string_view_t kind) {
   return iree_string_view_equal(kind, IREE_SV("llvm.x86.rdtsc")) ||
          iree_string_view_equal(kind, IREE_SV("llvm.x86.sse2.pause"));
@@ -36,12 +28,6 @@ static iree_status_t loom_llvmir_x86_legality_verify_intrinsic(
   }
   *out_handled = true;
 
-  if (!loom_llvmir_x86_legality_target_is_x86(context)) {
-    return loom_llvmir_target_legality_fail(
-        context, provider, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC,
-        op, IREE_SV("x86 llvmir.intrinsic requires an x86 target environment"),
-        kind);
-  }
   if (iree_string_view_equal(kind, IREE_SV("llvm.x86.rdtsc"))) {
     iree_string_view_t detail = IREE_SV("llvm.x86.rdtsc expects () -> i64");
     IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_expect_intrinsic_shape(
@@ -96,9 +82,6 @@ static iree_status_t loom_llvmir_x86_legality_verify_packed_dot(
     const loom_llvmir_target_legality_provider_t* provider,
     loom_llvmir_target_legality_context_t* context, const loom_op_t* op,
     bool* out_handled) {
-  if (!loom_llvmir_x86_legality_target_is_x86(context)) {
-    return iree_ok_status();
-  }
   *out_handled = true;
 
   loom_x86_packed_dot_match_request_t request = {0};
@@ -110,10 +93,10 @@ static iree_status_t loom_llvmir_x86_legality_verify_packed_dot(
         IREE_SV("no x86 packed-dot match request can be inferred"),
         IREE_SV("invalid-request"));
   }
-  const loom_target_config_t* config =
-      loom_llvmir_target_legality_config(context);
+  const loom_llvmir_target_profile_t* profile =
+      loom_llvmir_target_legality_profile(context);
   request.feature_bits =
-      (loom_x86_packed_dot_feature_bits_t)config->contract_feature_bits;
+      (loom_x86_packed_dot_feature_bits_t)profile->x86_packed_dot_feature_bits;
 
   loom_x86_packed_dot_match_diagnostic_t diagnostic = {0};
   const loom_x86_packed_dot_descriptor_t* descriptor =

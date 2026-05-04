@@ -1523,7 +1523,7 @@ class TestCrossFormatRoundTrip:
 
     def test_enum_future_ordinal_survives_bytecode(self) -> None:
         text = (
-            "target.generic<llvm_cpu> @future_target\n\n"
+            "target.generic<reference> @future_target\n\n"
             "target.artifact @future target(@future_target) "
             "{artifact_format = elf, abi = object_file}\n"
         )

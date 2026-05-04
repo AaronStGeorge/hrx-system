@@ -75,6 +75,20 @@ iree_status_t loom_llvmir_target_registry_select_legality_providers(
     const loom_target_bundle_t* bundle,
     loom_llvmir_target_legality_provider_list_t* out_providers);
 
+// Projects |bundle| to a linked LLVMIR profile row.
+iree_status_t loom_llvmir_target_registry_project_bundle(
+    const loom_llvmir_target_registry_t* registry,
+    const loom_target_bundle_t* bundle,
+    const loom_llvmir_target_profile_t** out_profile,
+    const loom_llvmir_target_profile_provider_t** out_provider);
+
+// Derives an LLVMIR profile adapter for |bundle| through the linked projection
+// providers.
+iree_status_t loom_llvmir_target_registry_initialize_profile_from_bundle(
+    const loom_llvmir_target_registry_t* registry,
+    const loom_target_bundle_t* bundle,
+    loom_llvmir_target_profile_storage_t* out_storage);
+
 // Selects target-specific lowering providers required by |profile|.
 iree_status_t loom_llvmir_target_registry_select_lowering_providers(
     const loom_llvmir_target_registry_t* registry,

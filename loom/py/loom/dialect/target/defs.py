@@ -134,7 +134,6 @@ GenericTargetKind = EnumDef(
     "GenericTargetKind",
     [
         EnumCase("reference", 1, doc="Target-independent reference execution."),
-        EnumCase("llvm_cpu", 2, doc="Host-neutral LLVM CPU code generation."),
     ],
     doc="Generic target-family row selected by target.generic.",
 )
@@ -150,8 +149,6 @@ TARGET_COMMON_OVERRIDE_ATTRS = [
         open_enum=True,
         optional=True,
     ),
-    AttrDef("target_triple", ATTR_TYPE_STRING, optional=True),
-    AttrDef("data_layout", ATTR_TYPE_STRING, optional=True),
     AttrDef(
         "artifact_format",
         ATTR_TYPE_ENUM,
@@ -159,8 +156,6 @@ TARGET_COMMON_OVERRIDE_ATTRS = [
         open_enum=True,
         optional=True,
     ),
-    AttrDef("target_cpu", ATTR_TYPE_STRING, optional=True),
-    AttrDef("target_features", ATTR_TYPE_STRING, optional=True),
     AttrDef("default_pointer_bitwidth", ATTR_TYPE_I64, optional=True),
     AttrDef("index_bitwidth", ATTR_TYPE_I64, optional=True),
     AttrDef("offset_bitwidth", ATTR_TYPE_I64, optional=True),
@@ -241,7 +236,6 @@ target_generic = Op(
     ],
     examples=[
         "target.generic<reference> @oracle",
-        "target.generic<llvm_cpu> @host {index_bitwidth = 64}",
     ],
 )
 

@@ -66,12 +66,8 @@ static iree_status_t loom_llvmir_linkage_from_target(
                           "unknown target linkage");
 }
 
-static iree_status_t loom_llvmir_validate_target_snapshot(
+static iree_status_t loom_llvmir_validate_target_snapshot_common(
     const loom_target_snapshot_t* snapshot) {
-  if (snapshot->codegen_format != LOOM_TARGET_CODEGEN_FORMAT_LLVMIR) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target snapshot is not an LLVMIR codegen target");
-  }
   if (snapshot->default_pointer_bitwidth == 0 ||
       snapshot->index_bitwidth == 0 || snapshot->offset_bitwidth == 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -83,12 +79,12 @@ static iree_status_t loom_llvmir_validate_target_snapshot(
 
 static iree_status_t loom_llvmir_validate_hal_kernel_export_plan(
     const loom_target_snapshot_t* snapshot,
+    const loom_llvmir_target_profile_t* projected_profile,
     const loom_target_export_plan_t* export_plan) {
-  if (!iree_string_view_equal(snapshot->target_triple,
-                              IREE_SV("amdgcn-amd-amdhsa"))) {
+  if (projected_profile->kind != LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
-        "LLVMIR HAL kernel profile derivation currently supports AMDGPU only");
+        "LLVMIR target projection does not support HAL kernel ABI");
   }
   if (export_plan->hal_kernel.binding_alignment == 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -136,12 +132,12 @@ static iree_status_t loom_llvmir_resolve_hal_kernel_flat_workgroup_range(
 
 iree_status_t loom_llvmir_target_profile_storage_initialize_from_bundle(
     const loom_target_bundle_t* bundle,
+    const loom_llvmir_target_profile_t* projected_profile,
     loom_llvmir_target_profile_storage_t* out_storage) {
   *out_storage = (loom_llvmir_target_profile_storage_t){0};
   const loom_target_snapshot_t* snapshot = bundle->snapshot;
   const loom_target_export_plan_t* export_plan = bundle->export_plan;
-  const loom_target_config_t* config = bundle->config;
-  IREE_RETURN_IF_ERROR(loom_llvmir_validate_target_snapshot(snapshot));
+  IREE_RETURN_IF_ERROR(loom_llvmir_validate_target_snapshot_common(snapshot));
 
   loom_llvmir_object_format_t object_format = LOOM_LLVMIR_OBJECT_FORMAT_UNKNOWN;
   IREE_RETURN_IF_ERROR(loom_llvmir_object_format_from_artifact(
@@ -152,8 +148,8 @@ iree_status_t loom_llvmir_target_profile_storage_initialize_from_bundle(
 
   out_storage->target_env = (loom_llvmir_target_env_t){
       .name = snapshot->name,
-      .target_triple = snapshot->target_triple,
-      .data_layout = snapshot->data_layout,
+      .target_triple = projected_profile->target_env->target_triple,
+      .data_layout = projected_profile->target_env->data_layout,
       .object_format = object_format,
       .default_pointer_bitwidth = snapshot->default_pointer_bitwidth,
       .index_bitwidth = snapshot->index_bitwidth,
@@ -170,11 +166,12 @@ iree_status_t loom_llvmir_target_profile_storage_initialize_from_bundle(
   };
 
   out_storage->profile = (loom_llvmir_target_profile_t){
-      .name = bundle->name,
+      .name = projected_profile->name,
       .target_env = &out_storage->target_env,
-      .target_cpu = snapshot->target_cpu,
-      .target_features = snapshot->target_features,
-      .x86_packed_dot_feature_bits = config->contract_feature_bits,
+      .target_cpu = projected_profile->target_cpu,
+      .target_features = projected_profile->target_features,
+      .x86_packed_dot_feature_bits =
+          projected_profile->x86_packed_dot_feature_bits,
       .exported_linkage = exported_linkage,
       .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
   };
@@ -184,8 +181,8 @@ iree_status_t loom_llvmir_target_profile_storage_initialize_from_bundle(
     return iree_ok_status();
   }
   if (export_plan->abi_kind == LOOM_TARGET_ABI_HAL_KERNEL) {
-    IREE_RETURN_IF_ERROR(
-        loom_llvmir_validate_hal_kernel_export_plan(snapshot, export_plan));
+    IREE_RETURN_IF_ERROR(loom_llvmir_validate_hal_kernel_export_plan(
+        snapshot, projected_profile, export_plan));
     uint32_t flat_workgroup_size_min = 0;
     uint32_t flat_workgroup_size_max = 0;
     IREE_RETURN_IF_ERROR(loom_llvmir_resolve_hal_kernel_flat_workgroup_range(
@@ -193,9 +190,9 @@ iree_status_t loom_llvmir_target_profile_storage_initialize_from_bundle(
         &flat_workgroup_size_max));
     out_storage->profile.kind = LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL;
     out_storage->profile.kernel_calling_convention =
-        LOOM_LLVMIR_CALLING_CONVENTION_AMDGPU_KERNEL;
+        projected_profile->kernel_calling_convention;
     out_storage->profile.required_workgroup_size_metadata_name =
-        IREE_SV("reqd_work_group_size");
+        projected_profile->required_workgroup_size_metadata_name;
     out_storage->profile.amdgpu_hal = (loom_llvmir_amdgpu_hal_abi_t){
         .binding_alignment = export_plan->hal_kernel.binding_alignment,
         .required_workgroup_size =

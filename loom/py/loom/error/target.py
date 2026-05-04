@@ -445,8 +445,7 @@ ERR_TARGET_024 = ErrorDef(
     message=(
         "target pipeline '{pipeline_name}' cannot compile '@{function_name}' "
         "with target '{target_key}' export '{export_name}' config "
-        "'{config_key}' ({codegen_format}/{artifact_format}/{abi_kind}, "
-        "triple '{target_triple}')"
+        "'{config_key}' ({codegen_format}/{artifact_format}/{abi_kind})"
     ),
     params=(
         ErrorParam("pipeline_name", ParamKind.STRING),
@@ -457,7 +456,6 @@ ERR_TARGET_024 = ErrorDef(
         ErrorParam("codegen_format", ParamKind.STRING),
         ErrorParam("artifact_format", ParamKind.STRING),
         ErrorParam("abi_kind", ParamKind.STRING),
-        ErrorParam("target_triple", ParamKind.STRING),
     ),
     fix_hint=(
         "Select a target record/export whose artifact kind is consumed by "

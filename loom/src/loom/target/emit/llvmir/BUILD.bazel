@@ -134,6 +134,7 @@ loom_cc_library(
     hdrs = ["target_presets.h"],
     deps = [
         ":target_env",
+        "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
     ],
 )

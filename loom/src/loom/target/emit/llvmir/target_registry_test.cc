@@ -93,8 +93,8 @@ TEST(LlvmIrTargetRegistryTest, SelectsLegalityAndLoweringProvidersByTarget) {
   EXPECT_FALSE(HasLegalityProvider(legality_providers, "amdgpu"));
 
   loom_llvmir_target_profile_storage_t profile_storage;
-  IREE_ASSERT_OK(loom_llvmir_target_profile_storage_initialize_from_bundle(
-      x86_bundle, &profile_storage));
+  IREE_ASSERT_OK(loom_llvmir_target_registry_initialize_profile_from_bundle(
+      &registry, x86_bundle, &profile_storage));
   loom_llvmir_lowering_provider_list_t lowering_providers = {};
   IREE_ASSERT_OK(loom_llvmir_target_registry_select_lowering_providers(
       &registry, &profile_storage.profile, &lowering_providers));

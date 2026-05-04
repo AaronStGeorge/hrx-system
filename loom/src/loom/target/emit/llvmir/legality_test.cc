@@ -102,6 +102,7 @@ class LlvmIrLegalityTest : public ::testing::Test {
     options.snapshot = bundle->snapshot;
     options.export_plan = bundle->export_plan;
     options.config = bundle->config;
+    options.profile = loom_llvmir_target_profile_test_object();
     return loom_llvmir_verify_target_legality(module_, &options, diagnostic);
   }
 
@@ -137,11 +138,7 @@ class LlvmIrLegalityTest : public ::testing::Test {
     loom_op_t* target_op = NULL;
     IREE_ASSERT_OK(loom_target_generic_build(
         &module_builder_, /*build_flags=*/0, LOOM_TARGET_GENERIC_KIND_REFERENCE,
-        target_symbol, /*codegen_format=*/0,
-        /*target_triple=*/LOOM_STRING_ID_INVALID,
-        /*data_layout=*/LOOM_STRING_ID_INVALID, /*artifact_format=*/0,
-        /*target_cpu=*/LOOM_STRING_ID_INVALID,
-        /*target_features=*/LOOM_STRING_ID_INVALID,
+        target_symbol, /*codegen_format=*/0, /*artifact_format=*/0,
         /*default_pointer_bitwidth=*/0, /*index_bitwidth=*/0,
         /*offset_bitwidth=*/0, /*max_workgroup_size_x=*/0,
         /*max_workgroup_size_y=*/0, /*max_workgroup_size_z=*/0,

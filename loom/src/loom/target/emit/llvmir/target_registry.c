@@ -34,39 +34,49 @@ void loom_llvmir_target_registry_initialize(
   out_registry->bundle_count = IREE_ARRAYSIZE(out_registry->bundles);
 }
 
-static bool loom_llvmir_target_registry_profile_has_triple(
-    const loom_llvmir_target_profile_t* profile,
-    iree_string_view_t target_triple) {
-  return profile != NULL && profile->target_env != NULL &&
-         iree_string_view_equal(profile->target_env->target_triple,
-                                target_triple);
-}
-
-static bool loom_llvmir_target_registry_bundle_has_triple(
-    const loom_target_bundle_t* bundle, iree_string_view_t target_triple) {
-  return bundle != NULL && bundle->snapshot != NULL &&
-         iree_string_view_equal(bundle->snapshot->target_triple, target_triple);
-}
-
-static iree_status_t loom_llvmir_target_registry_has_profile_provider(
-    const loom_llvmir_target_registry_t* registry, iree_string_view_t name,
-    bool* out_has_provider) {
-  *out_has_provider = false;
-  if (registry->profile_registry.provider_count > 0 &&
-      registry->profile_registry.providers == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "LLVMIR target registry has no providers");
+iree_status_t loom_llvmir_target_registry_project_bundle(
+    const loom_llvmir_target_registry_t* registry,
+    const loom_target_bundle_t* bundle,
+    const loom_llvmir_target_profile_t** out_profile,
+    const loom_llvmir_target_profile_provider_t** out_provider) {
+  *out_profile = NULL;
+  *out_provider = NULL;
+  if (registry->profile_registry.default_profile != NULL &&
+      iree_string_view_equal(
+          bundle->name, registry->profile_registry.default_profile->name)) {
+    *out_profile = registry->profile_registry.default_profile;
+    return iree_ok_status();
   }
-  for (iree_host_size_t i = 0; i < registry->profile_registry.provider_count;
-       ++i) {
+  for (iree_host_size_t provider_ordinal = 0;
+       provider_ordinal < registry->profile_registry.provider_count;
+       ++provider_ordinal) {
     const loom_llvmir_target_profile_provider_t* provider =
-        registry->profile_registry.providers[i];
-    if (iree_string_view_equal(provider->name, name)) {
-      *out_has_provider = true;
+        registry->profile_registry.providers[provider_ordinal];
+    if (provider->project_bundle == NULL) {
+      continue;
+    }
+    const loom_llvmir_target_profile_t* profile = NULL;
+    if (provider->project_bundle(bundle, &profile)) {
+      *out_profile = profile;
+      *out_provider = provider;
       return iree_ok_status();
     }
   }
-  return iree_ok_status();
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "target bundle has no linked LLVMIR projection");
+}
+
+iree_status_t loom_llvmir_target_registry_initialize_profile_from_bundle(
+    const loom_llvmir_target_registry_t* registry,
+    const loom_target_bundle_t* bundle,
+    loom_llvmir_target_profile_storage_t* out_storage) {
+  const loom_llvmir_target_profile_t* profile = NULL;
+  const loom_llvmir_target_profile_provider_t* provider = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_target_registry_project_bundle(
+      registry, bundle, &profile, &provider));
+  (void)provider;
+  return loom_llvmir_target_profile_storage_initialize_from_bundle(
+      bundle, profile, out_storage);
 }
 
 iree_status_t loom_llvmir_target_registry_lookup_bundle(
@@ -101,19 +111,19 @@ iree_status_t loom_llvmir_target_registry_select_legality_providers(
     loom_llvmir_target_legality_provider_list_t* out_providers) {
   *out_providers = (loom_llvmir_target_legality_provider_list_t){0};
 
-  bool has_x86_provider = false;
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_registry_has_profile_provider(
-      registry, IREE_SV("x86"), &has_x86_provider));
-  if (has_x86_provider && loom_llvmir_target_registry_bundle_has_triple(
-                              bundle, IREE_SV("x86_64-unknown-linux-gnu"))) {
+  const loom_llvmir_target_profile_t* profile = NULL;
+  const loom_llvmir_target_profile_provider_t* provider = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_target_registry_project_bundle(
+      registry, bundle, &profile, &provider));
+  (void)profile;
+  if (provider == NULL) {
+    return iree_ok_status();
+  }
+  if (provider == loom_llvmir_x86_target_profile_provider()) {
     out_providers->providers[out_providers->provider_count++] =
         loom_llvmir_x86_legality_provider();
   }
-  bool has_amdgpu_provider = false;
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_registry_has_profile_provider(
-      registry, IREE_SV("amdgpu"), &has_amdgpu_provider));
-  if (has_amdgpu_provider && loom_llvmir_target_registry_bundle_has_triple(
-                                 bundle, IREE_SV("amdgcn-amd-amdhsa"))) {
+  if (provider == loom_llvmir_amdgpu_target_profile_provider()) {
     out_providers->providers[out_providers->provider_count++] =
         loom_llvmir_amdgpu_legality_provider();
   }
@@ -126,19 +136,19 @@ iree_status_t loom_llvmir_target_registry_select_lowering_providers(
     loom_llvmir_lowering_provider_list_t* out_providers) {
   *out_providers = (loom_llvmir_lowering_provider_list_t){0};
 
-  bool has_x86_provider = false;
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_registry_has_profile_provider(
-      registry, IREE_SV("x86"), &has_x86_provider));
-  if (has_x86_provider && loom_llvmir_target_registry_profile_has_triple(
-                              profile, IREE_SV("x86_64-unknown-linux-gnu"))) {
+  const loom_llvmir_target_profile_provider_t* provider = NULL;
+  if (registry->profile_registry.default_profile != NULL &&
+      iree_string_view_equal(
+          profile->name, registry->profile_registry.default_profile->name)) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_llvmir_target_registry_lookup_profile_provider(
+      registry, profile->name, NULL, &provider));
+  if (provider == loom_llvmir_x86_target_profile_provider()) {
     out_providers->providers[out_providers->provider_count++] =
         loom_llvmir_x86_lowering_provider();
   }
-  bool has_amdgpu_provider = false;
-  IREE_RETURN_IF_ERROR(loom_llvmir_target_registry_has_profile_provider(
-      registry, IREE_SV("amdgpu"), &has_amdgpu_provider));
-  if (has_amdgpu_provider && loom_llvmir_target_registry_profile_has_triple(
-                                 profile, IREE_SV("amdgcn-amd-amdhsa"))) {
+  if (provider == loom_llvmir_amdgpu_target_profile_provider()) {
     out_providers->providers[out_providers->provider_count++] =
         loom_llvmir_amdgpu_lowering_provider();
   }

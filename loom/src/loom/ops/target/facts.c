@@ -37,46 +37,9 @@ static const loom_target_bundle_t kGenericReferenceBundle = {
     .config = &kGenericReferenceConfig,
 };
 
-static const loom_target_snapshot_t kGenericLlvmCpuSnapshot = {
-    .name = IREE_SVL("target-generic-llvm-cpu"),
-    .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LLVMIR,
-    .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
-    .default_pointer_bitwidth = 64,
-    .index_bitwidth = 64,
-    .offset_bitwidth = 64,
-    .memory_spaces =
-        {
-            .generic = 0,
-            .global = 0,
-            .workgroup = 0,
-            .constant = 0,
-            .private_memory = 0,
-            .host = 0,
-            .descriptor = UINT32_MAX,
-        },
-};
-
-static const loom_target_export_plan_t kGenericLlvmCpuExportPlan = {
-    .name = IREE_SVL("target-generic-llvm-cpu"),
-    .abi_kind = LOOM_TARGET_ABI_OBJECT_FUNCTION,
-    .linkage = LOOM_TARGET_LINKAGE_DSO_LOCAL,
-};
-
-static const loom_target_config_t kGenericLlvmCpuConfig = {
-    .name = IREE_SVL("target.generic.llvm_cpu"),
-};
-
-static const loom_target_bundle_t kGenericLlvmCpuBundle = {
-    .name = IREE_SVL("target-generic-llvm-cpu"),
-    .snapshot = &kGenericLlvmCpuSnapshot,
-    .export_plan = &kGenericLlvmCpuExportPlan,
-    .config = &kGenericLlvmCpuConfig,
-};
-
 static const loom_target_bundle_t* const kGenericTargetBundleValues[] = {
     NULL,
     &kGenericReferenceBundle,
-    &kGenericLlvmCpuBundle,
 };
 
 const loom_target_bundle_table_t loom_target_generic_target_bundles = {

@@ -10,15 +10,6 @@
 
 #include "loom/target/arch/x86/feature_bits.h"
 
-#define LOOM_X86_64_TARGET_TRIPLE IREE_SVL("x86_64-unknown-linux-gnu")
-#define LOOM_X86_64_DATA_LAYOUT                     \
-  IREE_SVL(                                         \
-      "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:" \
-      "64-i128:128-f80:128-n8:16:32:64-S128")
-#define LOOM_X86_64_AVX512_FEATURES \
-  IREE_SVL("+avx512f,+avx512bw,+avx512dq,+avx512vl,+fma")
-#define LOOM_X86_64_PACKED_DOT_FEATURES \
-  IREE_SVL("+avx512bf16,+avx512vl,+avxvnni,+avxvnniint8")
 #define LOOM_X86_64_PACKED_DOT_DESCRIPTOR_SET IREE_SVL("x86.packed_dot.core")
 #define LOOM_X86_64_AVX512_PACKED_DOT_DESCRIPTOR_SET \
   IREE_SVL("x86.avx512_packed_dot.core")
@@ -26,11 +17,7 @@
 static const loom_target_snapshot_t kX86_64Avx512Snapshot = {
     .name = IREE_SVL("x86_64-avx512-low"),
     .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,
-    .target_triple = LOOM_X86_64_TARGET_TRIPLE,
-    .data_layout = LOOM_X86_64_DATA_LAYOUT,
     .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
-    .target_cpu = IREE_SVL("x86-64-v4"),
-    .target_features = LOOM_X86_64_AVX512_FEATURES,
     .default_pointer_bitwidth = 64,
     .index_bitwidth = 64,
     .offset_bitwidth = 64,
@@ -49,11 +36,7 @@ static const loom_target_snapshot_t kX86_64Avx512Snapshot = {
 static const loom_target_snapshot_t kX86_64PackedDotSnapshot = {
     .name = IREE_SVL("x86_64-packed-dot-low"),
     .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,
-    .target_triple = LOOM_X86_64_TARGET_TRIPLE,
-    .data_layout = LOOM_X86_64_DATA_LAYOUT,
     .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
-    .target_cpu = IREE_SVL("x86-64-v4"),
-    .target_features = LOOM_X86_64_PACKED_DOT_FEATURES,
     .default_pointer_bitwidth = 64,
     .index_bitwidth = 64,
     .offset_bitwidth = 64,
@@ -72,13 +55,7 @@ static const loom_target_snapshot_t kX86_64PackedDotSnapshot = {
 static const loom_target_snapshot_t kX86_64Avx512PackedDotSnapshot = {
     .name = IREE_SVL("x86_64-avx512-packed-dot-low"),
     .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,
-    .target_triple = LOOM_X86_64_TARGET_TRIPLE,
-    .data_layout = LOOM_X86_64_DATA_LAYOUT,
     .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
-    .target_cpu = IREE_SVL("x86-64-v4"),
-    .target_features =
-        IREE_SVL("+avx512f,+avx512bw,+avx512dq,+avx512vl,+fma,"
-                 "+avx512bf16,+avx512vnni,+avxvnni,+avxvnniint8"),
     .default_pointer_bitwidth = 64,
     .index_bitwidth = 64,
     .offset_bitwidth = 64,

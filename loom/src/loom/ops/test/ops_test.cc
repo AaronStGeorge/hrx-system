@@ -815,10 +815,7 @@ TEST_F(BuilderTest, TargetLikeInterfaceReadsTargetRecordFields) {
   loom_op_t* op = NULL;
   IREE_ASSERT_OK(loom_test_target_build(
       &builder_, /*build_flags=*/0, LOOM_TEST_TARGET_KIND_LOW_CORE, symbol,
-      /*codegen_format=*/0, /*target_triple=*/LOOM_STRING_ID_INVALID,
-      /*data_layout=*/LOOM_STRING_ID_INVALID, /*artifact_format=*/0,
-      /*target_cpu=*/LOOM_STRING_ID_INVALID,
-      /*target_features=*/LOOM_STRING_ID_INVALID,
+      /*codegen_format=*/0, /*artifact_format=*/0,
       /*default_pointer_bitwidth=*/0, /*index_bitwidth=*/0,
       /*offset_bitwidth=*/0, /*max_workgroup_size_x=*/0,
       /*max_workgroup_size_y=*/0, /*max_workgroup_size_z=*/0,

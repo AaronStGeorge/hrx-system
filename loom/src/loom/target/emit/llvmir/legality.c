@@ -130,19 +130,9 @@ const loom_module_t* loom_llvmir_target_legality_module(
   return context->module;
 }
 
-const loom_target_snapshot_t* loom_llvmir_target_legality_snapshot(
+const loom_llvmir_target_profile_t* loom_llvmir_target_legality_profile(
     const loom_llvmir_target_legality_context_t* context) {
-  return context->options->snapshot;
-}
-
-const loom_target_export_plan_t* loom_llvmir_target_legality_export_plan(
-    const loom_llvmir_target_legality_context_t* context) {
-  return context->options->export_plan;
-}
-
-const loom_target_config_t* loom_llvmir_target_legality_config(
-    const loom_llvmir_target_legality_context_t* context) {
-  return context->options->config;
+  return &context->profile_storage.profile;
 }
 
 iree_status_t loom_llvmir_target_legality_string_attr(
@@ -341,7 +331,7 @@ static iree_status_t loom_llvmir_target_legality_validate_options(
   };
   iree_status_t status =
       loom_llvmir_target_profile_storage_initialize_from_bundle(
-          &context->bundle, &context->profile_storage);
+          &context->bundle, options->profile, &context->profile_storage);
   if (!iree_status_is_ok(status)) {
     iree_status_free(status);
     return loom_llvmir_target_legality_fail(

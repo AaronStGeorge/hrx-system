@@ -1254,10 +1254,7 @@ static iree_status_t loom_low_source_workload_generate_module_into(
   loom_op_t* target_op = NULL;
   IREE_RETURN_IF_ERROR(loom_test_target_build(
       &builder, /*build_flags=*/0, LOOM_TEST_TARGET_KIND_LOW_CORE, target_ref,
-      /*codegen_format=*/0, /*target_triple=*/LOOM_STRING_ID_INVALID,
-      /*data_layout=*/LOOM_STRING_ID_INVALID, /*artifact_format=*/0,
-      /*target_cpu=*/LOOM_STRING_ID_INVALID,
-      /*target_features=*/LOOM_STRING_ID_INVALID,
+      /*codegen_format=*/0, /*artifact_format=*/0,
       /*default_pointer_bitwidth=*/0, /*index_bitwidth=*/0,
       /*offset_bitwidth=*/0, /*max_workgroup_size_x=*/0,
       /*max_workgroup_size_y=*/0, /*max_workgroup_size_z=*/0,

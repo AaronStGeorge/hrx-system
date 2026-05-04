@@ -8,14 +8,6 @@
 
 #include "loom/ops/llvmir/ops.h"
 
-static bool loom_llvmir_amdgpu_legality_target_is_amdgpu(
-    loom_llvmir_target_legality_context_t* context) {
-  const loom_target_snapshot_t* snapshot =
-      loom_llvmir_target_legality_snapshot(context);
-  return iree_string_view_equal(snapshot->target_triple,
-                                IREE_SV("amdgcn-amd-amdhsa"));
-}
-
 static bool loom_llvmir_amdgpu_legality_intrinsic_is_workitem_id(
     iree_string_view_t kind) {
   return iree_string_view_equal(kind, IREE_SV("llvm.amdgcn.workitem.id.x")) ||
@@ -39,14 +31,6 @@ static iree_status_t loom_llvmir_amdgpu_legality_try_verify_op(
   }
   *out_handled = true;
 
-  if (!loom_llvmir_amdgpu_legality_target_is_amdgpu(context)) {
-    return loom_llvmir_target_legality_fail(
-        context, provider, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC,
-        op,
-        IREE_SV("AMDGPU llvmir.intrinsic requires an AMDGPU target "
-                "environment"),
-        kind);
-  }
   iree_string_view_t detail =
       IREE_SV("AMDGPU workitem.id intrinsic expects () -> i32");
   IREE_RETURN_IF_ERROR(loom_llvmir_target_legality_expect_intrinsic_shape(

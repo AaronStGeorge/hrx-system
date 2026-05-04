@@ -36,68 +36,60 @@ LOOM_DEFINE_ISA(loom_wasm_target_isa, LOOM_OP_WASM_TARGET)
 LOOM_DEFINE_ATTR_SYMBOL(loom_wasm_target_symbol, 0)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_wasm_target_kind, 1, loom_wasm_target_kind_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_wasm_target_codegen_format, 2, loom_target_codegen_format_t)
-LOOM_DEFINE_ATTR_STRING(loom_wasm_target_target_triple, 3)
-LOOM_DEFINE_ATTR_STRING(loom_wasm_target_data_layout, 4)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_wasm_target_artifact_format, 5, loom_target_artifact_format_t)
-LOOM_DEFINE_ATTR_STRING(loom_wasm_target_target_cpu, 6)
-LOOM_DEFINE_ATTR_STRING(loom_wasm_target_target_features, 7)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_default_pointer_bitwidth, 8)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_index_bitwidth, 9)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_offset_bitwidth, 10)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_max_workgroup_size_x, 11)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_max_workgroup_size_y, 12)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_max_workgroup_size_z, 13)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_max_flat_workgroup_size, 14)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_subgroup_size, 15)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_max_workgroup_count_x, 16)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_max_workgroup_count_y, 17)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_max_workgroup_count_z, 18)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_memory_space_generic, 19)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_memory_space_global, 20)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_memory_space_workgroup, 21)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_memory_space_constant, 22)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_memory_space_private, 23)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_memory_space_host, 24)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_memory_space_descriptor, 25)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_wasm_target_abi, 26, loom_target_abi_kind_t)
-LOOM_DEFINE_ATTR_STRING(loom_wasm_target_export_symbol, 27)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_wasm_target_linkage, 28, loom_target_linkage_t)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_hal_binding_alignment, 29)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_hal_buffer_resource_flags, 30)
-LOOM_DEFINE_ATTR_STRING(loom_wasm_target_contract_set_key, 31)
-LOOM_DEFINE_ATTR_I64(loom_wasm_target_contract_feature_bits, 32)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_wasm_target_artifact_format, 3, loom_target_artifact_format_t)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_default_pointer_bitwidth, 4)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_index_bitwidth, 5)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_offset_bitwidth, 6)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_max_workgroup_size_x, 7)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_max_workgroup_size_y, 8)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_max_workgroup_size_z, 9)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_max_flat_workgroup_size, 10)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_subgroup_size, 11)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_max_workgroup_count_x, 12)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_max_workgroup_count_y, 13)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_max_workgroup_count_z, 14)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_memory_space_generic, 15)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_memory_space_global, 16)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_memory_space_workgroup, 17)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_memory_space_constant, 18)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_memory_space_private, 19)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_memory_space_host, 20)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_memory_space_descriptor, 21)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_wasm_target_abi, 22, loom_target_abi_kind_t)
+LOOM_DEFINE_ATTR_STRING(loom_wasm_target_export_symbol, 23)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_wasm_target_linkage, 24, loom_target_linkage_t)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_hal_binding_alignment, 25)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_hal_buffer_resource_flags, 26)
+LOOM_DEFINE_ATTR_STRING(loom_wasm_target_contract_set_key, 27)
+LOOM_DEFINE_ATTR_I64(loom_wasm_target_contract_feature_bits, 28)
 enum loom_wasm_target_build_flag_bits_e {
   LOOM_WASM_TARGET_BUILD_FLAG_HAS_CODEGEN_FORMAT = 1u << 0,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_TARGET_TRIPLE = 1u << 1,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_DATA_LAYOUT = 1u << 2,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_ARTIFACT_FORMAT = 1u << 3,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_TARGET_CPU = 1u << 4,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_TARGET_FEATURES = 1u << 5,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_DEFAULT_POINTER_BITWIDTH = 1u << 6,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_INDEX_BITWIDTH = 1u << 7,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_OFFSET_BITWIDTH = 1u << 8,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MAX_WORKGROUP_SIZE_X = 1u << 9,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MAX_WORKGROUP_SIZE_Y = 1u << 10,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MAX_WORKGROUP_SIZE_Z = 1u << 11,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MAX_FLAT_WORKGROUP_SIZE = 1u << 12,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_SUBGROUP_SIZE = 1u << 13,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MAX_WORKGROUP_COUNT_X = 1u << 14,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MAX_WORKGROUP_COUNT_Y = 1u << 15,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MAX_WORKGROUP_COUNT_Z = 1u << 16,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MEMORY_SPACE_GENERIC = 1u << 17,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MEMORY_SPACE_GLOBAL = 1u << 18,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MEMORY_SPACE_WORKGROUP = 1u << 19,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MEMORY_SPACE_CONSTANT = 1u << 20,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MEMORY_SPACE_PRIVATE = 1u << 21,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MEMORY_SPACE_HOST = 1u << 22,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MEMORY_SPACE_DESCRIPTOR = 1u << 23,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_ABI = 1u << 24,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 25,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_LINKAGE = 1u << 26,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_HAL_BINDING_ALIGNMENT = 1u << 27,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_HAL_BUFFER_RESOURCE_FLAGS = 1u << 28,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_CONTRACT_SET_KEY = 1u << 29,
-  LOOM_WASM_TARGET_BUILD_FLAG_HAS_CONTRACT_FEATURE_BITS = 1u << 30,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_ARTIFACT_FORMAT = 1u << 1,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_DEFAULT_POINTER_BITWIDTH = 1u << 2,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_INDEX_BITWIDTH = 1u << 3,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_OFFSET_BITWIDTH = 1u << 4,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MAX_WORKGROUP_SIZE_X = 1u << 5,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MAX_WORKGROUP_SIZE_Y = 1u << 6,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MAX_WORKGROUP_SIZE_Z = 1u << 7,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MAX_FLAT_WORKGROUP_SIZE = 1u << 8,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_SUBGROUP_SIZE = 1u << 9,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MAX_WORKGROUP_COUNT_X = 1u << 10,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MAX_WORKGROUP_COUNT_Y = 1u << 11,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MAX_WORKGROUP_COUNT_Z = 1u << 12,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MEMORY_SPACE_GENERIC = 1u << 13,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MEMORY_SPACE_GLOBAL = 1u << 14,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MEMORY_SPACE_WORKGROUP = 1u << 15,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MEMORY_SPACE_CONSTANT = 1u << 16,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MEMORY_SPACE_PRIVATE = 1u << 17,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MEMORY_SPACE_HOST = 1u << 18,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_MEMORY_SPACE_DESCRIPTOR = 1u << 19,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_ABI = 1u << 20,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 21,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_LINKAGE = 1u << 22,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_HAL_BINDING_ALIGNMENT = 1u << 23,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_HAL_BUFFER_RESOURCE_FLAGS = 1u << 24,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_CONTRACT_SET_KEY = 1u << 25,
+  LOOM_WASM_TARGET_BUILD_FLAG_HAS_CONTRACT_FEATURE_BITS = 1u << 26,
 };
 typedef uint32_t loom_wasm_target_build_flags_t;
 iree_status_t loom_wasm_target_build(
@@ -106,11 +98,7 @@ iree_status_t loom_wasm_target_build(
     loom_wasm_target_kind_t kind,
     loom_symbol_ref_t symbol,
     loom_optional uint8_t codegen_format,
-    loom_optional loom_string_id_t target_triple,
-    loom_optional loom_string_id_t data_layout,
     loom_optional uint8_t artifact_format,
-    loom_optional loom_string_id_t target_cpu,
-    loom_optional loom_string_id_t target_features,
     loom_optional int64_t default_pointer_bitwidth,
     loom_optional int64_t index_bitwidth,
     loom_optional int64_t offset_bitwidth,

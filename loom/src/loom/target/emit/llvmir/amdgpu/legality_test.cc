@@ -95,6 +95,7 @@ class LlvmIrAmdgpuLegalityTest : public ::testing::Test {
     options.snapshot = bundle->snapshot;
     options.export_plan = bundle->export_plan;
     options.config = bundle->config;
+    options.profile = loom_llvmir_target_profile_amdgpu_hal();
     options.providers = providers;
     options.provider_count = IREE_ARRAYSIZE(providers);
     return loom_llvmir_verify_target_legality(module_, &options, diagnostic);

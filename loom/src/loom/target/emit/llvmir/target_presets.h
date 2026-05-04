@@ -14,10 +14,16 @@
 #define LOOM_TARGET_LLVMIR_TARGET_PRESETS_H_
 
 #include "loom/target/emit/llvmir/target_env.h"
+#include "loom/target/types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef bool(
+    IREE_API_PTR* loom_llvmir_target_profile_provider_project_bundle_fn_t)(
+    const loom_target_bundle_t* bundle,
+    const loom_llvmir_target_profile_t** out_profile);
 
 typedef struct loom_llvmir_target_profile_provider_t {
   // Stable provider name used for diagnostics.
@@ -28,6 +34,8 @@ typedef struct loom_llvmir_target_profile_provider_t {
   iree_host_size_t profile_count;
   // Target name reported by `llc --version`, or empty when not applicable.
   iree_string_view_t llc_target_name;
+  // Projects a Loom target bundle to this provider's LLVM profile row.
+  loom_llvmir_target_profile_provider_project_bundle_fn_t project_bundle;
 } loom_llvmir_target_profile_provider_t;
 
 typedef struct loom_llvmir_target_profile_registry_t {

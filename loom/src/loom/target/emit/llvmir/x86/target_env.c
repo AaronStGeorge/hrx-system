@@ -13,8 +13,19 @@
   IREE_SVL(                                         \
       "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:" \
       "64-i128:128-f80:128-n8:16:32:64-S128")
+#define LOOM_LLVMIR_X86_64_AVX512_FEATURES \
+  IREE_SVL("+avx512f,+avx512bw,+avx512dq,+avx512vl,+fma")
 #define LOOM_LLVMIR_X86_64_PACKED_DOT_FEATURES \
   IREE_SVL("+avx512bf16,+avx512vl,+avxvnni,+avxvnniint8")
+#define LOOM_LLVMIR_X86_64_AVX512_PACKED_DOT_FEATURES \
+  IREE_SVL(                                           \
+      "+avx512f,+avx512bw,+avx512dq,+avx512vl,+fma,"  \
+      "+avx512bf16,+avx512vnni,+avxvnni,+avxvnniint8")
+#define LOOM_LLVMIR_X86_64_AVX512_CONTRACT_SET IREE_SV("x86.avx512.core")
+#define LOOM_LLVMIR_X86_64_PACKED_DOT_LOW_CONTRACT_SET \
+  IREE_SV("x86.packed_dot.core")
+#define LOOM_LLVMIR_X86_64_AVX512_PACKED_DOT_LOW_CONTRACT_SET \
+  IREE_SV("x86.avx512_packed_dot.core")
 #define LOOM_LLVMIR_X86_64_PACKED_DOT_CONTRACT_SET \
   IREE_SVL("x86.packed_dot.avx512bf16-avx512vl-avxvnni-avxvnniint8")
 
@@ -40,8 +51,6 @@ static const loom_llvmir_target_env_t kX86_64UnknownLinuxGnuTargetEnv = {
 static const loom_target_snapshot_t kX86_64ObjectSnapshot = {
     .name = LOOM_LLVMIR_X86_64_TARGET_TRIPLE,
     .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LLVMIR,
-    .target_triple = LOOM_LLVMIR_X86_64_TARGET_TRIPLE,
-    .data_layout = LOOM_LLVMIR_X86_64_DATA_LAYOUT,
     .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
     .default_pointer_bitwidth = 64,
     .index_bitwidth = 64,
@@ -61,10 +70,7 @@ static const loom_target_snapshot_t kX86_64ObjectSnapshot = {
 static const loom_target_snapshot_t kX86_64PackedDotObjectSnapshot = {
     .name = IREE_SVL("x86_64-unknown-linux-gnu-packed-dot"),
     .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LLVMIR,
-    .target_triple = LOOM_LLVMIR_X86_64_TARGET_TRIPLE,
-    .data_layout = LOOM_LLVMIR_X86_64_DATA_LAYOUT,
     .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
-    .target_features = LOOM_LLVMIR_X86_64_PACKED_DOT_FEATURES,
     .default_pointer_bitwidth = 64,
     .index_bitwidth = 64,
     .offset_bitwidth = 64,
@@ -123,6 +129,15 @@ static const loom_llvmir_target_profile_t kX86_64ObjectProfile = {
     .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
 };
 
+static const loom_llvmir_target_profile_t kX86_64Avx512ObjectProfile = {
+    .name = IREE_SVL("x86_64-avx512-object"),
+    .target_env = &kX86_64UnknownLinuxGnuTargetEnv,
+    .kind = LOOM_LLVMIR_TARGET_PROFILE_HOST_OBJECT,
+    .target_features = LOOM_LLVMIR_X86_64_AVX512_FEATURES,
+    .exported_linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,
+    .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
+};
+
 static const loom_llvmir_target_profile_t kX86_64PackedDotObjectProfile = {
     .name = IREE_SVL("x86_64-packed-dot-object"),
     .target_env = &kX86_64UnknownLinuxGnuTargetEnv,
@@ -135,16 +150,69 @@ static const loom_llvmir_target_profile_t kX86_64PackedDotObjectProfile = {
         LOOM_X86_FEATURE_AVX_VNNI | LOOM_X86_FEATURE_AVX_VNNI_INT8,
 };
 
+static const loom_llvmir_target_profile_t kX86_64Avx512PackedDotObjectProfile =
+    {
+        .name = IREE_SVL("x86_64-avx512-packed-dot-object"),
+        .target_env = &kX86_64UnknownLinuxGnuTargetEnv,
+        .kind = LOOM_LLVMIR_TARGET_PROFILE_HOST_OBJECT,
+        .target_features = LOOM_LLVMIR_X86_64_AVX512_PACKED_DOT_FEATURES,
+        .exported_linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,
+        .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
+        .x86_packed_dot_feature_bits =
+            LOOM_X86_FEATURE_AVX512_VNNI | LOOM_X86_FEATURE_AVX512_BF16 |
+            LOOM_X86_FEATURE_AVX512_VL | LOOM_X86_FEATURE_AVX_VNNI |
+            LOOM_X86_FEATURE_AVX_VNNI_INT8,
+};
+
 static const loom_llvmir_target_profile_t* const kX86TargetProfiles[] = {
     &kX86_64ObjectProfile,
+    &kX86_64Avx512ObjectProfile,
     &kX86_64PackedDotObjectProfile,
+    &kX86_64Avx512PackedDotObjectProfile,
 };
+
+static bool loom_llvmir_x86_project_bundle(
+    const loom_target_bundle_t* bundle,
+    const loom_llvmir_target_profile_t** out_profile) {
+  *out_profile = NULL;
+  if (iree_string_view_equal(bundle->name, kX86_64ObjectProfile.name)) {
+    *out_profile = &kX86_64ObjectProfile;
+    return true;
+  }
+  if (iree_string_view_equal(bundle->name,
+                             kX86_64PackedDotObjectProfile.name)) {
+    *out_profile = &kX86_64PackedDotObjectProfile;
+    return true;
+  }
+  if (bundle->export_plan->abi_kind != LOOM_TARGET_ABI_OBJECT_FUNCTION) {
+    return false;
+  }
+  const iree_string_view_t contract_set_key = bundle->config->contract_set_key;
+  if (iree_string_view_equal(contract_set_key,
+                             LOOM_LLVMIR_X86_64_AVX512_CONTRACT_SET)) {
+    *out_profile = &kX86_64Avx512ObjectProfile;
+    return true;
+  }
+  if (iree_string_view_equal(contract_set_key,
+                             LOOM_LLVMIR_X86_64_PACKED_DOT_LOW_CONTRACT_SET)) {
+    *out_profile = &kX86_64PackedDotObjectProfile;
+    return true;
+  }
+  if (iree_string_view_equal(
+          contract_set_key,
+          LOOM_LLVMIR_X86_64_AVX512_PACKED_DOT_LOW_CONTRACT_SET)) {
+    *out_profile = &kX86_64Avx512PackedDotObjectProfile;
+    return true;
+  }
+  return false;
+}
 
 static const loom_llvmir_target_profile_provider_t kX86TargetProfileProvider = {
     .name = IREE_SVL("x86"),
     .profiles = kX86TargetProfiles,
     .profile_count = IREE_ARRAYSIZE(kX86TargetProfiles),
     .llc_target_name = IREE_SVL("x86"),
+    .project_bundle = loom_llvmir_x86_project_bundle,
 };
 
 const loom_target_bundle_t* loom_llvmir_target_bundle_x86_64_object(void) {
