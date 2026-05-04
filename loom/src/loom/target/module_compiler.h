@@ -143,13 +143,6 @@ iree_status_t loom_target_module_compile_select_entry(
     iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
     bool* out_selected, loom_target_module_compile_entry_t* out_entry);
 
-// Emits a structured diagnostic for mutually exclusive entry/artifact selection
-// options.
-iree_status_t loom_target_module_compile_emit_entry_artifact_conflict(
-    loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    iree_string_view_t entry_kind, iree_string_view_t entry_symbol,
-    iree_string_view_t artifact_symbol);
-
 // Selects exported artifact entries in target.artifact plan order.
 //
 // |artifact_symbol| names the target.artifact symbol without or with a leading

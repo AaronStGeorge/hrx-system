@@ -10,7 +10,6 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/analysis/symbol_facts.h"
-#include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -20,7 +19,6 @@
 #include "loom/ops/target/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/target/types.h"
-#include "loom/testing/diagnostic_matchers.h"
 #include "loom/testing/module_ptr.h"
 
 namespace loom {
@@ -97,20 +95,6 @@ class TargetFunctionContractTest : public ::testing::Test {
     ASSERT_TRUE(valid);
   }
 
-  void ExpectContractError(const loom_module_t* module,
-                           const loom_func_symbol_facts_t* facts,
-                           uint16_t code) {
-    testing::DiagnosticEmissionCapture capture;
-    loom_target_bundle_storage_t storage = {};
-    bool valid = true;
-    IREE_ASSERT_OK(loom_target_function_contract_resolve(
-        module, &fact_table_, facts, capture.emitter(), &valid, &storage));
-    EXPECT_FALSE(valid);
-    ASSERT_EQ(capture.emissions.size(), 1u);
-    EXPECT_EQ(capture.emissions[0].error,
-              loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, code));
-  }
-
   // Block pool shared by parser, module allocation, and analysis storage.
   iree_arena_block_pool_t block_pool_;
 
@@ -175,21 +159,6 @@ low.kernel.def target(@test_target) export("dispatch") ordinal(5) linkage(dso_lo
   EXPECT_EQ(storage.export_plan.hal_kernel.flat_workgroup_size_min, 0u);
   EXPECT_EQ(storage.export_plan.hal_kernel.flat_workgroup_size_max, 0u);
   EXPECT_EQ(storage.export_plan.hal_kernel.buffer_resource_flags, 7u);
-}
-
-TEST_F(TargetFunctionContractTest, TargetMustResolveToTargetFacts) {
-  ModulePtr module = ParseModule(R"(
-test.target<low_core> @test_target
-target.artifact @not_target target(@test_target)
-
-low.func.def target(@not_target) @kernel() {
-  low.return
-}
-)");
-
-  const loom_func_symbol_facts_t* facts =
-      LookupFunc(module.get(), IREE_SV("kernel"));
-  ExpectContractError(module.get(), facts, 38);
 }
 
 }  // namespace

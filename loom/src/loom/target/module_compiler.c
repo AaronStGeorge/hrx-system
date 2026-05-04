@@ -292,46 +292,6 @@ static void loom_target_module_compile_assign_entry(
   loom_target_bundle_storage_rebind(&out_entry->bundle_storage);
 }
 
-static iree_status_t loom_target_module_compile_emit_entry_not_found(
-    loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    iree_string_view_t pipeline_name, iree_string_view_t symbol_name) {
-  const loom_diagnostic_param_t params[] = {
-      loom_param_string(pipeline_name),
-      loom_param_string(symbol_name),
-  };
-  return loom_target_module_compile_emit(
-      diagnostic_emitter, NULL,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 20), params,
-      IREE_ARRAYSIZE(params));
-}
-
-static iree_status_t loom_target_module_compile_emit_artifact_not_found(
-    loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    iree_string_view_t pipeline_name, iree_string_view_t artifact_name) {
-  const loom_diagnostic_param_t params[] = {
-      loom_param_string(pipeline_name),
-      loom_param_string(artifact_name),
-  };
-  return loom_target_module_compile_emit(
-      diagnostic_emitter, NULL,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 21), params,
-      IREE_ARRAYSIZE(params));
-}
-
-static iree_status_t loom_target_module_compile_emit_entry_not_func(
-    loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    const loom_op_t* op, iree_string_view_t pipeline_name,
-    iree_string_view_t symbol_name) {
-  const loom_diagnostic_param_t params[] = {
-      loom_param_string(pipeline_name),
-      loom_param_string(symbol_name),
-  };
-  return loom_target_module_compile_emit(
-      diagnostic_emitter, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 22), params,
-      IREE_ARRAYSIZE(params));
-}
-
 static iree_status_t loom_target_module_compile_emit_missing_target_record(
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     const loom_op_t* op, iree_string_view_t pipeline_name,
@@ -342,7 +302,7 @@ static iree_status_t loom_target_module_compile_emit_missing_target_record(
   };
   return loom_target_module_compile_emit(
       diagnostic_emitter, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 23), params,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 20), params,
       IREE_ARRAYSIZE(params));
 }
 
@@ -376,7 +336,7 @@ static iree_status_t loom_target_module_compile_emit_incompatible_bundle(
   };
   return loom_target_module_compile_emit(
       diagnostic_emitter, entry->func.op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 24), params,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 21), params,
       IREE_ARRAYSIZE(params));
 }
 
@@ -388,7 +348,7 @@ static iree_status_t loom_target_module_compile_emit_no_compatible_entry(
   };
   return loom_target_module_compile_emit(
       diagnostic_emitter, NULL,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 25), params,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 22), params,
       IREE_ARRAYSIZE(params));
 }
 
@@ -401,7 +361,7 @@ static iree_status_t loom_target_module_compile_emit_ambiguous_entry(
   };
   return loom_target_module_compile_emit(
       diagnostic_emitter, NULL,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 26), params,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 23), params,
       IREE_ARRAYSIZE(params));
 }
 
@@ -415,22 +375,7 @@ static iree_status_t loom_target_module_compile_emit_empty_artifact(
   };
   return loom_target_module_compile_emit(
       diagnostic_emitter, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 27), params,
-      IREE_ARRAYSIZE(params));
-}
-
-iree_status_t loom_target_module_compile_emit_entry_artifact_conflict(
-    loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    iree_string_view_t entry_kind, iree_string_view_t entry_symbol,
-    iree_string_view_t artifact_symbol) {
-  const loom_diagnostic_param_t params[] = {
-      loom_param_string(entry_kind),
-      loom_param_string(entry_symbol),
-      loom_param_string(artifact_symbol),
-  };
-  return loom_target_module_compile_emit(
-      diagnostic_emitter, NULL,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 28), params,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 24), params,
       IREE_ARRAYSIZE(params));
 }
 
@@ -449,11 +394,13 @@ static iree_status_t loom_target_module_compile_try_entry(
     if (!require_compatible) {
       return iree_ok_status();
     }
-    IREE_RETURN_IF_ERROR(loom_target_module_compile_emit_entry_not_func(
-        diagnostic_emitter,
-        loom_target_module_compile_symbol_op(module, symbol_id), pipeline_name,
-        loom_target_module_compile_symbol_name(module, symbol_id)));
-    return iree_ok_status();
+    iree_string_view_t symbol_name =
+        loom_target_module_compile_symbol_name(module, symbol_id);
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target pipeline '%.*s' entry '@%.*s' must name a function with a body",
+        (int)pipeline_name.size, pipeline_name.data, (int)symbol_name.size,
+        symbol_name.data);
   }
   if (!loom_symbol_ref_is_valid(func_facts->target_symbol)) {
     if (!require_compatible) {
@@ -501,8 +448,11 @@ static iree_status_t loom_target_module_compile_select_named_entry(
   uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
   if (!loom_target_module_compile_lookup_symbol_id(module, entry_symbol,
                                                    &symbol_id)) {
-    return loom_target_module_compile_emit_entry_not_found(
-        diagnostic_emitter, pipeline_name, entry_symbol);
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target pipeline '%.*s' entry '@%.*s' was not found",
+        (int)pipeline_name.size, pipeline_name.data, (int)entry_symbol.size,
+        entry_symbol.data);
   }
   bool compatible = false;
   IREE_RETURN_IF_ERROR(loom_target_module_compile_try_entry(
@@ -592,8 +542,11 @@ iree_status_t loom_target_module_compile_select_artifact_entries(
   uint16_t artifact_symbol_id = LOOM_SYMBOL_ID_INVALID;
   if (!loom_target_module_compile_lookup_symbol_id(module, artifact_symbol,
                                                    &artifact_symbol_id)) {
-    return loom_target_module_compile_emit_artifact_not_found(
-        diagnostic_emitter, entry_kind, artifact_symbol);
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target pipeline '%.*s' artifact '@%.*s' was not found",
+        (int)entry_kind.size, entry_kind.data, (int)artifact_symbol.size,
+        artifact_symbol.data);
   }
   loom_call_graph_t call_graph = {0};
   IREE_RETURN_IF_ERROR(loom_call_graph_build(module, arena, &call_graph));

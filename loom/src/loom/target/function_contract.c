@@ -77,7 +77,7 @@ static iree_status_t loom_target_function_contract_apply_abi_attrs(
         loom_param_string(name),
     };
     return loom_target_function_contract_reject(
-        diagnostic_emitter, func_facts, 39, params, IREE_ARRAYSIZE(params),
+        diagnostic_emitter, func_facts, 32, params, IREE_ARRAYSIZE(params),
         out_valid);
   }
   return iree_ok_status();
@@ -94,7 +94,7 @@ static iree_status_t loom_target_function_contract_lookup_target(
         loom_param_string(func_facts->name),
     };
     return loom_target_function_contract_reject(
-        diagnostic_emitter, func_facts, 53, params, IREE_ARRAYSIZE(params),
+        diagnostic_emitter, func_facts, 44, params, IREE_ARRAYSIZE(params),
         out_valid);
   }
   const loom_symbol_facts_base_t* target_base_facts = NULL;
@@ -103,14 +103,15 @@ static iree_status_t loom_target_function_contract_lookup_target(
   const loom_target_symbol_facts_t* target =
       loom_target_symbol_facts_cast(target_base_facts);
   if (!target) {
-    const loom_diagnostic_param_t params[] = {
-        loom_param_string(func_facts->name),
-        loom_param_string(loom_target_function_contract_symbol_ref_name(
-            module, func_facts->target_symbol)),
-    };
-    return loom_target_function_contract_reject(
-        diagnostic_emitter, func_facts, 38, params, IREE_ARRAYSIZE(params),
-        out_valid);
+    iree_string_view_t target_name =
+        loom_target_function_contract_symbol_ref_name(
+            module, func_facts->target_symbol);
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "verified function '@%.*s' target '@%.*s' does not resolve to target "
+        "facts",
+        (int)func_facts->name.size, func_facts->name.data,
+        (int)target_name.size, target_name.data);
   }
   *out_target = target;
   *out_valid = true;
@@ -150,7 +151,7 @@ static iree_status_t loom_target_function_contract_reject_dimension_limit(
       loom_param_u32(limit),
   };
   return loom_target_function_contract_reject(
-      diagnostic_emitter, func_facts, 48, params, IREE_ARRAYSIZE(params),
+      diagnostic_emitter, func_facts, 40, params, IREE_ARRAYSIZE(params),
       out_valid);
 }
 
@@ -163,14 +164,14 @@ static iree_status_t loom_target_function_contract_validate_hal_kernel(
       &hal_kernel->required_workgroup_size;
   if (loom_target_workgroup_size_is_partial(required)) {
     return loom_target_function_contract_reject_with_target_name(
-        diagnostic_emitter, func_facts, target_name, 44, out_valid);
+        diagnostic_emitter, func_facts, target_name, 36, out_valid);
   }
   const uint32_t max_flat_workgroup_size = snapshot->max_flat_workgroup_size;
   const uint32_t flat_min = hal_kernel->flat_workgroup_size_min;
   const uint32_t flat_max = hal_kernel->flat_workgroup_size_max;
   if ((flat_min == 0) != (flat_max == 0)) {
     return loom_target_function_contract_reject_with_target_name(
-        diagnostic_emitter, func_facts, target_name, 45, out_valid);
+        diagnostic_emitter, func_facts, target_name, 37, out_valid);
   }
   if (flat_min != 0) {
     if (flat_min > flat_max) {
@@ -181,7 +182,7 @@ static iree_status_t loom_target_function_contract_validate_hal_kernel(
           loom_param_u32(flat_max),
       };
       return loom_target_function_contract_reject(
-          diagnostic_emitter, func_facts, 46, params, IREE_ARRAYSIZE(params),
+          diagnostic_emitter, func_facts, 38, params, IREE_ARRAYSIZE(params),
           out_valid);
     }
     if (max_flat_workgroup_size != 0 && flat_max > max_flat_workgroup_size) {
@@ -192,7 +193,7 @@ static iree_status_t loom_target_function_contract_validate_hal_kernel(
           loom_param_u32(max_flat_workgroup_size),
       };
       return loom_target_function_contract_reject(
-          diagnostic_emitter, func_facts, 47, params, IREE_ARRAYSIZE(params),
+          diagnostic_emitter, func_facts, 39, params, IREE_ARRAYSIZE(params),
           out_valid);
     }
   }
@@ -223,7 +224,7 @@ static iree_status_t loom_target_function_contract_validate_hal_kernel(
       !loom_target_function_contract_mul_u64(flat_size, required->z,
                                              &flat_size)) {
     return loom_target_function_contract_reject_with_target_name(
-        diagnostic_emitter, func_facts, target_name, 49, out_valid);
+        diagnostic_emitter, func_facts, target_name, 41, out_valid);
   }
   if (max_flat_workgroup_size != 0 && flat_size > max_flat_workgroup_size) {
     const loom_diagnostic_param_t params[] = {
@@ -233,7 +234,7 @@ static iree_status_t loom_target_function_contract_validate_hal_kernel(
         loom_param_u32(max_flat_workgroup_size),
     };
     return loom_target_function_contract_reject(
-        diagnostic_emitter, func_facts, 50, params, IREE_ARRAYSIZE(params),
+        diagnostic_emitter, func_facts, 42, params, IREE_ARRAYSIZE(params),
         out_valid);
   }
   if (flat_min != 0 && (flat_size < flat_min || flat_size > flat_max)) {
@@ -245,7 +246,7 @@ static iree_status_t loom_target_function_contract_validate_hal_kernel(
         loom_param_u32(flat_max),
     };
     return loom_target_function_contract_reject(
-        diagnostic_emitter, func_facts, 51, params, IREE_ARRAYSIZE(params),
+        diagnostic_emitter, func_facts, 43, params, IREE_ARRAYSIZE(params),
         out_valid);
   }
   return iree_ok_status();
@@ -259,7 +260,7 @@ iree_status_t loom_target_function_contract_apply_hal_workgroup_size(
   *out_valid = false;
   if (bundle_storage->export_plan.abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
     return loom_target_function_contract_reject_with_target_name(
-        diagnostic_emitter, func_facts, target_name, 42, out_valid);
+        diagnostic_emitter, func_facts, target_name, 34, out_valid);
   }
   bundle_storage->export_plan.hal_kernel.required_workgroup_size =
       *required_workgroup_size;
@@ -298,7 +299,7 @@ iree_status_t loom_target_function_contract_resolve(
   }
   if (out_bundle_storage->export_plan.abi_kind == LOOM_TARGET_ABI_UNKNOWN) {
     return loom_target_function_contract_reject_with_target(
-        diagnostic_emitter, func_facts, target, 41, out_valid);
+        diagnostic_emitter, func_facts, target, 33, out_valid);
   }
   IREE_RETURN_IF_ERROR(loom_target_function_contract_apply_abi_attrs(
       module, func_facts, diagnostic_emitter, func_facts->abi_attrs,
@@ -309,7 +310,7 @@ iree_status_t loom_target_function_contract_resolve(
   if (out_bundle_storage->export_plan.abi_kind == LOOM_TARGET_ABI_HAL_KERNEL) {
     if (out_bundle_storage->export_plan.hal_kernel.binding_alignment == 0) {
       return loom_target_function_contract_reject_with_target(
-          diagnostic_emitter, func_facts, target, 43, out_valid);
+          diagnostic_emitter, func_facts, target, 35, out_valid);
     }
     IREE_RETURN_IF_ERROR(loom_target_function_contract_validate_hal_kernel(
         diagnostic_emitter, func_facts, target->name,

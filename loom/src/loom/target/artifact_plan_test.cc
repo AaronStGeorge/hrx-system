@@ -201,7 +201,7 @@ func.def target(@test_target) abi(object_function) export("second", {artifact = 
 }
 )");
 
-  ExpectArtifactPlanError(module.get(), 34);
+  ExpectArtifactPlanError(module.get(), 28);
 }
 
 TEST_F(ArtifactPlanTest, RejectsEntryTargetMismatchingArtifactTarget) {
@@ -215,7 +215,7 @@ func.def target(@other) abi(object_function) export("entry", {artifact = @module
 }
 )");
 
-  ExpectArtifactPlanError(module.get(), 33);
+  ExpectArtifactPlanError(module.get(), 27);
 }
 
 TEST_F(ArtifactPlanTest, RejectsClosureCrossingIntoAnotherArtifact) {
@@ -234,7 +234,7 @@ func.def target(@test_target) abi(object_function) export("other", {artifact = @
 }
 )");
 
-  ExpectArtifactPlanError(module.get(), 31);
+  ExpectArtifactPlanError(module.get(), 25);
 }
 
 TEST_F(ArtifactPlanTest, AllowsExternalDeclarationCalls) {
@@ -260,20 +260,6 @@ func.decl import("env") @external()
   EXPECT_EQ(plan.func_count, 1u);
   EXPECT_EQ(plan.func_symbol_ids[0],
             FindSymbol(module.get(), IREE_SV("entry")));
-}
-
-TEST_F(ArtifactPlanTest, RejectsNonFunctionCallees) {
-  ModulePtr module = ParseModule(R"(
-test.target<low_core> @test_target {contract_feature_bits = 1}
-target.artifact @module target(@test_target)
-
-func.def target(@test_target) abi(object_function) export("entry", {artifact = @module}) @entry() {
-  func.call @test_target() : ()
-  func.return
-}
-)");
-
-  ExpectArtifactPlanError(module.get(), 30);
 }
 
 }  // namespace

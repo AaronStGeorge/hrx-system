@@ -126,7 +126,7 @@ iree_status_t loom_low_lower_emit_source_type_unsupported(
       loom_param_type(actual_type),
   };
   return loom_low_lower_emit_target_context_error(
-      context, source_op, 70, params, IREE_ARRAYSIZE(params));
+      context, source_op, 61, params, IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_low_lower_emit_branch_constraint(
@@ -136,7 +136,7 @@ iree_status_t loom_low_lower_emit_branch_constraint(
       loom_param_string(branch_constraint),
   };
   return loom_low_lower_emit_target_context_error(
-      context, source_op, 71, params, IREE_ARRAYSIZE(params));
+      context, source_op, 62, params, IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_low_lower_emit_branch_condition_type_unsupported(
@@ -147,7 +147,7 @@ iree_status_t loom_low_lower_emit_branch_condition_type_unsupported(
       loom_param_string(type_constraint),
   };
   return loom_low_lower_emit_target_context_error(
-      context, source_op, 72, params, IREE_ARRAYSIZE(params));
+      context, source_op, 63, params, IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_low_lower_emit_error_ref(

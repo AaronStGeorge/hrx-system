@@ -1167,7 +1167,7 @@ static iree_status_t loom_check_emit_write_source_low_text(
         loom_param_string(IREE_SV("source-to-low")),
     };
     const loom_diagnostic_emission_t emission = {
-        .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 52),
+        .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TARGET, 22),
         .params = params,
         .param_count = IREE_ARRAYSIZE(params),
     };

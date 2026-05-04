@@ -750,9 +750,12 @@ iree_status_t loom_amdgpu_compile_hal_executable(
   if (iree_status_is_ok(status) && verify_result.error_count == 0 &&
       !iree_string_view_is_empty(entry_symbol) &&
       !iree_string_view_is_empty(artifact_symbol)) {
-    status = loom_target_module_compile_emit_entry_artifact_conflict(
-        &diagnostic_emitter, IREE_SV("AMDGPU HAL-native"), entry_symbol,
-        artifact_symbol);
+    status = iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL-native cannot select both entry '@%.*s' and artifact "
+        "'@%.*s'",
+        (int)entry_symbol.size, entry_symbol.data, (int)artifact_symbol.size,
+        artifact_symbol.data);
   }
   bool selected = false;
   if (iree_status_is_ok(status) && verify_result.error_count == 0 &&

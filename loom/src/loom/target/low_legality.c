@@ -379,11 +379,11 @@ static iree_status_t loom_target_low_legality_verify_scalar_type(
       return iree_ok_status();
     case LOOM_SCALAR_TYPE_F8E4M3:
     case LOOM_SCALAR_TYPE_F8E5M2:
-      return loom_target_low_legality_emit_type_error(context, op, 58, type);
+      return loom_target_low_legality_emit_type_error(context, op, 49, type);
     case LOOM_SCALAR_TYPE_COUNT_:
       break;
   }
-  return loom_target_low_legality_emit_type_error(context, op, 59, type);
+  return loom_target_low_legality_emit_type_error(context, op, 50, type);
 }
 
 static const loom_type_descriptor_t*
@@ -457,10 +457,10 @@ static iree_status_t loom_target_low_legality_verify_registered_type(
               descriptor->semantics.semantic)),
       };
       return loom_target_low_legality_emit_target_context_error(
-          context, op, 60, params, IREE_ARRAYSIZE(params));
+          context, op, 51, params, IREE_ARRAYSIZE(params));
     }
     default:
-      return loom_target_low_legality_emit_type_error(context, op, 63, type);
+      return loom_target_low_legality_emit_type_error(context, op, 54, type);
   }
 }
 
@@ -482,17 +482,17 @@ static iree_status_t loom_target_low_legality_verify_type(
   }
   if (loom_type_is_vector(type)) {
     if (!loom_type_is_all_static(type) || loom_type_rank(type) != 1) {
-      return loom_target_low_legality_emit_type_error(context, op, 61, type);
+      return loom_target_low_legality_emit_type_error(context, op, 52, type);
     }
     uint64_t element_count = 0;
     if (!loom_type_static_element_count(type, &element_count) ||
         element_count > UINT32_MAX) {
-      return loom_target_low_legality_emit_type_error(context, op, 62, type);
+      return loom_target_low_legality_emit_type_error(context, op, 53, type);
     }
     return loom_target_low_legality_verify_scalar_type(
         context, op, loom_type_scalar(loom_type_element_type(type)));
   }
-  return loom_target_low_legality_emit_type_error(context, op, 63, type);
+  return loom_target_low_legality_emit_type_error(context, op, 54, type);
 }
 
 static iree_status_t loom_target_low_legality_verify_value(
@@ -503,7 +503,7 @@ static iree_status_t loom_target_low_legality_verify_value(
         loom_param_u64(value_id),
     };
     return loom_target_low_legality_emit_target_context_error(
-        context, op, 64, params, IREE_ARRAYSIZE(params));
+        context, op, 55, params, IREE_ARRAYSIZE(params));
   }
   const loom_type_t type = loom_module_value_type(context->module, value_id);
   return loom_target_low_legality_verify_type(context, op, type);
@@ -611,14 +611,14 @@ static iree_status_t loom_target_low_legality_reject_source_only_op(
     case LOOM_OP_SCF_WHILE:
     case LOOM_OP_SCF_SWITCH:
       return loom_target_low_legality_emit_target_context_error(
-          context, op, 66, /*extra_params=*/NULL, /*extra_param_count=*/0);
+          context, op, 57, /*extra_params=*/NULL, /*extra_param_count=*/0);
     case LOOM_OP_SCF_CONDITION:
     case LOOM_OP_SCF_YIELD:
       return loom_target_low_legality_emit_target_context_error(
-          context, op, 67, /*extra_params=*/NULL, /*extra_param_count=*/0);
+          context, op, 58, /*extra_params=*/NULL, /*extra_param_count=*/0);
     default:
       return loom_target_low_legality_emit_target_context_error(
-          context, op, 68, /*extra_params=*/NULL, /*extra_param_count=*/0);
+          context, op, 59, /*extra_params=*/NULL, /*extra_param_count=*/0);
   }
 }
 
@@ -668,12 +668,12 @@ static iree_status_t loom_target_low_legality_verify_op_class(
       return iree_ok_status();
     case LOOM_TARGET_LOW_LEGALITY_PROVIDER:
       return loom_target_low_legality_emit_target_context_error(
-          context, op, 65, /*extra_params=*/NULL, /*extra_param_count=*/0);
+          context, op, 56, /*extra_params=*/NULL, /*extra_param_count=*/0);
     case LOOM_TARGET_LOW_LEGALITY_SOURCE_ONLY:
       return loom_target_low_legality_reject_source_only_op(context, op);
     case LOOM_TARGET_LOW_LEGALITY_MODULE_METADATA:
       return loom_target_low_legality_emit_target_context_error(
-          context, op, 69, /*extra_params=*/NULL, /*extra_param_count=*/0);
+          context, op, 60, /*extra_params=*/NULL, /*extra_param_count=*/0);
     case LOOM_TARGET_LOW_LEGALITY_UNSUPPORTED:
       return loom_target_low_legality_emit_no_target_contract(context, op);
     default: {
