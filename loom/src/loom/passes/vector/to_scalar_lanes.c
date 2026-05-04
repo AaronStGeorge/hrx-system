@@ -295,7 +295,7 @@ iree_status_t loom_vector_to_scalar_build_bitstream_base_term(
     loom_vector_to_scalar_index_term_t lane_ordinal, int64_t lane_bit_width,
     loom_vector_to_scalar_index_term_t* out_position) {
   return loom_vector_to_scalar_build_term_binary(
-      state, LOOM_OP_INDEX_MUL, lane_ordinal,
+      state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MUL, lane_ordinal,
       loom_vector_to_scalar_static_term(lane_bit_width), out_position);
 }
 
@@ -429,11 +429,11 @@ iree_status_t loom_vector_to_scalar_build_select_lane(
 
 static iree_status_t loom_vector_to_scalar_build_coordinate_binary(
     loom_vector_to_scalar_state_t* state, loom_op_kind_t integer_kind,
-    loom_op_kind_t index_kind, loom_value_id_t lhs, loom_value_id_t rhs,
-    loom_type_t type, loom_value_id_t* out_result) {
+    loom_vector_to_scalar_index_binary_t index_binary, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t type, loom_value_id_t* out_result) {
   if (loom_type_element_type(type) == LOOM_SCALAR_TYPE_INDEX) {
-    return loom_vector_to_scalar_build_index_binary(state, index_kind, lhs, rhs,
-                                                    out_result);
+    return loom_vector_to_scalar_build_index_binary(state, index_binary, lhs,
+                                                    rhs, out_result);
   }
   return loom_vector_to_scalar_build_generic_lane_op(
       state, integer_kind, 0, (loom_value_id_t[]){lhs, rhs}, 2, NULL, 0, type,
@@ -451,11 +451,11 @@ static iree_status_t loom_vector_to_scalar_build_iota_lane(
       state, indices, lane_type, &ordinal));
   loom_value_id_t scaled = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_coordinate_binary(
-      state, LOOM_OP_SCALAR_MULI, LOOM_OP_INDEX_MUL, ordinal, step, lane_type,
-      &scaled));
+      state, LOOM_OP_SCALAR_MULI, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MUL,
+      ordinal, step, lane_type, &scaled));
   return loom_vector_to_scalar_build_coordinate_binary(
-      state, LOOM_OP_SCALAR_ADDI, LOOM_OP_INDEX_ADD, base, scaled, lane_type,
-      out_lane);
+      state, LOOM_OP_SCALAR_ADDI, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, base,
+      scaled, lane_type, out_lane);
 }
 
 static iree_status_t loom_vector_to_scalar_build_mask_range_lane(
@@ -472,12 +472,12 @@ static iree_status_t loom_vector_to_scalar_build_mask_range_lane(
       state, indices, coordinate_type, &ordinal));
   loom_value_id_t scaled = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_coordinate_binary(
-      state, LOOM_OP_SCALAR_MULI, LOOM_OP_INDEX_MUL, ordinal, step,
-      coordinate_type, &scaled));
+      state, LOOM_OP_SCALAR_MULI, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MUL,
+      ordinal, step, coordinate_type, &scaled));
   loom_value_id_t coordinate = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_coordinate_binary(
-      state, LOOM_OP_SCALAR_ADDI, LOOM_OP_INDEX_ADD, lower_bound, scaled,
-      coordinate_type, &coordinate));
+      state, LOOM_OP_SCALAR_ADDI, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD,
+      lower_bound, scaled, coordinate_type, &coordinate));
 
   if (loom_type_element_type(coordinate_type) == LOOM_SCALAR_TYPE_INDEX) {
     loom_op_t* cmp_op = NULL;

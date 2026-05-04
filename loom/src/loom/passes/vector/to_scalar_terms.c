@@ -18,71 +18,28 @@
 // Index op emission
 //===----------------------------------------------------------------------===//
 
+static const loom_op_kind_t kVectorToScalarIndexBinaryOps[] = {
+    [LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD] = LOOM_OP_INDEX_ADD,
+    [LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_SUB] = LOOM_OP_INDEX_SUB,
+    [LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MUL] = LOOM_OP_INDEX_MUL,
+    [LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_DIV] = LOOM_OP_INDEX_DIV,
+    [LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_REM] = LOOM_OP_INDEX_REM,
+    [LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MIN] = LOOM_OP_INDEX_MIN,
+    [LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MAX] = LOOM_OP_INDEX_MAX,
+};
+
+static_assert(IREE_ARRAYSIZE(kVectorToScalarIndexBinaryOps) ==
+                  LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_COUNT,
+              "index binary op table must cover all binary term modes");
+
 iree_status_t loom_vector_to_scalar_build_index_binary(
-    loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
-    loom_value_id_t lhs, loom_value_id_t rhs, loom_value_id_t* out_result) {
-  switch (kind) {
-    case LOOM_OP_INDEX_ADD: {
-      loom_op_t* op = NULL;
-      IREE_RETURN_IF_ERROR(loom_index_add_build(
-          &state->rewriter->builder, lhs, rhs,
-          loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), state->location, &op));
-      *out_result = loom_index_add_result(op);
-      return iree_ok_status();
-    }
-    case LOOM_OP_INDEX_SUB: {
-      loom_op_t* op = NULL;
-      IREE_RETURN_IF_ERROR(loom_index_sub_build(
-          &state->rewriter->builder, lhs, rhs,
-          loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), state->location, &op));
-      *out_result = loom_index_sub_result(op);
-      return iree_ok_status();
-    }
-    case LOOM_OP_INDEX_MUL: {
-      loom_op_t* op = NULL;
-      IREE_RETURN_IF_ERROR(loom_index_mul_build(
-          &state->rewriter->builder, lhs, rhs,
-          loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), state->location, &op));
-      *out_result = loom_index_mul_result(op);
-      return iree_ok_status();
-    }
-    case LOOM_OP_INDEX_DIV: {
-      loom_op_t* op = NULL;
-      IREE_RETURN_IF_ERROR(loom_index_div_build(
-          &state->rewriter->builder, lhs, rhs,
-          loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), state->location, &op));
-      *out_result = loom_index_div_result(op);
-      return iree_ok_status();
-    }
-    case LOOM_OP_INDEX_REM: {
-      loom_op_t* op = NULL;
-      IREE_RETURN_IF_ERROR(loom_index_rem_build(
-          &state->rewriter->builder, lhs, rhs,
-          loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), state->location, &op));
-      *out_result = loom_index_rem_result(op);
-      return iree_ok_status();
-    }
-    case LOOM_OP_INDEX_MIN: {
-      loom_op_t* op = NULL;
-      IREE_RETURN_IF_ERROR(loom_index_min_build(
-          &state->rewriter->builder, lhs, rhs,
-          loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), state->location, &op));
-      *out_result = loom_index_min_result(op);
-      return iree_ok_status();
-    }
-    case LOOM_OP_INDEX_MAX: {
-      loom_op_t* op = NULL;
-      IREE_RETURN_IF_ERROR(loom_index_max_build(
-          &state->rewriter->builder, lhs, rhs,
-          loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), state->location, &op));
-      *out_result = loom_index_max_result(op);
-      return iree_ok_status();
-    }
-    default:
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "unsupported index binary op kind %u",
-                              (unsigned)kind);
-  }
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_binary_t binary, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_value_id_t* out_result) {
+  return loom_vector_to_scalar_build_generic_lane_op(
+      state, kVectorToScalarIndexBinaryOps[binary], 0,
+      (loom_value_id_t[]){lhs, rhs}, 2, NULL, 0,
+      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), out_result);
 }
 
 //===----------------------------------------------------------------------===//
@@ -141,6 +98,24 @@ static bool loom_vector_to_scalar_term_is_static_value(
   return !term.is_dynamic && term.static_value == value;
 }
 
+static int64_t loom_vector_to_scalar_static_index_divide(int64_t lhs,
+                                                         int64_t rhs) {
+  // Zero-sized axes have no observable lanes; use the same all-zero coordinate
+  // convention as ordinal-to-index expansion.
+  if (rhs == 0) return 0;
+  if (lhs == INT64_MIN && rhs == -1) return 0;
+  return lhs / rhs;
+}
+
+static int64_t loom_vector_to_scalar_static_index_remainder(int64_t lhs,
+                                                            int64_t rhs) {
+  // Zero-sized axes have no observable lanes; use the same all-zero coordinate
+  // convention as ordinal-to-index expansion.
+  if (rhs == 0) return 0;
+  if (lhs == INT64_MIN && rhs == -1) return 0;
+  return lhs % rhs;
+}
+
 iree_status_t loom_vector_to_scalar_term_value(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_term_t term, loom_value_id_t* out_value) {
@@ -154,14 +129,15 @@ iree_status_t loom_vector_to_scalar_term_value(
 }
 
 iree_status_t loom_vector_to_scalar_build_term_binary(
-    loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_binary_t binary,
     loom_vector_to_scalar_index_term_t lhs,
     loom_vector_to_scalar_index_term_t rhs,
     loom_vector_to_scalar_index_term_t* out_term) {
   if (!lhs.is_dynamic && !rhs.is_dynamic) {
     int64_t result = 0;
-    switch (kind) {
-      case LOOM_OP_INDEX_ADD:
+    switch (binary) {
+      case LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD:
         if (!loom_checked_add_i64(lhs.static_value, rhs.static_value,
                                   &result)) {
           return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -169,7 +145,7 @@ iree_status_t loom_vector_to_scalar_build_term_binary(
         }
         *out_term = loom_vector_to_scalar_static_term(result);
         return iree_ok_status();
-      case LOOM_OP_INDEX_SUB:
+      case LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_SUB:
         if (!loom_checked_sub_i64(lhs.static_value, rhs.static_value,
                                   &result)) {
           return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -177,7 +153,7 @@ iree_status_t loom_vector_to_scalar_build_term_binary(
         }
         *out_term = loom_vector_to_scalar_static_term(result);
         return iree_ok_status();
-      case LOOM_OP_INDEX_MUL:
+      case LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MUL:
         if (!loom_checked_mul_i64(lhs.static_value, rhs.static_value,
                                   &result)) {
           return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -185,43 +161,31 @@ iree_status_t loom_vector_to_scalar_build_term_binary(
         }
         *out_term = loom_vector_to_scalar_static_term(result);
         return iree_ok_status();
-      case LOOM_OP_INDEX_DIV:
-        if (lhs.static_value < 0 || rhs.static_value <= 0) {
-          return iree_make_status(
-              IREE_STATUS_INVALID_ARGUMENT,
-              "static index division requires non-negative dividend and "
-              "positive divisor");
-        }
-        *out_term = loom_vector_to_scalar_static_term(lhs.static_value /
-                                                      rhs.static_value);
+      case LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_DIV:
+        *out_term = loom_vector_to_scalar_static_term(
+            loom_vector_to_scalar_static_index_divide(lhs.static_value,
+                                                      rhs.static_value));
         return iree_ok_status();
-      case LOOM_OP_INDEX_REM:
-        if (lhs.static_value < 0 || rhs.static_value <= 0) {
-          return iree_make_status(
-              IREE_STATUS_INVALID_ARGUMENT,
-              "static index remainder requires non-negative dividend and "
-              "positive divisor");
-        }
-        *out_term = loom_vector_to_scalar_static_term(lhs.static_value %
-                                                      rhs.static_value);
+      case LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_REM:
+        *out_term = loom_vector_to_scalar_static_term(
+            loom_vector_to_scalar_static_index_remainder(lhs.static_value,
+                                                         rhs.static_value));
         return iree_ok_status();
-      case LOOM_OP_INDEX_MIN:
+      case LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MIN:
         *out_term = loom_vector_to_scalar_static_term(
             loom_min_i64(lhs.static_value, rhs.static_value));
         return iree_ok_status();
-      case LOOM_OP_INDEX_MAX:
+      case LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MAX:
         *out_term = loom_vector_to_scalar_static_term(
             loom_max_i64(lhs.static_value, rhs.static_value));
         return iree_ok_status();
       default:
-        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "unsupported static index term op kind %u",
-                                (unsigned)kind);
+        IREE_CHECK_UNREACHABLE("unsupported vector-to-scalar index term op");
     }
   }
 
-  switch (kind) {
-    case LOOM_OP_INDEX_ADD:
+  switch (binary) {
+    case LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD:
       if (loom_vector_to_scalar_term_is_static_value(lhs, 0)) {
         *out_term = rhs;
         return iree_ok_status();
@@ -231,13 +195,13 @@ iree_status_t loom_vector_to_scalar_build_term_binary(
         return iree_ok_status();
       }
       break;
-    case LOOM_OP_INDEX_SUB:
+    case LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_SUB:
       if (loom_vector_to_scalar_term_is_static_value(rhs, 0)) {
         *out_term = lhs;
         return iree_ok_status();
       }
       break;
-    case LOOM_OP_INDEX_MUL:
+    case LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MUL:
       if (loom_vector_to_scalar_term_is_static_value(lhs, 1)) {
         *out_term = rhs;
         return iree_ok_status();
@@ -247,7 +211,7 @@ iree_status_t loom_vector_to_scalar_build_term_binary(
         return iree_ok_status();
       }
       break;
-    case LOOM_OP_INDEX_DIV:
+    case LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_DIV:
       if (loom_vector_to_scalar_term_is_static_value(rhs, 1)) {
         *out_term = lhs;
         return iree_ok_status();
@@ -265,7 +229,7 @@ iree_status_t loom_vector_to_scalar_build_term_binary(
       loom_vector_to_scalar_term_value(state, rhs, &rhs_value));
   loom_value_id_t result = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_index_binary(
-      state, kind, lhs_value, rhs_value, &result));
+      state, binary, lhs_value, rhs_value, &result));
   *out_term = loom_vector_to_scalar_value_term(state, result);
   return iree_ok_status();
 }
@@ -367,14 +331,6 @@ iree_status_t loom_vector_to_scalar_terms_from_explicit_indices(
     loom_vector_to_scalar_state_t* state, loom_attribute_t static_indices,
     loom_value_slice_t dynamic_indices,
     loom_vector_to_scalar_index_term_t** out_terms, uint8_t* out_count) {
-  if (static_indices.kind != LOOM_ATTR_I64_ARRAY) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected i64 array index attribute");
-  }
-  if (static_indices.count > UINT8_MAX) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "index rank exceeds uint8_t range");
-  }
   loom_vector_to_scalar_index_term_t* terms = NULL;
   if (static_indices.count > 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -385,21 +341,11 @@ iree_status_t loom_vector_to_scalar_terms_from_explicit_indices(
   for (uint16_t i = 0; i < static_indices.count; ++i) {
     int64_t static_index = static_indices.i64_array[i];
     if (static_index == INT64_MIN) {
-      if (dynamic_ordinal >= dynamic_indices.count) {
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "dynamic index count does not match static sentinel count");
-      }
       terms[i] = loom_vector_to_scalar_value_term(
           state, loom_value_slice_get(dynamic_indices, dynamic_ordinal++));
     } else {
       terms[i] = loom_vector_to_scalar_static_term(static_index);
     }
-  }
-  if (dynamic_ordinal != dynamic_indices.count) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "dynamic index count does not match static sentinel count");
   }
   *out_terms = terms;
   *out_count = (uint8_t)static_indices.count;
@@ -428,11 +374,12 @@ static iree_status_t loom_vector_to_scalar_linear_ordinal_dynamic(
       IREE_RETURN_IF_ERROR(loom_vector_to_scalar_dim_bound(
           state, state->vector_type, axis, &dim));
       IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_index_binary(
-          state, LOOM_OP_INDEX_MUL, ordinal, dim, &ordinal));
+          state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MUL, ordinal, dim,
+          &ordinal));
     }
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_index_binary(
-        state, LOOM_OP_INDEX_ADD, ordinal, indices.dynamic_indices[axis],
-        &ordinal));
+        state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, ordinal,
+        indices.dynamic_indices[axis], &ordinal));
   }
   *out_ordinal = ordinal;
   return iree_ok_status();
@@ -468,10 +415,6 @@ static iree_status_t loom_vector_to_scalar_indices_from_ordinal_term(
     loom_vector_to_scalar_index_term_t ordinal,
     loom_vector_to_scalar_index_list_t* out_indices) {
   uint8_t rank = loom_type_rank(vector_type);
-  if (!ordinal.is_dynamic && ordinal.static_value < 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "negative static vector lane ordinal");
-  }
   if (!ordinal.is_dynamic && loom_type_is_all_static(vector_type)) {
     int64_t* static_indices = NULL;
     if (rank > 0) {
@@ -512,9 +455,11 @@ static iree_status_t loom_vector_to_scalar_indices_from_ordinal_term(
     loom_vector_to_scalar_index_term_t dim =
         loom_vector_to_scalar_dim_bound_term(state, vector_type, axis);
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-        state, LOOM_OP_INDEX_REM, remaining, dim, &terms[axis]));
+        state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_REM, remaining, dim,
+        &terms[axis]));
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-        state, LOOM_OP_INDEX_DIV, remaining, dim, &remaining));
+        state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_DIV, remaining, dim,
+        &remaining));
   }
   return loom_vector_to_scalar_terms_to_index_list(state, terms, rank,
                                                    out_indices);
@@ -546,21 +491,17 @@ iree_status_t loom_vector_to_scalar_linear_ordinal_term(
     loom_vector_to_scalar_state_t* state, loom_type_t vector_type,
     loom_vector_to_scalar_index_list_t indices,
     loom_vector_to_scalar_index_term_t* out_ordinal) {
-  if (indices.rank != loom_type_rank(vector_type)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector lane index rank mismatch");
-  }
   loom_vector_to_scalar_index_term_t ordinal =
       loom_vector_to_scalar_static_term(0);
   for (uint8_t axis = 0; axis < indices.rank; ++axis) {
     if (axis > 0) {
       IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-          state, LOOM_OP_INDEX_MUL, ordinal,
+          state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MUL, ordinal,
           loom_vector_to_scalar_dim_bound_term(state, vector_type, axis),
           &ordinal));
     }
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-        state, LOOM_OP_INDEX_ADD, ordinal,
+        state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, ordinal,
         loom_vector_to_scalar_lane_term(state, indices, axis), &ordinal));
   }
   *out_ordinal = ordinal;

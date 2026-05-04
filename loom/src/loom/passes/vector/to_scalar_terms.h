@@ -34,6 +34,17 @@ typedef struct loom_vector_to_scalar_index_term_t {
   bool is_dynamic;
 } loom_vector_to_scalar_index_term_t;
 
+typedef enum loom_vector_to_scalar_index_binary_e {
+  LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD = 0,
+  LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_SUB,
+  LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MUL,
+  LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_DIV,
+  LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_REM,
+  LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MIN,
+  LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MAX,
+  LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_COUNT,
+} loom_vector_to_scalar_index_binary_t;
+
 bool loom_vector_to_scalar_indices_are_dynamic(
     loom_vector_to_scalar_index_list_t indices);
 
@@ -44,8 +55,9 @@ iree_status_t loom_vector_to_scalar_copy_static_indices(
     iree_host_size_t index_count, int64_t** out_indices);
 
 iree_status_t loom_vector_to_scalar_build_index_binary(
-    loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
-    loom_value_id_t lhs, loom_value_id_t rhs, loom_value_id_t* out_result);
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_binary_t binary, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_value_id_t* out_result);
 
 loom_vector_to_scalar_index_term_t loom_vector_to_scalar_static_term(
     int64_t value);
@@ -61,7 +73,8 @@ loom_vector_to_scalar_index_term_t loom_vector_to_scalar_value_term(
     loom_vector_to_scalar_state_t* state, loom_value_id_t value);
 
 iree_status_t loom_vector_to_scalar_build_term_binary(
-    loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_binary_t binary,
     loom_vector_to_scalar_index_term_t lhs,
     loom_vector_to_scalar_index_term_t rhs,
     loom_vector_to_scalar_index_term_t* out_term);

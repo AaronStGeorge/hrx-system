@@ -133,7 +133,8 @@ static iree_status_t loom_vector_to_scalar_build_memory_terms(
     uint8_t first_vector_axis = (uint8_t)(term_count - lane_indices.rank);
     for (uint8_t axis = 0; axis < lane_indices.rank; ++axis) {
       IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-          state, LOOM_OP_INDEX_ADD, terms[first_vector_axis + axis],
+          state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD,
+          terms[first_vector_axis + axis],
           loom_vector_to_scalar_lane_term(state, lane_indices, axis),
           &terms[first_vector_axis + axis]));
     }
@@ -148,7 +149,7 @@ static iree_status_t loom_vector_to_scalar_build_memory_terms(
         state, offset_lane, &offset_index));
     uint8_t last_axis = (uint8_t)(term_count - 1);
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-        state, LOOM_OP_INDEX_ADD, terms[last_axis],
+        state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, terms[last_axis],
         loom_vector_to_scalar_value_term(state, offset_index),
         &terms[last_axis]));
   }
@@ -156,8 +157,8 @@ static iree_status_t loom_vector_to_scalar_build_memory_terms(
   if (add_last_axis_offset) {
     uint8_t last_axis = (uint8_t)(term_count - 1);
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-        state, LOOM_OP_INDEX_ADD, terms[last_axis], last_axis_offset,
-        &terms[last_axis]));
+        state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, terms[last_axis],
+        last_axis_offset, &terms[last_axis]));
   }
 
   *out_terms = terms;
@@ -224,7 +225,7 @@ static iree_status_t loom_vector_to_scalar_build_static_active_prefix(
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_mask_increment(
         state, mask_vector, mask_indices, &increment));
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-        state, LOOM_OP_INDEX_ADD, prefix,
+        state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, prefix,
         loom_vector_to_scalar_value_term(state, increment), &prefix));
   }
   *out_prefix = prefix;
@@ -267,7 +268,8 @@ static iree_status_t loom_vector_to_scalar_build_dynamic_active_prefix(
       state, mask_vector, mask_indices, &increment));
   loom_value_id_t next_accumulator = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_index_binary(
-      state, LOOM_OP_INDEX_ADD, accumulator, increment, &next_accumulator));
+      state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, accumulator, increment,
+      &next_accumulator));
   loom_op_t* yield_op = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_yield_build(&state->rewriter->builder,
                                             &next_accumulator, 1,

@@ -167,7 +167,7 @@ iree_status_t loom_vector_to_scalar_build_slice_lane(
   }
   for (uint8_t i = 0; i < indices.rank; ++i) {
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-        state, LOOM_OP_INDEX_ADD, offset_terms[i],
+        state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, offset_terms[i],
         loom_vector_to_scalar_lane_term(state, indices, i), &source_terms[i]));
   }
 
@@ -206,14 +206,15 @@ static iree_status_t loom_vector_to_scalar_build_concat_dynamic_lane(
       loom_vector_to_scalar_dim_bound_term(state, input_type, axis);
   loom_vector_to_scalar_index_term_t end = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-      state, LOOM_OP_INDEX_ADD, prefix, extent, &end));
+      state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, prefix, extent, &end));
   loom_value_id_t within_input = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_index_term_cmp(
       state, LOOM_INDEX_CMP_PREDICATE_SLT, axis_index, end, &within_input));
 
   loom_vector_to_scalar_index_term_t source_axis = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-      state, LOOM_OP_INDEX_SUB, axis_index, prefix, &source_axis));
+      state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_SUB, axis_index, prefix,
+      &source_axis));
   loom_vector_to_scalar_index_term_t* source_terms = NULL;
   if (indices.rank > 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -361,7 +362,7 @@ iree_status_t loom_vector_to_scalar_build_interleave_lane(
   loom_vector_to_scalar_index_term_t axis_index = source_terms[axis_u8];
   loom_vector_to_scalar_index_term_t source_axis_index = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-      state, LOOM_OP_INDEX_DIV, axis_index,
+      state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_DIV, axis_index,
       loom_vector_to_scalar_static_term(2), &source_axis_index));
   source_terms[axis_u8] = source_axis_index;
 
@@ -387,7 +388,7 @@ iree_status_t loom_vector_to_scalar_build_interleave_lane(
 
   loom_vector_to_scalar_index_term_t remainder = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-      state, LOOM_OP_INDEX_REM, axis_index,
+      state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_REM, axis_index,
       loom_vector_to_scalar_static_term(2), &remainder));
   loom_value_id_t remainder_value = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
@@ -422,10 +423,10 @@ iree_status_t loom_vector_to_scalar_build_deinterleave_lane(
 
   loom_vector_to_scalar_index_term_t scaled = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-      state, LOOM_OP_INDEX_MUL, source_terms[axis_u8],
+      state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MUL, source_terms[axis_u8],
       loom_vector_to_scalar_static_term(2), &scaled));
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-      state, LOOM_OP_INDEX_ADD, scaled,
+      state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, scaled,
       loom_vector_to_scalar_static_term((int64_t)state->result_ordinal),
       &source_terms[axis_u8]));
 
@@ -529,14 +530,15 @@ static iree_status_t loom_vector_to_scalar_build_dynamic_bitcast_bit(
     loom_value_id_t* out_accumulator) {
   loom_vector_to_scalar_index_term_t global_bit = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-      state, LOOM_OP_INDEX_ADD, result_base_bit, result_bit, &global_bit));
+      state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, result_base_bit,
+      result_bit, &global_bit));
   loom_vector_to_scalar_index_term_t source_ordinal = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-      state, LOOM_OP_INDEX_DIV, global_bit,
+      state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_DIV, global_bit,
       loom_vector_to_scalar_static_term(source_width), &source_ordinal));
   loom_vector_to_scalar_index_term_t source_shift = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
-      state, LOOM_OP_INDEX_REM, global_bit,
+      state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_REM, global_bit,
       loom_vector_to_scalar_static_term(source_width), &source_shift));
 
   loom_value_id_t source_lane = LOOM_VALUE_ID_INVALID;
