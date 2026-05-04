@@ -151,7 +151,7 @@ static iree_status_t loom_low_lower_descriptor_matrix_make_rejection(
       loom_param_string(loom_low_lower_descriptor_matrix_source_constraint_key(
           rule->source, *diagnostic));
   *rejection = (loom_target_contract_rejection_t){
-      .error_ref = LOOM_ERR_TARGET_046_REF,
+      .error_ref = LOOM_ERR_TARGET_039_REF,
       .params = params,
       .param_count = 7,
   };

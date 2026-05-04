@@ -176,7 +176,7 @@ static iree_status_t loom_target_low_legality_emit_type_constraint(
       loom_param_string(type_constraint),
   };
   return loom_target_low_legality_emit_target_context_error(
-      context, op, LOOM_ERR_TARGET_038, params, IREE_ARRAYSIZE(params));
+      context, op, LOOM_ERR_TARGET_031, params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_target_low_legality_emit_op_constraint(
@@ -186,7 +186,7 @@ static iree_status_t loom_target_low_legality_emit_op_constraint(
       loom_param_string(op_constraint),
   };
   return loom_target_low_legality_emit_target_context_error(
-      context, op, LOOM_ERR_TARGET_039, params, IREE_ARRAYSIZE(params));
+      context, op, LOOM_ERR_TARGET_032, params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_target_low_legality_reject_error_ref(

@@ -424,127 +424,48 @@ ERR_TARGET_021 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_022: Function target contract has no concrete ABI.
+# ERR_TARGET_022: Function target contract constraint is not satisfied.
 ERR_TARGET_022 = ErrorDef(
     domain=ErrorDomain.TARGET,
     code=22,
     severity=Severity.ERROR,
-    summary="Function target contract has no concrete ABI.",
+    summary="Function target contract constraint is not satisfied.",
     message=(
-        "function '@{function_name}' target record '@{target_name}' must "
-        "resolve a concrete ABI"
+        "function '@{function_name}' target record '@{target_name}' does not "
+        "satisfy target contract constraint '{constraint_key}'"
     ),
     params=(
         ErrorParam("function_name", ParamKind.STRING),
         ErrorParam("target_name", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
     ),
 )
 
-# ERR_TARGET_023: Kernel entry target contract is not a HAL kernel ABI.
+# ERR_TARGET_023: HAL kernel flat workgroup range constraint is not satisfied.
 ERR_TARGET_023 = ErrorDef(
     domain=ErrorDomain.TARGET,
     code=23,
     severity=Severity.ERROR,
-    summary="Kernel entry target contract is not a HAL kernel ABI.",
+    summary="HAL kernel flat workgroup range constraint is not satisfied.",
     message=(
-        "kernel entry '@{function_name}' target record '@{target_name}' "
-        "must resolve a HAL kernel ABI"
+        "kernel entry '@{function_name}' target record '@{target_name}' flat "
+        "workgroup range [{minimum}, {maximum}] does not satisfy "
+        "'{constraint_key}' with target limit {limit}"
     ),
     params=(
         ErrorParam("function_name", ParamKind.STRING),
         ErrorParam("target_name", ParamKind.STRING),
-    ),
-)
-
-# ERR_TARGET_024: HAL kernel binding alignment is zero.
-ERR_TARGET_024 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=24,
-    severity=Severity.ERROR,
-    summary="HAL kernel binding alignment is zero.",
-    message=(
-        "kernel entry '@{function_name}' target record '@{target_name}' "
-        "must resolve a non-zero HAL binding alignment"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("target_name", ParamKind.STRING),
-    ),
-)
-
-# ERR_TARGET_025: HAL kernel workgroup size is partial.
-ERR_TARGET_025 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=25,
-    severity=Severity.ERROR,
-    summary="HAL kernel workgroup size is partial.",
-    message=(
-        "kernel entry '@{function_name}' target record '@{target_name}' "
-        "requires workgroup size dimensions to be all zero or all non-zero"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("target_name", ParamKind.STRING),
-    ),
-)
-
-# ERR_TARGET_026: HAL kernel flat workgroup range is partial.
-ERR_TARGET_026 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=26,
-    severity=Severity.ERROR,
-    summary="HAL kernel flat workgroup range is partial.",
-    message=(
-        "kernel entry '@{function_name}' target record '@{target_name}' "
-        "requires flat workgroup size min and max to be both zero or both "
-        "non-zero"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("target_name", ParamKind.STRING),
-    ),
-)
-
-# ERR_TARGET_027: HAL kernel flat workgroup range is unordered.
-ERR_TARGET_027 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=27,
-    severity=Severity.ERROR,
-    summary="HAL kernel flat workgroup range is unordered.",
-    message=(
-        "kernel entry '@{function_name}' target record '@{target_name}' "
-        "flat workgroup size min {minimum} exceeds max {maximum}"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("target_name", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
         ErrorParam("minimum", ParamKind.U32),
-        ErrorParam("maximum", ParamKind.U32),
-    ),
-)
-
-# ERR_TARGET_028: HAL kernel flat workgroup max exceeds target limit.
-ERR_TARGET_028 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=28,
-    severity=Severity.ERROR,
-    summary="HAL kernel flat workgroup max exceeds target limit.",
-    message=(
-        "kernel entry '@{function_name}' target record '@{target_name}' "
-        "flat workgroup max {maximum} exceeds target limit {limit}"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("target_name", ParamKind.STRING),
         ErrorParam("maximum", ParamKind.U32),
         ErrorParam("limit", ParamKind.U32),
     ),
 )
 
-# ERR_TARGET_029: HAL kernel required workgroup dimension exceeds target limit.
-ERR_TARGET_029 = ErrorDef(
+# ERR_TARGET_024: HAL kernel required workgroup dimension exceeds target limit.
+ERR_TARGET_024 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=29,
+    code=24,
     severity=Severity.ERROR,
     summary="HAL kernel required workgroup dimension exceeds target limit.",
     message=(
@@ -560,74 +481,43 @@ ERR_TARGET_029 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_030: HAL kernel required flat workgroup size overflows.
-ERR_TARGET_030 = ErrorDef(
+# ERR_TARGET_025: HAL kernel required flat workgroup size constraint is not satisfied.
+ERR_TARGET_025 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=30,
+    code=25,
     severity=Severity.ERROR,
-    summary="HAL kernel required flat workgroup size overflows.",
+    summary="HAL kernel required flat workgroup size constraint is not satisfied.",
     message=(
         "kernel entry '@{function_name}' target record '@{target_name}' "
-        "required flat workgroup size overflows uint64"
+        "required flat workgroup size {size} does not satisfy "
+        "'{constraint_key}' with range [{minimum}, {maximum}] and target "
+        "limit {limit}"
     ),
     params=(
         ErrorParam("function_name", ParamKind.STRING),
         ErrorParam("target_name", ParamKind.STRING),
-    ),
-)
-
-# ERR_TARGET_031: HAL kernel required flat workgroup size exceeds target limit.
-ERR_TARGET_031 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=31,
-    severity=Severity.ERROR,
-    summary="HAL kernel required flat workgroup size exceeds target limit.",
-    message=(
-        "kernel entry '@{function_name}' target record '@{target_name}' "
-        "required flat workgroup size {size} exceeds target limit {limit}"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("target_name", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
         ErrorParam("size", ParamKind.U64),
+        ErrorParam("minimum", ParamKind.U32),
+        ErrorParam("maximum", ParamKind.U32),
         ErrorParam("limit", ParamKind.U32),
     ),
 )
 
-# ERR_TARGET_032: HAL kernel required flat workgroup size is outside range.
-ERR_TARGET_032 = ErrorDef(
+# ERR_TARGET_026: Function has no target record.
+ERR_TARGET_026 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=32,
-    severity=Severity.ERROR,
-    summary="HAL kernel required flat workgroup size is outside range.",
-    message=(
-        "kernel entry '@{function_name}' target record '@{target_name}' "
-        "required flat workgroup size {size} is outside range "
-        "[{minimum}, {maximum}]"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("target_name", ParamKind.STRING),
-        ErrorParam("size", ParamKind.U64),
-        ErrorParam("minimum", ParamKind.U32),
-        ErrorParam("maximum", ParamKind.U32),
-    ),
-)
-
-# ERR_TARGET_033: Function has no target record.
-ERR_TARGET_033 = ErrorDef(
-    domain=ErrorDomain.TARGET,
-    code=33,
+    code=26,
     severity=Severity.ERROR,
     summary="Function has no target record.",
     message="function '@{function_name}' must declare a target record",
     params=(ErrorParam("function_name", ParamKind.STRING),),
 )
 
-# ERR_TARGET_034: Target-low ABI policy did not map a value.
-ERR_TARGET_034 = ErrorDef(
+# ERR_TARGET_027: Target-low ABI policy did not map a value.
+ERR_TARGET_027 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=34,
+    code=27,
     severity=Severity.ERROR,
     summary="Target-low ABI policy did not map a value.",
     message=(
@@ -643,10 +533,10 @@ ERR_TARGET_034 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_035: Function predicates reached target-low lowering.
-ERR_TARGET_035 = ErrorDef(
+# ERR_TARGET_028: Function predicates reached target-low lowering.
+ERR_TARGET_028 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=35,
+    code=28,
     severity=Severity.ERROR,
     summary="Function predicates reached target-low lowering.",
     message=(
@@ -661,10 +551,10 @@ ERR_TARGET_035 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_036: Tied function results reached target-low lowering.
-ERR_TARGET_036 = ErrorDef(
+# ERR_TARGET_029: Tied function results reached target-low lowering.
+ERR_TARGET_029 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=36,
+    code=29,
     severity=Severity.ERROR,
     summary="Tied function results reached target-low lowering.",
     message=(
@@ -678,10 +568,10 @@ ERR_TARGET_036 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_037: Operation with regions reached target-low source lowering.
-ERR_TARGET_037 = ErrorDef(
+# ERR_TARGET_030: Operation with regions reached target-low source lowering.
+ERR_TARGET_030 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=37,
+    code=30,
     severity=Severity.ERROR,
     summary="Operation with regions reached target-low source lowering.",
     message=(
@@ -695,10 +585,10 @@ ERR_TARGET_037 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_038: Target-low type constraint is not satisfied.
-ERR_TARGET_038 = ErrorDef(
+# ERR_TARGET_031: Target-low type constraint is not satisfied.
+ERR_TARGET_031 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=38,
+    code=31,
     severity=Severity.ERROR,
     summary="Target-low type constraint is not satisfied.",
     message=(
@@ -713,10 +603,10 @@ ERR_TARGET_038 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_039: Target-low operation constraint is not satisfied.
-ERR_TARGET_039 = ErrorDef(
+# ERR_TARGET_032: Target-low operation constraint is not satisfied.
+ERR_TARGET_032 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=39,
+    code=32,
     severity=Severity.ERROR,
     summary="Target-low operation constraint is not satisfied.",
     message=(
@@ -730,10 +620,10 @@ ERR_TARGET_039 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_040: Target-low policy has no source value type mapping.
-ERR_TARGET_040 = ErrorDef(
+# ERR_TARGET_033: Target-low policy has no source value type mapping.
+ERR_TARGET_033 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=40,
+    code=33,
     severity=Severity.ERROR,
     summary="Target-low policy has no source value type mapping.",
     message=(
@@ -749,10 +639,10 @@ ERR_TARGET_040 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_041: Target branch lowering constraint is not satisfied.
-ERR_TARGET_041 = ErrorDef(
+# ERR_TARGET_034: Target branch lowering constraint is not satisfied.
+ERR_TARGET_034 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=41,
+    code=34,
     severity=Severity.ERROR,
     summary="Target branch lowering constraint is not satisfied.",
     message=(
@@ -766,10 +656,10 @@ ERR_TARGET_041 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_042: Target branch condition type constraint is not satisfied.
-ERR_TARGET_042 = ErrorDef(
+# ERR_TARGET_035: Target branch condition type constraint is not satisfied.
+ERR_TARGET_035 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=42,
+    code=35,
     severity=Severity.ERROR,
     summary="Target branch condition type constraint is not satisfied.",
     message=(
@@ -784,10 +674,10 @@ ERR_TARGET_042 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_043: Target has no projection for an emitter.
-ERR_TARGET_043 = ErrorDef(
+# ERR_TARGET_036: Target has no projection for an emitter.
+ERR_TARGET_036 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=43,
+    code=36,
     severity=Severity.ERROR,
     summary="Target has no projection for an emitter.",
     message=(
@@ -809,10 +699,10 @@ ERR_TARGET_043 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_044: Target emitter preflight constraint failed.
-ERR_TARGET_044 = ErrorDef(
+# ERR_TARGET_037: Target emitter preflight constraint failed.
+ERR_TARGET_037 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=44,
+    code=37,
     severity=Severity.ERROR,
     summary="Target emitter preflight constraint failed.",
     message=(
@@ -831,10 +721,10 @@ ERR_TARGET_044 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_045: Target emitter rejected an operation.
-ERR_TARGET_045 = ErrorDef(
+# ERR_TARGET_038: Target emitter rejected an operation.
+ERR_TARGET_038 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=45,
+    code=38,
     severity=Severity.ERROR,
     summary="Target emitter rejected an operation.",
     message=(
@@ -856,10 +746,10 @@ ERR_TARGET_045 = ErrorDef(
     ),
 )
 
-# ERR_TARGET_046: Matrix source contract did not satisfy target constraints.
-ERR_TARGET_046 = ErrorDef(
+# ERR_TARGET_039: Matrix source contract did not satisfy target constraints.
+ERR_TARGET_039 = ErrorDef(
     domain=ErrorDomain.TARGET,
-    code=46,
+    code=39,
     severity=Severity.ERROR,
     summary="Matrix source contract did not satisfy target constraints.",
     message=(
@@ -918,11 +808,4 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_037,
     ERR_TARGET_038,
     ERR_TARGET_039,
-    ERR_TARGET_040,
-    ERR_TARGET_041,
-    ERR_TARGET_042,
-    ERR_TARGET_043,
-    ERR_TARGET_044,
-    ERR_TARGET_045,
-    ERR_TARGET_046,
 )

@@ -13,6 +13,18 @@ func.def target(@target) @unsupported_source_op(%lhs: i32, %rhs: i32) -> (i32) {
 ireevm.target<core> @target
 
 func.def target(@target) @unsupported_source_type(%value: f32) {
-  // ERROR@-1: TARGET/040 {field_name="source", actual_type="f32"}
+  // ERROR@-1: TARGET/033 {field_name="source", actual_type="f32"}
   func.return
+}
+
+// ====
+
+ireevm.target<core> @target
+
+// ERROR@+1: TARGET/022 {constraint_key="abi.hal_kernel"}
+kernel.def target(@target) @kernel_workgroup_size_requires_hal_abi() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  kernel.return
 }

@@ -680,19 +680,19 @@ iree_status_t loom_low_lower_record_source_memory_access(
     loom_low_lower_context_t* context, const loom_op_t* low_op,
     const loom_low_source_memory_access_plan_t* source_plan);
 
-// Emits ERR_TARGET_040 for a source value type rejected by the active
+// Emits ERR_TARGET_033 for a source value type rejected by the active
 // target-low policy.
 iree_status_t loom_low_lower_emit_source_type_unsupported(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     iree_string_view_t field_name, loom_type_t actual_type);
 
-// Emits ERR_TARGET_041 for a CFG branch shape rejected by the active
+// Emits ERR_TARGET_034 for a CFG branch shape rejected by the active
 // target-low policy.
 iree_status_t loom_low_lower_emit_branch_constraint(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     iree_string_view_t branch_constraint);
 
-// Emits ERR_TARGET_042 for a branch condition type rejected by the active
+// Emits ERR_TARGET_035 for a branch condition type rejected by the active
 // target-low policy.
 iree_status_t loom_low_lower_emit_branch_condition_type_unsupported(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
