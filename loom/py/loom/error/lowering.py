@@ -8,27 +8,6 @@
 
 from loom.errors import ErrorDef, ErrorDomain, ErrorParam, ParamKind, Severity
 
-# ERR_LOWERING_020: Static vector scalarization lane count is not representable.
-ERR_LOWERING_020 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=20,
-    severity=Severity.ERROR,
-    summary="Static vector scalarization lane count is not representable.",
-    message=(
-        "{op_name} cannot be lowered by {pass_name} because static vector type "
-        "{vector_type} has more lanes than scalarization can represent"
-    ),
-    params=(
-        ErrorParam("op_name", ParamKind.STRING),
-        ErrorParam("pass_name", ParamKind.STRING),
-        ErrorParam("vector_type", ParamKind.TYPE),
-    ),
-    fix_hint=(
-        "Refine the vector shape before scalarization or lower it with a "
-        "target primitive that preserves the vector aggregate"
-    ),
-)
-
 # ERR_LOWERING_022: Kernel async group has no wait in the current stream.
 ERR_LOWERING_022 = ErrorDef(
     domain=ErrorDomain.LOWERING,
@@ -321,7 +300,6 @@ ERR_LOWERING_043 = ErrorDef(
 )
 
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
-    ERR_LOWERING_020,
     ERR_LOWERING_022,
     ERR_LOWERING_023,
     ERR_LOWERING_024,

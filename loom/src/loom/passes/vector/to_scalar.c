@@ -69,7 +69,7 @@ iree_status_t loom_vector_to_scalar_static_element_count(
   };
   loom_diagnostic_emission_t emission = {
       .op = state->op,
-      .error = LOOM_ERR_LOWERING_020,
+      .error = LOOM_ERR_SHAPE_007,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };

@@ -107,6 +107,27 @@ ERR_SHAPE_006 = ErrorDef(
     ),
 )
 
+# ERR_SHAPE_007: Static vector element count is not representable.
+ERR_SHAPE_007 = ErrorDef(
+    domain=ErrorDomain.SHAPE,
+    code=7,
+    severity=Severity.ERROR,
+    summary="Static vector element count is not representable.",
+    message=(
+        "{op_name} cannot be scalarized by {pass_name} because static vector "
+        "type {vector_type} has more lanes than scalarization can represent"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("pass_name", ParamKind.STRING),
+        ErrorParam("vector_type", ParamKind.TYPE),
+    ),
+    fix_hint=(
+        "Refine the vector shape before scalarization or lower it with a "
+        "target primitive that preserves the vector aggregate"
+    ),
+)
+
 ALL_SHAPE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SHAPE_001,
     ERR_SHAPE_002,
@@ -114,4 +135,5 @@ ALL_SHAPE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SHAPE_004,
     ERR_SHAPE_005,
     ERR_SHAPE_006,
+    ERR_SHAPE_007,
 )
