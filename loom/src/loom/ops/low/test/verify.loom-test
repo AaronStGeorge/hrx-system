@@ -4,7 +4,7 @@ test.target<low_core> @test_target
 
 target.artifact @test_artifact target(@test_target) {abi = hal_executable, artifact_format = elf}
 
-// ERROR@+1: LOWERING/044 {function_name="kernel_artifact_requires_export", attribute_name="export", required_by="artifact, ordinal, or linkage"}
+// ERROR@+1: STRUCTURE/014 {attr_name="export", actual_value="0", expected_constraint="present when artifact, ordinal, or linkage is present"}
 low.kernel.def target(@test_target) artifact(@test_artifact) @kernel_artifact_requires_export() {
   low.return
 }
@@ -13,7 +13,7 @@ low.kernel.def target(@test_target) artifact(@test_artifact) @kernel_artifact_re
 
 test.target<low_core> @test_target
 
-// ERROR@+1: LOWERING/045 {function_name="kernel_rejects_zero_workgroup_size", attribute_name="workgroup_size_x"}
+// ERROR@+1: STRUCTURE/014 {attr_name="workgroup_size_x", actual_value="0", expected_constraint="positive u32"}
 low.kernel.def target(@test_target) workgroup_size(0, 1, 1) @kernel_rejects_zero_workgroup_size() {
   low.return
 }
