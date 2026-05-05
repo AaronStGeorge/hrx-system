@@ -60,10 +60,14 @@ const loom_run_execution_backend_t* const kDuplicateFakeExecutionBackends[] = {
     &kDuplicateFakeExecutionBackend,
 };
 
-const loom_run_execution_provider_t kCoreTestProvider = {
-    .name = IREE_SVL("core-test"),
+const loom_target_provider_t kCoreTestTargetProvider = {
     .initialize_low_descriptor_registry =
         loom_target_core_test_low_descriptor_registry_initialize,
+};
+
+const loom_run_execution_provider_t kCoreTestProvider = {
+    .name = IREE_SVL("core-test"),
+    .target_provider = &kCoreTestTargetProvider,
     .hal_backends = kFakeHalBackends,
     .hal_backend_count = IREE_ARRAYSIZE(kFakeHalBackends),
     .execution_backends = kFakeExecutionBackends,

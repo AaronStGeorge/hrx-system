@@ -6,6 +6,22 @@
 
 #include "loom/tooling/execution/execution_provider.h"
 
+static iree_status_t loom_run_execution_environment_append_target_provider(
+    loom_run_execution_environment_t* environment,
+    const loom_run_execution_provider_t* provider) {
+  if (provider->target_provider == NULL) {
+    return iree_ok_status();
+  }
+  if (environment->target_provider_count >=
+      IREE_ARRAYSIZE(environment->target_providers)) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "loom execution target provider capacity exceeded");
+  }
+  environment->target_providers[environment->target_provider_count++] =
+      provider->target_provider;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_run_execution_environment_append_hal_backends(
     loom_run_execution_environment_t* environment,
     const loom_run_execution_provider_t* provider) {
@@ -45,12 +61,20 @@ iree_status_t loom_run_execution_environment_initialize(
 
   for (iree_host_size_t i = 0; i < provider_set->provider_count; ++i) {
     const loom_run_execution_provider_t* provider = provider_set->providers[i];
+    IREE_RETURN_IF_ERROR(loom_run_execution_environment_append_target_provider(
+        out_environment, provider));
     IREE_RETURN_IF_ERROR(loom_run_execution_environment_append_hal_backends(
         out_environment, provider));
     IREE_RETURN_IF_ERROR(
         loom_run_execution_environment_append_execution_backends(
             out_environment, provider));
   }
+  out_environment->target_provider_set =
+      loom_target_provider_set_make(out_environment->target_providers,
+                                    out_environment->target_provider_count);
+  IREE_RETURN_IF_ERROR(
+      loom_target_environment_initialize(&out_environment->target_provider_set,
+                                         &out_environment->target_environment));
   loom_run_hal_backend_registry_initialize_from_entries(
       out_environment->hal_backends, out_environment->hal_backend_count,
       &out_environment->hal_backend_registry);
@@ -73,16 +97,8 @@ static iree_status_t loom_run_execution_environment_register_context(
     void* user_data, loom_context_t* context) {
   loom_run_execution_environment_t* environment =
       (loom_run_execution_environment_t*)user_data;
-  const loom_run_execution_provider_set_t* provider_set =
-      environment->provider_set;
-  for (iree_host_size_t i = 0; i < provider_set->provider_count; ++i) {
-    const loom_run_execution_provider_t* provider = provider_set->providers[i];
-    if (provider->register_context == NULL) {
-      continue;
-    }
-    IREE_RETURN_IF_ERROR(provider->register_context(context));
-  }
-  return iree_ok_status();
+  return loom_target_environment_register_context(
+      &environment->target_environment, context);
 }
 
 loom_run_register_context_callback_t
@@ -99,26 +115,8 @@ loom_run_execution_environment_initialize_low_descriptor_registry(
     void* user_data, loom_target_low_descriptor_registry_t* out_registry) {
   loom_run_execution_environment_t* environment =
       (loom_run_execution_environment_t*)user_data;
-  environment->descriptor_set_provider_count = 0;
-  const loom_run_execution_provider_set_t* provider_set =
-      environment->provider_set;
-  for (iree_host_size_t i = 0; i < provider_set->provider_count; ++i) {
-    const loom_run_execution_provider_t* provider = provider_set->providers[i];
-    if (provider->initialize_low_descriptor_registry == NULL) {
-      continue;
-    }
-    loom_target_low_descriptor_registry_t provider_registry = {0};
-    provider->initialize_low_descriptor_registry(&provider_registry);
-    IREE_RETURN_IF_ERROR(loom_target_low_descriptor_registry_append_to_tables(
-        &provider_registry, environment->descriptor_set_providers,
-        IREE_ARRAYSIZE(environment->descriptor_set_providers),
-        &environment->descriptor_set_provider_count));
-  }
-
-  loom_target_low_descriptor_registry_initialize_from_tables(
-      out_registry, environment->descriptor_set_providers,
-      environment->descriptor_set_provider_count);
-  return iree_ok_status();
+  return loom_target_environment_initialize_low_descriptor_registry(
+      &environment->target_environment, out_registry);
 }
 
 loom_run_initialize_low_descriptor_registry_callback_t

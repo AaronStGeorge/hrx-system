@@ -244,6 +244,23 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    provider
+  HDRS
+    "provider.h"
+  SRCS
+    "provider.c"
+  DEPS
+    ::low_descriptor_registry
+    ::low_legality
+    ::low_packet_diagnostics
+    iree::base
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     module_compiler
   HDRS
     "module_compiler.h"

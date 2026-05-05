@@ -43,6 +43,7 @@ loom_assert_no_dependencies(
         ":packed_dot_contract_projection",
         ":packed_dot_descriptors",
         ":packed_dot_vector",
+        ":provider",
         ":target_records",
         "//loom/src/loom/target/arch/x86/contracts:avx512_lower_rules",
         "//loom/src/loom/target/arch/x86/contracts:packed_dot_lower_rules",
@@ -59,11 +60,13 @@ loom_assert_no_dependencies(
         ":packed_dot_contract",
         ":packed_dot_contract_projection",
         ":packed_dot_descriptors",
+        ":provider",
         ":target_records",
     ],
     targets = [
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:low_legality",
+        "//loom/src/loom/target:provider",
         "//loom/src/loom/target:types",
     ],
 )
@@ -75,8 +78,11 @@ loom_assert_no_dependencies(
 )
 
 loom_assert_no_dependencies(
-    name = "core_tools_no_x86_low_registry_dep",
-    dependencies = [":low_registry"],
+    name = "core_tools_no_x86_target_provider_deps",
+    dependencies = [
+        ":low_registry",
+        ":provider",
+    ],
     targets = [
         "//loom/src/loom/tools/iree-run-loom:main",
         "//loom/src/loom/tools/loom-check:execute",
@@ -193,13 +199,24 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "check_provider",
-    srcs = ["check/provider.c"],
-    hdrs = ["check/provider.h"],
+    name = "provider",
+    srcs = ["provider.c"],
+    hdrs = ["provider.h"],
     deps = [
         ":low_registry",
         ":lower",
         ":ops",
+        "//loom/src/loom/target:provider",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "check_provider",
+    srcs = ["check/provider.c"],
+    hdrs = ["check/provider.h"],
+    deps = [
+        ":provider",
         "//loom/src/loom/target/emit/native/x86:loom_check",
         "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",

@@ -6,15 +6,9 @@
 
 #include "loom/target/emit/ireevm/check/provider.h"
 
-#include "loom/target/emit/ireevm/low_registry.h"
-#include "loom/target/emit/ireevm/lower.h"
-#include "loom/target/emit/ireevm/ops/registry.h"
+#include "loom/target/emit/ireevm/provider.h"
 
 const loom_check_provider_t loom_ireevm_check_provider = {
     .name = IREE_SVL("ireevm"),
-    .register_context = loom_ireevm_ops_register_dialect,
-    .initialize_low_descriptor_registry =
-        loom_ireevm_low_descriptor_registry_initialize,
-    .initialize_low_lower_policy_registry =
-        loom_ireevm_low_lower_policy_registry_initialize,
+    .target_provider = &loom_ireevm_target_provider,
 };

@@ -6,15 +6,9 @@
 
 #include "loom/target/arch/wasm/check/provider.h"
 
-#include "loom/target/arch/wasm/low_registry.h"
-#include "loom/target/arch/wasm/ops/registry.h"
-#include "loom/target/emit/wasm/lower.h"
+#include "loom/target/arch/wasm/provider.h"
 
 const loom_check_provider_t loom_wasm_check_provider = {
     .name = IREE_SVL("wasm"),
-    .register_context = loom_wasm_ops_register_dialect,
-    .initialize_low_descriptor_registry =
-        loom_wasm_low_descriptor_registry_initialize,
-    .initialize_low_lower_policy_registry =
-        loom_wasm_low_lower_policy_registry_initialize,
+    .target_provider = &loom_wasm_target_provider,
 };

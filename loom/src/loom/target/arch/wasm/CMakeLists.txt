@@ -74,16 +74,30 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    provider
+  HDRS
+    "provider.h"
+  SRCS
+    "provider.c"
+  DEPS
+    ::low_registry
+    ::ops
+    iree::base
+    loom::src::loom::target::emit::wasm::lower
+    loom::src::loom::target::provider
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     check_provider
   HDRS
     "check/provider.h"
   SRCS
     "check/provider.c"
   DEPS
-    ::low_registry
-    ::ops
+    ::provider
     iree::base
-    loom::src::loom::target::emit::wasm::lower
     loom::src::loom::tools::loom-check::provider
   PUBLIC
 )

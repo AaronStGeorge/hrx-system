@@ -38,6 +38,7 @@ loom_assert_no_dependencies(
         ":descriptors",
         ":low_registry",
         ":ops",
+        ":provider",
         ":target_records",
     ],
 )
@@ -47,17 +48,22 @@ loom_assert_no_dependencies(
     dependencies = [
         ":descriptors",
         ":low_registry",
+        ":provider",
         ":target_records",
     ],
     targets = [
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:low_legality",
+        "//loom/src/loom/target:provider",
     ],
 )
 
 loom_assert_no_dependencies(
-    name = "core_tools_no_wasm_low_registry_dep",
-    dependencies = [":low_registry"],
+    name = "core_tools_no_wasm_target_provider_deps",
+    dependencies = [
+        ":low_registry",
+        ":provider",
+    ],
     targets = [
         "//loom/src/loom/tools/iree-run-loom:main",
         "//loom/src/loom/tools/loom-check:execute",
@@ -125,13 +131,24 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "provider",
+    srcs = ["provider.c"],
+    hdrs = ["provider.h"],
+    deps = [
+        ":low_registry",
+        ":ops",
+        "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/emit/wasm:lower",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "check_provider",
     srcs = ["check/provider.c"],
     hdrs = ["check/provider.h"],
     deps = [
-        ":low_registry",
-        ":ops",
-        "//loom/src/loom/target/emit/wasm:lower",
+        ":provider",
         "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
     ],

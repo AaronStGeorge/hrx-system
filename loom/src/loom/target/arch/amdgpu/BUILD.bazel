@@ -66,6 +66,7 @@ loom_assert_no_dependencies(
         ":occupancy",
         ":occupancy_tables",
         ":packet_diagnostics",
+        ":provider",
         ":register_class",
         ":target_id",
         ":target_info",
@@ -111,11 +112,13 @@ loom_assert_no_dependencies(
         ":matrix_contract",
         ":matrix_contract_projection",
         ":packet_diagnostics",
+        ":provider",
     ],
     targets = [
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:low_legality",
         "//loom/src/loom/target:low_packet_diagnostics",
+        "//loom/src/loom/target:provider",
         "//loom/src/loom/target:types",
     ],
 )
@@ -178,6 +181,7 @@ loom_assert_no_dependencies(
         ":check_provider",
         ":low_registry",
         ":packet_diagnostics",
+        ":provider",
     ],
     targets = [
         "//loom/src/loom/tools/loom-check:execute",
@@ -677,11 +681,24 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "provider",
+    srcs = ["provider.c"],
+    hdrs = ["provider.h"],
+    deps = [
+        ":low_registry",
+        ":lower",
+        ":ops",
+        ":packet_diagnostics",
+        "//loom/src/loom/target:provider",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "amdgpu_hal_backend",
     srcs = ["execution/amdgpu_hal_backend.c"],
     hdrs = ["execution/amdgpu_hal_backend.h"],
     deps = [
-        ":low_registry",
         ":target_id",
         ":target_info",
         ":target_record_table",
@@ -722,11 +739,8 @@ loom_cc_library(
         "check/provider.h",
     ],
     deps = [
-        ":low_registry",
-        ":lower",
         ":occupancy",
-        ":ops",
-        ":packet_diagnostics",
+        ":provider",
         "//loom/src/loom/target/emit/native/amdgpu:loom_check",
         "//loom/src/loom/tools/loom-check:execute",
         "//loom/src/loom/tools/loom-check:provider",
@@ -739,8 +753,7 @@ loom_cc_library(
     srcs = ["execution/provider.c"],
     hdrs = ["execution/provider.h"],
     deps = [
-        ":low_registry",
-        ":ops",
+        ":provider",
         ":amdgpu_hal_backend",
         "//loom/src/loom/tooling/execution:execution_provider",
         "//loom/src/loom/tooling/execution:hal_execution_backend",

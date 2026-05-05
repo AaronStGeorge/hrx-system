@@ -310,9 +310,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::codegen::low::lower
     loom::src::loom::ir
-    loom::src::loom::target::low_descriptor_registry
-    loom::src::loom::target::low_legality
-    loom::src::loom::target::low_packet_diagnostics
+    loom::src::loom::target::provider
   PUBLIC
 )
 

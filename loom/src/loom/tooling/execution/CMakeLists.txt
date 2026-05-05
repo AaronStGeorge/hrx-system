@@ -69,7 +69,7 @@ loom_cc_library(
     ::hal_backend
     ::session
     iree::base
-    loom::src::loom::target::low_descriptor_registry
+    loom::src::loom::target::provider
   PUBLIC
 )
 

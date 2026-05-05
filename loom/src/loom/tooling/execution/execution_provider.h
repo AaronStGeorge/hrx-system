@@ -10,6 +10,7 @@
 #define LOOM_TOOLING_EXECUTION_EXECUTION_PROVIDER_H_
 
 #include "iree/base/api.h"
+#include "loom/target/provider.h"
 #include "loom/tooling/execution/execution_backend.h"
 #include "loom/tooling/execution/hal_backend.h"
 #include "loom/tooling/execution/session.h"
@@ -18,26 +19,12 @@
 extern "C" {
 #endif
 
-// Registers target-owned dialects contributed by a provider.
-typedef iree_status_t (*loom_run_execution_provider_context_registration_fn_t)(
-    loom_context_t* context);
-
-// Initializes a target-low descriptor registry package. Registry tables are
-// linked into the provider library and do not allocate.
-typedef void (*loom_run_low_descriptor_registry_initializer_t)(
-    loom_target_low_descriptor_registry_t* out_registry);
-
 // Target-owned execution contribution linked into run/benchmark/tune tools.
 typedef struct loom_run_execution_provider_t {
   // Stable provider name used in diagnostics and help text.
   iree_string_view_t name;
-  // Optional function that registers target-owned dialects with the execution
-  // context.
-  loom_run_execution_provider_context_registration_fn_t register_context;
-  // Optional function that initializes a target-low descriptor registry
-  // package.
-  loom_run_low_descriptor_registry_initializer_t
-      initialize_low_descriptor_registry;
+  // Optional target provider contribution reused by compile and check tools.
+  const loom_target_provider_t* target_provider;
   // Optional HAL backend table contributed by this provider.
   const loom_run_hal_backend_t* const* hal_backends;
   // Number of entries in |hal_backends|.
@@ -57,7 +44,7 @@ typedef struct loom_run_execution_provider_set_t {
 } loom_run_execution_provider_set_t;
 
 enum {
-  LOOM_RUN_EXECUTION_PROVIDER_DESCRIPTOR_SET_PROVIDER_CAPACITY = 256,
+  LOOM_RUN_EXECUTION_PROVIDER_TARGET_PROVIDER_CAPACITY = 64,
   LOOM_RUN_EXECUTION_PROVIDER_HAL_BACKEND_CAPACITY = 64,
   LOOM_RUN_EXECUTION_PROVIDER_EXECUTION_BACKEND_CAPACITY = 64,
 };
@@ -66,11 +53,15 @@ enum {
 typedef struct loom_run_execution_environment_t {
   // Provider table selected by the linked binary or embedding.
   const loom_run_execution_provider_set_t* provider_set;
-  // Descriptor-set provider scratch table assembled on demand.
-  loom_low_descriptor_set_provider_t descriptor_set_providers
-      [LOOM_RUN_EXECUTION_PROVIDER_DESCRIPTOR_SET_PROVIDER_CAPACITY];
-  // Number of entries in |descriptor_set_providers|.
-  iree_host_size_t descriptor_set_provider_count;
+  // Core target provider table assembled once for the environment.
+  const loom_target_provider_t*
+      target_providers[LOOM_RUN_EXECUTION_PROVIDER_TARGET_PROVIDER_CAPACITY];
+  // Number of entries in |target_providers|.
+  iree_host_size_t target_provider_count;
+  // Provider-set view over |target_providers|.
+  loom_target_provider_set_t target_provider_set;
+  // Core target environment composed from |target_providers|.
+  loom_target_environment_t target_environment;
   // HAL backend table assembled once for the environment.
   const loom_run_hal_backend_t*
       hal_backends[LOOM_RUN_EXECUTION_PROVIDER_HAL_BACKEND_CAPACITY];
@@ -101,10 +92,9 @@ loom_run_register_context_callback_t
 loom_run_execution_environment_register_context_callback(
     loom_run_execution_environment_t* environment);
 
-// Returns a session descriptor-registry callback backed by |environment|. Each
-// callback invocation resets environment-owned scratch tables, so the returned
-// registry view remains valid only until the next callback invocation or
-// |environment| deinitialization.
+// Returns a session descriptor-registry callback backed by |environment|. The
+// returned registry view borrows immutable tables owned by |environment| and
+// remains valid until |environment| deinitialization.
 loom_run_initialize_low_descriptor_registry_callback_t
 loom_run_execution_environment_low_descriptor_registry_callback(
     loom_run_execution_environment_t* environment);

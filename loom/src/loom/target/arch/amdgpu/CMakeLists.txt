@@ -549,13 +549,29 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    provider
+  HDRS
+    "provider.h"
+  SRCS
+    "provider.c"
+  DEPS
+    ::low_registry
+    ::lower
+    ::ops
+    ::packet_diagnostics
+    iree::base
+    loom::src::loom::target::provider
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     amdgpu_hal_backend
   HDRS
     "execution/amdgpu_hal_backend.h"
   SRCS
     "execution/amdgpu_hal_backend.c"
   DEPS
-    ::low_registry
     ::target_id
     ::target_info
     ::target_record_table
@@ -596,11 +612,8 @@ loom_cc_library(
     "check/occupancy.c"
     "check/provider.c"
   DEPS
-    ::low_registry
-    ::lower
     ::occupancy
-    ::ops
-    ::packet_diagnostics
+    ::provider
     iree::base
     loom::src::loom::target::emit::native::amdgpu::loom_check
     loom::src::loom::tools::loom-check::execute
@@ -616,8 +629,7 @@ loom_cc_library(
   SRCS
     "execution/provider.c"
   DEPS
-    ::low_registry
-    ::ops
+    ::provider
     ::amdgpu_hal_backend
     iree::base
     loom::src::loom::tooling::execution::execution_provider
