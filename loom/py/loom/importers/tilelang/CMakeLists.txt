@@ -21,12 +21,20 @@ iree_py_library(
     "coverage.py"
     "model.py"
     "nodes.py"
-    "oracle.py"
     "types.py"
   DEPS
     iree::runtime::py::loom::core
     iree::runtime::py::loom::package
     iree::runtime::py::loom::importers::core::core
+)
+
+iree_py_library(
+  NAME
+    oracle
+  SRCS
+    "oracle.py"
+  DEPS
+    iree::runtime::py::loom::importers::tilelang::core
 )
 
 iree_py_library(

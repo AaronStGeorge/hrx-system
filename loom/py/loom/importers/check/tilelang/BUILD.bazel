@@ -30,6 +30,7 @@ py_library(
         "//loom/py/loom/importers/check",
         "//loom/py/loom/importers/core",
         "//loom/py/loom/importers/tilelang",
+        "//loom/py/loom/importers/tilelang:oracle",
     ],
 )
 

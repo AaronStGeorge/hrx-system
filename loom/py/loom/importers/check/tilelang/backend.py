@@ -60,7 +60,7 @@ class TileLangBackend:
             default="off",
             help=(
                 "optionally capture TileLang generated source or code-object "
-                "oracle artifacts while still checking imported Loom IR"
+                "oracle artifacts when the local toolchain supports them"
             ),
         )
         parser.add_argument(

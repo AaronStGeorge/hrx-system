@@ -23,6 +23,7 @@ iree_py_library(
     iree::runtime::py::loom::importers::check::check
     iree::runtime::py::loom::importers::core::core
     iree::runtime::py::loom::importers::tilelang::tilelang
+    iree::runtime::py::loom::importers::tilelang::oracle
 )
 
 if(LOOM_IMPORTER_TILELANG)

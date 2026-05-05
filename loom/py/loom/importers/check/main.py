@@ -199,8 +199,10 @@ device source, and `--oracle=code-object` additionally compiles, unbundles, and
 externally disassembles a code object when the ROCm tools are available. This
 metadata is sidecar validation evidence: the checked stdout remains imported
 Loom IR. Use `--oracle-output-dir` or `--dump-temp-dir` to retain artifact files.
-Missing TileLang/ROCm hooks or tools produce skipped cases with structured JSON
-metadata, not fake passes.
+Oracle modes detect their optional dependencies at runtime. Missing TileLang
+source-codegen hooks, HIP/ROCm tools, or LLVM tools produce skipped cases with
+structured JSON metadata, not fake passes, and do not expand the minimal
+TileLang import dependency contract.
 
 Expected diagnostics use loom-check-style source annotations:
 
