@@ -122,6 +122,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "promote_private_fragments_footprint"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/promote_private_fragments_footprint.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "refine_boundaries"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/refine_boundaries.loom-test"
@@ -147,6 +158,17 @@ iree_executable_test(
     "scf_to_cfg"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/scf_to_cfg.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "scf_unroll"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/scf_unroll.loom-test"
   SRC
     loom::src::loom::tools::loom-check::loom-check-test
   LABELS

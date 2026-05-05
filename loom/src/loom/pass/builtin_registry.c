@@ -27,6 +27,7 @@
 #include "loom/passes/promote_private_fragments.h"
 #include "loom/passes/refine_boundaries.h"
 #include "loom/passes/scf_to_cfg.h"
+#include "loom/passes/scf_unroll.h"
 #include "loom/passes/strip_hints.h"
 #include "loom/passes/symbol_dce.h"
 #include "loom/passes/vector/memory_footprint.h"
@@ -128,6 +129,15 @@ static const loom_pass_requirement_def_t kLowSourceToLowRequirements[] = {
 static const loom_pass_option_schema_t kRefineBoundariesOptionSchema[] = {
     {
         .name = IREE_SVL("max-iterations"),
+        .kind = LOOM_PASS_OPTION_SCHEMA_UINT32,
+        .minimum_uint32 = 1,
+        .maximum_uint32 = UINT32_MAX,
+    },
+};
+
+static const loom_pass_option_schema_t kScfUnrollOptionSchema[] = {
+    {
+        .name = IREE_SVL("max-trip-count"),
         .kind = LOOM_PASS_OPTION_SCHEMA_UINT32,
         .minimum_uint32 = 1,
         .maximum_uint32 = UINT32_MAX,
@@ -251,6 +261,14 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .key = IREE_SVL("symbol-dce"),
         .info = loom_symbol_dce_pass_info,
         .module_run = loom_symbol_dce_run,
+    },
+    {
+        .key = IREE_SVL("unroll-scf-for"),
+        .info = loom_scf_unroll_pass_info,
+        .function_run = loom_scf_unroll_run,
+        .create = loom_scf_unroll_create,
+        .option_schema = kScfUnrollOptionSchema,
+        .option_schema_count = IREE_ARRAYSIZE(kScfUnrollOptionSchema),
     },
     {
         .key = IREE_SVL("vector-memory-footprint"),

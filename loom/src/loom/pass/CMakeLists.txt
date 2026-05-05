@@ -247,6 +247,7 @@ loom_cc_library(
     loom::src::loom::passes::promote_private_fragments
     loom::src::loom::passes::refine_boundaries
     loom::src::loom::passes::scf_to_cfg
+    loom::src::loom::passes::scf_unroll
     loom::src::loom::passes::strip_hints
     loom::src::loom::passes::symbol_dce
     loom::src::loom::passes::vector::memory_footprint

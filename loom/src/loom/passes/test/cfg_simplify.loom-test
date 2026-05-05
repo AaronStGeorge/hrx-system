@@ -186,6 +186,19 @@ func.def @preserves_effectful_alpha_candidate(%cond: i1, %buffer: buffer, %offse
   func.return
 }
 
+// ----
+func.def @preserves_effectful_alpha_candidate(%cond: i1, %buffer: buffer, %offset: offset, %value: f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  cfg.cond_br %cond, ^left, ^right : i1
+^left:
+  view.store %value, %view[0] : f32, view<1xf32, %layout>
+  func.return
+^right:
+  view.store %value, %view[0] : f32, view<1xf32, %layout>
+  func.return
+}
+
 // ====
 
 func.def @preserves_alpha_candidate_with_different_successors(%cond: i1, %guard: i1, %a: i32, %b: i32, %c: i32) -> (i32) {
@@ -226,6 +239,23 @@ func.def @preserves_distinct_return_blocks(%cond: i1, %a: i32, %b: i32) -> (i32)
   func.return %a : i32
 ^else:
   func.return %b : i32
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.kernel.def target(@test_target) @duplicates_low_return_after_br() {
+  low.br ^return
+^return:
+  low.return
+}
+
+// ----
+test.target<low_core> @test_target
+
+low.kernel.def target(@test_target) @duplicates_low_return_after_br() {
+  low.return
 }
 
 // ====
@@ -792,6 +822,18 @@ func.def @preserves_effectful_forward_block(%cond: i1, %buffer: buffer, %offset:
 ^effect:
   view.store %value, %view[0] : f32, view<1xf32, %layout>
   cfg.br ^exit
+^exit:
+  func.return
+}
+
+// ----
+func.def @preserves_effectful_forward_block(%cond: i1, %buffer: buffer, %offset: offset, %value: f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  cfg.cond_br %cond, ^effect, ^exit : i1
+^effect:
+  view.store %value, %view[0] : f32, view<1xf32, %layout>
+  func.return
 ^exit:
   func.return
 }

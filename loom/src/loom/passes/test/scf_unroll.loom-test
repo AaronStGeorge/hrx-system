@@ -1,0 +1,93 @@
+// RUN: pass unroll-scf-for
+
+func.def @static_resultless_loop_unrolls() {
+  %start = index.constant 0 : index
+  %end = index.constant 3 : index
+  %step = index.constant 1 : index
+  scf.for %i = [%start to %end step %step] {
+    test.use %i : index
+  }
+  func.return
+}
+
+// ----
+func.def @static_resultless_loop_unrolls() {
+  %start = index.constant 0 : index
+  %end = index.constant 3 : index
+  %step = index.constant 1 : index
+  %i0 = index.constant 0 : index
+  test.use %i0 : index
+  %i1 = index.constant 1 : index
+  test.use %i1 : index
+  %i2 = index.constant 2 : index
+  test.use %i2 : index
+  func.return
+}
+
+// ====
+
+func.def @zero_trip_loop_erases() {
+  %start = index.constant 0 : index
+  %end = index.constant 0 : index
+  %step = index.constant 1 : index
+  scf.for %i = [%start to %end step %step] {
+    test.use %i : index
+  }
+  func.return
+}
+
+// ----
+func.def @zero_trip_loop_erases() {
+  %start = index.constant 0 : index
+  %end = index.constant 0 : index
+  %step = index.constant 1 : index
+  func.return
+}
+
+// ====
+
+func.def @large_static_loop_stays_structured() {
+  %start = index.constant 0 : index
+  %end = index.constant 9 : index
+  %step = index.constant 1 : index
+  scf.for %i = [%start to %end step %step] {
+    test.use %i : index
+  }
+  func.return
+}
+
+// ----
+func.def @large_static_loop_stays_structured() {
+  %start = index.constant 0 : index
+  %end = index.constant 9 : index
+  %step = index.constant 1 : index
+  scf.for %i = [%start to %end step %step] {
+    test.use %i : index
+  }
+  func.return
+}
+
+// ====
+
+func.def @result_loop_stays_structured(%input: i32) -> (i32) {
+  %start = index.constant 0 : index
+  %end = index.constant 3 : index
+  %step = index.constant 1 : index
+  %result = scf.for %i = [%start to %end step %step](%acc = %input : i32) -> (i32) {
+    %next = test.addi %acc, %acc : i32
+    scf.yield %next : i32
+  }
+  func.return %result : i32
+}
+
+// ----
+func.def @result_loop_stays_structured(%input: i32) -> (i32) {
+  %start = index.constant 0 : index
+  %end = index.constant 3 : index
+  %step = index.constant 1 : index
+  %result = scf.for %i = [%start to %end step %step](%acc = %input : i32) -> (i32) {
+    %next = test.addi %acc, %acc : i32
+    scf.yield %next : i32
+  }
+  func.return %result : i32
+}

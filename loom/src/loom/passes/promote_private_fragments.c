@@ -17,6 +17,7 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/rewrite/rewriter.h"
+#include "loom/util/dominance.h"
 #include "loom/util/walk.h"
 
 //===----------------------------------------------------------------------===//
@@ -26,6 +27,7 @@
 enum {
   LOOM_PROMOTE_PRIVATE_FRAGMENTS_STAT_FRAGMENTS_PROMOTED = 0,
   LOOM_PROMOTE_PRIVATE_FRAGMENTS_STAT_LOADS_PROMOTED = 1,
+  LOOM_PROMOTE_PRIVATE_FRAGMENTS_STAT_LOADS_FORWARDED = 2,
 };
 
 static const loom_pass_statistic_def_t kPromotePrivateFragmentsStatistics[] = {
@@ -33,6 +35,9 @@ static const loom_pass_statistic_def_t kPromotePrivateFragmentsStatistics[] = {
      IREE_SVL("Number of private fragment views promoted to SSA vectors.")},
     {IREE_SVL("loads-promoted"),
      IREE_SVL("Number of private scalar loads replaced with vector.extract.")},
+    {IREE_SVL("loads-forwarded"),
+     IREE_SVL("Number of private scalar loads forwarded from a dominated "
+              "single store.")},
 };
 
 static const loom_pass_info_t loom_promote_private_fragments_pass_info_storage =
@@ -130,18 +135,27 @@ typedef struct loom_promote_private_fragments_copy_loop_t {
   loom_type_t vector_type;
 } loom_promote_private_fragments_copy_loop_t;
 
-typedef struct loom_promote_private_fragments_load_list_t {
-  // Private view.load operations to replace with vector.extract.
+typedef struct loom_promote_private_fragments_op_list_t {
+  // Collected private memory operations.
   loom_op_t** ops;
-  // Number of collected private loads.
+  // Number of collected operations.
   iree_host_size_t count;
-  // Allocated private load pointer capacity.
+  // Allocated operation pointer capacity.
   iree_host_size_t capacity;
-} loom_promote_private_fragments_load_list_t;
+} loom_promote_private_fragments_op_list_t;
 
-static iree_status_t loom_promote_private_fragments_load_list_push(
+static iree_status_t loom_promote_private_fragments_op_list_initialize(
     iree_arena_allocator_t* arena,
-    loom_promote_private_fragments_load_list_t* list, loom_op_t* op) {
+    loom_promote_private_fragments_op_list_t* list) {
+  list->count = 0;
+  list->capacity = 4;
+  return iree_arena_allocate_array(arena, list->capacity, sizeof(loom_op_t*),
+                                   (void**)&list->ops);
+}
+
+static iree_status_t loom_promote_private_fragments_op_list_push(
+    iree_arena_allocator_t* arena,
+    loom_promote_private_fragments_op_list_t* list, loom_op_t* op) {
   if (list->count >= list->capacity) {
     iree_host_size_t new_count = list->count + 1;
     IREE_RETURN_IF_ERROR(
@@ -359,14 +373,10 @@ static iree_status_t loom_promote_private_fragments_collect_uses(
     loom_pass_t* pass, loom_module_t* module, loom_value_id_t private_view,
     int64_t fragment_length,
     loom_promote_private_fragments_copy_loop_t* out_copy_loop,
-    loom_promote_private_fragments_load_list_t* out_loads,
-    bool* out_promotable) {
+    loom_promote_private_fragments_op_list_t* out_loads, bool* out_promotable) {
   *out_promotable = false;
-  out_loads->count = 0;
-  out_loads->capacity = 4;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate_array(pass->arena, out_loads->capacity,
-                                sizeof(loom_op_t*), (void**)&out_loads->ops));
+  IREE_RETURN_IF_ERROR(loom_promote_private_fragments_op_list_initialize(
+      pass->arena, out_loads));
 
   const loom_value_t* view_value = loom_module_value(module, private_view);
   bool found_copy_loop = false;
@@ -374,7 +384,7 @@ static iree_status_t loom_promote_private_fragments_collect_uses(
   loom_value_for_each_use(view_value, use) {
     loom_op_t* user_op = loom_use_user_op(*use);
     if (loom_view_load_isa(user_op) && loom_use_operand_index(*use) == 0) {
-      IREE_RETURN_IF_ERROR(loom_promote_private_fragments_load_list_push(
+      IREE_RETURN_IF_ERROR(loom_promote_private_fragments_op_list_push(
           pass->arena, out_loads, user_op));
       continue;
     }
@@ -403,6 +413,8 @@ typedef struct loom_promote_private_fragments_context_t {
   loom_pass_t* pass;
   // Module being transformed.
   loom_module_t* module;
+  // Dominance state for store-to-load forwarding queries.
+  const loom_dominance_info_t* dominance;
   // Shared rewriter for all promotions.
   loom_rewriter_t* rewriter;
 } loom_promote_private_fragments_context_t;
@@ -444,6 +456,112 @@ static iree_status_t loom_promote_private_fragments_try_erase_dead(
   return loom_rewriter_erase_if_dead(context->rewriter, op, &erased);
 }
 
+static bool loom_promote_private_fragments_i64_array_equal(
+    loom_attribute_t lhs, loom_attribute_t rhs) {
+  if (lhs.kind != LOOM_ATTR_I64_ARRAY || rhs.kind != LOOM_ATTR_I64_ARRAY ||
+      lhs.count != rhs.count) {
+    return false;
+  }
+  for (uint16_t i = 0; i < lhs.count; ++i) {
+    if (lhs.i64_array[i] != rhs.i64_array[i]) return false;
+  }
+  return true;
+}
+
+static bool loom_promote_private_fragments_value_slice_equal(
+    loom_value_slice_t lhs, loom_value_slice_t rhs) {
+  if (lhs.count != rhs.count) return false;
+  for (uint16_t i = 0; i < lhs.count; ++i) {
+    if (lhs.values[i] != rhs.values[i]) return false;
+  }
+  return true;
+}
+
+static bool loom_promote_private_fragments_load_matches_store_indices(
+    const loom_op_t* store_op, const loom_op_t* load_op) {
+  return loom_promote_private_fragments_i64_array_equal(
+             loom_view_store_static_indices(store_op),
+             loom_view_load_static_indices(load_op)) &&
+         loom_promote_private_fragments_value_slice_equal(
+             loom_view_store_indices(store_op),
+             loom_view_load_indices(load_op));
+}
+
+static iree_status_t loom_promote_private_fragments_collect_single_store_uses(
+    loom_pass_t* pass, loom_module_t* module, loom_value_id_t private_view,
+    loom_op_t** out_store_op,
+    loom_promote_private_fragments_op_list_t* out_loads, bool* out_promotable) {
+  *out_store_op = NULL;
+  *out_promotable = false;
+  IREE_RETURN_IF_ERROR(loom_promote_private_fragments_op_list_initialize(
+      pass->arena, out_loads));
+
+  const loom_value_t* view_value = loom_module_value(module, private_view);
+  const loom_use_t* use = NULL;
+  loom_value_for_each_use(view_value, use) {
+    loom_op_t* user_op = loom_use_user_op(*use);
+    if (loom_view_load_isa(user_op) && loom_use_operand_index(*use) == 0) {
+      IREE_RETURN_IF_ERROR(loom_promote_private_fragments_op_list_push(
+          pass->arena, out_loads, user_op));
+      continue;
+    }
+    if (loom_view_store_isa(user_op) && loom_use_operand_index(*use) == 1) {
+      if (*out_store_op) return iree_ok_status();
+      *out_store_op = user_op;
+      continue;
+    }
+    return iree_ok_status();
+  }
+
+  *out_promotable = *out_store_op && out_loads->count > 0;
+  return iree_ok_status();
+}
+
+static bool loom_promote_private_fragments_can_forward_single_store(
+    const loom_promote_private_fragments_context_t* context,
+    const loom_op_t* store_op,
+    const loom_promote_private_fragments_op_list_t* loads) {
+  loom_value_id_t stored_value = loom_view_store_value(store_op);
+  for (iree_host_size_t i = 0; i < loads->count; ++i) {
+    loom_op_t* load_op = loads->ops[i];
+    if (!loom_promote_private_fragments_load_matches_store_indices(store_op,
+                                                                   load_op)) {
+      return false;
+    }
+    if (!loom_dominates_op(context->dominance, store_op, load_op)) {
+      return false;
+    }
+    if (!loom_dominates_value(context->dominance, stored_value, load_op)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static iree_status_t loom_promote_private_fragments_forward_single_store(
+    loom_promote_private_fragments_context_t* context, loom_op_t* view_op,
+    loom_op_t* alloca_op, loom_op_t* store_op,
+    const loom_promote_private_fragments_op_list_t* loads) {
+  loom_value_id_t stored_value = loom_view_store_value(store_op);
+  for (iree_host_size_t i = 0; i < loads->count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
+        context->rewriter, loads->ops[i], &stored_value, 1));
+  }
+
+  IREE_RETURN_IF_ERROR(loom_rewriter_erase(context->rewriter, store_op));
+  IREE_RETURN_IF_ERROR(
+      loom_promote_private_fragments_try_erase_dead(context, view_op));
+  IREE_RETURN_IF_ERROR(
+      loom_promote_private_fragments_try_erase_dead(context, alloca_op));
+
+  if (context->pass->statistics) {
+    loom_pass_statistic_add(context->pass,
+                            LOOM_PROMOTE_PRIVATE_FRAGMENTS_STAT_LOADS_FORWARDED,
+                            loads->count);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_promote_private_fragments_name_vector_value(
     loom_promote_private_fragments_context_t* context,
     loom_value_id_t private_view, loom_value_id_t vector_value) {
@@ -475,7 +593,7 @@ static iree_status_t loom_promote_private_fragments_promote(
     loom_promote_private_fragments_context_t* context, loom_op_t* view_op,
     loom_op_t* alloca_op,
     const loom_promote_private_fragments_copy_loop_t* copy_loop,
-    const loom_promote_private_fragments_load_list_t* loads) {
+    const loom_promote_private_fragments_op_list_t* loads) {
   loom_builder_set_before(&context->rewriter->builder, copy_loop->loop_op);
   int64_t* static_indices = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -514,6 +632,235 @@ static iree_status_t loom_promote_private_fragments_promote(
   return iree_ok_status();
 }
 
+static iree_status_t loom_promote_private_fragments_try_single_store_forward(
+    loom_promote_private_fragments_context_t* context, loom_op_t* view_op,
+    loom_op_t* alloca_op, loom_value_id_t private_view, bool* out_changed) {
+  loom_op_t* store_op = NULL;
+  loom_promote_private_fragments_op_list_t loads = {0};
+  bool promotable = false;
+  IREE_RETURN_IF_ERROR(loom_promote_private_fragments_collect_single_store_uses(
+      context->pass, context->module, private_view, &store_op, &loads,
+      &promotable));
+  if (!promotable || !loom_promote_private_fragments_can_forward_single_store(
+                         context, store_op, &loads)) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_promote_private_fragments_forward_single_store(
+      context, view_op, alloca_op, store_op, &loads));
+  *out_changed = true;
+  return iree_ok_status();
+}
+
+static bool loom_promote_private_fragments_rank1_static_slot_index(
+    const loom_module_t* module, loom_attribute_t static_indices,
+    loom_value_slice_t indices, int64_t fragment_length,
+    int64_t* out_slot_index) {
+  *out_slot_index = 0;
+  if (static_indices.kind != LOOM_ATTR_I64_ARRAY || static_indices.count != 1) {
+    return false;
+  }
+  int64_t slot_index = static_indices.i64_array[0];
+  if (slot_index == INT64_MIN) {
+    if (indices.count != 1) return false;
+    if (!loom_promote_private_fragments_exact_index_constant(
+            module, indices.values[0], &slot_index)) {
+      return false;
+    }
+  } else if (indices.count != 0) {
+    return false;
+  }
+  if (slot_index < 0 || slot_index >= fragment_length) return false;
+  *out_slot_index = slot_index;
+  return true;
+}
+
+static bool loom_promote_private_fragments_is_static_slot_load(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_value_id_t private_view, int64_t fragment_length,
+    int64_t* out_slot_index) {
+  return loom_view_load_isa(op) && loom_view_load_view(op) == private_view &&
+         loom_promote_private_fragments_rank1_static_slot_index(
+             module, loom_view_load_static_indices(op),
+             loom_view_load_indices(op), fragment_length, out_slot_index);
+}
+
+static bool loom_promote_private_fragments_is_static_slot_store(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_value_id_t private_view, int64_t fragment_length,
+    int64_t* out_slot_index) {
+  return loom_view_store_isa(op) && loom_view_store_view(op) == private_view &&
+         loom_promote_private_fragments_rank1_static_slot_index(
+             module, loom_view_store_static_indices(op),
+             loom_view_store_indices(op), fragment_length, out_slot_index);
+}
+
+static iree_status_t loom_promote_private_fragments_collect_static_slot_uses(
+    loom_pass_t* pass, loom_module_t* module, loom_value_id_t private_view,
+    int64_t fragment_length,
+    loom_promote_private_fragments_op_list_t* out_stores,
+    loom_promote_private_fragments_op_list_t* out_loads, bool* out_promotable) {
+  *out_promotable = false;
+  IREE_RETURN_IF_ERROR(loom_promote_private_fragments_op_list_initialize(
+      pass->arena, out_stores));
+  IREE_RETURN_IF_ERROR(loom_promote_private_fragments_op_list_initialize(
+      pass->arena, out_loads));
+
+  const loom_value_t* view_value = loom_module_value(module, private_view);
+  const loom_use_t* use = NULL;
+  loom_value_for_each_use(view_value, use) {
+    loom_op_t* user_op = loom_use_user_op(*use);
+    int64_t slot_index = 0;
+    if (loom_view_load_isa(user_op) && loom_use_operand_index(*use) == 0 &&
+        loom_promote_private_fragments_is_static_slot_load(
+            module, user_op, private_view, fragment_length, &slot_index)) {
+      IREE_RETURN_IF_ERROR(loom_promote_private_fragments_op_list_push(
+          pass->arena, out_loads, user_op));
+      continue;
+    }
+    if (loom_view_store_isa(user_op) && loom_use_operand_index(*use) == 1 &&
+        loom_promote_private_fragments_is_static_slot_store(
+            module, user_op, private_view, fragment_length, &slot_index)) {
+      IREE_RETURN_IF_ERROR(loom_promote_private_fragments_op_list_push(
+          pass->arena, out_stores, user_op));
+      continue;
+    }
+    return iree_ok_status();
+  }
+
+  *out_promotable = out_stores->count > 0 && out_loads->count > 0;
+  return iree_ok_status();
+}
+
+static bool loom_promote_private_fragments_load_store_same_static_slot(
+    const loom_module_t* module, const loom_op_t* load_op,
+    const loom_op_t* store_op, int64_t fragment_length) {
+  int64_t load_slot_index = 0;
+  int64_t store_slot_index = 0;
+  return loom_promote_private_fragments_rank1_static_slot_index(
+             module, loom_view_load_static_indices(load_op),
+             loom_view_load_indices(load_op), fragment_length,
+             &load_slot_index) &&
+         loom_promote_private_fragments_rank1_static_slot_index(
+             module, loom_view_store_static_indices(store_op),
+             loom_view_store_indices(store_op), fragment_length,
+             &store_slot_index) &&
+         load_slot_index == store_slot_index;
+}
+
+static loom_op_t* loom_promote_private_fragments_latest_static_slot_store(
+    const loom_promote_private_fragments_context_t* context,
+    const loom_op_t* load_op, int64_t fragment_length,
+    const loom_promote_private_fragments_op_list_t* stores) {
+  loom_op_t* latest_store = NULL;
+  for (iree_host_size_t i = 0; i < stores->count; ++i) {
+    loom_op_t* store_op = stores->ops[i];
+    if (!loom_promote_private_fragments_load_store_same_static_slot(
+            context->module, load_op, store_op, fragment_length)) {
+      continue;
+    }
+    if (!loom_dominates_op(context->dominance, store_op, load_op)) {
+      continue;
+    }
+    if (latest_store == NULL) {
+      latest_store = store_op;
+      continue;
+    }
+    if (loom_dominates_op(context->dominance, latest_store, store_op)) {
+      latest_store = store_op;
+      continue;
+    }
+    if (!loom_dominates_op(context->dominance, store_op, latest_store)) {
+      return NULL;
+    }
+  }
+  return latest_store;
+}
+
+static bool loom_promote_private_fragments_can_forward_static_slots(
+    const loom_promote_private_fragments_context_t* context,
+    int64_t fragment_length,
+    const loom_promote_private_fragments_op_list_t* stores,
+    const loom_promote_private_fragments_op_list_t* loads) {
+  for (iree_host_size_t i = 0; i < loads->count; ++i) {
+    loom_op_t* load_op = loads->ops[i];
+    for (iree_host_size_t j = 0; j < stores->count; ++j) {
+      loom_op_t* store_op = stores->ops[j];
+      if (!loom_promote_private_fragments_load_store_same_static_slot(
+              context->module, load_op, store_op, fragment_length)) {
+        continue;
+      }
+      if (!loom_dominates_op(context->dominance, store_op, load_op) &&
+          !loom_dominates_op(context->dominance, load_op, store_op)) {
+        return false;
+      }
+    }
+    loom_op_t* store_op =
+        loom_promote_private_fragments_latest_static_slot_store(
+            context, load_op, fragment_length, stores);
+    if (store_op == NULL) return false;
+    loom_value_id_t stored_value = loom_view_store_value(store_op);
+    if (!loom_dominates_value(context->dominance, stored_value, load_op)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static iree_status_t loom_promote_private_fragments_forward_static_slots(
+    loom_promote_private_fragments_context_t* context, loom_op_t* view_op,
+    loom_op_t* alloca_op, int64_t fragment_length,
+    const loom_promote_private_fragments_op_list_t* stores,
+    const loom_promote_private_fragments_op_list_t* loads) {
+  for (iree_host_size_t i = 0; i < loads->count; ++i) {
+    loom_op_t* load_op = loads->ops[i];
+    loom_op_t* store_op =
+        loom_promote_private_fragments_latest_static_slot_store(
+            context, load_op, fragment_length, stores);
+    loom_value_id_t stored_value = loom_view_store_value(store_op);
+    IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
+        context->rewriter, load_op, &stored_value, 1));
+  }
+
+  for (iree_host_size_t i = 0; i < stores->count; ++i) {
+    if (!iree_any_bit_set(stores->ops[i]->flags, LOOM_OP_FLAG_DEAD)) {
+      IREE_RETURN_IF_ERROR(
+          loom_rewriter_erase(context->rewriter, stores->ops[i]));
+    }
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_promote_private_fragments_try_erase_dead(context, view_op));
+  IREE_RETURN_IF_ERROR(
+      loom_promote_private_fragments_try_erase_dead(context, alloca_op));
+
+  if (context->pass->statistics) {
+    loom_pass_statistic_add(context->pass,
+                            LOOM_PROMOTE_PRIVATE_FRAGMENTS_STAT_LOADS_FORWARDED,
+                            loads->count);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_promote_private_fragments_try_static_slot_forward(
+    loom_promote_private_fragments_context_t* context, loom_op_t* view_op,
+    loom_op_t* alloca_op, loom_value_id_t private_view, int64_t fragment_length,
+    bool* out_changed) {
+  loom_promote_private_fragments_op_list_t stores = {0};
+  loom_promote_private_fragments_op_list_t loads = {0};
+  bool promotable = false;
+  IREE_RETURN_IF_ERROR(loom_promote_private_fragments_collect_static_slot_uses(
+      context->pass, context->module, private_view, fragment_length, &stores,
+      &loads, &promotable));
+  if (!promotable || !loom_promote_private_fragments_can_forward_static_slots(
+                         context, fragment_length, &stores, &loads)) {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(loom_promote_private_fragments_forward_static_slots(
+      context, view_op, alloca_op, fragment_length, &stores, &loads));
+  *out_changed = true;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_promote_private_fragments_process_view(
     loom_promote_private_fragments_context_t* context, loom_op_t* view_op,
     bool* out_changed) {
@@ -530,12 +877,20 @@ static iree_status_t loom_promote_private_fragments_process_view(
 
   loom_value_id_t private_view = loom_buffer_view_result(view_op);
   loom_promote_private_fragments_copy_loop_t copy_loop = {0};
-  loom_promote_private_fragments_load_list_t loads = {0};
+  loom_promote_private_fragments_op_list_t loads = {0};
   bool promotable = false;
   IREE_RETURN_IF_ERROR(loom_promote_private_fragments_collect_uses(
       context->pass, context->module, private_view, fragment_length, &copy_loop,
       &loads, &promotable));
-  if (!promotable) return iree_ok_status();
+  if (!promotable) {
+    IREE_RETURN_IF_ERROR(
+        loom_promote_private_fragments_try_single_store_forward(
+            context, view_op, alloca_op, private_view, out_changed));
+    if (*out_changed) return iree_ok_status();
+    return loom_promote_private_fragments_try_static_slot_forward(
+        context, view_op, alloca_op, private_view, fragment_length,
+        out_changed);
+  }
 
   IREE_RETURN_IF_ERROR(loom_promote_private_fragments_promote(
       context, view_op, alloca_op, &copy_loop, &loads));
@@ -555,39 +910,52 @@ iree_status_t loom_promote_private_fragments_run(loom_pass_t* pass,
   loom_rewriter_t rewriter;
   IREE_RETURN_IF_ERROR(
       loom_rewriter_initialize(&rewriter, module, pass->arena));
-  loom_promote_private_fragments_view_list_t views = {0};
-  iree_status_t status =
-      loom_promote_private_fragments_view_list_initialize(pass->arena, &views);
-
-  loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
-  loom_promote_private_fragments_collect_context_t collect_context = {
-      .arena = pass->arena,
-      .views = &views,
-  };
-  if (iree_status_is_ok(status)) {
-    status = loom_walk_function(
-        module, function, LOOM_WALK_PRE_ORDER,
-        (loom_walk_callback_t){
-            .fn = loom_promote_private_fragments_collect_view,
-            .user_data = &collect_context,
-        },
-        pass->arena, &walk_result);
-  }
-
-  loom_promote_private_fragments_context_t context = {
-      .pass = pass,
-      .module = module,
-      .rewriter = &rewriter,
-  };
+  iree_status_t status = iree_ok_status();
   bool changed = false;
-  for (iree_host_size_t i = 0; i < views.count && iree_status_is_ok(status);
-       ++i) {
-    status = loom_promote_private_fragments_process_view(&context, views.ops[i],
-                                                         &changed);
+  bool iteration_changed = true;
+  while (iree_status_is_ok(status) && iteration_changed) {
+    iteration_changed = false;
+
+    loom_dominance_info_t dominance = {0};
+    status = loom_dominance_info_initialize(module, pass->arena, &dominance);
+    loom_promote_private_fragments_view_list_t views = {0};
+    if (iree_status_is_ok(status)) {
+      status = loom_promote_private_fragments_view_list_initialize(pass->arena,
+                                                                   &views);
+    }
+
+    loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
+    loom_promote_private_fragments_collect_context_t collect_context = {
+        .arena = pass->arena,
+        .views = &views,
+    };
+    if (iree_status_is_ok(status)) {
+      status = loom_walk_function(
+          module, function, LOOM_WALK_PRE_ORDER,
+          (loom_walk_callback_t){
+              .fn = loom_promote_private_fragments_collect_view,
+              .user_data = &collect_context,
+          },
+          pass->arena, &walk_result);
+    }
+
+    loom_promote_private_fragments_context_t context = {
+        .pass = pass,
+        .module = module,
+        .dominance = &dominance,
+        .rewriter = &rewriter,
+    };
+    for (iree_host_size_t i = 0; i < views.count && iree_status_is_ok(status);
+         ++i) {
+      status = loom_promote_private_fragments_process_view(
+          &context, views.ops[i], &iteration_changed);
+      if (iteration_changed) {
+        changed = true;
+        break;
+      }
+    }
   }
-  if (iree_status_is_ok(status) && changed) {
-    loom_pass_mark_changed(pass);
-  }
+  if (iree_status_is_ok(status) && changed) loom_pass_mark_changed(pass);
 
   loom_rewriter_deinitialize(&rewriter);
   return status;

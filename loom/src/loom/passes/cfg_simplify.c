@@ -13,9 +13,11 @@
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/cfg/ops.h"
+#include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/special_values.h"
 #include "loom/pass/value_facts.h"
+#include "loom/rewrite/materialize.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/util/cfg_graph.h"
 #include "loom/util/dominance.h"
@@ -31,6 +33,7 @@ enum {
   LOOM_CFG_SIMPLIFY_STAT_BLOCK_ARGS_REMOVED = 3,
   LOOM_CFG_SIMPLIFY_STAT_BLOCKS_FUSED = 4,
   LOOM_CFG_SIMPLIFY_STAT_DUPLICATE_BLOCKS_MERGED = 5,
+  LOOM_CFG_SIMPLIFY_STAT_TERMINAL_BLOCKS_DUPLICATED = 6,
 };
 
 static const loom_pass_statistic_def_t kCfgSimplifyStatistics[] = {
@@ -47,6 +50,9 @@ static const loom_pass_statistic_def_t kCfgSimplifyStatistics[] = {
               "predecessors.")},
     {IREE_SVL("duplicate-blocks-merged"),
      IREE_SVL("Number of duplicate terminal CFG blocks merged.")},
+    {IREE_SVL("terminal-blocks-duplicated"),
+     IREE_SVL("Number of direct branches replaced by duplicated terminal "
+              "successors.")},
 };
 
 static const loom_pass_info_t loom_cfg_simplify_pass_info_storage = {
@@ -130,12 +136,20 @@ static iree_status_t loom_cfg_simplify_push_child_regions(
   return iree_ok_status();
 }
 
-static bool loom_cfg_simplify_region_has_successors(loom_region_t* region) {
+static bool loom_cfg_simplify_region_is_cfg_shaped(loom_region_t* region) {
+  if (!region) {
+    return false;
+  }
+  if (region->block_count > 1) {
+    return true;
+  }
   loom_block_t* block = NULL;
   loom_region_for_each_block(region, block) {
     loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
-      if (op->successor_count > 0) return true;
+      if (op->successor_count > 0) {
+        return true;
+      }
     }
   }
   return false;
@@ -155,7 +169,7 @@ static iree_status_t loom_cfg_simplify_mark_cfg_regions(
 
   while (stack_count > 0) {
     loom_region_t* region = stack[--stack_count];
-    if (loom_cfg_simplify_region_has_successors(region)) {
+    if (loom_cfg_simplify_region_is_cfg_shaped(region)) {
       region->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
     } else {
       region->flags &= ~LOOM_REGION_INSTANCE_FLAG_CFG;
@@ -168,7 +182,9 @@ static iree_status_t loom_cfg_simplify_mark_cfg_regions(
         loom_region_t** regions = loom_op_regions(op);
         for (uint8_t region_index = 0; region_index < op->region_count;
              ++region_index) {
-          if (!regions[region_index]) continue;
+          if (!regions[region_index]) {
+            continue;
+          }
           if (stack_count >= stack_capacity) {
             IREE_RETURN_IF_ERROR(iree_arena_grow_array(
                 arena, stack_count, stack_count + 1, sizeof(*stack),
@@ -247,6 +263,116 @@ static iree_status_t loom_cfg_simplify_fold_block_branches(
     if (*out_changed) return iree_ok_status();
     IREE_RETURN_IF_ERROR(loom_cfg_simplify_push_child_regions(state, op));
     op = next_op;
+  }
+  return iree_ok_status();
+}
+
+//===----------------------------------------------------------------------===//
+// Terminal block duplication
+//===----------------------------------------------------------------------===//
+
+static bool loom_cfg_simplify_direct_branch(const loom_op_t* op,
+                                            loom_block_t** out_dest,
+                                            loom_value_slice_t* out_args) {
+  if (loom_cfg_br_isa(op)) {
+    *out_dest = loom_cfg_br_dest(op);
+    *out_args = loom_cfg_br_args(op);
+    return true;
+  }
+  if (loom_low_br_isa(op)) {
+    *out_dest = loom_low_br_dest(op);
+    *out_args = loom_low_br_args(op);
+    return true;
+  }
+  *out_dest = NULL;
+  *out_args = (loom_value_slice_t){0};
+  return false;
+}
+
+static bool loom_cfg_simplify_operandless_terminal_block(
+    const loom_cfg_simplify_state_t* state, const loom_block_t* block,
+    const loom_op_t** out_terminator) {
+  *out_terminator = NULL;
+  if (!block || block->arg_count != 0 || block->first_op != block->last_op ||
+      !block->first_op) {
+    return false;
+  }
+
+  const loom_op_t* terminator = block->first_op;
+  loom_trait_flags_t traits =
+      loom_op_effective_traits(state->module, terminator);
+  if (!iree_all_bits_set(traits, LOOM_TRAIT_TERMINATOR | LOOM_TRAIT_PURE) ||
+      loom_traits_are_convergent(traits) || terminator->operand_count != 0 ||
+      terminator->successor_count != 0 || terminator->result_count != 0 ||
+      terminator->region_count != 0) {
+    return false;
+  }
+  *out_terminator = terminator;
+  return true;
+}
+
+static iree_status_t loom_cfg_simplify_clone_terminal_before_branch(
+    loom_cfg_simplify_state_t* state, loom_op_t* branch_op,
+    const loom_op_t* terminator) {
+  loom_builder_ip_t saved_ip = loom_builder_save(&state->rewriter->builder);
+  loom_builder_set_before(&state->rewriter->builder, branch_op);
+
+  loom_ir_remap_t remap = {0};
+  const loom_ir_remap_options_t remap_options = {
+      .allow_unmapped_values = true,
+  };
+  iree_status_t status =
+      loom_ir_remap_initialize(state->module, state->module,
+                               state->analysis_arena, &remap_options, &remap);
+  if (iree_status_is_ok(status)) {
+    loom_op_t* cloned_op = NULL;
+    status = loom_ir_clone_op(&state->rewriter->builder, terminator, &remap,
+                              &cloned_op);
+    (void)cloned_op;
+  }
+
+  loom_builder_restore(&state->rewriter->builder, saved_ip);
+  if (!iree_status_is_ok(status)) {
+    return status;
+  }
+  return loom_rewriter_erase(state->rewriter, branch_op);
+}
+
+static iree_status_t loom_cfg_simplify_duplicate_terminal_successors(
+    loom_cfg_simplify_state_t* state, const loom_cfg_graph_t* graph,
+    bool* out_changed) {
+  if (graph->malformed) {
+    return iree_ok_status();
+  }
+  for (uint16_t block_index = 0; block_index < graph->block_count;
+       ++block_index) {
+    loom_block_t* block = (loom_block_t*)graph->blocks[block_index].block;
+    if (!block || !block->last_op) {
+      continue;
+    }
+
+    loom_block_t* dest = NULL;
+    loom_value_slice_t args = {0};
+    if (!loom_cfg_simplify_direct_branch(block->last_op, &dest, &args) ||
+        args.count != 0 || dest == block) {
+      continue;
+    }
+
+    const loom_op_t* terminator = NULL;
+    if (!loom_cfg_simplify_operandless_terminal_block(state, dest,
+                                                      &terminator)) {
+      continue;
+    }
+
+    IREE_RETURN_IF_ERROR(loom_cfg_simplify_clone_terminal_before_branch(
+        state, block->last_op, terminator));
+    if (state->pass->statistics) {
+      loom_pass_statistic_add(
+          state->pass, LOOM_CFG_SIMPLIFY_STAT_TERMINAL_BLOCKS_DUPLICATED, 1);
+    }
+    state->rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
+    *out_changed = true;
+    return iree_ok_status();
   }
   return iree_ok_status();
 }
@@ -2441,6 +2567,9 @@ static iree_status_t loom_cfg_simplify_process_cfg_region(
   if (*out_changed) return iree_ok_status();
   IREE_RETURN_IF_ERROR(loom_cfg_simplify_fold_path_sensitive_i1_ops(
       state, &graph, path_facts, out_changed));
+  if (*out_changed) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(loom_cfg_simplify_duplicate_terminal_successors(
+      state, &graph, out_changed));
   if (*out_changed) return iree_ok_status();
   IREE_RETURN_IF_ERROR(
       loom_cfg_simplify_forward_trivial_blocks(state, &graph, out_changed));
