@@ -149,11 +149,37 @@ typedef struct loom_pass_registry_t {
   iree_host_size_t descriptor_count;
 } loom_pass_registry_t;
 
+enum {
+  LOOM_PASS_REGISTRY_STORAGE_DESCRIPTOR_CAPACITY = 256,
+};
+
+// Storage for a composed pass registry assembled from static registries.
+typedef struct loom_pass_registry_storage_t {
+  // Sorted descriptor storage copied from source registries.
+  loom_pass_descriptor_t
+      descriptors[LOOM_PASS_REGISTRY_STORAGE_DESCRIPTOR_CAPACITY];
+  // Registry view over |descriptors|.
+  loom_pass_registry_t registry;
+} loom_pass_registry_storage_t;
+
 // Looks up |key| by exact canonical spelling. Returns OK with
 // |*out_descriptor| NULL when the key is unknown.
 iree_status_t loom_pass_registry_lookup(
     const loom_pass_registry_t* registry, iree_string_view_t key,
     const loom_pass_descriptor_t** out_descriptor);
+
+// Builds a sorted registry from zero or more sorted source registries.
+//
+// Descriptors are copied by value and their callback/data pointers continue to
+// reference static storage owned by the source registry packages. Duplicate
+// pass keys are rejected so every textual pass.run key has a single owner.
+iree_status_t loom_pass_registry_storage_initialize_from_registries(
+    const loom_pass_registry_t* const* registries,
+    iree_host_size_t registry_count, loom_pass_registry_storage_t* out_storage);
+
+// Returns the immutable registry view stored in |storage|.
+const loom_pass_registry_t* loom_pass_registry_storage_registry(
+    const loom_pass_registry_storage_t* storage);
 
 // Returns true when |descriptor| can be instantiated in the current build.
 bool loom_pass_descriptor_is_available(

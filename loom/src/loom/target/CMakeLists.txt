@@ -257,6 +257,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::lower
     loom::src::loom::ir
     loom::src::loom::pass::environment
+    loom::src::loom::pass::registry
   PUBLIC
 )
 

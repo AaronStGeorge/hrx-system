@@ -157,6 +157,8 @@ int loom_check_provider_main(int argc, char** argv,
               .fn = loom_check_provider_initialize_low_lower_policy_registry,
               .user_data = &state,
           },
+      .pass_registry =
+          loom_target_environment_pass_registry(&state.target_environment),
       .low_legality_provider_list =
           loom_target_environment_low_legality_provider_list(
               &state.target_environment),

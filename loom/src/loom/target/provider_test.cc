@@ -20,6 +20,29 @@ namespace {
 
 using ModulePtr = ::loom::testing::ModulePtr;
 
+const loom_pass_info_t* TargetAlphaPassInfo(void) {
+  static const loom_pass_info_t kInfo = {
+      .name = IREE_SVL("target-alpha"),
+      .description = IREE_SVL("Target alpha pass."),
+      .kind = LOOM_PASS_FUNCTION,
+  };
+  return &kInfo;
+}
+
+const loom_pass_info_t* TargetBetaPassInfo(void) {
+  static const loom_pass_info_t kInfo = {
+      .name = IREE_SVL("target-beta"),
+      .description = IREE_SVL("Target beta pass."),
+      .kind = LOOM_PASS_FUNCTION,
+  };
+  return &kInfo;
+}
+
+iree_status_t NoopFunctionPass(loom_pass_t* pass, loom_module_t* module,
+                               loom_func_like_t function) {
+  return iree_ok_status();
+}
+
 static iree_status_t ContributeMaterialization(
     const loom_target_pipeline_contribution_t* contribution) {
   if (contribution->phase !=
@@ -143,6 +166,62 @@ TEST_F(TargetProviderTest, ContributesPassIrByPhase) {
   EXPECT_TRUE(iree_string_view_equal(RunKey(module.get(), prepare_run),
                                      IREE_SV("target-prepare")));
   EXPECT_TRUE(loom_pass_yield_isa(pipeline_body->last_op));
+
+  loom_target_environment_deinitialize(&environment);
+}
+
+TEST_F(TargetProviderTest, ComposesTargetPassRegistries) {
+  static const loom_pass_descriptor_t first_descriptors[] = {
+      {
+          .key = IREE_SVL("target-beta"),
+          .info = TargetBetaPassInfo,
+          .function_run = NoopFunctionPass,
+      },
+  };
+  static const loom_pass_descriptor_t second_descriptors[] = {
+      {
+          .key = IREE_SVL("target-alpha"),
+          .info = TargetAlphaPassInfo,
+          .function_run = NoopFunctionPass,
+      },
+  };
+  static const loom_pass_registry_t first_registry = {
+      .descriptors = first_descriptors,
+      .descriptor_count = IREE_ARRAYSIZE(first_descriptors),
+  };
+  static const loom_pass_registry_t second_registry = {
+      .descriptors = second_descriptors,
+      .descriptor_count = IREE_ARRAYSIZE(second_descriptors),
+  };
+  static const loom_target_provider_t first_provider = {
+      .pass_registry = &first_registry,
+  };
+  static const loom_target_provider_t second_provider = {
+      .pass_registry = &second_registry,
+  };
+  static const loom_target_provider_t* const providers[] = {
+      &first_provider,
+      &second_provider,
+  };
+  const loom_target_provider_set_t provider_set =
+      loom_target_provider_set_make(providers, IREE_ARRAYSIZE(providers));
+  loom_target_environment_t environment = {0};
+  IREE_ASSERT_OK(
+      loom_target_environment_initialize(&provider_set, &environment));
+
+  const loom_pass_registry_t* registry =
+      loom_target_environment_pass_registry(&environment);
+  ASSERT_EQ(registry->descriptor_count, 2u);
+  EXPECT_TRUE(iree_string_view_equal(registry->descriptors[0].key,
+                                     IREE_SV("target-alpha")));
+  EXPECT_TRUE(iree_string_view_equal(registry->descriptors[1].key,
+                                     IREE_SV("target-beta")));
+
+  const loom_pass_descriptor_t* descriptor = nullptr;
+  IREE_ASSERT_OK(
+      loom_pass_registry_lookup(registry, IREE_SV("target-beta"), &descriptor));
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->info, TargetBetaPassInfo);
 
   loom_target_environment_deinitialize(&environment);
 }

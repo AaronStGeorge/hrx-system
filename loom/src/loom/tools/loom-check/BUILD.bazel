@@ -209,6 +209,7 @@ loom_cc_library(
         "//loom/src/loom/ops/target",
         "//loom/src/loom/pass:builtin_registry",
         "//loom/src/loom/pass:pipeline",
+        "//loom/src/loom/pass:registry",
         "//loom/src/loom/pass:tooling",
         "//loom/src/loom/pass:value_facts",
         "//loom/src/loom/target:low_descriptor_registry",

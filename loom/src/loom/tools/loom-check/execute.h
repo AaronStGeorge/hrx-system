@@ -29,6 +29,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/context.h"
+#include "loom/pass/registry.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/low_legality.h"
 #include "loom/target/low_packet_diagnostics.h"
@@ -295,6 +296,8 @@ struct loom_check_environment_t {
   // into descriptor-backed low IR.
   loom_check_initialize_low_lower_policy_registry_callback_t
       initialize_low_lower_policy_registry;
+  // Optional target-owned pass descriptors linked into this runner.
+  const loom_pass_registry_t* pass_registry;
   // Optional target-low source legality providers linked into this runner.
   loom_target_low_legality_provider_list_t low_legality_provider_list;
   // Optional target-low packet diagnostic providers linked into this runner.

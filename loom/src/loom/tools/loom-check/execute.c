@@ -401,8 +401,23 @@ iree_status_t loom_check_execute_pass(
     loom_target_pass_predicate_provider_storage_t predicate_storage;
     loom_target_pass_predicate_provider_storage_initialize(block_pool,
                                                            &predicate_storage);
+    const loom_pass_registry_t* pass_registry = loom_pass_builtin_registry();
+    loom_pass_registry_storage_t pass_registry_storage = {0};
+    if (environment != NULL && environment->pass_registry != NULL) {
+      const loom_pass_registry_t* pass_registries[] = {
+          loom_pass_builtin_registry(),
+          environment->pass_registry,
+      };
+      status = loom_pass_registry_storage_initialize_from_registries(
+          pass_registries, IREE_ARRAYSIZE(pass_registries),
+          &pass_registry_storage);
+      if (iree_status_is_ok(status)) {
+        pass_registry =
+            loom_pass_registry_storage_registry(&pass_registry_storage);
+      }
+    }
     loom_pass_tool_run_options_t run_options = {
-        .registry = loom_pass_builtin_registry(),
+        .registry = pass_registry,
         .environment = loom_low_pass_environment_storage_initialize(
             &low_registry.registry, low_lower_policy_registry_ref,
             environment ? &environment->low_legality_provider_list : NULL,

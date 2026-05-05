@@ -89,8 +89,18 @@ iree_status_t loom_target_environment_initialize(
       .provider_set = provider_set,
   };
 
+  const loom_pass_registry_t*
+      pass_registries[LOOM_TARGET_PROVIDER_PASS_REGISTRY_CAPACITY] = {0};
+  iree_host_size_t pass_registry_count = 0;
   for (iree_host_size_t i = 0; i < provider_set->provider_count; ++i) {
     const loom_target_provider_t* provider = provider_set->providers[i];
+    if (provider->pass_registry != NULL) {
+      if (pass_registry_count >= IREE_ARRAYSIZE(pass_registries)) {
+        return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                "target pass registry capacity exceeded");
+      }
+      pass_registries[pass_registry_count++] = provider->pass_registry;
+    }
     IREE_RETURN_IF_ERROR(loom_target_environment_append_low_descriptor_registry(
         out_environment, provider));
     IREE_RETURN_IF_ERROR(
@@ -102,6 +112,9 @@ iree_status_t loom_target_environment_initialize(
         loom_target_environment_append_low_packet_diagnostic_providers(
             out_environment, provider));
   }
+  IREE_RETURN_IF_ERROR(loom_pass_registry_storage_initialize_from_registries(
+      pass_registries, pass_registry_count,
+      &out_environment->pass_registry_storage));
   return iree_ok_status();
 }
 
@@ -166,6 +179,13 @@ loom_target_environment_low_packet_diagnostic_provider_list(
   return loom_target_low_packet_diagnostic_provider_list_make(
       environment->low_packet_diagnostic_providers,
       environment->low_packet_diagnostic_provider_count);
+}
+
+const loom_pass_registry_t* loom_target_environment_pass_registry(
+    const loom_target_environment_t* environment) {
+  IREE_ASSERT_ARGUMENT(environment);
+  return loom_pass_registry_storage_registry(
+      &environment->pass_registry_storage);
 }
 
 iree_status_t loom_target_environment_contribute_pipeline(
