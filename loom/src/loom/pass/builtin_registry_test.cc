@@ -28,6 +28,7 @@ static const iree_string_view_t kExpectedBuiltinPassKeys[] = {
     IREE_SVL("low-materialize-allocation"),
     IREE_SVL("low-select-operand-forms"),
     IREE_SVL("normalize-kernel-resources"),
+    IREE_SVL("promote-private-fragments"),
     IREE_SVL("refine-boundaries"),
     IREE_SVL("scf-to-cfg"),
     IREE_SVL("source-to-low"),

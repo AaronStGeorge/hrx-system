@@ -260,6 +260,28 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    promote_private_fragments
+  HDRS
+    "promote_private_fragments.h"
+  SRCS
+    "promote_private_fragments.c"
+  DEPS
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::buffer
+    loom::src::loom::ops::index
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::scf
+    loom::src::loom::ops::vector
+    loom::src::loom::ops::view
+    loom::src::loom::pass::types
+    loom::src::loom::rewrite::rewriter
+    loom::src::loom::util::walk
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     refine_boundaries
   HDRS
     "refine_boundaries.h"

@@ -1,0 +1,106 @@
+// RUN: pass promote-private-fragments,dce
+
+func.def @promote_static_fragment_load(%input: buffer, %output: buffer) {
+  %zero_bytes = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero_bytes] : buffer -> view<4xf32, #dense>
+  %output_view = buffer.view %output[%zero_bytes] : buffer -> view<4xf32, #dense>
+  %fragment_bytes = index.constant 16 : offset
+  %fragment_buffer = buffer.alloca %fragment_bytes {base_alignment = 4, memory_space = private} : buffer
+  %fragment = buffer.view %fragment_buffer[%zero_bytes] : buffer -> view<4xf32, #dense>
+  %start = index.constant 0 : index
+  %end = index.constant 4 : index
+  %step = index.constant 1 : index
+  scf.for %lane = [%start to %end step %step] {
+    %copy = view.load %input_view[%lane] : view<4xf32, #dense> -> f32
+    view.store %copy, %fragment[%lane] : f32, view<4xf32, #dense>
+  }
+  %selected = view.load %fragment[2] : view<4xf32, #dense> -> f32
+  view.store %selected, %output_view[2] : f32, view<4xf32, #dense>
+  func.return
+}
+
+// ----
+func.def @promote_static_fragment_load(%input: buffer, %output: buffer) {
+  %zero_bytes = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero_bytes] : buffer -> view<4xf32, #dense>
+  %output_view = buffer.view %output[%zero_bytes] : buffer -> view<4xf32, #dense>
+  %fragment_vector = vector.load %input_view[0] : view<4xf32, #dense> -> vector<4xf32>
+  %selected = vector.extract %fragment_vector[2] : vector<4xf32> -> f32
+  view.store %selected, %output_view[2] : f32, view<4xf32, #dense>
+  func.return
+}
+
+// ====
+
+func.def @promote_trailing_axis_fragment(%input: buffer, %output: buffer, %row: index, %lane: index) {
+  %zero_bytes = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero_bytes] : buffer -> view<8x4xi32, #dense>
+  %output_view = buffer.view %output[%zero_bytes] : buffer -> view<4xi32, #dense>
+  %fragment_bytes = index.constant 16 : offset
+  %fragment_buffer = buffer.alloca %fragment_bytes {base_alignment = 4, memory_space = private} : buffer
+  %fragment = buffer.view %fragment_buffer[%zero_bytes] : buffer -> view<4xi32, #dense>
+  %start = index.constant 0 : index
+  %end = index.constant 4 : index
+  %step = index.constant 1 : index
+  scf.for %copy_lane = [%start to %end step %step] {
+    %copy = view.load %input_view[%row, %copy_lane] : view<8x4xi32, #dense> -> i32
+    view.store %copy, %fragment[%copy_lane] : i32, view<4xi32, #dense>
+  }
+  %selected = view.load %fragment[%lane] : view<4xi32, #dense> -> i32
+  view.store %selected, %output_view[%lane] : i32, view<4xi32, #dense>
+  func.return
+}
+
+// ----
+func.def @promote_trailing_axis_fragment(%input: buffer, %output: buffer, %row: index, %lane: index) {
+  %zero_bytes = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero_bytes] : buffer -> view<8x4xi32, #dense>
+  %output_view = buffer.view %output[%zero_bytes] : buffer -> view<4xi32, #dense>
+  %fragment_vector = vector.load %input_view[%row, 0] : view<8x4xi32, #dense> -> vector<4xi32>
+  %selected = vector.extract %fragment_vector[%lane] : vector<4xi32> -> i32
+  view.store %selected, %output_view[%lane] : i32, view<4xi32, #dense>
+  func.return
+}
+
+// ====
+
+// Partial initialization stays explicit. The pass only promotes full-copy
+// fragments because anything else needs a stronger dataflow representation.
+func.def @keeps_partial_fragment_copy(%input: buffer, %output: buffer) {
+  %zero_bytes = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero_bytes] : buffer -> view<4xf32, #dense>
+  %output_view = buffer.view %output[%zero_bytes] : buffer -> view<4xf32, #dense>
+  %fragment_bytes = index.constant 16 : offset
+  %fragment_buffer = buffer.alloca %fragment_bytes {base_alignment = 4, memory_space = private} : buffer
+  %fragment = buffer.view %fragment_buffer[%zero_bytes] : buffer -> view<4xf32, #dense>
+  %start = index.constant 0 : index
+  %partial_end = index.constant 3 : index
+  %step = index.constant 1 : index
+  scf.for %lane = [%start to %partial_end step %step] {
+    %copy = view.load %input_view[%lane] : view<4xf32, #dense> -> f32
+    view.store %copy, %fragment[%lane] : f32, view<4xf32, #dense>
+  }
+  %selected = view.load %fragment[2] : view<4xf32, #dense> -> f32
+  view.store %selected, %output_view[2] : f32, view<4xf32, #dense>
+  func.return
+}
+
+// ----
+func.def @keeps_partial_fragment_copy(%input: buffer, %output: buffer) {
+  %zero_bytes = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero_bytes] : buffer -> view<4xf32, #dense>
+  %output_view = buffer.view %output[%zero_bytes] : buffer -> view<4xf32, #dense>
+  %fragment_bytes = index.constant 16 : offset
+  %fragment_buffer = buffer.alloca %fragment_bytes {base_alignment = 4, memory_space = private} : buffer
+  %fragment = buffer.view %fragment_buffer[%zero_bytes] : buffer -> view<4xf32, #dense>
+  %start = index.constant 0 : index
+  %partial_end = index.constant 3 : index
+  %step = index.constant 1 : index
+  scf.for %lane = [%start to %partial_end step %step] {
+    %copy = view.load %input_view[%lane] : view<4xf32, #dense> -> f32
+    view.store %copy, %fragment[%lane] : f32, view<4xf32, #dense>
+  }
+  %selected = view.load %fragment[2] : view<4xf32, #dense> -> f32
+  view.store %selected, %output_view[2] : f32, view<4xf32, #dense>
+  func.return
+}

@@ -24,6 +24,7 @@
 #include "loom/passes/kernel_resources.h"
 #include "loom/passes/licm.h"
 #include "loom/passes/loop_fusion.h"
+#include "loom/passes/promote_private_fragments.h"
 #include "loom/passes/refine_boundaries.h"
 #include "loom/passes/scf_to_cfg.h"
 #include "loom/passes/strip_hints.h"
@@ -212,6 +213,11 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .key = IREE_SVL("normalize-kernel-resources"),
         .info = loom_normalize_kernel_resources_pass_info,
         .function_run = loom_normalize_kernel_resources_run,
+    },
+    {
+        .key = IREE_SVL("promote-private-fragments"),
+        .info = loom_promote_private_fragments_pass_info,
+        .function_run = loom_promote_private_fragments_run,
     },
     {
         .key = IREE_SVL("refine-boundaries"),

@@ -207,6 +207,7 @@ loom_cc_library(
         "//loom/src/loom/passes:kernel_resources",
         "//loom/src/loom/passes:licm",
         "//loom/src/loom/passes:loop_fusion",
+        "//loom/src/loom/passes:promote_private_fragments",
         "//loom/src/loom/passes:refine_boundaries",
         "//loom/src/loom/passes:scf_to_cfg",
         "//loom/src/loom/passes:strip_hints",
