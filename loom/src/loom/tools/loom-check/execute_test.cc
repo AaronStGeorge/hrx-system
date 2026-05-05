@@ -392,8 +392,8 @@ TEST_F(ExecuteTest, VerifyRunsLowDescriptorVerifier) {
       << "detail: " << DetailString(result);
   EXPECT_EQ(result.diagnostic_count, 1u);
   const std::string diagnostic_json = DiagnosticJsonString(result);
-  EXPECT_NE(diagnostic_json.find("\"domain\":\"LOWERING\""), std::string::npos);
-  EXPECT_NE(diagnostic_json.find("\"error_id\":\"ERR_LOWERING_007\""),
+  EXPECT_NE(diagnostic_json.find("\"domain\":\"TARGET\""), std::string::npos);
+  EXPECT_NE(diagnostic_json.find("\"error_id\":\"ERR_TARGET_047\""),
             std::string::npos);
   EXPECT_NE(diagnostic_json.find("\"emitter\":\"verifier\""),
             std::string::npos);

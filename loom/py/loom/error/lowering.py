@@ -8,66 +8,6 @@
 
 from loom.errors import ErrorDef, ErrorDomain, ErrorParam, ParamKind, Severity
 
-# ERR_LOWERING_007: Low descriptor immediate attribute is missing.
-ERR_LOWERING_007 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=7,
-    severity=Severity.ERROR,
-    summary="Low descriptor immediate attribute is missing.",
-    message=(
-        "low function '@{function_name}' descriptor '{opcode}' requires "
-        "immediate attribute '{immediate_name}'"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("opcode", ParamKind.STRING),
-        ErrorParam("immediate_name", ParamKind.STRING),
-    ),
-    fix_hint="Provide attribute '{immediate_name}' in the low packet attrs "
-    "for descriptor '{opcode}'",
-)
-
-# ERR_LOWERING_008: Low descriptor immediate attribute is not declared.
-ERR_LOWERING_008 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=8,
-    severity=Severity.ERROR,
-    summary="Low descriptor immediate attribute is not declared.",
-    message=(
-        "low function '@{function_name}' descriptor '{opcode}' has "
-        "attribute '{attr_name}', but the descriptor declares no such "
-        "immediate"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("opcode", ParamKind.STRING),
-        ErrorParam("attr_name", ParamKind.STRING),
-    ),
-    fix_hint="Remove attribute '{attr_name}' or add a descriptor immediate "
-    "row that owns it",
-)
-
-# ERR_LOWERING_009: Low descriptor immediate attribute kind is invalid.
-ERR_LOWERING_009 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=9,
-    severity=Severity.ERROR,
-    summary="Low descriptor immediate attribute kind is invalid.",
-    message=(
-        "low function '@{function_name}' descriptor '{opcode}' immediate "
-        "'{immediate_name}' has attribute kind {actual_kind}, expected "
-        "{expected_kind}"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("opcode", ParamKind.STRING),
-        ErrorParam("immediate_name", ParamKind.STRING),
-        ErrorParam("actual_kind", ParamKind.U32),
-        ErrorParam("expected_kind", ParamKind.STRING),
-    ),
-    fix_hint="Encode immediate '{immediate_name}' using {expected_kind}",
-)
-
 # ERR_LOWERING_015: Low pure call targets an impure callee.
 ERR_LOWERING_015 = ErrorDef(
     domain=ErrorDomain.LOWERING,
@@ -557,9 +497,6 @@ ERR_LOWERING_043 = ErrorDef(
 )
 
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
-    ERR_LOWERING_007,
-    ERR_LOWERING_008,
-    ERR_LOWERING_009,
     ERR_LOWERING_015,
     ERR_LOWERING_019,
     ERR_LOWERING_020,

@@ -916,6 +916,66 @@ ERR_TARGET_046 = ErrorDef(
     "legal for the selected target config",
 )
 
+# ERR_TARGET_047: Low descriptor immediate attribute is missing.
+ERR_TARGET_047 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=47,
+    severity=Severity.ERROR,
+    summary="Low descriptor immediate attribute is missing.",
+    message=(
+        "low function '@{function_name}' descriptor '{opcode}' requires "
+        "immediate attribute '{immediate_name}'"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("opcode", ParamKind.STRING),
+        ErrorParam("immediate_name", ParamKind.STRING),
+    ),
+    fix_hint="Provide attribute '{immediate_name}' in the low packet attrs "
+    "for descriptor '{opcode}'",
+)
+
+# ERR_TARGET_048: Low descriptor immediate attribute is not declared.
+ERR_TARGET_048 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=48,
+    severity=Severity.ERROR,
+    summary="Low descriptor immediate attribute is not declared.",
+    message=(
+        "low function '@{function_name}' descriptor '{opcode}' has "
+        "attribute '{attr_name}', but the descriptor declares no such "
+        "immediate"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("opcode", ParamKind.STRING),
+        ErrorParam("attr_name", ParamKind.STRING),
+    ),
+    fix_hint="Remove attribute '{attr_name}' or add a descriptor immediate "
+    "row that owns it",
+)
+
+# ERR_TARGET_049: Low descriptor immediate attribute kind is invalid.
+ERR_TARGET_049 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=49,
+    severity=Severity.ERROR,
+    summary="Low descriptor immediate attribute kind is invalid.",
+    message=(
+        "low function '@{function_name}' descriptor '{opcode}' immediate "
+        "'{immediate_name}' has attribute kind {actual_kind}, expected "
+        "{expected_kind}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("opcode", ParamKind.STRING),
+        ErrorParam("immediate_name", ParamKind.STRING),
+        ErrorParam("actual_kind", ParamKind.U32),
+        ErrorParam("expected_kind", ParamKind.STRING),
+    ),
+    fix_hint="Encode immediate '{immediate_name}' using {expected_kind}",
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -963,4 +1023,7 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_044,
     ERR_TARGET_045,
     ERR_TARGET_046,
+    ERR_TARGET_047,
+    ERR_TARGET_048,
+    ERR_TARGET_049,
 )

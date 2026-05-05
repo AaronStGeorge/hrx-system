@@ -153,7 +153,7 @@ low.func.def target(@test_target) @add(%lhs: reg<test.i32>, %rhs: reg<test.i32>)
 
 test.target<low_core> @test_target
 low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
-  // ERROR@+1: LOWERING/007 "i32_value"
+  // ERROR@+1: TARGET/047 "i32_value"
   %c0 = low.const<test.const.i32> : reg<test.i32>
   low.return %c0 : reg<test.i32>
 }
@@ -162,7 +162,7 @@ low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
 
 test.target<low_core> @test_target
 low.func.def target(@test_target) @add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
-  // ERROR@+1: LOWERING/008 "junk"
+  // ERROR@+1: TARGET/048 "junk"
   %sum = low.op<test.add.i32>(%lhs, %rhs) {junk = 1} : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   low.return %sum : reg<test.i32>
 }
@@ -171,7 +171,7 @@ low.func.def target(@test_target) @add(%lhs: reg<test.i32>, %rhs: reg<test.i32>)
 
 test.target<low_core> @test_target
 low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
-  // ERROR@+1: LOWERING/009 "i64 signed integer"
+  // ERROR@+1: TARGET/049 "i64 signed integer"
   %c0 = low.const<test.const.i32> {i32_value = "wrong"} : reg<test.i32>
   low.return %c0 : reg<test.i32>
 }
