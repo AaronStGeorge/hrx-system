@@ -13,7 +13,6 @@ func.def @lowers_if_result(%cond: i1, %a: i32, %b: i32) -> (i32) {
 
 // ----
 func.def @lowers_if_result(%cond: i1, %a: i32, %b: i32) -> (i32) {
-^_bb0(%cond: i1, %a: i32, %b: i32):
   cfg.cond_br %cond, ^_bb1, ^_bb2 : i1
 ^_bb1:
   %then = test.addi %a, %b : i32
@@ -38,7 +37,6 @@ func.def @lowers_if_without_else(%cond: i1, %a: i32, %b: i32) {
 
 // ----
 func.def @lowers_if_without_else(%cond: i1, %a: i32, %b: i32) {
-^_bb0(%cond: i1, %a: i32, %b: i32):
   cfg.cond_br %cond, ^_bb1, ^_bb2 : i1
 ^_bb1:
   %then = test.addi %a, %b : i32
@@ -62,7 +60,6 @@ func.def @lowers_counted_for(%n: index, %seed: i32, %x: i32) -> (i32) {
 
 // ----
 func.def @lowers_counted_for(%n: index, %seed: i32, %x: i32) -> (i32) {
-^_bb0(%n: index, %seed: i32, %x: i32):
   %start = index.constant 0 : index
   %step = index.constant 1 : index
   cfg.br ^_bb1(%start: index, %seed: i32)
@@ -92,7 +89,6 @@ func.def @preserves_static_for_iv_facts() {
 
 // ----
 func.def @preserves_static_for_iv_facts() {
-^_bb0:
   %start = index.constant 0 : index
   %limit = index.constant 4 : index
   %step = index.constant 2 : index
@@ -130,7 +126,6 @@ kernel.def @preserves_kernel_for_iv_facts() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
 } launch {
-^_bb0:
   %start = index.constant 0 : index
   %limit = index.constant 4 : index
   %step = index.constant 2 : index
@@ -162,7 +157,6 @@ func.def @lowers_while(%cond: i1, %seed: i32, %x: i32) -> (i32) {
 
 // ----
 func.def @lowers_while(%cond: i1, %seed: i32, %x: i32) -> (i32) {
-^_bb0(%cond: i1, %seed: i32, %x: i32):
   cfg.br ^_bb1(%seed: i32)
 ^_bb1(%result: i32):
   %forwarded = test.addi %result, %x : i32
@@ -196,7 +190,6 @@ func.def @lowers_switch(%selector: index, %a: i32, %b: i32) -> (i32) {
 
 // ----
 func.def @lowers_switch(%selector: index, %a: i32, %b: i32) -> (i32) {
-^_bb0(%selector: index, %a: i32, %b: i32):
   %9 = index.constant 0 : index
   %10 = index.cmp eq, %selector, %9 : index
   cfg.cond_br %10, ^_bb2, ^_bb1 : i1
@@ -235,7 +228,6 @@ func.def @remaps_join_argument_dependent_type(%cond: i1, %buffer: buffer, %offse
 
 // ----
 func.def @remaps_join_argument_dependent_type(%cond: i1, %buffer: buffer, %offset: offset) {
-^_bb0(%cond: i1, %buffer: buffer, %offset: offset):
   cfg.cond_br %cond, ^_bb1, ^_bb2 : i1
 ^_bb1:
   %dense = encoding.layout.dense : encoding<layout>

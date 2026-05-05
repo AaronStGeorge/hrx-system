@@ -13,6 +13,127 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 
+static const loom_op_vtable_t* loom_print_value_defining_op_vtable(
+    const loom_module_t* module, const loom_op_t* op) {
+  if (!module || !module->context || !op) {
+    return NULL;
+  }
+  return loom_context_resolve_op(module->context, op->kind);
+}
+
+static bool loom_print_value_has_name(const loom_module_t* module,
+                                      loom_value_id_t value_id,
+                                      loom_string_id_t* out_name_id) {
+  *out_name_id = LOOM_STRING_ID_INVALID;
+  if (!module || value_id >= module->values.count) {
+    return false;
+  }
+  loom_string_id_t name_id = module->values.entries[value_id].name_id;
+  if (name_id == LOOM_STRING_ID_INVALID || name_id >= module->strings.count) {
+    return false;
+  }
+  *out_name_id = name_id;
+  return true;
+}
+
+// Returns the parser scope that will receive |value_id|'s printed definition.
+// Sibling regions and symbol signatures have independent SSA namespaces, while
+// values defined inside one region body share that region's namespace.
+static const void* loom_print_value_parse_scope(const loom_module_t* module,
+                                                loom_value_id_t value_id) {
+  if (!module || value_id >= module->values.count) {
+    return NULL;
+  }
+  const loom_value_t* value = &module->values.entries[value_id];
+  if (loom_value_is_block_arg(value)) {
+    loom_block_t* block = loom_value_def_block(value);
+    return block ? (const void*)block->parent_region : NULL;
+  }
+
+  loom_op_t* def_op = loom_value_def_op(value);
+  if (def_op) {
+    const loom_op_vtable_t* vtable =
+        loom_print_value_defining_op_vtable(module, def_op);
+    if (vtable && iree_any_bit_set(vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE)) {
+      return (const void*)def_op;
+    }
+    loom_block_t* block = def_op->parent_block;
+    return block ? (const void*)block->parent_region : NULL;
+  }
+
+  const loom_use_t* uses = loom_value_uses(value);
+  if (!uses || value->use_count == 0) {
+    return NULL;
+  }
+  loom_op_t* user_op = loom_use_user_op(uses[0]);
+  const loom_op_vtable_t* user_vtable =
+      loom_print_value_defining_op_vtable(module, user_op);
+  if (user_vtable &&
+      iree_any_bit_set(user_vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE)) {
+    return (const void*)user_op;
+  }
+  loom_block_t* block = user_op ? user_op->parent_block : NULL;
+  return block ? (const void*)block->parent_region : NULL;
+}
+
+static bool loom_print_value_is_printable(const loom_module_t* module,
+                                          loom_value_id_t value_id) {
+  if (!module || value_id >= module->values.count) {
+    return false;
+  }
+  const loom_value_t* value = &module->values.entries[value_id];
+  if (loom_value_is_block_arg(value)) {
+    return loom_value_def_block(value) != NULL;
+  }
+  loom_op_t* def_op = loom_value_def_op(value);
+  if (def_op) {
+    return !iree_any_bit_set(def_op->flags, LOOM_OP_FLAG_DEAD);
+  }
+  return value->use_count > 0;
+}
+
+static bool loom_print_value_name_is_duplicated(const loom_module_t* module,
+                                                loom_value_id_t value_id,
+                                                loom_string_id_t name_id) {
+  const void* scope = loom_print_value_parse_scope(module, value_id);
+  for (iree_host_size_t i = 0; i < module->values.count; ++i) {
+    if (i == value_id) {
+      continue;
+    }
+    if (!loom_print_value_is_printable(module, (loom_value_id_t)i)) {
+      continue;
+    }
+    if (loom_print_value_parse_scope(module, (loom_value_id_t)i) != scope) {
+      continue;
+    }
+    if (module->values.entries[i].name_id == name_id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool loom_print_explicit_value_name_exists(const loom_module_t* module,
+                                                  const void* scope,
+                                                  iree_string_view_t name) {
+  for (iree_host_size_t i = 0; i < module->values.count; ++i) {
+    if (!loom_print_value_is_printable(module, (loom_value_id_t)i)) {
+      continue;
+    }
+    if (loom_print_value_parse_scope(module, (loom_value_id_t)i) != scope) {
+      continue;
+    }
+    loom_string_id_t name_id = module->values.entries[i].name_id;
+    if (name_id == LOOM_STRING_ID_INVALID || name_id >= module->strings.count) {
+      continue;
+    }
+    if (iree_string_view_equal(module->strings.entries[name_id], name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Emits a canonical JSON-compatible string literal. Stored strings are expected
 // to contain decoded UTF-8 payload bytes; this helper validates that invariant
 // before writing so malformed IR never serializes as malformed text.
@@ -76,13 +197,33 @@ iree_string_view_t loom_print_resolve_value_name(const loom_module_t* module,
                                                  loom_value_id_t value_id,
                                                  char* buffer,
                                                  iree_host_size_t buffer_size) {
-  if (module && value_id < module->values.count) {
-    loom_string_id_t name_id = module->values.entries[value_id].name_id;
-    if (name_id != LOOM_STRING_ID_INVALID && name_id < module->strings.count) {
-      iree_string_view_t bare_name = module->strings.entries[name_id];
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  if (loom_print_value_has_name(module, value_id, &name_id)) {
+    iree_string_view_t bare_name = module->strings.entries[name_id];
+    const void* scope = loom_print_value_parse_scope(module, value_id);
+    if (!loom_print_value_name_is_duplicated(module, value_id, name_id)) {
       int length = iree_snprintf(buffer, buffer_size, "%%%.*s",
                                  (int)bare_name.size, bare_name.data);
       return iree_make_string_view(buffer, length);
+    }
+
+    for (iree_host_size_t attempt = 0; attempt < 8; ++attempt) {
+      int length = attempt == 0
+                       ? iree_snprintf(buffer, buffer_size, "%%%.*s$%" PRIhsz,
+                                       (int)bare_name.size, bare_name.data,
+                                       (iree_host_size_t)value_id)
+                       : iree_snprintf(buffer, buffer_size,
+                                       "%%%.*s$%" PRIhsz "$%" PRIhsz,
+                                       (int)bare_name.size, bare_name.data,
+                                       (iree_host_size_t)value_id, attempt);
+      if (length <= 1 || (iree_host_size_t)length >= buffer_size) {
+        break;
+      }
+      iree_string_view_t candidate =
+          iree_make_string_view(buffer + 1, (iree_host_size_t)length - 1);
+      if (!loom_print_explicit_value_name_exists(module, scope, candidate)) {
+        return iree_make_string_view(buffer, (iree_host_size_t)length);
+      }
     }
   }
   int length = iree_snprintf(buffer, buffer_size, "%%%" PRIhsz,

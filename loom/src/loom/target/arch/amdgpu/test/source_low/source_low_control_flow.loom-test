@@ -46,7 +46,6 @@ func.def target(@target) @divergent_if_else(%values: vector<2xi32>, %limit: i32)
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @divergent_if_else(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
-^_bb0(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>):
   %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %7 = v_mov_b32_copy %limit
   %cond = v_cmp_lt_i32 %lane, %7
@@ -83,7 +82,6 @@ func.def target(@target) @divergent_then_only(%values: vector<2xi32>, %limit: i3
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @divergent_then_only(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
-^_bb0(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>):
   %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %8 = v_mov_b32_copy %limit
   %cond = v_cmp_lt_i32 %lane, %8
@@ -123,7 +121,6 @@ func.def target(@target) @divergent_region_with_uniform_loop(%values: vector<2xi
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @divergent_region_with_uniform_loop(%values: reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
-^_bb0(%values: reg<amdgpu.vgpr x2>):
   %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %limit = s_mov_b32 8
   %start = s_mov_b32 0

@@ -22,14 +22,14 @@ bool loom_print_low_asm_is_requested(loom_print_context_t* ctx);
 iree_status_t loom_print_low_asm_region(
     loom_print_context_t* ctx, const loom_region_t* region,
     const loom_region_descriptor_t* region_descriptor,
-    bool allow_entry_block_args);
+    bool entry_args_declared_by_parent);
 
 // Attempts to print a region using optional low asm syntax. Sets
 // |out_printed| to false when the region has no lossless low asm spelling.
 iree_status_t loom_print_low_asm_optional_region(
     loom_print_context_t* ctx, const loom_region_t* region,
     const loom_region_descriptor_t* region_descriptor,
-    bool allow_entry_block_args, bool* out_printed);
+    bool entry_args_declared_by_parent, bool* out_printed);
 
 #ifdef __cplusplus
 }  // extern "C"

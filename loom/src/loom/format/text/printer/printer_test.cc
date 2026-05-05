@@ -433,6 +433,11 @@ class PrintOpTest : public ::testing::Test {
     return id;
   }
 
+  // Assigns a display name to a value.
+  void set_value_name(loom_value_id_t value, const char* name) {
+    IREE_CHECK_OK(loom_module_set_value_name(module_, value, intern(name)));
+  }
+
   // Creates a symbol with the given name and returns a local reference.
   loom_symbol_ref_t make_symbol(const char* name) {
     loom_string_id_t name_id = intern(name);
@@ -618,7 +623,6 @@ TEST_F(PrintOpTest, SuccessorReferenceSynthesizesBlockLabels) {
       PrintOpWithFields(func_op, LOOM_TEXT_PRINT_DEFAULT, &fields);
   EXPECT_EQ(output,
             "test.func @cfg() {\n"
-            "^_bb0:\n"
             "  test.br ^_bb1\n"
             "^_bb1:\n"
             "}\n");
@@ -629,6 +633,39 @@ TEST_F(PrintOpTest, SuccessorReferenceSynthesizesBlockLabels) {
   EXPECT_EQ(output.substr(successor_field->start,
                           successor_field->end - successor_field->start),
             "^_bb1");
+}
+
+TEST_F(PrintOpTest, SyntheticEntryBlockLabelOmitsParentDeclaredArgs) {
+  loom_symbol_ref_t callee = make_symbol("cycle");
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+
+  loom_type_t arg_types[] = {f32};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_test_func_build(&builder_, 0, 0, 0, callee, arg_types, 1,
+                                      NULL, 0, NULL, 0, NULL, 0,
+                                      LOOM_LOCATION_UNKNOWN, &func_op));
+
+  loom_region_t* body = loom_test_func_body(func_op);
+  ASSERT_NE(body, nullptr);
+  loom_block_t* entry_block = loom_region_entry_block(body);
+  ASSERT_NE(entry_block, nullptr);
+  loom_block_t* backedge_block = nullptr;
+  IREE_ASSERT_OK(loom_region_append_block(module_, body, &backedge_block));
+  ASSERT_NE(backedge_block, nullptr);
+
+  loom_builder_ip_t saved = loom_builder_enter_region(&builder_, func_op, body);
+  loom_builder_set_block(&builder_, backedge_block);
+  loom_op_t* branch_op = NULL;
+  IREE_ASSERT_OK(loom_test_br_build(&builder_, entry_block,
+                                    LOOM_LOCATION_UNKNOWN, &branch_op));
+  loom_builder_restore(&builder_, saved);
+
+  EXPECT_EQ(print_op(func_op, LOOM_TEXT_PRINT_DEFAULT),
+            "test.func @cycle(%0: f32) {\n"
+            "^_bb0:\n"
+            "^_bb1:\n"
+            "  test.br ^_bb0\n"
+            "}\n");
 }
 
 //===----------------------------------------------------------------------===//
@@ -906,6 +943,65 @@ TEST_F(PrintOpTest, FuncWithBody) {
   // Body present, one arg. FuncArgs prints (%block_arg: f32).
   EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
             "test.func @negate(%0: f32) -> (f32) {\n"
+            "}\n");
+}
+
+TEST_F(PrintOpTest, DuplicateExplicitValueNamesPrintUniquely) {
+  loom_symbol_ref_t callee = make_symbol("dupes");
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+
+  loom_type_t arg_types[] = {f32, f32};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_test_func_build(&builder_, 0, 0, 0, callee, arg_types, 2,
+                                      NULL, 0, NULL, 0, NULL, 0,
+                                      LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_region_t* body = loom_test_func_body(func_op);
+  ASSERT_NE(body, nullptr);
+  loom_block_t* entry_block = loom_region_entry_block(body);
+  ASSERT_NE(entry_block, nullptr);
+  set_value_name(loom_block_arg_id(entry_block, 0), "input");
+  set_value_name(loom_block_arg_id(entry_block, 1), "input");
+
+  EXPECT_EQ(print_op(func_op, LOOM_TEXT_PRINT_DEFAULT),
+            "test.func @dupes(%input$0: f32, %input$1: f32) {\n"
+            "}\n");
+}
+
+TEST_F(PrintOpTest, DuplicateExplicitValueNamesInSiblingRegionsArePreserved) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t arg_types[] = {f32};
+
+  loom_op_t* first_func = NULL;
+  IREE_ASSERT_OK(loom_test_func_build(&builder_, 0, 0, 0, make_symbol("first"),
+                                      arg_types, 1, NULL, 0, NULL, 0, NULL, 0,
+                                      LOOM_LOCATION_UNKNOWN, &first_func));
+  loom_region_t* first_body = loom_test_func_body(first_func);
+  ASSERT_NE(first_body, nullptr);
+  set_value_name(loom_block_arg_id(loom_region_entry_block(first_body), 0),
+                 "input");
+
+  loom_op_t* second_func = NULL;
+  IREE_ASSERT_OK(loom_test_func_build(&builder_, 0, 0, 0, make_symbol("second"),
+                                      arg_types, 1, NULL, 0, NULL, 0, NULL, 0,
+                                      LOOM_LOCATION_UNKNOWN, &second_func));
+  loom_region_t* second_body = loom_test_func_body(second_func);
+  ASSERT_NE(second_body, nullptr);
+  set_value_name(loom_block_arg_id(loom_region_entry_block(second_body), 0),
+                 "input");
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_text_print_module_to_builder(module_, &builder,
+                                                   LOOM_TEXT_PRINT_DEFAULT));
+  std::string output(iree_string_builder_buffer(&builder),
+                     iree_string_builder_size(&builder));
+  iree_string_builder_deinitialize(&builder);
+
+  EXPECT_EQ(output,
+            "test.func @first(%input: f32) {\n"
+            "}\n"
+            "\n"
+            "test.func @second(%input: f32) {\n"
             "}\n");
 }
 
