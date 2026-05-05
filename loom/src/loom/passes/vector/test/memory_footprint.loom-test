@@ -49,6 +49,16 @@ func.def @dynamic_unproven_tail(%buffer: buffer, %base: offset, %n: index, %iv: 
 
 // ====
 
+func.def @dynamic_unit_axis_proven_by_assume_relation(%buffer: buffer, %base: offset, %row: index, %n: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%base] : buffer -> view<[%n]x4xf32, %layout>
+  %row_in_bounds, %n_assumed = index.assume %row, %n [ge(%row, 0), lt(%row, %n)] : index, index
+  %loaded = vector.load %view[%row_in_bounds, 0] : view<[%n]x4xf32, %layout> -> vector<4xf32>
+  func.return
+}
+
+// ====
+
 func.def @mask_range_tail_uses_upper_bound(%buffer: buffer, %base: offset, %n: index, %iv: index, %old: vector<16xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %c1 = index.constant 1 : index

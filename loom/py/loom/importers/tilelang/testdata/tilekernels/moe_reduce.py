@@ -88,13 +88,15 @@ kernel.def target(@hip_mcpu_gfx1100) export("reduce_fused_kernel") @reduce_fused
   %c0_bytes = index.constant 0 : offset
   %x_noalias = buffer.assume.noalias %x_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %x = buffer.view %x_noalias[%c0_bytes] : buffer -> view<[%num_expanded_tokens]x8xf16, %layout>
+  %num_expanded_tokens_idx = index.cast %num_expanded_tokens : i32 to index
+  %x = buffer.view %x_noalias[%c0_bytes] : buffer -> view<[%num_expanded_tokens_idx]x8xf16, %layout>
   %topk_weights_noalias = buffer.assume.noalias %topk_weights_handle : buffer
-  %topk_weights = buffer.view %topk_weights_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %topk_weights = buffer.view %topk_weights_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2xf32, %layout>
   %token_topk_to_pos_noalias = buffer.assume.noalias %token_topk_to_pos_handle : buffer
-  %token_topk_to_pos = buffer.view %token_topk_to_pos_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xi32, %layout>
+  %token_topk_to_pos = buffer.view %token_topk_to_pos_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2xi32, %layout>
   %out_noalias = buffer.assume.noalias %out_handle : buffer
-  %out = buffer.view %out_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x8xf16, %layout>
+  %out = buffer.view %out_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x8xf16, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -119,11 +121,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("reduce_fused_kernel") @reduce_fused
   }
   %c2 = index.constant 2 : index
   scf.for %i0 = [%c0 to %c2 step %c1] {
-    %copy = view.load %topk_weights[%bx, %i0] : view<[%num_tokens]x2xf32, %layout> -> f32
+    %copy = view.load %topk_weights[%bx, %i0] : view<[%num_tokens_idx]x2xf32, %layout> -> f32
     view.store %copy, %topk_weights_local[%i0] : f32, view<2xf32, %layout>
   }
   scf.for %i0 = [%c0 to %c2 step %c1] {
-    %copy_2 = view.load %token_topk_to_pos[%bx, %i0] : view<[%num_tokens]x2xi32, %layout> -> i32
+    %copy_2 = view.load %token_topk_to_pos[%bx, %i0] : view<[%num_tokens_idx]x2xi32, %layout> -> i32
     view.store %copy_2, %topk_to_pos_local[%i0] : i32, view<2xi32, %layout>
   }
   scf.for %k = [%c0 to %c2 step %c1] {
@@ -137,7 +139,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("reduce_fused_kernel") @reduce_fused
       scf.for %i = [%c0 to %c8 step %c1] {
         %load_3 = view.load %reduced_fragment[%i] : view<8xf32, %layout> -> f32
         %pos_idx = index.cast %pos_assumed : i32 to index
-        %load_4 = view.load %x[%pos_idx, %i] : view<[%num_expanded_tokens]x8xf16, %layout> -> f16
+        %load_4 = view.load %x[%pos_idx, %i] : view<[%num_expanded_tokens_idx]x8xf16, %layout> -> f16
         %extf = scalar.extf %load_4 : f16 to f32
         %load_5 = view.load %scale[%c0] : view<1xf32, %layout> -> f32
         %mulf = scalar.mulf %extf, %load_5 : f32
@@ -149,7 +151,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("reduce_fused_kernel") @reduce_fused
   scf.for %i = [%c0 to %c8 step %c1] {
     %load_6 = view.load %reduced_fragment[%i] : view<8xf32, %layout> -> f32
     %fptrunc = scalar.fptrunc %load_6 : f32 to f16
-    view.store %fptrunc, %out[%bx, %i] : f16, view<[%num_tokens]x8xf16, %layout>
+    view.store %fptrunc, %out[%bx, %i] : f16, view<[%num_tokens_idx]x8xf16, %layout>
   }
   kernel.return
 }

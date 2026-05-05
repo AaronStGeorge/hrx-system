@@ -20,6 +20,7 @@ from loom.importers.tilelang.context import TileLangConversionContext
 from loom.importers.tilelang.coverage import CoverageState, coverage_by_name
 from loom.importers.tilelang.nodes import node_kind, node_text
 from loom.importers.tilelang.types import TileLangTypeConversionError
+from loom.ir import INDEX, OFFSET
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,9 +190,7 @@ class TileLangConverter:
             if mapped_index is not None:
                 return mapped_index
         mapped = context.mapped(expr)
-        if mapped is not None and (
-            not index_like or str(mapped.type) in ("index", "offset")
-        ):
+        if mapped is not None and (not index_like or mapped.type in (INDEX, OFFSET)):
             return mapped
         kind = node_kind(expr)
         self.operation_counts[kind] += 1

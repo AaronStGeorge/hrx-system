@@ -146,9 +146,12 @@ kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") @batched_
   %c0_bytes = index.constant 0 : offset
   %x_noalias = buffer.assume.noalias %x_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %x = buffer.view %x_noalias[%c0_bytes] : buffer -> view<[%num_batches]x[%shape_x]x[%shape_y]xf16, %layout>
+  %num_batches_idx = index.cast %num_batches : i32 to index
+  %shape_x_idx = index.cast %shape_x : i32 to index
+  %shape_y_idx = index.cast %shape_y : i32 to index
+  %x = buffer.view %x_noalias[%c0_bytes] : buffer -> view<[%num_batches_idx]x[%shape_x_idx]x[%shape_y_idx]xf16, %layout>
   %out_noalias = buffer.assume.noalias %out_handle : buffer
-  %out = buffer.view %out_noalias[%c0_bytes] : buffer -> view<[%num_batches]x[%shape_y]x[%shape_x]xf16, %layout>
+  %out = buffer.view %out_noalias[%c0_bytes] : buffer -> view<[%num_batches_idx]x[%shape_y_idx]x[%shape_x_idx]xf16, %layout>
   %bx = kernel.workgroup.id<x> : index
   %by = kernel.workgroup.id<y> : index
   %bz = kernel.workgroup.id<z> : index
@@ -185,7 +188,7 @@ kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") @batched_
         %mul_2 = index.mul %rem, %c4 : index
         %madd_3 = index.madd %bx, %c128, %mul_2 : index
         %add_2 = index.add %madd_3, %k : index
-        %load = view.load %x[%bz, %add, %add_2] : view<[%num_batches]x[%shape_x]x[%shape_y]xf16, %layout> -> f16
+        %load = view.load %x[%bz, %add, %add_2] : view<[%num_batches_idx]x[%shape_x_idx]x[%shape_y_idx]xf16, %layout> -> f16
         view.store %load, %tmp_row[%k] : f16, view<4xf16, %layout>
       }
       scf.for %k = [%c0 to %c4 step %c1] {
@@ -212,7 +215,7 @@ kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") @batched_
       %load_4 = view.load %out_shared[%i, %j] : view<128x132xf16, %layout> -> f16
       %madd_6 = index.madd %bx, %c128_2, %i : index
       %madd_7 = index.madd %by, %c128_2, %j : index
-      view.store %load_4, %out[%bz, %madd_6, %madd_7] : f16, view<[%num_batches]x[%shape_y]x[%shape_x]xf16, %layout>
+      view.store %load_4, %out[%bz, %madd_6, %madd_7] : f16, view<[%num_batches_idx]x[%shape_y_idx]x[%shape_x_idx]xf16, %layout>
     }
   }
   kernel.return

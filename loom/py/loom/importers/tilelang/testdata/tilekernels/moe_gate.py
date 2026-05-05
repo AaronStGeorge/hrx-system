@@ -104,9 +104,10 @@ kernel.def target(@hip_mcpu_gfx1100) export("topk_gate_kernel") @topk_gate_kerne
   %c0_bytes = index.constant 0 : offset
   %scores_noalias = buffer.assume.noalias %scores_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %scores = buffer.view %scores_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x8xf32, %layout>
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %scores = buffer.view %scores_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x8xf32, %layout>
   %topk_idx_noalias = buffer.assume.noalias %topk_idx_handle : buffer
-  %topk_idx = buffer.view %topk_idx_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
+  %topk_idx = buffer.view %topk_idx_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2xi64, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -131,7 +132,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("topk_gate_kernel") @topk_gate_kerne
     %c8 = index.constant 8 : index
     %cmp = index.cmp slt, %i, %c8 : index
     scf.if %cmp {
-      %load = view.load %scores[%bx, %i] : view<[%num_tokens]x8xf32, %layout> -> f32
+      %load = view.load %scores[%bx, %i] : view<[%num_tokens_idx]x8xf32, %layout> -> f32
       view.store %load, %scores_fragment[%i] : f32, view<32xf32, %layout>
     } else {
       %inf = scalar.constant inf : f32
@@ -187,7 +188,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("topk_gate_kernel") @topk_gate_kerne
   scf.for %i0 = [%c0 to %c2 step %c1] {
     %copy = view.load %topk_idx_shared[%i0] : view<2xi32, %layout> -> i32
     %copy_ext = scalar.extsi %copy : i32 to i64
-    view.store %copy_ext, %topk_idx[%bx, %i0] : i64, view<[%num_tokens]x2xi64, %layout>
+    view.store %copy_ext, %topk_idx[%bx, %i0] : i64, view<[%num_tokens_idx]x2xi64, %layout>
   }
   kernel.return
 }

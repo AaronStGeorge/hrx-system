@@ -40,7 +40,14 @@ from loom.importers.tilelang.nodes import (
 )
 from loom.importers.tilelang.ops.topology import collect_thread_extents, integer_value
 from loom.importers.tilelang.types import TileLangTypeConverter
-from loom.ir import DynamicDim, Module, ShapedType, rebuild_value_metadata
+from loom.ir import (
+    INDEX,
+    OFFSET,
+    DynamicDim,
+    Module,
+    ShapedType,
+    rebuild_value_metadata,
+)
 from loom.verify import verify_module
 
 
@@ -435,9 +442,11 @@ def _dynamic_view_dimension_bindings(
             )
             return None
         source_dim = shape[position]
-        mapped_dim = context.mapped(source_dim)
+        mapped_dim = context.mapped_index_value(source_dim)
         if mapped_dim is None:
-            mapped_dim = context.mapped_index_value(source_dim)
+            mapped = context.mapped(source_dim)
+            if mapped is not None and mapped.type in (INDEX, OFFSET):
+                mapped_dim = mapped
         if mapped_dim is None:
             mapped_dim = converter.convert_expr(source_dim, context, index_like=True)
         if mapped_dim is None:

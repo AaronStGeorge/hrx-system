@@ -86,11 +86,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") @normaliz
   %c0_bytes = index.constant 0 : offset
   %topk_weights_noalias = buffer.assume.noalias %topk_weights_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %topk_weights = buffer.view %topk_weights_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %topk_weights = buffer.view %topk_weights_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2xf32, %layout>
   %denominator_noalias = buffer.assume.noalias %denominator_handle : buffer
-  %denominator = buffer.view %denominator_noalias[%c0_bytes] : buffer -> view<[%num_tokens]xf32, %layout>
+  %denominator = buffer.view %denominator_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]xf32, %layout>
   %normalized_weights_noalias = buffer.assume.noalias %normalized_weights_handle : buffer
-  %normalized_weights = buffer.view %normalized_weights_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
+  %normalized_weights = buffer.view %normalized_weights_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tid = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -106,13 +107,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") @normaliz
   view.store %const, %total[%c0] : f32, view<1xf32, %layout>
   %c128 = index.constant 128 : index
   %madd = index.madd %bx, %c128, %tid : index
-  %num_tokens_idx = index.cast %num_tokens : i32 to index
   %cmp = index.cmp slt, %madd, %num_tokens_idx : index
   scf.if %cmp {
     %c2 = index.constant 2 : index
     %c1 = index.constant 1 : index
     scf.for %i = [%c0 to %c2 step %c1] {
-      %load = view.load %topk_weights[%madd, %i] : view<[%num_tokens]x2xf32, %layout> -> f32
+      %load = view.load %topk_weights[%madd, %i] : view<[%num_tokens_idx]x2xf32, %layout> -> f32
       view.store %load, %weights_local[%i] : f32, view<2xf32, %layout>
     }
     scf.for %i = [%c0 to %c2 step %c1] {
@@ -122,12 +122,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") @normaliz
       view.store %addf, %total[%c0] : f32, view<1xf32, %layout>
     }
     %load_4 = view.load %total[%c0] : view<1xf32, %layout> -> f32
-    view.store %load_4, %denominator[%madd] : f32, view<[%num_tokens]xf32, %layout>
+    view.store %load_4, %denominator[%madd] : f32, view<[%num_tokens_idx]xf32, %layout>
     scf.for %i = [%c0 to %c2 step %c1] {
       %load_5 = view.load %weights_local[%i] : view<2xf32, %layout> -> f32
       %load_6 = view.load %total[%c0] : view<1xf32, %layout> -> f32
       %divf = scalar.divf %load_5, %load_6 : f32
-      view.store %divf, %normalized_weights[%madd, %i] : f32, view<[%num_tokens]x2xf32, %layout>
+      view.store %divf, %normalized_weights[%madd, %i] : f32, view<[%num_tokens_idx]x2xf32, %layout>
     }
   }
   kernel.return

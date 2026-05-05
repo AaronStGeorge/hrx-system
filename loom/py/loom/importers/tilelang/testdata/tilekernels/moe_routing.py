@@ -104,9 +104,10 @@ kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") @mask_i
   %c0_bytes = index.constant 0 : offset
   %indices_noalias = buffer.assume.noalias %indices_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %indices = buffer.view %indices_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %indices = buffer.view %indices_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2xi64, %layout>
   %masked_indices_noalias = buffer.assume.noalias %masked_indices_handle : buffer
-  %masked_indices = buffer.view %masked_indices_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
+  %masked_indices = buffer.view %masked_indices_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2xi64, %layout>
   %bx = kernel.workgroup.id<x> : index
   %thread_idx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -116,14 +117,13 @@ kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") @mask_i
   %value = buffer.view %value_buffer[%c0_bytes] : buffer -> view<1xi64, %layout>
   %c128 = index.constant 128 : index
   %madd = index.madd %bx, %c128, %thread_idx : index
-  %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c2 = index.constant 2 : index
   %mul = index.mul %num_tokens_idx, %c2 : index
   %cmp = index.cmp slt, %madd, %mul : index
   scf.if %cmp {
     %rem = index.rem %madd, %c2 : index
     %div = index.div %madd, %c2 : index
-    %load = view.load %indices[%div, %rem] : view<[%num_tokens]x2xi64, %layout> -> i64
+    %load = view.load %indices[%div, %rem] : view<[%num_tokens_idx]x2xi64, %layout> -> i64
     %c0 = index.constant 0 : index
     view.store %load, %value[%c0] : i64, view<1xi64, %layout>
     %load_2 = view.load %value[%c0] : view<1xi64, %layout> -> i64
@@ -141,7 +141,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") @mask_i
       %const_2 = scalar.constant -1 : i64
       %rem_2 = index.rem %madd, %c2 : index
       %div_2 = index.div %madd, %c2 : index
-      view.store %const_2, %masked_indices[%div_2, %rem_2] : i64, view<[%num_tokens]x2xi64, %layout>
+      view.store %const_2, %masked_indices[%div_2, %rem_2] : i64, view<[%num_tokens_idx]x2xi64, %layout>
     } else {
       %load_4 = view.load %value[%c0] : view<1xi64, %layout> -> i64
       %muli = scalar.muli %tp_rank, %per_gpu : i32
@@ -164,7 +164,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") @mask_i
       %select = scf.select %cmp_4, %const_3, %load_8 : i64
       %rem_3 = index.rem %madd, %c2 : index
       %div_3 = index.div %madd, %c2 : index
-      view.store %select, %masked_indices[%div_3, %rem_3] : i64, view<[%num_tokens]x2xi64, %layout>
+      view.store %select, %masked_indices[%div_3, %rem_3] : i64, view<[%num_tokens_idx]x2xi64, %layout>
     }
   }
   kernel.return
@@ -266,7 +266,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel
   %c0_bytes = index.constant 0 : offset
   %group_indices_noalias = buffer.assume.noalias %group_indices_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %group_indices = buffer.view %group_indices_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x4xi64, %layout>
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %group_indices = buffer.view %group_indices_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x4xi64, %layout>
   %bx = kernel.workgroup.id<x> : index
   %thread_idx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -277,7 +278,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel
   %c128 = index.constant 128 : index
   %madd = index.madd %bx, %c128, %thread_idx : index
   %c0 = index.constant 0 : index
-  %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c1023 = index.constant 1023 : index
   %add = index.add %num_tokens_idx, %c1023 : index
   %sub = index.sub %add, %madd : index
@@ -292,7 +292,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel
     }
     %c4 = index.constant 4 : index
     scf.for %j = [%c0 to %c4 step %c1] {
-      %load = view.load %group_indices[%madd_2, %j] : view<[%num_tokens]x4xi64, %layout> -> i64
+      %load = view.load %group_indices[%madd_2, %j] : view<[%num_tokens_idx]x4xi64, %layout> -> i64
       %group_idx_assumed = scalar.assume %load [lt(%load, 64)] : i64
       %const_2 = scalar.constant 0 : i64
       %cmp = scalar.cmpi sge, %group_idx_assumed, %const_2 : i64
@@ -321,7 +321,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel
       %cmp_4 = scalar.cmpi ne, %ori, %const_6 : i64
       scf.if %cmp_4 {
         %const_7 = scalar.constant -1 : i64
-        view.store %const_7, %group_indices[%madd_2, %j] : i64, view<[%num_tokens]x4xi64, %layout>
+        view.store %const_7, %group_indices[%madd_2, %j] : i64, view<[%num_tokens_idx]x4xi64, %layout>
       }
     }
   }

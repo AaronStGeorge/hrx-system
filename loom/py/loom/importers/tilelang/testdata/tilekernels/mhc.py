@@ -308,9 +308,10 @@ kernel.def target(@hip_mcpu_gfx1100) export("expand_to_mhc_fwd_kernel") @expand_
   %c0_bytes = index.constant 0 : offset
   %x_noalias = buffer.assume.noalias %x_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %x = buffer.view %x_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x128xbf16, %layout>
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %x = buffer.view %x_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x128xbf16, %layout>
   %output_noalias = buffer.assume.noalias %output_handle : buffer
-  %output = buffer.view %output_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2x128xbf16, %layout>
+  %output = buffer.view %output_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2x128xbf16, %layout>
   %bx = kernel.workgroup.id<x> : index
   %by = kernel.workgroup.id<y> : index
   %tx = kernel.workitem.id<x> : index
@@ -332,7 +333,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("expand_to_mhc_fwd_kernel") @expand_
       scf.for %i1 = [%c0 to %c128 step %c1] {
         %idx = index.add %mul, %i0 : index
         %idx_2 = index.add %mul_2, %i1 : index
-        %copy = view.load %x[%idx, %idx_2] : view<[%num_tokens]x128xbf16, %layout> -> bf16
+        %copy = view.load %x[%idx, %idx_2] : view<[%num_tokens_idx]x128xbf16, %layout> -> bf16
         view.store %copy, %local[%i0, %i1] : bf16, view<32x128xbf16, %layout>
       }
     }
@@ -342,13 +343,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("expand_to_mhc_fwd_kernel") @expand_
         scf.for %tj = [%c0 to %c128 step %c1] {
           %madd = index.madd %bx, %c32, %ti : index
           %madd_2 = index.madd %by, %c128, %tj : index
-          %num_tokens_idx = index.cast %num_tokens : i32 to index
           %cmp_2 = index.cmp slt, %madd, %num_tokens_idx : index
           %cmp_3 = index.cmp slt, %madd_2, %c128 : index
           %andi = scalar.andi %cmp_2, %cmp_3 : i1
           scf.if %andi {
             %load = view.load %local[%ti, %tj] : view<32x128xbf16, %layout> -> bf16
-            view.store %load, %output[%madd, %m, %madd_2] : bf16, view<[%num_tokens]x2x128xbf16, %layout>
+            view.store %load, %output[%madd, %m, %madd_2] : bf16, view<[%num_tokens_idx]x2x128xbf16, %layout>
           }
         }
       }
@@ -394,13 +394,14 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_head_compute_mix_fwd_kernel") @
   %c0_bytes = index.constant 0 : offset
   %input_mix_noalias = buffer.assume.noalias %input_mix_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %input_mix = buffer.view %input_mix_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %input_mix = buffer.view %input_mix_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2xf32, %layout>
   %mhc_scale_noalias = buffer.assume.noalias %mhc_scale_handle : buffer
   %mhc_scale = buffer.view %mhc_scale_noalias[%c0_bytes] : buffer -> view<1xf32, %layout>
   %mhc_base_noalias = buffer.assume.noalias %mhc_base_handle : buffer
   %mhc_base = buffer.view %mhc_base_noalias[%c0_bytes] : buffer -> view<2xf32, %layout>
   %output_mix_noalias = buffer.assume.noalias %output_mix_handle : buffer
-  %output_mix = buffer.view %output_mix_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
+  %output_mix = buffer.view %output_mix_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -411,10 +412,9 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_head_compute_mix_fwd_kernel") @
   scf.for %i1 = [%c0 to %c2 step %c1] {
     scf.for %j = [%c0 to %c2 step %c1] {
       %madd = index.madd %bx, %c2, %i1 : index
-      %num_tokens_idx = index.cast %num_tokens : i32 to index
       %cmp = index.cmp slt, %madd, %num_tokens_idx : index
       scf.if %cmp {
-        %load = view.load %input_mix[%madd, %j] : view<[%num_tokens]x2xf32, %layout> -> f32
+        %load = view.load %input_mix[%madd, %j] : view<[%num_tokens_idx]x2xf32, %layout> -> f32
         %load_2 = view.load %mhc_scale[%c0] : view<1xf32, %layout> -> f32
         %mulf = scalar.mulf %load, %load_2 : f32
         %load_3 = view.load %mhc_base[%j] : view<2xf32, %layout> -> f32
@@ -426,7 +426,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_head_compute_mix_fwd_kernel") @
         %sigmoid = scalar.divf %one, %sigmoid_den : f32
         %const = scalar.constant 1.0000000000000001e-05 : f32
         %addf_2 = scalar.addf %sigmoid, %const : f32
-        view.store %addf_2, %output_mix[%madd, %j] : f32, view<[%num_tokens]x2xf32, %layout>
+        view.store %addf_2, %output_mix[%madd, %j] : f32, view<[%num_tokens_idx]x2xf32, %layout>
       }
     }
   }
@@ -470,17 +470,18 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_pre_split_mixes_fwd_kernel") @m
   %c0_bytes = index.constant 0 : offset
   %input_mixes_noalias = buffer.assume.noalias %input_mixes_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %input_mixes = buffer.view %input_mixes_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x8xf32, %layout>
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %input_mixes = buffer.view %input_mixes_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x8xf32, %layout>
   %mhc_scale_noalias = buffer.assume.noalias %mhc_scale_handle : buffer
   %mhc_scale = buffer.view %mhc_scale_noalias[%c0_bytes] : buffer -> view<3xf32, %layout>
   %mhc_base_noalias = buffer.assume.noalias %mhc_base_handle : buffer
   %mhc_base = buffer.view %mhc_base_noalias[%c0_bytes] : buffer -> view<8xf32, %layout>
   %pre_layer_mix_noalias = buffer.assume.noalias %pre_layer_mix_handle : buffer
-  %pre_layer_mix = buffer.view %pre_layer_mix_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
+  %pre_layer_mix = buffer.view %pre_layer_mix_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2xf32, %layout>
   %post_layer_mix_noalias = buffer.assume.noalias %post_layer_mix_handle : buffer
-  %post_layer_mix = buffer.view %post_layer_mix_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
+  %post_layer_mix = buffer.view %post_layer_mix_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2xf32, %layout>
   %comb_res_mix_noalias = buffer.assume.noalias %comb_res_mix_handle : buffer
-  %comb_res_mix = buffer.view %comb_res_mix_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x4xf32, %layout>
+  %comb_res_mix = buffer.view %comb_res_mix_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x4xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -504,7 +505,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_pre_split_mixes_fwd_kernel") @m
   scf.for %i0 = [%c0 to %c2 step %c1] {
     scf.for %i1 = [%c0 to %c8 step %c1] {
       %idx = index.add %mul, %i0 : index
-      %copy = view.load %input_mixes[%idx, %i1] : view<[%num_tokens]x8xf32, %layout> -> f32
+      %copy = view.load %input_mixes[%idx, %i1] : view<[%num_tokens_idx]x8xf32, %layout> -> f32
       view.store %copy, %input_mixes_frag[%i0, %i1] : f32, view<2x8xf32, %layout>
     }
   }
@@ -562,7 +563,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_pre_split_mixes_fwd_kernel") @m
     scf.for %i1 = [%c0 to %c2 step %c1] {
       %idx_2 = index.add %mul_2, %i0 : index
       %copy_2 = view.load %pre_layer_mix_frag[%i0, %i1] : view<2x2xf32, %layout> -> f32
-      view.store %copy_2, %pre_layer_mix[%idx_2, %i1] : f32, view<[%num_tokens]x2xf32, %layout>
+      view.store %copy_2, %pre_layer_mix[%idx_2, %i1] : f32, view<[%num_tokens_idx]x2xf32, %layout>
     }
   }
   %mul_3 = index.mul %bx, %c2 : index
@@ -570,7 +571,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_pre_split_mixes_fwd_kernel") @m
     scf.for %i1 = [%c0 to %c2 step %c1] {
       %idx_3 = index.add %mul_3, %i0 : index
       %copy_3 = view.load %post_layer_mix_frag[%i0, %i1] : view<2x2xf32, %layout> -> f32
-      view.store %copy_3, %post_layer_mix[%idx_3, %i1] : f32, view<[%num_tokens]x2xf32, %layout>
+      view.store %copy_3, %post_layer_mix[%idx_3, %i1] : f32, view<[%num_tokens_idx]x2xf32, %layout>
     }
   }
   %c4_2 = index.constant 4 : index
@@ -579,7 +580,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_pre_split_mixes_fwd_kernel") @m
     scf.for %i1 = [%c0 to %c4_2 step %c1] {
       %idx_4 = index.add %mul_4, %i0 : index
       %copy_4 = view.load %comb_res_mix_frag[%i0, %i1] : view<2x4xf32, %layout> -> f32
-      view.store %copy_4, %comb_res_mix[%idx_4, %i1] : f32, view<[%num_tokens]x4xf32, %layout>
+      view.store %copy_4, %comb_res_mix[%idx_4, %i1] : f32, view<[%num_tokens_idx]x4xf32, %layout>
     }
   }
   kernel.return
@@ -620,9 +621,10 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_sinkhorn_kernel") @mhc_sinkhorn
   %c0_bytes = index.constant 0 : offset
   %comb_res_mix_noalias = buffer.assume.noalias %comb_res_mix_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %comb_res_mix = buffer.view %comb_res_mix_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2x2xf32, %layout>
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %comb_res_mix = buffer.view %comb_res_mix_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2x2xf32, %layout>
   %comb_res_mix_out_noalias = buffer.assume.noalias %comb_res_mix_out_handle : buffer
-  %comb_res_mix_out = buffer.view %comb_res_mix_out_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2x2xf32, %layout>
+  %comb_res_mix_out = buffer.view %comb_res_mix_out_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2x2xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -642,7 +644,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_sinkhorn_kernel") @mhc_sinkhorn
   %c2 = index.constant 2 : index
   scf.for %i0 = [%c0 to %c2 step %c1] {
     scf.for %i1 = [%c0 to %c2 step %c1] {
-      %copy = view.load %comb_res_mix[%bx, %i0, %i1] : view<[%num_tokens]x2x2xf32, %layout> -> f32
+      %copy = view.load %comb_res_mix[%bx, %i0, %i1] : view<[%num_tokens_idx]x2x2xf32, %layout> -> f32
       view.store %copy, %comb_frag[%c0, %i0, %i1] : f32, view<1x2x2xf32, %layout>
     }
   }
@@ -765,7 +767,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_sinkhorn_kernel") @mhc_sinkhorn
   scf.for %i0 = [%c0 to %c2 step %c1] {
     scf.for %i1 = [%c0 to %c2 step %c1] {
       %copy_2 = view.load %comb_frag[%c0, %i0, %i1] : view<1x2x2xf32, %layout> -> f32
-      view.store %copy_2, %comb_res_mix_out[%bx, %i0, %i1] : f32, view<[%num_tokens]x2x2xf32, %layout>
+      view.store %copy_2, %comb_res_mix_out[%bx, %i0, %i1] : f32, view<[%num_tokens_idx]x2x2xf32, %layout>
     }
   }
   kernel.return

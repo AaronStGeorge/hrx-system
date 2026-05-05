@@ -122,7 +122,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_k
   %c0_bytes = index.constant 0 : offset
   %ngram_token_ids_noalias = buffer.assume.noalias %ngram_token_ids_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %ngram_token_ids = buffer.view %ngram_token_ids_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x3xi32, %layout>
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %ngram_token_ids = buffer.view %ngram_token_ids_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x3xi32, %layout>
   %multipliers_noalias = buffer.assume.noalias %multipliers_handle : buffer
   %multipliers = buffer.view %multipliers_noalias[%c0_bytes] : buffer -> view<2x3xi64, %layout>
   %vocab_sizes_noalias = buffer.assume.noalias %vocab_sizes_handle : buffer
@@ -130,7 +131,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_k
   %offsets_noalias = buffer.assume.noalias %offsets_handle : buffer
   %offsets = buffer.view %offsets_noalias[%c0_bytes] : buffer -> view<2x8xi32, %layout>
   %output_noalias = buffer.assume.noalias %output_handle : buffer
-  %output = buffer.view %output_noalias[%c0_bytes] : buffer -> view<2x[%num_tokens]x8xi32, %layout>
+  %output = buffer.view %output_noalias[%c0_bytes] : buffer -> view<2x[%num_tokens_idx]x8xi32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %by = kernel.workgroup.id<y> : index
   %tid = kernel.workitem.id<x> : index
@@ -144,13 +145,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_k
   view.store %const, %hash_local[%c0] : i64, view<1xi64, %layout>
   %c32 = index.constant 32 : index
   %madd = index.madd %by, %c32, %tid : index
-  %num_tokens_idx = index.cast %num_tokens : i32 to index
   %cmp = index.cmp sge, %madd, %num_tokens_idx : index
   kernel.exit %cmp : i1
   %c3 = index.constant 3 : index
   %c1 = index.constant 1 : index
   scf.for %ngram_idx = [%c0 to %c3 step %c1] {
-    %load = view.load %ngram_token_ids[%madd, %ngram_idx] : view<[%num_tokens]x3xi32, %layout> -> i32
+    %load = view.load %ngram_token_ids[%madd, %ngram_idx] : view<[%num_tokens_idx]x3xi32, %layout> -> i32
     %extsi = scalar.extsi %load : i32 to i64
     %load_2 = view.load %hash_local[%c0] : view<1xi64, %layout> -> i64
     %load_3 = view.load %multipliers[%bx, %ngram_idx] : view<2x3xi64, %layout> -> i64
@@ -171,7 +171,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_k
         %trunci = scalar.trunci %remsi : i64 to i32
         %load_6 = view.load %offsets[%bx, %madd_2] : view<2x8xi32, %layout> -> i32
         %addi = scalar.addi %trunci, %load_6 : i32
-        view.store %addi, %output[%bx, %madd, %madd_2] : i32, view<2x[%num_tokens]x8xi32, %layout>
+        view.store %addi, %output[%bx, %madd, %madd_2] : i32, view<2x[%num_tokens_idx]x8xi32, %layout>
       }
     }
   }

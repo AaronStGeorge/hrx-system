@@ -100,7 +100,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") @group_count_k
   %c0_bytes = index.constant 0 : offset
   %group_idx_noalias = buffer.assume.noalias %group_idx_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %group_idx = buffer.view %group_idx_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %group_idx = buffer.view %group_idx_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2xi64, %layout>
   %out_noalias = buffer.assume.noalias %out_handle : buffer
   %out = buffer.view %out_noalias[%c0_bytes] : buffer -> view<8xi32, %layout>
   %bx = kernel.workgroup.id<x> : index
@@ -123,7 +124,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") @group_count_k
     view.store %const, %out_shared[%madd_2] : i32, view<128xi32, %layout>
   }
   kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
-  %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c1023 = index.constant 1023 : index
   %add = index.add %num_tokens_idx, %c1023 : index
   %sub_2 = index.sub %add, %madd : index
@@ -133,7 +133,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") @group_count_k
     %madd_3 = index.madd %tmp, %c1024, %madd : index
     %c2 = index.constant 2 : index
     scf.for %j = [%c0 to %c2 step %c1] {
-      %load = view.load %group_idx[%madd_3, %j] : view<[%num_tokens]x2xi64, %layout> -> i64
+      %load = view.load %group_idx[%madd_3, %j] : view<[%num_tokens_idx]x2xi64, %layout> -> i64
       %trunci = scalar.trunci %load : i64 to i32
       %group_assumed = scalar.assume %trunci [lt(%trunci, 8)] : i32
       %const_2 = scalar.constant 0 : i32
@@ -257,7 +257,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") @aux_fi_kernel(%top
   %c0_bytes = index.constant 0 : offset
   %topk_idx_noalias = buffer.assume.noalias %topk_idx_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %topk_idx = buffer.view %topk_idx_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
+  %num_tokens_idx = index.cast %num_tokens : i32 to index
+  %topk_idx = buffer.view %topk_idx_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2xi64, %layout>
   %out_noalias = buffer.assume.noalias %out_handle : buffer
   %out = buffer.view %out_noalias[%c0_bytes] : buffer -> view<8xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
@@ -280,7 +281,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") @aux_fi_kernel(%top
     view.store %const, %out_shared[%madd_2] : i32, view<128xi32, %layout>
   }
   kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
-  %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c1023 = index.constant 1023 : index
   %add = index.add %num_tokens_idx, %c1023 : index
   %sub_2 = index.sub %add, %madd : index
@@ -290,7 +290,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") @aux_fi_kernel(%top
     %madd_3 = index.madd %tmp, %c1024, %madd : index
     %c2 = index.constant 2 : index
     scf.for %j = [%c0 to %c2 step %c1] {
-      %load = view.load %topk_idx[%madd_3, %j] : view<[%num_tokens]x2xi64, %layout> -> i64
+      %load = view.load %topk_idx[%madd_3, %j] : view<[%num_tokens_idx]x2xi64, %layout> -> i64
       %trunci = scalar.trunci %load : i64 to i32
       %expert_idx_assumed = scalar.assume %trunci [lt(%trunci, 8)] : i32
       %const_2 = scalar.constant 0 : i32

@@ -315,17 +315,17 @@ kernel.def target(@hip_mcpu_gfx1100) export("mixed_address_scalar_assume") @mixe
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<[%n]xf32, %layout>
+  %n_idx = index.cast %n : i32 to index
+  %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<[%n_idx]xf32, %layout>
   %dst_noalias = buffer.assume.noalias %dst_handle : buffer
-  %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<[%n]xf32, %layout>
+  %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<[%n_idx]xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
   %tz = kernel.workitem.id<z> : index
-  %n_idx = index.cast %n : i32 to index
   %bx_assumed, %n_assumed = index.assume %bx, %n_idx [lt(%bx, %n_idx)] : index, index
-  %load = view.load %src[%bx_assumed] : view<[%n]xf32, %layout> -> f32
-  view.store %load, %dst[%bx_assumed] : f32, view<[%n]xf32, %layout>
+  %load = view.load %src[%bx_assumed] : view<[%n_idx]xf32, %layout> -> f32
+  view.store %load, %dst[%bx_assumed] : f32, view<[%n_idx]xf32, %layout>
   kernel.return
 }
 """
@@ -383,9 +383,9 @@ kernel.def target(@hip_mcpu_gfx1100) export("derived_dynamic_buffer_dimension") 
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<[%n]xf32, %layout>
-  %scale_noalias = buffer.assume.noalias %scale_handle : buffer
   %n_idx = index.cast %n : i32 to index
+  %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<[%n_idx]xf32, %layout>
+  %scale_noalias = buffer.assume.noalias %scale_handle : buffer
   %c128 = index.constant 128 : index
   %add = index.add %n_idx, %c128 : index
   %c1 = index.constant 1 : index
@@ -393,7 +393,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("derived_dynamic_buffer_dimension") 
   %div = index.div %sub, %c128 : index
   %scale = buffer.view %scale_noalias[%c0_bytes] : buffer -> view<[%div]xf32, %layout>
   %dst_noalias = buffer.assume.noalias %dst_handle : buffer
-  %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<[%n]xf32, %layout>
+  %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<[%n_idx]xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -401,10 +401,10 @@ kernel.def target(@hip_mcpu_gfx1100) export("derived_dynamic_buffer_dimension") 
   %mul = index.mul %bx, %c128 : index
   %cmp = index.cmp slt, %mul, %n_idx : index
   scf.if %cmp {
-    %load = view.load %src[%mul] : view<[%n]xf32, %layout> -> f32
+    %load = view.load %src[%mul] : view<[%n_idx]xf32, %layout> -> f32
     %load_2 = view.load %scale[%bx] : view<[%div]xf32, %layout> -> f32
     %mulf = scalar.mulf %load, %load_2 : f32
-    view.store %mulf, %dst[%mul] : f32, view<[%n]xf32, %layout>
+    view.store %mulf, %dst[%mul] : f32, view<[%n_idx]xf32, %layout>
   }
   kernel.return
 }
