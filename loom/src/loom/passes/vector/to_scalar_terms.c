@@ -140,24 +140,21 @@ iree_status_t loom_vector_to_scalar_build_term_binary(
       case LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD:
         if (!loom_checked_add_i64(lhs.static_value, rhs.static_value,
                                   &result)) {
-          return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                  "static index addition overflow");
+          break;
         }
         *out_term = loom_vector_to_scalar_static_term(result);
         return iree_ok_status();
       case LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_SUB:
         if (!loom_checked_sub_i64(lhs.static_value, rhs.static_value,
                                   &result)) {
-          return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                  "static index subtraction overflow");
+          break;
         }
         *out_term = loom_vector_to_scalar_static_term(result);
         return iree_ok_status();
       case LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MUL:
         if (!loom_checked_mul_i64(lhs.static_value, rhs.static_value,
                                   &result)) {
-          return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                  "static index multiplication overflow");
+          break;
         }
         *out_term = loom_vector_to_scalar_static_term(result);
         return iree_ok_status();

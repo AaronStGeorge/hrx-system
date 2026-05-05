@@ -681,12 +681,8 @@ loom_vector_to_scalar_build_static_shape_changing_bitcast_lane(
 
   int64_t result_ordinal = loom_vector_to_scalar_linear_ordinal_static(
       state->vector_type, result_indices);
-  int64_t result_start = 0;
-  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_position(
-      result_ordinal, result_width, &result_start));
-  int64_t result_end = 0;
-  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_end(
-      result_start, result_width, &result_end));
+  int64_t result_start = result_ordinal * result_width;
+  int64_t result_end = result_start + result_width;
   int64_t first_source_ordinal = result_start / source_width;
   int64_t last_source_ordinal = (result_end - 1) / source_width;
 
@@ -700,12 +696,8 @@ loom_vector_to_scalar_build_static_shape_changing_bitcast_lane(
   }
   for (int64_t source_ordinal = first_source_ordinal;
        source_ordinal <= last_source_ordinal; ++source_ordinal) {
-    int64_t source_start = 0;
-    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_position(
-        source_ordinal, source_width, &source_start));
-    int64_t source_end = 0;
-    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_end(
-        source_start, source_width, &source_end));
+    int64_t source_start = source_ordinal * source_width;
+    int64_t source_end = source_start + source_width;
     int64_t overlap_start =
         result_start > source_start ? result_start : source_start;
     int64_t overlap_end = result_end < source_end ? result_end : source_end;

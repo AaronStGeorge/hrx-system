@@ -87,13 +87,6 @@ iree_status_t loom_vector_to_scalar_build_single_bit_extract(
     loom_type_t lane_type, loom_vector_to_scalar_index_term_t bit_shift,
     loom_value_id_t one_mask, loom_value_id_t* out_bit);
 
-iree_status_t loom_vector_to_scalar_checked_static_bit_position(
-    int64_t ordinal, int64_t bit_width, int64_t* out_position);
-
-iree_status_t loom_vector_to_scalar_checked_static_bit_end(int64_t start,
-                                                           int64_t bit_width,
-                                                           int64_t* out_end);
-
 iree_status_t loom_vector_to_scalar_build_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane);

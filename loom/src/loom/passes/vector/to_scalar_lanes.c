@@ -310,27 +310,6 @@ iree_status_t loom_vector_to_scalar_build_single_bit_extract(
       state, LOOM_OP_SCALAR_ANDI, shifted_lane, one_mask, lane_type, out_bit);
 }
 
-iree_status_t loom_vector_to_scalar_checked_static_bit_position(
-    int64_t ordinal, int64_t bit_width, int64_t* out_position) {
-  *out_position = 0;
-  if (!loom_checked_mul_i64(ordinal, bit_width, out_position)) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "static bitstream position overflow");
-  }
-  return iree_ok_status();
-}
-
-iree_status_t loom_vector_to_scalar_checked_static_bit_end(int64_t start,
-                                                           int64_t bit_width,
-                                                           int64_t* out_end) {
-  *out_end = 0;
-  if (!loom_checked_add_i64(start, bit_width, out_end)) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "static bitstream end overflow");
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_vector_to_scalar_extract_lane(
     loom_vector_to_scalar_state_t* state, loom_value_id_t vector_value,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {

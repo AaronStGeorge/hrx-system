@@ -507,12 +507,8 @@ static iree_status_t loom_vector_to_scalar_build_bitpack_static_lane(
       loom_scalar_type_bitwidth(loom_type_element_type(storage_scalar_type));
   int64_t storage_ordinal = loom_vector_to_scalar_linear_ordinal_static(
       state->vector_type, indices.static_indices);
-  int64_t storage_start = 0;
-  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_position(
-      storage_ordinal, storage_width, &storage_start));
-  int64_t storage_end = 0;
-  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_end(
-      storage_start, storage_width, &storage_end));
+  int64_t storage_start = storage_ordinal * storage_width;
+  int64_t storage_end = storage_start + storage_width;
   int64_t first_source_ordinal = storage_start / width;
   int64_t last_source_ordinal = (storage_end - 1) / width;
 
@@ -528,12 +524,8 @@ static iree_status_t loom_vector_to_scalar_build_bitpack_static_lane(
   }
   for (int64_t source_ordinal = first_source_ordinal;
        source_ordinal <= last_source_ordinal; ++source_ordinal) {
-    int64_t source_start = 0;
-    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_position(
-        source_ordinal, width, &source_start));
-    int64_t source_end = 0;
-    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_end(
-        source_start, width, &source_end));
+    int64_t source_start = source_ordinal * width;
+    int64_t source_end = source_start + width;
     int64_t overlap_start =
         storage_start > source_start ? storage_start : source_start;
     int64_t overlap_end = storage_end < source_end ? storage_end : source_end;
@@ -788,12 +780,8 @@ static iree_status_t loom_vector_to_scalar_build_bitunpack_static_lane(
       loom_scalar_type_bitwidth(loom_type_element_type(storage_scalar_type));
   int64_t result_ordinal = loom_vector_to_scalar_linear_ordinal_static(
       state->vector_type, indices.static_indices);
-  int64_t result_start = 0;
-  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_position(
-      result_ordinal, width, &result_start));
-  int64_t result_end = 0;
-  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_end(
-      result_start, width, &result_end));
+  int64_t result_start = result_ordinal * width;
+  int64_t result_end = result_start + width;
   int64_t first_storage_ordinal = result_start / storage_width;
   int64_t last_storage_ordinal = (result_end - 1) / storage_width;
 
@@ -809,12 +797,8 @@ static iree_status_t loom_vector_to_scalar_build_bitunpack_static_lane(
   }
   for (int64_t storage_ordinal = first_storage_ordinal;
        storage_ordinal <= last_storage_ordinal; ++storage_ordinal) {
-    int64_t storage_start = 0;
-    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_position(
-        storage_ordinal, storage_width, &storage_start));
-    int64_t storage_end = 0;
-    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_end(
-        storage_start, storage_width, &storage_end));
+    int64_t storage_start = storage_ordinal * storage_width;
+    int64_t storage_end = storage_start + storage_width;
     int64_t overlap_start =
         result_start > storage_start ? result_start : storage_start;
     int64_t overlap_end = result_end < storage_end ? result_end : storage_end;
