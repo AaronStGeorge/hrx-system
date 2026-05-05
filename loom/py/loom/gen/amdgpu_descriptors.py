@@ -35,6 +35,18 @@ from loom.target.arch.amdgpu.descriptors import (  # noqa: E402
 )
 
 
+def _parse_view_headers(values: Sequence[str]) -> dict[str, Path]:
+    view_headers: dict[str, Path] = {}
+    for value in values:
+        target, separator, path = value.partition("=")
+        if not separator or not target or not path:
+            raise ValueError("AMDGPU descriptor --view-header must have form <target>=<path>")
+        if target in view_headers:
+            raise ValueError(f"duplicate AMDGPU descriptor view header for {target}")
+        view_headers[target] = Path(path)
+    return view_headers
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate AMDGPU target-low descriptor C tables from vendor ISA XML.")
     parser.add_argument(
@@ -61,10 +73,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=Path,
         help="Generated descriptor source path.",
     )
+    parser.add_argument(
+        "--view-header",
+        action="append",
+        default=[],
+        help="Generated descriptor view header as <target>=<path>.",
+    )
     args = parser.parse_args(argv)
 
+    view_headers = _parse_view_headers(args.view_header)
     descriptor_set = build_amdgpu_core_descriptor_set(args.target, args.xml)
     if args.target == "rdna4":
+        unknown_view_headers = set(view_headers) - {"rdna4_gfx125x"}
+        if unknown_view_headers:
+            unknown_targets = ", ".join(sorted(unknown_view_headers))
+            raise ValueError(f"RDNA4 descriptor generation cannot emit view headers for: {unknown_targets}")
         gfx125x_descriptor_set = build_amdgpu_core_descriptor_set("rdna4_gfx125x", args.xml)
         storage_descriptor_set = replace(
             descriptor_set,
@@ -84,7 +107,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             ),
             encoding="utf-8",
         )
+        gfx125x_header_path = view_headers.get("rdna4_gfx125x")
+        if gfx125x_header_path is not None:
+            gfx125x_generated = generate_descriptor_set(
+                gfx125x_descriptor_set,
+                format_output=False,
+            )
+            gfx125x_header_path.parent.mkdir(parents=True, exist_ok=True)
+            gfx125x_header_path.write_text(
+                gfx125x_generated.header,
+                encoding="utf-8",
+            )
         return 0
+
+    if view_headers:
+        unknown_targets = ", ".join(sorted(view_headers))
+        raise ValueError(f"AMDGPU descriptor target {args.target} cannot emit view headers for: {unknown_targets}")
 
     if args.target == "rdna4_gfx125x":
         generated = generate_descriptor_set(descriptor_set, format_output=False)

@@ -108,9 +108,12 @@ def loom_low_descriptor_data_archive(
 
 def loom_target_table_cc_library(
         name,
-        generator,
+        generator = None,
         source = None,
         header = None,
+        generated_hdr_flags = [],
+        generated_hdrs = [],
+        header_only = False,
         args = [],
         inputs = [],
         deps = [],
@@ -133,6 +136,14 @@ def loom_target_table_cc_library(
         script and transitive sources for generated CMake dependencies.
       source: Generated C source filename. Defaults to <name>.c.
       header: Generated C header filename. Defaults to <name>.h.
+      generated_hdr_flags: Generator flags paired with generated_hdrs. Each
+        flag is emitted as <flag>=<path>, allowing selected view names such as
+        --view-header=rdna4_gfx125x to prefix the generated path.
+      generated_hdrs: Additional generated headers produced by this action for
+        sibling header_only targets.
+      header_only: Declares a generated-header-only library. The header must be
+        produced by another target in the package, usually a family table action
+        that also emits arch-overlay view headers.
       args: Generator arguments before the output flags. Arguments may use
         $(rootpath <label>) for declared inputs; the Bazel action rewrites
         those to $(execpath <label>) while CMake conversion maps them to source
@@ -145,40 +156,72 @@ def loom_target_table_cc_library(
       visibility: Passed through to the generator action and runtime library.
       **kwargs: Additional arguments passed through to loom_cc_library.
     """
+    if len(generated_hdr_flags) != len(generated_hdrs):
+        fail("generated_hdr_flags and generated_hdrs must have the same length")
+
+    package_name = native.package_name()
+    header = header or (name + ".h")
+    generated_header = "//%s:%s" % (package_name, header)
+
+    if header_only:
+        if generator != None:
+            fail("header-only target table %s must not specify generator" % name)
+        if source != None:
+            fail("header-only target table %s must not specify source" % name)
+        if args:
+            fail("header-only target table %s must not specify args" % name)
+        if inputs:
+            fail("header-only target table %s must not specify inputs" % name)
+        if generated_hdrs:
+            fail("header-only target table %s must not specify generated_hdrs" % name)
+        loom_cc_library(
+            name = name,
+            hdrs = [generated_header],
+            deps = deps,
+            testonly = testonly,
+            visibility = visibility,
+            **kwargs
+        )
+        _ignore = (exclude_from_cmake_all, tags)
+        return
+
+    if generator == None:
+        fail("loom_target_table_cc_library %s requires generator" % name)
+
     genrule_kwargs = {}
     if visibility != None:
         genrule_kwargs["visibility"] = visibility
 
     source = source or (name + ".c")
-    header = header or (name + ".h")
 
     # BUILD files use rootpath so the CMake converter can map external data
     # labels to their fetched source directories. Bazel genrules execute in the
     # action sandbox and need execpath to read declared srcs.
     bazel_args = [arg.replace("$(rootpath ", "$(execpath ") for arg in args]
+    output_args = [
+        "--source=$(execpath %s)" % source,
+        "--header=$(execpath %s)" % header,
+    ]
+    for i in range(len(generated_hdrs)):
+        flag = generated_hdr_flags[i]
+        header_output = generated_hdrs[i]
+        output_args.append("%s=$(execpath %s)" % (flag, header_output))
 
     iree_genrule(
         name = name + "_gen",
         srcs = inputs,
-        outs = [
-            source,
-            header,
-        ],
+        outs = [source, header] + generated_hdrs,
         cmd = " ".join(
             ["$(location %s)" % generator] +
-            bazel_args + [
-                "--source=$(execpath %s)" % source,
-                "--header=$(execpath %s)" % header,
-            ],
+            bazel_args +
+            output_args,
         ),
         tags = tags + ["skip-bazel_to_cmake"],
         tools = [generator],
         **genrule_kwargs
     )
 
-    package_name = native.package_name()
     generated_source = "//%s:%s" % (package_name, source)
-    generated_header = "//%s:%s" % (package_name, header)
     loom_cc_library(
         name = name,
         srcs = [generated_source],
@@ -282,9 +325,12 @@ def loom_generated_cc_library(
 
 def loom_low_descriptor_cc_library(
         name,
-        generator,
+        generator = None,
         source = None,
         header = None,
+        generated_hdr_flags = [],
+        generated_hdrs = [],
+        header_only = False,
         args = [],
         inputs = [],
         deps = [],
@@ -295,13 +341,17 @@ def loom_low_descriptor_cc_library(
         visibility = None,
         **kwargs):
     """Generates a low descriptor C/H shard and wraps it in a runtime library."""
-    source = source or (name + ".c")
+    if not header_only:
+        source = source or (name + ".c")
     header = header or (name + ".h")
     loom_target_table_cc_library(
         name = name,
         generator = generator,
         source = source,
         header = header,
+        generated_hdr_flags = generated_hdr_flags,
+        generated_hdrs = generated_hdrs,
+        header_only = header_only,
         args = args,
         inputs = inputs,
         deps = deps,

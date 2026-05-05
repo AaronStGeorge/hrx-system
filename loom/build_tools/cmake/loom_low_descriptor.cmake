@@ -58,17 +58,14 @@ endfunction()
 function(loom_target_table_cc_library)
   cmake_parse_arguments(
     _RULE
-    "EXCLUDE_FROM_ALL"
+    "EXCLUDE_FROM_ALL;HEADER_ONLY"
     "NAME;GENERATOR;SOURCE;HEADER"
-    "ARGS;INPUTS;DEPS"
+    "ARGS;INPUTS;DEPS;GENERATED_HDR_FLAGS;GENERATED_HDRS;IDS_DEPS"
     ${ARGN}
   )
 
   if(NOT _RULE_NAME)
     message(FATAL_ERROR "loom_target_table_cc_library requires NAME")
-  endif()
-  if(NOT _RULE_GENERATOR)
-    message(FATAL_ERROR "loom_target_table_cc_library requires GENERATOR")
   endif()
   if(NOT _RULE_SOURCE)
     set(_RULE_SOURCE "${_RULE_NAME}.c")
@@ -79,6 +76,60 @@ function(loom_target_table_cc_library)
 
   set(_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_SOURCE}")
   set(_HEADER "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_HEADER}")
+  list(LENGTH _RULE_GENERATED_HDR_FLAGS _GENERATED_HDR_FLAG_COUNT)
+  list(LENGTH _RULE_GENERATED_HDRS _GENERATED_HDR_COUNT)
+  if(NOT _GENERATED_HDR_FLAG_COUNT EQUAL _GENERATED_HDR_COUNT)
+    message(FATAL_ERROR
+      "loom_target_table_cc_library generated header flags and headers must match")
+  endif()
+  set(_GENERATED_HDRS)
+  set(_GENERATED_HDR_OUTPUT_ARGS)
+  if(_GENERATED_HDR_COUNT GREATER 0)
+    math(EXPR _GENERATED_HDR_LAST_INDEX "${_GENERATED_HDR_COUNT} - 1")
+    foreach(_INDEX RANGE ${_GENERATED_HDR_LAST_INDEX})
+      list(GET _RULE_GENERATED_HDR_FLAGS ${_INDEX} _GENERATED_HDR_FLAG)
+      list(GET _RULE_GENERATED_HDRS ${_INDEX} _GENERATED_HDR)
+      set(_GENERATED_HDR "${CMAKE_CURRENT_BINARY_DIR}/${_GENERATED_HDR}")
+      list(APPEND _GENERATED_HDRS "${_GENERATED_HDR}")
+      list(APPEND _GENERATED_HDR_OUTPUT_ARGS
+        "${_GENERATED_HDR_FLAG}=${_GENERATED_HDR}")
+    endforeach()
+  endif()
+
+  iree_package_name(_PACKAGE_NAME)
+  if(_RULE_HEADER_ONLY)
+    if(_RULE_GENERATOR)
+      message(FATAL_ERROR
+        "loom_target_table_cc_library HEADER_ONLY target cannot set GENERATOR")
+    endif()
+    if(_RULE_ARGS OR _RULE_INPUTS OR _RULE_GENERATED_HDRS)
+      message(FATAL_ERROR
+        "loom_target_table_cc_library HEADER_ONLY target cannot generate outputs")
+    endif()
+    add_custom_target("${_PACKAGE_NAME}_${_RULE_NAME}_gen"
+      DEPENDS
+        "${_HEADER}"
+    )
+    loom_cc_library(
+      NAME
+        ${_RULE_NAME}
+      HDRS
+        "${_HEADER}"
+      DEPS
+        ${_RULE_DEPS}
+      PUBLIC
+    )
+    add_dependencies(
+      "${_PACKAGE_NAME}_${_RULE_NAME}"
+      "${_PACKAGE_NAME}_${_RULE_NAME}_gen"
+    )
+    return()
+  endif()
+
+  if(NOT _RULE_GENERATOR)
+    message(FATAL_ERROR "loom_target_table_cc_library requires GENERATOR")
+  endif()
+
   iree_py_library_main(_GENERATOR "${_RULE_GENERATOR}")
   iree_py_library_collect_sources(_GENERATOR_INPUTS "${_RULE_GENERATOR}")
 
@@ -86,12 +137,14 @@ function(loom_target_table_cc_library)
     OUTPUT
       "${_SOURCE}"
       "${_HEADER}"
+      ${_GENERATED_HDRS}
     COMMAND
       "${Python3_EXECUTABLE}"
       "${_GENERATOR}"
       ${_RULE_ARGS}
       "--source=${_SOURCE}"
       "--header=${_HEADER}"
+      ${_GENERATED_HDR_OUTPUT_ARGS}
     DEPENDS
       ${_GENERATOR_INPUTS}
       ${_RULE_INPUTS}
@@ -100,11 +153,11 @@ function(loom_target_table_cc_library)
     VERBATIM
   )
 
-  iree_package_name(_PACKAGE_NAME)
   add_custom_target("${_PACKAGE_NAME}_${_RULE_NAME}_gen"
     DEPENDS
       "${_SOURCE}"
       "${_HEADER}"
+      ${_GENERATED_HDRS}
   )
 
   loom_cc_library(
@@ -129,7 +182,7 @@ function(loom_low_descriptor_cc_library)
     _RULE
     "EXCLUDE_FROM_ALL"
     "NAME;HEADER"
-    "DEPS"
+    "DEPS;IDS_DEPS"
     ${ARGN}
   )
 
@@ -141,6 +194,9 @@ function(loom_low_descriptor_cc_library)
   if(NOT _RULE_HEADER)
     set(_RULE_HEADER "${_RULE_NAME}.h")
   endif()
+  if(NOT _RULE_IDS_DEPS)
+    set(_RULE_IDS_DEPS ${_RULE_DEPS})
+  endif()
 
   set(_HEADER "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_HEADER}")
   iree_package_name(_PACKAGE_NAME)
@@ -150,7 +206,7 @@ function(loom_low_descriptor_cc_library)
     HDRS
       "${_HEADER}"
     DEPS
-      ${_RULE_DEPS}
+      ${_RULE_IDS_DEPS}
     PUBLIC
   )
   add_dependencies(

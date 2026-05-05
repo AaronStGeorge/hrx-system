@@ -73,6 +73,18 @@ class _EncodingTableView:
     table_function: str
 
 
+def _parse_view_headers(values: Sequence[str]) -> dict[str, Path]:
+    view_headers: dict[str, Path] = {}
+    for value in values:
+        target, separator, path = value.partition("=")
+        if not separator or not target or not path:
+            raise ValueError("AMDGPU encoding --view-header must have form <target>=<path>")
+        if target in view_headers:
+            raise ValueError(f"duplicate AMDGPU encoding view header for {target}")
+        view_headers[target] = Path(path)
+    return view_headers
+
+
 def _clang_format_source(source: str, assume_filename: Path) -> str:
     result = subprocess.run(
         ["clang-format", f"--assume-filename={assume_filename}"],
@@ -228,6 +240,20 @@ def _emit_header(
     if not format_output:
         return source
     return _clang_format_source(source, header_path)
+
+
+def _emit_header_for_target(
+    *,
+    target: str,
+    format_output: bool,
+    header_path: Path,
+) -> str:
+    return _emit_header(
+        header_guard=f"LOOM_TARGET_ARCH_AMDGPU_{target.upper()}_ENCODING_TABLES_H_",
+        table_function=f"loom_amdgpu_{target}_encoding_table",
+        format_output=format_output,
+        header_path=header_path,
+    )
 
 
 def _compile_formats(
@@ -503,16 +529,30 @@ def _parse_arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--public-header", required=True)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--header", type=Path, required=True)
+    parser.add_argument(
+        "--view-header",
+        action="append",
+        default=[],
+        help="Generated encoding-table view header as <target>=<path>.",
+    )
     parser.add_argument("--format", action="store_true")
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_arguments(argv)
+    view_headers = _parse_view_headers(args.view_header)
     spec = parse_amdgpu_isa_xml_path(args.xml)
     descriptor_set_info = amdgpu_descriptor_set_info_by_generator_target(args.target)
     if descriptor_set_info.key != args.descriptor_set_key:
         raise ValueError(f"AMDGPU encoding target {args.target} expects descriptor set '{descriptor_set_info.key}', found '{args.descriptor_set_key}'")
+    if args.target != "rdna4" and view_headers:
+        unknown_targets = ", ".join(sorted(view_headers))
+        raise ValueError(f"AMDGPU encoding target {args.target} cannot emit view headers for: {unknown_targets}")
+    unknown_view_headers = set(view_headers) - {"rdna4_gfx125x"}
+    if unknown_view_headers:
+        unknown_targets = ", ".join(sorted(unknown_view_headers))
+        raise ValueError(f"RDNA4 encoding generation cannot emit view headers for: {unknown_targets}")
     validate_amdgpu_descriptor_set_isa_xml(descriptor_set_info, spec)
     source_literal = spec.operand_predefined_value("OPR_SRC", "SRC_LITERAL")
     scalar_source_literal = spec.operand_predefined_value("OPR_SSRC", "SRC_LITERAL")
@@ -534,18 +574,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     table_prefix = "Amdgpu" + "".join(part.title() for part in args.target.split("_"))
     table_function = f"loom_amdgpu_{args.target}_encoding_table"
-    header_guard = f"LOOM_TARGET_ARCH_AMDGPU_{args.target.upper()}_ENCODING_TABLES_H_"
     args.header.parent.mkdir(parents=True, exist_ok=True)
     args.source.parent.mkdir(parents=True, exist_ok=True)
     args.header.write_text(
-        _emit_header(
-            header_guard=header_guard,
-            table_function=table_function,
+        _emit_header_for_target(
+            target=args.target,
             format_output=args.format,
             header_path=args.header,
         ),
         encoding="utf-8",
     )
+    gfx125x_header_path = view_headers.get("rdna4_gfx125x")
+    if gfx125x_header_path is not None:
+        gfx125x_header_path.parent.mkdir(parents=True, exist_ok=True)
+        gfx125x_header_path.write_text(
+            _emit_header_for_target(
+                target="rdna4_gfx125x",
+                format_output=args.format,
+                header_path=gfx125x_header_path,
+            ),
+            encoding="utf-8",
+        )
+
     if args.target == "rdna4_gfx125x":
         args.source.write_text(
             "\n".join(
