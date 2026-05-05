@@ -181,11 +181,6 @@ static iree_status_t loom_branch_fusion_concat_placeholder_types(
     uint16_t* out_count) {
   uint32_t combined_count =
       (uint32_t)first->results.count + (uint32_t)second->results.count;
-  if (combined_count > UINT16_MAX) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "combined branch result count exceeds %u",
-                            (unsigned)UINT16_MAX);
-  }
   *out_count = (uint16_t)combined_count;
   *out_result_types = NULL;
   if (combined_count == 0) return iree_ok_status();
@@ -287,10 +282,6 @@ static iree_status_t loom_branch_fusion_build_region_terminators(
   loom_builder_t* builder = &context->rewriter->builder;
   loom_region_branch_t fused_branch =
       loom_region_branch_cast(context->module, fused_if);
-  if (!loom_region_branch_isa(fused_branch)) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "fused branch does not implement RegionBranch");
-  }
 
   iree_status_t status = iree_ok_status();
   for (uint8_t i = 0;
@@ -385,11 +376,6 @@ static iree_status_t loom_branch_fusion_resolve_terminator_values(
 static iree_status_t loom_branch_fusion_replace_terminator_values(
     loom_branch_fusion_context_t* context, loom_op_t* terminator,
     const loom_value_id_t* values, uint16_t count) {
-  if (terminator->operand_count != count) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "fused branch terminator operand count changed unexpectedly");
-  }
   for (uint16_t i = 0; i < count; ++i) {
     IREE_RETURN_IF_ERROR(
         loom_rewriter_set_operand(context->rewriter, terminator, i, values[i]));

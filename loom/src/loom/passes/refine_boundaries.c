@@ -742,12 +742,6 @@ static iree_status_t loom_refine_boundaries_visit_successors(
     loom_scc_successor_callback_t visitor) {
   const loom_refine_boundaries_graph_t* graph =
       (const loom_refine_boundaries_graph_t*)user_data;
-  if (node >= graph->function_count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "function graph node %" PRIhsz
-                            " out of range for %" PRIhsz " functions",
-                            node, graph->function_count);
-  }
 
   loom_refine_boundaries_successor_walk_t walk = {
       .graph = graph,
@@ -1610,21 +1604,6 @@ static iree_status_t loom_refine_boundaries_substitute_call_result_type(
     loom_value_slice_t operands, loom_value_slice_t results,
     loom_type_t callee_type, loom_type_t* out_type) {
   *out_type = callee_type;
-  if (operands.count != callee_info->argument_count) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "direct call operand count %u does not match callee argument count %u "
-        "during boundary type refinement",
-        (unsigned)operands.count, (unsigned)callee_info->argument_count);
-  }
-  if (results.count != callee_info->result_count) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "direct call result count %u does not match callee result count %u "
-        "during boundary type refinement",
-        (unsigned)results.count, (unsigned)callee_info->result_count);
-  }
-
   for (uint16_t i = 0; i < callee_info->argument_count; ++i) {
     bool changed = false;
     IREE_RETURN_IF_ERROR(loom_module_replace_type_value_references(
@@ -1986,18 +1965,8 @@ static iree_status_t loom_refine_boundaries_make_specialization_symbol(
     iree_host_size_t preferred_ordinal, iree_arena_allocator_t* arena,
     loom_symbol_ref_t* out_symbol_ref) {
   *out_symbol_ref = loom_symbol_ref_null();
-  if (!loom_symbol_ref_is_valid(source_ref) || source_ref.module_id != 0 ||
-      source_ref.symbol_id >= module->symbols.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "source specialization symbol is invalid");
-  }
-
   const loom_symbol_t* source_symbol =
       &module->symbols.entries[source_ref.symbol_id];
-  if (source_symbol->name_id >= module->strings.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "source specialization symbol has no name");
-  }
   iree_string_view_t source_name =
       module->strings.entries[source_symbol->name_id];
 
@@ -2054,10 +2023,6 @@ static iree_status_t loom_refine_boundaries_clone_function_specialization(
   *out_op = NULL;
   loom_op_t* source_op = function_info->function.op;
   loom_region_t* source_body = loom_func_like_body(function_info->function);
-  if (!source_body) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "specialization source has no body");
-  }
 
   loom_ir_remap_t remap = {0};
   IREE_RETURN_IF_ERROR(loom_ir_remap_initialize(module, module, arena,
@@ -2399,20 +2364,6 @@ static iree_status_t loom_refine_boundaries_preflight_pruned_call(
   if (!plan->has_prunable_arguments && !plan->has_prunable_results) {
     return iree_ok_status();
   }
-  if (plan->has_prunable_arguments && operands.count != plan->argument_count) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "direct call operand count %u"
-        " does not match callee argument count %u during boundary pruning",
-        (unsigned)operands.count, (unsigned)plan->argument_count);
-  }
-  if (plan->has_prunable_results && results.count != plan->result_count) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "direct call result count %u"
-        " does not match callee result count %u during boundary pruning",
-        (unsigned)results.count, (unsigned)plan->result_count);
-  }
 
   const loom_tied_result_t* tied_results = loom_op_tied_results(op);
   uint16_t operand_offset = loom_call_like_operand_offset(call);
@@ -2421,24 +2372,12 @@ static iree_status_t loom_refine_boundaries_preflight_pruned_call(
     uint16_t operand_index = tied_results[i].operand_index;
     if (plan->has_prunable_arguments && operand_index >= operand_offset) {
       uint16_t argument_index = (uint16_t)(operand_index - operand_offset);
-      if (argument_index >= plan->argument_count) {
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "tied result operand index %u is out of range for %u argument(s)",
-            (unsigned)argument_index, (unsigned)plan->argument_count);
-      }
       plan->prune_arguments[argument_index] = false;
     }
 
     uint16_t result_index = tied_results[i].result_index;
     if (plan->has_prunable_results && result_index >= result_offset) {
       uint16_t call_result_index = (uint16_t)(result_index - result_offset);
-      if (call_result_index >= plan->result_count) {
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "tied result index %u is out of range for %u result(s)",
-            (unsigned)call_result_index, (unsigned)plan->result_count);
-      }
       plan->prune_results[call_result_index] = false;
     }
   }
@@ -2458,7 +2397,7 @@ static iree_status_t loom_refine_boundaries_preflight_pruned_call(
   return iree_ok_status();
 }
 
-static iree_status_t loom_refine_boundaries_copy_result_names(
+static void loom_refine_boundaries_copy_result_names(
     loom_module_t* module, const loom_op_t* old_op, loom_op_t* new_op,
     const uint16_t* old_to_new_result_indices) {
   const loom_value_id_t* old_results = loom_op_const_results(old_op);
@@ -2466,20 +2405,11 @@ static iree_status_t loom_refine_boundaries_copy_result_names(
   for (uint16_t i = 0; i < old_op->result_count; ++i) {
     uint16_t new_index = old_to_new_result_indices[i];
     if (new_index == UINT16_MAX) continue;
-    if (new_index >= new_op->result_count) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "replacement call result index mismatch");
-    }
     loom_value_id_t old_result = old_results[i];
     loom_value_id_t new_result = new_results[new_index];
     if (old_result == LOOM_VALUE_ID_INVALID ||
         new_result == LOOM_VALUE_ID_INVALID) {
       continue;
-    }
-    if (old_result >= module->values.count ||
-        new_result >= module->values.count) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "call result value out of range");
     }
     loom_string_id_t name_id = loom_module_value(module, old_result)->name_id;
     if (name_id == LOOM_STRING_ID_INVALID) continue;
@@ -2488,40 +2418,18 @@ static iree_status_t loom_refine_boundaries_copy_result_names(
       new_value->name_id = name_id;
     }
   }
-  return iree_ok_status();
 }
 
 static iree_status_t loom_refine_boundaries_build_pruned_call(
-    loom_module_t* module, loom_op_t* op,
+    loom_module_t* module, loom_op_t* op, loom_call_like_t call,
+    loom_value_slice_t operands, loom_value_slice_t results,
     const loom_refine_boundaries_prune_plan_t* plan,
     iree_arena_allocator_t* arena, uint16_t** out_old_to_new_result_indices,
     loom_op_t** out_new_op) {
   *out_old_to_new_result_indices = NULL;
   *out_new_op = NULL;
-  loom_symbol_ref_t callee = loom_symbol_ref_null();
-  loom_call_like_t call = {0};
-  loom_value_slice_t operands = {0};
-  loom_value_slice_t results = {0};
-  if (!loom_refine_boundaries_read_call(module, op, &call, &callee, &operands,
-                                        &results)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected direct call-like op");
-  }
-  (void)callee;
-
-  if (op->successor_count != 0 || op->region_count != 0) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "boundary pruning requires call-like ops without successors or "
-        "regions");
-  }
   uint16_t operand_offset = loom_call_like_operand_offset(call);
   uint16_t result_offset = loom_call_like_result_offset(call);
-  if (operand_offset > op->operand_count || result_offset > op->result_count) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "call-like operand or result offset is out of range");
-  }
 
   uint16_t* old_to_new_operand_indices = NULL;
   loom_value_id_t* new_operands = NULL;
@@ -2593,34 +2501,11 @@ static iree_status_t loom_refine_boundaries_build_pruned_call(
     for (uint16_t i = 0; i < op->tied_result_count; ++i) {
       tied_results[i] = old_tied_results[i];
       uint16_t old_operand_index = old_tied_results[i].operand_index;
-      if (old_operand_index >= op->operand_count) {
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "tied result operand index %u is out of range for %u operand(s)",
-            (unsigned)old_operand_index, (unsigned)op->operand_count);
-      }
       uint16_t new_operand_index =
           old_to_new_operand_indices[old_operand_index];
-      if (new_operand_index == UINT16_MAX) {
-        return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "boundary pruning cannot remove tied operand %u",
-            (unsigned)old_operand_index);
-      }
       tied_results[i].operand_index = new_operand_index;
       uint16_t old_result_index = old_tied_results[i].result_index;
-      if (old_result_index >= op->result_count) {
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "tied result index %u is out of range for %u result(s)",
-            (unsigned)old_result_index, (unsigned)op->result_count);
-      }
       uint16_t new_result_index = old_to_new_result_indices[old_result_index];
-      if (new_result_index == UINT16_MAX) {
-        return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                                "boundary pruning cannot remove tied result %u",
-                                (unsigned)old_result_index);
-      }
       tied_results[i].result_index = new_result_index;
     }
   }
@@ -2695,9 +2580,10 @@ static iree_status_t loom_refine_boundaries_rewrite_pruned_call(
   loom_refine_boundaries_rewrite_call_walk_t* walk =
       (loom_refine_boundaries_rewrite_call_walk_t*)user_data;
   loom_symbol_ref_t callee = loom_symbol_ref_null();
+  loom_call_like_t call = {0};
   loom_value_slice_t operands = {0};
   loom_value_slice_t results = {0};
-  if (!loom_refine_boundaries_read_call(walk->module, op, NULL, &callee,
+  if (!loom_refine_boundaries_read_call(walk->module, op, &call, &callee,
                                         &operands, &results)) {
     return iree_ok_status();
   }
@@ -2715,10 +2601,10 @@ static iree_status_t loom_refine_boundaries_rewrite_pruned_call(
   uint16_t* old_to_new_result_indices = NULL;
   loom_op_t* new_op = NULL;
   IREE_RETURN_IF_ERROR(loom_refine_boundaries_build_pruned_call(
-      walk->module, op, plan, walk->arena, &old_to_new_result_indices,
-      &new_op));
-  IREE_RETURN_IF_ERROR(loom_refine_boundaries_copy_result_names(
-      walk->module, op, new_op, old_to_new_result_indices));
+      walk->module, op, call, operands, results, plan, walk->arena,
+      &old_to_new_result_indices, &new_op));
+  loom_refine_boundaries_copy_result_names(walk->module, op, new_op,
+                                           old_to_new_result_indices);
 
   const loom_value_id_t* old_results = loom_op_const_results(op);
   const loom_value_id_t* new_results = loom_op_const_results(new_op);
@@ -2827,13 +2713,6 @@ static iree_status_t loom_refine_boundaries_rewrite_pruned_return(
     const loom_refine_boundaries_prune_plan_t* plan,
     iree_arena_allocator_t* arena) {
   loom_value_slice_t operands = loom_func_return_operands(return_op);
-  if (operands.count != plan->result_count) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "func.return operand count %u"
-        " does not match callee result count %u during boundary pruning",
-        (unsigned)operands.count, (unsigned)plan->result_count);
-  }
 
   loom_value_id_t* kept_operands = NULL;
   uint16_t kept_count = 0;
@@ -2885,11 +2764,6 @@ static iree_status_t loom_refine_boundaries_remove_pruned_results(
     const loom_refine_boundaries_prune_plan_t* plan = &plans[node];
     if (!plan->has_prunable_results) continue;
     loom_op_t* function_op = graph->functions[node].function.op;
-    if (function_op->result_count != plan->result_count) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "callee result count changed before boundary pruning");
-    }
     uint16_t removed_count = 0;
     IREE_RETURN_IF_ERROR(loom_op_remove_results(
         module, function_op, plan->prune_results, arena, &removed_count));
@@ -2912,11 +2786,6 @@ static iree_status_t loom_refine_boundaries_remove_pruned_arguments(
          ++projection_index) {
       loom_block_t* entry_block =
           function_info->argument_projections[projection_index].entry_block;
-      if (entry_block->arg_count != plan->argument_count) {
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "callee argument count changed before boundary pruning");
-      }
       for (uint16_t i = plan->argument_count; i > 0; --i) {
         uint16_t argument_index = (uint16_t)(i - 1);
         if (!plan->prune_arguments[argument_index]) {

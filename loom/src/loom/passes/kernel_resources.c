@@ -111,11 +111,6 @@ iree_status_t loom_normalize_kernel_resources_run(loom_pass_t* pass,
   loom_value_id_t zero_offset = LOOM_VALUE_ID_INVALID;
   for (uint16_t i = 0; i < arg_count; ++i) {
     loom_value_id_t arg_id = arg_ids[i];
-    if (arg_id == LOOM_VALUE_ID_INVALID || arg_id >= module->values.count) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "function argument %u has invalid value id %%%u",
-                              (unsigned)i, (unsigned)arg_id);
-    }
     loom_type_t arg_type = loom_module_value_type(module, arg_id);
     if (!loom_type_is_view(arg_type)) continue;
     if (zero_offset == LOOM_VALUE_ID_INVALID) {

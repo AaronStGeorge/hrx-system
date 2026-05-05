@@ -2308,10 +2308,6 @@ static bool loom_cfg_simplify_find_forwarded_arg_replacement(
 static iree_status_t loom_cfg_simplify_rebuild_br_without_arg(
     loom_cfg_simplify_state_t* state, loom_op_t* br, uint16_t removed_index) {
   loom_value_slice_t args = loom_cfg_br_args(br);
-  if (removed_index >= args.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "removed branch argument index is out of range");
-  }
   loom_value_id_t* kept_args = NULL;
   iree_host_size_t kept_count = args.count - 1;
   if (kept_count > 0) {

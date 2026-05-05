@@ -363,6 +363,16 @@ static bool loom_loop_fusion_candidate_is_legal(
     loom_loop_fusion_context_t* context,
     const loom_loop_fusion_for_info_t* first,
     const loom_loop_fusion_for_info_t* second) {
+  uint32_t combined_iter_arg_count =
+      (uint32_t)first->iter_args.count + (uint32_t)second->iter_args.count;
+  if (combined_iter_arg_count > UINT16_MAX) {
+    return false;
+  }
+  uint32_t combined_result_count =
+      (uint32_t)first->results.count + (uint32_t)second->results.count;
+  if (combined_result_count > UINT16_MAX) {
+    return false;
+  }
   if (!loom_loop_domain_equal(context->rewriter->fact_table, first->domain,
                               second->domain)) {
     return false;
@@ -394,11 +404,6 @@ static iree_status_t loom_loop_fusion_concat_iter_args(
     uint16_t* out_count) {
   uint32_t combined_count =
       (uint32_t)first->iter_args.count + (uint32_t)second->iter_args.count;
-  if (combined_count > UINT16_MAX) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "combined loop iter arg count exceeds %u",
-                            (unsigned)UINT16_MAX);
-  }
   *out_count = (uint16_t)combined_count;
   *out_iter_args = NULL;
   if (combined_count == 0) return iree_ok_status();
@@ -420,11 +425,6 @@ static iree_status_t loom_loop_fusion_make_placeholder_result_types(
     uint16_t* out_count) {
   uint32_t combined_count =
       (uint32_t)first->results.count + (uint32_t)second->results.count;
-  if (combined_count > UINT16_MAX) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "combined loop result count exceeds %u",
-                            (unsigned)UINT16_MAX);
-  }
   *out_count = (uint16_t)combined_count;
   *out_result_types = NULL;
   if (combined_count == 0) return iree_ok_status();
@@ -579,10 +579,6 @@ static void loom_loop_fusion_clear_block_result_names(loom_module_t* module,
 static iree_status_t loom_loop_fusion_replace_yield_values(
     loom_loop_fusion_context_t* context, loom_op_t* yield_op,
     const loom_value_id_t* values, uint16_t count) {
-  if (yield_op->operand_count != count) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "fused yield operand count changed unexpectedly");
-  }
   for (uint16_t i = 0; i < count; ++i) {
     IREE_RETURN_IF_ERROR(
         loom_rewriter_set_operand(context->rewriter, yield_op, i, values[i]));
