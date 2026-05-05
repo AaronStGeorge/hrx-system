@@ -316,30 +316,6 @@ ERR_LOWERING_017 = ErrorDef(
     ),
 )
 
-# ERR_LOWERING_018: Low ABI resource register type is not accepted.
-ERR_LOWERING_018 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=18,
-    severity=Severity.ERROR,
-    summary="Low ABI resource register type is not accepted.",
-    message=(
-        "low function '{function_name}' resource '{resource_name}' has ABI "
-        "type {actual_type}, which descriptor set '{descriptor_set}' rejects: "
-        "{reason}"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("resource_name", ParamKind.STRING),
-        ErrorParam("actual_type", ParamKind.TYPE),
-        ErrorParam("descriptor_set", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Use a register class and allocation-unit count accepted by the "
-        "selected low descriptor set"
-    ),
-)
-
 # ERR_LOWERING_019: Low operation reads an undefined register part.
 ERR_LOWERING_019 = ErrorDef(
     domain=ErrorDomain.LOWERING,
@@ -918,6 +894,51 @@ ERR_LOWERING_048 = ErrorDef(
     fix_hint="Provide the imported code symbol name or remove the import attributes.",
 )
 
+# ERR_LOWERING_049: Low ABI resource register class is missing.
+ERR_LOWERING_049 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=49,
+    severity=Severity.ERROR,
+    summary="Low ABI resource register class is missing.",
+    message=(
+        "low function '@{function_name}' resource '{resource_name}' has ABI "
+        "type {actual_type}, whose register class is not defined by "
+        "descriptor set '{descriptor_set}'"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("resource_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("descriptor_set", ParamKind.STRING),
+    ),
+    fix_hint="Use a register class declared by the selected low descriptor set.",
+)
+
+# ERR_LOWERING_050: Low ABI resource register unit count is too large.
+ERR_LOWERING_050 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=50,
+    severity=Severity.ERROR,
+    summary="Low ABI resource register unit count is too large.",
+    message=(
+        "low function '@{function_name}' resource '{resource_name}' has ABI "
+        "type {actual_type}, requiring {unit_count} physical unit(s), but "
+        "descriptor set '{descriptor_set}' provides only {physical_count}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("resource_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("unit_count", ParamKind.U32),
+        ErrorParam("descriptor_set", ParamKind.STRING),
+        ErrorParam("physical_count", ParamKind.U32),
+    ),
+    fix_hint=(
+        "Use a smaller ABI register value or select a descriptor set whose "
+        "register class has enough physical units."
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_003,
     ERR_LOWERING_004,
@@ -933,7 +954,6 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_014,
     ERR_LOWERING_015,
     ERR_LOWERING_017,
-    ERR_LOWERING_018,
     ERR_LOWERING_019,
     ERR_LOWERING_020,
     ERR_LOWERING_021,
@@ -964,4 +984,6 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_046,
     ERR_LOWERING_047,
     ERR_LOWERING_048,
+    ERR_LOWERING_049,
+    ERR_LOWERING_050,
 )
