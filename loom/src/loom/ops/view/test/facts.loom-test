@@ -13,6 +13,53 @@ func.def @buffer_arg_reference(%buffer: buffer) -> (i1) {
 
 // ====
 
+// Generic function buffer arguments are storage roots but do not imply a
+// concrete memory space.
+func.def @buffer_arg_memory_space_unknown(%buffer: buffer) -> (i64) {
+  %space = test.fact_buffer_memory_space %buffer : buffer -> i64
+  func.return %space : i64
+}
+// ----
+func.def @buffer_arg_memory_space_unknown(%buffer: buffer) -> (i64) {
+  %space = scalar.constant -1 : i64
+  func.return %space : i64
+}
+
+// ====
+
+// Kernel buffer arguments seed global memory facts for both the launch-config
+// projection and the executable body.
+kernel.def @kernel_buffer_arg_memory_space_global(%buffer: buffer) {
+  %config_space = test.fact_buffer_memory_space %buffer : buffer -> i64
+  %workgroups = index.cast %config_space : i64 to index
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%workgroups, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch {
+  %zero = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%zero] : buffer -> view<1xi64, %layout>
+  %body_space = test.fact_buffer_memory_space %buffer : buffer -> i64
+  %view_space = test.fact_view_memory_space %view : view<1xi64, %layout> -> i64
+  %sum = scalar.addi %body_space, %view_space : i64
+  view.store %sum, %view[0] : i64, view<1xi64, %layout>
+  kernel.return
+}
+// ----
+kernel.def @kernel_buffer_arg_memory_space_global(%buffer: buffer) {
+  %workgroups = index.constant 1 : index
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%workgroups, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch {
+  %zero = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%zero] : buffer -> view<1xi64, %layout>
+  %sum = scalar.constant 2 : i64
+  view.store %sum, %view[0] : i64, view<1xi64, %layout>
+  kernel.return
+}
+
+// ====
+
 // Scratch buffer roots seed extent, base alignment, memory-space, and non-null
 // facts. Views derived from them keep the root facts while computing their own
 // typed byte footprint.

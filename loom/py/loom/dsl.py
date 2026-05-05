@@ -680,6 +680,9 @@ class RegionDef:
         Text parsing gets concrete names and types from BindingList or
         BlockArgs format elements for ordinary value fields, or clones the
         FuncArgs signature names and types for projected FuncArgs regions.
+    buffer_arg_memory_space: Optional target-independent memory-space fact to
+        seed for buffer entry block arguments in this region. This refines
+        region boundary facts without parameterizing the buffer type itself.
     """
 
     name: str
@@ -690,6 +693,7 @@ class RegionDef:
     terminator: str | None = None
     implicit_args: tuple[tuple[str, str], ...] = ()
     arg_source: str | None = None
+    buffer_arg_memory_space: str | None = None
 
 
 # ============================================================================

@@ -78,12 +78,10 @@ kernel.def target(@hip_mcpu_gfx1100) export("lazy_if_then_else") @lazy_if_then_e
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_global = buffer.assume.memory_space %src {memory_space = global} : buffer
-  %src_noalias = buffer.assume.noalias %src_global : buffer
+  %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
-  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
-  %dst_noalias = buffer.assume.noalias %dst_global : buffer
+  %dst_noalias = buffer.assume.noalias %dst : buffer
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
   %cmp = scalar.cmpi slt, %i, %n : i32
   %if = scf.if %cmp -> (f32) {
@@ -145,8 +143,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("tvm_access_ptr_atomic") @tvm_access
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
-  %dst_noalias = buffer.assume.noalias %dst_global : buffer
+  %dst_noalias = buffer.assume.noalias %dst : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xi32, %layout>
   %const = scalar.constant 1 : i32
@@ -189,8 +186,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("tl_infinity_constant") @tl_infinity
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
-  %dst_noalias = buffer.assume.noalias %dst_global : buffer
+  %dst_noalias = buffer.assume.noalias %dst : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
   %inf = scalar.constant inf : f32

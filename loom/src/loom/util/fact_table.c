@@ -1375,7 +1375,8 @@ static int64_t loom_value_fact_static_element_byte_count(loom_type_t type) {
 }
 
 static iree_status_t loom_value_fact_table_seed_buffer_arg(
-    loom_value_fact_table_t* table, loom_value_id_t value_id) {
+    loom_value_fact_table_t* table, loom_value_id_t value_id,
+    loom_value_fact_memory_space_t memory_space) {
   if (!loom_value_facts_is_unknown(
           loom_value_fact_table_lookup(table, value_id))) {
     return iree_ok_status();
@@ -1383,7 +1384,7 @@ static iree_status_t loom_value_fact_table_seed_buffer_arg(
   loom_value_fact_buffer_reference_t reference = {
       .maximum_byte_extent = loom_value_facts_make(0, INT64_MAX, 1),
       .minimum_alignment = 1,
-      .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
+      .memory_space = memory_space,
       .root_value_id = value_id,
       .alias_scope_id = LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE,
       .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN,
@@ -1583,16 +1584,47 @@ static iree_status_t loom_value_fact_table_seed_loop_iv_arg(
   return loom_value_fact_table_define(table, iv_id, iv_facts);
 }
 
+static loom_value_fact_memory_space_t
+loom_value_fact_table_seeded_buffer_memory_space(const loom_module_t* module,
+                                                 const loom_block_t* block,
+                                                 const loom_op_t* parent_op) {
+  const loom_region_t* region = block->parent_region;
+  if (!parent_op || !region) {
+    return LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN;
+  }
+
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, parent_op);
+  loom_region_t* const* regions = loom_op_regions(parent_op);
+  for (uint8_t i = 0; i < parent_op->region_count; ++i) {
+    if (regions[i] != region) {
+      continue;
+    }
+    const loom_region_descriptor_t* descriptor =
+        loom_op_vtable_region_descriptor(vtable, i);
+    if (descriptor &&
+        iree_any_bit_set(descriptor->flags, LOOM_REGION_GLOBAL_BUFFER_ARGS)) {
+      return LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL;
+    }
+    return LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN;
+  }
+  return LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN;
+}
+
 static iree_status_t loom_value_fact_table_seed_block_args(
     loom_value_fact_table_t* table, const loom_module_t* module,
     const loom_block_t* block, loom_op_t* parent_op) {
+  loom_value_fact_memory_space_t buffer_memory_space =
+      loom_value_fact_table_seeded_buffer_memory_space(module, block,
+                                                       parent_op);
   for (uint16_t i = 0; i < block->arg_count; ++i) {
     loom_value_id_t value_id = loom_block_arg_id(block, i);
-    if (value_id >= module->values.count) continue;
+    if (value_id >= module->values.count) {
+      continue;
+    }
     loom_type_t type = loom_module_value_type(module, value_id);
     if (loom_type_is_buffer(type)) {
-      IREE_RETURN_IF_ERROR(
-          loom_value_fact_table_seed_buffer_arg(table, value_id));
+      IREE_RETURN_IF_ERROR(loom_value_fact_table_seed_buffer_arg(
+          table, value_id, buffer_memory_space));
     } else if (loom_type_is_view(type)) {
       IREE_RETURN_IF_ERROR(
           loom_value_fact_table_seed_view_arg(table, value_id, type));

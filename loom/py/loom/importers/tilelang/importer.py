@@ -382,24 +382,14 @@ def _refine_kernel_buffer_argument(
     argument: ValueRef,
     context: TileLangConversionContext,
 ) -> ValueRef:
+    if not binding.noalias:
+        return argument
     base_name = binding.name.removesuffix("_handle")
     if base_name == binding.name:
         base_name = binding.name
-    buffer = context.builder.buffer.memory_space(
-        buffer=argument,
-        memory_space="global",
-        results=[argument.type],
-        name=context.reserve_name(f"{base_name}_global"),
-    )
-    context.record_converted(
-        f"param {binding.name}",
-        f"{context.ssa(buffer)} = buffer.assume.memory_space",
-    )
-    if not binding.noalias:
-        return buffer
     buffer = context.builder.buffer.noalias(
-        buffer=buffer,
-        results=[buffer.type],
+        buffer=argument,
+        results=[argument.type],
         name=context.reserve_name(f"{base_name}_noalias"),
     )
     context.record_converted(

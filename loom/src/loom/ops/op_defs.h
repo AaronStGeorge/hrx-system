@@ -697,6 +697,10 @@ enum loom_region_flag_bits_e {
   // signature. The projected values have matching names and types but remain
   // distinct SSA values owned by this region.
   LOOM_REGION_PROJECT_FUNC_ARGS = 1u << 2,
+  // Buffer entry block arguments seed target-independent global memory facts.
+  // This is a region signature contract, not a property of the generic buffer
+  // type.
+  LOOM_REGION_GLOBAL_BUFFER_ARGS = 1u << 3,
 };
 typedef uint8_t loom_region_flags_t;
 

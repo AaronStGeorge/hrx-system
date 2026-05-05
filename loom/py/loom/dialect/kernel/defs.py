@@ -270,8 +270,14 @@ kernel_def = Op(
             single_block=True,
             terminator="kernel.launch.config",
             arg_source="args",
+            buffer_arg_memory_space="global",
         ),
-        RegionDef("body", doc="Kernel body.", terminator="kernel.return"),
+        RegionDef(
+            "body",
+            doc="Kernel body.",
+            terminator="kernel.return",
+            buffer_arg_memory_space="global",
+        ),
     ],
     constraints=[
         BlockArgCount("config", "body"),

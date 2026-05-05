@@ -71,8 +71,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("shared_block_alloc") @shared_block_
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
-  %dst_noalias = buffer.assume.noalias %dst_global : buffer
+  %dst_noalias = buffer.assume.noalias %dst : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
   %scratch_bytes = index.constant 16 : offset
@@ -136,8 +135,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("private_block_alloc") @private_bloc
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
-  %dst_noalias = buffer.assume.noalias %dst_global : buffer
+  %dst_noalias = buffer.assume.noalias %dst : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xi32, %layout>
   %scratch_bytes = index.constant 16 : offset
