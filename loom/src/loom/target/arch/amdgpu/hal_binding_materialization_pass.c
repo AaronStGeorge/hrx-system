@@ -1,0 +1,112 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/target/arch/amdgpu/hal_binding_materialization_pass.h"
+
+#include "loom/codegen/low/function.h"
+#include "loom/codegen/low/pass_environment.h"
+#include "loom/codegen/low/target_binding.h"
+#include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/hal_binding_materialization.h"
+#include "loom/target/arch/amdgpu/hal_kernel_abi.h"
+#include "loom/target/arch/amdgpu/ops/ops.h"
+
+enum {
+  LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_ERRORS = 0,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_FUNCTIONS = 1,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_BINDINGS = 2,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_DIRECT_ARGS = 3,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_DESCRIPTORS = 4,
+};
+
+static const loom_pass_statistic_def_t
+    kAmdgpuMaterializeHalKernelAbiStatistics[] = {
+        {IREE_SVL("errors"),
+         IREE_SVL("Number of AMDGPU HAL ABI errors emitted.")},
+        {IREE_SVL("functions"),
+         IREE_SVL("Number of target-low functions materialized.")},
+        {IREE_SVL("bindings"),
+         IREE_SVL("Number of HAL buffer bindings materialized.")},
+        {IREE_SVL("direct-args"),
+         IREE_SVL("Number of direct kernarg values materialized.")},
+        {IREE_SVL("descriptors"),
+         IREE_SVL("Number of HAL buffer descriptor pseudos materialized.")},
+};
+
+static const loom_pass_info_t
+    loom_amdgpu_materialize_hal_kernel_abi_pass_info_storage = {
+        .name = IREE_SVL("amdgpu-materialize-hal-kernel-abi"),
+        .description = IREE_SVL("Materialize AMDGPU HAL kernel ABI resources."),
+        .kind = LOOM_PASS_FUNCTION,
+        .statistic_defs = kAmdgpuMaterializeHalKernelAbiStatistics,
+        .statistic_count =
+            IREE_ARRAYSIZE(kAmdgpuMaterializeHalKernelAbiStatistics),
+};
+
+const loom_pass_info_t* loom_amdgpu_materialize_hal_kernel_abi_pass_info(void) {
+  return &loom_amdgpu_materialize_hal_kernel_abi_pass_info_storage;
+}
+
+static bool loom_amdgpu_materialize_hal_kernel_abi_matches(
+    const loom_low_resolved_target_t* target) {
+  return target->descriptor_set != NULL &&
+         target->bundle_storage.export_plan.abi_kind ==
+             LOOM_TARGET_ABI_HAL_KERNEL &&
+         loom_amdgpu_target_isa(target->target_op);
+}
+
+static bool loom_amdgpu_hal_binding_materialization_changed(
+    const loom_amdgpu_hal_binding_materialization_result_t* result) {
+  return result->materialized_binding_count != 0 ||
+         result->materialized_direct_arg_count != 0 ||
+         result->materialized_descriptor_count != 0 ||
+         result->inserted_kernarg_segment_ptr_live_in;
+}
+
+iree_status_t loom_amdgpu_materialize_hal_kernel_abi_run(
+    loom_pass_t* pass, loom_module_t* module, loom_func_like_t function) {
+  if (!loom_low_function_def_isa(function.op)) {
+    return iree_ok_status();
+  }
+
+  const loom_low_pass_capability_t* low_capability =
+      loom_low_pass_capability_from_pass(pass);
+  const loom_low_descriptor_registry_t* descriptor_registry =
+      loom_low_pass_capability_descriptor_registry(low_capability);
+  loom_low_resolved_target_t target = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_low_resolve_function_target(module, function.op, descriptor_registry,
+                                       pass->diagnostic_emitter, &target));
+  if (!loom_amdgpu_materialize_hal_kernel_abi_matches(&target)) {
+    return iree_ok_status();
+  }
+
+  loom_amdgpu_hal_kernel_abi_verify_result_t verify_result = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_low(
+      module, function.op, target.descriptor_set, /*max_errors=*/20,
+      pass->diagnostic_emitter, &verify_result, pass->arena));
+  loom_pass_statistic_add(pass, LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_ERRORS,
+                          verify_result.error_count);
+  if (verify_result.error_count != 0) {
+    return iree_ok_status();
+  }
+
+  loom_amdgpu_hal_binding_materialization_result_t materialization = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_binding_materialize(
+      module, function.op, &target.bundle_storage.bundle, target.descriptor_set,
+      &materialization, pass->arena));
+  loom_pass_statistic_add(pass, LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_FUNCTIONS, 1);
+  loom_pass_statistic_add(pass, LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_BINDINGS,
+                          materialization.materialized_binding_count);
+  loom_pass_statistic_add(pass, LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_DIRECT_ARGS,
+                          materialization.materialized_direct_arg_count);
+  loom_pass_statistic_add(pass, LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_DESCRIPTORS,
+                          materialization.materialized_descriptor_count);
+  if (loom_amdgpu_hal_binding_materialization_changed(&materialization)) {
+    loom_pass_mark_changed(pass);
+  }
+  return iree_ok_status();
+}

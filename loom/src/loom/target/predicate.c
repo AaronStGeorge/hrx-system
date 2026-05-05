@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "loom/analysis/symbol_facts.h"
+#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func_symbol_facts.h"
 #include "loom/ops/pass/ops.h"
@@ -19,6 +20,7 @@
 static bool loom_target_pass_predicate_is_supported_attr(
     iree_string_view_t name) {
   return iree_string_view_equal(name, IREE_SV("target")) ||
+         iree_string_view_equal(name, IREE_SV("target_op")) ||
          iree_string_view_equal(name, IREE_SV("artifact")) ||
          iree_string_view_equal(name, IREE_SV("bundle")) ||
          iree_string_view_equal(name, IREE_SV("snapshot")) ||
@@ -155,6 +157,8 @@ static bool loom_target_pass_predicate_symbol_id(
 typedef struct loom_target_pass_predicate_target_facts_t {
   // Resolved function facts for the current function.
   const loom_func_symbol_facts_t* func;
+  // Target record op named by |func|.
+  const loom_op_t* target_op;
   // Resolved function target bundle.
   loom_target_bundle_storage_t bundle_storage;
   // Resolved artifact facts when the function exports into target.artifact.
@@ -184,6 +188,14 @@ static iree_status_t loom_target_pass_predicate_resolve_facts(
       !loom_symbol_ref_is_valid(out_facts->func->target_symbol)) {
     return iree_ok_status();
   }
+  if (out_facts->func->target_symbol.module_id != 0 ||
+      out_facts->func->target_symbol.symbol_id >=
+          context->target_module->symbols.count) {
+    return iree_ok_status();
+  }
+  out_facts->target_op = context->target_module->symbols
+                             .entries[out_facts->func->target_symbol.symbol_id]
+                             .defining_op;
 
   bool contract_valid = false;
   IREE_RETURN_IF_ERROR(loom_target_function_contract_resolve(
@@ -217,6 +229,13 @@ static bool loom_target_pass_predicate_match_attr(
         loom_target_pass_predicate_symbol_name(context->target_module,
                                                facts->func->target_symbol),
         expected);
+  }
+  if (iree_string_view_equal(name, IREE_SV("target_op"))) {
+    if (facts->target_op == NULL) {
+      return false;
+    }
+    return iree_string_view_equal(
+        loom_op_name(context->target_module, facts->target_op), expected);
   }
   if (iree_string_view_equal(name, IREE_SV("artifact"))) {
     return loom_target_pass_predicate_symbol_matches(

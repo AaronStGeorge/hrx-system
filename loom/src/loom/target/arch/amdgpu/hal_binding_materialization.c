@@ -107,6 +107,11 @@ static iree_status_t loom_amdgpu_hal_binding_insert_kernarg_live_in(
       &rewriter->builder, source_id, loom_make_named_attr_slice(NULL, 0),
       sgpr_x2_type, function_op->location, &live_in_op));
   *out_value = loom_low_live_in_result(live_in_op);
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(rewriter->module,
+                                                 IREE_SV("kernarg"), &name_id));
+  IREE_RETURN_IF_ERROR(
+      loom_module_set_value_name(rewriter->module, *out_value, name_id));
   *out_live_in_op = live_in_op;
   return iree_ok_status();
 }

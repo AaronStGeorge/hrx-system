@@ -148,7 +148,7 @@ TEST_F(TargetPredicateTest, VerifiesTargetPredicateAttrs) {
   ModulePtr module = ParseModule(R"(
 pass.pipeline<module> @pipeline pipeline {
   for func {
-    where target(target = "test_target", codegen = "low_native", abi = "object_function") {
+    where target(target = "test_target", target_op = "test.target", codegen = "low_native", abi = "object_function") {
     }
   }
 }
@@ -164,7 +164,7 @@ test.target<quirky> @other_target
 
 pass.pipeline<module> @pipeline pipeline {
   for func {
-    where target(target = "@test_target", bundle = "test_target", snapshot = "test_target", codegen = "low_native", artifact_format = "elf", abi = "object_function", config = "test_target", contract = "test.low.core") {
+    where target(target = "@test_target", target_op = "test.target", bundle = "test_target", snapshot = "test_target", codegen = "low_native", artifact_format = "elf", abi = "object_function", config = "test_target", contract = "test.low.core") {
     }
   }
 }

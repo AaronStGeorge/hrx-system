@@ -1,0 +1,31 @@
+// RUN: pass amdgpu-materialize-hal-kernel-abi
+
+amdgpu.target<gfx1100> @target
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @binding_pointer() {
+  %view = low.resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x2>
+  %offset = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %value = low.const<amdgpu.v_mov_b32> {imm32 = 42} : reg<amdgpu.vgpr>
+  %descriptor = low.op<amdgpu.hal.buffer_descriptor>(%view) {cache_swizzle_stride = 0, valid_byte_count = 16} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  low.op<amdgpu.global_store_b32_saddr>(%offset, %value, %view) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.return
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @binding_pointer() {
+  %kernarg = low.live_in<amdgpu.kernarg_segment_ptr> : reg<amdgpu.sgpr x2>
+  %view = low.op<amdgpu.s_load_dwordx2_offset_only>(%kernarg) {offset = 0} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x2>
+  %offset = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %value = low.const<amdgpu.v_mov_b32> {imm32 = 42} : reg<amdgpu.vgpr>
+  %6 = low.slice %view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %7 = low.slice %view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %8 = low.const<amdgpu.s_mov_b32> {imm32 = 65535} : reg<amdgpu.sgpr>
+  %9 = low.op<amdgpu.s_and_b32>(%7, %8) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %10 = low.concat(%6, %9) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %11 = low.const<amdgpu.s_mov_b32> {imm32 = 16} : reg<amdgpu.sgpr>
+  %12 = low.const<amdgpu.s_mov_b32> {imm32 = 822243328} : reg<amdgpu.sgpr>
+  %descriptor = low.concat(%10, %11, %12) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
+  low.op<amdgpu.global_store_b32_saddr>(%offset, %value, %view) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.return
+}

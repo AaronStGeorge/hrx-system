@@ -559,9 +559,32 @@ loom_cc_library(
     ::lower
     ::ops
     ::packet_diagnostics
+    ::pass_registry
     iree::base
+    loom::src::loom::pass::builder
     loom::src::loom::target::provider
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    provider_test
+  SRCS
+    "provider_test.cc"
+  DEPS
+    ::provider
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::pass
+    loom::src::loom::pass::builder
+    loom::src::loom::pass::registry
+    loom::src::loom::pass::testing::registry_verify
+    loom::src::loom::target::provider
+    loom::src::loom::testing::module_ptr
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_library(
@@ -750,6 +773,54 @@ loom_cc_library(
     loom::src::loom::rewrite::rewriter
     loom::src::loom::target::types
   PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    hal_binding_materialization_pass
+  HDRS
+    "hal_binding_materialization_pass.h"
+  SRCS
+    "hal_binding_materialization_pass.c"
+  DEPS
+    ::hal_binding_materialization
+    ::hal_kernel_abi
+    ::ops
+    iree::base
+    loom::src::loom::codegen::low::function
+    loom::src::loom::codegen::low::pass_environment
+    loom::src::loom::codegen::low::target_binding
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::pass::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    pass_registry
+  HDRS
+    "pass_registry.h"
+  SRCS
+    "pass_registry.c"
+  DEPS
+    ::hal_binding_materialization_pass
+    iree::base
+    loom::src::loom::codegen::low::pass_environment
+    loom::src::loom::codegen::low::pass_requirements
+    loom::src::loom::pass::registry
+  PUBLIC
+)
+
+iree_executable_test(
+  NAME
+    "low_hal_materialization"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_hal_materialization.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
 )
 
 iree_executable_test(
