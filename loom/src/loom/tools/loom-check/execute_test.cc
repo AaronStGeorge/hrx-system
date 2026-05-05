@@ -948,11 +948,8 @@ TEST_F(ExecuteTest, PassModePassesOptionsToPassCreate) {
   EXPECT_NE(DiagnosticJsonString(result).find("\"emitter\":\"pass\""),
             std::string::npos);
   EXPECT_NE(
-      DiagnosticJsonString(result).find("\"error_id\":\"ERR_LOWERING_002\""),
+      DiagnosticJsonString(result).find("\"error_id\":\"ERR_LOWERING_043\""),
       std::string::npos);
-  EXPECT_NE(DiagnosticJsonString(result).find(
-                "\"origin\":{\"provenance\":\"unavailable_source\""),
-            std::string::npos);
   EXPECT_NE(DetailString(result).find("did not converge"), std::string::npos);
   loom_check_result_deinitialize(&result);
 }

@@ -671,7 +671,7 @@ func.def public @call_projected_dead_argument(%kept: index, %dead: index) {
 
 // RUN: pass refine-boundaries{max-iterations=1}
 
-// ERROR@+1: LOWERING/002 "refine-boundaries" "module" "did not converge"
+// ERROR@+1: LOWERING/043 {pass_name="refine-boundaries", max_iterations="1"}
 func.def @identity(%value: index) -> (index) {
   func.return %value : index
 }

@@ -8,22 +8,6 @@
 
 from loom.errors import ErrorDef, ErrorDomain, ErrorParam, ParamKind, Severity
 
-# ERR_LOWERING_002: Pass-level refinement failed.
-ERR_LOWERING_002 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=2,
-    severity=Severity.ERROR,
-    summary="Pass refinement failed.",
-    message="{pass_name} failed while refining {scope}: {reason}",
-    params=(
-        ErrorParam("pass_name", ParamKind.STRING),
-        ErrorParam("scope", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
-    ),
-    fix_hint="Refine boundary facts/types, specialize incompatible call paths, "
-    "or split the recursive/SCC structure before running {pass_name}",
-)
-
 # ERR_LOWERING_003: Low descriptor set is not available.
 ERR_LOWERING_003 = ErrorDef(
     domain=ErrorDomain.LOWERING,
@@ -812,8 +796,66 @@ ERR_LOWERING_040 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_041: Boundary facts conflict with a boundary value type.
+ERR_LOWERING_041 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=41,
+    severity=Severity.ERROR,
+    summary="Boundary facts conflict with a boundary value type.",
+    message=(
+        "{pass_name} found boundary facts for {op_name} that conflict with a "
+        "function boundary value type"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("pass_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Refine the producer facts or specialize the function boundary so the "
+        "boundary value type can represent the propagated facts"
+    ),
+)
+
+# ERR_LOWERING_042: Callee result type conflicts with a call result type.
+ERR_LOWERING_042 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=42,
+    severity=Severity.ERROR,
+    summary="Callee result type conflicts with a call result type.",
+    message=(
+        "{pass_name} found {op_name} whose callee result type conflicts with "
+        "the call result type after boundary substitution"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("pass_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Specialize the callee or callsite so substituted boundary dimensions "
+        "agree before refining call result types"
+    ),
+)
+
+# ERR_LOWERING_043: Boundary fact refinement did not converge.
+ERR_LOWERING_043 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=43,
+    severity=Severity.ERROR,
+    summary="Boundary fact refinement did not converge.",
+    message=(
+        "{pass_name} did not converge boundary facts in {max_iterations} iteration(s)"
+    ),
+    params=(
+        ErrorParam("pass_name", ParamKind.STRING),
+        ErrorParam("max_iterations", ParamKind.U32),
+    ),
+    fix_hint=(
+        "Specialize recursive/SCC summaries or raise the pass iteration limit "
+        "only after proving additional iterations are bounded"
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
-    ERR_LOWERING_002,
     ERR_LOWERING_003,
     ERR_LOWERING_004,
     ERR_LOWERING_005,
@@ -852,4 +894,7 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_038,
     ERR_LOWERING_039,
     ERR_LOWERING_040,
+    ERR_LOWERING_041,
+    ERR_LOWERING_042,
+    ERR_LOWERING_043,
 )

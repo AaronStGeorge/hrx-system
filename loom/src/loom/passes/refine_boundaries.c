@@ -156,19 +156,31 @@ static const loom_op_t* loom_refine_boundaries_module_anchor(
   return entry_block->first_op;
 }
 
-static iree_status_t loom_refine_boundaries_fail(loom_pass_t* pass,
-                                                 const loom_module_t* module,
-                                                 const loom_op_t* op,
-                                                 iree_string_view_t reason) {
-  iree_string_view_t scope = op ? loom_op_name(module, op) : IREE_SV("module");
+static iree_status_t loom_refine_boundaries_emit_op_error(
+    loom_pass_t* pass, const loom_module_t* module, const loom_op_t* op,
+    const loom_error_def_t* error) {
   loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_op_name(module, op)),
       loom_param_string(pass->info->name),
-      loom_param_string(scope),
-      loom_param_string(reason),
   };
   loom_diagnostic_emission_t emission = {
-      .op = op ? op : loom_refine_boundaries_module_anchor(module),
-      .error = LOOM_ERR_LOWERING_002,
+      .op = op,
+      .error = error,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  return iree_diagnostic_emit(pass->diagnostic_emitter, &emission);
+}
+
+static iree_status_t loom_refine_boundaries_emit_nonconvergence(
+    loom_pass_t* pass, const loom_module_t* module, uint32_t max_iterations) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(pass->info->name),
+      loom_param_u32(max_iterations),
+  };
+  loom_diagnostic_emission_t emission = {
+      .op = loom_refine_boundaries_module_anchor(module),
+      .error = LOOM_ERR_LOWERING_043,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
@@ -873,9 +885,8 @@ static iree_status_t loom_refine_boundaries_refine_value_type_with_facts(
   IREE_RETURN_IF_ERROR(loom_type_refine_with_value_facts(
       current_type, facts, &module->arena, &refined_type, &result));
   if (result == LOOM_TYPE_REFINEMENT_CONFLICT) {
-    return loom_refine_boundaries_fail(
-        pass, module, owner_op,
-        IREE_SV("boundary facts conflict with a function boundary value type"));
+    return loom_refine_boundaries_emit_op_error(pass, module, owner_op,
+                                                LOOM_ERR_LOWERING_041);
   }
   if (result == LOOM_TYPE_REFINEMENT_UNCHANGED ||
       loom_type_equal(current_type, refined_type)) {
@@ -1646,10 +1657,8 @@ static iree_status_t loom_refine_boundaries_refine_call_result_type(
   IREE_RETURN_IF_ERROR(loom_type_refine_with_candidate(
       current_type, candidate_type, &module->arena, &refined_type, &result));
   if (result == LOOM_TYPE_REFINEMENT_CONFLICT) {
-    return loom_refine_boundaries_fail(
-        pass, module, call_op,
-        IREE_SV("callee result type conflicts with the call result type after "
-                "boundary substitution"));
+    return loom_refine_boundaries_emit_op_error(pass, module, call_op,
+                                                LOOM_ERR_LOWERING_042);
   }
   if (result == LOOM_TYPE_REFINEMENT_UNCHANGED ||
       loom_type_equal(current_type, refined_type)) {
@@ -2993,19 +3002,8 @@ iree_status_t loom_refine_boundaries_run_with_options(
   }
   if (iree_status_is_ok(status) && !loom_pass_has_error_diagnostics(pass) &&
       !converged) {
-    char reason_storage[192] = {0};
-    int reason_length = snprintf(
-        reason_storage, sizeof(reason_storage),
-        "boundary facts did not converge in %u iteration(s); recursive/SCC "
-        "summaries may require specialization or a wider pass limit",
-        max_iterations);
-    iree_string_view_t reason =
-        reason_length > 0 &&
-                (iree_host_size_t)reason_length < IREE_ARRAYSIZE(reason_storage)
-            ? iree_make_string_view(reason_storage,
-                                    (iree_host_size_t)reason_length)
-            : IREE_SV("boundary facts did not converge");
-    status = loom_refine_boundaries_fail(pass, module, NULL, reason);
+    status = loom_refine_boundaries_emit_nonconvergence(pass, module,
+                                                        max_iterations);
   }
 
   if (canonicalizer_initialized) {
