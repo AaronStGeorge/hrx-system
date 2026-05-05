@@ -757,6 +757,40 @@ ERR_LOWERING_036 = ErrorDef(
     fix_hint="Clamp or specialize permutation lanes to the source last-axis extent",
 )
 
+# ERR_LOWERING_037: SCF to CFG requires a positive counted-loop step.
+ERR_LOWERING_037 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=37,
+    severity=Severity.ERROR,
+    summary="SCF to CFG requires a positive counted-loop step.",
+    message="{pass_name} requires {op_name} step to be fact-proven positive",
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("pass_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Refine the loop step facts or normalize the loop before converting "
+        "structured control flow to CFG"
+    ),
+)
+
+# ERR_LOWERING_038: SCF to CFG cannot preserve tied result ownership.
+ERR_LOWERING_038 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=38,
+    severity=Severity.ERROR,
+    summary="SCF to CFG cannot preserve tied result ownership.",
+    message="{pass_name} cannot preserve tied result ownership on {op_name}",
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("pass_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Lower ownership transfers before CFG conversion or keep the "
+        "structured op until CFG block arguments can model the transfer"
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
@@ -794,4 +828,6 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_034,
     ERR_LOWERING_035,
     ERR_LOWERING_036,
+    ERR_LOWERING_037,
+    ERR_LOWERING_038,
 )

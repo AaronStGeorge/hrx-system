@@ -113,26 +113,16 @@ static loom_region_t* loom_scf_to_cfg_region_stack_pop(
 // Diagnostics
 //===----------------------------------------------------------------------===//
 
-static iree_string_view_t loom_scf_to_cfg_op_name(const loom_module_t* module,
-                                                  const loom_op_t* op) {
-  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
-  if (!vtable) return IREE_SV("<unknown>");
-  return loom_op_vtable_name(vtable);
-}
-
-static iree_status_t loom_scf_to_cfg_fail(loom_scf_to_cfg_state_t* state,
+static iree_status_t loom_scf_to_cfg_emit(loom_scf_to_cfg_state_t* state,
                                           const loom_op_t* op,
-                                          iree_string_view_t reason) {
-  iree_string_view_t op_name = loom_scf_to_cfg_op_name(state->module, op);
-  iree_string_view_t pass_name = state->pass->info->name;
+                                          const loom_error_def_t* error) {
   loom_diagnostic_param_t params[] = {
-      loom_param_string(op_name),
-      loom_param_string(pass_name),
-      loom_param_string(reason),
+      loom_param_string(loom_op_name(state->module, op)),
+      loom_param_string(state->pass->info->name),
   };
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = LOOM_ERR_LOWERING_001,
+      .error = error,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
@@ -328,48 +318,26 @@ static iree_status_t loom_scf_to_cfg_build_cond_br(
   return status;
 }
 
-static iree_status_t loom_scf_to_cfg_read_single_block_region(
-    loom_scf_to_cfg_state_t* state, loom_op_t* op, loom_region_t* region,
-    loom_op_kind_t terminator_kind, iree_string_view_t reason,
-    loom_block_t** out_block, loom_op_t** out_terminator) {
-  *out_block = NULL;
-  *out_terminator = NULL;
-  if (!region || region->block_count != 1) {
-    return loom_scf_to_cfg_fail(state, op, reason);
-  }
+static void loom_scf_to_cfg_read_single_block_region(
+    loom_region_t* region, loom_block_t** out_block,
+    loom_op_t** out_terminator) {
   loom_block_t* block = loom_region_entry_block(region);
-  if (!block || !block->last_op || block->last_op->kind != terminator_kind) {
-    return loom_scf_to_cfg_fail(state, op, reason);
-  }
   *out_block = block;
   *out_terminator = block->last_op;
-  return iree_ok_status();
 }
 
-static iree_status_t loom_scf_to_cfg_prepare_op_lowering(
+static iree_status_t loom_scf_to_cfg_verify_op_preconditions(
+    loom_scf_to_cfg_state_t* state, loom_op_t* op) {
+  if (op->tied_result_count == 0) return iree_ok_status();
+  return loom_scf_to_cfg_emit(state, op, LOOM_ERR_LOWERING_038);
+}
+
+static void loom_scf_to_cfg_prepare_op_lowering(
     loom_scf_to_cfg_state_t* state, loom_op_t* op,
     loom_region_t** out_parent_region, loom_block_t** out_source_block) {
-  if (op->tied_result_count != 0) {
-    return loom_scf_to_cfg_fail(
-        state, op,
-        IREE_SV("tied result ownership requires block-argument ownership "
-                "transfer support"));
-  }
-  if (!op->parent_block || !op->parent_block->parent_region) {
-    return loom_scf_to_cfg_fail(
-        state, op, IREE_SV("structured op must be nested in a parent region"));
-  }
-  if (!op->next_op) {
-    return loom_scf_to_cfg_fail(
-        state, op,
-        IREE_SV("structured op must have a following continuation "
-                "terminator"));
-  }
-
   loom_region_t* parent_region = op->parent_block->parent_region;
   *out_parent_region = parent_region;
   *out_source_block = op->parent_block;
-  return iree_ok_status();
 }
 
 //===----------------------------------------------------------------------===//
@@ -382,34 +350,20 @@ static iree_status_t loom_scf_to_cfg_lower_if(loom_scf_to_cfg_state_t* state,
 
   loom_block_t* then_source_block = NULL;
   loom_op_t* then_yield = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_read_single_block_region(
-      state, op, loom_scf_if_then_region(op), LOOM_OP_SCF_YIELD,
-      IREE_SV("scf.if then region must be a single block ending in scf.yield"),
-      &then_source_block, &then_yield));
+  loom_scf_to_cfg_read_single_block_region(loom_scf_if_then_region(op),
+                                           &then_source_block, &then_yield);
   loom_block_t* else_source_block = NULL;
   loom_op_t* else_yield = NULL;
   loom_region_t* else_region = loom_scf_if_else_region(op);
   if (else_region) {
-    IREE_RETURN_IF_ERROR(loom_scf_to_cfg_read_single_block_region(
-        state, op, else_region, LOOM_OP_SCF_YIELD,
-        IREE_SV(
-            "scf.if else region must be a single block ending in scf.yield"),
-        &else_source_block, &else_yield));
-  } else if (op->result_count != 0) {
-    return loom_scf_to_cfg_fail(
-        state, op, IREE_SV("scf.if with results requires an else region"));
+    loom_scf_to_cfg_read_single_block_region(else_region, &else_source_block,
+                                             &else_yield);
   }
-  if (then_yield->operand_count != op->result_count ||
-      (else_yield && else_yield->operand_count != op->result_count)) {
-    return loom_scf_to_cfg_fail(
-        state, op,
-        IREE_SV("scf.if yield operand counts must match result count"));
-  }
+  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_verify_op_preconditions(state, op));
 
   loom_region_t* parent_region = NULL;
   loom_block_t* source_block = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_prepare_op_lowering(
-      state, op, &parent_region, &source_block));
+  loom_scf_to_cfg_prepare_op_lowering(state, op, &parent_region, &source_block);
 
   loom_block_t* then_block = NULL;
   IREE_RETURN_IF_ERROR(
@@ -613,27 +567,16 @@ static iree_status_t loom_scf_to_cfg_lower_for(loom_scf_to_cfg_state_t* state,
       loom_value_fact_table_lookup(state->fact_table, loom_scf_for_step(op));
   if (loom_value_facts_is_float(step_facts) ||
       !loom_value_facts_is_positive(step_facts)) {
-    return loom_scf_to_cfg_fail(
-        state, op,
-        IREE_SV("scf.for lowering requires a fact-proven positive step"));
+    return loom_scf_to_cfg_emit(state, op, LOOM_ERR_LOWERING_037);
   }
 
   loom_block_t* body_source_block = NULL;
   loom_op_t* yield_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_read_single_block_region(
-      state, op, loom_scf_for_body(op), LOOM_OP_SCF_YIELD,
-      IREE_SV("scf.for body must be a single block ending in scf.yield"),
-      &body_source_block, &yield_op));
+  loom_scf_to_cfg_read_single_block_region(loom_scf_for_body(op),
+                                           &body_source_block, &yield_op);
+  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_verify_op_preconditions(state, op));
 
   loom_value_slice_t iter_args = loom_scf_for_iter_args(op);
-  if (op->result_count != iter_args.count ||
-      body_source_block->arg_count != (uint16_t)(1 + iter_args.count) ||
-      yield_op->operand_count != iter_args.count) {
-    return loom_scf_to_cfg_fail(
-        state, op,
-        IREE_SV("scf.for iter args, body args, yields, and results must "
-                "match"));
-  }
   loom_string_id_t original_iv_name_id =
       body_source_block->arg_count > 0
           ? loom_module_value(state->module, body_source_block->arg_ids[0])
@@ -650,8 +593,7 @@ static iree_status_t loom_scf_to_cfg_lower_for(loom_scf_to_cfg_state_t* state,
 
   loom_region_t* parent_region = NULL;
   loom_block_t* source_block = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_prepare_op_lowering(
-      state, op, &parent_region, &source_block));
+  loom_scf_to_cfg_prepare_op_lowering(state, op, &parent_region, &source_block);
 
   loom_block_t* header_block = NULL;
   IREE_RETURN_IF_ERROR(
@@ -767,36 +709,20 @@ static iree_status_t loom_scf_to_cfg_lower_while(loom_scf_to_cfg_state_t* state,
 
   loom_block_t* before_source_block = NULL;
   loom_op_t* condition_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_read_single_block_region(
-      state, op, loom_scf_while_before(op), LOOM_OP_SCF_CONDITION,
-      IREE_SV("scf.while before region must be a single block ending in "
-              "scf.condition"),
-      &before_source_block, &condition_op));
+  loom_scf_to_cfg_read_single_block_region(loom_scf_while_before(op),
+                                           &before_source_block, &condition_op);
   loom_block_t* after_source_block = NULL;
   loom_op_t* yield_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_read_single_block_region(
-      state, op, loom_scf_while_after(op), LOOM_OP_SCF_YIELD,
-      IREE_SV("scf.while after region must be a single block ending in "
-              "scf.yield"),
-      &after_source_block, &yield_op));
+  loom_scf_to_cfg_read_single_block_region(loom_scf_while_after(op),
+                                           &after_source_block, &yield_op);
+  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_verify_op_preconditions(state, op));
 
   loom_value_slice_t iter_args = loom_scf_while_iter_args(op);
   loom_value_slice_t forwarded = loom_scf_condition_forwarded(condition_op);
-  if (op->result_count != iter_args.count ||
-      before_source_block->arg_count != iter_args.count ||
-      after_source_block->arg_count != forwarded.count ||
-      forwarded.count != yield_op->operand_count ||
-      forwarded.count != op->result_count) {
-    return loom_scf_to_cfg_fail(
-        state, op,
-        IREE_SV("scf.while iter args, forwarded values, after args, yields, "
-                "and results must match"));
-  }
 
   loom_region_t* parent_region = NULL;
   loom_block_t* source_block = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_prepare_op_lowering(
-      state, op, &parent_region, &source_block));
+  loom_scf_to_cfg_prepare_op_lowering(state, op, &parent_region, &source_block);
 
   loom_block_t* before_block = NULL;
   IREE_RETURN_IF_ERROR(
@@ -885,15 +811,8 @@ static iree_status_t loom_scf_to_cfg_move_switch_case(
     loom_block_t* target_block, loom_block_t* join_block) {
   loom_block_t* source_block = NULL;
   loom_op_t* yield_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_read_single_block_region(
-      state, op, source_region, LOOM_OP_SCF_YIELD,
-      IREE_SV("scf.switch regions must be single blocks ending in scf.yield"),
-      &source_block, &yield_op));
-  if (yield_op->operand_count != op->result_count) {
-    return loom_scf_to_cfg_fail(
-        state, op,
-        IREE_SV("scf.switch yield operand counts must match result count"));
-  }
+  loom_scf_to_cfg_read_single_block_region(source_region, &source_block,
+                                           &yield_op);
 
   loom_ir_remap_t remap = {0};
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_initialize_remap(state, &remap));
@@ -953,16 +872,11 @@ static iree_status_t loom_scf_to_cfg_lower_switch(
 
   loom_attribute_t case_keys_attr = loom_scf_switch_case_keys(op);
   loom_region_slice_t case_regions = loom_scf_switch_case_regions(op);
-  if (case_keys_attr.count != case_regions.count) {
-    return loom_scf_to_cfg_fail(
-        state, op,
-        IREE_SV("scf.switch case key count must match case region count"));
-  }
+  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_verify_op_preconditions(state, op));
 
   loom_region_t* parent_region = NULL;
   loom_block_t* source_block = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_prepare_op_lowering(
-      state, op, &parent_region, &source_block));
+  loom_scf_to_cfg_prepare_op_lowering(state, op, &parent_region, &source_block);
 
   loom_block_t** dispatch_blocks = NULL;
   iree_host_size_t dispatch_block_count =
