@@ -38,20 +38,29 @@ loom_assert_no_dependencies(
 #===------------------------------------------------------------------------===#
 
 loom_cc_library(
-    name = "low_registry",
-    srcs = ["low_registry.c"],
-    hdrs = ["low_registry.h"],
+    name = "provider",
+    srcs = ["provider.c"],
+    hdrs = ["provider.h"],
     deps = [
-        "//loom/src/loom/codegen/low:lower",
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target:low_legality",
         "//loom/src/loom/target:provider",
-        "//loom/src/loom/target:types",
         "//loom/src/loom/target/arch/amdgpu:provider",
         "//loom/src/loom/target/arch/wasm:provider",
         "//loom/src/loom/target/arch/x86:provider",
         "//loom/src/loom/target/emit/ireevm:provider",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/threading",
+    ],
+)
+
+loom_cc_library(
+    name = "low_registry",
+    srcs = ["low_registry.c"],
+    hdrs = ["low_registry.h"],
+    deps = [
+        ":provider",
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/target:low_descriptor_registry",
+        "//loom/src/loom/target:low_legality",
+        "//runtime/src/iree/base",
     ],
 )

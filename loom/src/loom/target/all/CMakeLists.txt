@@ -12,23 +12,35 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    provider
+  HDRS
+    "provider.h"
+  SRCS
+    "provider.c"
+  DEPS
+    iree::base
+    iree::base::threading
+    loom::src::loom::target::arch::amdgpu::provider
+    loom::src::loom::target::arch::wasm::provider
+    loom::src::loom::target::arch::x86::provider
+    loom::src::loom::target::emit::ireevm::provider
+    loom::src::loom::target::provider
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     low_registry
   HDRS
     "low_registry.h"
   SRCS
     "low_registry.c"
   DEPS
+    ::provider
     iree::base
-    iree::base::threading
     loom::src::loom::codegen::low::lower
-    loom::src::loom::target::arch::amdgpu::provider
-    loom::src::loom::target::arch::wasm::provider
-    loom::src::loom::target::arch::x86::provider
-    loom::src::loom::target::emit::ireevm::provider
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::low_legality
-    loom::src::loom::target::provider
-    loom::src::loom::target::types
   PUBLIC
 )
 
