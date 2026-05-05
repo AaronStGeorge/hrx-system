@@ -96,7 +96,6 @@ loom_cc_library(
     loom::src::loom::pass::registry
     loom::src::loom::pass::types
     loom::src::loom::pass::value_facts
-    loom::src::loom::verify
   PUBLIC
 )
 
@@ -110,7 +109,6 @@ loom_cc_test(
     iree::base::internal::arena
     loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::pass_environment
-    loom::src::loom::error::error_defs
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::func
@@ -119,7 +117,6 @@ loom_cc_test(
     loom::src::loom::ops::target
     loom::src::loom::ops::test
     loom::src::loom::pass::value_facts
-    loom::src::loom::target::test::contracts::core
     loom::src::loom::target::test::contracts::core_lower_rules
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower

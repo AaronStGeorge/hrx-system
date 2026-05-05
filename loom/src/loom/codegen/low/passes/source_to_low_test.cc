@@ -6,7 +6,6 @@
 
 #include "loom/codegen/low/passes/source_to_low.h"
 
-#include <string>
 #include <vector>
 
 #include "iree/base/internal/arena.h"
@@ -14,8 +13,6 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/lower_rules.h"
 #include "loom/codegen/low/pass_environment.h"
-#include "loom/error/error_catalog.h"
-#include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -25,7 +22,6 @@
 #include "loom/ops/target/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/pass/value_facts.h"
-#include "loom/target/test/contracts/core.h"
 #include "loom/target/test/contracts/core_lower_rules.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/target/test/lower.h"
@@ -38,91 +34,13 @@ using ModulePtr = ::loom::testing::ModulePtr;
 
 struct DiagnosticEmissionCollector {
   int count = 0;
-  std::string subject_name;
-  std::string reason;
 };
-
-static std::string CopyString(iree_string_view_t value) {
-  return std::string(value.data, value.size);
-}
 
 static iree_status_t CollectDiagnosticEmission(
-    void* user_data, const loom_diagnostic_emission_t* emission) {
+    void* user_data, const loom_diagnostic_emission_t*) {
   auto* collector = static_cast<DiagnosticEmissionCollector*>(user_data);
   ++collector->count;
-  if (emission->error == loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 1) &&
-      emission->param_count >= 7) {
-    collector->subject_name = CopyString(emission->params[5].string);
-    collector->reason = CopyString(emission->params[6].string);
-  }
   return iree_ok_status();
-}
-
-static iree_status_t MakeRegisterType(loom_low_lower_context_t* context,
-                                      iree_string_view_t register_class,
-                                      uint32_t unit_count,
-                                      loom_type_t* out_type) {
-  loom_string_id_t register_class_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_module_intern_string(loom_low_lower_context_module(context),
-                                register_class, &register_class_id));
-  *out_type = loom_type_register(register_class_id, unit_count);
-  return iree_ok_status();
-}
-
-static iree_status_t EmitInvalidPreamble(void* user_data,
-                                         loom_low_lower_context_t* context) {
-  (void)user_data;
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(
-      MakeRegisterType(context, IREE_SV("test.i32"), 1, &result_type));
-  loom_op_t* copy_op = nullptr;
-  return loom_low_copy_build(
-      loom_low_lower_context_builder(context), LOOM_VALUE_ID_INVALID,
-      result_type, loom_low_lower_context_low_function(context)->location,
-      &copy_op);
-}
-
-static const loom_low_lower_rule_set_t* const kInvalidPreambleRuleSets[] = {
-    &loom_test_low_core_lower_rule_set,
-};
-
-static const loom_target_contract_binding_t kInvalidPreambleBindings[] = {
-    {
-        .fragment = &loom_test_low_core_contract_fragment,
-        .rule_set_index = 0,
-    },
-};
-
-static const loom_low_lower_policy_t kInvalidPreamblePolicy = {
-    .name = IREE_SVL("invalid-preamble-policy"),
-    .error_catalog = &loom_error_catalog_core,
-    .map_type = {.fn = loom_test_low_lower_map_type, .user_data = nullptr},
-    .map_contract_value = {.fn = loom_test_low_lower_map_contract_value,
-                           .user_data = nullptr},
-    .map_argument = {.fn = loom_test_low_lower_map_argument,
-                     .user_data = nullptr},
-    .emit_preamble = {.fn = EmitInvalidPreamble, .user_data = nullptr},
-    .rule_sets =
-        {
-            .count = IREE_ARRAYSIZE(kInvalidPreambleRuleSets),
-            .values = kInvalidPreambleRuleSets,
-        },
-    .contract_bindings = kInvalidPreambleBindings,
-    .contract_binding_count = IREE_ARRAYSIZE(kInvalidPreambleBindings),
-};
-
-static loom_low_lower_policy_registry_t MakeInvalidPreamblePolicyRegistry() {
-  static const loom_low_lower_policy_registry_entry_t kEntries[] = {
-      {
-          .contract_set_key = IREE_SVL("test.low.core"),
-          .policy = &kInvalidPreamblePolicy,
-      },
-  };
-  loom_low_lower_policy_registry_t registry = {};
-  loom_low_lower_policy_registry_initialize_from_entries(
-      &registry, kEntries, IREE_ARRAYSIZE(kEntries));
-  return registry;
 }
 
 class LowLowerPassTest : public ::testing::Test {
@@ -138,7 +56,6 @@ class LowLowerPassTest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     loom_test_low_descriptor_registry_initialize(&registry_);
-    invalid_preamble_policy_registry_ = MakeInvalidPreamblePolicyRegistry();
   }
 
   void TearDown() override {
@@ -212,20 +129,7 @@ class LowLowerPassTest : public ::testing::Test {
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   loom_target_low_descriptor_registry_t registry_ = {};
-  loom_low_lower_policy_registry_t invalid_preamble_policy_registry_ = {};
 };
-
-TEST_F(LowLowerPassTest, VerifiesLoweredModuleBeforeReturningSuccess) {
-  ModulePtr module = Parse(IREE_SV(
-      "test.target<low_core> @test_target\n"
-      "func.def target(@test_target) @identity(%value: i32) -> (i32) {\n"
-      "  func.return %value : i32\n"
-      "}\n"));
-
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      RunSourceToLow(&invalid_preamble_policy_registry_, module.get()));
-}
 
 TEST_F(LowLowerPassTest,
        ContractFragmentDrivesRuleSelectionWithoutLegacySpans) {
@@ -261,8 +165,7 @@ TEST_F(LowLowerPassTest,
   DiagnosticEmissionCollector collector;
   iree_status_t status =
       RunSourceToLow(&policy_registry, module.get(), &collector);
-  EXPECT_EQ(collector.count, 0)
-      << collector.subject_name << ": " << collector.reason;
+  EXPECT_EQ(collector.count, 0);
   IREE_ASSERT_OK(status);
 }
 

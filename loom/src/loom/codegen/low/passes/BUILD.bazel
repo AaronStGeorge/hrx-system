@@ -117,7 +117,6 @@ loom_cc_library(
         "//loom/src/loom/pass:registry",
         "//loom/src/loom/pass:types",
         "//loom/src/loom/pass:value_facts",
-        "//loom/src/loom/verify",
         "//runtime/src/iree/base",
     ],
 )
@@ -129,7 +128,6 @@ loom_cc_test(
         ":source_to_low",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/codegen/low:pass_environment",
-        "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/func",
@@ -140,7 +138,6 @@ loom_cc_test(
         "//loom/src/loom/pass:value_facts",
         "//loom/src/loom/target/test:low_registry",
         "//loom/src/loom/target/test:lower",
-        "//loom/src/loom/target/test/contracts:core",
         "//loom/src/loom/target/test/contracts:core_lower_rules",
         "//loom/src/loom/testing:module_ptr",
         "//runtime/src/iree/base/internal:arena",
