@@ -193,6 +193,11 @@ iree_status_t loom_amdgpu_map_argument(
     loom_value_id_t source_argument_id,
     loom_low_lower_abi_argument_t* out_argument);
 
+// Plans divergent branch expansion before the source body is emitted.
+iree_status_t loom_amdgpu_prepare_branch(void* user_data,
+                                         loom_low_lower_context_t* context,
+                                         const loom_op_t* source_terminator);
+
 // Emits a conditional branch, using EXEC narrowing for divergent SGPR masks.
 iree_status_t loom_amdgpu_emit_cond_branch(void* user_data,
                                            loom_low_lower_context_t* context,

@@ -55,13 +55,15 @@ low.func.def target(@target) abi(hal_kernel) @divergent_if_else(%values: reg<amd
 ^then:
   low.br ^_bb4
 ^else:
-  low.br ^join
+  low.br ^_bb5
 ^join:
-  s_mov_b64_exec %9
   return
 ^_bb4:
   %11 = s_xor_b64_exec %9
-  low.cond_br %11, ^else, ^join : reg<amdgpu.scc>
+  low.cond_br %11, ^else, ^_bb5 : reg<amdgpu.scc>
+^_bb5:
+  s_mov_b64_exec %9
+  low.br ^join
 }
 
 // ====
@@ -81,14 +83,66 @@ func.def target(@target) @divergent_then_only(%values: vector<2xi32>, %limit: i3
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @divergent_then_only(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+^_bb0(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>):
   %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %8 = v_mov_b32_copy %limit
   %cond = v_cmp_lt_i32 %lane, %8
   %10, %11 = s_and_saveexec_b64 %cond
-  low.cond_br %11, ^then, ^join : reg<amdgpu.scc>
+  low.cond_br %11, ^then, ^_bb3 : reg<amdgpu.scc>
 ^then:
-  low.br ^join
+  low.br ^_bb3
 ^join:
-  s_mov_b64_exec %10
   return
+^_bb3:
+  s_mov_b64_exec %10
+  low.br ^join
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @divergent_region_with_uniform_loop(%values: vector<2xi32>) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %limit = scalar.constant 8 : i32
+  %start = scalar.constant 0 : i32
+  %step = scalar.constant 1 : i32
+  %cond = scalar.cmpi slt, %lane, %limit : i32
+  cfg.cond_br %cond, ^then, ^join : i1
+^then:
+  cfg.br ^loop(%start: i32)
+^loop(%i: i32):
+  %next = scalar.addi %i, %step : i32
+  %again = scalar.cmpi slt, %next, %limit : i32
+  cfg.cond_br %again, ^body, ^join : i1
+^body:
+  cfg.br ^loop(%next: i32)
+^join:
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @divergent_region_with_uniform_loop(%values: reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+^_bb0(%values: reg<amdgpu.vgpr x2>):
+  %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %limit = s_mov_b32 8
+  %start = s_mov_b32 0
+  %step = s_mov_b32 1
+  %15 = v_mov_b32 8
+  %cond = v_cmp_lt_i32 %lane, %15
+  %17, %18 = s_and_saveexec_b64 %cond
+  low.cond_br %18, ^then, ^_bb5 : reg<amdgpu.scc>
+^then:
+  low.br ^loop(%start: reg<amdgpu.sgpr>)
+^loop(%i: reg<amdgpu.sgpr>):
+  %next = s_add_u32 %i, %step
+  %again = s_cmp_lt_i32 %next, %limit
+  low.cond_br %again, ^body, ^_bb5 : reg<amdgpu.scc>
+^body:
+  low.br ^loop(%next: reg<amdgpu.sgpr>)
+^join:
+  return
+^_bb5:
+  s_mov_b64_exec %17
+  low.br ^join
 }

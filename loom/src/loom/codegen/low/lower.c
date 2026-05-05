@@ -1234,14 +1234,21 @@ static iree_status_t loom_low_lower_map_blocks(
                                 (void**)&context->lowering.block_map));
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       &context->arena, source_body->block_count,
-      sizeof(*context->lowering.branch_dest_overrides),
-      (void**)&context->lowering.branch_dest_overrides));
+      sizeof(*context->lowering.successor_interpositions),
+      (void**)&context->lowering.successor_interpositions));
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(&context->arena, source_body->block_count,
+                                sizeof(*context->lowering.branch_plans),
+                                (void**)&context->lowering.branch_plans));
   memset(context->lowering.block_map, 0,
          (iree_host_size_t)source_body->block_count *
              sizeof(*context->lowering.block_map));
-  memset(context->lowering.branch_dest_overrides, 0,
+  memset(context->lowering.successor_interpositions, 0,
          (iree_host_size_t)source_body->block_count *
-             sizeof(*context->lowering.branch_dest_overrides));
+             sizeof(*context->lowering.successor_interpositions));
+  for (uint16_t i = 0; i < source_body->block_count; ++i) {
+    context->lowering.branch_plans[i] = loom_low_lower_plan_empty();
+  }
 
   for (uint16_t i = 0; i < source_body->block_count; ++i) {
     loom_block_t* source_block = loom_region_block(source_body, i);
@@ -1364,6 +1371,28 @@ static iree_status_t loom_low_lower_emit_preamble(
   return status;
 }
 
+static iree_status_t loom_low_lower_prepare_branches(
+    loom_low_lower_context_t* context, loom_region_t* source_body) {
+  if (context->policy->prepare_branch.fn == NULL) {
+    return iree_ok_status();
+  }
+  for (uint16_t block_index = 0; block_index < source_body->block_count;
+       ++block_index) {
+    const loom_block_t* source_block =
+        loom_region_block(source_body, block_index);
+    const loom_op_t* source_terminator = loom_block_const_last_op(source_block);
+    if (source_terminator == NULL || source_terminator->successor_count == 0) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(context->policy->prepare_branch.fn(
+        context->policy->prepare_branch.user_data, context, source_terminator));
+    if (loom_low_lower_context_should_stop(context)) {
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_lower_remap_values(
     loom_low_lower_context_t* context, const loom_value_id_t* source_values,
     iree_host_size_t value_count, loom_value_id_t** out_low_values) {
@@ -1432,17 +1461,8 @@ static iree_status_t loom_low_lower_structural_op(
     }
     case LOOM_OP_CFG_BR: {
       loom_block_t* low_dest = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_lookup_block(
-          context, loom_cfg_br_dest(source_op), &low_dest));
-      loom_region_t* source_body =
-          loom_func_like_body(context->source_function);
-      uint16_t source_index = 0;
-      if (source_body &&
-          loom_region_try_block_index(source_body, source_op->parent_block,
-                                      &source_index) &&
-          context->lowering.branch_dest_overrides[source_index] != NULL) {
-        low_dest = context->lowering.branch_dest_overrides[source_index];
-      }
+      IREE_RETURN_IF_ERROR(loom_low_lower_lookup_successor_dest(
+          context, source_op, 0, &low_dest));
       loom_value_slice_t args = loom_cfg_br_args(source_op);
       loom_value_id_t* low_args = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_remap_values(context, args.values,
@@ -1453,11 +1473,11 @@ static iree_status_t loom_low_lower_structural_op(
     }
     case LOOM_OP_CFG_COND_BR: {
       loom_block_t* low_true_dest = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_lookup_block(
-          context, loom_cfg_cond_br_true_dest(source_op), &low_true_dest));
+      IREE_RETURN_IF_ERROR(loom_low_lower_lookup_successor_dest(
+          context, source_op, 0, &low_true_dest));
       loom_block_t* low_false_dest = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_lookup_block(
-          context, loom_cfg_cond_br_false_dest(source_op), &low_false_dest));
+      IREE_RETURN_IF_ERROR(loom_low_lower_lookup_successor_dest(
+          context, source_op, 1, &low_false_dest));
       loom_value_id_t low_condition = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
           context, loom_cfg_cond_br_condition(source_op), &low_condition));
@@ -2008,15 +2028,19 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
       status = loom_low_lower_map_blocks(&context, source_body);
     }
     if (iree_status_is_ok(status)) {
+      status = loom_low_lower_prepare_branches(&context, source_body);
+    }
+    if (iree_status_is_ok(status) && context.result->error_count == 0) {
       status = loom_low_lower_emit_preamble(&context);
     }
-    if (iree_status_is_ok(status)) {
+    if (iree_status_is_ok(status) && context.result->error_count == 0) {
       status = loom_low_lower_emit_argument_resource_imports(&context);
     }
-    if (iree_status_is_ok(status)) {
+    if (iree_status_is_ok(status) && context.result->error_count == 0) {
       status = loom_low_lower_emit_body(&context, source_body);
     }
-    if (iree_status_is_ok(status) && context.result->error_count != 0) {
+    if (iree_status_is_ok(status) && context.result->error_count != 0 &&
+        context.low_func_op != NULL) {
       status = loom_op_erase(module, context.low_func_op);
       context.low_func_op = NULL;
       out_result->low_func_op = NULL;

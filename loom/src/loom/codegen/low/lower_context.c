@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <inttypes.h>
+#include <string.h>
 
 #include "loom/codegen/low/lower_internal.h"
 #include "loom/codegen/low/source_memory_plan.h"
@@ -271,31 +272,8 @@ iree_status_t loom_low_lower_append_low_block(loom_low_lower_context_t* context,
   return loom_region_append_block(context->module, low_body, out_block);
 }
 
-iree_status_t loom_low_lower_redirect_empty_branch_dest(
-    loom_low_lower_context_t* context, const loom_op_t* source_branch_op,
-    loom_block_t* low_dest) {
-  IREE_ASSERT(loom_cfg_br_isa(source_branch_op));
-  IREE_ASSERT(loom_cfg_br_args(source_branch_op).count == 0);
-  IREE_ASSERT(low_dest->arg_count == 0);
-
-  loom_region_t* source_body = loom_func_like_body(context->source_function);
-  uint16_t source_index = 0;
-  IREE_ASSERT(source_body != NULL);
-  const bool found_source_index = loom_region_try_block_index(
-      source_body, source_branch_op->parent_block, &source_index);
-  IREE_ASSERT(found_source_index);
-  (void)found_source_index;
-  IREE_ASSERT(context->lowering.branch_dest_overrides[source_index] == NULL ||
-              context->lowering.branch_dest_overrides[source_index] ==
-                  low_dest);
-  context->lowering.branch_dest_overrides[source_index] = low_dest;
-  return iree_ok_status();
-}
-
-iree_status_t loom_low_lower_lookup_block(loom_low_lower_context_t* context,
-                                          const loom_block_t* source_block,
-                                          loom_block_t** out_low_block) {
-  *out_low_block = NULL;
+static uint16_t loom_low_lower_source_block_index(
+    loom_low_lower_context_t* context, const loom_block_t* source_block) {
   loom_region_t* source_body = loom_func_like_body(context->source_function);
   uint16_t source_index = 0;
   IREE_ASSERT(source_body != NULL);
@@ -303,6 +281,103 @@ iree_status_t loom_low_lower_lookup_block(loom_low_lower_context_t* context,
       loom_region_try_block_index(source_body, source_block, &source_index);
   IREE_ASSERT(found_source_index);
   (void)found_source_index;
+  return source_index;
+}
+
+iree_status_t loom_low_lower_lookup_successor_dest(
+    loom_low_lower_context_t* context, const loom_op_t* source_terminator,
+    uint8_t successor_index, loom_block_t** out_low_dest) {
+  *out_low_dest = NULL;
+  IREE_ASSERT(source_terminator != NULL);
+  IREE_ASSERT_LT(successor_index, source_terminator->successor_count);
+
+  const uint16_t source_index = loom_low_lower_source_block_index(
+      context, source_terminator->parent_block);
+  const loom_low_lower_successor_interpositions_t* interpositions =
+      &context->lowering.successor_interpositions[source_index];
+  if (interpositions->low_dests != NULL &&
+      interpositions->low_dests[successor_index] != NULL) {
+    *out_low_dest = interpositions->low_dests[successor_index];
+    return iree_ok_status();
+  }
+
+  loom_block_t* const* source_successors =
+      loom_op_const_successors(source_terminator);
+  return loom_low_lower_lookup_block(
+      context, source_successors[successor_index], out_low_dest);
+}
+
+iree_status_t loom_low_lower_interpose_successor_dest(
+    loom_low_lower_context_t* context, const loom_op_t* source_terminator,
+    uint8_t successor_index, loom_block_t* interposed_low_block,
+    loom_block_t** out_previous_low_dest) {
+  *out_previous_low_dest = NULL;
+  IREE_ASSERT(source_terminator != NULL);
+  IREE_ASSERT_LT(successor_index, source_terminator->successor_count);
+  IREE_ASSERT(interposed_low_block != NULL);
+  IREE_ASSERT_EQ(interposed_low_block->arg_count, 0);
+  if (loom_cfg_br_isa(source_terminator)) {
+    IREE_ASSERT_EQ(loom_cfg_br_args(source_terminator).count, 0);
+  }
+
+  loom_block_t* previous_low_dest = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_successor_dest(
+      context, source_terminator, successor_index, &previous_low_dest));
+
+  const uint16_t source_index = loom_low_lower_source_block_index(
+      context, source_terminator->parent_block);
+  loom_low_lower_successor_interpositions_t* interpositions =
+      &context->lowering.successor_interpositions[source_index];
+  if (interpositions->low_dests == NULL) {
+    IREE_ASSERT_EQ(interpositions->low_dest_count, 0);
+    interpositions->low_dest_count = source_terminator->successor_count;
+    IREE_RETURN_IF_ERROR(loom_low_lower_allocate_scratch_array(
+        context, interpositions->low_dest_count,
+        sizeof(*interpositions->low_dests),
+        (void**)&interpositions->low_dests));
+    memset(interpositions->low_dests, 0,
+           interpositions->low_dest_count * sizeof(*interpositions->low_dests));
+  }
+  IREE_ASSERT_EQ(interpositions->low_dest_count,
+                 source_terminator->successor_count);
+  interpositions->low_dests[successor_index] = interposed_low_block;
+  *out_previous_low_dest = previous_low_dest;
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_lower_set_branch_plan(loom_low_lower_context_t* context,
+                                             const loom_op_t* source_terminator,
+                                             loom_low_lower_plan_t plan) {
+  IREE_ASSERT(source_terminator != NULL);
+  IREE_ASSERT_FALSE(loom_low_lower_plan_is_empty(plan));
+  const uint16_t source_index = loom_low_lower_source_block_index(
+      context, source_terminator->parent_block);
+  loom_low_lower_plan_t* branch_plan =
+      &context->lowering.branch_plans[source_index];
+  IREE_ASSERT(loom_low_lower_plan_is_empty(*branch_plan));
+  *branch_plan = plan;
+  return iree_ok_status();
+}
+
+bool loom_low_lower_lookup_branch_plan(loom_low_lower_context_t* context,
+                                       const loom_op_t* source_terminator,
+                                       loom_low_lower_plan_t* out_plan) {
+  *out_plan = loom_low_lower_plan_empty();
+  if (source_terminator == NULL || context->lowering.branch_plans == NULL) {
+    return false;
+  }
+  const uint16_t source_index = loom_low_lower_source_block_index(
+      context, source_terminator->parent_block);
+  *out_plan = context->lowering.branch_plans[source_index];
+  return !loom_low_lower_plan_is_empty(*out_plan);
+}
+
+iree_status_t loom_low_lower_lookup_block(loom_low_lower_context_t* context,
+                                          const loom_block_t* source_block,
+                                          loom_block_t** out_low_block) {
+  *out_low_block = NULL;
+  const uint16_t source_index =
+      loom_low_lower_source_block_index(context, source_block);
   IREE_ASSERT(context->lowering.block_map[source_index] != NULL);
   *out_low_block = context->lowering.block_map[source_index];
   return iree_ok_status();

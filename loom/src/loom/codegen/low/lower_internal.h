@@ -76,6 +76,14 @@ typedef struct loom_low_lower_rule_descriptor_map_t {
   uint16_t descriptor_count;
 } loom_low_lower_rule_descriptor_map_t;
 
+typedef struct loom_low_lower_successor_interpositions_t {
+  // Effective low destinations indexed by source terminator successor ordinal.
+  // NULL entries use the destination implied by the source successor block.
+  loom_block_t** low_dests;
+  // Number of entries in low_dests.
+  uint8_t low_dest_count;
+} loom_low_lower_successor_interpositions_t;
+
 typedef struct loom_low_lowering_frame_t {
   // Active source-function value domain for dense per-value lowering state.
   loom_local_value_domain_t value_domain;
@@ -87,8 +95,10 @@ typedef struct loom_low_lowering_frame_t {
   loom_value_id_t* value_map;
   // Source block ordinal to emitted low block pointer map.
   loom_block_t** block_map;
-  // Source block ordinal to redirected low branch destination, or NULL.
-  loom_block_t** branch_dest_overrides;
+  // Source block ordinal to per-successor low destination interpositions.
+  loom_low_lower_successor_interpositions_t* successor_interpositions;
+  // Source block ordinal to target branch plan selected after low blocks exist.
+  loom_low_lower_plan_t* branch_plans;
   // Source function argument ABI mappings.
   loom_low_lower_abi_argument_t* argument_map;
   // Number of entries in argument_map.
