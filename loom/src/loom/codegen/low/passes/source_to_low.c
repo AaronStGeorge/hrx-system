@@ -137,12 +137,6 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
       loom_low_pass_capability_descriptor_registry(low_capability);
   const loom_low_lower_policy_registry_t* policy_registry =
       loom_low_pass_capability_lower_policy_registry(low_capability);
-  if (!descriptor_registry || !policy_registry) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "pass 'source-to-low' requires pass environment low descriptor and "
-        "lowering policy registries");
-  }
 
   iree_arena_allocator_t selection_arena;
   iree_arena_initialize(module->arena.block_pool, &selection_arena);

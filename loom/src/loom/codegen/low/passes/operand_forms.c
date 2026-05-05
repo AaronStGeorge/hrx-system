@@ -335,12 +335,6 @@ iree_status_t loom_low_select_operand_forms_run(loom_pass_t* pass,
       loom_low_pass_capability_from_pass(pass);
   const loom_low_descriptor_registry_t* descriptor_registry =
       loom_low_pass_capability_descriptor_registry(low_capability);
-  if (!descriptor_registry) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "pass 'low-select-operand-forms' requires a pass environment low "
-        "descriptor registry");
-  }
   return loom_low_select_operand_forms_function(
       pass, module, function, descriptor_registry, pass->diagnostic_emitter);
 }

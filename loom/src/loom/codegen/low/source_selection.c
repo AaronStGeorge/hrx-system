@@ -76,12 +76,6 @@ iree_status_t loom_low_select_source_funcs(
     iree_arena_allocator_t* arena,
     loom_low_source_selection_list_t* out_selection_list) {
   *out_selection_list = (loom_low_source_selection_list_t){0};
-  if (options->policy_registry == NULL) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "source-to-low selection requires a lowering policy registry");
-  }
-
   loom_symbol_fact_table_t fact_table = {0};
   loom_symbol_fact_table_initialize(&fact_table, arena);
   if (module->symbols.count == 0) {
@@ -93,10 +87,6 @@ iree_status_t loom_low_select_source_funcs(
       arena, module->symbols.count, sizeof(*selections), (void**)&selections));
   iree_host_size_t selection_count = 0;
   for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
-    if (i > UINT16_MAX) {
-      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                              "symbol index exceeds source selection range");
-    }
     bool compatible = false;
     loom_low_source_selection_t candidate = {0};
     IREE_RETURN_IF_ERROR(loom_low_source_selection_try_func(
