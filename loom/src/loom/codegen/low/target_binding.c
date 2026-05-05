@@ -147,7 +147,7 @@ static iree_status_t loom_low_emit_missing_descriptor_set(
       .op = target_context_op,
       .field_ref = loom_diagnostic_field_ref_none(),
   }};
-  return loom_low_emit(emitter, low_func_op, LOOM_ERR_LOWERING_003, params,
+  return loom_low_emit(emitter, low_func_op, LOOM_ERR_TARGET_044, params,
                        IREE_ARRAYSIZE(params), related,
                        target_context_op ? IREE_ARRAYSIZE(related) : 0);
 }

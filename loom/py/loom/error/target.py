@@ -855,6 +855,67 @@ ERR_TARGET_043 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_044: Low descriptor set is not available.
+ERR_TARGET_044 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=44,
+    severity=Severity.ERROR,
+    summary="Low descriptor set is not available.",
+    message=(
+        "low function '@{function_name}' target '@{target_name}' requires "
+        "descriptor set '{descriptor_set_key}', but the descriptor registry "
+        "does not provide it"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+        ErrorParam("descriptor_set_key", ParamKind.STRING),
+    ),
+    fix_hint="Link the descriptor package named by '{descriptor_set_key}' or "
+    "choose a target config whose descriptor set is available",
+)
+
+# ERR_TARGET_045: Low descriptor is not available.
+ERR_TARGET_045 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=45,
+    severity=Severity.ERROR,
+    summary="Low descriptor is not available.",
+    message=(
+        "low function '@{function_name}' uses descriptor '{opcode}', but "
+        "descriptor set '{descriptor_set_key}' does not define it"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("opcode", ParamKind.STRING),
+        ErrorParam("descriptor_set_key", ParamKind.STRING),
+    ),
+    fix_hint="Choose an opcode from descriptor set '{descriptor_set_key}' or "
+    "select a target config with a descriptor set that defines '{opcode}'",
+)
+
+# ERR_TARGET_046: Low descriptor feature is not enabled.
+ERR_TARGET_046 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=46,
+    severity=Severity.ERROR,
+    summary="Low descriptor feature is not enabled.",
+    message=(
+        "low function '@{function_name}' uses descriptor '{opcode}' from set "
+        "'{descriptor_set_key}', but feature word {feature_word_index} is "
+        "missing bits {missing_feature_bits}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("opcode", ParamKind.STRING),
+        ErrorParam("descriptor_set_key", ParamKind.STRING),
+        ErrorParam("feature_word_index", ParamKind.U32),
+        ErrorParam("missing_feature_bits", ParamKind.U64),
+    ),
+    fix_hint="Enable the missing target feature bits or choose a descriptor "
+    "legal for the selected target config",
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -899,4 +960,7 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_041,
     ERR_TARGET_042,
     ERR_TARGET_043,
+    ERR_TARGET_044,
+    ERR_TARGET_045,
+    ERR_TARGET_046,
 )

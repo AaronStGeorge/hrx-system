@@ -37,7 +37,7 @@ iree_status_t loom_low_schedule_emit_missing_descriptor(
       loom_param_string(opcode),
       loom_param_string(state->target.descriptor_set_key),
   };
-  return loom_low_schedule_emit(state, op, LOOM_ERR_LOWERING_004, params,
+  return loom_low_schedule_emit(state, op, LOOM_ERR_TARGET_045, params,
                                 IREE_ARRAYSIZE(params));
 }
 

@@ -158,7 +158,7 @@ static iree_status_t loom_low_verify_emit_missing_descriptor(
                                     opcode_attr_index)),
       loom_param_string(target->descriptor_set_key),
   };
-  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_004,
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_TARGET_045,
                               params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
@@ -324,7 +324,7 @@ static iree_status_t loom_low_verify_emit_missing_features(
       loom_param_u32(feature_word_index),
       loom_param_u64(missing_bits),
   };
-  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_005,
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_TARGET_046,
                               params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
