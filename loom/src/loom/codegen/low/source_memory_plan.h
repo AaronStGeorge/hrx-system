@@ -89,19 +89,26 @@ typedef struct loom_low_source_memory_access_diagnostic_t {
 typedef struct loom_low_source_memory_dynamic_term_t {
   // Dynamic source SSA value multiplied into this address term.
   loom_value_id_t index;
+  // Dynamic dimension SSA values multiplied into this term's byte stride.
+  loom_value_id_t stride_values[LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY];
+  // Number of populated entries in stride_values.
+  uint8_t stride_value_count;
   // Source provenance for the dynamic index value.
   loom_low_source_memory_dynamic_index_source_t source;
   // Workitem/workgroup dimension when |source| is a coordinate.
   loom_kernel_dimension_t dimension;
   // View axis represented by |index|.
   uint8_t axis;
-  // Byte stride multiplied by |index| before adding it to the address.
+  // Static byte stride multiplied by |index| and each stride value before
+  // adding the term to the address.
   int64_t byte_stride;
-  // Facts for |index| multiplied by |byte_stride|, in bytes.
+  // Facts for |index| multiplied by all stride factors and |byte_stride|, in
+  // bytes.
   loom_value_facts_t byte_facts;
-  // Power-of-two shift used to compute the dynamic byte offset, or
+  // Power-of-two shift used to compute the static byte stride, or
   // LOOM_LOW_SOURCE_MEMORY_ACCESS_BYTE_SHIFT_NONE when multiplication or
-  // target-specific handling is required.
+  // target-specific handling is required. Dynamic stride values are still
+  // multiplied separately.
   uint32_t byte_shift;
 } loom_low_source_memory_dynamic_term_t;
 

@@ -77,6 +77,24 @@ TEST(TargetLaunchTest, RejectsRequiredFlatWorkgroupSizeOverflow) {
       loom_target_validate_hal_kernel_launch(&snapshot, &hal_kernel));
 }
 
+TEST(TargetLaunchTest, ComputesFlatWorkgroupSize) {
+  uint32_t flat_size = 0;
+  loom_target_workgroup_size_t concrete = {.x = 64, .y = 2, .z = 1};
+  EXPECT_TRUE(
+      loom_target_workgroup_size_flat_product_u32(&concrete, &flat_size));
+  EXPECT_EQ(flat_size, 128u);
+
+  loom_target_workgroup_size_t unresolved = {.x = 0, .y = 0, .z = 0};
+  EXPECT_TRUE(
+      loom_target_workgroup_size_flat_product_u32(&unresolved, &flat_size));
+  EXPECT_EQ(flat_size, 0u);
+
+  loom_target_workgroup_size_t overflowing = {
+      .x = UINT32_MAX, .y = UINT32_MAX, .z = UINT32_MAX};
+  EXPECT_FALSE(
+      loom_target_workgroup_size_flat_product_u32(&overflowing, &flat_size));
+}
+
 TEST(TargetLaunchTest, ValidatesSelectedFlatWorkgroupRange) {
   loom_target_snapshot_t snapshot = TestSnapshot();
   loom_target_hal_kernel_abi_t hal_kernel =

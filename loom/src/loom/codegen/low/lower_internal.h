@@ -11,6 +11,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/analysis/view_regions.h"
 #include "loom/codegen/low/builder.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/lower_rules.h"
@@ -117,6 +118,12 @@ typedef struct loom_low_lowering_frame_t {
   iree_host_size_t memory_access_record_count;
   // Capacity of memory_access_records.
   iree_host_size_t memory_access_record_capacity;
+  // View-region table for the source function, initialized on first use.
+  loom_view_region_table_t view_regions;
+  // True after view_regions has been initialized against value_domain.
+  bool view_regions_initialized;
+  // True after view_regions has recorded per-view read/write flags.
+  bool view_regions_analyzed;
   // Descriptor set used to build rule_descriptor_maps.
   const loom_low_descriptor_set_t* rule_descriptor_map_set;
   // Per-policy-rule-set descriptor-ref to descriptor-row maps.

@@ -33,6 +33,14 @@ bool loom_target_workgroup_size_is_concrete(
 bool loom_target_workgroup_size_is_partial(
     const loom_target_workgroup_size_t* size);
 
+// Computes the flat workgroup size product.
+//
+// Returns false if the product overflows uint32_t. Any zero dimension makes the
+// flat size zero, matching the target launch convention that an all-zero
+// workgroup size is unresolved.
+bool loom_target_workgroup_size_flat_product_u32(
+    const loom_target_workgroup_size_t* size, uint32_t* out_flat_size);
+
 // Validates HAL kernel launch facts against the target capability envelope.
 //
 // An empty required workgroup size is valid and means launch selection remains

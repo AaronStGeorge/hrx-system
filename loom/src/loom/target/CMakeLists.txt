@@ -207,6 +207,7 @@ loom_cc_library(
     ::types
     iree::base
     iree::base::internal::arena
+    loom::src::loom::analysis::view_regions
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir

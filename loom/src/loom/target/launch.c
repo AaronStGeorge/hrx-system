@@ -24,6 +24,17 @@ bool loom_target_workgroup_size_is_partial(
          !loom_target_workgroup_size_is_concrete(size);
 }
 
+bool loom_target_workgroup_size_flat_product_u32(
+    const loom_target_workgroup_size_t* size, uint32_t* out_flat_size) {
+  uint64_t flat_size = (uint64_t)size->x * size->y * size->z;
+  if (flat_size > UINT32_MAX) {
+    *out_flat_size = 0;
+    return false;
+  }
+  *out_flat_size = (uint32_t)flat_size;
+  return true;
+}
+
 static iree_status_t loom_target_validate_required_workgroup_size(
     const loom_target_workgroup_size_t* limit,
     const loom_target_workgroup_size_t* required) {

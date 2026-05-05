@@ -219,6 +219,25 @@ const loom_value_fact_table_t* loom_low_lower_context_fact_table(
   return context->lowering.fact_table;
 }
 
+iree_status_t loom_low_lower_context_view_regions(
+    loom_low_lower_context_t* context,
+    const loom_view_region_table_t** out_view_regions) {
+  *out_view_regions = NULL;
+  if (!context->lowering.view_regions_initialized) {
+    IREE_RETURN_IF_ERROR(loom_view_region_table_initialize(
+        context->lowering.fact_table, &context->lowering.value_domain,
+        &context->arena, &context->lowering.view_regions));
+    context->lowering.view_regions_initialized = true;
+  }
+  if (!context->lowering.view_regions_analyzed) {
+    IREE_RETURN_IF_ERROR(
+        loom_view_region_table_analyze(&context->lowering.view_regions));
+    context->lowering.view_regions_analyzed = true;
+  }
+  *out_view_regions = &context->lowering.view_regions;
+  return iree_ok_status();
+}
+
 iree_host_size_t loom_low_lower_context_selected_plan_count(
     const loom_low_lower_context_t* context) {
   return context->lowering.selected_plan_count;

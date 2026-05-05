@@ -59,6 +59,30 @@ func.def @dynamic_unit_axis_proven_by_assume_relation(%buffer: buffer, %base: of
 
 // ====
 
+func.def @dynamic_unit_axis_proven_by_assume_relation_through_cast(%buffer: buffer, %base: offset, %row: index, %n: i32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %n_idx = index.cast %n : i32 to index
+  %view = buffer.view %buffer[%base] : buffer -> view<[%n]x4xf32, %layout>
+  %row_in_bounds, %n_idx_assumed = index.assume %row, %n_idx [ge(%row, 0), lt(%row, %n_idx)] : index, index
+  %loaded = vector.load %view[%row_in_bounds, 0] : view<[%n]x4xf32, %layout> -> vector<4xf32>
+  func.return
+}
+
+// ====
+
+func.def @dynamic_unit_axis_proven_by_scalar_assume_before_index_cast(%buffer: buffer, %base: offset, %row: i32, %n: i32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %n_idx = index.cast %n : i32 to index
+  %view = buffer.view %buffer[%base] : buffer -> view<[%n_idx]x4xf32, %layout>
+  %row_bounded, %n_bounded = scalar.assume %row, %n [lt(%row, %n)] : i32, i32
+  %row_nonnegative = scalar.assume %row_bounded [ge(%row_bounded, 0)] : i32
+  %row_idx = index.cast %row_nonnegative : i32 to index
+  %loaded = vector.load %view[%row_idx, 0] : view<[%n_idx]x4xf32, %layout> -> vector<4xf32>
+  func.return
+}
+
+// ====
+
 func.def @mask_range_tail_uses_upper_bound(%buffer: buffer, %base: offset, %n: index, %iv: index, %old: vector<16xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %c1 = index.constant 1 : index

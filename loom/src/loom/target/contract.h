@@ -35,6 +35,8 @@
 extern "C" {
 #endif
 
+typedef struct loom_view_region_table_t loom_view_region_table_t;
+
 typedef enum loom_target_contract_query_outcome_e {
   // No linked contract fragment or provider has an opinion about the op.
   LOOM_TARGET_CONTRACT_QUERY_UNHANDLED = 0,
@@ -319,6 +321,8 @@ typedef struct loom_target_contract_query_environment_t {
   const loom_low_descriptor_set_t* descriptor_set;
   // Source value facts visible to the query.
   const loom_value_fact_table_t* fact_table;
+  // Optional function-local view-region analysis visible to the query.
+  const loom_view_region_table_t* view_regions;
   // Scoped arena available for rare query-side auxiliary records.
   iree_arena_allocator_t* arena;
 } loom_target_contract_query_environment_t;

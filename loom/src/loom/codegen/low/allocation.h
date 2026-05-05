@@ -245,6 +245,18 @@ typedef struct loom_low_allocation_edge_copy_temporary_t {
   uint32_t location;
 } loom_low_allocation_edge_copy_temporary_t;
 
+// Scratch unit reserved for sequencing one cyclic packet-local move set.
+typedef struct loom_low_allocation_packet_move_temporary_t {
+  // Storage class of the cyclic move set.
+  loom_liveness_value_class_t value_class;
+  // Descriptor-set-local register class ID for |value_class|.
+  uint16_t descriptor_reg_class_id;
+  // Target-visible scratch location kind.
+  loom_low_allocation_location_kind_t location_kind;
+  // Physical register, target ID, or spill slot ordinal used as scratch.
+  uint32_t location;
+} loom_low_allocation_packet_move_temporary_t;
+
 // Contiguous edge-copy group for one low.br terminator.
 typedef struct loom_low_allocation_edge_copy_group_t {
   // low.br terminator that owns this outgoing edge.
@@ -262,6 +274,20 @@ typedef struct loom_low_allocation_edge_copy_group_t {
   // Number of temporary records reserved for |terminator_op|.
   uint32_t temporary_count;
 } loom_low_allocation_edge_copy_group_t;
+
+// Scratch-unit group for one packet-local parallel move operation.
+typedef struct loom_low_allocation_packet_move_temporary_group_t {
+  // low.copy, low.slice, or low.concat operation that owns the move set.
+  const loom_op_t* op;
+  // Source-order ordinal of |op| in its low function body.
+  uint32_t source_ordinal;
+  // Program point where the packet-local moves execute.
+  uint32_t program_point;
+  // First scratch record for |op|.
+  uint32_t temporary_start;
+  // Number of scratch records reserved for |op|.
+  uint32_t temporary_count;
+} loom_low_allocation_packet_move_temporary_group_t;
 
 // Options controlling allocation table construction.
 typedef struct loom_low_allocation_options_t {
@@ -334,6 +360,15 @@ typedef struct loom_low_allocation_table_t {
   const loom_low_allocation_edge_copy_temporary_t* edge_copy_temporaries;
   // Number of records in |edge_copy_temporaries|.
   iree_host_size_t edge_copy_temporary_count;
+  // Per-packet groups indexing |packet_move_temporaries|.
+  const loom_low_allocation_packet_move_temporary_group_t*
+      packet_move_temporary_groups;
+  // Number of records in |packet_move_temporary_groups|.
+  iree_host_size_t packet_move_temporary_group_count;
+  // Scratch units reserved for cyclic packet-local move groups.
+  const loom_low_allocation_packet_move_temporary_t* packet_move_temporaries;
+  // Number of records in |packet_move_temporaries|.
+  iree_host_size_t packet_move_temporary_count;
   // Number of assignments whose location kind is SPILL_SLOT.
   iree_host_size_t spill_count;
   // Number of low.copy ops coalesced into one location.
@@ -409,6 +444,12 @@ loom_low_allocation_map_active_value_assignment(
 // has no edge-copy payload.
 const loom_low_allocation_edge_copy_group_t*
 loom_low_allocation_find_edge_copy_group_by_source_ordinal(
+    const loom_low_allocation_table_t* table, uint32_t source_ordinal);
+
+// Finds the packet-local move temporary group for the source-order node, or
+// NULL when the node has no cyclic packet-local move set.
+const loom_low_allocation_packet_move_temporary_group_t*
+loom_low_allocation_find_packet_move_temporary_group_by_source_ordinal(
     const loom_low_allocation_table_t* table, uint32_t source_ordinal);
 
 // Resolves the descriptor-set register class spelling for |assignment|.

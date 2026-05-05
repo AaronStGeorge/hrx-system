@@ -15,6 +15,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/index/ops.h"
+#include "loom/ops/op_defs.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/util/fact_table.h"
@@ -319,6 +320,70 @@ TEST_F(SymbolicExprTest, ScalarAssumePredicatesProveRelations) {
       &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_GT, assumed_element,
       bound, &proof));
   EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_FALSE);
+}
+
+TEST_F(SymbolicExprTest, MemoTableGrowthPreservesOuterExpansion) {
+  loom_value_id_t old_element = DefineI64Value();
+  loom_value_id_t bound = DefineI64Value();
+  loom_predicate_t predicate = {
+      .kind = LOOM_PREDICATE_LT,
+      .arg_count = 2,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_VALUE},
+      .args = {old_element, bound},
+  };
+  loom_type_t i64_type = loom_type_scalar(LOOM_SCALAR_TYPE_I64);
+  loom_type_t result_types[] = {i64_type, i64_type};
+  loom_value_id_t values[] = {old_element, bound};
+  loom_op_t* bounded_op = nullptr;
+  IREE_ASSERT_OK(loom_scalar_assume_build(
+      &builder_, values, IREE_ARRAYSIZE(values), &predicate, 1, result_types,
+      IREE_ARRAYSIZE(result_types), LOOM_LOCATION_UNKNOWN, &bounded_op));
+  loom_value_id_t bounded_element =
+      loom_scalar_assume_results(bounded_op).values[0];
+
+  loom_predicate_t nonnegative_predicate = {
+      .kind = LOOM_PREDICATE_GE,
+      .arg_count = 2,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST},
+      .args = {bounded_element, 0},
+  };
+  loom_op_t* nonnegative_op = nullptr;
+  IREE_ASSERT_OK(loom_scalar_assume_build(
+      &builder_, &bounded_element, 1, &nonnegative_predicate, 1, &i64_type, 1,
+      LOOM_LOCATION_UNKNOWN, &nonnegative_op));
+  loom_value_id_t nonnegative_element =
+      loom_scalar_assume_results(nonnegative_op).values[0];
+
+  loom_op_t* cast_op = nullptr;
+  IREE_ASSERT_OK(loom_index_cast_build(&builder_, nonnegative_element, i64_type,
+                                       loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                       LOOM_LOCATION_UNKNOWN, &cast_op));
+  loom_value_id_t origin = loom_index_cast_result(cast_op);
+
+  loom_value_id_t new_element = DefineI64Value();
+  ASSERT_GT(new_element, origin);
+  IREE_ASSERT_OK(
+      loom_value_replace_all_uses_with(module_, old_element, new_element));
+
+  loom_symbolic_expr_t origin_expression = {0};
+  IREE_ASSERT_OK(loom_symbolic_expr_from_value(&expression_context_, origin,
+                                               &origin_expression));
+  ASSERT_TRUE(loom_symbolic_expr_is_linear(&origin_expression));
+  ASSERT_EQ(origin_expression.term_count, 1);
+  EXPECT_EQ(origin_expression.terms[0].value_id, new_element);
+
+  loom_symbolic_expr_t origin_again = {0};
+  IREE_ASSERT_OK(loom_symbolic_expr_from_value(&expression_context_, origin,
+                                               &origin_again));
+  ASSERT_TRUE(loom_symbolic_expr_is_linear(&origin_again));
+  ASSERT_EQ(origin_again.term_count, 1);
+  EXPECT_EQ(origin_again.terms[0].value_id, new_element);
+
+  loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LT, origin, bound,
+      &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
 }
 
 TEST_F(SymbolicExprTest, TermsAreSortedByValueId) {

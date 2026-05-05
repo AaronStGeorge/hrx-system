@@ -36,6 +36,8 @@ typedef struct loom_target_low_legality_context_t
     loom_target_low_legality_context_t;
 typedef struct loom_target_low_legality_provider_t
     loom_target_low_legality_provider_t;
+typedef struct loom_local_value_domain_t loom_local_value_domain_t;
+typedef struct loom_view_region_table_t loom_view_region_table_t;
 
 typedef enum loom_target_low_legality_diagnostic_flag_bits_e {
   // Emit target memory-access selection remarks from providers that support
@@ -120,7 +122,10 @@ typedef struct loom_target_low_legality_options_t {
   // source of truth for table-backed source-to-low emission.
   loom_target_contract_query_callback_t contract_query;
   // Caller-owned facts for |function|.
-  const loom_value_fact_table_t* fact_table;
+  loom_value_fact_table_t* fact_table;
+  // Optional active value domain for |function|'s body. Providers can use this
+  // to request shared function-local analyses without acquiring module scratch.
+  const loom_local_value_domain_t* value_domain;
   // Optional target-specific feedback diagnostics to emit during source
   // legality. Zero keeps legality quiet except for errors and provider-owned
   // mandatory contract remarks.
@@ -178,6 +183,13 @@ const loom_low_descriptor_set_t* loom_target_low_legality_descriptor_set(
 // Returns source value facts available to target-specific legality providers.
 const loom_value_fact_table_t* loom_target_low_legality_fact_table(
     const loom_target_low_legality_context_t* context);
+
+// Returns a lazily analyzed view-region table when the caller supplied a value
+// domain for the checked function. Standalone legality callers that do not
+// provide a domain receive NULL.
+iree_status_t loom_target_low_legality_view_regions(
+    loom_target_low_legality_context_t* context,
+    const loom_view_region_table_t** out_view_regions);
 
 // Returns the optional feedback diagnostics requested by the caller.
 loom_target_low_legality_diagnostic_flags_t

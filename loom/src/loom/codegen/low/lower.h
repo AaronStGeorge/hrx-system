@@ -37,6 +37,7 @@ typedef struct loom_low_lower_context_t loom_low_lower_context_t;
 typedef struct loom_low_lower_rule_set_t loom_low_lower_rule_set_t;
 typedef struct loom_low_source_memory_access_plan_t
     loom_low_source_memory_access_plan_t;
+typedef struct loom_view_region_table_t loom_view_region_table_t;
 
 typedef struct loom_low_lower_rule_mapped_value_t {
   // True when the source value maps to a target-low register.
@@ -548,6 +549,12 @@ const loom_low_descriptor_set_t* loom_low_lower_context_descriptor_set(
 // the source function being lowered and remains valid only during callbacks.
 const loom_value_fact_table_t* loom_low_lower_context_fact_table(
     const loom_low_lower_context_t* context);
+
+// Returns a lazily analyzed view-region table for the source function being
+// lowered. The table remains valid only during the current lowering callback.
+iree_status_t loom_low_lower_context_view_regions(
+    loom_low_lower_context_t* context,
+    const loom_view_region_table_t** out_view_regions);
 
 // Returns the number of non-structural source-op lowering plans selected during
 // planning. Preamble callbacks may inspect these plans before body emission.

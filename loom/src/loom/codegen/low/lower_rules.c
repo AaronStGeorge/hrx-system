@@ -489,6 +489,9 @@ static bool loom_low_lower_source_memory_dynamic_terms_match(
   for (uint8_t i = 0; i < access->dynamic_term_count; ++i) {
     const loom_low_source_memory_dynamic_term_t* term =
         &access->dynamic_terms[i];
+    if (term->stride_value_count != 0) {
+      return false;
+    }
     if (term->source != source_memory->dynamic_index_source ||
         term->byte_stride != source_memory->dynamic_byte_stride) {
       return false;

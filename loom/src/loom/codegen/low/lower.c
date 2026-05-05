@@ -603,19 +603,24 @@ static bool loom_low_lower_rule_selection_is_better_failure(
               failed_rule_selection.matched_guard_count);
 }
 
-static loom_target_contract_query_environment_t
-loom_low_lower_query_environment_from_context(
+static iree_status_t loom_low_lower_query_environment_from_context(
     loom_low_lower_context_t* context,
-    const loom_low_descriptor_set_t* descriptor_set) {
-  return (loom_target_contract_query_environment_t){
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_target_contract_query_environment_t* out_environment) {
+  const loom_view_region_table_t* view_regions = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_context_view_regions(context, &view_regions));
+  *out_environment = (loom_target_contract_query_environment_t){
       .module = context->module,
       .function = context->source_function,
       .bundle = context->options->bundle,
       .target_ref = context->options->target_ref,
       .descriptor_set = descriptor_set,
       .fact_table = context->lowering.fact_table,
+      .view_regions = view_regions,
       .arena = &context->arena,
   };
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_lower_emit_contract_query_rejection(
@@ -648,9 +653,9 @@ static iree_status_t loom_low_lower_descriptor_matrix_request_from_source(
             "descriptor-matrix vector.mma plan cannot lower a non-vector.mma "
             "source op");
       }
-      const loom_target_contract_query_environment_t environment =
-          loom_low_lower_query_environment_from_context(
-              context, context->descriptor_set);
+      loom_target_contract_query_environment_t environment = {0};
+      IREE_RETURN_IF_ERROR(loom_low_lower_query_environment_from_context(
+          context, context->descriptor_set, &environment));
       loom_contract_vector_mma_options_t options = {0};
       IREE_RETURN_IF_ERROR(context->policy->descriptor_matrix.options(
           context->policy->descriptor_matrix.user_data, &environment,
@@ -741,9 +746,9 @@ static iree_status_t loom_low_lower_plan_op_from_contract_index(
           &binding->fragment->descriptor_matrices[contract_case->row_index];
       loom_target_contract_query_result_t query_result =
           loom_target_contract_query_result_empty();
-      const loom_target_contract_query_environment_t environment =
-          loom_low_lower_query_environment_from_context(
-              context, context->descriptor_set);
+      loom_target_contract_query_environment_t environment = {0};
+      IREE_RETURN_IF_ERROR(loom_low_lower_query_environment_from_context(
+          context, context->descriptor_set, &environment));
       IREE_RETURN_IF_ERROR(loom_low_lower_query_descriptor_matrix_contract(
           &environment, &context->policy->descriptor_matrix, matrix_rule,
           source_op, &query_result));
@@ -1977,6 +1982,7 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
                 .user_data = &context,
             },
         .fact_table = context.lowering.fact_table,
+        .value_domain = &context.lowering.value_domain,
         .diagnostic_flags = options->legality_diagnostic_flags,
         .emitter = options->emitter,
         .max_errors = options->max_errors,

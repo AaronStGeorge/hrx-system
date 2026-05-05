@@ -435,6 +435,7 @@ loom_cc_library(
     loom::src::loom::analysis::contract_vector
     loom::src::loom::analysis::kernel_async_legality
     loom::src::loom::analysis::vector_memory_footprint
+    loom::src::loom::analysis::view_regions
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir
@@ -486,6 +487,7 @@ loom_cc_library(
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
     loom::src::loom::util::fact_table
+    loom::src::loom::util::math
   PUBLIC
 )
 

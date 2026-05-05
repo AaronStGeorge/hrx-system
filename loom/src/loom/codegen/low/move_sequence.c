@@ -149,6 +149,17 @@ static void loom_low_move_location_from_edge_copy_temporary(
   };
 }
 
+static void loom_low_move_location_from_packet_move_temporary(
+    const loom_low_allocation_packet_move_temporary_t* temporary,
+    loom_low_move_location_t* out_location) {
+  *out_location = (loom_low_move_location_t){
+      .location_kind = temporary->location_kind,
+      .value_class = temporary->value_class,
+      .descriptor_reg_class_id = temporary->descriptor_reg_class_id,
+      .location = temporary->location,
+  };
+}
+
 static const loom_low_allocation_assignment_t*
 loom_low_move_sequence_assignment(const loom_low_allocation_table_t* allocation,
                                   loom_value_id_t value_id) {
@@ -263,6 +274,32 @@ iree_status_t loom_low_move_sequence_populate_edge_copy_temporaries(
   for (uint32_t i = 0; i < group->temporary_count; ++i) {
     loom_low_move_location_from_edge_copy_temporary(
         &allocation->edge_copy_temporaries[group->temporary_start + i],
+        &temporary_locations[i]);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_move_sequence_populate_packet_move_temporaries(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_packet_move_temporary_group_t* group,
+    loom_low_move_location_t* temporary_locations,
+    iree_host_size_t temporary_location_count) {
+  if (temporary_location_count != group->temporary_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "packet move temporary storage has %zu entries but needs %" PRIu32,
+        temporary_location_count, group->temporary_count);
+  }
+  if (group->temporary_start > allocation->packet_move_temporary_count ||
+      group->temporary_count >
+          allocation->packet_move_temporary_count - group->temporary_start) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "packet move temporary group range is outside allocation");
+  }
+  for (uint32_t i = 0; i < group->temporary_count; ++i) {
+    loom_low_move_location_from_packet_move_temporary(
+        &allocation->packet_move_temporaries[group->temporary_start + i],
         &temporary_locations[i]);
   }
   return iree_ok_status();

@@ -9,8 +9,10 @@
 #include <stdint.h>
 
 #include "iree/base/internal/arena.h"
+#include "loom/analysis/view_regions.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
+#include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/cfg/ops.h"
@@ -41,7 +43,15 @@ struct loom_target_low_legality_context_t {
   // Descriptor set selected by options.bundle.
   const loom_low_descriptor_set_t* descriptor_set;
   // Source facts visible to target-specific legality providers.
-  const loom_value_fact_table_t* fact_table;
+  loom_value_fact_table_t* fact_table;
+  // Optional active value domain supplied by the source-to-low frame.
+  const loom_local_value_domain_t* value_domain;
+  // View-region table for providers that need read/write summaries.
+  loom_view_region_table_t view_regions;
+  // True after view_regions has been initialized against value_domain.
+  bool view_regions_initialized;
+  // True after view_regions has recorded per-view read/write flags.
+  bool view_regions_analyzed;
   // Result object receiving counters and selected descriptor set.
   loom_target_low_legality_result_t* result;
   // Scratch arena for the IR walker.
@@ -254,6 +264,28 @@ const loom_low_descriptor_set_t* loom_target_low_legality_descriptor_set(
 const loom_value_fact_table_t* loom_target_low_legality_fact_table(
     const loom_target_low_legality_context_t* context) {
   return context->fact_table;
+}
+
+iree_status_t loom_target_low_legality_view_regions(
+    loom_target_low_legality_context_t* context,
+    const loom_view_region_table_t** out_view_regions) {
+  *out_view_regions = NULL;
+  if (context->value_domain == NULL) {
+    return iree_ok_status();
+  }
+  if (!context->view_regions_initialized) {
+    IREE_RETURN_IF_ERROR(loom_view_region_table_initialize(
+        context->fact_table, context->value_domain, &context->arena,
+        &context->view_regions));
+    context->view_regions_initialized = true;
+  }
+  if (!context->view_regions_analyzed) {
+    IREE_RETURN_IF_ERROR(
+        loom_view_region_table_analyze(&context->view_regions));
+    context->view_regions_analyzed = true;
+  }
+  *out_view_regions = &context->view_regions;
+  return iree_ok_status();
 }
 
 loom_target_low_legality_diagnostic_flags_t
@@ -504,6 +536,9 @@ static iree_status_t loom_target_low_legality_try_contract_query_op(
     return iree_ok_status();
   }
 
+  const loom_view_region_table_t* view_regions = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_target_low_legality_view_regions(context, &view_regions));
   const loom_target_contract_query_environment_t environment = {
       .module = context->module,
       .function = context->function,
@@ -511,6 +546,7 @@ static iree_status_t loom_target_low_legality_try_contract_query_op(
       .target_ref = context->options->target_ref,
       .descriptor_set = context->descriptor_set,
       .fact_table = context->fact_table,
+      .view_regions = view_regions,
       .arena = &context->arena,
   };
   loom_target_contract_query_result_t result =
@@ -708,6 +744,7 @@ iree_status_t loom_target_low_verify_function_legality(
   };
   iree_arena_initialize(module->arena.block_pool, &context.arena);
   context.fact_table = options->fact_table;
+  context.value_domain = options->value_domain;
 
   iree_status_t status = iree_ok_status();
   if (iree_status_is_ok(status)) {

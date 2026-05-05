@@ -179,6 +179,7 @@ loom_cc_library(
         ":contract",
         ":low_descriptor_registry",
         ":types",
+        "//loom/src/loom/analysis:view_regions",
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",

@@ -142,6 +142,15 @@ iree_status_t loom_low_move_sequence_populate_edge_copy_temporaries(
     loom_low_move_location_t* temporary_locations,
     iree_host_size_t temporary_location_count);
 
+// Populates |temporary_locations| from the scratch units planned for one
+// packet-local move group. |temporary_location_count| must match
+// group->temporary_count.
+iree_status_t loom_low_move_sequence_populate_packet_move_temporaries(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_packet_move_temporary_group_t* group,
+    loom_low_move_location_t* temporary_locations,
+    iree_host_size_t temporary_location_count);
+
 // Counts scalar unit moves required to materialize one low.slice. Coalesced
 // structural slices require zero moves.
 iree_status_t loom_low_move_sequence_count_slice_units(
