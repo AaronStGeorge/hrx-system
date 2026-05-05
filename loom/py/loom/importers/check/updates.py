@@ -35,7 +35,11 @@ def format_updated_source(
         if result is None:
             updated_cases.append(case.raw_source or case.source)
             continue
-        if result.returncode == 0 and (case.has_expected or result.stdout):
+        if (
+            result.returncode == 0
+            and not result.skipped
+            and (case.has_expected or result.stdout)
+        ):
             updated_cases.append(
                 format_updated_case(
                     case.source,

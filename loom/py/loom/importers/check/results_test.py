@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 from loom.importers.check.results import (
     CheckResult,
     dump_check_results,
+    results_to_json,
     summarize_results,
 )
 
@@ -53,3 +54,21 @@ def test_dump_check_results_writes_case_artifacts() -> None:
         assert (case_dirs[0] / "expected.txt").read_text() == "expected\n"
         assert (case_dirs[0] / "stdout.txt").read_text() == "actual\n"
         assert (case_dirs[0] / "diff.patch").read_text() == "diff\n"
+
+
+def test_results_json_preserves_metadata() -> None:
+    rendered = results_to_json(
+        [
+            CheckResult(
+                Path("kernels.py"),
+                0,
+                0,
+                "actual\n",
+                "",
+                metadata={"tilelang_oracle": {"status": "unavailable"}},
+            )
+        ]
+    )
+
+    assert '"tilelang_oracle"' in rendered
+    assert '"status": "unavailable"' in rendered

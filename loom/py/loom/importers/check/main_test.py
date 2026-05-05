@@ -65,6 +65,7 @@ def test_main_skips_unavailable_importer_by_default() -> None:
 
     assert exit_code == 0
     assert "skipped: case.py" in stdout.getvalue()
+    assert "package missing; install extra" in stdout.getvalue()
     assert "summary: 0 passed, 0 updated, 1 skipped, 0 failed, 0 crashed" in (
         stdout.getvalue()
     )

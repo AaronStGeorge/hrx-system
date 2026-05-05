@@ -94,7 +94,7 @@ def main(
                 sys.stdout.write(f"  {result.mismatch}\n")
                 if result.diff:
                     sys.stdout.write(result.diff)
-            if not result.passed:
+            if result.skipped or not result.passed:
                 first_line = _diagnostic_line(result.stderr or result.stdout)
                 if first_line:
                     sys.stdout.write(f"  {first_line}\n")
@@ -192,6 +192,15 @@ rewrites. Bazel and CMake tests pass `--loom-opt` explicitly from build
 metadata. Direct use resolves `loom-opt` from `--loom-opt`, `LOOM_BIN_DIR`, or
 `PATH`; importer-check Python does not inspect Bazel runfiles or repository
 paths.
+
+TileLang checks also have an opt-in oracle lane for comparing against
+TileLang/TVM generated artifacts. `--oracle=source` asks TileLang for generated
+device source, and `--oracle=code-object` additionally compiles, unbundles, and
+externally disassembles a code object when the ROCm tools are available. This
+metadata is sidecar validation evidence: the checked stdout remains imported
+Loom IR. Use `--oracle-output-dir` or `--dump-temp-dir` to retain artifact files.
+Missing TileLang/ROCm hooks or tools produce skipped cases with structured JSON
+metadata, not fake passes.
 
 Expected diagnostics use loom-check-style source annotations:
 

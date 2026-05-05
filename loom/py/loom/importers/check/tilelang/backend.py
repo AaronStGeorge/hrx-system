@@ -14,6 +14,7 @@ from pathlib import Path
 from loom.importers.check.loom_verifier import LoomOutputVerifier
 from loom.importers.check.registry import Availability, has_module
 from loom.importers.check.results import CheckResult
+from loom.importers.check.tilelang.runner import TILELANG_ORACLE_MODES
 
 
 class TileLangBackend:
@@ -53,10 +54,28 @@ class TileLangBackend:
             action="store_true",
             help="update inline expected output sections",
         )
+        parser.add_argument(
+            "--oracle",
+            choices=TILELANG_ORACLE_MODES,
+            default="off",
+            help=(
+                "optionally capture TileLang generated source or code-object "
+                "oracle artifacts while still checking imported Loom IR"
+            ),
+        )
+        parser.add_argument(
+            "--oracle-output-dir",
+            type=Path,
+            help=(
+                "directory for TileLang oracle artifacts; code-object capture "
+                "requires this or --dump-temp-dir"
+            ),
+        )
 
     def run(self, args: argparse.Namespace) -> tuple[CheckResult, ...]:
         from loom.importers.check.tilelang.runner import (
             TileLangCheckOptions,
+            TileLangOracleCheckOptions,
             run_tilelang_check,
         )
 
@@ -65,6 +84,10 @@ class TileLangBackend:
             target_preset=args.target_preset,
             case_filter=args.case_filter,
             output_verifier=LoomOutputVerifier.resolve(args.loom_opt),
+            oracle=TileLangOracleCheckOptions(
+                mode=args.oracle,
+                output_directory=args.oracle_output_dir or args.dump_temp_dir,
+            ),
         )
         return tuple(
             result

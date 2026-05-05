@@ -30,6 +30,34 @@ class TileLangOracleError(RuntimeError):
     """Raised when TileLang oracle capture cannot complete."""
 
 
+class TileLangOracleUnavailable(TileLangOracleError):
+    """Raised when an optional TileLang oracle dependency is unavailable."""
+
+    def __init__(
+        self,
+        dependency: str,
+        reason: str,
+        *,
+        target_text: str | None = None,
+    ) -> None:
+        super().__init__(reason)
+        self.dependency: str = dependency
+        self.reason: str = reason
+        self.target_text: str | None = target_text
+
+    def metadata(self) -> Mapping[str, object]:
+        """Returns structured unavailable metadata for check results."""
+
+        metadata: dict[str, object] = {
+            "status": "unavailable",
+            "dependency": self.dependency,
+            "reason": self.reason,
+        }
+        if self.target_text is not None:
+            metadata["target"] = self.target_text
+        return metadata
+
+
 @dataclass(frozen=True, slots=True)
 class TileLangOracleToolchain:
     """Optional external tools used by TileLang oracle capture."""
@@ -179,11 +207,23 @@ def compile_hip_code_object(
 
     toolchain = toolchain or TileLangOracleToolchain.probe()
     if toolchain.hipcc is None:
-        raise TileLangOracleError("hipcc is not available")
+        raise TileLangOracleUnavailable(
+            "hipcc",
+            "hipcc is not available",
+            target_text=generated_source.target_text,
+        )
     if toolchain.clang_offload_bundler is None:
-        raise TileLangOracleError("clang-offload-bundler is not available")
+        raise TileLangOracleUnavailable(
+            "clang-offload-bundler",
+            "clang-offload-bundler is not available",
+            target_text=generated_source.target_text,
+        )
     if toolchain.llvm_objdump is None:
-        raise TileLangOracleError("llvm-objdump is not available")
+        raise TileLangOracleUnavailable(
+            "llvm-objdump",
+            "llvm-objdump is not available",
+            target_text=generated_source.target_text,
+        )
 
     output_directory.mkdir(parents=True, exist_ok=True)
     source_path = output_directory / f"{stem}.{generated_source.arch}.hip.cpp"
@@ -331,8 +371,10 @@ def _require_codegen_hook(modules: _TileLangModules, target_text: str) -> None:
     required_hook = "target.build.tilelang_hip_without_compile"
     global_func_names = set(modules.tvm_ffi.registry.list_global_func_names())
     if required_hook not in global_func_names:
-        raise TileLangOracleError(
-            f"TileLang HIP source codegen hook `{required_hook}` is not registered"
+        raise TileLangOracleUnavailable(
+            "tilelang-hip-source-codegen",
+            f"TileLang HIP source codegen hook `{required_hook}` is not registered",
+            target_text=target_text,
         )
 
 

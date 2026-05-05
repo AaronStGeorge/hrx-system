@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import hashlib
 import sys
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -56,8 +56,35 @@ class PythonCheckCase:
     function: Callable[..., Any]
 
 
+@dataclass(frozen=True, slots=True)
+class PythonCheckInvocation:
+    """Structured result from invoking one Python check case."""
+
+    stdout: str
+    stderr: str = ""
+    metadata: Mapping[str, object] = field(default_factory=dict)
+
+
 class PythonCheckError(ValueError):
     """Raised for structurally invalid Python importer check files."""
+
+
+class PythonCheckSkip(Exception):
+    """Raised by an importer check case to skip that case."""
+
+    def __init__(
+        self,
+        reason: str,
+        *,
+        stdout: str = "",
+        stderr: str = "",
+        metadata: Mapping[str, object] | None = None,
+    ) -> None:
+        super().__init__(reason)
+        self.reason: str = reason
+        self.stdout: str = stdout
+        self.stderr: str = stderr
+        self.metadata: Mapping[str, object] = dict(metadata or {})
 
 
 def run_python_check(
@@ -65,7 +92,7 @@ def run_python_check(
     *,
     options: PythonCheckOptions,
     is_case: Callable[[object], bool],
-    invoke: Callable[[PythonCheckCase], str],
+    invoke: Callable[[PythonCheckCase], str | PythonCheckInvocation],
     case_labels: Callable[[PythonCheckCase], Sequence[str]] | None = None,
 ) -> tuple[CheckResult, ...]:
     source = path.read_text()
@@ -190,7 +217,7 @@ def run_python_case(
     python_case: PythonCheckCase,
     *,
     options: PythonCheckOptions,
-    invoke: Callable[[PythonCheckCase], str],
+    invoke: Callable[[PythonCheckCase], str | PythonCheckInvocation],
 ) -> CheckResult:
     check_case = python_case.check_case
     expected_diagnostics = parse_expected_diagnostics(
@@ -200,7 +227,19 @@ def run_python_case(
         comment_prefix="#",
     )
     try:
-        stdout = invoke(python_case)
+        invocation = _normalize_invocation(invoke(python_case))
+    except PythonCheckSkip as exc:
+        return CheckResult(
+            path=check_case.path,
+            case_index=check_case.index,
+            returncode=0,
+            stdout=exc.stdout,
+            stderr=exc.stderr or f"{exc.reason}\n",
+            input=check_case.input,
+            expected=check_case.expected,
+            skipped=True,
+            metadata=exc.metadata,
+        )
     except LoomDiagnosticError as exc:
         diagnostics = _diagnostics_with_case_location(exc.diagnostics, python_case)
         if expected_diagnostics:
@@ -228,6 +267,7 @@ def run_python_case(
             input=check_case.input,
             expected=check_case.expected,
         )
+    stdout = invocation.stdout
     if expected_diagnostics:
         return source_diagnostic_check_result(
             check_case,
@@ -245,9 +285,10 @@ def run_python_case(
             case_index=check_case.index,
             returncode=0,
             stdout=stdout,
-            stderr="",
+            stderr=invocation.stderr,
             input=check_case.input,
             expected=check_case.expected,
+            metadata=invocation.metadata,
         )
     if options.update:
         return CheckResult(
@@ -255,20 +296,22 @@ def run_python_case(
             case_index=check_case.index,
             returncode=0,
             stdout=stdout,
-            stderr="",
+            stderr=invocation.stderr,
             input=check_case.input,
             expected=check_case.expected,
             updated=True,
+            metadata=invocation.metadata,
         )
     return CheckResult(
         path=check_case.path,
         case_index=check_case.index,
         returncode=0,
         stdout=stdout,
-        stderr="",
+        stderr=invocation.stderr,
         input=check_case.input,
         expected=check_case.expected,
         mismatch="output differs from expected output",
+        metadata=invocation.metadata,
         diff=unified_diff(
             check_case.expected,
             stdout,
@@ -276,6 +319,12 @@ def run_python_case(
             tofile=f"{check_case.path}:case{check_case.index}:actual",
         ),
     )
+
+
+def _normalize_invocation(result: str | PythonCheckInvocation) -> PythonCheckInvocation:
+    if isinstance(result, PythonCheckInvocation):
+        return result
+    return PythonCheckInvocation(stdout=result)
 
 
 def _filter_python_cases(

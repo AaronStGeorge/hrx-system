@@ -47,6 +47,17 @@ def test_format_updated_source_keeps_unselected_cases() -> None:
     )
 
 
+def test_format_updated_source_keeps_skipped_cases() -> None:
+    source = "input\n// ----\nold\n"
+    cases = parse_inline_cases(
+        Path("kernels.mlir"),
+        source,
+    )
+    results = [CheckResult(Path("kernels.mlir"), 0, 0, "", "", skipped=True)]
+
+    assert format_updated_source(source, cases, results) == source
+
+
 def test_format_updated_source_preserves_python_preamble() -> None:
     syntax = InlineCheckSyntax(
         case_separator_prefix="# ====",

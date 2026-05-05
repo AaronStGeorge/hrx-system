@@ -26,6 +26,7 @@ from loom.importers.tilelang.oracle import (
     TileLangGeneratedSource,
     TileLangOracleError,
     TileLangOracleToolchain,
+    TileLangOracleUnavailable,
     capture_generated_source,
     compile_hip_code_object,
 )
@@ -44,6 +45,7 @@ __all__ = [
     "TileLangImportInput",
     "TileLangOracleError",
     "TileLangOracleToolchain",
+    "TileLangOracleUnavailable",
     "capture_generated_source",
     "compile_hip_code_object",
     "import_tilelang",

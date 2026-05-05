@@ -11,8 +11,8 @@ from __future__ import annotations
 import difflib
 import hashlib
 import json
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -31,6 +31,7 @@ class CheckResult:
     diff: str | None = None
     updated: bool = False
     skipped: bool = False
+    metadata: Mapping[str, object] = field(default_factory=dict)
 
     @property
     def passed(self) -> bool:
@@ -62,6 +63,7 @@ class CheckResult:
             "diff": self.diff,
             "updated": self.updated,
             "skipped": self.skipped,
+            "metadata": dict(self.metadata),
         }
 
 

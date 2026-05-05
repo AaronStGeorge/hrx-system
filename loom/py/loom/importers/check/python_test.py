@@ -17,7 +17,9 @@ from loom.diagnostics import (
 from loom.error.type import ERR_TYPE_001
 from loom.importers.check.python import (
     PythonCheckCase,
+    PythonCheckInvocation,
     PythonCheckOptions,
+    PythonCheckSkip,
     decode_python_expected,
     encode_python_expected,
     run_python_check,
@@ -252,3 +254,75 @@ def named():
         )
 
     assert results[0].passed
+
+
+def test_run_python_check_preserves_invocation_metadata() -> None:
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "cases.py"
+        path.write_text(
+            """
+def case(func):
+    func.__case__ = True
+    return func
+
+@case
+def named():
+    return "ignored\\n"
+# ----
+# actual
+"""
+        )
+
+        def invoke(_case: PythonCheckCase) -> PythonCheckInvocation:
+            return PythonCheckInvocation(
+                stdout="actual\n",
+                stderr="sidecar\n",
+                metadata={"artifact": "captured"},
+            )
+
+        results = run_python_check(
+            path,
+            options=PythonCheckOptions(),
+            is_case=lambda value: bool(getattr(value, "__case__", False)),
+            invoke=invoke,
+        )
+
+    assert results[0].passed
+    assert results[0].stderr == "sidecar\n"
+    assert results[0].metadata == {"artifact": "captured"}
+
+
+def test_run_python_check_supports_case_skip() -> None:
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "cases.py"
+        path.write_text(
+            """
+def case(func):
+    func.__case__ = True
+    return func
+
+@case
+def named():
+    return "ignored\\n"
+# ----
+# ignored
+"""
+        )
+
+        def invoke(_case: PythonCheckCase) -> str:
+            raise PythonCheckSkip(
+                "oracle unavailable",
+                metadata={"dependency": "hipcc"},
+            )
+
+        results = run_python_check(
+            path,
+            options=PythonCheckOptions(),
+            is_case=lambda value: bool(getattr(value, "__case__", False)),
+            invoke=invoke,
+        )
+
+    assert results[0].skipped
+    assert results[0].status == "skipped"
+    assert results[0].stderr == "oracle unavailable\n"
+    assert results[0].metadata == {"dependency": "hipcc"}
