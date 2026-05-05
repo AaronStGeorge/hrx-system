@@ -260,6 +260,23 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    pipeline
+  HDRS
+    "pipeline.h"
+  SRCS
+    "pipeline.c"
+  DEPS
+    ::provider
+    iree::base
+    loom::src::loom::codegen::low::pipeline
+    loom::src::loom::ir
+    loom::src::loom::pass::builder
+    loom::src::loom::pass::environment
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     provider_test
@@ -267,6 +284,23 @@ loom_cc_test(
     "provider_test.cc"
   DEPS
     ::provider
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::pass
+    loom::src::loom::pass::builder
+    loom::src::loom::testing::module_ptr
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    pipeline_test
+  SRCS
+    "pipeline_test.cc"
+  DEPS
+    ::pipeline
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::ops::op_registry
