@@ -28,10 +28,11 @@ GENERATORS = {
     "c_errors": "loom.gen.c_errors",
     "c_tables": "loom.gen.c_tables",
     "low_descriptors": "loom.gen.low_descriptors",
+    "package_inits": "loom.gen.package_inits",
     "textmate": "loom.gen.textmate",
 }
 
-ARGUMENT_GENERATORS: set[str] = {"builders_pyi", "c_errors"}
+ARGUMENT_GENERATORS: set[str] = {"builders_pyi", "c_errors", "package_inits"}
 
 
 def _usage() -> str:

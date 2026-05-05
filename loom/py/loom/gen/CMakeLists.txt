@@ -30,6 +30,29 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    package_inits
+  SRCS
+    "bootstrap.py"
+    "package_inits.py"
+  DEPS
+    iree::runtime::py::loom::gen::generated_file
+    iree::runtime::py::loom::core
+)
+
+iree_py_test(
+  NAME
+    package_inits_test
+  SRCS
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.gen.package_inits_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
+)
+
+iree_py_library(
+  NAME
     target_contract_fragments
   SRCS
     "target_contract_fragments.py"

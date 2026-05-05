@@ -54,6 +54,16 @@ def main() -> int:
         cwd=REPO_ROOT,
     )
     ok &= _run(
+        "package init files",
+        [
+            sys.executable,
+            "loom/py/loom/gen/run.py",
+            "package_inits",
+            "--in-place",
+        ],
+        cwd=REPO_ROOT,
+    )
+    ok &= _run(
         "c errors",
         [sys.executable, "loom/py/loom/gen/run.py", "c_errors", "--check"],
         cwd=REPO_ROOT,

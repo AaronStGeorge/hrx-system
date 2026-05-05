@@ -4,4 +4,8 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+# GENERATED FILE: DO NOT EDIT.
+# Generator: loom.gen.package_inits.
+# Regenerate: python3 loom/py/loom/gen/run.py package_inits --in-place
+
 """Target-family descriptor inputs."""

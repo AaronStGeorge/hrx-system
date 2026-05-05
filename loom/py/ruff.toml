@@ -54,6 +54,8 @@ max-complexity = 35
 # Dialect files have intentionally long one-op-per-line declarations
 # and generated builder signatures. Line length is by design.
 "loom/dialect/**" = ["E501"]
+# The package root is a deliberate public re-export facade.
+"loom/__init__.py" = ["F401", "I001"]
 # Code generators emit long strings, use print for progress, and have
 # inherently high cyclomatic complexity from match/case dispatch.
 "loom/gen/**" = ["E501", "T201", "C901"]
