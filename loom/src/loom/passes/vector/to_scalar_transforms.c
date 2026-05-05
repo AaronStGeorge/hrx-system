@@ -41,13 +41,12 @@ static iree_status_t
 loom_vector_to_scalar_emit_undecodable_transform_descriptor(
     loom_vector_to_scalar_state_t* state) {
   return loom_vector_to_scalar_emit_transform_error(state,
-                                                    LOOM_ERR_LOWERING_039);
+                                                    LOOM_ERR_ENCODING_017);
 }
 
 static iree_status_t loom_vector_to_scalar_emit_dynamic_transform_extent(
     loom_vector_to_scalar_state_t* state) {
-  return loom_vector_to_scalar_emit_transform_error(state,
-                                                    LOOM_ERR_LOWERING_040);
+  return loom_vector_to_scalar_emit_transform_error(state, LOOM_ERR_SHAPE_006);
 }
 
 //===----------------------------------------------------------------------===//
@@ -139,20 +138,20 @@ static bool loom_vector_to_scalar_exact_leading_element_count(
 static iree_status_t loom_vector_to_scalar_emit_unproven_transform_permutation(
     loom_vector_to_scalar_state_t* state) {
   return loom_vector_to_scalar_emit_transform_error(state,
-                                                    LOOM_ERR_LOWERING_034);
+                                                    LOOM_ERR_ENCODING_018);
 }
 
 static iree_status_t loom_vector_to_scalar_emit_duplicate_transform_permutation(
     loom_vector_to_scalar_state_t* state) {
   return loom_vector_to_scalar_emit_transform_error(state,
-                                                    LOOM_ERR_LOWERING_035);
+                                                    LOOM_ERR_ENCODING_019);
 }
 
 static iree_status_t
 loom_vector_to_scalar_emit_out_of_bounds_transform_permutation(
     loom_vector_to_scalar_state_t* state) {
   return loom_vector_to_scalar_emit_transform_error(state,
-                                                    LOOM_ERR_LOWERING_036);
+                                                    LOOM_ERR_ENCODING_020);
 }
 
 static iree_status_t loom_vector_to_scalar_validate_permutation_facts(

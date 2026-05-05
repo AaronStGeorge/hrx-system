@@ -90,10 +90,28 @@ ERR_SHAPE_005 = ErrorDef(
     fix_hint="Ensure result type has the same shape as the input tiles",
 )
 
+# ERR_SHAPE_006: Vector transform last-axis extent is dynamic.
+ERR_SHAPE_006 = ErrorDef(
+    domain=ErrorDomain.SHAPE,
+    code=6,
+    severity=Severity.ERROR,
+    summary="Vector transform last-axis extent is dynamic.",
+    message=("{pass_name} requires {op_name} last-axis transform extent to be static"),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("pass_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Refine the transform last-axis extent before vector scalarization or "
+        "lower the transform through a target primitive"
+    ),
+)
+
 ALL_SHAPE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SHAPE_001,
     ERR_SHAPE_002,
     ERR_SHAPE_003,
     ERR_SHAPE_004,
     ERR_SHAPE_005,
+    ERR_SHAPE_006,
 )
