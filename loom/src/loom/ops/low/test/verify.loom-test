@@ -117,7 +117,7 @@ test.target<low_core> @test_target
 
 // Import attrs on low.func.decl are valid without changing the referenced low
 // descriptor contract set.
-low.func.decl import(vm, "iree.vm.core.add_i32") target(@test_target) @extern_imported(%lhs: reg<vm.i32>) -> (reg<vm.i32>)
+low.func.decl import(vm, "iree.vm.core.add_i32") target(@test_target) @extern_imported(%lhs: reg<test.i32>) -> (reg<test.i32>)
 
 // ====
 
@@ -165,11 +165,11 @@ func.def @invoke_non_low(%lhs: i32) -> (i32) {
 
 test.target<low_core> @test_target
 
-low.func.decl target(@test_target) @extern_add(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
+low.func.decl target(@test_target) @extern_add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>)
 
-low.func.def target(@test_target) @low_call(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {
-  %sum = low.func.call @extern_add(%lhs, %rhs) : (reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
-  low.return %sum : reg<amdgpu.vgpr x1>
+low.func.def target(@test_target) @low_call(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
+  %sum = low.func.call @extern_add(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> (reg<test.i32>)
+  low.return %sum : reg<test.i32>
 }
 
 // ====
@@ -201,10 +201,10 @@ low.func.def target(@test_target) @invoke_in_low_body() {
 func.decl @semantic(%arg: i32) -> (i32)
 test.target<low_core> @test_target
 
-low.func.def target(@test_target) @low_call_non_low(%lhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {
+low.func.def target(@test_target) @low_call_non_low(%lhs: reg<test.i32>) -> (reg<test.i32>) {
   // ERROR@+1: SYMBOL/003 {symbol_name="semantic", actual_kind="function", expected_kind="low function"}
-  %sum = low.func.call @semantic(%lhs) : (reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
-  low.return %sum : reg<amdgpu.vgpr x1>
+  %sum = low.func.call @semantic(%lhs) : (reg<test.i32>) -> (reg<test.i32>)
+  low.return %sum : reg<test.i32>
 }
 
 // ====
@@ -212,46 +212,46 @@ low.func.def target(@test_target) @low_call_non_low(%lhs: reg<amdgpu.vgpr x1>) -
 test.target<low_core> @gfx1100
 test.target<low_core> @gfx1200
 
-low.func.decl target(@gfx1200) @extern_add(%lhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
+low.func.decl target(@gfx1200) @extern_add(%lhs: reg<test.i32>) -> (reg<test.i32>)
 
-low.func.def target(@gfx1100) @low_call_cross_target(%lhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {
+low.func.def target(@gfx1100) @low_call_cross_target(%lhs: reg<test.i32>) -> (reg<test.i32>) {
   // ERROR@+1: LOWERING/017 {op_name="low.func.call", field_name="callee", reason="callee target must match enclosing low entry target"}
-  %sum = low.func.call @extern_add(%lhs) : (reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
-  low.return %sum : reg<amdgpu.vgpr x1>
+  %sum = low.func.call @extern_add(%lhs) : (reg<test.i32>) -> (reg<test.i32>)
+  low.return %sum : reg<test.i32>
 }
 
 // ====
 
 test.target<low_core> @test_target
 
-low.func.decl target(@test_target) @extern_add(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
+low.func.decl target(@test_target) @extern_add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>)
 
-low.func.def target(@test_target) @low_call_operand_count(%lhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {
+low.func.def target(@test_target) @low_call_operand_count(%lhs: reg<test.i32>) -> (reg<test.i32>) {
   // ERROR@+1: LOWERING/013 {callee_name="extern_add", field_kind="operand", actual_count="1", expected_count="2"}
-  %sum = low.func.call @extern_add(%lhs) : (reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
-  low.return %sum : reg<amdgpu.vgpr x1>
+  %sum = low.func.call @extern_add(%lhs) : (reg<test.i32>) -> (reg<test.i32>)
+  low.return %sum : reg<test.i32>
 }
 
 // ====
 
 test.target<low_core> @test_target
 
-low.func.decl target(@test_target) @extern_add(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.sgpr x1>) -> (reg<amdgpu.vgpr x1>)
+low.func.decl target(@test_target) @extern_add(%lhs: reg<test.i32>, %rhs: reg<test.ptr>) -> (reg<test.i32>)
 
-low.func.def target(@test_target) @low_call_operand_type(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {
-  // ERROR@+1: LOWERING/014 {callee_name="extern_add", field_kind="operand", field_index="1", actual_type="reg<amdgpu.vgpr>", callee_field_kind="argument", expected_type="reg<amdgpu.sgpr>"}
-  %sum = low.func.call @extern_add(%lhs, %rhs) : (reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
-  low.return %sum : reg<amdgpu.vgpr x1>
+low.func.def target(@test_target) @low_call_operand_type(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
+  // ERROR@+1: LOWERING/014 {callee_name="extern_add", field_kind="operand", field_index="1", actual_type="reg<test.i32>", callee_field_kind="argument", expected_type="reg<test.ptr>"}
+  %sum = low.func.call @extern_add(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> (reg<test.i32>)
+  low.return %sum : reg<test.i32>
 }
 
 // ====
 
 test.target<low_core> @test_target
 
-low.func.decl target(@test_target) @extern_add(%lhs: reg<vm.i32>) -> (reg<vm.i32>)
+low.func.decl target(@test_target) @extern_add(%lhs: reg<test.i32>) -> (reg<test.i32>)
 
 func.def @pure_invoke_impure_low(%lhs: i32) -> (i32) {
-  // ERROR@+1: LOWERING/015 {callee_name="extern_add", boundary_name="extern_add", reason="callee has no pure contract"}
+  // ERROR@+1: LOWERING/015 {callee_name="extern_add", boundary_name="extern_add"}
   %sum = low.invoke pure @extern_add(%lhs) : (i32) -> (i32)
   func.return %sum : i32
 }
@@ -294,8 +294,8 @@ low.func.def target(@test_target) @resource_bad_swizzle_stride() -> (reg<test.pt
 
 test.target<low_core> @test_target
 
-low.func.def target(@test_target) abi(object_function) @resource_wrong_export_abi() -> (reg<vm.i32>) {
+low.func.def target(@test_target) abi(object_function) @resource_wrong_export_abi() -> (reg<test.ptr>) {
   // ERROR@+1: LOWERING/017 {op_name="low.resource", field_name="import_kind", reason="VM resources require vm_module_function export ABI"}
-  %state = low.resource<vm_state> {index = 0, source_type = vm.state} : reg<vm.i32>
-  low.return %state : reg<vm.i32>
+  %state = low.resource<vm_state> {index = 0, source_type = vm.state} : reg<test.ptr>
+  low.return %state : reg<test.ptr>
 }

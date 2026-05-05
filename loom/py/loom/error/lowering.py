@@ -277,28 +277,24 @@ ERR_LOWERING_014 = ErrorDef(
     ),
 )
 
-# ERR_LOWERING_015: Low call purity conflicts with callee effects.
+# ERR_LOWERING_015: Low pure call targets an impure callee.
 ERR_LOWERING_015 = ErrorDef(
     domain=ErrorDomain.LOWERING,
     code=15,
     severity=Severity.ERROR,
-    summary="Low call purity conflicts with callee effects.",
+    summary="Low pure call targets an impure callee.",
     message=(
         "low pure call callee '@{callee_name}' through '{boundary_name}' "
-        "is invalid: {reason} ({effect_count} effect record(s), "
-        "{clobber_count} clobber record(s))"
+        "does not have a pure contract"
     ),
     params=(
         ErrorParam("callee_name", ParamKind.STRING),
         ErrorParam("boundary_name", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
-        ErrorParam("effect_count", ParamKind.U32),
-        ErrorParam("clobber_count", ParamKind.U32),
     ),
     fix_hint=(
         "Remove the pure marker, mark the direct callee pure after proving its "
-        "body, or remove the adapter effect/clobber records after proving the "
-        "low boundary has no observable effects"
+        "body has no observable effects, or route the call through a boundary "
+        "whose contract is explicitly pure"
     ),
 )
 

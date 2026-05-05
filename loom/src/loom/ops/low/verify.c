@@ -28,13 +28,6 @@ typedef struct loom_low_callee_signature_t {
   uint16_t result_count;
 } loom_low_callee_signature_t;
 
-typedef struct loom_low_effect_counts_t {
-  // Number of explicit effect records attached to the boundary.
-  uint32_t effect_count;
-  // Number of explicit clobber records attached to the boundary.
-  uint32_t clobber_count;
-} loom_low_effect_counts_t;
-
 static iree_status_t loom_low_emit_related(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op,
     const loom_error_def_t* error, const loom_diagnostic_param_t* params,
@@ -1072,18 +1065,14 @@ static iree_status_t loom_low_emit_call_type_mismatch(
       IREE_ARRAYSIZE(params));
 }
 
-static iree_status_t loom_low_emit_call_purity_effect_error(
+static iree_status_t loom_low_emit_call_impure_callee_error(
     const loom_module_t* module, const loom_op_t* call_op,
     loom_symbol_ref_t callee, iree_string_view_t boundary_name,
-    iree_string_view_t reason, const loom_op_t* related_op,
-    iree_string_view_t related_label, loom_low_effect_counts_t counts,
+    const loom_op_t* related_op, iree_string_view_t related_label,
     iree_diagnostic_emitter_t emitter) {
   loom_diagnostic_param_t params[] = {
       loom_param_string(loom_low_symbol_name(module, callee)),
       loom_param_string(boundary_name),
-      loom_param_string(reason),
-      loom_param_u32(counts.effect_count),
-      loom_param_u32(counts.clobber_count),
   };
   loom_diagnostic_related_op_t related[] = {{
       .label = related_label,
@@ -1195,11 +1184,9 @@ static iree_status_t loom_low_verify_call_purity(
     return iree_ok_status();
   }
 
-  loom_low_effect_counts_t counts = {0};
-  return loom_low_emit_call_purity_effect_error(
-      module, call_op, callee, loom_low_symbol_name(module, callee),
-      IREE_SV("callee has no pure contract"), purity_op,
-      IREE_SV("contract defined here"), counts, emitter);
+  return loom_low_emit_call_impure_callee_error(
+      module, call_op, callee, loom_low_symbol_name(module, callee), purity_op,
+      IREE_SV("contract defined here"), emitter);
 }
 
 static iree_status_t loom_low_verify_func_call_context(
