@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/ir/attribute.h"
+#include "loom/ir/facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/combining.h"
 #include "loom/ops/op_defs.h"
@@ -126,6 +127,25 @@ static bool loom_vector_value_def_op(const loom_rewriter_t* rewriter,
   loom_op_t* def_op = loom_value_def_op(value);
   if (!def_op || (def_op->flags & LOOM_OP_FLAG_DEAD)) return false;
   *out_def_op = def_op;
+  return true;
+}
+
+static bool loom_vector_index_value_as_static_index(
+    const loom_rewriter_t* rewriter, loom_value_id_t value_id,
+    loom_type_t source_type, uint16_t axis, int64_t* out_static_index) {
+  int64_t static_index = 0;
+  if (!loom_value_facts_as_exact_i64(
+          loom_rewriter_value_facts(rewriter, value_id), &static_index) ||
+      static_index < 0) {
+    return false;
+  }
+  if (loom_type_is_vector(source_type) && axis < loom_type_rank(source_type) &&
+      !loom_type_dim_is_dynamic_at(source_type, (uint8_t)axis) &&
+      static_index >=
+          loom_type_dim_static_size_at(source_type, (uint8_t)axis)) {
+    return false;
+  }
+  *out_static_index = static_index;
   return true;
 }
 
@@ -370,20 +390,90 @@ static iree_status_t loom_vector_canonicalize_extract_from_elements(
   return iree_ok_status();
 }
 
+static iree_status_t loom_vector_canonicalize_extract_static_indices(
+    loom_op_t* op, loom_rewriter_t* rewriter, loom_type_t source_type,
+    loom_type_t result_type, bool* out_changed) {
+  *out_changed = false;
+  loom_attribute_t old_static_indices = loom_vector_extract_static_indices(op);
+  if (old_static_indices.kind != LOOM_ATTR_I64_ARRAY ||
+      old_static_indices.count == 0) {
+    return iree_ok_status();
+  }
+
+  loom_value_slice_t old_indices = loom_vector_extract_indices(op);
+  if (old_indices.count == 0) {
+    return iree_ok_status();
+  }
+
+  int64_t* new_static_indices = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      rewriter->arena, old_static_indices.count, sizeof(*new_static_indices),
+      (void**)&new_static_indices));
+  loom_value_id_t* new_indices = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(rewriter->arena, old_indices.count,
+                                sizeof(*new_indices), (void**)&new_indices));
+
+  bool changed = false;
+  uint16_t old_dynamic_index = 0;
+  uint16_t new_dynamic_index = 0;
+  for (uint16_t axis = 0; axis < old_static_indices.count; ++axis) {
+    int64_t static_index = old_static_indices.i64_array[axis];
+    if (static_index != INT64_MIN) {
+      new_static_indices[axis] = static_index;
+      continue;
+    }
+    if (old_dynamic_index >= old_indices.count) {
+      return iree_ok_status();
+    }
+
+    loom_value_id_t dynamic_index = old_indices.values[old_dynamic_index++];
+    if (loom_vector_index_value_as_static_index(
+            rewriter, dynamic_index, source_type, axis, &static_index)) {
+      new_static_indices[axis] = static_index;
+      changed = true;
+    } else {
+      new_static_indices[axis] = INT64_MIN;
+      new_indices[new_dynamic_index++] = dynamic_index;
+    }
+  }
+  if (old_dynamic_index != old_indices.count || !changed) {
+    return iree_ok_status();
+  }
+
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  loom_op_t* replacement_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_vector_extract_build(
+      &rewriter->builder, loom_vector_extract_source(op), new_indices,
+      new_dynamic_index, new_static_indices, old_static_indices.count,
+      result_type, op->location, &replacement_op));
+  IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_new_op(
+      op, rewriter, replacement_op, value_checkpoint));
+  *out_changed = true;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_vector_canonicalize_extract(loom_op_t* op,
                                                       loom_rewriter_t* rewriter,
                                                       bool* out_changed) {
   *out_changed = false;
 
   loom_value_id_t source = loom_vector_extract_source(op);
-  loom_op_t* source_def_op = NULL;
-  if (!loom_vector_value_def_op(rewriter, source, &source_def_op)) {
-    return iree_ok_status();
-  }
-
   loom_type_t source_type = loom_module_value_type(rewriter->module, source);
   loom_type_t result_type = {0};
   if (!loom_vector_get_single_result_type(rewriter, op, &result_type)) {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(loom_vector_canonicalize_extract_static_indices(
+      op, rewriter, source_type, result_type, out_changed));
+  if (*out_changed) {
+    return iree_ok_status();
+  }
+
+  loom_op_t* source_def_op = NULL;
+  if (!loom_vector_value_def_op(rewriter, source, &source_def_op)) {
     return iree_ok_status();
   }
 

@@ -210,6 +210,17 @@ static iree_status_t loom_index_materialize_or_reuse_index_constant(
   return iree_ok_status();
 }
 
+static iree_status_t loom_index_replace_single_result_with_binary_constant_op(
+    loom_op_t* op, loom_rewriter_t* rewriter, loom_op_kind_t kind,
+    loom_value_id_t lhs, int64_t rhs, loom_value_id_t reusable_constant) {
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_value_id_t rhs_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_index_materialize_or_reuse_index_constant(
+      op, rewriter, reusable_constant, rhs, &rhs_value));
+  return loom_index_replace_single_result_with_binary_op(op, rewriter, kind,
+                                                         lhs, rhs_value);
+}
+
 static iree_status_t loom_index_replace_single_result_with_madd_op(
     loom_op_t* op, loom_rewriter_t* rewriter, loom_value_id_t a,
     loom_value_id_t b, loom_value_id_t c) {
@@ -497,6 +508,11 @@ iree_status_t loom_index_div_canonicalize(loom_op_t* op,
           addend_value);
     }
   }
+  if (loom_is_power_of_two_i64(divisor) &&
+      loom_index_value_facts_are_non_negative(rewriter, lhs)) {
+    return loom_index_replace_single_result_with_binary_constant_op(
+        op, rewriter, LOOM_OP_INDEX_SHRUI, lhs, loom_ilog2_i64(divisor), rhs);
+  }
   return iree_ok_status();
 }
 
@@ -529,6 +545,12 @@ iree_status_t loom_index_rem_canonicalize(loom_op_t* op,
                                            1)) {
     return loom_index_replace_single_result_with_index_constant(op, rewriter,
                                                                 result_type, 0);
+  }
+  if (loom_index_query_exact_i64(rewriter, rhs, &divisor) &&
+      loom_is_power_of_two_i64(divisor) &&
+      loom_index_value_facts_are_non_negative(rewriter, lhs)) {
+    return loom_index_replace_single_result_with_binary_constant_op(
+        op, rewriter, LOOM_OP_INDEX_ANDI, lhs, divisor - 1, rhs);
   }
   return iree_ok_status();
 }

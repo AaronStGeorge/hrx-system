@@ -374,6 +374,24 @@ func.def @div_self_positive(%x: index) -> (index) {
 
 // ====
 
+// Division by a power of two becomes a logical shift when the numerator is
+// known non-negative.
+func.def @div_power_of_two_nonnegative(%x: index) -> (index) {
+  %x2 = index.assume %x [range(%x, 0, 1024)] : index
+  %divisor = index.constant 128 : index
+  %q = index.div %x2, %divisor : index
+  func.return %q : index
+}
+// ----
+func.def @div_power_of_two_nonnegative(%x: index) -> (index) {
+  %x2 = index.assume %x [range(%x, 0, 1024)] : index
+  %5 = index.constant 7 : index
+  %q = index.shrui %x2, %5 : index
+  func.return %q : index
+}
+
+// ====
+
 // index.rem materializes zero when divisibility facts prove it.
 func.def @rem_divisible_coordinate(%x: index) -> (index) {
   %x2 = index.assume %x [range(%x, 0, 4096), mul(%x, 64)] : index
@@ -414,6 +432,24 @@ func.def @rem_self_positive(%x: index) -> (index) {
 // ----
 func.def @rem_self_positive(%x: index) -> (index) {
   %r = index.constant 0 : index
+  func.return %r : index
+}
+
+// ====
+
+// Remainder by a power of two becomes a mask when the numerator is
+// known non-negative.
+func.def @rem_power_of_two_nonnegative(%x: index) -> (index) {
+  %x2 = index.assume %x [range(%x, 0, 1024)] : index
+  %divisor = index.constant 128 : index
+  %r = index.rem %x2, %divisor : index
+  func.return %r : index
+}
+// ----
+func.def @rem_power_of_two_nonnegative(%x: index) -> (index) {
+  %x2 = index.assume %x [range(%x, 0, 1024)] : index
+  %5 = index.constant 127 : index
+  %r = index.andi %x2, %5 : index
   func.return %r : index
 }
 

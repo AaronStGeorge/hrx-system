@@ -21,8 +21,8 @@ func.def @tail_branch_pruned_by_divisibility(%n: index) -> (index) {
 // ----
 func.def @tail_branch_pruned_by_divisibility(%n: index) -> (index) {
   %n_aligned = index.assume %n [range(%n, 16, 4096), mul(%n, 16)] : index
-  %tile = index.constant 16 : index
-  %blocks = index.div %n_aligned, %tile : index
+  %11 = index.constant 4 : index
+  %blocks = index.shrui %n_aligned, %11 : index
   func.return %blocks : index
 }
 

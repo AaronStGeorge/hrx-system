@@ -276,6 +276,35 @@ func.def @extract_from_elements_to_operand() -> (i32) {
 
 // ====
 
+// Exact dynamic indices are represented as static extract coordinates.
+func.def @extract_constant_dynamic_index(%v: vector<4xi32>) -> (i32) {
+  %lane = index.constant 2 : index
+  %r = vector.extract %v[%lane] : vector<4xi32> -> i32
+  func.return %r : i32
+}
+// ----
+func.def @extract_constant_dynamic_index(%v: vector<4xi32>) -> (i32) {
+  %r = vector.extract %v[2] : vector<4xi32> -> i32
+  func.return %r : i32
+}
+
+// ====
+
+// Constant coordinates fold independently while true dynamic coordinates stay
+// explicit.
+func.def @extract_mixed_dynamic_indices(%v: vector<4x4xi32>, %row: index) -> (i32) {
+  %col = index.constant 1 : index
+  %r = vector.extract %v[%row, %col] : vector<4x4xi32> -> i32
+  func.return %r : i32
+}
+// ----
+func.def @extract_mixed_dynamic_indices(%v: vector<4x4xi32>, %row: index) -> (i32) {
+  %r = vector.extract %v[%row, 1] : vector<4x4xi32> -> i32
+  func.return %r : i32
+}
+
+// ====
+
 // Identity shuffles do not need to survive as explicit register traffic.
 func.def @shuffle_identity(%v: vector<4xf32>) -> (vector<4xf32>) {
   %r = vector.shuffle<[0, 1, 2, 3]> %v : vector<4xf32>
