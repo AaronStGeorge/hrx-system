@@ -65,9 +65,7 @@ typedef struct loom_condition_fact_set_t {
   iree_host_size_t integer_relation_capacity;
 } loom_condition_fact_set_t;
 
-// Initializes a caller-owned fact set over fixed storage. Query functions
-// return RESOURCE_EXHAUSTED instead of silently truncating when capacity is too
-// small.
+// Initializes a caller-owned fact set over fixed storage.
 void loom_condition_fact_set_initialize(
     loom_condition_integer_relation_t* integer_relation_storage,
     iree_host_size_t integer_relation_capacity,
@@ -79,11 +77,13 @@ void loom_condition_fact_set_reset(loom_condition_fact_set_t* facts);
 // Derives facts implied by assuming |condition_value| evaluates to
 // |assumed_truth|. Unknown condition producers are valid and simply produce an
 // empty fact set. |fact_table| may be NULL to query without ambient value
-// facts.
-iree_status_t loom_condition_facts_query(
-    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
-    loom_value_id_t condition_value, bool assumed_truth,
-    loom_condition_fact_set_t* out_facts);
+// facts. Returns false if the caller-owned storage was too small or recursion
+// was capped; returned relations remain a conservative subset in that case.
+bool loom_condition_facts_query(const loom_module_t* module,
+                                const loom_value_fact_table_t* fact_table,
+                                loom_value_id_t condition_value,
+                                bool assumed_truth,
+                                loom_condition_fact_set_t* out_facts);
 
 // Applies a single integer relation to scalar range facts for |value_id| when
 // the relation can be reduced to value-vs-constant form. Value-to-value

@@ -525,9 +525,11 @@ static iree_status_t loom_canonicalize_try_symbolic_integer_cmp(
   loom_condition_fact_set_t condition_facts;
   loom_condition_fact_set_initialize(
       relation_storage, IREE_ARRAYSIZE(relation_storage), &condition_facts);
-  IREE_RETURN_IF_ERROR(loom_condition_facts_query(
-      rewriter->module, rewriter->fact_table, loom_op_const_results(op)[0],
-      /*assumed_truth=*/true, &condition_facts));
+  if (!loom_condition_facts_query(rewriter->module, rewriter->fact_table,
+                                  loom_op_const_results(op)[0],
+                                  /*assumed_truth=*/true, &condition_facts)) {
+    return iree_ok_status();
+  }
   if (condition_facts.integer_relation_count != 1) {
     return iree_ok_status();
   }
@@ -1083,9 +1085,8 @@ static iree_status_t loom_canonicalize_materialize_condition_facts_in_region(
   loom_condition_fact_set_t condition_facts;
   loom_condition_fact_set_initialize(
       relation_storage, IREE_ARRAYSIZE(relation_storage), &condition_facts);
-  IREE_RETURN_IF_ERROR(
-      loom_condition_facts_query(rewriter->module, rewriter->fact_table,
-                                 condition, assumed_truth, &condition_facts));
+  loom_condition_facts_query(rewriter->module, rewriter->fact_table, condition,
+                             assumed_truth, &condition_facts);
   if (condition_facts.integer_relation_count == 0) return iree_ok_status();
 
   loom_canonicalize_edge_assume_set_t assume_set = {0};

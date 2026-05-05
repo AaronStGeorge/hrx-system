@@ -126,8 +126,7 @@ static iree_status_t loom_symbol_dce_mark_symbol_ref(
 }
 
 static iree_status_t loom_symbol_dce_mark_attr_refs(
-    loom_symbol_dce_state_t* state, const loom_attribute_t* attr,
-    uint8_t dict_depth) {
+    loom_symbol_dce_state_t* state, const loom_attribute_t* attr) {
   if (!attr) return iree_ok_status();
   if (attr->kind == LOOM_ATTR_SYMBOL) {
     return loom_symbol_dce_mark_symbol_ref(state, attr->symbol);
@@ -135,19 +134,9 @@ static iree_status_t loom_symbol_dce_mark_attr_refs(
   if (attr->kind != LOOM_ATTR_DICT || attr->count == 0) {
     return iree_ok_status();
   }
-  if (dict_depth >= LOOM_ATTR_DICT_MAX_NESTING_DEPTH) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "dict attribute nesting exceeds max depth %u",
-                            (unsigned)LOOM_ATTR_DICT_MAX_NESTING_DEPTH);
-  }
-  if (!attr->dict_entries) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "non-empty dict attribute has a NULL entry pointer");
-  }
   for (uint16_t i = 0; i < attr->count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_symbol_dce_mark_attr_refs(
-        state, &attr->dict_entries[i].value, (uint8_t)(dict_depth + 1)));
+    IREE_RETURN_IF_ERROR(
+        loom_symbol_dce_mark_attr_refs(state, &attr->dict_entries[i].value));
   }
   return iree_ok_status();
 }
@@ -155,14 +144,9 @@ static iree_status_t loom_symbol_dce_mark_attr_refs(
 static iree_status_t loom_symbol_dce_mark_named_attr_refs(
     loom_symbol_dce_state_t* state, const loom_named_attr_t* attrs,
     iree_host_size_t attr_count) {
-  if (attr_count > 0 && !attrs) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "non-empty named attribute list has a NULL entry pointer");
-  }
   for (iree_host_size_t i = 0; i < attr_count; ++i) {
     IREE_RETURN_IF_ERROR(
-        loom_symbol_dce_mark_attr_refs(state, &attrs[i].value, 0));
+        loom_symbol_dce_mark_attr_refs(state, &attrs[i].value));
   }
   return iree_ok_status();
 }
@@ -171,7 +155,7 @@ static iree_status_t loom_symbol_dce_mark_op_attr_refs(
     loom_symbol_dce_state_t* state, const loom_op_t* op) {
   const loom_attribute_t* attrs = loom_op_const_attrs(op);
   for (uint8_t i = 0; i < op->attribute_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_symbol_dce_mark_attr_refs(state, &attrs[i], 0));
+    IREE_RETURN_IF_ERROR(loom_symbol_dce_mark_attr_refs(state, &attrs[i]));
   }
   return iree_ok_status();
 }

@@ -115,10 +115,9 @@ class ConditionFactsTest : public ::testing::Test {
     return op;
   }
 
-  void Query(loom_value_id_t condition_value, bool assumed_truth = true) {
-    IREE_ASSERT_OK(loom_condition_facts_query(module_, &fact_table_,
-                                              condition_value, assumed_truth,
-                                              &condition_facts_));
+  bool Query(loom_value_id_t condition_value, bool assumed_truth = true) {
+    return loom_condition_facts_query(module_, &fact_table_, condition_value,
+                                      assumed_truth, &condition_facts_);
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -324,7 +323,7 @@ TEST_F(ConditionFactsTest, UnknownConditionProducesNoFacts) {
   EXPECT_EQ(condition_facts_.integer_relation_count, 0u);
 }
 
-TEST_F(ConditionFactsTest, RelationCapacityOverflowIsLoud) {
+TEST_F(ConditionFactsTest, RelationCapacityOverflowIsIncomplete) {
   loom_value_id_t induction = DefineIndexValue();
   loom_value_id_t upper_bound = DefineIndexValue();
   loom_op_t* compare =
@@ -332,11 +331,10 @@ TEST_F(ConditionFactsTest, RelationCapacityOverflowIsLoud) {
   loom_condition_fact_set_t empty_facts;
   loom_condition_fact_set_initialize(NULL, 0, &empty_facts);
 
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_RESOURCE_EXHAUSTED,
-      loom_condition_facts_query(module_, &fact_table_,
-                                 loom_index_cmp_result(compare), true,
-                                 &empty_facts));
+  EXPECT_FALSE(loom_condition_facts_query(module_, &fact_table_,
+                                          loom_index_cmp_result(compare), true,
+                                          &empty_facts));
+  EXPECT_EQ(empty_facts.integer_relation_count, 0u);
 }
 
 }  // namespace
