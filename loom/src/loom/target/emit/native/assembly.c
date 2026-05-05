@@ -133,6 +133,45 @@ static void loom_native_assembly_truncate_builder(
   }
 }
 
+static bool loom_native_assembly_op_branches_to(const loom_op_t* op,
+                                                const loom_block_t* block) {
+  if (loom_low_br_isa(op)) {
+    return loom_low_br_dest(op) == block;
+  }
+  if (loom_low_cond_br_isa(op)) {
+    return loom_low_cond_br_true_dest(op) == block ||
+           loom_low_cond_br_false_dest(op) == block;
+  }
+  return false;
+}
+
+static bool loom_native_assembly_block_is_branch_target(
+    const loom_low_schedule_table_t* schedule, const loom_block_t* block) {
+  for (iree_host_size_t block_index = 0; block_index < schedule->block_count;
+       ++block_index) {
+    const loom_low_schedule_block_t* scheduled_block =
+        &schedule->blocks[block_index];
+    for (uint32_t i = 0; i < scheduled_block->scheduled_node_count; ++i) {
+      const iree_host_size_t packet_index =
+          (iree_host_size_t)scheduled_block->scheduled_node_start + i;
+      const loom_low_schedule_node_t* node = &schedule->nodes[packet_index];
+      if (loom_native_assembly_op_branches_to(node->op, block)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+static bool loom_native_assembly_should_print_block_label(
+    const loom_low_schedule_table_t* schedule, iree_host_size_t block_index) {
+  if (block_index != 0) {
+    return true;
+  }
+  return loom_native_assembly_block_is_branch_target(
+      schedule, schedule->blocks[block_index].block);
+}
+
 static iree_status_t loom_native_assembly_append_block(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
@@ -141,9 +180,11 @@ static iree_status_t loom_native_assembly_append_block(
     loom_low_move_sequence_scratch_t* move_scratch,
     iree_host_size_t block_index) {
   const loom_low_schedule_block_t* block = &schedule->blocks[block_index];
-  IREE_RETURN_IF_ERROR(
-      loom_native_assembly_append_block_label(schedule, block->block, builder));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ":\n"));
+  if (loom_native_assembly_should_print_block_label(schedule, block_index)) {
+    IREE_RETURN_IF_ERROR(loom_native_assembly_append_block_label(
+        schedule, block->block, builder));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ":\n"));
+  }
   for (uint32_t i = 0; i < block->scheduled_node_count; ++i) {
     const iree_host_size_t packet_index =
         (iree_host_size_t)block->scheduled_node_start + i;

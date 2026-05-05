@@ -11,7 +11,6 @@ low.func.def target(@gfx11_target) @gfx11_wmma_base(%a8: reg<amdgpu.vgpr x8>, %b
 }
 
 // ----
-.Lbb0:
   v_wmma_f32_16x16x16_f16 v[0:7], v[8:15], v[16:23], v[0:7]
   v_wmma_f32_16x16x16_bf16 v[0:7], v[8:15], v[16:23], v[0:7]
   v_wmma_f16_16x16x16_f16 v[0:7], v[8:15], v[16:23], v[0:7]
@@ -40,7 +39,6 @@ low.func.def target(@gfx12_target) @gfx12_wmma_base(%a4: reg<amdgpu.vgpr x4>, %b
 }
 
 // ----
-.Lbb0:
   v_wmma_f32_16x16x16_f16 v[0:7], v[12:15], v[16:19], v[0:7]
   v_wmma_f16_16x16x16_f16 v[8:11], v[12:15], v[16:19], v[8:11]
   v_wmma_bf16_16x16x16_bf16 v[8:11], v[12:15], v[16:19], v[8:11]
@@ -74,7 +72,6 @@ low.func.def target(@gfx1250_target) @gfx1250_wmma_base(%a4: reg<amdgpu.vgpr x4>
 }
 
 // ----
-.Lbb0:
   v_wmma_f32_16x16x16_f16 v[0:7], v[12:15], v[16:19], v[0:7]
   v_wmma_f16_16x16x16_f16 v[8:11], v[12:15], v[16:19], v[8:11]
   v_wmma_bf16_16x16x16_bf16 v[8:11], v[12:15], v[16:19], v[8:11]

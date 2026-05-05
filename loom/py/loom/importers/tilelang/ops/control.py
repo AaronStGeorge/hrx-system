@@ -195,7 +195,9 @@ def _convert_parallel_for(
         context.record_converted(node_text(stmt), "tir.For parallel<vector.store>")
         return
 
-    _convert_counted_for(stmt, context, converter, record_name="tir.For parallel<scf.for>")
+    _convert_counted_for(
+        stmt, context, converter, record_name="tir.For parallel<scf.for>"
+    )
 
 
 def convert_while(

@@ -65,6 +65,18 @@ static iree_status_t loom_native_fragment_validate_physical_allocations(
           "locations");
     }
   }
+  for (iree_host_size_t i = 0; i < allocation->packet_move_temporary_count;
+       ++i) {
+    const loom_low_allocation_packet_move_temporary_t* temporary =
+        &allocation->packet_move_temporaries[i];
+    if (temporary->location_kind !=
+        LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "native fragment emission requires physical packet-local move "
+          "temporary locations");
+    }
+  }
   return iree_ok_status();
 }
 

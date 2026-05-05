@@ -558,7 +558,7 @@ static iree_status_t loom_amdgpu_module_compile_build_kernel_contribution(
   *out_export = (loom_amdgpu_hal_executable_export_t){
       .symbol_name = out_contribution->kernel.metadata.descriptor_symbol,
       .workgroup_size = hal_kernel->required_workgroup_size,
-      .constant_count = 0,
+      .constant_count = abi_layout->constant_count,
       .binding_flags = binding_flags,
       .binding_count = abi_layout->resource_count,
   };

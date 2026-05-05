@@ -8,7 +8,6 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
   return
 }
 // ----
-.Lbb0:
   vmovdqu32 zmm1, [rax]
   vpaddd zmm0, zmm1, zmm0
   vmovdqu32 [rax + 64], zmm0
@@ -26,7 +25,6 @@ low.func.def target(@x86_target) @x86_fragment(%input: reg<x86.gpr64>, %output: 
 }
 
 // ----
-.Lbb0:
   lea rax, [rax + rcx]
   vmovdqu32 zmm0, [rdx + rax * 4 + 16]
   vmovdqu32 [rbx + rax * 4 + 32], zmm0
@@ -45,7 +43,6 @@ low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86
 }
 
 // ----
-.Lbb0:
   vpaddd zmm0, zmm1, zmm0
   vpaddd zmm0, zmm1, zmm0
   vmovdqu32 [rax + 128], zmm0
@@ -62,7 +59,6 @@ low.func.def target(@x86_target) @x86_fragment(%value: reg<x86.zmm>) asm<x86.avx
 }
 
 // ----
-.Lbb0:
   mov rax, 1024
   vmovdqu32 [rax - 16], zmm0
   ret
@@ -79,7 +75,6 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %value: re
 }
 
 // ----
-.Lbb0:
   vpbroadcastd zmm1, eax
   vpaddd zmm0, zmm1, zmm0
   vmovdqu32 [rcx + 128], zmm0
@@ -97,7 +92,6 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %value: re
 }
 
 // ----
-.Lbb0:
   vbroadcastss zmm0, xmm0
   vaddps zmm0, zmm0, zmm1
   vmovdqu32 [rax + 192], zmm0
@@ -123,7 +117,6 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 }
 
 // ----
-.Lbb0:
   vpminsd zmm2, zmm0, zmm1
   vpmaxsd zmm3, zmm0, zmm1
   vpminud zmm4, zmm0, zmm1
@@ -153,7 +146,6 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 }
 
 // ----
-.Lbb0:
   vpcmpd.sgt k0, zmm2, zmm0
   vpcmpud.ugt k1, zmm2, zmm0
   vcmpps.olt k2, zmm2, zmm0
@@ -183,7 +175,6 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 }
 
 // ----
-.Lbb0:
   vpcmpd.sgt k0, zmm0, zmm1
   vpcmpd.slt k1, zmm0, zmm1
   korq k2, k0, k1
@@ -212,7 +203,6 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 }
 
 // ----
-.Lbb0:
   vmovdqa32 zmm1, zmm0
   jmp .Lbb1
 .Lbb1:
@@ -233,7 +223,6 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 }
 
 // ----
-.Lbb0:
   vmovdqa32 zmm2, zmm0
   vmovdqa32 zmm0, zmm1
   vmovdqa32 zmm1, zmm2
@@ -254,7 +243,6 @@ low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86
 }
 
 // ----
-.Lbb0:
   vmovdqa32 zmm2, zmm0
   vmovdqa32 zmm0, zmm1
   vmovdqa32 zmm1, zmm2
@@ -281,7 +269,6 @@ low.func.def target(@x86_target) @x86_fragment(%input: reg<x86.gpr64>, %output: 
 }
 
 // ----
-.Lbb0:
   mov rbp, 256
   imul rax, rcx
   lea rax, [rax + rdx]
@@ -301,7 +288,6 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x8
 }
 
 // ----
-.Lbb0:
   vextractf32x4 xmm0, zmm0, 2
   vmovdqu32 [rax + 112], xmm0
   ret
@@ -330,7 +316,6 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x8
 }
 
 // ----
-.Lbb0:
   vpshufd xmm1, xmm0, 27
   vpextrd edx, xmm1, 0
   add eax, edx
@@ -355,7 +340,6 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x8
 }
 
 // ----
-.Lbb0:
   vpermilps xmm0, xmm0, 39
   vmovdqu32 [rax + 32], xmm0
   ret
@@ -373,7 +357,6 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x8
 }
 
 // ----
-.Lbb0:
   vpermilps xmm2, xmm1, 1
   vaddss xmm0, xmm2, xmm0
   vinsertps xmm0, xmm1, xmm0, 32
@@ -395,7 +378,6 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x8
 }
 
 // ----
-.Lbb0:
   vpermilps xmm2, xmm0, 78
   vaddps xmm0, xmm0, xmm2
   vpermilps xmm2, xmm0, 177
@@ -419,7 +401,6 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 }
 
 // ----
-.Lbb0:
   vaddss xmm0, xmm0, xmm2
   vsubss xmm0, xmm0, xmm1
   vmulss xmm0, xmm0, xmm2
@@ -440,7 +421,6 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %bf16_acc:
 }
 
 // ----
-.Lbb0:
   vdpbf16ps zmm0, zmm1, zmm2
   vmovdqu32 [rax], zmm0
   vpdpbusd zmm3, zmm4, zmm5
