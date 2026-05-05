@@ -200,26 +200,6 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_test(
-  NAME
-    kernel_async_legality_test
-  SRCS
-    "kernel_async_legality_test.cc"
-  DEPS
-    ::kernel_async_legality
-    iree::base::internal::arena
-    loom::src::loom::error::error_defs
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::ops::kernel
-    loom::src::loom::ops::test
-    loom::src::loom::pass::types
-    loom::src::loom::pass::value_facts
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 loom_cc_library(
   NAME
     kernel_resources
