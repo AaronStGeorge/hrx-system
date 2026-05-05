@@ -791,6 +791,43 @@ ERR_LOWERING_038 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_039: Vector transform descriptor is not locally decodable.
+ERR_LOWERING_039 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=39,
+    severity=Severity.ERROR,
+    summary="Vector transform descriptor is not locally decodable.",
+    message=(
+        "{pass_name} requires {op_name} transform to be a local "
+        "#numeric_transform encoding.define"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("pass_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Specialize the transform descriptor into the function before vector "
+        "scalarization or lower the transform through a target primitive"
+    ),
+)
+
+# ERR_LOWERING_040: Vector transform last-axis extent is dynamic.
+ERR_LOWERING_040 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=40,
+    severity=Severity.ERROR,
+    summary="Vector transform last-axis extent is dynamic.",
+    message=("{pass_name} requires {op_name} last-axis transform extent to be static"),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("pass_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Refine the transform last-axis extent before vector scalarization or "
+        "lower the transform through a target primitive"
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
@@ -830,4 +867,6 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_036,
     ERR_LOWERING_037,
     ERR_LOWERING_038,
+    ERR_LOWERING_039,
+    ERR_LOWERING_040,
 )

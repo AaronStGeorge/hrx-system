@@ -55,3 +55,20 @@ func.def @rejects_duplicate_transform_uniform_permutation(%v: vector<2xf32>, %si
   %r = vector.transform %v, %xf : vector<2xf32>, encoding<transform> -> vector<2xf32>
   func.return %r : vector<2xf32>
 }
+
+// ====
+
+func.def @rejects_nonlocal_transform_descriptor(%v: vector<2xf32>, %xf: encoding<transform>) -> (vector<2xf32>) {
+  // ERROR@+1: LOWERING/039 {op_name="vector.transform", pass_name="vector-to-scalar"}
+  %r = vector.transform %v, %xf : vector<2xf32>, encoding<transform> -> vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ====
+
+func.def @rejects_dynamic_transform_last_axis(%n: index, %v: vector<[%n]xf32>) -> (vector<[%n]xf32>) {
+  %xf = encoding.define #numeric_transform<family="hadamard"> {input_elems = %n : index, output_elems = %n : index} : encoding<transform>
+  // ERROR@+1: LOWERING/040 {op_name="vector.transform", pass_name="vector-to-scalar"}
+  %r = vector.transform %v, %xf : vector<[%n]xf32>, encoding<transform> -> vector<[%n]xf32>
+  func.return %r : vector<[%n]xf32>
+}
