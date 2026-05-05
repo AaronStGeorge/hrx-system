@@ -20,6 +20,7 @@
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/low/ops.h"
+#include "loom/ops/pass/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/ops/vector/ops.h"
@@ -195,6 +196,9 @@ iree_status_t loom_low_source_workload_register_dialects(
   IREE_RETURN_IF_ERROR(loom_low_source_workload_register_dialect(
       context, LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables,
       loom_vector_dialect_op_semantics));
+  IREE_RETURN_IF_ERROR(loom_low_source_workload_register_dialect(
+      context, LOOM_DIALECT_PASS, loom_pass_dialect_vtables,
+      loom_pass_dialect_op_semantics));
   return loom_low_source_workload_register_dialect(
       context, LOOM_DIALECT_LOW, loom_low_dialect_vtables,
       loom_low_dialect_op_semantics);

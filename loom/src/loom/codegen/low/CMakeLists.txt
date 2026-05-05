@@ -381,7 +381,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
-    loom::src::loom::ops::pass
+    loom::src::loom::pass::builder
     loom::src::loom::pass::interpreter
     loom::src::loom::pass::program
     loom::src::loom::pass::registry

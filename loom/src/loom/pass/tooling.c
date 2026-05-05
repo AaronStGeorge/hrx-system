@@ -12,6 +12,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/pass/ops.h"
+#include "loom/pass/builder.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/program.h"
 #include "loom/pass/registry.h"
@@ -305,15 +306,12 @@ static iree_status_t loom_pass_tool_build_option_attrs(
 static iree_status_t loom_pass_tool_build_flat_run(
     loom_builder_t* builder, const loom_pass_descriptor_t* descriptor,
     iree_string_view_t options) {
-  loom_string_id_t key_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_module_intern_string(builder->module, descriptor->key, &key_id));
   loom_named_attr_slice_t option_attrs = {0};
   IREE_RETURN_IF_ERROR(loom_pass_tool_build_option_attrs(
       builder->module, descriptor, options, &option_attrs));
   loom_op_t* run_op = NULL;
-  return loom_pass_run_build(builder, key_id, option_attrs,
-                             LOOM_LOCATION_UNKNOWN, &run_op);
+  return loom_pass_ir_build_run(builder, descriptor->key, option_attrs,
+                                &run_op);
 }
 
 typedef struct loom_pass_tool_flat_function_group_t {
@@ -344,9 +342,7 @@ static iree_status_t loom_pass_tool_flat_function_group_close(
   if (!group->is_open) {
     return iree_ok_status();
   }
-  loom_op_t* yield_op = NULL;
-  iree_status_t status =
-      loom_pass_yield_build(group->builder, LOOM_LOCATION_UNKNOWN, &yield_op);
+  iree_status_t status = loom_pass_ir_build_yield(group->builder);
   loom_builder_restore(group->builder, group->saved_insertion_point);
   group->is_open = false;
   return status;
@@ -359,13 +355,21 @@ static iree_status_t loom_pass_tool_flat_function_group_append_run(
   return loom_pass_tool_build_flat_run(group->builder, descriptor, options);
 }
 
+typedef struct loom_pass_tool_flat_pipeline_build_context_t {
+  // Registry used to resolve textual pass keys.
+  const loom_pass_registry_t* registry;
+  // Textual shallow pass list being converted into pass IR.
+  iree_string_view_t pipeline;
+} loom_pass_tool_flat_pipeline_build_context_t;
+
 static iree_status_t loom_pass_tool_build_flat_pipeline_body(
-    loom_builder_t* builder, const loom_pass_registry_t* registry,
-    iree_string_view_t pipeline) {
+    loom_builder_t* builder, void* user_data) {
+  const loom_pass_tool_flat_pipeline_build_context_t* context =
+      (const loom_pass_tool_flat_pipeline_build_context_t*)user_data;
   loom_pass_tool_flat_function_group_t function_group = {
       .builder = builder,
   };
-  iree_string_view_t remaining = pipeline;
+  iree_string_view_t remaining = context->pipeline;
   iree_host_size_t pipeline_index = 0;
   iree_status_t status = iree_ok_status();
   while (iree_status_is_ok(status)) {
@@ -380,7 +384,8 @@ static iree_status_t loom_pass_tool_build_flat_pipeline_body(
     }
 
     const loom_pass_descriptor_t* descriptor = NULL;
-    status = loom_pass_registry_lookup(registry, spec.name, &descriptor);
+    status =
+        loom_pass_registry_lookup(context->registry, spec.name, &descriptor);
     if (!iree_status_is_ok(status)) {
       break;
     }
@@ -432,32 +437,14 @@ static iree_status_t loom_pass_tool_build_synthetic_pipeline(
     loom_module_t* pipeline_module, iree_string_view_t pipeline,
     const loom_pass_registry_t* registry, const loom_op_t** out_pipeline_op) {
   *out_pipeline_op = NULL;
-
-  loom_builder_t builder;
-  loom_builder_initialize(pipeline_module, &pipeline_module->arena,
-                          loom_module_block(pipeline_module), &builder);
-
-  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_module_intern_string(
-      pipeline_module, IREE_SV("__command_line"), &name_id));
-  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_module_add_symbol(pipeline_module, name_id, &symbol_id));
+  const loom_pass_tool_flat_pipeline_build_context_t context = {
+      .registry = registry,
+      .pipeline = pipeline,
+  };
   loom_op_t* pipeline_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_pass_pipeline_build(
-      &builder, LOOM_PASS_ANCHOR_MODULE,
-      (loom_symbol_ref_t){.module_id = 0, .symbol_id = symbol_id},
-      LOOM_LOCATION_UNKNOWN, &pipeline_op));
-
-  loom_builder_ip_t saved = loom_builder_enter_region(
-      &builder, pipeline_op, loom_pass_pipeline_body(pipeline_op));
-  iree_status_t status =
-      loom_pass_tool_build_flat_pipeline_body(&builder, registry, pipeline);
-  if (iree_status_is_ok(status)) {
-    loom_op_t* yield_op = NULL;
-    status = loom_pass_yield_build(&builder, LOOM_LOCATION_UNKNOWN, &yield_op);
-  }
-  loom_builder_restore(&builder, saved);
+  iree_status_t status = loom_pass_ir_build_pipeline(
+      pipeline_module, IREE_SV("__command_line"), LOOM_PASS_ANCHOR_MODULE,
+      loom_pass_tool_build_flat_pipeline_body, (void*)&context, &pipeline_op);
   if (iree_status_is_ok(status)) {
     *out_pipeline_op = pipeline_op;
   }

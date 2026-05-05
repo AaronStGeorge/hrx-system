@@ -56,6 +56,33 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "builder",
+    srcs = ["builder.c"],
+    hdrs = ["builder.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/pass",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "builder_test",
+    srcs = ["builder_test.cc"],
+    deps = [
+        ":builder",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/pass",
+        "//loom/src/loom/testing:module_ptr",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_test(
     name = "pipeline_test",
     srcs = ["pipeline_test.cc"],
@@ -172,6 +199,7 @@ loom_cc_library(
     srcs = ["tooling.c"],
     hdrs = ["tooling.h"],
     deps = [
+        ":builder",
         ":environment",
         ":interpreter",
         ":pipeline",

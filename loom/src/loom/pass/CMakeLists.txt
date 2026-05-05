@@ -65,6 +65,37 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    builder
+  HDRS
+    "builder.h"
+  SRCS
+    "builder.c"
+  DEPS
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::pass
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    builder_test
+  SRCS
+    "builder_test.cc"
+  DEPS
+    ::builder
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::pass
+    loom::src::loom::testing::module_ptr
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_test(
   NAME
     pipeline_test
@@ -206,6 +237,7 @@ loom_cc_library(
   SRCS
     "tooling.c"
   DEPS
+    ::builder
     ::environment
     ::interpreter
     ::pipeline
