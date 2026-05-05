@@ -805,6 +805,56 @@ ERR_TARGET_041 = ErrorDef(
     fix_hint="Use a resource import kind accepted by the enclosing function ABI.",
 )
 
+# ERR_TARGET_042: Low register type has no target descriptor register class.
+ERR_TARGET_042 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=42,
+    severity=Severity.ERROR,
+    summary="Low register type has no target descriptor register class.",
+    message=(
+        "low function '@{function_name}' {value_kind} '{value_name}' has "
+        "type {actual_type}, whose register class is not defined by descriptor "
+        "set '{descriptor_set}'"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("value_kind", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("descriptor_set", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use a register class declared by descriptor set '{descriptor_set}' "
+        "or select a target config whose descriptor set owns this ABI type"
+    ),
+)
+
+# ERR_TARGET_043: Low ABI register unit count exceeds target descriptor class.
+ERR_TARGET_043 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=43,
+    severity=Severity.ERROR,
+    summary="Low ABI register unit count exceeds target descriptor class.",
+    message=(
+        "low function '@{function_name}' {value_kind} '{value_name}' has "
+        "type {actual_type}, requiring {unit_count} physical unit(s), but "
+        "descriptor set '{descriptor_set}' provides only {physical_count}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("value_kind", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("unit_count", ParamKind.U32),
+        ErrorParam("descriptor_set", ParamKind.STRING),
+        ErrorParam("physical_count", ParamKind.U32),
+    ),
+    fix_hint=(
+        "Use a smaller ABI register value or select a descriptor set whose "
+        "register class has enough physical units."
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -847,4 +897,6 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_039,
     ERR_TARGET_040,
     ERR_TARGET_041,
+    ERR_TARGET_042,
+    ERR_TARGET_043,
 )

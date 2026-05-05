@@ -9,7 +9,7 @@ low.func.def target(@test_target) @add(%lhs: reg<test.i32>, %rhs: reg<test.i32>)
 // ====
 
 test.target<low_core> @test_target
-// ERROR@+1: LOWERING/021 {actual_type="reg<test.typo>", descriptor_set="test.low.core"}
+// ERROR@+1: TARGET/042 {value_kind="argument", value_name="value", actual_type="reg<test.typo>", descriptor_set="test.low.core"}
 low.func.def target(@test_target) @bad_register_class(%value: reg<test.typo>) {
   low.return
 }
@@ -17,14 +17,14 @@ low.func.def target(@test_target) @bad_register_class(%value: reg<test.typo>) {
 // ====
 
 test.target<low_core> @test_target
-// ERROR@+1: LOWERING/021 {actual_type="reg<test.typo>", descriptor_set="test.low.core"}
+// ERROR@+1: TARGET/042 {value_kind="argument", value_name="value", actual_type="reg<test.typo>", descriptor_set="test.low.core"}
 low.func.decl target(@test_target) @bad_register_decl(%value: reg<test.typo>)
 
 // ====
 
 test.target<low_core> @test_target
 low.func.def target(@test_target) @resource_missing_class() {
-  // ERROR@+1: LOWERING/049 {function_name="resource_missing_class", resource_name="low.resource", actual_type="reg<test.typo>", descriptor_set="test.low.core"}
+  // ERROR@+1: TARGET/042 {function_name="resource_missing_class", value_kind="resource", value_name="low.resource", actual_type="reg<test.typo>", descriptor_set="test.low.core"}
   %resource = low.resource<native_pointer> {index = 0, source_type = buffer} : reg<test.typo>
   low.return
 }
@@ -33,7 +33,7 @@ low.func.def target(@test_target) @resource_missing_class() {
 
 test.target<low_core> @test_target
 low.func.def target(@test_target) @resource_too_many_units() {
-  // ERROR@+1: LOWERING/050 {function_name="resource_too_many_units", resource_name="low.resource", actual_type="reg<test.special x2>", unit_count="2", descriptor_set="test.low.core", physical_count="1"}
+  // ERROR@+1: TARGET/043 {function_name="resource_too_many_units", value_kind="resource", value_name="low.resource", actual_type="reg<test.special x2>", unit_count="2", descriptor_set="test.low.core", physical_count="1"}
   %resource = low.resource<native_pointer> {index = 0, source_type = buffer} : reg<test.special x2>
   low.return
 }

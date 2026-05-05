@@ -1036,6 +1036,7 @@ static iree_status_t loom_low_verify_emit_resource_register_class_missing(
   const loom_low_resolved_target_t* target = function_state->target;
   loom_diagnostic_param_t params[] = {
       loom_param_string(function_state->function_name),
+      loom_param_string(IREE_SV("resource")),
       loom_param_with_field_ref(
           loom_param_string(IREE_SV("low.resource")),
           loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
@@ -1045,7 +1046,7 @@ static iree_status_t loom_low_verify_emit_resource_register_class_missing(
           loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, 0)),
       loom_param_string(target->descriptor_set_key),
   };
-  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_049,
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_TARGET_042,
                               params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
@@ -1055,6 +1056,7 @@ static iree_status_t loom_low_verify_emit_resource_unit_count_exceeded(
   const loom_low_resolved_target_t* target = function_state->target;
   loom_diagnostic_param_t params[] = {
       loom_param_string(function_state->function_name),
+      loom_param_string(IREE_SV("resource")),
       loom_param_with_field_ref(
           loom_param_string(IREE_SV("low.resource")),
           loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
@@ -1066,7 +1068,7 @@ static iree_status_t loom_low_verify_emit_resource_unit_count_exceeded(
       loom_param_string(target->descriptor_set_key),
       loom_param_u32(physical_count),
   };
-  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_050,
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_TARGET_043,
                               params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
@@ -1124,7 +1126,7 @@ static iree_status_t loom_low_verify_emit_unresolved_register_class(
       loom_param_type(actual_type),
       loom_param_string(target->descriptor_set_key),
   };
-  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_021,
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_TARGET_042,
                               params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
