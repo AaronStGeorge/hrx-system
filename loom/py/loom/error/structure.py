@@ -483,6 +483,69 @@ ERR_STRUCTURE_029 = ErrorDef(
     fix_hint="Move '{op_name}' to a region satisfying its placement contract",
 )
 
+# ERR_STRUCTURE_030: Operation order constraint violated.
+ERR_STRUCTURE_030 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=30,
+    severity=Severity.ERROR,
+    summary="Operation order constraint violated.",
+    message="'{op_name}' must appear {placement} '{reference_name}'",
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("placement", ParamKind.STRING),
+        ErrorParam("reference_name", ParamKind.STRING),
+    ),
+    fix_hint="Move '{op_name}' to the required position in its block",
+)
+
+# ERR_STRUCTURE_031: Operation block placement constraint violated.
+ERR_STRUCTURE_031 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=31,
+    severity=Severity.ERROR,
+    summary="Operation block placement constraint violated.",
+    message="'{op_name}' must appear in {expected_block}, found {actual_block}",
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("expected_block", ParamKind.STRING),
+        ErrorParam("actual_block", ParamKind.STRING),
+    ),
+    fix_hint="Move '{op_name}' to the required block",
+)
+
+# ERR_STRUCTURE_032: Referenced value origin is structurally invalid.
+ERR_STRUCTURE_032 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=32,
+    severity=Severity.ERROR,
+    summary="Referenced value origin is structurally invalid.",
+    message=("'{op_name}' field '{field_name}' must reference {required_origin}"),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("field_name", ParamKind.STRING),
+        ErrorParam("required_origin", ParamKind.STRING),
+    ),
+    fix_hint="Use a value produced by the required structural origin",
+)
+
+# ERR_STRUCTURE_033: Referenced value owner does not match.
+ERR_STRUCTURE_033 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=33,
+    severity=Severity.ERROR,
+    summary="Referenced value owner does not match.",
+    message=(
+        "'{op_name}' field '{field_name}' references a value owned by a "
+        "different {owner_kind}"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("field_name", ParamKind.STRING),
+        ErrorParam("owner_kind", ParamKind.STRING),
+    ),
+    fix_hint="Use a value owned by the same enclosing operation",
+)
+
 ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_001,
     ERR_STRUCTURE_002,
@@ -513,4 +576,8 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_027,
     ERR_STRUCTURE_028,
     ERR_STRUCTURE_029,
+    ERR_STRUCTURE_030,
+    ERR_STRUCTURE_031,
+    ERR_STRUCTURE_032,
+    ERR_STRUCTURE_033,
 )

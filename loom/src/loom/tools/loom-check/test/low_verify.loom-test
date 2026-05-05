@@ -80,7 +80,7 @@ low.func.def target(@test_target) @concat(%lo: reg<test.i32>, %hi: reg<test.i32>
 
 test.target<low_core> @test_target
 low.func.def target(@test_target) @copy_bad_units(%pair: reg<test.i32 x2>) {
-  // ERROR@+1: LOWERING/017
+  // ERROR@+1: TYPE/001 {field_a="source", type_a="reg<test.i32 x2>", field_b="result", type_b="reg<test.i32>"}
   %copy = low.copy %pair : reg<test.i32 x2> -> reg<test.i32>
   low.return
 }
@@ -98,7 +98,7 @@ low.func.def target(@test_target) @slice_bad_class(%pair: reg<test.i32 x2>) {
 
 test.target<low_core> @test_target
 low.func.def target(@test_target) @slice_negative_offset(%pair: reg<test.i32 x2>) {
-  // ERROR@+1: LOWERING/017
+  // ERROR@+1: STRUCTURE/014 {attr_name="offset", actual_value="-1", expected_constraint="non-negative register-unit offset"}
   %lane = low.slice %pair[-1] : reg<test.i32 x2> -> reg<test.i32>
   low.return
 }
@@ -107,7 +107,7 @@ low.func.def target(@test_target) @slice_negative_offset(%pair: reg<test.i32 x2>
 
 test.target<low_core> @test_target
 low.func.def target(@test_target) @slice_out_of_range(%pair: reg<test.i32 x2>) {
-  // ERROR@+1: LOWERING/017
+  // ERROR@+1: SUBRANGE/004 {dim_index="0", offset="2", size="1", total="3", bound="2"}
   %lane = low.slice %pair[2] : reg<test.i32 x2> -> reg<test.i32>
   low.return
 }

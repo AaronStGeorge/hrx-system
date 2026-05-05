@@ -23,7 +23,7 @@ low.kernel.def target(@test_target) workgroup_size(0, 1, 1) @kernel_rejects_zero
 test.target<low_core> @test_target
 
 low.kernel.def target(@test_target) @kernel_return_rejects_values(%value: reg<test.i32>) {
-  // ERROR@+1: LOWERING/017 "low.return" "values" "low kernel entries must return no values"
+  // ERROR@+1: STRUCTURE/001 {op_name="low.return", actual_count="1", expected_count="0"}
   low.return %value : reg<test.i32>
 }
 
@@ -45,7 +45,7 @@ test.target<low_core> @test_target
 
 low.func.def target(@test_target) @storage_view_rejects_overflowing_length() {
   %storage = low.storage.reserve {byte_alignment = 16, byte_length = 64} : low.storage<scratch>
-  // ERROR@+1: LOWERING/017 "low.storage.view" "byte_length" "byte_length must fit inside the source storage subspan"
+  // ERROR@+1: SUBRANGE/004 {dim_index="0", offset="48", size="32", total="80", bound="64"}
   %view = low.storage.view %storage {offset = 48, byte_length = 32} : low.storage<scratch> -> low.storage<scratch>
   low.return
 }
@@ -57,7 +57,7 @@ test.target<low_core> @test_target
 low.func.def target(@test_target) @storage_view_bounds_storage_traffic(%value: reg<test.i32>) {
   %storage = low.storage.reserve {byte_alignment = 16, byte_length = 64} : low.storage<scratch>
   %view = low.storage.view %storage {offset = 16, byte_length = 16} : low.storage<scratch> -> low.storage<scratch>
-  // ERROR@+1: LOWERING/017 "low.spill" "offset" "offset must address a byte inside the referenced storage"
+  // ERROR@+1: SUBRANGE/004 {dim_index="0", offset="16", size="1", total="17", bound="16"}
   low.spill %value, %view {offset = 16} : reg<test.i32>, low.storage<scratch>
   low.return
 }
@@ -81,7 +81,7 @@ test.target<low_core> @test_target
 low.func.def target(@test_target) @live_in_after_preamble(%input: reg<test.i32>) -> (reg<test.i32>) {
   %arg0 = low.live_in<test.arg0> : reg<test.i32>
   %copy = low.copy %arg0 : reg<test.i32> -> reg<test.i32>
-  // ERROR@+1: LOWERING/017 {op_name="low.live_in", field_name="position", reason="live-ins and resources must form an entry-block prefix before ordinary low packets"}
+  // ERROR@+1: STRUCTURE/030 {op_name="low.live_in", placement="before", reference_name="ordinary low packets"}
   %late = low.live_in<test.arg1> : reg<test.i32>
   low.return %late : reg<test.i32>
 }
@@ -93,7 +93,7 @@ test.target<low_core> @test_target
 low.func.def target(@test_target) @resource_after_preamble() -> (reg<test.ptr>) {
   %arg0 = low.live_in<test.arg0> : reg<test.ptr>
   %copy = low.copy %arg0 : reg<test.ptr> -> reg<test.ptr>
-  // ERROR@+1: LOWERING/017 {op_name="low.resource", field_name="position", reason="live-ins and resources must form an entry-block prefix before ordinary low packets"}
+  // ERROR@+1: STRUCTURE/030 {op_name="low.resource", placement="before", reference_name="ordinary low packets"}
   %late = low.resource<native_pointer> {index = 0, source_type = buffer} : reg<test.ptr>
   low.return %late : reg<test.ptr>
 }
@@ -106,7 +106,7 @@ low.func.def target(@test_target) @live_in_non_entry_block() -> (reg<test.i32>) 
   %arg0 = low.live_in<test.arg0> : reg<test.i32>
   low.br ^exit
 ^exit:
-  // ERROR@+1: LOWERING/017 {op_name="low.live_in", field_name="position", reason="live-ins and resources must appear in the low entry block"}
+  // ERROR@+1: STRUCTURE/031 {op_name="low.live_in", expected_block="the low entry block", actual_block="a non-entry block"}
   %late = low.live_in<test.arg1> : reg<test.i32>
   low.return %late : reg<test.i32>
 }
@@ -179,7 +179,7 @@ test.target<low_core> @test_target
 low.func.decl target(@test_target) @extern_add()
 
 func.def @low_call_outside_low_body() {
-  // ERROR@+1: LOWERING/017 {op_name="low.func.call", field_name="enclosing low entry", reason="low.func.call must be nested under a low function or low kernel body"}
+  // ERROR@+1: STRUCTURE/029 {op_name="low.func.call", constraint_kind="required", ancestor_name="low executable", actual_ancestor="func.def"}
   low.func.call @extern_add() : ()
   func.return
 }
@@ -215,7 +215,7 @@ test.target<low_core> @gfx1200
 low.func.decl target(@gfx1200) @extern_add(%lhs: reg<test.i32>) -> (reg<test.i32>)
 
 low.func.def target(@gfx1100) @low_call_cross_target(%lhs: reg<test.i32>) -> (reg<test.i32>) {
-  // ERROR@+1: LOWERING/017 {op_name="low.func.call", field_name="callee", reason="callee target must match enclosing low entry target"}
+  // ERROR@+1: TARGET/040 {op_name="low.func.call", field_name="callee", callee_target_name="gfx1200", caller_target_name="gfx1100"}
   %sum = low.func.call @extern_add(%lhs) : (reg<test.i32>) -> (reg<test.i32>)
   low.return %sum : reg<test.i32>
 }
@@ -275,7 +275,7 @@ low.func.def target(@test_target) @slot_roundtrip(%input: reg<test.i32>) -> (reg
 test.target<low_core> @test_target
 
 low.func.def target(@test_target) @resource_negative_extent() -> (reg<test.ptr>) {
-  // ERROR@+1: LOWERING/017 {op_name="low.resource", field_name="valid_byte_count", reason="valid_byte_count must be non-negative"}
+  // ERROR@+1: STRUCTURE/014 {attr_name="valid_byte_count", actual_value="-1", expected_constraint="non-negative byte count"}
   %binding = low.resource<native_pointer> {index = 0, source_type = buffer, valid_byte_count = -1} : reg<test.ptr>
   low.return %binding : reg<test.ptr>
 }
@@ -285,7 +285,7 @@ low.func.def target(@test_target) @resource_negative_extent() -> (reg<test.ptr>)
 test.target<low_core> @test_target
 
 low.func.def target(@test_target) @resource_bad_swizzle_stride() -> (reg<test.ptr>) {
-  // ERROR@+1: LOWERING/017 {op_name="low.resource", field_name="cache_swizzle_stride", reason="cache_swizzle_stride must fit a 14-bit byte stride"}
+  // ERROR@+1: STRUCTURE/014 {attr_name="cache_swizzle_stride", actual_value="16384", expected_constraint="14-bit non-negative byte stride"}
   %binding = low.resource<native_pointer> {index = 0, source_type = buffer, cache_swizzle_stride = 16384} : reg<test.ptr>
   low.return %binding : reg<test.ptr>
 }
@@ -295,7 +295,7 @@ low.func.def target(@test_target) @resource_bad_swizzle_stride() -> (reg<test.pt
 test.target<low_core> @test_target
 
 low.func.def target(@test_target) abi(object_function) @resource_wrong_export_abi() -> (reg<test.ptr>) {
-  // ERROR@+1: LOWERING/017 {op_name="low.resource", field_name="import_kind", reason="VM resources require vm_module_function export ABI"}
+  // ERROR@+1: TARGET/041 {op_name="low.resource", field_name="import_kind", import_kind="vm_state", expected_abi="vm_module_function", actual_abi="object_function"}
   %state = low.resource<vm_state> {index = 0, source_type = vm.state} : reg<test.ptr>
   low.return %state : reg<test.ptr>
 }

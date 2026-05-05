@@ -298,24 +298,6 @@ ERR_LOWERING_015 = ErrorDef(
     ),
 )
 
-# ERR_LOWERING_017: Low structural storage op is invalid.
-ERR_LOWERING_017 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=17,
-    severity=Severity.ERROR,
-    summary="Low structural storage op is invalid.",
-    message=("low structural op '{op_name}' field '{field_name}' is invalid: {reason}"),
-    params=(
-        ErrorParam("op_name", ParamKind.STRING),
-        ErrorParam("field_name", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Keep low structural records owned by low functions and reference "
-        "them with matching function, type, and target ABI contracts"
-    ),
-)
-
 # ERR_LOWERING_019: Low operation reads an undefined register part.
 ERR_LOWERING_019 = ErrorDef(
     domain=ErrorDomain.LOWERING,
@@ -953,7 +935,6 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_013,
     ERR_LOWERING_014,
     ERR_LOWERING_015,
-    ERR_LOWERING_017,
     ERR_LOWERING_019,
     ERR_LOWERING_020,
     ERR_LOWERING_021,

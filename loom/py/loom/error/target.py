@@ -766,6 +766,45 @@ ERR_TARGET_039 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_040: Low function call target does not match the caller target.
+ERR_TARGET_040 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=40,
+    severity=Severity.ERROR,
+    summary="Low function call target does not match the caller target.",
+    message=(
+        "'{op_name}' field '{field_name}' calls a low function targeting "
+        "'@{callee_target_name}' from an entry targeting '@{caller_target_name}'"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("field_name", ParamKind.STRING),
+        ErrorParam("callee_target_name", ParamKind.STRING),
+        ErrorParam("caller_target_name", ParamKind.STRING),
+    ),
+    fix_hint="Call a low function owned by the same target as the enclosing entry.",
+)
+
+# ERR_TARGET_041: Low resource import kind conflicts with function ABI.
+ERR_TARGET_041 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=41,
+    severity=Severity.ERROR,
+    summary="Low resource import kind conflicts with function ABI.",
+    message=(
+        "'{op_name}' field '{field_name}' imports {import_kind}, requiring "
+        "ABI '{expected_abi}', but the enclosing function ABI is '{actual_abi}'"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("field_name", ParamKind.STRING),
+        ErrorParam("import_kind", ParamKind.STRING),
+        ErrorParam("expected_abi", ParamKind.STRING),
+        ErrorParam("actual_abi", ParamKind.STRING),
+    ),
+    fix_hint="Use a resource import kind accepted by the enclosing function ABI.",
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -806,4 +845,6 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_037,
     ERR_TARGET_038,
     ERR_TARGET_039,
+    ERR_TARGET_040,
+    ERR_TARGET_041,
 )
