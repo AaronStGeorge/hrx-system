@@ -45,6 +45,8 @@ def extract_bindings(
     """Extract deterministic Loom kernel ABI bindings from a TileLang PrimFunc."""
 
     source_buffer_map = buffer_map(prim_func)
+    nonrestrict_keys = _collect_nonrestrict_param_keys(prim_func)
+    noalias_enabled = _tilelang_noalias_enabled(prim_func)
     names = NameAllocator()
     bindings: list[TileLangBinding] = []
     skip_sources: list[object] = []
@@ -65,6 +67,11 @@ def extract_bindings(
                 source=param,
                 type=value_type,
                 buffer=buffer,
+                noalias=(
+                    buffer is not None
+                    and noalias_enabled
+                    and not _buffer_is_nonrestrict(param, buffer, nonrestrict_keys)
+                ),
             )
         )
         skip_sources.append(param)
@@ -336,3 +343,174 @@ _COMMON_SOURCE_ATTRS = (
     "false_value",
     "value",
 )
+
+
+def _tilelang_noalias_enabled(prim_func: object) -> bool:
+    """Return whether TileLang would print restrict-qualified pointer params."""
+
+    # TileLang's device splitting path materializes tir.noalias=true on kernels.
+    # Preserve an explicit false attr, but otherwise model the production
+    # TileLang kernel ABI default instead of requiring the high-level source
+    # object to have already run that lowering pass.
+    return _truthy_attr(attrs(prim_func).get("tir.noalias", True))
+
+
+def _truthy_attr(value: object | None) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    payload = getattr(value, "value", None)
+    if payload is not None:
+        return bool(payload)
+    return bool(value)
+
+
+def _collect_nonrestrict_param_keys(prim_func: object) -> set[object]:
+    """Collect TileLang params whose generated pointers must not be restrict."""
+
+    keys: set[object] = set()
+    _record_nonrestrict_sources(attrs(prim_func).get("tl.non_restrict_params"), keys)
+    _collect_nonrestrict_param_keys_from_stmt(
+        getattr(prim_func, "body", None),
+        keys,
+        visited=[],
+    )
+    return keys
+
+
+def _collect_nonrestrict_param_keys_from_stmt(
+    value: object,
+    keys: set[object],
+    *,
+    visited: list[object],
+) -> None:
+    if value is None or _is_leaf(value):
+        return
+    if any(value is seen for seen in visited):
+        return
+    visited.append(value)
+
+    kind = node_kind(value)
+    if kind == "AttrStmt":
+        if str(getattr(value, "attr_key", "")) == "tl.non_restrict_params":
+            _record_nonrestrict_sources(getattr(value, "value", None), keys)
+        _collect_nonrestrict_param_keys_from_stmt(
+            getattr(value, "body", None),
+            keys,
+            visited=visited,
+        )
+        return
+    if kind == "Block":
+        _record_nonrestrict_metadata(value, keys)
+        for attr_name in ("init", "body"):
+            _collect_nonrestrict_param_keys_from_stmt(
+                getattr(value, attr_name, None),
+                keys,
+                visited=visited,
+            )
+        return
+    if kind == "BlockRealize":
+        _collect_nonrestrict_param_keys_from_stmt(
+            getattr(value, "block", None),
+            keys,
+            visited=visited,
+        )
+        return
+    if kind == "SeqStmt":
+        _collect_nonrestrict_param_keys_from_stmt(
+            getattr(value, "seq", ()),
+            keys,
+            visited=visited,
+        )
+        return
+    if kind in (
+        "Allocate",
+        "AssertStmt",
+        "BufferRealize",
+        "DeclBuffer",
+        "For",
+        "LetStmt",
+    ):
+        _collect_nonrestrict_param_keys_from_stmt(
+            getattr(value, "body", None),
+            keys,
+            visited=visited,
+        )
+        return
+    if kind == "IfThenElse":
+        for attr_name in ("then_case", "else_case"):
+            _collect_nonrestrict_param_keys_from_stmt(
+                getattr(value, attr_name, None),
+                keys,
+                visited=visited,
+            )
+        return
+    children: Iterable[object]
+    if isinstance(value, Mapping):
+        children = value.values()
+    else:
+        items = mapping_items(value)
+        if items:
+            children = tuple(child for _key, child in items)
+        elif isinstance(value, Iterable) and not isinstance(value, str | bytes):
+            children = value
+        else:
+            children = ()
+    for child in children:
+        _collect_nonrestrict_param_keys_from_stmt(
+            child,
+            keys,
+            visited=visited,
+        )
+
+
+def _record_nonrestrict_metadata(value: object, keys: set[object]) -> None:
+    _record_nonrestrict_sources(attrs(value).get("tl.non_restrict_params"), keys)
+    for key, item in mapping_items(getattr(value, "annotations", {})):
+        if str(key) == "tl.non_restrict_params":
+            _record_nonrestrict_sources(item, keys)
+
+
+def _record_nonrestrict_sources(value: object | None, keys: set[object]) -> None:
+    if value is None:
+        return
+    if _is_leaf(value):
+        return
+    if node_kind(value) in ("Var", "SizeVar"):
+        keys.update(_source_identity_keys(value))
+        return
+    data = getattr(value, "data", None)
+    if data is not None and node_kind(data) in ("Var", "SizeVar"):
+        keys.update(_source_identity_keys(data))
+        return
+    items = mapping_items(value)
+    if items:
+        for _key, item in items:
+            _record_nonrestrict_sources(item, keys)
+        return
+    if isinstance(value, Iterable) and not isinstance(value, str | bytes):
+        for child in value:
+            _record_nonrestrict_sources(child, keys)
+        return
+    keys.update(_source_identity_keys(value))
+
+
+def _buffer_is_nonrestrict(
+    param: object,
+    buffer: object,
+    nonrestrict_keys: set[object],
+) -> bool:
+    for source in (param, getattr(buffer, "data", None)):
+        if source is None:
+            continue
+        if any(key in nonrestrict_keys for key in _source_identity_keys(source)):
+            return True
+    return False
+
+
+def _source_identity_keys(value: object) -> tuple[object, ...]:
+    keys: list[object] = [source_key(value)]
+    if node_kind(value) in ("Var", "SizeVar"):
+        keys.append(("var", source_name(value, fallback=str(value)), dtype(value)))
+    return tuple(keys)

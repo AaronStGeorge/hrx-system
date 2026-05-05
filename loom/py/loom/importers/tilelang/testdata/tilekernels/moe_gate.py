@@ -102,9 +102,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("topk_gate_kernel") @topk_gate_kerne
   kernel.launch.config workgroups(%num_tokens_idx, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %scores_noalias = buffer.assume.noalias %scores_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %scores = buffer.view %scores_handle[%c0_bytes] : buffer -> view<[%num_tokens]x8xf32, %layout>
-  %topk_idx = buffer.view %topk_idx_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
+  %scores = buffer.view %scores_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x8xf32, %layout>
+  %topk_idx_noalias = buffer.assume.noalias %topk_idx_handle : buffer
+  %topk_idx = buffer.view %topk_idx_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index

@@ -101,11 +101,15 @@ kernel.def target(@hip_mcpu_gfx1100) export("expand_to_fused_kernel") @expand_to
   kernel.launch.config workgroups(%max, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %x_noalias = buffer.assume.noalias %x_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %x = buffer.view %x_handle[%c0_bytes] : buffer -> view<[%num_tokens]x64xf16, %layout>
-  %expanded_x = buffer.view %expanded_x_handle[%c0_bytes] : buffer -> view<[%num_expanded_tokens]x64xf16, %layout>
-  %token_topk_to_pos = buffer.view %token_topk_to_pos_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xi32, %layout>
-  %pos_to_expert = buffer.view %pos_to_expert_handle[%c0_bytes] : buffer -> view<[%num_expanded_tokens]xi32, %layout>
+  %x = buffer.view %x_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x64xf16, %layout>
+  %expanded_x_noalias = buffer.assume.noalias %expanded_x_handle : buffer
+  %expanded_x = buffer.view %expanded_x_noalias[%c0_bytes] : buffer -> view<[%num_expanded_tokens]x64xf16, %layout>
+  %token_topk_to_pos_noalias = buffer.assume.noalias %token_topk_to_pos_handle : buffer
+  %token_topk_to_pos = buffer.view %token_topk_to_pos_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xi32, %layout>
+  %pos_to_expert_noalias = buffer.assume.noalias %pos_to_expert_handle : buffer
+  %pos_to_expert = buffer.view %pos_to_expert_noalias[%c0_bytes] : buffer -> view<[%num_expanded_tokens]xi32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index

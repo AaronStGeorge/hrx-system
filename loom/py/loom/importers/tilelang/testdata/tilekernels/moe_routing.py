@@ -102,9 +102,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") @mask_i
   kernel.launch.config workgroups(%div, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %indices_noalias = buffer.assume.noalias %indices_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %indices = buffer.view %indices_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
-  %masked_indices = buffer.view %masked_indices_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
+  %indices = buffer.view %indices_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
+  %masked_indices_noalias = buffer.assume.noalias %masked_indices_handle : buffer
+  %masked_indices = buffer.view %masked_indices_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
   %bx = kernel.workgroup.id<x> : index
   %thread_idx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -262,8 +264,9 @@ kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel
   kernel.launch.config workgroups(%c8, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %group_indices_noalias = buffer.assume.noalias %group_indices_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %group_indices = buffer.view %group_indices_handle[%c0_bytes] : buffer -> view<[%num_tokens]x4xi64, %layout>
+  %group_indices = buffer.view %group_indices_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x4xi64, %layout>
   %bx = kernel.workgroup.id<x> : index
   %thread_idx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index

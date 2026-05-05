@@ -120,12 +120,17 @@ kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_k
   kernel.launch.config workgroups(%c2, %div, %c1) workgroup_size(%c32, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %ngram_token_ids_noalias = buffer.assume.noalias %ngram_token_ids_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %ngram_token_ids = buffer.view %ngram_token_ids_handle[%c0_bytes] : buffer -> view<[%num_tokens]x3xi32, %layout>
-  %multipliers = buffer.view %multipliers_handle[%c0_bytes] : buffer -> view<2x3xi64, %layout>
-  %vocab_sizes = buffer.view %vocab_sizes_handle[%c0_bytes] : buffer -> view<2x2x4xi32, %layout>
-  %offsets = buffer.view %offsets_handle[%c0_bytes] : buffer -> view<2x8xi32, %layout>
-  %output = buffer.view %output_handle[%c0_bytes] : buffer -> view<2x[%num_tokens]x8xi32, %layout>
+  %ngram_token_ids = buffer.view %ngram_token_ids_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x3xi32, %layout>
+  %multipliers_noalias = buffer.assume.noalias %multipliers_handle : buffer
+  %multipliers = buffer.view %multipliers_noalias[%c0_bytes] : buffer -> view<2x3xi64, %layout>
+  %vocab_sizes_noalias = buffer.assume.noalias %vocab_sizes_handle : buffer
+  %vocab_sizes = buffer.view %vocab_sizes_noalias[%c0_bytes] : buffer -> view<2x2x4xi32, %layout>
+  %offsets_noalias = buffer.assume.noalias %offsets_handle : buffer
+  %offsets = buffer.view %offsets_noalias[%c0_bytes] : buffer -> view<2x8xi32, %layout>
+  %output_noalias = buffer.assume.noalias %output_handle : buffer
+  %output = buffer.view %output_noalias[%c0_bytes] : buffer -> view<2x[%num_tokens]x8xi32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %by = kernel.workgroup.id<y> : index
   %tid = kernel.workitem.id<x> : index

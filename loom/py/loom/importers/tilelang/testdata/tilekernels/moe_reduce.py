@@ -86,11 +86,15 @@ kernel.def target(@hip_mcpu_gfx1100) export("reduce_fused_kernel") @reduce_fused
   kernel.launch.config workgroups(%num_tokens_idx, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %x_noalias = buffer.assume.noalias %x_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %x = buffer.view %x_handle[%c0_bytes] : buffer -> view<[%num_expanded_tokens]x8xf16, %layout>
-  %topk_weights = buffer.view %topk_weights_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
-  %token_topk_to_pos = buffer.view %token_topk_to_pos_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xi32, %layout>
-  %out = buffer.view %out_handle[%c0_bytes] : buffer -> view<[%num_tokens]x8xf16, %layout>
+  %x = buffer.view %x_noalias[%c0_bytes] : buffer -> view<[%num_expanded_tokens]x8xf16, %layout>
+  %topk_weights_noalias = buffer.assume.noalias %topk_weights_handle : buffer
+  %topk_weights = buffer.view %topk_weights_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
+  %token_topk_to_pos_noalias = buffer.assume.noalias %token_topk_to_pos_handle : buffer
+  %token_topk_to_pos = buffer.view %token_topk_to_pos_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xi32, %layout>
+  %out_noalias = buffer.assume.noalias %out_handle : buffer
+  %out = buffer.view %out_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x8xf16, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index

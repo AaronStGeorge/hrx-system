@@ -52,9 +52,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("vector_add_store") @vector_add_stor
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>
-  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
+  %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
   %c0 = index.constant 0 : index
   %load = vector.load %src_view[%c0] : view<16xf32, %layout> -> vector<4xf32>
   %const = scalar.constant 2.0 : f32
@@ -103,9 +105,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("vector_select_store") @vector_selec
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>
-  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
+  %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
   %c0 = index.constant 0 : index
   %load = vector.load %src_view[%c0] : view<16xf32, %layout> -> vector<4xf32>
   %const = scalar.constant 0.0 : f32

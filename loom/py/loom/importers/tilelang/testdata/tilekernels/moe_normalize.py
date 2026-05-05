@@ -84,10 +84,13 @@ kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") @normaliz
   kernel.launch.config workgroups(%div, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %topk_weights_noalias = buffer.assume.noalias %topk_weights_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %topk_weights = buffer.view %topk_weights_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
-  %denominator = buffer.view %denominator_handle[%c0_bytes] : buffer -> view<[%num_tokens]xf32, %layout>
-  %normalized_weights = buffer.view %normalized_weights_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
+  %topk_weights = buffer.view %topk_weights_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
+  %denominator_noalias = buffer.assume.noalias %denominator_handle : buffer
+  %denominator = buffer.view %denominator_noalias[%c0_bytes] : buffer -> view<[%num_tokens]xf32, %layout>
+  %normalized_weights_noalias = buffer.assume.noalias %normalized_weights_handle : buffer
+  %normalized_weights = buffer.view %normalized_weights_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tid = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index

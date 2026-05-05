@@ -98,9 +98,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") @group_count_k
   kernel.launch.config workgroups(%c8, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %group_idx_noalias = buffer.assume.noalias %group_idx_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %group_idx = buffer.view %group_idx_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
-  %out = buffer.view %out_handle[%c0_bytes] : buffer -> view<8xi32, %layout>
+  %group_idx = buffer.view %group_idx_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
+  %out_noalias = buffer.assume.noalias %out_handle : buffer
+  %out = buffer.view %out_noalias[%c0_bytes] : buffer -> view<8xi32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %thread_idx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -253,9 +255,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") @aux_fi_kernel(%top
   kernel.launch.config workgroups(%c8, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %topk_idx_noalias = buffer.assume.noalias %topk_idx_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %topk_idx = buffer.view %topk_idx_handle[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
-  %out = buffer.view %out_handle[%c0_bytes] : buffer -> view<8xf32, %layout>
+  %topk_idx = buffer.view %topk_idx_noalias[%c0_bytes] : buffer -> view<[%num_tokens]x2xi64, %layout>
+  %out_noalias = buffer.assume.noalias %out_handle : buffer
+  %out = buffer.view %out_noalias[%c0_bytes] : buffer -> view<8xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %thread_idx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index

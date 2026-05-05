@@ -340,6 +340,7 @@ def _map_kernel_arguments(
         if binding.buffer is None:
             continue
         argument = shell.body_arguments_by_ordinal[binding.ordinal]
+        buffer = _refine_kernel_buffer_argument(binding, argument, context)
         view_type = context.buffer_view_type(binding.buffer)
         dim_bindings = _dynamic_view_dimension_bindings(
             context,
@@ -350,7 +351,7 @@ def _map_kernel_arguments(
         if dim_bindings is None:
             return False
         view = context.builder.buffer.view(
-            buffer=argument,
+            buffer=buffer,
             byte_offset=zero,
             results=[view_type],
             name=_buffer_view_name(binding, context),
@@ -367,6 +368,28 @@ def _map_kernel_arguments(
             f"{context.ssa(view)} = buffer.view",
         )
     return True
+
+
+def _refine_kernel_buffer_argument(
+    binding: TileLangBinding,
+    argument: ValueRef,
+    context: TileLangConversionContext,
+) -> ValueRef:
+    if not binding.noalias:
+        return argument
+    base_name = binding.name.removesuffix("_handle")
+    if base_name == binding.name:
+        base_name = binding.name
+    buffer = context.builder.buffer.noalias(
+        buffer=argument,
+        results=[argument.type],
+        name=context.reserve_name(f"{base_name}_noalias"),
+    )
+    context.record_converted(
+        f"param {binding.name}",
+        f"{context.ssa(buffer)} = buffer.assume.noalias",
+    )
+    return buffer
 
 
 def _map_scalar_kernel_arguments(

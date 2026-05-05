@@ -84,9 +84,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("launch_thread_attrs") @launch_threa
   kernel.launch.config workgroups(%c8, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<1024xf32, %layout>
-  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<1024xf32, %layout>
+  %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<1024xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<1024xf32, %layout>
   %blockIdx_x = kernel.workgroup.id<x> : index
   %threadIdx_x = kernel.workitem.id<x> : index
   %add = index.add %blockIdx_x, %blockIdx_x : index
@@ -137,9 +139,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("shared_storage_sync") @shared_stora
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
-  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
   kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
   %c0 = index.constant 0 : index
   %load = view.load %src_view[%c0] : view<4xf32, %layout> -> f32
@@ -183,9 +187,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("warp_sync_kernel") @warp_sync_kerne
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<32xf32, %layout>
-  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<32xf32, %layout>
+  %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<32xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<32xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %thread_index = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -233,9 +239,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("thread_binding_loop") @thread_bindi
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<128xf32, %layout>
-  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<128xf32, %layout>
+  %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<128xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<128xf32, %layout>
   %tx = kernel.workitem.id<x> : index
   %load = view.load %src_view[%tx] : view<128xf32, %layout> -> f32
   view.store %load, %dst_view[%tx] : f32, view<128xf32, %layout>
@@ -270,8 +278,9 @@ kernel.def target(@hip_mcpu_gfx1100) export("thread_index_to_i64_kernel") @threa
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<32xi64, %layout>
+  %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<32xi64, %layout>
   %bx = kernel.workgroup.id<x> : index
   %thread_index = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -320,9 +329,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("warp_shuffle_kernel") @warp_shuffle
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<32xf32, %layout>
-  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<128xf32, %layout>
+  %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<32xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<128xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %thread_index = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -386,9 +397,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("warp_shuffle_loop_offsets_kernel") 
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<32xf32, %layout>
-  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<128xf32, %layout>
+  %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<32xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<128xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %thread_index = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -456,9 +469,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("warp_reduce_float_kernel") @warp_re
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<32xf32, %layout>
-  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<96xf32, %layout>
+  %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<32xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<96xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %thread_index = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -522,11 +537,15 @@ kernel.def target(@hip_mcpu_gfx1100) export("warp_reduce_integer_kernel") @warp_
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<32xi32, %layout>
-  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<160xi32, %layout>
-  %unsigned_src = buffer.view %unsigned_src_handle[%c0_bytes] : buffer -> view<32xi32, %layout>
-  %unsigned_dst = buffer.view %unsigned_dst_handle[%c0_bytes] : buffer -> view<64xi32, %layout>
+  %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<32xi32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<160xi32, %layout>
+  %unsigned_src_noalias = buffer.assume.noalias %unsigned_src_handle : buffer
+  %unsigned_src = buffer.view %unsigned_src_noalias[%c0_bytes] : buffer -> view<32xi32, %layout>
+  %unsigned_dst_noalias = buffer.assume.noalias %unsigned_dst_handle : buffer
+  %unsigned_dst = buffer.view %unsigned_dst_noalias[%c0_bytes] : buffer -> view<64xi32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %thread_index = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index

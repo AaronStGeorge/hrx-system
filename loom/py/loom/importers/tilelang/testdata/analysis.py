@@ -74,9 +74,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("scoped_tl_assume") @scoped_tl_assum
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
-  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
   %n_assumed = scalar.assume %n [lt(0, %n)] : i32
   %c0 = index.constant 0 : index
   %n_idx = index.cast %n_assumed : i32 to index
@@ -132,13 +134,71 @@ kernel.def target(@hip_mcpu_gfx1100) export("effect_tir_assume") @effect_tir_ass
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xf32, %layout>
-  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
   %n_assumed = scalar.assume %n [mul(%n, 16)] : i32
   %c0 = index.constant 0 : index
   %load = view.load %src_view[%c0] : view<4xf32, %layout> -> f32
   view.store %load, %dst_view[%c0] : f32, view<4xf32, %layout>
+  kernel.return
+}
+"""
+
+
+# ====
+@tilelang_case(
+    name="nonrestrict_buffer_annotation",
+    category="op",
+    tags=("analysis", "tilelang"),
+)
+def nonrestrict_buffer_annotation(tilelang: Any, T: Any) -> TileLangImportInput:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+        },
+    )
+    def get_nonrestrict_buffer_annotation() -> Any:
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def nonrestrict_buffer_annotation(
+            src: T.Tensor[(4,), T.float32],
+            dst: T.Tensor[(4,), T.float32],
+        ) -> None:
+            with T.Kernel(1, threads=1):
+                T.annotate_restrict_buffers(src)
+                dst[0] = src[0]
+
+        return nonrestrict_buffer_annotation
+
+    return TileLangImportInput(
+        source=get_nonrestrict_buffer_annotation,
+        target="hip -mcpu=gfx1100",
+        name="nonrestrict_buffer_annotation",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("nonrestrict_buffer_annotation") @nonrestrict_buffer_annotation(%src_handle: buffer, %dst_handle: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %tx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %c0 = index.constant 0 : index
+  %load = view.load %src[%c0] : view<4xf32, %layout> -> f32
+  view.store %load, %dst[%c0] : f32, view<4xf32, %layout>
   kernel.return
 }
 """
@@ -195,9 +255,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("effect_tir_assume_buffer_load") @ef
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<4xi32, %layout>
-  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<4xi32, %layout>
+  %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xi32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xi32, %layout>
   %c0 = index.constant 0 : index
   %load = view.load %src_view[%c0] : view<4xi32, %layout> -> i32
   %value_assumed, %n_assumed = scalar.assume %load, %n [lt(%load, %n)] : i32, i32
@@ -251,9 +313,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("mixed_address_scalar_assume") @mixe
   kernel.launch.config workgroups(%n_idx, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<[%n]xf32, %layout>
-  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<[%n]xf32, %layout>
+  %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<[%n]xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<[%n]xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -317,16 +381,19 @@ kernel.def target(@hip_mcpu_gfx1100) export("derived_dynamic_buffer_dimension") 
   kernel.launch.config workgroups(%div, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<[%n]xf32, %layout>
+  %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<[%n]xf32, %layout>
+  %scale_noalias = buffer.assume.noalias %scale_handle : buffer
   %n_idx = index.cast %n : i32 to index
   %c128 = index.constant 128 : index
   %add = index.add %n_idx, %c128 : index
   %c1 = index.constant 1 : index
   %sub = index.sub %add, %c1 : index
   %div = index.div %sub, %c128 : index
-  %scale = buffer.view %scale_handle[%c0_bytes] : buffer -> view<[%div]xf32, %layout>
-  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<[%n]xf32, %layout>
+  %scale = buffer.view %scale_noalias[%c0_bytes] : buffer -> view<[%div]xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<[%n]xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index
@@ -386,9 +453,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("assume_or_static_false") @assume_or
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<1xf32, %layout>
-  %dst = buffer.view %dst_handle[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<1xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
   %ty = kernel.workitem.id<y> : index

@@ -67,8 +67,9 @@ kernel.def target(@hip_mcpu_gfx1100) export("broadcast_vector_store") @broadcast
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %dst_noalias = buffer.assume.noalias %dst : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
+  %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
   %const = scalar.constant 0.0 : f32
   %splat = vector.splat %const : vector<4xf32>
   %c4 = index.constant 4 : index
@@ -108,9 +109,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("ramp_vector_load") @ramp_vector_loa
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
-  %src_view = buffer.view %src[%c0_bytes] : buffer -> view<16xf32, %layout>
-  %dst_view = buffer.view %dst[%c0_bytes] : buffer -> view<16xf32, %layout>
+  %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
   %c8 = index.constant 8 : index
   %load = vector.load %src_view[%c8] : view<16xf32, %layout> -> vector<4xf32>
   %c0 = index.constant 0 : index
