@@ -48,6 +48,7 @@ loom_assert_no_dependencies(
         ":packet_json",
         ":placement",
         ":frame",
+        ":pipeline",
         ":preparation",
         ":pass_environment",
         ":register_class_map",
@@ -72,6 +73,7 @@ loom_assert_no_dependencies(
         ":packet_asm",
         ":packet_json",
         ":placement",
+        ":pipeline",
         ":frame",
         ":register_class_map",
         ":source_memory_plan",
@@ -169,6 +171,32 @@ loom_cc_library(
         "//loom/src/loom/pass:environment",
         "//loom/src/loom/pass:types",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "pipeline",
+    srcs = ["pipeline.c"],
+    hdrs = ["pipeline.h"],
+    deps = [
+        "//loom/src/loom/pass:builder",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "pipeline_test",
+    srcs = ["pipeline_test.cc"],
+    deps = [
+        ":pipeline",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/pass",
+        "//loom/src/loom/pass:builder",
+        "//loom/src/loom/testing:module_ptr",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
@@ -385,11 +413,11 @@ loom_cc_library(
         ":descriptors",
         ":function",
         ":pass_environment",
+        ":pipeline",
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/low",
-        "//loom/src/loom/pass:builder",
         "//loom/src/loom/pass:interpreter",
         "//loom/src/loom/pass:program",
         "//loom/src/loom/pass:registry",

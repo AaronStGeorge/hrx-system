@@ -126,6 +126,36 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    pipeline
+  HDRS
+    "pipeline.h"
+  SRCS
+    "pipeline.c"
+  DEPS
+    iree::base
+    loom::src::loom::pass::builder
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    pipeline_test
+  SRCS
+    "pipeline_test.cc"
+  DEPS
+    ::pipeline
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::pass
+    loom::src::loom::pass::builder
+    loom::src::loom::testing::module_ptr
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     text_asm
   HDRS
     "text_asm.h"
@@ -375,13 +405,13 @@ loom_cc_library(
     ::descriptors
     ::function
     ::pass_environment
+    ::pipeline
     iree::base
     iree::base::internal::arena
     loom::src::loom::error::emitter
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
-    loom::src::loom::pass::builder
     loom::src::loom::pass::interpreter
     loom::src::loom::pass::program
     loom::src::loom::pass::registry

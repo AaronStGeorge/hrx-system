@@ -8,30 +8,16 @@
 
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/pass_environment.h"
+#include "loom/codegen/low/pipeline.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
-#include "loom/pass/builder.h"
 #include "loom/pass/interpreter.h"
 #include "loom/pass/program.h"
 
 static iree_status_t loom_low_preparation_build_pipeline(
     loom_builder_t* builder, void* user_data) {
-  (void)user_data;
-  loom_op_t* run_op = NULL;
-  iree_status_t status = loom_pass_ir_build_run(
-      builder, IREE_SV("cse"), loom_make_named_attr_slice(NULL, 0), &run_op);
-  if (iree_status_is_ok(status)) {
-    status =
-        loom_pass_ir_build_run(builder, IREE_SV("low-select-operand-forms"),
-                               loom_make_named_attr_slice(NULL, 0), &run_op);
-  }
-  if (iree_status_is_ok(status)) {
-    status =
-        loom_pass_ir_build_run(builder, IREE_SV("low-dce"),
-                               loom_make_named_attr_slice(NULL, 0), &run_op);
-  }
-  return status;
+  return loom_low_pipeline_build_packetization_preparation(builder);
 }
 
 static iree_status_t loom_low_preparation_validate_function(
