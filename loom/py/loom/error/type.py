@@ -167,6 +167,49 @@ ERR_TYPE_014 = ErrorDef(
     fix_hint=("'{argument_name}' must satisfy type constraint '{expected_constraint}'"),
 )
 
+# ERR_TYPE_015: Boundary facts conflict with a boundary value type.
+ERR_TYPE_015 = ErrorDef(
+    domain=ErrorDomain.TYPE,
+    code=15,
+    severity=Severity.ERROR,
+    summary="Boundary facts conflict with a boundary value type.",
+    message=(
+        "{pass_name} found boundary facts for {op_name} that conflict with "
+        "boundary type {actual_type}"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("pass_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+    ),
+    fix_hint=(
+        "Refine the producer facts or specialize the function boundary so the "
+        "boundary value type can represent the propagated facts"
+    ),
+)
+
+# ERR_TYPE_016: Callee result type conflicts with a call result type.
+ERR_TYPE_016 = ErrorDef(
+    domain=ErrorDomain.TYPE,
+    code=16,
+    severity=Severity.ERROR,
+    summary="Callee result type conflicts with a call result type.",
+    message=(
+        "{pass_name} found {op_name} with call result type {actual_type} "
+        "conflicting with substituted callee result type {candidate_type}"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("pass_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("candidate_type", ParamKind.TYPE),
+    ),
+    fix_hint=(
+        "Specialize the callee or callsite so substituted boundary dimensions "
+        "agree before refining call result types"
+    ),
+)
+
 # ERR_TYPE_009: Yield type does not match result type.
 ERR_TYPE_009 = ErrorDef(
     domain=ErrorDomain.TYPE,
@@ -245,4 +288,6 @@ ALL_TYPE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_TYPE_012,
     ERR_TYPE_013,
     ERR_TYPE_014,
+    ERR_TYPE_015,
+    ERR_TYPE_016,
 )

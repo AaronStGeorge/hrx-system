@@ -156,16 +156,35 @@ static const loom_op_t* loom_refine_boundaries_module_anchor(
   return entry_block->first_op;
 }
 
-static iree_status_t loom_refine_boundaries_emit_op_error(
+static iree_status_t loom_refine_boundaries_emit_boundary_type_conflict(
     loom_pass_t* pass, const loom_module_t* module, const loom_op_t* op,
-    const loom_error_def_t* error) {
+    loom_type_t actual_type) {
   loom_diagnostic_param_t params[] = {
       loom_param_string(loom_op_name(module, op)),
       loom_param_string(pass->info->name),
+      loom_param_type(actual_type),
   };
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = error,
+      .error = LOOM_ERR_TYPE_015,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  return iree_diagnostic_emit(pass->diagnostic_emitter, &emission);
+}
+
+static iree_status_t loom_refine_boundaries_emit_call_result_type_conflict(
+    loom_pass_t* pass, const loom_module_t* module, const loom_op_t* op,
+    loom_type_t actual_type, loom_type_t candidate_type) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_op_name(module, op)),
+      loom_param_string(pass->info->name),
+      loom_param_type(actual_type),
+      loom_param_type(candidate_type),
+  };
+  loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = LOOM_ERR_TYPE_016,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
@@ -885,8 +904,8 @@ static iree_status_t loom_refine_boundaries_refine_value_type_with_facts(
   IREE_RETURN_IF_ERROR(loom_type_refine_with_value_facts(
       current_type, facts, &module->arena, &refined_type, &result));
   if (result == LOOM_TYPE_REFINEMENT_CONFLICT) {
-    return loom_refine_boundaries_emit_op_error(pass, module, owner_op,
-                                                LOOM_ERR_LOWERING_041);
+    return loom_refine_boundaries_emit_boundary_type_conflict(
+        pass, module, owner_op, current_type);
   }
   if (result == LOOM_TYPE_REFINEMENT_UNCHANGED ||
       loom_type_equal(current_type, refined_type)) {
@@ -1657,8 +1676,8 @@ static iree_status_t loom_refine_boundaries_refine_call_result_type(
   IREE_RETURN_IF_ERROR(loom_type_refine_with_candidate(
       current_type, candidate_type, &module->arena, &refined_type, &result));
   if (result == LOOM_TYPE_REFINEMENT_CONFLICT) {
-    return loom_refine_boundaries_emit_op_error(pass, module, call_op,
-                                                LOOM_ERR_LOWERING_042);
+    return loom_refine_boundaries_emit_call_result_type_conflict(
+        pass, module, call_op, current_type, candidate_type);
   }
   if (result == LOOM_TYPE_REFINEMENT_UNCHANGED ||
       loom_type_equal(current_type, refined_type)) {

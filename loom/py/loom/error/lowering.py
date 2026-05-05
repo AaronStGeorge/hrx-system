@@ -437,46 +437,6 @@ ERR_LOWERING_040 = ErrorDef(
     ),
 )
 
-# ERR_LOWERING_041: Boundary facts conflict with a boundary value type.
-ERR_LOWERING_041 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=41,
-    severity=Severity.ERROR,
-    summary="Boundary facts conflict with a boundary value type.",
-    message=(
-        "{pass_name} found boundary facts for {op_name} that conflict with a "
-        "function boundary value type"
-    ),
-    params=(
-        ErrorParam("op_name", ParamKind.STRING),
-        ErrorParam("pass_name", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Refine the producer facts or specialize the function boundary so the "
-        "boundary value type can represent the propagated facts"
-    ),
-)
-
-# ERR_LOWERING_042: Callee result type conflicts with a call result type.
-ERR_LOWERING_042 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=42,
-    severity=Severity.ERROR,
-    summary="Callee result type conflicts with a call result type.",
-    message=(
-        "{pass_name} found {op_name} whose callee result type conflicts with "
-        "the call result type after boundary substitution"
-    ),
-    params=(
-        ErrorParam("op_name", ParamKind.STRING),
-        ErrorParam("pass_name", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Specialize the callee or callsite so substituted boundary dimensions "
-        "agree before refining call result types"
-    ),
-)
-
 # ERR_LOWERING_043: Boundary fact refinement did not converge.
 ERR_LOWERING_043 = ErrorDef(
     domain=ErrorDomain.LOWERING,
@@ -519,7 +479,5 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_038,
     ERR_LOWERING_039,
     ERR_LOWERING_040,
-    ERR_LOWERING_041,
-    ERR_LOWERING_042,
     ERR_LOWERING_043,
 )
