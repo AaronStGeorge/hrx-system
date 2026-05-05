@@ -246,40 +246,6 @@ ERR_LOWERING_033 = ErrorDef(
     ),
 )
 
-# ERR_LOWERING_037: SCF to CFG requires a positive counted-loop step.
-ERR_LOWERING_037 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=37,
-    severity=Severity.ERROR,
-    summary="SCF to CFG requires a positive counted-loop step.",
-    message="{pass_name} requires {op_name} step to be fact-proven positive",
-    params=(
-        ErrorParam("op_name", ParamKind.STRING),
-        ErrorParam("pass_name", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Refine the loop step facts or normalize the loop before converting "
-        "structured control flow to CFG"
-    ),
-)
-
-# ERR_LOWERING_038: SCF to CFG cannot preserve tied result ownership.
-ERR_LOWERING_038 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=38,
-    severity=Severity.ERROR,
-    summary="SCF to CFG cannot preserve tied result ownership.",
-    message="{pass_name} cannot preserve tied result ownership on {op_name}",
-    params=(
-        ErrorParam("op_name", ParamKind.STRING),
-        ErrorParam("pass_name", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Lower ownership transfers before CFG conversion or keep the "
-        "structured op until CFG block arguments can model the transfer"
-    ),
-)
-
 # ERR_LOWERING_043: Boundary fact refinement did not converge.
 ERR_LOWERING_043 = ErrorDef(
     domain=ErrorDomain.LOWERING,
@@ -312,7 +278,5 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_031,
     ERR_LOWERING_032,
     ERR_LOWERING_033,
-    ERR_LOWERING_037,
-    ERR_LOWERING_038,
     ERR_LOWERING_043,
 )

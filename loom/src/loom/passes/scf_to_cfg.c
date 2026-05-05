@@ -329,7 +329,7 @@ static void loom_scf_to_cfg_read_single_block_region(
 static iree_status_t loom_scf_to_cfg_verify_op_preconditions(
     loom_scf_to_cfg_state_t* state, loom_op_t* op) {
   if (op->tied_result_count == 0) return iree_ok_status();
-  return loom_scf_to_cfg_emit(state, op, LOOM_ERR_LOWERING_038);
+  return loom_scf_to_cfg_emit(state, op, LOOM_ERR_STRUCTURE_036);
 }
 
 static void loom_scf_to_cfg_prepare_op_lowering(
@@ -567,7 +567,7 @@ static iree_status_t loom_scf_to_cfg_lower_for(loom_scf_to_cfg_state_t* state,
       loom_value_fact_table_lookup(state->fact_table, loom_scf_for_step(op));
   if (loom_value_facts_is_float(step_facts) ||
       !loom_value_facts_is_positive(step_facts)) {
-    return loom_scf_to_cfg_emit(state, op, LOOM_ERR_LOWERING_037);
+    return loom_scf_to_cfg_emit(state, op, LOOM_ERR_STRUCTURE_035);
   }
 
   loom_block_t* body_source_block = NULL;

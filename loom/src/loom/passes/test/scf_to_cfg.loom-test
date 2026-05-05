@@ -254,7 +254,7 @@ func.def @remaps_join_argument_dependent_type(%cond: i1, %buffer: buffer, %offse
 
 func.def @rejects_unknown_for_step(%n: index, %step: index) {
   %zero = index.constant 0 : index
-  // ERROR@+1: LOWERING/037 {op_name="scf.for", pass_name="scf-to-cfg"}
+  // ERROR@+1: STRUCTURE/035 {op_name="scf.for", pass_name="scf-to-cfg"}
   scf.for %i = [%zero to %n step %step] {
     scf.yield
   }

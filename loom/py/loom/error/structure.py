@@ -567,6 +567,40 @@ ERR_STRUCTURE_034 = ErrorDef(
     ),
 )
 
+# ERR_STRUCTURE_035: Counted loop step is not proven positive.
+ERR_STRUCTURE_035 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=35,
+    severity=Severity.ERROR,
+    summary="Counted loop step is not proven positive.",
+    message="{pass_name} requires {op_name} step to be fact-proven positive",
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("pass_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Refine the loop step facts or normalize the loop before converting "
+        "structured control flow to CFG"
+    ),
+)
+
+# ERR_STRUCTURE_036: CFG conversion cannot preserve tied result ownership.
+ERR_STRUCTURE_036 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=36,
+    severity=Severity.ERROR,
+    summary="CFG conversion cannot preserve tied result ownership.",
+    message="{pass_name} cannot preserve tied result ownership on {op_name}",
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("pass_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Lower ownership transfers before CFG conversion or keep the "
+        "structured op until CFG block arguments can model the transfer"
+    ),
+)
+
 ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_001,
     ERR_STRUCTURE_002,
@@ -602,4 +636,6 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_032,
     ERR_STRUCTURE_033,
     ERR_STRUCTURE_034,
+    ERR_STRUCTURE_035,
+    ERR_STRUCTURE_036,
 )
