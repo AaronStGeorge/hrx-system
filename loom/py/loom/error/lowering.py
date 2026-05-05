@@ -8,22 +8,6 @@
 
 from loom.errors import ErrorDef, ErrorDomain, ErrorParam, ParamKind, Severity
 
-# ERR_LOWERING_001: Pass has no legal lowering for an op.
-ERR_LOWERING_001 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=1,
-    severity=Severity.ERROR,
-    summary="Operation has no legal lowering.",
-    message="{op_name} cannot be lowered by {pass_name}: {reason}",
-    params=(
-        ErrorParam("op_name", ParamKind.STRING),
-        ErrorParam("pass_name", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
-    ),
-    fix_hint="Run a refinement pass that makes the operation legal for "
-    "{pass_name}, or lower it with a pass that supports this operation",
-)
-
 # ERR_LOWERING_002: Pass-level refinement failed.
 ERR_LOWERING_002 = ErrorDef(
     domain=ErrorDomain.LOWERING,
@@ -829,7 +813,6 @@ ERR_LOWERING_040 = ErrorDef(
 )
 
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
-    ERR_LOWERING_001,
     ERR_LOWERING_002,
     ERR_LOWERING_003,
     ERR_LOWERING_004,
