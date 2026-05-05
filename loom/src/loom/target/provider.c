@@ -167,3 +167,26 @@ loom_target_environment_low_packet_diagnostic_provider_list(
       environment->low_packet_diagnostic_providers,
       environment->low_packet_diagnostic_provider_count);
 }
+
+iree_status_t loom_target_environment_contribute_pipeline(
+    const loom_target_environment_t* environment,
+    loom_target_pipeline_phase_t phase,
+    loom_pass_environment_t pass_environment, loom_builder_t* builder) {
+  IREE_ASSERT_ARGUMENT(environment);
+  IREE_ASSERT_ARGUMENT(builder);
+  const loom_target_provider_set_t* provider_set = environment->provider_set;
+  for (iree_host_size_t i = 0; i < provider_set->provider_count; ++i) {
+    const loom_target_provider_t* provider = provider_set->providers[i];
+    if (provider->contribute_pipeline == NULL) {
+      continue;
+    }
+    const loom_target_pipeline_contribution_t contribution = {
+        .target_environment = environment,
+        .phase = phase,
+        .builder = builder,
+        .pass_environment = pass_environment,
+    };
+    IREE_RETURN_IF_ERROR(provider->contribute_pipeline(&contribution));
+  }
+  return iree_ok_status();
+}

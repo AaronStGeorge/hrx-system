@@ -223,7 +223,24 @@ loom_cc_library(
         ":low_packet_diagnostics",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ir",
+        "//loom/src/loom/pass:environment",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "provider_test",
+    srcs = ["provider_test.cc"],
+    deps = [
+        ":provider",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/pass",
+        "//loom/src/loom/pass:builder",
+        "//loom/src/loom/testing:module_ptr",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

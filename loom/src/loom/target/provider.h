@@ -18,6 +18,7 @@
 #include "iree/base/api.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/ir/context.h"
+#include "loom/pass/environment.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/low_legality.h"
 #include "loom/target/low_packet_diagnostics.h"
@@ -38,6 +39,38 @@ typedef void (*loom_target_low_descriptor_registry_initializer_t)(
 typedef void (*loom_target_low_lower_policy_registry_initializer_t)(
     loom_low_lower_policy_registry_t* out_registry);
 
+typedef struct loom_builder_t loom_builder_t;
+typedef struct loom_target_environment_t loom_target_environment_t;
+
+// Coarse phase hooks owned by a top-level compile pipeline builder. Target
+// providers append pass IR into these hooks; they do not execute passes.
+typedef enum loom_target_pipeline_phase_e {
+  // Source/kernel normalization before source-to-low lowering.
+  LOOM_TARGET_PIPELINE_PHASE_SOURCE_NORMALIZATION = 0,
+  // Source-to-target-low lowering.
+  LOOM_TARGET_PIPELINE_PHASE_SOURCE_TO_LOW = 1,
+  // Target ABI/resource materialization after source-to-low.
+  LOOM_TARGET_PIPELINE_PHASE_TARGET_LOW_MATERIALIZATION = 2,
+  // Target-low cleanup and operand-form preparation before emission.
+  LOOM_TARGET_PIPELINE_PHASE_TARGET_LOW_PREPARATION = 3,
+  LOOM_TARGET_PIPELINE_PHASE_COUNT_,
+} loom_target_pipeline_phase_t;
+
+typedef struct loom_target_pipeline_contribution_t {
+  // Composed target environment receiving the contribution request.
+  const loom_target_environment_t* target_environment;
+  // Compile phase being built.
+  loom_target_pipeline_phase_t phase;
+  // Builder positioned in the caller-owned pass pipeline region for |phase|.
+  loom_builder_t* builder;
+  // Pass capabilities that the produced pass IR will verify and run with.
+  loom_pass_environment_t pass_environment;
+} loom_target_pipeline_contribution_t;
+
+// Appends target-owned pass IR for one compile phase.
+typedef iree_status_t (*loom_target_provider_pipeline_contribution_fn_t)(
+    const loom_target_pipeline_contribution_t* contribution);
+
 // Target-owned compiler capability contribution linked into a tool or driver.
 typedef struct loom_target_provider_t {
   // Optional function that registers target-owned dialects.
@@ -53,6 +86,8 @@ typedef struct loom_target_provider_t {
   // Optional low-packet diagnostic providers contributed by this target.
   loom_target_low_packet_diagnostic_provider_list_t
       low_packet_diagnostic_provider_list;
+  // Optional pass-pipeline contribution callback.
+  loom_target_provider_pipeline_contribution_fn_t contribute_pipeline;
 } loom_target_provider_t;
 
 // Static target provider table linked into a binary or embedding.
@@ -71,7 +106,7 @@ enum {
 };
 
 // Composed target environment derived from a target provider set.
-typedef struct loom_target_environment_t {
+struct loom_target_environment_t {
   // Borrowed provider table selected by the linked binary or embedding.
   const loom_target_provider_set_t* provider_set;
   // Descriptor-set provider table assembled once.
@@ -95,7 +130,7 @@ typedef struct loom_target_environment_t {
           [LOOM_TARGET_PROVIDER_LOW_PACKET_DIAGNOSTIC_PROVIDER_CAPACITY];
   // Number of entries in |low_packet_diagnostic_providers|.
   iree_host_size_t low_packet_diagnostic_provider_count;
-} loom_target_environment_t;
+};
 
 // Creates a borrowed provider set view.
 static inline loom_target_provider_set_t loom_target_provider_set_make(
@@ -140,6 +175,14 @@ loom_target_environment_low_legality_provider_list(
 loom_target_low_packet_diagnostic_provider_list_t
 loom_target_environment_low_packet_diagnostic_provider_list(
     const loom_target_environment_t* environment);
+
+// Invokes target-provider pass-pipeline contributions for |phase|. The caller
+// owns phase ordering, surrounding pass.for/pass.where scopes, and global
+// cleanup insertion.
+iree_status_t loom_target_environment_contribute_pipeline(
+    const loom_target_environment_t* environment,
+    loom_target_pipeline_phase_t phase,
+    loom_pass_environment_t pass_environment, loom_builder_t* builder);
 
 #ifdef __cplusplus
 }  // extern "C"
