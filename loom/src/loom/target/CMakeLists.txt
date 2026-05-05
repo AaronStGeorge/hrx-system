@@ -277,6 +277,27 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    predicate
+  HDRS
+    "predicate.h"
+  SRCS
+    "predicate.c"
+  DEPS
+    ::function_contract
+    ::types
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::symbol_facts
+    loom::src::loom::ir
+    loom::src::loom::ops::func_symbol_facts
+    loom::src::loom::ops::pass
+    loom::src::loom::ops::target
+    loom::src::loom::pass::predicate
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     provider_test
@@ -289,6 +310,28 @@ loom_cc_test(
     loom::src::loom::ops::op_registry
     loom::src::loom::ops::pass
     loom::src::loom::pass::builder
+    loom::src::loom::testing::module_ptr
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    predicate_test
+  SRCS
+    "predicate_test.cc"
+  DEPS
+    ::predicate
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::low
+    loom::src::loom::ops::pass
+    loom::src::loom::ops::target
+    loom::src::loom::ops::test
+    loom::src::loom::pass::verify
+    loom::src::loom::target::test::target_record_table
     loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main

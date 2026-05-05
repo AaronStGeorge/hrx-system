@@ -24,11 +24,9 @@
 #include "loom/pass/registry.h"
 #include "loom/pass/report.h"
 #include "loom/pass/tooling.h"
-#include "loom/target/all/low_registry.h"
-#include "loom/target/arch/amdgpu/ops/registry.h"
-#include "loom/target/arch/wasm/ops/registry.h"
-#include "loom/target/arch/x86/ops/registry.h"
-#include "loom/target/emit/ireevm/ops/registry.h"
+#include "loom/target/all/provider.h"
+#include "loom/target/predicate.h"
+#include "loom/target/provider.h"
 #include "loom/tooling/execution/session.h"
 #include "loom/tooling/io/file.h"
 #include "loom/util/json.h"
@@ -122,19 +120,18 @@ static iree_status_t loom_opt_parse_diagnostic_format(
 
 static iree_status_t loom_opt_register_context(void* user_data,
                                                loom_context_t* context) {
-  (void)user_data;
+  const loom_target_environment_t* target_environment =
+      (const loom_target_environment_t*)user_data;
   IREE_RETURN_IF_ERROR(loom_op_registry_register_all_dialects(context));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_ops_register_dialect(context));
-  IREE_RETURN_IF_ERROR(loom_x86_ops_register_dialect(context));
-  IREE_RETURN_IF_ERROR(loom_wasm_ops_register_dialect(context));
-  return loom_ireevm_ops_register_dialect(context);
+  return loom_target_environment_register_context(target_environment, context);
 }
 
 static iree_status_t loom_opt_initialize_low_descriptor_registry(
     void* user_data, loom_target_low_descriptor_registry_t* out_registry) {
-  (void)user_data;
-  loom_all_low_descriptor_registry_initialize(out_registry);
-  return iree_ok_status();
+  const loom_target_environment_t* target_environment =
+      (const loom_target_environment_t*)user_data;
+  return loom_target_environment_initialize_low_descriptor_registry(
+      target_environment, out_registry);
 }
 
 static bool loom_opt_resolve_emission_location(
@@ -656,6 +653,7 @@ static iree_status_t loom_opt_write_pass_reproducer(
 
 static iree_status_t loom_opt_run_passes(
     const loom_target_low_descriptor_registry_t* low_registry,
+    const loom_target_environment_t* target_environment,
     iree_arena_block_pool_t* block_pool, loom_run_module_t* run_module,
     loom_diagnostic_sink_t diagnostic_sink, loom_pass_report_t* report,
     bool* out_execution_started, loom_pass_run_result_t* out_result,
@@ -686,15 +684,22 @@ static iree_status_t loom_opt_run_passes(
   };
 
   loom_low_lower_policy_registry_t low_lower_policy_registry = {0};
-  loom_all_low_lower_policy_registry_initialize(&low_lower_policy_registry);
+  IREE_RETURN_IF_ERROR(
+      loom_target_environment_initialize_low_lower_policy_registry(
+          target_environment, &low_lower_policy_registry));
   const loom_target_low_legality_provider_list_t low_legality_provider_list =
-      loom_all_low_legality_provider_list();
+      loom_target_environment_low_legality_provider_list(target_environment);
   loom_low_pass_environment_storage_t low_pass_environment_storage;
+  loom_target_pass_predicate_provider_storage_t predicate_storage;
+  loom_target_pass_predicate_provider_storage_initialize(block_pool,
+                                                         &predicate_storage);
   loom_pass_tool_run_options_t run_options = {
       .registry = loom_pass_builtin_registry(),
       .environment = loom_low_pass_environment_storage_initialize(
           &low_registry->registry, &low_lower_policy_registry,
           &low_legality_provider_list, &low_pass_environment_storage),
+      .predicate_provider =
+          loom_target_pass_predicate_provider(&predicate_storage),
       .block_pool = block_pool,
       .diagnostic_emitter = {.fn = loom_opt_diagnostic_emitter_emit,
                              .user_data = &pass_emitter},
@@ -884,6 +889,7 @@ int main(int argc, char** argv) {
   loom_run_session_t run_session = {0};
   loom_run_module_t run_module = {0};
   const loom_pass_registry_t* pass_registry = loom_pass_builtin_registry();
+  const loom_target_environment_t* target_environment = NULL;
   iree_string_view_t source = iree_string_view_empty();
   loom_opt_pass_report_mode_t pass_report_mode = LOOM_OPT_PASS_REPORT_NONE;
   loom_opt_diagnostic_format_t diagnostic_format =
@@ -937,15 +943,18 @@ int main(int argc, char** argv) {
   }
 
   if (iree_status_is_ok(status) && !metadata_only) {
+    target_environment = loom_all_target_environment();
     loom_run_session_options_t session_options = {0};
     loom_run_session_options_initialize(&session_options);
     session_options.host_allocator = allocator;
     session_options.register_context = (loom_run_register_context_callback_t){
         .fn = loom_opt_register_context,
+        .user_data = (void*)target_environment,
     };
     session_options.initialize_low_descriptor_registry =
         (loom_run_initialize_low_descriptor_registry_callback_t){
             .fn = loom_opt_initialize_low_descriptor_registry,
+            .user_data = (void*)target_environment,
         };
     status = loom_run_session_initialize(&session_options, &run_session);
   }
@@ -985,7 +994,8 @@ int main(int argc, char** argv) {
   if (iree_status_is_ok(status) && !metadata_only) {
     pass_pipeline_status = loom_opt_run_passes(
         loom_run_session_low_descriptor_registry(&run_session),
-        loom_run_session_block_pool(&run_session), &run_module, diagnostic_sink,
+        target_environment, loom_run_session_block_pool(&run_session),
+        &run_module, diagnostic_sink,
         pass_report_initialized ? &pass_report : NULL, &pass_execution_started,
         &pass_run_result, allocator);
     status = pass_pipeline_status;

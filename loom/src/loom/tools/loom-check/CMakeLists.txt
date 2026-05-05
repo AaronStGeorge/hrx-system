@@ -86,6 +86,7 @@ loom_cc_library(
     loom::src::loom::target::low_legality
     loom::src::loom::target::low_packet_diagnostics
     loom::src::loom::target::module_compiler
+    loom::src::loom::target::predicate
     loom::src::loom::target::types
     loom::src::loom::testing::diff
     loom::src::loom::util::json

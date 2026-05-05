@@ -18,6 +18,7 @@
 #include "loom/ir/module.h"
 #include "loom/pass/builtin_registry.h"
 #include "loom/pass/tooling.h"
+#include "loom/target/predicate.h"
 #include "loom/testing/diff.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/requirements.h"
@@ -397,12 +398,17 @@ iree_status_t loom_check_execute_pass(
       }
     }
     loom_low_pass_environment_storage_t low_pass_environment_storage;
+    loom_target_pass_predicate_provider_storage_t predicate_storage;
+    loom_target_pass_predicate_provider_storage_initialize(block_pool,
+                                                           &predicate_storage);
     loom_pass_tool_run_options_t run_options = {
         .registry = loom_pass_builtin_registry(),
         .environment = loom_low_pass_environment_storage_initialize(
             &low_registry.registry, low_lower_policy_registry_ref,
             environment ? &environment->low_legality_provider_list : NULL,
             &low_pass_environment_storage),
+        .predicate_provider =
+            loom_target_pass_predicate_provider(&predicate_storage),
         .block_pool = block_pool,
         .diagnostic_emitter = pass_diagnostic_emitter,
     };

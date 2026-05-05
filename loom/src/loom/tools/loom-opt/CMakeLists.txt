@@ -32,11 +32,9 @@ loom_cc_binary(
     loom::src::loom::pass::registry
     loom::src::loom::pass::report
     loom::src::loom::pass::tooling
-    loom::src::loom::target::all::low_registry
-    loom::src::loom::target::arch::amdgpu::ops
-    loom::src::loom::target::arch::wasm::ops
-    loom::src::loom::target::arch::x86::ops
-    loom::src::loom::target::emit::ireevm::ops
+    loom::src::loom::target::all::provider
+    loom::src::loom::target::predicate
+    loom::src::loom::target::provider
     loom::src::loom::tooling::execution::session
     loom::src::loom::tooling::io::file
     loom::src::loom::util::json

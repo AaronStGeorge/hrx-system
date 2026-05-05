@@ -242,6 +242,24 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "predicate",
+    srcs = ["predicate.c"],
+    hdrs = ["predicate.h"],
+    deps = [
+        ":function_contract",
+        ":types",
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:func_symbol_facts",
+        "//loom/src/loom/ops/pass",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/pass:predicate",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
 loom_cc_test(
     name = "provider_test",
     srcs = ["provider_test.cc"],
@@ -251,6 +269,27 @@ loom_cc_test(
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/ops/pass",
         "//loom/src/loom/pass:builder",
+        "//loom/src/loom/testing:module_ptr",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "predicate_test",
+    srcs = ["predicate_test.cc"],
+    deps = [
+        ":predicate",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/pass",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/pass:verify",
+        "//loom/src/loom/target/test:target_record_table",
         "//loom/src/loom/testing:module_ptr",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
