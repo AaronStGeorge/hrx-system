@@ -149,6 +149,30 @@ ERR_DOMINANCE_010 = ErrorDef(
     fix_hint="Use '%{value_name}' only where the lifetime contract allows it.",
 )
 
+# ERR_DOMINANCE_011: Low operation reads an undefined register part.
+ERR_DOMINANCE_011 = ErrorDef(
+    domain=ErrorDomain.DOMINANCE,
+    code=11,
+    severity=Severity.ERROR,
+    summary="Low operation reads an undefined register part.",
+    message=(
+        "low function '@{function_name}' op '{op_name}' operand "
+        "'{field_name}' requires register part mask {required_mask}, but "
+        "the value defines only mask {defined_mask}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("field_name", ParamKind.STRING),
+        ErrorParam("required_mask", ParamKind.U64),
+        ErrorParam("defined_mask", ParamKind.U64),
+    ),
+    fix_hint=(
+        "Compose the missing register part with an explicitly tied partial "
+        "write before using the value as a full-register operand"
+    ),
+)
+
 ALL_DOMINANCE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_DOMINANCE_001,
     ERR_DOMINANCE_002,
@@ -160,4 +184,5 @@ ALL_DOMINANCE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_DOMINANCE_008,
     ERR_DOMINANCE_009,
     ERR_DOMINANCE_010,
+    ERR_DOMINANCE_011,
 )

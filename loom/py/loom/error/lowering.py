@@ -8,30 +8,6 @@
 
 from loom.errors import ErrorDef, ErrorDomain, ErrorParam, ParamKind, Severity
 
-# ERR_LOWERING_019: Low operation reads an undefined register part.
-ERR_LOWERING_019 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=19,
-    severity=Severity.ERROR,
-    summary="Low operation reads an undefined register part.",
-    message=(
-        "low function '@{function_name}' op '{op_name}' operand "
-        "'{field_name}' requires register part mask {required_mask}, but "
-        "the value defines only mask {defined_mask}"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("op_name", ParamKind.STRING),
-        ErrorParam("field_name", ParamKind.STRING),
-        ErrorParam("required_mask", ParamKind.U64),
-        ErrorParam("defined_mask", ParamKind.U64),
-    ),
-    fix_hint=(
-        "Compose the missing register part with an explicitly tied partial "
-        "write before using the value as a full-register operand"
-    ),
-)
-
 # ERR_LOWERING_020: Static vector scalarization lane count is not representable.
 ERR_LOWERING_020 = ErrorDef(
     domain=ErrorDomain.LOWERING,
@@ -436,7 +412,6 @@ ERR_LOWERING_043 = ErrorDef(
 )
 
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
-    ERR_LOWERING_019,
     ERR_LOWERING_020,
     ERR_LOWERING_022,
     ERR_LOWERING_023,

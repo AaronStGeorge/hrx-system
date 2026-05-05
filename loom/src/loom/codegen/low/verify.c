@@ -949,7 +949,7 @@ static iree_status_t loom_low_verify_emit_undefined_register_part(
       loom_param_u64(required_mask),
       loom_param_u64(defined_mask),
   };
-  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_019,
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_DOMINANCE_011,
                               params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 

@@ -12,7 +12,7 @@ from loom.diagnostics import (
     DiagnosticSeverity,
     SourceRange,
 )
-from loom.error.lowering import ERR_LOWERING_019
+from loom.error.dominance import ERR_DOMINANCE_011
 from loom.error.type import ERR_TYPE_001
 from loom.importers.check.annotations import (
     match_source_diagnostics,
@@ -64,7 +64,7 @@ def test_parse_expected_diagnostics_ignores_natural_language_comments() -> None:
 
 def test_parse_expected_diagnostics_supports_structured_param_matchers() -> None:
     expected = parse_expected_diagnostics(
-        '# ERROR@+1: LOWERING/019 {op_name="test.add", field_name="lhs"}\nbad()\n',
+        '# ERROR@+1: DOMINANCE/011 {op_name="test.add", field_name="lhs"}\nbad()\n',
         path=Path("case.py"),
         line_start=1,
         comment_prefix="#",
@@ -112,7 +112,7 @@ def test_match_source_diagnostics_rejects_unexpected_diagnostic() -> None:
 
 def test_match_source_diagnostics_accepts_structured_params() -> None:
     expected = parse_expected_diagnostics(
-        '# ERROR@+1: LOWERING/019 {op_name="test.add", field_name="lhs"}\nbad()\n',
+        '# ERROR@+1: DOMINANCE/011 {op_name="test.add", field_name="lhs"}\nbad()\n',
         path=Path("case.py"),
         line_start=1,
         comment_prefix="#",
@@ -120,7 +120,7 @@ def test_match_source_diagnostics_accepts_structured_params() -> None:
     actual = (
         Diagnostic(
             severity=DiagnosticSeverity.ERROR,
-            error_def=ERR_LOWERING_019,
+            error_def=ERR_DOMINANCE_011,
             message="lowering failed",
             source_location=SourceRange.line(Path("case.py"), 2),
             params=(
