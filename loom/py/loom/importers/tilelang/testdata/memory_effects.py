@@ -66,7 +66,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("scalar_atomic_add") @scalar_atomic_
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xi32, %layout>
   %const = scalar.constant 1 : i32
@@ -117,7 +118,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("scalar_atomic_add_return") @scalar_
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xi32, %layout>
   %const = scalar.constant 1 : i32
@@ -168,10 +170,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("device_asserts_kernel") @device_ass
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src_handle : buffer
+  %src_global = buffer.assume.memory_space %src_handle {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<1xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst_global = buffer.assume.memory_space %dst_handle {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<1xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
@@ -180,9 +184,9 @@ kernel.def target(@hip_mcpu_gfx1100) export("device_asserts_kernel") @device_ass
   %c0 = index.constant 0 : index
   %load = view.load %src[%c0] : view<1xf32, %layout> -> f32
   %isfinitef = scalar.isfinitef %load : f32
-  kernel.assert %isfinitef "\n  at memory_effects.py:149 in device_asserts_kernel\n" : i1
+  kernel.assert %isfinitef "\n  at memory_effects.py:151 in device_asserts_kernel\n" : i1
   %isfinitef_2 = scalar.isfinitef %load : f32
-  kernel.assert %isfinitef_2 "finite input required\n  at memory_effects.py:150 in device_asserts_kernel\n" : i1
+  kernel.assert %isfinitef_2 "finite input required\n  at memory_effects.py:152 in device_asserts_kernel\n" : i1
   view.store %load, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
 }

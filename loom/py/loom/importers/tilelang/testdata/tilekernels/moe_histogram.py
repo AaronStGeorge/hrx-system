@@ -98,11 +98,13 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") @group_count_k
   kernel.launch.config workgroups(%c8, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %group_idx_noalias = buffer.assume.noalias %group_idx_handle : buffer
+  %group_idx_global = buffer.assume.memory_space %group_idx_handle {memory_space = global} : buffer
+  %group_idx_noalias = buffer.assume.noalias %group_idx_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %num_tokens_idx = index.cast %num_tokens : i32 to index
   %group_idx = buffer.view %group_idx_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2xi64, %layout>
-  %out_noalias = buffer.assume.noalias %out_handle : buffer
+  %out_global = buffer.assume.memory_space %out_handle {memory_space = global} : buffer
+  %out_noalias = buffer.assume.noalias %out_global : buffer
   %out = buffer.view %out_noalias[%c0_bytes] : buffer -> view<8xi32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %thread_idx = kernel.workitem.id<x> : index
@@ -255,11 +257,13 @@ kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") @aux_fi_kernel(%top
   kernel.launch.config workgroups(%c8, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %topk_idx_noalias = buffer.assume.noalias %topk_idx_handle : buffer
+  %topk_idx_global = buffer.assume.memory_space %topk_idx_handle {memory_space = global} : buffer
+  %topk_idx_noalias = buffer.assume.noalias %topk_idx_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %num_tokens_idx = index.cast %num_tokens : i32 to index
   %topk_idx = buffer.view %topk_idx_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2xi64, %layout>
-  %out_noalias = buffer.assume.noalias %out_handle : buffer
+  %out_global = buffer.assume.memory_space %out_handle {memory_space = global} : buffer
+  %out_noalias = buffer.assume.noalias %out_global : buffer
   %out = buffer.view %out_noalias[%c0_bytes] : buffer -> view<8xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %thread_idx = kernel.workitem.id<x> : index

@@ -10,14 +10,26 @@ from __future__ import annotations
 
 from loom.builder import ValueRef
 from loom.importers.core import sanitize_identifier
-from loom.importers.tilelang.buffers import resolve_buffer_access
-from loom.importers.tilelang.context import TileLangConversionContext
+from loom.importers.tilelang.buffers import (
+    TileLangBufferAccess,
+    resolve_buffer_access,
+    resolve_buffer_index_map,
+)
+from loom.importers.tilelang.context import (
+    TileLangConversionContext,
+    TileLangDistributedIndex,
+    TileLangFragmentVector,
+)
 from loom.importers.tilelang.converter import (
     ExpressionOptions,
     TileLangConverter,
     TileLangConverterRegistry,
 )
 from loom.importers.tilelang.nodes import dtype, node_kind, node_text, source_name
+from loom.importers.tilelang.ops.distribution import (
+    MAX_DISTRIBUTED_UNROLL_LANES,
+    materialize_distributed_1d_plan,
+)
 from loom.importers.tilelang.ops.topology import integer_value
 from loom.importers.tilelang.ops.vector import vector_lanes
 from loom.ir import (
@@ -32,6 +44,220 @@ from loom.ir import (
 def register(registry: TileLangConverterRegistry) -> None:
     registry.register_statement("BufferStore", convert_buffer_store)
     registry.register_expression("BufferLoad", convert_buffer_load)
+
+
+def try_convert_parallel_vector_store(
+    stmt: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    *,
+    loop_var: object,
+    extent_integer: int,
+    index_name: str,
+) -> bool:
+    """Import a 1D distributed parallel store as one vector.store per workitem."""
+
+    body = _single_statement_body(getattr(stmt, "body", None))
+    if node_kind(body) != "BufferStore":
+        return False
+    source_indices = tuple(getattr(body, "indices", ()))
+    target_axis_position = _direct_loop_var_axis(source_indices, loop_var, context)
+    if target_axis_position is None:
+        return False
+    target_index_map = resolve_buffer_index_map(
+        getattr(body, "buffer", None),
+        context,
+        converter,
+        diagnostic_owner=body,
+    )
+    if target_index_map is None:
+        return False
+    if (
+        not target_index_map.is_identity
+        or target_axis_position != target_index_map.logical_rank - 1
+    ):
+        return False
+    if not _parallel_store_value_is_vectorizable(
+        body,
+        context,
+        converter,
+        loop_var=loop_var,
+    ):
+        return False
+
+    thread_count = context.static_topology_extent("threadIdx.x")
+    if thread_count is None or thread_count <= 0:
+        return False
+    if extent_integer <= thread_count or extent_integer % thread_count != 0:
+        return False
+    lane_count = extent_integer // thread_count
+    if lane_count > MAX_DISTRIBUTED_UNROLL_LANES:
+        return False
+
+    plan = materialize_distributed_1d_plan(
+        stmt,
+        context,
+        converter,
+        extent_integer=extent_integer,
+        index_name=index_name,
+    )
+    if plan is None or plan.lane_count != lane_count:
+        return False
+
+    child = context.fork(preview_block=context.builder.ir.insertion_block)
+    child.map_value(loop_var, plan.base, "index")
+    child.map_index_value(loop_var, plan.base)
+    child.map_distributed_index(
+        plan.base,
+        TileLangDistributedIndex(
+            base=plan.base,
+            lane=0,
+            lane_count=plan.lane_count,
+        ),
+    )
+    access = resolve_buffer_access(
+        getattr(body, "buffer", None),
+        source_indices,
+        child,
+        converter,
+        diagnostic_owner=body,
+    )
+    if access is None:
+        return False
+    if target_axis_position != len(access.indices) - 1:
+        return False
+
+    vector_value = _parallel_store_vector_value(
+        body,
+        child,
+        converter,
+        lane_count=plan.lane_count,
+        target_view=access.view,
+    )
+    if vector_value is None:
+        return False
+
+    indices: list[int | ValueRef] = list(access.indices)
+    indices[target_axis_position] = plan.base
+    child.invalidate_buffer_accesses(access.view)
+    child.builder.vector.store(
+        value=vector_value,
+        view=access.view,
+        indices=indices,
+    )
+    child.record_converted(node_text(body), "vector.store distributed")
+    context.merge_child_records(child)
+    return True
+
+
+def _single_statement_body(stmt: object) -> object:
+    if node_kind(stmt) != "SeqStmt":
+        return stmt
+    children = tuple(getattr(stmt, "seq", ()) or ())
+    if len(children) != 1:
+        return stmt
+    return children[0]
+
+
+def _direct_loop_var_axis(
+    source_indices: tuple[object, ...],
+    loop_var: object,
+    context: TileLangConversionContext,
+) -> int | None:
+    loop_key = context.source_key(loop_var)
+    match = None
+    for axis, source_index in enumerate(source_indices):
+        if context.source_key(source_index) != loop_key and not _same_source_var(
+            source_index, loop_var
+        ):
+            continue
+        if match is not None:
+            return None
+        match = axis
+    return match
+
+
+def _same_source_var(lhs: object, rhs: object) -> bool:
+    if node_kind(lhs) not in ("Var", "SizeVar") or node_kind(rhs) not in (
+        "Var",
+        "SizeVar",
+    ):
+        return False
+    return dtype(lhs) == dtype(rhs) and source_name(
+        lhs, fallback=str(lhs)
+    ) == source_name(
+        rhs,
+        fallback=str(rhs),
+    )
+
+
+def _parallel_store_value_is_vectorizable(
+    stmt: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    *,
+    loop_var: object,
+) -> bool:
+    value_expr = getattr(stmt, "value", None)
+    if node_kind(value_expr) in ("FloatImm", "IntImm"):
+        return True
+    if node_kind(value_expr) != "BufferLoad":
+        return False
+    source_indices = tuple(getattr(value_expr, "indices", ()))
+    source_axis_position = _direct_loop_var_axis(source_indices, loop_var, context)
+    if source_axis_position is None:
+        return False
+    index_map = resolve_buffer_index_map(
+        getattr(value_expr, "buffer", None),
+        context,
+        converter,
+        diagnostic_owner=value_expr,
+    )
+    if index_map is None:
+        return False
+    return (
+        index_map.is_identity
+        and index_map.memory_scope == "local.fragment"
+        and source_axis_position == index_map.logical_rank - 1
+        and context.fragment_vector(index_map.view) is not None
+    )
+
+
+def _parallel_store_vector_value(
+    stmt: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    *,
+    lane_count: int,
+    target_view: ValueRef,
+) -> ValueRef | None:
+    value_expr = getattr(stmt, "value", None)
+    if node_kind(value_expr) == "BufferLoad":
+        fragment_value = _fragment_vector_value_for_load(value_expr, context, converter)
+        if fragment_value is None:
+            return None
+        if fragment_value.lane_count != lane_count:
+            context.record_blocked(
+                node_text(stmt),
+                "local.fragment vector lane count does not match store distribution",
+            )
+            return None
+        return fragment_value.value
+
+    if node_kind(value_expr) not in ("FloatImm", "IntImm"):
+        return None
+    scalar = converter.convert_expr(value_expr, context)
+    if scalar is None:
+        return None
+    scalar = _coerce_store_value(scalar, target_view, stmt, context)
+    if scalar is None:
+        return None
+    result_type = context.type_converter.vector_type(scalar.type, lane_count)
+    return context.builder.vector.splat(
+        scalar=scalar,
+        results=[result_type],
+        name=context.fresh_name("store_splat"),
+    )
 
 
 def map_alloc_buffer(
@@ -97,6 +323,14 @@ def convert_buffer_store(
 
     source_indices = tuple(getattr(stmt, "indices", ()))
     buffer = getattr(stmt, "buffer", None)
+    if _try_convert_distributed_fragment_store(
+        stmt,
+        buffer,
+        source_indices,
+        context,
+        converter,
+    ):
+        return
     value = converter.convert_expr(getattr(stmt, "value", None), context)
     if value is None:
         context.record_blocked(node_text(stmt), "buffer store operands are not mapped")
@@ -126,6 +360,7 @@ def convert_buffer_store(
             view=view,
             indices=vector_indices,
         )
+        context.invalidate_buffer_accesses(view)
         context.record_converted(node_text(stmt), "vector.store")
         return
     access = resolve_buffer_access(
@@ -137,13 +372,32 @@ def convert_buffer_store(
     )
     if access is None:
         return
+    if (
+        access.memory_scope == "local.fragment"
+        and context.fragment_vector(access.view) is not None
+    ):
+        context.record_blocked(
+            node_text(stmt),
+            "local.fragment scalar store after vector import is not mapped",
+        )
+        return
+    if access.memory_scope == "local.fragment":
+        context.clear_fragment_vector(access.view)
     value = _coerce_store_value(value, access.view, stmt, context)
     if value is None:
         return
+    context.invalidate_buffer_accesses(access.view)
     context.builder.view.store(
         value=value,
         view=access.view,
         indices=list(access.indices),
+    )
+    context.map_buffer_access(
+        stmt,
+        access.view,
+        access.indices,
+        access.memory_scope,
+        value,
     )
     context.record_converted(node_text(stmt), "view.store")
 
@@ -197,6 +451,46 @@ def convert_buffer_load(
     )
     if access is None:
         return None
+    if (
+        access.memory_scope == "local.fragment"
+        and context.fragment_vector(access.view) is not None
+    ):
+        fragment_result = _try_convert_fragment_vector_load(
+            expr,
+            access,
+            result_type,
+            context,
+        )
+        if fragment_result is None:
+            return None
+        context.map_value(expr, fragment_result, str(result_type))
+        context.record_converted(
+            node_text(expr), f"{context.ssa(fragment_result)} = vector.extract"
+        )
+        return fragment_result
+    mapped_result = context.mapped_buffer_access(
+        access.view,
+        access.indices,
+        access.memory_scope,
+    )
+    if mapped_result is not None:
+        context.map_value(expr, mapped_result, str(mapped_result.type))
+        context.map_buffer_access(
+            expr,
+            access.view,
+            access.indices,
+            access.memory_scope,
+            mapped_result,
+        )
+        context.record_converted(
+            node_text(expr), f"{context.ssa(mapped_result)} = cached buffer load"
+        )
+        if options.index_like:
+            index_result = _coerce_index_like_load(mapped_result, expr, context)
+            if index_result is None:
+                return None
+            return index_result
+        return mapped_result
     result = context.builder.view.load(
         view=access.view,
         indices=list(access.indices),
@@ -204,6 +498,13 @@ def convert_buffer_load(
         name=context.fresh_name("load"),
     )
     context.map_value(expr, result, str(result_type))
+    context.map_buffer_access(
+        expr,
+        access.view,
+        access.indices,
+        access.memory_scope,
+        result,
+    )
     context.record_converted(node_text(expr), f"{context.ssa(result)} = view.load")
     if options.index_like:
         index_result = _coerce_index_like_load(result, expr, context)
@@ -211,6 +512,137 @@ def convert_buffer_load(
             return None
         return index_result
     return result
+
+
+def _try_convert_distributed_fragment_store(
+    stmt: object,
+    buffer: object,
+    source_indices: tuple[object, ...],
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> bool:
+    value_expr = getattr(stmt, "value", None)
+    if node_kind(value_expr) != "BufferLoad":
+        return False
+    target_axis = _direct_distributed_source_axis(source_indices, context)
+    if target_axis is None or target_axis[1].lane_count <= 1:
+        return False
+    target_axis_position, target_lane = target_axis
+    fragment_value = _fragment_vector_value_for_load(value_expr, context, converter)
+    if fragment_value is None:
+        return False
+    if fragment_value.lane_count != target_lane.lane_count:
+        context.record_blocked(
+            node_text(stmt),
+            "local.fragment vector lane count does not match store distribution",
+        )
+        return True
+    if target_lane.lane != 0:
+        context.record_converted(node_text(stmt), "distributed vector.store lane")
+        return True
+
+    access = resolve_buffer_access(
+        buffer,
+        source_indices,
+        context,
+        converter,
+        diagnostic_owner=stmt,
+    )
+    if access is None:
+        return True
+    if target_axis_position != len(access.indices) - 1:
+        context.record_blocked(
+            node_text(stmt),
+            "distributed local.fragment store must write the trailing view axis",
+        )
+        return True
+    indices: list[int | ValueRef] = list(access.indices)
+    indices[target_axis_position] = target_lane.base
+    context.builder.vector.store(
+        value=fragment_value.value,
+        view=access.view,
+        indices=indices,
+    )
+    context.record_converted(node_text(stmt), "distributed vector.store")
+    return True
+
+
+def _try_convert_fragment_vector_load(
+    expr: object,
+    access: TileLangBufferAccess,
+    result_type: Type,
+    context: TileLangConversionContext,
+) -> ValueRef | None:
+    fragment_value = context.fragment_vector(access.view)
+    if fragment_value is None:
+        return None
+    lane = _single_distributed_index(access.indices, context)
+    if lane is None or lane.lane < 0 or lane.lane_count != fragment_value.lane_count:
+        context.record_blocked(
+            node_text(expr),
+            "local.fragment vector access is not aligned with a static lane",
+        )
+        return None
+    return context.builder.vector.extract(
+        source=fragment_value.value,
+        indices=[lane.lane],
+        results=[result_type],
+        name=context.fresh_name("load"),
+    )
+
+
+def _fragment_vector_value_for_load(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> TileLangFragmentVector | None:
+    access = resolve_buffer_access(
+        getattr(expr, "buffer", None),
+        tuple(getattr(expr, "indices", ())),
+        context,
+        converter,
+        diagnostic_owner=expr,
+    )
+    if access is None or access.memory_scope != "local.fragment":
+        return None
+    lane = _single_distributed_index(access.indices, context)
+    if lane is None or lane.lane < 0:
+        return None
+    fragment_value = context.fragment_vector(access.view)
+    if fragment_value is None:
+        return None
+    if fragment_value.lane_count != lane.lane_count:
+        return None
+    return fragment_value
+
+
+def _direct_distributed_source_axis(
+    source_indices: tuple[object, ...],
+    context: TileLangConversionContext,
+) -> tuple[int, TileLangDistributedIndex] | None:
+    for axis, source_index in enumerate(source_indices):
+        mapped = context.mapped_index_value(source_index)
+        if mapped is None:
+            continue
+        lane = context.distributed_index(mapped)
+        if lane is not None:
+            return axis, lane
+    return None
+
+
+def _single_distributed_index(
+    indices: tuple[ValueRef, ...],
+    context: TileLangConversionContext,
+) -> TileLangDistributedIndex | None:
+    match = None
+    for index in indices:
+        lane = context.distributed_index(index)
+        if lane is None:
+            continue
+        if match is not None:
+            return None
+        match = lane
+    return match
 
 
 def _resolve_vector_view(

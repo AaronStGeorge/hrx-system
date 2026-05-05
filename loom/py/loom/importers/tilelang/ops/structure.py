@@ -25,6 +25,7 @@ from loom.importers.tilelang.ops.assumptions import (
 )
 from loom.importers.tilelang.ops.memory import map_alloc_buffer
 from loom.importers.tilelang.ops.topology import (
+    integer_value,
     map_thread_axis,
     mapped_thread_axis_sources,
     thread_axis_from_binding,
@@ -233,6 +234,7 @@ def convert_attr_stmt(
     if attr_key == "thread_extent":
         node = getattr(stmt, "node", None)
         thread_axis = thread_axis_from_binding(node)
+        extent_value = getattr(stmt, "value", None)
         if thread_axis is None:
             if thread_tag(node) is not None:
                 context.record_blocked(
@@ -246,6 +248,11 @@ def convert_attr_stmt(
                 "AttrStmt `thread_extent` normalized",
             )
             return
+        context.map_topology_extent(
+            thread_axis.source_tag,
+            None,
+            static_extent=integer_value(extent_value),
+        )
         thread_value = map_thread_axis(
             axis=thread_axis,
             sources=mapped_thread_axis_sources(binding=node),

@@ -18,6 +18,7 @@ from loom.importers.tilelang.converter import (
 from loom.importers.tilelang.nodes import node_kind, node_text, source_name
 from loom.importers.tilelang.ops.calls import is_thread_return_call
 from loom.importers.tilelang.ops.conditions import coerce_condition
+from loom.importers.tilelang.ops.memory import try_convert_parallel_vector_store
 from loom.importers.tilelang.ops.topology import (
     integer_value,
     map_thread_axis,
@@ -26,6 +27,10 @@ from loom.importers.tilelang.ops.topology import (
     thread_axis_name,
 )
 from loom.ir import INDEX
+
+TIR_FOR_SERIAL = 0
+TIR_FOR_PARALLEL = 1
+TIR_FOR_UNROLLED = 3
 
 
 def register(registry: TileLangConverterRegistry) -> None:
@@ -63,6 +68,11 @@ def convert_for(
         context.record_blocked(node_text(stmt), "thread binding axis is not mapped")
         return
     if thread_axis is not None:
+        context.map_topology_extent(
+            thread_axis.source_tag,
+            None,
+            static_extent=integer_value(getattr(stmt, "extent", None)),
+        )
         thread_value = map_thread_axis(
             axis=thread_axis,
             sources=mapped_thread_axis_sources(
@@ -88,6 +98,26 @@ def convert_for(
         )
         return
 
+    loop_kind = integer_value(getattr(stmt, "kind", None))
+    if loop_kind == TIR_FOR_PARALLEL:
+        _convert_parallel_for(stmt, context, converter)
+        return
+    record_name = (
+        "tir.For unrolled<scf.for>" if loop_kind == TIR_FOR_UNROLLED else "scf.for"
+    )
+    _convert_counted_for(stmt, context, converter, record_name=record_name)
+
+
+def _convert_counted_for(
+    stmt: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    *,
+    record_name: str,
+) -> None:
+    """Import a TileLang/TIR counted loop as structured scf.for."""
+
+    loop_var = getattr(stmt, "loop_var", None)
     loop_name = sanitize_identifier(source_name(loop_var, fallback="iv"))
     lower = converter.convert_expr(
         getattr(stmt, "min", None),
@@ -128,7 +158,44 @@ def convert_for(
         results=[],
         body=body,
     )
-    context.record_converted(node_text(stmt), "scf.for")
+    context.record_converted(node_text(stmt), record_name)
+
+
+def _convert_parallel_for(
+    stmt: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> None:
+    """Import TileLang's parallel loop form conservatively."""
+
+    loop_var = getattr(stmt, "loop_var", None)
+    loop_name = sanitize_identifier(source_name(loop_var, fallback="i"))
+    lower = getattr(stmt, "min", None)
+    lower_integer = integer_value(lower)
+    if lower_integer != 0:
+        context.record_blocked(node_text(stmt), "parallel loop lower bound is not zero")
+        return
+    extent_source = getattr(stmt, "extent", None)
+    extent_integer = integer_value(extent_source)
+    if extent_integer is None:
+        context.record_blocked(
+            node_text(stmt),
+            "parallel loop requires static extent",
+        )
+        return
+
+    if try_convert_parallel_vector_store(
+        stmt,
+        context,
+        converter,
+        loop_var=loop_var,
+        extent_integer=extent_integer,
+        index_name=loop_name,
+    ):
+        context.record_converted(node_text(stmt), "tir.For parallel<vector.store>")
+        return
+
+    _convert_counted_for(stmt, context, converter, record_name="tir.For parallel<scf.for>")
 
 
 def convert_while(

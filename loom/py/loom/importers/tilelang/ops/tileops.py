@@ -20,10 +20,18 @@ from loom.importers.tilelang.buffers import (
     resolve_buffer_access,
     resolve_buffer_region,
 )
-from loom.importers.tilelang.context import TileLangConversionContext
+from loom.importers.tilelang.context import (
+    TileLangConversionContext,
+    TileLangFragmentVector,
+)
 from loom.importers.tilelang.converter import ExpressionOptions, TileLangConverter
 from loom.importers.tilelang.coverage import coverage_row
 from loom.importers.tilelang.nodes import dtype, mapping_items, node_kind, node_text
+from loom.importers.tilelang.ops.distribution import (
+    emit_distributed_1d,
+    materialize_distributed_1d_plan,
+    static_index_value,
+)
 from loom.importers.tilelang.ops.topology import integer_value
 from loom.ir import INDEX, ScalarType, ShapedType, StaticDim, Type, TypeKind
 
@@ -114,6 +122,18 @@ def _convert_copy_call(
             f"call `{op_name}` destination region is not a shaped view",
         )
         return None
+    if _try_emit_fragment_vector_copy(
+        expr,
+        context,
+        converter,
+        source=source,
+        target=target,
+        loop_extents=loop_extents,
+        source_element_type=source_element_type,
+        target_element_type=target_element_type,
+    ):
+        context.record_converted(node_text(expr), "tl.tileop.copy vector")
+        return None
 
     def emit_copy(
         indices: tuple[ValueRef, ...],
@@ -144,13 +164,70 @@ def _convert_copy_call(
             indices=list(target_indices),
         )
 
-    if not _emit_region_loops(loop_extents, context, emit_copy):
+    if not _emit_region_loops(
+        loop_extents,
+        context,
+        emit_copy,
+        distribution=_copy_uses_distributed_index_space(source, target),
+        converter=converter,
+        owner=expr,
+    ):
         context.record_blocked(
             node_text(expr), f"call `{op_name}` region is not mapped"
         )
         return None
     context.record_converted(node_text(expr), "tl.tileop.copy")
     return None
+
+
+def _try_emit_fragment_vector_copy(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    *,
+    source: TileLangBufferRegion,
+    target: TileLangBufferRegion,
+    loop_extents: tuple[ValueRef, ...],
+    source_element_type: Type,
+    target_element_type: Type,
+) -> bool:
+    if not _region_is_fragment(target) or _region_is_fragment(source):
+        return False
+    if len(loop_extents) != 1:
+        return False
+    extent_integer = static_index_value(loop_extents[0], context)
+    if extent_integer is None:
+        return False
+    plan = materialize_distributed_1d_plan(
+        expr,
+        context,
+        converter,
+        extent_integer=extent_integer,
+        index_name="i0",
+    )
+    if plan is None or plan.lane_count <= 1:
+        return False
+    if str(source_element_type) != str(target_element_type):
+        return False
+    source_indices = _project_region_indices(source, (plan.base,), expr, context)
+    target_indices = _project_region_indices(target, (plan.base,), expr, context)
+    if source_indices is None or target_indices is None:
+        return False
+    result_type = context.type_converter.vector_type(
+        source_element_type,
+        plan.lane_count,
+    )
+    vector = context.builder.vector.load(
+        view=source.view,
+        indices=list(source_indices),
+        results=[result_type],
+        name=context.fresh_name("copy"),
+    )
+    context.map_fragment_vector(
+        target.view,
+        TileLangFragmentVector(value=vector, lane_count=plan.lane_count),
+    )
+    return True
 
 
 def _validate_copy_annotations(
@@ -229,7 +306,14 @@ def _convert_fill_call(
             indices=list(_region_indices(target, indices, body_context)),
         )
 
-    if not _emit_region_loops(target.extents, context, emit_fill):
+    if not _emit_region_loops(
+        target.extents,
+        context,
+        emit_fill,
+        distribution=_region_is_fragment(target),
+        converter=converter,
+        owner=expr,
+    ):
         context.record_blocked(
             node_text(expr), f"call `{op_name}` region is not mapped"
         )
@@ -909,7 +993,33 @@ def _emit_region_loops(
     extents: tuple[ValueRef, ...],
     context: TileLangConversionContext,
     emit_body: Callable[[tuple[ValueRef, ...], TileLangConversionContext], None],
+    *,
+    distribution: bool = False,
+    converter: TileLangConverter | None = None,
+    owner: object | None = None,
 ) -> bool:
+    if not extents:
+        emit_body((), context)
+        return True
+
+    if (
+        distribution
+        and len(extents) == 1
+        and converter is not None
+        and owner is not None
+    ):
+        extent_integer = static_index_value(extents[0], context)
+        if extent_integer is not None:
+            return emit_distributed_1d(
+                owner,
+                context,
+                converter,
+                extent=extents[0],
+                extent_integer=extent_integer,
+                index_name="i0",
+                emit_body=emit_body,
+            )
+
     zero = context.ensure_constant("0", "index", "c0")
     one = context.ensure_constant("1", "index", "c1")
 
@@ -939,6 +1049,17 @@ def _emit_region_loops(
 
     emit_at_depth(0, (), context)
     return True
+
+
+def _copy_uses_distributed_index_space(
+    source: TileLangBufferRegion,
+    target: TileLangBufferRegion,
+) -> bool:
+    return _region_is_fragment(source) or _region_is_fragment(target)
+
+
+def _region_is_fragment(region: TileLangBufferRegion) -> bool:
+    return region.index_map.memory_scope == "local.fragment"
 
 
 def _region_indices(

@@ -63,10 +63,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("vector_float_trunc_store") @vector_
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src : buffer
+  %src_global = buffer.assume.memory_space %src {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<16xf16, %layout>
   %c0 = index.constant 0 : index
   %load = vector.load %src_view[%c0] : view<16xf32, %layout> -> vector<4xf32>
@@ -115,10 +117,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("scalar_reinterpret_store") @scalar_
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src : buffer
+  %src_global = buffer.assume.memory_space %src {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xi32, %layout>
   %c0 = index.constant 0 : index
   %load = view.load %src_view[%c0] : view<4xf32, %layout> -> f32
@@ -165,10 +169,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("vector_reinterpret_store") @vector_
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src : buffer
+  %src_global = buffer.assume.memory_space %src {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<16xi32, %layout>
   %c0 = index.constant 0 : index
   %load = vector.load %src_view[%c0] : view<16xf32, %layout> -> vector<4xf32>
@@ -215,10 +221,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("vector_int_to_float_store") @vector
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src : buffer
+  %src_global = buffer.assume.memory_space %src {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<16xi32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
   %c0 = index.constant 0 : index
   %load = vector.load %src_view[%c0] : view<16xi32, %layout> -> vector<4xi32>

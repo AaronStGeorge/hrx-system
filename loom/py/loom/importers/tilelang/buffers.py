@@ -24,6 +24,7 @@ class TileLangBufferIndexMap:
     """Maps logical TileLang buffer coordinates to a physical Loom view."""
 
     view: ValueRef
+    memory_scope: str
     view_rank: int
     logical_rank_value: int
     logical_extents: tuple[ValueRef, ...] | None
@@ -49,6 +50,7 @@ class TileLangBufferAccess:
 
     view: ValueRef
     indices: tuple[ValueRef, ...]
+    memory_scope: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +104,7 @@ def resolve_buffer_access(
     return TileLangBufferAccess(
         view=index_map.view,
         indices=physical_indices,
+        memory_scope=index_map.memory_scope,
     )
 
 
@@ -183,6 +186,7 @@ def resolve_buffer_index_map(
             return None
         return TileLangBufferIndexMap(
             view=view,
+            memory_scope=_buffer_scope(buffer),
             view_rank=view_rank,
             logical_rank_value=view_rank,
             logical_extents=None,
@@ -241,6 +245,7 @@ def resolve_buffer_index_map(
         return None
     return TileLangBufferIndexMap(
         view=view,
+        memory_scope=_buffer_scope(buffer),
         view_rank=view_rank,
         logical_rank_value=logical_rank,
         logical_extents=logical_extents,
@@ -525,3 +530,12 @@ def _static_physical_product(
             return None
         product *= dim.size
     return product
+
+
+def _buffer_scope(buffer: object) -> str:
+    scope = getattr(buffer, "scope", None)
+    if callable(scope):
+        return str(scope())
+    if scope is not None:
+        return str(scope)
+    return ""

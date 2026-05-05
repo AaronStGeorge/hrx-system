@@ -77,7 +77,10 @@ def map_thread_axis(
 ) -> ValueRef | None:
     """Map TIR thread-bound values to Loom kernel topology query ops."""
 
-    result = build_thread_axis_id(axis, context, name=name)
+    result = context.topology_value(axis.source_tag)
+    if result is None:
+        result = build_thread_axis_id(axis, context, name=name)
+        context.map_topology_value(axis.source_tag, result)
     lower_integer = integer_value(lower)
     if lower is not None and lower_integer != 0:
         lower_value = converter.convert_expr(lower, context, index_like=True)

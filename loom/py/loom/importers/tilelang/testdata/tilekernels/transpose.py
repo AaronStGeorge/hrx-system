@@ -144,13 +144,15 @@ kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") @batched_
   kernel.launch.config workgroups(%div, %div_2, %num_batches_idx) workgroup_size(%c256, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %x_noalias = buffer.assume.noalias %x_handle : buffer
+  %x_global = buffer.assume.memory_space %x_handle {memory_space = global} : buffer
+  %x_noalias = buffer.assume.noalias %x_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %num_batches_idx = index.cast %num_batches : i32 to index
   %shape_x_idx = index.cast %shape_x : i32 to index
   %shape_y_idx = index.cast %shape_y : i32 to index
   %x = buffer.view %x_noalias[%c0_bytes] : buffer -> view<[%num_batches_idx]x[%shape_x_idx]x[%shape_y_idx]xf16, %layout>
-  %out_noalias = buffer.assume.noalias %out_handle : buffer
+  %out_global = buffer.assume.memory_space %out_handle {memory_space = global} : buffer
+  %out_noalias = buffer.assume.noalias %out_global : buffer
   %out = buffer.view %out_noalias[%c0_bytes] : buffer -> view<[%num_batches_idx]x[%shape_y_idx]x[%shape_x_idx]xf16, %layout>
   %bx = kernel.workgroup.id<x> : index
   %by = kernel.workgroup.id<y> : index

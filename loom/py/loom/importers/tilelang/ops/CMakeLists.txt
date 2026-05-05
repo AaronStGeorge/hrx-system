@@ -20,6 +20,7 @@ iree_py_library(
     "coercions.py"
     "conditions.py"
     "control.py"
+    "distribution.py"
     "memory.py"
     "scalar.py"
     "structure.py"

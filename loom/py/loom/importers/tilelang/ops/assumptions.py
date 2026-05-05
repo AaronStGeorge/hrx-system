@@ -432,6 +432,9 @@ def _build_assume_group(
             context.map_index_value(source_value.source, result)
         else:
             context.map_value(source_value.source, result, str(result.type))
+        buffer_access_key = context.buffer_access_source_key(source_value.source)
+        if buffer_access_key is not None:
+            context.map_buffer_access_key(buffer_access_key, result)
 
 
 def _maps_as_index_value(

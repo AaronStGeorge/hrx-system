@@ -44,10 +44,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_copy_kernel") @tileop_copy_k
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src_handle : buffer
+  %src_global = buffer.assume.memory_space %src_handle {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst_global = buffer.assume.memory_space %dst_handle {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
@@ -104,10 +106,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_copy_disable_tma_kernel") @t
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src_handle : buffer
+  %src_global = buffer.assume.memory_space %src_handle {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst_global = buffer.assume.memory_space %dst_handle {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
@@ -157,7 +161,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_fill_kernel") @tileop_fill_k
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst_global = buffer.assume.memory_space %dst_handle {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
@@ -215,7 +220,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_fill_integer_zero_kernel") @
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst_global = buffer.assume.memory_space %dst_handle {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
@@ -265,10 +271,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_kernel") @tileop_
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src_handle : buffer
+  %src_global = buffer.assume.memory_space %src_handle {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst_global = buffer.assume.memory_space %dst_handle {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<1xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
@@ -282,15 +290,13 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_kernel") @tileop_
   %out = buffer.view %out_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
-  %c1 = index.constant 1 : index
-  scf.for %i0 = [%c0 to %c4 step %c1] {
-    %copy = view.load %src[%i0] : view<4xf32, %layout> -> f32
-    view.store %copy, %local[%i0] : f32, view<4xf32, %layout>
-  }
+  %i0_base = index.mul %tx, %c4 : index
+  %copy = vector.load %src[%i0_base] : view<4xf32, %layout> -> vector<4xf32>
   %load = vector.load %local[%c0] : view<4xf32, %layout> -> vector<4xf32>
   %identity = scalar.constant 0.0 : f32
   %reduce = vector.reduce<addf> %load, %identity : vector<4xf32>, f32
   view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
+  %c1 = index.constant 1 : index
   %copy_2 = view.load %out[%c0] : view<1xf32, %layout> -> f32
   view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
@@ -333,10 +339,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_abssum_kernel") @tile
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src_handle : buffer
+  %src_global = buffer.assume.memory_space %src_handle {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst_global = buffer.assume.memory_space %dst_handle {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<1xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
@@ -350,16 +358,14 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_abssum_kernel") @tile
   %out = buffer.view %out_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
-  %c1 = index.constant 1 : index
-  scf.for %i0 = [%c0 to %c4 step %c1] {
-    %copy = view.load %src[%i0] : view<4xf32, %layout> -> f32
-    view.store %copy, %local[%i0] : f32, view<4xf32, %layout>
-  }
+  %i0_base = index.mul %tx, %c4 : index
+  %copy = vector.load %src[%i0_base] : view<4xf32, %layout> -> vector<4xf32>
   %load = vector.load %local[%c0] : view<4xf32, %layout> -> vector<4xf32>
   %identity = scalar.constant 0.0 : f32
   %abs = vector.absf %load : vector<4xf32>
   %reduce = vector.reduce<addf> %abs, %identity : vector<4xf32>, f32
   view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
+  %c1 = index.constant 1 : index
   %copy_2 = view.load %out[%c0] : view<1xf32, %layout> -> f32
   view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
@@ -402,10 +408,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_kernel") @tile
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src_handle : buffer
+  %src_global = buffer.assume.memory_space %src_handle {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst_global = buffer.assume.memory_space %dst_handle {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<1xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
@@ -419,16 +427,14 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_kernel") @tile
   %out = buffer.view %out_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
-  %c1 = index.constant 1 : index
-  scf.for %i0 = [%c0 to %c4 step %c1] {
-    %copy = view.load %src[%i0] : view<4xf32, %layout> -> f32
-    view.store %copy, %local[%i0] : f32, view<4xf32, %layout>
-  }
+  %i0_base = index.mul %tx, %c4 : index
+  %copy = vector.load %src[%i0_base] : view<4xf32, %layout> -> vector<4xf32>
   %load = vector.load %local[%c0] : view<4xf32, %layout> -> vector<4xf32>
   %identity = scalar.constant 0.0 : f32
   %abs = vector.absf %load : vector<4xf32>
   %reduce = vector.reduce<maxnumf> %abs, %identity : vector<4xf32>, f32
   view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
+  %c1 = index.constant 1 : index
   %copy_2 = view.load %out[%c0] : view<1xf32, %layout> -> f32
   view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
@@ -471,10 +477,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_widen_kernel")
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src_handle : buffer
+  %src_global = buffer.assume.memory_space %src_handle {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xf16, %layout>
-  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst_global = buffer.assume.memory_space %dst_handle {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<1xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
@@ -488,17 +496,15 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_widen_kernel")
   %out = buffer.view %out_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
-  %c1 = index.constant 1 : index
-  scf.for %i0 = [%c0 to %c4 step %c1] {
-    %copy = view.load %src[%i0] : view<4xf16, %layout> -> f16
-    view.store %copy, %local[%i0] : f16, view<4xf16, %layout>
-  }
+  %i0_base = index.mul %tx, %c4 : index
+  %copy = vector.load %src[%i0_base] : view<4xf16, %layout> -> vector<4xf16>
   %load = vector.load %local[%c0] : view<4xf16, %layout> -> vector<4xf16>
   %reduce_cast = vector.extf %load : vector<4xf16> to vector<4xf32>
   %identity = scalar.constant 0.0 : f32
   %abs = vector.absf %reduce_cast : vector<4xf32>
   %reduce = vector.reduce<maxnumf> %abs, %identity : vector<4xf32>, f32
   view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
+  %c1 = index.constant 1 : index
   %copy_2 = view.load %out[%c0] : view<1xf32, %layout> -> f32
   view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
@@ -537,10 +543,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_2d_kernel") @tile
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src_handle : buffer
+  %src_global = buffer.assume.memory_space %src_handle {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<2x4xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst_global = buffer.assume.memory_space %dst_handle {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<2xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
@@ -571,10 +579,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_2d_kernel") @tile
     }
     view.store %reduce, %out[%i0] : f32, view<2xf32, %layout>
   }
-  scf.for %i0 = [%c0 to %c2 step %c1] {
-    %copy_2 = view.load %out[%i0] : view<2xf32, %layout> -> f32
-    view.store %copy_2, %dst[%i0] : f32, view<2xf32, %layout>
-  }
+  %i0_base = index.mul %tx, %c2 : index
+  %copy_2 = view.load %out[%i0_base] : view<2xf32, %layout> -> f32
+  view.store %copy_2, %dst[%i0_base] : f32, view<2xf32, %layout>
+  %i0 = index.add %i0_base, %c1 : index
+  %copy_3 = view.load %out[%i0] : view<2xf32, %layout> -> f32
+  view.store %copy_3, %dst[%i0] : f32, view<2xf32, %layout>
   kernel.return
 }
 """
@@ -621,10 +631,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_finalize_reducer_none_kernel
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src_handle : buffer
+  %src_global = buffer.assume.memory_space %src_handle {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst_global = buffer.assume.memory_space %dst_handle {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
@@ -636,18 +648,33 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_finalize_reducer_none_kernel
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
   %const = scalar.constant 0.0 : f32
+  %i0_base = index.mul %tx, %c4 : index
+  view.store %const, %reducer[%i0_base] : f32, view<4xf32, %layout>
   %c1 = index.constant 1 : index
-  scf.for %i0 = [%c0 to %c4 step %c1] {
-    view.store %const, %reducer[%i0] : f32, view<4xf32, %layout>
-  }
+  %i0 = index.add %i0_base, %c1 : index
+  view.store %const, %reducer[%i0] : f32, view<4xf32, %layout>
+  %c2 = index.constant 2 : index
+  %i0_2 = index.add %i0_base, %c2 : index
+  view.store %const, %reducer[%i0_2] : f32, view<4xf32, %layout>
+  %c3 = index.constant 3 : index
+  %i0_3 = index.add %i0_base, %c3 : index
+  view.store %const, %reducer[%i0_3] : f32, view<4xf32, %layout>
   scf.for %i = [%c0 to %c4 step %c1] {
     %load = view.load %src[%i] : view<4xf32, %layout> -> f32
     view.store %load, %reducer[%i] : f32, view<4xf32, %layout>
   }
-  scf.for %i0 = [%c0 to %c4 step %c1] {
-    %copy = view.load %reducer[%i0] : view<4xf32, %layout> -> f32
-    view.store %copy, %dst[%i0] : f32, view<4xf32, %layout>
-  }
+  %i0_base_2 = index.mul %tx, %c4 : index
+  %copy = view.load %reducer[%i0_base_2] : view<4xf32, %layout> -> f32
+  view.store %copy, %dst[%i0_base_2] : f32, view<4xf32, %layout>
+  %i0_4 = index.add %i0_base_2, %c1 : index
+  %copy_2 = view.load %reducer[%i0_4] : view<4xf32, %layout> -> f32
+  view.store %copy_2, %dst[%i0_4] : f32, view<4xf32, %layout>
+  %i0_5 = index.add %i0_base_2, %c2 : index
+  %copy_3 = view.load %reducer[%i0_5] : view<4xf32, %layout> -> f32
+  view.store %copy_3, %dst[%i0_5] : f32, view<4xf32, %layout>
+  %i0_6 = index.add %i0_base_2, %c3 : index
+  %copy_4 = view.load %reducer[%i0_6] : view<4xf32, %layout> -> f32
+  view.store %copy_4, %dst[%i0_6] : f32, view<4xf32, %layout>
   kernel.return
 }
 """
@@ -694,10 +721,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_finalize_reducer_all_kernel"
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c4, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src_handle : buffer
+  %src_global = buffer.assume.memory_space %src_handle {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst_global = buffer.assume.memory_space %dst_handle {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %thread_index = kernel.workitem.id<x> : index
@@ -715,8 +744,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_finalize_reducer_all_kernel"
     %reducer_all = kernel.workgroup.reduce<addf> %reducer_value : f32
     view.store %reducer_all, %reducer[%i0] : f32, view<1xf32, %layout>
   }
-  %load_2 = view.load %reducer[%c0] : view<1xf32, %layout> -> f32
-  view.store %load_2, %dst[%thread_index] : f32, view<4xf32, %layout>
+  view.store %load, %dst[%thread_index] : f32, view<4xf32, %layout>
   kernel.return
 }
 """
@@ -758,10 +786,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_reshape_kernel
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src_handle : buffer
+  %src_global = buffer.assume.memory_space %src_handle {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<2x4xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst_global = buffer.assume.memory_space %dst_handle {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<2x2xf32, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
@@ -847,10 +877,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_copy_2d_kernel") @tileop_cop
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src_handle : buffer
+  %src_global = buffer.assume.memory_space %src_handle {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<2x3xf16, %layout>
-  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst_global = buffer.assume.memory_space %dst_handle {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<2x3xf16, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index

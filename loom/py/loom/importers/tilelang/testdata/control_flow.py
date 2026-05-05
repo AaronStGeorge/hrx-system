@@ -74,10 +74,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("thread_return_prefix_guard") @threa
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src : buffer
+  %src_global = buffer.assume.memory_space %src {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
   %cmp = scalar.cmpi sge, %i, %n : i32
   kernel.exit %cmp : i1
@@ -139,10 +141,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("thread_return_prefix_guard_with_eff
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src : buffer
+  %src_global = buffer.assume.memory_space %src {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
   %cmp = scalar.cmpi sge, %i, %n : i32
   kernel.exit %cmp : i1 {

@@ -71,10 +71,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("scalar_calls") @scalar_calls(%src: 
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src : buffer
+  %src_global = buffer.assume.memory_space %src {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
   %c0 = index.constant 0 : index
   %load = view.load %src_view[%c0] : view<4xf32, %layout> -> f32
@@ -131,10 +133,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("bitwise_not") @bitwise_not(%src: bu
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src : buffer
+  %src_global = buffer.assume.memory_space %src {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xi32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xi32, %layout>
   %c0 = index.constant 0 : index
   %load = view.load %src_view[%c0] : view<4xi32, %layout> -> i32
@@ -182,10 +186,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("dynamic_loop_bound") @dynamic_loop_
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src : buffer
+  %src_global = buffer.assume.memory_space %src {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<8xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<8xf32, %layout>
   %c0 = index.constant 0 : index
   %n_idx = index.cast %n : i32 to index
@@ -232,10 +238,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("ceildiv_loop") @ceildiv_loop(%src: 
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %src_noalias = buffer.assume.noalias %src : buffer
+  %src_global = buffer.assume.memory_space %src {memory_space = global} : buffer
+  %src_noalias = buffer.assume.noalias %src_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<8xf32, %layout>
-  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_global = buffer.assume.memory_space %dst {memory_space = global} : buffer
+  %dst_noalias = buffer.assume.noalias %dst_global : buffer
   %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<8xf32, %layout>
   %c0 = index.constant 0 : index
   %c2 = index.constant 2 : index

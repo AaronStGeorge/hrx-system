@@ -102,11 +102,13 @@ kernel.def target(@hip_mcpu_gfx1100) export("topk_gate_kernel") @topk_gate_kerne
   kernel.launch.config workgroups(%num_tokens_idx, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
 } launch {
   %c0_bytes = index.constant 0 : offset
-  %scores_noalias = buffer.assume.noalias %scores_handle : buffer
+  %scores_global = buffer.assume.memory_space %scores_handle {memory_space = global} : buffer
+  %scores_noalias = buffer.assume.noalias %scores_global : buffer
   %layout = encoding.layout.dense : encoding<layout>
   %num_tokens_idx = index.cast %num_tokens : i32 to index
   %scores = buffer.view %scores_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x8xf32, %layout>
-  %topk_idx_noalias = buffer.assume.noalias %topk_idx_handle : buffer
+  %topk_idx_global = buffer.assume.memory_space %topk_idx_handle {memory_space = global} : buffer
+  %topk_idx_noalias = buffer.assume.noalias %topk_idx_global : buffer
   %topk_idx = buffer.view %topk_idx_noalias[%c0_bytes] : buffer -> view<[%num_tokens_idx]x2xi64, %layout>
   %bx = kernel.workgroup.id<x> : index
   %tx = kernel.workitem.id<x> : index
@@ -152,8 +154,9 @@ kernel.def target(@hip_mcpu_gfx1100) export("topk_gate_kernel") @topk_gate_kerne
     %reduce = vector.reduce<maxnumf> %load_2, %identity : vector<32xf32>, f32
     view.store %reduce, %amax_fragment[%c0] : f32, view<1xf32, %layout>
     %const_2 = scalar.constant 2147483647 : i32
-    scf.for %i0 = [%c0 to %c1 step %c1] {
-      view.store %const_2, %idx_reducer[%i0] : i32, view<1xi32, %layout>
+    %i0_active = index.cmp slt, %tx, %c1 : index
+    scf.if %i0_active {
+      view.store %const_2, %idx_reducer[%tx] : i32, view<1xi32, %layout>
     }
     scf.for %i = [%c0 to %c32 step %c1] {
       %load_3 = view.load %scores_fragment[%i] : view<32xf32, %layout> -> f32
@@ -175,8 +178,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("topk_gate_kernel") @topk_gate_kerne
     view.store %load_7, %topk_idx_shared[%k] : i32, view<2xi32, %layout>
     scf.for %i = [%c0 to %c32 step %c1] {
       %load_8 = view.load %idx_fragment[%i] : view<32xi32, %layout> -> i32
-      %load_9 = view.load %idx_reducer[%c0] : view<1xi32, %layout> -> i32
-      %cmp_3 = scalar.cmpi eq, %load_8, %load_9 : i32
+      %cmp_3 = scalar.cmpi eq, %load_8, %load_7 : i32
       scf.if %cmp_3 {
         %inf_2 = scalar.constant inf : f32
         %const_3 = scalar.constant -1.0 : f32

@@ -8,7 +8,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -26,6 +27,31 @@ from loom.ir import (
     ShapedType,
     Type,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class TileLangDistributedIndex:
+    """A logical TileLang parallel index lane within one workitem chunk."""
+
+    base: ValueRef
+    lane: int
+    lane_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class TileLangFragmentVector:
+    """Current SSA vector payload backing one TileLang local.fragment view."""
+
+    value: ValueRef
+    lane_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class TileLangBufferAccessKey:
+    """Current-value key for a TileLang local buffer access."""
+
+    view_id: int
+    index_ids: tuple[int, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +76,19 @@ class TileLangConversionContext(SourceImportSession):
         default_factory=dict
     )
     reducer_infos: dict[object, TileLangReducerInfo] = field(default_factory=dict)
+    topology_values: dict[str, ValueRef] = field(default_factory=dict)
+    topology_extent_values: dict[str, ValueRef] = field(default_factory=dict)
+    static_topology_extents: dict[str, int] = field(default_factory=dict)
+    distributed_indices: dict[int, TileLangDistributedIndex] = field(
+        default_factory=dict
+    )
+    fragment_vectors: dict[int, TileLangFragmentVector] = field(default_factory=dict)
+    buffer_access_values: dict[TileLangBufferAccessKey, ValueRef] = field(
+        default_factory=dict
+    )
+    buffer_access_source_keys: dict[object, TileLangBufferAccessKey] = field(
+        default_factory=dict
+    )
     kernel_body_block: object | None = None
     dense_layout: ValueRef | None = None
 
@@ -180,6 +219,118 @@ class TileLangConversionContext(SourceImportSession):
     def reducer_info(self, source: object) -> TileLangReducerInfo | None:
         return self.reducer_infos.get(_reducer_info_key(source))
 
+    def topology_value(self, source_tag: str) -> ValueRef | None:
+        return self.topology_values.get(source_tag)
+
+    def map_topology_value(self, source_tag: str, ref: ValueRef) -> None:
+        self.topology_values[source_tag] = ref
+
+    def map_topology_extent(
+        self,
+        source_tag: str,
+        extent: ValueRef | None,
+        *,
+        static_extent: int | None = None,
+    ) -> None:
+        if extent is not None:
+            self.topology_extent_values[source_tag] = extent
+        if static_extent is not None:
+            self.static_topology_extents[source_tag] = static_extent
+
+    def topology_extent(self, source_tag: str) -> ValueRef | None:
+        return self.topology_extent_values.get(source_tag)
+
+    def static_topology_extent(self, source_tag: str) -> int | None:
+        return self.static_topology_extents.get(source_tag)
+
+    def map_distributed_index(
+        self,
+        ref: ValueRef,
+        info: TileLangDistributedIndex,
+    ) -> None:
+        self.distributed_indices[ref.id] = info
+
+    def distributed_index(self, ref: ValueRef) -> TileLangDistributedIndex | None:
+        return self.distributed_indices.get(ref.id)
+
+    def map_fragment_vector(
+        self,
+        view: ValueRef,
+        vector: TileLangFragmentVector,
+    ) -> None:
+        self.fragment_vectors[view.id] = vector
+
+    def fragment_vector(self, view: ValueRef) -> TileLangFragmentVector | None:
+        return self.fragment_vectors.get(view.id)
+
+    def clear_fragment_vector(self, view: ValueRef) -> None:
+        self.fragment_vectors.pop(view.id, None)
+
+    def buffer_access_key(
+        self,
+        view: ValueRef,
+        indices: tuple[ValueRef, ...],
+        memory_scope: str,
+    ) -> TileLangBufferAccessKey | None:
+        if memory_scope not in _TRACKED_LOCAL_BUFFER_SCOPES:
+            return None
+        return TileLangBufferAccessKey(
+            view_id=view.id,
+            index_ids=tuple(index.id for index in indices),
+        )
+
+    def mapped_buffer_access(
+        self,
+        view: ValueRef,
+        indices: tuple[ValueRef, ...],
+        memory_scope: str,
+    ) -> ValueRef | None:
+        key = self.buffer_access_key(view, indices, memory_scope)
+        if key is None:
+            return None
+        return self.buffer_access_values.get(key)
+
+    def map_buffer_access(
+        self,
+        source: object,
+        view: ValueRef,
+        indices: tuple[ValueRef, ...],
+        memory_scope: str,
+        ref: ValueRef,
+    ) -> None:
+        key = self.buffer_access_key(view, indices, memory_scope)
+        if key is None:
+            return
+        self.buffer_access_values[key] = ref
+        self.buffer_access_source_keys[self.source_key(source)] = key
+
+    def map_buffer_access_key(
+        self,
+        key: TileLangBufferAccessKey,
+        ref: ValueRef,
+    ) -> None:
+        self.buffer_access_values[key] = ref
+
+    def buffer_access_source_key(
+        self,
+        source: object,
+    ) -> TileLangBufferAccessKey | None:
+        return self.buffer_access_source_keys.get(self.source_key(source))
+
+    def invalidate_buffer_accesses(self, view: ValueRef) -> None:
+        stale_keys = [
+            key for key in self.buffer_access_values if key.view_id == view.id
+        ]
+        for key in stale_keys:
+            self.buffer_access_values.pop(key, None)
+        stale_source_keys = [
+            source_lookup_key
+            for source_lookup_key, key in self.buffer_access_source_keys.items()
+            if key.view_id == view.id
+        ]
+        for source_lookup_key in stale_source_keys:
+            self.buffer_access_source_keys.pop(source_lookup_key, None)
+
     def mapped_index_value(self, source: object) -> ValueRef | None:
         mapped_value = self.index_values.get(self.source_key(source))
         if mapped_value is not None:
@@ -196,6 +347,88 @@ class TileLangConversionContext(SourceImportSession):
             self.semantic_index_values[semantic_key] = ref
         if ref.name:
             self.names.capture(ref.name)
+
+    @contextmanager
+    def scoped_index_value(
+        self,
+        source: object,
+        ref: ValueRef,
+    ) -> Iterator[None]:
+        """Temporarily bind a source index variable while importing an inline body."""
+
+        source_lookup_key = self.source_key(source)
+        semantic_key = _semantic_var_key(source)
+        old_value = self.value_map.get(source_lookup_key)
+        old_value_type = self.value_types.get(source_lookup_key)
+        old_index = self.index_values.get(source_lookup_key)
+        old_semantic_value = (
+            self.semantic_values.get(semantic_key) if semantic_key is not None else None
+        )
+        old_semantic_value_type = (
+            self.semantic_value_types.get(semantic_key)
+            if semantic_key is not None
+            else None
+        )
+        old_semantic_index = (
+            self.semantic_index_values.get(semantic_key)
+            if semantic_key is not None
+            else None
+        )
+        had_value = source_lookup_key in self.value_map
+        had_value_type = source_lookup_key in self.value_types
+        had_index = source_lookup_key in self.index_values
+        had_semantic_value = (
+            semantic_key is not None and semantic_key in self.semantic_values
+        )
+        had_semantic_value_type = (
+            semantic_key is not None and semantic_key in self.semantic_value_types
+        )
+        had_semantic_index = (
+            semantic_key is not None and semantic_key in self.semantic_index_values
+        )
+
+        self.map_value(source, ref, "index")
+        self.map_index_value(source, ref)
+        try:
+            yield
+        finally:
+            _restore_optional_mapping(
+                self.value_map,
+                source_lookup_key,
+                had_value,
+                old_value,
+            )
+            _restore_optional_mapping(
+                self.value_types,
+                source_lookup_key,
+                had_value_type,
+                old_value_type,
+            )
+            _restore_optional_mapping(
+                self.index_values,
+                source_lookup_key,
+                had_index,
+                old_index,
+            )
+            if semantic_key is not None:
+                _restore_optional_mapping(
+                    self.semantic_values,
+                    semantic_key,
+                    had_semantic_value,
+                    old_semantic_value,
+                )
+                _restore_optional_mapping(
+                    self.semantic_value_types,
+                    semantic_key,
+                    had_semantic_value_type,
+                    old_semantic_value_type,
+                )
+                _restore_optional_mapping(
+                    self.semantic_index_values,
+                    semantic_key,
+                    had_semantic_index,
+                    old_semantic_index,
+                )
 
     def can_emit_kernel_exit(self) -> bool:
         return (
@@ -221,9 +454,19 @@ class TileLangConversionContext(SourceImportSession):
             buffer_data_buffers=dict(self.buffer_data_buffers),
             semantic_index_values=dict(self.semantic_index_values),
             reducer_infos=dict(self.reducer_infos),
+            topology_values=dict(self.topology_values),
+            topology_extent_values=dict(self.topology_extent_values),
+            static_topology_extents=dict(self.static_topology_extents),
+            distributed_indices=dict(self.distributed_indices),
+            fragment_vectors=dict(self.fragment_vectors),
+            buffer_access_values=dict(self.buffer_access_values),
+            buffer_access_source_keys=dict(self.buffer_access_source_keys),
             kernel_body_block=self.kernel_body_block,
             dense_layout=self.dense_layout,
         )
+
+
+_TRACKED_LOCAL_BUFFER_SCOPES = frozenset(("local", "local.fragment", "local.var"))
 
 
 def _semantic_source_key(source: object) -> tuple[object, ...] | None:
@@ -353,3 +596,15 @@ def _buffer_scope(buffer: object) -> str:
     if scope is not None:
         return str(scope)
     return ""
+
+
+def _restore_optional_mapping(
+    mapping: dict[Any, Any],
+    key: Any,
+    had_key: bool,
+    old_value: Any,
+) -> None:
+    if had_key:
+        mapping[key] = old_value
+    else:
+        mapping.pop(key, None)
