@@ -8,27 +8,6 @@
 
 from loom.errors import ErrorDef, ErrorDomain, ErrorParam, ParamKind, Severity
 
-# ERR_LOWERING_015: Low pure call targets an impure callee.
-ERR_LOWERING_015 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=15,
-    severity=Severity.ERROR,
-    summary="Low pure call targets an impure callee.",
-    message=(
-        "low pure call callee '@{callee_name}' through '{boundary_name}' "
-        "does not have a pure contract"
-    ),
-    params=(
-        ErrorParam("callee_name", ParamKind.STRING),
-        ErrorParam("boundary_name", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Remove the pure marker, mark the direct callee pure after proving its "
-        "body has no observable effects, or route the call through a boundary "
-        "whose contract is explicitly pure"
-    ),
-)
-
 # ERR_LOWERING_019: Low operation reads an undefined register part.
 ERR_LOWERING_019 = ErrorDef(
     domain=ErrorDomain.LOWERING,
@@ -457,7 +436,6 @@ ERR_LOWERING_043 = ErrorDef(
 )
 
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
-    ERR_LOWERING_015,
     ERR_LOWERING_019,
     ERR_LOWERING_020,
     ERR_LOWERING_022,

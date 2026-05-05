@@ -1165,7 +1165,7 @@ static iree_status_t loom_low_emit_call_impure_callee_error(
       .label = related_label,
       .op = related_op,
   }};
-  return loom_low_emit_related(emitter, call_op, LOOM_ERR_LOWERING_015, params,
+  return loom_low_emit_related(emitter, call_op, LOOM_ERR_STRUCTURE_034, params,
                                IREE_ARRAYSIZE(params), related,
                                related_op ? IREE_ARRAYSIZE(related) : 0);
 }

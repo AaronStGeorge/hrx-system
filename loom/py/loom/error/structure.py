@@ -546,6 +546,27 @@ ERR_STRUCTURE_033 = ErrorDef(
     fix_hint="Use a value owned by the same enclosing operation",
 )
 
+# ERR_STRUCTURE_034: Pure call targets an impure callee.
+ERR_STRUCTURE_034 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=34,
+    severity=Severity.ERROR,
+    summary="Pure call targets an impure callee.",
+    message=(
+        "pure call callee '@{callee_name}' through '{boundary_name}' does not "
+        "have a pure contract"
+    ),
+    params=(
+        ErrorParam("callee_name", ParamKind.STRING),
+        ErrorParam("boundary_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Remove the pure marker, mark the direct callee pure after proving its "
+        "body has no observable effects, or route the call through a boundary "
+        "whose contract is explicitly pure"
+    ),
+)
+
 ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_001,
     ERR_STRUCTURE_002,
@@ -580,4 +601,5 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_031,
     ERR_STRUCTURE_032,
     ERR_STRUCTURE_033,
+    ERR_STRUCTURE_034,
 )
