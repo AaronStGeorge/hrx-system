@@ -149,9 +149,17 @@ iree_status_t loom_refine_boundaries_create(loom_pass_t* pass,
   return iree_ok_status();
 }
 
-static iree_status_t loom_refine_boundaries_fail(
-    loom_pass_t* pass, const loom_module_t* module, const loom_op_t* op,
-    iree_string_view_t reason, iree_status_code_t status_code) {
+static const loom_op_t* loom_refine_boundaries_module_anchor(
+    const loom_module_t* module) {
+  if (!module->body || module->body->block_count == 0) return NULL;
+  const loom_block_t* entry_block = loom_region_const_entry_block(module->body);
+  return entry_block->first_op;
+}
+
+static iree_status_t loom_refine_boundaries_fail(loom_pass_t* pass,
+                                                 const loom_module_t* module,
+                                                 const loom_op_t* op,
+                                                 iree_string_view_t reason) {
   iree_string_view_t scope = op ? loom_op_name(module, op) : IREE_SV("module");
   loom_diagnostic_param_t params[] = {
       loom_param_string(pass->info->name),
@@ -159,17 +167,12 @@ static iree_status_t loom_refine_boundaries_fail(
       loom_param_string(reason),
   };
   loom_diagnostic_emission_t emission = {
-      .op = op,
+      .op = op ? op : loom_refine_boundaries_module_anchor(module),
       .error = LOOM_ERR_LOWERING_002,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
-  IREE_RETURN_IF_ERROR(
-      iree_diagnostic_emit(pass->diagnostic_emitter, &emission));
-  return iree_make_status(status_code, "%.*s failed while refining %.*s: %.*s",
-                          (int)pass->info->name.size, pass->info->name.data,
-                          (int)scope.size, scope.data, (int)reason.size,
-                          reason.data);
+  return iree_diagnostic_emit(pass->diagnostic_emitter, &emission);
 }
 
 //===----------------------------------------------------------------------===//
@@ -878,8 +881,7 @@ static iree_status_t loom_refine_boundaries_refine_value_type_with_facts(
   if (result == LOOM_TYPE_REFINEMENT_CONFLICT) {
     return loom_refine_boundaries_fail(
         pass, module, owner_op,
-        IREE_SV("boundary facts conflict with a function boundary value type"),
-        IREE_STATUS_FAILED_PRECONDITION);
+        IREE_SV("boundary facts conflict with a function boundary value type"));
   }
   if (result == LOOM_TYPE_REFINEMENT_UNCHANGED ||
       loom_type_equal(current_type, refined_type)) {
@@ -898,11 +900,14 @@ static iree_status_t loom_refine_boundaries_refine_function_signature(
     int64_t* changed_count) {
   if (!function_info->is_internal) return iree_ok_status();
   for (uint8_t projection_index = 0;
+       !loom_pass_has_error_diagnostics(pass) &&
        projection_index < function_info->argument_projection_count;
        ++projection_index) {
     const loom_refine_boundaries_argument_projection_t* projection =
         &function_info->argument_projections[projection_index];
-    for (uint16_t i = 0; i < function_info->argument_count; ++i) {
+    for (uint16_t i = 0; !loom_pass_has_error_diagnostics(pass) &&
+                         i < function_info->argument_count;
+         ++i) {
       IREE_RETURN_IF_ERROR(loom_refine_boundaries_refine_value_type_with_facts(
           pass, module, function_info->function.op, facts,
           loom_block_arg_id(projection->entry_block, i), changed_count));
@@ -910,7 +915,9 @@ static iree_status_t loom_refine_boundaries_refine_function_signature(
   }
   const loom_value_id_t* results =
       loom_op_const_results(function_info->function.op);
-  for (uint16_t i = 0; i < function_info->result_count; ++i) {
+  for (uint16_t i = 0; !loom_pass_has_error_diagnostics(pass) &&
+                       i < function_info->result_count;
+       ++i) {
     IREE_RETURN_IF_ERROR(loom_refine_boundaries_refine_value_type_with_facts(
         pass, module, function_info->function.op, facts, results[i],
         changed_count));
@@ -1558,6 +1565,7 @@ static iree_status_t loom_refine_boundaries_run_function(
     IREE_RETURN_IF_ERROR(loom_refine_boundaries_refine_function_signature(
         pass, graph->module, function_facts, function_info,
         signature_type_changed_count));
+    if (loom_pass_has_error_diagnostics(pass)) return iree_ok_status();
     if (signature_type_changes_before != *signature_type_changed_count) {
       loom_pass_mark_changed(pass);
     }
@@ -1662,8 +1670,7 @@ static iree_status_t loom_refine_boundaries_refine_call_result_type(
     return loom_refine_boundaries_fail(
         pass, module, call_op,
         IREE_SV("callee result type conflicts with the call result type after "
-                "boundary substitution"),
-        IREE_STATUS_FAILED_PRECONDITION);
+                "boundary substitution"));
   }
   if (result == LOOM_TYPE_REFINEMENT_UNCHANGED ||
       loom_type_equal(current_type, refined_type)) {
@@ -1697,6 +1704,11 @@ static iree_status_t loom_refine_boundaries_refine_call_result_types(
 
   loom_refine_boundaries_signature_call_walk_t* walk =
       (loom_refine_boundaries_signature_call_walk_t*)user_data;
+  if (loom_pass_has_error_diagnostics(walk->pass)) {
+    *out_result = LOOM_WALK_ABORT;
+    return iree_ok_status();
+  }
+
   loom_symbol_ref_t callee = loom_symbol_ref_null();
   loom_value_slice_t operands = {0};
   loom_value_slice_t results = {0};
@@ -1713,10 +1725,14 @@ static iree_status_t loom_refine_boundaries_refine_call_result_types(
       &walk->graph->functions[callee_node];
   if (!callee_info->is_internal) return iree_ok_status();
 
-  for (iree_host_size_t i = 0; i < results.count; ++i) {
+  for (iree_host_size_t i = 0;
+       !loom_pass_has_error_diagnostics(walk->pass) && i < results.count; ++i) {
     IREE_RETURN_IF_ERROR(loom_refine_boundaries_refine_call_result_type(
         walk->pass, walk->module, op, callee_info, operands, results, i,
         walk->changed_count));
+  }
+  if (loom_pass_has_error_diagnostics(walk->pass)) {
+    *out_result = LOOM_WALK_ABORT;
   }
   return iree_ok_status();
 }
@@ -1727,11 +1743,14 @@ static iree_status_t loom_refine_boundaries_refine_internal_signature_types(
     const loom_value_fact_table_t* boundary_facts,
     iree_arena_allocator_t* walk_arena, int64_t* out_changed_count) {
   *out_changed_count = 0;
-  for (iree_host_size_t node = 0; node < graph->function_count; ++node) {
+  for (iree_host_size_t node = 0;
+       !loom_pass_has_error_diagnostics(pass) && node < graph->function_count;
+       ++node) {
     IREE_RETURN_IF_ERROR(loom_refine_boundaries_refine_function_signature(
         pass, module, boundary_facts, &graph->functions[node],
         out_changed_count));
   }
+  if (loom_pass_has_error_diagnostics(pass)) return iree_ok_status();
 
   loom_refine_boundaries_signature_call_walk_t walk = {
       .pass = pass,
@@ -2976,7 +2995,9 @@ iree_status_t loom_refine_boundaries_run_with_options(
 
   bool converged = false;
   for (uint32_t iteration = 0;
-       iree_status_is_ok(status) && iteration < max_iterations; ++iteration) {
+       iree_status_is_ok(status) && !loom_pass_has_error_diagnostics(pass) &&
+       iteration < max_iterations;
+       ++iteration) {
     iree_arena_reset(&iteration_arena);
     iree_arena_reset(next_facts_arena);
 
@@ -2992,10 +3013,14 @@ iree_status_t loom_refine_boundaries_run_with_options(
 
     int64_t signature_type_changed_count = 0;
     for (iree_host_size_t scc_index = 0;
-         iree_status_is_ok(status) && scc_index < sccs.count; ++scc_index) {
+         iree_status_is_ok(status) && !loom_pass_has_error_diagnostics(pass) &&
+         scc_index < sccs.count;
+         ++scc_index) {
       const loom_scc_t* scc = &sccs.values[scc_index];
       for (iree_host_size_t member = 0;
-           iree_status_is_ok(status) && member < scc->node_count; ++member) {
+           iree_status_is_ok(status) &&
+           !loom_pass_has_error_diagnostics(pass) && member < scc->node_count;
+           ++member) {
         iree_host_size_t node = scc->nodes[member];
         status = loom_refine_boundaries_run_function(
             pass, &canonicalizer, &graph, &current_boundary->facts,
@@ -3004,7 +3029,9 @@ iree_status_t loom_refine_boundaries_run_with_options(
             &signature_type_changed_count);
       }
     }
-    if (!iree_status_is_ok(status)) break;
+    if (!iree_status_is_ok(status) || loom_pass_has_error_diagnostics(pass)) {
+      break;
+    }
 
     bool boundary_facts_changed = !loom_refine_boundaries_fact_tables_equal(
         &current_boundary->facts, &next_boundary->facts);
@@ -3016,7 +3043,9 @@ iree_status_t loom_refine_boundaries_run_with_options(
       status = loom_refine_boundaries_refine_internal_signature_types(
           pass, module, &graph, &next_boundary->facts, &walk_arena,
           &call_result_type_changed_count);
-      if (!iree_status_is_ok(status)) break;
+      if (!iree_status_is_ok(status) || loom_pass_has_error_diagnostics(pass)) {
+        break;
+      }
       signature_type_changed_count += call_result_type_changed_count;
       if (signature_type_changed_count > 0) {
         loom_pass_mark_changed(pass);
@@ -3093,7 +3122,8 @@ iree_status_t loom_refine_boundaries_run_with_options(
     current_boundary = next_boundary;
     next_boundary = old_current_boundary;
   }
-  if (iree_status_is_ok(status) && !converged) {
+  if (iree_status_is_ok(status) && !loom_pass_has_error_diagnostics(pass) &&
+      !converged) {
     char reason_storage[192] = {0};
     int reason_length = snprintf(
         reason_storage, sizeof(reason_storage),
@@ -3106,8 +3136,7 @@ iree_status_t loom_refine_boundaries_run_with_options(
             ? iree_make_string_view(reason_storage,
                                     (iree_host_size_t)reason_length)
             : IREE_SV("boundary facts did not converge");
-    status = loom_refine_boundaries_fail(pass, module, NULL, reason,
-                                         IREE_STATUS_RESOURCE_EXHAUSTED);
+    status = loom_refine_boundaries_fail(pass, module, NULL, reason);
   }
 
   if (canonicalizer_initialized) {

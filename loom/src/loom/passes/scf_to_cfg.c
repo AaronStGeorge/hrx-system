@@ -136,12 +136,7 @@ static iree_status_t loom_scf_to_cfg_fail(loom_scf_to_cfg_state_t* state,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
-  IREE_RETURN_IF_ERROR(
-      iree_diagnostic_emit(state->pass->diagnostic_emitter, &emission));
-  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                          "%.*s cannot be lowered by %.*s: %.*s",
-                          (int)op_name.size, op_name.data, (int)pass_name.size,
-                          pass_name.data, (int)reason.size, reason.data);
+  return iree_diagnostic_emit(state->pass->diagnostic_emitter, &emission);
 }
 
 static void loom_scf_to_cfg_add_stat(loom_scf_to_cfg_state_t* state,
@@ -1064,21 +1059,25 @@ static iree_status_t loom_scf_to_cfg_process_block(
 
     if (loom_scf_if_isa(op)) {
       IREE_RETURN_IF_ERROR(loom_scf_to_cfg_lower_if(state, op));
+      if (loom_pass_has_error_diagnostics(state->pass)) return iree_ok_status();
       *out_changed = true;
       return iree_ok_status();
     }
     if (loom_scf_for_isa(op)) {
       IREE_RETURN_IF_ERROR(loom_scf_to_cfg_lower_for(state, op));
+      if (loom_pass_has_error_diagnostics(state->pass)) return iree_ok_status();
       *out_changed = true;
       return iree_ok_status();
     }
     if (loom_scf_while_isa(op)) {
       IREE_RETURN_IF_ERROR(loom_scf_to_cfg_lower_while(state, op));
+      if (loom_pass_has_error_diagnostics(state->pass)) return iree_ok_status();
       *out_changed = true;
       return iree_ok_status();
     }
     if (loom_scf_switch_isa(op)) {
       IREE_RETURN_IF_ERROR(loom_scf_to_cfg_lower_switch(state, op));
+      if (loom_pass_has_error_diagnostics(state->pass)) return iree_ok_status();
       *out_changed = true;
       return iree_ok_status();
     }
@@ -1102,12 +1101,14 @@ static iree_status_t loom_scf_to_cfg_process_function_once(
   while (true) {
     loom_region_t* region =
         loom_scf_to_cfg_region_stack_pop(&state->region_stack);
-    if (!region) break;
+    if (!region || loom_pass_has_error_diagnostics(state->pass)) break;
     loom_block_t* block = NULL;
     loom_region_for_each_block(region, block) {
       IREE_RETURN_IF_ERROR(
           loom_scf_to_cfg_process_block(state, block, out_changed));
-      if (*out_changed) return iree_ok_status();
+      if (*out_changed || loom_pass_has_error_diagnostics(state->pass)) {
+        return iree_ok_status();
+      }
     }
   }
 
@@ -1136,7 +1137,8 @@ iree_status_t loom_scf_to_cfg_run(loom_pass_t* pass, loom_module_t* module,
 
   bool changed = true;
   bool any_changed = false;
-  while (iree_status_is_ok(status) && changed) {
+  while (iree_status_is_ok(status) && changed &&
+         !loom_pass_has_error_diagnostics(pass)) {
     changed = false;
     status = loom_pass_value_facts_acquire(
         pass, module, loom_pass_value_fact_scope_function(function),

@@ -666,3 +666,18 @@ func.def public @call_projected_dead_argument(%kept: index, %dead: index) {
   test.invoke @projected_dead_argument(%kept) : (index)
   func.return
 }
+
+// ====
+
+// RUN: pass refine-boundaries{max-iterations=1}
+
+// ERROR@+1: LOWERING/002 "refine-boundaries" "module" "did not converge"
+func.def @identity(%value: index) -> (index) {
+  func.return %value : index
+}
+
+func.def public @caller() -> (index) {
+  %zero = index.constant 0 : index
+  %result = func.call @identity(%zero) : (index) -> (index)
+  func.return %result : index
+}

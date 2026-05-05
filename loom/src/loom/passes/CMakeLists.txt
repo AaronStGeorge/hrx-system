@@ -308,25 +308,6 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_test(
-  NAME
-    refine_boundaries_test
-  SRCS
-    "refine_boundaries_test.cc"
-  DEPS
-    ::refine_boundaries
-    iree::base::internal::arena
-    loom::src::loom::error::error_defs
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::ops::index
-    loom::src::loom::pass::types
-    loom::src::loom::pass::value_facts
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 loom_cc_library(
   NAME
     scf_to_cfg

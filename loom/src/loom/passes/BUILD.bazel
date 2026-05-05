@@ -273,24 +273,6 @@ loom_cc_library(
     ],
 )
 
-loom_cc_test(
-    name = "refine_boundaries_test",
-    srcs = ["refine_boundaries_test.cc"],
-    deps = [
-        ":refine_boundaries",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/index",
-        "//loom/src/loom/pass:types",
-        "//loom/src/loom/pass:value_facts",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
 loom_cc_library(
     name = "scf_to_cfg",
     srcs = ["scf_to_cfg.c"],
