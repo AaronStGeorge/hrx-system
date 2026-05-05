@@ -48,10 +48,60 @@ class PassBuilderTest : public ::testing::Test {
 };
 
 static iree_status_t BuildOneRun(loom_builder_t* builder, void* user_data) {
-  (void)user_data;
   loom_op_t* run_op = nullptr;
   return loom_pass_ir_build_run(
       builder, IREE_SV("cse"), loom_make_named_attr_slice(nullptr, 0), &run_op);
+}
+
+static iree_status_t BuildWhereBody(loom_builder_t* builder, void* user_data) {
+  loom_op_t* run_op = nullptr;
+  return loom_pass_ir_build_run(builder, IREE_SV("low-dce"),
+                                loom_named_attr_slice_empty(), &run_op);
+}
+
+static iree_status_t BuildRepeatBody(loom_builder_t* builder, void* user_data) {
+  loom_op_t* run_op = nullptr;
+  return loom_pass_ir_build_run(builder, IREE_SV("canonicalize"),
+                                loom_named_attr_slice_empty(), &run_op);
+}
+
+static iree_status_t BuildForBody(loom_builder_t* builder, void* user_data) {
+  loom_string_id_t value_name = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(
+      builder->module, IREE_SV("value"), &value_name));
+  loom_string_id_t matmul_value = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(
+      builder->module, IREE_SV("matmul"), &matmul_value));
+  loom_named_attr_t attrs[] = {{
+      .name_id = value_name,
+      .value = loom_attr_string(matmul_value),
+  }};
+
+  loom_op_t* where_op = nullptr;
+  IREE_RETURN_IF_ERROR(loom_pass_ir_build_where(
+      builder, IREE_SV("name"),
+      loom_make_named_attr_slice(attrs, IREE_ARRAYSIZE(attrs)), BuildWhereBody,
+      nullptr, &where_op));
+
+  loom_op_t* repeat_op = nullptr;
+  return loom_pass_ir_build_repeat(
+      builder, LOOM_PASS_REPEAT_BUILD_FLAG_HAS_COUNT,
+      LOOM_PASS_REPEAT_MODE_FIXED, 2, 0, BuildRepeatBody, nullptr, &repeat_op);
+}
+
+typedef struct MainPipelineBuildData {
+  loom_symbol_ref_t callee;
+} MainPipelineBuildData;
+
+static iree_status_t BuildNestedPassControls(loom_builder_t* builder,
+                                             void* user_data) {
+  const MainPipelineBuildData* build_data =
+      static_cast<const MainPipelineBuildData*>(user_data);
+  loom_op_t* for_op = nullptr;
+  IREE_RETURN_IF_ERROR(loom_pass_ir_build_for(builder, LOOM_PASS_ANCHOR_FUNC,
+                                              BuildForBody, nullptr, &for_op));
+  loom_op_t* call_op = nullptr;
+  return loom_pass_ir_build_call(builder, build_data->callee, &call_op);
 }
 
 TEST_F(PassBuilderTest, BuildsLinkedPipelineSymbol) {
@@ -76,6 +126,58 @@ TEST_F(PassBuilderTest, BuildsLinkedPipelineSymbol) {
   ASSERT_EQ(body_block->op_count, 2u);
   EXPECT_TRUE(loom_pass_run_isa(body_block->first_op));
   EXPECT_TRUE(loom_pass_yield_isa(body_block->last_op));
+}
+
+TEST_F(PassBuilderTest, BuildsNestedPassControls) {
+  ModulePtr module;
+  IREE_ASSERT_OK(AllocateModule(IREE_SV("pipeline"), &module));
+
+  loom_op_t* callee_op = nullptr;
+  IREE_ASSERT_OK(loom_pass_ir_build_pipeline(module.get(), IREE_SV("callee"),
+                                             LOOM_PASS_ANCHOR_MODULE,
+                                             BuildOneRun, nullptr, &callee_op));
+  MainPipelineBuildData build_data = {
+      .callee = loom_pass_pipeline_symbol(callee_op),
+  };
+  loom_op_t* main_op = nullptr;
+  IREE_ASSERT_OK(loom_pass_ir_build_pipeline(
+      module.get(), IREE_SV("main"), LOOM_PASS_ANCHOR_MODULE,
+      BuildNestedPassControls, &build_data, &main_op));
+
+  loom_block_t* main_body =
+      loom_region_entry_block(loom_pass_pipeline_body(main_op));
+  ASSERT_NE(main_body, nullptr);
+  ASSERT_EQ(main_body->op_count, 3u);
+  ASSERT_TRUE(loom_pass_for_isa(main_body->first_op));
+  EXPECT_TRUE(loom_pass_call_isa(main_body->first_op->next_op));
+  EXPECT_TRUE(loom_pass_yield_isa(main_body->last_op));
+
+  loom_op_t* for_op = main_body->first_op;
+  loom_block_t* for_body = loom_region_entry_block(loom_pass_for_body(for_op));
+  ASSERT_NE(for_body, nullptr);
+  ASSERT_EQ(for_body->op_count, 3u);
+  ASSERT_TRUE(loom_pass_where_isa(for_body->first_op));
+  ASSERT_TRUE(loom_pass_repeat_isa(for_body->first_op->next_op));
+  EXPECT_TRUE(loom_pass_yield_isa(for_body->last_op));
+
+  loom_op_t* where_op = for_body->first_op;
+  EXPECT_EQ(loom_pass_where_attrs(where_op).count, 1u);
+  loom_block_t* where_body =
+      loom_region_entry_block(loom_pass_where_body(where_op));
+  ASSERT_NE(where_body, nullptr);
+  ASSERT_EQ(where_body->op_count, 2u);
+  EXPECT_TRUE(loom_pass_run_isa(where_body->first_op));
+  EXPECT_TRUE(loom_pass_yield_isa(where_body->last_op));
+
+  loom_op_t* repeat_op = for_body->first_op->next_op;
+  EXPECT_EQ(loom_pass_repeat_mode(repeat_op), LOOM_PASS_REPEAT_MODE_FIXED);
+  EXPECT_EQ(loom_pass_repeat_count(repeat_op), 2);
+  loom_block_t* repeat_body =
+      loom_region_entry_block(loom_pass_repeat_body(repeat_op));
+  ASSERT_NE(repeat_body, nullptr);
+  ASSERT_EQ(repeat_body->op_count, 2u);
+  EXPECT_TRUE(loom_pass_run_isa(repeat_body->first_op));
+  EXPECT_TRUE(loom_pass_yield_isa(repeat_body->last_op));
 }
 
 TEST(PassBuilderStandaloneTest, RequiresPassDialect) {

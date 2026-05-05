@@ -317,8 +317,8 @@ static iree_status_t loom_pass_tool_build_flat_run(
 typedef struct loom_pass_tool_flat_function_group_t {
   // Builder receiving synthetic pass pipeline operations.
   loom_builder_t* builder;
-  // Saved insertion point outside the open pass.for body.
-  loom_builder_ip_t saved_insertion_point;
+  // Open pass.for body scope.
+  loom_pass_ir_scope_t scope;
   // True when builder currently inserts into a pass.for<func> body.
   bool is_open;
 } loom_pass_tool_flat_function_group_t;
@@ -328,11 +328,8 @@ static iree_status_t loom_pass_tool_flat_function_group_open(
   if (group->is_open) {
     return iree_ok_status();
   }
-  loom_op_t* for_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_pass_for_build(
-      group->builder, LOOM_PASS_ANCHOR_FUNC, LOOM_LOCATION_UNKNOWN, &for_op));
-  group->saved_insertion_point = loom_builder_enter_region(
-      group->builder, for_op, loom_pass_for_body(for_op));
+  IREE_RETURN_IF_ERROR(loom_pass_ir_begin_for(
+      group->builder, LOOM_PASS_ANCHOR_FUNC, &group->scope));
   group->is_open = true;
   return iree_ok_status();
 }
@@ -342,8 +339,7 @@ static iree_status_t loom_pass_tool_flat_function_group_close(
   if (!group->is_open) {
     return iree_ok_status();
   }
-  iree_status_t status = loom_pass_ir_build_yield(group->builder);
-  loom_builder_restore(group->builder, group->saved_insertion_point);
+  iree_status_t status = loom_pass_ir_end_scope(group->builder, &group->scope);
   group->is_open = false;
   return status;
 }
