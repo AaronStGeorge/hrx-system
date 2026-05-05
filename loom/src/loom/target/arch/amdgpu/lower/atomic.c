@@ -1268,7 +1268,7 @@ iree_status_t loom_amdgpu_lower_view_atomic(
       .address_form = plan->address_form,
       .immediate_offset = plan->immediate_offset,
       .scalar_byte_offset = plan->scalar_byte_offset,
-      .vgpr_count = 1,
+      .payload_register_count = 1,
       .packet_byte_count = 4,
   };
   for (iree_host_size_t i = 0; i < LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY;
@@ -1300,7 +1300,7 @@ iree_status_t loom_amdgpu_lower_view_atomic(
   loom_value_id_t low_saddr = LOOM_VALUE_ID_INVALID;
   if (plan->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_saddr(
-        context, source_op, low_resource, &low_saddr));
+        context, source_op, &access, low_resource, &low_saddr));
   }
   loom_value_id_t low_soffset = LOOM_VALUE_ID_INVALID;
   if (loom_amdgpu_atomic_uses_buffer_resource(plan)) {

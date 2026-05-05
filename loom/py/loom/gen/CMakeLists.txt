@@ -53,6 +53,29 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    c_tables
+  SRCS
+    "bootstrap.py"
+    "c_tables.py"
+  DEPS
+    iree::runtime::py::loom::gen::generated_file
+    iree::runtime::py::loom::core
+)
+
+iree_py_test(
+  NAME
+    c_tables_test
+  SRCS
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.gen.c_tables_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
+)
+
+iree_py_library(
+  NAME
     c_errors
   MAIN
     "c_errors.py"

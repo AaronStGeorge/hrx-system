@@ -1,6 +1,86 @@
 // RUN: emit source-low output=low
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @index_uniform_multiply(%lhs: i32) -> (index) {
+  %lhs_index = index.cast %lhs : i32 to index
+  %bounded_lhs = index.assume %lhs_index [range(%lhs_index, 0, 1023)] : index
+  %stride = index.constant 128 : index
+  %product = index.mul %bounded_lhs, %stride : index
+  func.return %product : index
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @index_uniform_multiply(%bounded_lhs: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %stride = s_mov_b32 128
+  %product = s_mul_i32 %bounded_lhs, %stride
+  return %product
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @index_uniform_shift_mask(%value: i32) -> (index, index) {
+  %value_index = index.cast %value : i32 to index
+  %bounded_value = index.assume %value_index [range(%value_index, 0, 1024)] : index
+  %shift = index.constant 7 : index
+  %quotient = index.shrui %bounded_value, %shift : index
+  %mask = index.constant 127 : index
+  %remainder = index.andi %bounded_value, %mask : index
+  func.return %quotient, %remainder : index, index
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @index_uniform_shift_mask(%bounded_value: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %shift = s_mov_b32 7
+  %quotient = s_lshr_b32 %bounded_value, %shift
+  %mask = s_mov_b32 127
+  %remainder = s_and_b32 %bounded_value, %mask
+  return %quotient, %remainder
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @index_divergent_shift_mask(%values: vector<2xi32>) {
+  %lane_i32 = vector.extract %values[0] : vector<2xi32> -> i32
+  %lane = index.cast %lane_i32 : i32 to index
+  %bounded_lane = index.assume %lane [range(%lane, 0, 63)] : index
+  %shift = index.constant 2 : index
+  %quotient = index.shrui %bounded_lane, %shift : index
+  %mask = index.constant 7 : index
+  %remainder = index.andi %bounded_lane, %mask : index
+  %condition = index.cmp slt, %quotient, %remainder : index
+  cfg.cond_br %condition, ^then, ^join : i1
+^then:
+  cfg.br ^join
+^join:
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @index_divergent_shift_mask(%values: reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %bounded_lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %shift = s_mov_b32 2
+  %12 = v_mov_b32 2
+  %quotient = v_lshrrev_b32 %12, %bounded_lane
+  %mask = s_mov_b32 7
+  %15 = v_mov_b32 7
+  %remainder = v_and_b32 %bounded_lane, %15
+  %condition = v_cmp_lt_i32 %quotient, %remainder
+  %18, %19 = s_and_saveexec_b64 %condition
+  low.cond_br %19, ^then, ^_bb3 : reg<amdgpu.scc>
+^then:
+  low.br ^_bb3
+^join:
+  return
+^_bb3:
+  s_mov_b64_exec %18
+  low.br ^join
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @index_cast_compare_uniform(%lhs: i32, %rhs: i32) -> (i1) {
   %lhs_index = index.cast %lhs : i32 to index
   %rhs_index = index.cast %rhs : i32 to index
@@ -42,5 +122,39 @@ low.func.def target(@target) abi(hal_kernel) @index_cast_compare_divergent(%valu
   return
 ^_bb3:
   s_mov_b64_exec %11
+  low.br ^join
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @dynamic_vector_extract_i32(%values: vector<2xi32>, %lane_index: index, %limit: i32) {
+  %lane = vector.extract %values[%lane_index] : vector<2xi32> -> i32
+  %condition = scalar.cmpi slt, %lane, %limit : i32
+  cfg.cond_br %condition, ^then, ^join : i1
+^then:
+  cfg.br ^join
+^join:
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @dynamic_vector_extract_i32(%values: reg<amdgpu.vgpr x2>, %lane_index: reg<amdgpu.sgpr>, %limit: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %8 = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %9 = v_mov_b32_copy %lane_index
+  %10 = v_mov_b32 1
+  %11 = v_cmp_eq_i32 %9, %10
+  %12 = slice %values[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %lane = v_cndmask_b32 %8, %12, %11
+  %14 = v_mov_b32_copy %limit
+  %condition = v_cmp_lt_i32 %lane, %14
+  %16, %17 = s_and_saveexec_b64 %condition
+  low.cond_br %17, ^then, ^_bb3 : reg<amdgpu.scc>
+^then:
+  low.br ^_bb3
+^join:
+  return
+^_bb3:
+  s_mov_b64_exec %16
   low.br ^join
 }

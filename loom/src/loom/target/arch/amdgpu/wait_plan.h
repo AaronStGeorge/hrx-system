@@ -78,10 +78,8 @@ typedef enum loom_amdgpu_wait_plan_reason_e {
   LOOM_AMDGPU_WAIT_PLAN_REASON_EXPLICIT_PACKET = 1,
   // A consumer uses a value produced by an outstanding memory load.
   LOOM_AMDGPU_WAIT_PLAN_REASON_SSA_USE = 2,
-  // Block terminator exits with outstanding stores.
-  LOOM_AMDGPU_WAIT_PLAN_REASON_BLOCK_EXIT = 3,
   // A barrier observes memory that may still have outstanding packets.
-  LOOM_AMDGPU_WAIT_PLAN_REASON_BARRIER = 4,
+  LOOM_AMDGPU_WAIT_PLAN_REASON_BARRIER = 3,
 } loom_amdgpu_wait_plan_reason_t;
 
 // One AMDGPU wait-counter action in scheduled packet order.

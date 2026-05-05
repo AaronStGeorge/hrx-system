@@ -31,6 +31,12 @@ extern "C" {
 // Required kernarg alignment for HAL binding pointers.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_ALIGNMENT 8u
 
+// Kernarg storage for one direct scalar dispatch constant.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_SIZE 4u
+
+// Required kernarg alignment for direct scalar dispatch constants.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_ALIGNMENT 4u
+
 // Stable low.live_in source spelling for the AMDGPU kernarg segment pointer.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_KERNARG_SEGMENT_PTR_SOURCE \
   "amdgpu.kernarg_segment_ptr"
@@ -127,6 +133,23 @@ typedef struct loom_amdgpu_hal_kernarg_resource_t {
   loom_type_t abi_type;
 } loom_amdgpu_hal_kernarg_resource_t;
 
+typedef struct loom_amdgpu_hal_kernarg_direct_arg_t {
+  // Entry block argument value loaded from the HAL constant segment.
+  loom_value_id_t arg_id;
+  // Metadata name copied from the entry block argument when present.
+  iree_string_view_t name;
+  // Entry block argument index before ABI materialization removes arguments.
+  uint16_t argument_index;
+  // Byte offset of the scalar entry in the kernarg segment.
+  uint32_t kernarg_offset;
+  // Byte length of the scalar entry in the kernarg segment.
+  uint32_t kernarg_size;
+  // Byte alignment of the scalar entry in the kernarg segment.
+  uint32_t kernarg_alignment;
+  // Target-low value type produced by materializing this argument.
+  loom_type_t abi_type;
+} loom_amdgpu_hal_kernarg_direct_arg_t;
+
 typedef struct loom_amdgpu_hal_kernel_abi_layout_t {
   // Target-low function operation whose resources are laid out.
   const loom_op_t* function_op;
@@ -136,10 +159,16 @@ typedef struct loom_amdgpu_hal_kernel_abi_layout_t {
   uint32_t kernarg_segment_alignment;
   // True when the kernel descriptor must request the kernarg segment pointer.
   bool uses_kernarg_segment_ptr;
+  // HAL dispatch constant count consumed by direct scalar arguments.
+  uint32_t constant_count;
   // Resource records in HAL binding/kernarg offset order.
   const loom_amdgpu_hal_kernarg_resource_t* resources;
   // Number of resource records in |resources|.
   iree_host_size_t resource_count;
+  // Direct scalar argument records in entry block argument order.
+  const loom_amdgpu_hal_kernarg_direct_arg_t* direct_args;
+  // Number of direct scalar argument records in |direct_args|.
+  iree_host_size_t direct_arg_count;
 } loom_amdgpu_hal_kernel_abi_layout_t;
 
 typedef struct loom_amdgpu_hal_kernel_abi_verify_result_t {
@@ -161,12 +190,13 @@ iree_status_t loom_amdgpu_hal_kernel_abi_verify_low(
 
 // Derives the AMDGPU HAL-kernel ABI layout for |function_op|.
 //
-// v0 supports only low.resource imports with kind hal_binding, dense unique
-// binding indexes starting at zero, and result type reg<amdgpu.sgpr x2>. The
+// Supports low.resource imports with kind hal_binding, dense unique binding
+// indexes starting at zero, and result type reg<amdgpu.sgpr x2>. The
 // source_type attribute records the high-level resource handle type, but the
 // AMDGPU ABI layout is determined by the import kind and target-low result
 // type. The kernarg segment stores one 64-bit global pointer per binding in
-// binding-index order; later lowering materializes the target buffer
+// binding-index order, then one 32-bit direct scalar argument per remaining
+// entry block argument. Later lowering materializes the target buffer
 // descriptor value consumed by packets that need one.
 //
 // The function must already have passed

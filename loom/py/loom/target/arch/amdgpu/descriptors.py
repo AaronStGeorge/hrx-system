@@ -309,6 +309,10 @@ _CDNA_SMEM_SGPR_IMM_FIXED_FIELDS = (
     ("IMM", 1),
     ("SOFFSET_EN", 1),
 )
+_CDNA_SMEM_OFFSET_ONLY_FIXED_FIELDS = (
+    ("IMM", 1),
+    ("SOFFSET_EN", 0),
+)
 
 _ADDRESS_OFFSET_BYTE_ENCODING_ID = 1
 _ADDRESS_OFFSET_DWORD_ENCODING_ID = 2
@@ -654,6 +658,16 @@ def _scc_clobber(field_name: str = "scc") -> Operand:
         OperandRole.IMPLICIT,
         _SCC_ALT,
         flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_WRITE),
+        unit_count=1,
+    )
+
+
+def _scc_state_read(field_name: str = "scc_in") -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.IMPLICIT,
+        _SCC_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
         unit_count=1,
     )
 
@@ -1321,6 +1335,17 @@ def _scc_output(descriptor_operand: Operand) -> AmdgpuImplicitOperandOverlay:
     )
 
 
+def _scc_input(descriptor_operand: Operand) -> AmdgpuImplicitOperandOverlay:
+    return AmdgpuImplicitOperandOverlay(
+        operand_type="OPR_SSRC_SPECIAL_SCC",
+        descriptor_operand=descriptor_operand,
+        data_format_name="FMT_NUM_B1",
+        size_bits=1,
+        is_input=True,
+        is_output=False,
+    )
+
+
 _SCC_CLOBBER_OUTPUT = _scc_output(_scc_clobber())
 
 _IGNORE_GLOBAL_READ_MEMORY = AmdgpuImplicitOperandOverlay(
@@ -1594,6 +1619,28 @@ def _s_add_u32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _s_addc_u32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_addc_u32",
+        instruction_name="S_ADDC_U32",
+        mnemonic="s_addc_u32",
+        encoding_name="ENC_SOP2",
+        semantic_tag="integer.add.carry_in_out.u32",
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SDST", _sgpr_result("sum")),
+            AmdgpuOperandOverlay("SSRC0", _sgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs")),
+        ),
+        implicit_operands=(
+            _scc_output(_scc_clobber("carry")),
+            _scc_input(_scc_state_read("carry_in")),
+        ),
+        asm_forms=_asm(results=("sum",), operands=("lhs", "rhs")),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _s_sub_u32_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.s_sub_u32",
@@ -1608,6 +1655,40 @@ def _s_sub_u32_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs")),
         ),
         implicit_operands=(_SCC_CLOBBER_OUTPUT,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _s_mul_i32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_mul_i32",
+        instruction_name="S_MUL_I32",
+        mnemonic="s_mul_i32",
+        encoding_name="ENC_SOP2",
+        semantic_tag="integer.mul.lo.i32",
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SDST", _sgpr_result()),
+            AmdgpuOperandOverlay("SSRC0", _sgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _s_mul_hi_u32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_mul_hi_u32",
+        instruction_name="S_MUL_HI_U32",
+        mnemonic="s_mul_hi_u32",
+        encoding_name="ENC_SOP2",
+        semantic_tag="integer.mul.hi.u32",
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SDST", _sgpr_result()),
+            AmdgpuOperandOverlay("SSRC0", _sgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs")),
+        ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -1630,6 +1711,30 @@ def _s_binary_u32_overlay(
             AmdgpuOperandOverlay("SDST", _sgpr_result()),
             AmdgpuOperandOverlay("SSRC0", _sgpr_operand("lhs")),
             AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs")),
+        ),
+        implicit_operands=(_SCC_CLOBBER_OUTPUT,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _s_shift_u64_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="ENC_SOP2",
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SDST", _sgpr_result(units=2)),
+            AmdgpuOperandOverlay("SSRC0", _sgpr_operand("value", units=2)),
+            AmdgpuOperandOverlay("SSRC1", _sgpr_operand("shift")),
         ),
         implicit_operands=(_SCC_CLOBBER_OUTPUT,),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
@@ -2015,12 +2120,30 @@ def _s_lshl_b32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _s_lshl_b64_overlay() -> AmdgpuDescriptorOverlay:
+    return _s_shift_u64_overlay(
+        descriptor_key="amdgpu.s_lshl_b64",
+        instruction_name="S_LSHL_B64",
+        mnemonic="s_lshl_b64",
+        semantic_tag="integer.shl.u64",
+    )
+
+
 def _s_lshr_b32_overlay() -> AmdgpuDescriptorOverlay:
     return _s_binary_u32_overlay(
         descriptor_key="amdgpu.s_lshr_b32",
         instruction_name="S_LSHR_B32",
         mnemonic="s_lshr_b32",
         semantic_tag="integer.shr.u32",
+    )
+
+
+def _s_lshr_b64_overlay() -> AmdgpuDescriptorOverlay:
+    return _s_shift_u64_overlay(
+        descriptor_key="amdgpu.s_lshr_b64",
+        instruction_name="S_LSHR_B64",
+        mnemonic="s_lshr_b64",
+        semantic_tag="integer.shr.u64",
     )
 
 
@@ -2159,7 +2282,9 @@ def _i32_bitwise_shift_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_or_b32_overlay(),
         _s_xor_b32_overlay(),
         _s_lshl_b32_overlay(),
+        _s_lshl_b64_overlay(),
         _s_lshr_b32_overlay(),
+        _s_lshr_b64_overlay(),
         _s_ashr_i32_overlay(),
         _v_and_b32_overlay(),
         _v_and_b32_literal_overlay(),
@@ -2561,25 +2686,110 @@ def _s_load_dwordx2_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 21,
     fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
+    *,
+    descriptor_key: str = "amdgpu.s_load_dwordx2",
+    fixed_soffset: AmdgpuFixedEncodingValue | None = None,
 ) -> AmdgpuDescriptorOverlay:
+    operands: tuple[AmdgpuOperandOverlay, ...] = (
+        AmdgpuOperandOverlay("SDATA", _sgpr_result(units=2)),
+        AmdgpuOperandOverlay("SBASE", _sgpr_operand("base", units=2)),
+    )
+    if fixed_soffset is not None:
+        fixed_encoding_fields = (*fixed_encoding_fields, ("SOFFSET", fixed_soffset))
+    else:
+        operands = (
+            *operands,
+            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+        )
     return AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.s_load_dwordx2",
+        descriptor_key=descriptor_key,
         instruction_name="S_LOAD_DWORDX2",
         mnemonic="s_load_dwordx2",
         encoding_name="ENC_SMEM",
         semantic_tag="memory.load.u64",
         schedule_class=_SCHEDULE_SMEM_LOAD,
-        operands=(
-            AmdgpuOperandOverlay("SDATA", _sgpr_result(units=2)),
-            AmdgpuOperandOverlay("SBASE", _sgpr_operand("base", units=2)),
-            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
-        ),
+        operands=operands,
         implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY_B64,),
         immediate_fields=(offset_field_name,),
         immediates=(_offset_immediate(offset_bit_width),),
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_GLOBAL_LOAD_B64_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=() if fixed_soffset is not None else None,
+    )
+
+
+def _s_load_dwordx4_overlay(
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
+    *,
+    descriptor_key: str = "amdgpu.s_load_dwordx4",
+    fixed_soffset: AmdgpuFixedEncodingValue | None = None,
+) -> AmdgpuDescriptorOverlay:
+    operands: tuple[AmdgpuOperandOverlay, ...] = (
+        AmdgpuOperandOverlay("SDATA", _sgpr_result(units=4)),
+        AmdgpuOperandOverlay("SBASE", _sgpr_operand("base", units=2)),
+    )
+    if fixed_soffset is not None:
+        fixed_encoding_fields = (*fixed_encoding_fields, ("SOFFSET", fixed_soffset))
+    else:
+        operands = (
+            *operands,
+            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+        )
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name="S_LOAD_DWORDX4",
+        mnemonic="s_load_dwordx4",
+        encoding_name="ENC_SMEM",
+        semantic_tag="memory.load.u128",
+        schedule_class=_SCHEDULE_SMEM_LOAD,
+        operands=operands,
+        implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY_B128,),
+        immediate_fields=(offset_field_name,),
+        immediates=(_offset_immediate(offset_bit_width),),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_GLOBAL_LOAD_B128_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=() if fixed_soffset is not None else None,
+    )
+
+
+def _s_load_dword_overlay(
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
+    *,
+    descriptor_key: str = "amdgpu.s_load_dword",
+    fixed_soffset: AmdgpuFixedEncodingValue | None = None,
+) -> AmdgpuDescriptorOverlay:
+    operands: tuple[AmdgpuOperandOverlay, ...] = (
+        AmdgpuOperandOverlay("SDATA", _sgpr_result()),
+        AmdgpuOperandOverlay("SBASE", _sgpr_operand("base", units=2)),
+    )
+    if fixed_soffset is not None:
+        fixed_encoding_fields = (*fixed_encoding_fields, ("SOFFSET", fixed_soffset))
+    else:
+        operands = (
+            *operands,
+            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+        )
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name="S_LOAD_DWORD",
+        mnemonic="s_load_dword",
+        encoding_name="ENC_SMEM",
+        semantic_tag="memory.load.u32",
+        schedule_class=_SCHEDULE_SMEM_LOAD,
+        operands=operands,
+        implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
+        immediate_fields=(offset_field_name,),
+        immediates=(_offset_immediate(offset_bit_width),),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_GLOBAL_LOAD_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=() if fixed_soffset is not None else None,
     )
 
 
@@ -6284,7 +6494,10 @@ def _cdna_core_overlays(
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
+        _s_addc_u32_overlay(),
         _s_sub_u32_overlay(),
+        _s_mul_i32_overlay(),
+        _s_mul_hi_u32_overlay(),
         *_s_cmp_i32_overlays(),
         *_s_cmp_u64_overlays(),
         _s_and_saveexec_b64_overlay("default"),
@@ -6310,7 +6523,24 @@ def _cdna_core_overlays(
         _v_cvt_f32_u32_overlay(),
         *_v_cmp_overlays(),
         _v_cndmask_b32_overlay(),
+        _s_load_dword_overlay(fixed_encoding_fields=_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS),
         _s_load_dwordx2_overlay(fixed_encoding_fields=_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS),
+        _s_load_dwordx4_overlay(fixed_encoding_fields=_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS),
+        _s_load_dword_overlay(
+            fixed_encoding_fields=_CDNA_SMEM_OFFSET_ONLY_FIXED_FIELDS,
+            descriptor_key="amdgpu.s_load_dword_offset_only",
+            fixed_soffset=0,
+        ),
+        _s_load_dwordx2_overlay(
+            fixed_encoding_fields=_CDNA_SMEM_OFFSET_ONLY_FIXED_FIELDS,
+            descriptor_key="amdgpu.s_load_dwordx2_offset_only",
+            fixed_soffset=0,
+        ),
+        _s_load_dwordx4_overlay(
+            fixed_encoding_fields=_CDNA_SMEM_OFFSET_ONLY_FIXED_FIELDS,
+            descriptor_key="amdgpu.s_load_dwordx4_offset_only",
+            fixed_soffset=0,
+        ),
         _s_buffer_load_dword_overlay(
             fixed_encoding_fields=_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS
         ),
@@ -6520,7 +6750,10 @@ def _gfx950_core_overlay_descriptors(
 def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
+        _s_addc_u32_overlay(),
         _s_sub_u32_overlay(),
+        _s_mul_i32_overlay(),
+        _s_mul_hi_u32_overlay(),
         *_s_cmp_i32_overlays(),
         *_s_cmp_u64_overlays(),
         _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
@@ -6544,7 +6777,21 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_cvt_f32_u32_overlay(),
         *_v_cmp_overlays(),
         _v_cndmask_b32_overlay(),
+        _s_load_dword_overlay(),
         _s_load_dwordx2_overlay(),
+        _s_load_dwordx4_overlay(),
+        _s_load_dword_overlay(
+            descriptor_key="amdgpu.s_load_dword_offset_only",
+            fixed_soffset=_predefined("NULL"),
+        ),
+        _s_load_dwordx2_overlay(
+            descriptor_key="amdgpu.s_load_dwordx2_offset_only",
+            fixed_soffset=_predefined("NULL"),
+        ),
+        _s_load_dwordx4_overlay(
+            descriptor_key="amdgpu.s_load_dwordx4_offset_only",
+            fixed_soffset=_predefined("NULL"),
+        ),
         _s_buffer_load_dword_overlay(),
         _s_buffer_load_64_overlay(),
         _buffer_load_dword_overlay(
@@ -6724,7 +6971,10 @@ def _gfx11_core_overlay_descriptors(
 def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
+        _s_addc_u32_overlay(),
         _s_sub_u32_overlay(),
+        _s_mul_i32_overlay(),
+        _s_mul_hi_u32_overlay(),
         *_s_cmp_i32_overlays(),
         *_s_cmp_u64_overlays(),
         _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
@@ -6748,7 +6998,27 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_cvt_f32_u32_overlay(),
         *_v_cmp_overlays(),
         _v_cndmask_b32_overlay(),
+        _s_load_dword_overlay("IOFFSET", offset_bit_width=24),
         _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
+        _s_load_dwordx4_overlay("IOFFSET", offset_bit_width=24),
+        _s_load_dword_overlay(
+            "IOFFSET",
+            offset_bit_width=24,
+            descriptor_key="amdgpu.s_load_dword_offset_only",
+            fixed_soffset=_predefined("NULL"),
+        ),
+        _s_load_dwordx2_overlay(
+            "IOFFSET",
+            offset_bit_width=24,
+            descriptor_key="amdgpu.s_load_dwordx2_offset_only",
+            fixed_soffset=_predefined("NULL"),
+        ),
+        _s_load_dwordx4_overlay(
+            "IOFFSET",
+            offset_bit_width=24,
+            descriptor_key="amdgpu.s_load_dwordx4_offset_only",
+            fixed_soffset=_predefined("NULL"),
+        ),
         _s_buffer_load_dword_overlay("IOFFSET", offset_bit_width=24),
         _s_buffer_load_64_overlay(offset_field_name="IOFFSET", offset_bit_width=24),
         _buffer_load_dword_overlay(
@@ -6963,7 +7233,10 @@ def _gfx12_core_overlay_descriptors(
 def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
+        _s_addc_u32_overlay(),
         _s_sub_u32_overlay(),
+        _s_mul_i32_overlay(),
+        _s_mul_hi_u32_overlay(),
         *_s_cmp_i32_overlays(),
         *_s_cmp_u64_overlays(),
         _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
@@ -6987,7 +7260,27 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_cvt_f32_u32_overlay(),
         *_v_cmp_overlays(),
         _v_cndmask_b32_overlay(),
+        _s_load_dword_overlay("IOFFSET", offset_bit_width=24),
         _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
+        _s_load_dwordx4_overlay("IOFFSET", offset_bit_width=24),
+        _s_load_dword_overlay(
+            "IOFFSET",
+            offset_bit_width=24,
+            descriptor_key="amdgpu.s_load_dword_offset_only",
+            fixed_soffset=_predefined("NULL"),
+        ),
+        _s_load_dwordx2_overlay(
+            "IOFFSET",
+            offset_bit_width=24,
+            descriptor_key="amdgpu.s_load_dwordx2_offset_only",
+            fixed_soffset=_predefined("NULL"),
+        ),
+        _s_load_dwordx4_overlay(
+            "IOFFSET",
+            offset_bit_width=24,
+            descriptor_key="amdgpu.s_load_dwordx4_offset_only",
+            fixed_soffset=_predefined("NULL"),
+        ),
         _s_buffer_load_dword_overlay("IOFFSET", offset_bit_width=24),
         _s_buffer_load_64_overlay(offset_field_name="IOFFSET", offset_bit_width=24),
         _buffer_load_dword_overlay(
@@ -7937,6 +8230,8 @@ _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS: dict[
 ] = {
     "amdgpu.s_add_u32": _s_add_u32_overlay,
     "amdgpu.s_sub_u32": _s_sub_u32_overlay,
+    "amdgpu.s_mul_i32": _s_mul_i32_overlay,
+    "amdgpu.s_mul_hi_u32": _s_mul_hi_u32_overlay,
     "amdgpu.v_add_u32": lambda: _v_add_u32_overlay("V_ADD_NC_U32"),
     "amdgpu.v_add_u32.lit": lambda: _v_add_u32_literal_overlay("V_ADD_NC_U32"),
     "amdgpu.v_sub_u32": lambda: _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),

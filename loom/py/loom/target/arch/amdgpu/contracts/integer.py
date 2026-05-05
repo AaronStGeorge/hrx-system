@@ -36,6 +36,7 @@ from loom.target.low_descriptors import Descriptor
 _DESCRIPTOR_KEYS = (
     "amdgpu.s_add_u32",
     "amdgpu.s_sub_u32",
+    "amdgpu.s_mul_i32",
     "amdgpu.s_and_b32",
     "amdgpu.s_or_b32",
     "amdgpu.s_xor_b32",
@@ -210,9 +211,21 @@ def _address_rules(
     source_op: Op,
     sgpr_descriptor_key: str,
     vgpr_descriptor_key: str,
+    *,
+    reversed_vgpr: bool = False,
 ) -> tuple[DescriptorRule, ...]:
     sgpr_descriptor = _descriptor(sgpr_descriptor_key)
     vgpr_descriptor = _descriptor(vgpr_descriptor_key)
+    if reversed_vgpr:
+        vgpr_descriptor_lhs = "shift"
+        vgpr_descriptor_rhs = "value"
+        vgpr_source_lhs = "rhs"
+        vgpr_source_rhs = "lhs"
+    else:
+        vgpr_descriptor_lhs = "lhs"
+        vgpr_descriptor_rhs = "rhs"
+        vgpr_source_lhs = "lhs"
+        vgpr_source_rhs = "rhs"
     return tuple(
         _sgpr_binary_rule(
             source_op,
@@ -228,6 +241,10 @@ def _address_rules(
             type_pattern,
             vgpr_descriptor,
             ADDRESS_VGPR_MATERIALIZER,
+            descriptor_lhs=vgpr_descriptor_lhs,
+            descriptor_rhs=vgpr_descriptor_rhs,
+            source_lhs=vgpr_source_lhs,
+            source_rhs=vgpr_source_rhs,
             unsigned_bit_count=32,
             unsigned_diagnostic=_ADDRESS_U32_DIAGNOSTIC,
         )
@@ -251,12 +268,11 @@ def _rules() -> tuple[DescriptorRule, ...]:
             "amdgpu.v_sub_u32",
         )
     )
-    rules.append(
-        _vgpr_binary_rule(
+    rules.extend(
+        _i32_sgpr_vgpr_rules(
             scalar_arithmetic.scalar_muli,
-            _I32,
-            _descriptor("amdgpu.v_mul_lo_u32"),
-            I32_VGPR_MATERIALIZER,
+            "amdgpu.s_mul_i32",
+            "amdgpu.v_mul_lo_u32",
         )
     )
     rules.extend(
@@ -310,14 +326,42 @@ def _rules() -> tuple[DescriptorRule, ...]:
     rules.extend(
         _address_rules(index.index_sub, "amdgpu.s_sub_u32", "amdgpu.v_sub_u32")
     )
-    rules.append(
-        _vgpr_binary_rule(
+    rules.extend(
+        _address_rules(
             index.index_mul,
-            _INDEX,
-            _descriptor("amdgpu.v_mul_lo_u32"),
-            ADDRESS_VGPR_MATERIALIZER,
-            unsigned_bit_count=32,
-            unsigned_diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            "amdgpu.s_mul_i32",
+            "amdgpu.v_mul_lo_u32",
+        )
+    )
+    rules.extend(
+        _address_rules(index.index_andi, "amdgpu.s_and_b32", "amdgpu.v_and_b32")
+    )
+    rules.extend(_address_rules(index.index_ori, "amdgpu.s_or_b32", "amdgpu.v_or_b32"))
+    rules.extend(
+        _address_rules(index.index_xori, "amdgpu.s_xor_b32", "amdgpu.v_xor_b32")
+    )
+    rules.extend(
+        _address_rules(
+            index.index_shli,
+            "amdgpu.s_lshl_b32",
+            "amdgpu.v_lshlrev_b32",
+            reversed_vgpr=True,
+        )
+    )
+    rules.extend(
+        _address_rules(
+            index.index_shrsi,
+            "amdgpu.s_ashr_i32",
+            "amdgpu.v_ashrrev_i32",
+            reversed_vgpr=True,
+        )
+    )
+    rules.extend(
+        _address_rules(
+            index.index_shrui,
+            "amdgpu.s_lshr_b32",
+            "amdgpu.v_lshrrev_b32",
+            reversed_vgpr=True,
         )
     )
     return tuple(rules)

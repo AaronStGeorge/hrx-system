@@ -599,8 +599,8 @@ iree_status_t loom_amdgpu_lower_kernel_async_gather(
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, plan->source_view, &low_resource));
   loom_value_id_t low_saddr = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_saddr(context, source_op,
-                                                     low_resource, &low_saddr));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_saddr(
+      context, source_op, &access, low_resource, &low_saddr));
 
   loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(

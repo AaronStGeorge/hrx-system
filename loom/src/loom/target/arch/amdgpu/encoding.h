@@ -74,6 +74,12 @@ typedef enum loom_amdgpu_encoding_format_e {
   LOOM_AMDGPU_ENCODING_FORMAT_VOP1_LITERAL = 42,
   // CDNA MFMA packed vector three-source instruction format.
   LOOM_AMDGPU_ENCODING_FORMAT_VOP3P_MFMA = 53,
+  // Vector three-source 64-bit instruction format with mandatory literal.
+  LOOM_AMDGPU_ENCODING_FORMAT_VOP3_LITERAL = 56,
+  // Vector three-source 64-bit instruction format with scalar carry result.
+  LOOM_AMDGPU_ENCODING_FORMAT_VOP3_SDST = 57,
+  // VOP3 scalar-destination form with a mandatory literal payload.
+  LOOM_AMDGPU_ENCODING_FORMAT_VOP3_SDST_LITERAL = 58,
 } loom_amdgpu_encoding_format_t;
 
 typedef struct loom_amdgpu_encoding_bit_range_t {
@@ -126,7 +132,7 @@ typedef struct loom_amdgpu_encoding_table_t {
   uint16_t descriptor_set_ordinal;
   // SOP1 opcode used for target-inserted s_mov_b32 register/literal moves.
   uint16_t s_mov_b32_opcode;
-  // VOP1 opcode used for target-inserted v_mov_b32 register moves.
+  // VOP1 opcode used for target-inserted v_mov_b32 register/immediate moves.
   uint16_t v_mov_b32_opcode;
   // Unified source field value selecting the literal word after a packet.
   uint16_t source_literal;
@@ -177,6 +183,12 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format);
 // register encoding, where VGPR operands are biased by 0x100.
 bool loom_amdgpu_encoding_field_uses_unified_source(uint16_t field_id);
 
+// Returns true when |field_id| is the first vector source selector.
+bool loom_amdgpu_encoding_field_is_src0(uint16_t field_id);
+
+// Returns true when |field_id| is the literal payload field.
+bool loom_amdgpu_encoding_field_is_literal(uint16_t field_id);
+
 // Returns the generated encoding table for |descriptor_set_ordinal|, or NULL
 // when this binary was not linked with a matching table.
 const loom_amdgpu_encoding_table_t*
@@ -217,11 +229,18 @@ iree_status_t loom_amdgpu_encoding_pack_v_mov_b32_vgpr(
     const loom_amdgpu_encoding_table_t* table, uint16_t vdst, uint16_t vsrc0,
     loom_amdgpu_encoding_packet_t* out_packet);
 
-// Packs a 32-bit literal-to-VGPR v_mov_b32 packet using the target table's
-// VOP1 literal layout.
+// Packs a 32-bit immediate-to-VGPR v_mov_b32 packet using an inline vector
+// source when possible and a literal VOP1 form otherwise.
 iree_status_t loom_amdgpu_encoding_pack_v_mov_b32_u32(
     const loom_amdgpu_encoding_table_t* table, uint16_t vdst, uint32_t imm32,
     loom_amdgpu_encoding_packet_t* out_packet);
+
+// Packs a 32-bit VOP2 packet whose first source is an immediate and second
+// source is a VGPR. The immediate uses an inline source when possible and a
+// literal VOP2 form otherwise.
+iree_status_t loom_amdgpu_encoding_pack_vop2_u32_vgpr(
+    const loom_amdgpu_encoding_table_t* table, uint16_t opcode, uint16_t vdst,
+    uint32_t imm32, uint16_t vsrc1, loom_amdgpu_encoding_packet_t* out_packet);
 
 #ifdef __cplusplus
 }  // extern "C"

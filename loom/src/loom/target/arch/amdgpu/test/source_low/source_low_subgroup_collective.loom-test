@@ -634,6 +634,39 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_active_mask_i6
 // RUN: emit source-low output=low
 
 amdgpu.target<gfx950> @target
+kernel.def target(@target) @subgroup_active_mask_trunci_i32_wave64() {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch {
+  %mask64 = kernel.subgroup.active.mask : i64
+  %mask = scalar.trunci %mask64 : i64 to i32
+  %zero = scalar.constant 0 : i32
+  %condition = scalar.cmpi ne, %mask, %zero : i32
+  cfg.cond_br %condition, ^then, ^join : i1
+^then:
+  cfg.br ^join
+^join:
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_active_mask_trunci_i32_wave64() asm<amdgpu.cdna4.core> {
+  %mask64 = s_mov_b64_exec_read
+  %mask = slice %mask64[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %zero = s_mov_b32 0
+  %condition = s_cmp_lg_i32 %mask, %zero
+  low.cond_br %condition, ^then, ^join : reg<amdgpu.scc>
+^then:
+  low.br ^join
+^join:
+  return
+}
+
+// ====
+// RUN: emit source-low output=low
+
+amdgpu.target<gfx950> @target
 kernel.def target(@target) @subgroup_broadcast_i32_wave64(%input: buffer, %output: buffer) {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index

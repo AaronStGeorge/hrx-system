@@ -76,7 +76,7 @@ kernel.def target(@target) @async_gather_dynamic_offset_sum_rejected(%input: buf
   %source = view.subview %source_base[%x, %y, 0] : view<4294967296x4096x4xi8, %layout> -> view<1x1x4xi8, %layout>
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
   %dest = buffer.view %scratch[%zero] : buffer -> view<64x1x1x4xi8, #dense>
-  // ERROR@+1: AMDGPU/023 {constraint_key="memory_access.dynamic_offset_range"}
+  // ERROR@+1: AMDGPU/023 {constraint_key="async_gather.offset_immediate"}
   %copy = kernel.async.gather %source to %dest {cache_scope = device, cache_temporal = regular} : view<1x1x4xi8, %layout> to view<64x1x1x4xi8, #dense> -> kernel.async.token
   %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group

@@ -76,9 +76,12 @@ iree_status_t loom_amdgpu_low_legality_verify_memory(
   loom_amdgpu_memory_access_t access = {0};
   loom_low_source_memory_access_diagnostic_t source_diagnostic = {0};
   loom_amdgpu_memory_access_diagnostic_t diagnostic = {0};
+  const loom_view_region_table_t* view_regions = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_target_low_legality_view_regions(context, &view_regions));
   if (!loom_amdgpu_memory_access_select(
           module, loom_target_low_legality_fact_table(context), descriptor_set,
-          loom_target_low_legality_function(context), op, &access,
+          view_regions, loom_target_low_legality_function(context), op, &access,
           &source_diagnostic, &diagnostic)) {
     bool handled = false;
     if (diagnostic.rejection_bits != 0) {

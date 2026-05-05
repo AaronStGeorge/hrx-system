@@ -4,14 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// AMDGPU HAL binding and descriptor-pseudo materialization for target-low
-// kernels.
+// AMDGPU HAL-kernel ABI materialization for target-low kernels.
 //
-// Function-local low.resource imports describe the HAL-facing binding ABI. This
-// layer lowers each low.resource into the AMDGPU packet-level sequence that
-// loads the raw binding pointer from kernargs. Descriptor-consuming operations
-// use an explicit amdgpu.hal.buffer_descriptor pseudo, which this layer expands
-// into the four-SGPR buffer descriptor construction sequence.
+// Function-local low.resource imports describe the HAL-facing binding ABI, and
+// remaining entry block arguments describe direct dispatch constants. This
+// layer lowers both forms into AMDGPU packet-level sequences that load from the
+// kernarg segment. Descriptor-consuming operations use an explicit
+// amdgpu.hal.buffer_descriptor pseudo, which this layer expands into the
+// four-SGPR buffer descriptor construction sequence.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_HAL_BINDING_MATERIALIZATION_H_
 #define LOOM_TARGET_ARCH_AMDGPU_HAL_BINDING_MATERIALIZATION_H_
@@ -32,13 +32,16 @@ typedef struct loom_amdgpu_hal_binding_materialization_result_t {
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout;
   // Number of low.resource<hal_binding> ops expanded into pointer loads.
   iree_host_size_t materialized_binding_count;
+  // Number of direct entry block arguments expanded into scalar loads.
+  iree_host_size_t materialized_direct_arg_count;
   // Number of amdgpu.hal.buffer_descriptor pseudos expanded into low IR.
   iree_host_size_t materialized_descriptor_count;
   // True when the pass inserted the kernarg segment pointer live-in.
   bool inserted_kernarg_segment_ptr_live_in;
 } loom_amdgpu_hal_binding_materialization_result_t;
 
-// Expands AMDGPU HAL low.resource imports and descriptor pseudos in
+// Expands AMDGPU HAL low.resource imports, direct arguments, and descriptor
+// pseudos in
 // |function_op|.
 //
 // |descriptor_set| must be the target-low descriptor set selected for
@@ -47,8 +50,12 @@ typedef struct loom_amdgpu_hal_binding_materialization_result_t {
 //
 // The expansion inserts or reuses a low.live_in<amdgpu.kernarg_segment_ptr>
 // value, loads one 64-bit binding pointer from each kernarg slot assigned by
-// low.resource<hal_binding>, and replaces the import with reg<amdgpu.sgpr x2>.
-// Separate amdgpu.hal.buffer_descriptor pseudos materialize range, flags, and
+// low.resource<hal_binding>, loads one 32-bit scalar from each direct argument
+// slot, removes direct entry block arguments, and replaces resource imports
+// with reg<amdgpu.sgpr x2>. Direct scalar arguments are loaded from the HAL
+// constant segment, packing adjacent 32-bit arguments into wider SMEM loads
+// when the target-low descriptor set supports the packet. Separate
+// amdgpu.hal.buffer_descriptor pseudos materialize range, flags, and
 // pointer-high descriptor bits only for selected descriptor-consuming packets.
 iree_status_t loom_amdgpu_hal_binding_materialize(
     loom_module_t* module, loom_op_t* function_op,

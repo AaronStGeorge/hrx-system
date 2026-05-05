@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 
+#include "loom/analysis/view_regions.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/source_memory_plan.h"
@@ -128,6 +129,7 @@ bool loom_amdgpu_source_memory_offset_fits_u32(
 bool loom_amdgpu_memory_access_select(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     const loom_low_descriptor_set_t* descriptor_set,
+    const loom_view_region_table_t* view_regions,
     loom_func_like_t source_function, const loom_op_t* source_op,
     loom_amdgpu_memory_access_t* out_access,
     loom_low_source_memory_access_diagnostic_t* out_source_diagnostic,
@@ -145,10 +147,10 @@ iree_status_t loom_amdgpu_emit_memory_vaddr(
     loom_value_id_t* out_low_vaddr);
 
 // Emits the SGPR SADDR operand for a low HAL binding pointer.
-iree_status_t loom_amdgpu_emit_memory_saddr(loom_low_lower_context_t* context,
-                                            const loom_op_t* source_op,
-                                            loom_value_id_t low_binding,
-                                            loom_value_id_t* out_low_saddr);
+iree_status_t loom_amdgpu_emit_memory_saddr(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_memory_access_t* access, loom_value_id_t low_binding,
+    loom_value_id_t* out_low_saddr);
 
 // Emits the target buffer descriptor consumed by MUBUF-style packets from a low
 // HAL binding pointer.

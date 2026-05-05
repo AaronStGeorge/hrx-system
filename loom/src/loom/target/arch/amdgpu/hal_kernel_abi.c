@@ -570,6 +570,23 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_emit_m0_type_error(
       NULL, 0, max_errors, result);
 }
 
+static iree_status_t loom_amdgpu_hal_kernel_abi_emit_direct_arg_type_error(
+    const loom_module_t* module, const loom_op_t* function_op,
+    loom_value_id_t arg_id, uint16_t argument_index,
+    uint16_t expected_reg_class_id, uint32_t expected_unit_count,
+    uint32_t max_errors, iree_diagnostic_emitter_t emitter,
+    loom_amdgpu_hal_kernel_abi_verify_result_t* result) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_u32(argument_index),
+      loom_param_type(loom_module_value_type(module, arg_id)),
+      loom_param_u32(expected_reg_class_id),
+      loom_param_u32(expected_unit_count),
+  };
+  return loom_amdgpu_hal_kernel_abi_emit(
+      emitter, function_op, LOOM_ERR_AMDGPU_025, params, IREE_ARRAYSIZE(params),
+      NULL, 0, max_errors, result);
+}
+
 static iree_status_t loom_amdgpu_hal_kernel_abi_format_resource_name(
     uint32_t binding_index, iree_string_view_t* out_name,
     iree_arena_allocator_t* arena) {
@@ -585,6 +602,38 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_format_resource_name(
       iree_arena_allocate(arena, (iree_host_size_t)length, (void**)&storage));
   memcpy(storage, scratch, (iree_host_size_t)length);
   *out_name = iree_make_string_view(storage, (iree_host_size_t)length);
+  return iree_ok_status();
+}
+
+static iree_string_view_t loom_amdgpu_hal_kernel_abi_value_name(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  if (value_id >= module->values.count) {
+    return iree_string_view_empty();
+  }
+  const loom_string_id_t name_id = module->values.entries[value_id].name_id;
+  return loom_amdgpu_hal_kernel_abi_module_string(module, name_id);
+}
+
+static iree_status_t loom_amdgpu_hal_kernel_abi_direct_arg_from_block_arg(
+    const loom_module_t* module, const loom_block_t* entry_block,
+    uint16_t argument_index, uint32_t resource_count,
+    loom_amdgpu_hal_kernarg_direct_arg_t* out_direct_arg) {
+  const loom_value_id_t arg_id = loom_block_arg_id(entry_block, argument_index);
+  const uint64_t kernarg_offset =
+      (uint64_t)resource_count *
+          LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_SIZE +
+      (uint64_t)argument_index *
+          LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_SIZE;
+  *out_direct_arg = (loom_amdgpu_hal_kernarg_direct_arg_t){
+      .arg_id = arg_id,
+      .name = loom_amdgpu_hal_kernel_abi_value_name(module, arg_id),
+      .argument_index = argument_index,
+      .kernarg_offset = (uint32_t)kernarg_offset,
+      .kernarg_size = LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_SIZE,
+      .kernarg_alignment =
+          LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_ALIGNMENT,
+      .abi_type = loom_module_value_type(module, arg_id),
+  };
   return iree_ok_status();
 }
 
@@ -616,6 +665,36 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_resource_from_import(
       .abi_type =
           loom_module_value_type(module, loom_low_resource_result(resource_op)),
   };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_hal_kernel_abi_verify_direct_arguments(
+    const loom_module_t* module, const loom_op_t* function_op,
+    const loom_low_register_class_map_t* map, uint32_t max_errors,
+    iree_diagnostic_emitter_t emitter,
+    loom_amdgpu_hal_kernel_abi_verify_result_t* result) {
+  const loom_region_t* body = loom_low_function_const_body(function_op);
+  if (body == NULL || body->block_count == 0) {
+    return iree_ok_status();
+  }
+
+  const loom_block_t* entry_block = loom_region_const_entry_block(body);
+  uint16_t expected_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_reg_class_id(
+      LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR, &expected_reg_class_id));
+  for (uint16_t i = 0; i < entry_block->arg_count; ++i) {
+    const loom_value_id_t arg_id = loom_block_arg_id(entry_block, i);
+    bool type_matches = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_register_value_matches(
+        module, map, arg_id, LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR, 1,
+        &type_matches));
+    if (!type_matches) {
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_hal_kernel_abi_emit_direct_arg_type_error(
+              module, function_op, arg_id, i, expected_reg_class_id, 1,
+              max_errors, emitter, result));
+    }
+  }
   return iree_ok_status();
 }
 
@@ -997,6 +1076,9 @@ iree_status_t loom_amdgpu_hal_kernel_abi_verify_low(
   loom_low_register_class_map_t register_class_map = {0};
   IREE_RETURN_IF_ERROR(loom_low_register_class_map_initialize(
       module, descriptor_set, arena, &register_class_map));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_direct_arguments(
+      module, function_op, &register_class_map, max_errors, emitter,
+      out_result));
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_resources(
       module, function_op, &register_class_map, max_errors, emitter, out_result,
       arena));
@@ -1027,6 +1109,23 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
   }
 
   const loom_region_t* body = loom_low_function_const_body(function_op);
+  const loom_block_t* entry_block = body != NULL && body->block_count != 0
+                                        ? loom_region_const_entry_block(body)
+                                        : NULL;
+  const iree_host_size_t direct_arg_count =
+      entry_block != NULL ? entry_block->arg_count : 0;
+  bool direct_arg_used = false;
+  if (entry_block != NULL) {
+    for (uint16_t i = 0; i < entry_block->arg_count; ++i) {
+      const loom_value_id_t arg_id = loom_block_arg_id(entry_block, i);
+      const loom_value_t* arg_value = loom_module_value(module, arg_id);
+      if (arg_value->use_count != 0 ||
+          loom_module_value_has_type_uses(module, arg_id)) {
+        direct_arg_used = true;
+        break;
+      }
+    }
+  }
   iree_host_size_t resource_count = 0;
   if (body != NULL) {
     for (uint16_t block_index = 0; block_index < body->block_count;
@@ -1045,6 +1144,20 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
     return iree_make_status(
         IREE_STATUS_INTERNAL,
         "AMDGPU HAL kernel ABI layout called with an unverified resource set");
+  }
+  const uint64_t kernarg_resource_bytes =
+      (uint64_t)resource_count *
+      LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_SIZE;
+  const uint64_t kernarg_direct_arg_bytes =
+      (uint64_t)direct_arg_count *
+      LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_SIZE;
+  const uint64_t kernarg_segment_size = iree_align_uint64(
+      kernarg_resource_bytes + kernarg_direct_arg_bytes,
+      LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_ALIGNMENT);
+  if (kernarg_segment_size > UINT32_MAX || direct_arg_count > UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "AMDGPU HAL kernel ABI layout called with an "
+                            "unverified direct argument set");
   }
 
   loom_amdgpu_hal_kernarg_resource_t* resources = NULL;
@@ -1095,16 +1208,28 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
     }
   }
 
+  loom_amdgpu_hal_kernarg_direct_arg_t* direct_args = NULL;
+  if (direct_arg_count != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        arena, direct_arg_count, sizeof(*direct_args), (void**)&direct_args));
+    memset(direct_args, 0, direct_arg_count * sizeof(*direct_args));
+    for (uint16_t i = 0; i < entry_block->arg_count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_direct_arg_from_block_arg(
+          module, entry_block, i, (uint32_t)resource_count, &direct_args[i]));
+    }
+  }
+
   *out_layout = (loom_amdgpu_hal_kernel_abi_layout_t){
       .function_op = function_op,
-      .kernarg_segment_size =
-          (uint32_t)resource_count *
-          LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_SIZE,
+      .kernarg_segment_size = (uint32_t)kernarg_segment_size,
       .kernarg_segment_alignment =
           LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_ALIGNMENT,
-      .uses_kernarg_segment_ptr = true,
+      .uses_kernarg_segment_ptr = resource_count != 0 || direct_arg_used,
+      .constant_count = (uint32_t)direct_arg_count,
       .resources = resources,
       .resource_count = resource_count,
+      .direct_args = direct_args,
+      .direct_arg_count = direct_arg_count,
   };
 
   return iree_ok_status();

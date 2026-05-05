@@ -14,6 +14,7 @@
 #include "loom/ir/module.h"
 #include "loom/target/arch/amdgpu/occupancy_tables.h"
 #include "loom/target/arch/amdgpu/target_id.h"
+#include "loom/target/launch.h"
 #include "loom/target/types.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
@@ -368,12 +369,10 @@ static iree_status_t loom_amdgpu_occupancy_flat_workgroup_size(
   }
   const loom_target_workgroup_size_t size =
       export_plan->hal_kernel.required_workgroup_size;
-  uint64_t flat_size = (uint64_t)size.x * size.y * size.z;
-  if (flat_size > UINT32_MAX) {
+  if (!loom_target_workgroup_size_flat_product_u32(&size, out_flat_size)) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "AMDGPU workgroup size overflows uint32_t");
   }
-  *out_flat_size = (uint32_t)flat_size;
   return iree_ok_status();
 }
 

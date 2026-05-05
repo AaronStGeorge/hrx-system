@@ -301,9 +301,10 @@ loom_amdgpu_memory_access_bank_summary(
   summary.conflict_degree = loom_amdgpu_gcd_u32(summary.bank_stride_words,
                                                 LOOM_AMDGPU_LDS_BANK_COUNT);
   const uint32_t vector_footprint_bytes =
-      access->packet_byte_count != 0 ? access->packet_byte_count
-                                     : access->source.element_byte_count *
-                                           iree_max(access->vgpr_count, 1u);
+      access->packet_byte_count != 0
+          ? access->packet_byte_count
+          : access->source.element_byte_count *
+                iree_max(access->payload_register_count, 1u);
   if (summary.conflict_degree == 1) {
     summary.conflict_kind = term->byte_stride > vector_footprint_bytes
                                 ? IREE_SV("padded-bank-conflict-free")
@@ -347,7 +348,7 @@ iree_status_t loom_amdgpu_record_memory_access_diagnostic(
   return loom_target_low_legality_record_memory_access(
       context, op, loom_amdgpu_memory_space_name(access->source.memory_space),
       loom_amdgpu_memory_operation_name(kind), packet_key, IREE_SV("selected"),
-      access->source.element_byte_count, access->vgpr_count,
+      access->source.element_byte_count, access->payload_register_count,
       access->source.dynamic_term_count == 1
           ? access->source.dynamic_terms[0].byte_stride
           : 0,

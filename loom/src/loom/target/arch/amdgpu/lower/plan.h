@@ -85,12 +85,16 @@ typedef struct loom_amdgpu_vector_bitcast_plan_t {
 typedef struct loom_amdgpu_vector_extract_plan_t {
   // Source vector value containing 32-bit lanes.
   loom_value_id_t source;
+  // Optional dynamic source lane index, or invalid for static extraction.
+  loom_value_id_t dynamic_index;
   // Result scalar value receiving one extracted lane.
   loom_value_id_t result;
   // Static source lane offset.
   uint32_t lane_offset;
   // Static source lane count.
   uint32_t lane_count;
+  // True when extraction uses |dynamic_index| instead of |lane_offset|.
+  bool is_dynamic;
 } loom_amdgpu_vector_extract_plan_t;
 
 typedef struct loom_amdgpu_buffer_alloca_plan_t {
@@ -329,6 +333,16 @@ typedef enum loom_amdgpu_memory_operation_kind_e {
   LOOM_AMDGPU_MEMORY_OPERATION_STORE = 1,
 } loom_amdgpu_memory_operation_kind_t;
 
+typedef enum loom_amdgpu_memory_payload_register_class_e {
+  LOOM_AMDGPU_MEMORY_PAYLOAD_REGISTER_CLASS_VGPR = 0,
+  LOOM_AMDGPU_MEMORY_PAYLOAD_REGISTER_CLASS_SGPR = 1,
+} loom_amdgpu_memory_payload_register_class_t;
+
+typedef enum loom_amdgpu_memory_scalar_offset_placement_e {
+  LOOM_AMDGPU_MEMORY_SCALAR_OFFSET_PLACEMENT_SOFFSET = 0,
+  LOOM_AMDGPU_MEMORY_SCALAR_OFFSET_PLACEMENT_BASE = 1,
+} loom_amdgpu_memory_scalar_offset_placement_t;
+
 typedef struct loom_amdgpu_memory_access_t {
   // Target-independent source memory access plan being wrapped.
   loom_low_source_memory_access_plan_t source;
@@ -342,11 +356,17 @@ typedef struct loom_amdgpu_memory_access_t {
   // Static offset value encoded in the descriptor's second offset immediate.
   int64_t secondary_immediate_offset;
   // Static byte offset materialized through the VGPR VADDR operand.
-  uint32_t vaddr_static_byte_offset;
+  uint64_t vaddr_static_byte_offset;
   // Static byte offset materialized through the scalar SOFFSET operand.
   uint32_t scalar_byte_offset;
-  // Number of 32-bit VGPR lanes moved by the selected memory packet.
-  uint32_t vgpr_count;
+  // Static byte offset folded into the scalar base pointer.
+  uint64_t scalar_base_byte_offset;
+  // Location selected for scalar dynamic and static address terms.
+  loom_amdgpu_memory_scalar_offset_placement_t scalar_offset_placement;
+  // Register file selected for the memory packet payload.
+  loom_amdgpu_memory_payload_register_class_t payload_register_class;
+  // Number of 32-bit registers moved by the selected memory packet payload.
+  uint32_t payload_register_count;
   // Number of bytes moved by the selected memory packet.
   uint32_t packet_byte_count;
   // Descriptor row selected for the active descriptor set.

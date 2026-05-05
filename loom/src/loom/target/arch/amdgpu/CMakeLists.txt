@@ -87,6 +87,18 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_test(
+  NAME
+    encoding_test
+  SRCS
+    "encoding_test.cc"
+  DEPS
+    ::encoding
+    ::target_info
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_library(
   NAME
     ops
@@ -493,6 +505,7 @@ loom_cc_library(
     ::wait_packets
     iree::base
     loom::src::loom::analysis::contract_vector
+    loom::src::loom::analysis::view_regions
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::lower
@@ -1445,6 +1458,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::schedule
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::target::launch
     loom::src::loom::target::types
     loom::src::loom::util::json
     loom::src::loom::util::stream

@@ -476,6 +476,26 @@ ERR_AMDGPU_024 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_025: AMDGPU HAL-kernel ABI direct argument type is unsupported.
+ERR_AMDGPU_025 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=25,
+    severity=Severity.ERROR,
+    summary="AMDGPU HAL-kernel ABI direct argument type is unsupported.",
+    message=(
+        "AMDGPU HAL-kernel ABI direct argument {argument_index} requires "
+        "descriptor register-class ID {expected_reg_class_id} with "
+        "{expected_unit_count} unit(s), but found {actual_type}"
+    ),
+    params=(
+        ErrorParam("argument_index", ParamKind.U32),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("expected_reg_class_id", ParamKind.U32),
+        ErrorParam("expected_unit_count", ParamKind.U32),
+    ),
+    fix_hint="Lower direct HAL kernel arguments to the ABI register shape",
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_002,
@@ -501,4 +521,5 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_022,
     ERR_AMDGPU_023,
     ERR_AMDGPU_024,
+    ERR_AMDGPU_025,
 )

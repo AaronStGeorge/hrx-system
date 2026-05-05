@@ -11,6 +11,112 @@ func.def @global_saddr_fallback(%input: buffer, %output: buffer) {
 
 // ====
 
+kernel.def target(@target) @i32_readonly_uniform_smem(%input: buffer, %output: buffer) {
+  %unit = index.constant 1 : index
+  %workgroups = index.constant 16 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch {
+  %workgroup = kernel.workgroup.id<x> : index
+  %base = index.constant 0 : offset
+  %input_global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %input_noalias = buffer.assume.noalias %input_global : buffer
+  %output_global = buffer.assume.memory_space %output {memory_space = global} : buffer
+  %output_noalias = buffer.assume.noalias %output_global : buffer
+  %input_view = buffer.view %input_noalias[%base] : buffer -> view<16x2xi32, #dense>
+  %output_view = buffer.view %output_noalias[%base] : buffer -> view<16xi32, #dense>
+  %loaded = vector.load %input_view[%workgroup, 0] : view<16x2xi32, #dense> -> vector<2xi32>
+  %lane = vector.extract %loaded[0] : vector<2xi32> -> i32
+  view.store %lane, %output_view[%workgroup] : i32, view<16xi32, #dense>
+  kernel.return
+}
+
+// ====
+
+kernel.def target(@target) @i32_workgroup_global_saddr(%input: buffer, %output: buffer) {
+  %unit = index.constant 1 : index
+  %workgroups = index.constant 16 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch {
+  %workgroup = kernel.workgroup.id<x> : index
+  %column = kernel.workitem.id<x> : index
+  %base = index.constant 0 : offset
+  %input_view = buffer.view %input[%base] : buffer -> view<16x64xf16, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<16x64xf16, #dense>
+  %loaded = view.load %input_view[%workgroup, %column] : view<16x64xf16, #dense> -> f16
+  view.store %loaded, %output_view[%workgroup, %column] : f16, view<16x64xf16, #dense>
+  kernel.return
+}
+
+// ====
+
+kernel.def target(@target) @i32_dynamic_leading_dim_global_saddr(%output: buffer, %columns_i32: i32) {
+  %unit = index.constant 1 : index
+  %workgroups_x = index.constant 2 : index
+  %workgroup_size = index.constant 32 : index
+  kernel.launch.config workgroups(%workgroups_x, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch {
+  %workgroup = kernel.workgroup.id<x> : index
+  %column = kernel.workitem.id<x> : index
+  %base = index.constant 0 : offset
+  %columns = index.cast %columns_i32 : i32 to index
+  %output_global = buffer.assume.memory_space %output {memory_space = global} : buffer
+  %output_view = buffer.view %output_global[%base] : buffer -> view<2x[%columns]x8xi32, #dense>
+  %zero = scalar.constant 0 : i32
+  view.store %zero, %output_view[%workgroup, %column, 0] : i32, view<2x[%columns]x8xi32, #dense>
+  kernel.return
+}
+
+// ====
+
+kernel.def target(@target) @i32_readonly_uniform_smem_non_power_two_stride(%input: buffer, %output: buffer) {
+  %unit = index.constant 1 : index
+  %workgroups = index.constant 2 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch {
+  %workgroup = kernel.workgroup.id<x> : index
+  %base = index.constant 0 : offset
+  %input_global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %input_noalias = buffer.assume.noalias %input_global : buffer
+  %output_global = buffer.assume.memory_space %output {memory_space = global} : buffer
+  %input_view = buffer.view %input_noalias[%base] : buffer -> view<2x3xi32, #dense>
+  %output_view = buffer.view %output_global[%base] : buffer -> view<2xi32, #dense>
+  %loaded = view.load %input_view[%workgroup, 0] : view<2x3xi32, #dense> -> i32
+  view.store %loaded, %output_view[%workgroup] : i32, view<2xi32, #dense>
+  kernel.return
+}
+
+// ====
+
+kernel.def target(@target) @i32_readonly_uniform_smem_scalar_branch(%input: buffer, %output: buffer) {
+  %unit = index.constant 1 : index
+  %workgroups = index.constant 16 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch {
+  %workgroup = kernel.workgroup.id<x> : index
+  %base = index.constant 0 : offset
+  %input_global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %input_noalias = buffer.assume.noalias %input_global : buffer
+  %output_global = buffer.assume.memory_space %output {memory_space = global} : buffer
+  %output_noalias = buffer.assume.noalias %output_global : buffer
+  %input_view = buffer.view %input_noalias[%base] : buffer -> view<16xi32, #dense>
+  %output_view = buffer.view %output_noalias[%base] : buffer -> view<16xi32, #dense>
+  %loaded = view.load %input_view[%workgroup] : view<16xi32, #dense> -> i32
+  %zero = scalar.constant 0 : i32
+  %negative = scalar.cmpi slt, %loaded, %zero : i32
+  cfg.cond_br %negative, ^then, ^join : i1
+^then:
+  view.store %zero, %output_view[%workgroup] : i32, view<16xi32, #dense>
+  cfg.br ^join
+^join:
+  kernel.return
+}
+
+// ====
+
 kernel.def @i32_b128(%input: buffer, %output: buffer) {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index

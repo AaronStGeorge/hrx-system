@@ -41,6 +41,7 @@ typedef enum loom_amdgpu_memory_address_form_e {
   LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR = 3,
   LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID = 4,
   LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT = 5,
+  LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SMEM = 6,
 } loom_amdgpu_memory_address_form_t;
 
 typedef enum loom_amdgpu_atomic_operation_kind_e {
