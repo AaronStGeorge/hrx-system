@@ -27,10 +27,14 @@ _ensure_runtime_py_on_path()
 
 from loom.gen.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.amdgpu.descriptors import (  # noqa: E402
-    AMDGPU_DESCRIPTOR_SET_BUILDERS,
     amdgpu_common_reg_class_ids,
     amdgpu_descriptor_ref_keys,
     amdgpu_immediate_encoding_id_items,
+    build_amdgpu_core_descriptor_set_from_spec,
+)
+from loom.target.arch.amdgpu.isa_xml import (  # noqa: E402
+    AmdgpuIsaFactSource,
+    parse_amdgpu_isa_xml_path,
 )
 from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     amdgpu_descriptor_set_ordinal,
@@ -57,14 +61,14 @@ def _parse_isa_xml_argument(value: str) -> tuple[str, Path]:
     return key, Path(path)
 
 
-def _parse_isa_xml_arguments(values: Sequence[str]) -> dict[str, Path]:
-    paths: dict[str, Path] = {}
+def _parse_isa_xml_arguments(values: Sequence[str]) -> dict[str, AmdgpuIsaFactSource]:
+    specs: dict[str, AmdgpuIsaFactSource] = {}
     for value in values:
         key, path = _parse_isa_xml_argument(value)
-        if key in paths:
+        if key in specs:
             raise ValueError(f"AMDGPU target-ref ISA XML key '{key}' is duplicate")
-        paths[key] = path
-    return paths
+        specs[key] = parse_amdgpu_isa_xml_path(path)
+    return specs
 
 
 def _c_identifier(value: str) -> str:
@@ -98,17 +102,19 @@ def _descriptor_set_table_name(key: str) -> str:
 
 
 def _materialize_descriptor_ref_tables(
-    isa_xml_paths: Mapping[str, Path],
+    isa_specs: Mapping[str, AmdgpuIsaFactSource],
 ) -> list[tuple[int, str, list[int | None]]]:
     descriptor_ref_keys = amdgpu_descriptor_ref_keys()
     descriptor_set_tables: list[tuple[int, str, list[int | None]]] = []
     for descriptor_set_info in sorted_descriptor_set_infos():
         try:
-            xml_path = isa_xml_paths[descriptor_set_info.isa_xml_key]
+            spec = isa_specs[descriptor_set_info.isa_xml_key]
         except KeyError as exc:
             raise ValueError(f"AMDGPU target-ref generator is missing ISA XML key '{descriptor_set_info.isa_xml_key}'") from exc
-        builder = AMDGPU_DESCRIPTOR_SET_BUILDERS[descriptor_set_info.generator_target]
-        descriptor_set = builder(xml_path)
+        descriptor_set = build_amdgpu_core_descriptor_set_from_spec(
+            descriptor_set_info.generator_target,
+            spec,
+        )
         if descriptor_set.key != descriptor_set_info.key:
             raise ValueError(f"AMDGPU descriptor-set builder '{descriptor_set_info.generator_target}' produced '{descriptor_set.key}', expected '{descriptor_set_info.key}'")
         descriptor_ordinals = {descriptor.key: ordinal for ordinal, descriptor in enumerate(descriptor_set.descriptors)}
@@ -184,10 +190,10 @@ def _emit_source(
     *,
     public_header: str,
     source_path: Path,
-    isa_xml_paths: Mapping[str, Path],
+    isa_specs: Mapping[str, AmdgpuIsaFactSource],
     format_output: bool,
 ) -> str:
-    descriptor_set_tables = _materialize_descriptor_ref_tables(isa_xml_paths)
+    descriptor_set_tables = _materialize_descriptor_ref_tables(isa_specs)
     lines = [
         "// Copyright 2026 The IREE Authors",
         "//",
@@ -286,7 +292,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    isa_xml_paths = _parse_isa_xml_arguments(args.isa_xml)
+    isa_specs = _parse_isa_xml_arguments(args.isa_xml)
     args.header.parent.mkdir(parents=True, exist_ok=True)
     args.source.parent.mkdir(parents=True, exist_ok=True)
     args.header.write_text(
@@ -297,7 +303,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         _emit_source(
             public_header=args.public_header,
             source_path=args.source,
-            isa_xml_paths=isa_xml_paths,
+            isa_specs=isa_specs,
             format_output=True,
         ),
         encoding="utf-8",

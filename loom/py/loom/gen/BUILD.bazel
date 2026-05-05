@@ -241,6 +241,23 @@ py_binary(
     ],
 )
 
+py_test(
+    name = "amdgpu_descriptors_test",
+    srcs = [
+        "amdgpu_descriptors.py",
+        "amdgpu_descriptors_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.amdgpu_descriptors_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":low_descriptors",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
+    ],
+)
+
 py_binary(
     name = "amdgpu_target_refs",
     srcs = ["amdgpu_target_refs.py"],

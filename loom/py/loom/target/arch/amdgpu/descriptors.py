@@ -8253,95 +8253,66 @@ def _with_overlay_descriptors(
     return descriptor_set
 
 
-def build_amdgpu_cdna4_core_descriptor_set(
-    xml_path: str | Path,
-) -> DescriptorSet:
-    spec = parse_amdgpu_isa_xml_path(xml_path)
-    validate_amdgpu_descriptor_set_isa_xml(
-        amdgpu_descriptor_set_info_by_generator_target("cdna4"), spec
-    )
-    return _with_overlay_descriptors(
-        _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE,
-        spec,
-        _gfx950_core_overlay_descriptors(spec),
-    )
+@dataclass(frozen=True, slots=True)
+class _AmdgpuCoreDescriptorSetBuilder:
+    base: DescriptorSet
+    overlay_descriptors: Callable[[AmdgpuIsaFactSource], tuple[Descriptor, ...]]
 
 
-def build_amdgpu_cdna3_core_descriptor_set(
-    xml_path: str | Path,
-) -> DescriptorSet:
-    spec = parse_amdgpu_isa_xml_path(xml_path)
-    validate_amdgpu_descriptor_set_isa_xml(
-        amdgpu_descriptor_set_info_by_generator_target("cdna3"), spec
-    )
-    return _with_overlay_descriptors(
-        _AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE,
-        spec,
-        _gfx940_core_overlay_descriptors(spec),
-    )
-
-
-def build_amdgpu_rdna3_core_descriptor_set(
-    xml_path: str | Path,
-) -> DescriptorSet:
-    spec = parse_amdgpu_isa_xml_path(xml_path)
-    validate_amdgpu_descriptor_set_isa_xml(
-        amdgpu_descriptor_set_info_by_generator_target("rdna3"), spec
-    )
-    return _with_overlay_descriptors(
-        _AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE,
-        spec,
-        _gfx11_core_overlay_descriptors(spec),
-    )
-
-
-def build_amdgpu_rdna4_core_descriptor_set(
-    xml_path: str | Path,
-) -> DescriptorSet:
-    spec = parse_amdgpu_isa_xml_path(xml_path)
-    validate_amdgpu_descriptor_set_isa_xml(
-        amdgpu_descriptor_set_info_by_generator_target("rdna4"), spec
-    )
-    return _with_overlay_descriptors(
-        _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE,
-        spec,
-        _gfx12_core_overlay_descriptors(spec),
-    )
-
-
-def build_amdgpu_rdna4_gfx125x_core_descriptor_set(
-    xml_path: str | Path,
-) -> DescriptorSet:
-    spec = parse_amdgpu_isa_xml_path(xml_path)
-    validate_amdgpu_descriptor_set_isa_xml(
-        amdgpu_descriptor_set_info_by_generator_target("rdna4_gfx125x"), spec
-    )
-    return _with_overlay_descriptors(
-        _AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE,
-        spec,
-        _gfx1250_core_overlay_descriptors(spec),
-    )
-
-
-AMDGPU_DESCRIPTOR_SET_BUILDERS = {
-    "cdna3": build_amdgpu_cdna3_core_descriptor_set,
-    "cdna4": build_amdgpu_cdna4_core_descriptor_set,
-    "rdna3": build_amdgpu_rdna3_core_descriptor_set,
-    "rdna4": build_amdgpu_rdna4_core_descriptor_set,
-    "rdna4_gfx125x": build_amdgpu_rdna4_gfx125x_core_descriptor_set,
+_AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS = {
+    "cdna3": _AmdgpuCoreDescriptorSetBuilder(
+        base=_AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE,
+        overlay_descriptors=_gfx940_core_overlay_descriptors,
+    ),
+    "cdna4": _AmdgpuCoreDescriptorSetBuilder(
+        base=_AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE,
+        overlay_descriptors=_gfx950_core_overlay_descriptors,
+    ),
+    "rdna3": _AmdgpuCoreDescriptorSetBuilder(
+        base=_AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE,
+        overlay_descriptors=_gfx11_core_overlay_descriptors,
+    ),
+    "rdna4": _AmdgpuCoreDescriptorSetBuilder(
+        base=_AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE,
+        overlay_descriptors=_gfx12_core_overlay_descriptors,
+    ),
+    "rdna4_gfx125x": _AmdgpuCoreDescriptorSetBuilder(
+        base=_AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE,
+        overlay_descriptors=_gfx1250_core_overlay_descriptors,
+    ),
 }
+
+AMDGPU_DESCRIPTOR_SET_GENERATOR_TARGETS = tuple(
+    sorted(_AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS)
+)
+
+
+def build_amdgpu_core_descriptor_set_from_spec(
+    target: str,
+    spec: AmdgpuIsaFactSource,
+) -> DescriptorSet:
+    try:
+        builder = _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS[target]
+    except KeyError as exc:
+        supported = ", ".join(AMDGPU_DESCRIPTOR_SET_GENERATOR_TARGETS)
+        raise ValueError(
+            f"unsupported AMDGPU descriptor target '{target}'; "
+            f"expected one of: {supported}"
+        ) from exc
+    validate_amdgpu_descriptor_set_isa_xml(
+        amdgpu_descriptor_set_info_by_generator_target(target), spec
+    )
+    return _with_overlay_descriptors(
+        builder.base,
+        spec,
+        builder.overlay_descriptors(spec),
+    )
 
 
 def build_amdgpu_core_descriptor_set(
     target: str,
     xml_path: str | Path,
 ) -> DescriptorSet:
-    try:
-        builder = AMDGPU_DESCRIPTOR_SET_BUILDERS[target]
-    except KeyError as exc:
-        supported = ", ".join(sorted(AMDGPU_DESCRIPTOR_SET_BUILDERS))
-        raise ValueError(
-            f"unsupported AMDGPU descriptor target '{target}'; "
-            f"expected one of: {supported}"
-        ) from exc
-    return builder(xml_path)
+    return build_amdgpu_core_descriptor_set_from_spec(
+        target, parse_amdgpu_isa_xml_path(xml_path)
+    )

@@ -30,9 +30,10 @@ from loom.gen.low_descriptors import (  # noqa: E402
     write_descriptor_set_to_paths,
 )
 from loom.target.arch.amdgpu.descriptors import (  # noqa: E402
-    AMDGPU_DESCRIPTOR_SET_BUILDERS,
-    build_amdgpu_core_descriptor_set,
+    AMDGPU_DESCRIPTOR_SET_GENERATOR_TARGETS,
+    build_amdgpu_core_descriptor_set_from_spec,
 )
+from loom.target.arch.amdgpu.isa_xml import parse_amdgpu_isa_xml_path  # noqa: E402
 from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AmdgpuDescriptorSetInfo,
     amdgpu_descriptor_set_info_by_generator_target,
@@ -92,7 +93,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--target",
         required=True,
-        choices=sorted(AMDGPU_DESCRIPTOR_SET_BUILDERS),
+        choices=AMDGPU_DESCRIPTOR_SET_GENERATOR_TARGETS,
         help="AMDGPU descriptor target shard to generate.",
     )
     parser.add_argument(
@@ -126,10 +127,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     storage_info = amdgpu_descriptor_set_storage_info_by_generator_target(args.target)
     if storage_info != descriptor_set_info:
         raise ValueError(f"AMDGPU descriptor target {args.target} is a view of storage target {storage_info.generator_target}; generate the storage target with --view-header instead")
-    descriptor_set = build_amdgpu_core_descriptor_set(args.target, args.xml)
     view_infos = _view_infos_for_storage_target(descriptor_set_info, view_headers)
+    spec = parse_amdgpu_isa_xml_path(args.xml)
+    descriptor_set = build_amdgpu_core_descriptor_set_from_spec(args.target, spec)
     if view_infos:
-        view_descriptor_sets = tuple(build_amdgpu_core_descriptor_set(info.generator_target, args.xml) for info in view_infos)
+        view_descriptor_sets = tuple(build_amdgpu_core_descriptor_set_from_spec(info.generator_target, spec) for info in view_infos)
         storage_descriptor_set = _shared_storage_descriptor_set(
             descriptor_set,
             view_descriptor_sets,

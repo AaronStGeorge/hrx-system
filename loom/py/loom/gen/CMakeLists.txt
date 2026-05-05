@@ -271,6 +271,18 @@ iree_py_library(
     iree::runtime::py::loom::target::arch::amdgpu::target_info
 )
 
+iree_py_test(
+  NAME
+    amdgpu_descriptors_test
+  SRCS
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.gen.amdgpu_descriptors_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
+)
+
 iree_py_library(
   NAME
     amdgpu_target_refs
