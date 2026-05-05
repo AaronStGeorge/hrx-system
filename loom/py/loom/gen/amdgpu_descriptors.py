@@ -33,6 +33,13 @@ from loom.target.arch.amdgpu.descriptors import (  # noqa: E402
     AMDGPU_DESCRIPTOR_SET_BUILDERS,
     build_amdgpu_core_descriptor_set,
 )
+from loom.target.arch.amdgpu.target_info import (  # noqa: E402
+    AmdgpuDescriptorSetInfo,
+    amdgpu_descriptor_set_info_by_generator_target,
+    amdgpu_descriptor_set_storage_info_by_generator_target,
+    amdgpu_descriptor_set_view_infos_by_storage_generator_target,
+)
+from loom.target.low_descriptors import DescriptorSet  # noqa: E402
 
 
 def _parse_view_headers(values: Sequence[str]) -> dict[str, Path]:
@@ -45,6 +52,39 @@ def _parse_view_headers(values: Sequence[str]) -> dict[str, Path]:
             raise ValueError(f"duplicate AMDGPU descriptor view header for {target}")
         view_headers[target] = Path(path)
     return view_headers
+
+
+def _view_infos_for_storage_target(
+    storage_info: AmdgpuDescriptorSetInfo,
+    view_headers: dict[str, Path],
+) -> tuple[AmdgpuDescriptorSetInfo, ...]:
+    view_infos = amdgpu_descriptor_set_view_infos_by_storage_generator_target(storage_info.generator_target)
+    expected_view_targets = {info.generator_target for info in view_infos}
+    unknown_view_headers = set(view_headers) - expected_view_targets
+    if unknown_view_headers:
+        unknown_targets = ", ".join(sorted(unknown_view_headers))
+        raise ValueError(f"AMDGPU descriptor target {storage_info.generator_target} cannot emit view headers for: {unknown_targets}")
+    return view_infos
+
+
+def _shared_storage_descriptor_set(
+    storage_descriptor_set: DescriptorSet,
+    view_descriptor_sets: Sequence[DescriptorSet],
+) -> DescriptorSet:
+    backing_descriptor_set = max(
+        (storage_descriptor_set, *view_descriptor_sets),
+        key=lambda descriptor_set: (
+            len(descriptor_set.descriptors),
+            len(descriptor_set.resources),
+            len(descriptor_set.schedule_classes),
+        ),
+    )
+    return replace(
+        storage_descriptor_set,
+        descriptors=backing_descriptor_set.descriptors,
+        resources=backing_descriptor_set.resources,
+        schedule_classes=backing_descriptor_set.schedule_classes,
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -82,18 +122,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     view_headers = _parse_view_headers(args.view_header)
+    descriptor_set_info = amdgpu_descriptor_set_info_by_generator_target(args.target)
+    storage_info = amdgpu_descriptor_set_storage_info_by_generator_target(args.target)
+    if storage_info != descriptor_set_info:
+        raise ValueError(f"AMDGPU descriptor target {args.target} is a view of storage target {storage_info.generator_target}; generate the storage target with --view-header instead")
     descriptor_set = build_amdgpu_core_descriptor_set(args.target, args.xml)
-    if args.target == "rdna4":
-        unknown_view_headers = set(view_headers) - {"rdna4_gfx125x"}
-        if unknown_view_headers:
-            unknown_targets = ", ".join(sorted(unknown_view_headers))
-            raise ValueError(f"RDNA4 descriptor generation cannot emit view headers for: {unknown_targets}")
-        gfx125x_descriptor_set = build_amdgpu_core_descriptor_set("rdna4_gfx125x", args.xml)
-        storage_descriptor_set = replace(
+    view_infos = _view_infos_for_storage_target(descriptor_set_info, view_headers)
+    if view_infos:
+        view_descriptor_sets = tuple(build_amdgpu_core_descriptor_set(info.generator_target, args.xml) for info in view_infos)
+        storage_descriptor_set = _shared_storage_descriptor_set(
             descriptor_set,
-            descriptors=gfx125x_descriptor_set.descriptors,
-            resources=gfx125x_descriptor_set.resources,
-            schedule_classes=gfx125x_descriptor_set.schedule_classes,
+            view_descriptor_sets,
         )
         generated = generate_descriptor_set(descriptor_set, format_output=False)
         args.header.parent.mkdir(parents=True, exist_ok=True)
@@ -102,51 +141,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.source.write_text(
             generate_descriptor_set_shared_source(
                 storage_descriptor_set,
-                (descriptor_set, gfx125x_descriptor_set),
+                (descriptor_set, *view_descriptor_sets),
                 format_output=False,
             ),
             encoding="utf-8",
         )
-        gfx125x_header_path = view_headers.get("rdna4_gfx125x")
-        if gfx125x_header_path is not None:
-            gfx125x_generated = generate_descriptor_set(
-                gfx125x_descriptor_set,
+        for view_info, view_descriptor_set in zip(view_infos, view_descriptor_sets, strict=True):
+            view_header_path = view_headers.get(view_info.generator_target)
+            if view_header_path is None:
+                continue
+            view_generated = generate_descriptor_set(
+                view_descriptor_set,
                 format_output=False,
             )
-            gfx125x_header_path.parent.mkdir(parents=True, exist_ok=True)
-            gfx125x_header_path.write_text(
-                gfx125x_generated.header,
+            view_header_path.parent.mkdir(parents=True, exist_ok=True)
+            view_header_path.write_text(
+                view_generated.header,
                 encoding="utf-8",
             )
-        return 0
-
-    if view_headers:
-        unknown_targets = ", ".join(sorted(view_headers))
-        raise ValueError(f"AMDGPU descriptor target {args.target} cannot emit view headers for: {unknown_targets}")
-
-    if args.target == "rdna4_gfx125x":
-        generated = generate_descriptor_set(descriptor_set, format_output=False)
-        args.header.parent.mkdir(parents=True, exist_ok=True)
-        args.source.parent.mkdir(parents=True, exist_ok=True)
-        args.header.write_text(generated.header, encoding="utf-8")
-        args.source.write_text(
-            "\n".join(
-                [
-                    "// Copyright 2026 The IREE Authors",
-                    "//",
-                    "// Licensed under the Apache License v2.0 with LLVM Exceptions.",
-                    "// See https://llvm.org/LICENSE.txt for license information.",
-                    "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
-                    "",
-                    f'#include "{descriptor_set.public_header}"',
-                    "",
-                    "// The gfx125x descriptor-set provider and backing storage are",
-                    "// emitted with the shared RDNA4 descriptor source.",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
         return 0
 
     write_descriptor_set_to_paths(

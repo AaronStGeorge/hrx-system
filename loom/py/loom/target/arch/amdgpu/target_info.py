@@ -56,6 +56,7 @@ class AmdgpuDescriptorSetInfo:
     isa_architecture_name: str
     isa_architecture_id: int
     supports_descriptor_packet_encoding: bool
+    storage_generator_target: str | None = None
     buffer_resource_cache_swizzle: str = AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE
     vector_memory_cache_policy_encoding: str = (
         AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE
@@ -186,6 +187,7 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         isa_architecture_name="AMD RDNA 4",
         isa_architecture_id=10,
         supports_descriptor_packet_encoding=True,
+        storage_generator_target="rdna4",
         vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
     ),
     AmdgpuDescriptorSetInfo(
@@ -478,6 +480,46 @@ def amdgpu_descriptor_set_info_by_generator_target(
         if info.generator_target == generator_target:
             return info
     raise ValueError(f"unknown AMDGPU descriptor generator target '{generator_target}'")
+
+
+def amdgpu_descriptor_set_storage_info_by_generator_target(
+    generator_target: str,
+) -> AmdgpuDescriptorSetInfo:
+    info = amdgpu_descriptor_set_info_by_generator_target(generator_target)
+    if info.storage_generator_target is None:
+        return info
+    storage_info = amdgpu_descriptor_set_info_by_generator_target(
+        info.storage_generator_target
+    )
+    if storage_info.storage_generator_target is not None:
+        raise ValueError(
+            f"AMDGPU descriptor generator target '{generator_target}' uses "
+            f"view-only target '{storage_info.generator_target}' as storage"
+        )
+    return storage_info
+
+
+def amdgpu_descriptor_set_view_infos_by_storage_generator_target(
+    storage_generator_target: str,
+) -> tuple[AmdgpuDescriptorSetInfo, ...]:
+    storage_info = amdgpu_descriptor_set_info_by_generator_target(
+        storage_generator_target
+    )
+    if storage_info.storage_generator_target is not None:
+        raise ValueError(
+            f"AMDGPU descriptor generator target '{storage_generator_target}' "
+            "is a view target, not a storage target"
+        )
+    return tuple(
+        sorted(
+            (
+                info
+                for info in AMDGPU_DESCRIPTOR_SET_INFOS
+                if info.storage_generator_target == storage_generator_target
+            ),
+            key=lambda info: info.key,
+        )
+    )
 
 
 def validate_amdgpu_descriptor_set_isa_xml(

@@ -43,8 +43,11 @@ from loom.target.arch.amdgpu.isa_xml import (  # noqa: E402
     parse_amdgpu_isa_xml_path,
 )
 from loom.target.arch.amdgpu.target_info import (  # noqa: E402
+    AmdgpuDescriptorSetInfo,
     amdgpu_descriptor_set_info_by_generator_target,
     amdgpu_descriptor_set_ordinal,
+    amdgpu_descriptor_set_storage_info_by_generator_target,
+    amdgpu_descriptor_set_view_infos_by_storage_generator_target,
     validate_amdgpu_descriptor_set_isa_xml,
 )
 
@@ -83,6 +86,37 @@ def _parse_view_headers(values: Sequence[str]) -> dict[str, Path]:
             raise ValueError(f"duplicate AMDGPU encoding view header for {target}")
         view_headers[target] = Path(path)
     return view_headers
+
+
+def _table_prefix_for_target(target: str) -> str:
+    return "Amdgpu" + "".join(part.title() for part in target.split("_"))
+
+
+def _table_function_for_target(target: str) -> str:
+    return f"loom_amdgpu_{target}_encoding_table"
+
+
+def _encoding_table_view_for_info(
+    info: AmdgpuDescriptorSetInfo,
+) -> _EncodingTableView:
+    return _EncodingTableView(
+        descriptor_set_key=info.key,
+        table_prefix=_table_prefix_for_target(info.generator_target),
+        table_function=_table_function_for_target(info.generator_target),
+    )
+
+
+def _view_infos_for_storage_target(
+    storage_info: AmdgpuDescriptorSetInfo,
+    view_headers: dict[str, Path],
+) -> tuple[AmdgpuDescriptorSetInfo, ...]:
+    view_infos = amdgpu_descriptor_set_view_infos_by_storage_generator_target(storage_info.generator_target)
+    expected_view_targets = {info.generator_target for info in view_infos}
+    unknown_view_headers = set(view_headers) - expected_view_targets
+    if unknown_view_headers:
+        unknown_targets = ", ".join(sorted(unknown_view_headers))
+        raise ValueError(f"AMDGPU encoding target {storage_info.generator_target} cannot emit view headers for: {unknown_targets}")
+    return view_infos
 
 
 def _clang_format_source(source: str, assume_filename: Path) -> str:
@@ -542,17 +576,14 @@ def _parse_arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_arguments(argv)
     view_headers = _parse_view_headers(args.view_header)
-    spec = parse_amdgpu_isa_xml_path(args.xml)
     descriptor_set_info = amdgpu_descriptor_set_info_by_generator_target(args.target)
     if descriptor_set_info.key != args.descriptor_set_key:
         raise ValueError(f"AMDGPU encoding target {args.target} expects descriptor set '{descriptor_set_info.key}', found '{args.descriptor_set_key}'")
-    if args.target != "rdna4" and view_headers:
-        unknown_targets = ", ".join(sorted(view_headers))
-        raise ValueError(f"AMDGPU encoding target {args.target} cannot emit view headers for: {unknown_targets}")
-    unknown_view_headers = set(view_headers) - {"rdna4_gfx125x"}
-    if unknown_view_headers:
-        unknown_targets = ", ".join(sorted(unknown_view_headers))
-        raise ValueError(f"RDNA4 encoding generation cannot emit view headers for: {unknown_targets}")
+    storage_info = amdgpu_descriptor_set_storage_info_by_generator_target(args.target)
+    if storage_info != descriptor_set_info:
+        raise ValueError(f"AMDGPU encoding target {args.target} is a view of storage target {storage_info.generator_target}; generate the storage target with --view-header instead")
+    view_infos = _view_infos_for_storage_target(descriptor_set_info, view_headers)
+    spec = parse_amdgpu_isa_xml_path(args.xml)
     validate_amdgpu_descriptor_set_isa_xml(descriptor_set_info, spec)
     source_literal = spec.operand_predefined_value("OPR_SRC", "SRC_LITERAL")
     scalar_source_literal = spec.operand_predefined_value("OPR_SSRC", "SRC_LITERAL")
@@ -572,8 +603,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         name_pattern=re.compile(r"v([0-9]+)"),
         description="OPR_SRC VGPR",
     )
-    table_prefix = "Amdgpu" + "".join(part.title() for part in args.target.split("_"))
-    table_function = f"loom_amdgpu_{args.target}_encoding_table"
+    table_prefix = _table_prefix_for_target(args.target)
+    table_function = _table_function_for_target(args.target)
     args.header.parent.mkdir(parents=True, exist_ok=True)
     args.source.parent.mkdir(parents=True, exist_ok=True)
     args.header.write_text(
@@ -584,53 +615,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
         encoding="utf-8",
     )
-    gfx125x_header_path = view_headers.get("rdna4_gfx125x")
-    if gfx125x_header_path is not None:
-        gfx125x_header_path.parent.mkdir(parents=True, exist_ok=True)
-        gfx125x_header_path.write_text(
+    for view_info in view_infos:
+        view_header_path = view_headers.get(view_info.generator_target)
+        if view_header_path is None:
+            continue
+        view_header_path.parent.mkdir(parents=True, exist_ok=True)
+        view_header_path.write_text(
             _emit_header_for_target(
-                target="rdna4_gfx125x",
+                target=view_info.generator_target,
                 format_output=args.format,
-                header_path=gfx125x_header_path,
+                header_path=view_header_path,
             ),
             encoding="utf-8",
         )
-
-    if args.target == "rdna4_gfx125x":
-        args.source.write_text(
-            "\n".join(
-                [
-                    "// Copyright 2026 The IREE Authors",
-                    "//",
-                    "// Licensed under the Apache License v2.0 with LLVM Exceptions.",
-                    "// See https://llvm.org/LICENSE.txt for license information.",
-                    "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
-                    "",
-                    f'#include "{args.public_header}"',
-                    "",
-                    "// The gfx125x encoding-table provider and backing storage are",
-                    "// emitted with the shared RDNA4 encoding-table source.",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        return 0
 
     table_views: tuple[_EncodingTableView, ...] = ()
-    if args.target == "rdna4":
-        gfx125x_descriptor_set_key = amdgpu_descriptor_set_info_by_generator_target("rdna4_gfx125x").key
+    if view_infos:
         table_views = (
-            _EncodingTableView(
-                descriptor_set_key=descriptor_set_info.key,
-                table_prefix=table_prefix,
-                table_function=table_function,
-            ),
-            _EncodingTableView(
-                descriptor_set_key=gfx125x_descriptor_set_key,
-                table_prefix="AmdgpuRdna4Gfx125X",
-                table_function="loom_amdgpu_rdna4_gfx125x_encoding_table",
-            ),
+            _encoding_table_view_for_info(descriptor_set_info),
+            *(_encoding_table_view_for_info(view_info) for view_info in view_infos),
         )
     args.source.write_text(
         _emit_source(

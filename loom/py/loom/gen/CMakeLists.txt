@@ -266,7 +266,9 @@ iree_py_library(
     "amdgpu_descriptors.py"
   DEPS
     iree::runtime::py::loom::gen::low_descriptors
+    iree::runtime::py::loom::target::low_descriptors
     iree::runtime::py::loom::target::arch::amdgpu::descriptors
+    iree::runtime::py::loom::target::arch::amdgpu::target_info
 )
 
 iree_py_library(

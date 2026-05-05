@@ -208,6 +208,7 @@ def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
     generator_targets = [info.generator_target for info in descriptor_sets]
     if len(generator_targets) != len(set(generator_targets)):
         raise ValueError("AMDGPU descriptor generator targets must be unique")
+    infos_by_generator_target = {info.generator_target: info for info in descriptor_sets}
     for info in descriptor_sets:
         if not info.generator_target:
             raise ValueError("AMDGPU descriptor generator target is required")
@@ -219,6 +220,18 @@ def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
             raise ValueError(f"AMDGPU ISA XML architecture name is required for {info.key}")
         if info.isa_architecture_id <= 0:
             raise ValueError(f"AMDGPU ISA XML architecture id is required for {info.key}")
+        if info.storage_generator_target is not None:
+            if not info.storage_generator_target:
+                raise ValueError(f"AMDGPU storage generator target is required for {info.key}")
+            if info.storage_generator_target == info.generator_target:
+                raise ValueError(f"AMDGPU descriptor set {info.key} cannot store itself as a view")
+            storage_info = infos_by_generator_target.get(info.storage_generator_target)
+            if storage_info is None:
+                raise ValueError(f"AMDGPU descriptor set {info.key} references unknown storage generator target '{info.storage_generator_target}'")
+            if storage_info.storage_generator_target is not None:
+                raise ValueError(f"AMDGPU descriptor set {info.key} uses view-only target '{storage_info.generator_target}' as storage")
+            if storage_info.isa_xml_key != info.isa_xml_key:
+                raise ValueError(f"AMDGPU descriptor set {info.key} storage target '{storage_info.generator_target}' uses ISA XML key '{storage_info.isa_xml_key}', expected '{info.isa_xml_key}'")
         _buffer_resource_cache_swizzle_expr(info.buffer_resource_cache_swizzle)
         _vector_memory_cache_policy_encoding_expr(info.vector_memory_cache_policy_encoding)
 

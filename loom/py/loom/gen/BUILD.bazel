@@ -235,7 +235,9 @@ py_binary(
     main = "amdgpu_descriptors.py",
     deps = [
         ":low_descriptors",
+        "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/arch/amdgpu:descriptors",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
     ],
 )
 
