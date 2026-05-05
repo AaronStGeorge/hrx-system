@@ -26,12 +26,27 @@ static iree_status_t loom_vector_to_scalar_emit_transform_unimplemented(
     loom_vector_to_scalar_state_t* state, iree_string_view_t reason) {
   loom_diagnostic_param_t params[] = {
       loom_param_string(loom_op_name(state->rewriter->module, state->op)),
-      loom_param_string(IREE_SV("vector-to-scalar")),
+      loom_param_string(state->pass->info->name),
       loom_param_string(reason),
   };
   loom_diagnostic_emission_t emission = {
       .op = state->op,
       .error = LOOM_ERR_LOWERING_001,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  return iree_diagnostic_emit(state->pass->diagnostic_emitter, &emission);
+}
+
+static iree_status_t loom_vector_to_scalar_emit_transform_error(
+    loom_vector_to_scalar_state_t* state, const loom_error_def_t* error) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_op_name(state->rewriter->module, state->op)),
+      loom_param_string(state->pass->info->name),
+  };
+  loom_diagnostic_emission_t emission = {
+      .op = state->op,
+      .error = error,
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
@@ -131,24 +146,21 @@ static bool loom_vector_to_scalar_exact_leading_element_count(
 
 static iree_status_t loom_vector_to_scalar_emit_unproven_transform_permutation(
     loom_vector_to_scalar_state_t* state) {
-  return loom_vector_to_scalar_emit_transform_unimplemented(
-      state, IREE_SV("sign_permute_hadamard permutation lanes must be "
-                     "provably exact before vector-to-scalar lowering"));
+  return loom_vector_to_scalar_emit_transform_error(state,
+                                                    LOOM_ERR_LOWERING_034);
 }
 
 static iree_status_t loom_vector_to_scalar_emit_duplicate_transform_permutation(
     loom_vector_to_scalar_state_t* state) {
-  return loom_vector_to_scalar_emit_transform_unimplemented(
-      state, IREE_SV("sign_permute_hadamard permutation must name each source "
-                     "lane once per last-axis slice"));
+  return loom_vector_to_scalar_emit_transform_error(state,
+                                                    LOOM_ERR_LOWERING_035);
 }
 
 static iree_status_t
 loom_vector_to_scalar_emit_out_of_bounds_transform_permutation(
     loom_vector_to_scalar_state_t* state) {
-  return loom_vector_to_scalar_emit_transform_unimplemented(
-      state, IREE_SV("sign_permute_hadamard permutation must contain "
-                     "in-bounds source lanes"));
+  return loom_vector_to_scalar_emit_transform_error(state,
+                                                    LOOM_ERR_LOWERING_036);
 }
 
 static iree_status_t loom_vector_to_scalar_validate_permutation_facts(

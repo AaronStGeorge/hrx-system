@@ -703,6 +703,60 @@ ERR_LOWERING_033 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_034: Vector transform permutation is not statically proven.
+ERR_LOWERING_034 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=34,
+    severity=Severity.ERROR,
+    summary="Vector transform permutation is not statically proven.",
+    message=("{pass_name} requires {op_name} permutation lanes to be statically exact"),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("pass_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Refine the permutation lane facts before vector scalarization or "
+        "specialize the transform through a target primitive"
+    ),
+)
+
+# ERR_LOWERING_035: Vector transform permutation repeats a source lane.
+ERR_LOWERING_035 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=35,
+    severity=Severity.ERROR,
+    summary="Vector transform permutation repeats a source lane.",
+    message=(
+        "{pass_name} requires {op_name} permutation to name each source lane "
+        "once per last-axis slice"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("pass_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use a bijective permutation for each last-axis slice before vector "
+        "scalarization"
+    ),
+)
+
+# ERR_LOWERING_036: Vector transform permutation source lane is out of bounds.
+ERR_LOWERING_036 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=36,
+    severity=Severity.ERROR,
+    summary="Vector transform permutation source lane is out of bounds.",
+    message=(
+        "{pass_name} requires {op_name} permutation lanes to reference "
+        "in-bounds source lanes"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("pass_name", ParamKind.STRING),
+    ),
+    fix_hint="Clamp or specialize permutation lanes to the source last-axis extent",
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
@@ -737,4 +791,7 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_031,
     ERR_LOWERING_032,
     ERR_LOWERING_033,
+    ERR_LOWERING_034,
+    ERR_LOWERING_035,
+    ERR_LOWERING_036,
 )
