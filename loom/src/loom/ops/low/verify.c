@@ -1107,39 +1107,48 @@ static iree_status_t loom_low_emit_call_callee_kind_mismatch(
 
 static iree_status_t loom_low_emit_call_count_mismatch(
     const loom_module_t* module, const loom_op_t* call_op,
-    loom_symbol_ref_t callee, const loom_low_callee_signature_t* signature,
-    iree_diagnostic_emitter_t emitter, iree_string_view_t field_kind,
+    const loom_low_callee_signature_t* signature,
+    iree_diagnostic_emitter_t emitter, const loom_error_def_t* error,
     uint16_t actual_count, uint16_t expected_count) {
   loom_diagnostic_param_t params[] = {
-      loom_param_string(loom_low_symbol_name(module, callee)),
-      loom_param_string(field_kind),
+      loom_param_string(loom_low_op_name(module, call_op)),
       loom_param_u32(actual_count),
       loom_param_u32(expected_count),
   };
-  return loom_low_emit_callee_related(
-      emitter, call_op, signature->definition_op, LOOM_ERR_LOWERING_013, params,
-      IREE_ARRAYSIZE(params));
+  return loom_low_emit_callee_related(emitter, call_op,
+                                      signature->definition_op, error, params,
+                                      IREE_ARRAYSIZE(params));
+}
+
+static void loom_low_format_call_field_name(char* buffer,
+                                            iree_host_size_t buffer_capacity,
+                                            const char* prefix,
+                                            uint16_t field_index) {
+  iree_snprintf(buffer, buffer_capacity, "%s %u", prefix, field_index);
 }
 
 static iree_status_t loom_low_emit_call_type_mismatch(
-    const loom_module_t* module, const loom_op_t* call_op,
-    loom_symbol_ref_t callee, const loom_low_callee_signature_t* signature,
+    const loom_op_t* call_op, const loom_low_callee_signature_t* signature,
     iree_diagnostic_emitter_t emitter,
-    loom_diagnostic_field_kind_t field_ref_kind, iree_string_view_t field_kind,
+    loom_diagnostic_field_kind_t field_ref_kind, const char* field_prefix,
     uint16_t field_index, loom_type_t actual_type,
-    iree_string_view_t callee_field_kind, loom_type_t expected_type) {
+    const char* callee_field_prefix, loom_type_t expected_type) {
+  char field_name[32];
+  char callee_field_name[32];
+  loom_low_format_call_field_name(field_name, sizeof(field_name), field_prefix,
+                                  field_index);
+  loom_low_format_call_field_name(callee_field_name, sizeof(callee_field_name),
+                                  callee_field_prefix, field_index);
   loom_diagnostic_param_t params[] = {
-      loom_param_string(loom_low_symbol_name(module, callee)),
       loom_param_with_field_ref(
-          loom_param_string(field_kind),
+          loom_param_string(iree_make_cstring_view(field_name)),
           loom_diagnostic_field_ref(field_ref_kind, field_index)),
-      loom_param_u32(field_index),
       loom_param_type(actual_type),
-      loom_param_string(callee_field_kind),
+      loom_param_string(iree_make_cstring_view(callee_field_name)),
       loom_param_type(expected_type),
   };
   return loom_low_emit_callee_related(
-      emitter, call_op, signature->definition_op, LOOM_ERR_LOWERING_014, params,
+      emitter, call_op, signature->definition_op, LOOM_ERR_TYPE_001, params,
       IREE_ARRAYSIZE(params));
 }
 
@@ -1178,31 +1187,31 @@ static bool loom_low_func_like_is_pure(const loom_module_t* module,
 
 static iree_status_t loom_low_verify_call_argument_count(
     const loom_module_t* module, const loom_op_t* call_op,
-    loom_symbol_ref_t callee, const loom_low_callee_signature_t* signature,
+    const loom_low_callee_signature_t* signature,
     iree_diagnostic_emitter_t emitter) {
   if (call_op->operand_count == signature->argument_count) {
     return iree_ok_status();
   }
   return loom_low_emit_call_count_mismatch(
-      module, call_op, callee, signature, emitter, IREE_SV("operand"),
+      module, call_op, signature, emitter, LOOM_ERR_STRUCTURE_001,
       call_op->operand_count, signature->argument_count);
 }
 
 static iree_status_t loom_low_verify_call_result_count(
     const loom_module_t* module, const loom_op_t* call_op,
-    loom_symbol_ref_t callee, const loom_low_callee_signature_t* signature,
+    const loom_low_callee_signature_t* signature,
     iree_diagnostic_emitter_t emitter) {
   if (call_op->result_count == signature->result_count) {
     return iree_ok_status();
   }
   return loom_low_emit_call_count_mismatch(
-      module, call_op, callee, signature, emitter, IREE_SV("result"),
+      module, call_op, signature, emitter, LOOM_ERR_STRUCTURE_002,
       call_op->result_count, signature->result_count);
 }
 
 static iree_status_t loom_low_verify_call_argument_types(
     const loom_module_t* module, const loom_op_t* call_op,
-    loom_symbol_ref_t callee, const loom_low_callee_signature_t* signature,
+    const loom_low_callee_signature_t* signature,
     iree_diagnostic_emitter_t emitter) {
   uint16_t compare_count = call_op->operand_count;
   if (compare_count > signature->argument_count) {
@@ -1217,16 +1226,15 @@ static iree_status_t loom_low_verify_call_argument_types(
       continue;
     }
     IREE_RETURN_IF_ERROR(loom_low_emit_call_type_mismatch(
-        module, call_op, callee, signature, emitter,
-        LOOM_DIAGNOSTIC_FIELD_OPERAND, IREE_SV("operand"), i, actual_type,
-        IREE_SV("argument"), expected_type));
+        call_op, signature, emitter, LOOM_DIAGNOSTIC_FIELD_OPERAND, "operand",
+        i, actual_type, "callee argument", expected_type));
   }
   return iree_ok_status();
 }
 
 static iree_status_t loom_low_verify_call_result_types(
     const loom_module_t* module, const loom_op_t* call_op,
-    loom_symbol_ref_t callee, const loom_low_callee_signature_t* signature,
+    const loom_low_callee_signature_t* signature,
     iree_diagnostic_emitter_t emitter) {
   uint16_t compare_count = call_op->result_count;
   if (compare_count > signature->result_count) {
@@ -1241,9 +1249,8 @@ static iree_status_t loom_low_verify_call_result_types(
       continue;
     }
     IREE_RETURN_IF_ERROR(loom_low_emit_call_type_mismatch(
-        module, call_op, callee, signature, emitter,
-        LOOM_DIAGNOSTIC_FIELD_RESULT, IREE_SV("result"), i, actual_type,
-        IREE_SV("result"), expected_type));
+        call_op, signature, emitter, LOOM_DIAGNOSTIC_FIELD_RESULT, "result", i,
+        actual_type, "callee result", expected_type));
   }
   return iree_ok_status();
 }
@@ -1509,14 +1516,14 @@ iree_status_t loom_low_func_call_verify(const loom_module_t* module,
 
   IREE_RETURN_IF_ERROR(
       loom_low_verify_func_call_context(module, op, &low_signature, emitter));
-  IREE_RETURN_IF_ERROR(loom_low_verify_call_argument_count(
-      module, op, callee, &low_signature, emitter));
-  IREE_RETURN_IF_ERROR(loom_low_verify_call_result_count(
-      module, op, callee, &low_signature, emitter));
-  IREE_RETURN_IF_ERROR(loom_low_verify_call_argument_types(
-      module, op, callee, &low_signature, emitter));
-  IREE_RETURN_IF_ERROR(loom_low_verify_call_result_types(
-      module, op, callee, &low_signature, emitter));
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_call_argument_count(module, op, &low_signature, emitter));
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_call_result_count(module, op, &low_signature, emitter));
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_call_argument_types(module, op, &low_signature, emitter));
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_call_result_types(module, op, &low_signature, emitter));
   return loom_low_verify_call_purity(module, op, callee,
                                      loom_low_func_call_purity(op),
                                      &low_signature, emitter);
