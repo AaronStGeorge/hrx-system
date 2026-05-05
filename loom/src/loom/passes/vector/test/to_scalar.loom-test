@@ -34,3 +34,24 @@ func.def @rejects_static_lane_count_beyond_value_slice() {
   test.use %value : vector<65536xi32>
   func.return
 }
+
+// ====
+
+func.def @rejects_out_of_bounds_transform_iota_permutation(%v: vector<2xf32>, %signs: vector<2xi1>) -> (vector<2xf32>) {
+  %one = index.constant 1 : index
+  %permutation = vector.iota %one step %one : vector<2xindex>
+  %xf = encoding.define #numeric_transform<family="sign_permute_hadamard", input_elems=2, output_elems=2> {permutation = %permutation : vector<2xindex>, signs = %signs : vector<2xi1>} : encoding<transform>
+  // ERROR@+1: LOWERING/001 "vector.transform" "vector-to-scalar" "sign_permute_hadamard permutation must contain in-bounds source lanes"
+  %r = vector.transform %v, %xf : vector<2xf32>, encoding<transform> -> vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ====
+
+func.def @rejects_duplicate_transform_uniform_permutation(%v: vector<2xf32>, %signs: vector<2xi1>) -> (vector<2xf32>) {
+  %permutation = vector.constant 0 : vector<2xindex>
+  %xf = encoding.define #numeric_transform<family="sign_permute_hadamard", input_elems=2, output_elems=2> {permutation = %permutation : vector<2xindex>, signs = %signs : vector<2xi1>} : encoding<transform>
+  // ERROR@+1: LOWERING/001 "vector.transform" "vector-to-scalar" "sign_permute_hadamard permutation must name each source lane once per last-axis slice"
+  %r = vector.transform %v, %xf : vector<2xf32>, encoding<transform> -> vector<2xf32>
+  func.return %r : vector<2xf32>
+}
