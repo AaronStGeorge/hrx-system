@@ -456,6 +456,43 @@ TEST_F(BuilderTest, GeneratedBuildersRejectCountsBeforeNarrowing) {
   EXPECT_EQ(op, nullptr);
 }
 
+TEST_F(BuilderTest, ReplaceAllUsesWithUpdatesPredicateAttrs) {
+  loom_type_t index = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_value_id_t old_id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module_, index, &old_id));
+  loom_value_id_t new_id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module_, index, &new_id));
+  loom_value_id_t bound_id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module_, index, &bound_id));
+
+  loom_value_id_t values[] = {old_id, bound_id};
+  loom_predicate_t predicates[] = {{
+      .kind = LOOM_PREDICATE_LT,
+      .arg_count = 2,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_VALUE,
+                   LOOM_PRED_ARG_NONE},
+      .args = {(int64_t)old_id, (int64_t)bound_id, 0},
+  }};
+  loom_type_t result_types[] = {index, index};
+
+  loom_op_t* assume_op = NULL;
+  IREE_ASSERT_OK(loom_test_assume_build(
+      &builder_, values, IREE_ARRAYSIZE(values), predicates,
+      IREE_ARRAYSIZE(predicates), result_types, IREE_ARRAYSIZE(result_types),
+      LOOM_LOCATION_UNKNOWN, &assume_op));
+
+  IREE_ASSERT_OK(loom_value_replace_all_uses_with(module_, old_id, new_id));
+
+  ASSERT_TRUE(loom_test_assume_isa(assume_op));
+  EXPECT_EQ(loom_test_assume_values(assume_op).values[0], new_id);
+  loom_attribute_t predicate_attr = loom_op_attrs(assume_op)[0];
+  ASSERT_EQ(predicate_attr.kind, LOOM_ATTR_PREDICATE_LIST);
+  ASSERT_EQ(predicate_attr.count, 1u);
+  ASSERT_NE(predicate_attr.predicate_list, nullptr);
+  EXPECT_EQ(predicate_attr.predicate_list[0].args[0], (int64_t)new_id);
+  EXPECT_EQ(predicate_attr.predicate_list[0].args[1], (int64_t)bound_id);
+}
+
 TEST_F(BuilderTest, EnumAttribute) {
   // test.cmp: 2 operands, 1 result, 1 enum attr.
   loom_op_t* op = NULL;

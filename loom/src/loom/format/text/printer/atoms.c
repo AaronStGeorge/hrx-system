@@ -226,8 +226,30 @@ iree_string_view_t loom_print_resolve_value_name(const loom_module_t* module,
       }
     }
   }
+  const void* scope = loom_print_value_parse_scope(module, value_id);
   int length = iree_snprintf(buffer, buffer_size, "%%%" PRIhsz,
                              (iree_host_size_t)value_id);
+  if (length > 1 && (iree_host_size_t)length < buffer_size) {
+    iree_string_view_t candidate =
+        iree_make_string_view(buffer + 1, (iree_host_size_t)length - 1);
+    if (!loom_print_explicit_value_name_exists(module, scope, candidate)) {
+      return iree_make_string_view(buffer, (iree_host_size_t)length);
+    }
+  }
+  for (iree_host_size_t attempt = 1; attempt < 8; ++attempt) {
+    length = iree_snprintf(buffer, buffer_size, "%%%" PRIhsz "$%" PRIhsz,
+                           (iree_host_size_t)value_id, attempt);
+    if (length <= 1 || (iree_host_size_t)length >= buffer_size) {
+      break;
+    }
+    iree_string_view_t candidate =
+        iree_make_string_view(buffer + 1, (iree_host_size_t)length - 1);
+    if (!loom_print_explicit_value_name_exists(module, scope, candidate)) {
+      return iree_make_string_view(buffer, (iree_host_size_t)length);
+    }
+  }
+  length = iree_snprintf(buffer, buffer_size, "%%%" PRIhsz,
+                         (iree_host_size_t)value_id);
   return iree_make_string_view(buffer, length);
 }
 

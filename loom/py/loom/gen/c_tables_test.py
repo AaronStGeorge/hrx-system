@@ -4,7 +4,9 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-import pytest
+import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 from loom.assembly import (
     COLON,
@@ -16,6 +18,7 @@ from loom.assembly import (
     Flags,
     OperandDict,
     OptionalGroup,
+    PredicateList,
     Ref,
     Region,
     ResultType,
@@ -27,6 +30,7 @@ from loom.assembly import (
 from loom.dsl import (
     ANY,
     ATTR_TYPE_I64_ARRAY,
+    ATTR_TYPE_PREDICATE_LIST,
     ATTR_TYPE_SYMBOL,
     INTEGER,
     SYMBOL_DEFINE,
@@ -69,6 +73,17 @@ from loom.gen.c_tables import (
     generate_tables_c,
     generate_type_registry,
 )
+
+
+@contextmanager
+def _raises_value_error(pattern: str) -> Iterator[None]:
+    try:
+        yield
+    except ValueError as exc:
+        if not re.search(pattern, str(exc)):
+            raise AssertionError(f"{exc!s} did not match {pattern!r}") from exc
+    else:
+        raise AssertionError(f"expected ValueError matching {pattern!r}")
 
 
 def test_type_constraint_map_covers_every_constraint() -> None:
@@ -123,10 +138,7 @@ def test_generate_type_registry_rejects_invalid_fact_domain_symbol() -> None:
         fact_domain="loom.test.handle.fact_domain",
     )
 
-    with pytest.raises(
-        ValueError,
-        match=r"TypeDef 'test\.handle': fact_domain must be a C symbol name",
-    ):
+    with _raises_value_error(r"TypeDef 'test\.handle': fact_domain must be a C symbol name"):
         generate_type_registry([type_def])
 
 
@@ -244,12 +256,9 @@ def test_generate_tables_rejects_constraint_field_index_above_6_bit_max() -> Non
         constraints=[SameType("input_0", "input_64")],
     )
 
-    with pytest.raises(
-        ValueError,
-        match=(
-            r"Op 'test\.wide' constraint SameType: field 'input_64' "
-            r"index 64 exceeds LOOM_FIELD_REF 6-bit max 63"
-        ),
+    with _raises_value_error(
+        r"Op 'test\.wide' constraint SameType: field 'input_64' "
+        r"index 64 exceeds LOOM_FIELD_REF 6-bit max 63"
     ):
         generate_tables_c("test", 0, [op])
 
@@ -477,6 +486,54 @@ def test_generate_builders_keep_count_guard_for_optional_aggregate_attrs() -> No
     assert "dict.count > 0" in builders_c
 
 
+def test_generate_builders_copy_i64_array_attrs_into_builder_arena() -> None:
+    op = Op(
+        "test.attr_table",
+        group=Dialect("test"),
+        operands=[
+            Operand("selector", INTEGER),
+            Operand("values", ANY, variadic=True),
+        ],
+        results=[Result("results", ANY, variadic=True)],
+        attrs=[AttrDef("case_keys", ATTR_TYPE_I64_ARRAY)],
+        format=[
+            Ref("selector"),
+            AttrTable("case_keys", "values"),
+            COLON,
+            ResultTypeList("results", parens=False),
+        ],
+    )
+
+    builders_c = generate_builders_c("test", [op])
+
+    assert "int64_t* _case_keys_storage = NULL;" in builders_c
+    assert "if (!case_keys)" in builders_c
+    assert ("builder->arena, case_keys_count, sizeof(*_case_keys_storage), (void**)&_case_keys_storage") in builders_c
+    assert ("memcpy(_case_keys_storage, case_keys, case_keys_count * sizeof(*_case_keys_storage));") in builders_c
+    assert "loom_attr_i64_array(_case_keys_storage, (uint16_t)case_keys_count)" in builders_c
+    assert "(int64_t*)case_keys" not in builders_c
+
+
+def test_generate_builders_copy_predicate_list_attrs_into_builder_arena() -> None:
+    op = Op(
+        "test.assume",
+        group=Dialect("test"),
+        operands=[Operand("value", INTEGER)],
+        results=[Result("result", INTEGER)],
+        attrs=[AttrDef("predicates", ATTR_TYPE_PREDICATE_LIST)],
+        format=[Ref("value"), PredicateList("predicates"), ResultType("result")],
+    )
+
+    builders_c = generate_builders_c("test", [op])
+
+    assert "loom_predicate_t* _predicates_storage = NULL;" in builders_c
+    assert "if (!predicates)" in builders_c
+    assert ("builder->arena, predicates_count, sizeof(*_predicates_storage), (void**)&_predicates_storage") in builders_c
+    assert ("memcpy(_predicates_storage, predicates, predicates_count * sizeof(*_predicates_storage));") in builders_c
+    assert ("loom_attr_predicate_list(_predicates_storage, (uint16_t)predicates_count)") in builders_c
+    assert "(loom_predicate_t*)predicates" not in builders_c
+
+
 def test_generate_builders_preserve_named_operands_for_non_binary_shapes() -> None:
     op = Op(
         "test.lookup",
@@ -640,10 +697,7 @@ def test_generate_tables_memory_access_rejects_explicit_missing_field() -> None:
         interfaces=[MemoryAccessInterface(value="payload")],
     )
 
-    with pytest.raises(
-        ValueError,
-        match=r"MemoryAccessInterface on 'test\.store': operand 'payload' not found",
-    ):
+    with _raises_value_error(r"MemoryAccessInterface on 'test\.store': operand 'payload' not found"):
         generate_tables_c("test", 0, [op])
 
 
@@ -663,13 +717,7 @@ def test_generate_tables_rejects_call_like_non_variadic_operand() -> None:
         ],
     )
 
-    with pytest.raises(
-        ValueError,
-        match=(
-            r"CallLikeInterface on 'test\.call': operand 'operand' "
-            r"must be variadic"
-        ),
-    ):
+    with _raises_value_error(r"CallLikeInterface on 'test\.call': operand 'operand' must be variadic"):
         generate_tables_c("test", 0, [op])
 
 
@@ -689,13 +737,7 @@ def test_generate_tables_rejects_call_like_non_variadic_result() -> None:
         ],
     )
 
-    with pytest.raises(
-        ValueError,
-        match=(
-            r"CallLikeInterface on 'test\.call': result 'result' "
-            r"must be variadic"
-        ),
-    ):
+    with _raises_value_error(r"CallLikeInterface on 'test\.call': result 'result' must be variadic"):
         generate_tables_c("test", 0, [op])
 
 
@@ -734,13 +776,7 @@ def test_unknown_region_syntax_is_rejected() -> None:
         format=[Region("body", syntax="missing.syntax")],
     )
 
-    with pytest.raises(
-        ValueError,
-        match=(
-            r"Op 'test\.region_syntax': unknown region syntax "
-            r"'missing\.syntax'"
-        ),
-    ):
+    with _raises_value_error(r"Op 'test\.region_syntax': unknown region syntax 'missing\.syntax'"):
         generate_tables_c("test", 0, [op])
 
 

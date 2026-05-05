@@ -2447,6 +2447,52 @@ def _emit_builder_count_check(
     lines.append("  }")
 
 
+def _emit_builder_i64_array_storage(
+    lines: list[str],
+    *,
+    source: str,
+    count: str,
+    storage: str,
+    op_name: str,
+    field_name: str,
+) -> None:
+    """Emits C code that copies an i64-array attr payload into the builder."""
+    lines.append(f"  int64_t* {storage} = NULL;")
+    lines.append(f"  if ({count} > 0) {{")
+    lines.append(f"    if (!{source}) {{")
+    lines.append("      return iree_make_status(")
+    lines.append("          IREE_STATUS_INVALID_ARGUMENT,")
+    lines.append(f'          "{op_name} {field_name} storage is NULL for non-zero count");')
+    lines.append("    }")
+    lines.append("    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(")
+    lines.append(f"        builder->arena, {count}, sizeof(*{storage}), (void**)&{storage}));")
+    lines.append(f"    memcpy({storage}, {source}, {count} * sizeof(*{storage}));")
+    lines.append("  }")
+
+
+def _emit_builder_predicate_list_storage(
+    lines: list[str],
+    *,
+    source: str,
+    count: str,
+    storage: str,
+    op_name: str,
+    field_name: str,
+) -> None:
+    """Emits C code that copies a predicate-list attr payload into the builder."""
+    lines.append(f"  loom_predicate_t* {storage} = NULL;")
+    lines.append(f"  if ({count} > 0) {{")
+    lines.append(f"    if (!{source}) {{")
+    lines.append("      return iree_make_status(")
+    lines.append("          IREE_STATUS_INVALID_ARGUMENT,")
+    lines.append(f'          "{op_name} {field_name} storage is NULL for non-zero count");')
+    lines.append("    }")
+    lines.append("    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(")
+    lines.append(f"        builder->arena, {count}, sizeof(*{storage}), (void**)&{storage}));")
+    lines.append(f"    memcpy({storage}, {source}, {count} * sizeof(*{storage}));")
+    lines.append("  }")
+
+
 def _generate_builder_implementation(
     op: Op,
     prefix: str,
@@ -2777,16 +2823,34 @@ def _generate_builder_implementation(
         if param["kind"] == "predicate_list":
             idx = param["attr_index"]
             name = param["name"]
+            storage = f"_{name}_storage"
+            _emit_builder_predicate_list_storage(
+                lines,
+                source=name,
+                count=f"{name}_count",
+                storage=storage,
+                op_name=op.name,
+                field_name=name,
+            )
             if param.get("optional"):
                 lines.append(f"  if ({name}_count > 0) {{")
-                lines.append(f"    loom_op_attrs(*out_op)[{idx}] = loom_attr_predicate_list((loom_predicate_t*){name}, (uint16_t){name}_count);")
+                lines.append(f"    loom_op_attrs(*out_op)[{idx}] = loom_attr_predicate_list({storage}, (uint16_t){name}_count);")
                 lines.append("  }")
             else:
-                lines.append(f"  loom_op_attrs(*out_op)[{idx}] = loom_attr_predicate_list((loom_predicate_t*){name}, (uint16_t){name}_count);")
+                lines.append(f"  loom_op_attrs(*out_op)[{idx}] = loom_attr_predicate_list({storage}, (uint16_t){name}_count);")
         elif param["kind"] == "index_list":
             static_field = param["static_field"]
             idx = param["static_attr_index"]
-            lines.append(f"  loom_op_attrs(*out_op)[{idx}] = loom_attr_i64_array((int64_t*){static_field}, (uint16_t){static_field}_count);")
+            storage = f"_{static_field}_storage"
+            _emit_builder_i64_array_storage(
+                lines,
+                source=static_field,
+                count=f"{static_field}_count",
+                storage=storage,
+                op_name=op.name,
+                field_name=static_field,
+            )
+            lines.append(f"  loom_op_attrs(*out_op)[{idx}] = loom_attr_i64_array({storage}, (uint16_t){static_field}_count);")
         elif param["kind"] == "symbol":
             idx = param["attr_index"]
             optional_flag = _build_flag_bit_name(prefix, param) if _optional_param_uses_build_flag(param) else ""
@@ -2815,12 +2879,21 @@ def _generate_builder_implementation(
             constructor = constructor_map.get(attr_type, name)
             optional_flag = _build_flag_bit_name(prefix, param) if _optional_param_uses_build_flag(param) else ""
             if attr_type == "i64_array":
+                storage = f"_{name}_storage"
+                _emit_builder_i64_array_storage(
+                    lines,
+                    source=name,
+                    count=f"{name}_count",
+                    storage=storage,
+                    op_name=op.name,
+                    field_name=name,
+                )
                 if is_optional:
                     lines.append(f"  if ({name}_count > 0) {{")
-                    lines.append(f"    loom_op_attrs(*out_op)[{idx}] = loom_attr_i64_array((int64_t*){name}, (uint16_t){name}_count);")
+                    lines.append(f"    loom_op_attrs(*out_op)[{idx}] = loom_attr_i64_array({storage}, (uint16_t){name}_count);")
                     lines.append("  }")
                 else:
-                    lines.append(f"  loom_op_attrs(*out_op)[{idx}] = loom_attr_i64_array((int64_t*){name}, (uint16_t){name}_count);")
+                    lines.append(f"  loom_op_attrs(*out_op)[{idx}] = loom_attr_i64_array({storage}, (uint16_t){name}_count);")
             elif attr_type == "dict":
                 if is_optional:
                     lines.append(f"  if ({name}.count > 0) {{")

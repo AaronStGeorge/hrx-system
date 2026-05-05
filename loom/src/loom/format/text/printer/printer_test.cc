@@ -1005,6 +1005,31 @@ TEST_F(PrintOpTest, DuplicateExplicitValueNamesInSiblingRegionsArePreserved) {
             "}\n");
 }
 
+TEST_F(PrintOpTest, GeneratedValueNameAvoidsExplicitNumericName) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_op_t* explicit_numeric_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(7), i32,
+                                          LOOM_LOCATION_UNKNOWN,
+                                          &explicit_numeric_op));
+  set_value_name(loom_test_constant_result(explicit_numeric_op), "1");
+  loom_op_t* generated_numeric_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(8), i32,
+                                          LOOM_LOCATION_UNKNOWN,
+                                          &generated_numeric_op));
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_text_print_module_to_builder(module_, &builder,
+                                                   LOOM_TEXT_PRINT_DEFAULT));
+  std::string output(iree_string_builder_buffer(&builder),
+                     iree_string_builder_size(&builder));
+  iree_string_builder_deinitialize(&builder);
+
+  EXPECT_EQ(output,
+            "%1 = test.constant 7 : i32\n"
+            "%1$1 = test.constant 8 : i32\n");
+}
+
 TEST_F(PrintOpTest, FuncWithVisibility) {
   loom_symbol_ref_t callee = make_symbol("main");
   loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);

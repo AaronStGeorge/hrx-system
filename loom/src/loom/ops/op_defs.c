@@ -2243,6 +2243,228 @@ static iree_status_t loom_value_ensure_use_capacity(loom_module_t* module,
   return iree_ok_status();
 }
 
+static iree_status_t loom_attribute_replace_value_refs(
+    loom_module_t* module, loom_attribute_t attr, loom_value_id_t old_id,
+    loom_value_id_t new_id, uint8_t dict_depth, loom_attribute_t* out_attr,
+    bool* out_changed);
+
+static iree_status_t loom_predicate_list_replace_value_refs(
+    loom_module_t* module, loom_attribute_t attr, loom_value_id_t old_id,
+    loom_value_id_t new_id, loom_attribute_t* out_attr, bool* out_changed) {
+  *out_attr = attr;
+  *out_changed = false;
+  if (attr.count == 0) {
+    out_attr->predicate_list = NULL;
+    return iree_ok_status();
+  }
+  if (!attr.predicate_list) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "non-empty predicate list has a NULL payload");
+  }
+
+  bool changed = false;
+  for (uint16_t predicate_index = 0; predicate_index < attr.count;
+       ++predicate_index) {
+    const loom_predicate_t* predicate = &attr.predicate_list[predicate_index];
+    uint8_t argument_count = predicate->arg_count;
+    if (argument_count > IREE_ARRAYSIZE(predicate->args)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "predicate %u has %u args, max %" PRIhsz, (unsigned)predicate_index,
+          (unsigned)argument_count, IREE_ARRAYSIZE(predicate->args));
+    }
+    for (uint8_t argument_index = 0; argument_index < argument_count;
+         ++argument_index) {
+      if (predicate->arg_tags[argument_index] != LOOM_PRED_ARG_VALUE) {
+        continue;
+      }
+      if ((loom_value_id_t)predicate->args[argument_index] == old_id) {
+        changed = true;
+      }
+    }
+  }
+  if (!changed) {
+    return iree_ok_status();
+  }
+
+  loom_predicate_t* predicates = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(&module->arena, attr.count,
+                                                 sizeof(loom_predicate_t),
+                                                 (void**)&predicates));
+  memcpy(predicates, attr.predicate_list,
+         (iree_host_size_t)attr.count * sizeof(loom_predicate_t));
+  for (uint16_t predicate_index = 0; predicate_index < attr.count;
+       ++predicate_index) {
+    loom_predicate_t* predicate = &predicates[predicate_index];
+    for (uint8_t argument_index = 0; argument_index < predicate->arg_count;
+         ++argument_index) {
+      if (predicate->arg_tags[argument_index] != LOOM_PRED_ARG_VALUE) {
+        continue;
+      }
+      if ((loom_value_id_t)predicate->args[argument_index] == old_id) {
+        predicate->args[argument_index] = (int64_t)new_id;
+      }
+    }
+  }
+  out_attr->predicate_list = predicates;
+  *out_changed = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_type_attr_replace_value_refs(
+    loom_module_t* module, loom_attribute_t attr, loom_value_id_t old_id,
+    loom_value_id_t new_id, loom_attribute_t* out_attr, bool* out_changed) {
+  *out_attr = attr;
+  *out_changed = false;
+  if (attr.type_id == LOOM_TYPE_ID_INVALID) {
+    return iree_ok_status();
+  }
+  if (attr.type_id >= module->types.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "type attribute value id %u is out of range",
+                            (unsigned)attr.type_id);
+  }
+  loom_type_t replaced_type = module->types.entries[attr.type_id];
+  IREE_RETURN_IF_ERROR(loom_module_replace_type_value_references(
+      module, replaced_type, old_id, new_id, &replaced_type, out_changed));
+  if (!*out_changed) {
+    return iree_ok_status();
+  }
+  return loom_module_intern_type_id(module, replaced_type, &out_attr->type_id);
+}
+
+static iree_status_t loom_dict_attr_replace_value_refs(
+    loom_module_t* module, loom_attribute_t attr, loom_value_id_t old_id,
+    loom_value_id_t new_id, uint8_t dict_depth, loom_attribute_t* out_attr,
+    bool* out_changed) {
+  *out_attr = attr;
+  *out_changed = false;
+  if (dict_depth >= LOOM_ATTR_DICT_MAX_NESTING_DEPTH) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "dict attribute nesting exceeds max depth %u",
+                            (unsigned)LOOM_ATTR_DICT_MAX_NESTING_DEPTH);
+  }
+  if (attr.count == 0) {
+    *out_attr = loom_make_canonical_attr_dict(NULL, 0);
+    return iree_ok_status();
+  }
+  if (!attr.dict_entries) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "non-empty dict attribute has a NULL payload");
+  }
+
+  bool changed = false;
+  for (uint16_t i = 0; i < attr.count; ++i) {
+    bool value_changed = false;
+    loom_attribute_t replacement_value = attr.dict_entries[i].value;
+    IREE_RETURN_IF_ERROR(loom_attribute_replace_value_refs(
+        module, attr.dict_entries[i].value, old_id, new_id,
+        (uint8_t)(dict_depth + 1), &replacement_value, &value_changed));
+    if (!value_changed) {
+      continue;
+    }
+    if (!changed) {
+      loom_named_attr_t* entries = NULL;
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(&module->arena, attr.count,
+                                                     sizeof(loom_named_attr_t),
+                                                     (void**)&entries));
+      memcpy(entries, attr.dict_entries,
+             (iree_host_size_t)attr.count * sizeof(loom_named_attr_t));
+      *out_attr = loom_make_canonical_attr_dict(entries, attr.count);
+      changed = true;
+    }
+    loom_named_attr_t* entries = (loom_named_attr_t*)out_attr->dict_entries;
+    entries[i].value = replacement_value;
+    entries[i].reserved = 0;
+  }
+  if (!changed) {
+    return iree_ok_status();
+  }
+  *out_changed = true;
+  return loom_module_make_canonical_attr_dict(
+      module, loom_make_named_attr_slice(out_attr->dict_entries, attr.count),
+      out_attr);
+}
+
+static iree_status_t loom_attribute_replace_value_refs(
+    loom_module_t* module, loom_attribute_t attr, loom_value_id_t old_id,
+    loom_value_id_t new_id, uint8_t dict_depth, loom_attribute_t* out_attr,
+    bool* out_changed) {
+  *out_attr = attr;
+  *out_changed = false;
+  switch ((loom_attr_kind_t)attr.kind) {
+    case LOOM_ATTR_ABSENT:
+    case LOOM_ATTR_I64:
+    case LOOM_ATTR_F64:
+    case LOOM_ATTR_STRING:
+    case LOOM_ATTR_BOOL:
+    case LOOM_ATTR_ENUM:
+    case LOOM_ATTR_SYMBOL:
+    case LOOM_ATTR_I64_ARRAY:
+    case LOOM_ATTR_ENCODING:
+      return iree_ok_status();
+    case LOOM_ATTR_TYPE:
+      return loom_type_attr_replace_value_refs(module, attr, old_id, new_id,
+                                               out_attr, out_changed);
+    case LOOM_ATTR_PREDICATE_LIST:
+      return loom_predicate_list_replace_value_refs(
+          module, attr, old_id, new_id, out_attr, out_changed);
+    case LOOM_ATTR_DICT:
+      return loom_dict_attr_replace_value_refs(
+          module, attr, old_id, new_id, dict_depth, out_attr, out_changed);
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown attribute kind %u", (unsigned)attr.kind);
+  }
+}
+
+static iree_status_t loom_op_replace_attr_value_refs(loom_module_t* module,
+                                                     loom_op_t* op,
+                                                     loom_value_id_t old_id,
+                                                     loom_value_id_t new_id) {
+  loom_attribute_t* attrs = loom_op_attrs(op);
+  for (uint8_t attr_index = 0; attr_index < op->attribute_count; ++attr_index) {
+    loom_attribute_t replacement = attrs[attr_index];
+    bool changed = false;
+    IREE_RETURN_IF_ERROR(loom_attribute_replace_value_refs(
+        module, attrs[attr_index], old_id, new_id, /*dict_depth=*/0,
+        &replacement, &changed));
+    if (!changed) {
+      continue;
+    }
+    loom_trait_flags_t old_traits = op->traits;
+    attrs[attr_index] = replacement;
+    loom_op_refresh_effective_traits(module, op);
+    loom_module_update_op_direct_effects(op, old_traits, op->traits);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_region_replace_attr_value_refs(
+    loom_module_t* module, loom_region_t* region, loom_value_id_t old_id,
+    loom_value_id_t new_id) {
+  if (!region) {
+    return iree_ok_status();
+  }
+  loom_block_t* block = NULL;
+  loom_region_for_each_block(region, block) {
+    loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
+        continue;
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_op_replace_attr_value_refs(module, op, old_id, new_id));
+      loom_region_t** regions = loom_op_regions(op);
+      for (uint8_t i = 0; i < op->region_count; ++i) {
+        IREE_RETURN_IF_ERROR(loom_region_replace_attr_value_refs(
+            module, regions[i], old_id, new_id));
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_value_replace_all_uses_with(loom_module_t* module,
                                                loom_value_id_t old_id,
                                                loom_value_id_t new_id) {
@@ -2256,6 +2478,8 @@ iree_status_t loom_value_replace_all_uses_with(loom_module_t* module,
 
   IREE_RETURN_IF_ERROR(
       loom_module_replace_value_type_uses(module, old_id, new_id));
+  IREE_RETURN_IF_ERROR(loom_region_replace_attr_value_refs(module, module->body,
+                                                           old_id, new_id));
   if (old_use_count == 0) return iree_ok_status();
 
   // Patch every user op's operand slot.
