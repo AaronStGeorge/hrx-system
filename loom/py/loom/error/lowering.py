@@ -420,6 +420,27 @@ ERR_LOWERING_019 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_020: Static vector scalarization lane count is not representable.
+ERR_LOWERING_020 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=20,
+    severity=Severity.ERROR,
+    summary="Static vector scalarization lane count is not representable.",
+    message=(
+        "{op_name} cannot be lowered by {pass_name} because static vector type "
+        "{vector_type} has more lanes than scalarization can represent"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("pass_name", ParamKind.STRING),
+        ErrorParam("vector_type", ParamKind.TYPE),
+    ),
+    fix_hint=(
+        "Refine the vector shape before scalarization or lower it with a "
+        "target primitive that preserves the vector aggregate"
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
@@ -440,4 +461,5 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_017,
     ERR_LOWERING_018,
     ERR_LOWERING_019,
+    ERR_LOWERING_020,
 )

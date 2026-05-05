@@ -16,9 +16,10 @@
 
 static iree_status_t loom_vector_to_scalar_lower_static_aggregate(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
-  iree_host_size_t element_count = 0;
-  loom_type_static_element_count(state->vector_type, &element_count);
-
+  uint16_t element_count = 0;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_static_element_count(
+      state, state->vector_type, &element_count));
+  if (loom_pass_has_error_diagnostics(state->pass)) return iree_ok_status();
   loom_builder_t* builder = &state->rewriter->builder;
   loom_value_id_t* elements = NULL;
   if (element_count > 0) {
@@ -32,9 +33,9 @@ static iree_status_t loom_vector_to_scalar_lower_static_aggregate(
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         state->rewriter->arena, rank, sizeof(int64_t), (void**)&indices));
   }
-  for (iree_host_size_t ordinal = 0; ordinal < element_count; ++ordinal) {
-    loom_vector_to_scalar_indices_from_ordinal(state->vector_type, ordinal,
-                                               indices);
+  for (uint16_t ordinal = 0; ordinal < element_count; ++ordinal) {
+    loom_vector_to_scalar_indices_from_ordinal(state->vector_type,
+                                               (int64_t)ordinal, indices);
     loom_vector_to_scalar_index_list_t index_list = {
         .static_indices = indices,
         .rank = rank,
@@ -173,8 +174,10 @@ iree_status_t loom_vector_to_scalar_lower_aggregate(
 
 static iree_status_t loom_vector_to_scalar_lower_static_splat(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
-  iree_host_size_t element_count = 0;
-  loom_type_static_element_count(state->vector_type, &element_count);
+  uint16_t element_count = 0;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_static_element_count(
+      state, state->vector_type, &element_count));
+  if (loom_pass_has_error_diagnostics(state->pass)) return iree_ok_status();
   loom_value_id_t scalar = loom_vector_splat_scalar(state->op);
   loom_value_id_t* elements = NULL;
   if (element_count > 0) {
@@ -182,7 +185,7 @@ static iree_status_t loom_vector_to_scalar_lower_static_splat(
         iree_arena_allocate_array(state->rewriter->arena, element_count,
                                   sizeof(loom_value_id_t), (void**)&elements));
   }
-  for (iree_host_size_t i = 0; i < element_count; ++i) {
+  for (uint16_t i = 0; i < element_count; ++i) {
     elements[i] = scalar;
   }
   loom_op_t* from_elements_op = NULL;

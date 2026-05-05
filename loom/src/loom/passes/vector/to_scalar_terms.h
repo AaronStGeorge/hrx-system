@@ -120,7 +120,7 @@ int64_t loom_vector_to_scalar_linear_ordinal_static(loom_type_t vector_type,
                                                     const int64_t* indices);
 
 void loom_vector_to_scalar_indices_from_ordinal(loom_type_t vector_type,
-                                                iree_host_size_t ordinal,
+                                                int64_t ordinal,
                                                 int64_t* indices);
 
 #ifdef __cplusplus

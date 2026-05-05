@@ -77,8 +77,12 @@ static iree_status_t loom_vector_to_scalar_build_accumulator_lane(
 static iree_status_t loom_vector_to_scalar_lower_static_accumulator(
     loom_vector_to_scalar_accumulator_state_t* state,
     loom_value_id_t* out_replacement) {
-  iree_host_size_t element_count = 0;
-  loom_type_static_element_count(state->lane_state.vector_type, &element_count);
+  uint16_t element_count = 0;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_static_element_count(
+      &state->lane_state, state->lane_state.vector_type, &element_count));
+  if (loom_pass_has_error_diagnostics(state->lane_state.pass)) {
+    return iree_ok_status();
+  }
   loom_value_id_t accumulator = state->init;
   uint8_t rank = loom_type_rank(state->lane_state.vector_type);
   int64_t* indices = NULL;
@@ -87,9 +91,9 @@ static iree_status_t loom_vector_to_scalar_lower_static_accumulator(
         iree_arena_allocate_array(state->lane_state.rewriter->arena, rank,
                                   sizeof(int64_t), (void**)&indices));
   }
-  for (iree_host_size_t ordinal = 0; ordinal < element_count; ++ordinal) {
+  for (uint16_t ordinal = 0; ordinal < element_count; ++ordinal) {
     loom_vector_to_scalar_indices_from_ordinal(state->lane_state.vector_type,
-                                               ordinal, indices);
+                                               (int64_t)ordinal, indices);
     loom_vector_to_scalar_index_list_t index_list = {
         .static_indices = indices,
         .rank = rank,
@@ -350,8 +354,12 @@ static iree_status_t loom_vector_to_scalar_reduce_axes_lane(
 static iree_status_t loom_vector_to_scalar_reduce_axes_static_result(
     loom_vector_to_scalar_reduce_axes_state_t* state,
     loom_value_id_t* out_replacement) {
-  iree_host_size_t element_count = 0;
-  loom_type_static_element_count(state->result_type, &element_count);
+  uint16_t element_count = 0;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_static_element_count(
+      &state->lane_state, state->result_type, &element_count));
+  if (loom_pass_has_error_diagnostics(state->lane_state.pass)) {
+    return iree_ok_status();
+  }
   if (element_count == 0) {
     *out_replacement = state->init;
     return iree_ok_status();
@@ -368,7 +376,7 @@ static iree_status_t loom_vector_to_scalar_reduce_axes_static_result(
         state->lane_state.rewriter->arena, result_rank, sizeof(int64_t),
         (void**)&result_indices));
   }
-  for (iree_host_size_t ordinal = 0; ordinal < element_count; ++ordinal) {
+  for (uint16_t ordinal = 0; ordinal < element_count; ++ordinal) {
     loom_vector_to_scalar_indices_from_ordinal(state->result_type, ordinal,
                                                result_indices);
     loom_vector_to_scalar_index_list_t index_list = {

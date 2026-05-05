@@ -399,12 +399,12 @@ int64_t loom_vector_to_scalar_linear_ordinal_static(loom_type_t vector_type,
 }
 
 void loom_vector_to_scalar_indices_from_ordinal(loom_type_t vector_type,
-                                                iree_host_size_t ordinal,
+                                                int64_t ordinal,
                                                 int64_t* indices) {
   uint8_t rank = loom_type_rank(vector_type);
   for (uint8_t reverse_axis = 0; reverse_axis < rank; ++reverse_axis) {
     uint8_t axis = (uint8_t)(rank - reverse_axis - 1);
-    uint64_t dim = loom_type_dim_static_size_at(vector_type, axis);
+    int64_t dim = loom_type_dim_static_size_at(vector_type, axis);
     indices[axis] = dim == 0 ? 0 : (int64_t)(ordinal % dim);
     if (dim != 0) ordinal /= dim;
   }
@@ -423,7 +423,7 @@ static iree_status_t loom_vector_to_scalar_indices_from_ordinal_term(
                                                      (void**)&static_indices));
     }
     loom_vector_to_scalar_indices_from_ordinal(
-        vector_type, (iree_host_size_t)ordinal.static_value, static_indices);
+        vector_type, ordinal.static_value, static_indices);
     *out_indices = (loom_vector_to_scalar_index_list_t){
         .static_indices = static_indices,
         .rank = rank,

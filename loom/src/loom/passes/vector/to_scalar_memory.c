@@ -55,8 +55,8 @@ static loom_vector_memory_cache_policy_t
 loom_vector_to_scalar_memory_cache_policy(
     loom_vector_to_scalar_state_t* state) {
   loom_vector_memory_cache_policy_t policy = {0};
-  (void)loom_vector_memory_cache_policy_from_op(state->rewriter->module,
-                                                state->op, &policy);
+  loom_vector_memory_cache_policy_from_op(state->rewriter->module, state->op,
+                                          &policy);
   return policy;
 }
 
@@ -601,21 +601,19 @@ static iree_status_t loom_vector_to_scalar_emit_store_compress_lane(
 
 static iree_status_t loom_vector_to_scalar_lower_static_memory_store(
     loom_vector_to_scalar_state_t* state) {
-  iree_host_size_t element_count = 0;
-  if (!loom_type_static_element_count(state->vector_type, &element_count)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected all-static vector store type");
-  }
-
+  uint16_t element_count = 0;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_static_element_count(
+      state, state->vector_type, &element_count));
+  if (loom_pass_has_error_diagnostics(state->pass)) return iree_ok_status();
   uint8_t rank = loom_type_rank(state->vector_type);
   int64_t* indices = NULL;
   if (rank > 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         state->rewriter->arena, rank, sizeof(int64_t), (void**)&indices));
   }
-  for (iree_host_size_t ordinal = 0; ordinal < element_count; ++ordinal) {
-    loom_vector_to_scalar_indices_from_ordinal(state->vector_type, ordinal,
-                                               indices);
+  for (uint16_t ordinal = 0; ordinal < element_count; ++ordinal) {
+    loom_vector_to_scalar_indices_from_ordinal(state->vector_type,
+                                               (int64_t)ordinal, indices);
     loom_vector_to_scalar_index_list_t index_list = {
         .static_indices = indices,
         .rank = rank,
@@ -692,12 +690,11 @@ iree_status_t loom_vector_to_scalar_lower_memory_store(
 
 static iree_status_t loom_vector_to_scalar_lower_static_store_compress(
     loom_vector_to_scalar_state_t* state) {
-  iree_host_size_t element_count = 0;
-  if (!loom_type_static_element_count(state->vector_type, &element_count)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected all-static vector.store.compress type");
-  }
-  for (iree_host_size_t ordinal = 0; ordinal < element_count; ++ordinal) {
+  uint16_t element_count = 0;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_static_element_count(
+      state, state->vector_type, &element_count));
+  if (loom_pass_has_error_diagnostics(state->pass)) return iree_ok_status();
+  for (uint16_t ordinal = 0; ordinal < element_count; ++ordinal) {
     int64_t index = (int64_t)ordinal;
     loom_vector_to_scalar_index_list_t index_list = {
         .static_indices = &index,
@@ -871,21 +868,19 @@ static iree_status_t loom_vector_to_scalar_emit_atomic_reduce_lane(
 
 static iree_status_t loom_vector_to_scalar_lower_static_atomic_reduce(
     loom_vector_to_scalar_state_t* state) {
-  iree_host_size_t element_count = 0;
-  if (!loom_type_static_element_count(state->vector_type, &element_count)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected all-static vector.atomic.reduce type");
-  }
-
+  uint16_t element_count = 0;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_static_element_count(
+      state, state->vector_type, &element_count));
+  if (loom_pass_has_error_diagnostics(state->pass)) return iree_ok_status();
   uint8_t rank = loom_type_rank(state->vector_type);
   int64_t* indices = NULL;
   if (rank > 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         state->rewriter->arena, rank, sizeof(int64_t), (void**)&indices));
   }
-  for (iree_host_size_t ordinal = 0; ordinal < element_count; ++ordinal) {
-    loom_vector_to_scalar_indices_from_ordinal(state->vector_type, ordinal,
-                                               indices);
+  for (uint16_t ordinal = 0; ordinal < element_count; ++ordinal) {
+    loom_vector_to_scalar_indices_from_ordinal(state->vector_type,
+                                               (int64_t)ordinal, indices);
     loom_vector_to_scalar_index_list_t index_list = {
         .static_indices = indices,
         .rank = rank,
@@ -1095,12 +1090,10 @@ static iree_status_t loom_vector_to_scalar_build_atomic_rmw_lane(
 
 static iree_status_t loom_vector_to_scalar_lower_static_atomic_rmw(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
-  iree_host_size_t element_count = 0;
-  if (!loom_type_static_element_count(state->vector_type, &element_count)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected all-static vector.atomic.rmw type");
-  }
-
+  uint16_t element_count = 0;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_static_element_count(
+      state, state->vector_type, &element_count));
+  if (loom_pass_has_error_diagnostics(state->pass)) return iree_ok_status();
   loom_value_id_t* elements = NULL;
   if (element_count > 0) {
     IREE_RETURN_IF_ERROR(
@@ -1113,9 +1106,9 @@ static iree_status_t loom_vector_to_scalar_lower_static_atomic_rmw(
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         state->rewriter->arena, rank, sizeof(int64_t), (void**)&indices));
   }
-  for (iree_host_size_t ordinal = 0; ordinal < element_count; ++ordinal) {
-    loom_vector_to_scalar_indices_from_ordinal(state->vector_type, ordinal,
-                                               indices);
+  for (uint16_t ordinal = 0; ordinal < element_count; ++ordinal) {
+    loom_vector_to_scalar_indices_from_ordinal(state->vector_type,
+                                               (int64_t)ordinal, indices);
     loom_vector_to_scalar_index_list_t index_list = {
         .static_indices = indices,
         .rank = rank,
@@ -1269,12 +1262,10 @@ static iree_status_t loom_vector_to_scalar_build_view_atomic_cmpxchg_lane(
 
 static iree_status_t loom_vector_to_scalar_lower_static_atomic_cmpxchg(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
-  iree_host_size_t element_count = 0;
-  if (!loom_type_static_element_count(state->vector_type, &element_count)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected all-static vector.atomic.cmpxchg type");
-  }
-
+  uint16_t element_count = 0;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_static_element_count(
+      state, state->vector_type, &element_count));
+  if (loom_pass_has_error_diagnostics(state->pass)) return iree_ok_status();
   loom_value_id_t* elements = NULL;
   if (element_count > 0) {
     IREE_RETURN_IF_ERROR(
@@ -1287,9 +1278,9 @@ static iree_status_t loom_vector_to_scalar_lower_static_atomic_cmpxchg(
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         state->rewriter->arena, rank, sizeof(int64_t), (void**)&indices));
   }
-  for (iree_host_size_t ordinal = 0; ordinal < element_count; ++ordinal) {
-    loom_vector_to_scalar_indices_from_ordinal(state->vector_type, ordinal,
-                                               indices);
+  for (uint16_t ordinal = 0; ordinal < element_count; ++ordinal) {
+    loom_vector_to_scalar_indices_from_ordinal(state->vector_type,
+                                               (int64_t)ordinal, indices);
     loom_vector_to_scalar_index_list_t index_list = {
         .static_indices = indices,
         .rank = rank,

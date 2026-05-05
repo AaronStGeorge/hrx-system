@@ -66,6 +66,11 @@ static inline loom_op_t* loom_vector_to_scalar_value_def_op(
   return loom_value_def_op(value);
 }
 
+// Computes a static lane count representable by scalarized IR value slices.
+iree_status_t loom_vector_to_scalar_static_element_count(
+    loom_vector_to_scalar_state_t* state, loom_type_t type,
+    uint16_t* out_element_count);
+
 #ifdef __cplusplus
 }
 #endif

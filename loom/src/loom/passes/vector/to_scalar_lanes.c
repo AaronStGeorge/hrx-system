@@ -623,7 +623,7 @@ static bool loom_vector_to_scalar_try_from_elements_lane(
       vector_type, indices.static_indices);
   if (ordinal < 0) return false;
   loom_value_slice_t elements = loom_vector_from_elements_elements(def_op);
-  if ((uint64_t)ordinal >= elements.count) return false;
+  if (ordinal >= (int64_t)elements.count) return false;
   *out_lane = loom_value_slice_get(elements, (uint16_t)ordinal);
   return true;
 }

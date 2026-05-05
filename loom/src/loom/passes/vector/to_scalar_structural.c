@@ -712,8 +712,8 @@ loom_vector_to_scalar_build_static_shape_changing_bitcast_lane(
     int64_t bit_count = overlap_end - overlap_start;
     if (bit_count <= 0) continue;
 
-    loom_vector_to_scalar_indices_from_ordinal(
-        input_type, (iree_host_size_t)source_ordinal, source_indices);
+    loom_vector_to_scalar_indices_from_ordinal(input_type, source_ordinal,
+                                               source_indices);
     loom_vector_to_scalar_index_list_t source_index_list = {
         .static_indices = source_indices,
         .rank = source_rank,
