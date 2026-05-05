@@ -38,3 +38,12 @@ const loom_target_provider_t loom_amdgpu_target_provider = {
             .values = kLoomAmdgpuLowPacketDiagnosticProviders,
         },
 };
+
+static const loom_target_provider_t* const kLoomAmdgpuTargetProviders[] = {
+    &loom_amdgpu_target_provider,
+};
+
+const loom_target_provider_set_t loom_amdgpu_target_provider_set = {
+    .providers = kLoomAmdgpuTargetProviders,
+    .provider_count = IREE_ARRAYSIZE(kLoomAmdgpuTargetProviders),
+};

@@ -16,9 +16,9 @@
 #include "loom/pass/value_facts.h"
 #include "loom/target/compile_report_low.h"
 #include "loom/target/emit/ireevm/function_bytecode.h"
-#include "loom/target/emit/ireevm/low_registry.h"
-#include "loom/target/emit/ireevm/lower.h"
+#include "loom/target/emit/ireevm/provider.h"
 #include "loom/target/module_compiler.h"
+#include "loom/target/provider.h"
 
 enum {
   LOOM_IREEVM_MODULE_COMPILE_DEFAULT_MAX_ERRORS = 20,
@@ -115,17 +115,16 @@ static iree_status_t loom_ireevm_module_compile_symbol_name(
 static iree_status_t loom_ireevm_module_compile_lower_function(
     loom_module_t* module,
     const loom_target_low_descriptor_registry_t* registry,
+    const loom_low_lower_policy_registry_t* lower_policy_registry,
     const loom_target_module_compile_entry_t* entry,
     loom_func_like_t source_function,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     uint32_t max_errors, iree_arena_allocator_t* table_arena,
     loom_pass_value_fact_owner_t* value_facts,
     loom_target_compile_report_t* report, loom_low_lower_result_t* out_result) {
-  loom_low_lower_policy_registry_t policy_registry = {0};
-  loom_ireevm_low_lower_policy_registry_initialize(&policy_registry);
   const loom_low_lower_policy_t* policy =
       loom_low_lower_policy_registry_lookup_for_bundle(
-          &policy_registry, &entry->bundle_storage.bundle);
+          lower_policy_registry, &entry->bundle_storage.bundle);
   if (policy == NULL) {
     return iree_make_status(
         IREE_STATUS_INTERNAL,
@@ -177,14 +176,20 @@ typedef struct loom_ireevm_archive_compile_state_t {
   const loom_ireevm_module_compile_options_t* options;
   // Host allocator used for transient buffers and output ownership.
   iree_allocator_t allocator;
+  // True after arena-backed state has been initialized.
+  bool initialized;
   // Optional caller-owned structured compile report.
   loom_target_compile_report_t* report;
   // Target-neutral compile options derived from |options|.
   loom_target_module_compile_options_t target_options;
   // Normalized diagnostic cap used by target phases.
   uint32_t max_errors;
+  // Target provider environment used to compose target-owned registries.
+  loom_target_environment_t target_environment;
   // Target-low descriptor registry used for selection, lowering, and verify.
   loom_target_low_descriptor_registry_t low_registry;
+  // Source-to-low policy registry used during lowering.
+  loom_low_lower_policy_registry_t lower_policy_registry;
   // Diagnostic materializer shared by lowering, preparation, and low verify.
   loom_target_module_compile_diagnostic_emitter_t diagnostic_emitter;
   // Predicate selecting target bundles the IREE VM archive path can emit.
@@ -201,7 +206,19 @@ typedef struct loom_ireevm_archive_compile_state_t {
   loom_ireevm_function_bytecode_t bytecode;
 } loom_ireevm_archive_compile_state_t;
 
-static void loom_ireevm_archive_compile_state_initialize(
+static void loom_ireevm_archive_compile_state_deinitialize(
+    loom_ireevm_archive_compile_state_t* state) {
+  loom_ireevm_function_bytecode_deinitialize(&state->bytecode,
+                                             state->allocator);
+  loom_pass_value_fact_owner_deinitialize(&state->value_facts);
+  iree_arena_deinitialize(&state->table_arena);
+  iree_arena_block_pool_deinitialize(&state->block_pool);
+  iree_string_builder_deinitialize(&state->calling_convention_builder);
+  loom_target_environment_deinitialize(&state->target_environment);
+  state->initialized = false;
+}
+
+static iree_status_t loom_ireevm_archive_compile_state_initialize(
     loom_module_t* module, const loom_ireevm_module_compile_options_t* options,
     iree_allocator_t allocator,
     loom_ireevm_archive_compile_state_t* out_state) {
@@ -242,11 +259,6 @@ static void loom_ireevm_archive_compile_state_initialize(
         options ? options->entry_symbol : iree_string_view_empty();
   }
 
-  loom_ireevm_low_descriptor_registry_initialize(&out_state->low_registry);
-  loom_target_module_compile_diagnostic_emitter_initialize(
-      module, &out_state->target_options, LOOM_EMITTER_VERIFIER,
-      &out_state->diagnostic_emitter);
-
   iree_string_builder_initialize(allocator,
                                  &out_state->calling_convention_builder);
   iree_arena_block_pool_initialize(32 * 1024, allocator,
@@ -254,16 +266,26 @@ static void loom_ireevm_archive_compile_state_initialize(
   iree_arena_initialize(&out_state->block_pool, &out_state->table_arena);
   loom_pass_value_fact_owner_initialize(&out_state->block_pool,
                                         &out_state->value_facts);
-}
+  out_state->initialized = true;
 
-static void loom_ireevm_archive_compile_state_deinitialize(
-    loom_ireevm_archive_compile_state_t* state) {
-  loom_ireevm_function_bytecode_deinitialize(&state->bytecode,
-                                             state->allocator);
-  loom_pass_value_fact_owner_deinitialize(&state->value_facts);
-  iree_arena_deinitialize(&state->table_arena);
-  iree_arena_block_pool_deinitialize(&state->block_pool);
-  iree_string_builder_deinitialize(&state->calling_convention_builder);
+  iree_status_t status = loom_target_environment_initialize(
+      &loom_ireevm_target_provider_set, &out_state->target_environment);
+  if (iree_status_is_ok(status)) {
+    status = loom_target_environment_initialize_low_descriptor_registry(
+        &out_state->target_environment, &out_state->low_registry);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_target_environment_initialize_low_lower_policy_registry(
+        &out_state->target_environment, &out_state->lower_policy_registry);
+  }
+  if (iree_status_is_ok(status)) {
+    loom_target_module_compile_diagnostic_emitter_initialize(
+        module, &out_state->target_options, LOOM_EMITTER_VERIFIER,
+        &out_state->diagnostic_emitter);
+  } else {
+    loom_ireevm_archive_compile_state_deinitialize(out_state);
+  }
+  return status;
 }
 
 static iree_status_t loom_ireevm_archive_compile_select_entry(
@@ -301,9 +323,9 @@ static iree_status_t loom_ireevm_archive_compile_selected_entry(
 
   loom_low_lower_result_t lower_result = {0};
   IREE_RETURN_IF_ERROR(loom_ireevm_module_compile_lower_function(
-      state->module, &state->low_registry, entry, entry->func,
-      &state->diagnostic_emitter, state->max_errors, &state->table_arena,
-      &state->value_facts, state->report, &lower_result));
+      state->module, &state->low_registry, &state->lower_policy_registry, entry,
+      entry->func, &state->diagnostic_emitter, state->max_errors,
+      &state->table_arena, &state->value_facts, state->report, &lower_result));
   if (lower_result.error_count != 0) {
     return iree_ok_status();
   }
@@ -417,16 +439,19 @@ iree_status_t loom_ireevm_compile_module_archive(
   *out_archive = (loom_ireevm_module_archive_t){0};
 
   loom_ireevm_archive_compile_state_t state = {0};
-  loom_ireevm_archive_compile_state_initialize(module, options, allocator,
-                                               &state);
-  iree_status_t status =
-      loom_ireevm_archive_compile(&state, out_archive, out_compiled);
+  iree_status_t status = loom_ireevm_archive_compile_state_initialize(
+      module, options, allocator, &state);
+  if (iree_status_is_ok(status)) {
+    status = loom_ireevm_archive_compile(&state, out_archive, out_compiled);
+  }
   if (!iree_status_is_ok(status)) {
     loom_ireevm_module_archive_deinitialize(out_archive, allocator);
   }
   if (state.report != NULL) {
     loom_target_compile_report_record_status(state.report, status);
   }
-  loom_ireevm_archive_compile_state_deinitialize(&state);
+  if (state.initialized) {
+    loom_ireevm_archive_compile_state_deinitialize(&state);
+  }
   return status;
 }

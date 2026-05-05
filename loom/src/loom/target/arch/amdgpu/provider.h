@@ -18,6 +18,9 @@ extern "C" {
 // AMDGPU target dialect, descriptor, lowering, and diagnostic capabilities.
 extern const loom_target_provider_t loom_amdgpu_target_provider;
 
+// Provider set containing only the AMDGPU target provider.
+extern const loom_target_provider_set_t loom_amdgpu_target_provider_set;
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

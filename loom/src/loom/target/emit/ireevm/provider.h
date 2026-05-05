@@ -18,6 +18,9 @@ extern "C" {
 // IREE VM target dialect, descriptor, and lowering capabilities.
 extern const loom_target_provider_t loom_ireevm_target_provider;
 
+// Provider set containing only the IREE VM target provider.
+extern const loom_target_provider_set_t loom_ireevm_target_provider_set;
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

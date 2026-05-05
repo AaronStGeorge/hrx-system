@@ -18,6 +18,9 @@ extern "C" {
 // x86 target dialect, descriptor, and lowering capabilities.
 extern const loom_target_provider_t loom_x86_target_provider;
 
+// Provider set containing only the x86 target provider.
+extern const loom_target_provider_set_t loom_x86_target_provider_set;
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

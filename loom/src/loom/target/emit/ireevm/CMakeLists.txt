@@ -116,9 +116,8 @@ loom_cc_library(
     "module_compiler.c"
   DEPS
     ::function_bytecode
-    ::low_registry
-    ::lower
     ::module_archive
+    ::provider
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::frame
@@ -134,6 +133,7 @@ loom_cc_library(
     loom::src::loom::target::compile_report
     loom::src::loom::target::compile_report_low
     loom::src::loom::target::module_compiler
+    loom::src::loom::target::provider
     loom::src::loom::verify
   PUBLIC
 )

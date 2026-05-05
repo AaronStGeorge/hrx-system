@@ -17,3 +17,12 @@ const loom_target_provider_t loom_x86_target_provider = {
     .initialize_low_lower_policy_registry =
         loom_x86_low_lower_policy_registry_initialize,
 };
+
+static const loom_target_provider_t* const kLoomX86TargetProviders[] = {
+    &loom_x86_target_provider,
+};
+
+const loom_target_provider_set_t loom_x86_target_provider_set = {
+    .providers = kLoomX86TargetProviders,
+    .provider_count = IREE_ARRAYSIZE(kLoomX86TargetProviders),
+};

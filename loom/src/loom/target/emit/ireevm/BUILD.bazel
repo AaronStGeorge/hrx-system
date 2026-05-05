@@ -195,9 +195,8 @@ loom_cc_library(
     hdrs = ["module_compiler.h"],
     deps = [
         ":function_bytecode",
-        ":low_registry",
-        ":lower",
         ":module_archive",
+        ":provider",
         "//loom/src/loom/codegen/low:frame",
         "//loom/src/loom/codegen/low:preparation",
         "//loom/src/loom/codegen/low:verify",
@@ -211,6 +210,7 @@ loom_cc_library(
         "//loom/src/loom/target:compile_report",
         "//loom/src/loom/target:compile_report_low",
         "//loom/src/loom/target:module_compiler",
+        "//loom/src/loom/target:provider",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",

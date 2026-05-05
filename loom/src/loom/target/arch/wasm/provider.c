@@ -17,3 +17,12 @@ const loom_target_provider_t loom_wasm_target_provider = {
     .initialize_low_lower_policy_registry =
         loom_wasm_low_lower_policy_registry_initialize,
 };
+
+static const loom_target_provider_t* const kLoomWasmTargetProviders[] = {
+    &loom_wasm_target_provider,
+};
+
+const loom_target_provider_set_t loom_wasm_target_provider_set = {
+    .providers = kLoomWasmTargetProviders,
+    .provider_count = IREE_ARRAYSIZE(kLoomWasmTargetProviders),
+};
