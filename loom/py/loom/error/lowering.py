@@ -298,26 +298,6 @@ ERR_LOWERING_015 = ErrorDef(
     ),
 )
 
-# ERR_LOWERING_016: Low function contract is invalid.
-ERR_LOWERING_016 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=16,
-    severity=Severity.ERROR,
-    summary="Low function contract is invalid.",
-    message=(
-        "low function '@{function_name}' {contract_name} contract is invalid: {reason}"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("contract_name", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Keep low function exactness and imported-code attrs complete and on "
-        "the operation kind that owns them"
-    ),
-)
-
 # ERR_LOWERING_017: Low structural storage op is invalid.
 ERR_LOWERING_017 = ErrorDef(
     domain=ErrorDomain.LOWERING,
@@ -851,6 +831,93 @@ ERR_LOWERING_043 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_044: Low function attribute is required.
+ERR_LOWERING_044 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=44,
+    severity=Severity.ERROR,
+    summary="Low function attribute is required.",
+    message=(
+        "low function '@{function_name}' requires attribute {attribute_name} "
+        "when {required_by} is present"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("attribute_name", ParamKind.STRING),
+        ErrorParam("required_by", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Add the required low function attribute or remove the dependent attribute."
+    ),
+)
+
+# ERR_LOWERING_045: Low function integer attribute must be positive.
+ERR_LOWERING_045 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=45,
+    severity=Severity.ERROR,
+    summary="Low function integer attribute must be positive.",
+    message=(
+        "low function '@{function_name}' attribute {attribute_name} must be a "
+        "positive u32"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("attribute_name", ParamKind.STRING),
+    ),
+    fix_hint="Use a value in the inclusive range [1, 4294967295].",
+)
+
+# ERR_LOWERING_046: Low exactness mode is unnamed.
+ERR_LOWERING_046 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=46,
+    severity=Severity.ERROR,
+    summary="Low exactness mode is unnamed.",
+    message=(
+        "low function '@{function_name}' explicit {attribute_name} mode must "
+        "name a supported exactness mode"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("attribute_name", ParamKind.STRING),
+    ),
+    fix_hint="Use a named allocation or schedule exactness mode.",
+)
+
+# ERR_LOWERING_047: Low import kind is unnamed.
+ERR_LOWERING_047 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=47,
+    severity=Severity.ERROR,
+    summary="Low import kind is unnamed.",
+    message=(
+        "low function '@{function_name}' attribute {attribute_name} must name "
+        "a supported import kind"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("attribute_name", ParamKind.STRING),
+    ),
+    fix_hint="Use a named import kind such as vm, native, rocasm, or object.",
+)
+
+# ERR_LOWERING_048: Low import code symbol is empty.
+ERR_LOWERING_048 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=48,
+    severity=Severity.ERROR,
+    summary="Low import code symbol is empty.",
+    message=(
+        "low function '@{function_name}' attribute {attribute_name} must not be empty"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("attribute_name", ParamKind.STRING),
+    ),
+    fix_hint="Provide the imported code symbol name or remove the import attributes.",
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_003,
     ERR_LOWERING_004,
@@ -865,7 +932,6 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_013,
     ERR_LOWERING_014,
     ERR_LOWERING_015,
-    ERR_LOWERING_016,
     ERR_LOWERING_017,
     ERR_LOWERING_018,
     ERR_LOWERING_019,
@@ -893,4 +959,9 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_041,
     ERR_LOWERING_042,
     ERR_LOWERING_043,
+    ERR_LOWERING_044,
+    ERR_LOWERING_045,
+    ERR_LOWERING_046,
+    ERR_LOWERING_047,
+    ERR_LOWERING_048,
 )
