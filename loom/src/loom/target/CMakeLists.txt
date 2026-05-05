@@ -357,11 +357,11 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
-    module_compiler
+    entry_selection
   HDRS
-    "module_compiler.h"
+    "entry_selection.h"
   SRCS
-    "module_compiler.c"
+    "entry_selection.c"
   DEPS
     ::artifact_plan
     ::function_contract

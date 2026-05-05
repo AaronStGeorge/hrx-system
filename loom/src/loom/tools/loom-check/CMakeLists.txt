@@ -82,11 +82,11 @@ loom_cc_library(
     loom::src::loom::pass::registry
     loom::src::loom::pass::tooling
     loom::src::loom::pass::value_facts
+    loom::src::loom::target::entry_selection
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::low_descriptor_registry_manifest
     loom::src::loom::target::low_legality
     loom::src::loom::target::low_packet_diagnostics
-    loom::src::loom::target::module_compiler
     loom::src::loom::target::predicate
     loom::src::loom::target::types
     loom::src::loom::testing::diff

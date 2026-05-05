@@ -305,9 +305,9 @@ loom_cc_library(
     loom::src::loom::target::arch::amdgpu::wait_plan
     loom::src::loom::target::compile_report
     loom::src::loom::target::compile_report_low
+    loom::src::loom::target::entry_selection
     loom::src::loom::target::function_contract
     loom::src::loom::target::launch
-    loom::src::loom::target::module_compiler
     loom::src::loom::target::provider
     loom::src::loom::verify
   PUBLIC

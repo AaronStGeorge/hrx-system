@@ -132,7 +132,7 @@ loom_cc_library(
     loom::src::loom::pass::value_facts
     loom::src::loom::target::compile_report
     loom::src::loom::target::compile_report_low
-    loom::src::loom::target::module_compiler
+    loom::src::loom::target::entry_selection
     loom::src::loom::target::provider
     loom::src::loom::verify
   PUBLIC
