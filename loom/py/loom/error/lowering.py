@@ -441,6 +441,30 @@ ERR_LOWERING_020 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_021: Low register type has no descriptor register class.
+ERR_LOWERING_021 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=21,
+    severity=Severity.ERROR,
+    summary="Low register type has no descriptor register class.",
+    message=(
+        "low function '@{function_name}' {value_kind} '{value_name}' has "
+        "type {actual_type}, whose register class is not defined by descriptor "
+        "set '{descriptor_set}'"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("value_kind", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("descriptor_set", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use a register class declared by descriptor set '{descriptor_set}' "
+        "or select a target config whose descriptor set owns this ABI type"
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
@@ -462,4 +486,5 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_018,
     ERR_LOWERING_019,
     ERR_LOWERING_020,
+    ERR_LOWERING_021,
 )

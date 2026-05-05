@@ -1109,6 +1109,90 @@ static iree_status_t loom_low_verify_resource(
   return iree_ok_status();
 }
 
+static iree_string_view_t loom_low_verify_value_name_or_placeholder(
+    const loom_module_t* module, loom_value_id_t value_id,
+    iree_string_view_t placeholder) {
+  if (value_id >= module->values.count) {
+    return placeholder;
+  }
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (value->name_id == LOOM_STRING_ID_INVALID ||
+      value->name_id >= module->strings.count) {
+    return placeholder;
+  }
+  return module->strings.entries[value->name_id];
+}
+
+static iree_status_t loom_low_verify_emit_unresolved_register_class(
+    loom_low_function_verify_state_t* function_state, const loom_op_t* op,
+    iree_string_view_t value_kind, iree_string_view_t value_name,
+    loom_type_t actual_type) {
+  const loom_low_resolved_target_t* target = function_state->target;
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(function_state->function_name),
+      loom_param_string(value_kind),
+      loom_param_string(value_name),
+      loom_param_type(actual_type),
+      loom_param_string(target->descriptor_set_key),
+  };
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_021,
+                              params, IREE_ARRAYSIZE(params), NULL, 0);
+}
+
+static iree_status_t loom_low_verify_register_value_class(
+    loom_low_function_verify_state_t* function_state, const loom_op_t* op,
+    iree_string_view_t value_kind, iree_string_view_t placeholder,
+    loom_value_id_t value_id) {
+  const loom_module_t* module = function_state->state->module;
+  loom_type_t type = loom_module_value_type(module, value_id);
+  if (!loom_type_is_register(type)) {
+    return iree_ok_status();
+  }
+  uint16_t descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
+  bool found_descriptor_register_class = false;
+  IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_type(
+      &function_state->register_class_map, type, &descriptor_register_class_id,
+      NULL, &found_descriptor_register_class));
+  if (found_descriptor_register_class) {
+    return iree_ok_status();
+  }
+  return loom_low_verify_emit_unresolved_register_class(
+      function_state, op, value_kind,
+      loom_low_verify_value_name_or_placeholder(module, value_id, placeholder),
+      type);
+}
+
+static iree_status_t loom_low_verify_function_register_values(
+    loom_low_function_verify_state_t* function_state, const loom_op_t* op,
+    loom_region_t* body) {
+  const loom_value_id_t* results = loom_op_const_results(op);
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_register_value_class(
+        function_state, op, IREE_SV("result"), IREE_SV("result"), results[i]));
+  }
+  if (loom_low_func_decl_isa(op)) {
+    const loom_value_id_t* args = loom_op_const_operands(op);
+    for (uint16_t i = 0; i < op->operand_count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_low_verify_register_value_class(
+          function_state, op, IREE_SV("argument"), IREE_SV("argument"),
+          args[i]));
+    }
+    return iree_ok_status();
+  }
+  if (!body) {
+    return iree_ok_status();
+  }
+  loom_block_t* block = NULL;
+  loom_region_for_each_block(body, block) {
+    for (uint16_t i = 0; i < block->arg_count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_low_verify_register_value_class(
+          function_state, op, IREE_SV("argument"), IREE_SV("argument"),
+          loom_block_arg_id(block, i)));
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_descriptor_register_field(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
     iree_string_view_t opcode, uint16_t opcode_attr_index,
@@ -1535,8 +1619,7 @@ static iree_status_t loom_low_verify_function(loom_low_verify_state_t* state,
   IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
       state->module, low_func_op, state->registry, counting_emitter, &target));
   loom_region_t* body = loom_low_verify_function_body(low_func_op);
-  if (target.descriptor_set == NULL || body == NULL ||
-      loom_low_verify_should_stop(state)) {
+  if (target.descriptor_set == NULL || loom_low_verify_should_stop(state)) {
     return iree_ok_status();
   }
 
@@ -1549,6 +1632,14 @@ static iree_status_t loom_low_verify_function(loom_low_verify_state_t* state,
   IREE_RETURN_IF_ERROR(loom_low_register_class_map_initialize(
       state->module, target.descriptor_set, &state->arena,
       &function_state.register_class_map));
+  IREE_RETURN_IF_ERROR(loom_low_verify_function_register_values(
+      &function_state, low_func_op, body));
+  if (loom_low_verify_should_stop(state)) {
+    return iree_ok_status();
+  }
+  if (body == NULL) {
+    return iree_ok_status();
+  }
   IREE_RETURN_IF_ERROR(
       loom_low_verify_initialize_block_arg_masks(&function_state, body));
   loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;

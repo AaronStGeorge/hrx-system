@@ -9,6 +9,20 @@ low.func.def target(@test_target) @add(%lhs: reg<test.i32>, %rhs: reg<test.i32>)
 // ====
 
 test.target<low_core> @test_target
+// ERROR@+1: LOWERING/021 {actual_type="reg<test.typo>", descriptor_set="test.low.core"}
+low.func.def target(@test_target) @bad_register_class(%value: reg<test.typo>) {
+  low.return
+}
+
+// ====
+
+test.target<low_core> @test_target
+// ERROR@+1: LOWERING/021 {actual_type="reg<test.typo>", descriptor_set="test.low.core"}
+low.func.decl target(@test_target) @bad_register_decl(%value: reg<test.typo>)
+
+// ====
+
+test.target<low_core> @test_target
 low.func.def target(@test_target) @partial_register_pair(%ptr: reg<test.ptr>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
   %low = low.op<test.write.low16.i32>(%ptr) : (reg<test.ptr>) -> reg<test.i32>
   %full = low.op<test.write.high16.i32>(%low, %ptr) : (reg<test.i32>, reg<test.ptr>) -> %low as reg<test.i32>

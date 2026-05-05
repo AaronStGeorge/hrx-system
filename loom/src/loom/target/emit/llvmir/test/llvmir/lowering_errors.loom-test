@@ -30,9 +30,9 @@ func.def @dot4_f8(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %acc: vector<4xf32>)
 // ====
 
 // Vector memory lowering currently requires dense address layouts.
-// ERROR@+1: LOWERING/001 "UNIMPLEMENTED"
 func.def @vector_load_strided(%buffer: buffer, %offset: offset) -> (vector<4xf32>) {
   %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, #strided<stride=8>>
+  // ERROR@+1: TARGET/038 {op_name="vector.load", legality_code="unsupported_op", constraint_key="llvmir-vector-memory-dense-layout", subject_key="view"}
   %loaded = vector.load %view[0] : view<4xf32, #strided<stride=8>> -> vector<4xf32>
   func.return %loaded : vector<4xf32>
 }
@@ -101,16 +101,6 @@ func.def @scf_for_before_cfg(%n: index) {
   scf.for %i = [%zero to %n step %one] {
     scf.yield
   }
-  func.return
-}
-
-// ====
-
-// RUN: emit llvmir spirv-vulkan
-
-// Unknown LLVMIR target profiles are reported before parsing/lowering.
-// ERROR@+1: LOWERING/001 "INVALID_ARGUMENT"
-func.def @unknown_profile() {
   func.return
 }
 

@@ -19,6 +19,7 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/target/ops.h"
+#include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/emit/llvmir/target_env.h"
@@ -682,6 +683,50 @@ static bool loom_llvmir_target_legality_verify_intrinsic(
       IREE_SV("known-llvmir-intrinsic"), kind);
 }
 
+static bool loom_llvmir_target_legality_verify_vector_memory_access(
+    loom_llvmir_target_legality_context_t* context, const loom_op_t* op,
+    loom_type_t view_type, loom_type_t vector_type) {
+  loom_vector_memory_access_t access;
+  if (!loom_vector_memory_access_describe(context->module, view_type,
+                                          vector_type, &access)) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_OP, op,
+        IREE_SV("llvmir-vector-memory-shape"), IREE_SV("vector"));
+  }
+  if (access.vector_rank != 1 || !loom_type_is_all_static(vector_type)) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_OP, op,
+        IREE_SV("llvmir-vector-memory-vector-shape"), IREE_SV("vector"));
+  }
+  uint64_t lane_count = 0;
+  if (!loom_type_static_element_count(vector_type, &lane_count) ||
+      lane_count == 0 || lane_count > UINT32_MAX) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_OP, op,
+        IREE_SV("llvmir-vector-memory-lane-count"), IREE_SV("vector"));
+  }
+  if (access.layout_kind != LOOM_VECTOR_MEMORY_LAYOUT_DENSE) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_OP, op,
+        IREE_SV("llvmir-vector-memory-dense-layout"), IREE_SV("view"));
+  }
+  int64_t vector_axis_stride = 0;
+  if (!loom_vector_memory_access_static_axis_stride(
+          &access, access.first_vector_axis, &vector_axis_stride) ||
+      vector_axis_stride != 1) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_OP, op,
+        IREE_SV("llvmir-vector-memory-contiguous-lanes"), IREE_SV("view"));
+  }
+  if (access.static_element_byte_count <= 0 ||
+      lane_count > (uint64_t)(INT64_MAX / access.static_element_byte_count)) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_OP, op,
+        IREE_SV("llvmir-vector-memory-byte-size"), IREE_SV("vector"));
+  }
+  return true;
+}
+
 static bool loom_llvmir_target_legality_verify_inline_asm(
     loom_llvmir_target_legality_context_t* context, const loom_op_t* op) {
   if (op->result_count > 1) {
@@ -855,6 +900,20 @@ static bool loom_llvmir_target_legality_verify_op(
       return loom_llvmir_target_legality_verify_inline_asm(context, op);
     case LOOM_OP_LLVMIR_INTRINSIC:
       return loom_llvmir_target_legality_verify_intrinsic(context, op);
+    case LOOM_OP_VECTOR_LOAD:
+      return loom_llvmir_target_legality_verify_vector_memory_access(
+          context, op,
+          loom_llvmir_target_legality_value_type(context,
+                                                 loom_vector_load_view(op)),
+          loom_llvmir_target_legality_value_type(context,
+                                                 loom_vector_load_result(op)));
+    case LOOM_OP_VECTOR_STORE:
+      return loom_llvmir_target_legality_verify_vector_memory_access(
+          context, op,
+          loom_llvmir_target_legality_value_type(context,
+                                                 loom_vector_store_view(op)),
+          loom_llvmir_target_legality_value_type(context,
+                                                 loom_vector_store_value(op)));
     case LOOM_OP_VECTOR_DOT2F:
     case LOOM_OP_VECTOR_DOT4I:
       return loom_llvmir_target_legality_verify_provider_contract_op(
