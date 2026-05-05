@@ -2,7 +2,7 @@
 
 amdgpu.target<gfx1100> @target
 func.def target(@target) @async_group_argument_rejected(%group: kernel.async.group) {
-  // ERROR@+1: LOWERING/001 "kernel.async.wait" "source-low" "waited async group is not committed in the current straight-line async stream"
+  // ERROR@+1: LOWERING/029 {op_name="kernel.async.wait", phase_name="source-low"}
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group
   func.return
 }
@@ -45,7 +45,7 @@ kernel.def target(@target) @async_gather_destination_read_before_wait(%input: bu
   %dest = buffer.view %scratch[%zero] : buffer -> view<64x1x4xi8, #dense>
   %copy = kernel.async.gather %source to %dest {cache_scope = device, cache_temporal = regular} : view<1x4xi8, #dense> to view<64x1x4xi8, #dense> -> kernel.async.token
   %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
-  // ERROR@+1: LOWERING/001 "view.load" "source-low" "synchronous read may observe a pending async destination before wait"
+  // ERROR@+1: LOWERING/028 {op_name="view.load", phase_name="source-low"}
   %loaded = view.load %dest[0, 0, 0] : view<64x1x4xi8, #dense> -> i8
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group
   kernel.return

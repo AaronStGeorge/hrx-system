@@ -6,9 +6,6 @@
 
 #include "loom/analysis/kernel_async_legality.h"
 
-#include <inttypes.h>
-#include <stdio.h>
-
 #include "loom/analysis/movement.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
@@ -154,29 +151,63 @@ static iree_string_view_t loom_kernel_async_legality_op_name(
   return loom_op_vtable_name(vtable);
 }
 
-static iree_status_t loom_kernel_async_legality_fail(
-    loom_kernel_async_legality_state_t* state, const loom_op_t* op,
-    iree_string_view_t reason) {
-  state->failed = true;
-  iree_string_view_t op_name =
-      loom_kernel_async_legality_op_name(state->module, op);
-  iree_string_view_t phase_name = state->options->phase_name;
-  if (iree_string_view_is_empty(phase_name)) {
-    phase_name = IREE_SV("kernel-async-legality");
+static iree_string_view_t loom_kernel_async_legality_phase_name(
+    const loom_kernel_async_legality_state_t* state) {
+  if (!iree_string_view_is_empty(state->options->phase_name)) {
+    return state->options->phase_name;
   }
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(op_name),
-      loom_param_string(phase_name),
-      loom_param_string(reason),
-  };
+  return IREE_SV("kernel-async-legality");
+}
+
+static iree_status_t loom_kernel_async_legality_emit(
+    loom_kernel_async_legality_state_t* state, const loom_op_t* op,
+    const loom_error_def_t* error, const loom_diagnostic_param_t* params,
+    iree_host_size_t param_count) {
+  state->failed = true;
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = LOOM_ERR_LOWERING_001,
+      .error = error,
       .params = params,
-      .param_count = IREE_ARRAYSIZE(params),
+      .param_count = param_count,
   };
   ++state->result->error_count;
   return iree_diagnostic_emit(state->options->emitter, &emission);
+}
+
+static iree_status_t loom_kernel_async_legality_fail(
+    loom_kernel_async_legality_state_t* state, const loom_op_t* op,
+    const loom_error_def_t* error) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_kernel_async_legality_op_name(state->module, op)),
+      loom_param_string(loom_kernel_async_legality_phase_name(state)),
+  };
+  return loom_kernel_async_legality_emit(state, op, error, params,
+                                         IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_kernel_async_legality_fail_movement_rejection(
+    loom_kernel_async_legality_state_t* state, const loom_op_t* op,
+    uint64_t rejection_bits) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_kernel_async_legality_op_name(state->module, op)),
+      loom_param_string(loom_kernel_async_legality_phase_name(state)),
+      loom_param_u64(rejection_bits),
+  };
+  return loom_kernel_async_legality_emit(state, op, LOOM_ERR_LOWERING_024,
+                                         params, IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_kernel_async_legality_fail_newer_groups(
+    loom_kernel_async_legality_state_t* state, const loom_op_t* op,
+    int64_t actual_newer_groups, iree_host_size_t expected_newer_groups) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_kernel_async_legality_op_name(state->module, op)),
+      loom_param_string(loom_kernel_async_legality_phase_name(state)),
+      loom_param_i64(actual_newer_groups),
+      loom_param_u64((uint64_t)expected_newer_groups),
+  };
+  return loom_kernel_async_legality_emit(state, op, LOOM_ERR_LOWERING_031,
+                                         params, IREE_ARRAYSIZE(params));
 }
 
 static bool loom_kernel_async_legality_use_is_wait(const loom_use_t* use) {
@@ -186,23 +217,14 @@ static bool loom_kernel_async_legality_use_is_wait(const loom_use_t* use) {
 static iree_status_t loom_kernel_async_legality_check_group_uses(
     loom_kernel_async_legality_state_t* state, const loom_op_t* op,
     loom_value_id_t group_id) {
-  if (group_id >= state->module->values.count) {
-    return loom_kernel_async_legality_fail(
-        state, op, IREE_SV("async group result value is out of range"));
-  }
   const loom_value_t* group_value = loom_module_value(state->module, group_id);
   if (group_value->use_count == 0) {
-    return loom_kernel_async_legality_fail(
-        state, op,
-        IREE_SV("async group has no wait in the current async stream"));
+    return loom_kernel_async_legality_fail(state, op, LOOM_ERR_LOWERING_022);
   }
   const loom_use_t* use = NULL;
   loom_value_for_each_use(group_value, use) {
     if (!loom_kernel_async_legality_use_is_wait(use)) {
-      return loom_kernel_async_legality_fail(
-          state, op,
-          IREE_SV("carried async groups require pipeline-aware legality "
-                  "analysis before lowering"));
+      return loom_kernel_async_legality_fail(state, op, LOOM_ERR_LOWERING_023);
     }
   }
   return iree_ok_status();
@@ -310,16 +332,10 @@ static iree_status_t loom_kernel_async_legality_check_pending_dest_hazard(
       state, stream, access_region, &overlaps));
   if (overlaps) {
     if (iree_any_bit_set(flags, LOOM_OPERAND_WRITES)) {
-      return loom_kernel_async_legality_fail(
-          state, op,
-          IREE_SV("synchronous write may overwrite a pending async destination "
-                  "before wait"));
+      return loom_kernel_async_legality_fail(state, op, LOOM_ERR_LOWERING_027);
     }
     if (iree_any_bit_set(flags, LOOM_OPERAND_READS)) {
-      return loom_kernel_async_legality_fail(
-          state, op,
-          IREE_SV("synchronous read may observe a pending async destination "
-                  "before wait"));
+      return loom_kernel_async_legality_fail(state, op, LOOM_ERR_LOWERING_028);
     }
   }
   return iree_ok_status();
@@ -375,15 +391,13 @@ static iree_status_t loom_kernel_async_legality_append_endpoint(
       loom_movement_request_describe_op(&state->movement_analysis, producer_op,
                                         &request, &diagnostic, &described));
   if (!described) {
-    return loom_kernel_async_legality_fail(
-        state, group_op,
-        loom_movement_rejection_detail(diagnostic.rejection_bits));
+    return loom_kernel_async_legality_fail_movement_rejection(
+        state, group_op, diagnostic.rejection_bits);
   }
   if (!iree_all_bits_set(request.flags, LOOM_MOVEMENT_REQUEST_ASYNC) ||
       request.dest.kind != LOOM_MOVEMENT_ENDPOINT_VIEW) {
-    return loom_kernel_async_legality_fail(
-        state, group_op,
-        IREE_SV("async group token producer is not an async view movement"));
+    return loom_kernel_async_legality_fail(state, group_op,
+                                           LOOM_ERR_LOWERING_025);
   }
 
   loom_view_region_t dest_region = {0};
@@ -392,10 +406,8 @@ static iree_status_t loom_kernel_async_legality_append_endpoint(
   IREE_RETURN_IF_ERROR(loom_kernel_async_legality_pending_dest_overlaps(
       state, stream, &dest_region, &overlaps));
   if (overlaps) {
-    return loom_kernel_async_legality_fail(
-        state, group_op,
-        IREE_SV("pending async destination may overlap an earlier uncompleted "
-                "async destination"));
+    return loom_kernel_async_legality_fail(state, group_op,
+                                           LOOM_ERR_LOWERING_026);
   }
 
   stream->endpoints[stream->endpoint_count++] =
@@ -415,9 +427,7 @@ static iree_status_t loom_kernel_async_legality_append_group_endpoints(
     const loom_op_t* producer_op = loom_kernel_async_legality_token_producer(
         state, loom_value_slice_get(tokens, i));
     if (!producer_op) {
-      return loom_kernel_async_legality_fail(
-          state, op,
-          IREE_SV("async group token is not produced by an operation"));
+      return loom_kernel_async_legality_fail(state, op, LOOM_ERR_LOWERING_033);
     }
     IREE_RETURN_IF_ERROR(loom_kernel_async_legality_append_endpoint(
         state, stream, op, group_index, producer_op));
@@ -431,10 +441,6 @@ static iree_status_t loom_kernel_async_legality_append_group_endpoints(
 static iree_status_t loom_kernel_async_legality_append_group(
     loom_kernel_async_legality_state_t* state,
     loom_kernel_async_legality_stream_t* stream, const loom_op_t* op) {
-  if (op->result_count == 0) {
-    return loom_kernel_async_legality_fail(
-        state, op, IREE_SV("kernel.async.group is missing its group result"));
-  }
   loom_value_id_t group_id = loom_kernel_async_group_group(op);
   IREE_RETURN_IF_ERROR(
       loom_kernel_async_legality_check_group_uses(state, op, group_id));
@@ -486,58 +492,20 @@ static void loom_kernel_async_legality_complete_through(
   }
 }
 
-static iree_status_t loom_kernel_async_legality_fail_newer_groups(
-    loom_kernel_async_legality_state_t* state, const loom_op_t* op,
-    int64_t actual_newer_groups, iree_host_size_t expected_newer_groups) {
-  char reason_buffer[160];
-  int reason_length = snprintf(reason_buffer, IREE_ARRAYSIZE(reason_buffer),
-                               "newer_groups is %" PRId64 " but %" PRIhsz
-                               " younger async group(s) remain outstanding",
-                               actual_newer_groups, expected_newer_groups);
-  if (reason_length <= 0 ||
-      (iree_host_size_t)reason_length >= IREE_ARRAYSIZE(reason_buffer)) {
-    return loom_kernel_async_legality_fail(
-        state, op,
-        IREE_SV("newer_groups does not match the async stream depth"));
-  }
-  return loom_kernel_async_legality_fail(
-      state, op,
-      iree_make_string_view(reason_buffer, (iree_host_size_t)reason_length));
-}
-
 static iree_status_t loom_kernel_async_legality_check_wait(
     loom_kernel_async_legality_state_t* state,
     loom_kernel_async_legality_stream_t* stream, const loom_op_t* op) {
-  if (op->operand_count == 0) {
-    return loom_kernel_async_legality_fail(
-        state, op, IREE_SV("kernel.async.wait is missing its group operand"));
-  }
-  if (op->attribute_count == 0) {
-    return loom_kernel_async_legality_fail(
-        state, op, IREE_SV("kernel.async.wait is missing newer_groups"));
-  }
-
   loom_value_id_t group_id = loom_kernel_async_wait_group(op);
   iree_host_size_t group_index =
       loom_kernel_async_legality_find_group(stream, group_id);
   if (group_index == IREE_HOST_SIZE_MAX) {
-    return loom_kernel_async_legality_fail(
-        state, op,
-        IREE_SV("waited async group is not committed in the current "
-                "straight-line async stream"));
+    return loom_kernel_async_legality_fail(state, op, LOOM_ERR_LOWERING_029);
   }
   if (stream->groups[group_index].completed) {
-    return loom_kernel_async_legality_fail(
-        state, op,
-        IREE_SV("async group was already completed by an earlier "
-                "wait in the current stream"));
+    return loom_kernel_async_legality_fail(state, op, LOOM_ERR_LOWERING_030);
   }
 
   int64_t actual_newer_groups = loom_kernel_async_wait_newer_groups(op);
-  if (actual_newer_groups < 0) {
-    return loom_kernel_async_legality_fail(
-        state, op, IREE_SV("newer_groups must be nonnegative"));
-  }
   iree_host_size_t expected_newer_groups =
       loom_kernel_async_legality_newer_uncompleted_count(stream, group_index);
   if ((uint64_t)actual_newer_groups != (uint64_t)expected_newer_groups) {
@@ -557,9 +525,8 @@ static iree_status_t loom_kernel_async_legality_check_uncompleted_groups(
     if (stream->groups[i].completed) {
       continue;
     }
-    return loom_kernel_async_legality_fail(
-        state, stream->groups[i].group_op,
-        IREE_SV("async group is not waited before leaving its block"));
+    return loom_kernel_async_legality_fail(state, stream->groups[i].group_op,
+                                           LOOM_ERR_LOWERING_032);
   }
   return iree_ok_status();
 }
