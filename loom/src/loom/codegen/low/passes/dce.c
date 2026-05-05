@@ -56,9 +56,7 @@ static iree_status_t loom_low_dce_deadness_query(void* user_data,
   }
 
   if (packet.descriptor == NULL) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "failed to look up low descriptor '%.*s'",
-                            (int)packet.key.size, packet.key.data);
+    return iree_ok_status();
   }
   *out_is_dead = iree_any_bit_set(packet.descriptor->flags,
                                   LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE);
@@ -74,8 +72,7 @@ static iree_status_t loom_low_dce_function(
   IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
       module, low_func_op, descriptor_registry, emitter, &target));
   if (!target.descriptor_set) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "low function target did not resolve");
+    return iree_ok_status();
   }
 
   loom_low_dce_deadness_context_t deadness_context = {
