@@ -21,6 +21,7 @@ iree_py_library(
     "coverage.py"
     "model.py"
     "nodes.py"
+    "oracle.py"
     "types.py"
   DEPS
     iree::runtime::py::loom::core
@@ -55,6 +56,7 @@ iree_py_test(
   ARGS
     "loom.importers.tilelang.context_test"
     "loom.importers.tilelang.coverage_test"
+    "loom.importers.tilelang.oracle_test"
     "loom.importers.tilelang.types_test"
   PACKAGE_DIRS
     "${IREE_SOURCE_DIR}/runtime/py"

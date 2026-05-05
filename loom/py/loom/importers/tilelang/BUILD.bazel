@@ -52,6 +52,7 @@ py_library(
         "coverage.py",
         "model.py",
         "nodes.py",
+        "oracle.py",
         "types.py",
     ],
     deps = [
@@ -137,12 +138,14 @@ py_test(
     srcs = [
         "context_test.py",
         "coverage_test.py",
+        "oracle_test.py",
         "types_test.py",
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = [
         "loom.importers.tilelang.context_test",
         "loom.importers.tilelang.coverage_test",
+        "loom.importers.tilelang.oracle_test",
         "loom.importers.tilelang.types_test",
     ],
     main = "pytest_style_runner.py",

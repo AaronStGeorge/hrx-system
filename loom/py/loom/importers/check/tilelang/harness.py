@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from types import ModuleType
 from typing import Any
 
-from loom.importers.check.tilelang.cases import TileLangImportInput
+from loom.importers.tilelang.model import TileLangImportInput
 
 
 class TileLangHarnessError(RuntimeError):

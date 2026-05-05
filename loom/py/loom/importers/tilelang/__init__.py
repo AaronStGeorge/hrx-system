@@ -20,6 +20,15 @@ from loom.importers.tilelang.importer import (
     import_tilelang,
     import_tilelang_file,
 )
+from loom.importers.tilelang.model import TileLangImportInput
+from loom.importers.tilelang.oracle import (
+    TileLangCodeObjectOracle,
+    TileLangGeneratedSource,
+    TileLangOracleError,
+    TileLangOracleToolchain,
+    capture_generated_source,
+    compile_hip_code_object,
+)
 
 __all__ = [
     "CoverageAudit",
@@ -29,7 +38,14 @@ __all__ = [
     "TILELANG_OP_COVERAGE",
     "audit_coverage",
     "coverage_by_name",
+    "TileLangCodeObjectOracle",
+    "TileLangGeneratedSource",
     "TileLangImportOptions",
+    "TileLangImportInput",
+    "TileLangOracleError",
+    "TileLangOracleToolchain",
+    "capture_generated_source",
+    "compile_hip_code_object",
     "import_tilelang",
     "import_tilelang_file",
 ]

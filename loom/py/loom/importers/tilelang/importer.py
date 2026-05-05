@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from loom.builder import ValueRef
@@ -31,7 +31,12 @@ from loom.importers.tilelang.abi import extract_bindings
 from loom.importers.tilelang.context import TileLangConversionContext
 from loom.importers.tilelang.converter import TileLangConverter
 from loom.importers.tilelang.defaults import build_default_registry
-from loom.importers.tilelang.model import TileLangBinding, TileLangKernelFacts
+from loom.importers.tilelang.model import (
+    TileLangBinding,
+    TileLangKernelFacts,
+    normalize_tilelang_input,
+    resolve_tilelang_input,
+)
 from loom.importers.tilelang.nodes import (
     attrs,
     mapping_items,
@@ -60,15 +65,6 @@ class TileLangImportOptions(ImportOptions):
 
 
 @dataclass(frozen=True, slots=True)
-class _NormalizedInput:
-    source: object
-    args: tuple[object, ...] = ()
-    kwargs: Mapping[str, object] = field(default_factory=dict)
-    target: str | None = None
-    name: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
 class _LaunchTopology:
     """TileLang launch topology before conversion into Loom SSA."""
 
@@ -83,8 +79,8 @@ def import_tilelang(
 ) -> ImportResult:
     options = options or TileLangImportOptions()
     diagnostics = DiagnosticEngine()
-    normalized = _normalize_input(source)
-    resolved_source = _resolve_source(normalized)
+    normalized = normalize_tilelang_input(source)
+    resolved_source = resolve_tilelang_input(normalized).source
     prim_func = _select_prim_func(
         resolved_source,
         options.kernel or normalized.name,
@@ -136,25 +132,6 @@ def import_tilelang_file(
         "TileLang imports require structured Python objects; "
         f"cannot import text file {path!s}"
     )
-
-
-def _normalize_input(source: object) -> _NormalizedInput:
-    if hasattr(source, "source") and type(source).__name__ == "TileLangImportInput":
-        return _NormalizedInput(
-            source=source.source,
-            args=tuple(getattr(source, "args", ())),
-            kwargs=dict(getattr(source, "kwargs", {})),
-            target=getattr(source, "target", None),
-            name=getattr(source, "name", None),
-        )
-    return _NormalizedInput(source=source)
-
-
-def _resolve_source(normalized: _NormalizedInput) -> object:
-    get_tir = getattr(normalized.source, "get_tir", None)
-    if get_tir is None:
-        return normalized.source
-    return get_tir(*normalized.args, **dict(normalized.kwargs))
 
 
 def _select_prim_func(source: object, requested_name: str | None) -> object:

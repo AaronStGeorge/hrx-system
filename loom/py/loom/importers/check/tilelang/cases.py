@@ -8,9 +8,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
-from types import MappingProxyType
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import Any, ParamSpec, Protocol, TypeVar, overload
 
 TILELANG_CASE_ATTR = "__loom_tilelang_case__"
@@ -34,22 +33,6 @@ class TileLangCaseMetadata:
     name: str | None = None
     category: str = "composition"
     tags: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class TileLangImportInput:
-    """Structured input returned by a TileLang check case."""
-
-    source: Any
-    args: tuple[Any, ...] = ()
-    kwargs: Mapping[str, Any] = field(default_factory=dict)
-    target: str | None = None
-    name: str | None = None
-    metadata: Mapping[str, object] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "kwargs", MappingProxyType(dict(self.kwargs)))
-        object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
 
 
 @overload

@@ -22,13 +22,13 @@ from loom.importers.check.python import (
 )
 from loom.importers.check.results import CheckResult
 from loom.importers.check.tilelang.cases import (
-    TileLangImportInput,
     get_tilelang_case_metadata,
     is_tilelang_case,
 )
 from loom.importers.check.tilelang.harness import TileLangHarness
 from loom.importers.core import kernel_module_ops, print_loom_module
 from loom.importers.tilelang.importer import TileLangImportOptions, import_tilelang
+from loom.importers.tilelang.model import TileLangImportInput
 
 
 @dataclass(frozen=True, slots=True)

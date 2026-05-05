@@ -9,7 +9,6 @@
 from loom.importers.check.tilelang.cases import (
     TILELANG_CASE_ATTR,
     TileLangCaseMetadata,
-    TileLangImportInput,
     TileLangT,
     get_tilelang_case_metadata,
     is_tilelang_case,
@@ -20,6 +19,7 @@ from loom.importers.check.tilelang.harness import (
     TileLangHarnessError,
     TileLangModules,
 )
+from loom.importers.tilelang.model import TileLangImportInput
 
 __all__ = [
     "TILELANG_CASE_ATTR",
