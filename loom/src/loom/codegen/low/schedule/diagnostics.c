@@ -41,20 +41,6 @@ iree_status_t loom_low_schedule_emit_missing_descriptor(
                                 IREE_ARRAYSIZE(params));
 }
 
-iree_status_t loom_low_schedule_emit_missing_schedule_class(
-    loom_low_schedule_build_state_t* state, const loom_op_t* op,
-    iree_string_view_t opcode) {
-  iree_string_view_t op_name = loom_op_name(state->module, op);
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(op_name),
-      loom_param_string(IREE_SV("low-schedule")),
-      loom_param_string(IREE_SV("descriptor has no schedule class")),
-  };
-  (void)opcode;
-  return loom_low_schedule_emit(state, op, LOOM_ERR_LOWERING_001, params,
-                                IREE_ARRAYSIZE(params));
-}
-
 static bool loom_low_schedule_interval_contains_point(
     const loom_liveness_interval_t* interval, uint32_t point) {
   return interval->start_point <= point && point < interval->end_point;

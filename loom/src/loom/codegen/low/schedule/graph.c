@@ -77,17 +77,6 @@ static iree_status_t loom_low_schedule_resolve_descriptor(
   node->descriptor = packet.descriptor;
   node->effect_count = packet.descriptor->effect_count;
   node->schedule_class_id = packet.descriptor->schedule_class_id;
-  if (packet.descriptor->schedule_class_id == LOOM_LOW_SCHEDULE_CLASS_NONE ||
-      packet.descriptor->schedule_class_id >=
-          state->target.descriptor_set->schedule_class_count) {
-    IREE_RETURN_IF_ERROR(
-        loom_low_schedule_emit_missing_schedule_class(state, op, packet.key));
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "low schedule descriptor '%.*s' has no usable schedule class",
-        (int)packet.key.size, packet.key.data);
-  }
-
   const loom_low_schedule_class_t* schedule_class =
       &state->target.descriptor_set
            ->schedule_classes[packet.descriptor->schedule_class_id];
