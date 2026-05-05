@@ -36,7 +36,6 @@ typedef struct loom_low_function_verify_state_t {
 } loom_low_function_verify_state_t;
 
 typedef struct loom_low_packet_field_t {
-  iree_string_view_t field_kind;
   iree_string_view_t field_name;
   loom_diagnostic_field_ref_t field_ref;
   loom_value_id_t value_id;
@@ -225,15 +224,9 @@ static iree_status_t loom_low_verify_emit_immediate_kind_mismatch(
 
 static iree_status_t loom_low_verify_emit_immediate_range_mismatch(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
-    iree_string_view_t opcode, uint16_t opcode_attr_index,
     iree_string_view_t immediate_name, uint16_t attrs_attr_index,
     int64_t actual_value, iree_string_view_t expected_range) {
   loom_diagnostic_param_t params[] = {
-      loom_param_string(function_state->function_name),
-      loom_param_with_field_ref(
-          loom_param_string(opcode),
-          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                    opcode_attr_index)),
       loom_param_with_field_ref(
           loom_param_string(immediate_name),
           loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
@@ -241,55 +234,61 @@ static iree_status_t loom_low_verify_emit_immediate_range_mismatch(
       loom_param_i64(actual_value),
       loom_param_string(expected_range),
   };
-  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_010,
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_STRUCTURE_014,
                               params, IREE_ARRAYSIZE(params), NULL, 0);
+}
+
+static iree_status_t loom_low_verify_format_enum_constraint(
+    loom_low_function_verify_state_t* function_state,
+    iree_string_view_t enum_domain, iree_string_view_t* out_constraint) {
+  const iree_host_size_t byte_count =
+      IREE_SV("value from enum domain ''").size + enum_domain.size;
+  char* storage = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(&function_state->state->arena,
+                                           byte_count + 1, (void**)&storage));
+  int length =
+      iree_snprintf(storage, byte_count + 1, "value from enum domain '%.*s'",
+                    (int)enum_domain.size, enum_domain.data);
+  if (length < 0 || (iree_host_size_t)length != byte_count) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "failed to format enum constraint");
+  }
+  *out_constraint = iree_make_string_view(storage, byte_count);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_verify_emit_enum_domain_mismatch(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
-    iree_string_view_t opcode, uint16_t opcode_attr_index,
     iree_string_view_t immediate_name, uint16_t attrs_attr_index,
     iree_string_view_t actual_value, iree_string_view_t enum_domain) {
+  iree_string_view_t expected_constraint = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_verify_format_enum_constraint(
+      function_state, enum_domain, &expected_constraint));
   loom_diagnostic_param_t params[] = {
-      loom_param_string(function_state->function_name),
-      loom_param_with_field_ref(
-          loom_param_string(opcode),
-          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                    opcode_attr_index)),
       loom_param_with_field_ref(
           loom_param_string(immediate_name),
           loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
                                     attrs_attr_index)),
       loom_param_string(actual_value),
-      loom_param_string(enum_domain),
+      loom_param_string(expected_constraint),
   };
-  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_012,
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_STRUCTURE_027,
                               params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
 static iree_status_t loom_low_verify_emit_constraint_type_mismatch(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
-    iree_string_view_t opcode, uint16_t opcode_attr_index,
-    iree_string_view_t constraint_kind,
     const loom_low_packet_field_t* lhs_field,
     const loom_low_packet_field_t* rhs_field) {
   loom_diagnostic_param_t params[] = {
-      loom_param_string(function_state->function_name),
-      loom_param_with_field_ref(
-          loom_param_string(opcode),
-          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                    opcode_attr_index)),
-      loom_param_string(constraint_kind),
-      loom_param_string(lhs_field->field_kind),
       loom_param_with_field_ref(loom_param_string(lhs_field->field_name),
                                 lhs_field->field_ref),
       loom_param_type(lhs_field->type),
-      loom_param_string(rhs_field->field_kind),
       loom_param_with_field_ref(loom_param_string(rhs_field->field_name),
                                 rhs_field->field_ref),
       loom_param_type(rhs_field->type),
   };
-  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_011,
+  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_TYPE_001,
                               params, IREE_ARRAYSIZE(params), NULL, 0);
 }
 
@@ -511,8 +510,8 @@ static iree_status_t loom_low_verify_i64_immediate_range(
       IREE_RETURN_IF_ERROR(loom_low_verify_format_signed_range(
           function_state, immediate->signed_min, maximum, &expected_range));
       return loom_low_verify_emit_immediate_range_mismatch(
-          function_state, op, opcode, opcode_attr_index, immediate_name,
-          attrs_attr_index, value, expected_range);
+          function_state, op, immediate_name, attrs_attr_index, value,
+          expected_range);
     }
     case LOOM_LOW_IMMEDIATE_KIND_UNSIGNED:
     case LOOM_LOW_IMMEDIATE_KIND_ORDINAL: {
@@ -523,8 +522,8 @@ static iree_status_t loom_low_verify_i64_immediate_range(
       IREE_RETURN_IF_ERROR(loom_low_verify_format_unsigned_range(
           function_state, immediate->unsigned_max, &expected_range));
       return loom_low_verify_emit_immediate_range_mismatch(
-          function_state, op, opcode, opcode_attr_index, immediate_name,
-          attrs_attr_index, value, expected_range);
+          function_state, op, immediate_name, attrs_attr_index, value,
+          expected_range);
     }
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -611,8 +610,8 @@ static iree_status_t loom_low_verify_descriptor_immediate_attr(
           return iree_ok_status();
         }
         return loom_low_verify_emit_enum_domain_mismatch(
-            function_state, op, opcode, opcode_attr_index, immediate_name,
-            attrs_attr_index, actual_token, domain_name);
+            function_state, op, immediate_name, attrs_attr_index, actual_token,
+            domain_name);
       }
       if (attr->value.kind != LOOM_ATTR_I64) {
         return loom_low_verify_emit_immediate_kind_mismatch(
@@ -628,8 +627,8 @@ static iree_status_t loom_low_verify_descriptor_immediate_attr(
       IREE_RETURN_IF_ERROR(loom_low_verify_format_i64(
           function_state, attr->value.i64, &actual_value));
       return loom_low_verify_emit_enum_domain_mismatch(
-          function_state, op, opcode, opcode_attr_index, immediate_name,
-          attrs_attr_index, actual_value, domain_name);
+          function_state, op, immediate_name, attrs_attr_index, actual_value,
+          domain_name);
     }
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -735,26 +734,6 @@ static bool loom_low_verify_constraint_requires_matching_types(
          kind == LOOM_LOW_CONSTRAINT_KIND_DESTRUCTIVE;
 }
 
-static iree_string_view_t loom_low_verify_constraint_kind_name(
-    loom_low_constraint_kind_t kind) {
-  switch (kind) {
-    case LOOM_LOW_CONSTRAINT_KIND_TIED:
-      return IREE_SV("tied");
-    case LOOM_LOW_CONSTRAINT_KIND_COMMUTABLE:
-      return IREE_SV("commutable");
-    case LOOM_LOW_CONSTRAINT_KIND_DESTRUCTIVE:
-      return IREE_SV("destructive");
-    case LOOM_LOW_CONSTRAINT_KIND_EARLY_CLOBBER:
-      return IREE_SV("early-clobber");
-    case LOOM_LOW_CONSTRAINT_KIND_REMATERIALIZABLE:
-      return IREE_SV("rematerializable");
-    case LOOM_LOW_CONSTRAINT_KIND_FOLDABLE:
-      return IREE_SV("foldable");
-    default:
-      return IREE_SV("unknown");
-  }
-}
-
 static iree_status_t loom_low_verify_descriptor_packet_field(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
     const loom_low_descriptor_t* descriptor, uint16_t descriptor_operand_index,
@@ -792,7 +771,6 @@ static iree_status_t loom_low_verify_descriptor_packet_field(
     }
     const loom_value_id_t value_id =
         loom_op_const_results(op)[descriptor_operand_index];
-    out_field->field_kind = IREE_SV("result");
     out_field->field_ref = loom_diagnostic_field_ref(
         LOOM_DIAGNOSTIC_FIELD_RESULT, descriptor_operand_index);
     out_field->value_id = value_id;
@@ -831,7 +809,6 @@ static iree_status_t loom_low_verify_descriptor_packet_field(
   }
   const loom_value_id_t value_id =
       loom_op_const_operands(op)[packet_operand_index];
-  out_field->field_kind = IREE_SV("operand");
   out_field->field_ref = loom_diagnostic_field_ref(
       LOOM_DIAGNOSTIC_FIELD_OPERAND, packet_operand_index);
   out_field->value_id = value_id;
@@ -915,26 +892,49 @@ static bool loom_low_verify_operand_accepts_register_class(
   return false;
 }
 
+static iree_status_t loom_low_verify_format_register_constraint(
+    loom_low_function_verify_state_t* function_state,
+    iree_string_view_t expected_reg_classes, uint32_t expected_unit_count,
+    iree_string_view_t* out_constraint) {
+  const iree_host_size_t maximum_unit_count_digits = 10;
+  const iree_host_size_t byte_capacity =
+      IREE_SV("register class in [] with  unit(s)").size +
+      expected_reg_classes.size + maximum_unit_count_digits;
+  char* storage = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(
+      &function_state->state->arena, byte_capacity + 1, (void**)&storage));
+  int length =
+      iree_snprintf(storage, byte_capacity + 1,
+                    "register class in [%.*s] with %" PRIu32 " unit(s)",
+                    (int)expected_reg_classes.size, expected_reg_classes.data,
+                    expected_unit_count);
+  if (length < 0 || (iree_host_size_t)length > byte_capacity) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "failed to format register constraint");
+  }
+  *out_constraint = iree_make_string_view(storage, (iree_host_size_t)length);
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_emit_register_type_mismatch(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
-    iree_string_view_t opcode, uint16_t opcode_attr_index,
-    iree_string_view_t field_kind, loom_diagnostic_field_ref_t field_ref,
-    iree_string_view_t field_name, loom_type_t actual_type,
-    iree_string_view_t expected_reg_classes, uint32_t expected_unit_count) {
+    loom_diagnostic_field_ref_t field_ref, iree_string_view_t field_name,
+    loom_type_t actual_type, iree_string_view_t expected_reg_classes,
+    uint32_t expected_unit_count) {
+  iree_string_view_t expected_constraint = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_verify_format_register_constraint(
+      function_state, expected_reg_classes, expected_unit_count,
+      &expected_constraint));
+  const loom_error_def_t* error = field_ref.kind == LOOM_DIAGNOSTIC_FIELD_RESULT
+                                      ? LOOM_ERR_TYPE_004
+                                      : LOOM_ERR_TYPE_003;
   loom_diagnostic_param_t params[] = {
-      loom_param_string(function_state->function_name),
-      loom_param_with_field_ref(
-          loom_param_string(opcode),
-          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                    opcode_attr_index)),
-      loom_param_string(field_kind),
       loom_param_with_field_ref(loom_param_string(field_name), field_ref),
       loom_param_type(actual_type),
-      loom_param_string(expected_reg_classes),
-      loom_param_u32(expected_unit_count),
+      loom_param_string(expected_constraint),
   };
-  return loom_low_verify_emit(function_state->state, op, LOOM_ERR_LOWERING_006,
-                              params, IREE_ARRAYSIZE(params), NULL, 0);
+  return loom_low_verify_emit(function_state->state, op, error, params,
+                              IREE_ARRAYSIZE(params), NULL, 0);
 }
 
 static iree_status_t loom_low_verify_emit_undefined_register_part(
@@ -1186,7 +1186,6 @@ static iree_status_t loom_low_verify_function_register_values(
 
 static iree_status_t loom_low_verify_descriptor_register_field(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
-    iree_string_view_t opcode, uint16_t opcode_attr_index,
     const loom_low_descriptor_t* descriptor, uint16_t descriptor_operand_index,
     bool is_result, uint16_t field_index) {
   const loom_module_t* module = function_state->state->module;
@@ -1235,14 +1234,12 @@ static iree_status_t loom_low_verify_descriptor_register_field(
       is_result ? LOOM_DIAGNOSTIC_FIELD_RESULT : LOOM_DIAGNOSTIC_FIELD_OPERAND,
       field_index);
   return loom_low_verify_emit_register_type_mismatch(
-      function_state, op, opcode, opcode_attr_index,
-      is_result ? IREE_SV("result") : IREE_SV("operand"), field_ref, field_name,
-      actual_type, expected_reg_classes, descriptor_operand->unit_count);
+      function_state, op, field_ref, field_name, actual_type,
+      expected_reg_classes, descriptor_operand->unit_count);
 }
 
 static iree_status_t loom_low_verify_descriptor_registers(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
-    iree_string_view_t opcode, uint16_t opcode_attr_index,
     const loom_low_descriptor_t* descriptor) {
   uint16_t operand_field_index = 0;
   for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
@@ -1266,8 +1263,7 @@ static iree_status_t loom_low_verify_descriptor_registers(
       field_index = operand_field_index++;
     }
     IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_register_field(
-        function_state, op, opcode, opcode_attr_index, descriptor, i, is_result,
-        field_index));
+        function_state, op, descriptor, i, is_result, field_index));
     if (loom_low_verify_should_stop(function_state->state)) {
       return iree_ok_status();
     }
@@ -1277,7 +1273,6 @@ static iree_status_t loom_low_verify_descriptor_registers(
 
 static iree_status_t loom_low_verify_descriptor_constraints(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
-    iree_string_view_t opcode, uint16_t opcode_attr_index,
     const loom_low_descriptor_t* descriptor) {
   const loom_low_descriptor_set_t* descriptor_set =
       function_state->target->descriptor_set;
@@ -1313,9 +1308,7 @@ static iree_status_t loom_low_verify_descriptor_constraints(
       continue;
     }
     IREE_RETURN_IF_ERROR(loom_low_verify_emit_constraint_type_mismatch(
-        function_state, op, opcode, opcode_attr_index,
-        loom_low_verify_constraint_kind_name(constraint->kind), &lhs_field,
-        &rhs_field));
+        function_state, op, &lhs_field, &rhs_field));
     if (loom_low_verify_should_stop(function_state->state)) {
       return iree_ok_status();
     }
@@ -1524,13 +1517,13 @@ static iree_status_t loom_low_verify_packet(
   }
   if (op->result_count == expected_result_count &&
       op->operand_count == expected_operand_count) {
-    IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_registers(
-        function_state, op, opcode, opcode_attr_index, descriptor));
+    IREE_RETURN_IF_ERROR(
+        loom_low_verify_descriptor_registers(function_state, op, descriptor));
     if (loom_low_verify_should_stop(function_state->state)) {
       return iree_ok_status();
     }
-    IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_constraints(
-        function_state, op, opcode, opcode_attr_index, descriptor));
+    IREE_RETURN_IF_ERROR(
+        loom_low_verify_descriptor_constraints(function_state, op, descriptor));
     if (loom_low_verify_should_stop(function_state->state)) {
       return iree_ok_status();
     }

@@ -69,32 +69,6 @@ ERR_LOWERING_005 = ErrorDef(
     "legal for the selected target config",
 )
 
-# ERR_LOWERING_006: Low descriptor register type constraint violated.
-ERR_LOWERING_006 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=6,
-    severity=Severity.ERROR,
-    summary="Low descriptor register type constraint violated.",
-    message=(
-        "low function '@{function_name}' descriptor '{opcode}' "
-        "{field_kind} '{field_name}' has type {actual_type}, expected "
-        "register class in [{expected_reg_classes}] with "
-        "{expected_unit_count} unit(s)"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("opcode", ParamKind.STRING),
-        ErrorParam("field_kind", ParamKind.STRING),
-        ErrorParam("field_name", ParamKind.STRING),
-        ErrorParam("actual_type", ParamKind.TYPE),
-        ErrorParam("expected_reg_classes", ParamKind.STRING),
-        ErrorParam("expected_unit_count", ParamKind.U32),
-    ),
-    fix_hint="Choose a register type accepted by descriptor '{opcode}' for "
-    "field '{field_name}' or select a descriptor whose register contract "
-    "matches the packet",
-)
-
 # ERR_LOWERING_007: Low descriptor immediate attribute is missing.
 ERR_LOWERING_007 = ErrorDef(
     domain=ErrorDomain.LOWERING,
@@ -153,80 +127,6 @@ ERR_LOWERING_009 = ErrorDef(
         ErrorParam("expected_kind", ParamKind.STRING),
     ),
     fix_hint="Encode immediate '{immediate_name}' using {expected_kind}",
-)
-
-# ERR_LOWERING_010: Low descriptor immediate attribute is out of range.
-ERR_LOWERING_010 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=10,
-    severity=Severity.ERROR,
-    summary="Low descriptor immediate attribute is out of range.",
-    message=(
-        "low function '@{function_name}' descriptor '{opcode}' immediate "
-        "'{immediate_name}' has value {actual_value}, expected "
-        "{expected_range}"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("opcode", ParamKind.STRING),
-        ErrorParam("immediate_name", ParamKind.STRING),
-        ErrorParam("actual_value", ParamKind.I64),
-        ErrorParam("expected_range", ParamKind.STRING),
-    ),
-    fix_hint="Choose an immediate value in {expected_range} for '{immediate_name}'",
-)
-
-# ERR_LOWERING_011: Low descriptor register constraint type mismatch.
-ERR_LOWERING_011 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=11,
-    severity=Severity.ERROR,
-    summary="Low descriptor register constraint type mismatch.",
-    message=(
-        "low function '@{function_name}' descriptor '{opcode}' "
-        "{constraint_kind} constraint requires {lhs_field_kind} "
-        "'{lhs_field_name}' type {lhs_type} to match {rhs_field_kind} "
-        "'{rhs_field_name}' type {rhs_type}"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("opcode", ParamKind.STRING),
-        ErrorParam("constraint_kind", ParamKind.STRING),
-        ErrorParam("lhs_field_kind", ParamKind.STRING),
-        ErrorParam("lhs_field_name", ParamKind.STRING),
-        ErrorParam("lhs_type", ParamKind.TYPE),
-        ErrorParam("rhs_field_kind", ParamKind.STRING),
-        ErrorParam("rhs_field_name", ParamKind.STRING),
-        ErrorParam("rhs_type", ParamKind.TYPE),
-    ),
-    fix_hint=(
-        "Choose matching register types for the constrained packet fields or "
-        "select a descriptor without the {constraint_kind} constraint"
-    ),
-)
-
-# ERR_LOWERING_012: Low descriptor enum immediate value is not in domain.
-ERR_LOWERING_012 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=12,
-    severity=Severity.ERROR,
-    summary="Low descriptor enum immediate value is not in domain.",
-    message=(
-        "low function '@{function_name}' descriptor '{opcode}' immediate "
-        "'{immediate_name}' has enum value '{actual_value}', expected a "
-        "value from enum domain '{enum_domain}'"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("opcode", ParamKind.STRING),
-        ErrorParam("immediate_name", ParamKind.STRING),
-        ErrorParam("actual_value", ParamKind.STRING),
-        ErrorParam("enum_domain", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Choose an enum token or numeric value declared by enum domain "
-        "'{enum_domain}' for '{immediate_name}'"
-    ),
 )
 
 # ERR_LOWERING_015: Low pure call targets an impure callee.
@@ -721,13 +621,9 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_003,
     ERR_LOWERING_004,
     ERR_LOWERING_005,
-    ERR_LOWERING_006,
     ERR_LOWERING_007,
     ERR_LOWERING_008,
     ERR_LOWERING_009,
-    ERR_LOWERING_010,
-    ERR_LOWERING_011,
-    ERR_LOWERING_012,
     ERR_LOWERING_015,
     ERR_LOWERING_019,
     ERR_LOWERING_020,
