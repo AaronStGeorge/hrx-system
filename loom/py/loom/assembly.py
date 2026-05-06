@@ -745,8 +745,8 @@ class TemplateParamFlags:
     """Required op parameter plus optional instance flags in one angle group.
 
     Prints/parses: <addf> when no flags are present, or
-    <addf, nnan|nsz> when instance flags are set. The parameter field names an
-    ordinary attribute parsed through its descriptor, while the flags field
+    <addf, reassoc|nnan|nsz> when instance flags are set. The parameter field
+    names an ordinary attribute parsed through its descriptor, while the flags field
     names the flags-typed attribute stored in op instance flags.
 
     Use this for ops whose primary specialization is a template-like enum and
@@ -755,7 +755,7 @@ class TemplateParamFlags:
 
     Examples:
         vector.reduce<addf> %v, %zero : vector<16xf32>, f32
-        vector.reduce<addf, nnan|nsz> %v, %zero : vector<16xf32>, f32
+        vector.reduce<addf, reassoc|nnan|nsz> %v, %zero : vector<16xf32>, f32
     """
 
     param: str

@@ -465,6 +465,9 @@ typedef uint16_t loom_low_lower_emit_flags_t;
 // Seeds DESCRIPTOR_OP_ACCUMULATE_LANES from lane 0 of its accumulator operand
 // and starts descriptor emission at lane 1.
 #define LOOM_LOW_LOWER_EMIT_FLAG_ACCUMULATE_SEED_FIRST_LANE ((uint16_t)1u << 3)
+// Builds DESCRIPTOR_OP_ACCUMULATE_LANES as a balanced tree over source lanes.
+// Requires ACCUMULATE_SEED_FIRST_LANE.
+#define LOOM_LOW_LOWER_EMIT_FLAG_ACCUMULATE_TREE_BALANCED ((uint16_t)1u << 4)
 
 typedef struct loom_low_lower_emit_t {
   // Emit action to perform.

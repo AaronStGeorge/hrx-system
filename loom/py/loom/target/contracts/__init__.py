@@ -41,6 +41,7 @@ from loom.target.contracts.diagnostics import (
 )
 from loom.target.contracts.emits import (
     DescriptorAccumulatorSeed,
+    DescriptorAccumulatorTree,
     DescriptorEmitForm,
     EmitDescriptorOp,
 )
@@ -60,6 +61,7 @@ from loom.target.contracts.immediates import (
 from loom.target.contracts.kinds import ContractSystem, SourceValueKind
 from loom.target.contracts.lower_rules import (
     LOWER_EMIT_FLAG_ACCUMULATE_SEED_FIRST_LANE,
+    LOWER_EMIT_FLAG_ACCUMULATE_TREE_BALANCED,
     LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS,
     LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN,
     LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1,
@@ -128,6 +130,7 @@ __all__ = [
     "ContractFragment",
     "DescriptorMatrixRule",
     "DescriptorAccumulatorSeed",
+    "DescriptorAccumulatorTree",
     "DescriptorEmitForm",
     "DescriptorRule",
     "DiagnosticParam",
@@ -141,6 +144,7 @@ __all__ = [
     "GuardDiagnostic",
     "GuardKind",
     "LOWER_EMIT_FLAG_ACCUMULATE_SEED_FIRST_LANE",
+    "LOWER_EMIT_FLAG_ACCUMULATE_TREE_BALANCED",
     "LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS",
     "LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN",
     "LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1",

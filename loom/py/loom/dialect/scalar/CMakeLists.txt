@@ -24,6 +24,7 @@ iree_py_library(
     "math.py"
   DEPS
     iree::runtime::py::loom::core
+    iree::runtime::py::loom::error::error
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

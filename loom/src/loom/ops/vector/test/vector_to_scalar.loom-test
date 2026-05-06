@@ -566,18 +566,23 @@ func.def @static_reduce(%v: vector<4xf32>, %zero: f32) -> (f32) {
 
 // ====
 
-// Floating reduction value-domain assumptions project onto scalar fast-math bits.
-func.def @static_reduce_assumptions(%v: vector<2xf32>, %zero: f32) -> (f32) {
-  %r = vector.reduce<addf, nnan|ninf|nsz> %v, %zero : vector<2xf32>, f32
+// Floating reduction fastmath flags project onto scalar fast-math bits and
+// reassociation permits a balanced lane tree.
+func.def @static_reduce_fastmath(%v: vector<4xf32>, %zero: f32) -> (f32) {
+  %r = vector.reduce<addf, reassoc|nnan|ninf|nsz> %v, %zero : vector<4xf32>, f32
   func.return %r : f32
 }
 
 // ----
-func.def @static_reduce_assumptions(%v: vector<2xf32>, %zero: f32) -> (f32) {
-  %4 = vector.extract %v[0] : vector<2xf32> -> f32
-  %5 = scalar.addf<nnan|ninf|nsz> %zero, %4 : f32
-  %6 = vector.extract %v[1] : vector<2xf32> -> f32
-  %r = scalar.addf<nnan|ninf|nsz> %5, %6 : f32
+func.def @static_reduce_fastmath(%v: vector<4xf32>, %zero: f32) -> (f32) {
+  %4 = vector.extract %v[0] : vector<4xf32> -> f32
+  %5 = vector.extract %v[1] : vector<4xf32> -> f32
+  %6 = scalar.addf<reassoc|nnan|ninf|nsz> %4, %5 : f32
+  %7 = vector.extract %v[2] : vector<4xf32> -> f32
+  %8 = vector.extract %v[3] : vector<4xf32> -> f32
+  %9 = scalar.addf<reassoc|nnan|ninf|nsz> %7, %8 : f32
+  %10 = scalar.addf<reassoc|nnan|ninf|nsz> %6, %9 : f32
+  %r = scalar.addf<reassoc|nnan|ninf|nsz> %zero, %10 : f32
   func.return %r : f32
 }
 

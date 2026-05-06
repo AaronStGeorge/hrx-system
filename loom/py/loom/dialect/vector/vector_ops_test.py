@@ -6,9 +6,11 @@
 
 from __future__ import annotations
 
-from loom.dialect.scalar import ALL_SCALAR_OPS
+from loom.dialect.scalar import ALL_SCALAR_OPS, FastMathFlags
 from loom.dialect.vector import (
     ALL_VECTOR_OPS,
+    FloatAssumptionFlags,
+    FloatReductionFlags,
 )
 from loom.dsl import FLOAT, I1, INTEGER, Op
 
@@ -41,3 +43,22 @@ def test_vector_fields_do_not_use_scalar_family_constraints() -> None:
     for op in ALL_VECTOR_OPS:
         for field in (*op.operands, *op.results):
             assert field.type_constraint not in forbidden, (op.name, field.name)
+
+
+def test_float_assumption_flags_project_to_scalar_fastmath_flags() -> None:
+    scalar_flags = {case.keyword: case.value for case in FastMathFlags.cases}
+    vector_flags = {case.keyword: case.value for case in FloatAssumptionFlags.cases}
+
+    assert vector_flags["nnan"] << 1 == scalar_flags["nnan"]
+    assert vector_flags["ninf"] << 1 == scalar_flags["ninf"]
+    assert vector_flags["nsz"] << 1 == scalar_flags["nsz"]
+
+
+def test_float_reduction_flags_project_to_scalar_fastmath_flags() -> None:
+    scalar_flags = {case.keyword: case.value for case in FastMathFlags.cases}
+    reduction_flags = {case.keyword: case.value for case in FloatReductionFlags.cases}
+
+    assert reduction_flags["reassoc"] == scalar_flags["reassoc"]
+    assert reduction_flags["nnan"] == scalar_flags["nnan"]
+    assert reduction_flags["ninf"] == scalar_flags["ninf"]
+    assert reduction_flags["nsz"] == scalar_flags["nsz"]

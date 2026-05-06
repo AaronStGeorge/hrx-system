@@ -258,6 +258,17 @@ FloatAssumptionFlags = EnumDef(
     doc="Floating-point value-domain assumptions for vector operations.",
 )
 
+FloatReductionFlags = EnumDef(
+    "FloatReductionFlags",
+    [
+        EnumCase("reassoc", 1, doc="Allow reassociation of reduction terms."),
+        EnumCase("nnan", 2, doc="Assume no NaNs."),
+        EnumCase("ninf", 4, doc="Assume no infinities."),
+        EnumCase("nsz", 8, doc="Assume no signed zeros."),
+    ],
+    doc="Floating-point reduction relaxations and value-domain assumptions.",
+)
+
 QuantizeNaN = EnumDef(
     "QuantizeNaN",
     [
@@ -3762,8 +3773,8 @@ vector_reduce = Op(
         "Reduce all lanes of a vector into a scalar accumulator/result using "
         "the template combining kind. The init operand and result have the "
         "same scalar type, and the combining kind must be valid for the input "
-        "element type. Optional assumptions flags constrain floating-point "
-        "lane value domains for optimization and lowering."
+        "element type. Optional fastmath flags constrain floating-point "
+        "reassociation and lane value domains for optimization and lowering."
     ),
     operands=[
         Operand("input", VECTOR),
@@ -3773,10 +3784,10 @@ vector_reduce = Op(
     attrs=[
         AttrDef("kind", ATTR_TYPE_ENUM, enum_def=CombiningKind),
         AttrDef(
-            "assumptions",
+            "fastmath",
             ATTR_TYPE_FLAGS,
             optional=True,
-            enum_def=FloatAssumptionFlags,
+            enum_def=FloatReductionFlags,
         ),
     ],
     constraints=[
@@ -3788,7 +3799,7 @@ vector_reduce = Op(
     canonicalize="loom_vector_reduce_canonicalize",
     traits=[PURE],
     format=[
-        TemplateParamFlags("kind", "assumptions"),
+        TemplateParamFlags("kind", "fastmath"),
         Ref("input"),
         COMMA,
         Ref("init"),
@@ -3809,8 +3820,8 @@ vector_reduce_axes = Op(
         "remaining axes in their original order. The init operand and result "
         "have the same type: scalar when every source axis is reduced, or a "
         "vector whose shape is the source shape with the reduced axes removed. "
-        "Optional assumptions flags constrain floating-point lane value "
-        "domains for optimization and lowering."
+        "Optional fastmath flags constrain floating-point reassociation and "
+        "lane value domains for optimization and lowering."
     ),
     operands=[
         Operand("input", VECTOR),
@@ -3820,10 +3831,10 @@ vector_reduce_axes = Op(
     attrs=[
         AttrDef("kind", ATTR_TYPE_ENUM, enum_def=CombiningKind),
         AttrDef(
-            "assumptions",
+            "fastmath",
             ATTR_TYPE_FLAGS,
             optional=True,
-            enum_def=FloatAssumptionFlags,
+            enum_def=FloatReductionFlags,
         ),
         AttrDef("axes", ATTR_TYPE_I64_ARRAY),
     ],
@@ -3837,7 +3848,7 @@ vector_reduce_axes = Op(
     builder_name="reduce_axes",
     traits=[PURE],
     format=[
-        TemplateParamFlags("kind", "assumptions"),
+        TemplateParamFlags("kind", "fastmath"),
         Ref("input"),
         COMMA,
         Ref("init"),

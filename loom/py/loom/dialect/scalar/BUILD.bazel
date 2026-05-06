@@ -23,5 +23,8 @@ py_library(
         "defs.py",
         "math.py",
     ],
-    deps = ["//loom/py/loom:core"],
+    deps = [
+        "//loom/py/loom:core",
+        "//loom/py/loom/error",
+    ],
 )

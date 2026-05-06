@@ -20,6 +20,19 @@ iree_py_library(
     iree::runtime::py::loom::core
     iree::runtime::py::loom::dialect::shared
     iree::runtime::py::loom::dialect::scalar::scalar
+    iree::runtime::py::loom::error::error
+)
+
+iree_py_test(
+  NAME
+    vector_ops_test
+  SRCS
+    "../../tools/pytest_style_runner.py"
+  ARGS
+    "loom.dialect.vector.vector_ops_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

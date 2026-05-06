@@ -70,30 +70,30 @@ low.func.def target(@target) abi(hal_kernel) @f32_reduce_add() asm<amdgpu.rdna3.
 // ====
 
 amdgpu.target<gfx1100> @target
-func.def target(@target) @f32_reduce_add_assumptions(%input: buffer, %output: buffer) {
+func.def target(@target) @f32_reduce_add_fastmath(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<4xf32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<1xf32, #dense>
   %loaded = vector.load %input_view[0] : view<4xf32, #dense> -> vector<4xf32>
   %init = scalar.constant 0.0 : f32
-  %sum = vector.reduce<addf, nnan|nsz> %loaded, %init : vector<4xf32>, f32
+  %sum = vector.reduce<addf, reassoc|nnan|nsz> %loaded, %init : vector<4xf32>, f32
   %stored = vector.from_elements %sum : vector<1xf32>
   vector.store %stored, %output_view[0] : vector<1xf32>, view<1xf32, #dense>
   func.return
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @f32_reduce_add_assumptions() asm<amdgpu.rdna3.core> {
+low.func.def target(@target) abi(hal_kernel) @f32_reduce_add_fastmath() asm<amdgpu.rdna3.core> {
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x2>
   %12 = v_mov_b32 0
   %loaded = global_load_b128 %12, %input_view
   %14 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %15 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %16 = v_add_f32 %14, %15
-  %17 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %18 = v_add_f32 %16, %17
-  %19 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %16 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %17 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %18 = v_add_f32 %14, %15
+  %19 = v_add_f32 %16, %17
   %stored = v_add_f32 %18, %19
   %21 = v_mov_b32 0
   global_store_b32 %21, %stored, %output_view

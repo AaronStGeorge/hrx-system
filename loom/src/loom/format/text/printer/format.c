@@ -585,7 +585,7 @@ iree_status_t loom_print_format_elements(loom_print_context_t* ctx,
       }
       case LOOM_FORMAT_KIND_TEMPLATE_PARAM_FLAGS: {
         // Required compile-time op parameter plus optional instance flags:
-        // vector.reduce<addf, nnan|nsz>.
+        // vector.reduce<addf, reassoc|nnan|nsz>.
         if (element->field_index >= op->attribute_count) {
           return iree_make_status(
               IREE_STATUS_INVALID_ARGUMENT,

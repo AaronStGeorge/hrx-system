@@ -15,6 +15,7 @@ from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor
 from loom.target.contracts import (
     ContractFragment,
     DescriptorAccumulatorSeed,
+    DescriptorAccumulatorTree,
     DescriptorEmitForm,
     DescriptorRule,
     EmitDescriptorOp,
@@ -70,6 +71,7 @@ def _vector_reduce_rule(
     descriptor: Descriptor,
     materialized_init: ValueRef | None = None,
     accumulator_seed: DescriptorAccumulatorSeed = DescriptorAccumulatorSeed.OPERAND,
+    accumulator_tree: DescriptorAccumulatorTree = DescriptorAccumulatorTree.CHAIN,
     extra_guards: tuple[Guard, ...] = (),
 ) -> DescriptorRule:
     init = (
@@ -106,6 +108,7 @@ def _vector_reduce_rule(
                 form=DescriptorEmitForm.ACCUMULATE_LANES,
                 accumulator="lhs",
                 accumulator_seed=accumulator_seed,
+                accumulator_tree=accumulator_tree,
             ),
         ),
     )
@@ -152,8 +155,25 @@ def _f32_add_assumed_zero_rule() -> DescriptorRule:
         descriptor=_descriptor("amdgpu.v_add_f32"),
         accumulator_seed=DescriptorAccumulatorSeed.FIRST_LANE,
         extra_guards=(
-            Guard.instance_flags_has_all("assumptions", "nnan"),
-            Guard.instance_flags_has_all("assumptions", "nsz"),
+            Guard.instance_flags_has_all("fastmath", "nnan"),
+            Guard.instance_flags_has_all("fastmath", "nsz"),
+            Guard.value_f64_equals("init", 0.0),
+        ),
+    )
+
+
+def _f32_add_reassociated_zero_rule() -> DescriptorRule:
+    return _vector_reduce_rule(
+        kind="addf",
+        input_type=_VEC_F32,
+        accumulator_type=_F32,
+        descriptor=_descriptor("amdgpu.v_add_f32"),
+        accumulator_seed=DescriptorAccumulatorSeed.FIRST_LANE,
+        accumulator_tree=DescriptorAccumulatorTree.BALANCED,
+        extra_guards=(
+            Guard.instance_flags_has_all("fastmath", "reassoc"),
+            Guard.instance_flags_has_all("fastmath", "nnan"),
+            Guard.instance_flags_has_all("fastmath", "nsz"),
             Guard.value_f64_equals("init", 0.0),
         ),
     )
@@ -175,6 +195,7 @@ AMDGPU_REDUCE_CONTRACT_FRAGMENT = ContractFragment(
         _i32_rule("andi", "amdgpu.v_and_b32"),
         _i32_rule("ori", "amdgpu.v_or_b32"),
         _i32_rule("xori", "amdgpu.v_xor_b32"),
+        _f32_add_reassociated_zero_rule(),
         _f32_add_assumed_zero_rule(),
         _f32_rule("addf", "amdgpu.v_add_f32"),
         _f32_rule("mulf", "amdgpu.v_mul_f32"),

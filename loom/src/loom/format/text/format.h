@@ -449,7 +449,7 @@
 //                           Glued to the op name. Parsed as an attribute.
 //   TemplateParamFlags(p, f)
 //                         Required template parameter plus optional flags:
-//                           <add> or <add, nnan|nsz>.
+//                           <add> or <add, reassoc|nnan|nsz>.
 //                           Glued to the op name. Parameter p is parsed as an
 //                           attribute. Flags f are stored in instance_flags.
 //

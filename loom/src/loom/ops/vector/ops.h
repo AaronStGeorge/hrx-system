@@ -177,6 +177,12 @@ enum {
 #define LOOM_VECTOR_INTOVERFLOWFLAGS_NSW ((uint8_t)1)
 #define LOOM_VECTOR_INTOVERFLOWFLAGS_NUW ((uint8_t)2)
 
+// Floating-point reduction relaxations and value-domain assumptions.
+#define LOOM_VECTOR_FLOATREDUCTIONFLAGS_REASSOC ((uint8_t)1)
+#define LOOM_VECTOR_FLOATREDUCTIONFLAGS_NNAN ((uint8_t)2)
+#define LOOM_VECTOR_FLOATREDUCTIONFLAGS_NINF ((uint8_t)4)
+#define LOOM_VECTOR_FLOATREDUCTIONFLAGS_NSZ ((uint8_t)8)
+
 typedef enum loom_vector_role_e {
   LOOM_VECTOR_ROLE_LHS = 0,
   LOOM_VECTOR_ROLE_RHS = 1,
@@ -2976,14 +2982,14 @@ iree_status_t loom_vector_mma_facts(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
-// LOOM_OP_VECTOR_REDUCE: Reduce all lanes of a vector into a scalar accumulator/result using the template combining kind. The init operand and result have the same scalar type, and the combining kind must be valid for the input element type. Optional assumptions flags constrain floating-point lane value domains for optimization and lowering.
+// LOOM_OP_VECTOR_REDUCE: Reduce all lanes of a vector into a scalar accumulator/result using the template combining kind. The init operand and result have the same scalar type, and the combining kind must be valid for the input element type. Optional fastmath flags constrain floating-point reassociation and lane value domains for optimization and lowering.
 // %sum = vector.reduce<addf> %v, %zero : vector<16xf32>, f32
 LOOM_DEFINE_ISA(loom_vector_reduce_isa, LOOM_OP_VECTOR_REDUCE)
 LOOM_DEFINE_OPERAND(loom_vector_reduce_input, 0)
 LOOM_DEFINE_OPERAND(loom_vector_reduce_init, 1)
 LOOM_DEFINE_RESULT(loom_vector_reduce_result, 0)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_reduce_kind, 0, loom_combining_kind_t)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_reduce_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_reduce_fastmath)
 iree_status_t loom_vector_reduce_build(
     loom_builder_t* builder,
     loom_combining_kind_t kind,
@@ -3003,14 +3009,14 @@ iree_status_t loom_vector_reduce_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_REDUCE_AXES: Reduce the explicit source axes of a vector while preserving the remaining axes in their original order. The init operand and result have the same type: scalar when every source axis is reduced, or a vector whose shape is the source shape with the reduced axes removed. Optional assumptions flags constrain floating-point lane value domains for optimization and lowering.
+// LOOM_OP_VECTOR_REDUCE_AXES: Reduce the explicit source axes of a vector while preserving the remaining axes in their original order. The init operand and result have the same type: scalar when every source axis is reduced, or a vector whose shape is the source shape with the reduced axes removed. Optional fastmath flags constrain floating-point reassociation and lane value domains for optimization and lowering.
 // %cols = vector.reduce.axes<addf> %src, %init axes [0] : vector<4x8xf32>, vector<8xf32>
 LOOM_DEFINE_ISA(loom_vector_reduce_axes_isa, LOOM_OP_VECTOR_REDUCE_AXES)
 LOOM_DEFINE_OPERAND(loom_vector_reduce_axes_input, 0)
 LOOM_DEFINE_OPERAND(loom_vector_reduce_axes_init, 1)
 LOOM_DEFINE_RESULT(loom_vector_reduce_axes_result, 0)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_reduce_axes_kind, 0, loom_combining_kind_t)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_reduce_axes_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_reduce_axes_fastmath)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_reduce_axes_axes, 1)
 iree_status_t loom_vector_reduce_axes_build(
     loom_builder_t* builder,

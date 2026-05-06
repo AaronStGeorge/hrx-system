@@ -35,16 +35,6 @@ static loom_attribute_t loom_vector_to_scalar_zero_attr(
   return loom_attr_i64(0);
 }
 
-static_assert((LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NNAN << 1) ==
-                  LOOM_SCALAR_FASTMATHFLAGS_NNAN,
-              "vector nnan must project onto scalar nnan");
-static_assert((LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NINF << 1) ==
-                  LOOM_SCALAR_FASTMATHFLAGS_NINF,
-              "vector ninf must project onto scalar ninf");
-static_assert((LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NSZ << 1) ==
-                  LOOM_SCALAR_FASTMATHFLAGS_NSZ,
-              "vector nsz must project onto scalar nsz");
-
 uint8_t loom_vector_to_scalar_project_instance_flags(
     loom_vector_to_scalar_instance_flag_mode_t mode, uint8_t instance_flags) {
   switch (mode) {
@@ -54,6 +44,8 @@ uint8_t loom_vector_to_scalar_project_instance_flags(
       return instance_flags;
     case LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FLOAT_ASSUMPTIONS:
       return (uint8_t)(instance_flags << 1);
+    case LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FLOAT_REDUCTION:
+      return instance_flags;
   }
   return 0;
 }

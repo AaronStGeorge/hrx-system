@@ -75,9 +75,92 @@ static iree_status_t loom_vector_to_scalar_build_accumulator_lane(
       state->lane_state.result_scalar_type, out_next);
 }
 
+static bool loom_vector_to_scalar_accumulator_can_reassociate(
+    const loom_vector_to_scalar_accumulator_state_t* state) {
+  return !state->use_fmaf &&
+         iree_any_bit_set(state->instance_flags,
+                          LOOM_VECTOR_FLOATREDUCTIONFLAGS_REASSOC);
+}
+
+static iree_status_t loom_vector_to_scalar_combine_accumulator_terms(
+    loom_vector_to_scalar_accumulator_state_t* state, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_value_id_t* out_result) {
+  return loom_vector_to_scalar_build_generic_lane_op(
+      &state->lane_state, state->scalar_kind, state->instance_flags,
+      (loom_value_id_t[]){lhs, rhs}, 2, NULL, 0,
+      state->lane_state.result_scalar_type, out_result);
+}
+
+static iree_status_t loom_vector_to_scalar_build_static_reduction_tree(
+    loom_vector_to_scalar_accumulator_state_t* state, uint16_t begin_ordinal,
+    uint16_t end_ordinal, int64_t* indices, loom_value_id_t* out_result) {
+  IREE_ASSERT_GT(end_ordinal, begin_ordinal);
+  if (end_ordinal - begin_ordinal == 1) {
+    loom_vector_to_scalar_indices_from_ordinal(state->lane_state.vector_type,
+                                               begin_ordinal, indices);
+    loom_vector_to_scalar_index_list_t index_list = {
+        .static_indices = indices,
+        .rank = loom_type_rank(state->lane_state.vector_type),
+    };
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+        &state->lane_state, state->input, index_list, out_result));
+    if (state->lane_state.pass->statistics) {
+      loom_pass_statistic_add(state->lane_state.pass,
+                              LOOM_VECTOR_TO_SCALAR_STAT_LANES_MATERIALIZED, 1);
+    }
+    return iree_ok_status();
+  }
+
+  uint16_t middle_ordinal =
+      (uint16_t)(begin_ordinal + (end_ordinal - begin_ordinal) / 2);
+  loom_value_id_t lhs = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_static_reduction_tree(
+      state, begin_ordinal, middle_ordinal, indices, &lhs));
+  loom_value_id_t rhs = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_static_reduction_tree(
+      state, middle_ordinal, end_ordinal, indices, &rhs));
+  return loom_vector_to_scalar_combine_accumulator_terms(state, lhs, rhs,
+                                                         out_result);
+}
+
+static iree_status_t
+loom_vector_to_scalar_lower_static_reassociated_accumulator(
+    loom_vector_to_scalar_accumulator_state_t* state,
+    loom_value_id_t* out_replacement) {
+  uint16_t element_count = 0;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_static_element_count(
+      &state->lane_state, state->lane_state.vector_type, &element_count));
+  if (loom_pass_has_error_diagnostics(state->lane_state.pass)) {
+    return iree_ok_status();
+  }
+  if (element_count == 0) {
+    *out_replacement = state->init;
+    return iree_ok_status();
+  }
+
+  uint8_t rank = loom_type_rank(state->lane_state.vector_type);
+  int64_t* indices = NULL;
+  if (rank > 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(state->lane_state.rewriter->arena, rank,
+                                  sizeof(int64_t), (void**)&indices));
+  }
+
+  loom_value_id_t tree = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_static_reduction_tree(
+      state, 0, element_count, indices, &tree));
+  return loom_vector_to_scalar_combine_accumulator_terms(state, state->init,
+                                                         tree, out_replacement);
+}
+
 static iree_status_t loom_vector_to_scalar_lower_static_accumulator(
     loom_vector_to_scalar_accumulator_state_t* state,
     loom_value_id_t* out_replacement) {
+  if (loom_vector_to_scalar_accumulator_can_reassociate(state)) {
+    return loom_vector_to_scalar_lower_static_reassociated_accumulator(
+        state, out_replacement);
+  }
+
   uint16_t element_count = 0;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_static_element_count(
       &state->lane_state, state->lane_state.vector_type, &element_count));
@@ -206,7 +289,7 @@ iree_status_t loom_vector_to_scalar_lower_reduce(
       .instance_flags =
           loom_combining_kind_accepts_float(reduce_kind)
               ? loom_vector_to_scalar_project_instance_flags(
-                    LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FLOAT_ASSUMPTIONS,
+                    LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FLOAT_REDUCTION,
                     state->op->instance_flags)
               : 0,
   };
@@ -498,7 +581,7 @@ iree_status_t loom_vector_to_scalar_lower_reduce_axes(
       .instance_flags =
           loom_combining_kind_accepts_float(reduce_kind)
               ? loom_vector_to_scalar_project_instance_flags(
-                    LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FLOAT_ASSUMPTIONS,
+                    LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FLOAT_REDUCTION,
                     state->op->instance_flags)
               : 0,
   };

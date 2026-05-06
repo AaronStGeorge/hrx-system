@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -20,6 +20,21 @@ py_library(
     deps = [
         "//loom/py/loom:core",
         "//loom/py/loom/dialect:shared",
+        "//loom/py/loom/dialect/scalar",
+        "//loom/py/loom/error",
+    ],
+)
+
+py_test(
+    name = "vector_ops_test",
+    srcs = [
+        "vector_ops_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.dialect.vector.vector_ops_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":vector",
         "//loom/py/loom/dialect/scalar",
     ],
 )

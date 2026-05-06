@@ -55,6 +55,14 @@ class DescriptorAccumulatorSeed(Enum):
     FIRST_LANE = "first_lane"
 
 
+@unique
+class DescriptorAccumulatorTree(Enum):
+    """Lane-combining tree shape for lane-accumulating descriptor emits."""
+
+    CHAIN = "chain"
+    BALANCED = "balanced"
+
+
 type ResultTypeBinding = ValueRef | TypePattern
 
 
@@ -75,6 +83,7 @@ class EmitDescriptorOp:
     copy_operands: Sequence[str] = ()
     accumulator: str | None = None
     accumulator_seed: DescriptorAccumulatorSeed = DescriptorAccumulatorSeed.OPERAND
+    accumulator_tree: DescriptorAccumulatorTree = DescriptorAccumulatorTree.CHAIN
     source_memory: SourceMemoryConstraint | None = None
 
     def __post_init__(self) -> None:
@@ -193,6 +202,22 @@ class EmitDescriptorOp:
             raise ValueError(
                 f"{source_op.name}: accumulator seed is only valid for "
                 "accumulate-lanes emits"
+            )
+        if (
+            self.accumulator_tree != DescriptorAccumulatorTree.CHAIN
+            and self.form != DescriptorEmitForm.ACCUMULATE_LANES
+        ):
+            raise ValueError(
+                f"{source_op.name}: accumulator tree is only valid for "
+                "accumulate-lanes emits"
+            )
+        if (
+            self.accumulator_tree == DescriptorAccumulatorTree.BALANCED
+            and self.accumulator_seed != DescriptorAccumulatorSeed.FIRST_LANE
+        ):
+            raise ValueError(
+                f"{source_op.name}: balanced accumulator tree requires "
+                "first-lane accumulator seed"
             )
         if self.source_memory is not None and self.form not in (
             DescriptorEmitForm.AUTO,
