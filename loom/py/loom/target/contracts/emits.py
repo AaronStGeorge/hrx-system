@@ -211,14 +211,6 @@ class EmitDescriptorOp:
                 f"{source_op.name}: accumulator tree is only valid for "
                 "accumulate-lanes emits"
             )
-        if (
-            self.accumulator_tree == DescriptorAccumulatorTree.BALANCED
-            and self.accumulator_seed != DescriptorAccumulatorSeed.FIRST_LANE
-        ):
-            raise ValueError(
-                f"{source_op.name}: balanced accumulator tree requires "
-                "first-lane accumulator seed"
-            )
         if self.source_memory is not None and self.form not in (
             DescriptorEmitForm.AUTO,
             DescriptorEmitForm.OP,

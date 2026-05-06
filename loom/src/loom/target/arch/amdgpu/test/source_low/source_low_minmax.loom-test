@@ -52,9 +52,9 @@ func.def target(@target) @f32_reduce_minnum_maxnum(%input: buffer, %output: buff
   %output_view = buffer.view %output[%zero] : buffer -> view<2xf32, #dense>
   %loaded = vector.load %input_view[0] : view<4xf32, #dense> -> vector<4xf32>
   %min_init = scalar.constant 1000.0 : f32
-  %min = vector.reduce<minnumf> %loaded, %min_init : vector<4xf32>, f32
+  %min = vector.reduce<minnumf, reassoc|nnan|nsz> %loaded, %min_init : vector<4xf32>, f32
   %max_init = scalar.constant -1000.0 : f32
-  %max = vector.reduce<maxnumf> %loaded, %max_init : vector<4xf32>, f32
+  %max = vector.reduce<maxnumf, reassoc|nnan|nsz> %loaded, %max_init : vector<4xf32>, f32
   %stored = vector.from_elements %min, %max : vector<2xf32>
   vector.store %stored, %output_view[0] : vector<2xf32>, view<2xf32, #dense>
   func.return
@@ -68,18 +68,18 @@ low.func.def target(@target) abi(hal_kernel) @f32_reduce_minnum_maxnum() asm<amd
   %loaded = global_load_b128 %13, %input_view
   %min_init = v_mov_b32 1148846080
   %16 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %17 = v_min_f32 %min_init, %16
-  %18 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %19 = v_min_f32 %17, %18
-  %20 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %21 = v_min_f32 %19, %20
-  %22 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %min = v_min_f32 %21, %22
+  %17 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %18 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %19 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %20 = v_min_f32 %min_init, %16
+  %21 = v_min_f32 %17, %18
+  %22 = v_min_f32 %20, %21
+  %min = v_min_f32 %22, %19
   %max_init = v_mov_b32 3296329728
-  %26 = v_max_f32 %max_init, %16
-  %28 = v_max_f32 %26, %18
-  %30 = v_max_f32 %28, %20
-  %max = v_max_f32 %30, %22
+  %29 = v_max_f32 %max_init, %16
+  %30 = v_max_f32 %17, %18
+  %31 = v_max_f32 %29, %30
+  %max = v_max_f32 %31, %19
   %stored = concat(%min, %max) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   %34 = v_mov_b32 0
   global_store_b64 %34, %stored, %output_view

@@ -179,6 +179,21 @@ def _f32_add_reassociated_zero_rule() -> DescriptorRule:
     )
 
 
+def _f32_extremum_reassociated_rule(kind: str, descriptor_key: str) -> DescriptorRule:
+    return _vector_reduce_rule(
+        kind=kind,
+        input_type=_VEC_F32,
+        accumulator_type=_F32,
+        descriptor=_descriptor(descriptor_key),
+        accumulator_tree=DescriptorAccumulatorTree.BALANCED,
+        extra_guards=(
+            Guard.instance_flags_has_all("fastmath", "reassoc"),
+            Guard.instance_flags_has_all("fastmath", "nnan"),
+            Guard.instance_flags_has_all("fastmath", "nsz"),
+        ),
+    )
+
+
 AMDGPU_REDUCE_CONTRACT_DIALECT_OPS = {
     "vector": ALL_VECTOR_OPS,
 }
@@ -199,6 +214,8 @@ AMDGPU_REDUCE_CONTRACT_FRAGMENT = ContractFragment(
         _f32_add_assumed_zero_rule(),
         _f32_rule("addf", "amdgpu.v_add_f32"),
         _f32_rule("mulf", "amdgpu.v_mul_f32"),
+        _f32_extremum_reassociated_rule("minnumf", "amdgpu.v_min_f32"),
+        _f32_extremum_reassociated_rule("maxnumf", "amdgpu.v_max_f32"),
         _f32_rule("minnumf", "amdgpu.v_min_f32"),
         _f32_rule("maxnumf", "amdgpu.v_max_f32"),
     ],

@@ -1875,7 +1875,6 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op_accumulate_lanes(
       emit->flags, LOOM_LOW_LOWER_EMIT_FLAG_ACCUMULATE_SEED_FIRST_LANE);
   const bool balanced_tree = iree_any_bit_set(
       emit->flags, LOOM_LOW_LOWER_EMIT_FLAG_ACCUMULATE_TREE_BALANCED);
-  IREE_ASSERT(!balanced_tree || seed_first_lane);
 
   loom_value_id_t* low_operands = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_low_operands(
@@ -1935,19 +1934,23 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op_accumulate_lanes(
     IREE_ASSERT_EQ(emit->operand_ref_count, 2);
     const uint16_t term_operand_index =
         emit->accumulator_operand_index == 0 ? 1 : 0;
+    const uint32_t term_count =
+        seed_first_lane ? lane_count : (uint32_t)(lane_count + 1);
     loom_value_id_t* lane_terms = NULL;
     IREE_RETURN_IF_ERROR(loom_low_lower_allocate_scratch_array(
-        context, lane_count, sizeof(*lane_terms), (void**)&lane_terms));
-    lane_terms[0] = accumulator;
+        context, term_count, sizeof(*lane_terms), (void**)&lane_terms));
+    uint32_t term_index = 0;
+    lane_terms[term_index++] = accumulator;
     for (uint32_t lane_index = first_lane_index; lane_index < lane_count;
          ++lane_index) {
       IREE_RETURN_IF_ERROR(loom_low_lower_rule_slice_lane(
           context, source_op, low_operands[term_operand_index], lane_index,
-          result_type_scalar, &lane_terms[lane_index]));
+          result_type_scalar, &lane_terms[term_index++]));
     }
+    IREE_ASSERT_EQ(term_index, term_count);
 
-    for (uint32_t step = 1; step < lane_count; step <<= 1) {
-      for (uint32_t lane_index = 0; lane_index + step < lane_count;
+    for (uint32_t step = 1; step < term_count; step <<= 1) {
+      for (uint32_t lane_index = 0; lane_index + step < term_count;
            lane_index += step << 1) {
         lane_operands[emit->accumulator_operand_index] = lane_terms[lane_index];
         lane_operands[term_operand_index] = lane_terms[lane_index + step];
