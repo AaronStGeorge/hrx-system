@@ -328,6 +328,57 @@ static iree_status_t loom_vector_make_unknown_result_facts(
   return iree_ok_status();
 }
 
+static bool loom_vector_fragment_fact_is_accumulator_like(
+    loom_vector_fragment_fact_t fact) {
+  const loom_vector_fragment_role_flags_t accumulator_roles =
+      LOOM_VECTOR_FRAGMENT_ROLE_FLAG_INIT |
+      LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT;
+  return fact.shape_rank == 2 && fact.role_flags != 0 &&
+         (fact.role_flags & ~accumulator_roles) == 0;
+}
+
+static bool loom_vector_fragment_facts_match_except_role(
+    loom_vector_fragment_fact_t lhs, loom_vector_fragment_fact_t rhs) {
+  lhs.role_flags = 0;
+  rhs.role_flags = 0;
+  return loom_vector_fragment_fact_equal(lhs, rhs);
+}
+
+static iree_status_t loom_vector_try_preserve_accumulator_fragment_facts(
+    loom_fact_context_t* context, const loom_value_facts_t* operand_facts,
+    uint16_t operand_count, loom_value_facts_t* result_facts,
+    bool* out_handled) {
+  *out_handled = false;
+  loom_vector_fragment_fact_t fragment;
+  loom_vector_fragment_fact_initialize(&fragment);
+  for (uint16_t i = 0; i < operand_count; ++i) {
+    loom_vector_fragment_fact_t candidate;
+    if (!loom_vector_fragment_fact_query_value_facts(context, operand_facts[i],
+                                                     &candidate)) {
+      continue;
+    }
+    *out_handled = true;
+    if (!loom_vector_fragment_fact_is_accumulator_like(candidate)) {
+      result_facts[0] = loom_value_facts_unknown();
+      return iree_ok_status();
+    }
+    if (loom_vector_fragment_fact_is_unknown(fragment)) {
+      fragment = candidate;
+      continue;
+    }
+    if (!loom_vector_fragment_facts_match_except_role(fragment, candidate)) {
+      result_facts[0] = loom_value_facts_unknown();
+      return iree_ok_status();
+    }
+  }
+  if (!*out_handled) {
+    return iree_ok_status();
+  }
+  fragment.role_flags = LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT;
+  return loom_vector_fragment_fact_make_value_facts(context, fragment,
+                                                    &result_facts[0]);
+}
+
 static void loom_vector_fragment_copy_present_auxiliary(
     loom_vector_encoding_auxiliary_view_t source,
     loom_vector_encoding_auxiliary_view_t* out_target) {
@@ -2128,6 +2179,13 @@ static iree_status_t loom_vector_float_unary_summary_facts(
     loom_fact_context_t* context, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts,
     loom_vector_float_unary_transfer_fn_t fn) {
+  bool fragment_handled = false;
+  IREE_RETURN_IF_ERROR(loom_vector_try_preserve_accumulator_fragment_facts(
+      context, operand_facts, 1, result_facts, &fragment_handled));
+  if (fragment_handled) {
+    return iree_ok_status();
+  }
+
   loom_value_facts_t input = {0};
   if (loom_vector_facts_query_uniform_element(context, operand_facts[0],
                                               &input)) {
@@ -2166,6 +2224,13 @@ static iree_status_t loom_vector_float_binary_summary_facts(
     loom_fact_context_t* context, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts,
     loom_vector_float_binary_transfer_fn_t fn) {
+  bool fragment_handled = false;
+  IREE_RETURN_IF_ERROR(loom_vector_try_preserve_accumulator_fragment_facts(
+      context, operand_facts, 2, result_facts, &fragment_handled));
+  if (fragment_handled) {
+    return iree_ok_status();
+  }
+
   loom_value_facts_t lhs = {0};
   loom_value_facts_t rhs = {0};
   if (loom_vector_facts_query_uniform_element(context, operand_facts[0],
@@ -2215,6 +2280,13 @@ static iree_status_t loom_vector_float_binary_summary_facts(
 static iree_status_t loom_vector_ternary_summary_facts(
     loom_fact_context_t* context, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts, loom_vector_ternary_transfer_fn_t fn) {
+  bool fragment_handled = false;
+  IREE_RETURN_IF_ERROR(loom_vector_try_preserve_accumulator_fragment_facts(
+      context, operand_facts, 3, result_facts, &fragment_handled));
+  if (fragment_handled) {
+    return iree_ok_status();
+  }
+
   loom_value_facts_t a = {0};
   loom_value_facts_t b = {0};
   loom_value_facts_t c = {0};
@@ -2410,6 +2482,13 @@ iree_status_t loom_vector_fmaf_facts(loom_fact_context_t* context,
                                      const loom_op_t* op,
                                      const loom_value_facts_t* operand_facts,
                                      loom_value_facts_t* result_facts) {
+  bool fragment_handled = false;
+  IREE_RETURN_IF_ERROR(loom_vector_try_preserve_accumulator_fragment_facts(
+      context, operand_facts, 3, result_facts, &fragment_handled));
+  if (fragment_handled) {
+    return iree_ok_status();
+  }
+
   loom_value_facts_t a = {0};
   loom_value_facts_t b = {0};
   loom_value_facts_t c = {0};
