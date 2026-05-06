@@ -13,12 +13,17 @@
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"
+#include "loom/target/low_legality.h"
 
 typedef struct loom_low_source_to_low_pass_state_t {
   // Maximum number of lowering diagnostics emitted before stopping.
   uint32_t max_errors;
   // True when max_errors was explicitly provided.
   bool has_max_errors_option;
+  // Target-low legality diagnostics to emit while matching lowering rules.
+  loom_target_low_legality_diagnostic_flags_t legality_diagnostic_flags;
+  // True when diagnostics was explicitly provided.
+  bool has_diagnostics_option;
 } loom_low_source_to_low_pass_state_t;
 
 typedef struct loom_low_source_to_low_parse_context_t {
@@ -27,6 +32,9 @@ typedef struct loom_low_source_to_low_parse_context_t {
 } loom_low_source_to_low_parse_context_t;
 
 static const loom_pass_option_def_t kLowSourceToLowOptions[] = {
+    {IREE_SVL("diagnostics"),
+     IREE_SVL("Target-low legality diagnostics to emit: none, memory, or "
+              "all.")},
     {IREE_SVL("max-errors"),
      IREE_SVL("Maximum number of source-to-low diagnostics to emit; zero "
               "means no limit.")},
@@ -70,10 +78,39 @@ static iree_status_t loom_low_source_to_low_parse_max_errors(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_source_to_low_parse_diagnostics(
+    iree_string_view_t value, loom_low_source_to_low_parse_context_t* context) {
+  if (context->state->has_diagnostics_option) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "duplicate option 'diagnostics' for pass 'source-to-low'");
+  }
+  if (iree_string_view_equal(value, IREE_SV("none"))) {
+    context->state->legality_diagnostic_flags = 0;
+  } else if (iree_string_view_equal(value, IREE_SV("memory"))) {
+    context->state->legality_diagnostic_flags =
+        LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS;
+  } else if (iree_string_view_equal(value, IREE_SV("all"))) {
+    context->state->legality_diagnostic_flags =
+        LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_ALL;
+  } else {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "source-to-low option 'diagnostics' expected 'none', 'memory', or "
+        "'all', got '%.*s'",
+        (int)value.size, value.data);
+  }
+  context->state->has_diagnostics_option = true;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_source_to_low_parse_option(
     void* user_data, iree_string_view_t name, iree_string_view_t value) {
   loom_low_source_to_low_parse_context_t* context =
       (loom_low_source_to_low_parse_context_t*)user_data;
+  if (iree_string_view_equal(name, IREE_SV("diagnostics"))) {
+    return loom_low_source_to_low_parse_diagnostics(value, context);
+  }
   if (iree_string_view_equal(name, IREE_SV("max-errors"))) {
     uint32_t max_errors = 0;
     IREE_RETURN_IF_ERROR(loom_pass_option_parse_uint32(
@@ -101,6 +138,13 @@ iree_status_t loom_low_source_to_low_create(loom_pass_t* pass,
       const loom_pass_decoded_option_t* option =
           &pass->decoded_options->options[i];
       if (!option->present) {
+        continue;
+      }
+      if (iree_string_view_equal(option->schema->name,
+                                 IREE_SV("diagnostics"))) {
+        IREE_RETURN_IF_ERROR(loom_low_source_to_low_parse_diagnostics(
+            option->schema->enum_values[option->enum_value_index].value,
+            &context));
         continue;
       }
       if (iree_string_view_equal(option->schema->name, IREE_SV("max-errors"))) {
@@ -169,6 +213,8 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
             legality_provider_list
                 ? *legality_provider_list
                 : loom_target_low_legality_provider_list_empty(),
+        .legality_diagnostic_flags =
+            state ? state->legality_diagnostic_flags : 0,
         .policy = selection->policy,
         .fact_table = fact_table,
         .emitter = pass->diagnostic_emitter,

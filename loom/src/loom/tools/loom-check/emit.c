@@ -11,13 +11,11 @@
 #include "loom/codegen/low/descriptors_manifest.h"
 #include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/function.h"
-#include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/packet_json.h"
 #include "loom/codegen/low/register_class_map.h"
 #include "loom/codegen/low/schedule/json.h"
 #include "loom/codegen/low/schedule/run.h"
 #include "loom/codegen/low/schedule/types.h"
-#include "loom/codegen/low/source_selection.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
@@ -29,10 +27,10 @@
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
-#include "loom/pass/value_facts.h"
 #include "loom/target/entry_selection.h"
 #include "loom/target/low_descriptor_registry_manifest.h"
 #include "loom/target/low_packet_diagnostics.h"
+#include "loom/tooling/compile/pipeline.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/tools/loom-check/low_emit.h"
@@ -671,8 +669,8 @@ static iree_status_t loom_check_emit_parse_request(
     if (iree_string_view_starts_with(first_token, IREE_SV("@"))) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "source-low does not accept a function symbol; it lowers all "
-          "targeted source funcs in the module");
+          "source-low does not accept a function symbol; it runs the shared "
+          "source-to-low pass pipeline for the module");
     }
     IREE_RETURN_IF_ERROR(
         loom_check_emit_parse_source_low_options(target_options, out_request));
@@ -959,14 +957,69 @@ static iree_status_t loom_check_emit_write_source_low_artifacts(
   return iree_ok_status();
 }
 
+static bool loom_check_emit_is_low_function_op(const loom_op_t* op) {
+  return loom_low_func_def_isa(op) || loom_low_kernel_def_isa(op);
+}
+
+static iree_status_t loom_check_emit_select_single_low_descriptor_set_key(
+    const loom_module_t* module,
+    const loom_low_descriptor_registry_t* descriptor_registry,
+    iree_diagnostic_emitter_t emitter,
+    iree_string_view_t* out_descriptor_set_key, bool* out_found) {
+  *out_descriptor_set_key = iree_string_view_empty();
+  *out_found = false;
+
+  const loom_block_t* block = loom_region_const_entry_block(module->body);
+  const loom_op_t* op = NULL;
+  loom_block_for_each_op(block, op) {
+    if (!loom_check_emit_is_low_function_op(op)) {
+      continue;
+    }
+    loom_low_resolved_target_t target = {0};
+    IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
+        module, op, descriptor_registry, emitter, &target));
+    if (target.descriptor_set == NULL) {
+      continue;
+    }
+    if (iree_string_view_is_empty(*out_descriptor_set_key)) {
+      *out_descriptor_set_key = target.descriptor_set_key;
+      *out_found = true;
+      continue;
+    }
+    if (!iree_string_view_equal(*out_descriptor_set_key,
+                                target.descriptor_set_key)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "source-low output=low requires all lowered funcs to use the same "
+          "target-low descriptor set");
+    }
+  }
+
+  return iree_ok_status();
+}
+
+static iree_string_view_t loom_check_emit_source_low_pipeline(
+    const loom_check_emit_request_t* request) {
+  if (!request->has_source_low_diagnostics_option) {
+    return IREE_SV("source-to-low");
+  }
+  if (request->source_low_diagnostic_flags == 0) {
+    return IREE_SV("source-to-low{diagnostics=none}");
+  }
+  if (request->source_low_diagnostic_flags ==
+      LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS) {
+    return IREE_SV("source-to-low{diagnostics=memory}");
+  }
+  return IREE_SV("source-to-low{diagnostics=all}");
+}
+
 static iree_status_t loom_check_emit_write_source_low_text(
     loom_module_t* module, const loom_check_emit_request_t* request,
     const loom_target_low_descriptor_registry_t* low_registry,
-    const loom_low_lower_policy_registry_t* policy_registry,
-    loom_target_low_legality_provider_list_t legality_provider_list,
+    const loom_check_environment_t* environment,
     loom_source_resolver_t source_resolver,
     loom_check_diagnostic_collector_t* diagnostic_collector,
-    loom_check_result_t* result) {
+    iree_arena_block_pool_t* block_pool, loom_check_result_t* result) {
   const loom_target_entry_options_t entry_options = {
       .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,
                           .user_data = diagnostic_collector},
@@ -980,80 +1033,44 @@ static iree_status_t loom_check_emit_write_source_low_text(
     return iree_ok_status();
   }
 
+  if (environment->target_environment == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "source-low emit requires a target environment");
+  }
+
+  loom_compile_pipeline_options_t compile_options = {0};
+  loom_compile_pipeline_options_initialize(&compile_options);
+  compile_options.pipeline = loom_check_emit_source_low_pipeline(request);
+  compile_options.default_pipeline = LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW;
+  compile_options.target_environment = environment->target_environment;
+  compile_options.low_descriptor_registry = low_registry;
+  compile_options.diagnostic_sink =
+      (loom_diagnostic_sink_t){.fn = loom_check_diagnostic_collector_sink,
+                               .user_data = diagnostic_collector};
+  compile_options.source_resolver = source_resolver;
+  compile_options.max_errors = 20;
+
+  loom_pass_run_result_t run_result = {0};
+  iree_status_t status = loom_compile_run_pipeline(module, &compile_options,
+                                                   block_pool, &run_result);
+  IREE_RETURN_IF_ERROR(status);
+  if (run_result.error_count != 0 || diagnostic_collector->count != 0) {
+    return iree_ok_status();
+  }
+
   loom_target_entry_diagnostic_emitter_t pass_emitter = {0};
   loom_target_entry_diagnostic_emitter_initialize(
       module, &entry_options, LOOM_EMITTER_PASS, &pass_emitter);
-
-  iree_arena_allocator_t selection_arena;
-  iree_arena_initialize(module->arena.block_pool, &selection_arena);
-  loom_pass_value_fact_owner_t value_facts = {0};
-  loom_pass_value_fact_owner_initialize(module->arena.block_pool, &value_facts);
-  loom_low_source_selection_list_t selection_list = {0};
-  const loom_low_source_selection_options_t selection_options = {
-      .policy_registry = policy_registry,
-      .diagnostic_emitter = loom_target_entry_emitter(&pass_emitter),
-      .lowering_kind = IREE_SV("source-to-low"),
-  };
   iree_string_view_t selected_descriptor_set_key = iree_string_view_empty();
-  bool has_multiple_descriptor_sets = false;
-  bool rejected = false;
-  iree_status_t status = loom_low_select_source_funcs(
-      module, &selection_options, &selection_arena, &selection_list);
-  for (iree_host_size_t i = 0;
-       i < selection_list.count && iree_status_is_ok(status) && !rejected;
-       ++i) {
-    const loom_low_source_selection_t* selection = &selection_list.values[i];
-    const iree_string_view_t descriptor_set_key =
-        selection->target_bundle->config->contract_set_key;
-    if (iree_string_view_is_empty(selected_descriptor_set_key)) {
-      selected_descriptor_set_key = descriptor_set_key;
-    } else if (!iree_string_view_equal(selected_descriptor_set_key,
-                                       descriptor_set_key)) {
-      has_multiple_descriptor_sets = true;
-    }
-    loom_value_fact_table_t* fact_table = NULL;
-    status = loom_pass_value_fact_owner_acquire(
-        &value_facts, module,
-        loom_pass_value_fact_scope_function_for_target(
-            selection->func, selection->target_bundle),
-        &fact_table);
-    if (!iree_status_is_ok(status)) {
-      break;
-    }
-    const loom_low_lower_options_t lower_options = {
-        .target_ref = selection->target_ref,
-        .bundle = selection->target_bundle,
-        .descriptor_registry = &low_registry->registry,
-        .legality_provider_list = legality_provider_list,
-        .legality_diagnostic_flags = request->source_low_diagnostic_flags,
-        .policy = selection->policy,
-        .fact_table = fact_table,
-        .emitter = loom_target_entry_emitter(&pass_emitter),
-        .max_errors = 20,
-    };
-    loom_low_lower_result_t lower_result = {0};
-    status = loom_low_lower_function(module, selection->func, &lower_options,
-                                     &lower_result);
-    loom_pass_value_fact_owner_invalidate(&value_facts);
-    if (iree_status_is_ok(status) && lower_result.error_count != 0) {
-      rejected = true;
-    }
-    if (iree_status_is_ok(status) && lower_result.error_count == 0 &&
-        lower_result.low_func_op == NULL) {
-      status = iree_make_status(IREE_STATUS_INTERNAL,
-                                "source-to-low lowering produced no low func");
-    }
-  }
-  loom_pass_value_fact_owner_deinitialize(&value_facts);
-  iree_arena_deinitialize(&selection_arena);
+  bool has_low_artifacts = false;
+  status = loom_check_emit_select_single_low_descriptor_set_key(
+      module, &low_registry->registry, loom_target_entry_emitter(&pass_emitter),
+      &selected_descriptor_set_key, &has_low_artifacts);
   IREE_RETURN_IF_ERROR(status);
-  if (pass_emitter.error_count != 0) {
+  if (diagnostic_collector->count != 0) {
     return iree_ok_status();
   }
-  if (rejected) {
-    return iree_ok_status();
-  }
-  if (selection_list.count == 0) {
+  if (!has_low_artifacts) {
     const loom_diagnostic_param_t params[] = {
         loom_param_string(IREE_SV("source-to-low")),
     };
@@ -1065,6 +1082,7 @@ static iree_status_t loom_check_emit_write_source_low_text(
     return iree_diagnostic_emit(loom_target_entry_emitter(&pass_emitter),
                                 &emission);
   }
+
   IREE_RETURN_IF_ERROR(loom_target_entry_verify_module(module, &entry_options,
                                                        20, &verify_result));
   if (verify_result.error_count != 0) {
@@ -1082,12 +1100,6 @@ static iree_status_t loom_check_emit_write_source_low_text(
   }
 
   if (request->source_low_output == LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW) {
-    if (has_multiple_descriptor_sets) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "source-low output=low requires all lowered funcs to use the same "
-          "target-low descriptor set");
-    }
     iree_status_t status = loom_check_emit_write_source_low_artifacts(
         module, &low_registry->registry, selected_descriptor_set_key,
         &result->actual_output);
@@ -1361,18 +1373,12 @@ iree_status_t loom_check_execute_emit(
     loom_source_table_resolver_t resolver_data = {0};
     status = loom_check_source_resolver_for_case(
         context, filename, stripped_view, &source_entry, &resolver_data);
-    loom_low_lower_policy_registry_t policy_registry = {0};
-    if (iree_status_is_ok(status)) {
-      status = loom_check_environment_initialize_low_lower_policy_registry(
-          environment, &policy_registry);
-    }
     if (iree_status_is_ok(status)) {
       status = loom_check_emit_write_source_low_text(
-          module, &request, &low_registry, &policy_registry,
-          environment->low_legality_provider_list,
+          module, &request, &low_registry, environment,
           (loom_source_resolver_t){.fn = loom_source_table_resolve,
                                    .user_data = &resolver_data},
-          &diagnostic_collector, result);
+          &diagnostic_collector, block_pool, result);
     }
     loom_module_free(module);
     diagnostic_collector.module = NULL;

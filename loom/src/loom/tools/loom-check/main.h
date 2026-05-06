@@ -7,9 +7,9 @@
 // Shared loom-check command-line entry point.
 //
 // Tool binaries provide a loom_check_environment_t that selects the dialects,
-// target-low descriptor package, and source-to-low lowering policies linked
-// into that binary. The shared entry point owns flag parsing, context setup,
-// and process exit behavior.
+// target environment, descriptor package, and optional test-only providers
+// linked into that binary. The shared entry point owns flag parsing, context
+// setup, and process exit behavior.
 
 #ifndef LOOM_TOOLS_LOOM_CHECK_MAIN_H_
 #define LOOM_TOOLS_LOOM_CHECK_MAIN_H_

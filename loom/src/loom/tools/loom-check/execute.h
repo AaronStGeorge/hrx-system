@@ -44,6 +44,7 @@ extern "C" {
 
 typedef struct loom_low_lower_policy_registry_t
     loom_low_lower_policy_registry_t;
+typedef struct loom_target_environment_t loom_target_environment_t;
 typedef struct loom_check_diagnostic_collector_t
     loom_check_diagnostic_collector_t;
 
@@ -160,9 +161,10 @@ typedef struct loom_check_initialize_low_descriptor_registry_callback_t {
 typedef iree_status_t (*loom_check_initialize_low_lower_policy_registry_fn_t)(
     void* user_data, loom_low_lower_policy_registry_t* out_registry);
 
-// Callback for the lowering policy registry package used by source-to-low emit
-// modes. The policy package is intentionally separate from descriptor tables:
-// tools may want low parsing/scheduling without linking source lowering.
+// Callback for the lowering policy registry package used by RUN: pass tests
+// that explicitly execute source-to-low. The policy package is intentionally
+// separate from descriptor tables: tools may want low parsing/scheduling
+// without linking source lowering.
 typedef struct loom_check_initialize_low_lower_policy_registry_callback_t {
   // Function that initializes the selected linked lowering policy package.
   loom_check_initialize_low_lower_policy_registry_fn_t fn;
@@ -289,6 +291,8 @@ typedef struct loom_check_requirement_provider_registry_t {
 struct loom_check_environment_t {
   // Dialect registration callback for the IR surface accepted by this runner.
   loom_check_register_context_callback_t register_context;
+  // Optional composed target environment used by compile-pipeline-backed modes.
+  const loom_target_environment_t* target_environment;
   // Target-low registry callback for descriptor-backed low IR operations.
   loom_check_initialize_low_descriptor_registry_callback_t
       initialize_low_descriptor_registry;

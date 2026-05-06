@@ -98,7 +98,20 @@ static const loom_pass_requirement_def_t kLowSelectOperandFormsRequirements[] =
         },
 };
 
+static const loom_pass_option_enum_value_t kLowSourceToLowDiagnosticsValues[] =
+    {
+        {.value = IREE_SVL("all")},
+        {.value = IREE_SVL("memory")},
+        {.value = IREE_SVL("none")},
+};
+
 static const loom_pass_option_schema_t kLowSourceToLowOptionSchema[] = {
+    {
+        .name = IREE_SVL("diagnostics"),
+        .kind = LOOM_PASS_OPTION_SCHEMA_ENUM,
+        .enum_values = kLowSourceToLowDiagnosticsValues,
+        .enum_value_count = IREE_ARRAYSIZE(kLowSourceToLowDiagnosticsValues),
+    },
     {
         .name = IREE_SVL("max-errors"),
         .kind = LOOM_PASS_OPTION_SCHEMA_UINT32,

@@ -60,7 +60,6 @@ loom_cc_library(
     loom::src::loom::codegen::low::pass_environment
     loom::src::loom::codegen::low::register_class_map
     loom::src::loom::codegen::low::schedule
-    loom::src::loom::codegen::low::source_selection
     loom::src::loom::codegen::low::target_binding
     loom::src::loom::codegen::low::text_asm
     loom::src::loom::codegen::low::verify
@@ -81,7 +80,6 @@ loom_cc_library(
     loom::src::loom::pass::pipeline
     loom::src::loom::pass::registry
     loom::src::loom::pass::tooling
-    loom::src::loom::pass::value_facts
     loom::src::loom::target::entry_selection
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::low_descriptor_registry_manifest
@@ -90,6 +88,7 @@ loom_cc_library(
     loom::src::loom::target::predicate
     loom::src::loom::target::types
     loom::src::loom::testing::diff
+    loom::src::loom::tooling::compile::pipeline
     loom::src::loom::util::json
     loom::src::loom::util::stream
     loom::src::loom::verify
@@ -155,6 +154,7 @@ loom_cc_test(
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::target::low_descriptor_registry_core_test
+    loom::src::loom::target::provider
     loom::src::loom::target::test::lower
     loom::src::loom::testing::context
     iree::testing::gtest

@@ -13,6 +13,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/target/low_descriptor_registry_core_test.h"
+#include "loom/target/provider.h"
 #include "loom/target/test/lower.h"
 #include "loom/testing/context.h"
 #include "loom/tools/loom-check/check.h"
@@ -41,6 +42,27 @@ iree_status_t InitializeTestLowLowerPolicyRegistry(
   loom_test_low_lower_policy_registry_initialize(out_registry);
   return iree_ok_status();
 }
+
+void InitializeTestLowDescriptorRegistryForProvider(
+    loom_target_low_descriptor_registry_t* out_registry) {
+  loom_target_core_test_low_descriptor_registry_initialize(out_registry);
+}
+
+void InitializeTestLowLowerPolicyRegistryForProvider(
+    loom_low_lower_policy_registry_t* out_registry) {
+  loom_test_low_lower_policy_registry_initialize(out_registry);
+}
+
+const loom_target_provider_t kTestTargetProvider = {
+    .initialize_low_descriptor_registry =
+        InitializeTestLowDescriptorRegistryForProvider,
+    .initialize_low_lower_policy_registry =
+        InitializeTestLowLowerPolicyRegistryForProvider,
+};
+
+const loom_target_provider_t* const kTestTargetProviders[] = {
+    &kTestTargetProvider,
+};
 
 bool TestRequirementProviderMatches(
     const loom_check_requirement_provider_t* provider,
@@ -162,13 +184,22 @@ class ExecuteTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
+    target_provider_set_ = loom_target_provider_set_make(
+        kTestTargetProviders, IREE_ARRAYSIZE(kTestTargetProviders));
+    IREE_ASSERT_OK(loom_target_environment_initialize(&target_provider_set_,
+                                                      &target_environment_));
+    execute_environment_ = kExecuteTestEnvironment;
+    execute_environment_.target_environment = &target_environment_;
+    provider_environment_ = kExecuteTestProviderEnvironment;
+    provider_environment_.target_environment = &target_environment_;
     loom_context_initialize(iree_allocator_system(), &context_);
     IREE_ASSERT_OK(
-        loom_check_context_initialize(&kExecuteTestEnvironment, &context_));
+        loom_check_context_initialize(&execute_environment_, &context_));
   }
 
   void TearDown() override {
     loom_context_deinitialize(&context_);
+    loom_target_environment_deinitialize(&target_environment_);
     iree_arena_block_pool_deinitialize(&block_pool_);
   }
 
@@ -177,7 +208,7 @@ class ExecuteTest : public ::testing::Test {
   // result is already cleaned up.
   iree_status_t ExecuteFirst(const char* source,
                              loom_check_result_t* out_result) {
-    return ExecuteFirstWithEnvironment(source, &kExecuteTestEnvironment,
+    return ExecuteFirstWithEnvironment(source, &execute_environment_,
                                        out_result);
   }
 
@@ -239,6 +270,10 @@ class ExecuteTest : public ::testing::Test {
 
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
+  loom_target_provider_set_t target_provider_set_;
+  loom_target_environment_t target_environment_;
+  loom_check_environment_t execute_environment_;
+  loom_check_environment_t provider_environment_;
 };
 
 //===----------------------------------------------------------------------===//
@@ -1025,7 +1060,7 @@ TEST_F(ExecuteTest, RequirementProviderCanOwnAvailabilityQuery) {
       ExecuteFirstWithEnvironment("// RUN: roundtrip\n"
                                   "// REQUIRES: fake-target\n"
                                   "this.is.not.valid.ir\n",
-                                  &kExecuteTestProviderEnvironment, &result));
+                                  &provider_environment_, &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_SKIP);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_SKIP);
   EXPECT_NE(DetailString(result).find("fake-target"), std::string::npos);
@@ -1041,7 +1076,7 @@ TEST_F(ExecuteTest, UnknownRequiresListsProviderRequirements) {
       ExecuteFirstWithEnvironment("// RUN: roundtrip\n"
                                   "// REQUIRES: definitely-not-real\n"
                                   "func.def @f() {}\n",
-                                  &kExecuteTestProviderEnvironment, &result));
+                                  &provider_environment_, &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   EXPECT_NE(DetailString(result).find("unknown REQUIRES requirement"),
@@ -1059,7 +1094,7 @@ TEST_F(ExecuteTest, EmitProviderCanOwnTarget) {
                                   "}\n"
                                   "// ----\n"
                                   "fake emit\n",
-                                  &kExecuteTestProviderEnvironment, &result));
+                                  &provider_environment_, &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_PASS);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS);
   loom_check_result_deinitialize(&result);
@@ -1070,7 +1105,7 @@ TEST_F(ExecuteTest, UnknownEmitTargetListsProviderTargets) {
   IREE_ASSERT_OK(
       ExecuteFirstWithEnvironment("// RUN: emit definitely-not-real\n"
                                   "this.is.not.valid.ir\n",
-                                  &kExecuteTestProviderEnvironment, &result));
+                                  &provider_environment_, &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   EXPECT_NE(DetailString(result).find("unknown emit target"),

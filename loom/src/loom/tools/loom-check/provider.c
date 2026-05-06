@@ -147,6 +147,7 @@ int loom_check_provider_main(int argc, char** argv,
               .fn = loom_check_provider_register_context,
               .user_data = &state,
           },
+      .target_environment = &state.target_environment,
       .initialize_low_descriptor_registry =
           {
               .fn = loom_check_provider_initialize_low_descriptor_registry,

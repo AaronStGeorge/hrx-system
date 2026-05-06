@@ -27,8 +27,9 @@
 //   // RUN: verify          Parse -> verify -> match annotations.
 //   // RUN: pass <pipeline> Parse -> run pipeline -> print -> compare.
 //   // RUN: format <target> Parse -> convert format -> print -> compare.
-//   // RUN: emit <target>   Parse -> lower to target output -> compare. Core
-//                           targets include low-descriptor-manifest,
+//   // RUN: emit <target>   Parse -> emit analysis or target-structured
+//                           output -> compare. Core targets include
+//                           low-descriptor-manifest,
 //                           target-low-registry-manifest, and source-low.
 //                           Analysis targets include liveness-json @function,
 //                           low-schedule-json @function [strategy=...]
@@ -37,7 +38,7 @@
 //                           [diagnostics=...] [class=units...]
 //                           [fixed=%value:<kind>:<base>:<count>],
 //                           and low-packet-json @function.
-//                           Source lowering tests use source-low
+//                           Source-to-low tests use source-low
 //                           [output=module|low]
 //                           [diagnostics=none|memory|all]. Linked providers
 //                           may add target-specific emit forms.
@@ -127,7 +128,7 @@ typedef enum loom_check_mode_e {
   LOOM_CHECK_MODE_VERIFY = 1,     // Parse -> verify -> match annotations.
   LOOM_CHECK_MODE_PASS = 2,       // Parse -> run pipeline -> print -> compare.
   LOOM_CHECK_MODE_FORMAT = 3,  // Parse -> convert format -> print -> compare.
-  LOOM_CHECK_MODE_EMIT = 4,    // Parse -> lower to target output -> compare.
+  LOOM_CHECK_MODE_EMIT = 4,    // Parse -> emit target/check output -> compare.
 } loom_check_mode_t;
 
 // Returns a human-readable name for the mode.
