@@ -11,14 +11,14 @@
 #include "iree/base/internal/flatcc/building.h"
 #include "iree/schemas/amdgpu_executable_def_builder.h"
 
-static const loom_amdgpu_hal_executable_binding_flags_t
-    LOOM_AMDGPU_HAL_EXECUTABLE_BINDING_KNOWN_FLAGS =
-        LOOM_AMDGPU_HAL_EXECUTABLE_BINDING_READ_ONLY |
-        LOOM_AMDGPU_HAL_EXECUTABLE_BINDING_INDIRECT;
+static const loom_amdgpu_hal_kernel_binding_flags_t
+    LOOM_AMDGPU_HAL_KERNEL_BINDING_KNOWN_FLAGS =
+        LOOM_AMDGPU_HAL_KERNEL_BINDING_READ_ONLY |
+        LOOM_AMDGPU_HAL_KERNEL_BINDING_INDIRECT;
 
 static iree_status_t loom_amdgpu_hal_executable_validate(
     iree_string_view_t isa, iree_const_byte_span_t hsaco,
-    const loom_amdgpu_hal_executable_export_t* exports,
+    const loom_amdgpu_hal_kernel_export_t* exports,
     iree_host_size_t export_count) {
   if (iree_string_view_is_empty(isa)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -35,7 +35,7 @@ static iree_status_t loom_amdgpu_hal_executable_validate(
   }
 
   for (iree_host_size_t i = 0; i < export_count; ++i) {
-    const loom_amdgpu_hal_executable_export_t* export = &exports[i];
+    const loom_amdgpu_hal_kernel_export_t* export = &exports[i];
     if (iree_string_view_is_empty(export->symbol_name)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "AMDGPU HAL executable export %" PRIhsz
@@ -56,9 +56,9 @@ static iree_status_t loom_amdgpu_hal_executable_validate(
           (int)export->symbol_name.size, export->symbol_name.data);
     }
     for (iree_host_size_t j = 0; j < export->binding_count; ++j) {
-      const loom_amdgpu_hal_executable_binding_flags_t unknown_flags =
+      const loom_amdgpu_hal_kernel_binding_flags_t unknown_flags =
           export->binding_flags[j] &
-          ~LOOM_AMDGPU_HAL_EXECUTABLE_BINDING_KNOWN_FLAGS;
+          ~LOOM_AMDGPU_HAL_KERNEL_BINDING_KNOWN_FLAGS;
       if (unknown_flags != 0) {
         return iree_make_status(
             IREE_STATUS_INVALID_ARGUMENT,
@@ -75,7 +75,7 @@ static iree_status_t loom_amdgpu_hal_executable_validate(
 static iree_status_t loom_amdgpu_hal_executable_build_flatbuffer(
     flatcc_builder_t* builder, iree_string_view_t isa,
     iree_const_byte_span_t hsaco,
-    const loom_amdgpu_hal_executable_export_t* exports,
+    const loom_amdgpu_hal_kernel_export_t* exports,
     iree_host_size_t export_count, iree_allocator_t allocator,
     uint8_t** out_flatbuffer_data, iree_host_size_t* out_flatbuffer_length) {
   *out_flatbuffer_data = NULL;
@@ -114,7 +114,7 @@ static iree_status_t loom_amdgpu_hal_executable_build_flatbuffer(
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0; iree_status_is_ok(status) && i < export_count;
        ++i) {
-    const loom_amdgpu_hal_executable_export_t* export = &exports[i];
+    const loom_amdgpu_hal_kernel_export_t* export = &exports[i];
     flatbuffers_string_ref_t symbol_ref = flatbuffers_string_create(
         builder, export->symbol_name.data, export->symbol_name.size);
     if (!symbol_ref) {
@@ -218,9 +218,9 @@ void loom_amdgpu_hal_executable_deinitialize(
   *executable = (loom_amdgpu_hal_executable_t){0};
 }
 
-iree_status_t loom_amdgpu_emit_hal_executable(
+iree_status_t loom_amdgpu_package_hal_executable(
     iree_string_view_t isa, iree_const_byte_span_t hsaco,
-    const loom_amdgpu_hal_executable_export_t* exports,
+    const loom_amdgpu_hal_kernel_export_t* exports,
     iree_host_size_t export_count, iree_allocator_t allocator,
     loom_amdgpu_hal_executable_t* out_executable) {
   *out_executable = (loom_amdgpu_hal_executable_t){0};

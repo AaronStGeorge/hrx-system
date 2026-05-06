@@ -39,13 +39,14 @@ loom_assert_no_dependencies(
         ":descriptor",
         ":encoding",
         ":hal_executable",
+        ":hal_kernel_metadata",
         ":hsaco",
         ":kernel_assembly",
         ":kernel_hsaco",
         ":kernel_record",
         ":loom_check",
         ":metadata",
-        ":module_compiler",
+        ":hal_kernel_library",
         ":preflight",
     ],
 )
@@ -58,6 +59,7 @@ loom_assert_no_dependencies(
         ":descriptor",
         ":encoding",
         ":hal_executable",
+        ":hal_kernel_metadata",
         ":hsaco",
         ":kernel_assembly",
         ":kernel_hsaco",
@@ -76,21 +78,33 @@ loom_assert_no_dependencies(
         ":descriptor",
         ":encoding",
         ":hal_executable",
+        ":hal_kernel_metadata",
         ":hsaco",
         ":kernel_assembly",
         ":kernel_hsaco",
         ":kernel_record",
         ":loom_check",
         ":metadata",
-        ":module_compiler",
+        ":hal_kernel_library",
         ":preflight",
     ],
 )
 
 loom_assert_no_dependencies(
-    name = "core_run_tool_no_amdgpu_module_compiler_dep",
-    dependencies = [":module_compiler"],
+    name = "core_run_tool_no_amdgpu_hal_kernel_library_dep",
+    dependencies = [":hal_kernel_library"],
     targets = ["//loom/src/loom/tools/iree-run-loom:main"],
+)
+
+loom_assert_no_dependencies(
+    name = "amdgpu_hal_kernel_library_no_hal_package_deps",
+    dependencies = [
+        ":hal_executable",
+        "//runtime/src/iree/base/internal/flatcc:building",
+        "//runtime/src/iree/schemas:amdgpu_executable_def_c_fbs",
+        "//runtime/src/iree/schemas:executable_debug_info_c_fbs",
+    ],
+    targets = [":hal_kernel_library"],
 )
 
 #===------------------------------------------------------------------------===#
@@ -290,11 +304,20 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "hal_kernel_metadata",
+    hdrs = ["hal_kernel_metadata.h"],
+    deps = [
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "hal_executable",
     srcs = ["hal_executable.c"],
     hdrs = ["hal_executable.h"],
     deps = [
-        "//loom/src/loom/target:types",
+        ":hal_kernel_metadata",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal/flatcc:building",
         "//runtime/src/iree/schemas:amdgpu_executable_def_c_fbs",
@@ -303,11 +326,11 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "module_compiler",
-    srcs = ["module_compiler.c"],
-    hdrs = ["module_compiler.h"],
+    name = "hal_kernel_library",
+    srcs = ["hal_kernel_library.c"],
+    hdrs = ["hal_kernel_library.h"],
     deps = [
-        ":hal_executable",
+        ":hal_kernel_metadata",
         ":kernel_hsaco",
         ":preflight",
         "//loom/src/loom/analysis:symbol_facts",
@@ -348,10 +371,10 @@ loom_cc_library(
 )
 
 loom_cc_test(
-    name = "module_compiler_test",
-    srcs = ["module_compiler_test.cc"],
+    name = "hal_kernel_library_test",
+    srcs = ["hal_kernel_library_test.cc"],
     deps = [
-        ":module_compiler",
+        ":hal_kernel_library",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",

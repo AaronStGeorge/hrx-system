@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/ireevm/module_compiler.h"
+#include "loom/target/emit/ireevm/archive_emitter.h"
 
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/frame.h"
@@ -21,18 +21,18 @@
 #include "loom/target/provider.h"
 
 enum {
-  LOOM_IREEVM_MODULE_COMPILE_DEFAULT_MAX_ERRORS = 20,
+  LOOM_IREEVM_ARCHIVE_EMIT_DEFAULT_MAX_ERRORS = 20,
 };
 
-static iree_string_view_t loom_ireevm_module_compile_module_name(
-    const loom_ireevm_module_compile_options_t* options) {
+static iree_string_view_t loom_ireevm_archive_emit_module_name(
+    const loom_ireevm_archive_emit_options_t* options) {
   if (options && !iree_string_view_is_empty(options->module_name)) {
     return options->module_name;
   }
   return IREE_SV("loom");
 }
 
-static bool loom_ireevm_module_compile_bundle_is_compatible(
+static bool loom_ireevm_archive_emit_bundle_is_compatible(
     void* user_data, const loom_target_entry_t* entry) {
   const loom_target_bundle_t* bundle = &entry->bundle_storage.bundle;
   return bundle && bundle->snapshot && bundle->export_plan &&
@@ -42,7 +42,7 @@ static bool loom_ireevm_module_compile_bundle_is_compatible(
          bundle->export_plan->abi_kind == LOOM_TARGET_ABI_VM_MODULE_FUNCTION;
 }
 
-static iree_status_t loom_ireevm_module_compile_append_cconv_type(
+static iree_status_t loom_ireevm_archive_emit_append_cconv_type(
     loom_type_t type, iree_string_builder_t* builder) {
   if (!loom_type_is_scalar(type)) {
     return iree_make_status(
@@ -59,7 +59,7 @@ static iree_status_t loom_ireevm_module_compile_append_cconv_type(
   return iree_string_builder_append_string(builder, IREE_SV("i"));
 }
 
-static iree_status_t loom_ireevm_module_compile_build_cconv(
+static iree_status_t loom_ireevm_archive_emit_build_cconv(
     const loom_module_t* module, loom_func_like_t function,
     iree_string_builder_t* builder) {
   IREE_RETURN_IF_ERROR(
@@ -69,7 +69,7 @@ static iree_status_t loom_ireevm_module_compile_build_cconv(
   const loom_value_id_t* argument_ids =
       loom_func_like_arg_ids(function, &argument_count);
   for (uint16_t i = 0; i < argument_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_ireevm_module_compile_append_cconv_type(
+    IREE_RETURN_IF_ERROR(loom_ireevm_archive_emit_append_cconv_type(
         loom_module_value_type(module, argument_ids[i]), builder));
   }
 
@@ -77,13 +77,13 @@ static iree_status_t loom_ireevm_module_compile_build_cconv(
       iree_string_builder_append_string(builder, IREE_SV("_")));
   const loom_value_id_t* result_ids = loom_op_const_results(function.op);
   for (uint16_t i = 0; i < function.op->result_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_ireevm_module_compile_append_cconv_type(
+    IREE_RETURN_IF_ERROR(loom_ireevm_archive_emit_append_cconv_type(
         loom_module_value_type(module, result_ids[i]), builder));
   }
   return iree_ok_status();
 }
 
-static iree_string_view_t loom_ireevm_module_compile_export_name(
+static iree_string_view_t loom_ireevm_archive_emit_export_name(
     const loom_target_entry_t* entry) {
   const loom_target_export_plan_t* export_plan =
       &entry->bundle_storage.export_plan;
@@ -93,7 +93,7 @@ static iree_string_view_t loom_ireevm_module_compile_export_name(
   return entry->func_name;
 }
 
-static iree_status_t loom_ireevm_module_compile_symbol_name(
+static iree_status_t loom_ireevm_archive_emit_symbol_name(
     const loom_module_t* module, loom_symbol_ref_t symbol_ref,
     iree_string_view_t* out_name) {
   *out_name = iree_string_view_empty();
@@ -112,7 +112,7 @@ static iree_status_t loom_ireevm_module_compile_symbol_name(
   return iree_ok_status();
 }
 
-static iree_status_t loom_ireevm_module_compile_lower_function(
+static iree_status_t loom_ireevm_archive_emit_lower_function(
     loom_module_t* module,
     const loom_target_low_descriptor_registry_t* registry,
     const loom_low_lower_policy_registry_t* lower_policy_registry,
@@ -127,7 +127,7 @@ static iree_status_t loom_ireevm_module_compile_lower_function(
   if (policy == NULL) {
     return iree_make_status(
         IREE_STATUS_INTERNAL,
-        "IREE VM compiler has no target-low lowering policy for contract set "
+        "IREE VM emitter has no target-low lowering policy for contract set "
         "'%.*s'",
         (int)entry->bundle_storage.bundle.config->contract_set_key.size,
         entry->bundle_storage.bundle.config->contract_set_key.data);
@@ -168,18 +168,18 @@ static iree_status_t loom_ireevm_module_compile_lower_function(
   return iree_ok_status();
 }
 
-typedef struct loom_ireevm_archive_compile_state_t {
+typedef struct loom_ireevm_archive_emit_state_t {
   // Module being mutated and emitted.
   loom_module_t* module;
   // Caller-provided options, or NULL for defaults.
-  const loom_ireevm_module_compile_options_t* options;
+  const loom_ireevm_archive_emit_options_t* options;
   // Host allocator used for transient buffers and output ownership.
   iree_allocator_t allocator;
   // True after arena-backed state has been initialized.
   bool initialized;
   // Optional caller-owned structured compile report.
   loom_target_compile_report_t* report;
-  // Target-neutral compile options derived from |options|.
+  // Target-neutral entry options derived from |options|.
   loom_target_entry_options_t target_options;
   // Normalized diagnostic cap used by target phases.
   uint32_t max_errors;
@@ -193,7 +193,7 @@ typedef struct loom_ireevm_archive_compile_state_t {
   loom_target_entry_diagnostic_emitter_t diagnostic_emitter;
   // Predicate selecting target bundles the IREE VM archive path can emit.
   loom_target_entry_predicate_t entry_predicate;
-  // Block pool backing all per-compile arena allocations.
+  // Block pool backing all per-emission arena allocations.
   iree_arena_block_pool_t block_pool;
   // Arena for target selection, lowering reports, frames, and tables.
   iree_arena_allocator_t table_arena;
@@ -203,10 +203,10 @@ typedef struct loom_ireevm_archive_compile_state_t {
   iree_string_builder_t calling_convention_builder;
   // Function bytecode emitted before archive wrapping.
   loom_ireevm_function_bytecode_t bytecode;
-} loom_ireevm_archive_compile_state_t;
+} loom_ireevm_archive_emit_state_t;
 
-static void loom_ireevm_archive_compile_state_deinitialize(
-    loom_ireevm_archive_compile_state_t* state) {
+static void loom_ireevm_archive_emit_state_deinitialize(
+    loom_ireevm_archive_emit_state_t* state) {
   loom_ireevm_function_bytecode_deinitialize(&state->bytecode,
                                              state->allocator);
   loom_pass_value_fact_owner_deinitialize(&state->value_facts);
@@ -217,11 +217,10 @@ static void loom_ireevm_archive_compile_state_deinitialize(
   state->initialized = false;
 }
 
-static iree_status_t loom_ireevm_archive_compile_state_initialize(
-    loom_module_t* module, const loom_ireevm_module_compile_options_t* options,
-    iree_allocator_t allocator,
-    loom_ireevm_archive_compile_state_t* out_state) {
-  *out_state = (loom_ireevm_archive_compile_state_t){
+static iree_status_t loom_ireevm_archive_emit_state_initialize(
+    loom_module_t* module, const loom_ireevm_archive_emit_options_t* options,
+    iree_allocator_t allocator, loom_ireevm_archive_emit_state_t* out_state) {
+  *out_state = (loom_ireevm_archive_emit_state_t){
       .module = module,
       .options = options,
       .allocator = allocator,
@@ -238,13 +237,12 @@ static iree_status_t loom_ireevm_archive_compile_state_initialize(
           },
       .entry_predicate =
           {
-              .fn = loom_ireevm_module_compile_bundle_is_compatible,
+              .fn = loom_ireevm_archive_emit_bundle_is_compatible,
               .user_data = NULL,
           },
   };
   out_state->max_errors = loom_target_entry_max_errors(
-      &out_state->target_options,
-      LOOM_IREEVM_MODULE_COMPILE_DEFAULT_MAX_ERRORS);
+      &out_state->target_options, LOOM_IREEVM_ARCHIVE_EMIT_DEFAULT_MAX_ERRORS);
 
   if (out_state->report != NULL) {
     loom_target_compile_report_initialize(out_state->report);
@@ -253,7 +251,7 @@ static iree_status_t loom_ireevm_archive_compile_state_initialize(
     out_state->report->artifact_kind =
         LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
     out_state->report->module_name =
-        loom_ireevm_module_compile_module_name(options);
+        loom_ireevm_archive_emit_module_name(options);
     out_state->report->entry_symbol =
         options ? options->entry_symbol : iree_string_view_empty();
   }
@@ -282,18 +280,18 @@ static iree_status_t loom_ireevm_archive_compile_state_initialize(
         module, &out_state->target_options, LOOM_EMITTER_VERIFIER,
         &out_state->diagnostic_emitter);
   } else {
-    loom_ireevm_archive_compile_state_deinitialize(out_state);
+    loom_ireevm_archive_emit_state_deinitialize(out_state);
   }
   return status;
 }
 
-static iree_status_t loom_ireevm_archive_compile_select_entry(
-    loom_ireevm_archive_compile_state_t* state, bool* out_selected,
+static iree_status_t loom_ireevm_archive_emit_select_entry(
+    loom_ireevm_archive_emit_state_t* state, bool* out_selected,
     loom_target_entry_t* out_entry) {
   loom_verify_result_t verify_result = {0};
   IREE_RETURN_IF_ERROR(loom_target_entry_verify_module(
       state->module, &state->target_options,
-      LOOM_IREEVM_MODULE_COMPILE_DEFAULT_MAX_ERRORS, &verify_result));
+      LOOM_IREEVM_ARCHIVE_EMIT_DEFAULT_MAX_ERRORS, &verify_result));
   if (verify_result.error_count != 0) {
     *out_selected = false;
     return iree_ok_status();
@@ -313,15 +311,14 @@ static iree_status_t loom_ireevm_archive_compile_select_entry(
   return iree_ok_status();
 }
 
-static iree_status_t loom_ireevm_archive_compile_selected_entry(
-    loom_ireevm_archive_compile_state_t* state,
-    const loom_target_entry_t* entry, loom_ireevm_module_archive_t* out_archive,
-    bool* out_compiled) {
-  IREE_RETURN_IF_ERROR(loom_ireevm_module_compile_build_cconv(
+static iree_status_t loom_ireevm_archive_emit_selected_entry(
+    loom_ireevm_archive_emit_state_t* state, const loom_target_entry_t* entry,
+    loom_ireevm_module_archive_t* out_archive, bool* out_emitted) {
+  IREE_RETURN_IF_ERROR(loom_ireevm_archive_emit_build_cconv(
       state->module, entry->func, &state->calling_convention_builder));
 
   loom_low_lower_result_t lower_result = {0};
-  IREE_RETURN_IF_ERROR(loom_ireevm_module_compile_lower_function(
+  IREE_RETURN_IF_ERROR(loom_ireevm_archive_emit_lower_function(
       state->module, &state->low_registry, &state->lower_policy_registry, entry,
       entry->func, &state->diagnostic_emitter, state->max_errors,
       &state->table_arena, &state->value_facts, state->report, &lower_result));
@@ -330,7 +327,7 @@ static iree_status_t loom_ireevm_archive_compile_selected_entry(
   }
 
   if (state->report != NULL) {
-    IREE_RETURN_IF_ERROR(loom_ireevm_module_compile_symbol_name(
+    IREE_RETURN_IF_ERROR(loom_ireevm_archive_emit_symbol_name(
         state->module, lower_result.low_func_ref,
         &state->report->lowered_symbol));
   }
@@ -338,7 +335,7 @@ static iree_status_t loom_ireevm_archive_compile_selected_entry(
   loom_verify_result_t verify_result = {0};
   IREE_RETURN_IF_ERROR(loom_target_entry_verify_module(
       state->module, &state->target_options,
-      LOOM_IREEVM_MODULE_COMPILE_DEFAULT_MAX_ERRORS, &verify_result));
+      LOOM_IREEVM_ARCHIVE_EMIT_DEFAULT_MAX_ERRORS, &verify_result));
   if (verify_result.error_count != 0) {
     return iree_ok_status();
   }
@@ -361,7 +358,7 @@ static iree_status_t loom_ireevm_archive_compile_selected_entry(
 
   IREE_RETURN_IF_ERROR(loom_target_entry_verify_module(
       state->module, &state->target_options,
-      LOOM_IREEVM_MODULE_COMPILE_DEFAULT_MAX_ERRORS, &verify_result));
+      LOOM_IREEVM_ARCHIVE_EMIT_DEFAULT_MAX_ERRORS, &verify_result));
   if (verify_result.error_count != 0) {
     return iree_ok_status();
   }
@@ -399,49 +396,49 @@ static iree_status_t loom_ireevm_archive_compile_selected_entry(
 
   const loom_ireevm_module_archive_function_t functions[] = {
       {
-          .export_name = loom_ireevm_module_compile_export_name(entry),
+          .export_name = loom_ireevm_archive_emit_export_name(entry),
           .calling_convention =
               iree_string_builder_view(&state->calling_convention_builder),
           .bytecode = &state->bytecode,
       },
   };
   IREE_RETURN_IF_ERROR(loom_ireevm_emit_module_archive(
-      loom_ireevm_module_compile_module_name(state->options), functions,
+      loom_ireevm_archive_emit_module_name(state->options), functions,
       IREE_ARRAYSIZE(functions), state->allocator, out_archive));
   if (state->report != NULL) {
     loom_target_compile_report_record_artifact_size(state->report,
                                                     out_archive->data_length);
   }
-  *out_compiled = true;
+  *out_emitted = true;
   return iree_ok_status();
 }
 
-static iree_status_t loom_ireevm_archive_compile(
-    loom_ireevm_archive_compile_state_t* state,
-    loom_ireevm_module_archive_t* out_archive, bool* out_compiled) {
+static iree_status_t loom_ireevm_archive_emit(
+    loom_ireevm_archive_emit_state_t* state,
+    loom_ireevm_module_archive_t* out_archive, bool* out_emitted) {
   loom_target_entry_t entry = {0};
   bool selected = false;
   IREE_RETURN_IF_ERROR(
-      loom_ireevm_archive_compile_select_entry(state, &selected, &entry));
+      loom_ireevm_archive_emit_select_entry(state, &selected, &entry));
   if (!selected) {
     return iree_ok_status();
   }
-  return loom_ireevm_archive_compile_selected_entry(state, &entry, out_archive,
-                                                    out_compiled);
+  return loom_ireevm_archive_emit_selected_entry(state, &entry, out_archive,
+                                                 out_emitted);
 }
 
-iree_status_t loom_ireevm_compile_module_archive(
-    loom_module_t* module, const loom_ireevm_module_compile_options_t* options,
-    iree_allocator_t allocator, bool* out_compiled,
+iree_status_t loom_ireevm_emit_module_archive_from_ir(
+    loom_module_t* module, const loom_ireevm_archive_emit_options_t* options,
+    iree_allocator_t allocator, bool* out_emitted,
     loom_ireevm_module_archive_t* out_archive) {
-  *out_compiled = false;
+  *out_emitted = false;
   *out_archive = (loom_ireevm_module_archive_t){0};
 
-  loom_ireevm_archive_compile_state_t state = {0};
-  iree_status_t status = loom_ireevm_archive_compile_state_initialize(
+  loom_ireevm_archive_emit_state_t state = {0};
+  iree_status_t status = loom_ireevm_archive_emit_state_initialize(
       module, options, allocator, &state);
   if (iree_status_is_ok(status)) {
-    status = loom_ireevm_archive_compile(&state, out_archive, out_compiled);
+    status = loom_ireevm_archive_emit(&state, out_archive, out_emitted);
   }
   if (!iree_status_is_ok(status)) {
     loom_ireevm_module_archive_deinitialize(out_archive, allocator);
@@ -450,7 +447,7 @@ iree_status_t loom_ireevm_compile_module_archive(
     loom_target_compile_report_record_status(state.report, status);
   }
   if (state.initialized) {
-    loom_ireevm_archive_compile_state_deinitialize(&state);
+    loom_ireevm_archive_emit_state_deinitialize(&state);
   }
   return status;
 }

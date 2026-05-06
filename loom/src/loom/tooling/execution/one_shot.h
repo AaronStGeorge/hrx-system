@@ -67,6 +67,10 @@ typedef struct loom_run_one_shot_options_t {
   loom_run_one_shot_binding_specs_t hal_bindings;
   // Optional HAL binding specs compared after dispatch.
   loom_run_one_shot_binding_specs_t hal_expected_bindings;
+  // Optional path receiving the target-native HAL artifact, such as HSACO.
+  iree_string_view_t hal_target_artifact_output_path;
+  // Optional path receiving the HAL executable package passed to the loader.
+  iree_string_view_t hal_executable_output_path;
   // Maximum number of HAL output elements to format.
   iree_host_size_t hal_max_output_element_count;
 } loom_run_one_shot_options_t;

@@ -600,7 +600,7 @@ loom_cc_library(
     ::target_record_table
     iree::base
     loom::src::loom::target::emit::native::amdgpu::hal_executable
-    loom::src::loom::target::emit::native::amdgpu::module_compiler
+    loom::src::loom::target::emit::native::amdgpu::hal_kernel_library
     loom::src::loom::tooling::execution::hal_backend
     loom::src::loom::tooling::execution::hal_runtime
   PUBLIC

@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/native/amdgpu/module_compiler.h"
+#include "loom/target/emit/native/amdgpu/hal_kernel_library.h"
 
 #include <string>
 
@@ -42,7 +42,7 @@ iree_status_t InitializeAmdgpuContext(loom_context_t* context) {
   return status;
 }
 
-class AmdgpuModuleCompilerTest : public ::testing::Test {
+class AmdgpuHalKernelLibraryTest : public ::testing::Test {
  protected:
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
@@ -71,9 +71,9 @@ class AmdgpuModuleCompilerTest : public ::testing::Test {
         .diagnostic_sink = parse_capture.sink(),
         .max_errors = 20,
     };
-    IREE_ASSERT_OK(loom_text_parse(
-        iree_make_cstring_view(kSource), IREE_SV("amdgpu_compile_test.loom"),
-        &context_, &block_pool_, &parse_options, out_module));
+    IREE_ASSERT_OK(loom_text_parse(iree_make_cstring_view(kSource),
+                                   IREE_SV("amdgpu_emit_test.loom"), &context_,
+                                   &block_pool_, &parse_options, out_module));
     ASSERT_TRUE(parse_capture.diagnostics.empty());
     ASSERT_NE(*out_module, nullptr);
   }
@@ -94,46 +94,46 @@ class AmdgpuModuleCompilerTest : public ::testing::Test {
         .diagnostic_sink = parse_capture.sink(),
         .max_errors = 20,
     };
-    IREE_ASSERT_OK(loom_text_parse(
-        iree_make_cstring_view(kSource), IREE_SV("amdgpu_compile_test.loom"),
-        &context_, &block_pool_, &parse_options, out_module));
+    IREE_ASSERT_OK(loom_text_parse(iree_make_cstring_view(kSource),
+                                   IREE_SV("amdgpu_emit_test.loom"), &context_,
+                                   &block_pool_, &parse_options, out_module));
     ASSERT_TRUE(parse_capture.diagnostics.empty());
     ASSERT_NE(*out_module, nullptr);
   }
 
-  void CompileWithProcessor(iree_string_view_t processor,
-                            DiagnosticCapture* capture, bool* out_compiled) {
+  void EmitWithProcessor(iree_string_view_t processor,
+                         DiagnosticCapture* capture, bool* out_emitted) {
     loom_module_t* module = nullptr;
     ASSERT_NO_FATAL_FAILURE(ParseGfx11Kernel(&module));
 
-    loom_amdgpu_hal_executable_t executable = {};
-    loom_amdgpu_module_compile_options_t options = {
+    loom_amdgpu_hal_kernel_library_t library = {};
+    loom_amdgpu_hal_kernel_library_options_t options = {
         .processor = processor,
         .diagnostic_sink = capture->sink(),
         .max_errors = 20,
     };
-    iree_status_t status = loom_amdgpu_compile_hal_executable(
-        module, &options, iree_allocator_system(), out_compiled, &executable);
-    loom_amdgpu_hal_executable_deinitialize(&executable,
-                                            iree_allocator_system());
+    iree_status_t status = loom_amdgpu_emit_hal_kernel_library(
+        module, &options, iree_allocator_system(), out_emitted, &library);
+    loom_amdgpu_hal_kernel_library_deinitialize(&library,
+                                                iree_allocator_system());
     loom_module_free(module);
     IREE_ASSERT_OK(status);
   }
 
-  void CompileGfx942Kernel(DiagnosticCapture* capture, bool* out_compiled) {
+  void EmitGfx942Kernel(DiagnosticCapture* capture, bool* out_emitted) {
     loom_module_t* module = nullptr;
     ASSERT_NO_FATAL_FAILURE(ParseGfx942Kernel(&module));
 
-    loom_amdgpu_hal_executable_t executable = {};
-    loom_amdgpu_module_compile_options_t options = {
+    loom_amdgpu_hal_kernel_library_t library = {};
+    loom_amdgpu_hal_kernel_library_options_t options = {
         .processor = IREE_SV("gfx942"),
         .diagnostic_sink = capture->sink(),
         .max_errors = 20,
     };
-    iree_status_t status = loom_amdgpu_compile_hal_executable(
-        module, &options, iree_allocator_system(), out_compiled, &executable);
-    loom_amdgpu_hal_executable_deinitialize(&executable,
-                                            iree_allocator_system());
+    iree_status_t status = loom_amdgpu_emit_hal_kernel_library(
+        module, &options, iree_allocator_system(), out_emitted, &library);
+    loom_amdgpu_hal_kernel_library_deinitialize(&library,
+                                                iree_allocator_system());
     loom_module_free(module);
     IREE_ASSERT_OK(status);
   }
@@ -142,13 +142,13 @@ class AmdgpuModuleCompilerTest : public ::testing::Test {
   loom_context_t context_ = {};
 };
 
-TEST_F(AmdgpuModuleCompilerTest, UnknownProcessorEmitsDiagnostic) {
+TEST_F(AmdgpuHalKernelLibraryTest, UnknownProcessorEmitsDiagnostic) {
   DiagnosticCapture capture;
-  bool compiled = true;
+  bool emitted = true;
   ASSERT_NO_FATAL_FAILURE(
-      CompileWithProcessor(IREE_SV("gfx9999"), &capture, &compiled));
+      EmitWithProcessor(IREE_SV("gfx9999"), &capture, &emitted));
 
-  EXPECT_FALSE(compiled);
+  EXPECT_FALSE(emitted);
   ASSERT_EQ(capture.diagnostics.size(), 1u);
   const CapturedDiagnostic* diagnostic =
       FindDiagnostic(capture, LOOM_ERR_AMDGPU_003);
@@ -156,13 +156,14 @@ TEST_F(AmdgpuModuleCompilerTest, UnknownProcessorEmitsDiagnostic) {
   EXPECT_EQ(GetStringParam(*diagnostic, 0), "gfx9999");
 }
 
-TEST_F(AmdgpuModuleCompilerTest, ProcessorWithoutDescriptorSetEmitsDiagnostic) {
+TEST_F(AmdgpuHalKernelLibraryTest,
+       ProcessorWithoutDescriptorSetEmitsDiagnostic) {
   DiagnosticCapture capture;
-  bool compiled = true;
+  bool emitted = true;
   ASSERT_NO_FATAL_FAILURE(
-      CompileWithProcessor(IREE_SV("gfx908"), &capture, &compiled));
+      EmitWithProcessor(IREE_SV("gfx908"), &capture, &emitted));
 
-  EXPECT_FALSE(compiled);
+  EXPECT_FALSE(emitted);
   ASSERT_EQ(capture.diagnostics.size(), 1u);
   const CapturedDiagnostic* diagnostic =
       FindDiagnostic(capture, LOOM_ERR_AMDGPU_004);
@@ -170,22 +171,22 @@ TEST_F(AmdgpuModuleCompilerTest, ProcessorWithoutDescriptorSetEmitsDiagnostic) {
   EXPECT_EQ(GetStringParam(*diagnostic, 0), "gfx908");
 }
 
-TEST_F(AmdgpuModuleCompilerTest, CompilesGfx942Kernel) {
+TEST_F(AmdgpuHalKernelLibraryTest, EmitsGfx942Kernel) {
   DiagnosticCapture capture;
-  bool compiled = false;
-  ASSERT_NO_FATAL_FAILURE(CompileGfx942Kernel(&capture, &compiled));
+  bool emitted = false;
+  ASSERT_NO_FATAL_FAILURE(EmitGfx942Kernel(&capture, &emitted));
 
-  EXPECT_TRUE(compiled);
+  EXPECT_TRUE(emitted);
   EXPECT_TRUE(capture.diagnostics.empty());
 }
 
-TEST_F(AmdgpuModuleCompilerTest, DescriptorSetMismatchEmitsDiagnostic) {
+TEST_F(AmdgpuHalKernelLibraryTest, DescriptorSetMismatchEmitsDiagnostic) {
   DiagnosticCapture capture;
-  bool compiled = true;
+  bool emitted = true;
   ASSERT_NO_FATAL_FAILURE(
-      CompileWithProcessor(IREE_SV("gfx950"), &capture, &compiled));
+      EmitWithProcessor(IREE_SV("gfx950"), &capture, &emitted));
 
-  EXPECT_FALSE(compiled);
+  EXPECT_FALSE(emitted);
   ASSERT_EQ(capture.diagnostics.size(), 1u);
   const CapturedDiagnostic* diagnostic =
       FindDiagnostic(capture, LOOM_ERR_AMDGPU_005);

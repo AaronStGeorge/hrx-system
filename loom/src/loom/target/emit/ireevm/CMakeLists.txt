@@ -109,11 +109,11 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    module_compiler
+    archive_emitter
   HDRS
-    "module_compiler.h"
+    "archive_emitter.h"
   SRCS
-    "module_compiler.c"
+    "archive_emitter.c"
   DEPS
     ::function_bytecode
     ::module_archive
@@ -146,8 +146,8 @@ loom_cc_library(
   SRCS
     "candidate.c"
   DEPS
+    ::archive_emitter
     ::module_archive
-    ::module_compiler
     iree::base
     loom::src::loom::target::compile_report
     loom::src::loom::tooling::execution::compile_options

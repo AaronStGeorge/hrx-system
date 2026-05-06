@@ -11,6 +11,7 @@
 #include "loom/tooling/execution/hal_candidate.h"
 #include "loom/tooling/execution/hal_invocation.h"
 #include "loom/tooling/execution/hal_runtime.h"
+#include "loom/tooling/io/file.h"
 
 static const loom_run_hal_execution_backend_t*
 loom_run_hal_execution_backend_from_base(
@@ -29,6 +30,36 @@ static const loom_run_hal_backend_t* loom_run_hal_execution_backend_hal_backend(
     return NULL;
   }
   return hal_execution_backend->hal_backend;
+}
+
+static iree_status_t loom_run_hal_write_artifact(
+    iree_string_view_t path, iree_const_byte_span_t contents,
+    iree_string_view_t artifact_name, iree_allocator_t allocator) {
+  if (iree_string_view_is_empty(path)) {
+    return iree_ok_status();
+  }
+  if (contents.data == NULL || contents.data_length == 0) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "HAL %.*s artifact is empty",
+                            (int)artifact_name.size, artifact_name.data);
+  }
+  return loom_tooling_write_output_file(
+      path,
+      iree_make_string_view((const char*)contents.data, contents.data_length),
+      allocator);
+}
+
+static iree_status_t loom_run_hal_write_candidate_artifacts(
+    const loom_run_one_shot_request_t* request,
+    const loom_run_hal_candidate_t* candidate) {
+  IREE_RETURN_IF_ERROR(loom_run_hal_write_artifact(
+      request->options->hal_target_artifact_output_path,
+      candidate->executable.target_artifact_data, IREE_SV("target-native"),
+      request->host_allocator));
+  return loom_run_hal_write_artifact(
+      request->options->hal_executable_output_path,
+      candidate->executable.executable_data, IREE_SV("executable package"),
+      request->host_allocator);
 }
 
 iree_status_t loom_run_hal_execution_backend_probe(
@@ -116,6 +147,9 @@ iree_status_t loom_run_hal_execution_backend_run_one_shot(
   }
   if (iree_status_is_ok(status) && !candidate.compiled) {
     request->result->exit_code = 1;
+  }
+  if (iree_status_is_ok(status) && candidate.compiled) {
+    status = loom_run_hal_write_candidate_artifacts(request, &candidate);
   }
   if (iree_status_is_ok(status) && candidate.compiled) {
     loom_run_hal_invocation_request_t invocation_request = {0};

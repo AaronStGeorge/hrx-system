@@ -112,7 +112,7 @@ TEST_F(AmdgpuProviderTest, ContributesHalKernelAbiMaterialization) {
   };
   loom_op_t* pipeline_op = nullptr;
   IREE_ASSERT_OK(loom_pass_ir_build_pipeline(
-      module.get(), IREE_SV("compile"), LOOM_PASS_ANCHOR_MODULE,
+      module.get(), IREE_SV("emit"), LOOM_PASS_ANCHOR_MODULE,
       BuildMaterializationPipeline, &build_data, &pipeline_op));
 
   loom_block_t* pipeline_body =

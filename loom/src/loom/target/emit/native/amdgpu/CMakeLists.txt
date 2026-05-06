@@ -251,15 +251,26 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    hal_kernel_metadata
+  HDRS
+    "hal_kernel_metadata.h"
+  DEPS
+    iree::base
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     hal_executable
   HDRS
     "hal_executable.h"
   SRCS
     "hal_executable.c"
   DEPS
+    ::hal_kernel_metadata
     iree::base
     iree::base::internal::flatcc::building
-    loom::src::loom::target::types
     iree::schemas::amdgpu_executable_def_c_fbs
     iree::schemas::executable_debug_info_c_fbs
   PUBLIC
@@ -267,13 +278,13 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    module_compiler
+    hal_kernel_library
   HDRS
-    "module_compiler.h"
+    "hal_kernel_library.h"
   SRCS
-    "module_compiler.c"
+    "hal_kernel_library.c"
   DEPS
-    ::hal_executable
+    ::hal_kernel_metadata
     ::kernel_hsaco
     ::preflight
     iree::base
@@ -315,11 +326,11 @@ loom_cc_library(
 
 loom_cc_test(
   NAME
-    module_compiler_test
+    hal_kernel_library_test
   SRCS
-    "module_compiler_test.cc"
+    "hal_kernel_library_test.cc"
   DEPS
-    ::module_compiler
+    ::hal_kernel_library
     iree::base
     iree::base::internal::arena
     loom::src::loom::error::error_defs

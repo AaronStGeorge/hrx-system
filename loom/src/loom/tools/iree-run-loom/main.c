@@ -53,6 +53,12 @@ IREE_FLAG(int32_t, compile_report_row_limit,
           LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
           "Maximum pressure and spill rows to capture for "
           "--compile_report=details.");
+IREE_FLAG(string, emit_target_artifact, "",
+          "Optional output path for the selected HAL backend's target-native "
+          "artifact, such as AMDGPU HSACO.");
+IREE_FLAG(string, emit_hal_executable, "",
+          "Optional output path for the HAL executable package passed to the "
+          "runtime loader.");
 IREE_FLAG(bool, probe_hal, false,
           "Runs the selected backend's target probe, prints the result, and "
           "exits. Not all backends support probing.");
@@ -183,10 +189,34 @@ static iree_status_t iree_run_loom_parse_workgroup_count(
   return iree_ok_status();
 }
 
+static iree_status_t iree_run_loom_validate_artifact_output_path(
+    iree_string_view_t flag_name, iree_string_view_t path) {
+  if (iree_string_view_is_empty(path)) {
+    return iree_ok_status();
+  }
+  if (loom_tooling_file_path_is_stdio(path)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "--%.*s must name a file path; stdout is reserved for textual run "
+        "output",
+        (int)flag_name.size, flag_name.data);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t iree_run_loom_one_shot_options_initialize(
     const loom_run_execution_backend_t* backend,
     loom_run_one_shot_options_t* out_options) {
   loom_run_one_shot_options_initialize(out_options);
+
+  const iree_string_view_t target_artifact_output_path =
+      iree_make_cstring_view(FLAG_emit_target_artifact);
+  const iree_string_view_t hal_executable_output_path =
+      iree_make_cstring_view(FLAG_emit_hal_executable);
+  IREE_RETURN_IF_ERROR(iree_run_loom_validate_artifact_output_path(
+      IREE_SV("emit_target_artifact"), target_artifact_output_path));
+  IREE_RETURN_IF_ERROR(iree_run_loom_validate_artifact_output_path(
+      IREE_SV("emit_hal_executable"), hal_executable_output_path));
 
   if (iree_any_bit_set(backend->flags,
                        LOOM_RUN_EXECUTION_BACKEND_FLAG_VM_OPTIONS)) {
@@ -234,8 +264,16 @@ static iree_status_t iree_run_loom_one_shot_options_initialize(
         .conventions = iree_run_loom_hal_flags.expected_binding_cconv,
         .count = iree_run_loom_hal_flags.expected_binding_count,
     };
+    out_options->hal_target_artifact_output_path = target_artifact_output_path;
+    out_options->hal_executable_output_path = hal_executable_output_path;
     out_options->hal_max_output_element_count =
         IREE_RUN_LOOM_HAL_MAX_OUTPUT_ELEMENT_COUNT;
+  } else if (!iree_string_view_is_empty(target_artifact_output_path) ||
+             !iree_string_view_is_empty(hal_executable_output_path)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "--emit_target_artifact and --emit_hal_executable require a HAL "
+        "backend");
   }
   return iree_ok_status();
 }

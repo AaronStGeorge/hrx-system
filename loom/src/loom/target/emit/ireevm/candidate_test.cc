@@ -69,7 +69,7 @@ class IreeVmCandidateTest : public ::testing::Test {
     return loom_run_module_parse(&session_, &options, out_module);
   }
 
-  void InitializeCompileOptions(
+  void InitializeCandidateOptions(
       loom_run_module_t* run_module,
       loom_run_candidate_compile_options_t* out_options) {
     loom_run_candidate_compile_options_initialize(out_options);
@@ -79,12 +79,12 @@ class IreeVmCandidateTest : public ::testing::Test {
   loom_run_session_t session_ = {};
 };
 
-TEST_F(IreeVmCandidateTest, CompileVmArchiveCandidate) {
+TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidate) {
   loom_run_module_t run_module = {};
   IREE_ASSERT_OK(Parse(IREE_SV(kVmSource), &run_module));
 
   loom_run_candidate_compile_options_t options = {};
-  InitializeCompileOptions(&run_module, &options);
+  InitializeCandidateOptions(&run_module, &options);
   loom_target_compile_report_pressure_row_t pressure_rows[4] = {};
   loom_target_compile_report_source_low_row_t source_low_rows[4] = {};
   options.report_row_storage = {
@@ -97,7 +97,7 @@ TEST_F(IreeVmCandidateTest, CompileVmArchiveCandidate) {
   options.report = &report;
 
   loom_ireevm_run_candidate_t candidate = {};
-  IREE_ASSERT_OK(loom_ireevm_run_candidate_compile(
+  IREE_ASSERT_OK(loom_ireevm_run_candidate_emit(
       &run_module, &options, iree_allocator_system(), &candidate));
   EXPECT_GT(candidate.archive.data_length, 0u);
   EXPECT_EQ(candidate.compile_report.artifact_kind,
@@ -153,15 +153,15 @@ TEST_F(IreeVmCandidateTest, CompileVmArchiveCandidate) {
   loom_run_module_deinitialize(&run_module);
 }
 
-TEST_F(IreeVmCandidateTest, CompileVmArchiveCandidateWithoutReport) {
+TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidateWithoutReport) {
   loom_run_module_t run_module = {};
   IREE_ASSERT_OK(Parse(IREE_SV(kVmSource), &run_module));
 
   loom_run_candidate_compile_options_t options = {};
-  InitializeCompileOptions(&run_module, &options);
+  InitializeCandidateOptions(&run_module, &options);
 
   loom_ireevm_run_candidate_t candidate = {};
-  IREE_ASSERT_OK(loom_ireevm_run_candidate_compile(
+  IREE_ASSERT_OK(loom_ireevm_run_candidate_emit(
       &run_module, &options, iree_allocator_system(), &candidate));
   EXPECT_GT(candidate.archive.data_length, 0u);
   EXPECT_EQ(candidate.compile_report.detail_flags,

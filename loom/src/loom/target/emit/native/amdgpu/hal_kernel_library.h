@@ -4,33 +4,32 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// AMDGPU HAL executable compilation for parsed Loom modules.
+// AMDGPU HAL kernel-library emission for parsed Loom modules.
 //
 // This mutates a parsed module through the current AMDGPU target-low native
 // path: target-record resolution, verification, ABI resource materialization,
-// pass-managed low preparation, packetization, native HSACO writing, and IREE
-// HAL executable wrapping.
+// pass-managed low preparation, packetization, and native HSACO writing.
 
-#ifndef LOOM_TARGET_EMIT_NATIVE_AMDGPU_MODULE_COMPILER_H_
-#define LOOM_TARGET_EMIT_NATIVE_AMDGPU_MODULE_COMPILER_H_
+#ifndef LOOM_TARGET_EMIT_NATIVE_AMDGPU_HAL_KERNEL_LIBRARY_H_
+#define LOOM_TARGET_EMIT_NATIVE_AMDGPU_HAL_KERNEL_LIBRARY_H_
 
 #include "iree/base/api.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/ir.h"
 #include "loom/target/compile_report.h"
-#include "loom/target/emit/native/amdgpu/hal_executable.h"
+#include "loom/target/emit/native/amdgpu/hal_kernel_metadata.h"
 #include "loom/verify/verify.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef struct loom_amdgpu_module_compile_options_t {
-  // Optional function symbol to compile. Empty requires exactly one AMDGPU
+typedef struct loom_amdgpu_hal_kernel_library_options_t {
+  // Optional function symbol to emit. Empty requires exactly one AMDGPU
   // HAL-native-compatible function with a target record. A leading '@' is
   // accepted for command-line ergonomics.
   iree_string_view_t entry_symbol;
-  // Optional target.artifact symbol to compile as one multi-export executable.
+  // Optional target.artifact symbol to emit as one multi-export kernel library.
   // Empty preserves single-entry selection. A leading '@' is accepted for
   // command-line ergonomics.
   iree_string_view_t artifact_symbol;
@@ -51,25 +50,45 @@ typedef struct loom_amdgpu_module_compile_options_t {
   loom_target_compile_report_t* report;
   // Optional caller-owned row storage for detailed compile report rows.
   loom_target_compile_report_row_storage_t report_row_storage;
-} loom_amdgpu_module_compile_options_t;
+} loom_amdgpu_hal_kernel_library_options_t;
 
-// Compiles |module| into an allocator-owned IREE HAL AMDGPU executable.
+// Allocator-owned AMDGPU HAL kernel-library artifact.
+typedef struct loom_amdgpu_hal_kernel_library_t {
+  // Allocator-owned target id used by the AMDGPU loader.
+  iree_string_view_t executable_format;
+  // Allocator-owned HSACO ELF image bytes.
+  uint8_t* hsaco_data;
+  // Number of bytes in |hsaco_data|.
+  iree_host_size_t hsaco_data_length;
+  // Allocator-owned export metadata in executable entry-point order.
+  loom_amdgpu_hal_kernel_export_t* exports;
+  // Number of entries in |exports|.
+  iree_host_size_t export_count;
+} loom_amdgpu_hal_kernel_library_t;
+
+// Releases storage owned by |library|. Safe to call on a zero-initialized
+// library object.
+void loom_amdgpu_hal_kernel_library_deinitialize(
+    loom_amdgpu_hal_kernel_library_t* library, iree_allocator_t allocator);
+
+// Emits |module| into an allocator-owned AMDGPU HAL kernel library.
 //
 // |module| is mutated in place: source functions may gain sibling low IR and
 // HAL low.resource imports in the selected target-low function are materialized
 // before scheduling. Target records are resolved through the linked descriptor
 // registry without materializing companion target records in the IR.
-// |out_compiled| is false when target preflight or compiler diagnostics
+// |out_emitted| is false when target preflight or diagnostics
 // rejected the module; status remains reserved for infrastructure failures. The
-// caller owns |out_executable| when |out_compiled| is true and must release it
-// with loom_amdgpu_hal_executable_deinitialize.
-iree_status_t loom_amdgpu_compile_hal_executable(
-    loom_module_t* module, const loom_amdgpu_module_compile_options_t* options,
-    iree_allocator_t allocator, bool* out_compiled,
-    loom_amdgpu_hal_executable_t* out_executable);
+// caller owns |out_library| when |out_emitted| is true and must release it with
+// loom_amdgpu_hal_kernel_library_deinitialize.
+iree_status_t loom_amdgpu_emit_hal_kernel_library(
+    loom_module_t* module,
+    const loom_amdgpu_hal_kernel_library_options_t* options,
+    iree_allocator_t allocator, bool* out_emitted,
+    loom_amdgpu_hal_kernel_library_t* out_library);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_EMIT_NATIVE_AMDGPU_MODULE_COMPILER_H_
+#endif  // LOOM_TARGET_EMIT_NATIVE_AMDGPU_HAL_KERNEL_LIBRARY_H_

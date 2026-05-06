@@ -8,8 +8,8 @@
 //
 // The shared execution layer owns generic HAL device setup, executable loading,
 // dispatch, and binding/result handling. Target providers own device-target
-// selection and compilation of a parsed Loom module into the HAL executable
-// container accepted by that target's production loader.
+// selection and emission of a parsed Loom module into the HAL executable
+// package accepted by that target's production loader.
 
 #ifndef LOOM_TOOLING_EXECUTION_HAL_BACKEND_H_
 #define LOOM_TOOLING_EXECUTION_HAL_BACKEND_H_
@@ -28,13 +28,13 @@ extern "C" {
 typedef struct loom_run_hal_backend_t loom_run_hal_backend_t;
 typedef struct loom_run_hal_runtime_t loom_run_hal_runtime_t;
 
-// Target selected from the active HAL device for one compilation.
+// Target selected from the active HAL device for one candidate.
 typedef struct loom_run_hal_selected_target_t {
   // Backend-owned target payload. Usually points at static target info.
   const void* data;
   // Target-neutral bundle resolved for the selected backend target.
   const loom_target_bundle_t* target_bundle;
-  // Backend-facing target key selected for compilation, if any.
+  // Backend-facing target key selected for emission, if any.
   iree_string_view_t target_key;
 } loom_run_hal_selected_target_t;
 
@@ -44,6 +44,10 @@ typedef struct loom_run_hal_executable_t {
   iree_string_view_t executable_format;
   // Target-neutral bundle resolved for the executable, when available.
   const loom_target_bundle_t* target_bundle;
+  // Target-native artifact format before any runtime-loader packaging.
+  iree_string_view_t target_artifact_format;
+  // Target-native artifact bytes before any runtime-loader packaging.
+  iree_const_byte_span_t target_artifact_data;
   // Backend-owned executable container bytes.
   iree_const_byte_span_t executable_data;
   // Backend-owned storage released by |deinitialize_executable|.
@@ -60,13 +64,13 @@ typedef iree_status_t (*loom_run_hal_format_target_fn_t)(
     const loom_run_hal_selected_target_t* target,
     iree_string_builder_t* output);
 
-typedef iree_status_t (*loom_run_hal_compile_fn_t)(
+typedef iree_status_t (*loom_run_hal_emit_executable_fn_t)(
     const loom_run_hal_backend_t* backend, loom_module_t* module,
     const loom_run_hal_selected_target_t* target,
     iree_string_view_t entry_symbol, loom_diagnostic_sink_t diagnostic_sink,
     loom_source_resolver_t source_resolver, uint32_t max_errors,
     loom_target_compile_report_t* report, iree_allocator_t allocator,
-    bool* out_compiled, loom_run_hal_executable_t* out_executable);
+    bool* out_emitted, loom_run_hal_executable_t* out_executable);
 
 typedef void (*loom_run_hal_deinitialize_executable_fn_t)(
     const loom_run_hal_backend_t* backend,
@@ -83,9 +87,9 @@ struct loom_run_hal_backend_t {
   loom_run_hal_select_target_fn_t select_target;
   // Formats the selected target into a HAL executable target string.
   loom_run_hal_format_target_fn_t format_target;
-  // Compiles a parsed Loom module to a HAL executable container.
-  loom_run_hal_compile_fn_t compile;
-  // Releases storage owned by an executable returned from |compile|.
+  // Emits a parsed Loom module to a HAL executable package.
+  loom_run_hal_emit_executable_fn_t emit_executable;
+  // Releases storage owned by an executable returned from |emit_executable|.
   loom_run_hal_deinitialize_executable_fn_t deinitialize_executable;
 };
 

@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Execution provider for IREE VM compilation.
+// Execution provider for IREE VM archive emission.
 
 #ifndef LOOM_TARGET_EMIT_IREEVM_EXECUTION_PROVIDER_H_
 #define LOOM_TARGET_EMIT_IREEVM_EXECUTION_PROVIDER_H_

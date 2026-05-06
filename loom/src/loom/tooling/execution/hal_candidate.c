@@ -37,7 +37,7 @@ iree_status_t loom_run_hal_candidate_compile(
   }
 
   iree_status_t status = iree_ok_status();
-  if (backend->select_target == NULL || backend->compile == NULL) {
+  if (backend->select_target == NULL || backend->emit_executable == NULL) {
     status = iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "HAL backend '%.*s' is missing required candidate hooks",
@@ -52,7 +52,7 @@ iree_status_t loom_run_hal_candidate_compile(
     report->target_key = out_candidate->target.target_key;
   }
   if (iree_status_is_ok(status)) {
-    status = backend->compile(
+    status = backend->emit_executable(
         backend, run_module->module, &out_candidate->target,
         options->entry_symbol, options->diagnostic_sink,
         options->source_resolver, options->max_errors, report, allocator,

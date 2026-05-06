@@ -6,7 +6,7 @@
 
 #include "loom/target/emit/ireevm/candidate.h"
 
-#include "loom/target/emit/ireevm/module_compiler.h"
+#include "loom/target/emit/ireevm/archive_emitter.h"
 
 static void loom_ireevm_run_candidate_publish_compile_report(
     const loom_run_candidate_compile_options_t* options,
@@ -17,7 +17,7 @@ static void loom_ireevm_run_candidate_publish_compile_report(
   *options->report = candidate->compile_report;
 }
 
-iree_status_t loom_ireevm_run_candidate_compile(
+iree_status_t loom_ireevm_run_candidate_emit(
     loom_run_module_t* run_module,
     const loom_run_candidate_compile_options_t* options,
     iree_allocator_t allocator, loom_ireevm_run_candidate_t* out_candidate) {
@@ -35,7 +35,7 @@ iree_status_t loom_ireevm_run_candidate_compile(
     report->entry_symbol = options->entry_symbol;
   }
 
-  const loom_ireevm_module_compile_options_t compile_options = {
+  const loom_ireevm_archive_emit_options_t archive_emit_options = {
       .module_name = options->module_name,
       .entry_symbol = options->entry_symbol,
       .diagnostic_sink = options->diagnostic_sink,
@@ -44,15 +44,15 @@ iree_status_t loom_ireevm_run_candidate_compile(
       .report = report,
       .report_row_storage = options->report_row_storage,
   };
-  iree_status_t status = loom_ireevm_compile_module_archive(
-      run_module->module, &compile_options, allocator, &out_candidate->compiled,
-      &out_candidate->archive);
+  iree_status_t status = loom_ireevm_emit_module_archive_from_ir(
+      run_module->module, &archive_emit_options, allocator,
+      &out_candidate->emitted, &out_candidate->archive);
   if (report != NULL) {
     report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
     report->module_name = options->module_name;
     report->entry_symbol = options->entry_symbol;
   }
-  if (iree_status_is_ok(status) && out_candidate->compiled && report != NULL) {
+  if (iree_status_is_ok(status) && out_candidate->emitted && report != NULL) {
     loom_target_compile_report_record_artifact_size(
         report, out_candidate->archive.data_length);
   }

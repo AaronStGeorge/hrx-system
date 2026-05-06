@@ -139,6 +139,7 @@ loom_cc_library(
     ::one_shot
     iree::base
     iree::base::core_headers
+    loom::src::loom::tooling::io::file
   PUBLIC
 )
 

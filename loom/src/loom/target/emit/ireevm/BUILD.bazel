@@ -40,7 +40,7 @@ loom_assert_no_dependencies(
         ":low_registry",
         ":lower",
         ":module_archive",
-        ":module_compiler",
+        ":archive_emitter",
         ":ops",
         ":provider",
         ":target_records",
@@ -95,7 +95,7 @@ loom_assert_no_dependencies(
     name = "hal_execution_no_ireevm_module_artifact_deps",
     dependencies = [
         ":module_archive",
-        ":module_compiler",
+        ":archive_emitter",
     ],
     targets = [
         "//loom/src/loom/tooling/execution:hal_candidate",
@@ -190,9 +190,9 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "module_compiler",
-    srcs = ["module_compiler.c"],
-    hdrs = ["module_compiler.h"],
+    name = "archive_emitter",
+    srcs = ["archive_emitter.c"],
+    hdrs = ["archive_emitter.h"],
     deps = [
         ":function_bytecode",
         ":module_archive",
@@ -222,8 +222,8 @@ loom_cc_library(
     srcs = ["candidate.c"],
     hdrs = ["candidate.h"],
     deps = [
+        ":archive_emitter",
         ":module_archive",
-        ":module_compiler",
         "//loom/src/loom/target:compile_report",
         "//loom/src/loom/tooling/execution:compile_options",
         "//loom/src/loom/tooling/execution:session",

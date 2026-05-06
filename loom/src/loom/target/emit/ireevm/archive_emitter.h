@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// IREE VM archive compilation for parsed Loom modules.
+// IREE VM archive emission for parsed Loom modules.
 //
 // This mutates a parsed module through the current IREE VM target path:
 // target-record resolution, generic verification, source-to-low lowering, low
@@ -13,8 +13,8 @@
 // output archive is the same runtime artifact consumed by
 // iree_vm_bytecode_module_create.
 
-#ifndef LOOM_TARGET_EMIT_IREEVM_MODULE_COMPILER_H_
-#define LOOM_TARGET_EMIT_IREEVM_MODULE_COMPILER_H_
+#ifndef LOOM_TARGET_EMIT_IREEVM_ARCHIVE_EMITTER_H_
+#define LOOM_TARGET_EMIT_IREEVM_ARCHIVE_EMITTER_H_
 
 #include "iree/base/api.h"
 #include "loom/error/diagnostic.h"
@@ -27,10 +27,10 @@
 extern "C" {
 #endif
 
-typedef struct loom_ireevm_module_compile_options_t {
+typedef struct loom_ireevm_archive_emit_options_t {
   // VM module name stored in the emitted archive. Empty uses "loom".
   iree_string_view_t module_name;
-  // Optional function symbol to compile. Empty requires exactly one
+  // Optional function symbol to emit. Empty requires exactly one
   // IREE-VM-compatible function with a target record. A leading '@' is
   // accepted for command-line ergonomics.
   iree_string_view_t entry_symbol;
@@ -46,24 +46,24 @@ typedef struct loom_ireevm_module_compile_options_t {
   loom_target_compile_report_t* report;
   // Optional caller-owned row storage for detailed compile report rows.
   loom_target_compile_report_row_storage_t report_row_storage;
-} loom_ireevm_module_compile_options_t;
+} loom_ireevm_archive_emit_options_t;
 
-// Compiles |module| into an allocator-owned IREE VM bytecode module archive.
+// Emits |module| into an allocator-owned IREE VM bytecode module archive.
 //
 // |module| is mutated in place: the selected function gains sibling low IR
 // produced by source-to-low lowering. Target records are resolved through the
 // linked descriptor registry without materializing companion target records in
-// the IR. |out_compiled| is false when target preflight or compiler diagnostics
+// the IR. |out_emitted| is false when target preflight or diagnostics
 // rejected the module; status remains reserved for infrastructure failures. The
-// caller owns |out_archive| when |out_compiled| is true and must release it
+// caller owns |out_archive| when |out_emitted| is true and must release it
 // with loom_ireevm_module_archive_deinitialize.
-iree_status_t loom_ireevm_compile_module_archive(
-    loom_module_t* module, const loom_ireevm_module_compile_options_t* options,
-    iree_allocator_t allocator, bool* out_compiled,
+iree_status_t loom_ireevm_emit_module_archive_from_ir(
+    loom_module_t* module, const loom_ireevm_archive_emit_options_t* options,
+    iree_allocator_t allocator, bool* out_emitted,
     loom_ireevm_module_archive_t* out_archive);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_EMIT_IREEVM_MODULE_COMPILER_H_
+#endif  // LOOM_TARGET_EMIT_IREEVM_ARCHIVE_EMITTER_H_

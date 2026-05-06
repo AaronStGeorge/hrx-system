@@ -26,12 +26,12 @@ TEST(AmdgpuHalExecutableTest, WrapsHsacoInHalExecutableContainer) {
       0x7f, 'E', 'L', 'F', 'l', 'o',  'o',  'm',
       'h',  's', 'a', 'c', 'o', '\0', '\1', '\2',
   };
-  const loom_amdgpu_hal_executable_binding_flags_t binding_flags[] = {
-      LOOM_AMDGPU_HAL_EXECUTABLE_BINDING_READ_ONLY,
-      LOOM_AMDGPU_HAL_EXECUTABLE_BINDING_READ_ONLY |
-          LOOM_AMDGPU_HAL_EXECUTABLE_BINDING_INDIRECT,
+  const loom_amdgpu_hal_kernel_binding_flags_t binding_flags[] = {
+      LOOM_AMDGPU_HAL_KERNEL_BINDING_READ_ONLY,
+      LOOM_AMDGPU_HAL_KERNEL_BINDING_READ_ONLY |
+          LOOM_AMDGPU_HAL_KERNEL_BINDING_INDIRECT,
   };
-  const loom_amdgpu_hal_executable_export_t export_def = {
+  const loom_amdgpu_hal_kernel_export_t export_def = {
       .symbol_name = IREE_SV("loom_kernel.kd"),
       .workgroup_size = {.x = 64, .y = 2, .z = 1},
       .constant_count = 7,
@@ -40,7 +40,7 @@ TEST(AmdgpuHalExecutableTest, WrapsHsacoInHalExecutableContainer) {
   };
 
   loom_amdgpu_hal_executable_t executable = {};
-  IREE_ASSERT_OK(loom_amdgpu_emit_hal_executable(
+  IREE_ASSERT_OK(loom_amdgpu_package_hal_executable(
       IREE_SV("amdgcn-amd-amdhsa--gfx1100"),
       iree_make_const_byte_span(kHsaco, sizeof(kHsaco)), &export_def, 1,
       iree_allocator_system(), &executable));
@@ -101,10 +101,10 @@ TEST(AmdgpuHalExecutableTest, WrapsHsacoInHalExecutableContainer) {
 
 TEST(AmdgpuHalExecutableTest, RejectsUnknownBindingFlags) {
   static const uint8_t kHsaco[] = {0x7f, 'E', 'L', 'F'};
-  const loom_amdgpu_hal_executable_binding_flags_t binding_flags[] = {
+  const loom_amdgpu_hal_kernel_binding_flags_t binding_flags[] = {
       UINT64_C(1) << 63,
   };
-  const loom_amdgpu_hal_executable_export_t export_def = {
+  const loom_amdgpu_hal_kernel_export_t export_def = {
       .symbol_name = IREE_SV("loom_kernel.kd"),
       .workgroup_size = {.x = 64, .y = 1, .z = 1},
       .constant_count = 0,
@@ -115,7 +115,7 @@ TEST(AmdgpuHalExecutableTest, RejectsUnknownBindingFlags) {
   loom_amdgpu_hal_executable_t executable = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
-      loom_amdgpu_emit_hal_executable(
+      loom_amdgpu_package_hal_executable(
           IREE_SV("amdgcn-amd-amdhsa--gfx1100"),
           iree_make_const_byte_span(kHsaco, sizeof(kHsaco)), &export_def, 1,
           iree_allocator_system(), &executable));
