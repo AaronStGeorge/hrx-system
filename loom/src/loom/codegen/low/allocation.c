@@ -1017,7 +1017,26 @@ static bool loom_low_allocation_find_location(
   return false;
 }
 
-static bool loom_low_allocation_find_existing_location_span(
+static bool loom_low_allocation_align_up_u32(uint32_t value, uint32_t alignment,
+                                             uint32_t* out_value) {
+  if (alignment <= 1) {
+    *out_value = value;
+    return true;
+  }
+  const uint32_t remainder = value % alignment;
+  if (remainder == 0) {
+    *out_value = value;
+    return true;
+  }
+  const uint32_t increment = alignment - remainder;
+  if (value > UINT32_MAX - increment) {
+    return false;
+  }
+  *out_value = value + increment;
+  return true;
+}
+
+static bool loom_low_allocation_find_location_span(
     const loom_low_allocation_build_state_t* state,
     const loom_liveness_interval_t* interval,
     loom_low_allocation_class_capacity_t capacity, uint32_t location_count,
@@ -1033,16 +1052,13 @@ static bool loom_low_allocation_find_existing_location_span(
   const uint32_t assigned_limit =
       loom_low_allocation_assigned_location_search_limit(
           state, capacity.descriptor_reg_class_id, capacity.location_kind);
-  if (assigned_limit < location_count) {
-    return false;
-  }
 
-  uint32_t last_base = assigned_limit - location_count;
+  uint32_t last_base = 0;
   if (capacity.is_bounded) {
-    const uint32_t capacity_last_base = capacity.max_units - location_count;
-    if (last_base > capacity_last_base) {
-      last_base = capacity_last_base;
-    }
+    last_base = capacity.max_units - location_count;
+  } else if (!loom_low_allocation_align_up_u32(assigned_limit, alignment,
+                                               &last_base)) {
+    return false;
   }
 
   for (uint32_t base = 0; base <= last_base;) {
@@ -1764,7 +1780,7 @@ static iree_status_t loom_low_allocation_assign_concat_source_interval(
     IREE_RETURN_IF_ERROR(loom_low_allocation_class_capacity(
         state, interval->value_class, &capacity));
     uint32_t result_location_base = 0;
-    if (!loom_low_allocation_find_existing_location_span(
+    if (!loom_low_allocation_find_location_span(
             state, interval, capacity, result_interval->unit_count,
             loom_low_allocation_interval_alignment(result_interval),
             &result_location_base)) {
