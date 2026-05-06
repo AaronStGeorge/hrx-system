@@ -1,0 +1,91 @@
+// RUN: pass linearize-view-accesses,canonicalize,cse
+
+func.def @linearize_dense_load(%input: buffer, %zero_bytes: offset, %head: index, %head_dim: index) {
+  %input_view = buffer.view %input[%zero_bytes] : buffer -> view<4x128xf16, #dense>
+  %value = view.load %input_view[%head, %head_dim] : view<4x128xf16, #dense> -> f16
+  test.use %value : f16
+  func.return
+}
+
+// ----
+func.def @linearize_dense_load(%input: buffer, %zero_bytes: offset, %head: index, %head_dim: index) {
+  %input_view = buffer.view %input[%zero_bytes] : buffer -> view<512xf16, #dense>
+  %head_dimBounded = index.assume %head_dim [range(%head_dim, 0, 127)] : index
+  %headBounded = index.assume %head [range(%head, 0, 3)] : index
+  %stride128 = index.constant 128 : index
+  %linear128raw = index.madd %headBounded, %stride128, %head_dimBounded : index
+  %linear128 = index.assume %linear128raw [range(%linear128raw, 0, 511)] : index
+  %value = view.load %input_view[%linear128] : view<512xf16, #dense> -> f16
+  test.use %value : f16
+  func.return
+}
+
+// ====
+
+func.def @linearize_dense_store_shares_inner_index(%key_input: buffer, %value_input: buffer, %key_output: buffer, %value_output: buffer, %zero_bytes: offset, %position: index, %head: index, %head_dim: index) {
+  %key_input_view = buffer.view %key_input[%zero_bytes] : buffer -> view<4x128xf16, #dense>
+  %value_input_view = buffer.view %value_input[%zero_bytes] : buffer -> view<4x128xf16, #dense>
+  %key_cache = buffer.view %key_output[%zero_bytes] : buffer -> view<32768x4x128xf16, #dense>
+  %value_cache = buffer.view %value_output[%zero_bytes] : buffer -> view<32768x4x128xf16, #dense>
+  %key = view.load %key_input_view[%head, %head_dim] : view<4x128xf16, #dense> -> f16
+  %value = view.load %value_input_view[%head, %head_dim] : view<4x128xf16, #dense> -> f16
+  view.store %key, %key_cache[%position, %head, %head_dim] : f16, view<32768x4x128xf16, #dense>
+  view.store %value, %value_cache[%position, %head, %head_dim] : f16, view<32768x4x128xf16, #dense>
+  func.return
+}
+
+// ----
+func.def @linearize_dense_store_shares_inner_index(%key_input: buffer, %value_input: buffer, %key_output: buffer, %value_output: buffer, %zero_bytes: offset, %position: index, %head: index, %head_dim: index) {
+  %key_input_view = buffer.view %key_input[%zero_bytes] : buffer -> view<512xf16, #dense>
+  %value_input_view = buffer.view %value_input[%zero_bytes] : buffer -> view<512xf16, #dense>
+  %key_cache = buffer.view %key_output[%zero_bytes] : buffer -> view<16777216xf16, #dense>
+  %value_cache = buffer.view %value_output[%zero_bytes] : buffer -> view<16777216xf16, #dense>
+  %head_dimBounded = index.assume %head_dim [range(%head_dim, 0, 127)] : index
+  %headBounded = index.assume %head [range(%head, 0, 3)] : index
+  %stride128 = index.constant 128 : index
+  %linear128raw = index.madd %headBounded, %stride128, %head_dimBounded : index
+  %linear128 = index.assume %linear128raw [range(%linear128raw, 0, 511)] : index
+  %key = view.load %key_input_view[%linear128] : view<512xf16, #dense> -> f16
+  %value = view.load %value_input_view[%linear128] : view<512xf16, #dense> -> f16
+  %positionBounded = index.assume %position [range(%position, 0, 32767)] : index
+  %stride512 = index.constant 512 : index
+  %linear512raw = index.madd %positionBounded, %stride512, %linear128raw : index
+  %linear512 = index.assume %linear512raw [range(%linear512raw, 0, 16777215)] : index
+  view.store %key, %key_cache[%linear512] : f16, view<16777216xf16, #dense>
+  view.store %value, %value_cache[%linear512] : f16, view<16777216xf16, #dense>
+  func.return
+}
+
+// ====
+
+func.def @preserve_static_indices_and_cache_attrs(%input: buffer, %zero_bytes: offset, %column: index) {
+  %input_view = buffer.view %input[%zero_bytes] : buffer -> view<8x16xf32, #dense>
+  %value = view.load %input_view[3, %column] {cache_scope = device, cache_temporal = non_temporal} : view<8x16xf32, #dense> -> f32
+  test.use %value : f32
+  func.return
+}
+
+// ----
+func.def @preserve_static_indices_and_cache_attrs(%input: buffer, %zero_bytes: offset, %column: index) {
+  %input_view = buffer.view %input[%zero_bytes] : buffer -> view<128xf32, #dense>
+  %columnBounded = index.assume %column [range(%column, 0, 15)] : index
+  %axis3 = index.constant 3 : index
+  %stride16 = index.constant 16 : index
+  %linear16raw = index.madd %axis3, %stride16, %columnBounded : index
+  %linear16 = index.assume %linear16raw [range(%linear16raw, 0, 127)] : index
+  %value = view.load %input_view[%linear16] {cache_scope = device, cache_temporal = non_temporal} : view<128xf32, #dense> -> f32
+  test.use %value : f32
+  func.return
+}
+
+// ====
+
+func.def @leave_rank1_and_strided_views(%input: buffer, %zero_bytes: offset, %row: index, %column: index) {
+  %dense_view = buffer.view %input[%zero_bytes] : buffer -> view<128xf32, #dense>
+  %strided_layout = encoding.layout.strided [64, 1] : encoding<layout>
+  %strided_view = buffer.view %input[%zero_bytes] : buffer -> view<8x16xf32, %strided_layout>
+  %dense = view.load %dense_view[%row] : view<128xf32, #dense> -> f32
+  %strided = view.load %strided_view[%row, %column] : view<8x16xf32, %strided_layout> -> f32
+  test.use %dense, %strided : f32, f32
+  func.return
+}

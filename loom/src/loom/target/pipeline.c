@@ -81,6 +81,8 @@ static iree_status_t loom_target_pipeline_build_source_normalization(
       builder, IREE_SV("normalize-kernel-resources")));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
       builder, IREE_SV("promote-private-fragments")));
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
+      builder, IREE_SV("linearize-view-accesses")));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_cleanup(builder));
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_run(builder, IREE_SV("scf-to-cfg")));

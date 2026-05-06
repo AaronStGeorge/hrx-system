@@ -23,6 +23,7 @@ loom_check_test_suite(
         "kernel_async_legality.loom-test",
         "kernel_resources.loom-test",
         "licm.loom-test",
+        "linearize_view_accesses.loom-test",
         "loop_fusion.loom-test",
         "promote_private_fragments.loom-test",
         "promote_private_fragments_footprint.loom-test",

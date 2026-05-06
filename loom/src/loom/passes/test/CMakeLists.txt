@@ -100,6 +100,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "linearize_view_accesses"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/linearize_view_accesses.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "loop_fusion"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/loop_fusion.loom-test"

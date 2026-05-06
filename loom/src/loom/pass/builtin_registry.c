@@ -23,6 +23,7 @@
 #include "loom/passes/kernel_async_legality.h"
 #include "loom/passes/kernel_resources.h"
 #include "loom/passes/licm.h"
+#include "loom/passes/linearize_view_accesses.h"
 #include "loom/passes/loop_fusion.h"
 #include "loom/passes/promote_private_fragments.h"
 #include "loom/passes/refine_boundaries.h"
@@ -200,6 +201,11 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .key = IREE_SVL("licm"),
         .info = loom_licm_pass_info,
         .function_run = loom_licm_run,
+    },
+    {
+        .key = IREE_SVL("linearize-view-accesses"),
+        .info = loom_linearize_view_accesses_pass_info,
+        .function_run = loom_linearize_view_accesses_run,
     },
     {
         .key = IREE_SVL("loop-fusion"),
