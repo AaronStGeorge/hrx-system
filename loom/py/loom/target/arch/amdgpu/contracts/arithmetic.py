@@ -43,6 +43,9 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_min_f32",
     "amdgpu.v_max_f32",
     "amdgpu.v_fma_f32",
+    "amdgpu.v_exp_f32",
+    "amdgpu.v_sqrt_f32",
+    "amdgpu.v_rsq_f32",
     "amdgpu.v_cvt_f32_f16",
     "amdgpu.v_cvt_f16_f32",
     "amdgpu.v_cvt_f32_i32",
@@ -213,6 +216,30 @@ def _binary_rule(
                     descriptor_lhs: ValueRef.operand(source_lhs),
                     descriptor_rhs: ValueRef.operand(source_rhs),
                 },
+                results={"dst": ValueRef.result("result")},
+                form=_emit_form(type_pattern),
+            ),
+        ),
+    )
+
+
+def _unary_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    descriptor_key: str,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("input", "result"), type_pattern),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={"input": ValueRef.operand("input")},
                 results={"dst": ValueRef.result("result")},
                 form=_emit_form(type_pattern),
             ),
@@ -441,6 +468,9 @@ def _rules() -> tuple[DescriptorRule, ...]:
             _binary_rule(vector.vector_minnumf, _VEC_F32, "amdgpu.v_min_f32"),
             _binary_rule(vector.vector_maxnumf, _VEC_F32, "amdgpu.v_max_f32"),
             _ternary_rule(vector.vector_fmaf, _VEC_F32, "amdgpu.v_fma_f32"),
+            _unary_rule(vector.vector_exp2f, _VEC_F32, "amdgpu.v_exp_f32"),
+            _unary_rule(vector.vector_sqrtf, _VEC_F32, "amdgpu.v_sqrt_f32"),
+            _unary_rule(vector.vector_rsqrtf, _VEC_F32, "amdgpu.v_rsq_f32"),
         )
     )
     rules.extend(
@@ -553,6 +583,9 @@ def _rules() -> tuple[DescriptorRule, ...]:
                 "amdgpu.v_max_f32",
             ),
             _ternary_rule(scalar_math.scalar_fmaf, _F32, "amdgpu.v_fma_f32"),
+            _unary_rule(scalar_math.scalar_exp2f, _F32, "amdgpu.v_exp_f32"),
+            _unary_rule(scalar_math.scalar_sqrtf, _F32, "amdgpu.v_sqrt_f32"),
+            _unary_rule(scalar_math.scalar_rsqrtf, _F32, "amdgpu.v_rsq_f32"),
             _cast_rule(
                 scalar_conversion.scalar_extf,
                 _F16,
