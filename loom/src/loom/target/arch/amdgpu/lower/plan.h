@@ -20,6 +20,7 @@
 #include "loom/ir/ir.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/target/arch/amdgpu/lower/kinds.h"
+#include "loom/target/arch/amdgpu/matrix_contract.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -379,6 +380,49 @@ typedef struct loom_amdgpu_memory_access_plan_t {
   // Module string ID for access.descriptor's opcode spelling.
   loom_string_id_t opcode_id;
 } loom_amdgpu_memory_access_plan_t;
+
+typedef struct loom_amdgpu_fragment_origin_plan_t {
+  // Dynamic source origin index for this view axis, or invalid when static.
+  loom_value_id_t dynamic_index;
+  // Static source origin index used when dynamic_index is invalid.
+  int64_t static_index;
+} loom_amdgpu_fragment_origin_plan_t;
+
+typedef struct loom_amdgpu_fragment_memory_plan_t {
+  // Direction of the fragment memory movement.
+  loom_amdgpu_memory_operation_kind_t operation_kind;
+  // Matrix-fragment role selected from source IR.
+  loom_amdgpu_matrix_operand_role_t role;
+  // Target-owned lane/register layout selected for the fragment payload.
+  loom_amdgpu_matrix_fragment_layout_kind_t layout_kind;
+  // Source or destination view SSA value.
+  loom_value_id_t view;
+  // Source store payload or load result SSA value.
+  loom_value_id_t payload;
+  // Target-independent memory space selected from source view facts.
+  loom_value_fact_memory_space_t memory_space;
+  // Source SSA value representing the storage root.
+  loom_value_id_t root_value_id;
+  // Comparable alias scope for disjointness proofs, or NONE.
+  loom_value_fact_alias_scope_id_t alias_scope_id;
+  // Static view base byte offset relative to root_value_id.
+  uint64_t base_byte_offset;
+  // Per-axis origin indices from source IR.
+  loom_amdgpu_fragment_origin_plan_t
+      origins[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK];
+  // Per-axis byte strides selected from the view layout.
+  uint32_t axis_byte_strides[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK];
+  // Rank of the typed view.
+  uint8_t view_rank;
+  // Number of 32-bit registers in the fragment payload.
+  uint16_t register_count;
+  // Logical elements packed in each 32-bit fragment register.
+  uint16_t elements_per_register;
+  // Byte count of one logical fragment element.
+  uint16_t element_byte_count;
+  // Descriptor row emitted for each 32-bit fragment packet.
+  loom_amdgpu_descriptor_ref_t descriptor_ref;
+} loom_amdgpu_fragment_memory_plan_t;
 
 #define LOOM_AMDGPU_EXPLICIT_PACKET_IMMEDIATE_CAPACITY 4
 

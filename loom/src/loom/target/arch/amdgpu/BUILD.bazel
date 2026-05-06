@@ -605,6 +605,7 @@ loom_cc_library(
         "lower/lds_layout.c",
         "lower/mask.c",
         "lower/matrix.c",
+        "lower/matrix_fragment.c",
         "lower/memory.c",
         "lower/memory_cache.c",
         "lower/memory_diagnostics.c",

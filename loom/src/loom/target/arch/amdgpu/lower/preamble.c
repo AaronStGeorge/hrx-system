@@ -543,24 +543,10 @@ static bool loom_amdgpu_source_value_facts_exact_u32(
   return true;
 }
 
-static iree_status_t loom_amdgpu_mark_subgroup_query_workitem_id_live_ins(
+static iree_status_t loom_amdgpu_mark_lane_query_workitem_id_live_ins(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t optional_exact_source_result,
     const loom_op_t** first_workitem_id_ops) {
-  loom_value_id_t source_result = LOOM_VALUE_ID_INVALID;
-  switch (source_op->kind) {
-    case LOOM_OP_KERNEL_SUBGROUP_ID:
-      source_result = loom_kernel_subgroup_id_result(source_op);
-      break;
-    case LOOM_OP_KERNEL_SUBGROUP_LANE_ID:
-      source_result = loom_kernel_subgroup_lane_id_result(source_op);
-      break;
-    default:
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "AMDGPU subgroup query live-in marking received "
-                              "unexpected op kind %u",
-                              (unsigned)source_op->kind);
-  }
-
   loom_target_workgroup_size_t workgroup_size = {0};
   uint32_t unused_flat_workgroup_size = 0;
   if (!loom_amdgpu_required_workgroup_size(
@@ -588,8 +574,9 @@ static iree_status_t loom_amdgpu_mark_subgroup_query_workitem_id_live_ins(
   }
 
   uint32_t exact_result = 0;
-  if (loom_amdgpu_source_value_facts_exact_u32(context, source_result,
-                                               &exact_result)) {
+  if (optional_exact_source_result != LOOM_VALUE_ID_INVALID &&
+      loom_amdgpu_source_value_facts_exact_u32(
+          context, optional_exact_source_result, &exact_result)) {
     return iree_ok_status();
   }
 
@@ -605,6 +592,27 @@ static iree_status_t loom_amdgpu_mark_subgroup_query_workitem_id_live_ins(
     first_workitem_id_ops[LOOM_KERNEL_DIMENSION_Z] = source_op;
   }
   return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_mark_subgroup_query_workitem_id_live_ins(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_op_t** first_workitem_id_ops) {
+  loom_value_id_t source_result = LOOM_VALUE_ID_INVALID;
+  switch (source_op->kind) {
+    case LOOM_OP_KERNEL_SUBGROUP_ID:
+      source_result = loom_kernel_subgroup_id_result(source_op);
+      break;
+    case LOOM_OP_KERNEL_SUBGROUP_LANE_ID:
+      source_result = loom_kernel_subgroup_lane_id_result(source_op);
+      break;
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU subgroup query live-in marking received "
+                              "unexpected op kind %u",
+                              (unsigned)source_op->kind);
+  }
+  return loom_amdgpu_mark_lane_query_workitem_id_live_ins(
+      context, source_op, source_result, first_workitem_id_ops);
 }
 
 static iree_status_t loom_amdgpu_emit_workgroup_id_live_in(
@@ -757,6 +765,12 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
         IREE_RETURN_IF_ERROR(
             loom_amdgpu_mark_subgroup_query_workitem_id_live_ins(
                 context, source_op, first_workitem_id_ops));
+        break;
+      }
+      case LOOM_OP_VECTOR_FRAGMENT_LOAD:
+      case LOOM_OP_VECTOR_FRAGMENT_STORE: {
+        IREE_RETURN_IF_ERROR(loom_amdgpu_mark_lane_query_workitem_id_live_ins(
+            context, source_op, LOOM_VALUE_ID_INVALID, first_workitem_id_ops));
         break;
       }
       default:

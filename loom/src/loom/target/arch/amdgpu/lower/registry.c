@@ -265,6 +265,23 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_cmpf_dispatch,
                              loom_amdgpu_vector_compare_plan_t,
                              loom_amdgpu_lower_vector_cmpf)
 
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_fragment_load_dispatch,
+                               loom_amdgpu_fragment_memory_plan_t,
+                               loom_amdgpu_select_vector_fragment_load_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_fragment_load_dispatch,
+                             loom_amdgpu_fragment_memory_plan_t,
+                             loom_amdgpu_lower_vector_fragment_load)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(
+    loom_amdgpu_select_vector_fragment_store_dispatch,
+    loom_amdgpu_fragment_memory_plan_t,
+    loom_amdgpu_select_vector_fragment_store_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_fragment_store_dispatch,
+                             loom_amdgpu_fragment_memory_plan_t,
+                             loom_amdgpu_lower_vector_fragment_store)
+
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_select_dispatch,
                                loom_amdgpu_vector_select_plan_t,
                                loom_amdgpu_select_vector_select_plan)
