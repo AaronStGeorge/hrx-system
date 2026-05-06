@@ -267,6 +267,31 @@ low.func.def target(@test_target) @descriptor_low_write_blocks_read_cse(%ptr: re
 
 // ====
 
+// low.const materializes a descriptor-backed semantic constant. Identical
+// constants may share one virtual register when no consumer ties or consumes
+// the result identity.
+// RUN: pass cse
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @low_constants_cse() -> (reg<test.i32>, reg<test.i32>) {
+  %lhs = low.const<test.const.i32> {i32_value = 7} : reg<test.i32>
+  %rhs = low.const<test.const.i32> {i32_value = 7} : reg<test.i32>
+  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.return %sum, %rhs : reg<test.i32>, reg<test.i32>
+}
+
+// ----
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @low_constants_cse() -> (reg<test.i32>, reg<test.i32>) {
+  %lhs = low.const<test.const.i32> {i32_value = 7} : reg<test.i32>
+  %sum = low.op<test.add.i32>(%lhs, %lhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.return %sum, %lhs : reg<test.i32>, reg<test.i32>
+}
+
+// ====
+
 // low.copy and low.concat are virtual-register identity constructors. They may
 // look structurally identical, but each instance names distinct storage and
 // must not be folded by value CSE.

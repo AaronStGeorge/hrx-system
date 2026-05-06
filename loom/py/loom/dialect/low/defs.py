@@ -710,7 +710,8 @@ low_const = Op(
         AttrDef("descriptor_ordinal", "i64"),
         AttrDef("attrs", "dict", optional=True),
     ],
-    results=[Result("result", REGISTER, allocates=True)],
+    results=[Result("result", REGISTER)],
+    traits=[PURE],
     verify="loom_low_const_verify",
     facts="loom_low_const_facts",
     format=[
