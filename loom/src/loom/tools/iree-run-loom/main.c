@@ -59,6 +59,8 @@ IREE_FLAG(string, emit_target_artifact, "",
 IREE_FLAG(string, emit_hal_executable, "",
           "Optional output path for the HAL executable package passed to the "
           "runtime loader.");
+IREE_FLAG(bool, emit_only, false,
+          "Stops after HAL executable emission without dispatching.");
 IREE_FLAG(bool, probe_hal, false,
           "Runs the selected backend's target probe, prints the result, and "
           "exits. Not all backends support probing.");
@@ -266,14 +268,16 @@ static iree_status_t iree_run_loom_one_shot_options_initialize(
     };
     out_options->hal_target_artifact_output_path = target_artifact_output_path;
     out_options->hal_executable_output_path = hal_executable_output_path;
+    out_options->hal_emit_only = FLAG_emit_only;
     out_options->hal_max_output_element_count =
         IREE_RUN_LOOM_HAL_MAX_OUTPUT_ELEMENT_COUNT;
   } else if (!iree_string_view_is_empty(target_artifact_output_path) ||
-             !iree_string_view_is_empty(hal_executable_output_path)) {
+             !iree_string_view_is_empty(hal_executable_output_path) ||
+             FLAG_emit_only) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "--emit_target_artifact and --emit_hal_executable require a HAL "
-        "backend");
+        "--emit_target_artifact, --emit_hal_executable, and --emit_only "
+        "require a HAL backend");
   }
   return iree_ok_status();
 }

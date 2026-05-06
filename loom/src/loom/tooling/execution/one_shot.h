@@ -71,6 +71,8 @@ typedef struct loom_run_one_shot_options_t {
   iree_string_view_t hal_target_artifact_output_path;
   // Optional path receiving the HAL executable package passed to the loader.
   iree_string_view_t hal_executable_output_path;
+  // Stops after HAL executable emission without dispatching.
+  bool hal_emit_only;
   // Maximum number of HAL output elements to format.
   iree_host_size_t hal_max_output_element_count;
 } loom_run_one_shot_options_t;

@@ -151,7 +151,8 @@ iree_status_t loom_run_hal_execution_backend_run_one_shot(
   if (iree_status_is_ok(status) && candidate.compiled) {
     status = loom_run_hal_write_candidate_artifacts(request, &candidate);
   }
-  if (iree_status_is_ok(status) && candidate.compiled) {
+  if (iree_status_is_ok(status) && candidate.compiled &&
+      !request->options->hal_emit_only) {
     loom_run_hal_invocation_request_t invocation_request = {0};
     loom_run_hal_invocation_request_initialize(&invocation_request);
     invocation_request.runtime = &runtime;
@@ -178,7 +179,8 @@ iree_status_t loom_run_hal_execution_backend_run_one_shot(
     status = loom_run_hal_invocation_run(
         &invocation_request, request->host_allocator, &invocation_result);
   }
-  if (iree_status_is_ok(status) && candidate.compiled) {
+  if (iree_status_is_ok(status) && candidate.compiled &&
+      !request->options->hal_emit_only) {
     request->result->exit_code = invocation_result.exit_code;
     status = iree_string_builder_append_string(
         &request->result->output,

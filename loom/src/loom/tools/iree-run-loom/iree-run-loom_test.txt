@@ -2,6 +2,7 @@
 // RUN: iree-run-loom %s --function=branchy --input=50 --input=8 --expected_output=42 | FileCheck --check-prefix=NONZERO %s
 // RUN: iree-run-loom %s --function=branchy --input=50 --input=8 --output=- | FileCheck --check-prefix=OUTPUT %s
 // RUN: iree-run-loom %s --function=branchy --input=0 --input=21 --expected_output=42 --compile_report=summary | FileCheck --check-prefix=REPORT %s
+// RUN: ( iree-run-loom %s --emit_only 2>&1 || true ) | FileCheck --check-prefix=EMIT-ONLY-VM %s
 
 // ZERO: EXEC @branchy
 // ZERO: [SUCCESS] all function outputs matched their expected values.
@@ -15,6 +16,7 @@
 // REPORT: COMPILE-REPORT: emission instructions={{[0-9]+}}
 // REPORT: COMPILE-REPORT: source_low selected_ops={{[0-9]+}}
 // REPORT: COMPILE-REPORT: pressure_rows copied=0 total={{[0-9]+}}
+// EMIT-ONLY-VM: --emit_target_artifact, --emit_hal_executable, and --emit_only require a HAL backend
 
 ireevm.target<core> @vm_target
 
