@@ -617,11 +617,13 @@ loom_cc_test(
     ::amdgpu_hal_backend
     ::target_info
     ::target_info_defs
+    ::target_record_table
     iree::base
     iree::base::internal::arena
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::op_registry
+    loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main
 )

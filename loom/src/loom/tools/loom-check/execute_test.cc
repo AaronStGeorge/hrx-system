@@ -1286,13 +1286,22 @@ TEST_F(ExecuteTest, EmitLivenessJsonReportsUnknownFunction) {
   loom_check_result_deinitialize(&result);
 }
 
-TEST_F(ExecuteTest, FormatModeUnimplemented) {
+TEST_F(ExecuteTest, FormatModeBytecodeRoundTrips) {
   loom_check_result_t result;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
-                        ExecuteFirst("// RUN: format bytecode\n"
-                                     "func.def @f() {\n"
-                                     "}\n",
-                                     &result));
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: format bytecode\n"
+                   "func.def @f() {\n"
+                   "}\n"
+                   "// ----\n"
+                   "func.def @f() {\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_PASS);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS);
+  EXPECT_TRUE(result.has_actual_output);
+  EXPECT_NE(ActualOutputString(result).find("func.def @f()"),
+            std::string::npos);
+  loom_check_result_deinitialize(&result);
 }
 
 }  // namespace

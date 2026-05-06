@@ -32,19 +32,23 @@ iree_status_t InitializeLowDescriptorRegistry(
   return iree_ok_status();
 }
 
-constexpr char kVmSource[] =
+constexpr char kPreparedVmSource[] =
     "ireevm.target<core> @vm_target\n"
     "\n"
-    "func.def target(@vm_target) @branchy(%lhs: i32, %rhs: i32) -> (i32) {\n"
-    "  %c0 = scalar.constant 0 : i32\n"
-    "  %is_zero = scalar.cmpi eq, %lhs, %c0 : i32\n"
-    "  cfg.cond_br %is_zero, ^then, ^else : i1\n"
+    "low.func.def target(@vm_target) abi(vm_module_function) "
+    "@branchy(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>) {\n"
+    "  %c0 = low.const<iree.vm.const.i32> {i32_value = 0} : reg<vm.i32>\n"
+    "  %is_zero = low.op<iree.vm.cmp.eq.i32>(%lhs, %c0) : "
+    "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
+    "  low.cond_br %is_zero, ^then, ^else : reg<vm.i32>\n"
     "^then:\n"
-    "  %sum = scalar.addi %rhs, %rhs : i32\n"
-    "  func.return %sum : i32\n"
+    "  %sum = low.op<iree.vm.add.i32>(%rhs, %rhs) : "
+    "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
+    "  low.return %sum : reg<vm.i32>\n"
     "^else:\n"
-    "  %diff = scalar.subi %lhs, %rhs : i32\n"
-    "  func.return %diff : i32\n"
+    "  %diff = low.op<iree.vm.sub.i32>(%lhs, %rhs) : "
+    "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
+    "  low.return %diff : reg<vm.i32>\n"
     "}\n";
 
 class VmInvocationTest : public ::testing::Test {
@@ -69,22 +73,26 @@ class VmInvocationTest : public ::testing::Test {
     loom_run_session_deinitialize(&session_);
   }
 
-  void EmitArchive(loom_run_module_t* out_module,
-                   loom_ireevm_run_candidate_t* out_candidate) {
+  iree_status_t EmitArchive(loom_run_module_t* out_module,
+                            loom_ireevm_run_candidate_t* out_candidate) {
     loom_run_module_parse_options_t parse_options = {};
     loom_run_module_parse_options_initialize(&parse_options);
     parse_options.filename = IREE_SV("vm_invocation_test.loom");
-    parse_options.source = IREE_SV(kVmSource);
-    IREE_ASSERT_OK(
+    parse_options.source = IREE_SV(kPreparedVmSource);
+    IREE_RETURN_IF_ERROR(
         loom_run_module_parse(&session_, &parse_options, out_module));
 
     loom_run_candidate_compile_options_t archive_emit_options = {};
     loom_run_candidate_compile_options_initialize(&archive_emit_options);
     archive_emit_options.source_resolver =
         loom_run_module_source_resolver(out_module);
-    IREE_ASSERT_OK(
+    iree_status_t status =
         loom_ireevm_run_candidate_emit(out_module, &archive_emit_options,
-                                       iree_allocator_system(), out_candidate));
+                                       iree_allocator_system(), out_candidate);
+    if (!iree_status_is_ok(status)) {
+      loom_run_module_deinitialize(out_module);
+    }
+    return status;
   }
 
   iree_status_t RunBranchy(const loom_ireevm_module_archive_t* archive,
@@ -149,7 +157,7 @@ class VmInvocationTest : public ::testing::Test {
 TEST_F(VmInvocationTest, RunMatchesExpectedOutputs) {
   loom_run_module_t module = {};
   loom_ireevm_run_candidate_t candidate = {};
-  EmitArchive(&module, &candidate);
+  IREE_ASSERT_OK(EmitArchive(&module, &candidate));
 
   loom_run_vm_invocation_result_t result = {};
   loom_run_vm_invocation_result_initialize(iree_allocator_system(), &result);
@@ -170,7 +178,7 @@ TEST_F(VmInvocationTest, RunMatchesExpectedOutputs) {
 TEST_F(VmInvocationTest, RunReportsExpectedOutputMismatch) {
   loom_run_module_t module = {};
   loom_ireevm_run_candidate_t candidate = {};
-  EmitArchive(&module, &candidate);
+  IREE_ASSERT_OK(EmitArchive(&module, &candidate));
 
   loom_run_vm_invocation_result_t result = {};
   loom_run_vm_invocation_result_initialize(iree_allocator_system(), &result);
@@ -190,7 +198,7 @@ TEST_F(VmInvocationTest, RunReportsExpectedOutputMismatch) {
 TEST_F(VmInvocationTest, RunFormatsOutputsWhenNoExpectationIsProvided) {
   loom_run_module_t module = {};
   loom_ireevm_run_candidate_t candidate = {};
-  EmitArchive(&module, &candidate);
+  IREE_ASSERT_OK(EmitArchive(&module, &candidate));
 
   iree_string_view_t inputs[] = {IREE_SV("50"), IREE_SV("8")};
   loom_run_vm_invocation_request_t request = {};
@@ -221,7 +229,7 @@ TEST_F(VmInvocationTest, RunFormatsOutputsWhenNoExpectationIsProvided) {
 TEST_F(VmInvocationTest, PreparedCandidateRunsPlanTwice) {
   loom_run_module_t module = {};
   loom_ireevm_run_candidate_t candidate = {};
-  EmitArchive(&module, &candidate);
+  IREE_ASSERT_OK(EmitArchive(&module, &candidate));
 
   loom_run_vm_prepared_candidate_t prepared = {};
   PrepareBranchyCandidate(&candidate.archive, &prepared);
@@ -255,7 +263,7 @@ TEST_F(VmInvocationTest, PreparedCandidateRunsPlanTwice) {
 TEST_F(VmInvocationTest, InvokePlanCanSkipResultCollection) {
   loom_run_module_t module = {};
   loom_ireevm_run_candidate_t candidate = {};
-  EmitArchive(&module, &candidate);
+  IREE_ASSERT_OK(EmitArchive(&module, &candidate));
 
   loom_run_vm_prepared_candidate_t prepared = {};
   PrepareBranchyCandidate(&candidate.archive, &prepared);
@@ -280,7 +288,7 @@ TEST_F(VmInvocationTest, InvokePlanCanSkipResultCollection) {
 TEST_F(VmInvocationTest, PlanPrepareRejectsFunctionMismatch) {
   loom_run_module_t module = {};
   loom_ireevm_run_candidate_t candidate = {};
-  EmitArchive(&module, &candidate);
+  IREE_ASSERT_OK(EmitArchive(&module, &candidate));
 
   loom_run_vm_prepared_candidate_t prepared = {};
   PrepareBranchyCandidate(&candidate.archive, &prepared);
