@@ -61,8 +61,8 @@ typedef struct loom_vector_memory_access_t {
   // Resolved address-layout kind for the view type.
   loom_vector_memory_layout_kind_t layout_kind;
 
-  // Address-layout summary decoded from static encodings or local SSA
-  // encoding definitions.
+  // Address-layout summary decoded from static encodings or fact-bearing SSA
+  // encoding values.
   loom_value_fact_address_layout_t layout_summary;
 
   // Inline stride fact storage backing layout_summary.
@@ -89,11 +89,14 @@ typedef struct loom_vector_memory_cache_policy_t {
   uint8_t cache_temporal;
 } loom_vector_memory_cache_policy_t;
 
-// Describes a view/vector access. Returns false when the types are not a view
-// and a rank-1+ vector, or when the vector rank exceeds the view rank. Unknown
-// layouts still produce a valid access with layout_kind UNKNOWN.
+// Describes a view/vector access. |context| supplies SSA encoding facts; pass
+// NULL only from structural verification paths that intentionally cannot depend
+// on analysis. Returns false when the types are not a view and a rank-1+
+// vector, or when the vector rank exceeds the view rank. Unknown layouts still
+// produce a valid access with layout_kind UNKNOWN.
 bool loom_vector_memory_access_describe(
-    const loom_module_t* module, loom_type_t view_type, loom_type_t vector_type,
+    const loom_fact_context_t* context, const loom_module_t* module,
+    loom_type_t view_type, loom_type_t vector_type,
     loom_vector_memory_access_t* out_access);
 
 // Extracts the optional cache policy from a vector memory op. Returns false

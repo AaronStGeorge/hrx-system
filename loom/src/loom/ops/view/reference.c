@@ -114,16 +114,9 @@ static bool loom_view_address_layout(const loom_fact_context_t* context,
                                      loom_type_t view_type,
                                      loom_view_address_layout_t* out_layout) {
   *out_layout = (loom_view_address_layout_t){0};
-  if (loom_encoding_query_type_address_layout(
-          context, module, view_type, out_layout->static_strides,
-          IREE_ARRAYSIZE(out_layout->static_strides), &out_layout->summary)) {
-    return true;
-  }
-  if (!loom_type_has_ssa_encoding(view_type)) return false;
-  return loom_encoding_query_value_address_layout(
-      module, (loom_value_id_t)loom_type_encoding_value_id(view_type),
-      out_layout->static_strides, IREE_ARRAYSIZE(out_layout->static_strides),
-      &out_layout->summary);
+  return loom_encoding_query_type_address_layout(
+      context, module, view_type, out_layout->static_strides,
+      IREE_ARRAYSIZE(out_layout->static_strides), &out_layout->summary);
 }
 
 static bool loom_view_dense_axis_stride_facts(

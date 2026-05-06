@@ -28,14 +28,13 @@ static iree_status_t loom_buffer_emit(iree_diagnostic_emitter_t emitter,
 
 static iree_status_t loom_buffer_verify_strided_layout_rank(
     const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter, loom_type_t result_type,
-    loom_value_id_t layout_id) {
+    iree_diagnostic_emitter_t emitter, loom_type_t result_type) {
   loom_value_facts_t static_strides[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK] = {
       0};
   loom_value_fact_address_layout_t layout = {0};
-  if (!loom_encoding_query_value_address_layout(
-          module, layout_id, static_strides, IREE_ARRAYSIZE(static_strides),
-          &layout)) {
+  if (!loom_encoding_query_type_address_layout(
+          /*context=*/NULL, module, result_type, static_strides,
+          IREE_ARRAYSIZE(static_strides), &layout)) {
     return iree_ok_status();
   }
   if (layout.kind != LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED) {
@@ -173,9 +172,6 @@ iree_status_t loom_buffer_view_verify(const loom_module_t* module,
                             IREE_ARRAYSIZE(params));
   }
 
-  if (!loom_type_has_ssa_encoding(result_type)) return iree_ok_status();
-
-  loom_value_id_t layout_id = loom_type_encoding_value_id(result_type);
   return loom_buffer_verify_strided_layout_rank(module, op, emitter,
-                                                result_type, layout_id);
+                                                result_type);
 }

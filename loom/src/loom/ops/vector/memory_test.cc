@@ -11,6 +11,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/encoding/families.h"
 #include "loom/ops/encoding/ops.h"
 
 namespace loom {
@@ -28,6 +29,7 @@ class VectorMemoryTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_context_register_dialect(
         &context_, LOOM_DIALECT_ENCODING, encoding_vtables,
         (uint16_t)encoding_vtable_count));
+    IREE_ASSERT_OK(loom_context_register_builtin_encoding_vtables(&context_));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"),
                                         &block_pool_, NULL,
@@ -185,6 +187,26 @@ class VectorMemoryTest : public ::testing::Test {
     return view_type;
   }
 
+  bool Describe(loom_type_t view_type, loom_type_t vector_type,
+                loom_vector_memory_access_t* out_access) {
+    loom_value_fact_table_t facts;
+    iree_status_t status = loom_value_fact_table_initialize(
+        &facts, &module_->arena, module_->values.count);
+    IREE_EXPECT_OK(status);
+    if (!iree_status_is_ok(status)) {
+      return false;
+    }
+    loom_func_like_t no_function = {};
+    status = loom_value_fact_table_compute_region(
+        &facts, module_, no_function, module_->body, /*parent_op=*/nullptr);
+    IREE_EXPECT_OK(status);
+    if (!iree_status_is_ok(status)) {
+      return false;
+    }
+    return loom_vector_memory_access_describe(
+        &facts.context, module_, view_type, vector_type, out_access);
+  }
+
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   loom_module_t* module_ = nullptr;
@@ -205,8 +227,7 @@ TEST_F(VectorMemoryTest, DenseLayoutComputesLaneOffsets) {
                           /*encoding_id=*/0);
 
   loom_vector_memory_access_t access;
-  ASSERT_TRUE(loom_vector_memory_access_describe(module_, view_type,
-                                                 vector_type, &access));
+  ASSERT_TRUE(Describe(view_type, vector_type, &access));
   EXPECT_EQ(access.layout_kind, LOOM_VECTOR_MEMORY_LAYOUT_DENSE);
 
   int64_t row_stride = 0;
@@ -250,8 +271,7 @@ TEST_F(VectorMemoryTest, StridedLayoutComputesPaddedLaneOffsets) {
                           loom_dim_pack_static(4), /*encoding_id=*/0);
 
   loom_vector_memory_access_t access;
-  ASSERT_TRUE(loom_vector_memory_access_describe(module_, view_type,
-                                                 vector_type, &access));
+  ASSERT_TRUE(Describe(view_type, vector_type, &access));
   EXPECT_EQ(access.layout_kind, LOOM_VECTOR_MEMORY_LAYOUT_STRIDED);
 
   int64_t row_extent = 0;
@@ -295,8 +315,7 @@ TEST_F(VectorMemoryTest, PhysicalStorageCompositionUsesAddressLayout) {
                           loom_dim_pack_static(18), /*encoding_id=*/0);
 
   loom_vector_memory_access_t access;
-  ASSERT_TRUE(loom_vector_memory_access_describe(module_, view_type,
-                                                 vector_type, &access));
+  ASSERT_TRUE(Describe(view_type, vector_type, &access));
   EXPECT_EQ(access.layout_kind, LOOM_VECTOR_MEMORY_LAYOUT_STRIDED);
 
   int64_t row_stride = 0;
@@ -320,8 +339,7 @@ TEST_F(VectorMemoryTest, StaticStridedLayoutComputesLaneOffsets) {
                           loom_dim_pack_static(4), /*encoding_id=*/0);
 
   loom_vector_memory_access_t access;
-  ASSERT_TRUE(loom_vector_memory_access_describe(module_, view_type,
-                                                 vector_type, &access));
+  ASSERT_TRUE(Describe(view_type, vector_type, &access));
   EXPECT_EQ(access.layout_kind, LOOM_VECTOR_MEMORY_LAYOUT_STRIDED);
 
   int64_t stride = 0;
@@ -367,8 +385,7 @@ TEST_F(VectorMemoryTest, AssumeSpecPhysicalStorageUsesStaticAddressLayout) {
                           loom_dim_pack_static(4), /*encoding_id=*/0);
 
   loom_vector_memory_access_t access;
-  ASSERT_TRUE(loom_vector_memory_access_describe(module_, view_type,
-                                                 vector_type, &access));
+  ASSERT_TRUE(Describe(view_type, vector_type, &access));
   EXPECT_EQ(access.layout_kind, LOOM_VECTOR_MEMORY_LAYOUT_STRIDED);
 
   int64_t stride = 0;
@@ -390,8 +407,7 @@ TEST_F(VectorMemoryTest, DenseLayoutReportsUnknownStaticSuffixStride) {
                           loom_dim_pack_static(4), /*encoding_id=*/0);
 
   loom_vector_memory_access_t access;
-  ASSERT_TRUE(loom_vector_memory_access_describe(module_, view_type,
-                                                 vector_type, &access));
+  ASSERT_TRUE(Describe(view_type, vector_type, &access));
 
   int64_t row_stride = 0;
   int64_t column_stride = 0;
@@ -421,8 +437,7 @@ TEST_F(VectorMemoryTest, StridedLayoutSupportsDynamicStride) {
                           loom_dim_pack_static(4), /*encoding_id=*/0);
 
   loom_vector_memory_access_t access;
-  ASSERT_TRUE(loom_vector_memory_access_describe(module_, view_type,
-                                                 vector_type, &access));
+  ASSERT_TRUE(Describe(view_type, vector_type, &access));
   EXPECT_EQ(access.layout_kind, LOOM_VECTOR_MEMORY_LAYOUT_STRIDED);
 
   int64_t row_stride = 0;
@@ -461,8 +476,7 @@ TEST_F(VectorMemoryTest, ByteOffsetRejectsSubByteElementType) {
                           loom_dim_pack_static(4), /*encoding_id=*/0);
 
   loom_vector_memory_access_t access;
-  ASSERT_TRUE(loom_vector_memory_access_describe(module_, view_type,
-                                                 vector_type, &access));
+  ASSERT_TRUE(Describe(view_type, vector_type, &access));
 
   int64_t static_indices[] = {2};
   loom_attribute_t static_index_attr = loom_attr_i64_array(

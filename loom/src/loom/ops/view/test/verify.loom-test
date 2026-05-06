@@ -122,47 +122,10 @@ func.def @refine_missing_result_layout(%buffer: buffer, %offset: offset, %m: ind
 
 // ====
 
-// A concrete strided layout must provide one stride per result view rank.
+// A static strided layout must provide one stride per result view rank.
 func.def @buffer_view_stride_rank_mismatch(%buffer: buffer, %offset: offset) {
-  %layout = encoding.layout.strided [1] : encoding<layout>
   // ERROR@+1: SHAPE/001 "result type" "2" "layout stride list" "1"
-  %view = buffer.view %buffer[%offset] : buffer -> view<4x4xf32, %layout>
-  func.return
-}
-
-// ====
-
-// The rank contract applies to local layout assumptions too; otherwise a
-// refined function-argument layout could silently underdescribe a view.
-func.def @buffer_view_assumed_stride_rank_mismatch(%buffer: buffer, %offset: offset, %layout: encoding<layout>) {
-  %strided = encoding.layout.assume.strided %layout {rank = 1} : encoding<layout>
-  // ERROR@+1: SHAPE/001 "result type" "2" "layout stride list" "1"
-  %view = buffer.view %buffer[%offset] : buffer -> view<4x4xf32, %strided>
-  func.return
-}
-
-// ====
-
-// Encoded physical storage views still expose their address layout explicitly.
-// buffer.view must recover it through #physical_storage instead of treating the
-// storage schema as part of address arithmetic.
-func.def @buffer_view_physical_storage_stride_rank_mismatch(%buffer: buffer, %offset: offset) {
-  %layout = encoding.layout.strided [1] : encoding<layout>
-  %schema = encoding.define #ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>
-  %storage = encoding.define #physical_storage {layout = %layout : encoding<layout>, schema = %schema : encoding<schema>} : encoding<storage>
-  // ERROR@+1: SHAPE/001 "result type" "2" "layout stride list" "1"
-  %view = buffer.view %buffer[%offset] : buffer -> view<4x18xi8, %storage>
-  func.return
-}
-
-// ====
-
-// Exact static-spec assumptions participate in the same rank contract instead
-// of disappearing behind their source block argument.
-func.def @buffer_view_assume_spec_static_stride_rank_mismatch(%buffer: buffer, %offset: offset, %storage: encoding<storage>) {
-  %storage2 = encoding.assume.spec %storage, #physical_storage<layout=#strided<stride=64>, schema=#ggml_q4_0<block_elems=32, storage_bytes=18>> : encoding<storage>
-  // ERROR@+1: SHAPE/001 "result type" "2" "layout stride list" "1"
-  %view = buffer.view %buffer[%offset] : buffer -> view<4x18xi8, %storage2>
+  %view = buffer.view %buffer[%offset] : buffer -> view<4x4xf32, #strided<stride=1>>
   func.return
 }
 

@@ -231,8 +231,11 @@ static bool loom_movement_apply_vector_access(
     loom_movement_request_t* request, loom_movement_diagnostic_t* diagnostic) {
   const loom_type_t view_type =
       loom_module_value_type(analysis->module, view_value_id);
-  if (!loom_vector_memory_access_describe(
-          analysis->module, view_type, vector_type, &request->vector_access)) {
+  const loom_fact_context_t* fact_context =
+      analysis->fact_table ? &analysis->fact_table->context : NULL;
+  if (!loom_vector_memory_access_describe(fact_context, analysis->module,
+                                          view_type, vector_type,
+                                          &request->vector_access)) {
     diagnostic->rejection_bits |= LOOM_MOVEMENT_REJECTION_VECTOR_ACCESS;
     return false;
   }

@@ -196,7 +196,8 @@ static bool loom_amdgpu_fragment_memory_payload_matches(
 }
 
 static bool loom_amdgpu_fragment_memory_view_matches(
-    const loom_module_t* module, loom_type_t view_type,
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_type_t view_type,
     const loom_amdgpu_matrix_fragment_role_layout_t* role_layout,
     loom_vector_memory_access_t* out_access) {
   *out_access = (loom_vector_memory_access_t){0};
@@ -227,8 +228,10 @@ static bool loom_amdgpu_fragment_memory_view_matches(
   loom_type_t scalar_vector_type =
       loom_type_shaped_1d(LOOM_TYPE_VECTOR, expected_element_type,
                           loom_dim_pack_static(1), /*encoding_id=*/0);
-  if (!loom_vector_memory_access_describe(module, view_type, scalar_vector_type,
-                                          out_access)) {
+  const loom_fact_context_t* fact_context =
+      fact_table ? &fact_table->context : NULL;
+  if (!loom_vector_memory_access_describe(fact_context, module, view_type,
+                                          scalar_vector_type, out_access)) {
     return false;
   }
   return out_access->static_element_byte_count > 0 &&
@@ -443,8 +446,9 @@ static bool loom_amdgpu_fragment_memory_analyze(
   loom_vector_memory_access_t access = {0};
   const loom_type_t view_type =
       loom_module_value_type(environment->module, source->view);
-  if (!loom_amdgpu_fragment_memory_view_matches(environment->module, view_type,
-                                                role_layout, &access)) {
+  if (!loom_amdgpu_fragment_memory_view_matches(
+          environment->module, environment->fact_table, view_type, role_layout,
+          &access)) {
     return loom_amdgpu_fragment_memory_reject(diagnostic,
                                               IREE_SV("fragment_memory.view"));
   }

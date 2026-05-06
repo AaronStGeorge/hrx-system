@@ -590,8 +590,11 @@ static iree_status_t loom_vector_memory_footprint_check_direct(
     const loom_vector_memory_footprint_access_t* access) {
   loom_type_t view_type = loom_module_value_type(state->module, access->view);
   loom_vector_memory_access_t memory_access = {0};
-  if (!loom_vector_memory_access_describe(
-          state->module, view_type, access->vector_type, &memory_access)) {
+  const loom_fact_context_t* fact_context =
+      state->fact_table ? &state->fact_table->context : NULL;
+  if (!loom_vector_memory_access_describe(fact_context, state->module,
+                                          view_type, access->vector_type,
+                                          &memory_access)) {
     return iree_ok_status();
   }
   if (memory_access.layout_kind == LOOM_VECTOR_MEMORY_LAYOUT_UNKNOWN) {
@@ -899,8 +902,11 @@ static iree_status_t loom_vector_memory_footprint_check_offsets(
     const loom_vector_memory_footprint_access_t* access) {
   loom_type_t view_type = loom_module_value_type(state->module, access->view);
   loom_vector_memory_access_t memory_access = {0};
-  if (!loom_vector_memory_access_describe(
-          state->module, view_type, access->vector_type, &memory_access)) {
+  const loom_fact_context_t* fact_context =
+      state->fact_table ? &state->fact_table->context : NULL;
+  if (!loom_vector_memory_access_describe(fact_context, state->module,
+                                          view_type, access->vector_type,
+                                          &memory_access)) {
     return iree_ok_status();
   }
   if (memory_access.layout_kind == LOOM_VECTOR_MEMORY_LAYOUT_UNKNOWN) {

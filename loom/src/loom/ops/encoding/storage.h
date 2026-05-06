@@ -59,17 +59,6 @@ bool loom_encoding_query_static_storage_schema(
     const loom_module_t* module, uint16_t encoding_id,
     loom_value_fact_storage_schema_t* out_schema);
 
-// Resolves a local SSA encoding value to an address-layout summary by walking
-// through defining encoding ops. This recognizes direct layout ops, local
-// layout assumptions, physical-storage composition, and exact static-spec
-// assumptions. It deliberately does not inspect callers or global use sites;
-// block arguments require analysis facts queried by
-// loom_encoding_query_type_address_layout().
-bool loom_encoding_query_value_address_layout(
-    const loom_module_t* module, loom_value_id_t value_id,
-    loom_value_facts_t* stride_storage, iree_host_size_t stride_capacity,
-    loom_value_fact_address_layout_t* out_layout);
-
 // Queries a shaped type's address-layout summary from static encodings or
 // context-owned SSA encoding facts. This does not walk call graphs or inspect
 // callers; block-argument encodings only resolve when a previous analysis has

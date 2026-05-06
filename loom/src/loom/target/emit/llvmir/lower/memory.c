@@ -205,8 +205,10 @@ static iree_status_t loom_llvmir_lowering_vector_memory_access(
     loom_llvmir_lowering_state_t* state, const loom_op_t* op,
     loom_type_t view_type, loom_type_t vector_type,
     loom_vector_memory_access_t* out_access, int64_t* out_vector_byte_count) {
-  if (!loom_vector_memory_access_describe(state->source_module, view_type,
-                                          vector_type, out_access)) {
+  const loom_fact_context_t* fact_context =
+      state->fact_table ? &state->fact_table->context : NULL;
+  if (!loom_vector_memory_access_describe(fact_context, state->source_module,
+                                          view_type, vector_type, out_access)) {
     return loom_llvmir_lowering_unsupported_op(
         state, op, "vector memory ops need a view and vector operand");
   }

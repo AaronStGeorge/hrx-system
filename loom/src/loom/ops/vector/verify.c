@@ -504,8 +504,8 @@ static iree_status_t loom_vector_verify_memory_access(
   }
 
   loom_vector_memory_access_t access;
-  if (!loom_vector_memory_access_describe(module, view_type, vector_type,
-                                          &access)) {
+  if (!loom_vector_memory_access_describe(
+          /*context=*/NULL, module, view_type, vector_type, &access)) {
     return iree_ok_status();
   }
 

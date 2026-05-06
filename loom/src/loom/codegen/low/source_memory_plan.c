@@ -907,8 +907,10 @@ static bool loom_low_source_memory_access_plan_from_components(
   *out_diagnostic = (loom_low_source_memory_access_diagnostic_t){0};
 
   loom_vector_memory_access_t vector_access;
-  if (!loom_vector_memory_access_describe(module, view_type, vector_type,
-                                          &vector_access)) {
+  const loom_fact_context_t* fact_context =
+      fact_table ? &fact_table->context : NULL;
+  if (!loom_vector_memory_access_describe(fact_context, module, view_type,
+                                          vector_type, &vector_access)) {
     out_diagnostic->rejection_bits |=
         LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_DESCRIBE_FAILED;
     return false;

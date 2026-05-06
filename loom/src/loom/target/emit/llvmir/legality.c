@@ -687,8 +687,8 @@ static bool loom_llvmir_target_legality_verify_vector_memory_access(
     loom_llvmir_target_legality_context_t* context, const loom_op_t* op,
     loom_type_t view_type, loom_type_t vector_type) {
   loom_vector_memory_access_t access;
-  if (!loom_vector_memory_access_describe(context->module, view_type,
-                                          vector_type, &access)) {
+  if (!loom_vector_memory_access_describe(
+          /*context=*/NULL, context->module, view_type, vector_type, &access)) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_OP, op,
         IREE_SV("llvmir-vector-memory-shape"), IREE_SV("vector"));

@@ -24,23 +24,18 @@ static loom_vector_memory_layout_kind_t loom_vector_memory_layout_kind(
 }
 
 static bool loom_vector_memory_query_layout(
-    const loom_module_t* module, loom_type_t view_type,
-    loom_value_facts_t* stride_storage, iree_host_size_t stride_capacity,
+    const loom_fact_context_t* context, const loom_module_t* module,
+    loom_type_t view_type, loom_value_facts_t* stride_storage,
+    iree_host_size_t stride_capacity,
     loom_value_fact_address_layout_t* out_layout) {
   if (!module || !loom_type_has_encoding(view_type)) return false;
-  if (loom_type_has_static_encoding(view_type)) {
-    return loom_encoding_query_static_address_layout(
-        module, view_type.encoding_id, stride_storage, stride_capacity,
-        out_layout);
-  }
-  if (!loom_type_has_ssa_encoding(view_type)) return false;
-  return loom_encoding_query_value_address_layout(
-      module, (loom_value_id_t)loom_type_encoding_value_id(view_type),
-      stride_storage, stride_capacity, out_layout);
+  return loom_encoding_query_type_address_layout(
+      context, module, view_type, stride_storage, stride_capacity, out_layout);
 }
 
 bool loom_vector_memory_access_describe(
-    const loom_module_t* module, loom_type_t view_type, loom_type_t vector_type,
+    const loom_fact_context_t* context, const loom_module_t* module,
+    loom_type_t view_type, loom_type_t vector_type,
     loom_vector_memory_access_t* out_access) {
   if (!out_access) return false;
   *out_access = (loom_vector_memory_access_t){0};
@@ -63,9 +58,9 @@ bool loom_vector_memory_access_describe(
   loom_value_facts_t layout_strides[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK] = {
       0};
   loom_value_fact_address_layout_t layout_summary = {0};
-  (void)loom_vector_memory_query_layout(module, view_type, layout_strides,
-                                        IREE_ARRAYSIZE(layout_strides),
-                                        &layout_summary);
+  (void)loom_vector_memory_query_layout(
+      context, module, view_type, layout_strides,
+      IREE_ARRAYSIZE(layout_strides), &layout_summary);
   *out_access = (loom_vector_memory_access_t){
       .view_type = view_type,
       .vector_type = vector_type,
