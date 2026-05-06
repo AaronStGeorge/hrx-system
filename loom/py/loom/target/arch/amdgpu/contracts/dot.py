@@ -29,6 +29,7 @@ from loom.target.low_descriptors import Descriptor
 
 _DESCRIPTOR_KEYS = (
     "amdgpu.v_fma_f32",
+    "amdgpu.v_mul_f32",
     "amdgpu.v_dot2_f32_f16",
     "amdgpu.v_dot2_f32_bf16",
     "amdgpu.v_dot4_i32_i8",
@@ -315,6 +316,56 @@ def _dotf_rule() -> DescriptorRule:
     )
 
 
+def _dotf_zero_init_rule() -> DescriptorRule:
+    seed_descriptor = _descriptor("amdgpu.v_mul_f32")
+    accumulate_descriptor = _descriptor("amdgpu.v_fma_f32")
+    return DescriptorRule(
+        source_op=vector.vector_dotf,
+        descriptor=accumulate_descriptor,
+        guards=(
+            _value_type("lhs", _VEC_F32, _DOTF_LHS_DIAGNOSTIC),
+            _value_type("rhs", _VEC_F32, _DOTF_RHS_DIAGNOSTIC),
+            _unit_count_eq("lhs", "rhs", _DOTF_RHS_DIAGNOSTIC),
+            _value_type("init", _F32, _DOTF_ACC_DIAGNOSTIC),
+            Guard.value_f64_equals("init", 0.0, diagnostic=_DOTF_ACC_DIAGNOSTIC),
+            _value_type("result", _F32, _DOTF_RESULT_DIAGNOSTIC),
+            _vgpr("result", _RESULT_VGPR_DIAGNOSTIC),
+            Guard.descriptor_available(
+                seed_descriptor,
+                diagnostic=_DOTF_DESCRIPTOR_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(
+                accumulate_descriptor,
+                diagnostic=_DOTF_DESCRIPTOR_DIAGNOSTIC,
+            ),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=seed_descriptor,
+                operands={
+                    "lhs": ValueRef.operand("lhs"),
+                    "rhs": ValueRef.operand("rhs"),
+                },
+                results={"dst": ValueRef.temporary("seed")},
+                result_types={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.FIRST_LANE,
+            ),
+            EmitDescriptorOp(
+                descriptor=accumulate_descriptor,
+                operands={
+                    "a": ValueRef.operand("lhs"),
+                    "b": ValueRef.operand("rhs"),
+                    "c": ValueRef.temporary("seed"),
+                },
+                results={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.ACCUMULATE_LANES,
+                accumulator="c",
+                skip_first_lane=True,
+            ),
+        ),
+    )
+
+
 def _dot2f_rule(
     *,
     source_type: TypePattern,
@@ -481,6 +532,7 @@ AMDGPU_DOT_CONTRACT_FRAGMENT = ContractFragment(
     descriptor_set=_DESCRIPTOR_SET,
     c_source_includes=("loom/target/arch/amdgpu/lower/kinds.h",),
     cases=(
+        _dotf_zero_init_rule(),
         _dotf_rule(),
         _dot2f_rule(
             source_type=_VEC_F16_PACKED,
