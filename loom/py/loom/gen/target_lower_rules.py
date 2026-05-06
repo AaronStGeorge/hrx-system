@@ -104,6 +104,8 @@ _GUARD_KIND_C_NAMES = {
     GuardKind.VALUE_UNSIGNED_BIT_COUNT: "LOOM_LOW_LOWER_GUARD_VALUE_UNSIGNED_BIT_COUNT",
     GuardKind.VALUE_EXACT_I64: "LOOM_LOW_LOWER_GUARD_VALUE_EXACT_I64",
     GuardKind.VALUE_I64_RANGE: "LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE",
+    GuardKind.VALUE_F64_EQUALS: "LOOM_LOW_LOWER_GUARD_VALUE_F64_EQUALS",
+    GuardKind.INSTANCE_FLAGS_HAS_ALL: "LOOM_LOW_LOWER_GUARD_INSTANCE_FLAGS_HAS_ALL",
 }
 
 _ATTR_COPY_KIND_C_NAMES = {
@@ -668,6 +670,8 @@ def _guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]
         GuardKind.I64_ARRAY_ELEMENT_RANGE,
         GuardKind.VALUE_SIGNED_BIT_COUNT,
         GuardKind.VALUE_UNSIGNED_BIT_COUNT,
+        GuardKind.VALUE_F64_EQUALS,
+        GuardKind.INSTANCE_FLAGS_HAS_ALL,
     ):
         _append_field(fields, "u64", row.u64, always=True)
     if row.kind == GuardKind.DESCRIPTOR_AVAILABLE:

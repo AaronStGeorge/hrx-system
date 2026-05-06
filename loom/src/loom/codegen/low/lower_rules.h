@@ -400,6 +400,11 @@ typedef enum loom_low_lower_guard_kind_e {
   // Source operand segment starting at attr_index must contain exactly u64
   // operands.
   LOOM_LOW_LOWER_GUARD_OPERAND_SEGMENT_COUNT_EQ = 17,
+  // Source op instance flags must contain every bit in u64.
+  LOOM_LOW_LOWER_GUARD_INSTANCE_FLAGS_HAS_ALL = 18,
+  // Source value facts must prove an exact float equal to the f64 bit-pattern
+  // in u64.
+  LOOM_LOW_LOWER_GUARD_VALUE_F64_EQUALS = 19,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {
@@ -418,7 +423,8 @@ typedef struct loom_low_lower_guard_t {
   uint16_t diagnostic_index;
   // Required attribute kind for ATTR_KIND guards.
   loom_attr_kind_t attr_kind;
-  // Required enum value, divisor, count, element index, or bit-count payload.
+  // Required enum value, divisor, count, element index, bit-count payload, or
+  // exact f64 bit pattern.
   uint64_t u64;
   // Descriptor-set register-class ID used by LOW_VALUE_REGISTER_CLASS guards.
   uint16_t register_class_id;

@@ -2453,6 +2453,15 @@ def _v_rsq_f32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_rcp_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_unary_f32_overlay(
+        descriptor_key="amdgpu.v_rcp_f32",
+        instruction_name="V_RCP_F32",
+        mnemonic="v_rcp_f32",
+        semantic_tag="float.reciprocal.f32",
+    )
+
+
 def _v_cvt_f32_i32_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_cvt_f32_i32",
@@ -6674,6 +6683,7 @@ def _cdna_core_overlays(
         _v_exp_f32_overlay(),
         _v_sqrt_f32_overlay(),
         _v_rsq_f32_overlay(),
+        _v_rcp_f32_overlay(),
         _v_cvt_f32_f16_overlay(),
         _v_cvt_f16_f32_overlay(),
         _v_cvt_f32_i32_overlay(),
@@ -6933,6 +6943,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_exp_f32_overlay(),
         _v_sqrt_f32_overlay(),
         _v_rsq_f32_overlay(),
+        _v_rcp_f32_overlay(),
         _v_cvt_f32_f16_overlay(),
         _v_cvt_f16_f32_overlay(),
         _v_cvt_f32_i32_overlay(),
@@ -7159,6 +7170,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_exp_f32_overlay(),
         _v_sqrt_f32_overlay(),
         _v_rsq_f32_overlay(),
+        _v_rcp_f32_overlay(),
         _v_cvt_f32_f16_overlay(),
         _v_cvt_f16_f32_overlay(),
         _v_cvt_f32_i32_overlay(),
@@ -7426,6 +7438,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_exp_f32_overlay(),
         _v_sqrt_f32_overlay(),
         _v_rsq_f32_overlay(),
+        _v_rcp_f32_overlay(),
         _v_cvt_f32_f16_overlay(),
         _v_cvt_f16_f32_overlay(),
         _v_cvt_f32_i32_overlay(),
@@ -8417,6 +8430,7 @@ _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS: dict[
     "amdgpu.v_exp_f32": _v_exp_f32_overlay,
     "amdgpu.v_sqrt_f32": _v_sqrt_f32_overlay,
     "amdgpu.v_rsq_f32": _v_rsq_f32_overlay,
+    "amdgpu.v_rcp_f32": _v_rcp_f32_overlay,
     "amdgpu.v_cvt_f32_f16": _v_cvt_f32_f16_overlay,
     "amdgpu.v_cvt_f16_f32": _v_cvt_f16_f32_overlay,
     "amdgpu.v_cvt_f32_i32": _v_cvt_f32_i32_overlay,

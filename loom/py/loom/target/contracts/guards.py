@@ -15,6 +15,7 @@ from typing import Self
 from loom.dsl import (
     ATTR_TYPE_ANY,
     ATTR_TYPE_ENUM,
+    ATTR_TYPE_FLAGS,
     ATTR_TYPE_I64,
     ATTR_TYPE_I64_ARRAY,
     EnumCase,
@@ -56,6 +57,8 @@ class GuardKind(Enum):
     VALUE_UNSIGNED_BIT_COUNT = "value_unsigned_bit_count"
     VALUE_EXACT_I64 = "value_exact_i64"
     VALUE_I64_RANGE = "value_i64_range"
+    VALUE_F64_EQUALS = "value_f64_equals"
+    INSTANCE_FLAGS_HAS_ALL = "instance_flags_has_all"
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +105,7 @@ class Guard:
     element: int | None = None
     minimum: int | None = None
     maximum: int | None = None
+    f64_value: float | None = None
     descriptor: Descriptor | None = None
     register_class: str | None = None
     materializer: str | None = None
@@ -342,6 +346,37 @@ class Guard:
             diagnostic=diagnostic,
         )
 
+    @classmethod
+    def value_f64_equals(
+        cls,
+        field: str,
+        value: float,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_F64_EQUALS,
+            field=field,
+            f64_value=value,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
+    def instance_flags_has_all(
+        cls,
+        field: str,
+        enum_case: str | EnumCase,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        keyword = enum_case.keyword if isinstance(enum_case, EnumCase) else enum_case
+        return cls(
+            kind=GuardKind.INSTANCE_FLAGS_HAS_ALL,
+            field=field,
+            enum_keyword=keyword,
+            diagnostic=diagnostic,
+        )
+
     def __post_init__(self) -> None:
         if not self.field:
             raise ValueError(f"{self.kind.value} guard requires a field")
@@ -365,6 +400,8 @@ class Guard:
             raise ValueError(f"{self.kind.value} register class must be non-empty")
         if self.materializer is not None and not self.materializer:
             raise ValueError(f"{self.kind.value} materializer must be non-empty")
+        if self.kind == GuardKind.VALUE_F64_EQUALS and self.f64_value is None:
+            raise ValueError(f"{self.kind.value} guard needs an f64 value")
 
     def validate(self, source_op: Op) -> None:
         subject = f"guard {self.kind.value}"
@@ -449,29 +486,55 @@ class Guard:
         if self.kind in (
             GuardKind.VALUE_SIGNED_BIT_COUNT,
             GuardKind.VALUE_UNSIGNED_BIT_COUNT,
+            GuardKind.VALUE_EXACT_I64,
+            GuardKind.VALUE_I64_RANGE,
+            GuardKind.VALUE_F64_EQUALS,
         ):
-            _require_value(source_op, self.field, subject)
-            if self.count is None or self.count <= 0:
-                raise ValueError(
-                    f"{source_op.name}: {subject} needs a positive bit count"
-                )
+            _validate_value_fact_guard(self, source_op, subject)
             return
-        if self.kind in (GuardKind.VALUE_EXACT_I64, GuardKind.VALUE_I64_RANGE):
-            _validate_value_i64_fact_guard(self, source_op, subject)
+        if self.kind == GuardKind.INSTANCE_FLAGS_HAS_ALL:
+            attr = _require_attr(source_op, self.field, subject)
+            if attr.attr_type != ATTR_TYPE_FLAGS:
+                raise ValueError(
+                    f"{source_op.name}: {subject} field '{self.field}' "
+                    "must be a flags attr"
+                )
+            if self.enum_keyword is None:
+                raise ValueError(f"{source_op.name}: {subject} needs a flag keyword")
+            enum_def = attr.enum_def
+            if enum_def is None:
+                raise ValueError(
+                    f"{source_op.name}: {subject} field '{self.field}' "
+                    "has no enum definition"
+                )
+            if self.enum_keyword not in enum_def.keywords:
+                raise ValueError(
+                    f"{source_op.name}: {subject} field '{self.field}' "
+                    f"has no enum case '{self.enum_keyword}'"
+                )
             return
         _validate_i64_array_guard(self, source_op, subject)
 
 
-def _validate_value_i64_fact_guard(
+def _validate_value_fact_guard(
     guard: Guard,
     source_op: Op,
     subject: str,
 ) -> None:
     _require_value(source_op, guard.field, subject)
+    if guard.kind in (
+        GuardKind.VALUE_SIGNED_BIT_COUNT,
+        GuardKind.VALUE_UNSIGNED_BIT_COUNT,
+    ):
+        if guard.count is None or guard.count <= 0:
+            raise ValueError(f"{source_op.name}: {subject} needs a positive bit count")
+        return
     if guard.kind == GuardKind.VALUE_I64_RANGE and (
         guard.minimum is None or guard.maximum is None
     ):
         raise ValueError(f"{source_op.name}: {subject} needs minimum/maximum")
+    if guard.kind == GuardKind.VALUE_F64_EQUALS and guard.f64_value is None:
+        raise ValueError(f"{source_op.name}: {subject} needs an f64 value")
 
 
 def _validate_i64_array_guard(

@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import struct
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, unique
@@ -733,16 +734,61 @@ class _LowerRuleSetCompiler:
         if guard.kind in (
             GuardKind.VALUE_SIGNED_BIT_COUNT,
             GuardKind.VALUE_UNSIGNED_BIT_COUNT,
+            GuardKind.VALUE_EXACT_I64,
+            GuardKind.VALUE_I64_RANGE,
+            GuardKind.VALUE_F64_EQUALS,
+        ):
+            self._append_value_fact_guard(source_op, guard)
+            return
+
+        if guard.kind == GuardKind.INSTANCE_FLAGS_HAS_ALL:
+            attr_index = _source_attr_index(source_op, guard.field)
+            attr = source_op.attrs[attr_index]
+            enum_keyword = guard.enum_keyword
+            if attr.enum_def is None or enum_keyword is None:
+                raise ValueError(
+                    f"{source_op.name}: instance-flags guard needs an enum keyword"
+                )
+            enum_value = next(
+                enum_case.value
+                for enum_case in attr.enum_def.cases
+                if enum_case.keyword == enum_keyword
+            )
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    diagnostic_index=self._append_diagnostic_ref(
+                        source_op,
+                        _guard_diagnostic(
+                            guard,
+                            _instance_flags_diagnostic(guard.field, enum_keyword),
+                        ),
+                    ),
+                    u64=enum_value,
+                )
+            )
+            return
+
+        raise ValueError(
+            f"{source_op.name}: guard kind '{guard.kind.value}' is not "
+            "representable by generated descriptor rules yet"
+        )
+
+    def _append_value_fact_guard(self, source_op: Op, guard: Guard) -> None:
+        value_ref_index = self._append_value_ref(
+            source_op,
+            _value_ref_for_source_field(source_op, guard.field),
+        )
+        if guard.kind in (
+            GuardKind.VALUE_SIGNED_BIT_COUNT,
+            GuardKind.VALUE_UNSIGNED_BIT_COUNT,
         ):
             if guard.count is None or guard.count <= 0:
                 raise ValueError(f"{source_op.name}: bit-count guard needs a count")
             self._guards.append(
                 LowerGuard(
                     kind=guard.kind,
-                    value_ref_index=self._append_value_ref(
-                        source_op,
-                        _value_ref_for_source_field(source_op, guard.field),
-                    ),
+                    value_ref_index=value_ref_index,
                     diagnostic_index=self._append_diagnostic_ref(
                         source_op,
                         _guard_diagnostic(
@@ -754,15 +800,11 @@ class _LowerRuleSetCompiler:
                 )
             )
             return
-
         if guard.kind == GuardKind.VALUE_EXACT_I64:
             self._guards.append(
                 LowerGuard(
                     kind=guard.kind,
-                    value_ref_index=self._append_value_ref(
-                        source_op,
-                        _value_ref_for_source_field(source_op, guard.field),
-                    ),
+                    value_ref_index=value_ref_index,
                     diagnostic_index=self._append_diagnostic_ref(
                         source_op,
                         _guard_diagnostic(
@@ -773,17 +815,13 @@ class _LowerRuleSetCompiler:
                 )
             )
             return
-
         if guard.kind == GuardKind.VALUE_I64_RANGE:
             if guard.minimum is None or guard.maximum is None:
                 raise ValueError(f"{source_op.name}: value range guard needs bounds")
             self._guards.append(
                 LowerGuard(
                     kind=guard.kind,
-                    value_ref_index=self._append_value_ref(
-                        source_op,
-                        _value_ref_for_source_field(source_op, guard.field),
-                    ),
+                    value_ref_index=value_ref_index,
                     diagnostic_index=self._append_diagnostic_ref(
                         source_op,
                         _guard_diagnostic(
@@ -800,10 +838,27 @@ class _LowerRuleSetCompiler:
                 )
             )
             return
-
+        if guard.kind == GuardKind.VALUE_F64_EQUALS:
+            if guard.f64_value is None:
+                raise ValueError(f"{source_op.name}: f64-equals guard needs a value")
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=value_ref_index,
+                    diagnostic_index=self._append_diagnostic_ref(
+                        source_op,
+                        _guard_diagnostic(
+                            guard,
+                            _float_equals_diagnostic(guard.field, guard.f64_value),
+                        ),
+                    ),
+                    u64=_f64_bits(guard.f64_value),
+                )
+            )
+            return
         raise ValueError(
             f"{source_op.name}: guard kind '{guard.kind.value}' is not "
-            "representable by generated descriptor rules yet"
+            "a value-fact guard"
         )
 
     def _append_emit(
@@ -1295,6 +1350,10 @@ def _build_spans(
     )
 
 
+def _f64_bits(value: float) -> int:
+    return int.from_bytes(struct.pack("<d", value), byteorder="little", signed=False)
+
+
 def _lower_emit_kind(
     source_op: Op,
     emit: EmitDescriptorOp,
@@ -1604,6 +1663,16 @@ def _integer_range_diagnostic(
     return _range_constraint_diagnostic(
         "value_fact", field, "i64_range", minimum, maximum
     )
+
+
+def _float_equals_diagnostic(field: str, value: float) -> DiagnosticRef:
+    return _named_constraint_diagnostic(
+        "value_fact", field, f"f64_equals.0x{_f64_bits(value):016x}"
+    )
+
+
+def _instance_flags_diagnostic(field: str, enum_keyword: str) -> DiagnosticRef:
+    return _named_constraint_diagnostic("flags", field, f"has_all.{enum_keyword}")
 
 
 def _source_memory_diagnostic(

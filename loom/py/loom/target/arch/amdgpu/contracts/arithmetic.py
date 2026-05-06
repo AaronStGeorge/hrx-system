@@ -46,6 +46,7 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_exp_f32",
     "amdgpu.v_sqrt_f32",
     "amdgpu.v_rsq_f32",
+    "amdgpu.v_rcp_f32",
     "amdgpu.v_cvt_f32_f16",
     "amdgpu.v_cvt_f16_f32",
     "amdgpu.v_cvt_f32_i32",
@@ -270,6 +271,61 @@ def _ternary_rule(
                 },
                 results={"dst": ValueRef.result("result")},
                 form=_emit_form(type_pattern),
+            ),
+        ),
+    )
+
+
+def _scalar_divf_arcp_one_rule() -> DescriptorRule:
+    reciprocal = _descriptor("amdgpu.v_rcp_f32")
+    return DescriptorRule(
+        source_op=scalar_arithmetic.scalar_divf,
+        descriptor=reciprocal,
+        guards=(
+            *_typed_guards(("lhs", "rhs", "result"), _F32),
+            Guard.instance_flags_has_all("fastmath", "arcp"),
+            Guard.value_f64_equals("lhs", 1.0),
+            Guard.descriptor_available(reciprocal),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=reciprocal,
+                operands={"input": ValueRef.operand("rhs")},
+                results={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.OP,
+            ),
+        ),
+    )
+
+
+def _scalar_divf_arcp_rule() -> DescriptorRule:
+    reciprocal = _descriptor("amdgpu.v_rcp_f32")
+    multiply = _descriptor("amdgpu.v_mul_f32")
+    return DescriptorRule(
+        source_op=scalar_arithmetic.scalar_divf,
+        descriptor=reciprocal,
+        guards=(
+            *_typed_guards(("lhs", "rhs", "result"), _F32),
+            Guard.instance_flags_has_all("fastmath", "arcp"),
+            Guard.descriptor_available(reciprocal),
+            Guard.descriptor_available(multiply),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=reciprocal,
+                operands={"input": ValueRef.operand("rhs")},
+                results={"dst": ValueRef.temporary("reciprocal")},
+                result_types={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.OP,
+            ),
+            EmitDescriptorOp(
+                descriptor=multiply,
+                operands={
+                    "lhs": ValueRef.operand("lhs"),
+                    "rhs": ValueRef.temporary("reciprocal"),
+                },
+                results={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.OP,
             ),
         ),
     )
@@ -572,6 +628,8 @@ def _rules() -> tuple[DescriptorRule, ...]:
                 _F32,
                 "amdgpu.v_mul_f32",
             ),
+            _scalar_divf_arcp_one_rule(),
+            _scalar_divf_arcp_rule(),
             _binary_rule(
                 scalar_arithmetic.scalar_minnumf,
                 _F32,

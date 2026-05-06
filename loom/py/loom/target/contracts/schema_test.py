@@ -181,6 +181,101 @@ def test_compare_descriptor_rule_validates_enum_guard() -> None:
     assert case.descriptor == descriptor
 
 
+def test_descriptor_rule_validates_instance_flags_guard() -> None:
+    table = ContractFragment(
+        name="test-low.flags",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            DescriptorRule(
+                source_op=scalar_arithmetic.scalar_divf,
+                descriptor=TEST_LOW_ADD_F32_DESCRIPTOR,
+                guards=[
+                    Guard.instance_flags_has_all("fastmath", "arcp"),
+                    Guard.value_type("lhs", Scalar("f32")),
+                    Guard.value_type("rhs", Scalar("f32")),
+                    Guard.value_type("result", Scalar("f32")),
+                ],
+                emit=[
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_ADD_F32_DESCRIPTOR,
+                        operands={
+                            "lhs": ValueRef.operand("lhs"),
+                            "rhs": ValueRef.operand("rhs"),
+                        },
+                        results={"dst": ValueRef.result("result")},
+                    )
+                ],
+            )
+        ],
+    )
+
+    case = table.cases[0]
+    assert isinstance(case, DescriptorRule)
+    assert case.guards[0].enum_keyword == "arcp"
+
+
+def test_descriptor_rule_validates_f64_equals_guard() -> None:
+    table = ContractFragment(
+        name="test-low.f64-equals",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            DescriptorRule(
+                source_op=scalar_arithmetic.scalar_mulf,
+                descriptor=TEST_LOW_ADD_F32_DESCRIPTOR,
+                guards=[
+                    Guard.value_f64_equals("lhs", 1.0),
+                    Guard.value_type("lhs", Scalar("f32")),
+                    Guard.value_type("rhs", Scalar("f32")),
+                    Guard.value_type("result", Scalar("f32")),
+                ],
+                emit=[
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_ADD_F32_DESCRIPTOR,
+                        operands={
+                            "lhs": ValueRef.operand("lhs"),
+                            "rhs": ValueRef.operand("rhs"),
+                        },
+                        results={"dst": ValueRef.result("result")},
+                    )
+                ],
+            )
+        ],
+    )
+
+    case = table.cases[0]
+    assert isinstance(case, DescriptorRule)
+    assert case.guards[0].f64_value == 1.0
+
+
+def test_descriptor_rule_rejects_unknown_instance_flag() -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"scalar.divf: guard instance_flags_has_all field 'fastmath' "
+        r"has no enum case 'spicy'",
+    ):
+        ContractFragment(
+            name="test-low.flags",
+            descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+            cases=[
+                DescriptorRule(
+                    source_op=scalar_arithmetic.scalar_divf,
+                    descriptor=TEST_LOW_ADD_F32_DESCRIPTOR,
+                    guards=[Guard.instance_flags_has_all("fastmath", "spicy")],
+                    emit=[
+                        EmitDescriptorOp(
+                            descriptor=TEST_LOW_ADD_F32_DESCRIPTOR,
+                            operands={
+                                "lhs": ValueRef.operand("lhs"),
+                                "rhs": ValueRef.operand("rhs"),
+                            },
+                            results={"dst": ValueRef.result("result")},
+                        )
+                    ],
+                )
+            ],
+        )
+
+
 def test_descriptor_rule_validates_source_and_descriptor_fields() -> None:
     descriptor = TEST_LOW_EXTRACT_LANE_I32_DESCRIPTOR
 

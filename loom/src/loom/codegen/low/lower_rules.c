@@ -395,6 +395,36 @@ static bool loom_low_lower_rule_integer_immediate_facts(
   return true;
 }
 
+static bool loom_low_lower_rule_float_immediate_facts(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t value_id, loom_value_facts_t* out_facts) {
+  *out_facts = loom_value_facts_unknown();
+  if (fact_table == NULL) {
+    return false;
+  }
+  const loom_type_t type = loom_module_value_type(module, value_id);
+  loom_value_facts_t facts = loom_value_fact_table_lookup(fact_table, value_id);
+  if (loom_type_is_vector(type)) {
+    if (!loom_scalar_type_is_float(loom_type_element_type(type))) {
+      return false;
+    }
+    loom_value_fact_uniform_element_t uniform = {0};
+    if (!loom_value_facts_query_uniform_element(&fact_table->context, facts,
+                                                &uniform)) {
+      return false;
+    }
+    facts = uniform.element;
+  } else if (loom_type_is_scalar(type)) {
+    if (!loom_scalar_type_is_float(loom_type_element_type(type))) {
+      return false;
+    }
+  } else {
+    return false;
+  }
+  *out_facts = facts;
+  return true;
+}
+
 static bool loom_low_lower_rule_value_facts_fit_bit_count(
     const loom_low_lower_rule_match_context_t* match_context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
@@ -428,6 +458,21 @@ static bool loom_low_lower_rule_value_facts_exact_i64(
   }
   int64_t exact_value = 0;
   return loom_value_facts_as_exact_i64(facts, &exact_value);
+}
+
+static bool loom_low_lower_rule_value_facts_f64_equals(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t value_ref_index, uint64_t expected_bits) {
+  const loom_value_id_t value_id =
+      loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  if (!loom_low_lower_rule_float_immediate_facts(
+          match_context->module, match_context->fact_table, value_id, &facts)) {
+    return false;
+  }
+  return loom_value_facts_is_exact(facts) && loom_value_facts_is_float(facts) &&
+         (uint64_t)facts.range_lo == expected_bits;
 }
 
 static bool loom_low_lower_rule_value_facts_i64_range(
@@ -741,6 +786,14 @@ static iree_status_t loom_low_lower_rule_guard_matches(
       *out_matches = loom_low_lower_rule_value_facts_i64_range(
           match_context, rule_set, source_op, guard->value_ref_index,
           guard->minimum_i64, guard->maximum_i64);
+      return iree_ok_status();
+    case LOOM_LOW_LOWER_GUARD_VALUE_F64_EQUALS:
+      *out_matches = loom_low_lower_rule_value_facts_f64_equals(
+          match_context, rule_set, source_op, guard->value_ref_index,
+          guard->u64);
+      return iree_ok_status();
+    case LOOM_LOW_LOWER_GUARD_INSTANCE_FLAGS_HAS_ALL:
+      *out_matches = iree_all_bits_set(source_op->instance_flags, guard->u64);
       return iree_ok_status();
     default:
       IREE_CHECK_UNREACHABLE();
