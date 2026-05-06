@@ -1158,6 +1158,7 @@ vector_decode = Op(
         ),
     ],
     verify="loom_vector_decode_verify",
+    canonicalize="loom_vector_decode_canonicalize",
     traits=[PURE, REFINABLE_RESULT_TYPE_REFS],
     format=[
         Ref("payload"),

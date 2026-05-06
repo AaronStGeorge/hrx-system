@@ -24,12 +24,24 @@ static iree_string_view_t loom_encoding_matrix_operand_name(void) {
   return IREE_SV("matrix_operand");
 }
 
+static iree_string_view_t loom_encoding_ggml_q8_0_name(void) {
+  return IREE_SV("ggml_q8_0");
+}
+
 static iree_string_view_t loom_encoding_layout_param_name(void) {
   return IREE_SV("layout");
 }
 
 static iree_string_view_t loom_encoding_schema_param_name(void) {
   return IREE_SV("schema");
+}
+
+static iree_string_view_t loom_encoding_block_elems_param_name(void) {
+  return IREE_SV("block_elems");
+}
+
+static iree_string_view_t loom_encoding_storage_bytes_param_name(void) {
+  return IREE_SV("storage_bytes");
 }
 
 static iree_string_view_t loom_encoding_stride_param_name(void) {
@@ -164,6 +176,21 @@ static bool loom_encoding_static_nonnegative_u16_param_or_default(
   if (entry->value.kind != LOOM_ATTR_I64) return false;
   int64_t value = loom_attr_as_i64(entry->value);
   if (value < 0 || value > UINT16_MAX) return false;
+  *out_value = (uint16_t)value;
+  return true;
+}
+
+static bool loom_encoding_static_positive_u16_param_or_default(
+    const loom_module_t* module, const loom_encoding_t* encoding,
+    iree_string_view_t param_name, uint16_t default_value,
+    uint16_t* out_value) {
+  *out_value = default_value;
+  const loom_named_attr_t* entry = loom_encoding_find_param(
+      module, loom_encoding_attrs(encoding), param_name);
+  if (!entry) return true;
+  if (entry->value.kind != LOOM_ATTR_I64) return false;
+  int64_t value = loom_attr_as_i64(entry->value);
+  if (value <= 0 || value > UINT16_MAX) return false;
   *out_value = (uint16_t)value;
   return true;
 }
@@ -536,6 +563,38 @@ static bool loom_encoding_static_matrix_operand_schema(
   return true;
 }
 
+static bool loom_encoding_static_ggml_q8_0_schema(
+    const loom_module_t* module, uint16_t encoding_id,
+    const loom_encoding_t* encoding,
+    loom_value_fact_storage_schema_t* out_schema) {
+  uint16_t block_elements = 0;
+  uint16_t storage_bytes = 0;
+  if (!loom_encoding_static_positive_u16_param_or_default(
+          module, encoding, loom_encoding_block_elems_param_name(),
+          /*default_value=*/32, &block_elements) ||
+      !loom_encoding_static_positive_u16_param_or_default(
+          module, encoding, loom_encoding_storage_bytes_param_name(),
+          /*default_value=*/34, &storage_bytes)) {
+    return true;
+  }
+  if (storage_bytes != (uint16_t)(block_elements + 2)) {
+    return true;
+  }
+
+  out_schema->static_spec_encoding_id = encoding_id;
+  out_schema->encoded_operand = (loom_value_fact_encoded_operand_schema_t){
+      .element_format = LOOM_VALUE_FACT_NUMERIC_FORMAT_QUANT_I8,
+      .scale_format = LOOM_VALUE_FACT_NUMERIC_FORMAT_F16,
+      .payload_packing = LOOM_VALUE_FACT_PAYLOAD_PACKING_DENSE_LANES,
+      .scale_topology = LOOM_VALUE_FACT_SCALE_TOPOLOGY_BLOCK_1D,
+      .affine_policy = LOOM_VALUE_FACT_AFFINE_POLICY_SCALE_ONLY,
+      .payload_element_count = block_elements,
+      .scale_group_element_count = block_elements,
+      .scale_operand_count = 1,
+  };
+  return true;
+}
+
 static bool loom_encoding_query_static_address_layout_rec(
     const loom_module_t* module, uint16_t encoding_id, uint8_t depth,
     loom_value_facts_t* stride_storage, iree_host_size_t stride_capacity,
@@ -603,6 +662,11 @@ static bool loom_encoding_query_static_storage_schema_rec(
                                loom_encoding_matrix_operand_name())) {
     return loom_encoding_static_matrix_operand_schema(module, encoding_id,
                                                       encoding, out_schema);
+  }
+  if (loom_encoding_name_equal(module, encoding,
+                               loom_encoding_ggml_q8_0_name())) {
+    return loom_encoding_static_ggml_q8_0_schema(module, encoding_id, encoding,
+                                                 out_schema);
   }
   return true;
 }

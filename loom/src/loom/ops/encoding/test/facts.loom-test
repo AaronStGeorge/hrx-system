@@ -170,6 +170,33 @@ func.def @matrix_operand_schema_summary() -> (i64, i64, i64, i64, i64, i64) {
 
 // ====
 
+// GGML Q8_0 is a concrete block-quant schema: dense signed i8 payload lanes
+// with one f16 block scale covering 32 logical elements.
+func.def @ggml_q8_0_schema_summary() -> (i64, i64, i64, i64, i64, i64, i64) {
+  %schema = encoding.define #ggml_q8_0<block_elems=32, storage_bytes=34> : encoding<schema>
+  %format = test.fact_encoding_matrix_field %schema["element_format"] : encoding<schema> -> i64
+  %scale_format = test.fact_encoding_matrix_field %schema["scale_format"] : encoding<schema> -> i64
+  %packing = test.fact_encoding_matrix_field %schema["payload_packing"] : encoding<schema> -> i64
+  %scale = test.fact_encoding_matrix_field %schema["scale_topology"] : encoding<schema> -> i64
+  %affine = test.fact_encoding_matrix_field %schema["affine"] : encoding<schema> -> i64
+  %elements = test.fact_encoding_matrix_field %schema["payload_elements"] : encoding<schema> -> i64
+  %operands = test.fact_encoding_matrix_field %schema["scale_operands"] : encoding<schema> -> i64
+  func.return %format, %scale_format, %packing, %scale, %affine, %elements, %operands : i64, i64, i64, i64, i64, i64, i64
+}
+// ----
+func.def @ggml_q8_0_schema_summary() -> (i64, i64, i64, i64, i64, i64, i64) {
+  %format = scalar.constant 34359738368 : i64
+  %scale_format = scalar.constant 8 : i64
+  %packing = scalar.constant 1 : i64
+  %scale = scalar.constant 32 : i64
+  %affine = scalar.constant 1 : i64
+  %elements = scalar.constant 32 : i64
+  %operands = scalar.constant 1 : i64
+  func.return %format, %scale_format, %packing, %scale, %affine, %elements, %operands : i64, i64, i64, i64, i64, i64, i64
+}
+
+// ====
+
 // Dynamic physical-storage composition carries nested schema facts along with
 // layout facts, giving consumers one encoding value to query.
 func.def @physical_storage_matrix_schema_summary() -> (i64, i64, i64, i64) {
