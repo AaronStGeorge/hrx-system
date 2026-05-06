@@ -22,6 +22,7 @@
 #include "loom/testing/diff.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/requirements.h"
+#include "loom/tools/loom-format/convert.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
@@ -511,12 +512,80 @@ iree_status_t loom_check_execute_format(const loom_check_case_t* test_case,
                                         iree_arena_block_pool_t* block_pool,
                                         iree_allocator_t allocator,
                                         loom_check_result_t* result) {
-  (void)test_case;
-  (void)filename;
-  (void)context;
-  (void)block_pool;
-  (void)allocator;
-  (void)result;
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "format mode execution not yet implemented");
+  loom_module_format_t format = LOOM_MODULE_FORMAT_AUTO;
+  IREE_RETURN_IF_ERROR(loom_module_format_parse(test_case->format_target,
+                                                /*allow_auto=*/false, &format));
+
+  iree_string_builder_t stripped_input;
+  iree_string_builder_initialize(allocator, &stripped_input);
+  iree_status_t status =
+      loom_check_strip_comments(test_case->input, &stripped_input);
+
+  loom_check_diagnostic_capture_t diagnostic_capture = {
+      .detail = &result->detail,
+      .result = result,
+  };
+  loom_format_convert_options_t to_format_options = {
+      .input_format = LOOM_MODULE_FORMAT_TEXT,
+      .output_format = format,
+      .diagnostic_sink = {.fn = loom_check_diagnostic_capture_sink,
+                          .user_data = &diagnostic_capture},
+  };
+  loom_format_output_t formatted_output = {0};
+  iree_string_view_t stripped_view = iree_string_builder_view(&stripped_input);
+  if (iree_status_is_ok(status)) {
+    status = loom_format_convert(
+        iree_make_const_byte_span((const uint8_t*)stripped_view.data,
+                                  stripped_view.size),
+        filename, context, block_pool, &to_format_options, &formatted_output,
+        allocator);
+  }
+  iree_string_builder_deinitialize(&stripped_input);
+
+  loom_format_output_t text_output = {0};
+  loom_format_convert_options_t to_text_options = {
+      .input_format = format,
+      .output_format = LOOM_MODULE_FORMAT_TEXT,
+      .diagnostic_sink = {.fn = loom_check_diagnostic_capture_sink,
+                          .user_data = &diagnostic_capture},
+  };
+  if (iree_status_is_ok(status)) {
+    status =
+        loom_format_convert(iree_make_const_byte_span(formatted_output.data,
+                                                      formatted_output.length),
+                            filename, context, block_pool, &to_text_options,
+                            &text_output, allocator);
+  }
+  loom_format_output_deinitialize(&formatted_output, allocator);
+
+  if (iree_status_is_ok(status)) {
+    status = iree_string_builder_append_string(
+        &result->actual_output,
+        iree_make_string_view((const char*)text_output.data,
+                              text_output.length));
+  }
+  loom_format_output_deinitialize(&text_output, allocator);
+  IREE_RETURN_IF_ERROR(status);
+  result->has_actual_output = true;
+
+  iree_string_builder_t stripped_expected;
+  iree_string_builder_initialize(allocator, &stripped_expected);
+  status = loom_check_strip_comments(test_case->expected, &stripped_expected);
+
+  if (iree_status_is_ok(status)) {
+    iree_string_view_t actual_trimmed =
+        iree_string_view_trim(iree_string_builder_view(&result->actual_output));
+    iree_string_view_t expected_trimmed =
+        iree_string_view_trim(iree_string_builder_view(&stripped_expected));
+    if (iree_string_view_equal(actual_trimmed, expected_trimmed)) {
+      result->raw_outcome = LOOM_CHECK_PASS;
+    } else {
+      result->raw_outcome = LOOM_CHECK_FAIL;
+      status = loom_check_result_record_diff(expected_trimmed, actual_trimmed,
+                                             allocator, result);
+    }
+  }
+
+  iree_string_builder_deinitialize(&stripped_expected);
+  return status;
 }

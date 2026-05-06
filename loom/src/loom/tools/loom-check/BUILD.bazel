@@ -219,6 +219,7 @@ loom_cc_library(
         "//loom/src/loom/target:types",
         "//loom/src/loom/testing:diff",
         "//loom/src/loom/tooling/compile:pipeline",
+        "//loom/src/loom/tools/loom-format:convert",
         "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",
         "//loom/src/loom/verify",

@@ -34,6 +34,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "bytecode"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/bytecode.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "canonicalize"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/canonicalize.loom-test"
