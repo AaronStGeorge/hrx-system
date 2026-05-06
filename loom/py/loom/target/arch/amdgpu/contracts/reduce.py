@@ -14,6 +14,7 @@ from loom.target.arch.amdgpu.contracts.materializers import I32_VGPR_MATERIALIZE
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
 from loom.target.contracts import (
     ContractFragment,
+    DescriptorAccumulatorSeed,
     DescriptorEmitForm,
     DescriptorRule,
     EmitDescriptorOp,
@@ -68,8 +69,14 @@ def _vector_reduce_rule(
     accumulator_type: TypePattern,
     descriptor: Descriptor,
     materialized_init: ValueRef | None = None,
+    accumulator_seed: DescriptorAccumulatorSeed = DescriptorAccumulatorSeed.OPERAND,
+    extra_guards: tuple[Guard, ...] = (),
 ) -> DescriptorRule:
-    init = materialized_init or ValueRef.operand("init")
+    init = (
+        ValueRef.operand("input")
+        if accumulator_seed == DescriptorAccumulatorSeed.FIRST_LANE
+        else materialized_init or ValueRef.operand("init")
+    )
     guards = [
         Guard.enum_attr_equals("kind", kind),
         Guard.value_type("input", input_type),
@@ -77,6 +84,7 @@ def _vector_reduce_rule(
         Guard.value_type("result", accumulator_type),
         Guard.low_value_register_class("result", "amdgpu.vgpr"),
     ]
+    guards.extend(extra_guards)
     if materialized_init is not None:
         materializer = materialized_init.materializer
         if materializer is None:
@@ -97,6 +105,7 @@ def _vector_reduce_rule(
                 results={"dst": ValueRef.result("result")},
                 form=DescriptorEmitForm.ACCUMULATE_LANES,
                 accumulator="lhs",
+                accumulator_seed=accumulator_seed,
             ),
         ),
     )
@@ -112,6 +121,17 @@ def _i32_rule(kind: str, descriptor_key: str) -> DescriptorRule:
             "init",
             materializer=I32_VGPR_MATERIALIZER.name,
         ),
+    )
+
+
+def _i32_add_zero_rule() -> DescriptorRule:
+    return _vector_reduce_rule(
+        kind="addi",
+        input_type=_VEC_I32,
+        accumulator_type=_I32,
+        descriptor=_descriptor("amdgpu.v_add_u32"),
+        accumulator_seed=DescriptorAccumulatorSeed.FIRST_LANE,
+        extra_guards=(Guard.value_i64_range("init", 0, 0),),
     )
 
 
@@ -134,6 +154,7 @@ AMDGPU_REDUCE_CONTRACT_FRAGMENT = ContractFragment(
     c_source_includes=("loom/target/arch/amdgpu/lower/kinds.h",),
     materializers=(I32_VGPR_MATERIALIZER,),
     cases=[
+        _i32_add_zero_rule(),
         _i32_rule("addi", "amdgpu.v_add_u32"),
         _i32_rule("muli", "amdgpu.v_mul_lo_u32"),
         _i32_rule("andi", "amdgpu.v_and_b32"),

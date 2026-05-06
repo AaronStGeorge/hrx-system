@@ -1867,7 +1867,11 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op_accumulate_lanes(
   IREE_ASSERT_EQ(emit->result_ref_count, 1);
   IREE_ASSERT_EQ(emit->attr_copy_count, 0);
   IREE_ASSERT_EQ(emit->tied_result_count, 0);
-  IREE_ASSERT_EQ(emit->flags, 0);
+  const loom_low_lower_emit_flags_t supported_flags =
+      LOOM_LOW_LOWER_EMIT_FLAG_ACCUMULATE_SEED_FIRST_LANE;
+  IREE_ASSERT_EQ(emit->flags & ~supported_flags, 0);
+  const bool seed_first_lane = iree_any_bit_set(
+      emit->flags, LOOM_LOW_LOWER_EMIT_FLAG_ACCUMULATE_SEED_FIRST_LANE);
 
   loom_value_id_t* low_operands = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_low_operands(
@@ -1912,8 +1916,17 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op_accumulate_lanes(
   IREE_ASSERT(loom_type_is_register(accumulator_type));
   IREE_ASSERT_EQ(loom_type_register_class_id(accumulator_type),
                  loom_type_register_class_id(result_type));
-  IREE_ASSERT_EQ(loom_type_register_unit_count(accumulator_type), 1);
-  for (uint32_t lane_index = 0; lane_index < lane_count; ++lane_index) {
+  uint32_t first_lane_index = 0;
+  if (seed_first_lane) {
+    IREE_ASSERT_EQ(loom_type_register_unit_count(accumulator_type), lane_count);
+    IREE_RETURN_IF_ERROR(loom_low_lower_rule_slice_lane(
+        context, source_op, accumulator, 0, result_type, &accumulator));
+    first_lane_index = 1;
+  } else {
+    IREE_ASSERT_EQ(loom_type_register_unit_count(accumulator_type), 1);
+  }
+  for (uint32_t lane_index = first_lane_index; lane_index < lane_count;
+       ++lane_index) {
     for (uint16_t operand_index = 0; operand_index < emit->operand_ref_count;
          ++operand_index) {
       if (operand_index == emit->accumulator_operand_index) {

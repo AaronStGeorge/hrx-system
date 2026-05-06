@@ -462,6 +462,9 @@ typedef uint16_t loom_low_lower_emit_flags_t;
 // Maps emitted low result types from exact type-pattern rows instead of
 // result_ref_start source value refs.
 #define LOOM_LOW_LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN ((uint16_t)1u << 2)
+// Seeds DESCRIPTOR_OP_ACCUMULATE_LANES from lane 0 of its accumulator operand
+// and starts descriptor emission at lane 1.
+#define LOOM_LOW_LOWER_EMIT_FLAG_ACCUMULATE_SEED_FIRST_LANE ((uint16_t)1u << 3)
 
 typedef struct loom_low_lower_emit_t {
   // Emit action to perform.

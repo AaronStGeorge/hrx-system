@@ -47,6 +47,14 @@ class DescriptorEmitForm(Enum):
     ACCUMULATE_LANES = "accumulate_lanes"
 
 
+@unique
+class DescriptorAccumulatorSeed(Enum):
+    """Initial accumulator source for lane-accumulating descriptor emits."""
+
+    OPERAND = "operand"
+    FIRST_LANE = "first_lane"
+
+
 type ResultTypeBinding = ValueRef | TypePattern
 
 
@@ -66,6 +74,7 @@ class EmitDescriptorOp:
     swap_first_two_operands: bool = False
     copy_operands: Sequence[str] = ()
     accumulator: str | None = None
+    accumulator_seed: DescriptorAccumulatorSeed = DescriptorAccumulatorSeed.OPERAND
     source_memory: SourceMemoryConstraint | None = None
 
     def __post_init__(self) -> None:
@@ -175,6 +184,14 @@ class EmitDescriptorOp:
         elif self.accumulator is not None:
             raise ValueError(
                 f"{source_op.name}: accumulator is only valid for "
+                "accumulate-lanes emits"
+            )
+        if (
+            self.accumulator_seed != DescriptorAccumulatorSeed.OPERAND
+            and self.form != DescriptorEmitForm.ACCUMULATE_LANES
+        ):
+            raise ValueError(
+                f"{source_op.name}: accumulator seed is only valid for "
                 "accumulate-lanes emits"
             )
         if self.source_memory is not None and self.form not in (

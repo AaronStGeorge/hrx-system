@@ -35,6 +35,7 @@ from loom.target.contracts.diagnostics import (
     value_type_param,
 )
 from loom.target.contracts.emits import (
+    DescriptorAccumulatorSeed,
     DescriptorEmitForm,
     EmitDescriptorOp,
 )
@@ -84,6 +85,7 @@ class LowerAttrCopyKind(Enum):
 LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1 = 1 << 0
 LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS = 1 << 1
 LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN = 1 << 2
+LOWER_EMIT_FLAG_ACCUMULATE_SEED_FIRST_LANE = 1 << 3
 LOWER_SOURCE_MEMORY_NONE = 0
 
 
@@ -944,6 +946,8 @@ class _LowerRuleSetCompiler:
         flags = 0
         if emit.swap_first_two_operands:
             flags |= LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1
+        if emit.accumulator_seed == DescriptorAccumulatorSeed.FIRST_LANE:
+            flags |= LOWER_EMIT_FLAG_ACCUMULATE_SEED_FIRST_LANE
 
         if result_type_patterns:
             result_type_pattern_start = self._append_type_pattern_sequence(
