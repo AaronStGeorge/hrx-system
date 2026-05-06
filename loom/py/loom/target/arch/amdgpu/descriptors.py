@@ -1806,7 +1806,7 @@ def _v_add_u32_overlay(instruction_name: str) -> AmdgpuDescriptorOverlay:
     )
 
 
-def _v_binary_u32_literal_overlay(
+def _v_binary_literal_overlay(
     *,
     descriptor_key: str,
     instruction_name: str,
@@ -1840,7 +1840,7 @@ def _v_binary_u32_literal_overlay(
 
 
 def _v_add_u32_literal_overlay(instruction_name: str) -> AmdgpuDescriptorOverlay:
-    return _v_binary_u32_literal_overlay(
+    return _v_binary_literal_overlay(
         descriptor_key="amdgpu.v_add_u32.lit",
         instruction_name=instruction_name,
         mnemonic="v_add_u32",
@@ -2166,7 +2166,7 @@ def _v_and_b32_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _v_and_b32_literal_overlay() -> AmdgpuDescriptorOverlay:
-    return _v_binary_u32_literal_overlay(
+    return _v_binary_literal_overlay(
         descriptor_key="amdgpu.v_and_b32.lit",
         instruction_name="V_AND_B32",
         mnemonic="v_and_b32",
@@ -2185,7 +2185,7 @@ def _v_or_b32_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _v_or_b32_literal_overlay() -> AmdgpuDescriptorOverlay:
-    return _v_binary_u32_literal_overlay(
+    return _v_binary_literal_overlay(
         descriptor_key="amdgpu.v_or_b32.lit",
         instruction_name="V_OR_B32",
         mnemonic="v_or_b32",
@@ -2204,7 +2204,7 @@ def _v_xor_b32_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _v_xor_b32_literal_overlay() -> AmdgpuDescriptorOverlay:
-    return _v_binary_u32_literal_overlay(
+    return _v_binary_literal_overlay(
         descriptor_key="amdgpu.v_xor_b32.lit",
         instruction_name="V_XOR_B32",
         mnemonic="v_xor_b32",
@@ -2225,7 +2225,7 @@ def _v_lshlrev_b32_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _v_lshlrev_b32_literal_overlay() -> AmdgpuDescriptorOverlay:
-    return _v_binary_u32_literal_overlay(
+    return _v_binary_literal_overlay(
         descriptor_key="amdgpu.v_lshlrev_b32.lit",
         instruction_name="V_LSHLREV_B32",
         mnemonic="v_lshlrev_b32",
@@ -2246,7 +2246,7 @@ def _v_lshrrev_b32_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _v_lshrrev_b32_literal_overlay() -> AmdgpuDescriptorOverlay:
-    return _v_binary_u32_literal_overlay(
+    return _v_binary_literal_overlay(
         descriptor_key="amdgpu.v_lshrrev_b32.lit",
         instruction_name="V_LSHRREV_B32",
         mnemonic="v_lshrrev_b32",
@@ -2267,7 +2267,7 @@ def _v_ashrrev_i32_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _v_ashrrev_i32_literal_overlay() -> AmdgpuDescriptorOverlay:
-    return _v_binary_u32_literal_overlay(
+    return _v_binary_literal_overlay(
         descriptor_key="amdgpu.v_ashrrev_i32.lit",
         instruction_name="V_ASHRREV_I32",
         mnemonic="v_ashrrev_i32",
@@ -2318,6 +2318,15 @@ def _v_add_f32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_add_f32_literal_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_binary_literal_overlay(
+        descriptor_key="amdgpu.v_add_f32.lit",
+        instruction_name="V_ADD_F32",
+        mnemonic="v_add_f32",
+        semantic_tag="float.add.f32",
+    )
+
+
 def _v_sub_f32_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_sub_f32",
@@ -2332,6 +2341,15 @@ def _v_sub_f32_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("VSRC1", _vgpr_operand("rhs")),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_sub_f32_literal_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_binary_literal_overlay(
+        descriptor_key="amdgpu.v_sub_f32.lit",
+        instruction_name="V_SUB_F32",
+        mnemonic="v_sub_f32",
+        semantic_tag="float.sub.f32",
     )
 
 
@@ -2352,6 +2370,15 @@ def _v_mul_f32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_mul_f32_literal_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_binary_literal_overlay(
+        descriptor_key="amdgpu.v_mul_f32.lit",
+        instruction_name="V_MUL_F32",
+        mnemonic="v_mul_f32",
+        semantic_tag="float.mul.f32",
+    )
+
+
 def _v_min_f32_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_min_f32",
@@ -2369,6 +2396,15 @@ def _v_min_f32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_min_f32_literal_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_binary_literal_overlay(
+        descriptor_key="amdgpu.v_min_f32.lit",
+        instruction_name="V_MIN_F32",
+        mnemonic="v_min_f32",
+        semantic_tag="float.minnum.f32",
+    )
+
+
 def _v_max_f32_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_max_f32",
@@ -2383,6 +2419,15 @@ def _v_max_f32_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("VSRC1", _vgpr_operand("rhs")),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_max_f32_literal_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_binary_literal_overlay(
+        descriptor_key="amdgpu.v_max_f32.lit",
+        instruction_name="V_MAX_F32",
+        mnemonic="v_max_f32",
+        semantic_tag="float.maxnum.f32",
     )
 
 
@@ -6675,10 +6720,15 @@ def _cdna_core_overlays(
         _v_readfirstlane_b32_overlay(),
         *_i32_bitwise_shift_overlays(),
         _v_add_f32_overlay(),
+        _v_add_f32_literal_overlay(),
         _v_sub_f32_overlay(),
+        _v_sub_f32_literal_overlay(),
         _v_mul_f32_overlay(),
+        _v_mul_f32_literal_overlay(),
         _v_min_f32_overlay(),
+        _v_min_f32_literal_overlay(),
         _v_max_f32_overlay(),
+        _v_max_f32_literal_overlay(),
         _v_fma_f32_overlay(),
         _v_exp_f32_overlay(),
         _v_sqrt_f32_overlay(),
@@ -6935,10 +6985,15 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_readfirstlane_b32_overlay(),
         *_i32_bitwise_shift_overlays(),
         _v_add_f32_overlay(),
+        _v_add_f32_literal_overlay(),
         _v_sub_f32_overlay(),
+        _v_sub_f32_literal_overlay(),
         _v_mul_f32_overlay(),
+        _v_mul_f32_literal_overlay(),
         _v_min_f32_overlay(),
+        _v_min_f32_literal_overlay(),
         _v_max_f32_overlay(),
+        _v_max_f32_literal_overlay(),
         _v_fma_f32_overlay(),
         _v_exp_f32_overlay(),
         _v_sqrt_f32_overlay(),
@@ -7162,10 +7217,15 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_readfirstlane_b32_overlay(),
         *_i32_bitwise_shift_overlays(),
         _v_add_f32_overlay(),
+        _v_add_f32_literal_overlay(),
         _v_sub_f32_overlay(),
+        _v_sub_f32_literal_overlay(),
         _v_mul_f32_overlay(),
+        _v_mul_f32_literal_overlay(),
         _v_min_f32_overlay(),
+        _v_min_f32_literal_overlay(),
         _v_max_f32_overlay(),
+        _v_max_f32_literal_overlay(),
         _v_fma_f32_overlay(),
         _v_exp_f32_overlay(),
         _v_sqrt_f32_overlay(),
@@ -7430,10 +7490,15 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_readfirstlane_b32_overlay(),
         *_i32_bitwise_shift_overlays(),
         _v_add_f32_overlay(),
+        _v_add_f32_literal_overlay(),
         _v_sub_f32_overlay(),
+        _v_sub_f32_literal_overlay(),
         _v_mul_f32_overlay(),
+        _v_mul_f32_literal_overlay(),
         _v_min_f32_overlay(),
+        _v_min_f32_literal_overlay(),
         _v_max_f32_overlay(),
+        _v_max_f32_literal_overlay(),
         _v_fma_f32_overlay(),
         _v_exp_f32_overlay(),
         _v_sqrt_f32_overlay(),
@@ -8422,10 +8487,15 @@ _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS: dict[
     "amdgpu.v_sub_u32": lambda: _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
     "amdgpu.v_mul_lo_u32": _v_mul_lo_u32_overlay,
     "amdgpu.v_add_f32": _v_add_f32_overlay,
+    "amdgpu.v_add_f32.lit": _v_add_f32_literal_overlay,
     "amdgpu.v_sub_f32": _v_sub_f32_overlay,
+    "amdgpu.v_sub_f32.lit": _v_sub_f32_literal_overlay,
     "amdgpu.v_mul_f32": _v_mul_f32_overlay,
+    "amdgpu.v_mul_f32.lit": _v_mul_f32_literal_overlay,
     "amdgpu.v_min_f32": _v_min_f32_overlay,
+    "amdgpu.v_min_f32.lit": _v_min_f32_literal_overlay,
     "amdgpu.v_max_f32": _v_max_f32_overlay,
+    "amdgpu.v_max_f32.lit": _v_max_f32_literal_overlay,
     "amdgpu.v_fma_f32": _v_fma_f32_overlay,
     "amdgpu.v_exp_f32": _v_exp_f32_overlay,
     "amdgpu.v_sqrt_f32": _v_sqrt_f32_overlay,

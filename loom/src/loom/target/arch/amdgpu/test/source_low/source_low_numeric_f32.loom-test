@@ -27,12 +27,10 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_arith() asm<amdgpu.r
   %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
   %22 = v_mov_b32 0
   %lhs = global_load_b32 %22, %lhs_view
-  %24 = v_mov_b32 0
-  %rhs = global_load_b32 %24, %rhs_view
+  %rhs = global_load_b32 %22, %rhs_view
   %sum = v_add_f32 %lhs, %rhs
   %product = v_mul_f32 %sum, %rhs
-  %28 = v_mov_b32 0
-  global_store_b32 %28, %product, %output_view
+  global_store_b32 %22, %product, %output_view
   return
 }
 
@@ -65,13 +63,11 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_fma() asm<amdgpu.rdn
   %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
   %23 = v_mov_b32 0
   %lhs = global_load_b32 %23, %lhs_view
-  %25 = v_mov_b32 0
-  %rhs = global_load_b32 %25, %rhs_view
+  %rhs = global_load_b32 %23, %rhs_view
   %bias = v_mov_b32 1056964608
   %fma = v_fma_f32 %lhs, %rhs, %bias
   %result = v_sub_f32 %fma, %bias
-  %30 = v_mov_b32 0
-  global_store_b32 %30, %result, %output_view
+  global_store_b32 %23, %result, %output_view
   return
 }
 
@@ -115,8 +111,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_scalarized() asm<amd
   %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
   %34 = v_mov_b32 0
   %lhs = global_load_b128 %34, %lhs_view
-  %36 = v_mov_b32 0
-  %rhs = global_load_b128 %36, %rhs_view
+  %rhs = global_load_b128 %34, %rhs_view
   %lhs0 = slice %lhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %rhs0 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %lane0 = v_add_f32 %lhs0, %rhs0
@@ -131,7 +126,6 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_scalarized() asm<amd
   %bias = v_mov_b32 1056964608
   %lane3 = v_fma_f32 %lhs3, %rhs3, %bias
   %result = concat(%lane0, %lane1, %lane2, %lane3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %52 = v_mov_b32 0
-  global_store_b128 %52, %result, %output_view
+  global_store_b128 %34, %result, %output_view
   return
 }

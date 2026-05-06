@@ -36,6 +36,7 @@ class ValueProjectKind(Enum):
     EXACT_I64 = "exact_i64"
     EXACT_I64_LOG2 = "exact_i64_log2"
     I32_AS_U32_BITS = "i32_as_u32_bits"
+    F64_AS_F32_BITS = "f64_as_f32_bits"
 
 
 @unique
@@ -223,6 +224,14 @@ class ValueProject:
     def i32_as_u32_bits(cls, source_value: str, *, target_bit_offset: int = 0) -> Self:
         return cls(
             kind=ValueProjectKind.I32_AS_U32_BITS,
+            source_value=source_value,
+            target_bit_offset=target_bit_offset,
+        )
+
+    @classmethod
+    def f64_as_f32_bits(cls, source_value: str, *, target_bit_offset: int = 0) -> Self:
+        return cls(
+            kind=ValueProjectKind.F64_AS_F32_BITS,
             source_value=source_value,
             target_bit_offset=target_bit_offset,
         )

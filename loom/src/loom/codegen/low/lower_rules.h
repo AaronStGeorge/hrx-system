@@ -204,14 +204,17 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   // Emits an exact signed i32 source value fact as a zero-extended u32 packet
   // attribute bit pattern.
   LOOM_LOW_LOWER_ATTR_COPY_VALUE_I32_AS_U32_BITS = 6,
+  // Emits an exact f64 source value fact as a rounded f32 packet attribute bit
+  // pattern.
+  LOOM_LOW_LOWER_ATTR_COPY_VALUE_F64_AS_F32_BITS = 7,
   // Expands one i64_array lane ordinal into one byte-lane immediate:
   // source_attr[source_element_index] * source_element_count + literal_i64.
-  LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_LANE_BYTE = 7,
+  LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_LANE_BYTE = 8,
   // Emits the selected source-memory static byte offset as an i64 attribute.
-  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_STATIC_BYTE_OFFSET = 8,
+  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_STATIC_BYTE_OFFSET = 9,
   // Emits one selected source-memory dynamic term byte stride as an i64
   // attribute.
-  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE = 9,
+  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE = 10,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {
@@ -399,17 +402,19 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_EXACT_I64 = 15,
   // Source value facts must be an exact positive power-of-two integer.
   LOOM_LOW_LOWER_GUARD_VALUE_EXACT_POWER_OF_TWO_I64 = 16,
+  // Source value facts must be an exact floating-point value.
+  LOOM_LOW_LOWER_GUARD_VALUE_EXACT_F64 = 17,
   // Source value facts must be a non-floating integer range contained in
   // [minimum_i64, maximum_i64].
-  LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE = 17,
+  LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE = 18,
   // Source operand segment starting at attr_index must contain exactly u64
   // operands.
-  LOOM_LOW_LOWER_GUARD_OPERAND_SEGMENT_COUNT_EQ = 18,
+  LOOM_LOW_LOWER_GUARD_OPERAND_SEGMENT_COUNT_EQ = 19,
   // Source op instance flags must contain every bit in u64.
-  LOOM_LOW_LOWER_GUARD_INSTANCE_FLAGS_HAS_ALL = 19,
+  LOOM_LOW_LOWER_GUARD_INSTANCE_FLAGS_HAS_ALL = 20,
   // Source value facts must prove an exact float equal to the f64 bit-pattern
   // in u64.
-  LOOM_LOW_LOWER_GUARD_VALUE_F64_EQUALS = 20,
+  LOOM_LOW_LOWER_GUARD_VALUE_F64_EQUALS = 21,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {

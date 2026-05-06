@@ -38,10 +38,15 @@ from loom.target.low_descriptors import Descriptor
 
 _DESCRIPTOR_KEYS = (
     "amdgpu.v_add_f32",
+    "amdgpu.v_add_f32.lit",
     "amdgpu.v_sub_f32",
+    "amdgpu.v_sub_f32.lit",
     "amdgpu.v_mul_f32",
+    "amdgpu.v_mul_f32.lit",
     "amdgpu.v_min_f32",
+    "amdgpu.v_min_f32.lit",
     "amdgpu.v_max_f32",
+    "amdgpu.v_max_f32.lit",
     "amdgpu.v_fma_f32",
     "amdgpu.v_exp_f32",
     "amdgpu.v_sqrt_f32",
@@ -148,6 +153,11 @@ _LITERAL_EXACT_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="literal",
     subject_name="i64",
     constraint_key="amdgpu.literal.exact_i64",
+)
+_LITERAL_EXACT_F32_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="literal",
+    subject_name="f32",
+    constraint_key="amdgpu.literal.exact_f32",
 )
 _LITERAL_I32_BITS_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="literal-bits",
@@ -401,6 +411,40 @@ def _literal_binary_rule(
     )
 
 
+def _f32_literal_binary_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    descriptor_key: str,
+    *,
+    literal_source: str,
+    nonliteral_source: str,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("lhs", "rhs", "result"), type_pattern),
+            Guard.value_exact_f64(
+                literal_source,
+                diagnostic=_LITERAL_EXACT_F32_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={"rhs": ValueRef.operand(nonliteral_source)},
+                results={"dst": ValueRef.result("result")},
+                immediates={
+                    "imm32": ValueProject.f64_as_f32_bits(literal_source),
+                },
+                form=_emit_form(type_pattern),
+            ),
+        ),
+    )
+
+
 def _index_madd_power_of_two_rule(
     *,
     scale_source: str,
@@ -620,6 +664,39 @@ def _materialized_operand(field: str, materializer: ValueMaterializer) -> ValueR
 
 def _rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
+    for source_op, descriptor_key in (
+        (vector.vector_addf, "amdgpu.v_add_f32.lit"),
+        (vector.vector_mulf, "amdgpu.v_mul_f32.lit"),
+        (vector.vector_minnumf, "amdgpu.v_min_f32.lit"),
+        (vector.vector_maxnumf, "amdgpu.v_max_f32.lit"),
+    ):
+        rules.extend(
+            (
+                _f32_literal_binary_rule(
+                    source_op,
+                    _VEC_F32,
+                    descriptor_key,
+                    literal_source="lhs",
+                    nonliteral_source="rhs",
+                ),
+                _f32_literal_binary_rule(
+                    source_op,
+                    _VEC_F32,
+                    descriptor_key,
+                    literal_source="rhs",
+                    nonliteral_source="lhs",
+                ),
+            )
+        )
+    rules.append(
+        _f32_literal_binary_rule(
+            vector.vector_subf,
+            _VEC_F32,
+            "amdgpu.v_sub_f32.lit",
+            literal_source="lhs",
+            nonliteral_source="rhs",
+        )
+    )
     rules.extend(
         (
             _binary_rule(vector.vector_addf, _VEC_F32, "amdgpu.v_add_f32"),
@@ -703,6 +780,39 @@ def _rules() -> tuple[DescriptorRule, ...]:
                 ),
             )
         )
+    for source_op, descriptor_key in (
+        (scalar_arithmetic.scalar_addf, "amdgpu.v_add_f32.lit"),
+        (scalar_arithmetic.scalar_mulf, "amdgpu.v_mul_f32.lit"),
+        (scalar_arithmetic.scalar_minnumf, "amdgpu.v_min_f32.lit"),
+        (scalar_arithmetic.scalar_maxnumf, "amdgpu.v_max_f32.lit"),
+    ):
+        rules.extend(
+            (
+                _f32_literal_binary_rule(
+                    source_op,
+                    _F32,
+                    descriptor_key,
+                    literal_source="lhs",
+                    nonliteral_source="rhs",
+                ),
+                _f32_literal_binary_rule(
+                    source_op,
+                    _F32,
+                    descriptor_key,
+                    literal_source="rhs",
+                    nonliteral_source="lhs",
+                ),
+            )
+        )
+    rules.append(
+        _f32_literal_binary_rule(
+            scalar_arithmetic.scalar_subf,
+            _F32,
+            "amdgpu.v_sub_f32.lit",
+            literal_source="lhs",
+            nonliteral_source="rhs",
+        )
+    )
     rules.extend(
         (
             _cast_rule(
