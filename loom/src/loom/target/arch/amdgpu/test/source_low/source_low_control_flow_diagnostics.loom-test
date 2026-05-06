@@ -1,22 +1,22 @@
 // RUN: emit source-low output=low
 
 amdgpu.target<gfx1100> @target
-func.def target(@target) @divergent_then_return_rejected(%values: vector<2xi32>, %limit: i32) {
+func.def target(@target) @divergent_then_return_rejected(%values: vector<2xi32>, %limit: i32) -> (i32) {
   %lane = vector.extract %values[0] : vector<2xi32> -> i32
   %cond = scalar.cmpi slt, %lane, %limit : i32
   // ERROR@+1: TARGET/034 {branch_constraint="masked_region_exits_by_cfg"}
   cfg.cond_br %cond, ^then, ^else : i1
 ^then:
-  func.return
+  func.return %lane : i32
 ^else:
-  func.return
+  func.return %limit : i32
 }
 
 // ====
 
 amdgpu.target<gfx1100> @target
 
-func.def target(@target) @divergent_merge_argument_rejected(%values: vector<2xi32>, %limit: i32) {
+func.def target(@target) @divergent_merge_argument_rejected(%values: vector<2xi32>, %limit: i32) -> (i32) {
   %lane = vector.extract %values[0] : vector<2xi32> -> i32
   %cond = scalar.cmpi slt, %lane, %limit : i32
   // ERROR@+1: TARGET/034 {branch_constraint="merge_block_arguments_absent"}
@@ -27,14 +27,14 @@ func.def target(@target) @divergent_merge_argument_rejected(%values: vector<2xi3
   %offset = scalar.addi %limit, %limit : i32
   cfg.br ^join(%offset: i32)
 ^join(%value: i32):
-  func.return
+  func.return %value : i32
 }
 
 // ====
 
 amdgpu.target<gfx1100> @target
 
-func.def target(@target) @divergent_passthrough_else_scalar_merge_rejected(%values: vector<2xi32>, %limit: i32) {
+func.def target(@target) @divergent_passthrough_else_scalar_merge_rejected(%values: vector<2xi32>, %limit: i32) -> (i32) {
   %lane = vector.extract %values[0] : vector<2xi32> -> i32
   %cond = scalar.cmpi slt, %lane, %limit : i32
   // ERROR@+1: TARGET/034 {branch_constraint="masked_region_merge_vgpr_values"}
@@ -44,5 +44,5 @@ func.def target(@target) @divergent_passthrough_else_scalar_merge_rejected(%valu
 ^else:
   cfg.br ^join(%limit: i32)
 ^join(%value: i32):
-  func.return
+  func.return %value : i32
 }

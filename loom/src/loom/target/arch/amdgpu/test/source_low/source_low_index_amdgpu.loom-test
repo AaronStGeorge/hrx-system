@@ -59,23 +59,7 @@ func.def target(@target) @index_divergent_shift_mask(%values: vector<2xi32>) {
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @index_divergent_shift_mask(%values: reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
-  %bounded_lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %shift = s_mov_b32 2
-  %12 = v_mov_b32 2
-  %quotient = v_lshrrev_b32 %12, %bounded_lane
-  %mask = s_mov_b32 7
-  %15 = v_mov_b32 7
-  %remainder = v_and_b32 %bounded_lane, %15
-  %condition = v_cmp_lt_i32 %quotient, %remainder
-  %18, %19 = s_and_saveexec_b64 %condition
-  low.cond_br %19, ^then, ^_bb3 : reg<amdgpu.scc>
-^then:
-  low.br ^_bb3
-^join:
   return
-^_bb3:
-  s_mov_b64_exec %18
-  low.br ^join
 }
 
 // ====
@@ -110,19 +94,8 @@ func.def target(@target) @index_cast_compare_divergent(%values: vector<2xi32>, %
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @index_cast_compare_divergent(%values: reg<amdgpu.vgpr x2>, %limit_index: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
-  %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %9 = v_mov_b32_copy %limit_index
-  %condition = v_cmp_lt_i32 %lane, %9
-  %11, %12 = s_and_saveexec_b64 %condition
-  low.cond_br %12, ^then, ^_bb3 : reg<amdgpu.scc>
-^then:
-  low.br ^_bb3
-^join:
+low.func.def target(@target) abi(hal_kernel) @index_cast_compare_divergent(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
   return
-^_bb3:
-  s_mov_b64_exec %11
-  low.br ^join
 }
 
 // ====
@@ -140,21 +113,5 @@ func.def target(@target) @dynamic_vector_extract_i32(%values: vector<2xi32>, %la
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @dynamic_vector_extract_i32(%values: reg<amdgpu.vgpr x2>, %lane_index: reg<amdgpu.sgpr>, %limit: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
-  %8 = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %9 = v_mov_b32_copy %lane_index
-  %10 = v_mov_b32 1
-  %11 = v_cmp_eq_i32 %9, %10
-  %12 = slice %values[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %lane = v_cndmask_b32 %8, %12, %11
-  %14 = v_mov_b32_copy %limit
-  %condition = v_cmp_lt_i32 %lane, %14
-  %16, %17 = s_and_saveexec_b64 %condition
-  low.cond_br %17, ^then, ^_bb3 : reg<amdgpu.scc>
-^then:
-  low.br ^_bb3
-^join:
   return
-^_bb3:
-  s_mov_b64_exec %16
-  low.br ^join
 }

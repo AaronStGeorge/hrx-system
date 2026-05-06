@@ -200,6 +200,23 @@ low.func.def target(@test_target) @descriptor_low_convergent_ops_do_not_cse(%val
 
 // ====
 
+// CSE must not merge producers whose results are later consumed by tied-result
+// ops. The tied users are linear ownership transfers: replacing %rhs_copy with
+// %lhs_copy would make both tied ops consume the same storage.
+// RUN: pass cse
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @consumed_results_do_not_cse(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) {
+  %lhs_copy = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  %rhs_copy = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  %lhs_tied = low.op<test.tied.any>(%lhs_copy) : (reg<test.i32>) -> %lhs_copy as reg<test.i32>
+  %rhs_tied = low.op<test.tied.any>(%rhs_copy) : (reg<test.i32>) -> %rhs_copy as reg<test.i32>
+  low.return %lhs_tied, %rhs_tied : reg<test.i32>, reg<test.i32>
+}
+
+// ====
+
 // Descriptor-backed reads are CSE candidates until a descriptor-backed write
 // invalidates the read scope.
 // RUN: pass cse

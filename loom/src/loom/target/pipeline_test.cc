@@ -162,6 +162,7 @@ TEST_F(TargetPipelineTest, BuildsVisibleSourceLowPipeline) {
   const iree_string_view_t cleanup_keys[] = {
       IREE_SV("canonicalize"),
       IREE_SV("cse"),
+      IREE_SV("low-dce"),
   };
   ExpectRunKeySequence(module.get(), source_low_cleanup_body, cleanup_keys,
                        IREE_ARRAYSIZE(cleanup_keys));
@@ -225,6 +226,7 @@ TEST_F(TargetPipelineTest, BuildsVisiblePreparedLowPipeline) {
   const iree_string_view_t cleanup_keys[] = {
       IREE_SV("canonicalize"),
       IREE_SV("cse"),
+      IREE_SV("low-dce"),
   };
   ExpectRunKeySequence(module.get(), source_low_cleanup_body, cleanup_keys,
                        IREE_ARRAYSIZE(cleanup_keys));

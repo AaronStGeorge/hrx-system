@@ -453,6 +453,37 @@ static inline bool loom_cse_prevents_cse(loom_trait_flags_t traits) {
                     LOOM_TRAIT_CONVERGENT)) != 0;
 }
 
+static bool loom_cse_use_consumes_operand(const loom_use_t use) {
+  const loom_op_t* user_op = loom_use_user_op(use);
+  const uint16_t operand_index = loom_use_operand_index(use);
+  const loom_tied_result_t* tied_results = loom_op_tied_results(user_op);
+  for (uint16_t i = 0; i < user_op->tied_result_count; ++i) {
+    if (tied_results[i].operand_index == operand_index) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool loom_cse_result_is_consumed(const loom_module_t* module,
+                                        const loom_op_t* op) {
+  const loom_value_id_t* results = loom_op_results((loom_op_t*)op);
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    const loom_value_id_t result = results[i];
+    if (result == LOOM_VALUE_ID_INVALID) {
+      continue;
+    }
+    const loom_value_t* value = loom_module_value(module, result);
+    const loom_use_t* use = NULL;
+    loom_value_for_each_use(value, use) {
+      if (loom_cse_use_consumes_operand(*use)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 //===----------------------------------------------------------------------===//
 // Entry point
 //===----------------------------------------------------------------------===//
@@ -545,8 +576,18 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
 
         // CSE candidate check: must have results, no regions (handled
         // above), no writes, no unknown effects, and be deterministic.
-        if (op->result_count == 0) continue;
-        if (loom_cse_prevents_cse(traits)) continue;
+        if (op->result_count == 0) {
+          continue;
+        }
+        if (op->tied_result_count != 0) {
+          continue;
+        }
+        if (loom_cse_result_is_consumed(module, op)) {
+          continue;
+        }
+        if (loom_cse_prevents_cse(traits)) {
+          continue;
+        }
 
         // Look up the scope chain for an equivalent op.
         uint32_t hash = loom_cse_hash_op(module, op);

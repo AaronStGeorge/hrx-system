@@ -1001,7 +1001,7 @@ static iree_status_t loom_check_emit_select_single_low_descriptor_set_key(
 static iree_string_view_t loom_check_emit_source_low_pipeline(
     const loom_check_emit_request_t* request) {
   if (!request->has_source_low_diagnostics_option) {
-    return IREE_SV("source-to-low");
+    return IREE_SV("default");
   }
   if (request->source_low_diagnostic_flags == 0) {
     return IREE_SV("source-to-low{diagnostics=none}");

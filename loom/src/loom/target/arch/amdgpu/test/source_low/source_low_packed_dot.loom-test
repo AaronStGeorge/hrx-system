@@ -16,54 +16,6 @@ low.func.def target(@target) abi(hal_kernel) @dot4i_s8s8(%lhs: reg<amdgpu.vgpr>,
 // ====
 
 amdgpu.target<gfx1100> @target
-func.def target(@target) @model2_q8_0_dot4_scaled(%weight_codes: vector<4xi8>, %activation_codes: vector<4xi8>, %accumulator: vector<1xi32>, %weight_scale: vector<1xf32>, %activation_scale: vector<1xf32>) -> (vector<1xf32>) {
-  %dot = vector.dot4i<s8s8> %weight_codes, %activation_codes, %accumulator : vector<4xi8>, vector<4xi8>, vector<1xi32>
-  %dotf = vector.sitofp %dot : vector<1xi32> to vector<1xf32>
-  %scale = vector.mulf %weight_scale, %activation_scale : vector<1xf32>
-  %scaled = vector.mulf %dotf, %scale : vector<1xf32>
-  func.return %scaled : vector<1xf32>
-}
-
-// ----
-low.func.def target(@target) abi(hal_kernel) @model2_q8_0_dot4_scaled(%weight_codes: reg<amdgpu.vgpr>, %activation_codes: reg<amdgpu.vgpr>, %accumulator: reg<amdgpu.vgpr>, %weight_scale: reg<amdgpu.vgpr>, %activation_scale: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
-  %dot = v_dot4_i32_i8 %weight_codes, %activation_codes, %accumulator
-  %dotf = v_cvt_f32_i32 %dot
-  %scale = v_mul_f32 %weight_scale, %activation_scale
-  %scaled = v_mul_f32 %dotf, %scale
-  return %scaled
-}
-
-// ====
-
-amdgpu.target<gfx1100> @target
-func.def target(@target) @model2_q8_0_two_row_dot4_scaled(%row0_codes: vector<4xi8>, %row1_codes: vector<4xi8>, %activation_codes: vector<4xi8>, %row0_accumulator: vector<1xi32>, %row1_accumulator: vector<1xi32>, %row0_scale: vector<1xf32>, %row1_scale: vector<1xf32>, %activation_scale: vector<1xf32>) -> (vector<1xf32>, vector<1xf32>) {
-  %row0_dot = vector.dot4i<s8s8> %row0_codes, %activation_codes, %row0_accumulator : vector<4xi8>, vector<4xi8>, vector<1xi32>
-  %row1_dot = vector.dot4i<s8s8> %row1_codes, %activation_codes, %row1_accumulator : vector<4xi8>, vector<4xi8>, vector<1xi32>
-  %row0_dotf = vector.sitofp %row0_dot : vector<1xi32> to vector<1xf32>
-  %row1_dotf = vector.sitofp %row1_dot : vector<1xi32> to vector<1xf32>
-  %row0_combined_scale = vector.mulf %row0_scale, %activation_scale : vector<1xf32>
-  %row1_combined_scale = vector.mulf %row1_scale, %activation_scale : vector<1xf32>
-  %row0_scaled = vector.mulf %row0_dotf, %row0_combined_scale : vector<1xf32>
-  %row1_scaled = vector.mulf %row1_dotf, %row1_combined_scale : vector<1xf32>
-  func.return %row0_scaled, %row1_scaled : vector<1xf32>, vector<1xf32>
-}
-
-// ----
-low.func.def target(@target) abi(hal_kernel) @model2_q8_0_two_row_dot4_scaled(%row0_codes: reg<amdgpu.vgpr>, %row1_codes: reg<amdgpu.vgpr>, %activation_codes: reg<amdgpu.vgpr>, %row0_accumulator: reg<amdgpu.vgpr>, %row1_accumulator: reg<amdgpu.vgpr>, %row0_scale: reg<amdgpu.vgpr>, %row1_scale: reg<amdgpu.vgpr>, %activation_scale: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
-  %row0_dot = v_dot4_i32_i8 %row0_codes, %activation_codes, %row0_accumulator
-  %row1_dot = v_dot4_i32_i8 %row1_codes, %activation_codes, %row1_accumulator
-  %row0_dotf = v_cvt_f32_i32 %row0_dot
-  %row1_dotf = v_cvt_f32_i32 %row1_dot
-  %row0_combined_scale = v_mul_f32 %row0_scale, %activation_scale
-  %row1_combined_scale = v_mul_f32 %row1_scale, %activation_scale
-  %row0_scaled = v_mul_f32 %row0_dotf, %row0_combined_scale
-  %row1_scaled = v_mul_f32 %row1_dotf, %row1_combined_scale
-  return %row0_scaled, %row1_scaled
-}
-
-// ====
-
-amdgpu.target<gfx1100> @target
 func.def target(@target) @dot4i_u8u8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
   %dot = vector.dot4i<u8u8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
   func.return %dot : vector<1xi32>

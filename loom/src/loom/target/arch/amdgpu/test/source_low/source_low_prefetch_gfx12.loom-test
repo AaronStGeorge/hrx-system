@@ -70,15 +70,8 @@ kernel.def target(@target) @prefetch_fixed_query_offset(%input: buffer) {
 // ----
 low.kernel.def target(@target) workgroup_size(8, 4, 1) @prefetch_fixed_query_offset() {
   %input_view = low.resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
-  %workgroup_size_x = low.const<amdgpu.s_mov_b32> {imm32 = 8} : reg<amdgpu.sgpr>
-  %workgroup_size_y = low.const<amdgpu.s_mov_b32> {imm32 = 4} : reg<amdgpu.sgpr>
-  %subgroup_size = low.const<amdgpu.s_mov_b32> {imm32 = 32} : reg<amdgpu.sgpr>
-  %subgroup_count = low.const<amdgpu.s_mov_b32> {imm32 = 1} : reg<amdgpu.sgpr>
-  %offset0 = low.op<amdgpu.s_add_u32>(%workgroup_size_x, %workgroup_size_y) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
-  %offset1 = low.op<amdgpu.s_add_u32>(%offset0, %subgroup_size) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
-  %offset = low.op<amdgpu.s_add_u32>(%offset1, %subgroup_count) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
-  %22 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %23 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, valid_byte_count = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
-  low.op<amdgpu.s_buffer_prefetch_data>(%23, %22) {count = 1, offset = 180} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>)
+  %21 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %22 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, valid_byte_count = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  low.op<amdgpu.s_buffer_prefetch_data>(%22, %21) {count = 1, offset = 180} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>)
   low.return
 }

@@ -65,6 +65,12 @@ static iree_status_t loom_target_pipeline_build_cleanup_body(
   return loom_target_pipeline_build_cleanup(builder);
 }
 
+static iree_status_t loom_target_pipeline_build_low_cleanup_body(
+    loom_builder_t* builder, void* user_data) {
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_cleanup(builder));
+  return loom_target_pipeline_build_run(builder, IREE_SV("low-dce"));
+}
+
 static iree_status_t loom_target_pipeline_build_source_normalization(
     loom_builder_t* builder, void* user_data) {
   const loom_target_pipeline_build_context_t* context =
@@ -108,8 +114,8 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_source_to_low(builder, context->options));
   return loom_pass_ir_build_for(builder, LOOM_PASS_ANCHOR_FUNC,
-                                loom_target_pipeline_build_cleanup_body, NULL,
-                                &for_op);
+                                loom_target_pipeline_build_low_cleanup_body,
+                                NULL, &for_op);
 }
 
 static iree_status_t loom_target_pipeline_build_prepared_low_body(
