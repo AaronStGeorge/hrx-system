@@ -958,6 +958,54 @@ func.def @fragment_rejects_unknown_role(%payload: vector<6xi32>, %m: index, %k: 
 
 // ====
 
+// Fragment load shape operands are the same dynamic SSA index values consumed
+// by vector.fragment and vector.mma lowering.
+func.def @fragment_load_requires_index_shape(%buffer: buffer, %offset: offset, %row: index, %m: i32, %k: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<16x16xf16, %layout>
+  // ERROR@+1: TYPE/003 "rows" "index"
+  %lhs = vector.fragment.load<lhs> %view[%row, 0] shape [%m, %k] : view<16x16xf16, %layout> -> vector<16xf16>
+  func.return
+}
+
+// ====
+
+// Fragment movement origins address a full-rank logical view origin. The
+// payload vector is target-shaped, but the origin still belongs to the view.
+func.def @fragment_load_requires_full_rank_origin(%buffer: buffer, %offset: offset, %row: index, %m: index, %k: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<16x16xf16, %layout>
+  // ERROR@+1: SUBRANGE/001 "view" "1" "2"
+  %lhs = vector.fragment.load<lhs> %view[%row] shape [%m, %k] : view<16x16xf16, %layout> -> vector<16xf16>
+  func.return
+}
+
+// ====
+
+// Dense fragment movement keeps the logical view element type on the physical
+// fragment payload.
+func.def @fragment_load_requires_matching_element_type(%buffer: buffer, %offset: offset, %row: index, %m: index, %k: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<16x16xf32, %layout>
+  // ERROR@+1: TYPE/002 "view" "result"
+  %lhs = vector.fragment.load<lhs> %view[%row, 0] shape [%m, %k] : view<16x16xf32, %layout> -> vector<16xf16>
+  func.return
+}
+
+// ====
+
+// Dense fragment stores preserve the same element-type boundary as dense
+// fragment loads.
+func.def @fragment_store_requires_matching_element_type(%buffer: buffer, %offset: offset, %row: index, %col: index, %m: index, %n: index, %value: vector<8xf16>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<16x16xf32, %layout>
+  // ERROR@+1: TYPE/002 "value" "view"
+  vector.fragment.store<result> %value, %view[%row, %col] shape [%m, %n] : vector<8xf16>, view<16x16xf32, %layout>
+  func.return
+}
+
+// ====
+
 // Auxiliary fragment operands require the schema that interprets them.
 func.def @fragment_auxiliary_requires_schema(%payload: vector<6xi32>, %m: index, %k: index, %scale: vector<1xf16>) {
   // ERROR@+1: ENCODING/016 "vector.fragment" "schema"

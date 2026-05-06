@@ -523,6 +523,40 @@ static iree_status_t loom_vector_verify_memory_access(
   return iree_ok_status();
 }
 
+static iree_status_t loom_vector_verify_fragment_memory_origin(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    loom_type_t view_type, loom_attribute_t static_indices,
+    uint16_t dynamic_index_count) {
+  if (!loom_type_is_view(view_type)) {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(loom_vector_verify_dynamic_index_count(
+      emitter, op, static_indices, dynamic_index_count));
+
+  uint8_t view_rank = loom_type_rank(view_type);
+  if (view_rank == 0) {
+    return loom_vector_emit_operand_constraint(
+        emitter, op, IREE_SV("view"), view_type, IREE_SV("rank >= 1 view"));
+  }
+  if (static_indices.count != view_rank) {
+    return loom_vector_emit_offset_count_mismatch(
+        emitter, op, IREE_SV("view"), static_indices.count, view_rank);
+  }
+
+  uint16_t out_of_bounds_axis = 0;
+  int64_t out_of_bounds_index = 0;
+  int64_t out_of_bounds_bound = 0;
+  if (loom_vector_find_static_index_out_of_bounds(
+          static_indices, view_type, &out_of_bounds_axis, &out_of_bounds_index,
+          &out_of_bounds_bound)) {
+    return loom_vector_emit_static_index_out_of_bounds(
+        emitter, op, out_of_bounds_axis, out_of_bounds_index,
+        out_of_bounds_bound);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_vector_verify_gather_scatter_access(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op,
     loom_type_t view_type, loom_type_t offsets_type,
@@ -701,6 +735,34 @@ iree_status_t loom_vector_store_verify(const loom_module_t* module,
   return loom_vector_verify_optional_cache_policy(
       emitter, op, loom_vector_store_cache_scope_ATTR_INDEX,
       loom_vector_store_cache_temporal_ATTR_INDEX,
+      LOOM_CACHE_POLICY_ACCESS_STORE);
+}
+
+iree_status_t loom_vector_fragment_load_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_type_t view_type =
+      loom_module_value_type(module, loom_vector_fragment_load_view(op));
+  IREE_RETURN_IF_ERROR(loom_vector_verify_fragment_memory_origin(
+      emitter, op, view_type, loom_vector_fragment_load_static_indices(op),
+      loom_vector_fragment_load_indices(op).count));
+  return loom_vector_verify_optional_cache_policy(
+      emitter, op, loom_vector_fragment_load_cache_scope_ATTR_INDEX,
+      loom_vector_fragment_load_cache_temporal_ATTR_INDEX,
+      LOOM_CACHE_POLICY_ACCESS_LOAD);
+}
+
+iree_status_t loom_vector_fragment_store_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_type_t view_type =
+      loom_module_value_type(module, loom_vector_fragment_store_view(op));
+  IREE_RETURN_IF_ERROR(loom_vector_verify_fragment_memory_origin(
+      emitter, op, view_type, loom_vector_fragment_store_static_indices(op),
+      loom_vector_fragment_store_indices(op).count));
+  return loom_vector_verify_optional_cache_policy(
+      emitter, op, loom_vector_fragment_store_cache_scope_ATTR_INDEX,
+      loom_vector_fragment_store_cache_temporal_ATTR_INDEX,
       LOOM_CACHE_POLICY_ACCESS_STORE);
 }
 

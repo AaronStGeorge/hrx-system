@@ -414,6 +414,27 @@ iree_status_t loom_vector_fragment_facts(
                                                     &result_facts[0]);
 }
 
+iree_status_t loom_vector_fragment_load_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)module;
+  (void)operand_facts;
+  loom_vector_fragment_fact_t fact;
+  loom_vector_fragment_fact_initialize(&fact);
+  fact.role_flags =
+      loom_vector_fragment_role_flag(loom_vector_fragment_load_role(op));
+  if (fact.role_flags == 0) {
+    result_facts[0] = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+  fact.shape_rank = 2;
+  fact.shape_value_ids[0] = loom_vector_fragment_load_rows(op);
+  fact.shape_value_ids[1] = loom_vector_fragment_load_columns(op);
+  return loom_vector_fragment_fact_make_value_facts(context, fact,
+                                                    &result_facts[0]);
+}
+
 static bool loom_vector_integer_element_bitwidth(loom_type_t type,
                                                  int32_t* out_bitwidth) {
   if (!loom_type_is_shaped(type) && !loom_type_is_scalar(type)) return false;

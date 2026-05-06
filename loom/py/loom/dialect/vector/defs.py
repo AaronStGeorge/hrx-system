@@ -1380,6 +1380,107 @@ def _atomic_memory_access_interface(
     )
 
 
+vector_fragment_load = Op(
+    "vector.fragment.load",
+    group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Load a target-shaped matrix fragment payload from a typed view at a "
+        "full-rank logical origin. Unlike vector.load, the result vector shape "
+        "is the physical fragment payload selected by role, logical matrix "
+        "shape, view layout, and target legality; it is not an ordinary "
+        "trailing-axis footprint of the view. The result carries fragment "
+        "facts directly so vector.mma can consume it without a separate "
+        "vector.fragment wrapper."
+    ),
+    operands=[
+        Operand("view", VIEW, doc="Typed source view holding logical matrix data."),
+        Operand("rows", INDEX, doc="Logical matrix row count for this fragment role."),
+        Operand("columns", INDEX, doc="Logical matrix column count for this fragment role."),
+        Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
+    ],
+    results=[Result("result", VECTOR, doc="Loaded physical matrix fragment payload.")],
+    attrs=[
+        AttrDef("role", ATTR_TYPE_ENUM, enum_def=VectorFragmentRole),
+        *_indexed_memory_attrs(),
+    ],
+    constraints=[SameElementType("view", "result")],
+    traits=[REFINABLE_RESULT_TYPE_REFS],
+    effects=[Reads("view")],
+    interfaces=[_memory_access_interface()],
+    verify="loom_vector_fragment_load_verify",
+    facts="loom_vector_fragment_load_facts",
+    format=[
+        TemplateParam("role"),
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        kw("shape"),
+        LBRACKET,
+        Ref("rows"),
+        COMMA,
+        Ref("columns"),
+        RBRACKET,
+        AttrDict(),
+        COLON,
+        TypeOf("view"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%lhs = vector.fragment.load<lhs> %a[%row, %k0] shape [%m, %k] : view<[%M]x[%K]xf16, %layout> -> vector<16xf16>",
+    ],
+)
+
+vector_fragment_store = Op(
+    "vector.fragment.store",
+    group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Store a target-shaped matrix fragment payload into a typed view at a "
+        "full-rank logical origin. The value is interpreted as the physical "
+        "payload for the given fragment role and logical matrix shape; the "
+        "store is therefore a matrix-fragment movement boundary, not an "
+        "ordinary vector.store footprint."
+    ),
+    operands=[
+        Operand("value", VECTOR, doc="Physical matrix fragment payload to store."),
+        Operand("view", VIEW, doc="Typed destination view for logical matrix data."),
+        Operand("rows", INDEX, doc="Logical matrix row count for this fragment role."),
+        Operand("columns", INDEX, doc="Logical matrix column count for this fragment role."),
+        Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
+    ],
+    attrs=[
+        AttrDef("role", ATTR_TYPE_ENUM, enum_def=VectorFragmentRole),
+        *_indexed_memory_attrs(),
+    ],
+    constraints=[SameElementType("value", "view")],
+    effects=[Writes("view")],
+    interfaces=[_memory_access_interface(value="value")],
+    verify="loom_vector_fragment_store_verify",
+    format=[
+        TemplateParam("role"),
+        Ref("value"),
+        COMMA,
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        kw("shape"),
+        LBRACKET,
+        Ref("rows"),
+        COMMA,
+        Ref("columns"),
+        RBRACKET,
+        AttrDict(),
+        COLON,
+        TypeOf("value"),
+        COMMA,
+        TypeOf("view"),
+    ],
+    examples=[
+        "vector.fragment.store<result> %acc, %c[%row, %col] shape [%m, %n] : vector<8xf32>, view<[%M]x[%N]xf32, %layout>",
+    ],
+)
+
+
 vector_load = Op(
     "vector.load",
     group=vector_ops,
@@ -3768,6 +3869,8 @@ VECTOR_TABLE_OPS: tuple[Op, ...] = (
 )
 
 VECTOR_MEMORY_OPS: tuple[Op, ...] = (
+    vector_fragment_load,
+    vector_fragment_store,
     vector_load,
     vector_store,
     vector_load_mask,

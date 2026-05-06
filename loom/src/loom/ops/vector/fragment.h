@@ -34,11 +34,10 @@ enum loom_vector_fragment_fact_payload_tag_e {
 // Fragment role bitset values. Keep these in the same order as the generated
 // vector.fragment role enum so role -> bit conversion is a shift.
 typedef enum loom_vector_fragment_role_flag_bits_e {
-  LOOM_VECTOR_FRAGMENT_ROLE_FLAG_LHS = 1u << LOOM_VECTOR_FRAGMENT_ROLE_LHS,
-  LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RHS = 1u << LOOM_VECTOR_FRAGMENT_ROLE_RHS,
-  LOOM_VECTOR_FRAGMENT_ROLE_FLAG_INIT = 1u << LOOM_VECTOR_FRAGMENT_ROLE_INIT,
-  LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT = 1u
-                                          << LOOM_VECTOR_FRAGMENT_ROLE_RESULT,
+  LOOM_VECTOR_FRAGMENT_ROLE_FLAG_LHS = 1u << LOOM_VECTOR_ROLE_LHS,
+  LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RHS = 1u << LOOM_VECTOR_ROLE_RHS,
+  LOOM_VECTOR_FRAGMENT_ROLE_FLAG_INIT = 1u << LOOM_VECTOR_ROLE_INIT,
+  LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT = 1u << LOOM_VECTOR_ROLE_RESULT,
 } loom_vector_fragment_role_flag_bits_t;
 
 typedef uint32_t loom_vector_fragment_role_flags_t;
@@ -102,7 +101,7 @@ typedef struct loom_vector_fragment_parameter_view_t {
 
 // Returns the flag bit corresponding to |role|, or zero for invalid values.
 loom_vector_fragment_role_flags_t loom_vector_fragment_role_flag(
-    loom_vector_fragment_role_t role);
+    loom_vector_role_t role);
 
 // Initializes |out_fact| to the unknown all-zero fragment fact.
 void loom_vector_fragment_fact_initialize(

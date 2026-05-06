@@ -15,8 +15,8 @@ static const uint64_t loom_vector_fragment_schema_key_id =
     UINT64_C(0x758d17ff764667b6);
 
 loom_vector_fragment_role_flags_t loom_vector_fragment_role_flag(
-    loom_vector_fragment_role_t role) {
-  if (role >= LOOM_VECTOR_FRAGMENT_ROLE_COUNT_) {
+    loom_vector_role_t role) {
+  if (role >= LOOM_VECTOR_ROLE_COUNT_) {
     return 0;
   }
   return 1u << role;

@@ -39,6 +39,8 @@ extern const loom_op_vtable_t loom_vector_deinterleave_vtable;
 extern const loom_op_vtable_t loom_vector_table_lookup_vtable;
 extern const loom_op_vtable_t loom_vector_table_quantize_vtable;
 extern const loom_op_vtable_t loom_vector_transform_vtable;
+extern const loom_op_vtable_t loom_vector_fragment_load_vtable;
+extern const loom_op_vtable_t loom_vector_fragment_store_vtable;
 extern const loom_op_vtable_t loom_vector_load_vtable;
 extern const loom_op_vtable_t loom_vector_store_vtable;
 extern const loom_op_vtable_t loom_vector_load_mask_vtable;

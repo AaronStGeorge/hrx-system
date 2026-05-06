@@ -12,6 +12,35 @@ from loom.builder import TiedResultSpec, ValueRef
 from loom.ir import Block, Predicate, Region, Type
 
 class VectorMemoryMixin:
+    def fragment_load(
+        self,
+        *,
+        role: str,
+        view: ValueRef,
+        indices: list[int | ValueRef],
+        rows: ValueRef,
+        columns: ValueRef,
+        cache_scope: str | None = ...,
+        cache_temporal: str | None = ...,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> ValueRef: ...
+    def fragment_store(
+        self,
+        *,
+        role: str,
+        value: ValueRef,
+        view: ValueRef,
+        indices: list[int | ValueRef],
+        rows: ValueRef,
+        columns: ValueRef,
+        cache_scope: str | None = ...,
+        cache_temporal: str | None = ...,
+        location_id: int | None = ...,
+    ) -> None: ...
     def load(
         self,
         *,

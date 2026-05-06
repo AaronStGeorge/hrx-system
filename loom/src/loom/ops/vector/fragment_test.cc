@@ -61,8 +61,7 @@ TEST(VectorFragmentFactsTest, UnknownIsAllZeroAndByteComparable) {
   EXPECT_TRUE(loom_vector_fragment_fact_is_unknown(fact));
   EXPECT_TRUE(loom_vector_fragment_fact_equal(fact, unknown));
 
-  fact.role_flags =
-      loom_vector_fragment_role_flag(LOOM_VECTOR_FRAGMENT_ROLE_LHS);
+  fact.role_flags = loom_vector_fragment_role_flag(LOOM_VECTOR_ROLE_LHS);
   fact.shape_rank = 2;
   fact.shape_value_ids[0] = 12;
   fact.shape_value_ids[1] = 34;
@@ -84,8 +83,7 @@ TEST(VectorFragmentFactsTest, PayloadRoundTripsThroughValueFacts) {
   loom_vector_fragment_fact_initialize(&fact);
   fact.flags = LOOM_VECTOR_FRAGMENT_FACT_FLAG_HAS_SCHEMA |
                LOOM_VECTOR_FRAGMENT_FACT_FLAG_HAS_STATIC_SCHEMA;
-  fact.role_flags =
-      loom_vector_fragment_role_flag(LOOM_VECTOR_FRAGMENT_ROLE_RHS);
+  fact.role_flags = loom_vector_fragment_role_flag(LOOM_VECTOR_ROLE_RHS);
   fact.schema_value_id = 56;
   fact.static_schema_encoding_id = 3;
   fact.shape_rank = 2;
