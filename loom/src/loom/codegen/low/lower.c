@@ -229,16 +229,56 @@ static iree_status_t loom_low_lower_check_mapped_value(
   return iree_ok_status();
 }
 
+static bool loom_low_lower_first_return_operands(
+    loom_region_t* source_body, const loom_op_t** out_return_op,
+    loom_value_slice_t* out_operands) {
+  *out_return_op = NULL;
+  *out_operands = (loom_value_slice_t){0};
+  for (uint16_t block_index = 0; block_index < source_body->block_count;
+       ++block_index) {
+    loom_block_t* block = loom_region_block(source_body, block_index);
+    loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      if (!loom_func_return_isa(op)) {
+        continue;
+      }
+      *out_return_op = op;
+      *out_operands = loom_func_return_operands(op);
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_status_t loom_low_lower_check_function_result(
+    loom_low_lower_context_t* context, const loom_op_t* return_op,
+    loom_value_slice_t returned_values, uint16_t result_index,
+    loom_value_id_t result_id) {
+  if (result_index < returned_values.count) {
+    loom_type_t low_type = loom_type_none();
+    return loom_low_lower_check_mapped_value(
+        context, return_op, returned_values.values[result_index], &low_type);
+  }
+
+  loom_type_t low_type = loom_type_none();
+  return loom_low_lower_check_mapped_value(context, context->source_function.op,
+                                           result_id, &low_type);
+}
+
 static iree_status_t loom_low_lower_check_function_signature(
-    loom_low_lower_context_t* context) {
+    loom_low_lower_context_t* context, loom_region_t* source_body) {
   IREE_RETURN_IF_ERROR(loom_low_lower_initialize_argument_map(context));
+
+  const loom_op_t* return_op = NULL;
+  loom_value_slice_t returned_values = {0};
+  (void)loom_low_lower_first_return_operands(source_body, &return_op,
+                                             &returned_values);
 
   const loom_value_id_t* result_ids =
       loom_op_const_results(context->source_function.op);
   for (uint16_t i = 0; i < context->source_function.op->result_count; ++i) {
-    loom_type_t low_type = loom_type_none();
-    IREE_RETURN_IF_ERROR(loom_low_lower_check_mapped_value(
-        context, context->source_function.op, result_ids[i], &low_type));
+    IREE_RETURN_IF_ERROR(loom_low_lower_check_function_result(
+        context, return_op, returned_values, i, result_ids[i]));
   }
 
   uint16_t predicate_count = 0;
@@ -982,7 +1022,8 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
 
 static iree_status_t loom_low_lower_plan_body(loom_low_lower_context_t* context,
                                               loom_region_t* source_body) {
-  IREE_RETURN_IF_ERROR(loom_low_lower_check_function_signature(context));
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_check_function_signature(context, source_body));
   if (loom_low_lower_context_should_stop(context)) {
     return iree_ok_status();
   }
@@ -1015,9 +1056,9 @@ static iree_status_t loom_low_lower_plan_body(loom_low_lower_context_t* context,
 }
 
 static iree_status_t loom_low_lower_map_signature_types(
-    loom_low_lower_context_t* context, loom_type_t** out_arg_types,
-    iree_host_size_t* out_arg_count, loom_type_t** out_result_types,
-    iree_host_size_t* out_result_count) {
+    loom_low_lower_context_t* context, loom_region_t* source_body,
+    loom_type_t** out_arg_types, iree_host_size_t* out_arg_count,
+    loom_type_t** out_result_types, iree_host_size_t* out_result_count) {
   IREE_RETURN_IF_ERROR(loom_low_lower_initialize_argument_map(context));
   *out_arg_types = NULL;
   *out_arg_count = 0;
@@ -1055,10 +1096,19 @@ static iree_status_t loom_low_lower_map_signature_types(
         (void**)&result_types));
     const loom_value_id_t* result_ids =
         loom_op_const_results(context->source_function.op);
+    const loom_op_t* return_op = NULL;
+    loom_value_slice_t returned_values = {0};
+    (void)loom_low_lower_first_return_operands(source_body, &return_op,
+                                               &returned_values);
     for (uint16_t i = 0; i < result_count; ++i) {
-      IREE_RETURN_IF_ERROR(
-          loom_low_lower_map_value(context, context->source_function.op,
-                                   result_ids[i], &result_types[i]));
+      if (i < returned_values.count) {
+        IREE_RETURN_IF_ERROR(loom_low_lower_map_value(
+            context, return_op, returned_values.values[i], &result_types[i]));
+      } else {
+        IREE_RETURN_IF_ERROR(
+            loom_low_lower_map_value(context, context->source_function.op,
+                                     result_ids[i], &result_types[i]));
+      }
       IREE_ASSERT_FALSE(loom_low_lower_type_is_none(result_types[i]));
     }
   }
@@ -1205,7 +1255,8 @@ static iree_status_t loom_low_lower_create_function_op(
   loom_type_t* result_types = NULL;
   iree_host_size_t result_count = 0;
   IREE_RETURN_IF_ERROR(loom_low_lower_map_signature_types(
-      context, &arg_types, &arg_count, &result_types, &result_count));
+      context, source_body, &arg_types, &arg_count, &result_types,
+      &result_count));
 
   if (loom_low_lower_source_is_kernel_def(context)) {
     IREE_ASSERT_EQ(result_count, 0);
