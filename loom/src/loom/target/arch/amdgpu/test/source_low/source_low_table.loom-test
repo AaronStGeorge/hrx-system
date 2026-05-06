@@ -8,11 +8,11 @@ kernel.def target(@target) @f32_table_lookup_i8_codes(%codes_buffer: buffer, %ou
 } launch {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 1)] : index
-  %zero = index.constant 0 : offset
-  %four = index.constant 4 : index
-  %base = index.mul %tid, %four : index
-  %codes_view = buffer.view %codes_buffer[%zero] : buffer -> view<8xi8, #dense>
-  %output_view = buffer.view %output[%zero] : buffer -> view<8xf32, #dense>
+  %base_offset = index.constant 0 : offset
+  %code_stride = index.constant 4 : index
+  %base = index.mul %tid, %code_stride : index
+  %codes_view = buffer.view %codes_buffer[%base_offset] : buffer -> view<8xi8, #dense>
+  %output_view = buffer.view %output[%base_offset] : buffer -> view<8xf32, #dense>
   %codes = vector.load %codes_view[%base] : view<8xi8, #dense> -> vector<4xi8>
   %g0 = scalar.constant -1.0 : f32
   %g1 = scalar.constant -0.5 : f32
