@@ -27,20 +27,6 @@ static iree_status_t loom_low_replace_single_result_with_value(
                                                   1);
 }
 
-static bool loom_low_concat_only_feeds_slices(loom_rewriter_t* rewriter,
-                                              loom_op_t* concat_op) {
-  const loom_value_id_t result = loom_low_concat_result(concat_op);
-  if (loom_module_value_has_type_uses(rewriter->module, result)) return false;
-  loom_value_t* result_value = loom_module_value(rewriter->module, result);
-  if (loom_value_has_no_uses(result_value)) return false;
-
-  const loom_use_t* use = NULL;
-  loom_value_for_each_use(result_value, use) {
-    if (!loom_low_slice_isa(loom_use_user_op(*use))) return false;
-  }
-  return true;
-}
-
 static bool loom_low_slice_matches_concat_source(loom_rewriter_t* rewriter,
                                                  loom_op_t* slice_op,
                                                  loom_op_t* concat_op,
@@ -76,30 +62,10 @@ static bool loom_low_slice_matches_concat_source(loom_rewriter_t* rewriter,
   return false;
 }
 
-static bool loom_low_concat_slice_users_match_sources(loom_rewriter_t* rewriter,
-                                                      loom_op_t* concat_op) {
-  const loom_value_id_t result = loom_low_concat_result(concat_op);
-  loom_value_t* result_value = loom_module_value(rewriter->module, result);
-  const loom_use_t* use = NULL;
-  loom_value_for_each_use(result_value, use) {
-    loom_value_id_t unused_source = LOOM_VALUE_ID_INVALID;
-    if (!loom_low_slice_matches_concat_source(rewriter, loom_use_user_op(*use),
-                                              concat_op, &unused_source)) {
-      return false;
-    }
-  }
-  return true;
-}
-
 static iree_status_t loom_low_slice_canonicalize_concat_slice(
     loom_op_t* op, loom_rewriter_t* rewriter, loom_op_t* concat_op,
     bool* out_changed) {
   *out_changed = false;
-  if (!loom_low_concat_only_feeds_slices(rewriter, concat_op) ||
-      !loom_low_concat_slice_users_match_sources(rewriter, concat_op)) {
-    return iree_ok_status();
-  }
-
   loom_value_id_t replacement = LOOM_VALUE_ID_INVALID;
   if (!loom_low_slice_matches_concat_source(rewriter, op, concat_op,
                                             &replacement)) {
