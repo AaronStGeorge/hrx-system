@@ -641,6 +641,12 @@ iree_status_t loom_amdgpu_emit_vgpr_b32_copy(loom_low_lower_context_t* context,
                                              loom_value_id_t low_source,
                                              loom_value_id_t* out_value);
 
+// Returns |low_value| when it is already a one-unit VGPR, otherwise emits a
+// fresh VGPR carrying the same 32-bit bit payload.
+iree_status_t loom_amdgpu_materialize_low_vgpr_b32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t low_value, loom_value_id_t* out_low_value);
+
 // Emits one binary VGPR descriptor op.
 iree_status_t loom_amdgpu_emit_vgpr_binary(
     loom_low_lower_context_t* context, const loom_op_t* source_op,

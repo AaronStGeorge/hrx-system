@@ -667,22 +667,6 @@ static iree_status_t loom_amdgpu_emit_memory_flat_add_term(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_ensure_vgpr_b32(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t low_value, loom_value_id_t* out_low_value) {
-  *out_low_value = low_value;
-  const loom_module_t* module = loom_low_lower_context_module(context);
-  const loom_type_t low_type = loom_module_value_type(module, low_value);
-  bool is_vgpr = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
-      context, low_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, &is_vgpr));
-  if (is_vgpr) {
-    return iree_ok_status();
-  }
-  return loom_amdgpu_emit_vgpr_b32_copy(context, source_op, low_value,
-                                        out_low_value);
-}
-
 static iree_status_t loom_amdgpu_low_value_is_sgpr_b32(
     loom_low_lower_context_t* context, loom_value_id_t low_value,
     bool* out_is_sgpr_b32) {
@@ -793,9 +777,9 @@ iree_status_t loom_amdgpu_emit_memory_flat_vaddr(
         loom_amdgpu_emit_low_slice(context, source_op, low_scalar_base,
                                    /*offset=*/1, sgpr_type, &low_vaddr_hi));
   }
-  IREE_RETURN_IF_ERROR(loom_amdgpu_ensure_vgpr_b32(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
       context, source_op, low_vaddr_lo, &low_vaddr_lo));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_ensure_vgpr_b32(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
       context, source_op, low_vaddr_hi, &low_vaddr_hi));
   loom_value_id_t sources[] = {
       low_vaddr_lo,

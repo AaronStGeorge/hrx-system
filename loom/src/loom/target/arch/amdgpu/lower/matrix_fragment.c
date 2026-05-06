@@ -612,8 +612,8 @@ static iree_status_t loom_amdgpu_emit_fragment_memory_scaled_term(
                                       vgpr_type, out_low_term);
   }
   if (scale == 1) {
-    *out_low_term = low_value;
-    return iree_ok_status();
+    return loom_amdgpu_materialize_low_vgpr_b32(context, source_op, low_value,
+                                                out_low_term);
   }
   if (loom_amdgpu_u32_is_power_of_two(scale)) {
     uint32_t shift = 0;
@@ -622,11 +622,23 @@ static iree_status_t loom_amdgpu_emit_fragment_memory_scaled_term(
       value >>= 1u;
       ++shift;
     }
+    bool is_sgpr = false;
+    const loom_module_t* module = loom_low_lower_context_module(context);
+    const loom_type_t low_type = loom_module_value_type(module, low_value);
+    IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
+        context, low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, &is_sgpr));
+    if (is_sgpr && loom_type_register_unit_count(low_type) == 1) {
+      return loom_amdgpu_emit_vgpr_binary_literal(
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_VOP3_IMM,
+          low_value, shift, vgpr_type, out_low_term);
+    }
     return loom_amdgpu_emit_vgpr_shift(
         context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT, shift,
         low_value, vgpr_type, out_low_term);
   }
 
+  IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
+      context, source_op, low_value, &low_value));
   loom_value_id_t low_scale = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, scale,
@@ -659,8 +671,8 @@ static iree_status_t loom_amdgpu_emit_fragment_memory_dynamic_origin_terms(
       continue;
     }
     loom_value_id_t low_index = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_vgpr_address(
-        context, source_op, origin->dynamic_index, &low_index));
+    IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+        context, origin->dynamic_index, &low_index));
     loom_value_id_t low_term = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fragment_memory_scaled_term(
         context, source_op, low_index, plan->axis_byte_strides[axis], vgpr_type,
