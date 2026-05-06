@@ -597,9 +597,11 @@ iree_status_t loom_low_lower_lookup_successor_dest(
 
 // Interposes a low-only destination block on one source successor edge.
 //
-// The new block receives no block arguments. |out_previous_low_dest| receives
-// the effective destination that the interposed block should eventually branch
-// to when it wants to preserve the original edge behavior.
+// The new block receives the same edge payload as the source terminator edge:
+// no arguments for cfg.cond_br and the cfg.br payload for cfg.br.
+// |out_previous_low_dest| receives the effective destination that the
+// interposed block should eventually branch to when it wants to preserve the
+// original edge behavior.
 iree_status_t loom_low_lower_interpose_successor_dest(
     loom_low_lower_context_t* context, const loom_op_t* source_terminator,
     uint8_t successor_index, loom_block_t* interposed_low_block,

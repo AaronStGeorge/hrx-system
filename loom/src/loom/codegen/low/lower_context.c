@@ -334,9 +334,11 @@ iree_status_t loom_low_lower_interpose_successor_dest(
   IREE_ASSERT(source_terminator != NULL);
   IREE_ASSERT_LT(successor_index, source_terminator->successor_count);
   IREE_ASSERT(interposed_low_block != NULL);
-  IREE_ASSERT_EQ(interposed_low_block->arg_count, 0);
   if (loom_cfg_br_isa(source_terminator)) {
-    IREE_ASSERT_EQ(loom_cfg_br_args(source_terminator).count, 0);
+    IREE_ASSERT_EQ(loom_cfg_br_args(source_terminator).count,
+                   interposed_low_block->arg_count);
+  } else {
+    IREE_ASSERT_EQ(interposed_low_block->arg_count, 0);
   }
 
   loom_block_t* previous_low_dest = NULL;
