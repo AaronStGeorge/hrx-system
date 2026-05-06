@@ -41,6 +41,46 @@ func.def @empty_iota(%base: index, %step: index) -> (vector<0xindex>) {
 
 // ====
 
+// A small static iota with exact base and step materializes explicit lanes.
+func.def @static_iota_to_from_elements() -> (vector<4xi32>) {
+  %base = scalar.constant 3 : i32
+  %step = scalar.constant 4 : i32
+  %r = vector.iota %base step %step : vector<4xi32>
+  func.return %r : vector<4xi32>
+}
+// ----
+func.def @static_iota_to_from_elements() -> (vector<4xi32>) {
+  %4 = scalar.constant 3 : i32
+  %5 = scalar.constant 7 : i32
+  %6 = scalar.constant 11 : i32
+  %7 = scalar.constant 15 : i32
+  %r = vector.from_elements %4, %5, %6, %7 : vector<4xi32>
+  func.return %r : vector<4xi32>
+}
+
+// ====
+
+// Static extraction from iota folds through the lane-coordinate formula.
+func.def @extract_iota_static_lane_to_constant() -> (index, i32) {
+  %base = index.constant 5 : index
+  %step = index.constant 2 : index
+  %lanes = vector.iota %base step %step : vector<4xindex>
+  %lane2 = vector.extract %lanes[2] : vector<4xindex> -> index
+  %i32_base = scalar.constant 3 : i32
+  %i32_step = scalar.constant 4 : i32
+  %offsets = vector.iota %i32_base step %i32_step : vector<4xi32>
+  %lane3 = vector.extract %offsets[3] : vector<4xi32> -> i32
+  func.return %lane2, %lane3 : index, i32
+}
+// ----
+func.def @extract_iota_static_lane_to_constant() -> (index, i32) {
+  %lane2 = index.constant 9 : index
+  %lane3 = scalar.constant 15 : i32
+  func.return %lane2, %lane3 : index, i32
+}
+
+// ====
+
 // A zero-lane range mask performs no range tests.
 func.def @empty_mask_range(%lo: index, %hi: index, %step: index) -> (vector<0xi1>) {
   %r = vector.mask.range [%lo to %hi step %step] : index -> vector<0xi1>

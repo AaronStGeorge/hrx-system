@@ -566,6 +566,7 @@ vector_iota = Op(
         SameElementType("base", "step", "result"),
     ],
     facts="loom_vector_iota_facts",
+    canonicalize="loom_vector_iota_canonicalize",
     traits=[PURE, REFINABLE_RESULT_TYPE_REFS],
     format=[
         Ref("base"),
