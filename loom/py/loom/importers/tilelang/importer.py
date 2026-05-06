@@ -28,6 +28,7 @@ from loom.importers.core import (
     sanitize_symbol,
 )
 from loom.importers.tilelang.abi import extract_bindings
+from loom.importers.tilelang.analysis import collect_address_layout_preferences
 from loom.importers.tilelang.context import TileLangConversionContext
 from loom.importers.tilelang.converter import TileLangConverter
 from loom.importers.tilelang.defaults import build_default_registry
@@ -189,6 +190,10 @@ def _build_loom_module(
         )
     )
     converter = TileLangConverter(build_default_registry())
+    address_layout_preferences = collect_address_layout_preferences(
+        prim_func,
+        target_preset=target_preset,
+    )
     _build_launch_config(
         shell,
         bindings,
@@ -205,6 +210,7 @@ def _build_loom_module(
         type_converter=type_converter,
         target_preset=target_preset,
         kernel_body_block=shell.body_block,
+        address_layout_preferences=address_layout_preferences,
     )
     _capture_block_value_names(context, shell.body_block)
     with shell.builder.insertion_block(shell.body_block):
@@ -344,7 +350,7 @@ def _map_kernel_arguments(
             results=[view_type],
             name=_buffer_view_name(binding, context),
         )
-        context.bind_buffer_view_layout(view)
+        context.bind_buffer_view_layout(view, binding.buffer)
         _bind_dynamic_view_dimensions(context, view, dim_bindings)
         context.map_value(binding.source, view, str(view_type))
         context.map_value(binding.buffer, view, str(view_type))

@@ -4662,6 +4662,34 @@ def _ds_read_overlay(
     )
 
 
+def _ds_read_u16_overlay(
+    *,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("OFFSET1", 0),
+        ("GDS", 0),
+    ),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.ds_read_u16",
+        instruction_name="DS_READ_U16",
+        mnemonic="ds_read_u16",
+        encoding_name=encoding_name,
+        semantic_tag="memory.workgroup.load.u16",
+        schedule_class=_SCHEDULE_LDS_LOAD,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
+        ),
+        implicit_operands=(_ignore_workgroup_memory(width_bits=16, is_input=True),),
+        immediate_fields=("OFFSET0",),
+        immediates=(_offset_immediate(8),),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_workgroup_memory_effect(EffectKind.READ, 16),),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
 def _ds_load_u16_d16_overlays(
     *,
     encoding_name: str = "ENC_DS",
@@ -4743,6 +4771,37 @@ def _ds_load_u16_d16_overlays(
             constraints=(Constraint(ConstraintKind.TIED, 0, 1),),
             flags=(DescriptorFlag.SIDE_EFFECTING,),
         ),
+    )
+
+
+def _ds_write_b16_overlay(
+    *,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("OFFSET1", 0),
+        ("GDS", 0),
+    ),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.ds_write_b16",
+        instruction_name="DS_WRITE_B16",
+        mnemonic="ds_write_b16",
+        encoding_name=encoding_name,
+        semantic_tag="memory.workgroup.store.u16.low",
+        schedule_class=_SCHEDULE_LDS_STORE,
+        operands=(
+            AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
+            AmdgpuOperandOverlay(
+                "DATA0",
+                _vgpr_operand("value", register_part=_REG_PART_VGPR_LOW16),
+            ),
+        ),
+        implicit_operands=(_ignore_workgroup_memory(width_bits=16, is_input=False),),
+        immediate_fields=("OFFSET0",),
+        immediates=(_offset_immediate(8),),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_workgroup_memory_effect(EffectKind.WRITE, 16),),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
 
 
@@ -5422,6 +5481,10 @@ def _ds_memory_overlays(
         fixed_encoding_fields
     )
     return (
+        _ds_read_u16_overlay(
+            encoding_name=encoding_name,
+            fixed_encoding_fields=fixed_encoding_fields,
+        ),
         *(
             _ds_read_overlay(
                 width_bits=width_bits,
@@ -5430,6 +5493,10 @@ def _ds_memory_overlays(
                 fixed_encoding_fields=fixed_encoding_fields,
             )
             for width_bits, units in widths
+        ),
+        _ds_write_b16_overlay(
+            encoding_name=encoding_name,
+            fixed_encoding_fields=fixed_encoding_fields,
         ),
         *(
             _ds_write_overlay(

@@ -79,6 +79,13 @@ static bool loom_amdgpu_memory_access_has_32bit_lanes(
              iree_max(access->payload_register_count, 1u);
 }
 
+static bool loom_amdgpu_memory_access_has_contiguous_vector_lanes(
+    const loom_amdgpu_memory_access_t* access) {
+  return access->source.vector_lane_count <= 1 ||
+         access->source.vector_lane_byte_stride ==
+             access->source.element_byte_count;
+}
+
 typedef uint32_t loom_amdgpu_dynamic_index_source_rule_flags_t;
 
 #define LOOM_AMDGPU_DYNAMIC_INDEX_SOURCE_RULE_REJECT_WORKGROUP_MEMORY \
@@ -683,6 +690,14 @@ static const loom_amdgpu_memory_descriptor_candidate_t
         {
             .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
             .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
+            .packet_byte_count = 2,
+            .payload_register_count = 1,
+            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_U16,
+        },
+        {
+            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
+            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
             .packet_byte_count = 4,
             .payload_register_count = 1,
             .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
@@ -711,6 +726,14 @@ static const loom_amdgpu_memory_descriptor_candidate_t
             .payload_register_count = 4,
             .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
             .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B128,
+        },
+        {
+            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
+            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
+            .packet_byte_count = 2,
+            .payload_register_count = 1,
+            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B16,
         },
         {
             .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
@@ -1391,8 +1414,7 @@ static bool loom_amdgpu_try_select_ds_addtid_memory_descriptor(
       access->source.dynamic_terms[0].dimension != LOOM_KERNEL_DIMENSION_X ||
       access->source.dynamic_terms[0].byte_stride !=
           access->source.element_byte_count ||
-      access->source.vector_lane_byte_stride !=
-          access->source.element_byte_count ||
+      !loom_amdgpu_memory_access_has_contiguous_vector_lanes(access) ||
       !loom_amdgpu_source_lds_layout_lookup_root(fact_table, source_function,
                                                  access->source.root_value_id,
                                                  &root_byte_offset) ||
@@ -1689,8 +1711,7 @@ static bool loom_amdgpu_memory_access_try_select_lds_default(
     loom_amdgpu_memory_operation_kind_t kind,
     loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
-  if (access->source.vector_lane_byte_stride !=
-      access->source.element_byte_count) {
+  if (!loom_amdgpu_memory_access_has_contiguous_vector_lanes(access)) {
     diagnostic->rejection_bits |=
         LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_AXIS_STRIDE;
     return false;
@@ -1733,8 +1754,7 @@ loom_amdgpu_memory_address_attempt_apply(
                  ? LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_SELECTED
                  : LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_NOT_APPLICABLE;
     case LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_DS_2ADDR:
-      if (access->source.vector_lane_byte_stride ==
-          access->source.element_byte_count) {
+      if (loom_amdgpu_memory_access_has_contiguous_vector_lanes(access)) {
         return LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_NOT_APPLICABLE;
       }
       if (access->payload_register_count != 2 ||
@@ -1753,8 +1773,7 @@ loom_amdgpu_memory_address_attempt_apply(
                  ? LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_SELECTED
                  : LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_REJECTED;
     case LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_BUFFER_RESOURCE:
-      if (access->source.vector_lane_byte_stride !=
-          access->source.element_byte_count) {
+      if (!loom_amdgpu_memory_access_has_contiguous_vector_lanes(access)) {
         diagnostic->rejection_bits |=
             LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_AXIS_STRIDE;
         return LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_REJECTED;
@@ -1764,8 +1783,7 @@ loom_amdgpu_memory_address_attempt_apply(
                  ? LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_SELECTED
                  : LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_NOT_APPLICABLE;
     case LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_GLOBAL_SMEM:
-      if (access->source.vector_lane_byte_stride !=
-          access->source.element_byte_count) {
+      if (!loom_amdgpu_memory_access_has_contiguous_vector_lanes(access)) {
         return LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_NOT_APPLICABLE;
       }
       return loom_amdgpu_memory_access_try_select_global_smem(
@@ -1773,8 +1791,7 @@ loom_amdgpu_memory_address_attempt_apply(
                  ? LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_SELECTED
                  : LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_NOT_APPLICABLE;
     case LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_GLOBAL_SADDR:
-      if (access->source.vector_lane_byte_stride !=
-          access->source.element_byte_count) {
+      if (!loom_amdgpu_memory_access_has_contiguous_vector_lanes(access)) {
         diagnostic->rejection_bits |=
             LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_AXIS_STRIDE;
         return LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_REJECTED;
@@ -1784,8 +1801,7 @@ loom_amdgpu_memory_address_attempt_apply(
                  ? LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_SELECTED
                  : LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_NOT_APPLICABLE;
     case LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_GLOBAL_FLAT:
-      if (access->source.vector_lane_byte_stride !=
-          access->source.element_byte_count) {
+      if (!loom_amdgpu_memory_access_has_contiguous_vector_lanes(access)) {
         diagnostic->rejection_bits |=
             LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_AXIS_STRIDE;
         return LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_REJECTED;

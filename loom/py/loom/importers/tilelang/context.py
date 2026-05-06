@@ -73,6 +73,14 @@ class TileLangReducerInfo:
     replication: str
 
 
+@dataclass(frozen=True, slots=True)
+class TileLangAddressLayoutPreference:
+    """Preferred physical address layout for a TileLang buffer view."""
+
+    strides: tuple[int, ...]
+    name: str
+
+
 @dataclass(slots=True)
 class TileLangConversionContext(SourceImportSession):
     """TileLang-specialized import session using Loom dynamic builders."""
@@ -102,6 +110,10 @@ class TileLangConversionContext(SourceImportSession):
     buffer_access_source_keys: dict[object, TileLangBufferAccessKey] = field(
         default_factory=dict
     )
+    address_layout_preferences: dict[object, TileLangAddressLayoutPreference] = field(
+        default_factory=dict
+    )
+    address_layout_values: dict[object, ValueRef] = field(default_factory=dict)
     kernel_body_block: object | None = None
     dense_layout: ValueRef | None = None
 
@@ -120,7 +132,7 @@ class TileLangConversionContext(SourceImportSession):
         view_type = self.type_converter.view_type(buffer)
         if view_type.encoding is not None:
             return view_type
-        self.default_address_layout()
+        self.address_layout_for_buffer(buffer)
         return ShapedType(
             view_type.type_kind,
             view_type.element_type,
@@ -128,13 +140,46 @@ class TileLangConversionContext(SourceImportSession):
             encoding=DynamicEncoding(),
         )
 
-    def bind_buffer_view_layout(self, view: ValueRef) -> None:
+    def address_layout_for_buffer(self, buffer: object | None) -> ValueRef:
+        preference = self.address_layout_preference(buffer)
+        if preference is None:
+            return self.default_address_layout()
+        if buffer is None:
+            return self.default_address_layout()
+        key = address_layout_keys(buffer)[0]
+        layout = self.address_layout_values.get(key)
+        if layout is None:
+            layout = self.builder.encoding.layout_strided(
+                strides=list(preference.strides),
+                results=[ENCODING_LAYOUT_TYPE],
+                name=self.reserve_name(preference.name),
+            )
+            self.address_layout_values[key] = layout
+        return layout
+
+    def address_layout_preference(
+        self,
+        buffer: object | None,
+    ) -> TileLangAddressLayoutPreference | None:
+        if buffer is None:
+            return None
+        for key in address_layout_keys(buffer):
+            preference = self.address_layout_preferences.get(key)
+            if preference is not None:
+                return preference
+        return None
+
+    def bind_buffer_view_layout(
+        self,
+        view: ValueRef,
+        buffer: object | None = None,
+    ) -> None:
         view_value = self.builder.module.values[view.id]
         view_type = view_value.type
         if isinstance(view_type, ShapedType) and isinstance(
             view_type.encoding, DynamicEncoding
         ):
-            view_value.encoding_binding = self.default_address_layout().id
+            view_value.encoding_binding = self.address_layout_for_buffer(buffer).id
 
     def build_constant(self, value: Any, value_type: str, name: str) -> ValueRef:
         result_type = self.type_converter.map_dtype(
@@ -489,6 +534,8 @@ class TileLangConversionContext(SourceImportSession):
             matrix_fragments=dict(self.matrix_fragments),
             buffer_access_values=dict(self.buffer_access_values),
             buffer_access_source_keys=dict(self.buffer_access_source_keys),
+            address_layout_preferences=dict(self.address_layout_preferences),
+            address_layout_values=dict(self.address_layout_values),
             kernel_body_block=self.kernel_body_block,
             dense_layout=self.dense_layout,
         )
@@ -544,6 +591,15 @@ def _reducer_info_key(source: object) -> tuple[object, ...]:
     if semantic_key is not None:
         return ("reducer_info", *semantic_key)
     return ("reducer_info", source_key(source))
+
+
+def address_layout_keys(buffer: object) -> tuple[object, ...]:
+    """Return lookup keys that identify one TileLang buffer's address layout."""
+
+    semantic_key = _semantic_buffer_key(buffer)
+    if semantic_key is not None:
+        return (semantic_key, source_key(buffer))
+    return (source_key(buffer),)
 
 
 def _semantic_sequence(value: object) -> tuple[object, ...]:

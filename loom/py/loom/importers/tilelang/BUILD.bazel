@@ -46,6 +46,7 @@ py_library(
     name = "core",
     srcs = [
         "abi.py",
+        "analysis.py",
         "buffers.py",
         "context.py",
         "converter.py",
@@ -149,6 +150,7 @@ if(LOOM_IMPORTER_TILELANG)
 py_test(
     name = "tilelang_test",
     srcs = [
+        "analysis_test.py",
         "context_test.py",
         "coverage_test.py",
         "oracle_test.py",
@@ -156,6 +158,7 @@ py_test(
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = [
+        "loom.importers.tilelang.analysis_test",
         "loom.importers.tilelang.context_test",
         "loom.importers.tilelang.coverage_test",
         "loom.importers.tilelang.oracle_test",
@@ -166,6 +169,7 @@ py_test(
     deps = [
         ":oracle",
         ":tilelang",
+        ":tilelang_packages",
         "//loom/py/loom/importers/check/tilelang",
     ],
 )

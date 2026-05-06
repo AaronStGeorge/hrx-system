@@ -15,6 +15,7 @@ iree_py_library(
     core
   SRCS
     "abi.py"
+    "analysis.py"
     "buffers.py"
     "context.py"
     "converter.py"
@@ -63,6 +64,7 @@ iree_py_test(
   SRCS
     "../../tools/pytest_style_runner.py"
   ARGS
+    "loom.importers.tilelang.analysis_test"
     "loom.importers.tilelang.context_test"
     "loom.importers.tilelang.coverage_test"
     "loom.importers.tilelang.oracle_test"

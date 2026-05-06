@@ -916,7 +916,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_gemm_dense_16x16x16_kernel")
   %a_shared_buffer = buffer.alloca %a_shared_bytes {base_alignment = 2, memory_space = workgroup} : buffer
   %a_shared = buffer.view %a_shared_buffer[%c0_bytes] : buffer -> view<16x16xf16, %layout>
   %b_shared_buffer = buffer.alloca %a_shared_bytes {base_alignment = 2, memory_space = workgroup} : buffer
-  %b_shared = buffer.view %b_shared_buffer[%c0_bytes] : buffer -> view<16x16xf16, %layout>
+  %b_shared_layout = encoding.layout.strided [1, 16] : encoding<layout>
+  %b_shared = buffer.view %b_shared_buffer[%c0_bytes] : buffer -> view<16x16xf16, %b_shared_layout>
   %c_local_bytes = index.constant 1024 : offset
   %c_local_buffer = buffer.alloca %c_local_bytes {base_alignment = 4, memory_space = private} : buffer
   %c_local = buffer.view %c_local_buffer[%c0_bytes] : buffer -> view<16x16xf32, %layout>
@@ -932,14 +933,14 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_gemm_dense_16x16x16_kernel")
   scf.for %i0 = [%c0 to %c16 step %c1] {
     scf.for %i1 = [%c0 to %c16 step %c1] {
       %copy_2 = view.load %b[%i0, %i1] : view<16x16xf16, %layout> -> f16
-      view.store %copy_2, %b_shared[%i0, %i1] : f16, view<16x16xf16, %layout>
+      view.store %copy_2, %b_shared[%i0, %i1] : f16, view<16x16xf16, %b_shared_layout>
     }
   }
   %const = scalar.constant 0.0 : f32
   %fill = vector.splat %const : vector<8xf32>
   %init = vector.fragment<init> %fill shape [%c16, %c16] : vector<8xf32>
   %lhs = vector.fragment.load<lhs> %a_shared[%c0, %c0] shape [%c16, %c16] : view<16x16xf16, %layout> -> vector<16xf16>
-  %rhs = vector.fragment.load<rhs> %b_shared[%c0, %c0] shape [%c16, %c16] : view<16x16xf16, %layout> -> vector<16xf16>
+  %rhs = vector.fragment.load<rhs> %b_shared[%c0, %c0] shape [%c16, %c16] : view<16x16xf16, %b_shared_layout> -> vector<16xf16>
   %gemm = vector.mma %lhs, %rhs, %init : vector<16xf16>, vector<16xf16>, vector<8xf32>
   vector.fragment.store<result> %gemm, %c[%c0, %c0] shape [%c16, %c16] : vector<8xf32>, view<16x16xf32, %layout>
   kernel.return
