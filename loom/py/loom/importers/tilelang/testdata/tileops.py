@@ -859,3 +859,89 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_copy_2d_kernel") @tileop_cop
   kernel.return
 }
 """
+
+
+# ====
+@tilelang_case(
+    name="tileop_gemm_dense_16x16x16",
+    category="op",
+    tags=("tileop", "gemm", "matrix"),
+)
+def tileop_gemm_dense_16x16x16(T: Any) -> TileLangImportInput:
+    @T.prim_func  # type: ignore[untyped-decorator]
+    def tileop_gemm_dense_16x16x16_kernel(
+        a: T.Tensor[(16, 16), T.float16],
+        b: T.Tensor[(16, 16), T.float16],
+        c: T.Tensor[(16, 16), T.float32],
+    ) -> None:
+        with T.Kernel(1, threads=32):
+            a_shared = T.alloc_shared((16, 16), T.float16)
+            b_shared = T.alloc_shared((16, 16), T.float16)
+            c_local = T.alloc_fragment((16, 16), T.float32)
+            T.copy(a, a_shared)
+            T.copy(b, b_shared)
+            T.fill(c_local, 0.0)
+            T.gemm(a_shared, b_shared, c_local)
+            T.copy(c_local, c)
+
+    return TileLangImportInput(
+        source=tileop_gemm_dense_16x16x16_kernel,
+        target="hip -mcpu=gfx1100",
+        name="tileop_gemm_dense_16x16x16_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_gemm_dense_16x16x16_kernel") @tileop_gemm_dense_16x16x16_kernel(%a_handle: buffer, %b_handle: buffer, %c_handle: buffer) {
+  %c1 = index.constant 1 : index
+  %c32 = index.constant 32 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %a_noalias = buffer.assume.noalias %a_handle : buffer
+  %layout = encoding.layout.dense : encoding<layout>
+  %a = buffer.view %a_noalias[%c0_bytes] : buffer -> view<16x16xf16, %layout>
+  %b_noalias = buffer.assume.noalias %b_handle : buffer
+  %b = buffer.view %b_noalias[%c0_bytes] : buffer -> view<16x16xf16, %layout>
+  %c_noalias = buffer.assume.noalias %c_handle : buffer
+  %c = buffer.view %c_noalias[%c0_bytes] : buffer -> view<16x16xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %tx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %a_shared_bytes = index.constant 512 : offset
+  %a_shared_buffer = buffer.alloca %a_shared_bytes {base_alignment = 2, memory_space = workgroup} : buffer
+  %a_shared = buffer.view %a_shared_buffer[%c0_bytes] : buffer -> view<16x16xf16, %layout>
+  %b_shared_buffer = buffer.alloca %a_shared_bytes {base_alignment = 2, memory_space = workgroup} : buffer
+  %b_shared = buffer.view %b_shared_buffer[%c0_bytes] : buffer -> view<16x16xf16, %layout>
+  %c_local_bytes = index.constant 1024 : offset
+  %c_local_buffer = buffer.alloca %c_local_bytes {base_alignment = 4, memory_space = private} : buffer
+  %c_local = buffer.view %c_local_buffer[%c0_bytes] : buffer -> view<16x16xf32, %layout>
+  %c0 = index.constant 0 : index
+  %c16 = index.constant 16 : index
+  %c1 = index.constant 1 : index
+  scf.for %i0 = [%c0 to %c16 step %c1] {
+    scf.for %i1 = [%c0 to %c16 step %c1] {
+      %copy = view.load %a[%i0, %i1] : view<16x16xf16, %layout> -> f16
+      view.store %copy, %a_shared[%i0, %i1] : f16, view<16x16xf16, %layout>
+    }
+  }
+  scf.for %i0 = [%c0 to %c16 step %c1] {
+    scf.for %i1 = [%c0 to %c16 step %c1] {
+      %copy_2 = view.load %b[%i0, %i1] : view<16x16xf16, %layout> -> f16
+      view.store %copy_2, %b_shared[%i0, %i1] : f16, view<16x16xf16, %layout>
+    }
+  }
+  %const = scalar.constant 0.0 : f32
+  %fill = vector.splat %const : vector<8xf32>
+  %init = vector.fragment<init> %fill shape [%c16, %c16] : vector<8xf32>
+  %lhs = vector.fragment.load<lhs> %a_shared[%c0, %c0] shape [%c16, %c16] : view<16x16xf16, %layout> -> vector<16xf16>
+  %rhs = vector.fragment.load<rhs> %b_shared[%c0, %c0] shape [%c16, %c16] : view<16x16xf16, %layout> -> vector<16xf16>
+  %gemm = vector.mma %lhs, %rhs, %init : vector<16xf16>, vector<16xf16>, vector<8xf32>
+  vector.fragment.store<result> %gemm, %c[%c0, %c0] shape [%c16, %c16] : vector<8xf32>, view<16x16xf32, %layout>
+  kernel.return
+}
+"""

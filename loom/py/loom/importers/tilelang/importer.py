@@ -195,6 +195,7 @@ def _build_loom_module(
         launch_topology,
         diagnostics=diagnostics,
         type_converter=type_converter,
+        target_preset=target_preset,
         converter=converter,
     )
     context = TileLangConversionContext(
@@ -202,6 +203,7 @@ def _build_loom_module(
         diagnostics=diagnostics,
         preview_block=shell.body_block,
         type_converter=type_converter,
+        target_preset=target_preset,
         kernel_body_block=shell.body_block,
     )
     _capture_block_value_names(context, shell.body_block)
@@ -221,6 +223,7 @@ def _build_launch_config(
     *,
     diagnostics: DiagnosticEngine,
     type_converter: TileLangTypeConverter,
+    target_preset: str,
     converter: TileLangConverter,
 ) -> None:
     context = TileLangConversionContext(
@@ -228,6 +231,7 @@ def _build_launch_config(
         diagnostics=diagnostics,
         preview_block=shell.config_block,
         type_converter=type_converter,
+        target_preset=target_preset,
     )
     _capture_block_value_names(context, shell.config_block)
     with shell.builder.insertion_block(shell.config_block):

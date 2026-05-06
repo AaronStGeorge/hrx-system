@@ -48,6 +48,16 @@ class TileLangFragmentVector:
 
 
 @dataclass(frozen=True, slots=True)
+class TileLangMatrixFragment:
+    """Current SSA matrix fragment payload backing one TileLang local.fragment view."""
+
+    value: ValueRef
+    rows: ValueRef
+    columns: ValueRef
+    element_type: ScalarType
+
+
+@dataclass(frozen=True, slots=True)
 class TileLangBufferAccessKey:
     """Current-value key for a TileLang local buffer access."""
 
@@ -68,6 +78,7 @@ class TileLangConversionContext(SourceImportSession):
     """TileLang-specialized import session using Loom dynamic builders."""
 
     type_converter: TileLangTypeConverter = field(default_factory=TileLangTypeConverter)
+    target_preset: str = "tilelang.generic"
     index_values: dict[object, ValueRef] = field(default_factory=dict)
     semantic_values: dict[tuple[object, ...], ValueRef] = field(default_factory=dict)
     semantic_value_types: dict[tuple[object, ...], str] = field(default_factory=dict)
@@ -84,6 +95,7 @@ class TileLangConversionContext(SourceImportSession):
         default_factory=dict
     )
     fragment_vectors: dict[int, TileLangFragmentVector] = field(default_factory=dict)
+    matrix_fragments: dict[int, TileLangMatrixFragment] = field(default_factory=dict)
     buffer_access_values: dict[TileLangBufferAccessKey, ValueRef] = field(
         default_factory=dict
     )
@@ -267,6 +279,19 @@ class TileLangConversionContext(SourceImportSession):
     def clear_fragment_vector(self, view: ValueRef) -> None:
         self.fragment_vectors.pop(view.id, None)
 
+    def map_matrix_fragment(
+        self,
+        view: ValueRef,
+        fragment: TileLangMatrixFragment,
+    ) -> None:
+        self.matrix_fragments[view.id] = fragment
+
+    def matrix_fragment(self, view: ValueRef) -> TileLangMatrixFragment | None:
+        return self.matrix_fragments.get(view.id)
+
+    def clear_matrix_fragment(self, view: ValueRef) -> None:
+        self.matrix_fragments.pop(view.id, None)
+
     def buffer_access_key(
         self,
         view: ValueRef,
@@ -448,6 +473,7 @@ class TileLangConversionContext(SourceImportSession):
             registry=self.registry,
             names=self.names,
             type_converter=self.type_converter,
+            target_preset=self.target_preset,
             index_values=dict(self.index_values),
             semantic_values=dict(self.semantic_values),
             semantic_value_types=dict(self.semantic_value_types),
@@ -460,6 +486,7 @@ class TileLangConversionContext(SourceImportSession):
             static_topology_extents=dict(self.static_topology_extents),
             distributed_indices=dict(self.distributed_indices),
             fragment_vectors=dict(self.fragment_vectors),
+            matrix_fragments=dict(self.matrix_fragments),
             buffer_access_values=dict(self.buffer_access_values),
             buffer_access_source_keys=dict(self.buffer_access_source_keys),
             kernel_body_block=self.kernel_body_block,

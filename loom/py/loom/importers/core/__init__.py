@@ -28,6 +28,7 @@ from loom.importers.core.kernel import (
     kernel_module_ops,
     normalize_launch_tuple,
     normalize_workgroup_size,
+    target_preset_amdgpu_kind,
 )
 from loom.importers.core.names import (
     NameAllocator,
@@ -75,4 +76,5 @@ __all__ = [
     "sanitize_symbol",
     "source_name",
     "source_key",
+    "target_preset_amdgpu_kind",
 ]

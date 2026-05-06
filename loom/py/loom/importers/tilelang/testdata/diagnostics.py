@@ -60,15 +60,45 @@ def tileop_copy_coalesced_width(tilelang: Any, T: Any) -> TileLangImportInput:
 
 
 # ====
-# ERROR@+1: "tl.tileop.gemm" "vector.fragment" "m=16" "a=a_shared"
+# ERROR@+1: "tl.tileop.gemm vector.fragment bridge requires non-transposed inputs"
 @tilelang_case(
-    name="tileop_gemm_deferred",
+    name="tileop_gemm_transpose_b",
     category="diagnostic",
     tags=("tileop", "gemm", "matrix"),
 )
-def tileop_gemm_deferred(T: Any) -> TileLangImportInput:
+def tileop_gemm_transpose_b(T: Any) -> TileLangImportInput:
     @T.prim_func  # type: ignore[untyped-decorator]
-    def tileop_gemm_deferred_kernel(
+    def tileop_gemm_transpose_b_kernel(
+        a: T.Tensor[(16, 16), T.float16],
+        b: T.Tensor[(16, 16), T.float16],
+        c: T.Tensor[(16, 16), T.float32],
+    ) -> None:
+        with T.Kernel(1, threads=32):
+            a_shared = T.alloc_shared((16, 16), T.float16)
+            b_shared = T.alloc_shared((16, 16), T.float16)
+            c_local = T.alloc_fragment((16, 16), T.float32)
+            T.copy(a, a_shared)
+            T.copy(b, b_shared)
+            T.fill(c_local, 0.0)
+            T.gemm(a_shared, b_shared, c_local, transpose_B=True)
+
+    return TileLangImportInput(
+        source=tileop_gemm_transpose_b_kernel,
+        target="hip -mcpu=gfx1100",
+        name="tileop_gemm_transpose_b_kernel",
+    )
+
+
+# ====
+# ERROR@+1: "tl.tileop.gemm vector.fragment bridge requires AMDGPU gfx1100"
+@tilelang_case(
+    name="tileop_gemm_unsupported_target",
+    category="diagnostic",
+    tags=("tileop", "gemm", "matrix", "target"),
+)
+def tileop_gemm_unsupported_target(T: Any) -> TileLangImportInput:
+    @T.prim_func  # type: ignore[untyped-decorator]
+    def tileop_gemm_unsupported_target_kernel(
         a: T.Tensor[(16, 16), T.float16],
         b: T.Tensor[(16, 16), T.float16],
         c: T.Tensor[(16, 16), T.float32],
@@ -81,12 +111,11 @@ def tileop_gemm_deferred(T: Any) -> TileLangImportInput:
             T.copy(b, b_shared)
             T.fill(c_local, 0.0)
             T.gemm(a_shared, b_shared, c_local)
-            T.copy(c_local, c)
 
     return TileLangImportInput(
-        source=tileop_gemm_deferred_kernel,
-        target="hip -mcpu=gfx1100",
-        name="tileop_gemm_deferred_kernel",
+        source=tileop_gemm_unsupported_target_kernel,
+        target="hip -mcpu=gfx942",
+        name="tileop_gemm_unsupported_target_kernel",
     )
 
 

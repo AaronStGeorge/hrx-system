@@ -1050,8 +1050,12 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
     OpCoverage(
         "tl.tileop.gemm",
         OpFamily.TILELANG_TILEOP,
-        CoverageState.DEFERRED,
-        "Matrix tile op; maps through vector.fragment and vector.mma.",
+        CoverageState.SUPPORTED,
+        (
+            "Dense 16x16x16 f16/f32 GEMM maps through vector.fragment and "
+            "vector.mma; transpose, packed, and asynchronous variants remain "
+            "separate bridge cases."
+        ),
     ),
 )
 

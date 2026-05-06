@@ -220,11 +220,16 @@ def _region_arguments_by_ordinal(
 def kernel_module_ops(target_preset: str) -> tuple[Op, ...]:
     """Return the op declarations needed for a kernel module target preset."""
     ops = loom.default_ops()
-    if _amdgpu_target_kind(target_preset) is None:
+    if target_preset_amdgpu_kind(target_preset) is None:
         return ops
     from loom.target.arch.amdgpu.dialect import ALL_AMDGPU_OPS
 
     return (*ops, *ALL_AMDGPU_OPS)
+
+
+def target_preset_amdgpu_kind(target_preset: str) -> str | None:
+    """Return the canonical AMDGPU target kind selected by a target preset."""
+    return _amdgpu_target_kind(target_preset)
 
 
 def _build_target_record(
@@ -232,7 +237,7 @@ def _build_target_record(
     target_symbol: str,
     target_preset: str,
 ) -> None:
-    amdgpu_kind = _amdgpu_target_kind(target_preset)
+    amdgpu_kind = target_preset_amdgpu_kind(target_preset)
     if amdgpu_kind is not None:
         from loom.target.arch.amdgpu.dialect import amdgpu_target
 

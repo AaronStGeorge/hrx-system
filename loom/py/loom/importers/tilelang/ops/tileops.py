@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import cast
 
 from loom.builder import ValueRef
-from loom.importers.core import sanitize_identifier
+from loom.importers.core import sanitize_identifier, target_preset_amdgpu_kind
 from loom.importers.tilelang.buffers import (
     TileLangBufferAccess,
     TileLangBufferRegion,
@@ -25,6 +25,7 @@ from loom.importers.tilelang.context import (
     TileLangConversionContext,
     TileLangDistributedIndex,
     TileLangFragmentVector,
+    TileLangMatrixFragment,
 )
 from loom.importers.tilelang.converter import ExpressionOptions, TileLangConverter
 from loom.importers.tilelang.coverage import coverage_row
@@ -54,6 +55,19 @@ class _FragmentVectorLoopState:
     view: ValueRef
     initial: TileLangFragmentVector
     name: str
+
+
+@dataclass(frozen=True, slots=True)
+class _DenseGemmSpec:
+    """Decoded dense TileLang GEMM slice supported by the first bridge."""
+
+    lhs: TileLangBufferRegion
+    rhs: TileLangBufferRegion
+    accumulator: TileLangBufferRegion
+    lhs_type: ScalarType
+    rhs_type: ScalarType
+    accumulator_type: ScalarType
+    clear_accumulator: bool
 
 
 def is_tileop_call(op_name: str) -> bool:
@@ -88,7 +102,7 @@ def convert_tileop_call(
             expr, context, converter, options, op_name
         )
     if op_name in _GEMM_CALLS:
-        return _convert_gemm_call(expr, context, options, op_name)
+        return _convert_gemm_call(expr, context, converter, options, op_name)
     _record_unsupported_tileop(expr, context, op_name)
     return None
 
@@ -132,6 +146,17 @@ def _convert_copy_call(
             node_text(expr),
             f"call `{op_name}` destination region is not a shaped view",
         )
+        return None
+    if _try_emit_matrix_fragment_copy(
+        expr,
+        context,
+        source=source,
+        target=target,
+        loop_extents=loop_extents,
+        source_element_type=source_element_type,
+        target_element_type=target_element_type,
+    ):
+        context.record_converted(node_text(expr), "tl.tileop.copy matrix fragment")
         return None
     if _try_emit_fragment_vector_copy(
         expr,
@@ -273,6 +298,7 @@ def _try_emit_fragment_vector_copy(
         results=[result_type],
         name=context.fresh_name("copy"),
     )
+    context.clear_matrix_fragment(target.view)
     context.map_fragment_vector(
         target.view,
         TileLangFragmentVector(
@@ -280,6 +306,44 @@ def _try_emit_fragment_vector_copy(
             lane_count=plan.lane_count,
             base=None if plan.thread_count == 1 else plan.base,
         ),
+    )
+    return True
+
+
+def _try_emit_matrix_fragment_copy(
+    expr: object,
+    context: TileLangConversionContext,
+    *,
+    source: TileLangBufferRegion,
+    target: TileLangBufferRegion,
+    loop_extents: tuple[ValueRef, ...],
+    source_element_type: Type,
+    target_element_type: Type,
+) -> bool:
+    if source.index_map.memory_scope != "local.fragment":
+        return False
+    if target.index_map.memory_scope == "local.fragment":
+        return False
+    fragment = context.matrix_fragment(source.view)
+    if fragment is None:
+        return False
+    if source_element_type != target_element_type:
+        return False
+    if fragment.element_type != target_element_type:
+        return False
+    if len(loop_extents) != 2 or not _all_zero_indices(source.indices, context):
+        return False
+    if not _same_value_sequence(loop_extents, (fragment.rows, fragment.columns)):
+        return False
+    zero = context.ensure_constant("0", "index", "c0")
+    target_indices = _region_indices(target, (zero, zero), context)
+    context.builder.vector.fragment_store(
+        role="result",
+        value=fragment.value,
+        view=target.view,
+        indices=list(target_indices),
+        rows=fragment.rows,
+        columns=fragment.columns,
     )
     return True
 
@@ -313,6 +377,7 @@ def _try_emit_full_fragment_vector_copy(
         results=[result_type],
         name=context.fresh_name("copy"),
     )
+    context.clear_matrix_fragment(target.view)
     context.map_fragment_vector(
         target.view,
         TileLangFragmentVector(value=vector, lane_count=extent_integer),
@@ -385,6 +450,18 @@ def _convert_fill_call(
             f"call `{op_name}` fill value is not mapped",
         )
         return None
+    if _try_emit_matrix_fragment_fill(
+        expr,
+        context,
+        target=target,
+        value=value,
+        fill_source=args[1],
+        element_type=element_type,
+    ):
+        context.record_converted(
+            node_text(expr), "tl.tileop.fill<local.fragment.matrix>"
+        )
+        return None
     if _try_emit_fragment_vector_fill(
         expr,
         context,
@@ -442,9 +519,56 @@ def _try_emit_fragment_vector_fill(
         results=[result_type],
         name=context.fresh_name("fill"),
     )
+    context.clear_matrix_fragment(target.view)
     context.map_fragment_vector(
         target.view,
         TileLangFragmentVector(value=vector, lane_count=extent_integer),
+    )
+    return True
+
+
+def _try_emit_matrix_fragment_fill(
+    expr: object,
+    context: TileLangConversionContext,
+    *,
+    target: TileLangBufferRegion,
+    value: ValueRef,
+    fill_source: object,
+    element_type: ScalarType,
+) -> bool:
+    if target.index_map.memory_scope != "local.fragment":
+        return False
+    if len(target.extents) != 2 or not _all_zero_indices(target.indices, context):
+        return False
+    if not _is_zero_fill_source(fill_source):
+        return False
+    if _static_extent_tuple(target.extents, context) != (16, 16):
+        return False
+    if str(element_type) != "f32":
+        return False
+    payload_type = context.type_converter.vector_type(element_type, 8)
+    payload = context.builder.vector.splat(
+        scalar=value,
+        results=[payload_type],
+        name=context.fresh_name("fill"),
+    )
+    fragment = context.builder.vector.fragment(
+        role="init",
+        data=payload,
+        rows=target.extents[0],
+        columns=target.extents[1],
+        results=[payload_type],
+        name=context.fresh_name("init"),
+    )
+    context.clear_fragment_vector(target.view)
+    context.map_matrix_fragment(
+        target.view,
+        TileLangMatrixFragment(
+            value=fragment,
+            rows=target.extents[0],
+            columns=target.extents[1],
+            element_type=element_type,
+        ),
     )
     return True
 
@@ -835,6 +959,7 @@ def _convert_finalize_reducer_all(
 def _convert_gemm_call(
     expr: object,
     context: TileLangConversionContext,
+    converter: TileLangConverter,
     options: ExpressionOptions,
     op_name: str,
 ) -> ValueRef | None:
@@ -847,32 +972,270 @@ def _convert_gemm_call(
             f"call `{op_name}` expects at least 19 descriptor operands",
         )
         return None
-    descriptor = ", ".join(
-        (
-            f"a={_region_source_name(args[0])}",
-            f"b={_region_source_name(args[1])}",
-            f"c={_region_source_name(args[2])}",
-            f"transpose_a={_field_bool(args[3])}",
-            f"transpose_b={_field_bool(args[4])}",
-            f"m={_field_integer(args[5])}",
-            f"n={_field_integer(args[6])}",
-            f"k={_field_integer(args[7])}",
-            f"policy={_field_integer(args[8])}",
-            f"clear_accum={_field_bool(args[9])}",
-            f"k_pack={_field_integer(args[14])}",
-            f"wg_wait={_field_integer(args[15])}",
-        )
+    spec = _decode_dense_gemm_spec(expr, context, converter, args)
+    if spec is None:
+        return None
+    init = _gemm_init_fragment(expr, context, spec)
+    if init is None:
+        return None
+    lhs_payload_type = context.type_converter.vector_type(spec.lhs_type, 16)
+    accumulator_payload_type = context.type_converter.vector_type(
+        spec.accumulator_type, 8
     )
-    row = coverage_row(op_name)
-    if row is None:
+    lhs = context.builder.vector.fragment_load(
+        role="lhs",
+        view=spec.lhs.view,
+        indices=list(spec.lhs.indices),
+        rows=spec.lhs.extents[0],
+        columns=spec.lhs.extents[1],
+        results=[lhs_payload_type],
+        name=context.fresh_name("lhs"),
+    )
+    rhs = context.builder.vector.fragment_load(
+        role="rhs",
+        view=spec.rhs.view,
+        indices=list(spec.rhs.indices),
+        rows=spec.rhs.extents[0],
+        columns=spec.rhs.extents[1],
+        results=[lhs_payload_type],
+        name=context.fresh_name("rhs"),
+    )
+    result = context.builder.vector.mma(
+        lhs=lhs,
+        rhs=rhs,
+        init=init,
+        results=[accumulator_payload_type],
+        name=context.fresh_name("gemm"),
+    )
+    context.clear_fragment_vector(spec.accumulator.view)
+    context.map_matrix_fragment(
+        spec.accumulator.view,
+        TileLangMatrixFragment(
+            value=result,
+            rows=spec.accumulator.extents[0],
+            columns=spec.accumulator.extents[1],
+            element_type=spec.accumulator_type,
+        ),
+    )
+    context.record_converted(node_text(expr), "tl.tileop.gemm dense f16/f32")
+    return None
+
+
+def _decode_dense_gemm_spec(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    args: tuple[object, ...],
+) -> _DenseGemmSpec | None:
+    annotations = _call_annotations(expr)
+    if annotations:
         context.record_blocked(
             node_text(expr),
-            f"TileLang GEMM operation `{op_name}` is not in the coverage manifest",
+            (
+                "tl.tileop.gemm vector.fragment bridge does not import "
+                "pipeline or scheduling annotations"
+            ),
         )
         return None
-    reason = f"call `{op_name}` coverage state is {row.state.value}: {row.note}"
-    context.record_blocked(node_text(expr), f"{reason} ({descriptor})")
-    return None
+    if target_preset_amdgpu_kind(context.target_preset) != "gfx1100":
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm vector.fragment bridge requires AMDGPU gfx1100",
+        )
+        return None
+    transpose_lhs = _static_bool(args[3])
+    transpose_rhs = _static_bool(args[4])
+    if transpose_lhs or transpose_rhs:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm vector.fragment bridge requires non-transposed inputs",
+        )
+        return None
+    if transpose_lhs is None or transpose_rhs is None:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm transpose flags must be static",
+        )
+        return None
+    shape = tuple(integer_value(arg) for arg in args[5:8])
+    if shape != (16, 16, 16):
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm vector.fragment bridge requires m/n/k = 16/16/16",
+        )
+        return None
+    if integer_value(args[8]) != 0:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm vector.fragment bridge requires default warp policy",
+        )
+        return None
+    clear_accumulator = _static_bool(args[9])
+    if clear_accumulator is None:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm clear_accum flag must be static",
+        )
+        return None
+    if integer_value(args[14]) != 1:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm vector.fragment bridge requires k_pack = 1",
+        )
+        return None
+    if integer_value(args[15]) != 0:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm vector.fragment bridge does not import async waits",
+        )
+        return None
+    lhs = _decode_region(args[0], expr, context, converter, expected_access=1)
+    rhs = _decode_region(args[1], expr, context, converter, expected_access=1)
+    accumulator = _decode_region(args[2], expr, context, converter, expected_access=2)
+    if lhs is None or rhs is None or accumulator is None:
+        return None
+    lhs_type = _view_element_type(lhs.view, context)
+    rhs_type = _view_element_type(rhs.view, context)
+    accumulator_type = _view_element_type(accumulator.view, context)
+    if lhs_type is None or rhs_type is None or accumulator_type is None:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm regions must resolve to shaped views",
+        )
+        return None
+    if str(lhs_type) != "f16" or str(rhs_type) != "f16":
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm vector.fragment bridge requires f16 inputs",
+        )
+        return None
+    if str(accumulator_type) != "f32":
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm vector.fragment bridge requires f32 accumulator",
+        )
+        return None
+    if not _region_is_shared(lhs) or not _region_is_shared(rhs):
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm vector.fragment bridge requires shared input tiles",
+        )
+        return None
+    if accumulator.index_map.memory_scope != "local.fragment":
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm vector.fragment bridge requires local.fragment accumulator",
+        )
+        return None
+    if not _validate_gemm_region_shapes(expr, context, lhs, rhs, accumulator):
+        return None
+    return _DenseGemmSpec(
+        lhs=lhs,
+        rhs=rhs,
+        accumulator=accumulator,
+        lhs_type=lhs_type,
+        rhs_type=rhs_type,
+        accumulator_type=accumulator_type,
+        clear_accumulator=clear_accumulator,
+    )
+
+
+def _validate_gemm_region_shapes(
+    expr: object,
+    context: TileLangConversionContext,
+    lhs: TileLangBufferRegion,
+    rhs: TileLangBufferRegion,
+    accumulator: TileLangBufferRegion,
+) -> bool:
+    if _static_extent_tuple(lhs.extents, context) != (16, 16):
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm vector.fragment bridge requires full 16x16 lhs region",
+        )
+        return False
+    if _static_extent_tuple(rhs.extents, context) != (16, 16):
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm vector.fragment bridge requires full 16x16 rhs region",
+        )
+        return False
+    if _static_extent_tuple(accumulator.extents, context) != (16, 16):
+        context.record_blocked(
+            node_text(expr),
+            (
+                "tl.tileop.gemm vector.fragment bridge requires full 16x16 "
+                "accumulator region"
+            ),
+        )
+        return False
+    if not _all_zero_indices(accumulator.indices, context):
+        context.record_blocked(
+            node_text(expr),
+            (
+                "tl.tileop.gemm vector.fragment bridge requires full 16x16 "
+                "accumulator region"
+            ),
+        )
+        return False
+    return True
+
+
+def _gemm_init_fragment(
+    expr: object,
+    context: TileLangConversionContext,
+    spec: _DenseGemmSpec,
+) -> ValueRef | None:
+    if spec.clear_accumulator:
+        zero = context.build_typed_constant(
+            0.0,
+            spec.accumulator_type,
+            name=context.reserve_name("zero"),
+        )
+        return _build_zero_init_fragment(context, spec, zero)
+    fragment = context.matrix_fragment(spec.accumulator.view)
+    if fragment is None:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm accumulator has no imported matrix fragment state",
+        )
+        return None
+    if not _same_value_sequence(
+        (fragment.rows, fragment.columns),
+        (spec.accumulator.extents[0], spec.accumulator.extents[1]),
+    ):
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm accumulator fragment shape does not match region",
+        )
+        return None
+    if fragment.element_type != spec.accumulator_type:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm accumulator fragment element type does not match region",
+        )
+        return None
+    return fragment.value
+
+
+def _build_zero_init_fragment(
+    context: TileLangConversionContext,
+    spec: _DenseGemmSpec,
+    zero: ValueRef,
+) -> ValueRef:
+    payload_type = context.type_converter.vector_type(spec.accumulator_type, 8)
+    payload = context.builder.vector.splat(
+        scalar=zero,
+        results=[payload_type],
+        name=context.fresh_name("zero"),
+    )
+    return context.builder.vector.fragment(
+        role="init",
+        data=payload,
+        rows=spec.accumulator.extents[0],
+        columns=spec.accumulator.extents[1],
+        results=[payload_type],
+        name=context.fresh_name("init"),
+    )
 
 
 def _require_effect(
@@ -1204,6 +1567,7 @@ def _store_tracked_local_value(
     context: TileLangConversionContext,
 ) -> None:
     if memory_scope == "local.fragment":
+        context.clear_matrix_fragment(view)
         fragment_value = context.fragment_vector(view)
         if fragment_value is not None:
             updated = _insert_fragment_vector_value(
@@ -1467,6 +1831,42 @@ def _copy_uses_distributed_index_space(
 
 def _region_is_fragment(region: TileLangBufferRegion) -> bool:
     return region.index_map.memory_scope == "local.fragment"
+
+
+def _region_is_shared(region: TileLangBufferRegion) -> bool:
+    return region.index_map.memory_scope.startswith("shared")
+
+
+def _same_value_sequence(
+    lhs: tuple[ValueRef, ...],
+    rhs: tuple[ValueRef, ...],
+) -> bool:
+    return len(lhs) == len(rhs) and all(
+        lhs_value.id == rhs_value.id
+        for lhs_value, rhs_value in zip(lhs, rhs, strict=True)
+    )
+
+
+def _static_extent_tuple(
+    extents: tuple[ValueRef, ...],
+    context: TileLangConversionContext,
+) -> tuple[int, ...] | None:
+    values: list[int] = []
+    for extent in extents:
+        value = static_index_value(extent, context)
+        if value is None:
+            return None
+        values.append(value)
+    return tuple(values)
+
+
+def _is_zero_fill_source(source: object) -> bool:
+    payload = getattr(source, "value", source)
+    if isinstance(payload, bool):
+        return not payload
+    if isinstance(payload, int | float):
+        return payload == 0
+    return False
 
 
 def _region_indices(
