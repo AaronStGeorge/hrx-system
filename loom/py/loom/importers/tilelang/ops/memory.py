@@ -431,6 +431,21 @@ def convert_buffer_load(
                 )
                 return None
             result_type = context.type_converter.vector_type(dtype(expr), lanes)
+        fragment_result = _try_convert_fragment_vector_memory_load(
+            expr,
+            buffer,
+            source_indices,
+            vector_indices,
+            result_type,
+            context,
+            converter,
+        )
+        if fragment_result is not None:
+            context.map_value(expr, fragment_result, str(result_type))
+            context.record_converted(
+                node_text(expr), f"{context.ssa(fragment_result)} = local.fragment"
+            )
+            return fragment_result
         result = context.builder.vector.load(
             view=view,
             indices=vector_indices,
@@ -576,6 +591,19 @@ def _try_convert_fragment_vector_load(
     fragment_value = context.fragment_vector(access.view)
     if fragment_value is None:
         return None
+    if fragment_value.base is None:
+        if len(access.indices) != 1:
+            context.record_blocked(
+                node_text(expr),
+                "local.fragment vector access is not rank-1",
+            )
+            return None
+        return context.builder.vector.extract(
+            source=fragment_value.value,
+            indices=[access.indices[0]],
+            results=[result_type],
+            name=context.fresh_name("load"),
+        )
     lane = _single_distributed_index(access.indices, context)
     if lane is None or lane.lane < 0 or lane.lane_count != fragment_value.lane_count:
         context.record_blocked(
@@ -611,9 +639,54 @@ def _fragment_vector_value_for_load(
     fragment_value = context.fragment_vector(access.view)
     if fragment_value is None:
         return None
+    if fragment_value.base is None:
+        return None
     if fragment_value.lane_count != lane.lane_count:
         return None
     return fragment_value
+
+
+def _try_convert_fragment_vector_memory_load(
+    expr: object,
+    buffer: object,
+    source_indices: tuple[object, ...],
+    vector_indices: list[int | ValueRef],
+    result_type: Type,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> ValueRef | None:
+    if not is_vector_type(result_type):
+        return None
+    index_map = resolve_buffer_index_map(
+        buffer,
+        context,
+        converter,
+        diagnostic_owner=expr,
+    )
+    if index_map is None or index_map.memory_scope != "local.fragment":
+        return None
+    fragment_value = context.fragment_vector(index_map.view)
+    if fragment_value is None:
+        return None
+    if str(fragment_value.value.type) != str(result_type):
+        return None
+    if len(source_indices) != 1 or len(vector_indices) != 1:
+        return None
+    ramp = source_indices[0]
+    if node_kind(ramp) != "Ramp":
+        return None
+    stride = integer_value(getattr(ramp, "stride", None))
+    if stride != 1:
+        return None
+    if fragment_value.base is None:
+        base = vector_indices[0]
+        if not isinstance(base, ValueRef) or not _is_zero_index(base, context):
+            return None
+        return fragment_value.value
+    base = vector_indices[0]
+    if not isinstance(base, ValueRef) or base.id != fragment_value.base.id:
+        return None
+    return fragment_value.value
 
 
 def _direct_distributed_source_axis(
@@ -806,6 +879,11 @@ def _single_ramp_lanes(source_indices: tuple[object, ...]) -> int | None:
             return None
         lanes = vector_lanes(source_index)
     return lanes
+
+
+def _is_zero_index(value: ValueRef, context: TileLangConversionContext) -> bool:
+    zero = context.constants.get(("index", "0"))
+    return zero is not None and value.id == zero.id
 
 
 def _buffer_scope(buffer: object) -> str:

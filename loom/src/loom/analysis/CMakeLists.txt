@@ -478,6 +478,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ir::facts
     loom::src::loom::ops::index
+    loom::src::loom::ops::kernel
     loom::src::loom::ops::scalar
     loom::src::loom::ops::scf
     loom::src::loom::util::fact_table
@@ -568,6 +569,7 @@ loom_cc_test(
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::ops::index
+    loom::src::loom::ops::kernel
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar
     loom::src::loom::ops::scf

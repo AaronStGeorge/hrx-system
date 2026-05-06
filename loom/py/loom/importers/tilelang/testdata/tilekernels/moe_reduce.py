@@ -121,23 +121,15 @@ kernel.def target(@hip_mcpu_gfx1100) export("reduce_fused_kernel") @reduce_fused
   }
   %c1 = index.constant 1 : index
   %c2 = index.constant 2 : index
-  %i0_active_2 = index.cmp slt, %tx, %c2 : index
-  scf.if %i0_active_2 {
-    %copy = view.load %topk_weights[%bx, %tx] : view<[%num_tokens_idx]x2xf32, %layout> -> f32
-    view.store %copy, %topk_weights_local[%tx] : f32, view<2xf32, %layout>
-  }
-  %i0_active_3 = index.cmp slt, %tx, %c2 : index
-  scf.if %i0_active_3 {
-    %copy_2 = view.load %token_topk_to_pos[%bx, %tx] : view<[%num_tokens_idx]x2xi32, %layout> -> i32
-    view.store %copy_2, %topk_to_pos_local[%tx] : i32, view<2xi32, %layout>
-  }
+  %copy = vector.load %topk_weights[%bx, %c0] : view<[%num_tokens_idx]x2xf32, %layout> -> vector<2xf32>
+  %copy_2 = vector.load %token_topk_to_pos[%bx, %c0] : view<[%num_tokens_idx]x2xi32, %layout> -> vector<2xi32>
   scf.for %k = [%c0 to %c2 step %c1] {
-    %load = view.load %topk_to_pos_local[%k] : view<2xi32, %layout> -> i32
+    %load = vector.extract %copy_2[%k] : vector<2xi32> -> i32
     %pos_assumed, %num_expanded_tokens_assumed = scalar.assume %load, %num_expanded_tokens [lt(%load, %num_expanded_tokens)] : i32, i32
     %const_2 = scalar.constant 0 : i32
     %cmp = scalar.cmpi sge, %pos_assumed, %const_2 : i32
     scf.if %cmp {
-      %load_2 = view.load %topk_weights_local[%k] : view<2xf32, %layout> -> f32
+      %load_2 = vector.extract %copy[%k] : vector<2xf32> -> f32
       view.store %load_2, %scale[%c0] : f32, view<1xf32, %layout>
       scf.for %i = [%c0 to %c8 step %c1] {
         %load_3 = view.load %reduced_fragment[%i] : view<8xf32, %layout> -> f32

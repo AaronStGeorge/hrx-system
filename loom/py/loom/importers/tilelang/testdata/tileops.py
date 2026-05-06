@@ -282,15 +282,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_kernel") @tileop_
   %out = buffer.view %out_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
-  %i0_base = index.mul %tx, %c4 : index
-  %copy = vector.load %src[%i0_base] : view<4xf32, %layout> -> vector<4xf32>
-  %load = vector.load %local[%c0] : view<4xf32, %layout> -> vector<4xf32>
+  %copy = vector.load %src[%c0] : view<4xf32, %layout> -> vector<4xf32>
   %identity = scalar.constant 0.0 : f32
-  %reduce = vector.reduce<addf> %load, %identity : vector<4xf32>, f32
+  %reduce = vector.reduce<addf> %copy, %identity : vector<4xf32>, f32
   view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
   %c1 = index.constant 1 : index
-  %copy_2 = view.load %out[%c0] : view<1xf32, %layout> -> f32
-  view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
+  view.store %reduce, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
 }
 """
@@ -348,16 +345,13 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_abssum_kernel") @tile
   %out = buffer.view %out_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
-  %i0_base = index.mul %tx, %c4 : index
-  %copy = vector.load %src[%i0_base] : view<4xf32, %layout> -> vector<4xf32>
-  %load = vector.load %local[%c0] : view<4xf32, %layout> -> vector<4xf32>
+  %copy = vector.load %src[%c0] : view<4xf32, %layout> -> vector<4xf32>
   %identity = scalar.constant 0.0 : f32
-  %abs = vector.absf %load : vector<4xf32>
+  %abs = vector.absf %copy : vector<4xf32>
   %reduce = vector.reduce<addf> %abs, %identity : vector<4xf32>, f32
   view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
   %c1 = index.constant 1 : index
-  %copy_2 = view.load %out[%c0] : view<1xf32, %layout> -> f32
-  view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
+  view.store %reduce, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
 }
 """
@@ -415,16 +409,13 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_kernel") @tile
   %out = buffer.view %out_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
-  %i0_base = index.mul %tx, %c4 : index
-  %copy = vector.load %src[%i0_base] : view<4xf32, %layout> -> vector<4xf32>
-  %load = vector.load %local[%c0] : view<4xf32, %layout> -> vector<4xf32>
+  %copy = vector.load %src[%c0] : view<4xf32, %layout> -> vector<4xf32>
   %identity = scalar.constant 0.0 : f32
-  %abs = vector.absf %load : vector<4xf32>
+  %abs = vector.absf %copy : vector<4xf32>
   %reduce = vector.reduce<maxnumf> %abs, %identity : vector<4xf32>, f32
   view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
   %c1 = index.constant 1 : index
-  %copy_2 = view.load %out[%c0] : view<1xf32, %layout> -> f32
-  view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
+  view.store %reduce, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
 }
 """
@@ -482,17 +473,14 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_widen_kernel")
   %out = buffer.view %out_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
-  %i0_base = index.mul %tx, %c4 : index
-  %copy = vector.load %src[%i0_base] : view<4xf16, %layout> -> vector<4xf16>
-  %load = vector.load %local[%c0] : view<4xf16, %layout> -> vector<4xf16>
-  %reduce_cast = vector.extf %load : vector<4xf16> to vector<4xf32>
+  %copy = vector.load %src[%c0] : view<4xf16, %layout> -> vector<4xf16>
+  %reduce_cast = vector.extf %copy : vector<4xf16> to vector<4xf32>
   %identity = scalar.constant 0.0 : f32
   %abs = vector.absf %reduce_cast : vector<4xf32>
   %reduce = vector.reduce<maxnumf> %abs, %identity : vector<4xf32>, f32
   view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
   %c1 = index.constant 1 : index
-  %copy_2 = view.load %out[%c0] : view<1xf32, %layout> -> f32
-  view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
+  view.store %reduce, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
 }
 """

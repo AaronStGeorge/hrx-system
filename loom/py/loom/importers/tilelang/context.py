@@ -44,6 +44,7 @@ class TileLangFragmentVector:
 
     value: ValueRef
     lane_count: int
+    base: ValueRef | None = None
 
 
 @dataclass(frozen=True, slots=True)

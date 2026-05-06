@@ -158,12 +158,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("topk_gate_kernel") @topk_gate_kerne
     }
     scf.for %i = [%c0 to %c32 step %c1] {
       %load_3 = view.load %scores_fragment[%i] : view<32xf32, %layout> -> f32
-      %load_4 = view.load %amax_fragment[%c0] : view<1xf32, %layout> -> f32
-      %cmp_2 = scalar.cmpf oeq, %load_3, %load_4 : f32
+      %cmp_2 = scalar.cmpf oeq, %load_3, %reduce : f32
       scf.if %cmp_2 {
-        %load_5 = view.load %idx_reducer[%c0] : view<1xi32, %layout> -> i32
-        %load_6 = view.load %idx_fragment[%i] : view<32xi32, %layout> -> i32
-        %minsi = scalar.minsi %load_5, %load_6 : i32
+        %load_4 = view.load %idx_reducer[%c0] : view<1xi32, %layout> -> i32
+        %load_5 = view.load %idx_fragment[%i] : view<32xi32, %layout> -> i32
+        %minsi = scalar.minsi %load_4, %load_5 : i32
         view.store %minsi, %idx_reducer[%c0] : i32, view<1xi32, %layout>
       }
     }
@@ -172,11 +171,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("topk_gate_kernel") @topk_gate_kerne
       %reducer_all = kernel.workgroup.reduce<minsi> %reducer_value : i32
       view.store %reducer_all, %idx_reducer[%i0] : i32, view<1xi32, %layout>
     }
-    %load_7 = view.load %idx_reducer[%c0] : view<1xi32, %layout> -> i32
-    view.store %load_7, %topk_idx_shared[%k] : i32, view<2xi32, %layout>
+    %load_6 = view.load %idx_reducer[%c0] : view<1xi32, %layout> -> i32
+    view.store %load_6, %topk_idx_shared[%k] : i32, view<2xi32, %layout>
     scf.for %i = [%c0 to %c32 step %c1] {
-      %load_8 = view.load %idx_fragment[%i] : view<32xi32, %layout> -> i32
-      %cmp_3 = scalar.cmpi eq, %load_8, %load_7 : i32
+      %load_7 = view.load %idx_fragment[%i] : view<32xi32, %layout> -> i32
+      %cmp_3 = scalar.cmpi eq, %load_7, %load_6 : i32
       scf.if %cmp_3 {
         %inf_2 = scalar.constant inf : f32
         %const_3 = scalar.constant -1.0 : f32

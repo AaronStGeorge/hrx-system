@@ -160,34 +160,6 @@ static uint32_t loom_kernel_max_workgroup_count(
   return max_count;
 }
 
-static loom_value_id_t loom_kernel_launch_config_workgroup_count_operand(
-    const loom_op_t* launch_config, loom_kernel_dimension_t dimension) {
-  switch (dimension) {
-    case LOOM_KERNEL_DIMENSION_X:
-      return loom_kernel_launch_config_workgroup_count_x(launch_config);
-    case LOOM_KERNEL_DIMENSION_Y:
-      return loom_kernel_launch_config_workgroup_count_y(launch_config);
-    case LOOM_KERNEL_DIMENSION_Z:
-      return loom_kernel_launch_config_workgroup_count_z(launch_config);
-    default:
-      return LOOM_VALUE_ID_INVALID;
-  }
-}
-
-static loom_value_id_t loom_kernel_launch_config_workgroup_size_operand(
-    const loom_op_t* launch_config, loom_kernel_dimension_t dimension) {
-  switch (dimension) {
-    case LOOM_KERNEL_DIMENSION_X:
-      return loom_kernel_launch_config_workgroup_size_x(launch_config);
-    case LOOM_KERNEL_DIMENSION_Y:
-      return loom_kernel_launch_config_workgroup_size_y(launch_config);
-    case LOOM_KERNEL_DIMENSION_Z:
-      return loom_kernel_launch_config_workgroup_size_z(launch_config);
-    default:
-      return LOOM_VALUE_ID_INVALID;
-  }
-}
-
 static bool loom_kernel_launch_config_operand_facts(
     const loom_fact_context_t* context, loom_kernel_dimension_t dimension,
     loom_value_id_t (*operand_lookup)(const loom_op_t* launch_config,

@@ -8,6 +8,7 @@
 #define LOOM_OPS_KERNEL_LAUNCH_CONFIG_H_
 
 #include "loom/ir/module.h"
+#include "loom/ops/kernel/ops.h"
 #include "loom/target/types.h"
 #include "loom/util/fact_table.h"
 
@@ -19,6 +20,18 @@ extern "C" {
 // or NULL if the op is not a source kernel definition or the config region is
 // structurally incomplete.
 const loom_op_t* loom_kernel_def_launch_config_op(const loom_op_t* kernel_op);
+
+// Returns the workgroup count operand for |dimension| from a launch config
+// terminator, or LOOM_VALUE_ID_INVALID when |launch_config| is not a launch
+// config terminator or |dimension| is invalid.
+loom_value_id_t loom_kernel_launch_config_workgroup_count_operand(
+    const loom_op_t* launch_config, loom_kernel_dimension_t dimension);
+
+// Returns the workgroup size operand for |dimension| from a launch config
+// terminator, or LOOM_VALUE_ID_INVALID when |launch_config| is not a launch
+// config terminator or |dimension| is invalid.
+loom_value_id_t loom_kernel_launch_config_workgroup_size_operand(
+    const loom_op_t* launch_config, loom_kernel_dimension_t dimension);
 
 // Resolves a fully static required workgroup size from |kernel_op|'s launch
 // config terminator. Dynamic dimensions are represented by returning false;

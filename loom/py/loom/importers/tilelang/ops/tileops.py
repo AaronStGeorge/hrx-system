@@ -143,12 +143,18 @@ def _convert_copy_call(
         target_indices = _project_region_indices(target, indices, expr, body_context)
         if source_indices is None or target_indices is None:
             return
-        value = body_context.builder.view.load(
-            view=source.view,
-            indices=list(source_indices),
-            results=[source_element_type],
-            name=body_context.fresh_name("copy"),
+        value = body_context.mapped_buffer_access(
+            source.view,
+            source_indices,
+            source.index_map.memory_scope,
         )
+        if value is None:
+            value = body_context.builder.view.load(
+                view=source.view,
+                indices=list(source_indices),
+                results=[source_element_type],
+                name=body_context.fresh_name("copy"),
+            )
         converted_value = _copy_value_cast(
             value,
             source_element_type,
@@ -162,6 +168,14 @@ def _convert_copy_call(
             value=converted_value,
             view=target.view,
             indices=list(target_indices),
+        )
+        body_context.invalidate_buffer_accesses(target.view)
+        body_context.map_buffer_access(
+            expr,
+            target.view,
+            target_indices,
+            target.index_map.memory_scope,
+            converted_value,
         )
 
     if not _emit_region_loops(
@@ -198,6 +212,16 @@ def _try_emit_fragment_vector_copy(
     extent_integer = static_index_value(loop_extents[0], context)
     if extent_integer is None:
         return False
+    if context.static_topology_extent("threadIdx.x") == 1:
+        return _try_emit_full_fragment_vector_copy(
+            expr,
+            context,
+            source=source,
+            target=target,
+            extent_integer=extent_integer,
+            source_element_type=source_element_type,
+            target_element_type=target_element_type,
+        )
     plan = materialize_distributed_1d_plan(
         expr,
         context,
@@ -205,8 +229,18 @@ def _try_emit_fragment_vector_copy(
         extent_integer=extent_integer,
         index_name="i0",
     )
-    if plan is None or plan.lane_count <= 1:
+    if plan is None:
         return False
+    if plan.lane_count <= 1:
+        return _try_emit_full_fragment_vector_copy(
+            expr,
+            context,
+            source=source,
+            target=target,
+            extent_integer=extent_integer,
+            source_element_type=source_element_type,
+            target_element_type=target_element_type,
+        )
     if str(source_element_type) != str(target_element_type):
         return False
     source_indices = _project_region_indices(source, (plan.base,), expr, context)
@@ -225,7 +259,47 @@ def _try_emit_fragment_vector_copy(
     )
     context.map_fragment_vector(
         target.view,
-        TileLangFragmentVector(value=vector, lane_count=plan.lane_count),
+        TileLangFragmentVector(
+            value=vector,
+            lane_count=plan.lane_count,
+            base=None if plan.thread_count == 1 else plan.base,
+        ),
+    )
+    return True
+
+
+def _try_emit_full_fragment_vector_copy(
+    expr: object,
+    context: TileLangConversionContext,
+    *,
+    source: TileLangBufferRegion,
+    target: TileLangBufferRegion,
+    extent_integer: int,
+    source_element_type: Type,
+    target_element_type: Type,
+) -> bool:
+    if str(source_element_type) != str(target_element_type):
+        return False
+    zero = context.ensure_constant("0", "index", "c0")
+    source_indices = _project_region_indices(source, (zero,), expr, context)
+    target_indices = _project_region_indices(target, (zero,), expr, context)
+    if source_indices is None or target_indices is None:
+        return False
+    if not _all_zero_indices(target_indices, context):
+        return False
+    result_type = context.type_converter.vector_type(
+        source_element_type,
+        extent_integer,
+    )
+    vector = context.builder.vector.load(
+        view=source.view,
+        indices=list(source_indices),
+        results=[result_type],
+        name=context.fresh_name("copy"),
+    )
+    context.map_fragment_vector(
+        target.view,
+        TileLangFragmentVector(value=vector, lane_count=extent_integer),
     )
     return True
 
@@ -425,6 +499,14 @@ def _convert_reduce_call(
         view=target.view,
         indices=list(target.indices),
     )
+    context.invalidate_buffer_accesses(target.view)
+    context.map_buffer_access(
+        expr,
+        target.view,
+        target.indices,
+        target.memory_scope,
+        result,
+    )
     context.record_converted(
         node_text(expr),
         f"tl.tileop.reduce<{reduce_spec.source_kind}>",
@@ -531,6 +613,14 @@ def _convert_region_reduce_call(
             value=result,
             view=target.view,
             indices=list(target_indices),
+        )
+        body_context.invalidate_buffer_accesses(target.view)
+        body_context.map_buffer_access(
+            expr,
+            target.view,
+            target_indices,
+            target.index_map.memory_scope,
+            result,
         )
 
     if not _emit_region_loops(output_extents, context, emit_reduce):
@@ -987,6 +1077,14 @@ def _is_static_one_extent(
 ) -> bool:
     one = context.constants.get(("index", "1"))
     return one is not None and extent.id == one.id
+
+
+def _all_zero_indices(
+    indices: tuple[ValueRef, ...],
+    context: TileLangConversionContext,
+) -> bool:
+    zero = context.constants.get(("index", "0"))
+    return zero is not None and all(index.id == zero.id for index in indices)
 
 
 def _emit_region_loops(

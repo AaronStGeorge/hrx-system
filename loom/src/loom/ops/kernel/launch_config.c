@@ -73,6 +73,40 @@ const loom_op_t* loom_kernel_def_launch_config_op(const loom_op_t* kernel_op) {
                                                                  : NULL;
 }
 
+loom_value_id_t loom_kernel_launch_config_workgroup_count_operand(
+    const loom_op_t* launch_config, loom_kernel_dimension_t dimension) {
+  if (!launch_config || !loom_kernel_launch_config_isa(launch_config)) {
+    return LOOM_VALUE_ID_INVALID;
+  }
+  switch (dimension) {
+    case LOOM_KERNEL_DIMENSION_X:
+      return loom_kernel_launch_config_workgroup_count_x(launch_config);
+    case LOOM_KERNEL_DIMENSION_Y:
+      return loom_kernel_launch_config_workgroup_count_y(launch_config);
+    case LOOM_KERNEL_DIMENSION_Z:
+      return loom_kernel_launch_config_workgroup_count_z(launch_config);
+    default:
+      return LOOM_VALUE_ID_INVALID;
+  }
+}
+
+loom_value_id_t loom_kernel_launch_config_workgroup_size_operand(
+    const loom_op_t* launch_config, loom_kernel_dimension_t dimension) {
+  if (!launch_config || !loom_kernel_launch_config_isa(launch_config)) {
+    return LOOM_VALUE_ID_INVALID;
+  }
+  switch (dimension) {
+    case LOOM_KERNEL_DIMENSION_X:
+      return loom_kernel_launch_config_workgroup_size_x(launch_config);
+    case LOOM_KERNEL_DIMENSION_Y:
+      return loom_kernel_launch_config_workgroup_size_y(launch_config);
+    case LOOM_KERNEL_DIMENSION_Z:
+      return loom_kernel_launch_config_workgroup_size_z(launch_config);
+    default:
+      return LOOM_VALUE_ID_INVALID;
+  }
+}
+
 bool loom_kernel_def_static_workgroup_size(
     const loom_module_t* module, const loom_op_t* kernel_op,
     loom_target_workgroup_size_t* out_size) {
