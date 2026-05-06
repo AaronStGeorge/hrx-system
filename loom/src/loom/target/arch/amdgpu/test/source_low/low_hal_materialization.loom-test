@@ -13,7 +13,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @binding_pointer() {
 // ----
 amdgpu.target<gfx1100> @target
 
-low.kernel.def target(@target) workgroup_size(64, 1, 1) @binding_pointer() {
+low.kernel.def target(@target) abi_layout({constant_count = 0, direct_arg_count = 0, direct_arg_names = {}, resource_count = 1, uses_kernarg_segment_ptr = true}) workgroup_size(64, 1, 1) @binding_pointer() {
   %kernarg = low.live_in<amdgpu.kernarg_segment_ptr> : reg<amdgpu.sgpr x2>
   %view = low.op<amdgpu.s_load_dwordx2_offset_only>(%kernarg) {offset = 0} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x2>
   %offset = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>

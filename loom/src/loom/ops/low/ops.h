@@ -162,15 +162,16 @@ iree_status_t loom_low_func_def_verify(
 LOOM_DEFINE_ISA(loom_low_kernel_def_isa, LOOM_OP_LOW_KERNEL_DEF)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_kernel_def_callee, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_kernel_def_target, 1)
-LOOM_DEFINE_ATTR_STRING(loom_low_kernel_def_export_symbol, 2)
-LOOM_DEFINE_ATTR_SYMBOL(loom_low_kernel_def_artifact, 3)
-LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_export_ordinal, 4)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_export_linkage, 5, loom_target_linkage_t)
-LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_x, 6)
-LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_y, 7)
-LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_z, 8)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_allocation, 9, loom_low_allocation_t)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_schedule, 10, loom_low_schedule_t)
+LOOM_DEFINE_ATTR_DICT(loom_low_kernel_def_abi_layout, 2)
+LOOM_DEFINE_ATTR_STRING(loom_low_kernel_def_export_symbol, 3)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_kernel_def_artifact, 4)
+LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_export_ordinal, 5)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_export_linkage, 6, loom_target_linkage_t)
+LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_x, 7)
+LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_y, 8)
+LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_z, 9)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_allocation, 10, loom_low_allocation_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_schedule, 11, loom_low_schedule_t)
 LOOM_DEFINE_REGION(loom_low_kernel_def_body, 0)
 enum loom_low_kernel_def_build_flag_bits_e {
   LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_ALLOCATION = 1u << 0,
@@ -190,6 +191,7 @@ iree_status_t loom_low_kernel_def_build(
     loom_optional uint8_t allocation,
     loom_optional uint8_t schedule,
     loom_symbol_ref_t target,
+    loom_optional loom_named_attr_slice_t abi_layout,
     loom_optional loom_string_id_t export_symbol,
     loom_optional loom_symbol_ref_t artifact,
     loom_optional int64_t export_ordinal,

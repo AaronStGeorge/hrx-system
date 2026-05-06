@@ -212,6 +212,7 @@ _KERNEL_COMMON_ATTRS = [
         "symbol",
         symbol_ref=SymbolReference("target", ["target"]),
     ),
+    AttrDef("abi_layout", "dict", optional=True),
     AttrDef("export_symbol", "string", optional=True),
     AttrDef(
         "artifact",
@@ -314,6 +315,13 @@ _KERNEL_EXPORT_FORMAT: list[FormatElement] = [
     OptionalGroup(
         [kw("linkage"), GLUE, LPAREN, Attr("export_linkage"), GLUE, RPAREN],
         anchor="export_linkage",
+    ),
+]
+
+_KERNEL_ABI_LAYOUT_FORMAT: list[FormatElement] = [
+    OptionalGroup(
+        [kw("abi_layout"), GLUE, LPAREN, AttrDict("abi_layout"), GLUE, RPAREN],
+        anchor="abi_layout",
     ),
 ]
 
@@ -472,6 +480,7 @@ low_kernel_def = Op(
     format=[
         *_LOW_EXACTNESS_FORMAT,
         *_FUNC_TARGET_FORMAT,
+        *_KERNEL_ABI_LAYOUT_FORMAT,
         *_KERNEL_EXPORT_FORMAT,
         *_KERNEL_WORKGROUP_SIZE_FORMAT,
         *_KERNEL_SIGNATURE_FORMAT,

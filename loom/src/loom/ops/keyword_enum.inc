@@ -71,3 +71,4 @@
   LOOM_KW_CONFIG = 62,  // "config"
   LOOM_KW_LAUNCH = 63,  // "launch"
   LOOM_KW_WORKGROUPS = 64,  // "workgroups"
+  LOOM_KW_ABI_LAYOUT = 65,  // "abi_layout"

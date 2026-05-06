@@ -1186,10 +1186,11 @@ static iree_status_t loom_low_lower_create_kernel_op(
   loom_builder_set_before(&context->builder, context->source_function.op);
   IREE_RETURN_IF_ERROR(loom_low_kernel_def_build(
       &context->builder, build_flags, /*allocation=*/0, /*schedule=*/0,
-      context->options->target_ref, export_symbol, artifact, export_ordinal,
-      export_linkage, workgroup_size.x, workgroup_size.y, workgroup_size.z,
-      low_func_ref, arg_types, arg_count, predicates, predicate_count,
-      context->source_function.op->location, &context->low_func_op));
+      context->options->target_ref, loom_named_attr_slice_empty(),
+      export_symbol, artifact, export_ordinal, export_linkage, workgroup_size.x,
+      workgroup_size.y, workgroup_size.z, low_func_ref, arg_types, arg_count,
+      predicates, predicate_count, context->source_function.op->location,
+      &context->low_func_op));
 
   loom_region_t* low_body = loom_low_lower_low_body(context);
   low_body->flags = source_body->flags;

@@ -432,8 +432,13 @@ static iree_status_t loom_amdgpu_hal_kernel_library_compute_kernel_fixed_values(
     const loom_module_t* module,
     loom_amdgpu_hal_kernel_library_kernel_plan_t* plan,
     iree_arena_allocator_t* table_arena) {
-  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_layout_from_low(
-      module, plan->low_function_op, &plan->abi_layout, table_arena));
+  if (loom_amdgpu_hal_kernel_abi_has_layout_attr(plan->low_function_op)) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_layout_from_attr(
+        module, plan->low_function_op, &plan->abi_layout, table_arena));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_layout_from_low(
+        module, plan->low_function_op, &plan->abi_layout, table_arena));
+  }
   return loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
       module, plan->low_function_op, &plan->fixed_values,
       &plan->fixed_value_count, table_arena);

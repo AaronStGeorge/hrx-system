@@ -42,6 +42,7 @@ class LowBuilder(DialectBuilder):
         allocation: str | None = ...,
         schedule: str | None = ...,
         target: str,
+        abi_layout: Mapping[str, Any] | None = ...,
         export_symbol: str | None = ...,
         artifact: str | None = ...,
         export_ordinal: int | None = ...,

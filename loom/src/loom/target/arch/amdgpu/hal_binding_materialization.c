@@ -794,17 +794,30 @@ iree_status_t loom_amdgpu_hal_binding_materialize(
   IREE_RETURN_IF_ERROR(
       loom_rewriter_initialize(&rewriter, module, scratch_arena));
   iree_status_t status = iree_ok_status();
+  if (loom_low_kernel_def_isa(function_op) &&
+      (layout.resource_count != 0 || layout.direct_arg_count != 0 ||
+       layout.uses_kernarg_segment_ptr)) {
+    loom_attribute_t abi_layout_attr = {0};
+    status = loom_amdgpu_hal_kernel_abi_make_layout_attr(
+        module, &layout, scratch_arena, &abi_layout_attr);
+    if (iree_status_is_ok(status)) {
+      status = loom_rewriter_set_attr(&rewriter, function_op,
+                                      loom_low_kernel_def_abi_layout_ATTR_INDEX,
+                                      abi_layout_attr);
+    }
+  }
   loom_value_id_t kernarg_ptr = LOOM_VALUE_ID_INVALID;
   bool inserted_live_in = false;
 
   loom_region_t* body = loom_low_function_body(function_op);
   if (body == NULL) {
+    loom_rewriter_deinitialize(&rewriter);
     return iree_make_status(
         IREE_STATUS_INTERNAL,
         "AMDGPU HAL binding materialization reached a low function without a "
         "body");
   }
-  if (layout.uses_kernarg_segment_ptr) {
+  if (iree_status_is_ok(status) && layout.uses_kernarg_segment_ptr) {
     status = loom_amdgpu_hal_binding_get_kernarg_live_in(
         &rewriter, function_op, sgpr_x2_type, &kernarg_ptr, &inserted_live_in);
     if (iree_status_is_ok(status)) {

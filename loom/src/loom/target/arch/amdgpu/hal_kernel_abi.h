@@ -207,6 +207,26 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
     loom_amdgpu_hal_kernel_abi_layout_t* out_layout,
     iree_arena_allocator_t* arena);
 
+// Returns true when |function_op| carries a prepared AMDGPU HAL ABI layout.
+bool loom_amdgpu_hal_kernel_abi_has_layout_attr(const loom_op_t* function_op);
+
+// Builds a structured ABI layout snapshot attribute for a prepared
+// low.kernel.def.
+//
+// AMDGPU HAL binding materialization consumes low.resource ops and may remove
+// entry block arguments, so later emission cannot recover binding metadata by
+// walking the rewritten body. The snapshot is owned by the kernel op rather
+// than a companion metadata op to preserve function-local pass semantics.
+iree_status_t loom_amdgpu_hal_kernel_abi_make_layout_attr(
+    loom_module_t* module, const loom_amdgpu_hal_kernel_abi_layout_t* layout,
+    iree_arena_allocator_t* scratch_arena, loom_attribute_t* out_attr);
+
+// Loads a prepared AMDGPU HAL ABI layout snapshot from low.kernel.def.
+iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_attr(
+    const loom_module_t* module, const loom_op_t* function_op,
+    loom_amdgpu_hal_kernel_abi_layout_t* out_layout,
+    iree_arena_allocator_t* arena);
+
 // Returns true if |value_id| is defined by the kernarg segment pointer live-in.
 bool loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(
     const loom_module_t* module, loom_value_id_t value_id);
