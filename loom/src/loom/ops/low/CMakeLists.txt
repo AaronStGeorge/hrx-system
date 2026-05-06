@@ -18,6 +18,7 @@ loom_cc_library(
     "ops.h"
   SRCS
     "builders.c"
+    "canonicalize.c"
     "facts.c"
     "kernel.c"
     "tables.c"
@@ -32,6 +33,7 @@ loom_cc_library(
     loom::src::loom::ops::storage_facts
     loom::src::loom::ops::successor_verify
     loom::src::loom::ops::target
+    loom::src::loom::rewrite::rewriter
     loom::src::loom::target::types
     loom::src::loom::util::fact_table
     loom::src::loom::util::stable_id

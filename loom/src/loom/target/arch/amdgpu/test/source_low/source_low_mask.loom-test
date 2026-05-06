@@ -16,15 +16,12 @@ low.func.def target(@target) abi(hal_kernel) @i32_cmpi_select(%lhs: reg<amdgpu.v
   %15 = slice %lhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %16 = slice %rhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %17 = v_cmp_lt_i32 %15, %16
-  %mask = concat(%14, %17) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
-  %19 = slice %mask[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
   %20 = slice %true_value[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %21 = slice %false_value[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %22 = v_cndmask_b32 %21, %20, %19
-  %23 = slice %mask[2] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %22 = v_cndmask_b32 %21, %20, %14
   %24 = slice %true_value[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %25 = slice %false_value[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %26 = v_cndmask_b32 %25, %24, %23
+  %26 = v_cndmask_b32 %25, %24, %17
   %selected = concat(%22, %26) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %selected
 }

@@ -35,16 +35,10 @@ low.func.def target(@target) abi(hal_kernel) @vector_f32_minnum_maxnum(%lhs: reg
   %12 = slice %lhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %13 = slice %rhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %14 = v_min_f32 %12, %13
-  %min = concat(%11, %14) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   %18 = v_max_f32 %9, %10
   %21 = v_max_f32 %12, %13
-  %max = concat(%18, %21) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %23 = slice %min[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %24 = slice %max[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %25 = v_add_f32 %23, %24
-  %26 = slice %min[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %27 = slice %max[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %28 = v_add_f32 %26, %27
+  %25 = v_add_f32 %11, %18
+  %28 = v_add_f32 %14, %21
   %sum = concat(%25, %28) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %sum
 }

@@ -769,6 +769,7 @@ low_slice = Op(
     constraints=[
         SameRegisterClass("source", "result"),
     ],
+    canonicalize="loom_low_slice_canonicalize",
     verify="loom_low_slice_verify",
     facts="loom_low_slice_facts",
     format=[

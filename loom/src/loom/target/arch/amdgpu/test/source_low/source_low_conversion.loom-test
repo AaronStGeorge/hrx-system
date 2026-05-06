@@ -14,13 +14,10 @@ low.func.def target(@target) abi(hal_kernel) @vector_sitofp_i32x2(%input: reg<am
   %9 = v_cvt_f32_i32 %8
   %10 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %11 = v_cvt_f32_i32 %10
-  %converted = concat(%9, %11) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %13 = slice %converted[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %14 = slice %scale[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %15 = v_mul_f32 %13, %14
-  %16 = slice %converted[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %15 = v_mul_f32 %9, %14
   %17 = slice %scale[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %18 = v_mul_f32 %16, %17
+  %18 = v_mul_f32 %11, %17
   %scaled = concat(%15, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %scaled
 }
