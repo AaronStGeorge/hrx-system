@@ -77,6 +77,7 @@ class LowerAttrCopyKind(Enum):
     I64_ARRAY_PACK_ELEMENTS = "i64_array_pack_elements"
     I64_LITERAL = "i64_literal"
     VALUE_EXACT_I64 = "value_exact_i64"
+    VALUE_EXACT_I64_LOG2 = "value_exact_i64_log2"
     VALUE_I32_AS_U32_BITS = "value_i32_as_u32_bits"
     I64_ARRAY_LANE_BYTE = "i64_array_lane_byte"
     SOURCE_MEMORY_STATIC_BYTE_OFFSET = "source_memory_static_byte_offset"
@@ -739,6 +740,7 @@ class _LowerRuleSetCompiler:
             GuardKind.VALUE_SIGNED_BIT_COUNT,
             GuardKind.VALUE_UNSIGNED_BIT_COUNT,
             GuardKind.VALUE_EXACT_I64,
+            GuardKind.VALUE_EXACT_POWER_OF_TWO_I64,
             GuardKind.VALUE_I64_RANGE,
             GuardKind.VALUE_F64_EQUALS,
         ):
@@ -814,6 +816,21 @@ class _LowerRuleSetCompiler:
                         _guard_diagnostic(
                             guard,
                             _exact_integer_diagnostic(guard.field),
+                        ),
+                    ),
+                )
+            )
+            return
+        if guard.kind == GuardKind.VALUE_EXACT_POWER_OF_TWO_I64:
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=value_ref_index,
+                    diagnostic_index=self._append_diagnostic_ref(
+                        source_op,
+                        _guard_diagnostic(
+                            guard,
+                            _exact_power_of_two_integer_diagnostic(guard.field),
                         ),
                     ),
                 )
@@ -1222,6 +1239,8 @@ class _LowerRuleSetCompiler:
     ) -> LowerAttrCopy:
         if project.kind == ValueProjectKind.EXACT_I64:
             kind = LowerAttrCopyKind.VALUE_EXACT_I64
+        elif project.kind == ValueProjectKind.EXACT_I64_LOG2:
+            kind = LowerAttrCopyKind.VALUE_EXACT_I64_LOG2
         elif project.kind == ValueProjectKind.I32_AS_U32_BITS:
             kind = LowerAttrCopyKind.VALUE_I32_AS_U32_BITS
         else:
@@ -1661,6 +1680,14 @@ def _bounded_integer_diagnostic(field: str, guard: Guard) -> DiagnosticRef:
 
 def _exact_integer_diagnostic(field: str) -> DiagnosticRef:
     return _named_constraint_diagnostic("value_fact", field, "exact_i64")
+
+
+def _exact_power_of_two_integer_diagnostic(field: str) -> DiagnosticRef:
+    return _named_constraint_diagnostic(
+        "value_fact",
+        field,
+        "exact_power_of_two_i64",
+    )
 
 
 def _integer_range_diagnostic(

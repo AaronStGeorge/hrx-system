@@ -56,6 +56,7 @@ class GuardKind(Enum):
     VALUE_SIGNED_BIT_COUNT = "value_signed_bit_count"
     VALUE_UNSIGNED_BIT_COUNT = "value_unsigned_bit_count"
     VALUE_EXACT_I64 = "value_exact_i64"
+    VALUE_EXACT_POWER_OF_TWO_I64 = "value_exact_power_of_two_i64"
     VALUE_I64_RANGE = "value_i64_range"
     VALUE_F64_EQUALS = "value_f64_equals"
     INSTANCE_FLAGS_HAS_ALL = "instance_flags_has_all"
@@ -330,6 +331,19 @@ class Guard:
         )
 
     @classmethod
+    def value_exact_power_of_two_i64(
+        cls,
+        field: str,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_EXACT_POWER_OF_TWO_I64,
+            field=field,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
     def value_i64_range(
         cls,
         field: str,
@@ -487,6 +501,7 @@ class Guard:
             GuardKind.VALUE_SIGNED_BIT_COUNT,
             GuardKind.VALUE_UNSIGNED_BIT_COUNT,
             GuardKind.VALUE_EXACT_I64,
+            GuardKind.VALUE_EXACT_POWER_OF_TWO_I64,
             GuardKind.VALUE_I64_RANGE,
             GuardKind.VALUE_F64_EQUALS,
         ):

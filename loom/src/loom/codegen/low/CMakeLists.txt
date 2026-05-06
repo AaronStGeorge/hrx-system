@@ -458,6 +458,7 @@ loom_cc_library(
     loom::src::loom::target::low_legality
     loom::src::loom::target::types
     loom::src::loom::util::fact_table
+    loom::src::loom::util::math
   PUBLIC
 )
 

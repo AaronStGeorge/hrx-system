@@ -129,6 +129,11 @@ _ADDRESS_EXACT_DIAGNOSTIC = GuardDiagnostic(
     subject_name="i64",
     constraint_key="amdgpu.address.exact_i64",
 )
+_ADDRESS_POWER_OF_TWO_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="address-scale",
+    subject_name="i64",
+    constraint_key="amdgpu.address.exact_power_of_two_i64",
+)
 _ADDRESS_VGPR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="materializer",
     subject_name="address-vgpr",
@@ -392,6 +397,105 @@ def _literal_binary_rule(
                 },
                 form=DescriptorEmitForm.PER_LANE,
             ),
+        ),
+    )
+
+
+def _index_madd_power_of_two_rule(
+    *,
+    scale_source: str,
+    value_source: str,
+    literal_addend: bool,
+) -> DescriptorRule:
+    shift = _descriptor("amdgpu.v_lshlrev_b32.lit")
+    add = _descriptor("amdgpu.v_add_u32.lit" if literal_addend else "amdgpu.v_add_u32")
+    addend_guards = (
+        (
+            Guard.value_exact_i64("c", diagnostic=_ADDRESS_EXACT_DIAGNOSTIC),
+            Guard.value_unsigned_bit_count(
+                "c",
+                32,
+                diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+        )
+        if literal_addend
+        else (
+            Guard.value_materializable(
+                "c",
+                ADDRESS_VGPR_MATERIALIZER.name,
+                diagnostic=_ADDRESS_VGPR_DIAGNOSTIC,
+            ),
+        )
+    )
+    add_emit = (
+        EmitDescriptorOp(
+            descriptor=add,
+            operands={"rhs": ValueRef.temporary("scaled")},
+            results={"dst": ValueRef.result("result")},
+            immediates={"imm32": ValueProject.exact_i64("c")},
+            form=DescriptorEmitForm.OP,
+        )
+        if literal_addend
+        else EmitDescriptorOp(
+            descriptor=add,
+            operands={
+                "lhs": ValueRef.temporary("scaled"),
+                "rhs": _materialized_operand("c", ADDRESS_VGPR_MATERIALIZER),
+            },
+            results={"dst": ValueRef.result("result")},
+            form=DescriptorEmitForm.OP,
+        )
+    )
+    return DescriptorRule(
+        source_op=index.index_madd,
+        descriptor=shift,
+        guards=(
+            *_typed_guards(("a", "b", "c", "result"), _INDEX),
+            Guard.value_unsigned_bit_count(
+                "result",
+                32,
+                diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+            Guard.low_value_register_class(
+                "result",
+                "amdgpu.vgpr",
+                diagnostic=_RESULT_VGPR_DIAGNOSTIC,
+            ),
+            Guard.value_exact_power_of_two_i64(
+                scale_source,
+                diagnostic=_ADDRESS_POWER_OF_TWO_DIAGNOSTIC,
+            ),
+            Guard.value_unsigned_bit_count(
+                scale_source,
+                32,
+                diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+            Guard.value_materializable(
+                value_source,
+                ADDRESS_VGPR_MATERIALIZER.name,
+                diagnostic=_ADDRESS_VGPR_DIAGNOSTIC,
+            ),
+            *addend_guards,
+            Guard.descriptor_available(shift),
+            Guard.descriptor_available(add),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=shift,
+                operands={
+                    "value": _materialized_operand(
+                        value_source,
+                        ADDRESS_VGPR_MATERIALIZER,
+                    ),
+                },
+                results={"dst": ValueRef.temporary("scaled")},
+                result_types={"dst": ValueRef.result("result")},
+                immediates={
+                    "imm32": ValueProject.exact_i64_log2(scale_source),
+                },
+                form=DescriptorEmitForm.OP,
+            ),
+            add_emit,
         ),
     )
 
@@ -667,6 +771,26 @@ def _rules() -> tuple[DescriptorRule, ...]:
                 _I32,
                 _F32,
                 "amdgpu.v_cvt_f32_u32",
+            ),
+            _index_madd_power_of_two_rule(
+                scale_source="a",
+                value_source="b",
+                literal_addend=True,
+            ),
+            _index_madd_power_of_two_rule(
+                scale_source="b",
+                value_source="a",
+                literal_addend=True,
+            ),
+            _index_madd_power_of_two_rule(
+                scale_source="a",
+                value_source="b",
+                literal_addend=False,
+            ),
+            _index_madd_power_of_two_rule(
+                scale_source="b",
+                value_source="a",
+                literal_addend=False,
             ),
             _index_madd_literal_rule(),
             _index_madd_rule(),

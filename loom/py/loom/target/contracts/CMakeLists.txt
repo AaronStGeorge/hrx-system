@@ -36,4 +36,16 @@ iree_py_library(
     iree::runtime::py::loom::target::low_descriptors
 )
 
+iree_py_test(
+  NAME
+    contracts_test
+  SRCS
+    "../../tools/pytest_style_runner.py"
+  ARGS
+    "loom.target.contracts.lower_rules_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-import pytest
+from collections.abc import Callable
 
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
@@ -39,6 +39,16 @@ from loom.target.test.descriptors import (
     TEST_LOW_CONST_I32_DESCRIPTOR,
     TEST_LOW_CORE_DESCRIPTOR_SET,
 )
+
+
+def _expect_value_error(callable_obj: Callable[[], object], message: str) -> None:
+    error: ValueError | None = None
+    try:
+        callable_obj()
+    except ValueError as exc:
+        error = exc
+    assert error is not None
+    assert message in str(error)
 
 
 def _binary_rule(
@@ -171,11 +181,10 @@ def test_compile_lower_rule_set_rejects_descriptor_rule_without_emit() -> None:
         ],
     )
 
-    with pytest.raises(
-        ValueError,
-        match=r"scalar.addi: descriptor-rule contracts must author their emit",
-    ):
-        compile_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
+    _expect_value_error(
+        lambda: compile_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS}),
+        "scalar.addi: descriptor-rule contracts must author their emit",
+    )
 
 
 def test_compile_lower_rule_set_compiles_const_immediate_emit() -> None:
@@ -305,5 +314,40 @@ def test_compile_lower_rule_set_compiles_value_fact_immediate_emit() -> None:
 
     assert len(compiled.attr_copies) == 1
     assert compiled.attr_copies[0].kind == LowerAttrCopyKind.VALUE_I32_AS_U32_BITS
+    value_ref = compiled.value_refs[compiled.attr_copies[0].value_ref_index]
+    assert value_ref.index == 0
+
+
+def test_compile_lower_rule_set_compiles_power_of_two_log2_immediate() -> None:
+    table = ContractFragment(
+        name="test.power-of-two-log2",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            DescriptorRule(
+                source_op=scalar_arithmetic.scalar_addi,
+                descriptor=TEST_LOW_CONST_I32_DESCRIPTOR,
+                guards=(
+                    Guard.value_exact_power_of_two_i64("lhs"),
+                    Guard.value_type("result", Scalar("i32")),
+                ),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_CONST_I32_DESCRIPTOR,
+                        results={"dst": ValueRef.result("result")},
+                        immediates={
+                            "i32_value": ValueProject.exact_i64_log2("lhs"),
+                        },
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
+
+    assert compiled.guards[0].kind == GuardKind.VALUE_EXACT_POWER_OF_TWO_I64
+    assert compiled.guards[0].value_ref_index == 0
+    assert len(compiled.attr_copies) == 1
+    assert compiled.attr_copies[0].kind == LowerAttrCopyKind.VALUE_EXACT_I64_LOG2
     value_ref = compiled.value_refs[compiled.attr_copies[0].value_ref_index]
     assert value_ref.index == 0

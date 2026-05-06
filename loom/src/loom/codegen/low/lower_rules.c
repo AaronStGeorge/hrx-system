@@ -13,6 +13,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/util/math.h"
 
 static const loom_low_lower_rule_span_t* loom_low_lower_rule_set_find_span(
     const loom_low_lower_rule_set_t* rule_set, loom_op_kind_t source_op_kind) {
@@ -460,6 +461,22 @@ static bool loom_low_lower_rule_value_facts_exact_i64(
   return loom_value_facts_as_exact_i64(facts, &exact_value);
 }
 
+static bool loom_low_lower_rule_value_facts_exact_power_of_two_i64(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t value_ref_index) {
+  const loom_value_id_t value_id =
+      loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  if (!loom_low_lower_rule_integer_immediate_facts(
+          match_context->module, match_context->fact_table, value_id, &facts)) {
+    return false;
+  }
+  int64_t exact_value = 0;
+  return loom_value_facts_as_exact_i64(facts, &exact_value) &&
+         loom_is_power_of_two_i64(exact_value);
+}
+
 static bool loom_low_lower_rule_value_facts_f64_equals(
     const loom_low_lower_rule_match_context_t* match_context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
@@ -780,6 +797,10 @@ static iree_status_t loom_low_lower_rule_guard_matches(
       return iree_ok_status();
     case LOOM_LOW_LOWER_GUARD_VALUE_EXACT_I64:
       *out_matches = loom_low_lower_rule_value_facts_exact_i64(
+          match_context, rule_set, source_op, guard->value_ref_index);
+      return iree_ok_status();
+    case LOOM_LOW_LOWER_GUARD_VALUE_EXACT_POWER_OF_TWO_I64:
+      *out_matches = loom_low_lower_rule_value_facts_exact_power_of_two_i64(
           match_context, rule_set, source_op, guard->value_ref_index);
       return iree_ok_status();
     case LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE:
@@ -1434,6 +1455,35 @@ static iree_status_t loom_low_lower_rule_build_attrs(
                        (uint64_t)INT64_MAX >> attr_copy->target_bit_offset);
         attrs[i].value = loom_attr_i64(
             (int64_t)((uint64_t)source_value << attr_copy->target_bit_offset));
+        break;
+      }
+      case LOOM_LOW_LOWER_ATTR_COPY_VALUE_EXACT_I64_LOG2: {
+        const loom_value_id_t source_value_id =
+            loom_low_lower_rule_source_value(rule_set, source_op,
+                                             attr_copy->value_ref_index);
+        const loom_value_fact_table_t* fact_table =
+            loom_low_lower_context_fact_table(context);
+        loom_value_facts_t facts = loom_value_facts_unknown();
+        const bool has_integer_facts =
+            loom_low_lower_rule_integer_immediate_facts(
+                loom_low_lower_context_module(context), fact_table,
+                source_value_id, &facts);
+        IREE_ASSERT(has_integer_facts);
+        int64_t source_value = 0;
+        const bool has_exact_value =
+            loom_value_facts_as_exact_i64(facts, &source_value);
+        IREE_ASSERT(has_exact_value);
+        IREE_ASSERT(loom_is_power_of_two_i64(source_value));
+        const int64_t log2_value = loom_ilog2_i64(source_value);
+        if (attr_copy->target_bit_offset == 0) {
+          attrs[i].value = loom_attr_i64(log2_value);
+          break;
+        }
+        IREE_ASSERT_LT(attr_copy->target_bit_offset, 63);
+        IREE_ASSERT_LE((uint64_t)log2_value,
+                       (uint64_t)INT64_MAX >> attr_copy->target_bit_offset);
+        attrs[i].value = loom_attr_i64(
+            (int64_t)((uint64_t)log2_value << attr_copy->target_bit_offset));
         break;
       }
       case LOOM_LOW_LOWER_ATTR_COPY_VALUE_I32_AS_U32_BITS: {

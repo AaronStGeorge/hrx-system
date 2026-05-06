@@ -105,6 +105,7 @@ _GUARD_KIND_C_NAMES = {
     GuardKind.VALUE_SIGNED_BIT_COUNT: "LOOM_LOW_LOWER_GUARD_VALUE_SIGNED_BIT_COUNT",
     GuardKind.VALUE_UNSIGNED_BIT_COUNT: "LOOM_LOW_LOWER_GUARD_VALUE_UNSIGNED_BIT_COUNT",
     GuardKind.VALUE_EXACT_I64: "LOOM_LOW_LOWER_GUARD_VALUE_EXACT_I64",
+    GuardKind.VALUE_EXACT_POWER_OF_TWO_I64: "LOOM_LOW_LOWER_GUARD_VALUE_EXACT_POWER_OF_TWO_I64",
     GuardKind.VALUE_I64_RANGE: "LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE",
     GuardKind.VALUE_F64_EQUALS: "LOOM_LOW_LOWER_GUARD_VALUE_F64_EQUALS",
     GuardKind.INSTANCE_FLAGS_HAS_ALL: "LOOM_LOW_LOWER_GUARD_INSTANCE_FLAGS_HAS_ALL",
@@ -116,6 +117,7 @@ _ATTR_COPY_KIND_C_NAMES = {
     LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS: "LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_PACK_ELEMENTS",
     LowerAttrCopyKind.I64_LITERAL: "LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL",
     LowerAttrCopyKind.VALUE_EXACT_I64: "LOOM_LOW_LOWER_ATTR_COPY_VALUE_EXACT_I64",
+    LowerAttrCopyKind.VALUE_EXACT_I64_LOG2: "LOOM_LOW_LOWER_ATTR_COPY_VALUE_EXACT_I64_LOG2",
     LowerAttrCopyKind.VALUE_I32_AS_U32_BITS: "LOOM_LOW_LOWER_ATTR_COPY_VALUE_I32_AS_U32_BITS",
     LowerAttrCopyKind.I64_ARRAY_LANE_BYTE: "LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_LANE_BYTE",
     LowerAttrCopyKind.SOURCE_MEMORY_STATIC_BYTE_OFFSET: "LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_STATIC_BYTE_OFFSET",
@@ -633,6 +635,7 @@ def _guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]
         GuardKind.VALUE_SIGNED_BIT_COUNT,
         GuardKind.VALUE_UNSIGNED_BIT_COUNT,
         GuardKind.VALUE_EXACT_I64,
+        GuardKind.VALUE_EXACT_POWER_OF_TWO_I64,
         GuardKind.VALUE_I64_RANGE,
         GuardKind.VALUE_F64_EQUALS,
     ):
@@ -746,6 +749,7 @@ def _attr_copy_row(row: LowerAttrCopy) -> list[str]:
     _append_field(fields, "target_bit_offset", row.target_bit_offset)
     if row.kind in (
         LowerAttrCopyKind.VALUE_EXACT_I64,
+        LowerAttrCopyKind.VALUE_EXACT_I64_LOG2,
         LowerAttrCopyKind.VALUE_I32_AS_U32_BITS,
     ):
         _append_field(fields, "value_ref_index", row.value_ref_index, always=True)
