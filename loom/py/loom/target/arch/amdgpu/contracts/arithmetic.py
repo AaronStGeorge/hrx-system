@@ -43,6 +43,8 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_min_f32",
     "amdgpu.v_max_f32",
     "amdgpu.v_fma_f32",
+    "amdgpu.v_cvt_f32_f16",
+    "amdgpu.v_cvt_f16_f32",
     "amdgpu.v_cvt_f32_i32",
     "amdgpu.v_cvt_f32_u32",
     "amdgpu.v_add_u32",
@@ -79,6 +81,7 @@ _VEC_F32 = Vector(
     maximum_lanes="LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES",
 )
 _I32 = Scalar("i32")
+_F16 = Scalar("f16")
 _F32 = Scalar("f32")
 _INDEX = Scalar("index")
 
@@ -96,6 +99,11 @@ _I32_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="i32",
     constraint_key="amdgpu.arithmetic.i32",
+)
+_F16_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="type",
+    subject_name="f16",
+    constraint_key="amdgpu.arithmetic.f16",
 )
 _F32_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
@@ -150,6 +158,8 @@ def _type_diagnostic(type_pattern: TypePattern) -> GuardDiagnostic:
         return _VEC_F32_DIAGNOSTIC
     if type_pattern == _I32:
         return _I32_DIAGNOSTIC
+    if type_pattern == _F16:
+        return _F16_DIAGNOSTIC
     if type_pattern == _F32:
         return _F32_DIAGNOSTIC
     if type_pattern == _INDEX:
@@ -543,6 +553,18 @@ def _rules() -> tuple[DescriptorRule, ...]:
                 "amdgpu.v_max_f32",
             ),
             _ternary_rule(scalar_math.scalar_fmaf, _F32, "amdgpu.v_fma_f32"),
+            _cast_rule(
+                scalar_conversion.scalar_extf,
+                _F16,
+                _F32,
+                "amdgpu.v_cvt_f32_f16",
+            ),
+            _cast_rule(
+                scalar_conversion.scalar_fptrunc,
+                _F32,
+                _F16,
+                "amdgpu.v_cvt_f16_f32",
+            ),
             _cast_rule(
                 scalar_conversion.scalar_sitofp,
                 _I32,

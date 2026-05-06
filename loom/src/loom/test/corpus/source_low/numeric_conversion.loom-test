@@ -22,6 +22,23 @@ func.def @scalar_sitofp_i32(%input: i32) -> (f32) {
 
 // ====
 
+func.def @scalar_extf_f16(%input: f16) -> (f32) {
+  %converted = scalar.extf %input : f16 to f32
+  func.return %converted : f32
+}
+
+// ====
+
+func.def @scalar_fptrunc_f32_store(%output: buffer, %input: f32) {
+  %base = index.constant 0 : offset
+  %output_view = buffer.view %output[%base] : buffer -> view<1xf16, #dense>
+  %converted = scalar.fptrunc %input : f32 to f16
+  view.store %converted, %output_view[0] : f16, view<1xf16, #dense>
+  func.return
+}
+
+// ====
+
 func.def @vector_uitofp_i32x2(%input: vector<2xi32>) -> (vector<2xf32>) {
   %converted = vector.uitofp %input : vector<2xi32> to vector<2xf32>
   func.return %converted : vector<2xf32>
