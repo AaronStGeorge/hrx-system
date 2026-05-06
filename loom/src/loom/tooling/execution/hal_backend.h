@@ -8,8 +8,8 @@
 //
 // The shared execution layer owns generic HAL device setup, executable loading,
 // dispatch, and binding/result handling. Target providers own device-target
-// selection and emission of a parsed Loom module into the HAL executable
-// package accepted by that target's production loader.
+// selection and emission of prepared target-low Loom modules into the HAL
+// executable package accepted by that target's production loader.
 
 #ifndef LOOM_TOOLING_EXECUTION_HAL_BACKEND_H_
 #define LOOM_TOOLING_EXECUTION_HAL_BACKEND_H_
@@ -87,7 +87,7 @@ struct loom_run_hal_backend_t {
   loom_run_hal_select_target_fn_t select_target;
   // Formats the selected target into a HAL executable target string.
   loom_run_hal_format_target_fn_t format_target;
-  // Emits a parsed Loom module to a HAL executable package.
+  // Emits a prepared target-low Loom module to a HAL executable package.
   loom_run_hal_emit_executable_fn_t emit_executable;
   // Releases storage owned by an executable returned from |emit_executable|.
   loom_run_hal_deinitialize_executable_fn_t deinitialize_executable;

@@ -8,13 +8,10 @@
 
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/frame.h"
-#include "loom/codegen/low/preparation.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
-#include "loom/pass/builtin_registry.h"
-#include "loom/pass/value_facts.h"
 #include "loom/target/compile_report_low.h"
 #include "loom/target/emit/ireevm/function_bytecode.h"
 #include "loom/target/emit/ireevm/provider.h"
@@ -35,6 +32,9 @@ static iree_string_view_t loom_ireevm_archive_emit_module_name(
 
 static bool loom_ireevm_archive_emit_bundle_is_compatible(
     void* user_data, const loom_target_entry_t* entry) {
+  if (!loom_low_func_def_isa(entry->func.op)) {
+    return false;
+  }
   const loom_target_bundle_t* bundle = &entry->bundle_storage.bundle;
   return bundle && bundle->snapshot && bundle->export_plan &&
          bundle->snapshot->codegen_format == LOOM_TARGET_CODEGEN_FORMAT_VM &&
@@ -129,64 +129,8 @@ static iree_status_t loom_ireevm_archive_emit_symbol_name(
   return iree_ok_status();
 }
 
-static iree_status_t loom_ireevm_archive_emit_lower_function(
-    loom_module_t* module,
-    const loom_target_low_descriptor_registry_t* registry,
-    const loom_low_lower_policy_registry_t* lower_policy_registry,
-    const loom_target_entry_t* entry, loom_func_like_t source_function,
-    loom_target_entry_diagnostic_emitter_t* diagnostic_emitter,
-    uint32_t max_errors, iree_arena_allocator_t* table_arena,
-    loom_pass_value_fact_owner_t* value_facts,
-    loom_target_compile_report_t* report, loom_low_lower_result_t* out_result) {
-  const loom_low_lower_policy_t* policy =
-      loom_low_lower_policy_registry_lookup_for_bundle(
-          lower_policy_registry, &entry->bundle_storage.bundle);
-  if (policy == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INTERNAL,
-        "IREE VM emitter has no target-low lowering policy for contract set "
-        "'%.*s'",
-        (int)entry->bundle_storage.bundle.config->contract_set_key.size,
-        entry->bundle_storage.bundle.config->contract_set_key.data);
-  }
-
-  loom_low_lower_report_storage_t report_storage = {0};
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_allocate_low_lowering_rows(
-      report, table_arena, &report_storage));
-  loom_value_fact_table_t* fact_table = NULL;
-  IREE_RETURN_IF_ERROR(loom_pass_value_fact_owner_acquire(
-      value_facts, module,
-      loom_pass_value_fact_scope_function_for_target(
-          source_function, &entry->bundle_storage.bundle),
-      &fact_table));
-  const loom_low_lower_options_t lower_options = {
-      .target_ref = entry->target_ref,
-      .bundle = &entry->bundle_storage.bundle,
-      .descriptor_registry = &registry->registry,
-      .policy = policy,
-      .fact_table = fact_table,
-      .emitter = loom_target_entry_emitter(diagnostic_emitter),
-      .max_errors = max_errors,
-      .report_enabled = report != NULL,
-      .report_storage = report_storage,
-      .table_arena = table_arena,
-  };
-  iree_status_t status = loom_low_lower_function(module, source_function,
-                                                 &lower_options, out_result);
-  loom_pass_value_fact_owner_invalidate(value_facts);
-  IREE_RETURN_IF_ERROR(status);
-  if (report != NULL) {
-    loom_target_compile_report_record_low_lowering(report, out_result);
-  }
-  if (out_result->error_count == 0 && out_result->low_func_op == NULL) {
-    return iree_make_status(IREE_STATUS_INTERNAL,
-                            "source-to-low lowering produced no low function");
-  }
-  return iree_ok_status();
-}
-
 typedef struct loom_ireevm_archive_emit_state_t {
-  // Module being mutated and emitted.
+  // Module being emitted.
   loom_module_t* module;
   // Caller-provided options, or NULL for defaults.
   const loom_ireevm_archive_emit_options_t* options;
@@ -202,20 +146,17 @@ typedef struct loom_ireevm_archive_emit_state_t {
   uint32_t max_errors;
   // Target provider environment used to compose target-owned registries.
   loom_target_environment_t target_environment;
-  // Target-low descriptor registry used for selection, lowering, and verify.
+  // Target-low descriptor registry used for selection, verification, and
+  // emission.
   loom_target_low_descriptor_registry_t low_registry;
-  // Source-to-low policy registry used during lowering.
-  loom_low_lower_policy_registry_t lower_policy_registry;
-  // Diagnostic materializer shared by lowering, preparation, and low verify.
+  // Diagnostic materializer shared by target-low verification and emission.
   loom_target_entry_diagnostic_emitter_t diagnostic_emitter;
   // Predicate selecting target bundles the IREE VM archive path can emit.
   loom_target_entry_predicate_t entry_predicate;
   // Block pool backing all per-emission arena allocations.
   iree_arena_block_pool_t block_pool;
-  // Arena for target selection, lowering reports, frames, and tables.
+  // Arena for target selection, frames, and tables.
   iree_arena_allocator_t table_arena;
-  // Maintained value fact owner shared by source-to-low lowering.
-  loom_pass_value_fact_owner_t value_facts;
   // Builder for the VM calling convention string.
   iree_string_builder_t calling_convention_builder;
   // Function bytecode emitted before archive wrapping.
@@ -226,7 +167,6 @@ static void loom_ireevm_archive_emit_state_deinitialize(
     loom_ireevm_archive_emit_state_t* state) {
   loom_ireevm_function_bytecode_deinitialize(&state->bytecode,
                                              state->allocator);
-  loom_pass_value_fact_owner_deinitialize(&state->value_facts);
   iree_arena_deinitialize(&state->table_arena);
   iree_arena_block_pool_deinitialize(&state->block_pool);
   iree_string_builder_deinitialize(&state->calling_convention_builder);
@@ -278,8 +218,6 @@ static iree_status_t loom_ireevm_archive_emit_state_initialize(
   iree_arena_block_pool_initialize(32 * 1024, allocator,
                                    &out_state->block_pool);
   iree_arena_initialize(&out_state->block_pool, &out_state->table_arena);
-  loom_pass_value_fact_owner_initialize(&out_state->block_pool,
-                                        &out_state->value_facts);
   out_state->initialized = true;
 
   iree_status_t status = loom_target_environment_initialize(
@@ -287,10 +225,6 @@ static iree_status_t loom_ireevm_archive_emit_state_initialize(
   if (iree_status_is_ok(status)) {
     status = loom_target_environment_initialize_low_descriptor_registry(
         &out_state->target_environment, &out_state->low_registry);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_target_environment_initialize_low_lower_policy_registry(
-        &out_state->target_environment, &out_state->lower_policy_registry);
   }
   if (iree_status_is_ok(status)) {
     loom_target_entry_diagnostic_emitter_initialize(
@@ -328,70 +262,18 @@ static iree_status_t loom_ireevm_archive_emit_select_entry(
   return iree_ok_status();
 }
 
-static iree_status_t loom_ireevm_archive_emit_resolve_low_function(
-    loom_ireevm_archive_emit_state_t* state, const loom_target_entry_t* entry,
-    loom_low_lower_result_t* out_result) {
-  *out_result = (loom_low_lower_result_t){
-      .low_func_ref = loom_symbol_ref_null(),
-      .memory_access_table = loom_low_memory_access_table_empty(),
-  };
-  if (loom_low_func_def_isa(entry->func.op)) {
-    IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
-        &state->low_registry.registry, &entry->bundle_storage.bundle,
-        &out_result->descriptor_set));
-    out_result->low_func_op = entry->func.op;
-    out_result->low_func_ref = entry->func_ref;
-    return iree_ok_status();
-  }
-  return loom_ireevm_archive_emit_lower_function(
-      state->module, &state->low_registry, &state->lower_policy_registry, entry,
-      entry->func, &state->diagnostic_emitter, state->max_errors,
-      &state->table_arena, &state->value_facts, state->report, out_result);
-}
-
 static iree_status_t loom_ireevm_archive_emit_selected_entry(
     loom_ireevm_archive_emit_state_t* state, const loom_target_entry_t* entry,
     loom_ireevm_module_archive_t* out_archive, bool* out_emitted) {
   IREE_RETURN_IF_ERROR(loom_ireevm_archive_emit_build_cconv(
       state->module, entry->func, &state->calling_convention_builder));
 
-  loom_low_lower_result_t lower_result = {0};
-  IREE_RETURN_IF_ERROR(loom_ireevm_archive_emit_resolve_low_function(
-      state, entry, &lower_result));
-  if (lower_result.error_count != 0) {
-    return iree_ok_status();
-  }
-
   if (state->report != NULL) {
     IREE_RETURN_IF_ERROR(loom_ireevm_archive_emit_symbol_name(
-        state->module, lower_result.low_func_ref,
-        &state->report->lowered_symbol));
+        state->module, entry->func_ref, &state->report->lowered_symbol));
   }
 
   loom_verify_result_t verify_result = {0};
-  IREE_RETURN_IF_ERROR(loom_target_entry_verify_module(
-      state->module, &state->target_options,
-      LOOM_IREEVM_ARCHIVE_EMIT_DEFAULT_MAX_ERRORS, &verify_result));
-  if (verify_result.error_count != 0) {
-    return iree_ok_status();
-  }
-
-  loom_op_t* low_functions[] = {
-      lower_result.low_func_op,
-  };
-  const loom_low_preparation_options_t preparation_options = {
-      .pass_registry = loom_pass_builtin_registry(),
-      .descriptor_registry = &state->low_registry.registry,
-      .diagnostic_emitter =
-          loom_target_entry_emitter(&state->diagnostic_emitter),
-  };
-  IREE_RETURN_IF_ERROR(loom_low_prepare_functions_for_packetization(
-      state->module, low_functions, IREE_ARRAYSIZE(low_functions),
-      &preparation_options, &state->block_pool));
-  if (state->diagnostic_emitter.error_count != 0) {
-    return iree_ok_status();
-  }
-
   IREE_RETURN_IF_ERROR(loom_target_entry_verify_module(
       state->module, &state->target_options,
       LOOM_IREEVM_ARCHIVE_EMIT_DEFAULT_MAX_ERRORS, &verify_result));
@@ -410,12 +292,12 @@ static iree_status_t loom_ireevm_archive_emit_selected_entry(
   loom_low_emission_frame_t frame = {0};
   const loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = &state->low_registry.registry,
-      .memory_access_table = lower_result.memory_access_table,
+      .memory_access_table = loom_low_memory_access_table_empty(),
       .emitter = loom_target_entry_emitter(&state->diagnostic_emitter),
   };
   IREE_RETURN_IF_ERROR(loom_low_emission_frame_build(
-      state->module, lower_result.low_func_op, &frame_options,
-      &state->table_arena, &frame));
+      state->module, entry->func.op, &frame_options, &state->table_arena,
+      &frame));
   if (state->report != NULL) {
     IREE_RETURN_IF_ERROR(loom_target_compile_report_record_low_emission_frame(
         state->report, &frame));

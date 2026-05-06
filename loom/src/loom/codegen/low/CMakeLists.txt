@@ -396,30 +396,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    preparation
-  HDRS
-    "preparation.h"
-  SRCS
-    "preparation.c"
-  DEPS
-    ::descriptors
-    ::function
-    ::pass_environment
-    ::pipeline
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::error::emitter
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::op_defs
-    loom::src::loom::pass::interpreter
-    loom::src::loom::pass::program
-    loom::src::loom::pass::registry
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     packet_json
   HDRS
     "packet_json.h"

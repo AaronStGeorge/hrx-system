@@ -26,7 +26,7 @@ void loom_compile_pipeline_options_initialize(
     loom_compile_pipeline_options_t* out_options) {
   *out_options = (loom_compile_pipeline_options_t){
       .pipeline = IREE_SVL("default"),
-      .default_pipeline = LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW,
+      .default_pipeline = LOOM_COMPILE_DEFAULT_PIPELINE_PREPARED_LOW,
       .diagnostic_sink = {.fn = loom_diagnostic_stderr_sink},
       .max_errors = LOOM_COMPILE_DEFAULT_MAX_PIPELINE_ERRORS,
   };

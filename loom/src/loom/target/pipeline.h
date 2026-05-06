@@ -30,8 +30,8 @@ typedef struct loom_target_pipeline_options_t {
 // Builds a module-root pipeline that lowers source/kernel IR to target-low IR.
 //
 // The produced pipeline stops before target ABI/resource materialization and
-// packetization preparation so artifact emitters can still derive packaging
-// state from target-low resource/import ops.
+// packetization preparation. This boundary is for target-low inspection and
+// debugging; artifact emission expects the prepared-low pipeline below.
 //
 // |pass_environment| must contain the capabilities required by the produced
 // passes when the pipeline is later verified or executed.

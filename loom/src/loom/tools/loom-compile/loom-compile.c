@@ -51,7 +51,7 @@ IREE_FLAG(string, loom_module_name, "loom",
           "Module name to store in VM bytecode archives.");
 IREE_FLAG(string, pipeline, "default",
           "Pass pipeline to run before artifact emission. Use 'default' or "
-          "empty for the shared source-to-low compile pipeline, 'none' to "
+          "empty for the shared prepared-low compile pipeline, 'none' to "
           "disable pass execution, '@symbol' to run a module-local "
           "pass.pipeline, or a comma-separated pass list such as "
           "'canonicalize,cse'.");

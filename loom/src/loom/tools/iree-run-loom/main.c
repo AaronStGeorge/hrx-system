@@ -33,7 +33,7 @@ IREE_FLAG(string, loom_module_name, "loom",
           "Module name to store in the compiled VM bytecode archive.");
 IREE_FLAG(string, pipeline, "default",
           "Pass pipeline to run before execution. Use 'default' or empty for "
-          "the comprehensive source-to-low pipeline, 'none' to disable pass "
+          "the comprehensive prepared-low pipeline, 'none' to disable pass "
           "execution, '@symbol' to run a module-local pass.pipeline, or a "
           "comma-separated pass list such as 'canonicalize,cse'.");
 IREE_FLAG(string, function, "",

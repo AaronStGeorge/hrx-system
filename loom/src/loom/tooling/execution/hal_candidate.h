@@ -21,21 +21,21 @@ extern "C" {
 typedef struct loom_run_hal_candidate_t {
   // Host allocator used for owned candidate storage.
   iree_allocator_t host_allocator;
-  // Structured report for this candidate's compilation.
+  // Structured report for this candidate.
   loom_target_compile_report_t compile_report;
   // HAL backend that produced |executable|.
   const loom_run_hal_backend_t* backend;
   // HAL target selected during candidate compilation.
   loom_run_hal_selected_target_t target;
-  // True when compilation produced executable bytes.
+  // True when executable bytes were produced.
   bool compiled;
   // HAL executable bytes produced by |backend|.
   loom_run_hal_executable_t executable;
 } loom_run_hal_candidate_t;
 
-// Selects a HAL target through |backend| and compiles |run_module| to a HAL
-// executable candidate. Compilation may mutate the parsed module by expanding
-// target records and adding lowered IR.
+// Selects a HAL target through |backend| and emits |run_module| to a HAL
+// executable candidate. The module must already contain the prepared target-low
+// entries selected by |options->entry_symbol|.
 iree_status_t loom_run_hal_candidate_compile(
     const loom_run_hal_backend_t* backend,
     const loom_run_hal_runtime_t* runtime, loom_run_module_t* run_module,

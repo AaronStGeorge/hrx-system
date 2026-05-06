@@ -28,19 +28,23 @@ iree_status_t InitializeLowDescriptorRegistry(
   return iree_ok_status();
 }
 
-constexpr char kVmSource[] =
+constexpr char kPreparedVmSource[] =
     "ireevm.target<core> @vm_target\n"
     "\n"
-    "func.def target(@vm_target) @branchy(%lhs: i32, %rhs: i32) -> (i32) {\n"
-    "  %c0 = scalar.constant 0 : i32\n"
-    "  %is_zero = scalar.cmpi eq, %lhs, %c0 : i32\n"
-    "  cfg.cond_br %is_zero, ^then, ^else : i1\n"
+    "low.func.def target(@vm_target) abi(vm_module_function) "
+    "@branchy(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>) {\n"
+    "  %c0 = low.const<iree.vm.const.i32> {i32_value = 0} : reg<vm.i32>\n"
+    "  %is_zero = low.op<iree.vm.cmp.eq.i32>(%lhs, %c0) : "
+    "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
+    "  low.cond_br %is_zero, ^then, ^else : reg<vm.i32>\n"
     "^then:\n"
-    "  %sum = scalar.addi %rhs, %rhs : i32\n"
-    "  func.return %sum : i32\n"
+    "  %sum = low.op<iree.vm.add.i32>(%rhs, %rhs) : "
+    "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
+    "  low.return %sum : reg<vm.i32>\n"
     "^else:\n"
-    "  %diff = scalar.subi %lhs, %rhs : i32\n"
-    "  func.return %diff : i32\n"
+    "  %diff = low.op<iree.vm.sub.i32>(%lhs, %rhs) : "
+    "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
+    "  low.return %diff : reg<vm.i32>\n"
     "}\n";
 
 class IreeVmCandidateTest : public ::testing::Test {
@@ -81,17 +85,14 @@ class IreeVmCandidateTest : public ::testing::Test {
 
 TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidate) {
   loom_run_module_t run_module = {};
-  IREE_ASSERT_OK(Parse(IREE_SV(kVmSource), &run_module));
+  IREE_ASSERT_OK(Parse(IREE_SV(kPreparedVmSource), &run_module));
 
   loom_run_candidate_compile_options_t options = {};
   InitializeCandidateOptions(&run_module, &options);
   loom_target_compile_report_pressure_row_t pressure_rows[4] = {};
-  loom_target_compile_report_source_low_row_t source_low_rows[4] = {};
   options.report_row_storage = {
       .pressure_rows = pressure_rows,
       .pressure_row_capacity = IREE_ARRAYSIZE(pressure_rows),
-      .source_low_rows = source_low_rows,
-      .source_low_row_capacity = IREE_ARRAYSIZE(source_low_rows),
   };
   loom_target_compile_report_t report = {};
   options.report = &report;
@@ -115,9 +116,6 @@ TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidate) {
   EXPECT_TRUE(
       iree_all_bits_set(candidate.compile_report.detail_flags,
                         LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS));
-  EXPECT_TRUE(
-      iree_all_bits_set(candidate.compile_report.detail_flags,
-                        LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS));
   EXPECT_FALSE(
       iree_string_view_is_empty(candidate.compile_report.target_bundle_name));
   EXPECT_FALSE(
@@ -133,21 +131,17 @@ TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidate) {
   EXPECT_GT(candidate.compile_report.pressure_row_total_count, 0u);
   EXPECT_GT(candidate.compile_report.pressure_row_count, 0u);
   EXPECT_GT(candidate.compile_report.pressure_rows[0].peak_live_units, 0u);
-  EXPECT_EQ(candidate.compile_report.source_low_rows, source_low_rows);
-  EXPECT_GT(candidate.compile_report.source_low_selected_op_count, 0u);
-  EXPECT_GT(candidate.compile_report.source_low_emitted_op_count, 0u);
-  EXPECT_GT(candidate.compile_report.source_low_row_total_count, 0u);
-  EXPECT_GT(candidate.compile_report.source_low_row_count, 0u);
-  EXPECT_GT(candidate.compile_report.source_low_rows[0].emitted_low_op_count,
-            0u);
+  EXPECT_EQ(candidate.compile_report.source_low_selected_op_count, 0u);
+  EXPECT_EQ(candidate.compile_report.source_low_emitted_op_count, 0u);
+  EXPECT_EQ(candidate.compile_report.source_low_row_total_count, 0u);
+  EXPECT_EQ(candidate.compile_report.source_low_row_count, 0u);
   EXPECT_EQ(candidate.compile_report.artifact_size,
             candidate.archive.data_length);
   EXPECT_EQ(report.artifact_kind, candidate.compile_report.artifact_kind);
   EXPECT_EQ(report.artifact_size, candidate.compile_report.artifact_size);
   EXPECT_EQ(report.pressure_row_total_count,
             candidate.compile_report.pressure_row_total_count);
-  EXPECT_EQ(report.source_low_row_total_count,
-            candidate.compile_report.source_low_row_total_count);
+  EXPECT_EQ(report.source_low_row_total_count, 0u);
 
   loom_ireevm_run_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&run_module);
@@ -155,7 +149,7 @@ TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidate) {
 
 TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidateWithoutReport) {
   loom_run_module_t run_module = {};
-  IREE_ASSERT_OK(Parse(IREE_SV(kVmSource), &run_module));
+  IREE_ASSERT_OK(Parse(IREE_SV(kPreparedVmSource), &run_module));
 
   loom_run_candidate_compile_options_t options = {};
   InitializeCandidateOptions(&run_module, &options);

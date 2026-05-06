@@ -28,9 +28,8 @@ extern "C" {
 typedef struct loom_target_environment_t loom_target_environment_t;
 
 typedef enum loom_compile_default_pipeline_e {
-  // Build the shared source/kernel-to-target-low pipeline. This preserves the
-  // current artifact-emission boundary where target emitters finish low
-  // materialization until that remaining orchestration moves into pass IR.
+  // Build the shared source/kernel-to-target-low pipeline. This is useful for
+  // debugging the target-low handoff before artifact preparation.
   LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW = 0,
   // Build the full prepared target-low pipeline including target ABI/resource
   // materialization and packetization preparation.
@@ -60,9 +59,8 @@ typedef struct loom_compile_pipeline_options_t {
   uint32_t max_errors;
 } loom_compile_pipeline_options_t;
 
-// Initializes compile pipeline options with the current artifact-front-door
-// default: source/kernel-to-target-low, stderr diagnostics, and a small error
-// cap.
+// Initializes compile pipeline options with the artifact-front-door default:
+// prepared target-low, stderr diagnostics, and a small error cap.
 void loom_compile_pipeline_options_initialize(
     loom_compile_pipeline_options_t* out_options);
 

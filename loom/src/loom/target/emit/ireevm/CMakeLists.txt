@@ -121,7 +121,6 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::frame
-    loom::src::loom::codegen::low::preparation
     loom::src::loom::codegen::low::verify
     loom::src::loom::error::diagnostic
     loom::src::loom::ir
@@ -129,8 +128,6 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::target
-    loom::src::loom::pass::builtin_registry
-    loom::src::loom::pass::value_facts
     loom::src::loom::target::compile_report
     loom::src::loom::target::compile_report_low
     loom::src::loom::target::entry_selection

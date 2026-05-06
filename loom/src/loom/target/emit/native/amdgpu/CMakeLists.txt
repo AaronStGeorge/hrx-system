@@ -292,21 +292,14 @@ loom_cc_library(
     iree::io::stream
     loom::src::loom::analysis::symbol_facts
     loom::src::loom::codegen::low::frame
-    loom::src::loom::codegen::low::lower
-    loom::src::loom::codegen::low::preparation
-    loom::src::loom::codegen::low::target_binding
     loom::src::loom::codegen::low::verify
     loom::src::loom::error::diagnostic
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::func_symbol_facts
-    loom::src::loom::ops::kernel
     loom::src::loom::ops::low
     loom::src::loom::ops::target
-    loom::src::loom::pass::builtin_registry
-    loom::src::loom::pass::value_facts
     loom::src::loom::target::arch::amdgpu::error_defs
-    loom::src::loom::target::arch::amdgpu::hal_binding_materialization
     loom::src::loom::target::arch::amdgpu::hal_kernel_abi
     loom::src::loom::target::arch::amdgpu::occupancy
     loom::src::loom::target::arch::amdgpu::ops

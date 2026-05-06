@@ -4,11 +4,11 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// AMDGPU HAL kernel-library emission for parsed Loom modules.
+// AMDGPU HAL kernel-library emission for prepared target-low Loom modules.
 //
-// This mutates a parsed module through the current AMDGPU target-low native
-// path: target-record resolution, verification, ABI resource materialization,
-// pass-managed low preparation, packetization, and native HSACO writing.
+// This packages prepared low.kernel.def entries into native HSACO bytes and HAL
+// export metadata. Source-to-low lowering, HAL ABI/resource materialization,
+// and target-low preparation are owned by the caller's compile pipeline.
 
 #ifndef LOOM_TARGET_EMIT_NATIVE_AMDGPU_HAL_KERNEL_LIBRARY_H_
 #define LOOM_TARGET_EMIT_NATIVE_AMDGPU_HAL_KERNEL_LIBRARY_H_
@@ -73,14 +73,13 @@ void loom_amdgpu_hal_kernel_library_deinitialize(
 
 // Emits |module| into an allocator-owned AMDGPU HAL kernel library.
 //
-// |module| is mutated in place: source functions may gain sibling low IR and
-// HAL low.resource imports in the selected target-low function are materialized
-// before scheduling. Target records are resolved through the linked descriptor
-// registry without materializing companion target records in the IR.
-// |out_emitted| is false when target preflight or diagnostics
-// rejected the module; status remains reserved for infrastructure failures. The
-// caller owns |out_library| when |out_emitted| is true and must release it with
-// loom_amdgpu_hal_kernel_library_deinitialize.
+// |module| must already contain the prepared target-low entries selected by
+// |options->entry_symbol| or |options->artifact_symbol|. Target records are
+// resolved through the linked descriptor registry without materializing
+// companion target records in the IR. |out_emitted| is false when target
+// preflight or diagnostics rejected the module; status remains reserved for
+// infrastructure failures. The caller owns |out_library| when |out_emitted| is
+// true and must release it with loom_amdgpu_hal_kernel_library_deinitialize.
 iree_status_t loom_amdgpu_emit_hal_kernel_library(
     loom_module_t* module,
     const loom_amdgpu_hal_kernel_library_options_t* options,
