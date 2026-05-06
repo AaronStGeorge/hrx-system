@@ -68,6 +68,7 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_xor_b32.lit",
     "amdgpu.v_lshlrev_b32",
     "amdgpu.v_lshlrev_b32.lit",
+    "amdgpu.v_lshlrev_b32.vop3_imm",
     "amdgpu.v_ashrrev_i32",
     "amdgpu.v_ashrrev_i32.lit",
     "amdgpu.v_lshrrev_b32",
@@ -143,6 +144,11 @@ _ADDRESS_VGPR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="materializer",
     subject_name="address-vgpr",
     constraint_key="amdgpu.address.vgpr_materializer",
+)
+_ADDRESS_SGPR_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="register-class",
+    subject_name="sgpr",
+    constraint_key="amdgpu.address.sgpr",
 )
 _RESULT_VGPR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="register-class",
@@ -450,9 +456,32 @@ def _index_madd_power_of_two_rule(
     scale_source: str,
     value_source: str,
     literal_addend: bool,
+    preserve_value_register: bool,
 ) -> DescriptorRule:
-    shift = _descriptor("amdgpu.v_lshlrev_b32.lit")
+    shift = _descriptor(
+        "amdgpu.v_lshlrev_b32.vop3_imm"
+        if preserve_value_register
+        else "amdgpu.v_lshlrev_b32.lit"
+    )
     add = _descriptor("amdgpu.v_add_u32.lit" if literal_addend else "amdgpu.v_add_u32")
+    value_guard = (
+        Guard.low_value_register_class(
+            value_source,
+            "amdgpu.sgpr",
+            diagnostic=_ADDRESS_SGPR_DIAGNOSTIC,
+        )
+        if preserve_value_register
+        else Guard.value_materializable(
+            value_source,
+            ADDRESS_VGPR_MATERIALIZER.name,
+            diagnostic=_ADDRESS_VGPR_DIAGNOSTIC,
+        )
+    )
+    value_operand = (
+        ValueRef.operand(value_source)
+        if preserve_value_register
+        else _materialized_operand(value_source, ADDRESS_VGPR_MATERIALIZER)
+    )
     addend_guards = (
         (
             Guard.value_exact_i64("c", diagnostic=_ADDRESS_EXACT_DIAGNOSTIC),
@@ -514,11 +543,7 @@ def _index_madd_power_of_two_rule(
                 32,
                 diagnostic=_ADDRESS_U32_DIAGNOSTIC,
             ),
-            Guard.value_materializable(
-                value_source,
-                ADDRESS_VGPR_MATERIALIZER.name,
-                diagnostic=_ADDRESS_VGPR_DIAGNOSTIC,
-            ),
+            value_guard,
             *addend_guards,
             Guard.descriptor_available(shift),
             Guard.descriptor_available(add),
@@ -526,12 +551,7 @@ def _index_madd_power_of_two_rule(
         emit=(
             EmitDescriptorOp(
                 descriptor=shift,
-                operands={
-                    "value": _materialized_operand(
-                        value_source,
-                        ADDRESS_VGPR_MATERIALIZER,
-                    ),
-                },
+                operands={"value": value_operand},
                 results={"dst": ValueRef.temporary("scaled")},
                 result_types={"dst": ValueRef.result("result")},
                 immediates={
@@ -886,21 +906,49 @@ def _rules() -> tuple[DescriptorRule, ...]:
                 scale_source="a",
                 value_source="b",
                 literal_addend=True,
+                preserve_value_register=True,
             ),
             _index_madd_power_of_two_rule(
                 scale_source="b",
                 value_source="a",
                 literal_addend=True,
+                preserve_value_register=True,
             ),
             _index_madd_power_of_two_rule(
                 scale_source="a",
                 value_source="b",
                 literal_addend=False,
+                preserve_value_register=True,
             ),
             _index_madd_power_of_two_rule(
                 scale_source="b",
                 value_source="a",
                 literal_addend=False,
+                preserve_value_register=True,
+            ),
+            _index_madd_power_of_two_rule(
+                scale_source="a",
+                value_source="b",
+                literal_addend=True,
+                preserve_value_register=False,
+            ),
+            _index_madd_power_of_two_rule(
+                scale_source="b",
+                value_source="a",
+                literal_addend=True,
+                preserve_value_register=False,
+            ),
+            _index_madd_power_of_two_rule(
+                scale_source="a",
+                value_source="b",
+                literal_addend=False,
+                preserve_value_register=False,
+            ),
+            _index_madd_power_of_two_rule(
+                scale_source="b",
+                value_source="a",
+                literal_addend=False,
+                preserve_value_register=False,
             ),
             _index_madd_literal_rule(),
             _index_madd_rule(),
