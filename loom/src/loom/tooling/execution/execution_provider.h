@@ -104,6 +104,11 @@ const loom_run_hal_backend_registry_t*
 loom_run_execution_environment_hal_backend_registry(
     const loom_run_execution_environment_t* environment);
 
+// Returns the target environment composed from |environment|'s providers.
+const loom_target_environment_t*
+loom_run_execution_environment_target_environment(
+    const loom_run_execution_environment_t* environment);
+
 // Returns the execution backend registry composed from |environment|'s
 // providers.
 const loom_run_execution_backend_registry_t*

@@ -48,6 +48,14 @@ iree_status_t loom_pass_tool_run_pipeline_op(
     const loom_pass_tool_run_options_t* options,
     loom_pass_run_result_t* out_result);
 
+// Compiles |pipeline_op| from |pipeline_module| and executes it on |module|.
+// This is used by tools that synthesize pass IR in a scratch module instead of
+// inserting tool-owned pass.pipeline symbols into the subject module.
+iree_status_t loom_pass_tool_run_pipeline_module_op(
+    loom_module_t* module, loom_module_t* pipeline_module,
+    const loom_op_t* pipeline_op, const loom_pass_tool_run_options_t* options,
+    loom_pass_run_result_t* out_result);
+
 // Looks up a module-local pass.pipeline symbol by name and executes it. The
 // symbol may be spelled with or without a leading '@'. Status is reserved for
 // tooling and interpreter infrastructure failures; pass-emitted diagnostics are

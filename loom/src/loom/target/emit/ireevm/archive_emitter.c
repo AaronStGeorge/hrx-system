@@ -11,6 +11,7 @@
 #include "loom/codegen/low/preparation.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
+#include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/pass/builtin_registry.h"
 #include "loom/pass/value_facts.h"
@@ -42,21 +43,37 @@ static bool loom_ireevm_archive_emit_bundle_is_compatible(
          bundle->export_plan->abi_kind == LOOM_TARGET_ABI_VM_MODULE_FUNCTION;
 }
 
+static bool loom_ireevm_archive_emit_is_vm_i32_register(
+    const loom_module_t* module, loom_type_t type) {
+  if (!loom_type_is_register(type) ||
+      loom_type_register_unit_count(type) != 1) {
+    return false;
+  }
+  const loom_string_id_t register_class_id = loom_type_register_class_id(type);
+  if (register_class_id == LOOM_STRING_ID_INVALID ||
+      register_class_id >= module->strings.count) {
+    return false;
+  }
+  return iree_string_view_equal(module->strings.entries[register_class_id],
+                                IREE_SV("vm.i32"));
+}
+
 static iree_status_t loom_ireevm_archive_emit_append_cconv_type(
-    loom_type_t type, iree_string_builder_t* builder) {
-  if (!loom_type_is_scalar(type)) {
-    return iree_make_status(
-        IREE_STATUS_INTERNAL,
-        "IREE VM target legality accepted a non-scalar ABI value");
+    const loom_module_t* module, loom_type_t type,
+    iree_string_builder_t* builder) {
+  if (loom_ireevm_archive_emit_is_vm_i32_register(module, type)) {
+    return iree_string_builder_append_string(builder, IREE_SV("i"));
   }
-  const loom_scalar_type_t scalar_type = loom_type_element_type(type);
-  if (scalar_type != LOOM_SCALAR_TYPE_I1 &&
-      scalar_type != LOOM_SCALAR_TYPE_I32) {
-    return iree_make_status(IREE_STATUS_INTERNAL,
-                            "IREE VM target legality accepted a scalar ABI "
-                            "value other than i1/i32");
+  if (loom_type_is_scalar(type)) {
+    const loom_scalar_type_t scalar_type = loom_type_element_type(type);
+    if (scalar_type == LOOM_SCALAR_TYPE_I1 ||
+        scalar_type == LOOM_SCALAR_TYPE_I32) {
+      return iree_string_builder_append_string(builder, IREE_SV("i"));
+    }
   }
-  return iree_string_builder_append_string(builder, IREE_SV("i"));
+  return iree_make_status(
+      IREE_STATUS_INTERNAL,
+      "IREE VM target legality accepted an unsupported ABI value type");
 }
 
 static iree_status_t loom_ireevm_archive_emit_build_cconv(
@@ -70,7 +87,7 @@ static iree_status_t loom_ireevm_archive_emit_build_cconv(
       loom_func_like_arg_ids(function, &argument_count);
   for (uint16_t i = 0; i < argument_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_ireevm_archive_emit_append_cconv_type(
-        loom_module_value_type(module, argument_ids[i]), builder));
+        module, loom_module_value_type(module, argument_ids[i]), builder));
   }
 
   IREE_RETURN_IF_ERROR(
@@ -78,7 +95,7 @@ static iree_status_t loom_ireevm_archive_emit_build_cconv(
   const loom_value_id_t* result_ids = loom_op_const_results(function.op);
   for (uint16_t i = 0; i < function.op->result_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_ireevm_archive_emit_append_cconv_type(
-        loom_module_value_type(module, result_ids[i]), builder));
+        module, loom_module_value_type(module, result_ids[i]), builder));
   }
   return iree_ok_status();
 }
@@ -311,6 +328,27 @@ static iree_status_t loom_ireevm_archive_emit_select_entry(
   return iree_ok_status();
 }
 
+static iree_status_t loom_ireevm_archive_emit_resolve_low_function(
+    loom_ireevm_archive_emit_state_t* state, const loom_target_entry_t* entry,
+    loom_low_lower_result_t* out_result) {
+  *out_result = (loom_low_lower_result_t){
+      .low_func_ref = loom_symbol_ref_null(),
+      .memory_access_table = loom_low_memory_access_table_empty(),
+  };
+  if (loom_low_func_def_isa(entry->func.op)) {
+    IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
+        &state->low_registry.registry, &entry->bundle_storage.bundle,
+        &out_result->descriptor_set));
+    out_result->low_func_op = entry->func.op;
+    out_result->low_func_ref = entry->func_ref;
+    return iree_ok_status();
+  }
+  return loom_ireevm_archive_emit_lower_function(
+      state->module, &state->low_registry, &state->lower_policy_registry, entry,
+      entry->func, &state->diagnostic_emitter, state->max_errors,
+      &state->table_arena, &state->value_facts, state->report, out_result);
+}
+
 static iree_status_t loom_ireevm_archive_emit_selected_entry(
     loom_ireevm_archive_emit_state_t* state, const loom_target_entry_t* entry,
     loom_ireevm_module_archive_t* out_archive, bool* out_emitted) {
@@ -318,10 +356,8 @@ static iree_status_t loom_ireevm_archive_emit_selected_entry(
       state->module, entry->func, &state->calling_convention_builder));
 
   loom_low_lower_result_t lower_result = {0};
-  IREE_RETURN_IF_ERROR(loom_ireevm_archive_emit_lower_function(
-      state->module, &state->low_registry, &state->lower_policy_registry, entry,
-      entry->func, &state->diagnostic_emitter, state->max_errors,
-      &state->table_arena, &state->value_facts, state->report, &lower_result));
+  IREE_RETURN_IF_ERROR(loom_ireevm_archive_emit_resolve_low_function(
+      state, entry, &lower_result));
   if (lower_result.error_count != 0) {
     return iree_ok_status();
   }

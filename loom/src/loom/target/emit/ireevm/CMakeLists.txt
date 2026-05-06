@@ -126,6 +126,7 @@ loom_cc_library(
     loom::src::loom::error::diagnostic
     loom::src::loom::ir
     loom::src::loom::ops::func
+    loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::target
     loom::src::loom::pass::builtin_registry

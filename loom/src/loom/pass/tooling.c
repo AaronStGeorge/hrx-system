@@ -103,6 +103,14 @@ iree_status_t loom_pass_tool_run_pipeline_op(
     loom_module_t* module, const loom_op_t* pipeline_op,
     const loom_pass_tool_run_options_t* options,
     loom_pass_run_result_t* out_result) {
+  return loom_pass_tool_run_pipeline_module_op(module, module, pipeline_op,
+                                               options, out_result);
+}
+
+iree_status_t loom_pass_tool_run_pipeline_module_op(
+    loom_module_t* module, loom_module_t* pipeline_module,
+    const loom_op_t* pipeline_op, const loom_pass_tool_run_options_t* options,
+    loom_pass_run_result_t* out_result) {
   *out_result = (loom_pass_run_result_t){0};
   IREE_RETURN_IF_ERROR(loom_pass_tool_verify_options(options));
 
@@ -113,7 +121,8 @@ iree_status_t loom_pass_tool_run_pipeline_op(
   };
   loom_pass_program_t program = {0};
   iree_status_t status = loom_pass_program_compile_pipeline(
-      module, pipeline_op, &compile_options, options->block_pool, &program);
+      pipeline_module, pipeline_op, &compile_options, options->block_pool,
+      &program);
   if (iree_status_is_ok(status)) {
     status = loom_pass_tool_run_program(module, &program, options, out_result);
   }
@@ -462,20 +471,8 @@ iree_status_t loom_pass_tool_run_flat_pipeline(
   iree_status_t status = loom_pass_tool_build_synthetic_pipeline(
       pipeline_module, pipeline, options->registry, &pipeline_op);
   if (iree_status_is_ok(status)) {
-    loom_pass_program_compile_options_t compile_options = {
-        .registry = options->registry,
-        .environment = options->environment,
-        .predicate_provider = options->predicate_provider,
-    };
-    loom_pass_program_t program = {0};
-    status = loom_pass_program_compile_pipeline(pipeline_module, pipeline_op,
-                                                &compile_options,
-                                                options->block_pool, &program);
-    if (iree_status_is_ok(status)) {
-      status =
-          loom_pass_tool_run_program(module, &program, options, out_result);
-    }
-    loom_pass_program_deinitialize(&program);
+    status = loom_pass_tool_run_pipeline_module_op(
+        module, pipeline_module, pipeline_op, options, out_result);
   }
   loom_module_free(pipeline_module);
   return status;

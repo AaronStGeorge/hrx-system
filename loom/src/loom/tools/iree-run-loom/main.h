@@ -17,6 +17,8 @@
 extern "C" {
 #endif
 
+typedef struct loom_target_environment_t loom_target_environment_t;
+
 typedef struct iree_run_loom_configuration_t {
   // Null-terminated executable name used in help and diagnostics.
   const char* tool_name;
@@ -25,6 +27,8 @@ typedef struct iree_run_loom_configuration_t {
   // Target-low descriptor registry package linked into this runner.
   loom_run_initialize_low_descriptor_registry_callback_t
       initialize_low_descriptor_registry;
+  // Target environment linked into this runner and used for pass pipelines.
+  const loom_target_environment_t* target_environment;
   // Execution backends linked into this runner.
   loom_run_execution_backend_registry_t execution_backend_registry;
 } iree_run_loom_configuration_t;

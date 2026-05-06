@@ -8,13 +8,22 @@
 
 #include "loom/tools/iree-run-loom/main.h"
 
+#include <inttypes.h>
 #include <stdio.h>
 
 #include "iree/base/api.h"
 #include "iree/base/tooling/flags.h"
+#include "loom/codegen/low/pass_environment.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
+#include "loom/pass/builtin_registry.h"
+#include "loom/pass/registry.h"
+#include "loom/pass/tooling.h"
+#include "loom/target/entry_selection.h"
+#include "loom/target/pipeline.h"
+#include "loom/target/predicate.h"
+#include "loom/target/provider.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/execution/execution_backend.h"
 #include "loom/tooling/execution/one_shot.h"
@@ -30,6 +39,11 @@ IREE_FLAG(string, loom_backend, "vm",
           "backend.");
 IREE_FLAG(string, loom_module_name, "loom",
           "Module name to store in the compiled VM bytecode archive.");
+IREE_FLAG(string, pipeline, "default",
+          "Pass pipeline to run before execution. Use 'default' or empty for "
+          "the comprehensive source-to-low pipeline, 'none' to disable pass "
+          "execution, '@symbol' to run a module-local pass.pipeline, or a "
+          "comma-separated pass list such as 'canonicalize,cse'.");
 IREE_FLAG(string, function, "",
           "VM export name to invoke. Empty selects the single export.");
 IREE_FLAG_LIST(string, input,
@@ -297,6 +311,138 @@ static iree_status_t iree_run_loom_compile_report_options_initialize(
   return iree_ok_status();
 }
 
+static bool iree_run_loom_pipeline_is_disabled(iree_string_view_t pipeline) {
+  pipeline = iree_string_view_trim(pipeline);
+  return iree_string_view_equal(pipeline, IREE_SV("none"));
+}
+
+static bool iree_run_loom_pipeline_is_default(iree_string_view_t pipeline) {
+  pipeline = iree_string_view_trim(pipeline);
+  return iree_string_view_is_empty(pipeline) ||
+         iree_string_view_equal(pipeline, IREE_SV("default"));
+}
+
+static iree_status_t iree_run_loom_pass_registry_initialize(
+    const loom_target_environment_t* target_environment,
+    loom_pass_registry_storage_t* out_storage,
+    const loom_pass_registry_t** out_registry) {
+  const loom_pass_registry_t* registries[] = {
+      loom_pass_builtin_registry(),
+      loom_target_environment_pass_registry(target_environment),
+  };
+  IREE_RETURN_IF_ERROR(loom_pass_registry_storage_initialize_from_registries(
+      registries, IREE_ARRAYSIZE(registries), out_storage));
+  *out_registry = loom_pass_registry_storage_registry(out_storage);
+  return iree_ok_status();
+}
+
+static iree_status_t iree_run_loom_run_default_pass_pipeline(
+    loom_run_module_t* run_module,
+    const loom_target_environment_t* target_environment,
+    const loom_pass_tool_run_options_t* run_options,
+    loom_pass_run_result_t* out_result) {
+  *out_result = (loom_pass_run_result_t){0};
+
+  loom_module_t* pipeline_module = NULL;
+  iree_status_t status = loom_module_allocate(
+      run_module->module->context, IREE_SV("__iree_run_loom_default_pipeline"),
+      run_options->block_pool, NULL, iree_allocator_system(), &pipeline_module);
+  loom_op_t* pipeline_op = NULL;
+  if (iree_status_is_ok(status)) {
+    status = loom_target_pipeline_build_to_source_low(
+        pipeline_module, IREE_SV("__iree_run_loom_default"),
+        /*options=*/NULL, target_environment, run_options->environment,
+        &pipeline_op);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_pass_tool_run_pipeline_module_op(run_module->module,
+                                                   pipeline_module, pipeline_op,
+                                                   run_options, out_result);
+  }
+  if (pipeline_module != NULL) {
+    loom_module_free(pipeline_module);
+  }
+  return status;
+}
+
+static iree_status_t iree_run_loom_run_pass_pipeline(
+    const iree_run_loom_configuration_t* configuration,
+    loom_run_session_t* session, loom_run_module_t* run_module) {
+  iree_string_view_t pipeline =
+      iree_string_view_trim(iree_make_cstring_view(FLAG_pipeline));
+  if (iree_run_loom_pipeline_is_disabled(pipeline)) {
+    return iree_ok_status();
+  }
+
+  const loom_target_environment_t* target_environment =
+      configuration->target_environment;
+  if (target_environment == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "iree-run-loom pass pipelines require a target "
+                            "environment");
+  }
+
+  loom_pass_registry_storage_t pass_registry_storage = {0};
+  const loom_pass_registry_t* pass_registry = NULL;
+  IREE_RETURN_IF_ERROR(iree_run_loom_pass_registry_initialize(
+      target_environment, &pass_registry_storage, &pass_registry));
+
+  loom_low_lower_policy_registry_t low_lower_policy_registry = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_target_environment_initialize_low_lower_policy_registry(
+          target_environment, &low_lower_policy_registry));
+  const loom_target_low_legality_provider_list_t low_legality_provider_list =
+      loom_target_environment_low_legality_provider_list(target_environment);
+
+  loom_source_resolver_t source_resolver =
+      loom_run_module_source_resolver(run_module);
+  const loom_target_entry_options_t entry_options = {
+      .entry_symbol = iree_make_cstring_view(FLAG_loom_entry),
+      .diagnostic_sink = {.fn = loom_diagnostic_stderr_sink},
+      .source_resolver = source_resolver,
+      .max_errors = 20,
+  };
+  loom_target_entry_diagnostic_emitter_t pass_emitter = {0};
+  loom_target_entry_diagnostic_emitter_initialize(
+      run_module->module, &entry_options, LOOM_EMITTER_PASS, &pass_emitter);
+
+  loom_low_pass_environment_storage_t low_pass_environment_storage = {0};
+  loom_target_pass_predicate_provider_storage_t predicate_storage = {0};
+  loom_target_pass_predicate_provider_storage_initialize(
+      loom_run_session_block_pool(session), &predicate_storage);
+  loom_pass_tool_run_options_t run_options = {
+      .registry = pass_registry,
+      .environment = loom_low_pass_environment_storage_initialize(
+          &loom_run_session_low_descriptor_registry(session)->registry,
+          &low_lower_policy_registry, &low_legality_provider_list,
+          &low_pass_environment_storage),
+      .predicate_provider =
+          loom_target_pass_predicate_provider(&predicate_storage),
+      .block_pool = loom_run_session_block_pool(session),
+      .diagnostic_emitter = loom_target_entry_emitter(&pass_emitter),
+  };
+
+  loom_pass_run_result_t run_result = {0};
+  iree_status_t status = iree_ok_status();
+  if (iree_run_loom_pipeline_is_default(pipeline)) {
+    status = iree_run_loom_run_default_pass_pipeline(
+        run_module, target_environment, &run_options, &run_result);
+  } else if (iree_string_view_starts_with_char(pipeline, '@')) {
+    status = loom_pass_tool_run_pipeline_symbol(run_module->module, pipeline,
+                                                &run_options, &run_result);
+  } else {
+    status = loom_pass_tool_run_flat_pipeline(run_module->module, pipeline,
+                                              &run_options, &run_result);
+  }
+  if (iree_status_is_ok(status) && run_result.error_count != 0) {
+    status = iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "iree-run-loom pass pipeline failed with %" PRIu32 " error%s",
+        run_result.error_count, run_result.error_count == 1 ? "" : "s");
+  }
+  return status;
+}
+
 static iree_status_t iree_run_loom_make_unknown_backend_status(
     iree_string_view_t backend_name,
     const loom_run_execution_backend_registry_t* backend_registry,
@@ -462,6 +608,10 @@ int iree_run_loom_main(int argc, char** argv,
   if (iree_status_is_ok(status)) {
     compile_options.source_resolver =
         loom_run_module_source_resolver(&run_module);
+  }
+  if (iree_status_is_ok(status)) {
+    status =
+        iree_run_loom_run_pass_pipeline(configuration, &session, &run_module);
   }
   if (iree_status_is_ok(status)) {
     const loom_run_one_shot_request_t run_request = {

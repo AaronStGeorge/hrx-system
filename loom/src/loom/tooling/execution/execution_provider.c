@@ -134,6 +134,12 @@ loom_run_execution_environment_hal_backend_registry(
   return &environment->hal_backend_registry;
 }
 
+const loom_target_environment_t*
+loom_run_execution_environment_target_environment(
+    const loom_run_execution_environment_t* environment) {
+  return &environment->target_environment;
+}
+
 const loom_run_execution_backend_registry_t*
 loom_run_execution_environment_execution_backend_registry(
     const loom_run_execution_environment_t* environment) {

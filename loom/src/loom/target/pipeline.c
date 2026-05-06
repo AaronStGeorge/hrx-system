@@ -60,6 +60,11 @@ static iree_status_t loom_target_pipeline_build_cleanup(
   return loom_target_pipeline_build_run(builder, IREE_SV("cse"));
 }
 
+static iree_status_t loom_target_pipeline_build_cleanup_body(
+    loom_builder_t* builder, void* user_data) {
+  return loom_target_pipeline_build_cleanup(builder);
+}
+
 static iree_status_t loom_target_pipeline_build_source_normalization(
     loom_builder_t* builder, void* user_data) {
   const loom_target_pipeline_build_context_t* context =
@@ -68,6 +73,13 @@ static iree_status_t loom_target_pipeline_build_source_normalization(
       builder, context, LOOM_TARGET_PIPELINE_PHASE_SOURCE_NORMALIZATION));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
       builder, IREE_SV("normalize-kernel-resources")));
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
+      builder, IREE_SV("promote-private-fragments")));
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_cleanup(builder));
+  IREE_RETURN_IF_ERROR(
+      loom_target_pipeline_build_run(builder, IREE_SV("scf-to-cfg")));
+  IREE_RETURN_IF_ERROR(
+      loom_target_pipeline_build_run(builder, IREE_SV("cfg-simplify")));
   return loom_target_pipeline_build_cleanup(builder);
 }
 
@@ -83,8 +95,8 @@ static iree_status_t loom_target_pipeline_build_low_preparation(
   return loom_low_pipeline_build_packetization_preparation(builder);
 }
 
-static iree_status_t loom_target_pipeline_build_body(loom_builder_t* builder,
-                                                     void* user_data) {
+static iree_status_t loom_target_pipeline_build_source_low_body(
+    loom_builder_t* builder, void* user_data) {
   const loom_target_pipeline_build_context_t* context =
       (const loom_target_pipeline_build_context_t*)user_data;
   loom_op_t* for_op = NULL;
@@ -96,8 +108,39 @@ static iree_status_t loom_target_pipeline_build_body(loom_builder_t* builder,
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_source_to_low(builder, context->options));
   return loom_pass_ir_build_for(builder, LOOM_PASS_ANCHOR_FUNC,
+                                loom_target_pipeline_build_cleanup_body, NULL,
+                                &for_op);
+}
+
+static iree_status_t loom_target_pipeline_build_prepared_low_body(
+    loom_builder_t* builder, void* user_data) {
+  IREE_RETURN_IF_ERROR(
+      loom_target_pipeline_build_source_low_body(builder, user_data));
+  loom_op_t* for_op = NULL;
+  return loom_pass_ir_build_for(builder, LOOM_PASS_ANCHOR_FUNC,
                                 loom_target_pipeline_build_low_preparation,
                                 user_data, &for_op);
+}
+
+iree_status_t loom_target_pipeline_build_to_source_low(
+    loom_module_t* pipeline_module, iree_string_view_t name,
+    const loom_target_pipeline_options_t* options,
+    const loom_target_environment_t* target_environment,
+    loom_pass_environment_t pass_environment, loom_op_t** out_pipeline_op) {
+  IREE_ASSERT_ARGUMENT(pipeline_module);
+  IREE_ASSERT_ARGUMENT(target_environment);
+  IREE_ASSERT_ARGUMENT(out_pipeline_op);
+  *out_pipeline_op = NULL;
+
+  const loom_target_pipeline_build_context_t context = {
+      .target_environment = target_environment,
+      .pass_environment = pass_environment,
+      .options = options,
+  };
+  return loom_pass_ir_build_pipeline(pipeline_module, name,
+                                     LOOM_PASS_ANCHOR_MODULE,
+                                     loom_target_pipeline_build_source_low_body,
+                                     (void*)&context, out_pipeline_op);
 }
 
 iree_status_t loom_target_pipeline_build_to_prepared_low(
@@ -117,5 +160,6 @@ iree_status_t loom_target_pipeline_build_to_prepared_low(
   };
   return loom_pass_ir_build_pipeline(
       pipeline_module, name, LOOM_PASS_ANCHOR_MODULE,
-      loom_target_pipeline_build_body, (void*)&context, out_pipeline_op);
+      loom_target_pipeline_build_prepared_low_body, (void*)&context,
+      out_pipeline_op);
 }

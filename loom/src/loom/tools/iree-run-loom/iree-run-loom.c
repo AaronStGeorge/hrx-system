@@ -68,6 +68,8 @@ int main(int argc, char** argv) {
       .initialize_low_descriptor_registry =
           loom_run_execution_environment_low_descriptor_registry_callback(
               &environment),
+      .target_environment =
+          loom_run_execution_environment_target_environment(&environment),
       .execution_backend_registry =
           *loom_run_execution_environment_execution_backend_registry(
               &environment),
