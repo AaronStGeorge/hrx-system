@@ -43,6 +43,7 @@ class DescriptorEmitForm(Enum):
     AUTO = "auto"
     OP = "op"
     CONST = "const"
+    FIRST_LANE = "first_lane"
     PER_LANE = "per_lane"
     ACCUMULATE_LANES = "accumulate_lanes"
 
@@ -84,6 +85,7 @@ class EmitDescriptorOp:
     accumulator: str | None = None
     accumulator_seed: DescriptorAccumulatorSeed = DescriptorAccumulatorSeed.OPERAND
     accumulator_tree: DescriptorAccumulatorTree = DescriptorAccumulatorTree.CHAIN
+    skip_first_lane: bool = False
     source_memory: SourceMemoryConstraint | None = None
 
     def __post_init__(self) -> None:
@@ -210,6 +212,19 @@ class EmitDescriptorOp:
             raise ValueError(
                 f"{source_op.name}: accumulator tree is only valid for "
                 "accumulate-lanes emits"
+            )
+        if self.skip_first_lane and self.form != DescriptorEmitForm.ACCUMULATE_LANES:
+            raise ValueError(
+                f"{source_op.name}: skip-first-lane is only valid for "
+                "accumulate-lanes emits"
+            )
+        if (
+            self.skip_first_lane
+            and self.accumulator_seed == DescriptorAccumulatorSeed.FIRST_LANE
+        ):
+            raise ValueError(
+                f"{source_op.name}: skip-first-lane cannot be combined with "
+                "first-lane accumulator seeding"
             )
         if self.source_memory is not None and self.form not in (
             DescriptorEmitForm.AUTO,

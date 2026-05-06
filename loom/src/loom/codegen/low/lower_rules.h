@@ -453,13 +453,16 @@ typedef enum loom_low_lower_emit_kind_e {
   LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP = 1,
   // Emits a descriptor-backed low.const with copied attributes.
   LOOM_LOW_LOWER_EMIT_DESCRIPTOR_CONST = 2,
+  // Slices register-range operands at lane 0 and emits one descriptor-backed
+  // low.op.
+  LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_FIRST_LANE = 3,
   // Slices register-range operands, emits one descriptor-backed low.op per
   // register lane, and concatenates the lane results.
-  LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE = 3,
+  LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE = 4,
   // Slices register-range operands, emits one descriptor-backed low.op per
   // register lane, and threads one scalar accumulator operand through the
   // emitted results.
-  LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_ACCUMULATE_LANES = 4,
+  LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_ACCUMULATE_LANES = 5,
 } loom_low_lower_emit_kind_t;
 
 typedef uint16_t loom_low_lower_emit_flags_t;
@@ -476,8 +479,10 @@ typedef uint16_t loom_low_lower_emit_flags_t;
 // and starts descriptor emission at lane 1.
 #define LOOM_LOW_LOWER_EMIT_FLAG_ACCUMULATE_SEED_FIRST_LANE ((uint16_t)1u << 3)
 // Builds DESCRIPTOR_OP_ACCUMULATE_LANES as a balanced tree over source lanes.
-// Requires ACCUMULATE_SEED_FIRST_LANE.
 #define LOOM_LOW_LOWER_EMIT_FLAG_ACCUMULATE_TREE_BALANCED ((uint16_t)1u << 4)
+// Starts DESCRIPTOR_OP_ACCUMULATE_LANES at lane 1. The accumulator operand must
+// already contain the folded lane 0 contribution.
+#define LOOM_LOW_LOWER_EMIT_FLAG_ACCUMULATE_SKIP_FIRST_LANE ((uint16_t)1u << 5)
 
 typedef struct loom_low_lower_emit_t {
   // Emit action to perform.

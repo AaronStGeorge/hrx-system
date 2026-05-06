@@ -20,8 +20,10 @@ from loom.target.contracts import (
     DescriptorRule,
     EmitDescriptorOp,
     Guard,
+    GuardDiagnostic,
     Scalar,
     TypePattern,
+    ValueProject,
     ValueRef,
     Vector,
     descriptor_by_key,
@@ -35,9 +37,13 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_or_b32",
     "amdgpu.v_xor_b32",
     "amdgpu.v_add_f32",
+    "amdgpu.v_add_f32.lit",
     "amdgpu.v_mul_f32",
+    "amdgpu.v_mul_f32.lit",
     "amdgpu.v_min_f32",
+    "amdgpu.v_min_f32.lit",
     "amdgpu.v_max_f32",
+    "amdgpu.v_max_f32.lit",
 )
 
 _DESCRIPTOR_SET = build_amdgpu_contract_descriptor_set(
@@ -57,6 +63,12 @@ _VEC_F32 = Vector(
 )
 _I32 = Scalar("i32")
 _F32 = Scalar("f32")
+
+_LITERAL_EXACT_F32_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="literal",
+    subject_name="f32",
+    constraint_key="amdgpu.literal.exact_f32",
+)
 
 
 def _descriptor(key: str) -> Descriptor:
@@ -194,6 +206,68 @@ def _f32_extremum_reassociated_rule(kind: str, descriptor_key: str) -> Descripto
     )
 
 
+def _f32_literal_seed_rule(
+    kind: str,
+    seed_descriptor_key: str,
+    accumulate_descriptor_key: str,
+    *,
+    reassociated: bool = False,
+) -> DescriptorRule:
+    seed_descriptor = _descriptor(seed_descriptor_key)
+    accumulate_descriptor = _descriptor(accumulate_descriptor_key)
+    extra_guards: tuple[Guard, ...] = ()
+    if reassociated:
+        extra_guards = (
+            Guard.instance_flags_has_all("fastmath", "reassoc"),
+            Guard.instance_flags_has_all("fastmath", "nnan"),
+            Guard.instance_flags_has_all("fastmath", "nsz"),
+        )
+    return DescriptorRule(
+        source_op=vector.vector_reduce,
+        descriptor=seed_descriptor,
+        guards=(
+            Guard.enum_attr_equals("kind", kind),
+            Guard.value_type("input", _VEC_F32),
+            Guard.value_type("init", _F32),
+            Guard.value_type("result", _F32),
+            Guard.low_value_register_class("result", "amdgpu.vgpr"),
+            Guard.value_exact_f64(
+                "init",
+                diagnostic=_LITERAL_EXACT_F32_DIAGNOSTIC,
+            ),
+            *extra_guards,
+            Guard.descriptor_available(seed_descriptor),
+            Guard.descriptor_available(accumulate_descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=seed_descriptor,
+                operands={"rhs": ValueRef.operand("input")},
+                results={"dst": ValueRef.temporary("seed")},
+                result_types={"dst": ValueRef.operand("init")},
+                immediates={"imm32": ValueProject.f64_as_f32_bits("init")},
+                form=DescriptorEmitForm.FIRST_LANE,
+            ),
+            EmitDescriptorOp(
+                descriptor=accumulate_descriptor,
+                operands={
+                    "lhs": ValueRef.temporary("seed"),
+                    "rhs": ValueRef.operand("input"),
+                },
+                results={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.ACCUMULATE_LANES,
+                accumulator="lhs",
+                accumulator_tree=(
+                    DescriptorAccumulatorTree.BALANCED
+                    if reassociated
+                    else DescriptorAccumulatorTree.CHAIN
+                ),
+                skip_first_lane=True,
+            ),
+        ),
+    )
+
+
 AMDGPU_REDUCE_CONTRACT_DIALECT_OPS = {
     "vector": ALL_VECTOR_OPS,
 }
@@ -212,6 +286,36 @@ AMDGPU_REDUCE_CONTRACT_FRAGMENT = ContractFragment(
         _i32_rule("xori", "amdgpu.v_xor_b32"),
         _f32_add_reassociated_zero_rule(),
         _f32_add_assumed_zero_rule(),
+        _f32_literal_seed_rule(
+            "addf",
+            "amdgpu.v_add_f32.lit",
+            "amdgpu.v_add_f32",
+            reassociated=True,
+        ),
+        _f32_literal_seed_rule("addf", "amdgpu.v_add_f32.lit", "amdgpu.v_add_f32"),
+        _f32_literal_seed_rule("mulf", "amdgpu.v_mul_f32.lit", "amdgpu.v_mul_f32"),
+        _f32_literal_seed_rule(
+            "minnumf",
+            "amdgpu.v_min_f32.lit",
+            "amdgpu.v_min_f32",
+            reassociated=True,
+        ),
+        _f32_literal_seed_rule(
+            "maxnumf",
+            "amdgpu.v_max_f32.lit",
+            "amdgpu.v_max_f32",
+            reassociated=True,
+        ),
+        _f32_literal_seed_rule(
+            "minnumf",
+            "amdgpu.v_min_f32.lit",
+            "amdgpu.v_min_f32",
+        ),
+        _f32_literal_seed_rule(
+            "maxnumf",
+            "amdgpu.v_max_f32.lit",
+            "amdgpu.v_max_f32",
+        ),
         _f32_rule("addf", "amdgpu.v_add_f32"),
         _f32_rule("mulf", "amdgpu.v_mul_f32"),
         _f32_extremum_reassociated_rule("minnumf", "amdgpu.v_min_f32"),
