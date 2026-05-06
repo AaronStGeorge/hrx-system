@@ -6,151 +6,20 @@
 
 #include <stdint.h>
 
+#include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/target/arch/amdgpu/compare_candidates.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
-
-typedef struct loom_amdgpu_vector_compare_descriptor_t {
-  // Source compare op kind this descriptor row handles.
-  loom_op_kind_t op_kind;
-  // Source compare predicate value matched by this row.
-  uint8_t predicate;
-  // Stable descriptor ref selected for the compare predicate.
-  loom_amdgpu_descriptor_ref_t descriptor_ref;
-} loom_amdgpu_vector_compare_descriptor_t;
-
-static const loom_amdgpu_vector_compare_descriptor_t
-    kAmdgpuVectorCompareDescriptors[] = {
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPI,
-            .predicate = LOOM_VECTOR_CMPI_PREDICATE_EQ,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPI,
-            .predicate = LOOM_VECTOR_CMPI_PREDICATE_NE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_NE_I32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPI,
-            .predicate = LOOM_VECTOR_CMPI_PREDICATE_SLT,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_SLT_I32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPI,
-            .predicate = LOOM_VECTOR_CMPI_PREDICATE_SLE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_SLE_I32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPI,
-            .predicate = LOOM_VECTOR_CMPI_PREDICATE_SGT,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_SGT_I32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPI,
-            .predicate = LOOM_VECTOR_CMPI_PREDICATE_SGE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_SGE_I32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPI,
-            .predicate = LOOM_VECTOR_CMPI_PREDICATE_ULT,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_U32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPI,
-            .predicate = LOOM_VECTOR_CMPI_PREDICATE_ULE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULE_U32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPI,
-            .predicate = LOOM_VECTOR_CMPI_PREDICATE_UGT,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGT_U32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPI,
-            .predicate = LOOM_VECTOR_CMPI_PREDICATE_UGE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGE_U32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPF,
-            .predicate = LOOM_VECTOR_CMPF_PREDICATE_OEQ,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_OEQ_F32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPF,
-            .predicate = LOOM_VECTOR_CMPF_PREDICATE_OGT,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_OGT_F32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPF,
-            .predicate = LOOM_VECTOR_CMPF_PREDICATE_OGE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_OGE_F32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPF,
-            .predicate = LOOM_VECTOR_CMPF_PREDICATE_OLT,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_OLT_F32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPF,
-            .predicate = LOOM_VECTOR_CMPF_PREDICATE_OLE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_OLE_F32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPF,
-            .predicate = LOOM_VECTOR_CMPF_PREDICATE_ONE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ONE_F32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPF,
-            .predicate = LOOM_VECTOR_CMPF_PREDICATE_ORD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ORD_F32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPF,
-            .predicate = LOOM_VECTOR_CMPF_PREDICATE_UEQ,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UEQ_F32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPF,
-            .predicate = LOOM_VECTOR_CMPF_PREDICATE_UGT,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGT_F32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPF,
-            .predicate = LOOM_VECTOR_CMPF_PREDICATE_UGE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGE_F32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPF,
-            .predicate = LOOM_VECTOR_CMPF_PREDICATE_ULT,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_F32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPF,
-            .predicate = LOOM_VECTOR_CMPF_PREDICATE_ULE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULE_F32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPF,
-            .predicate = LOOM_VECTOR_CMPF_PREDICATE_UNE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UNE_F32,
-        },
-        {
-            .op_kind = LOOM_OP_VECTOR_CMPF,
-            .predicate = LOOM_VECTOR_CMPF_PREDICATE_UNO,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UNO_F32,
-        },
-};
 
 static bool loom_amdgpu_vector_compare_descriptor_ref(
     loom_op_kind_t op_kind, uint8_t predicate,
     loom_amdgpu_descriptor_ref_t* out_descriptor_ref) {
   *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
-  for (iree_host_size_t i = 0;
-       i < IREE_ARRAYSIZE(kAmdgpuVectorCompareDescriptors); ++i) {
-    const loom_amdgpu_vector_compare_descriptor_t* row =
-        &kAmdgpuVectorCompareDescriptors[i];
+  for (iree_host_size_t i = 0; i < kLoomAmdgpuCompareDescriptorCandidateCount;
+       ++i) {
+    const loom_amdgpu_compare_descriptor_candidate_t* row =
+        &kLoomAmdgpuCompareDescriptorCandidates[i];
     if (row->op_kind == op_kind && row->predicate == predicate) {
       *out_descriptor_ref = row->descriptor_ref;
       return true;
@@ -217,6 +86,46 @@ iree_status_t loom_amdgpu_select_vector_cmpf_plan(
       loom_vector_cmpf_rhs(source_op), loom_vector_cmpf_result(source_op),
       LOOM_SCALAR_TYPE_F32, loom_vector_cmpf_predicate(source_op), out_plan,
       out_selected);
+}
+
+iree_status_t loom_amdgpu_select_scalar_cmpf_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_compare_plan_t* out_plan, bool* out_selected) {
+  *out_plan = (loom_amdgpu_vector_compare_plan_t){0};
+  *out_selected = false;
+  loom_amdgpu_descriptor_ref_t descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
+  if (!loom_amdgpu_vector_compare_descriptor_ref(
+          source_op->kind, loom_scalar_cmpf_predicate(source_op),
+          &descriptor_ref)) {
+    return iree_ok_status();
+  }
+  loom_low_lower_resolved_descriptor_t descriptor = {0};
+  bool descriptor_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, descriptor_ref, &descriptor, &descriptor_present));
+  if (!descriptor_present) {
+    return iree_ok_status();
+  }
+
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_value_id_t lhs = loom_scalar_cmpf_lhs(source_op);
+  const loom_value_id_t rhs = loom_scalar_cmpf_rhs(source_op);
+  const loom_value_id_t result = loom_scalar_cmpf_result(source_op);
+  if (!loom_amdgpu_type_is_f32(loom_module_value_type(module, lhs)) ||
+      !loom_type_equal(loom_module_value_type(module, rhs),
+                       loom_module_value_type(module, lhs)) ||
+      !loom_amdgpu_type_is_i1(loom_module_value_type(module, result))) {
+    return iree_ok_status();
+  }
+  *out_plan = (loom_amdgpu_vector_compare_plan_t){
+      .descriptor = descriptor,
+      .lhs = lhs,
+      .rhs = rhs,
+      .result = result,
+      .lane_count = 1,
+  };
+  *out_selected = true;
+  return iree_ok_status();
 }
 
 iree_status_t loom_amdgpu_select_vector_select_plan(
@@ -288,9 +197,13 @@ static iree_status_t loom_amdgpu_lower_vector_compare(
     loom_value_id_t lane_lhs = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_slice_lane_if_needed(
         context, source_op, low_lhs, lane_count, i, lane_type, &lane_lhs));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
+        context, source_op, lane_lhs, &lane_lhs));
     loom_value_id_t lane_rhs = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_slice_lane_if_needed(
         context, source_op, low_rhs, lane_count, i, lane_type, &lane_rhs));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
+        context, source_op, lane_rhs, &lane_rhs));
     const loom_value_id_t operands[] = {
         lane_lhs,
         lane_rhs,
@@ -326,6 +239,12 @@ iree_status_t loom_amdgpu_lower_vector_cmpi(
 }
 
 iree_status_t loom_amdgpu_lower_vector_cmpf(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_compare_plan_t* plan) {
+  return loom_amdgpu_lower_vector_compare(context, source_op, plan);
+}
+
+iree_status_t loom_amdgpu_lower_scalar_cmpf(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_compare_plan_t* plan) {
   return loom_amdgpu_lower_vector_compare(context, source_op, plan);

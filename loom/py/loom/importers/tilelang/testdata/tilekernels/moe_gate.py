@@ -115,77 +115,92 @@ kernel.def target(@hip_mcpu_gfx1100) export("topk_gate_kernel") @topk_gate_kerne
   %scores_fragment_bytes = index.constant 128 : offset
   %scores_fragment_buffer = buffer.alloca %scores_fragment_bytes {base_alignment = 4, memory_space = private} : buffer
   %scores_fragment = buffer.view %scores_fragment_buffer[%c0_bytes] : buffer -> view<32xf32, %layout>
+  %f32_zero = scalar.constant 0.0 : f32
+  %scores_fragment_state = vector.splat %f32_zero : vector<32xf32>
   %amax_fragment_bytes = index.constant 4 : offset
   %amax_fragment_buffer = buffer.alloca %amax_fragment_bytes {base_alignment = 4, memory_space = private} : buffer
   %amax_fragment = buffer.view %amax_fragment_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %amax_fragment_state = vector.splat %f32_zero : vector<1xf32>
   %idx_fragment_buffer = buffer.alloca %scores_fragment_bytes {base_alignment = 4, memory_space = private} : buffer
   %idx_fragment = buffer.view %idx_fragment_buffer[%c0_bytes] : buffer -> view<32xi32, %layout>
+  %i32_zero = scalar.constant 0 : i32
+  %idx_fragment_state = vector.splat %i32_zero : vector<32xi32>
   %idx_reducer_buffer = buffer.alloca %amax_fragment_bytes {base_alignment = 4, memory_space = private} : buffer
   %idx_reducer = buffer.view %idx_reducer_buffer[%c0_bytes] : buffer -> view<1xi32, %layout>
+  %idx_reducer_state = vector.splat %i32_zero : vector<1xi32>
   %topk_idx_shared_bytes = index.constant 8 : offset
   %topk_idx_shared_buffer = buffer.alloca %topk_idx_shared_bytes {base_alignment = 4, memory_space = workgroup} : buffer
   %topk_idx_shared = buffer.view %topk_idx_shared_buffer[%c0_bytes] : buffer -> view<2xi32, %layout>
   %c0 = index.constant 0 : index
   %c32 = index.constant 32 : index
   %c1 = index.constant 1 : index
-  scf.for %i = [%c0 to %c32 step %c1] {
+  %scores_fragment_state_next = scf.for %i = [%c0 to %c32 step %c1](%scores_fragment_state_iter = %scores_fragment_state : vector<32xf32>) -> (vector<32xf32>) {
     %c8 = index.constant 8 : index
     %cmp = index.cmp slt, %i, %c8 : index
-    scf.if %cmp {
+    %scores_fragment_state_if = scf.if %cmp -> (vector<32xf32>) {
       %load = view.load %scores[%bx, %i] : view<[%num_tokens_idx]x8xf32, %layout> -> f32
-      view.store %load, %scores_fragment[%i] : f32, view<32xf32, %layout>
+      %store = vector.insert %load into %scores_fragment_state_iter[%i] : f32, vector<32xf32>
+      scf.yield %store : vector<32xf32>
     } else {
       %inf = scalar.constant inf : f32
       %const = scalar.constant -1.0 : f32
       %mulf = scalar.mulf %inf, %const : f32
-      view.store %mulf, %scores_fragment[%i] : f32, view<32xf32, %layout>
+      %store_2 = vector.insert %mulf into %scores_fragment_state_iter[%i] : f32, vector<32xf32>
+      scf.yield %store_2 : vector<32xf32>
     }
+    scf.yield %scores_fragment_state_if : vector<32xf32>
   }
-  scf.for %i = [%c0 to %c32 step %c1] {
+  %idx_fragment_state_next = scf.for %i = [%c0 to %c32 step %c1](%idx_fragment_state_iter = %idx_fragment_state : vector<32xi32>) -> (vector<32xi32>) {
     %store_cast = index.cast %i : index to i32
-    view.store %store_cast, %idx_fragment[%i] : i32, view<32xi32, %layout>
+    %store_3 = vector.insert %store_cast into %idx_fragment_state_iter[%i] : i32, vector<32xi32>
+    scf.yield %store_3 : vector<32xi32>
   }
   %c2 = index.constant 2 : index
-  scf.for %k = [%c0 to %c2 step %c1] {
-    %load_2 = vector.load %scores_fragment[%c0] : view<32xf32, %layout> -> vector<32xf32>
+  %scores_fragment_state_next_2, %idx_reducer_state_next = scf.for %k = [%c0 to %c2 step %c1](%scores_fragment_state_iter = %scores_fragment_state_next : vector<32xf32>, %idx_reducer_state_iter = %idx_reducer_state : vector<1xi32>) -> (vector<32xf32>, vector<1xi32>) {
     %identity = scalar.constant -inf : f32
-    %reduce = vector.reduce<maxnumf> %load_2, %identity : vector<32xf32>, f32
-    view.store %reduce, %amax_fragment[%c0] : f32, view<1xf32, %layout>
+    %reduce = vector.reduce<maxnumf> %scores_fragment_state_iter, %identity : vector<32xf32>, f32
+    %store_4 = vector.insert %reduce into %amax_fragment_state[%c0] : f32, vector<1xf32>
     %const_2 = scalar.constant 2147483647 : i32
     %fill = vector.splat %const_2 : vector<1xi32>
-    %idx_reducer_state_next = scf.for %i = [%c0 to %c32 step %c1](%idx_reducer_state_iter = %fill : vector<1xi32>) -> (vector<1xi32>) {
-      %load_3 = view.load %scores_fragment[%i] : view<32xf32, %layout> -> f32
-      %cmp_2 = scalar.cmpf oeq, %load_3, %reduce : f32
+    %idx_reducer_state_next_2 = scf.for %i = [%c0 to %c32 step %c1](%idx_reducer_state_iter = %fill : vector<1xi32>) -> (vector<1xi32>) {
+      %load_2 = vector.extract %scores_fragment_state_iter[%i] : vector<32xf32> -> f32
+      %load_3 = vector.extract %store_4[%c0] : vector<1xf32> -> f32
+      %cmp_2 = scalar.cmpf oeq, %load_2, %load_3 : f32
       %idx_reducer_state_if = scf.if %cmp_2 -> (vector<1xi32>) {
         %load_4 = vector.extract %idx_reducer_state_iter[%c0] : vector<1xi32> -> i32
-        %load_5 = view.load %idx_fragment[%i] : view<32xi32, %layout> -> i32
+        %load_5 = vector.extract %idx_fragment_state_next[%i] : vector<32xi32> -> i32
         %minsi = scalar.minsi %load_4, %load_5 : i32
-        %store = vector.insert %minsi into %idx_reducer_state_iter[%c0] : i32, vector<1xi32>
-        scf.yield %store : vector<1xi32>
+        %store_5 = vector.insert %minsi into %idx_reducer_state_iter[%c0] : i32, vector<1xi32>
+        scf.yield %store_5 : vector<1xi32>
       } else {
         scf.yield %idx_reducer_state_iter : vector<1xi32>
       }
       scf.yield %idx_reducer_state_if : vector<1xi32>
     }
-    %idx_reducer_state_next_2 = scf.for %i0 = [%c0 to %c1 step %c1](%idx_reducer_state_iter = %idx_reducer_state_next : vector<1xi32>) -> (vector<1xi32>) {
+    %idx_reducer_state_next_3 = scf.for %i0 = [%c0 to %c1 step %c1](%idx_reducer_state_iter = %idx_reducer_state_next_2 : vector<1xi32>) -> (vector<1xi32>) {
       %reducer_value = vector.extract %idx_reducer_state_iter[%i0] : vector<1xi32> -> i32
       %reducer_all = kernel.workgroup.reduce<minsi> %reducer_value : i32
-      %store_2 = vector.insert %reducer_all into %idx_reducer_state_iter[%i0] : i32, vector<1xi32>
-      scf.yield %store_2 : vector<1xi32>
+      %store_6 = vector.insert %reducer_all into %idx_reducer_state_iter[%i0] : i32, vector<1xi32>
+      scf.yield %store_6 : vector<1xi32>
     }
-    %load_6 = vector.extract %idx_reducer_state_next_2[%c0] : vector<1xi32> -> i32
+    %load_6 = vector.extract %idx_reducer_state_next_3[%c0] : vector<1xi32> -> i32
     view.store %load_6, %topk_idx_shared[%k] : i32, view<2xi32, %layout>
-    scf.for %i = [%c0 to %c32 step %c1] {
-      %load_7 = view.load %idx_fragment[%i] : view<32xi32, %layout> -> i32
-      %load_8 = vector.extract %idx_reducer_state_next_2[%c0] : vector<1xi32> -> i32
+    %scores_fragment_state_next_3 = scf.for %i = [%c0 to %c32 step %c1](%scores_fragment_state_iter = %scores_fragment_state_iter : vector<32xf32>) -> (vector<32xf32>) {
+      %load_7 = vector.extract %idx_fragment_state_next[%i] : vector<32xi32> -> i32
+      %load_8 = vector.extract %idx_reducer_state_next_3[%c0] : vector<1xi32> -> i32
       %cmp_3 = scalar.cmpi eq, %load_7, %load_8 : i32
-      scf.if %cmp_3 {
+      %scores_fragment_state_if_2 = scf.if %cmp_3 -> (vector<32xf32>) {
         %inf_2 = scalar.constant inf : f32
         %const_3 = scalar.constant -1.0 : f32
         %mulf_2 = scalar.mulf %inf_2, %const_3 : f32
-        view.store %mulf_2, %scores_fragment[%i] : f32, view<32xf32, %layout>
+        %store_7 = vector.insert %mulf_2 into %scores_fragment_state_iter[%i] : f32, vector<32xf32>
+        scf.yield %store_7 : vector<32xf32>
+      } else {
+        scf.yield %scores_fragment_state_iter : vector<32xf32>
       }
+      scf.yield %scores_fragment_state_if_2 : vector<32xf32>
     }
+    scf.yield %scores_fragment_state_next_3, %idx_reducer_state_next_3 : vector<32xf32>, vector<1xi32>
   }
   scf.for %i0 = [%c0 to %c2 step %c1] {
     %copy = view.load %topk_idx_shared[%i0] : view<2xi32, %layout> -> i32

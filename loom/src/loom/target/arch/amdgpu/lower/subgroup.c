@@ -110,6 +110,15 @@ static bool loom_amdgpu_subgroup_full_wave_workgroups(
          (flat_workgroup_size % wavefront_size) == 0;
 }
 
+static bool loom_amdgpu_subgroup_single_wave_workgroup(
+    const loom_module_t* module, loom_func_like_t function,
+    const loom_target_bundle_t* bundle, uint32_t wavefront_size) {
+  uint32_t flat_workgroup_size = 0;
+  return loom_amdgpu_required_flat_workgroup_size(module, function, bundle,
+                                                  &flat_workgroup_size) &&
+         flat_workgroup_size == wavefront_size;
+}
+
 static bool loom_amdgpu_subgroup_combine_descriptor_ref(
     loom_combining_kind_t kind,
     loom_amdgpu_subgroup_payload_kind_t payload_kind,
@@ -127,6 +136,30 @@ static bool loom_amdgpu_subgroup_combine_descriptor_ref(
         return false;
       }
       *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_MUL_LO_U32;
+      return true;
+    case LOOM_COMBINING_KIND_MINSI:
+      if (!loom_amdgpu_subgroup_payload_is_integer(payload_kind)) {
+        return false;
+      }
+      *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_MIN_I32;
+      return true;
+    case LOOM_COMBINING_KIND_MAXSI:
+      if (!loom_amdgpu_subgroup_payload_is_integer(payload_kind)) {
+        return false;
+      }
+      *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_MAX_I32;
+      return true;
+    case LOOM_COMBINING_KIND_MINUI:
+      if (!loom_amdgpu_subgroup_payload_is_integer(payload_kind)) {
+        return false;
+      }
+      *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_MIN_U32;
+      return true;
+    case LOOM_COMBINING_KIND_MAXUI:
+      if (!loom_amdgpu_subgroup_payload_is_integer(payload_kind)) {
+        return false;
+      }
+      *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_MAX_U32;
       return true;
     case LOOM_COMBINING_KIND_ANDI:
       if (!loom_amdgpu_subgroup_payload_is_integer(payload_kind)) {
@@ -187,6 +220,18 @@ static bool loom_amdgpu_subgroup_combine_identity_bits(
       return true;
     case LOOM_COMBINING_KIND_MULI:
       *out_bits = 1u;
+      return true;
+    case LOOM_COMBINING_KIND_MINSI:
+      *out_bits = (uint32_t)INT32_MAX;
+      return true;
+    case LOOM_COMBINING_KIND_MAXSI:
+      *out_bits = (uint32_t)INT32_MIN;
+      return true;
+    case LOOM_COMBINING_KIND_MINUI:
+      *out_bits = UINT32_MAX;
+      return true;
+    case LOOM_COMBINING_KIND_MAXUI:
+      *out_bits = 0u;
       return true;
     case LOOM_COMBINING_KIND_ANDI:
       *out_bits = UINT32_MAX;
@@ -448,6 +493,69 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
 
   out_plan->value = value;
   out_plan->result = loom_kernel_subgroup_reduce_result(source_op);
+  out_plan->payload_kind = payload_kind;
+  out_plan->register_count = register_count;
+  out_plan->wavefront_size = wavefront_size;
+  *out_selected = true;
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_select_kernel_workgroup_reduce_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_subgroup_reduce_plan_t* out_plan, bool* out_selected) {
+  *out_plan = (loom_amdgpu_subgroup_reduce_plan_t){0};
+  *out_selected = false;
+  if (!loom_kernel_workgroup_reduce_isa(source_op)) {
+    return iree_ok_status();
+  }
+
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_value_id_t value = loom_kernel_workgroup_reduce_value(source_op);
+  loom_amdgpu_subgroup_payload_kind_t payload_kind =
+      LOOM_AMDGPU_SUBGROUP_PAYLOAD_NONE;
+  uint32_t register_count = 0;
+  if (!loom_amdgpu_subgroup_payload_is_supported(module, value, &payload_kind,
+                                                 &register_count)) {
+    return iree_ok_status();
+  }
+
+  const loom_combining_kind_t kind =
+      loom_kernel_workgroup_reduce_kind(source_op);
+  loom_amdgpu_descriptor_ref_t combine_descriptor_ref =
+      LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
+  if (!loom_amdgpu_subgroup_combine_descriptor_ref(kind, payload_kind,
+                                                   &combine_descriptor_ref)) {
+    return iree_ok_status();
+  }
+
+  uint32_t wavefront_size = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
+      loom_low_lower_context_bundle(context), &wavefront_size));
+  if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size) ||
+      !loom_amdgpu_subgroup_single_wave_workgroup(
+          module, loom_low_lower_context_source_function(context),
+          loom_low_lower_context_bundle(context), wavefront_size)) {
+    return iree_ok_status();
+  }
+
+  bool bpermute_descriptor_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32,
+      &out_plan->bpermute_descriptor, &bpermute_descriptor_present));
+  if (!bpermute_descriptor_present) {
+    return iree_ok_status();
+  }
+
+  bool combine_descriptor_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, combine_descriptor_ref, &out_plan->combine_descriptor,
+      &combine_descriptor_present));
+  if (!combine_descriptor_present) {
+    return iree_ok_status();
+  }
+
+  out_plan->value = value;
+  out_plan->result = loom_kernel_workgroup_reduce_result(source_op);
   out_plan->payload_kind = payload_kind;
   out_plan->register_count = register_count;
   out_plan->wavefront_size = wavefront_size;
@@ -1217,6 +1325,12 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_reduce(
       context, source_op, plan->result, plan->register_count, result_registers);
 }
 
+iree_status_t loom_amdgpu_lower_kernel_workgroup_reduce(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_reduce_plan_t* plan) {
+  return loom_amdgpu_lower_kernel_subgroup_reduce(context, source_op, plan);
+}
+
 iree_status_t loom_amdgpu_lower_kernel_subgroup_scan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_scan_plan_t* plan) {
@@ -1733,6 +1847,66 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(
                                           combine_descriptor_ref)) {
     return loom_amdgpu_low_legality_reject(
         context, op, IREE_SV("descriptor.reduce_combine"));
+  }
+
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_low_legality_verify_kernel_workgroup_reduce(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled) {
+  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
+  if (!loom_amdgpu_low_legality_bundle_is_amdgpu(bundle)) {
+    return iree_ok_status();
+  }
+  *out_handled = true;
+
+  const loom_module_t* module = loom_target_low_legality_module(context);
+  const loom_value_id_t value = loom_kernel_workgroup_reduce_value(op);
+  loom_amdgpu_subgroup_payload_kind_t payload_kind =
+      LOOM_AMDGPU_SUBGROUP_PAYLOAD_NONE;
+  uint32_t unused_register_count = 0;
+  if (!loom_amdgpu_subgroup_payload_is_supported(module, value, &payload_kind,
+                                                 &unused_register_count)) {
+    return loom_amdgpu_low_legality_reject(context, op,
+                                           IREE_SV("workgroup_reduce.payload"));
+  }
+
+  loom_amdgpu_descriptor_ref_t combine_descriptor_ref =
+      LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
+  if (!loom_amdgpu_subgroup_combine_descriptor_ref(
+          loom_kernel_workgroup_reduce_kind(op), payload_kind,
+          &combine_descriptor_ref)) {
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("workgroup_reduce.combining_kind"));
+  }
+
+  uint32_t wavefront_size = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_target_wavefront_size(bundle, &wavefront_size));
+  if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size)) {
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("workgroup_reduce.wavefront_size"));
+  }
+  if (!loom_amdgpu_subgroup_single_wave_workgroup(
+          module, loom_target_low_legality_function(context), bundle,
+          wavefront_size)) {
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("workgroup_reduce.single_wave_workgroup"));
+  }
+
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_target_low_legality_descriptor_set(context);
+  if (!loom_amdgpu_descriptor_set_has_ref(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32)) {
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("descriptor.ds_bpermute_b32"));
+  }
+  if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
+                                          combine_descriptor_ref)) {
+    return loom_amdgpu_low_legality_reject(context, op,
+                                           IREE_SV("descriptor.combine"));
   }
 
   return iree_ok_status();

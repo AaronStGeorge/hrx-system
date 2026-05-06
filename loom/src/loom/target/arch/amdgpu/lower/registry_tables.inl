@@ -56,6 +56,13 @@ static const loom_amdgpu_lower_dispatch_row_t
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_TRUNCI)] = LOOM_AMDGPU_DIRECT_ROW(
             LOOM_OP_SCALAR_TRUNCI, loom_amdgpu_select_value_dispatch,
             loom_amdgpu_emit_value_dispatch, NULL),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_EXTSI)] = LOOM_AMDGPU_DIRECT_ROW(
+            LOOM_OP_SCALAR_EXTSI, loom_amdgpu_select_value_dispatch,
+            loom_amdgpu_emit_value_dispatch, NULL),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_CMPF)] = LOOM_AMDGPU_DATA_ROW(
+            LOOM_OP_SCALAR_CMPF, loom_amdgpu_vector_compare_plan_t,
+            loom_amdgpu_select_scalar_cmpf_dispatch,
+            loom_amdgpu_emit_scalar_cmpf_dispatch, NULL),
 };
 
 static const loom_amdgpu_lower_dispatch_row_t
@@ -340,9 +347,12 @@ static const loom_amdgpu_lower_dispatch_row_t
                 LOOM_OP_KERNEL_SUBGROUP_MATCH_ALL,
                 loom_amdgpu_low_legality_verify_kernel_subgroup_match),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_WORKGROUP_REDUCE)] =
-            LOOM_AMDGPU_LEGALITY_ROW(
+            LOOM_AMDGPU_DATA_ROW(
                 LOOM_OP_KERNEL_WORKGROUP_REDUCE,
-                loom_amdgpu_low_legality_verify_kernel_collective),
+                loom_amdgpu_subgroup_reduce_plan_t,
+                loom_amdgpu_select_kernel_workgroup_reduce_dispatch,
+                loom_amdgpu_emit_kernel_workgroup_reduce_dispatch,
+                loom_amdgpu_low_legality_verify_kernel_workgroup_reduce),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_WORKGROUP_VOTE_ANY)] =
             LOOM_AMDGPU_LEGALITY_ROW(
                 LOOM_OP_KERNEL_WORKGROUP_VOTE_ANY,

@@ -291,6 +291,112 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_reduce_addi_i3
 
 amdgpu.target<gfx1100> @target
 
+kernel.def target(@target) @subgroup_reduce_minsi_i32_wave32(%input: buffer, %output: buffer) {
+  %one = index.constant 1 : index
+  %wave_size = index.constant 32 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%wave_size, %one, %one) : index
+} launch {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 31)] : index
+  %start = index.constant 0 : offset
+  %input_view = buffer.view %input[%start] : buffer -> view<32xi32, #dense>
+  %output_view = buffer.view %output[%start] : buffer -> view<32xi32, #dense>
+  %loaded = vector.load %input_view[%tid] : view<32xi32, #dense> -> vector<1xi32>
+  %value = vector.extract %loaded[0] : vector<1xi32> -> i32
+  %min = kernel.subgroup.reduce<minsi> %value : i32
+  %result = vector.from_elements %min : vector<1xi32>
+  vector.store %result, %output_view[%tid] : vector<1xi32>, view<32xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(32, 1, 1) @subgroup_reduce_minsi_i32_wave32() asm<amdgpu.rdna3.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
+  %19 = v_lshlrev_b32_lit %tid, 2
+  %value = global_load_b32 %19, %input_view
+  %21 = v_xor_b32_lit %tid, 16
+  %22 = v_lshlrev_b32_lit %21, 2
+  %23 = ds_bpermute_b32 %22, %value
+  %24 = v_min_i32 %value, %23
+  %25 = v_xor_b32_lit %tid, 8
+  %26 = v_lshlrev_b32_lit %25, 2
+  %27 = ds_bpermute_b32 %26, %24
+  %28 = v_min_i32 %24, %27
+  %29 = v_xor_b32_lit %tid, 4
+  %30 = v_lshlrev_b32_lit %29, 2
+  %31 = ds_bpermute_b32 %30, %28
+  %32 = v_min_i32 %28, %31
+  %33 = v_xor_b32_lit %tid, 2
+  %34 = v_lshlrev_b32_lit %33, 2
+  %35 = ds_bpermute_b32 %34, %32
+  %36 = v_min_i32 %32, %35
+  %37 = v_xor_b32_lit %tid, 1
+  %38 = v_lshlrev_b32_lit %37, 2
+  %39 = ds_bpermute_b32 %38, %36
+  %result = v_min_i32 %36, %39
+  global_store_b32 %19, %result, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @workgroup_reduce_minsi_single_wave(%input: buffer, %output: buffer) {
+  %one = index.constant 1 : index
+  %wave_size = index.constant 32 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%wave_size, %one, %one) : index
+} launch {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 31)] : index
+  %start = index.constant 0 : offset
+  %input_view = buffer.view %input[%start] : buffer -> view<32xi32, #dense>
+  %output_view = buffer.view %output[%start] : buffer -> view<32xi32, #dense>
+  %loaded = vector.load %input_view[%tid] : view<32xi32, #dense> -> vector<1xi32>
+  %value = vector.extract %loaded[0] : vector<1xi32> -> i32
+  %min = kernel.workgroup.reduce<minsi> %value : i32
+  %result = vector.from_elements %min : vector<1xi32>
+  vector.store %result, %output_view[%tid] : vector<1xi32>, view<32xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(32, 1, 1) @workgroup_reduce_minsi_single_wave() asm<amdgpu.rdna3.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
+  %19 = v_lshlrev_b32_lit %tid, 2
+  %value = global_load_b32 %19, %input_view
+  %21 = v_xor_b32_lit %tid, 16
+  %22 = v_lshlrev_b32_lit %21, 2
+  %23 = ds_bpermute_b32 %22, %value
+  %24 = v_min_i32 %value, %23
+  %25 = v_xor_b32_lit %tid, 8
+  %26 = v_lshlrev_b32_lit %25, 2
+  %27 = ds_bpermute_b32 %26, %24
+  %28 = v_min_i32 %24, %27
+  %29 = v_xor_b32_lit %tid, 4
+  %30 = v_lshlrev_b32_lit %29, 2
+  %31 = ds_bpermute_b32 %30, %28
+  %32 = v_min_i32 %28, %31
+  %33 = v_xor_b32_lit %tid, 2
+  %34 = v_lshlrev_b32_lit %33, 2
+  %35 = ds_bpermute_b32 %34, %32
+  %36 = v_min_i32 %32, %35
+  %37 = v_xor_b32_lit %tid, 1
+  %38 = v_lshlrev_b32_lit %37, 2
+  %39 = ds_bpermute_b32 %38, %36
+  %result = v_min_i32 %36, %39
+  global_store_b32 %19, %result, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 kernel.def target(@target) @subgroup_scan_inclusive_addi_i32_wave32(%input: buffer, %output: buffer) {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index

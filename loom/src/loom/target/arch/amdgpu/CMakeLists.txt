@@ -218,6 +218,19 @@ loom_target_table_cc_library(
 
 loom_target_table_cc_library(
   NAME
+    compare_candidates
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_compare_candidates
+  DEPS
+    ::target_refs
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::vector
+)
+
+loom_target_table_cc_library(
+  NAME
     cdna3_encoding_tables
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_encoding_tables
@@ -494,6 +507,7 @@ loom_cc_library(
     "lower/values.c"
   DEPS
     ::atomic_candidates
+    ::compare_candidates
     ::error_defs
     ::hal_kernel_abi
     ::lower_kinds

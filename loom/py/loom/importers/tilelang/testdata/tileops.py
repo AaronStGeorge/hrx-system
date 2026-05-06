@@ -277,17 +277,20 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_kernel") @tileop_
   %local_bytes = index.constant 16 : offset
   %local_buffer = buffer.alloca %local_bytes {base_alignment = 4, memory_space = private} : buffer
   %local = buffer.view %local_buffer[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %f32_zero = scalar.constant 0.0 : f32
+  %local_state = vector.splat %f32_zero : vector<4xf32>
   %out_bytes = index.constant 4 : offset
   %out_buffer = buffer.alloca %out_bytes {base_alignment = 4, memory_space = private} : buffer
   %out = buffer.view %out_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %out_state = vector.splat %f32_zero : vector<1xf32>
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
   %copy = vector.load %src[%c0] : view<4xf32, %layout> -> vector<4xf32>
-  %identity = scalar.constant 0.0 : f32
-  %reduce = vector.reduce<addf> %copy, %identity : vector<4xf32>, f32
-  view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
+  %reduce = vector.reduce<addf> %copy, %f32_zero : vector<4xf32>, f32
+  %store = vector.insert %reduce into %out_state[%c0] : f32, vector<1xf32>
   %c1 = index.constant 1 : index
-  view.store %reduce, %dst[%c0] : f32, view<1xf32, %layout>
+  %copy_2 = vector.extract %store[%c0] : vector<1xf32> -> f32
+  view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
 }
 """
@@ -340,18 +343,21 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_abssum_kernel") @tile
   %local_bytes = index.constant 16 : offset
   %local_buffer = buffer.alloca %local_bytes {base_alignment = 4, memory_space = private} : buffer
   %local = buffer.view %local_buffer[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %f32_zero = scalar.constant 0.0 : f32
+  %local_state = vector.splat %f32_zero : vector<4xf32>
   %out_bytes = index.constant 4 : offset
   %out_buffer = buffer.alloca %out_bytes {base_alignment = 4, memory_space = private} : buffer
   %out = buffer.view %out_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %out_state = vector.splat %f32_zero : vector<1xf32>
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
   %copy = vector.load %src[%c0] : view<4xf32, %layout> -> vector<4xf32>
-  %identity = scalar.constant 0.0 : f32
   %abs = vector.absf %copy : vector<4xf32>
-  %reduce = vector.reduce<addf> %abs, %identity : vector<4xf32>, f32
-  view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
+  %reduce = vector.reduce<addf> %abs, %f32_zero : vector<4xf32>, f32
+  %store = vector.insert %reduce into %out_state[%c0] : f32, vector<1xf32>
   %c1 = index.constant 1 : index
-  view.store %reduce, %dst[%c0] : f32, view<1xf32, %layout>
+  %copy_2 = vector.extract %store[%c0] : vector<1xf32> -> f32
+  view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
 }
 """
@@ -404,18 +410,21 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_kernel") @tile
   %local_bytes = index.constant 16 : offset
   %local_buffer = buffer.alloca %local_bytes {base_alignment = 4, memory_space = private} : buffer
   %local = buffer.view %local_buffer[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %f32_zero = scalar.constant 0.0 : f32
+  %local_state = vector.splat %f32_zero : vector<4xf32>
   %out_bytes = index.constant 4 : offset
   %out_buffer = buffer.alloca %out_bytes {base_alignment = 4, memory_space = private} : buffer
   %out = buffer.view %out_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %out_state = vector.splat %f32_zero : vector<1xf32>
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
   %copy = vector.load %src[%c0] : view<4xf32, %layout> -> vector<4xf32>
-  %identity = scalar.constant 0.0 : f32
   %abs = vector.absf %copy : vector<4xf32>
-  %reduce = vector.reduce<maxnumf> %abs, %identity : vector<4xf32>, f32
-  view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
+  %reduce = vector.reduce<maxnumf> %abs, %f32_zero : vector<4xf32>, f32
+  %store = vector.insert %reduce into %out_state[%c0] : f32, vector<1xf32>
   %c1 = index.constant 1 : index
-  view.store %reduce, %dst[%c0] : f32, view<1xf32, %layout>
+  %copy_2 = vector.extract %store[%c0] : vector<1xf32> -> f32
+  view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
 }
 """
@@ -468,19 +477,23 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_widen_kernel")
   %local_bytes = index.constant 8 : offset
   %local_buffer = buffer.alloca %local_bytes {base_alignment = 2, memory_space = private} : buffer
   %local = buffer.view %local_buffer[%c0_bytes] : buffer -> view<4xf16, %layout>
+  %f16_zero = scalar.constant 0.0 : f16
+  %local_state = vector.splat %f16_zero : vector<4xf16>
   %out_bytes = index.constant 4 : offset
   %out_buffer = buffer.alloca %out_bytes {base_alignment = 4, memory_space = private} : buffer
   %out = buffer.view %out_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %f32_zero = scalar.constant 0.0 : f32
+  %out_state = vector.splat %f32_zero : vector<1xf32>
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
   %copy = vector.load %src[%c0] : view<4xf16, %layout> -> vector<4xf16>
   %reduce_cast = vector.extf %copy : vector<4xf16> to vector<4xf32>
-  %identity = scalar.constant 0.0 : f32
   %abs = vector.absf %reduce_cast : vector<4xf32>
-  %reduce = vector.reduce<maxnumf> %abs, %identity : vector<4xf32>, f32
-  view.store %reduce, %out[%c0] : f32, view<1xf32, %layout>
+  %reduce = vector.reduce<maxnumf> %abs, %f32_zero : vector<4xf32>, f32
+  %store = vector.insert %reduce into %out_state[%c0] : f32, vector<1xf32>
   %c1 = index.constant 1 : index
-  view.store %reduce, %dst[%c0] : f32, view<1xf32, %layout>
+  %copy_2 = vector.extract %store[%c0] : vector<1xf32> -> f32
+  view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
   kernel.return
 }
 """
@@ -532,6 +545,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_2d_kernel") @tile
   %out_bytes = index.constant 8 : offset
   %out_buffer = buffer.alloca %out_bytes {base_alignment = 4, memory_space = private} : buffer
   %out = buffer.view %out_buffer[%c0_bytes] : buffer -> view<2xf32, %layout>
+  %f32_zero = scalar.constant 0.0 : f32
+  %out_state = vector.splat %f32_zero : vector<2xf32>
   %c0 = index.constant 0 : index
   %c2 = index.constant 2 : index
   %c4 = index.constant 4 : index
@@ -543,19 +558,18 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_2d_kernel") @tile
     }
   }
   scf.for %i0 = [%c0 to %c2 step %c1] {
-    %identity = scalar.constant 0.0 : f32
-    %reduce = scf.for %r = [%c0 to %c4 step %c1](%acc = %identity : f32) -> (f32) {
+    %reduce = scf.for %r = [%c0 to %c4 step %c1](%acc = %f32_zero : f32) -> (f32) {
       %reduce_value = view.load %local[%i0, %r] : view<2x4xf32, %layout> -> f32
       %addf = scalar.addf %acc, %reduce_value : f32
       scf.yield %addf : f32
     }
-    view.store %reduce, %out[%i0] : f32, view<2xf32, %layout>
+    %store = vector.insert %reduce into %out_state[%i0] : f32, vector<2xf32>
   }
   %i0_base = index.mul %tx, %c2 : index
-  %copy_2 = view.load %out[%i0_base] : view<2xf32, %layout> -> f32
+  %copy_2 = vector.extract %out_state[%i0_base] : vector<2xf32> -> f32
   view.store %copy_2, %dst[%i0_base] : f32, view<2xf32, %layout>
   %i0 = index.add %i0_base, %c1 : index
-  %copy_3 = view.load %out[%i0] : view<2xf32, %layout> -> f32
+  %copy_3 = vector.extract %out_state[%i0] : vector<2xf32> -> f32
   view.store %copy_3, %dst[%i0] : f32, view<2xf32, %layout>
   kernel.return
 }
@@ -615,10 +629,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_finalize_reducer_none_kernel
   %reducer_bytes = index.constant 16 : offset
   %reducer_buffer = buffer.alloca %reducer_bytes {base_alignment = 4, memory_space = private} : buffer
   %reducer = buffer.view %reducer_buffer[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %f32_zero = scalar.constant 0.0 : f32
+  %reducer_state = vector.splat %f32_zero : vector<4xf32>
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
-  %const = scalar.constant 0.0 : f32
-  %fill = vector.splat %const : vector<4xf32>
+  %fill = vector.splat %f32_zero : vector<4xf32>
   %c1 = index.constant 1 : index
   %reducer_state_next = scf.for %i = [%c0 to %c4 step %c1](%reducer_state_iter = %fill : vector<4xf32>) -> (vector<4xf32>) {
     %load = view.load %src[%i] : view<4xf32, %layout> -> f32
@@ -697,16 +712,20 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_finalize_reducer_all_kernel"
   %reducer_bytes = index.constant 4 : offset
   %reducer_buffer = buffer.alloca %reducer_bytes {base_alignment = 4, memory_space = private} : buffer
   %reducer = buffer.view %reducer_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %f32_zero = scalar.constant 0.0 : f32
+  %reducer_state = vector.splat %f32_zero : vector<1xf32>
   %load = view.load %src[%thread_index] : view<4xf32, %layout> -> f32
   %c0 = index.constant 0 : index
-  view.store %load, %reducer[%c0] : f32, view<1xf32, %layout>
+  %store = vector.insert %load into %reducer_state[%c0] : f32, vector<1xf32>
   %c1 = index.constant 1 : index
-  scf.for %i0 = [%c0 to %c1 step %c1] {
-    %reducer_value = view.load %reducer[%i0] : view<1xf32, %layout> -> f32
+  %reducer_state_next = scf.for %i0 = [%c0 to %c1 step %c1](%reducer_state_iter = %store : vector<1xf32>) -> (vector<1xf32>) {
+    %reducer_value = vector.extract %reducer_state_iter[%i0] : vector<1xf32> -> f32
     %reducer_all = kernel.workgroup.reduce<addf> %reducer_value : f32
-    view.store %reducer_all, %reducer[%i0] : f32, view<1xf32, %layout>
+    %store_2 = vector.insert %reducer_all into %reducer_state_iter[%i0] : f32, vector<1xf32>
+    scf.yield %store_2 : vector<1xf32>
   }
-  view.store %load, %dst[%thread_index] : f32, view<4xf32, %layout>
+  %load_2 = vector.extract %reducer_state_next[%c0] : vector<1xf32> -> f32
+  view.store %load_2, %dst[%thread_index] : f32, view<4xf32, %layout>
   kernel.return
 }
 """

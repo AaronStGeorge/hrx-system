@@ -370,6 +370,21 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    amdgpu_compare_candidates
+  MAIN
+    "amdgpu_compare_candidates.py"
+  SRCS
+    "amdgpu_compare_candidates.py"
+  DEPS
+    iree::runtime::py::loom::gen::generated_file
+    iree::runtime::py::loom::dialect::scalar::scalar
+    iree::runtime::py::loom::dialect::vector::vector
+    iree::runtime::py::loom::target::low_descriptors
+    iree::runtime::py::loom::target::arch::amdgpu::descriptors
+)
+
+iree_py_library(
+  NAME
     amdgpu_encoding_tables
   MAIN
     "amdgpu_encoding_tables.py"

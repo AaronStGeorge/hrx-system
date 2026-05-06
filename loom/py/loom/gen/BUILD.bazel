@@ -350,6 +350,19 @@ py_binary(
 )
 
 py_binary(
+    name = "amdgpu_compare_candidates",
+    srcs = ["amdgpu_compare_candidates.py"],
+    main = "amdgpu_compare_candidates.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/dialect/scalar",
+        "//loom/py/loom/dialect/vector",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+    ],
+)
+
+py_binary(
     name = "amdgpu_encoding_tables",
     srcs = ["amdgpu_encoding_tables.py"],
     main = "amdgpu_encoding_tables.py",

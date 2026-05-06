@@ -104,18 +104,22 @@ kernel.def target(@hip_mcpu_gfx1100) export("reduce_fused_kernel") @reduce_fused
   %reduced_fragment_bytes = index.constant 32 : offset
   %reduced_fragment_buffer = buffer.alloca %reduced_fragment_bytes {base_alignment = 4, memory_space = private} : buffer
   %reduced_fragment = buffer.view %reduced_fragment_buffer[%c0_bytes] : buffer -> view<8xf32, %layout>
+  %f32_zero = scalar.constant 0.0 : f32
+  %reduced_fragment_state = vector.splat %f32_zero : vector<8xf32>
   %topk_weights_local_bytes = index.constant 8 : offset
   %topk_weights_local_buffer = buffer.alloca %topk_weights_local_bytes {base_alignment = 4, memory_space = private} : buffer
   %topk_weights_local = buffer.view %topk_weights_local_buffer[%c0_bytes] : buffer -> view<2xf32, %layout>
+  %topk_weights_local_state = vector.splat %f32_zero : vector<2xf32>
   %topk_to_pos_local_buffer = buffer.alloca %topk_weights_local_bytes {base_alignment = 4, memory_space = private} : buffer
   %topk_to_pos_local = buffer.view %topk_to_pos_local_buffer[%c0_bytes] : buffer -> view<2xi32, %layout>
+  %i32_zero = scalar.constant 0 : i32
+  %topk_to_pos_local_state = vector.splat %i32_zero : vector<2xi32>
   %scale_bytes = index.constant 4 : offset
   %scale_buffer = buffer.alloca %scale_bytes {base_alignment = 4, memory_space = private} : buffer
   %scale = buffer.view %scale_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
   %c0 = index.constant 0 : index
   %c8 = index.constant 8 : index
-  %const = scalar.constant 0.0 : f32
-  %fill = vector.splat %const : vector<8xf32>
+  %fill = vector.splat %f32_zero : vector<8xf32>
   %c1 = index.constant 1 : index
   %c2 = index.constant 2 : index
   %copy = vector.load %topk_weights[%bx, %c0] : view<[%num_tokens_idx]x2xf32, %layout> -> vector<2xf32>
@@ -123,8 +127,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("reduce_fused_kernel") @reduce_fused
   %reduced_fragment_state_next = scf.for %k = [%c0 to %c2 step %c1](%reduced_fragment_state_iter = %fill : vector<8xf32>) -> (vector<8xf32>) {
     %load = vector.extract %copy_2[%k] : vector<2xi32> -> i32
     %pos_assumed, %num_expanded_tokens_assumed = scalar.assume %load, %num_expanded_tokens [lt(%load, %num_expanded_tokens)] : i32, i32
-    %const_2 = scalar.constant 0 : i32
-    %cmp = scalar.cmpi sge, %pos_assumed, %const_2 : i32
+    %cmp = scalar.cmpi sge, %pos_assumed, %i32_zero : i32
     %reduced_fragment_state_if = scf.if %cmp -> (vector<8xf32>) {
       %load_2 = vector.extract %copy[%k] : vector<2xf32> -> f32
       %reduced_fragment_state_next_2 = scf.for %i = [%c0 to %c8 step %c1](%reduced_fragment_state_iter = %reduced_fragment_state_iter : vector<8xf32>) -> (vector<8xf32>) {

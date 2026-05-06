@@ -17,8 +17,9 @@ extern "C" {
 #define LOOM_AMDGPU_MAX_MEMORY_32BIT_LANES 4u
 
 // Maximum number of scalarized 32-bit vector lanes the source-to-low path will
-// keep live as individual VGPRs.
-#define LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES 8u
+// keep live as individual VGPRs. Tile-level register fragments commonly use
+// one lane per workitem in a wave, so this must cover a full 32-lane fragment.
+#define LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES 32u
 
 // Maximum number of packed f16/bf16 lanes accepted for packed-half payloads.
 #define LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES \

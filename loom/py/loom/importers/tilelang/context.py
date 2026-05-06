@@ -191,21 +191,33 @@ class TileLangConversionContext(SourceImportSession):
     def build_typed_constant(
         self, value: Any, result_type: Type, name: str
     ) -> ValueRef:
+        value = _typed_constant_value(value, result_type)
         if result_type in (INDEX, OFFSET):
             return self.builder.index.constant(
-                value=int(value),
+                value=value,
                 results=[result_type],
                 name=name,
             )
-        if _is_integer_scalar_type(result_type):
-            value = _integer_constant_value(value)
-        elif _is_float_scalar_type(result_type):
-            value = _float_constant_value(value)
         return self.builder.scalar.constant(
             value=value,
             results=[result_type],
             name=name,
         )
+
+    def ensure_typed_constant(
+        self,
+        value: Any,
+        result_type: Type,
+        base: str,
+    ) -> ValueRef:
+        value = _typed_constant_value(value, result_type)
+        key = (str(result_type), str(value))
+        existing = self.constants.get(key)
+        if existing is not None:
+            return existing
+        result = self.build_typed_constant(value, result_type, self.reserve_name(base))
+        self.constants[key] = result
+        return result
 
     def map_value(
         self,
@@ -650,6 +662,14 @@ def _float_constant_value(value: object) -> float:
     if isinstance(value, str):
         return float(value)
     raise TypeError(f"floating-point constant value must be float-like, got {value!r}")
+
+
+def _typed_constant_value(value: object, result_type: Type) -> Any:
+    if result_type in (INDEX, OFFSET) or _is_integer_scalar_type(result_type):
+        return _integer_constant_value(value)
+    if _is_float_scalar_type(result_type):
+        return _float_constant_value(value)
+    return value
 
 
 def _is_integer_scalar_type(value_type: Type) -> bool:

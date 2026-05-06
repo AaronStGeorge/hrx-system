@@ -1186,10 +1186,10 @@ def _gemm_init_fragment(
     spec: _DenseGemmSpec,
 ) -> ValueRef | None:
     if spec.clear_accumulator:
-        zero = context.build_typed_constant(
+        zero = context.ensure_typed_constant(
             0.0,
             spec.accumulator_type,
-            name=context.reserve_name("zero"),
+            base="zero",
         )
         return _build_zero_init_fragment(context, spec, zero)
     fragment = context.matrix_fragment(spec.accumulator.view)
@@ -2376,10 +2376,10 @@ def _reduce_init(
             ),
         )
         return None
-    return context.builder.scalar.constant(
-        value=identity,
-        results=[element_type],
-        name=context.reserve_name("identity"),
+    return context.ensure_typed_constant(
+        identity,
+        element_type,
+        "identity",
     )
 
 
@@ -2498,10 +2498,10 @@ def _convert_fill_value(
 ) -> ValueRef | None:
     payload = getattr(source, "value", source)
     if isinstance(payload, int | float | bool):
-        return context.build_typed_constant(
+        return context.ensure_typed_constant(
             payload,
             element_type,
-            name=context.reserve_name("const"),
+            base="const",
         )
     return converter.convert_expr(source, context)
 

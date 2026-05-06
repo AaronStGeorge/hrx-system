@@ -330,6 +330,8 @@ _AMDGPU_TARGET_REF_GENERATOR = "//loom/py/loom/gen:amdgpu_target_refs"
 
 _AMDGPU_ATOMIC_CANDIDATE_GENERATOR = "//loom/py/loom/gen:amdgpu_atomic_candidates"
 
+_AMDGPU_COMPARE_CANDIDATE_GENERATOR = "//loom/py/loom/gen:amdgpu_compare_candidates"
+
 _AMDGPU_ENCODING_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_encoding_tables"
 
 _AMDGPU_OCCUPANCY_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_occupancy_tables"
@@ -389,6 +391,18 @@ loom_target_table_cc_library(
         ":target_refs",
         "//loom/src/loom/ops:atomic",
         "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_target_table_cc_library(
+    name = "compare_candidates",
+    generator = _AMDGPU_COMPARE_CANDIDATE_GENERATOR,
+    deps = [
+        ":target_refs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/vector",
         "//runtime/src/iree/base",
     ],
 )
@@ -632,6 +646,7 @@ loom_cc_library(
     ],
     deps = [
         ":atomic_candidates",
+        ":compare_candidates",
         ":error_defs",
         ":hal_kernel_abi",
         ":lower_kinds",

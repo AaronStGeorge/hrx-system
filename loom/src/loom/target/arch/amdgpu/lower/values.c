@@ -82,6 +82,13 @@ typedef struct loom_amdgpu_scalar_trunci_plan_t {
   loom_value_id_t result;
 } loom_amdgpu_scalar_trunci_plan_t;
 
+typedef struct loom_amdgpu_scalar_extsi_plan_t {
+  // Source 32-bit integer value being sign-extended.
+  loom_value_id_t source;
+  // Result 64-bit integer value receiving the sign-extended pair.
+  loom_value_id_t result;
+} loom_amdgpu_scalar_extsi_plan_t;
+
 static bool loom_amdgpu_iota_i32_lane_value(int64_t base, int64_t step,
                                             uint32_t lane, int64_t* out_value) {
   *out_value = 0;
@@ -575,6 +582,38 @@ static bool loom_amdgpu_select_scalar_trunci_plan(
   return true;
 }
 
+static iree_status_t loom_amdgpu_select_scalar_extsi_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_scalar_extsi_plan_t* out_plan, bool* out_selected) {
+  *out_plan = (loom_amdgpu_scalar_extsi_plan_t){0};
+  *out_selected = false;
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_value_id_t source = loom_scalar_extsi_input(source_op);
+  const loom_value_id_t result = loom_scalar_extsi_result(source_op);
+  const loom_type_t source_type = loom_module_value_type(module, source);
+  const loom_type_t result_type = loom_module_value_type(module, result);
+  if (!loom_amdgpu_type_is_i32(source_type) ||
+      !loom_amdgpu_type_is_i64(result_type)) {
+    return iree_ok_status();
+  }
+
+  loom_low_lower_resolved_descriptor_t unused_descriptor = {0};
+  bool descriptor_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT, &unused_descriptor,
+      &descriptor_present));
+  if (!descriptor_present) {
+    return iree_ok_status();
+  }
+
+  *out_plan = (loom_amdgpu_scalar_extsi_plan_t){
+      .source = source,
+      .result = result,
+  };
+  *out_selected = true;
+  return iree_ok_status();
+}
+
 iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op,
                                             loom_low_lower_plan_t* out_plan) {
@@ -620,6 +659,18 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
           context, sizeof(*plan_data), (void**)&plan_data));
       if (loom_amdgpu_select_scalar_trunci_plan(context, source_op,
                                                 plan_data)) {
+        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
+      }
+      return iree_ok_status();
+    }
+    case LOOM_OP_SCALAR_EXTSI: {
+      loom_amdgpu_scalar_extsi_plan_t* plan_data = NULL;
+      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+          context, sizeof(*plan_data), (void**)&plan_data));
+      bool selected = false;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_select_scalar_extsi_plan(
+          context, source_op, plan_data, &selected));
+      if (selected) {
         *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
       }
       return iree_ok_status();
@@ -1046,6 +1097,35 @@ static iree_status_t loom_amdgpu_lower_scalar_trunci(
   return loom_low_lower_bind_value(context, plan->result, low_result);
 }
 
+static iree_status_t loom_amdgpu_lower_scalar_extsi(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_scalar_extsi_plan_t* plan) {
+  loom_value_id_t low_source = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_vgpr_i32(
+      context, source_op, plan->source, &low_source));
+
+  loom_type_t lane_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
+  loom_value_id_t high_bits = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT,
+      /*shift=*/31, low_source, lane_type, &high_bits));
+
+  loom_type_t result_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_make_vgpr_range_type(context, 2, &result_type));
+  const loom_value_id_t lanes[] = {
+      low_source,
+      high_bits,
+  };
+  loom_op_t* concat_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_concat_build(
+      loom_low_lower_context_builder(context), lanes, IREE_ARRAYSIZE(lanes),
+      result_type, source_op->location, &concat_op));
+  return loom_low_lower_bind_value(context, plan->result,
+                                   loom_low_concat_result(concat_op));
+}
+
 iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
                                          const loom_op_t* source_op,
                                          loom_low_lower_plan_t plan) {
@@ -1063,6 +1143,10 @@ iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
       return loom_amdgpu_lower_scalar_trunci(
           context, source_op,
           (const loom_amdgpu_scalar_trunci_plan_t*)plan.target_data);
+    case LOOM_OP_SCALAR_EXTSI:
+      return loom_amdgpu_lower_scalar_extsi(
+          context, source_op,
+          (const loom_amdgpu_scalar_extsi_plan_t*)plan.target_data);
     case LOOM_OP_VECTOR_IOTA:
       return loom_amdgpu_lower_vector_iota(
           context, source_op,

@@ -362,14 +362,31 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_reduce_plan_t* out_plan, bool* out_selected);
 
+// Selects native AMDGPU cross-lane packets for a source workgroup reduce when
+// the workgroup is exactly one subgroup.
+iree_status_t loom_amdgpu_select_kernel_workgroup_reduce_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_subgroup_reduce_plan_t* out_plan, bool* out_selected);
+
 // Lowers a source subgroup reduce using DS bpermute tree steps and native VGPR
 // combining packets.
 iree_status_t loom_amdgpu_lower_kernel_subgroup_reduce(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_reduce_plan_t* plan);
 
+// Lowers a source workgroup reduce selected as a single-subgroup native reduce.
+iree_status_t loom_amdgpu_lower_kernel_workgroup_reduce(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_reduce_plan_t* plan);
+
 // Verifies source subgroup reduce legality for native AMDGPU lowering.
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
+// Verifies source workgroup reduce legality for native AMDGPU lowering.
+iree_status_t loom_amdgpu_low_legality_verify_kernel_workgroup_reduce(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
@@ -701,6 +718,16 @@ iree_status_t loom_amdgpu_select_vector_cmpf_plan(
 
 // Lowers a source vector.cmpf op from its selected AMDGPU mask compare plan.
 iree_status_t loom_amdgpu_lower_vector_cmpf(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_compare_plan_t* plan);
+
+// Selects the AMDGPU mask compare plan for a source scalar.cmpf op.
+iree_status_t loom_amdgpu_select_scalar_cmpf_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_compare_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source scalar.cmpf op from its selected AMDGPU mask compare plan.
+iree_status_t loom_amdgpu_lower_scalar_cmpf(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_compare_plan_t* plan);
 

@@ -48,17 +48,15 @@ def convert_immediate(
 
     value = getattr(expr, "value", expr)
     value_type = "index" if options.index_like else dtype(expr)
-    constant_key = str(value)
-    result = context.constants.get((value_type, constant_key))
-    if result is None:
-        result = context.build_constant(
-            value,
-            value_type,
-            context.reserve_name(
-                _constant_base_name(value, index_like=options.index_like)
-            ),
-        )
-        context.remember_constant(constant_key, value_type, result)
+    result_type = context.type_converter.map_dtype(
+        value_type,
+        index_like=options.index_like,
+    )
+    result = context.ensure_typed_constant(
+        value,
+        result_type,
+        _constant_base_name(value, index_like=options.index_like),
+    )
     context.map_value(expr, result, value_type)
     return result
 

@@ -773,6 +773,14 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
             context, source_op, LOOM_VALUE_ID_INVALID, first_workitem_id_ops));
         break;
       }
+      case LOOM_OP_KERNEL_SUBGROUP_SHUFFLE:
+      case LOOM_OP_KERNEL_SUBGROUP_REDUCE:
+      case LOOM_OP_KERNEL_SUBGROUP_SCAN:
+      case LOOM_OP_KERNEL_WORKGROUP_REDUCE: {
+        IREE_RETURN_IF_ERROR(loom_amdgpu_mark_lane_query_workitem_id_live_ins(
+            context, source_op, LOOM_VALUE_ID_INVALID, first_workitem_id_ops));
+        break;
+      }
       default:
         break;
     }

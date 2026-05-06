@@ -158,9 +158,24 @@ kernel.def target(@target) @subgroup_reduce_kind_rejected() {
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
-  %value = scalar.constant 1 : i32
+  %value = scalar.constant 1.0 : f32
   // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_reduce.combining_kind"}
-  %min = kernel.subgroup.reduce<minsi> %value : i32
+  %min = kernel.subgroup.reduce<minimumf> %value : f32
+  kernel.return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @workgroup_reduce_multi_wave_rejected() {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch {
+  %value = scalar.constant 1 : i32
+  // ERROR@+1: AMDGPU/023 {constraint_key="workgroup_reduce.single_wave_workgroup"}
+  %sum = kernel.workgroup.reduce<addi> %value : i32
   kernel.return
 }
 
@@ -218,9 +233,9 @@ kernel.def target(@target) @subgroup_scan_kind_rejected() {
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
-  %value = scalar.constant 1 : i32
+  %value = scalar.constant 1.0 : f32
   // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_scan.combining_kind"}
-  %prefix = kernel.subgroup.scan<minsi> %value {direction = forward, mode = inclusive} : i32
+  %prefix = kernel.subgroup.scan<minimumf> %value {direction = forward, mode = inclusive} : f32
   kernel.return
 }
 

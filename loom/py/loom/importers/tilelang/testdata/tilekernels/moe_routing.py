@@ -292,12 +292,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel
       %const_4 = scalar.constant 64 : i64
       %remsi = scalar.remsi %group_idx_assumed, %const_4 : i64
       %shli = scalar.shli %const_3, %remsi : i64
-      %const_5 = scalar.constant 0 : i64
-      %select = scf.select %cmp, %shli, %const_5 : i64
+      %select = scf.select %cmp, %shli, %const_2 : i64
       %cmp_2 = scalar.cmpi slt, %group_idx_assumed, %const_4 : i64
-      %select_2 = scf.select %cmp_2, %select, %const_5 : i64
+      %select_2 = scf.select %cmp_2, %select, %const_2 : i64
       %cmp_3 = scalar.cmpi sge, %group_idx_assumed, %const_4 : i64
-      %select_3 = scf.select %cmp_3, %select, %const_5 : i64
+      %select_3 = scf.select %cmp_3, %select, %const_2 : i64
       %load_2 = view.load %group_sel[%c0] : view<2xi64, %layout> -> i64
       %andi = scalar.andi %select_2, %load_2 : i64
       %load_3 = view.load %group_sel[%c1] : view<2xi64, %layout> -> i64
@@ -308,11 +307,10 @@ kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel
       %load_4 = view.load %group_sel[%c1] : view<2xi64, %layout> -> i64
       %ori_3 = scalar.ori %load_4, %select_3 : i64
       view.store %ori_3, %group_sel[%c1] : i64, view<2xi64, %layout>
-      %const_6 = scalar.constant 0 : i64
-      %cmp_4 = scalar.cmpi ne, %ori, %const_6 : i64
+      %cmp_4 = scalar.cmpi ne, %ori, %const_2 : i64
       scf.if %cmp_4 {
-        %const_7 = scalar.constant -1 : i64
-        view.store %const_7, %group_indices[%madd_2, %j] : i64, view<[%num_tokens_idx]x4xi64, %layout>
+        %const_5 = scalar.constant -1 : i64
+        view.store %const_5, %group_indices[%madd_2, %j] : i64, view<[%num_tokens_idx]x4xi64, %layout>
       }
     }
   }

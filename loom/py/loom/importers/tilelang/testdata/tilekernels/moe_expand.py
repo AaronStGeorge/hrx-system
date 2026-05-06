@@ -122,6 +122,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("expand_to_fused_kernel") @expand_to
   %x_fragment_bytes = index.constant 256 : offset
   %x_fragment_buffer = buffer.alloca %x_fragment_bytes {base_alignment = 2, memory_space = private} : buffer
   %x_fragment = buffer.view %x_fragment_buffer[%c0_bytes] : buffer -> view<128xf16, %layout>
+  %f16_zero = scalar.constant 0.0 : f16
+  %x_fragment_state = vector.splat %f16_zero : vector<128xf16>
   %cmp = index.cmp slt, %bx, %num_expanded_tokens_idx : index
   scf.if %cmp {
     %load = view.load %pos_to_expert[%bx] : view<[%num_expanded_tokens_idx]xi32, %layout> -> i32
@@ -130,8 +132,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("expand_to_fused_kernel") @expand_to
     scf.if %cmp_2 {
       %c2 = index.constant 2 : index
       %i_base = index.mul %tx, %c2 : index
-      %const_2 = scalar.constant 0.0 : f16
-      %store_splat = vector.splat %const_2 : vector<2xf16>
+      %store_splat = vector.splat %f16_zero : vector<2xf16>
       vector.store %store_splat, %expanded_x[%bx, %i_base] : vector<2xf16>, view<[%num_expanded_tokens_idx]x128xf16, %layout>
     }
   }
@@ -151,8 +152,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("expand_to_fused_kernel") @expand_to
   scf.for %k = [%c0 to %c2_2 step %c1] {
     %load_2 = view.load %pos_local[%k] : view<2xi32, %layout> -> i32
     %value_assumed, %num_expanded_tokens_assumed = scalar.assume %load_2, %num_expanded_tokens [lt(%load_2, %num_expanded_tokens)] : i32, i32
-    %const_3 = scalar.constant 0 : i32
-    %cmp_4 = scalar.cmpi sge, %value_assumed, %const_3 : i32
+    %const_2 = scalar.constant 0 : i32
+    %cmp_4 = scalar.cmpi sge, %value_assumed, %const_2 : i32
     scf.if %cmp_4 {
       %i_base_2 = index.mul %tx, %c2_2 : index
       %load_idx = index.cast %value_assumed : i32 to index

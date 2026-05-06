@@ -60,6 +60,10 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_add_u32.lit",
     "amdgpu.v_sub_u32",
     "amdgpu.v_mul_lo_u32",
+    "amdgpu.v_min_i32",
+    "amdgpu.v_max_i32",
+    "amdgpu.v_min_u32",
+    "amdgpu.v_max_u32",
     "amdgpu.v_and_b32",
     "amdgpu.v_and_b32.lit",
     "amdgpu.v_or_b32",
@@ -751,6 +755,10 @@ def _rules() -> tuple[DescriptorRule, ...]:
         (
             _binary_rule(vector.vector_subi, _VEC_I32, "amdgpu.v_sub_u32"),
             _binary_rule(vector.vector_muli, _VEC_I32, "amdgpu.v_mul_lo_u32"),
+            _binary_rule(vector.vector_minsi, _VEC_I32, "amdgpu.v_min_i32"),
+            _binary_rule(vector.vector_maxsi, _VEC_I32, "amdgpu.v_max_i32"),
+            _binary_rule(vector.vector_minui, _VEC_I32, "amdgpu.v_min_u32"),
+            _binary_rule(vector.vector_maxui, _VEC_I32, "amdgpu.v_max_u32"),
         )
     )
     for source_op, descriptor_key in (
@@ -873,6 +881,26 @@ def _rules() -> tuple[DescriptorRule, ...]:
                 scalar_arithmetic.scalar_maxnumf,
                 _F32,
                 "amdgpu.v_max_f32",
+            ),
+            _binary_rule(
+                scalar_arithmetic.scalar_minsi,
+                _I32,
+                "amdgpu.v_min_i32",
+            ),
+            _binary_rule(
+                scalar_arithmetic.scalar_maxsi,
+                _I32,
+                "amdgpu.v_max_i32",
+            ),
+            _binary_rule(
+                scalar_arithmetic.scalar_minui,
+                _I32,
+                "amdgpu.v_min_u32",
+            ),
+            _binary_rule(
+                scalar_arithmetic.scalar_maxui,
+                _I32,
+                "amdgpu.v_max_u32",
             ),
             _ternary_rule(scalar_math.scalar_fmaf, _F32, "amdgpu.v_fma_f32"),
             _unary_rule(scalar_math.scalar_exp2f, _F32, "amdgpu.v_exp_f32"),

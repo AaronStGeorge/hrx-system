@@ -35,7 +35,10 @@ from loom.importers.tilelang.ops.vector import vector_lanes
 from loom.ir import (
     BUFFER_TYPE,
     INDEX,
+    ScalarType,
+    ScalarTypeKind,
     ShapedType,
+    StaticDim,
     Type,
     TypeKind,
 )
@@ -304,6 +307,7 @@ def map_alloc_buffer(
     data = getattr(buffer, "data", None)
     if data is not None:
         context.map_buffer_data(data, view, buffer=buffer)
+    _map_initial_fragment_vector(buffer, view, view_type, buffer_name, context)
     context.record_converted(
         node_text(buffer),
         (
@@ -312,6 +316,63 @@ def map_alloc_buffer(
         ),
     )
     return True
+
+
+def _map_initial_fragment_vector(
+    buffer: object,
+    view: ValueRef,
+    view_type: Type,
+    buffer_name: str,
+    context: TileLangConversionContext,
+) -> None:
+    if _buffer_scope(buffer) != "local.fragment":
+        return
+    if not isinstance(view_type, ShapedType) or view_type.type_kind != TypeKind.VIEW:
+        return
+    if len(view_type.dims) != 1 or not isinstance(view_type.dims[0], StaticDim):
+        return
+    lane_count = view_type.dims[0].size
+    if lane_count <= 0:
+        return
+    scalar_zero = _build_zero_fragment_seed(view_type.element_type, context)
+    if scalar_zero is None:
+        return
+    initial = context.builder.vector.splat(
+        scalar=scalar_zero,
+        results=[
+            context.type_converter.vector_type(view_type.element_type, lane_count)
+        ],
+        name=context.fresh_name(f"{buffer_name}_state"),
+    )
+    context.map_fragment_vector(
+        view,
+        TileLangFragmentVector(value=initial, lane_count=lane_count),
+    )
+
+
+def _build_zero_fragment_seed(
+    element_type: Type,
+    context: TileLangConversionContext,
+) -> ValueRef | None:
+    if not isinstance(element_type, ScalarType):
+        return None
+    value: int | float
+    if element_type.kind in (
+        ScalarTypeKind.F8E4M3,
+        ScalarTypeKind.F8E5M2,
+        ScalarTypeKind.F16,
+        ScalarTypeKind.BF16,
+        ScalarTypeKind.F32,
+        ScalarTypeKind.F64,
+    ):
+        value = 0.0
+    else:
+        value = 0
+    return context.ensure_typed_constant(
+        value,
+        element_type,
+        f"{element_type}_zero",
+    )
 
 
 def convert_buffer_store(
