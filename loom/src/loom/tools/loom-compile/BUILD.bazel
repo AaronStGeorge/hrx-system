@@ -10,7 +10,6 @@ load(
     "iree_lit_test_suite",
     "iree_select",
     "loom_cc_binary",
-    "loom_cc_library",
 )
 
 package(
@@ -19,18 +18,14 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-ALL_EXECUTION_PROVIDERS = [
+ALL_COMPILE_PROVIDERS = [
     "amdgpu",
     "ireevm",
 ]
 
-#===------------------------------------------------------------------------===#
-# Provider selection
-#===------------------------------------------------------------------------===#
-
 string_list_flag(
     name = "enabled_providers",
-    build_setting_default = ALL_EXECUTION_PROVIDERS,
+    build_setting_default = ALL_COMPILE_PROVIDERS,
 )
 
 [
@@ -40,7 +35,7 @@ string_list_flag(
             ":enabled_providers": provider,
         },
     )
-    for provider in ALL_EXECUTION_PROVIDERS
+    for provider in ALL_COMPILE_PROVIDERS
 ]
 
 config_setting(
@@ -51,87 +46,65 @@ config_setting(
     },
 )
 
-_AMDGPU_EXECUTION_COPTS = iree_select({
+_AMDGPU_COMPILE_COPTS = iree_select({
     ":amdgpu_provider_and_hal_enabled": [
-        "-DIREE_RUN_LOOM_HAVE_AMDGPU=1",
+        "-DLOOM_COMPILE_HAVE_AMDGPU=1",
     ],
     "//conditions:default": [],
 })
 
-_AMDGPU_EXECUTION_DEPS = iree_select({
+_AMDGPU_COMPILE_DEPS = iree_select({
     ":amdgpu_provider_and_hal_enabled": [
         "//loom/src/loom/target/arch/amdgpu:execution_provider",
     ],
     "//conditions:default": [],
 })
 
-_IREEVM_EXECUTION_COPTS = iree_select({
+_IREEVM_COMPILE_COPTS = iree_select({
     ":ireevm_provider_enabled": [
-        "-DIREE_RUN_LOOM_HAVE_IREEVM=1",
+        "-DLOOM_COMPILE_HAVE_IREEVM=1",
     ],
     "//conditions:default": [],
 })
 
-_IREEVM_EXECUTION_DEPS = iree_select({
+_IREEVM_COMPILE_DEPS = iree_select({
     ":ireevm_provider_enabled": [
+        "//loom/src/loom/target/emit/ireevm:candidate",
         "//loom/src/loom/target/emit/ireevm:execution_provider",
     ],
     "//conditions:default": [],
 })
 
-_IREE_RUN_LOOM_PROVIDER_COPTS = (
-    _AMDGPU_EXECUTION_COPTS +
-    _IREEVM_EXECUTION_COPTS
-)
-
-_IREE_RUN_LOOM_PROVIDER_DEPS = (
-    _AMDGPU_EXECUTION_DEPS +
-    _IREEVM_EXECUTION_DEPS
-)
-
-loom_cc_library(
-    name = "main",
-    srcs = [
-        "main.c",
-    ],
-    hdrs = [
-        "main.h",
-    ],
+loom_cc_binary(
+    name = "loom-compile",
+    srcs = ["loom-compile.c"],
+    copts = _AMDGPU_COMPILE_COPTS + _IREEVM_COMPILE_COPTS,
     deps = [
         "//loom/src/loom/error:diagnostic",
-        "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/tooling/compile:pipeline",
         "//loom/src/loom/tooling/execution:compile_options",
         "//loom/src/loom/tooling/execution:compile_report_capture",
-        "//loom/src/loom/tooling/execution:execution_backend",
-        "//loom/src/loom/tooling/execution:one_shot",
+        "//loom/src/loom/tooling/execution:execution_provider",
+        "//loom/src/loom/tooling/execution:hal_backend",
+        "//loom/src/loom/tooling/execution:hal_candidate",
+        "//loom/src/loom/tooling/execution:hal_runtime",
         "//loom/src/loom/tooling/execution:session",
         "//loom/src/loom/tooling/io:file",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/io:file_handle",
-    ],
-)
-
-loom_cc_binary(
-    name = "iree-run-loom",
-    srcs = ["iree-run-loom.c"],
-    copts = _IREE_RUN_LOOM_PROVIDER_COPTS,
-    deps = [
-        ":main",
-        "//loom/src/loom/tooling/execution:execution_provider",
-        "//runtime/src/iree/base",
-    ] + _IREE_RUN_LOOM_PROVIDER_DEPS,
+    ] + _AMDGPU_COMPILE_DEPS + _IREEVM_COMPILE_DEPS,
 )
 
 iree_lit_test_suite(
     name = "lit_test",
-    srcs = ["iree-run-loom_test.txt"],
+    srcs = ["loom-compile_test.txt"],
     cfg = "//runtime:lit.cfg.py",
     tags = ["hostonly"],
     tools = [
-        ":iree-run-loom",
+        ":loom-compile",
+        "//tools:iree-run-module",
         "@llvm-project//llvm:FileCheck",
     ],
 )

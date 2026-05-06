@@ -1,0 +1,21 @@
+// RUN: loom-compile %s --output=%t.vmfb --compile_report=summary 2> %t.report
+// RUN: iree-run-module --module=%t.vmfb --function=branchy --input=0 --input=21 --expected_output=42 | FileCheck --check-prefix=EXEC %s
+// RUN: FileCheck --check-prefix=REPORT %s < %t.report
+
+// EXEC: EXEC @branchy
+// EXEC: [SUCCESS] all function outputs matched their expected values.
+// REPORT: COMPILE-REPORT: summary artifact=vm-archive status=OK
+
+ireevm.target<core> @vm_target
+
+func.def target(@vm_target) @branchy(%lhs: i32, %rhs: i32) -> (i32) {
+  %c0 = scalar.constant 0 : i32
+  %is_zero = scalar.cmpi eq, %lhs, %c0 : i32
+  cfg.cond_br %is_zero, ^then, ^else : i1
+^then:
+  %sum = scalar.addi %rhs, %rhs : i32
+  func.return %sum : i32
+^else:
+  %diff = scalar.subi %lhs, %rhs : i32
+  func.return %diff : i32
+}
