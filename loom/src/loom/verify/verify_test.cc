@@ -555,6 +555,77 @@ TEST_F(VerifyTest, WrongOperandCountDetected) {
   ExpectU32Param(*entry, 2, 2);
 }
 
+TEST_F(VerifyTest, OperandDictOperandsRequireNamesAttribute) {
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_t argument_types[] = {f32_type, i32_type};
+  loom_value_id_t arguments[2];
+  EnterTestFunc(argument_types, IREE_ARRAYSIZE(argument_types), arguments);
+
+  loom_string_id_t alpha_name = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&builder_, IREE_SV("alpha"), &alpha_name));
+  loom_named_value_t parameters[] = {
+      {.name_id = alpha_name, .reserved = 0, .value_id = arguments[1]},
+  };
+  loom_op_t* op = nullptr;
+  IREE_ASSERT_OK(loom_test_operand_dict_build(
+      &builder_, arguments[0], parameters, IREE_ARRAYSIZE(parameters), f32_type,
+      LOOM_LOCATION_UNKNOWN, &op));
+  loom_op_attrs(op)[0] = loom_attr_absent();
+
+  TerminateFunc();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
+  EXPECT_GT(result.error_count, 0u);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 13));
+  ASSERT_NE(entry, nullptr)
+      << "Expected STRUCTURE/013 operand-dictionary count diagnostic";
+  EXPECT_EQ(GetStringParam(*entry, 0), "param_names");
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, 0);
+  ExpectU32Param(*entry, 1, 0);
+  EXPECT_EQ(GetStringParam(*entry, 2), "operand dictionary operands");
+  ExpectU32Param(*entry, 3, 1);
+}
+
+TEST_F(VerifyTest, OperandDictOrdinalsMustStayInOperandRange) {
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_t argument_types[] = {f32_type, i32_type};
+  loom_value_id_t arguments[2];
+  EnterTestFunc(argument_types, IREE_ARRAYSIZE(argument_types), arguments);
+
+  loom_string_id_t alpha_name = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&builder_, IREE_SV("alpha"), &alpha_name));
+  loom_named_value_t parameters[] = {
+      {.name_id = alpha_name, .reserved = 0, .value_id = arguments[1]},
+  };
+  loom_op_t* op = nullptr;
+  IREE_ASSERT_OK(loom_test_operand_dict_build(
+      &builder_, arguments[0], parameters, IREE_ARRAYSIZE(parameters), f32_type,
+      LOOM_LOCATION_UNKNOWN, &op));
+  loom_named_attr_t names[] = {
+      {.name_id = alpha_name, .reserved = 0, .value = loom_attr_i64(1)},
+  };
+  loom_op_attrs(op)[0] =
+      loom_make_canonical_attr_dict(names, IREE_ARRAYSIZE(names));
+
+  TerminateFunc();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
+  EXPECT_GT(result.error_count, 0u);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14));
+  ASSERT_NE(entry, nullptr)
+      << "Expected STRUCTURE/014 operand-dictionary ordinal diagnostic";
+  EXPECT_EQ(GetStringParam(*entry, 0), "alpha");
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, 0);
+  ExpectI64Param(*entry, 1, 1);
+  EXPECT_EQ(GetStringParam(*entry, 2), "operand ordinal in range");
+}
+
 TEST_F(VerifyTest, MissingSuccessorTargetDetected) {
   EnterTestFunc(nullptr, 0, nullptr);
 
