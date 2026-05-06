@@ -69,8 +69,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_table_lookup_i8_code
   %66 = v_cmp_eq_i32 %61, %36
   %67 = v_cndmask_b32 %65, %g3, %66
   %decoded = concat(%43, %51, %59, %67) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %69 = v_mov_b32 0
-  global_store_b128 %69, %decoded, %output_view
+  global_store_b128 %23, %decoded, %output_view
   return
 }
 

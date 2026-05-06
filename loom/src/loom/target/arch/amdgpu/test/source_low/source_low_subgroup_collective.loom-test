@@ -644,9 +644,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_i32_
   %value = low.op<amdgpu.global_load_b32_saddr>(%20, %input_view, %22) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
   %25 = low.const<amdgpu.v_mov_b32> {imm32 = 252} : reg<amdgpu.vgpr>
   %result = low.op<amdgpu.ds_bpermute_b32>(%25, %value) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %28 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %29 = low.op<amdgpu.s_mov_b32_m0>(%28) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  low.op<amdgpu.global_store_b32_saddr>(%20, %result, %output_view, %29) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.global_store_b32_saddr>(%20, %result, %output_view, %22) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
   low.return
 }
 
@@ -705,9 +703,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_reduce_addf_f3
   %44 = low.op<amdgpu.v_lshlrev_b32.lit>(%43) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %45 = low.op<amdgpu.ds_bpermute_b32>(%44, %42) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %result = low.op<amdgpu.v_add_f32>(%42, %45) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %48 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %49 = low.op<amdgpu.s_mov_b32_m0>(%48) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  low.op<amdgpu.global_store_b32_saddr>(%19, %result, %output_view, %49) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.global_store_b32_saddr>(%19, %result, %output_view, %21) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
   low.return
 }
 
@@ -747,8 +743,6 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_xor_i3
   %28 = low.op<amdgpu.v_xor_b32.lit>(%tid) {imm32 = 32} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %31 = low.op<amdgpu.v_lshlrev_b32.lit>(%28) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %result = low.op<amdgpu.ds_bpermute_b32>(%31, %value) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %34 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %35 = low.op<amdgpu.s_mov_b32_m0>(%34) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  low.op<amdgpu.global_store_b32_saddr>(%22, %result, %output_view, %35) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.global_store_b32_saddr>(%22, %result, %output_view, %24) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
   low.return
 }

@@ -30,8 +30,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_bitwise() asm<amdgpu
   %masked = v_and_b32_lit %loaded, 15
   %with_tag = v_or_b32_lit %masked, 240
   %result = v_xor_b32 %with_tag, %loaded
-  %25 = v_mov_b32 0
-  global_store_b32 %25, %result, %output_view
+  global_store_b32 %20, %result, %output_view
   return
 }
 
@@ -69,8 +68,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_shift() asm<amdgpu.r
   %arithmetic = v_ashrrev_i32_lit %loaded, 3
   %joined = v_or_b32 %left, %logical
   %result = v_xor_b32 %joined, %arithmetic
-  %28 = v_mov_b32 0
-  global_store_b32 %28, %result, %output_view
+  global_store_b32 %21, %result, %output_view
   return
 }
 
@@ -100,8 +98,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_negative_literal() a
   %17 = v_mov_b32 0
   %loaded = global_load_b32 %17, %input_view
   %result = v_xor_b32_lit %loaded, 4294967295
-  %20 = v_mov_b32 0
-  global_store_b32 %20, %result, %output_view
+  global_store_b32 %17, %result, %output_view
   return
 }
 
@@ -145,13 +142,11 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_scalarized() asm<amd
   %masked = v_and_b32 %lane0, %31
   %34 = v_mov_b32 3
   %left = v_lshlrev_b32 %34, %masked
-  %36 = v_mov_b32 3
-  %logical = v_lshrrev_b32 %36, %lane1
+  %logical = v_lshrrev_b32 %34, %lane1
   %mixed = v_xor_b32 %left, %logical
   %lane2 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %lane3 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %result = concat(%mixed, %logical, %lane2, %lane3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %42 = v_mov_b32 0
-  global_store_b128 %42, %result, %output_view
+  global_store_b128 %26, %result, %output_view
   return
 }

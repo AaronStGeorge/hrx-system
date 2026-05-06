@@ -23,8 +23,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_add_i32() asm
   %scratch_view = storage_address %11 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %14 = v_mov_b32 1
   ds_add_u32 %scratch_view, %14
-  %15 = v_mov_b32 1
-  %old = ds_add_rtn_u32 %scratch_view, %15
+  %old = ds_add_rtn_u32 %scratch_view, %14
   return
 }
 
@@ -55,14 +54,10 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_ordering_i32(
   %scratch_view = storage_address %14 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %17 = v_mov_b32 1
   ds_add_u32 %scratch_view, %17
-  %18 = v_mov_b32 1
-  %old_acquire = ds_add_rtn_u32 %scratch_view, %18
-  %20 = v_mov_b32 1
-  %old_release = ds_add_rtn_u32 %scratch_view, %20
-  %22 = v_mov_b32 1
-  %old_acq_rel = ds_add_rtn_u32 %scratch_view, %22
-  %24 = v_mov_b32 1
-  %old_seq_cst = ds_add_rtn_u32 %scratch_view, %24
+  %old_acquire = ds_add_rtn_u32 %scratch_view, %17
+  %old_release = ds_add_rtn_u32 %scratch_view, %17
+  %old_acq_rel = ds_add_rtn_u32 %scratch_view, %17
+  %old_seq_cst = ds_add_rtn_u32 %scratch_view, %17
   return
 }
 
@@ -154,16 +149,11 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_bitwise_i32()
   %scratch_view = storage_address %13 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %16 = v_mov_b32 255
   ds_and_b32 %scratch_view, %16
-  %17 = v_mov_b32 255
-  ds_or_b32 %scratch_view, %17
-  %18 = v_mov_b32 255
-  ds_xor_b32 %scratch_view, %18
-  %19 = v_mov_b32 255
-  %old_and = ds_and_rtn_b32 %scratch_view, %19
-  %21 = v_mov_b32 255
-  %old_or = ds_or_rtn_b32 %scratch_view, %21
-  %23 = v_mov_b32 255
-  %old_xor = ds_xor_rtn_b32 %scratch_view, %23
+  ds_or_b32 %scratch_view, %16
+  ds_xor_b32 %scratch_view, %16
+  %old_and = ds_and_rtn_b32 %scratch_view, %16
+  %old_or = ds_or_rtn_b32 %scratch_view, %16
+  %old_xor = ds_xor_rtn_b32 %scratch_view, %16
   return
 }
 
@@ -191,8 +181,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_sub_i32() asm
   %scratch_view = storage_address %11 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %14 = v_mov_b32 1
   ds_sub_u32 %scratch_view, %14
-  %15 = v_mov_b32 1
-  %old_sub = ds_sub_rtn_u32 %scratch_view, %15
+  %old_sub = ds_sub_rtn_u32 %scratch_view, %14
   return
 }
 
@@ -280,19 +269,12 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_atomic_minmax_i32() 
   %scratch_view = storage_address %14 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %17 = v_mov_b32 1
   ds_min_i32 %scratch_view, %17
-  %18 = v_mov_b32 1
-  ds_max_i32 %scratch_view, %18
-  %19 = v_mov_b32 1
-  ds_min_u32 %scratch_view, %19
-  %20 = v_mov_b32 1
-  ds_max_u32 %scratch_view, %20
-  %21 = v_mov_b32 1
-  %old_minsi = ds_min_rtn_i32 %scratch_view, %21
-  %23 = v_mov_b32 1
-  %old_maxsi = ds_max_rtn_i32 %scratch_view, %23
-  %25 = v_mov_b32 1
-  %old_minui = ds_min_rtn_u32 %scratch_view, %25
-  %27 = v_mov_b32 1
-  %old_maxui = ds_max_rtn_u32 %scratch_view, %27
+  ds_max_i32 %scratch_view, %17
+  ds_min_u32 %scratch_view, %17
+  ds_max_u32 %scratch_view, %17
+  %old_minsi = ds_min_rtn_i32 %scratch_view, %17
+  %old_maxsi = ds_max_rtn_i32 %scratch_view, %17
+  %old_minui = ds_min_rtn_u32 %scratch_view, %17
+  %old_maxui = ds_max_rtn_u32 %scratch_view, %17
   return
 }

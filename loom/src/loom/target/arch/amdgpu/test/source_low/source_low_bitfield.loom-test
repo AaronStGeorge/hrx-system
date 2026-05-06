@@ -20,8 +20,7 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extractu() asm<amdgpu
   %loaded = global_load_b32 %9, %input_view
   %11 = v_lshrrev_b32_lit %loaded, 4
   %nibble = v_and_b32_lit %11, 15
-  %13 = v_mov_b32 0
-  global_store_b32 %13, %nibble, %output_view
+  global_store_b32 %9, %nibble, %output_view
   return
 }
 
@@ -46,8 +45,7 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extracts() asm<amdgpu
   %loaded = global_load_b32 %9, %input_view
   %11 = v_lshlrev_b32_lit %loaded, 24
   %nibble = v_ashrrev_i32_lit %11, 28
-  %13 = v_mov_b32 0
-  global_store_b32 %13, %nibble, %output_view
+  global_store_b32 %9, %nibble, %output_view
   return
 }
 
@@ -73,14 +71,12 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_insert() asm<amdgpu.r
   %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x2>
   %13 = v_mov_b32 0
   %field = global_load_b32 %13, %field_view
-  %15 = v_mov_b32 0
-  %base = global_load_b32 %15, %base_view
+  %base = global_load_b32 %13, %base_view
   %17 = v_and_b32_lit %field, 15
   %18 = v_lshlrev_b32_lit %17, 8
   %19 = v_and_b32_lit %base, 4294963455
   %inserted = v_or_b32 %19, %18
-  %21 = v_mov_b32 0
-  global_store_b32 %21, %inserted, %output_view
+  global_store_b32 %13, %inserted, %output_view
   return
 }
 
@@ -140,15 +136,11 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_b128_shape() asm<amdg
   %59 = v_and_b32_lit %22, 4294967247
   %60 = v_or_b32 %59, %58
   %62 = v_mov_b32 32
-  %63 = v_mov_b32 32
-  %64 = v_mov_b32 32
-  %65 = v_mov_b32 32
   %69 = v_sub_nc_u32 %42, %62
-  %72 = v_sub_nc_u32 %48, %63
-  %75 = v_sub_nc_u32 %54, %64
-  %78 = v_sub_nc_u32 %60, %65
+  %72 = v_sub_nc_u32 %48, %62
+  %75 = v_sub_nc_u32 %54, %62
+  %78 = v_sub_nc_u32 %60, %62
   %result = concat(%69, %72, %75, %78) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %80 = v_mov_b32 0
-  global_store_b128 %80, %result, %output_view
+  global_store_b128 %13, %result, %output_view
   return
 }
