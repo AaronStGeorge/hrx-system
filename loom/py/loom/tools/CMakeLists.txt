@@ -22,6 +22,14 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    amdgpu_asm
+  SRCS
+    "__init__.py"
+    "amdgpu_asm.py"
+)
+
+iree_py_library(
+  NAME
     loom_opt
   SRCS
     "__init__.py"
@@ -46,6 +54,7 @@ iree_py_test(
   SRCS
     "pytest_style_runner.py"
   ARGS
+    "loom.tools.amdgpu_asm_test"
     "loom.tools.loom_opt_test"
   PACKAGE_DIRS
     "${IREE_SOURCE_DIR}/runtime/py"

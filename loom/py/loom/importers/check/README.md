@@ -71,6 +71,17 @@ tests pass the built target path. Direct use resolves `loom-opt` from
 `--loom-opt`, `LOOM_BIN_DIR`, or `PATH`. Importer-check Python does not inspect
 Bazel runfiles or repository paths.
 
+TileLang checks also have an opt-in oracle lane for local comparison against
+TileLang/TVM generated artifacts. `--oracle=source` asks TileLang for generated
+device source, and `--oracle=code-object` additionally compiles, unbundles, and
+externally disassembles a code object when the ROCm tools are available. The
+checked stdout remains imported Loom IR; oracle data is sidecar evidence only.
+Use `--oracle-output-dir` or `--dump-temp-dir` to retain the generated HIP
+source, bundled HSACO, unbundled code object, raw disassembly, metadata JSON,
+and parsed instruction-summary JSON. Missing TileLang source-codegen hooks,
+HIP/ROCm tools, or LLVM tools produce skipped cases with structured metadata
+instead of expanding the minimal TileLang import dependency contract.
+
 Expected diagnostics use source annotations instead of bespoke test callbacks:
 
 ```python

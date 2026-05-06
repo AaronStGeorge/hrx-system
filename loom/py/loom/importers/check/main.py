@@ -198,7 +198,9 @@ TileLang/TVM generated artifacts. `--oracle=source` asks TileLang for generated
 device source, and `--oracle=code-object` additionally compiles, unbundles, and
 externally disassembles a code object when the ROCm tools are available. This
 metadata is sidecar validation evidence: the checked stdout remains imported
-Loom IR. Use `--oracle-output-dir` or `--dump-temp-dir` to retain artifact files.
+Loom IR. Use `--oracle-output-dir` or `--dump-temp-dir` to retain the generated
+source, bundled HSACO, unbundled code object, raw disassembly, metadata JSON,
+and parsed instruction-summary JSON.
 Oracle modes detect their optional dependencies at runtime. Missing TileLang
 source-codegen hooks, HIP/ROCm tools, or LLVM tools produce skipped cases with
 structured JSON metadata, not fake passes, and do not expand the minimal

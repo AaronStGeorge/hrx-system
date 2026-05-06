@@ -24,6 +24,10 @@ from loom.importers.tilelang.model import (
     normalize_tilelang_input,
     resolve_tilelang_input,
 )
+from loom.tools.amdgpu_asm import (
+    AmdgpuDisassemblySummary,
+    summarize_amdgpu_disassembly,
+)
 
 
 class TileLangOracleError(RuntimeError):
@@ -119,7 +123,13 @@ class TileLangCodeObjectOracle:
     bundled_object_path: Path
     code_object_path: Path
     disassembly: str
-    instruction_counts: Mapping[str, int]
+    disassembly_summary: AmdgpuDisassemblySummary
+
+    @property
+    def instruction_counts(self) -> Mapping[str, int]:
+        """Returns stable instruction-family counts for compatibility."""
+
+        return self.disassembly_summary.family_counts
 
     def metadata(self) -> Mapping[str, object]:
         """Returns stable metadata for artifact files and JSON reports."""
@@ -131,6 +141,7 @@ class TileLangCodeObjectOracle:
                 "code_object_path": str(self.code_object_path),
                 "disassembly_bytes": len(self.disassembly.encode()),
                 "instruction_counts": dict(self.instruction_counts),
+                "instruction_summary": dict(self.disassembly_summary.metadata()),
             }
         )
 
@@ -251,7 +262,7 @@ def compile_hip_code_object(
         bundled_object_path=bundled_object_path,
         code_object_path=code_object_path,
         disassembly=disassembly,
-        instruction_counts=summarize_disassembly(disassembly),
+        disassembly_summary=summarize_amdgpu_disassembly(disassembly),
     )
     (output_directory / f"{stem}.{generated_source.arch}.metadata.json").write_text(
         json.dumps(result.metadata(), indent=2, sort_keys=True) + "\n",
@@ -259,6 +270,11 @@ def compile_hip_code_object(
     )
     (output_directory / f"{stem}.{generated_source.arch}.disasm").write_text(
         disassembly,
+        encoding="utf-8",
+    )
+    (output_directory / f"{stem}.{generated_source.arch}.instructions.json").write_text(
+        json.dumps(result.disassembly_summary.metadata(), indent=2, sort_keys=True)
+        + "\n",
         encoding="utf-8",
     )
     return result
@@ -300,25 +316,7 @@ def summarize_source(source: str) -> tuple[str, ...]:
 def summarize_disassembly(disassembly: str) -> Mapping[str, int]:
     """Counts instruction-family markers in external disassembly text."""
 
-    markers = (
-        "v_mfma",
-        "v_wmma",
-        "ds_read",
-        "ds_write",
-        "global_load",
-        "global_store",
-        "s_load",
-        "s_waitcnt",
-        "buffer_load",
-        "buffer_store",
-    )
-    return MappingProxyType(
-        {
-            marker: count
-            for marker in markers
-            if (count := disassembly.count(marker)) != 0
-        }
-    )
+    return summarize_amdgpu_disassembly(disassembly).family_counts
 
 
 def preload_rocm_runtime() -> tuple[Path, ...]:

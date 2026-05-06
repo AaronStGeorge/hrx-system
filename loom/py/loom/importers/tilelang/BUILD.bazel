@@ -68,6 +68,7 @@ py_library(
     ],
     deps = [
         ":core",
+        "//loom/py/loom/tools:amdgpu_asm",
     ],
 )
 
