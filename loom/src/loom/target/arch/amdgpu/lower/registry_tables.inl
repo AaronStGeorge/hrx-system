@@ -122,13 +122,15 @@ static const loom_amdgpu_lower_dispatch_row_t
                 LOOM_OP_VECTOR_FRAGMENT_LOAD,
                 loom_amdgpu_fragment_memory_plan_t,
                 loom_amdgpu_select_vector_fragment_load_dispatch,
-                loom_amdgpu_emit_vector_fragment_load_dispatch, NULL),
+                loom_amdgpu_emit_vector_fragment_load_dispatch,
+                loom_amdgpu_low_legality_verify_vector_fragment_memory),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FRAGMENT_STORE)] =
             LOOM_AMDGPU_DATA_ROW(
                 LOOM_OP_VECTOR_FRAGMENT_STORE,
                 loom_amdgpu_fragment_memory_plan_t,
                 loom_amdgpu_select_vector_fragment_store_dispatch,
-                loom_amdgpu_emit_vector_fragment_store_dispatch, NULL),
+                loom_amdgpu_emit_vector_fragment_store_dispatch,
+                loom_amdgpu_low_legality_verify_vector_fragment_memory),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_SELECT)] = LOOM_AMDGPU_DATA_ROW(
             LOOM_OP_VECTOR_SELECT, loom_amdgpu_vector_select_plan_t,
             loom_amdgpu_select_vector_select_dispatch,
