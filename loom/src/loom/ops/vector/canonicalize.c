@@ -911,9 +911,9 @@ iree_status_t loom_vector_reduce_axes_canonicalize(loom_op_t* op,
   loom_type_t result_type = loom_module_value_type(
       rewriter->module, loom_vector_reduce_axes_result(op));
   loom_op_t* reduce_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_vector_reduce_build(&rewriter->builder, kind, input,
-                                                init, result_type, op->location,
-                                                &reduce_op));
+  IREE_RETURN_IF_ERROR(loom_vector_reduce_build(
+      &rewriter->builder, kind, op->instance_flags, input, init, result_type,
+      op->location, &reduce_op));
   IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_new_op(
       op, rewriter, reduce_op, value_checkpoint));
   return iree_ok_status();

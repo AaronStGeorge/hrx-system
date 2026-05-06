@@ -160,6 +160,18 @@ static iree_status_t loom_vector_emit_shape_mismatch(
                           IREE_ARRAYSIZE(params));
 }
 
+static iree_status_t loom_vector_verify_float_assumptions(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t operand_name, loom_type_t operand_type) {
+  if (op->instance_flags == 0 ||
+      loom_scalar_type_is_float(loom_type_element_type(operand_type))) {
+    return iree_ok_status();
+  }
+  return loom_vector_emit_operand_constraint(
+      emitter, op, operand_name, operand_type,
+      IREE_SV("floating-point element type when assumptions are present"));
+}
+
 static iree_status_t loom_vector_emit_count_mismatch(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op,
     iree_string_view_t field_name, uint64_t actual_count,
@@ -2178,6 +2190,8 @@ iree_status_t loom_vector_reduce_verify(const loom_module_t* module,
   loom_type_t input_type =
       loom_module_value_type(module, loom_vector_reduce_input(op));
   if (!loom_type_is_vector(input_type)) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(loom_vector_verify_float_assumptions(
+      emitter, op, IREE_SV("input"), input_type));
 
   loom_combining_kind_t kind = loom_vector_reduce_kind(op);
   loom_scalar_type_t element_type = loom_type_element_type(input_type);
@@ -2251,6 +2265,8 @@ iree_status_t loom_vector_reduce_axes_verify(
   loom_type_t input_type =
       loom_module_value_type(module, loom_vector_reduce_axes_input(op));
   if (!loom_type_is_vector(input_type)) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(loom_vector_verify_float_assumptions(
+      emitter, op, IREE_SV("input"), input_type));
 
   loom_attribute_t axes = loom_vector_reduce_axes_axes(op);
   if (axes.kind != LOOM_ATTR_I64_ARRAY) {

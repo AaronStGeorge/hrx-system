@@ -50,6 +50,7 @@ from loom.assembly import (
     StableKeyRef,
     SymbolRef,
     TemplateParam,
+    TemplateParamFlags,
     TypedRefs,
     TypeOf,
     TypesOf,
@@ -1351,6 +1352,8 @@ class Parser:
                 return name == attr_name
             case TemplateParam(field=name) | PredicateList(field=name):
                 return name == attr_name
+            case TemplateParamFlags(param=param_name, flags=flags_name):
+                return param_name == attr_name or flags_name == attr_name
             case DescriptorRef(key=key, ordinal=ordinal):
                 return key == attr_name or ordinal == attr_name
             case StableKeyRef(key=key, stable_id=stable_id):
@@ -2223,6 +2226,20 @@ class Parser:
                     tok.expect(TokenKind.LANGLE)
                     attr_def = op_decl.attr(name)
                     parsed.attributes[name] = self._parse_attr_value(attr_def)
+                    tok.expect(TokenKind.RANGLE)
+
+                case TemplateParamFlags(param=param_name, flags=flags_name):
+                    tok.expect(TokenKind.LANGLE)
+                    attr_def = op_decl.attr(param_name)
+                    parsed.attributes[param_name] = self._parse_attr_value(attr_def)
+                    if tok.at(TokenKind.COMMA):
+                        tok.next()
+                        flag_parts: list[str] = []
+                        flag_parts.append(tok.expect(TokenKind.BARE_IDENT).text)
+                        while tok.at(TokenKind.PIPE):
+                            tok.next()
+                            flag_parts.append(tok.expect(TokenKind.BARE_IDENT).text)
+                        parsed.attributes[flags_name] = "|".join(flag_parts)
                     tok.expect(TokenKind.RANGLE)
 
                 case Glue():

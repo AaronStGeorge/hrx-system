@@ -263,48 +263,55 @@ static iree_status_t loom_parse_format_optional_group(
   return iree_ok_status();
 }
 
-// Parses instance flags: <flag1|flag2>.
+// Parses an instance flag list: flag1|flag2.
 // Matches flag names against the vtable's flag case names.
+static iree_status_t loom_parse_format_instance_flag_list(
+    loom_parser_t* parser, const loom_op_vtable_t* vtable, uint8_t* out_flags) {
+  uint8_t flags = 0;
+  bool first = true;
+  while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RANGLE) &&
+         !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
+    if (!first) {
+      if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_PIPE)) {
+        break;
+      }
+    }
+    loom_token_t flag_token = loom_token_none();
+    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, &flag_token);
+    bool found = false;
+    for (uint8_t bit = 0; bit < vtable->instance_flags_case_count; ++bit) {
+      if (loom_bstring_equal(vtable->instance_flags_case_names[bit],
+                             flag_token.text)) {
+        flags |= (1u << bit);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      loom_diagnostic_param_t params[] = {
+          loom_param_string(IREE_SV("instance flag")),
+          loom_param_string(flag_token.text),
+      };
+      return loom_parser_emit(parser, LOOM_ERR_PARSE_018, params,
+                              IREE_ARRAYSIZE(params), flag_token);
+    }
+    first = false;
+  }
+  *out_flags = flags;
+  return iree_ok_status();
+}
+
+// Parses instance flags: <flag1|flag2>.
 static iree_status_t loom_parse_format_flags(loom_parser_t* parser,
                                              const loom_op_vtable_t* vtable,
                                              loom_parsed_op_t* parsed) {
   if (loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LANGLE)) {
-    uint8_t flags = 0;
-    bool first = true;
-    while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RANGLE) &&
-           !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
-      if (!first) {
-        if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_PIPE)) {
-          break;
-        }
-      }
-      loom_token_t flag_token = loom_token_none();
-      LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, &flag_token);
-      // Look up the flag name.
-      bool found = false;
-      for (uint8_t bit = 0; bit < vtable->instance_flags_case_count; ++bit) {
-        if (loom_bstring_equal(vtable->instance_flags_case_names[bit],
-                               flag_token.text)) {
-          flags |= (1u << bit);
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        loom_diagnostic_param_t params[] = {
-            loom_param_string(IREE_SV("instance flag")),
-            loom_param_string(flag_token.text),
-        };
-        return loom_parser_emit(parser, LOOM_ERR_PARSE_018, params,
-                                IREE_ARRAYSIZE(params), flag_token);
-      }
-      first = false;
-    }
+    IREE_RETURN_IF_ERROR(loom_parse_format_instance_flag_list(
+        parser, vtable, &parsed->instance_flags));
     if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RANGLE)) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
       return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'>'"));
     }
-    parsed->instance_flags = flags;
   }
   return iree_ok_status();
 }
@@ -432,6 +439,37 @@ static iree_status_t loom_parse_format_template_param(
   uint32_t attr_errors_before = parser->error_count;
   IREE_RETURN_IF_ERROR(loom_parse_attr_value(parser, descriptor, &attr));
   if (parser->error_count > attr_errors_before) return iree_ok_status();
+  if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RANGLE)) {
+    loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'>'"));
+  }
+  IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
+      parsed, &parser->parser_arena, element->field_index, attr));
+  return loom_parse_format_add_field_span(parser, parsed,
+                                          LOOM_LOCATION_FIELD_ATTRIBUTE,
+                                          element->field_index, start_token);
+}
+
+// Parses a required template parameter plus optional instance flags:
+// <attr-value> or <attr-value, flag1|flag2>.
+static iree_status_t loom_parse_format_template_param_flags(
+    loom_parser_t* parser, const loom_op_vtable_t* vtable,
+    const loom_format_element_t* element, loom_parsed_op_t* parsed) {
+  loom_token_t start_token = loom_tokenizer_peek(&parser->tokenizer);
+  if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LANGLE)) {
+    loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'<'"));
+  }
+  const loom_attr_descriptor_t* descriptor =
+      &vtable->attr_descriptors[element->field_index];
+  loom_attribute_t attr = {0};
+  uint32_t attr_errors_before = parser->error_count;
+  IREE_RETURN_IF_ERROR(loom_parse_attr_value(parser, descriptor, &attr));
+  if (parser->error_count > attr_errors_before) return iree_ok_status();
+  if (loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
+    IREE_RETURN_IF_ERROR(loom_parse_format_instance_flag_list(
+        parser, vtable, &parsed->instance_flags));
+  }
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RANGLE)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
     return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'>'"));
@@ -794,6 +832,12 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
       case LOOM_FORMAT_KIND_TEMPLATE_PARAM: {
         IREE_RETURN_IF_ERROR(
             loom_parse_format_template_param(parser, vtable, element, parsed));
+        break;
+      }
+
+      case LOOM_FORMAT_KIND_TEMPLATE_PARAM_FLAGS: {
+        IREE_RETURN_IF_ERROR(loom_parse_format_template_param_flags(
+            parser, vtable, element, parsed));
         break;
       }
 

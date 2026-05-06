@@ -75,6 +75,22 @@ py_library(
     ],
 )
 
+py_test(
+    name = "target_lower_rules_test",
+    srcs = [
+        "target_lower_rules_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.target_lower_rules_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":target_lower_rules",
+        "//loom/py/loom/dialect/scalar",
+        "//loom/py/loom/target/contracts",
+        "//loom/py/loom/target/test:descriptors",
+    ],
+)
+
 py_library(
     name = "c_tables",
     srcs = [

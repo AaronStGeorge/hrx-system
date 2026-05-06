@@ -566,6 +566,23 @@ func.def @static_reduce(%v: vector<4xf32>, %zero: f32) -> (f32) {
 
 // ====
 
+// Floating reduction value-domain assumptions project onto scalar fast-math bits.
+func.def @static_reduce_assumptions(%v: vector<2xf32>, %zero: f32) -> (f32) {
+  %r = vector.reduce<addf, nnan|ninf|nsz> %v, %zero : vector<2xf32>, f32
+  func.return %r : f32
+}
+
+// ----
+func.def @static_reduce_assumptions(%v: vector<2xf32>, %zero: f32) -> (f32) {
+  %4 = vector.extract %v[0] : vector<2xf32> -> f32
+  %5 = scalar.addf<nnan|ninf|nsz> %zero, %4 : f32
+  %6 = vector.extract %v[1] : vector<2xf32> -> f32
+  %r = scalar.addf<nnan|ninf|nsz> %5, %6 : f32
+  func.return %r : f32
+}
+
+// ====
+
 // Producer lanes feeding reductions are materialized directly instead of
 // packing a temporary vector only to extract it again.
 func.def @producer_reduce(%a: vector<4xi32>, %b: vector<4xi32>, %zero: i32) -> (i32) {

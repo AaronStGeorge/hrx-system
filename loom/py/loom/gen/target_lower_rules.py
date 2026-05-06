@@ -632,6 +632,7 @@ def _guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]
         GuardKind.VALUE_UNSIGNED_BIT_COUNT,
         GuardKind.VALUE_EXACT_I64,
         GuardKind.VALUE_I64_RANGE,
+        GuardKind.VALUE_F64_EQUALS,
     ):
         _append_field(fields, "value_ref_index", row.value_ref_index, always=True)
     if row.kind == GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ:

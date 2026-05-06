@@ -25,6 +25,7 @@ from loom.assembly import (
     ResultTypeList,
     SymbolRef,
     TemplateParam,
+    TemplateParamFlags,
     TypesOf,
 )
 from loom.dsl import (
@@ -881,6 +882,31 @@ def test_enum_keywords_with_dots_generate_valid_c_constants() -> None:
     assert "LOOM_TEST_INTRINSIC_KIND_LLVM_X86_RDTSC = 0," in ops_h
     assert "LOOM_TEST_INTRINSIC_KIND_LLVM.X86.RDTSC" not in ops_h
     assert '"llvm.x86.rdtsc"' in tables_c
+
+
+def test_template_param_flags_uses_template_attr_and_instance_flags() -> None:
+    kind = EnumDef("Kind", [EnumCase("addf", 0), EnumCase("maxnumf", 1)])
+    flags = EnumDef("Flags", [EnumCase("nnan", 1), EnumCase("nsz", 2)])
+    op = Op(
+        "test.reduce",
+        group=Dialect("test"),
+        attrs=[
+            AttrDef("kind", "enum", enum_def=kind),
+            AttrDef("assumptions", "flags", optional=True, enum_def=flags),
+        ],
+        format=[TemplateParamFlags("kind", "assumptions")],
+    )
+
+    ops_h = generate_ops_h("test", 0, [op])
+    builders_c = generate_builders_c("test", [op])
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "LOOM_FORMAT_KIND_TEMPLATE_PARAM_FLAGS" in tables_c
+    assert "{LOOM_FORMAT_KIND_TEMPLATE_PARAM_FLAGS, 0, 0}" in tables_c
+    assert "loom_test_reduce_kind_t kind" in ops_h
+    assert "uint8_t instance_flags" in ops_h
+    assert "loom_op_attrs(*out_op)[0] = loom_attr_enum(kind);" in builders_c
+    assert "(*out_op)->instance_flags = instance_flags;" in builders_c
 
 
 def test_operand_dict_generates_format_and_builder_support() -> None:

@@ -200,49 +200,55 @@ enum loom_format_kind_e {
   // an ordinary attribute parsed with the attr descriptor.
   LOOM_FORMAT_KIND_TEMPLATE_PARAM = 21,
 
+  // Required compile-time op parameter plus optional instance flags:
+  // <add> or <add, flag1|flag2>. Glued to the preceding token (op name).
+  // field_index references the ordinary parameter attribute. Instance flags
+  // read/write op->instance_flags.
+  LOOM_FORMAT_KIND_TEMPLATE_PARAM_FLAGS = 22,
+
   // Keyed variadic operand dictionary: {key = %value : type, ...}.
   // field_index = variadic operand start, data = dict attr field index storing
   // key -> operand ordinal relative to field_index. The dict stores only
   // integer ordinals, never SSA value IDs.
-  LOOM_FORMAT_KIND_OPERAND_DICT = 22,
+  LOOM_FORMAT_KIND_OPERAND_DICT = 23,
 
   // Static-attribute-keyed value table:
   // {0 = (%a, %b), 1 = (%c, %d)} default(%x, %y).
   // field_index = variadic operand start, data = i64 array attr field index
   // storing the row keys. The operand field stores row payloads flattened in
   // row-major order, followed by one default row.
-  LOOM_FORMAT_KIND_ATTR_TABLE = 23,
+  LOOM_FORMAT_KIND_ATTR_TABLE = 24,
 
   // Static-attribute-keyed region table:
   // { case 0 { ... } case 1 { ... } default { ... } }.
   // field_index = variadic case region start. data packs the i64 array attr
   // field index storing row keys and the fixed default region index using
   // LOOM_FORMAT_REGION_TABLE_DATA.
-  LOOM_FORMAT_KIND_REGION_TABLE = 24,
+  LOOM_FORMAT_KIND_REGION_TABLE = 25,
 
   // Region entry block arguments: (%a: type, %b: type).
   // field_index = region index whose entry block args are printed or parsed.
-  LOOM_FORMAT_KIND_BLOCK_ARGS = 25,
+  LOOM_FORMAT_KIND_BLOCK_ARGS = 26,
 
   // CFG successor block reference: ^label.
   // field_index = successor index whose target block is printed or parsed.
-  LOOM_FORMAT_KIND_SUCCESSOR_REF = 26,
+  LOOM_FORMAT_KIND_SUCCESSOR_REF = 27,
 
   // Descriptor key reference in angle brackets: <amdgpu.v_add_u32>. The
   // field_index references the diagnostic string attribute and data references
   // the descriptor-set-local ordinal attribute. Text parsing stores -1 because
   // descriptor refs are resolved after target binding selects a descriptor set.
-  LOOM_FORMAT_KIND_DESCRIPTOR_REF = 27,
+  LOOM_FORMAT_KIND_DESCRIPTOR_REF = 28,
 
   // Stable symbolic key reference in angle brackets: <source.key>. The
   // field_index references the diagnostic string attribute and data references
   // the derived i64 stable-key attribute. This is for non-descriptor symbolic
   // domains; descriptor-backed packets use LOOM_FORMAT_KIND_DESCRIPTOR_REF.
-  LOOM_FORMAT_KIND_STABLE_KEY_REF = 28,
+  LOOM_FORMAT_KIND_STABLE_KEY_REF = 29,
 
   // Variadic operand references with adjacent type annotations:
   // %a: type, %b: type.
-  LOOM_FORMAT_KIND_OPERAND_TYPED_REFS = 29,
+  LOOM_FORMAT_KIND_OPERAND_TYPED_REFS = 30,
 };
 typedef uint8_t loom_format_kind_t;
 

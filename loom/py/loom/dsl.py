@@ -2577,6 +2577,7 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
         StableKeyRef,
         SymbolRef,
         TemplateParam,
+        TemplateParamFlags,
         TypedRefs,
         TypeOf,
         TypesOf,
@@ -2595,6 +2596,9 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
                 | TemplateParam(field=f)
             ):
                 fields.add(f)
+            case TemplateParamFlags(param=param, flags=flags):
+                fields.add(param)
+                fields.add(flags)
             case DescriptorRef(key=key, ordinal=ordinal):
                 fields.add(key)
                 fields.add(ordinal)

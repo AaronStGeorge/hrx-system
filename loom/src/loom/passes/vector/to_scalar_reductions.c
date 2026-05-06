@@ -49,6 +49,7 @@ typedef struct loom_vector_to_scalar_accumulator_state_t {
   loom_value_id_t rhs;
   loom_value_id_t init;
   loom_op_kind_t scalar_kind;
+  uint8_t instance_flags;
   bool use_fmaf;
 } loom_vector_to_scalar_accumulator_state_t;
 
@@ -69,7 +70,7 @@ static iree_status_t loom_vector_to_scalar_build_accumulator_lane(
         state->lane_state.result_scalar_type, out_next);
   }
   return loom_vector_to_scalar_build_generic_lane_op(
-      &state->lane_state, state->scalar_kind, 0,
+      &state->lane_state, state->scalar_kind, state->instance_flags,
       (loom_value_id_t[]){accumulator, lhs_lane}, 2, NULL, 0,
       state->lane_state.result_scalar_type, out_next);
 }
@@ -194,13 +195,20 @@ static iree_status_t loom_vector_to_scalar_lower_accumulator(
 
 iree_status_t loom_vector_to_scalar_lower_reduce(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
-  loom_op_kind_t scalar_kind = loom_vector_to_scalar_reduce_scalar_kind(
-      loom_vector_reduce_kind(state->op));
+  loom_combining_kind_t reduce_kind = loom_vector_reduce_kind(state->op);
+  loom_op_kind_t scalar_kind =
+      loom_vector_to_scalar_reduce_scalar_kind(reduce_kind);
   loom_vector_to_scalar_accumulator_state_t accumulator_state = {
       .lane_state = *state,
       .input = loom_vector_reduce_input(state->op),
       .init = loom_vector_reduce_init(state->op),
       .scalar_kind = scalar_kind,
+      .instance_flags =
+          loom_combining_kind_accepts_float(reduce_kind)
+              ? loom_vector_to_scalar_project_instance_flags(
+                    LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FLOAT_ASSUMPTIONS,
+                    state->op->instance_flags)
+              : 0,
   };
   return loom_vector_to_scalar_lower_accumulator(&accumulator_state,
                                                  out_replacement);
@@ -218,6 +226,7 @@ typedef struct loom_vector_to_scalar_reduce_axes_state_t {
   loom_type_t result_type;
   loom_attribute_t axes;
   loom_op_kind_t scalar_kind;
+  uint8_t instance_flags;
 } loom_vector_to_scalar_reduce_axes_state_t;
 
 static void loom_vector_to_scalar_reduce_axes_source_terms(
@@ -261,7 +270,7 @@ static iree_status_t loom_vector_to_scalar_reduce_axes_build_combiner(
                             LOOM_VECTOR_TO_SCALAR_STAT_LANES_MATERIALIZED, 1);
   }
   return loom_vector_to_scalar_build_generic_lane_op(
-      &state->lane_state, state->scalar_kind, 0,
+      &state->lane_state, state->scalar_kind, state->instance_flags,
       (loom_value_id_t[]){accumulator, lane}, 2, NULL, 0,
       state->lane_state.result_scalar_type, out_accumulator);
 }
@@ -471,8 +480,9 @@ static iree_status_t loom_vector_to_scalar_reduce_axes_dynamic_result(
 
 iree_status_t loom_vector_to_scalar_lower_reduce_axes(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
-  loom_op_kind_t scalar_kind = loom_vector_to_scalar_reduce_scalar_kind(
-      loom_vector_reduce_axes_kind(state->op));
+  loom_combining_kind_t reduce_kind = loom_vector_reduce_axes_kind(state->op);
+  loom_op_kind_t scalar_kind =
+      loom_vector_to_scalar_reduce_scalar_kind(reduce_kind);
 
   loom_type_t result_type = loom_module_value_type(
       state->rewriter->module, loom_vector_reduce_axes_result(state->op));
@@ -485,6 +495,12 @@ iree_status_t loom_vector_to_scalar_lower_reduce_axes(
       .result_type = result_type,
       .axes = loom_vector_reduce_axes_axes(state->op),
       .scalar_kind = scalar_kind,
+      .instance_flags =
+          loom_combining_kind_accepts_float(reduce_kind)
+              ? loom_vector_to_scalar_project_instance_flags(
+                    LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FLOAT_ASSUMPTIONS,
+                    state->op->instance_flags)
+              : 0,
   };
   if (loom_type_is_scalar(result_type)) {
     loom_vector_to_scalar_index_list_t index_list = {0};

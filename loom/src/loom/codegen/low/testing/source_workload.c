@@ -658,8 +658,8 @@ static iree_status_t loom_low_source_workload_gen_vector4xi32_reduce_addi(
 
   loom_op_t* op = NULL;
   IREE_RETURN_IF_ERROR(loom_vector_reduce_build(
-      context->builder, LOOM_COMBINING_KIND_ADDI, input, init, scalar_type,
-      LOOM_LOCATION_UNKNOWN, &op));
+      context->builder, LOOM_COMBINING_KIND_ADDI, /*instance_flags=*/0, input,
+      init, scalar_type, LOOM_LOCATION_UNKNOWN, &op));
   loom_low_source_workload_values_add(
       context->values, loom_vector_reduce_result(op), scalar_type);
   *out_result = LOOM_LOW_SOURCE_WORKLOAD_HOOK_EMITTED;
@@ -682,8 +682,8 @@ static iree_status_t loom_low_source_workload_gen_vector4xf32_reduce_addf(
 
   loom_op_t* op = NULL;
   IREE_RETURN_IF_ERROR(loom_vector_reduce_build(
-      context->builder, LOOM_COMBINING_KIND_ADDF, input, init, scalar_type,
-      LOOM_LOCATION_UNKNOWN, &op));
+      context->builder, LOOM_COMBINING_KIND_ADDF, /*instance_flags=*/0, input,
+      init, scalar_type, LOOM_LOCATION_UNKNOWN, &op));
   loom_low_source_workload_values_add(
       context->values, loom_vector_reduce_result(op), scalar_type);
   *out_result = LOOM_LOW_SOURCE_WORKLOAD_HOOK_EMITTED;

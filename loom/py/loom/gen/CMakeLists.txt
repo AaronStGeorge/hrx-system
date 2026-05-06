@@ -74,6 +74,18 @@ iree_py_library(
     iree::runtime::py::loom::target::contracts::contracts
 )
 
+iree_py_test(
+  NAME
+    target_lower_rules_test
+  SRCS
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.gen.target_lower_rules_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
+)
+
 iree_py_library(
   NAME
     c_tables

@@ -60,6 +60,7 @@ from loom.assembly import (
     StableKeyRef,
     SymbolRef,
     TemplateParam,
+    TemplateParamFlags,
     TypedRefs,
     TypeOf,
     TypesOf,
@@ -1523,6 +1524,16 @@ class Printer:
                     covered_attrs.add(name)
                     value = fields.attr(name)
                     stream.emit(f"<{value}>", glue=True)
+
+                case TemplateParamFlags(param=param_name, flags=flags_name):
+                    covered_attrs.add(param_name)
+                    covered_attrs.add(flags_name)
+                    param_value = fields.attr(param_name)
+                    flags_value = fields.attr(flags_name)
+                    if flags_value:
+                        stream.emit(f"<{param_value}, {flags_value}>", glue=True)
+                    else:
+                        stream.emit(f"<{param_value}>", glue=True)
 
                 case Glue():
                     stream.set_glue()

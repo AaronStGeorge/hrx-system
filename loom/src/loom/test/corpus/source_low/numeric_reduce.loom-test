@@ -25,3 +25,17 @@ func.def @f32_reduce_add(%input: buffer, %output: buffer) {
   vector.store %stored, %output_view[0] : vector<1xf32>, view<1xf32, #dense>
   func.return
 }
+
+// ====
+
+func.def @f32_reduce_add_assumptions(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<4xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1xf32, #dense>
+  %loaded = vector.load %input_view[0] : view<4xf32, #dense> -> vector<4xf32>
+  %init = scalar.constant 0.0 : f32
+  %sum = vector.reduce<addf, nnan|nsz> %loaded, %init : vector<4xf32>, f32
+  %stored = vector.from_elements %sum : vector<1xf32>
+  vector.store %stored, %output_view[0] : vector<1xf32>, view<1xf32, #dense>
+  func.return
+}

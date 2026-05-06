@@ -87,6 +87,7 @@ __all__ = [
     "DescriptorRef",
     "StableKeyRef",
     "TemplateParam",
+    "TemplateParamFlags",
     # Type-interior format elements.
     "ShapeOf",
     "ScalarOf",
@@ -739,6 +740,28 @@ class TemplateParam:
     field: str
 
 
+@dataclass(frozen=True, slots=True)
+class TemplateParamFlags:
+    """Required op parameter plus optional instance flags in one angle group.
+
+    Prints/parses: <addf> when no flags are present, or
+    <addf, nnan|nsz> when instance flags are set. The parameter field names an
+    ordinary attribute parsed through its descriptor, while the flags field
+    names the flags-typed attribute stored in op instance flags.
+
+    Use this for ops whose primary specialization is a template-like enum and
+    whose optional flags refine that specialization. Plain Flags remains the
+    spelling for ops whose only angle-bracket payload is flags.
+
+    Examples:
+        vector.reduce<addf> %v, %zero : vector<16xf32>, f32
+        vector.reduce<addf, nnan|nsz> %v, %zero : vector<16xf32>, f32
+    """
+
+    param: str
+    flags: str
+
+
 # ============================================================================
 # Type-interior format elements
 # ============================================================================
@@ -832,6 +855,7 @@ type FormatElement = (
     | DescriptorRef
     | StableKeyRef
     | TemplateParam
+    | TemplateParamFlags
     | ShapeOf
     | ScalarOf
     | EncodingOf

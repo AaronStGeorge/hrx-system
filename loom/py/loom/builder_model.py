@@ -45,6 +45,7 @@ from loom.assembly import (
     StableKeyRef,
     SymbolRef,
     TemplateParam,
+    TemplateParamFlags,
     TypedRefs,
     TypeOf,
     TypesOf,
@@ -318,6 +319,21 @@ def _extract_params(op: Op) -> list[BuilderParam]:  # noqa: C901
                     | TemplateParam(field=name)
                 ):
                     append_attr_param(name)
+
+                case TemplateParamFlags(param=param_name, flags=flags_name):
+                    append_attr_param(param_name)
+                    attr_def = op.attr(flags_name)
+                    params.append(
+                        BuilderParam(
+                            name=flags_name,
+                            kind=BuilderParamKind.FLAGS,
+                            type_hint="str",
+                            required=False,
+                            attr_def=attr_def,
+                            doc=attr_def.doc if attr_def else "Instance flags.",
+                        )
+                    )
+                    covered_attrs.add(flags_name)
 
                 case IndexList(dynamic=dynamic_field, static=static_field):
                     params.append(

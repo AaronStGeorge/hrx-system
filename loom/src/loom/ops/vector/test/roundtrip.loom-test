@@ -348,7 +348,7 @@ func.def @block_quant_register_encode(%q4_codes: vector<32xi8>, %q6_high: vector
 
 // Reductions consume a vector input and scalar accumulator/result of the same element type.
 func.def @reduce(%v: vector<16xf32>, %zero: f32, %i: vector<16xi32>, %izero: i32) -> (f32, i32) {
-  %sum = vector.reduce<addf> %v, %zero : vector<16xf32>, f32
+  %sum = vector.reduce<addf, nnan|nsz> %v, %zero : vector<16xf32>, f32
   %max = vector.reduce<maxsi> %i, %izero : vector<16xi32>, i32
   func.return %sum, %max : f32, i32
 }
@@ -358,7 +358,7 @@ func.def @reduce(%v: vector<16xf32>, %zero: f32, %i: vector<16xi32>, %izero: i32
 // Axis-preserving reductions keep unreduced dimensions in the accumulator and
 // result shape.
 func.def @reduce_axes(%src: vector<4x8xf32>, %init: vector<8xf32>, %zero: f32, %i: vector<2x3x4xi32>, %iinit: vector<2xi32>) -> (vector<8xf32>, f32, vector<2xi32>) {
-  %cols = vector.reduce.axes<addf> %src, %init axes [0] : vector<4x8xf32>, vector<8xf32>
+  %cols = vector.reduce.axes<addf, nnan|nsz> %src, %init axes [0] : vector<4x8xf32>, vector<8xf32>
   %sum = vector.reduce.axes<addf> %src, %zero axes [0, 1] : vector<4x8xf32>, f32
   %rows = vector.reduce.axes<maxsi> %i, %iinit axes [1, 2] : vector<2x3x4xi32>, vector<2xi32>
   func.return %cols, %sum, %rows : vector<8xf32>, f32, vector<2xi32>

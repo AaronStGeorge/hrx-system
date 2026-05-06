@@ -45,7 +45,7 @@ static_assert((LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NSZ << 1) ==
                   LOOM_SCALAR_FASTMATHFLAGS_NSZ,
               "vector nsz must project onto scalar nsz");
 
-static uint8_t loom_vector_to_scalar_project_instance_flags(
+uint8_t loom_vector_to_scalar_project_instance_flags(
     loom_vector_to_scalar_instance_flag_mode_t mode, uint8_t instance_flags) {
   switch (mode) {
     case LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_DROP:

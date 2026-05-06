@@ -144,6 +144,21 @@ def _f32_rule(kind: str, descriptor_key: str) -> DescriptorRule:
     )
 
 
+def _f32_add_assumed_zero_rule() -> DescriptorRule:
+    return _vector_reduce_rule(
+        kind="addf",
+        input_type=_VEC_F32,
+        accumulator_type=_F32,
+        descriptor=_descriptor("amdgpu.v_add_f32"),
+        accumulator_seed=DescriptorAccumulatorSeed.FIRST_LANE,
+        extra_guards=(
+            Guard.instance_flags_has_all("assumptions", "nnan"),
+            Guard.instance_flags_has_all("assumptions", "nsz"),
+            Guard.value_f64_equals("init", 0.0),
+        ),
+    )
+
+
 AMDGPU_REDUCE_CONTRACT_DIALECT_OPS = {
     "vector": ALL_VECTOR_OPS,
 }
@@ -160,6 +175,7 @@ AMDGPU_REDUCE_CONTRACT_FRAGMENT = ContractFragment(
         _i32_rule("andi", "amdgpu.v_and_b32"),
         _i32_rule("ori", "amdgpu.v_or_b32"),
         _i32_rule("xori", "amdgpu.v_xor_b32"),
+        _f32_add_assumed_zero_rule(),
         _f32_rule("addf", "amdgpu.v_add_f32"),
         _f32_rule("mulf", "amdgpu.v_mul_f32"),
         _f32_rule("minnumf", "amdgpu.v_min_f32"),

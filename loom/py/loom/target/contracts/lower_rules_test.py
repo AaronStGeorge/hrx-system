@@ -275,6 +275,7 @@ def test_compile_lower_rule_set_compiles_f64_equals_guard() -> None:
 
     assert compiled.rules[0].guard_count == 4
     assert compiled.guards[0].kind == GuardKind.VALUE_F64_EQUALS
+    assert compiled.guards[0].value_ref_index == 0
     assert compiled.guards[0].u64 == 0x3FF0000000000000
 
 

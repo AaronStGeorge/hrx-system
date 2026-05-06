@@ -31,6 +31,7 @@ from loom.assembly import (
     ResultType,
     ResultTypeList,
     TemplateParam,
+    TemplateParamFlags,
     TypeOf,
     TypesOf,
     kw,
@@ -3761,14 +3762,23 @@ vector_reduce = Op(
         "Reduce all lanes of a vector into a scalar accumulator/result using "
         "the template combining kind. The init operand and result have the "
         "same scalar type, and the combining kind must be valid for the input "
-        "element type."
+        "element type. Optional assumptions flags constrain floating-point "
+        "lane value domains for optimization and lowering."
     ),
     operands=[
         Operand("input", VECTOR),
         Operand("init", SCALAR),
     ],
     results=[Result("result", SCALAR)],
-    attrs=[AttrDef("kind", ATTR_TYPE_ENUM, enum_def=CombiningKind)],
+    attrs=[
+        AttrDef("kind", ATTR_TYPE_ENUM, enum_def=CombiningKind),
+        AttrDef(
+            "assumptions",
+            ATTR_TYPE_FLAGS,
+            optional=True,
+            enum_def=FloatAssumptionFlags,
+        ),
+    ],
     constraints=[
         SameType("init", "result"),
         SameElementType("input", "init", "result"),
@@ -3778,7 +3788,7 @@ vector_reduce = Op(
     canonicalize="loom_vector_reduce_canonicalize",
     traits=[PURE],
     format=[
-        TemplateParam("kind"),
+        TemplateParamFlags("kind", "assumptions"),
         Ref("input"),
         COMMA,
         Ref("init"),
@@ -3798,7 +3808,9 @@ vector_reduce_axes = Op(
         "Reduce the explicit source axes of a vector while preserving the "
         "remaining axes in their original order. The init operand and result "
         "have the same type: scalar when every source axis is reduced, or a "
-        "vector whose shape is the source shape with the reduced axes removed."
+        "vector whose shape is the source shape with the reduced axes removed. "
+        "Optional assumptions flags constrain floating-point lane value "
+        "domains for optimization and lowering."
     ),
     operands=[
         Operand("input", VECTOR),
@@ -3807,6 +3819,12 @@ vector_reduce_axes = Op(
     results=[Result("result", ANY)],
     attrs=[
         AttrDef("kind", ATTR_TYPE_ENUM, enum_def=CombiningKind),
+        AttrDef(
+            "assumptions",
+            ATTR_TYPE_FLAGS,
+            optional=True,
+            enum_def=FloatAssumptionFlags,
+        ),
         AttrDef("axes", ATTR_TYPE_I64_ARRAY),
     ],
     constraints=[
@@ -3819,7 +3837,7 @@ vector_reduce_axes = Op(
     builder_name="reduce_axes",
     traits=[PURE],
     format=[
-        TemplateParam("kind"),
+        TemplateParamFlags("kind", "assumptions"),
         Ref("input"),
         COMMA,
         Ref("init"),

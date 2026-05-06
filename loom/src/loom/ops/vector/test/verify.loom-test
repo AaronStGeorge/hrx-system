@@ -81,6 +81,15 @@ func.def @reduce_element_mismatch(%v: vector<4xf32>, %zero: i32) {
 
 // ====
 
+// Reduction assumptions only apply to floating-point element domains.
+func.def @reduce_assumptions_reject_integer(%v: vector<4xi32>, %zero: i32) {
+  // ERROR@+1: TYPE/003 "input" "vector<4xi32>" "floating-point element type when assumptions are present"
+  %r = vector.reduce<addi, nsz> %v, %zero : vector<4xi32>, i32
+  func.return
+}
+
+// ====
+
 // Reductions spell the accumulator/result type in the colon list, not as an
 // independent arrow result.
 func.def @reduce_reject_arrow_result(%v: vector<4xf32>, %zero: f32) {

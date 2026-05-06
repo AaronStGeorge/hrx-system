@@ -55,6 +55,7 @@ from loom.assembly import (
     StableKeyRef,
     SymbolRef,
     TemplateParam,
+    TemplateParamFlags,
     TypedRefs,
     TypeOf,
     TypesOf,
@@ -1645,6 +1646,15 @@ def _translate_format_elements(
                     kind, index = _resolve_field(name)
                     elements.append(("LOOM_FORMAT_KIND_TEMPLATE_PARAM", index, "0"))
 
+                case TemplateParamFlags(param=param_name, flags=flags_name):
+                    kind, index = _resolve_field(param_name)
+                    flags_attr = op.attr(flags_name)
+                    if kind != FieldKind.ATTR:
+                        raise ValueError(f"Op '{op.name}': TemplateParamFlags parameter field '{param_name}' is not an attr field")
+                    if flags_attr is None or flags_attr.attr_type != "flags":
+                        raise ValueError(f"Op '{op.name}': TemplateParamFlags flags field '{flags_name}' must be a flags attr")
+                    elements.append(("LOOM_FORMAT_KIND_TEMPLATE_PARAM_FLAGS", index, "0"))
+
                 case Glue():
                     elements.append(("LOOM_FORMAT_KIND_GLUE", 0, "0"))
 
@@ -1790,7 +1800,7 @@ def _detect_builder_pattern(op: Op) -> str | None:
     layout = compute_layout(op)
     non_flags = _non_flags_attrs(op)
     has_flags = _has_flags_attr(op)
-    has_template_param = any(isinstance(e, TemplateParam) for e in _flatten_format(op.format))
+    has_template_param = any(isinstance(e, TemplateParam | TemplateParamFlags) for e in _flatten_format(op.format))
     operand_names = tuple(operand.name for operand in op.operands)
 
     # Binary: 2 fixed operands, 1 fixed result, no real attrs/regions.
@@ -2204,6 +2214,18 @@ def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]])
 
                 case TemplateParam(field=name):
                     append_attr_param(name)
+
+                case TemplateParamFlags(param=param_name, flags=flags_name):
+                    append_attr_param(param_name)
+                    params.append(
+                        {
+                            "name": "instance_flags",
+                            "kind": "instance_flags",
+                            "c_type": "uint8_t",
+                            "attr_name": flags_name,
+                        }
+                    )
+                    covered_attrs.add(flags_name)
 
                 case OptionalGroup(elements=inner, anchor=_anchor):
                     walk(inner)
