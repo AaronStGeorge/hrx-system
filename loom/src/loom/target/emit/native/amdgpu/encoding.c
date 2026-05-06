@@ -591,8 +591,20 @@ static iree_status_t loom_amdgpu_read_immediate_encoding_field_value(
                             "%" PRId64 " is negative",
                             (int)field_name.size, field_name.data, value);
   }
-  *out_value = (uint64_t)value;
-  return iree_ok_status();
+  const uint64_t unsigned_value = (uint64_t)value;
+  switch (immediate->encoding_id) {
+    case LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_SOURCE_INLINE_U32: {
+      uint16_t source = 0;
+      const bool encoded = loom_amdgpu_encoding_inline_u32_source(
+          state->encoding_table, (uint32_t)unsigned_value, &source);
+      IREE_ASSERT(encoded);
+      *out_value = source;
+      return iree_ok_status();
+    }
+    default:
+      *out_value = unsigned_value;
+      return iree_ok_status();
+  }
 }
 
 static iree_status_t loom_amdgpu_encode_sop1_s_mov_b32(

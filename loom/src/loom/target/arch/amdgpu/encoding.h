@@ -189,6 +189,12 @@ bool loom_amdgpu_encoding_field_is_src0(uint16_t field_id);
 // Returns true when |field_id| is the literal payload field.
 bool loom_amdgpu_encoding_field_is_literal(uint16_t field_id);
 
+// Maps a verified inline unsigned integer into the target's scalar/vector
+// source selector domain.
+bool loom_amdgpu_encoding_inline_u32_source(
+    const loom_amdgpu_encoding_table_t* table, uint32_t value,
+    uint16_t* out_source);
+
 // Returns the generated encoding table for |descriptor_set_ordinal|, or NULL
 // when this binary was not linked with a matching table.
 const loom_amdgpu_encoding_table_t*

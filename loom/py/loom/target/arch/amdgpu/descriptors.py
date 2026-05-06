@@ -320,6 +320,7 @@ _ADDRESS_OFFSET_QWORD_ENCODING_ID = 3
 _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID = 4
 _ADDRESS_OFFSET_QWORD_STRIDE64_ENCODING_ID = 5
 _ADDRESS_OFFSET_DS16_ENCODING_ID = 6
+_SOURCE_INLINE_U32_ENCODING_ID = 7
 _WAIT_COUNTER_VMEM_ENCODING_ID = 16
 _WAIT_COUNTER_LGKM_ENCODING_ID = 17
 _WAIT_COUNTER_VMEM_LOAD_ENCODING_ID = 18
@@ -763,6 +764,14 @@ _U32_IMMEDIATE = Immediate(
     ImmediateKind.UNSIGNED,
     bit_width=32,
     unsigned_max=(2**32) - 1,
+)
+
+_SOURCE_INLINE_U32_IMMEDIATE = Immediate(
+    "imm32",
+    ImmediateKind.UNSIGNED,
+    bit_width=32,
+    unsigned_max=64,
+    encoding_id=_SOURCE_INLINE_U32_ENCODING_ID,
 )
 
 _HAL_BUFFER_DESCRIPTOR_VALID_BYTE_COUNT_IMMEDIATE = Immediate(
@@ -2253,7 +2262,7 @@ def _v_lshlrev_b32_vop3_immediate_overlay() -> AmdgpuDescriptorOverlay:
             immediates=("imm32",),
         ),
         immediate_fields=("SRC0",),
-        immediates=(_U32_IMMEDIATE,),
+        immediates=(_SOURCE_INLINE_U32_IMMEDIATE,),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -8723,6 +8732,7 @@ def amdgpu_immediate_encoding_id_items() -> tuple[tuple[str, int], ...]:
         ("address_offset_dword_stride64", _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID),
         ("address_offset_qword_stride64", _ADDRESS_OFFSET_QWORD_STRIDE64_ENCODING_ID),
         ("address_offset_ds16", _ADDRESS_OFFSET_DS16_ENCODING_ID),
+        ("source_inline_u32", _SOURCE_INLINE_U32_ENCODING_ID),
         ("wait_counter_vmem", _WAIT_COUNTER_VMEM_ENCODING_ID),
         ("wait_counter_lgkm", _WAIT_COUNTER_LGKM_ENCODING_ID),
         ("wait_counter_vmem_load", _WAIT_COUNTER_VMEM_LOAD_ENCODING_ID),

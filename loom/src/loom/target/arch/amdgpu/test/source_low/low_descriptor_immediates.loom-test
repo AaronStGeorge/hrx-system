@@ -1,0 +1,16 @@
+// RUN: verify
+
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @vop3_inline_source_shift(%value: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %shifted = v_lshlrev_b32_vop3_imm %value, 64
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @vop3_inline_source_shift_out_of_range(%value: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  // ERROR@+1: STRUCTURE/014 {attr_name="imm32", actual_value="65", expected_constraint="0..64"}
+  %shifted = v_lshlrev_b32_vop3_imm %value, 65
+  return
+}

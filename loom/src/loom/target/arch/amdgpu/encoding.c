@@ -223,9 +223,13 @@ bool loom_amdgpu_encoding_field_is_literal(uint16_t field_id) {
   return field_id == LOOM_AMDGPU_ENCODING_FIELD_LITERAL;
 }
 
-static bool loom_amdgpu_encoding_inline_u32_source(
+bool loom_amdgpu_encoding_inline_u32_source(
     const loom_amdgpu_encoding_table_t* table, uint32_t value,
     uint16_t* out_source) {
+  *out_source = 0;
+  if (table == NULL) {
+    return false;
+  }
   if (value < table->scalar_inline_u32_count) {
     *out_source = (uint16_t)(table->scalar_inline_u32_zero + value);
     return true;

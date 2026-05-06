@@ -15,6 +15,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _ADDRESS_OFFSET_DWORD_ENCODING_ID,
     _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID,
     _GFX12_TH_ATOMIC_RETURN_VALUE,
+    _SOURCE_INLINE_U32_ENCODING_ID,
     AMDGPU_ATOMIC_DESCRIPTOR_CATEGORY,
     AMDGPU_COMPARE_SELECT_DESCRIPTOR_CATEGORY,
     AMDGPU_CONTROL_DESCRIPTOR_CATEGORY,
@@ -232,6 +233,19 @@ def test_gfx12_global_cache_controls_expose_scope_immediate() -> None:
                 if overlay.descriptor_key == descriptor_key
             )
             assert _immediate_default(descriptor.immediates, "scope") == 0
+
+
+def test_vop3_shift_immediate_is_constrained_to_inline_source_selector() -> None:
+    descriptor = next(
+        overlay
+        for overlay in _gfx12_core_overlays()
+        if overlay.descriptor_key == "amdgpu.v_lshlrev_b32.vop3_imm"
+    )
+    assert len(descriptor.immediates) == 1
+    immediate = descriptor.immediates[0]
+    assert immediate.field_name == "imm32"
+    assert immediate.encoding_id == _SOURCE_INLINE_U32_ENCODING_ID
+    assert immediate.unsigned_max == 64
 
 
 def test_address_immediate_validation_rejects_missing_unit_metadata() -> None:
