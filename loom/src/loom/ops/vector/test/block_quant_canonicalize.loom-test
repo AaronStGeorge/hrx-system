@@ -158,6 +158,59 @@ func.def @q8_0_dense_activation_dot_folds() -> (i1) {
 
 // ====
 
+// Two Q8_0 weight rows sharing one dense activation block model the smallest
+// useful Model projection slice: each row has independent signed-byte payloads
+// and an independent block scale, while the activation block is common.
+func.def @q8_0_two_row_micro_gemv_folds() -> (f32, f32) {
+  %schema = encoding.define #ggml_q8_0<block_elems=32, storage_bytes=34> : encoding<schema>
+  test.use %schema : encoding<schema>
+
+  %row0_q0 = scalar.constant -3 : i8
+  %row0_q1 = scalar.constant -1 : i8
+  %row0_q2 = scalar.constant 2 : i8
+  %row0_q3 = scalar.constant 7 : i8
+  %row0_q = vector.from_elements %row0_q0, %row0_q1, %row0_q2, %row0_q3 : vector<4xi8>
+
+  %row1_q0 = scalar.constant 4 : i8
+  %row1_q1 = scalar.constant 0 : i8
+  %row1_q2 = scalar.constant -2 : i8
+  %row1_q3 = scalar.constant 1 : i8
+  %row1_q = vector.from_elements %row1_q0, %row1_q1, %row1_q2, %row1_q3 : vector<4xi8>
+
+  %row0_scale = scalar.constant 0.5 : f32
+  %row0_scalev = vector.splat %row0_scale : vector<4xf32>
+  %row0_qf = vector.sitofp %row0_q : vector<4xi8> to vector<4xf32>
+  %row0_decoded = vector.mulf %row0_qf, %row0_scalev : vector<4xf32>
+
+  %row1_scale = scalar.constant -0.25 : f32
+  %row1_scalev = vector.splat %row1_scale : vector<4xf32>
+  %row1_qf = vector.sitofp %row1_q : vector<4xi8> to vector<4xf32>
+  %row1_decoded = vector.mulf %row1_qf, %row1_scalev : vector<4xf32>
+
+  %a0 = scalar.constant 1.0 : f32
+  %a1 = scalar.constant -2.0 : f32
+  %a2 = scalar.constant 0.5 : f32
+  %a3 = scalar.constant 0.25 : f32
+  %activation = vector.from_elements %a0, %a1, %a2, %a3 : vector<4xf32>
+
+  %row0_products = vector.mulf %row0_decoded, %activation : vector<4xf32>
+  %row1_products = vector.mulf %row1_decoded, %activation : vector<4xf32>
+  %zero = scalar.constant 0.0 : f32
+  %row0_dot = vector.reduce<addf> %row0_products, %zero : vector<4xf32>, f32
+  %row1_dot = vector.reduce<addf> %row1_products, %zero : vector<4xf32>, f32
+  func.return %row0_dot, %row1_dot : f32, f32
+}
+// ----
+func.def @q8_0_two_row_micro_gemv_folds() -> (f32, f32) {
+  %schema = encoding.define #ggml_q8_0<block_elems=32, storage_bytes=34> : encoding<schema>
+  test.use %schema : encoding<schema>
+  %row0_dot = scalar.constant 0.875 : f32
+  %row1_dot = scalar.constant -0.8125 : f32
+  func.return %row0_dot, %row1_dot : f32, f32
+}
+
+// ====
+
 // Dynamic Q8_0 decode should become ordinary vector IR instead of staying an
 // opaque semantic op. Later target selection can match this visible signed
 // conversion and scale multiply shape.
