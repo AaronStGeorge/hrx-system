@@ -143,6 +143,7 @@ TEST(LowContractQueryTest, ContractIndexDescriptorRuleSelectsLegalCase) {
       /*.target_ref=*/{},
       /*.descriptor_set=*/nullptr,
       /*.fact_table=*/nullptr,
+      /*.view_regions=*/nullptr,
       /*.arena=*/nullptr,
   };
   loom_op_t op = {};
@@ -251,6 +252,7 @@ TEST(LowContractQueryTest, ContractIndexDescriptorRuleReportsRejectedCase) {
       /*.target_ref=*/{},
       /*.descriptor_set=*/nullptr,
       /*.fact_table=*/nullptr,
+      /*.view_regions=*/nullptr,
       /*.arena=*/&arena,
   };
   loom_op_t op = {};

@@ -10,11 +10,14 @@
 // LIST-DAG: loop-fusion{{[[:space:]]+}}func
 // LIST-DAG: low-dce{{[[:space:]]+}}func
 // LIST-DAG: low-materialize-allocation{{[[:space:]]+}}func
+// LIST-DAG: low-select-operand-forms{{[[:space:]]+}}func
 // LIST-DAG: normalize-kernel-resources{{[[:space:]]+}}func
+// LIST-DAG: promote-private-fragments{{[[:space:]]+}}func
 // LIST-DAG: refine-boundaries{{[[:space:]]+}}module
 // LIST-DAG: scf-to-cfg{{[[:space:]]+}}func
 // LIST-DAG: strip-hints{{[[:space:]]+}}func
 // LIST-DAG: symbol-dce{{[[:space:]]+}}module
+// LIST-DAG: unroll-scf-for{{[[:space:]]+}}func
 // LIST-DAG: vector-memory-footprint{{[[:space:]]+}}func
 // LIST-DAG: vector-to-scalar{{[[:space:]]+}}func
 
@@ -40,11 +43,14 @@
 // RUN:       --pass=loop-fusion \
 // RUN:       --pass=low-dce \
 // RUN:       --pass=low-materialize-allocation \
+// RUN:       --pass=low-select-operand-forms \
 // RUN:       --pass=normalize-kernel-resources \
+// RUN:       --pass=promote-private-fragments \
 // RUN:       --pass=refine-boundaries \
 // RUN:       --pass=scf-to-cfg \
 // RUN:       --pass=strip-hints \
 // RUN:       --pass=symbol-dce \
+// RUN:       --pass=unroll-scf-for \
 // RUN:       --pass=vector-memory-footprint \
 // RUN:       --pass=vector-to-scalar \
 // RUN:   | FileCheck --check-prefix=ALL-PASSES %s
@@ -84,7 +90,7 @@
 // SOURCE-LOW-DIAGNOSTIC: "error_id":"ERR_TARGET_003"
 // SOURCE-LOW-DIAGNOSTIC: "emitter":"pass"
 // SOURCE-LOW-DIAGNOSTIC: "op_name":"index.add"
-// SOURCE-LOW-DIAGNOSTIC: source-to-low lowering failed with
+// SOURCE-LOW-DIAGNOSTIC: "constraint_key":"amdgpu.address.u32"
 
 // RUN: printf '%%s\n' \
 // RUN:   'func.def @dce_single(%x: i32) -> (i32) {' \

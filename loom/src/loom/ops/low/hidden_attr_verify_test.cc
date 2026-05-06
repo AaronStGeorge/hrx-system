@@ -122,16 +122,14 @@ TEST_F(LowHiddenAttrVerifyTest, DescriptorOrdinalRejectsInvalidNegative) {
   EXPECT_GT(result.error_count, 0u);
 
   const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 17);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14);
   const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.op");
-  EXPECT_EQ(GetStringParam(*diagnostic, 1), "descriptor_ordinal");
-  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "descriptor_ordinal");
+  ExpectFieldRefParam(*diagnostic, 0, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
                       loom_low_op_descriptor_ordinal_ATTR_INDEX);
-  EXPECT_EQ(GetStringParam(*diagnostic, 2),
-            "descriptor ordinal must be -1 or a non-negative uint32_t");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "-1 or a non-negative uint32");
 }
 
 TEST_F(LowHiddenAttrVerifyTest, LiveInSourceIdMatchesSourceStableId) {
@@ -153,16 +151,14 @@ TEST_F(LowHiddenAttrVerifyTest, LiveInSourceIdMatchesSourceStableId) {
   EXPECT_GT(result.error_count, 0u);
 
   const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 17);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14);
   const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.live_in");
-  EXPECT_EQ(GetStringParam(*diagnostic, 1), "source_id");
-  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "source_id");
+  ExpectFieldRefParam(*diagnostic, 0, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
                       loom_low_live_in_source_id_ATTR_INDEX);
-  EXPECT_EQ(GetStringParam(*diagnostic, 2),
-            "source ID must match the stable ID derived from source");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "stable ID derived from key");
 }
 
 }  // namespace

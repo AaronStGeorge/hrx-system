@@ -34,6 +34,7 @@ static const iree_string_view_t kExpectedBuiltinPassKeys[] = {
     IREE_SVL("source-to-low"),
     IREE_SVL("strip-hints"),
     IREE_SVL("symbol-dce"),
+    IREE_SVL("unroll-scf-for"),
     IREE_SVL("vector-memory-footprint"),
     IREE_SVL("vector-to-scalar"),
 };
