@@ -158,6 +158,26 @@ func.def @q8_0_dense_activation_dot_folds() -> (i1) {
 
 // ====
 
+// Dynamic Q8_0 decode should become ordinary vector IR instead of staying an
+// opaque semantic op. Later target selection can match this visible signed
+// conversion and scale multiply shape.
+func.def @q8_0_vector_decode_expands(%payload: vector<32xi8>, %scale: vector<1xf16>) -> (vector<32xf32>) {
+  %schema = encoding.define #ggml_q8_0<block_elems=32, storage_bytes=34> : encoding<schema>
+  %decoded = vector.decode %payload using %schema {scale = %scale : vector<1xf16>} : vector<32xi8>, encoding<schema> -> vector<32xf32>
+  func.return %decoded : vector<32xf32>
+}
+// ----
+func.def @q8_0_vector_decode_expands(%payload: vector<32xi8>, %scale: vector<1xf16>) -> (vector<32xf32>) {
+  %5 = vector.extract %scale[0] : vector<1xf16> -> f16
+  %6 = scalar.extf %5 : f16 to f32
+  %7 = vector.splat %6 : vector<32xf32>
+  %8 = vector.sitofp %payload : vector<32xi8> to vector<32xf32>
+  %decoded = vector.mulf %8, %7 : vector<32xf32>
+  func.return %decoded : vector<32xf32>
+}
+
+// ====
+
 // vector.decode is the semantic import boundary for encoded storage. For Q8_0
 // it should expand through the same visible signed-byte decode used by the
 // handwritten reference fixtures, leaving no opaque decode op in the optimized
