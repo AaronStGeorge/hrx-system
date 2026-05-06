@@ -78,6 +78,86 @@ func.def @q4_0_reference_chunk_folds() -> (i1) {
 
 // ====
 
+// Q8_0 decode is intentionally plain: signed bytes converted to the destination
+// element type and multiplied by the block scale. Keeping this reference shape
+// folding gives Model matmul imports a readable oracle before a target elects a
+// native packed dot path.
+func.def @q8_0_reference_chunk_folds() -> (i1) {
+  %schema = encoding.define #ggml_q8_0<block_elems=32, storage_bytes=34> : encoding<schema>
+  test.use %schema : encoding<schema>
+
+  %q0 = scalar.constant -3 : i8
+  %q1 = scalar.constant -1 : i8
+  %q2 = scalar.constant 2 : i8
+  %q3 = scalar.constant 7 : i8
+  %q = vector.from_elements %q0, %q1, %q2, %q3 : vector<4xi8>
+
+  %scale = scalar.constant 0.5 : f16
+  %scalev = vector.splat %scale : vector<4xf16>
+  %qf = vector.sitofp %q : vector<4xi8> to vector<4xf16>
+  %decoded = vector.mulf %qf, %scalev : vector<4xf16>
+
+  %e0 = scalar.constant -1.5 : f16
+  %e1 = scalar.constant -0.5 : f16
+  %e2 = scalar.constant 1.0 : f16
+  %e3 = scalar.constant 3.5 : f16
+  %expected = vector.from_elements %e0, %e1, %e2, %e3 : vector<4xf16>
+  %matches = vector.cmpf oeq, %decoded, %expected : vector<4xf16> -> vector<4xi1>
+  %true = scalar.constant true : i1
+  %ok = vector.reduce<andi> %matches, %true : vector<4xi1>, i1
+  func.return %ok : i1
+}
+// ----
+func.def @q8_0_reference_chunk_folds() -> (i1) {
+  %schema = encoding.define #ggml_q8_0<block_elems=32, storage_bytes=34> : encoding<schema>
+  test.use %schema : encoding<schema>
+  %ok = scalar.constant true : i1
+  func.return %ok : i1
+}
+
+// ====
+
+// A dense-activation Q8_0 dot keeps the decode visible before the reduction.
+// This is the scalar/reference shape for Model FFN and attention projections
+// before online activation quantization or a native packed-dot path is selected.
+func.def @q8_0_dense_activation_dot_folds() -> (i1) {
+  %schema = encoding.define #ggml_q8_0<block_elems=32, storage_bytes=34> : encoding<schema>
+  test.use %schema : encoding<schema>
+
+  %q0 = scalar.constant -3 : i8
+  %q1 = scalar.constant -1 : i8
+  %q2 = scalar.constant 2 : i8
+  %q3 = scalar.constant 7 : i8
+  %q = vector.from_elements %q0, %q1, %q2, %q3 : vector<4xi8>
+
+  %scale = scalar.constant 0.5 : f32
+  %scalev = vector.splat %scale : vector<4xf32>
+  %qf = vector.sitofp %q : vector<4xi8> to vector<4xf32>
+  %decoded = vector.mulf %qf, %scalev : vector<4xf32>
+
+  %a0 = scalar.constant 1.0 : f32
+  %a1 = scalar.constant -2.0 : f32
+  %a2 = scalar.constant 0.5 : f32
+  %a3 = scalar.constant 0.25 : f32
+  %activation = vector.from_elements %a0, %a1, %a2, %a3 : vector<4xf32>
+
+  %products = vector.mulf %decoded, %activation : vector<4xf32>
+  %zero = scalar.constant 0.0 : f32
+  %dot = vector.reduce<addf> %products, %zero : vector<4xf32>, f32
+  %expected = scalar.constant 0.875 : f32
+  %ok = scalar.cmpf oeq, %dot, %expected : f32
+  func.return %ok : i1
+}
+// ----
+func.def @q8_0_dense_activation_dot_folds() -> (i1) {
+  %schema = encoding.define #ggml_q8_0<block_elems=32, storage_bytes=34> : encoding<schema>
+  test.use %schema : encoding<schema>
+  %ok = scalar.constant true : i1
+  func.return %ok : i1
+}
+
+// ====
+
 // Q6_K-style decode crosses packed side-stream bits, slices the high-bit
 // stream, inserts those bits into low nibbles, and interleaves the logical
 // lane order. This folds only if the whole decode-adjacent fact chain lines up.
