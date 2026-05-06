@@ -115,35 +115,36 @@ kernel.def target(@hip_mcpu_gfx1100) export("reduce_fused_kernel") @reduce_fused
   %c0 = index.constant 0 : index
   %c8 = index.constant 8 : index
   %const = scalar.constant 0.0 : f32
-  %i0_active = index.cmp slt, %tx, %c8 : index
-  scf.if %i0_active {
-    view.store %const, %reduced_fragment[%tx] : f32, view<8xf32, %layout>
-  }
+  %fill = vector.splat %const : vector<8xf32>
   %c1 = index.constant 1 : index
   %c2 = index.constant 2 : index
   %copy = vector.load %topk_weights[%bx, %c0] : view<[%num_tokens_idx]x2xf32, %layout> -> vector<2xf32>
   %copy_2 = vector.load %token_topk_to_pos[%bx, %c0] : view<[%num_tokens_idx]x2xi32, %layout> -> vector<2xi32>
-  scf.for %k = [%c0 to %c2 step %c1] {
+  %reduced_fragment_state_next = scf.for %k = [%c0 to %c2 step %c1](%reduced_fragment_state_iter = %fill : vector<8xf32>) -> (vector<8xf32>) {
     %load = vector.extract %copy_2[%k] : vector<2xi32> -> i32
     %pos_assumed, %num_expanded_tokens_assumed = scalar.assume %load, %num_expanded_tokens [lt(%load, %num_expanded_tokens)] : i32, i32
     %const_2 = scalar.constant 0 : i32
     %cmp = scalar.cmpi sge, %pos_assumed, %const_2 : i32
-    scf.if %cmp {
+    %reduced_fragment_state_if = scf.if %cmp -> (vector<8xf32>) {
       %load_2 = vector.extract %copy[%k] : vector<2xf32> -> f32
-      view.store %load_2, %scale[%c0] : f32, view<1xf32, %layout>
-      scf.for %i = [%c0 to %c8 step %c1] {
-        %load_3 = view.load %reduced_fragment[%i] : view<8xf32, %layout> -> f32
+      %reduced_fragment_state_next_2 = scf.for %i = [%c0 to %c8 step %c1](%reduced_fragment_state_iter = %reduced_fragment_state_iter : vector<8xf32>) -> (vector<8xf32>) {
+        %load_3 = vector.extract %reduced_fragment_state_iter[%i] : vector<8xf32> -> f32
         %pos_idx = index.cast %pos_assumed : i32 to index
         %load_4 = view.load %x[%pos_idx, %i] : view<[%num_expanded_tokens_idx]x8xf16, %layout> -> f16
         %extf = scalar.extf %load_4 : f16 to f32
         %mulf = scalar.mulf %extf, %load_2 : f32
         %addf = scalar.addf %load_3, %mulf : f32
-        view.store %addf, %reduced_fragment[%i] : f32, view<8xf32, %layout>
+        %store = vector.insert %addf into %reduced_fragment_state_iter[%i] : f32, vector<8xf32>
+        scf.yield %store : vector<8xf32>
       }
+      scf.yield %reduced_fragment_state_next_2 : vector<8xf32>
+    } else {
+      scf.yield %reduced_fragment_state_iter : vector<8xf32>
     }
+    scf.yield %reduced_fragment_state_if : vector<8xf32>
   }
   scf.for %i = [%c0 to %c8 step %c1] {
-    %load_5 = view.load %reduced_fragment[%i] : view<8xf32, %layout> -> f32
+    %load_5 = vector.extract %reduced_fragment_state_next[%i] : vector<8xf32> -> f32
     %fptrunc = scalar.fptrunc %load_5 : f32 to f16
     view.store %fptrunc, %out[%bx, %i] : f16, view<[%num_tokens_idx]x8xf16, %layout>
   }

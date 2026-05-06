@@ -92,7 +92,13 @@ def _import_local_var_initializers(
                 "local variable initializer value is not mapped",
             )
             return False
-        context.builder.view.store(value=init_value, view=view, indices=[zero])
+        context.map_buffer_access(
+            init_expr,
+            view,
+            (zero,),
+            "local.var",
+            init_value,
+        )
         context.record_converted(node_text(init_expr), "local var initializer")
     return True
 

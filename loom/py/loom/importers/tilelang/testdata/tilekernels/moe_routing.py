@@ -125,7 +125,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") @mask_i
     %div = index.div %madd, %c2 : index
     %load = view.load %indices[%div, %rem] : view<[%num_tokens_idx]x2xi64, %layout> -> i64
     %c0 = index.constant 0 : index
-    view.store %load, %value[%c0] : i64, view<1xi64, %layout>
     %const = scalar.constant 0 : i64
     %cmp_2 = scalar.cmpi slt, %load, %const : i64
     %extsi = scalar.extsi %per_gpu : i32 to i64
@@ -135,29 +134,29 @@ kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") @mask_i
     %extsi_3 = scalar.extsi %tp_rank : i32 to i64
     %cmp_3 = scalar.cmpi ne, %remsi, %extsi_3 : i64
     %ori = scalar.ori %cmp_2, %cmp_3 : i1
-    scf.if %ori {
+    %value_state_if = scf.if %ori -> (i64) {
       %const_2 = scalar.constant -1 : i64
       %rem_2 = index.rem %madd, %c2 : index
       %div_2 = index.div %madd, %c2 : index
       view.store %const_2, %masked_indices[%div_2, %rem_2] : i64, view<[%num_tokens_idx]x2xi64, %layout>
+      scf.yield %load : i64
     } else {
       %muli = scalar.muli %tp_rank, %per_gpu : i32
       %extsi_4 = scalar.extsi %muli : i32 to i64
       %subi = scalar.subi %load, %extsi_4 : i64
-      view.store %subi, %value[%c0] : i64, view<1xi64, %layout>
       %extsi_5 = scalar.extsi %per_dp : i32 to i64
       %divsi_2 = scalar.divsi %subi, %extsi_5 : i64
       %subi_2 = scalar.subi %per_dp, %per_gpu : i32
       %extsi_6 = scalar.extsi %subi_2 : i32 to i64
       %muli_2 = scalar.muli %divsi_2, %extsi_6 : i64
       %subi_3 = scalar.subi %subi, %muli_2 : i64
-      view.store %subi_3, %value[%c0] : i64, view<1xi64, %layout>
       %cmp_4 = scalar.cmpi slt, %subi_3, %const : i64
       %const_3 = scalar.constant -1 : i64
       %select = scf.select %cmp_4, %const_3, %subi_3 : i64
       %rem_3 = index.rem %madd, %c2 : index
       %div_3 = index.div %madd, %c2 : index
       view.store %select, %masked_indices[%div_3, %rem_3] : i64, view<[%num_tokens_idx]x2xi64, %layout>
+      scf.yield %subi_3 : i64
     }
   }
   kernel.return

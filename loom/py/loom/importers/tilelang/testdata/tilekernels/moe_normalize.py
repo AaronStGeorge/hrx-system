@@ -104,30 +104,30 @@ kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") @normaliz
   %total = buffer.view %total_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
   %c0 = index.constant 0 : index
   %const = scalar.constant 9.9999999999999995e-21 : f32
-  view.store %const, %total[%c0] : f32, view<1xf32, %layout>
   %c128 = index.constant 128 : index
   %madd = index.madd %bx, %c128, %tid : index
   %cmp = index.cmp slt, %madd, %num_tokens_idx : index
-  scf.if %cmp {
+  %total_state_if = scf.if %cmp -> (f32) {
     %c2 = index.constant 2 : index
     %c1 = index.constant 1 : index
     scf.for %i = [%c0 to %c2 step %c1] {
       %load = view.load %topk_weights[%madd, %i] : view<[%num_tokens_idx]x2xf32, %layout> -> f32
       view.store %load, %weights_local[%i] : f32, view<2xf32, %layout>
     }
-    scf.for %i = [%c0 to %c2 step %c1] {
-      %load_2 = view.load %total[%c0] : view<1xf32, %layout> -> f32
-      %load_3 = view.load %weights_local[%i] : view<2xf32, %layout> -> f32
-      %addf = scalar.addf %load_2, %load_3 : f32
-      view.store %addf, %total[%c0] : f32, view<1xf32, %layout>
+    %total_state_next = scf.for %i = [%c0 to %c2 step %c1](%total_state_iter = %const : f32) -> (f32) {
+      %load_2 = view.load %weights_local[%i] : view<2xf32, %layout> -> f32
+      %addf = scalar.addf %total_state_iter, %load_2 : f32
+      scf.yield %addf : f32
     }
-    %load_4 = view.load %total[%c0] : view<1xf32, %layout> -> f32
-    view.store %load_4, %denominator[%madd] : f32, view<[%num_tokens_idx]xf32, %layout>
+    view.store %total_state_next, %denominator[%madd] : f32, view<[%num_tokens_idx]xf32, %layout>
     scf.for %i = [%c0 to %c2 step %c1] {
-      %load_5 = view.load %weights_local[%i] : view<2xf32, %layout> -> f32
-      %divf = scalar.divf %load_5, %load_4 : f32
+      %load_3 = view.load %weights_local[%i] : view<2xf32, %layout> -> f32
+      %divf = scalar.divf %load_3, %total_state_next : f32
       view.store %divf, %normalized_weights[%madd, %i] : f32, view<[%num_tokens_idx]x2xf32, %layout>
     }
+    scf.yield %total_state_next : f32
+  } else {
+    scf.yield %const : f32
   }
   kernel.return
 }

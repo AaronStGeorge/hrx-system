@@ -376,9 +376,35 @@ def convert_buffer_store(
         access.memory_scope == "local.fragment"
         and context.fragment_vector(access.view) is not None
     ):
-        context.record_blocked(
+        fragment_value = _try_convert_fragment_vector_store(
+            stmt,
+            value,
+            access,
+            context,
+        )
+        if fragment_value is None:
+            return
+        context.map_fragment_vector(access.view, fragment_value)
+        context.record_converted(
             node_text(stmt),
-            "local.fragment scalar store after vector import is not mapped",
+            f"{context.ssa(fragment_value.value)} = vector.insert",
+        )
+        return
+    if access.memory_scope == "local.var":
+        value = _coerce_store_value(value, access.view, stmt, context)
+        if value is None:
+            return
+        context.invalidate_buffer_accesses(access.view)
+        context.map_buffer_access(
+            stmt,
+            access.view,
+            access.indices,
+            access.memory_scope,
+            value,
+        )
+        context.record_converted(
+            node_text(stmt),
+            f"{context.ssa(value)} = local.var",
         )
         return
     if access.memory_scope == "local.fragment":
@@ -616,6 +642,59 @@ def _try_convert_fragment_vector_load(
         indices=[lane.lane],
         results=[result_type],
         name=context.fresh_name("load"),
+    )
+
+
+def _try_convert_fragment_vector_store(
+    stmt: object,
+    value: ValueRef,
+    access: TileLangBufferAccess,
+    context: TileLangConversionContext,
+) -> TileLangFragmentVector | None:
+    fragment_value = context.fragment_vector(access.view)
+    if fragment_value is None:
+        return None
+    coerced_value = _coerce_store_value(value, access.view, stmt, context)
+    if coerced_value is None:
+        return None
+    if fragment_value.base is None:
+        if len(access.indices) != 1:
+            context.record_blocked(
+                node_text(stmt),
+                "local.fragment vector store is not rank-1",
+            )
+            return None
+        result = context.builder.vector.insert(
+            value=coerced_value,
+            dest=fragment_value.value,
+            indices=[access.indices[0]],
+            results=[fragment_value.value.type],
+            name=context.fresh_name("store"),
+        )
+        return TileLangFragmentVector(
+            value=result,
+            lane_count=fragment_value.lane_count,
+            base=None,
+        )
+
+    lane = _single_distributed_index(access.indices, context)
+    if lane is None or lane.lane < 0 or lane.lane_count != fragment_value.lane_count:
+        context.record_blocked(
+            node_text(stmt),
+            "local.fragment vector store is not aligned with a static lane",
+        )
+        return None
+    result = context.builder.vector.insert(
+        value=coerced_value,
+        dest=fragment_value.value,
+        indices=[lane.lane],
+        results=[fragment_value.value.type],
+        name=context.fresh_name("store"),
+    )
+    return TileLangFragmentVector(
+        value=result,
+        lane_count=fragment_value.lane_count,
+        base=fragment_value.base,
     )
 
 

@@ -142,21 +142,18 @@ kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_k
   %hash_local = buffer.view %hash_local_buffer[%c0_bytes] : buffer -> view<1xi64, %layout>
   %c0 = index.constant 0 : index
   %const = scalar.constant 0 : i64
-  view.store %const, %hash_local[%c0] : i64, view<1xi64, %layout>
   %c32 = index.constant 32 : index
   %madd = index.madd %by, %c32, %tid : index
   %cmp = index.cmp sge, %madd, %num_tokens_idx : index
   kernel.exit %cmp : i1
   %c3 = index.constant 3 : index
   %c1 = index.constant 1 : index
-  scf.for %ngram_idx = [%c0 to %c3 step %c1] {
+  %hash_local_state_next = scf.for %ngram_idx = [%c0 to %c3 step %c1](%hash_local_state_iter = %const : i64) -> (i64) {
     %load = view.load %ngram_token_ids[%madd, %ngram_idx] : view<[%num_tokens_idx]x3xi32, %layout> -> i32
     %extsi = scalar.extsi %load : i32 to i64
-    %load_2 = view.load %hash_local[%c0] : view<1xi64, %layout> -> i64
-    %load_3 = view.load %multipliers[%bx, %ngram_idx] : view<2x3xi64, %layout> -> i64
-    %muli = scalar.muli %extsi, %load_3 : i64
-    %xori = scalar.xori %load_2, %muli : i64
-    view.store %xori, %hash_local[%c0] : i64, view<1xi64, %layout>
+    %load_2 = view.load %multipliers[%bx, %ngram_idx] : view<2x3xi64, %layout> -> i64
+    %muli = scalar.muli %extsi, %load_2 : i64
+    %xori = scalar.xori %hash_local_state_iter, %muli : i64
     %cmp_2 = index.cmp sgt, %ngram_idx, %c0 : index
     scf.if %cmp_2 {
       %c4 = index.constant 4 : index
@@ -164,15 +161,16 @@ kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_k
         %sub = index.sub %ngram_idx, %c1 : index
         %madd_2 = index.madd %sub, %c4, %j : index
         %sub_2 = index.sub %ngram_idx, %c1 : index
-        %load_4 = view.load %vocab_sizes[%bx, %sub_2, %j] : view<2x2x4xi32, %layout> -> i32
-        %extsi_2 = scalar.extsi %load_4 : i32 to i64
+        %load_3 = view.load %vocab_sizes[%bx, %sub_2, %j] : view<2x2x4xi32, %layout> -> i32
+        %extsi_2 = scalar.extsi %load_3 : i32 to i64
         %remsi = scalar.remsi %xori, %extsi_2 : i64
         %trunci = scalar.trunci %remsi : i64 to i32
-        %load_5 = view.load %offsets[%bx, %madd_2] : view<2x8xi32, %layout> -> i32
-        %addi = scalar.addi %trunci, %load_5 : i32
+        %load_4 = view.load %offsets[%bx, %madd_2] : view<2x8xi32, %layout> -> i32
+        %addi = scalar.addi %trunci, %load_4 : i32
         view.store %addi, %output[%bx, %madd, %madd_2] : i32, view<2x[%num_tokens_idx]x8xi32, %layout>
       }
     }
+    scf.yield %xori : i64
   }
   kernel.return
 }

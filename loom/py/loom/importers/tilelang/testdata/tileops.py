@@ -618,33 +618,27 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_finalize_reducer_none_kernel
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
   %const = scalar.constant 0.0 : f32
-  %i0_base = index.mul %tx, %c4 : index
-  view.store %const, %reducer[%i0_base] : f32, view<4xf32, %layout>
+  %fill = vector.splat %const : vector<4xf32>
   %c1 = index.constant 1 : index
+  %reducer_state_next = scf.for %i = [%c0 to %c4 step %c1](%reducer_state_iter = %fill : vector<4xf32>) -> (vector<4xf32>) {
+    %load = view.load %src[%i] : view<4xf32, %layout> -> f32
+    %store = vector.insert %load into %reducer_state_iter[%i] : f32, vector<4xf32>
+    scf.yield %store : vector<4xf32>
+  }
+  %i0_base = index.mul %tx, %c4 : index
+  %copy = vector.extract %reducer_state_next[%i0_base] : vector<4xf32> -> f32
+  view.store %copy, %dst[%i0_base] : f32, view<4xf32, %layout>
   %i0 = index.add %i0_base, %c1 : index
-  view.store %const, %reducer[%i0] : f32, view<4xf32, %layout>
+  %copy_2 = vector.extract %reducer_state_next[%i0] : vector<4xf32> -> f32
+  view.store %copy_2, %dst[%i0] : f32, view<4xf32, %layout>
   %c2 = index.constant 2 : index
   %i0_2 = index.add %i0_base, %c2 : index
-  view.store %const, %reducer[%i0_2] : f32, view<4xf32, %layout>
+  %copy_3 = vector.extract %reducer_state_next[%i0_2] : vector<4xf32> -> f32
+  view.store %copy_3, %dst[%i0_2] : f32, view<4xf32, %layout>
   %c3 = index.constant 3 : index
   %i0_3 = index.add %i0_base, %c3 : index
-  view.store %const, %reducer[%i0_3] : f32, view<4xf32, %layout>
-  scf.for %i = [%c0 to %c4 step %c1] {
-    %load = view.load %src[%i] : view<4xf32, %layout> -> f32
-    view.store %load, %reducer[%i] : f32, view<4xf32, %layout>
-  }
-  %i0_base_2 = index.mul %tx, %c4 : index
-  %copy = view.load %reducer[%i0_base_2] : view<4xf32, %layout> -> f32
-  view.store %copy, %dst[%i0_base_2] : f32, view<4xf32, %layout>
-  %i0_4 = index.add %i0_base_2, %c1 : index
-  %copy_2 = view.load %reducer[%i0_4] : view<4xf32, %layout> -> f32
-  view.store %copy_2, %dst[%i0_4] : f32, view<4xf32, %layout>
-  %i0_5 = index.add %i0_base_2, %c2 : index
-  %copy_3 = view.load %reducer[%i0_5] : view<4xf32, %layout> -> f32
-  view.store %copy_3, %dst[%i0_5] : f32, view<4xf32, %layout>
-  %i0_6 = index.add %i0_base_2, %c3 : index
-  %copy_4 = view.load %reducer[%i0_6] : view<4xf32, %layout> -> f32
-  view.store %copy_4, %dst[%i0_6] : f32, view<4xf32, %layout>
+  %copy_4 = vector.extract %reducer_state_next[%i0_3] : vector<4xf32> -> f32
+  view.store %copy_4, %dst[%i0_3] : f32, view<4xf32, %layout>
   kernel.return
 }
 """

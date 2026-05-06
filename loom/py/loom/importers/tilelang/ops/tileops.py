@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import cast
 
 from loom.builder import ValueRef
+from loom.importers.core import sanitize_identifier
 from loom.importers.tilelang.buffers import (
     TileLangBufferAccess,
     TileLangBufferRegion,
@@ -22,6 +23,7 @@ from loom.importers.tilelang.buffers import (
 )
 from loom.importers.tilelang.context import (
     TileLangConversionContext,
+    TileLangDistributedIndex,
     TileLangFragmentVector,
 )
 from loom.importers.tilelang.converter import ExpressionOptions, TileLangConverter
@@ -43,6 +45,15 @@ class TileReduceSpec:
     source_kind: str
     combiner: str
     absolute: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class _FragmentVectorLoopState:
+    """A fragment vector carried through synthetic tile-operation loops."""
+
+    view: ValueRef
+    initial: TileLangFragmentVector
+    name: str
 
 
 def is_tileop_call(op_name: str) -> bool:
@@ -148,6 +159,15 @@ def _convert_copy_call(
             source_indices,
             source.index_map.memory_scope,
         )
+        if value is None and source.index_map.memory_scope == "local.fragment":
+            value = _load_tracked_local_value(
+                source.view,
+                source_indices,
+                source.index_map.memory_scope,
+                source_element_type,
+                body_context,
+                name="copy",
+            )
         if value is None:
             value = body_context.builder.view.load(
                 view=source.view,
@@ -164,18 +184,13 @@ def _convert_copy_call(
         )
         if converted_value is None:
             return
-        body_context.builder.view.store(
-            value=converted_value,
-            view=target.view,
-            indices=list(target_indices),
-        )
-        body_context.invalidate_buffer_accesses(target.view)
-        body_context.map_buffer_access(
+        _store_tracked_local_value(
             expr,
             target.view,
             target_indices,
             target.index_map.memory_scope,
             converted_value,
+            body_context,
         )
 
     if not _emit_region_loops(
@@ -185,6 +200,7 @@ def _convert_copy_call(
         distribution=_copy_uses_distributed_index_space(source, target),
         converter=converter,
         owner=expr,
+        fragment_vector_state=_fragment_vector_loop_state_views(context, target),
     ):
         context.record_blocked(
             node_text(expr), f"call `{op_name}` region is not mapped"
@@ -369,6 +385,15 @@ def _convert_fill_call(
             f"call `{op_name}` fill value is not mapped",
         )
         return None
+    if _try_emit_fragment_vector_fill(
+        expr,
+        context,
+        target=target,
+        value=value,
+        element_type=element_type,
+    ):
+        context.record_converted(node_text(expr), "tl.tileop.fill<local.fragment>")
+        return None
 
     def emit_fill(
         indices: tuple[ValueRef, ...],
@@ -394,6 +419,34 @@ def _convert_fill_call(
         return None
     context.record_converted(node_text(expr), "tl.tileop.fill")
     return None
+
+
+def _try_emit_fragment_vector_fill(
+    expr: object,
+    context: TileLangConversionContext,
+    *,
+    target: TileLangBufferRegion,
+    value: ValueRef,
+    element_type: ScalarType,
+) -> bool:
+    if target.index_map.memory_scope != "local.fragment":
+        return False
+    if len(target.extents) != 1 or not _all_zero_indices(target.indices, context):
+        return False
+    extent_integer = static_index_value(target.extents[0], context)
+    if extent_integer is None:
+        return False
+    result_type = context.type_converter.vector_type(element_type, extent_integer)
+    vector = context.builder.vector.splat(
+        scalar=value,
+        results=[result_type],
+        name=context.fresh_name("fill"),
+    )
+    context.map_fragment_vector(
+        target.view,
+        TileLangFragmentVector(value=vector, lane_count=extent_integer),
+    )
+    return True
 
 
 def _convert_reduce_call(
@@ -494,18 +547,13 @@ def _convert_reduce_call(
         results=[element_type],
         name=context.fresh_name("reduce"),
     )
-    context.builder.view.store(
-        value=result,
-        view=target.view,
-        indices=list(target.indices),
-    )
-    context.invalidate_buffer_accesses(target.view)
-    context.map_buffer_access(
+    _store_tracked_local_value(
         expr,
         target.view,
         target.indices,
         target.memory_scope,
         result,
+        context,
     )
     context.record_converted(
         node_text(expr),
@@ -591,7 +639,11 @@ def _convert_region_reduce_call(
             clear,
             reduce_spec,
             element_type,
-            TileLangBufferAccess(target.view, target_indices),
+            TileLangBufferAccess(
+                target.view,
+                target_indices,
+                target.index_map.memory_scope,
+            ),
             expr,
             body_context,
         )
@@ -609,18 +661,13 @@ def _convert_region_reduce_call(
         )
         if result is None:
             return
-        body_context.builder.view.store(
-            value=result,
-            view=target.view,
-            indices=list(target_indices),
-        )
-        body_context.invalidate_buffer_accesses(target.view)
-        body_context.map_buffer_access(
+        _store_tracked_local_value(
             expr,
             target.view,
             target_indices,
             target.index_map.memory_scope,
             result,
+            body_context,
         )
 
     if not _emit_region_loops(output_extents, context, emit_reduce):
@@ -739,25 +786,41 @@ def _convert_finalize_reducer_all(
         body_context: TileLangConversionContext,
     ) -> None:
         target_indices = _region_indices(target, indices, body_context)
-        value = body_context.builder.view.load(
+        value = _load_tracked_local_value(
             view=target.view,
-            indices=list(target_indices),
-            results=[element_type],
-            name=body_context.fresh_name("reducer_value"),
+            indices=target_indices,
+            memory_scope=target.index_map.memory_scope,
+            result_type=element_type,
+            context=body_context,
+            name="reducer_value",
         )
+        if value is None:
+            body_context.record_blocked(
+                node_text(expr),
+                f"call `{op_name}` reducer value is not mapped",
+            )
+            return
         result = body_context.builder.kernel.workgroup_reduce(
             kind=reduce_spec.combiner,
             value=value,
             results=[element_type],
             name=body_context.fresh_name("reducer_all"),
         )
-        body_context.builder.view.store(
-            value=result,
-            view=target.view,
-            indices=list(target_indices),
+        _store_tracked_local_value(
+            expr,
+            target.view,
+            target_indices,
+            target.index_map.memory_scope,
+            result,
+            body_context,
         )
 
-    if not _emit_region_loops(target.extents, context, emit_reduce):
+    if not _emit_region_loops(
+        target.extents,
+        context,
+        emit_reduce,
+        fragment_vector_state=_fragment_vector_loop_state_views(context, target),
+    ):
         context.record_blocked(
             node_text(expr), f"call `{op_name}` reducer region is not mapped"
         )
@@ -1087,6 +1150,225 @@ def _all_zero_indices(
     return zero is not None and all(index.id == zero.id for index in indices)
 
 
+def _load_tracked_local_value(
+    view: ValueRef,
+    indices: tuple[ValueRef, ...],
+    memory_scope: str,
+    result_type: Type,
+    context: TileLangConversionContext,
+    *,
+    name: str,
+) -> ValueRef | None:
+    if memory_scope == "local.fragment":
+        fragment_value = context.fragment_vector(view)
+        if fragment_value is not None:
+            if fragment_value.base is None:
+                if len(indices) != 1:
+                    return None
+                return context.builder.vector.extract(
+                    source=fragment_value.value,
+                    indices=[indices[0]],
+                    results=[result_type],
+                    name=context.fresh_name(name),
+                )
+            lane = _single_distributed_index(indices, context)
+            if (
+                lane is None
+                or lane.lane < 0
+                or lane.lane_count != fragment_value.lane_count
+            ):
+                return None
+            return context.builder.vector.extract(
+                source=fragment_value.value,
+                indices=[lane.lane],
+                results=[result_type],
+                name=context.fresh_name(name),
+            )
+    value = context.mapped_buffer_access(view, indices, memory_scope)
+    if value is not None:
+        return value
+    return context.builder.view.load(
+        view=view,
+        indices=list(indices),
+        results=[result_type],
+        name=context.fresh_name(name),
+    )
+
+
+def _store_tracked_local_value(
+    owner: object,
+    view: ValueRef,
+    indices: tuple[ValueRef, ...],
+    memory_scope: str,
+    value: ValueRef,
+    context: TileLangConversionContext,
+) -> None:
+    if memory_scope == "local.fragment":
+        fragment_value = context.fragment_vector(view)
+        if fragment_value is not None:
+            updated = _insert_fragment_vector_value(
+                owner,
+                fragment_value,
+                indices,
+                value,
+                context,
+            )
+            if updated is not None:
+                context.map_fragment_vector(view, updated)
+            return
+    if memory_scope == "local.var":
+        context.invalidate_buffer_accesses(view)
+        context.map_buffer_access(owner, view, indices, memory_scope, value)
+        return
+    context.builder.view.store(value=value, view=view, indices=list(indices))
+    context.invalidate_buffer_accesses(view)
+    context.map_buffer_access(owner, view, indices, memory_scope, value)
+
+
+def _insert_fragment_vector_value(
+    owner: object,
+    fragment_value: TileLangFragmentVector,
+    indices: tuple[ValueRef, ...],
+    value: ValueRef,
+    context: TileLangConversionContext,
+) -> TileLangFragmentVector | None:
+    if fragment_value.base is None:
+        if len(indices) != 1:
+            context.record_blocked(
+                node_text(owner),
+                "local.fragment vector store is not rank-1",
+            )
+            return None
+        result = context.builder.vector.insert(
+            value=value,
+            dest=fragment_value.value,
+            indices=[indices[0]],
+            results=[fragment_value.value.type],
+            name=context.fresh_name("store"),
+        )
+        return TileLangFragmentVector(
+            value=result,
+            lane_count=fragment_value.lane_count,
+            base=None,
+        )
+    lane = _single_distributed_index(indices, context)
+    if lane is None or lane.lane < 0 or lane.lane_count != fragment_value.lane_count:
+        context.record_blocked(
+            node_text(owner),
+            "local.fragment vector store is not aligned with a static lane",
+        )
+        return None
+    result = context.builder.vector.insert(
+        value=value,
+        dest=fragment_value.value,
+        indices=[lane.lane],
+        results=[fragment_value.value.type],
+        name=context.fresh_name("store"),
+    )
+    return TileLangFragmentVector(
+        value=result,
+        lane_count=fragment_value.lane_count,
+        base=fragment_value.base,
+    )
+
+
+def _single_distributed_index(
+    indices: tuple[ValueRef, ...],
+    context: TileLangConversionContext,
+) -> TileLangDistributedIndex | None:
+    match = None
+    for index in indices:
+        lane = context.distributed_index(index)
+        if lane is None:
+            continue
+        if match is not None:
+            return None
+        match = lane
+    return match
+
+
+def _fragment_vector_loop_state_views(
+    context: TileLangConversionContext,
+    *regions: TileLangBufferRegion,
+) -> tuple[ValueRef, ...]:
+    views: list[ValueRef] = []
+    seen_view_ids: set[int] = set()
+    for region in regions:
+        if region.index_map.memory_scope != "local.fragment":
+            continue
+        if region.view.id in seen_view_ids:
+            continue
+        if context.fragment_vector(region.view) is None:
+            continue
+        views.append(region.view)
+        seen_view_ids.add(region.view.id)
+    return tuple(views)
+
+
+def _fragment_vector_loop_state_slots(
+    context: TileLangConversionContext,
+    views: tuple[ValueRef, ...],
+) -> list[_FragmentVectorLoopState]:
+    slots: list[_FragmentVectorLoopState] = []
+    for view in views:
+        initial = context.fragment_vector(view)
+        if initial is None:
+            continue
+        view_value = context.builder.module.values[view.id]
+        base_name = sanitize_identifier(view_value.name or "fragment")
+        slots.append(
+            _FragmentVectorLoopState(
+                view=view,
+                initial=initial,
+                name=f"{base_name}_state",
+            )
+        )
+    return slots
+
+
+def _fragment_vector_loop_state_values(
+    slots: list[_FragmentVectorLoopState],
+    context: TileLangConversionContext,
+) -> list[ValueRef]:
+    values: list[ValueRef] = []
+    for slot in slots:
+        current = context.fragment_vector(slot.view)
+        values.append(current.value if current is not None else slot.initial.value)
+    return values
+
+
+def _map_fragment_vector_loop_state_args(
+    slots: list[_FragmentVectorLoopState],
+    arg_ids: list[int],
+    context: TileLangConversionContext,
+) -> None:
+    for slot, arg_id in zip(slots, arg_ids, strict=True):
+        context.map_fragment_vector(
+            slot.view,
+            TileLangFragmentVector(
+                value=ValueRef(arg_id, context.builder.ir),
+                lane_count=slot.initial.lane_count,
+                base=slot.initial.base,
+            ),
+        )
+
+
+def _map_fragment_vector_loop_state_results(
+    slots: list[_FragmentVectorLoopState],
+    results: list[ValueRef],
+    context: TileLangConversionContext,
+) -> None:
+    for slot, result in zip(slots, results, strict=True):
+        context.map_fragment_vector(
+            slot.view,
+            TileLangFragmentVector(
+                value=result,
+                lane_count=slot.initial.lane_count,
+                base=slot.initial.base,
+            ),
+        )
+
+
 def _emit_region_loops(
     extents: tuple[ValueRef, ...],
     context: TileLangConversionContext,
@@ -1095,7 +1377,9 @@ def _emit_region_loops(
     distribution: bool = False,
     converter: TileLangConverter | None = None,
     owner: object | None = None,
+    fragment_vector_state: tuple[ValueRef, ...] = (),
 ) -> bool:
+    state_slots = _fragment_vector_loop_state_slots(context, fragment_vector_state)
     if not extents:
         emit_body((), context)
         return True
@@ -1105,6 +1389,7 @@ def _emit_region_loops(
         and len(extents) == 1
         and converter is not None
         and owner is not None
+        and not state_slots
     ):
         extent_integer = static_index_value(extents[0], context)
         if extent_integer is not None:
@@ -1129,20 +1414,44 @@ def _emit_region_loops(
         if depth == len(extents):
             emit_body(indices, loop_context)
             return
-        loop_body = loop_context.builder.region(args=[(f"i{depth}", INDEX)])
+        result_names = [
+            loop_context.fresh_name(f"{slot.name}_next") for slot in state_slots
+        ]
+        loop_body = loop_context.builder.region(
+            args=[
+                (f"i{depth}", INDEX),
+                *(
+                    (f"{slot.name}_iter", slot.initial.value.type)
+                    for slot in state_slots
+                ),
+            ]
+        )
         iv = ValueRef(loop_body.blocks[0].arg_ids[0], loop_context.builder.ir)
         child = loop_context.fork(preview_block=loop_body.blocks[0])
+        _map_fragment_vector_loop_state_args(
+            state_slots,
+            loop_body.blocks[0].arg_ids[1:],
+            child,
+        )
         with loop_context.builder.insertion_block(loop_body.blocks[0]):
             emit_at_depth(depth + 1, (*indices, iv), child)
-            loop_context.builder.scf.yield_()
+            loop_context.builder.scf.yield_(
+                values=_fragment_vector_loop_state_values(state_slots, child)
+            )
         loop_context.merge_child_records(child)
-        loop_context.builder.scf.for_(
+        loop_results = loop_context.builder.scf.for_(
             lower_bound=zero,
             upper_bound=extents[depth],
             step=one,
-            iter_args=[],
-            results=[],
+            iter_args=_fragment_vector_loop_state_values(state_slots, loop_context),
+            results=[slot.initial.value.type for slot in state_slots],
             body=loop_body,
+            names=result_names or None,
+        )
+        _map_fragment_vector_loop_state_results(
+            state_slots,
+            loop_results,
+            loop_context,
         )
 
     emit_at_depth(0, (), context)
@@ -1649,11 +1958,13 @@ def _reduce_init(
     context: TileLangConversionContext,
 ) -> ValueRef | None:
     if not clear:
-        return context.builder.view.load(
-            view=target.view,
-            indices=list(target.indices),
-            results=[element_type],
-            name=context.fresh_name("reduce_init"),
+        return _load_tracked_local_value(
+            target.view,
+            target.indices,
+            target.memory_scope,
+            element_type,
+            context,
+            name="reduce_init",
         )
     identity = _reduce_identity(reduce_spec, element_type)
     if identity is None:
