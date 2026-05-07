@@ -34,6 +34,7 @@ loom_cc_library(
     loom::src::loom::pass::registry
     loom::src::loom::pass::types
     loom::src::loom::rewrite::greedy
+    loom::src::loom::rewrite::rewriter
     loom::src::loom::target::function_contract
     loom::src::loom::target::math_policy
   PUBLIC

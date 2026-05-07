@@ -54,6 +54,15 @@ static void loom_amdgpu_math_policy_query(
           loom_amdgpu_math_rewrite(LOOM_TARGET_MATH_RECIPE_SOFTPLUS_EXP2_F32,
                                    IREE_SV("math.recipe.softplus_exp2_f32"));
       return;
+    case LOOM_TARGET_MATH_OP_EXPF:
+      if (loom_amdgpu_math_query_has_afn(query)) {
+        *out_decision =
+            loom_amdgpu_math_rewrite(LOOM_TARGET_MATH_RECIPE_EXP_EXP2_F32,
+                                     IREE_SV("math.recipe.exp_exp2_f32"));
+        return;
+      }
+      *out_decision = loom_amdgpu_math_reject(IREE_SV("math.exp.exact_f32"));
+      return;
     case LOOM_TARGET_MATH_OP_GELUF_TANH:
       *out_decision =
           loom_amdgpu_math_rewrite(LOOM_TARGET_MATH_RECIPE_GELU_TANH_F32,

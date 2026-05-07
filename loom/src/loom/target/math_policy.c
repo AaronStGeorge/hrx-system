@@ -68,6 +68,8 @@ iree_string_view_t loom_target_math_op_name(loom_target_math_op_t math_op) {
       return IREE_SV("siluf");
     case LOOM_TARGET_MATH_OP_SOFTPLUSF:
       return IREE_SV("softplusf");
+    case LOOM_TARGET_MATH_OP_EXPF:
+      return IREE_SV("expf");
     case LOOM_TARGET_MATH_OP_GELUF_ERF:
       return IREE_SV("geluf.erf");
     case LOOM_TARGET_MATH_OP_GELUF_TANH:
@@ -102,6 +104,8 @@ iree_string_view_t loom_target_math_recipe_name(
       return IREE_SV("silu-logistic-f32");
     case LOOM_TARGET_MATH_RECIPE_SOFTPLUS_EXP2_F32:
       return IREE_SV("softplus-exp2-f32");
+    case LOOM_TARGET_MATH_RECIPE_EXP_EXP2_F32:
+      return IREE_SV("exp-exp2-f32");
     case LOOM_TARGET_MATH_RECIPE_GELU_TANH_F32:
       return IREE_SV("gelu-tanh-f32");
     case LOOM_TARGET_MATH_RECIPE_GELU_LOGISTIC_F32:

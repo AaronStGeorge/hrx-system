@@ -1,10 +1,160 @@
 // RUN: pass legalize-math
 
 amdgpu.target<gfx1100> @target
-func.def target(@target) @missing_logistic_recipe(%input: vector<4xf32>) -> (vector<4xf32>) {
-  // ERROR@+1: LOWERING/035 {op_name="vector.logisticf", phase_name="legalize-math", policy_name="amdgpu-math", recipe_name="logistic-exp2-f32", math_op="logisticf", lane_domain="vector", element_type="f32", constraint_key="math.recipe.logistic_exp2_f32"}
+func.def target(@target) @vector_logistic_exp2(%input: vector<4xf32>) -> (vector<4xf32>) {
   %result = vector.logisticf %input : vector<4xf32>
   func.return %result : vector<4xf32>
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @vector_logistic_exp2(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %3 = vector.constant -1.4426950408889634 : vector<4xf32>
+  %4 = vector.constant 1.0 : vector<4xf32>
+  %5 = vector.mulf %input, %3 : vector<4xf32>
+  %6 = vector.exp2f %5 : vector<4xf32>
+  %7 = vector.addf %4, %6 : vector<4xf32>
+  %result = vector.divf %4, %7 : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_logistic_exp2(%input: f32) -> (f32) {
+  %result = scalar.logisticf<afn> %input : f32
+  func.return %result : f32
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @scalar_logistic_exp2(%input: f32) -> (f32) {
+  %3 = scalar.constant -1.4426950408889634 : f32
+  %4 = scalar.constant 1.0 : f32
+  %5 = scalar.mulf<afn> %input, %3 : f32
+  %6 = scalar.exp2f<afn> %5 : f32
+  %7 = scalar.addf<afn> %4, %6 : f32
+  %result = scalar.divf<afn> %4, %7 : f32
+  func.return %result : f32
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_exp_afn(%input: f32) -> (f32) {
+  %result = scalar.expf<afn> %input : f32
+  func.return %result : f32
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @scalar_exp_afn(%input: f32) -> (f32) {
+  %3 = scalar.constant 1.4426950408889634 : f32
+  %4 = scalar.mulf<afn> %input, %3 : f32
+  %result = scalar.exp2f<afn> %4 : f32
+  func.return %result : f32
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_silu_logistic(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %result = vector.siluf<afn> %input : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @vector_silu_logistic(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %5 = vector.constant -1.4426950408889634 : vector<4xf32>
+  %6 = vector.constant 1.0 : vector<4xf32>
+  %7 = vector.mulf<afn> %input, %5 : vector<4xf32>
+  %8 = vector.exp2f<afn> %7 : vector<4xf32>
+  %9 = vector.addf<afn> %6, %8 : vector<4xf32>
+  %10 = vector.divf<afn> %6, %9 : vector<4xf32>
+  %result = vector.mulf<afn> %input, %10 : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_softplus_exp2(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %result = vector.softplusf<afn> %input : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @vector_softplus_exp2(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %3 = vector.constant 1.4426950408889634 : vector<4xf32>
+  %4 = vector.constant 0.69314718055994529 : vector<4xf32>
+  %5 = vector.constant 1.0 : vector<4xf32>
+  %6 = vector.mulf<afn> %input, %3 : vector<4xf32>
+  %7 = vector.exp2f<afn> %6 : vector<4xf32>
+  %8 = vector.addf<afn> %5, %7 : vector<4xf32>
+  %9 = vector.log2f<afn> %8 : vector<4xf32>
+  %result = vector.mulf<afn> %9, %4 : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_gelu_logistic(%input: f32) -> (f32) {
+  %result = scalar.geluf<logistic, afn> %input {scale = 1.702} : f32
+  func.return %result : f32
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @scalar_gelu_logistic(%input: f32) -> (f32) {
+  %3 = scalar.constant 1.702 : f32
+  %4 = scalar.mulf<afn> %3, %input : f32
+  %7 = scalar.constant -1.4426950408889634 : f32
+  %8 = scalar.constant 1.0 : f32
+  %9 = scalar.mulf<afn> %4, %7 : f32
+  %10 = scalar.exp2f<afn> %9 : f32
+  %11 = scalar.addf<afn> %8, %10 : f32
+  %12 = scalar.divf<afn> %8, %11 : f32
+  %result = scalar.mulf<afn> %input, %12 : f32
+  func.return %result : f32
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_gelu_tanh(%input: f32) -> (f32) {
+  %result = scalar.geluf<tanh, afn> %input : f32
+  func.return %result : f32
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @scalar_gelu_tanh(%input: f32) -> (f32) {
+  %3 = scalar.constant 0.5 : f32
+  %4 = scalar.constant 1.0 : f32
+  %5 = scalar.constant 0.044715 : f32
+  %6 = scalar.constant 0.79788456080286544 : f32
+  %7 = scalar.mulf<afn> %input, %input : f32
+  %8 = scalar.mulf<afn> %7, %input : f32
+  %9 = scalar.mulf<afn> %5, %8 : f32
+  %10 = scalar.addf<afn> %input, %9 : f32
+  %11 = scalar.mulf<afn> %6, %10 : f32
+  %12 = scalar.tanhf<afn> %11 : f32
+  %13 = scalar.addf<afn> %4, %12 : f32
+  %14 = scalar.mulf<afn> %3, %input : f32
+  %result = scalar.mulf<afn> %14, %13 : f32
+  func.return %result : f32
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @rejects_strict_exp(%input: f32) -> (f32) {
+  // ERROR@+1: LOWERING/036 {op_name="scalar.expf", phase_name="legalize-math", policy_name="amdgpu-math", math_op="expf", lane_domain="scalar", element_type="f32", constraint_key="math.exp.exact_f32"}
+  %result = scalar.expf %input : f32
+  func.return %result : f32
 }
 
 // ====

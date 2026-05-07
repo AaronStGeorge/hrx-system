@@ -91,6 +91,60 @@ typedef struct loom_math_legalize_state_t {
   loom_math_legalize_target_state_t target;
 } loom_math_legalize_state_t;
 
+static loom_target_math_fastmath_flags_t
+loom_math_legalize_scalar_fastmath_flags(uint8_t source_flags) {
+  loom_target_math_fastmath_flags_t flags = 0;
+  if (iree_any_bit_set(source_flags, LOOM_SCALAR_FASTMATHFLAGS_REASSOC)) {
+    flags |= LOOM_TARGET_MATH_FASTMATH_FLAG_REASSOC;
+  }
+  if (iree_any_bit_set(source_flags, LOOM_SCALAR_FASTMATHFLAGS_NNAN)) {
+    flags |= LOOM_TARGET_MATH_FASTMATH_FLAG_NNAN;
+  }
+  if (iree_any_bit_set(source_flags, LOOM_SCALAR_FASTMATHFLAGS_NINF)) {
+    flags |= LOOM_TARGET_MATH_FASTMATH_FLAG_NINF;
+  }
+  if (iree_any_bit_set(source_flags, LOOM_SCALAR_FASTMATHFLAGS_NSZ)) {
+    flags |= LOOM_TARGET_MATH_FASTMATH_FLAG_NSZ;
+  }
+  if (iree_any_bit_set(source_flags, LOOM_SCALAR_FASTMATHFLAGS_ARCP)) {
+    flags |= LOOM_TARGET_MATH_FASTMATH_FLAG_ARCP;
+  }
+  if (iree_any_bit_set(source_flags, LOOM_SCALAR_FASTMATHFLAGS_CONTRACT)) {
+    flags |= LOOM_TARGET_MATH_FASTMATH_FLAG_CONTRACT;
+  }
+  if (iree_any_bit_set(source_flags, LOOM_SCALAR_FASTMATHFLAGS_AFN)) {
+    flags |= LOOM_TARGET_MATH_FASTMATH_FLAG_AFN;
+  }
+  return flags;
+}
+
+static loom_target_math_fastmath_flags_t
+loom_math_legalize_vector_fastmath_flags(uint8_t source_flags) {
+  loom_target_math_fastmath_flags_t flags = 0;
+  if (iree_any_bit_set(source_flags, LOOM_VECTOR_FASTMATHFLAGS_REASSOC)) {
+    flags |= LOOM_TARGET_MATH_FASTMATH_FLAG_REASSOC;
+  }
+  if (iree_any_bit_set(source_flags, LOOM_VECTOR_FASTMATHFLAGS_NNAN)) {
+    flags |= LOOM_TARGET_MATH_FASTMATH_FLAG_NNAN;
+  }
+  if (iree_any_bit_set(source_flags, LOOM_VECTOR_FASTMATHFLAGS_NINF)) {
+    flags |= LOOM_TARGET_MATH_FASTMATH_FLAG_NINF;
+  }
+  if (iree_any_bit_set(source_flags, LOOM_VECTOR_FASTMATHFLAGS_NSZ)) {
+    flags |= LOOM_TARGET_MATH_FASTMATH_FLAG_NSZ;
+  }
+  if (iree_any_bit_set(source_flags, LOOM_VECTOR_FASTMATHFLAGS_ARCP)) {
+    flags |= LOOM_TARGET_MATH_FASTMATH_FLAG_ARCP;
+  }
+  if (iree_any_bit_set(source_flags, LOOM_VECTOR_FASTMATHFLAGS_CONTRACT)) {
+    flags |= LOOM_TARGET_MATH_FASTMATH_FLAG_CONTRACT;
+  }
+  if (iree_any_bit_set(source_flags, LOOM_VECTOR_FASTMATHFLAGS_AFN)) {
+    flags |= LOOM_TARGET_MATH_FASTMATH_FLAG_AFN;
+  }
+  return flags;
+}
+
 static iree_status_t loom_math_legalize_parse_option(void* user_data,
                                                      iree_string_view_t name,
                                                      iree_string_view_t value) {
@@ -219,38 +273,66 @@ static bool loom_math_legalize_query_for_op(
     const loom_module_t* module, const loom_op_t* op,
     loom_target_math_query_t* out_query) {
   switch (op->kind) {
+    case LOOM_OP_SCALAR_EXPF:
+      return loom_math_legalize_scalar_result_query(
+          module, op, LOOM_TARGET_MATH_OP_EXPF,
+          loom_math_legalize_scalar_fastmath_flags(
+              loom_scalar_expf_fastmath(op)),
+          out_query);
     case LOOM_OP_SCALAR_LOGISTICF:
       return loom_math_legalize_scalar_result_query(
           module, op, LOOM_TARGET_MATH_OP_LOGISTICF,
-          loom_scalar_logisticf_fastmath(op), out_query);
+          loom_math_legalize_scalar_fastmath_flags(
+              loom_scalar_logisticf_fastmath(op)),
+          out_query);
     case LOOM_OP_SCALAR_SILUF:
       return loom_math_legalize_scalar_result_query(
-          module, op, LOOM_TARGET_MATH_OP_SILUF, loom_scalar_siluf_fastmath(op),
+          module, op, LOOM_TARGET_MATH_OP_SILUF,
+          loom_math_legalize_scalar_fastmath_flags(
+              loom_scalar_siluf_fastmath(op)),
           out_query);
     case LOOM_OP_SCALAR_SOFTPLUSF:
       return loom_math_legalize_scalar_result_query(
           module, op, LOOM_TARGET_MATH_OP_SOFTPLUSF,
-          loom_scalar_softplusf_fastmath(op), out_query);
+          loom_math_legalize_scalar_fastmath_flags(
+              loom_scalar_softplusf_fastmath(op)),
+          out_query);
     case LOOM_OP_SCALAR_GELUF:
       return loom_math_legalize_scalar_result_query(
           module, op, loom_math_legalize_scalar_geluf_op(op),
-          loom_scalar_geluf_fastmath(op), out_query);
+          loom_math_legalize_scalar_fastmath_flags(
+              loom_scalar_geluf_fastmath(op)),
+          out_query);
+    case LOOM_OP_VECTOR_EXPF:
+      return loom_math_legalize_vector_result_query(
+          module, op, LOOM_TARGET_MATH_OP_EXPF,
+          loom_math_legalize_vector_fastmath_flags(
+              loom_vector_expf_fastmath(op)),
+          out_query);
     case LOOM_OP_VECTOR_LOGISTICF:
       return loom_math_legalize_vector_result_query(
           module, op, LOOM_TARGET_MATH_OP_LOGISTICF,
-          loom_vector_logisticf_fastmath(op), out_query);
+          loom_math_legalize_vector_fastmath_flags(
+              loom_vector_logisticf_fastmath(op)),
+          out_query);
     case LOOM_OP_VECTOR_SILUF:
       return loom_math_legalize_vector_result_query(
-          module, op, LOOM_TARGET_MATH_OP_SILUF, loom_vector_siluf_fastmath(op),
+          module, op, LOOM_TARGET_MATH_OP_SILUF,
+          loom_math_legalize_vector_fastmath_flags(
+              loom_vector_siluf_fastmath(op)),
           out_query);
     case LOOM_OP_VECTOR_SOFTPLUSF:
       return loom_math_legalize_vector_result_query(
           module, op, LOOM_TARGET_MATH_OP_SOFTPLUSF,
-          loom_vector_softplusf_fastmath(op), out_query);
+          loom_math_legalize_vector_fastmath_flags(
+              loom_vector_softplusf_fastmath(op)),
+          out_query);
     case LOOM_OP_VECTOR_GELUF:
       return loom_math_legalize_vector_result_query(
           module, op, loom_math_legalize_vector_geluf_op(op),
-          loom_vector_geluf_fastmath(op), out_query);
+          loom_math_legalize_vector_fastmath_flags(
+              loom_vector_geluf_fastmath(op)),
+          out_query);
     default:
       return false;
   }

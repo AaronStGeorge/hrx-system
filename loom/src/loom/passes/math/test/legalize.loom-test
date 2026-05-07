@@ -1,12 +1,12 @@
 // RUN: pass legalize-math
 
-func.def public @no_math_recipes_yet() -> (index) {
+func.def public @no_math_policy_needed() -> (index) {
   %result = index.constant 4 : index
   func.return %result : index
 }
 
 // ----
-func.def public @no_math_recipes_yet() -> (index) {
+func.def public @no_math_policy_needed() -> (index) {
   %result = index.constant 4 : index
   func.return %result : index
 }
