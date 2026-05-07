@@ -140,9 +140,8 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_scalarized() asm<amd
   %lane1 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %32 = v_mov_b32 255
   %masked = v_and_b32 %lane0, %32
-  %35 = v_mov_b32 3
-  %left = v_lshlrev_b32 %35, %masked
-  %logical = v_lshrrev_b32 %35, %lane1
+  %left = v_lshlrev_b32_lit %masked, 3
+  %logical = v_lshrrev_b32_lit %lane1, 3
   %mixed = v_xor_b32 %left, %logical
   %lane2 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %lane3 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>

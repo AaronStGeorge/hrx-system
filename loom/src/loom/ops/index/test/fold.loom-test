@@ -274,6 +274,20 @@ func.def @mul_identities(%x: index) -> (index, index) {
 
 // ====
 
+func.def @mul_power_of_two_becomes_shift(%x: index) -> (index) {
+  %c8 = index.constant 8 : index
+  %scaled = index.mul %x, %c8 : index
+  func.return %scaled : index
+}
+// ----
+func.def @mul_power_of_two_becomes_shift(%x: index) -> (index) {
+  %4 = index.constant 3 : index
+  %scaled = index.shli %x, %4 : index
+  func.return %scaled : index
+}
+
+// ====
+
 // index.madd simplifies the common address form a*1 + c to add, keeping the
 // addend first because it is usually the base address.
 func.def @madd_identity_multiplier(%a: index, %c: index) -> (index) {
@@ -306,6 +320,21 @@ func.def @add_mul_canonicalizes_to_madd(%i: index, %j: index) -> (index) {
 
 // ====
 
+func.def @add_shift_canonicalizes_to_madd(%i: index, %j: index) -> (index) {
+  %shift = index.constant 2 : index
+  %scaled = index.shli %i, %shift : index
+  %r = index.add %scaled, %j : index
+  func.return %r : index
+}
+// ----
+func.def @add_shift_canonicalizes_to_madd(%i: index, %j: index) -> (index) {
+  %6 = index.constant 4 : index
+  %r = index.madd %i, %6, %j : index
+  func.return %r : index
+}
+
+// ====
+
 // index.add collapses scaled quotient/remainder reconstruction back to a
 // single scaled coordinate.
 func.def @add_scaled_div_rem_reconstruction(%lane: index) -> (index) {
@@ -323,8 +352,8 @@ func.def @add_scaled_div_rem_reconstruction(%lane: index) -> (index) {
 // ----
 func.def @add_scaled_div_rem_reconstruction(%lane: index) -> (index) {
   %bounded = index.assume %lane [range(%lane, 0, 1024)] : index
-  %c8 = index.constant 8 : index
-  %linear = index.mul %bounded, %c8 : index
+  %12 = index.constant 3 : index
+  %linear = index.shli %bounded, %12 : index
   func.return %linear : index
 }
 
@@ -348,8 +377,8 @@ func.def @add_scaled_shift_mask_reconstruction(%lane: index) -> (index) {
 // ----
 func.def @add_scaled_shift_mask_reconstruction(%lane: index) -> (index) {
   %bounded = index.assume %lane [range(%lane, 0, 1024)] : index
-  %c8 = index.constant 8 : index
-  %linear = index.mul %bounded, %c8 : index
+  %13 = index.constant 3 : index
+  %linear = index.shli %bounded, %13 : index
   func.return %linear : index
 }
 
@@ -374,8 +403,8 @@ func.def @madd_scaled_shift_mask_reconstruction_with_assumes(%lane: index) -> (i
 // ----
 func.def @madd_scaled_shift_mask_reconstruction_with_assumes(%lane: index) -> (index) {
   %bounded = index.assume %lane [range(%lane, 0, 1024)] : index
-  %c8 = index.constant 8 : index
-  %linear = index.mul %bounded, %c8 : index
+  %14 = index.constant 3 : index
+  %linear = index.shli %bounded, %14 : index
   func.return %linear : index
 }
 
@@ -397,11 +426,11 @@ func.def @add_scaled_div_rem_maybe_negative_preserved(%lane: index) -> (index) {
 // ----
 func.def @add_scaled_div_rem_maybe_negative_preserved(%lane: index) -> (index) {
   %c2 = index.constant 2 : index
-  %c8 = index.constant 8 : index
   %c16 = index.constant 16 : index
   %quotient = index.div %lane, %c2 : index
   %remainder = index.rem %lane, %c2 : index
-  %remainder_scaled = index.mul %remainder, %c8 : index
+  %11 = index.constant 3 : index
+  %remainder_scaled = index.shli %remainder, %11 : index
   %linear = index.madd %quotient, %c16, %remainder_scaled : index
   func.return %linear : index
 }
@@ -409,7 +438,7 @@ func.def @add_scaled_div_rem_maybe_negative_preserved(%lane: index) -> (index) {
 // ====
 
 // Dividing a scaled non-negative coordinate by an exact positive divisor keeps
-// the address expression in multiplication form when the scale divides evenly.
+// the address expression scaled when the scale divides evenly.
 func.def @div_scaled_coordinate(%i: index) -> (index) {
   %i2 = index.assume %i [range(%i, 0, 1024)] : index
   %c64 = index.constant 64 : index
@@ -421,19 +450,28 @@ func.def @div_scaled_coordinate(%i: index) -> (index) {
 // ----
 func.def @div_scaled_coordinate(%i: index) -> (index) {
   %i2 = index.assume %i [range(%i, 0, 1024)] : index
-  %c8 = index.constant 8 : index
-  %q = index.mul %i2, %c8 : index
+  %8 = index.constant 3 : index
+  %q = index.shli %i2, %8 : index
   func.return %q : index
 }
 
 // ====
 
 // Without a bounded non-negative numerator, scaled division stays conservative:
-// the multiply may overflow before the quotient is taken.
+// the scale may wrap before the quotient is taken.
 func.def @div_scaled_unknown_range_is_preserved(%i: index) -> (index) {
   %c64 = index.constant 64 : index
   %c8 = index.constant 8 : index
   %scaled = index.mul %i, %c64 : index
+  %q = index.div %scaled, %c8 : index
+  func.return %q : index
+}
+
+// ----
+func.def @div_scaled_unknown_range_is_preserved(%i: index) -> (index) {
+  %c8 = index.constant 8 : index
+  %6 = index.constant 6 : index
+  %scaled = index.shli %i, %6 : index
   %q = index.div %scaled, %c8 : index
   func.return %q : index
 }
