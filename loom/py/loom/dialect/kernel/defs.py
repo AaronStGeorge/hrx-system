@@ -384,7 +384,7 @@ kernel_return = Op(
     group=kernel_ops,
     phase=OpPhase.EXECUTABLE,
     doc="Return from a dispatchable kernel entry.",
-    traits=[TERMINATOR],
+    traits=[TERMINATOR, CONVERGENT],
     examples=["kernel.return"],
 )
 
