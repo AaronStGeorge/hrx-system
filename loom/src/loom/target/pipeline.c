@@ -67,6 +67,8 @@ static iree_status_t loom_target_pipeline_build_cleanup_body(
 
 static iree_status_t loom_target_pipeline_build_low_cleanup_body(
     loom_builder_t* builder, void* user_data) {
+  IREE_RETURN_IF_ERROR(
+      loom_target_pipeline_build_run(builder, IREE_SV("cfg-simplify")));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_cleanup(builder));
   return loom_target_pipeline_build_run(builder, IREE_SV("low-dce"));
 }

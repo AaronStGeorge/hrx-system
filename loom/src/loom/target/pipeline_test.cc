@@ -166,6 +166,7 @@ TEST_F(TargetPipelineTest, BuildsVisibleSourceLowPipeline) {
   loom_block_t* source_low_cleanup_body =
       loom_region_entry_block(loom_pass_for_body(source_low_cleanup_for));
   const iree_string_view_t cleanup_keys[] = {
+      IREE_SV("cfg-simplify"),
       IREE_SV("canonicalize"),
       IREE_SV("cse"),
       IREE_SV("low-dce"),
@@ -236,6 +237,7 @@ TEST_F(TargetPipelineTest, BuildsVisiblePreparedLowPipeline) {
   loom_block_t* source_low_cleanup_body =
       loom_region_entry_block(loom_pass_for_body(source_low_cleanup_for));
   const iree_string_view_t cleanup_keys[] = {
+      IREE_SV("cfg-simplify"),
       IREE_SV("canonicalize"),
       IREE_SV("cse"),
       IREE_SV("low-dce"),
