@@ -227,6 +227,107 @@ low.func.def target(@target) abi(hal_kernel) @divergent_if_else_vector_result(%v
 
 amdgpu.target<gfx1100> @target
 
+func.def target(@target) @divergent_nested_if_else_vector_result(%values: vector<2xi32>, %lower: i32, %upper: i32, %state: vector<2xi32>) -> (vector<2xi32>) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %after_lower = scalar.cmpi sge, %lane, %lower : i32
+  %before_upper = scalar.cmpi slt, %lane, %upper : i32
+  cfg.cond_br %after_lower, ^after, ^before : i1
+^after:
+  cfg.cond_br %before_upper, ^inside, ^outside_high : i1
+^inside:
+  %inside_value = scalar.addi %lane, %upper : i32
+  %inside = vector.insert %inside_value into %state[0] : i32, vector<2xi32>
+  cfg.br ^join(%inside: vector<2xi32>)
+^outside_high:
+  %high_value = scalar.subi %lane, %upper : i32
+  %high = vector.insert %high_value into %state[1] : i32, vector<2xi32>
+  cfg.br ^join(%high: vector<2xi32>)
+^before:
+  %low_value = scalar.subi %lower, %lane : i32
+  %low = vector.insert %low_value into %state[0] : i32, vector<2xi32>
+  cfg.br ^join(%low: vector<2xi32>)
+^join(%result: vector<2xi32>):
+  func.return %result : vector<2xi32>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @divergent_nested_if_else_vector_result(%values: reg<amdgpu.vgpr x2>, %lower: reg<amdgpu.sgpr>, %upper: reg<amdgpu.sgpr>, %state: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %26 = v_mov_b32_copy %lower
+  %after_lower = v_cmp_ge_i32 %lane, %26
+  %28 = v_mov_b32_copy %upper
+  %before_upper = v_cmp_lt_i32 %lane, %28
+  %30, %31 = s_and_saveexec_b64 %after_lower
+  low.cond_br %31, ^after, ^_bb7 : reg<amdgpu.scc>
+^after:
+  %42, %43 = s_and_saveexec_b64 %before_upper
+  low.cond_br %43, ^inside, ^_bb11 : reg<amdgpu.scc>
+^inside:
+  %54 = v_mov_b32_copy %upper
+  %inside_value = v_add_u32 %lane, %54
+  %57 = slice %state[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %inside = concat(%inside_value, %57) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.br ^_bb10(%inside: reg<amdgpu.vgpr x2>)
+^outside_high:
+  %59 = v_mov_b32_copy %upper
+  %high_value = v_sub_nc_u32 %lane, %59
+  %61 = slice %state[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %high = concat(%61, %high_value) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.br ^_bb13(%high: reg<amdgpu.vgpr x2>)
+^before:
+  %64 = v_mov_b32_copy %lower
+  %low_value = v_sub_nc_u32 %64, %lane
+  %67 = slice %state[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %low = concat(%low_value, %67) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.br ^_bb9(%low: reg<amdgpu.vgpr x2>)
+^join(%result$20: reg<amdgpu.vgpr x2>):
+  return %result$20
+^_bb6(%result$21: reg<amdgpu.vgpr x2>):
+  %41 = s_xor_b64_exec %30
+  low.cond_br %41, ^before, ^_bb8 : reg<amdgpu.scc>
+^_bb7:
+  %32 = v_mov_b32 0
+  %33 = concat(%32, %32) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.br ^_bb6(%33: reg<amdgpu.vgpr x2>)
+^_bb8:
+  s_mov_b64_exec %30
+  low.br ^join(%result$21: reg<amdgpu.vgpr x2>)
+^_bb9(%result$22: reg<amdgpu.vgpr x2>):
+  s_mov_b64_exec %30
+  %34 = slice %result$22[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %35 = slice %result$21[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %36 = v_cndmask_b32 %34, %35, %after_lower
+  %37 = slice %result$22[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %38 = slice %result$21[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %39 = v_cndmask_b32 %37, %38, %after_lower
+  %40 = concat(%36, %39) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.br ^join(%40: reg<amdgpu.vgpr x2>)
+^_bb10(%result$23: reg<amdgpu.vgpr x2>):
+  %53 = s_xor_b64_exec %42
+  low.cond_br %53, ^outside_high, ^_bb12 : reg<amdgpu.scc>
+^_bb11:
+  %44 = v_mov_b32 0
+  %45 = concat(%44, %44) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.br ^_bb10(%45: reg<amdgpu.vgpr x2>)
+^_bb12:
+  s_mov_b64_exec %42
+  low.br ^_bb6(%result$23: reg<amdgpu.vgpr x2>)
+^_bb13(%result$24: reg<amdgpu.vgpr x2>):
+  s_mov_b64_exec %42
+  %46 = slice %result$24[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %47 = slice %result$23[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %48 = v_cndmask_b32 %46, %47, %before_upper
+  %49 = slice %result$24[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %50 = slice %result$23[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %51 = v_cndmask_b32 %49, %50, %before_upper
+  %52 = concat(%48, %51) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.br ^_bb6(%52: reg<amdgpu.vgpr x2>)
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 func.def target(@target) @divergent_then_only(%values: vector<2xi32>, %limit: i32, %output: buffer) {
   %lane = vector.extract %values[0] : vector<2xi32> -> i32
   %cond = scalar.cmpi slt, %lane, %limit : i32
