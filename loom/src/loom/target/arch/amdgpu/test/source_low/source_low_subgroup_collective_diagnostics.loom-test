@@ -168,13 +168,13 @@ kernel.def target(@target) @subgroup_reduce_kind_rejected() {
 
 amdgpu.target<gfx1100> @target
 
-kernel.def target(@target) @workgroup_reduce_multi_wave_rejected() {
+kernel.def target(@target) @workgroup_reduce_partial_wave_rejected() {
   %c1 = index.constant 1 : index
-  %c64 = index.constant 64 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+  %c48 = index.constant 48 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c48, %c1, %c1) : index
 } launch {
   %value = scalar.constant 1 : i32
-  // ERROR@+1: AMDGPU/023 {constraint_key="workgroup_reduce.single_wave_workgroup"}
+  // ERROR@+1: AMDGPU/023 {constraint_key="workgroup_reduce.fixed_workgroup_wave_multiple"}
   %sum = kernel.workgroup.reduce<addi> %value : i32
   kernel.return
 }

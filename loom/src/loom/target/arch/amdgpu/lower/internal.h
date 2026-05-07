@@ -300,6 +300,11 @@ iree_status_t loom_amdgpu_emit_current_subgroup_lane_id(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_type_t result_type, loom_value_id_t* out_lane_id);
 
+// Emits the flattened local workitem id for the active kernel launch.
+iree_status_t loom_amdgpu_emit_current_workitem_linear_id(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_type_t result_type, loom_value_id_t* out_linear_id);
+
 // Selects a plan for value-construction source ops.
 iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op,
@@ -372,11 +377,10 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_reduce_plan_t* out_plan, bool* out_selected);
 
-// Selects native AMDGPU cross-lane packets for a source workgroup reduce when
-// the workgroup is exactly one subgroup.
+// Selects native AMDGPU packets for a source workgroup reduce.
 iree_status_t loom_amdgpu_select_kernel_workgroup_reduce_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_subgroup_reduce_plan_t* out_plan, bool* out_selected);
+    loom_amdgpu_workgroup_reduce_plan_t* out_plan, bool* out_selected);
 
 // Lowers a source subgroup reduce using DS bpermute tree steps and native VGPR
 // combining packets.
@@ -384,10 +388,10 @@ iree_status_t loom_amdgpu_lower_kernel_subgroup_reduce(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_reduce_plan_t* plan);
 
-// Lowers a source workgroup reduce selected as a single-subgroup native reduce.
+// Lowers a source workgroup reduce through native subgroup and LDS packets.
 iree_status_t loom_amdgpu_lower_kernel_workgroup_reduce(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_subgroup_reduce_plan_t* plan);
+    const loom_amdgpu_workgroup_reduce_plan_t* plan);
 
 // Verifies source subgroup reduce legality for native AMDGPU lowering.
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(

@@ -982,6 +982,16 @@ iree_status_t loom_amdgpu_emit_current_subgroup_lane_id(
   return iree_ok_status();
 }
 
+iree_status_t loom_amdgpu_emit_current_workitem_linear_id(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_type_t result_type, loom_value_id_t* out_linear_id) {
+  uint32_t unused_wavefront_size = 0;
+  uint32_t unused_flat_workgroup_size = 0;
+  return loom_amdgpu_emit_subgroup_query_linear_id(
+      context, source_op, result_type, &unused_wavefront_size,
+      &unused_flat_workgroup_size, out_linear_id);
+}
+
 static iree_status_t loom_amdgpu_emit_subgroup_linear_query(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t source_result, bool is_lane_id) {
