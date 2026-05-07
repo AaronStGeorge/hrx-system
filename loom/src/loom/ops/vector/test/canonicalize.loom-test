@@ -122,6 +122,43 @@ func.def @extract_iota_dynamic_exact_lane_to_constant() -> (index, i32) {
 
 // ====
 
+// Static extraction from dynamic iota lanes lowers to the scalar lane formula.
+func.def @extract_iota_dynamic_values_to_scalar_formula(%base: index, %step: index, %i32_base: i32, %i32_step: i32) -> (index, index, index, i32) {
+  %index_lanes = vector.iota %base step %step : vector<4xindex>
+  %index_lane0 = vector.extract %index_lanes[0] : vector<4xindex> -> index
+  %index_lane1 = vector.extract %index_lanes[1] : vector<4xindex> -> index
+  %index_lane2 = vector.extract %index_lanes[2] : vector<4xindex> -> index
+  %i32_lanes = vector.iota %i32_base step %i32_step : vector<4xi32>
+  %i32_lane2 = vector.extract %i32_lanes[2] : vector<4xi32> -> i32
+  func.return %index_lane0, %index_lane1, %index_lane2, %i32_lane2 : index, index, index, i32
+}
+// ----
+func.def @extract_iota_dynamic_values_to_scalar_formula(%base: index, %step: index, %i32_base: i32, %i32_step: i32) -> (index, index, index, i32) {
+  %index_lane1 = index.add %base, %step : index
+  %19 = index.constant 2 : index
+  %index_lane2 = index.madd %step, %19, %base : index
+  %17 = scalar.constant 1 : i32
+  %18 = scalar.shli %i32_step, %17 : i32
+  %i32_lane2 = scalar.addi %i32_base, %18 : i32
+  func.return %base, %index_lane1, %index_lane2, %i32_lane2 : index, index, index, i32
+}
+
+// ====
+
+// The from_elements workaround for explicit dynamic lane formulas folds back to
+// the selected scalar operand.
+func.def @extract_from_elements_dynamic_operands_to_operand(%base: i32, %next: i32) -> (i32) {
+  %lanes = vector.from_elements %base, %next : vector<2xi32>
+  %r = vector.extract %lanes[1] : vector<2xi32> -> i32
+  func.return %r : i32
+}
+// ----
+func.def @extract_from_elements_dynamic_operands_to_operand(%base: i32, %next: i32) -> (i32) {
+  func.return %next : i32
+}
+
+// ====
+
 // A zero-lane range mask performs no range tests.
 func.def @empty_mask_range(%lo: index, %hi: index, %step: index) -> (vector<0xi1>) {
   %r = vector.mask.range [%lo to %hi step %step] : index -> vector<0xi1>
