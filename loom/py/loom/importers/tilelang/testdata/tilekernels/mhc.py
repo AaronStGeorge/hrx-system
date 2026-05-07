@@ -419,13 +419,9 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_head_compute_mix_fwd_kernel") @
         %mulf = scalar.mulf %load, %load_2 : f32
         %load_3 = view.load %mhc_base[%j] : view<2xf32, %layout> -> f32
         %addf = scalar.addf %mulf, %load_3 : f32
-        %one = scalar.constant 1.0 : f32
-        %sigmoid_neg = scalar.negf %addf : f32
-        %sigmoid_exp = scalar.expf %sigmoid_neg : f32
-        %sigmoid_den = scalar.addf %one, %sigmoid_exp : f32
-        %sigmoid = scalar.divf %one, %sigmoid_den : f32
+        %logisticf = scalar.logisticf %addf : f32
         %const = scalar.constant 1.0000000000000001e-05 : f32
-        %addf_2 = scalar.addf %sigmoid, %const : f32
+        %addf_2 = scalar.addf %logisticf, %const : f32
         view.store %addf_2, %output_mix[%madd, %j] : f32, view<[%num_tokens_idx]x2xf32, %layout>
       }
     }
@@ -516,13 +512,9 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_pre_split_mixes_fwd_kernel") @m
       %mulf = scalar.mulf %load, %load_2 : f32
       %load_3 = view.load %mhc_base[%j] : view<8xf32, %layout> -> f32
       %addf = scalar.addf %mulf, %load_3 : f32
-      %one = scalar.constant 1.0 : f32
-      %sigmoid_neg = scalar.negf %addf : f32
-      %sigmoid_exp = scalar.expf %sigmoid_neg : f32
-      %sigmoid_den = scalar.addf %one, %sigmoid_exp : f32
-      %sigmoid = scalar.divf %one, %sigmoid_den : f32
+      %logisticf = scalar.logisticf %addf : f32
       %const = scalar.constant 1.0000000000000001e-05 : f32
-      %addf_2 = scalar.addf %sigmoid, %const : f32
+      %addf_2 = scalar.addf %logisticf, %const : f32
       view.store %addf_2, %pre_layer_mix_frag[%i, %j] : f32, view<2x2xf32, %layout>
     }
   }
@@ -535,13 +527,9 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_pre_split_mixes_fwd_kernel") @m
       %add_2 = index.add %j, %c2 : index
       %load_6 = view.load %mhc_base[%add_2] : view<8xf32, %layout> -> f32
       %addf_3 = scalar.addf %mulf_2, %load_6 : f32
-      %one_2 = scalar.constant 1.0 : f32
-      %sigmoid_neg_2 = scalar.negf %addf_3 : f32
-      %sigmoid_exp_2 = scalar.expf %sigmoid_neg_2 : f32
-      %sigmoid_den_2 = scalar.addf %one_2, %sigmoid_exp_2 : f32
-      %sigmoid_2 = scalar.divf %one_2, %sigmoid_den_2 : f32
+      %logisticf_2 = scalar.logisticf %addf_3 : f32
       %const_2 = scalar.constant 0.5 : f32
-      %mulf_3 = scalar.mulf %sigmoid_2, %const_2 : f32
+      %mulf_3 = scalar.mulf %logisticf_2, %const_2 : f32
       view.store %mulf_3, %post_layer_mix_frag[%i, %j] : f32, view<2x2xf32, %layout>
     }
   }

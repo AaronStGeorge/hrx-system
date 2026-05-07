@@ -597,28 +597,19 @@ def _convert_sigmoid_call(
         )
         return None
     result_type = context.type_converter.map_dtype(dtype(expr))
-    one = _ensure_float_one(context, dtype(expr))
-    neg = context.builder.scalar.negf(
+    input_is_vector = _is_vector_type(input_value.type)
+    result_is_vector = _is_vector_type(result_type)
+    if input_is_vector != result_is_vector:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` cannot cross scalar/vector type boundaries",
+        )
+        return None
+    builder = context.builder.vector if result_is_vector else context.builder.scalar
+    result = builder.logisticf(
         input=input_value,
         results=[result_type],
-        name=context.fresh_name("sigmoid_neg"),
-    )
-    exp = context.builder.scalar.expf(
-        input=neg,
-        results=[result_type],
-        name=context.fresh_name("sigmoid_exp"),
-    )
-    denominator = context.builder.scalar.addf(
-        lhs=one,
-        rhs=exp,
-        results=[result_type],
-        name=context.fresh_name("sigmoid_den"),
-    )
-    result = context.builder.scalar.divf(
-        lhs=one,
-        rhs=denominator,
-        results=[result_type],
-        name=context.fresh_name("sigmoid"),
+        name=context.fresh_name("logisticf"),
     )
     _map_call_result(expr, context, result, op_name)
     return result
@@ -1391,18 +1382,6 @@ def _warp_reduce_kind(
     if op_name == "tl.warp_reduce_bitor" and is_integer:
         return "ori"
     return None
-
-
-def _ensure_float_one(
-    context: TileLangConversionContext,
-    value_type: str,
-) -> ValueRef:
-    existing = context.constants.get((value_type, "1.0"))
-    if existing is not None:
-        return existing
-    result = context.build_constant(1.0, value_type, context.reserve_name("one"))
-    context.remember_constant("1.0", value_type, result)
-    return result
 
 
 def _ensure_integer_all_ones(

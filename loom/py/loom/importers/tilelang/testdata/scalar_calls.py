@@ -84,12 +84,8 @@ kernel.def target(@hip_mcpu_gfx1100) export("scalar_calls") @scalar_calls(%src: 
     %absf = scalar.absf %load_2 : f32
     %sqrtf = scalar.sqrtf %absf : f32
     %load_3 = view.load %src_view[%c0] : view<4xf32, %layout> -> f32
-    %one = scalar.constant 1.0 : f32
-    %sigmoid_neg = scalar.negf %load_3 : f32
-    %sigmoid_exp = scalar.expf %sigmoid_neg : f32
-    %sigmoid_den = scalar.addf %one, %sigmoid_exp : f32
-    %sigmoid = scalar.divf %one, %sigmoid_den : f32
-    %addf = scalar.addf %sqrtf, %sigmoid : f32
+    %logisticf = scalar.logisticf %load_3 : f32
+    %addf = scalar.addf %sqrtf, %logisticf : f32
     view.store %addf, %dst_view[%c0] : f32, view<4xf32, %layout>
   } else {
     %load_4 = view.load %src_view[%c0] : view<4xf32, %layout> -> f32

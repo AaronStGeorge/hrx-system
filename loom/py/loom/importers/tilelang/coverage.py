@@ -605,8 +605,8 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
     OpCoverage(
         "tir.sigmoid",
         OpFamily.TIR_OP,
-        CoverageState.NORMALIZED,
-        "Normalizes to scalar neg/exp/add/div.",
+        CoverageState.SUPPORTED,
+        "Imports to Loom logistic activation.",
     ),
     OpCoverage(
         "tir.sin",
