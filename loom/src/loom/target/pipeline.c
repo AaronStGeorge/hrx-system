@@ -77,6 +77,8 @@ static iree_status_t loom_target_pipeline_build_source_normalization(
       (const loom_target_pipeline_build_context_t*)user_data;
   IREE_RETURN_IF_ERROR(loom_target_pipeline_contribute_phase(
       builder, context, LOOM_TARGET_PIPELINE_PHASE_SOURCE_NORMALIZATION));
+  IREE_RETURN_IF_ERROR(
+      loom_target_pipeline_build_run(builder, IREE_SV("legalize-math")));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
       builder, IREE_SV("normalize-kernel-resources")));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(

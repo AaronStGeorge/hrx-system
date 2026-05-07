@@ -137,8 +137,10 @@ TEST_F(TargetPipelineTest, BuildsVisibleSourceLowPipeline) {
       loom_region_entry_block(loom_pass_for_body(source_for));
   const iree_string_view_t source_keys[] = {
       IREE_SV("mock-source-normalization"),
+      IREE_SV("legalize-math"),
       IREE_SV("normalize-kernel-resources"),
       IREE_SV("promote-private-fragments"),
+      IREE_SV("vector-reduce-axes-to-scalar"),
       IREE_SV("linearize-view-accesses"),
       IREE_SV("canonicalize"),
       IREE_SV("cse"),
@@ -196,8 +198,10 @@ TEST_F(TargetPipelineTest, BuildsVisiblePreparedLowPipeline) {
       loom_region_entry_block(loom_pass_for_body(source_for));
   const iree_string_view_t source_keys[] = {
       IREE_SV("mock-source-normalization"),
+      IREE_SV("legalize-math"),
       IREE_SV("normalize-kernel-resources"),
       IREE_SV("promote-private-fragments"),
+      IREE_SV("vector-reduce-axes-to-scalar"),
       IREE_SV("linearize-view-accesses"),
       IREE_SV("canonicalize"),
       IREE_SV("cse"),
