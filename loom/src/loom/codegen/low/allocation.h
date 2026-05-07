@@ -136,6 +136,8 @@ typedef struct loom_low_allocation_assignment_t {
   uint32_t location_base;
   // Number of contiguous units assigned at |location_base|.
   uint32_t location_count;
+  // First per-unit end-point entry in the allocation table.
+  uint32_t unit_end_point_start;
 } loom_low_allocation_assignment_t;
 
 // Returns true when two assignments name the same concrete descriptor class and
@@ -336,6 +338,10 @@ typedef struct loom_low_allocation_table_t {
   // Assignment indices by liveness local value ordinal. Entries without an
   // assignment contain UINT32_MAX.
   const uint32_t* assignment_indices_by_value_ordinal;
+  // One-past-last live program point for each assigned unit.
+  const uint32_t* unit_end_points;
+  // Number of records in |unit_end_points|.
+  iree_host_size_t unit_end_point_count;
   // Spill materialization plans in assignment order.
   const loom_low_allocation_spill_plan_t* spill_plans;
   // Number of records in |spill_plans|.
