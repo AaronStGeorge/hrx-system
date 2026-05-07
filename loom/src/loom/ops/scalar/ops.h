@@ -74,44 +74,48 @@ enum {
   LOOM_OP_SCALAR_ATANHF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 52),
   LOOM_OP_SCALAR_ERFF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 53),
   LOOM_OP_SCALAR_ERFCF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 54),
-  LOOM_OP_SCALAR_FMAF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 55),
-  LOOM_OP_SCALAR_CEILF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 56),
-  LOOM_OP_SCALAR_FLOORF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 57),
-  LOOM_OP_SCALAR_ROUNDF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 58),
-  LOOM_OP_SCALAR_ROUNDEVENF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 59),
-  LOOM_OP_SCALAR_TRUNCF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 60),
-  LOOM_OP_SCALAR_CMPI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 61),
-  LOOM_OP_SCALAR_CMPF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 62),
-  LOOM_OP_SCALAR_ISNANF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 63),
-  LOOM_OP_SCALAR_ISINFF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 64),
-  LOOM_OP_SCALAR_ISFINITEF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 65),
-  LOOM_OP_SCALAR_SIGNF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 66),
-  LOOM_OP_SCALAR_SIGNI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 67),
-  LOOM_OP_SCALAR_SITOFP = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 68),
-  LOOM_OP_SCALAR_UITOFP = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 69),
-  LOOM_OP_SCALAR_FPTOSI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 70),
-  LOOM_OP_SCALAR_FPTOUI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 71),
-  LOOM_OP_SCALAR_EXTF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 72),
-  LOOM_OP_SCALAR_FPTRUNC = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 73),
-  LOOM_OP_SCALAR_EXTSI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 74),
-  LOOM_OP_SCALAR_EXTUI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 75),
-  LOOM_OP_SCALAR_TRUNCI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 76),
-  LOOM_OP_SCALAR_BITCAST = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 77),
-  LOOM_OP_SCALAR_CONSTANT = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 78),
-  LOOM_OP_SCALAR_POISON = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 79),
-  LOOM_OP_SCALAR_ANDI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 80),
-  LOOM_OP_SCALAR_ORI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 81),
-  LOOM_OP_SCALAR_XORI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 82),
-  LOOM_OP_SCALAR_SHLI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 83),
-  LOOM_OP_SCALAR_SHRSI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 84),
-  LOOM_OP_SCALAR_SHRUI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 85),
-  LOOM_OP_SCALAR_ROTLI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 86),
-  LOOM_OP_SCALAR_ROTRI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 87),
-  LOOM_OP_SCALAR_CTLZI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 88),
-  LOOM_OP_SCALAR_CTTZI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 89),
-  LOOM_OP_SCALAR_CTPOPI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 90),
-  LOOM_OP_SCALAR_ASSUME = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 91),
-  LOOM_OP_SCALAR_COUNT_ = 92,
+  LOOM_OP_SCALAR_LOGISTICF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 55),
+  LOOM_OP_SCALAR_SILUF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 56),
+  LOOM_OP_SCALAR_SOFTPLUSF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 57),
+  LOOM_OP_SCALAR_GELUF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 58),
+  LOOM_OP_SCALAR_FMAF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 59),
+  LOOM_OP_SCALAR_CEILF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 60),
+  LOOM_OP_SCALAR_FLOORF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 61),
+  LOOM_OP_SCALAR_ROUNDF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 62),
+  LOOM_OP_SCALAR_ROUNDEVENF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 63),
+  LOOM_OP_SCALAR_TRUNCF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 64),
+  LOOM_OP_SCALAR_CMPI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 65),
+  LOOM_OP_SCALAR_CMPF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 66),
+  LOOM_OP_SCALAR_ISNANF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 67),
+  LOOM_OP_SCALAR_ISINFF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 68),
+  LOOM_OP_SCALAR_ISFINITEF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 69),
+  LOOM_OP_SCALAR_SIGNF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 70),
+  LOOM_OP_SCALAR_SIGNI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 71),
+  LOOM_OP_SCALAR_SITOFP = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 72),
+  LOOM_OP_SCALAR_UITOFP = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 73),
+  LOOM_OP_SCALAR_FPTOSI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 74),
+  LOOM_OP_SCALAR_FPTOUI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 75),
+  LOOM_OP_SCALAR_EXTF = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 76),
+  LOOM_OP_SCALAR_FPTRUNC = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 77),
+  LOOM_OP_SCALAR_EXTSI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 78),
+  LOOM_OP_SCALAR_EXTUI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 79),
+  LOOM_OP_SCALAR_TRUNCI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 80),
+  LOOM_OP_SCALAR_BITCAST = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 81),
+  LOOM_OP_SCALAR_CONSTANT = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 82),
+  LOOM_OP_SCALAR_POISON = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 83),
+  LOOM_OP_SCALAR_ANDI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 84),
+  LOOM_OP_SCALAR_ORI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 85),
+  LOOM_OP_SCALAR_XORI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 86),
+  LOOM_OP_SCALAR_SHLI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 87),
+  LOOM_OP_SCALAR_SHRSI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 88),
+  LOOM_OP_SCALAR_SHRUI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 89),
+  LOOM_OP_SCALAR_ROTLI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 90),
+  LOOM_OP_SCALAR_ROTRI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 91),
+  LOOM_OP_SCALAR_CTLZI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 92),
+  LOOM_OP_SCALAR_CTTZI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 93),
+  LOOM_OP_SCALAR_CTPOPI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 94),
+  LOOM_OP_SCALAR_ASSUME = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 95),
+  LOOM_OP_SCALAR_COUNT_ = 96,
 };
 
 // Integer overflow behavior flags.
@@ -127,6 +131,14 @@ enum {
 #define LOOM_SCALAR_FASTMATHFLAGS_CONTRACT ((uint8_t)32)
 #define LOOM_SCALAR_FASTMATHFLAGS_AFN ((uint8_t)64)
 #define LOOM_SCALAR_FASTMATHFLAGS_FAST ((uint8_t)127)
+
+// GELU activation formula family.
+typedef enum loom_scalar_geluf_variant_e {
+  LOOM_SCALAR_GELUF_VARIANT_ERF = 0,
+  LOOM_SCALAR_GELUF_VARIANT_TANH = 1,
+  LOOM_SCALAR_GELUF_VARIANT_LOGISTIC = 2,
+  LOOM_SCALAR_GELUF_VARIANT_COUNT_ = 3,
+} loom_scalar_geluf_variant_t;
 
 // Integer comparison predicates.
 typedef enum loom_scalar_cmpi_predicate_e {
@@ -1084,6 +1096,85 @@ iree_status_t loom_scalar_erfcf_facts(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
+
+// LOOM_OP_SCALAR_LOGISTICF: Logistic sigmoid: 1 / (1 + exp(-x)).
+// %result = scalar.logisticf %input : f32
+LOOM_DEFINE_ISA(loom_scalar_logisticf_isa, LOOM_OP_SCALAR_LOGISTICF)
+LOOM_DEFINE_OPERAND(loom_scalar_logisticf_input, 0)
+LOOM_DEFINE_RESULT(loom_scalar_logisticf_result, 0)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_scalar_logisticf_fastmath)
+iree_status_t loom_scalar_logisticf_build(
+    loom_builder_t* builder, uint8_t instance_flags,
+    loom_value_id_t input, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_scalar_logisticf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_SCALAR_SILUF: SiLU activation: x * logistic(x).
+// %result = scalar.siluf %input : f32
+LOOM_DEFINE_ISA(loom_scalar_siluf_isa, LOOM_OP_SCALAR_SILUF)
+LOOM_DEFINE_OPERAND(loom_scalar_siluf_input, 0)
+LOOM_DEFINE_RESULT(loom_scalar_siluf_result, 0)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_scalar_siluf_fastmath)
+iree_status_t loom_scalar_siluf_build(
+    loom_builder_t* builder, uint8_t instance_flags,
+    loom_value_id_t input, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_scalar_siluf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_SCALAR_SOFTPLUSF: Softplus activation: log(1 + exp(x)).
+// %result = scalar.softplusf %input : f32
+LOOM_DEFINE_ISA(loom_scalar_softplusf_isa, LOOM_OP_SCALAR_SOFTPLUSF)
+LOOM_DEFINE_OPERAND(loom_scalar_softplusf_input, 0)
+LOOM_DEFINE_RESULT(loom_scalar_softplusf_result, 0)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_scalar_softplusf_fastmath)
+iree_status_t loom_scalar_softplusf_build(
+    loom_builder_t* builder, uint8_t instance_flags,
+    loom_value_id_t input, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_scalar_softplusf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_SCALAR_GELUF: GELU activation preserving the chosen formula family. The logistic variant carries its scale as an explicit attribute so importers do not encode approximation identity through arithmetic constants.
+// %result = scalar.geluf<erf> %input : f32
+LOOM_DEFINE_ISA(loom_scalar_geluf_isa, LOOM_OP_SCALAR_GELUF)
+LOOM_DEFINE_OPERAND(loom_scalar_geluf_input, 0)
+LOOM_DEFINE_RESULT(loom_scalar_geluf_result, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_scalar_geluf_variant, 0, loom_scalar_geluf_variant_t)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_scalar_geluf_fastmath)
+LOOM_DEFINE_ATTR_F64(loom_scalar_geluf_scale, 1)
+enum loom_scalar_geluf_build_flag_bits_e {
+  LOOM_SCALAR_GELUF_BUILD_FLAG_HAS_SCALE = 1u << 0,
+};
+typedef uint32_t loom_scalar_geluf_build_flags_t;
+iree_status_t loom_scalar_geluf_build(
+    loom_builder_t* builder,
+    loom_scalar_geluf_build_flags_t build_flags,
+    loom_scalar_geluf_variant_t variant,
+    uint8_t instance_flags,
+    loom_value_id_t input,
+    loom_optional double scale,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_scalar_geluf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_scalar_geluf_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_SCALAR_FMAF: Fused multiply-add: a*b + c with single rounding.
 // %result = scalar.fmaf %a, %b, %c : f32

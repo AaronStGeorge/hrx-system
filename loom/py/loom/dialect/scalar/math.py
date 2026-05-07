@@ -9,12 +9,17 @@
 from loom.assembly import (
     COLON,
     COMMA,
+    AttrDict,
     Flags,
     Ref,
+    TemplateParamFlags,
     TypeOf,
 )
-from loom.dialect.scalar import FastMathFlags, scalar_ops
+from loom.dialect.scalar import FastMathFlags, GeluVariant, scalar_ops
 from loom.dsl import (
+    ATTR_TYPE_ENUM,
+    ATTR_TYPE_F64,
+    ATTR_TYPE_FLAGS,
     FLOAT,
     IDEMPOTENT,
     PURE,
@@ -293,6 +298,70 @@ scalar_erfcf = unary_op(
     examples=["%result = scalar.erfcf %input : f32"],
 )
 
+scalar_logisticf = unary_op(
+    "scalar.logisticf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="Logistic sigmoid: 1 / (1 + exp(-x)).",
+    flags=_FM,
+    facts="loom_scalar_logisticf_facts",
+    examples=["%result = scalar.logisticf %input : f32"],
+)
+
+scalar_siluf = unary_op(
+    "scalar.siluf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="SiLU activation: x * logistic(x).",
+    flags=_FM,
+    facts="loom_scalar_siluf_facts",
+    examples=["%result = scalar.siluf %input : f32"],
+)
+
+scalar_softplusf = unary_op(
+    "scalar.softplusf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="Softplus activation: log(1 + exp(x)).",
+    flags=_FM,
+    facts="loom_scalar_softplusf_facts",
+    examples=["%result = scalar.softplusf %input : f32"],
+)
+
+scalar_geluf = Op(
+    "scalar.geluf",
+    group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "GELU activation preserving the chosen formula family. The logistic "
+        "variant carries its scale as an explicit attribute so importers do "
+        "not encode approximation identity through arithmetic constants."
+    ),
+    operands=[Operand("input", FLOAT)],
+    results=[Result("result", FLOAT)],
+    attrs=[
+        AttrDef("variant", ATTR_TYPE_ENUM, enum_def=GeluVariant),
+        AttrDef("fastmath", ATTR_TYPE_FLAGS, optional=True, enum_def=FastMathFlags),
+        AttrDef("scale", ATTR_TYPE_F64, optional=True),
+    ],
+    constraints=[SameType("input", "result")],
+    traits=[PURE],
+    verify="loom_scalar_geluf_verify",
+    facts="loom_scalar_geluf_facts",
+    format=[
+        TemplateParamFlags("variant", "fastmath"),
+        Ref("input"),
+        AttrDict(),
+        COLON,
+        TypeOf("result"),
+    ],
+    examples=[
+        "%result = scalar.geluf<erf> %input : f32",
+        "%result = scalar.geluf<tanh, afn> %input : f32",
+        "%result = scalar.geluf<logistic> %input {scale = 1.702} : f32",
+    ],
+)
+
 scalar_fmaf = Op(
     "scalar.fmaf",
     group=scalar_ops,
@@ -413,6 +482,10 @@ ALL_MATH_OPS: tuple[Op, ...] = (
     scalar_atanhf,
     scalar_erff,
     scalar_erfcf,
+    scalar_logisticf,
+    scalar_siluf,
+    scalar_softplusf,
+    scalar_geluf,
     scalar_fmaf,
     scalar_ceilf,
     scalar_floorf,

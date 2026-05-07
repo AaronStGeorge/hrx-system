@@ -151,6 +151,32 @@ func.def @static_float_math(%a: vector<2xf32>, %b: vector<2xf32>) -> (vector<2xf
 
 // ====
 
+func.def @static_activation_math(%a: vector<2xf32>) -> (vector<2xf32>) {
+  %logistic = vector.logisticf<afn> %a : vector<2xf32>
+  %silu = vector.siluf<afn> %logistic : vector<2xf32>
+  %softplus = vector.softplusf<afn> %silu : vector<2xf32>
+  %r = vector.geluf<logistic, afn> %softplus {scale = 1.702} : vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ----
+func.def @static_activation_math(%a: vector<2xf32>) -> (vector<2xf32>) {
+  %6 = vector.extract %a[0] : vector<2xf32> -> f32
+  %7 = scalar.logisticf<afn> %6 : f32
+  %8 = scalar.siluf<afn> %7 : f32
+  %9 = scalar.softplusf<afn> %8 : f32
+  %10 = scalar.geluf<logistic, afn> %9 {scale = 1.702} : f32
+  %11 = vector.extract %a[1] : vector<2xf32> -> f32
+  %12 = scalar.logisticf<afn> %11 : f32
+  %13 = scalar.siluf<afn> %12 : f32
+  %14 = scalar.softplusf<afn> %13 : f32
+  %15 = scalar.geluf<logistic, afn> %14 {scale = 1.702} : f32
+  %r = vector.from_elements %10, %15 : vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ====
+
 // Dynamic float/math ops lower to scalar work inside the aggregate loop.
 func.def @dynamic_float_math(%n: index, %a: vector<[%n]xf32>, %b: vector<[%n]xf32>) -> (vector<[%n]xf32>) {
   %quotient = vector.divf %a, %b : vector<[%n]xf32>

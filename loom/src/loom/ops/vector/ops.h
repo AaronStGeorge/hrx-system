@@ -128,44 +128,48 @@ enum {
   LOOM_OP_VECTOR_ATANHF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 103),
   LOOM_OP_VECTOR_ERFF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 104),
   LOOM_OP_VECTOR_ERFCF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 105),
-  LOOM_OP_VECTOR_CEILF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 106),
-  LOOM_OP_VECTOR_FLOORF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 107),
-  LOOM_OP_VECTOR_ROUNDF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 108),
-  LOOM_OP_VECTOR_ROUNDEVENF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 109),
-  LOOM_OP_VECTOR_TRUNCF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 110),
-  LOOM_OP_VECTOR_ISNANF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 111),
-  LOOM_OP_VECTOR_ISINFF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 112),
-  LOOM_OP_VECTOR_ISFINITEF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 113),
-  LOOM_OP_VECTOR_SIGNF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 114),
-  LOOM_OP_VECTOR_SIGNI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 115),
-  LOOM_OP_VECTOR_EXTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 116),
-  LOOM_OP_VECTOR_FPTRUNC = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 117),
-  LOOM_OP_VECTOR_EXTSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 118),
-  LOOM_OP_VECTOR_EXTUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 119),
-  LOOM_OP_VECTOR_TRUNCI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 120),
-  LOOM_OP_VECTOR_SITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 121),
-  LOOM_OP_VECTOR_UITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 122),
-  LOOM_OP_VECTOR_FPTOSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 123),
-  LOOM_OP_VECTOR_FPTOUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 124),
-  LOOM_OP_VECTOR_BITCAST = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 125),
-  LOOM_OP_VECTOR_BITFIELD_EXTRACTU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 126),
-  LOOM_OP_VECTOR_BITFIELD_EXTRACTS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 127),
-  LOOM_OP_VECTOR_BITFIELD_INSERT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 128),
-  LOOM_OP_VECTOR_BITPACK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 129),
-  LOOM_OP_VECTOR_BITUNPACKU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 130),
-  LOOM_OP_VECTOR_BITUNPACKS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 131),
-  LOOM_OP_VECTOR_DOTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 132),
-  LOOM_OP_VECTOR_DOT2F = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 133),
-  LOOM_OP_VECTOR_DOT4I = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 134),
-  LOOM_OP_VECTOR_DOT8I4 = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 135),
-  LOOM_OP_VECTOR_DOT4F8 = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 136),
-  LOOM_OP_VECTOR_MMA = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 137),
-  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 138),
-  LOOM_OP_VECTOR_REDUCE_AXES = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 139),
-  LOOM_OP_VECTOR_DECODE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 140),
-  LOOM_OP_VECTOR_ENCODE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 141),
-  LOOM_OP_VECTOR_FRAGMENT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 142),
-  LOOM_OP_VECTOR_COUNT_ = 143,
+  LOOM_OP_VECTOR_LOGISTICF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 106),
+  LOOM_OP_VECTOR_SILUF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 107),
+  LOOM_OP_VECTOR_SOFTPLUSF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 108),
+  LOOM_OP_VECTOR_GELUF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 109),
+  LOOM_OP_VECTOR_CEILF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 110),
+  LOOM_OP_VECTOR_FLOORF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 111),
+  LOOM_OP_VECTOR_ROUNDF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 112),
+  LOOM_OP_VECTOR_ROUNDEVENF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 113),
+  LOOM_OP_VECTOR_TRUNCF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 114),
+  LOOM_OP_VECTOR_ISNANF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 115),
+  LOOM_OP_VECTOR_ISINFF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 116),
+  LOOM_OP_VECTOR_ISFINITEF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 117),
+  LOOM_OP_VECTOR_SIGNF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 118),
+  LOOM_OP_VECTOR_SIGNI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 119),
+  LOOM_OP_VECTOR_EXTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 120),
+  LOOM_OP_VECTOR_FPTRUNC = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 121),
+  LOOM_OP_VECTOR_EXTSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 122),
+  LOOM_OP_VECTOR_EXTUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 123),
+  LOOM_OP_VECTOR_TRUNCI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 124),
+  LOOM_OP_VECTOR_SITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 125),
+  LOOM_OP_VECTOR_UITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 126),
+  LOOM_OP_VECTOR_FPTOSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 127),
+  LOOM_OP_VECTOR_FPTOUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 128),
+  LOOM_OP_VECTOR_BITCAST = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 129),
+  LOOM_OP_VECTOR_BITFIELD_EXTRACTU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 130),
+  LOOM_OP_VECTOR_BITFIELD_EXTRACTS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 131),
+  LOOM_OP_VECTOR_BITFIELD_INSERT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 132),
+  LOOM_OP_VECTOR_BITPACK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 133),
+  LOOM_OP_VECTOR_BITUNPACKU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 134),
+  LOOM_OP_VECTOR_BITUNPACKS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 135),
+  LOOM_OP_VECTOR_DOTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 136),
+  LOOM_OP_VECTOR_DOT2F = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 137),
+  LOOM_OP_VECTOR_DOT4I = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 138),
+  LOOM_OP_VECTOR_DOT8I4 = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 139),
+  LOOM_OP_VECTOR_DOT4F8 = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 140),
+  LOOM_OP_VECTOR_MMA = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 141),
+  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 142),
+  LOOM_OP_VECTOR_REDUCE_AXES = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 143),
+  LOOM_OP_VECTOR_DECODE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 144),
+  LOOM_OP_VECTOR_ENCODE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 145),
+  LOOM_OP_VECTOR_FRAGMENT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 146),
+  LOOM_OP_VECTOR_COUNT_ = 147,
 };
 
 // IEEE 754 fast-math relaxation flags for float operations.
@@ -243,6 +247,14 @@ typedef enum loom_vector_cmpf_predicate_e {
   LOOM_VECTOR_CMPF_PREDICATE_UNO = 13,
   LOOM_VECTOR_CMPF_PREDICATE_COUNT_ = 14,
 } loom_vector_cmpf_predicate_t;
+
+// GELU activation formula family.
+typedef enum loom_vector_geluf_variant_e {
+  LOOM_VECTOR_GELUF_VARIANT_ERF = 0,
+  LOOM_VECTOR_GELUF_VARIANT_TANH = 1,
+  LOOM_VECTOR_GELUF_VARIANT_LOGISTIC = 2,
+  LOOM_VECTOR_GELUF_VARIANT_COUNT_ = 3,
+} loom_vector_geluf_variant_t;
 
 // Signedness variants for four-lane i8 dot products accumulated into i32 lanes.
 typedef enum loom_vector_dot4i_kind_e {
@@ -2459,6 +2471,85 @@ iree_status_t loom_vector_erfcf_facts(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_LOGISTICF: Lanewise logistic sigmoid 1 / (1 + exp(-x)).
+// vector.logisticf
+LOOM_DEFINE_ISA(loom_vector_logisticf_isa, LOOM_OP_VECTOR_LOGISTICF)
+LOOM_DEFINE_OPERAND(loom_vector_logisticf_input, 0)
+LOOM_DEFINE_RESULT(loom_vector_logisticf_result, 0)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_logisticf_fastmath)
+iree_status_t loom_vector_logisticf_build(
+    loom_builder_t* builder, uint8_t instance_flags,
+    loom_value_id_t input, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_logisticf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_SILUF: Lanewise SiLU activation x * logistic(x).
+// vector.siluf
+LOOM_DEFINE_ISA(loom_vector_siluf_isa, LOOM_OP_VECTOR_SILUF)
+LOOM_DEFINE_OPERAND(loom_vector_siluf_input, 0)
+LOOM_DEFINE_RESULT(loom_vector_siluf_result, 0)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_siluf_fastmath)
+iree_status_t loom_vector_siluf_build(
+    loom_builder_t* builder, uint8_t instance_flags,
+    loom_value_id_t input, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_siluf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_SOFTPLUSF: Lanewise softplus activation log(1 + exp(x)).
+// vector.softplusf
+LOOM_DEFINE_ISA(loom_vector_softplusf_isa, LOOM_OP_VECTOR_SOFTPLUSF)
+LOOM_DEFINE_OPERAND(loom_vector_softplusf_input, 0)
+LOOM_DEFINE_RESULT(loom_vector_softplusf_result, 0)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_softplusf_fastmath)
+iree_status_t loom_vector_softplusf_build(
+    loom_builder_t* builder, uint8_t instance_flags,
+    loom_value_id_t input, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_softplusf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_GELUF: Lanewise GELU activation preserving the chosen formula family. The logistic variant carries its scale as an explicit attribute so importers do not encode approximation identity through arithmetic constants.
+// %result = vector.geluf<erf> %input : vector<16xf32>
+LOOM_DEFINE_ISA(loom_vector_geluf_isa, LOOM_OP_VECTOR_GELUF)
+LOOM_DEFINE_OPERAND(loom_vector_geluf_input, 0)
+LOOM_DEFINE_RESULT(loom_vector_geluf_result, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_geluf_variant, 0, loom_vector_geluf_variant_t)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_geluf_fastmath)
+LOOM_DEFINE_ATTR_F64(loom_vector_geluf_scale, 1)
+enum loom_vector_geluf_build_flag_bits_e {
+  LOOM_VECTOR_GELUF_BUILD_FLAG_HAS_SCALE = 1u << 0,
+};
+typedef uint32_t loom_vector_geluf_build_flags_t;
+iree_status_t loom_vector_geluf_build(
+    loom_builder_t* builder,
+    loom_vector_geluf_build_flags_t build_flags,
+    loom_vector_geluf_variant_t variant,
+    uint8_t instance_flags,
+    loom_value_id_t input,
+    loom_optional double scale,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_geluf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_vector_geluf_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_CEILF: Lanewise round toward positive infinity.
 // vector.ceilf

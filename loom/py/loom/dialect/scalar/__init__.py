@@ -27,6 +27,7 @@ from loom.dialect.scalar.defs import (  # isort: split
     SCALAR_MATH_CATEGORY,
     SCALAR_OP_CATEGORIES,
     FastMathFlags,
+    GeluVariant,
     IntOverflowFlags,
     scalar_ops,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "SCALAR_OP_CATEGORIES",
     "SCALAR_OP_CATEGORY_GROUPS",
     "FastMathFlags",
+    "GeluVariant",
     "IntOverflowFlags",
     "ALL_SCALAR_OPS",
 ]

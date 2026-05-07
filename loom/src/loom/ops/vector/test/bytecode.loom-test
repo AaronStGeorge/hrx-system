@@ -43,3 +43,15 @@ func.def @fragment_interpretation(%lhs_payload: vector<6xi32>, %rhs_payload: vec
   test.use %result : vector<8xf32>
   func.return
 }
+
+// ====
+
+// Activation math bytecode preserves fastmath flags, GELU variant, and
+// optional scale without formula expansion.
+func.def @activation_math(%x: vector<8xf32>) -> (vector<8xf32>) {
+  %logistic = vector.logisticf<afn> %x : vector<8xf32>
+  %silu = vector.siluf<afn> %logistic : vector<8xf32>
+  %softplus = vector.softplusf<afn> %silu : vector<8xf32>
+  %gelu = vector.geluf<logistic, afn> %softplus {scale = 1.702} : vector<8xf32>
+  func.return %gelu : vector<8xf32>
+}

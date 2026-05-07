@@ -94,6 +94,22 @@ static double div_f64(double a, double b) { return a / b; }
 static double negate_f64(double a) { return -a; }
 static double rsqrt_f64(double x) { return 1.0 / sqrt(x); }
 static double roundeven_f64(double x) { return nearbyint(x); }
+static double logistic_f64(double x) { return 1.0 / (1.0 + exp(-x)); }
+static double silu_f64(double x) { return x * logistic_f64(x); }
+static double softplus_f64(double x) {
+  return log1p(exp(-fabs(x))) + fmax(x, 0.0);
+}
+static double gelu_erf_f64(double x) {
+  const double inverse_sqrt2 = 0.70710678118654752440;
+  return 0.5 * x * (1.0 + erf(x * inverse_sqrt2));
+}
+static double gelu_tanh_f64(double x) {
+  const double sqrt_2_over_pi = 0.79788456080286535588;
+  return 0.5 * x * (1.0 + tanh(sqrt_2_over_pi * (x + 0.044715 * x * x * x)));
+}
+static double gelu_logistic_f64(double x, double scale) {
+  return x * logistic_f64(scale * x);
+}
 static double minimum_f64(double a, double b) {
   return (isnan(a) || isnan(b)) ? NAN : fmin(a, b);
 }
@@ -196,6 +212,45 @@ FLOAT_UNARY_FACTS(loom_scalar_acoshf_facts, acosh)
 FLOAT_UNARY_FACTS(loom_scalar_atanhf_facts, atanh)
 FLOAT_UNARY_FACTS(loom_scalar_erff_facts, erf)
 FLOAT_UNARY_FACTS(loom_scalar_erfcf_facts, erfc)
+FLOAT_UNARY_FACTS(loom_scalar_logisticf_facts, logistic_f64)
+FLOAT_UNARY_FACTS(loom_scalar_siluf_facts, silu_f64)
+FLOAT_UNARY_FACTS(loom_scalar_softplusf_facts, softplus_f64)
+
+iree_status_t loom_scalar_geluf_facts(loom_fact_context_t* context,
+                                      const loom_module_t* module,
+                                      const loom_op_t* op,
+                                      const loom_value_facts_t* operand_facts,
+                                      loom_value_facts_t* result_facts) {
+  if (!loom_value_facts_is_exact(operand_facts[0]) ||
+      !loom_value_facts_is_float(operand_facts[0])) {
+    result_facts[0] = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+
+  double input = loom_value_facts_as_f64(operand_facts[0]);
+  switch (loom_scalar_geluf_variant(op)) {
+    case LOOM_SCALAR_GELUF_VARIANT_ERF:
+      result_facts[0] = loom_value_facts_exact_f64(gelu_erf_f64(input));
+      return iree_ok_status();
+    case LOOM_SCALAR_GELUF_VARIANT_TANH:
+      result_facts[0] = loom_value_facts_exact_f64(gelu_tanh_f64(input));
+      return iree_ok_status();
+    case LOOM_SCALAR_GELUF_VARIANT_LOGISTIC: {
+      loom_attribute_t scale_attr = loom_op_attrs(op)[1];
+      if (loom_attr_is_absent(scale_attr)) {
+        result_facts[0] = loom_value_facts_unknown();
+        return iree_ok_status();
+      }
+      result_facts[0] = loom_value_facts_exact_f64(
+          gelu_logistic_f64(input, loom_attr_as_f64(scale_attr)));
+      return iree_ok_status();
+    }
+    case LOOM_SCALAR_GELUF_VARIANT_COUNT_:
+      break;
+  }
+  result_facts[0] = loom_value_facts_unknown();
+  return iree_ok_status();
+}
 
 // fmaf has 3 operands.
 iree_status_t loom_scalar_fmaf_facts(loom_fact_context_t* context,

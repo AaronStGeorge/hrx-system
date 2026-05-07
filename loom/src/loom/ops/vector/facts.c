@@ -41,6 +41,8 @@ typedef void (*loom_vector_ternary_transfer_fn_t)(const loom_value_facts_t* a,
 typedef int64_t (*loom_vector_bit_count_fn_t)(uint64_t value, int32_t bitwidth);
 
 typedef double (*loom_vector_float_unary_transfer_fn_t)(double input);
+typedef double (*loom_vector_float_unary_data_transfer_fn_t)(
+    double input, const void* user_data);
 typedef double (*loom_vector_float_binary_transfer_fn_t)(double lhs,
                                                          double rhs);
 
@@ -1327,6 +1329,34 @@ static double loom_vector_roundeven_f64(double input) {
   return nearbyint(input);
 }
 
+static double loom_vector_logistic_f64(double input) {
+  return 1.0 / (1.0 + exp(-input));
+}
+
+static double loom_vector_silu_f64(double input) {
+  return input * loom_vector_logistic_f64(input);
+}
+
+static double loom_vector_softplus_f64(double input) {
+  return log1p(exp(-fabs(input))) + fmax(input, 0.0);
+}
+
+static double loom_vector_gelu_erf_f64(double input) {
+  const double inverse_sqrt2 = 0.70710678118654752440;
+  return 0.5 * input * (1.0 + erf(input * inverse_sqrt2));
+}
+
+static double loom_vector_gelu_tanh_f64(double input) {
+  const double sqrt_2_over_pi = 0.79788456080286535588;
+  return 0.5 * input *
+         (1.0 +
+          tanh(sqrt_2_over_pi * (input + 0.044715 * input * input * input)));
+}
+
+static double loom_vector_gelu_logistic_f64(double input, double scale) {
+  return input * loom_vector_logistic_f64(scale * input);
+}
+
 static double loom_vector_minimum_f64(double lhs, double rhs) {
   return (isnan(lhs) || isnan(rhs)) ? NAN : fmin(lhs, rhs);
 }
@@ -2174,10 +2204,10 @@ static iree_status_t loom_vector_bit_count_summary_facts(
                                                   &result_facts[0]);
 }
 
-static iree_status_t loom_vector_float_unary_summary_facts(
+static iree_status_t loom_vector_float_unary_data_summary_facts(
     loom_fact_context_t* context, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts,
-    loom_vector_float_unary_transfer_fn_t fn) {
+    loom_vector_float_unary_data_transfer_fn_t fn, const void* user_data) {
   bool fragment_handled = false;
   IREE_RETURN_IF_ERROR(loom_vector_try_preserve_accumulator_fragment_facts(
       context, operand_facts, 1, result_facts, &fragment_handled));
@@ -2191,7 +2221,7 @@ static iree_status_t loom_vector_float_unary_summary_facts(
     double input_value = 0.0;
     loom_value_facts_t element = loom_value_facts_unknown();
     if (loom_vector_facts_query_exact_f64(input, &input_value)) {
-      element = loom_value_facts_exact_f64(fn(input_value));
+      element = loom_value_facts_exact_f64(fn(input_value, user_data));
     }
     return loom_value_facts_make_uniform_element(context, element,
                                                  &result_facts[0]);
@@ -2208,7 +2238,7 @@ static iree_status_t loom_vector_float_unary_summary_facts(
     double input_value = 0.0;
     lanes[i] = loom_value_facts_unknown();
     if (loom_vector_facts_query_exact_f64(input_lanes.lanes[i], &input_value)) {
-      lanes[i] = loom_value_facts_exact_f64(fn(input_value));
+      lanes[i] = loom_value_facts_exact_f64(fn(input_value, user_data));
     }
   }
   loom_value_fact_small_static_lanes_t lane_slice = {
@@ -2217,6 +2247,28 @@ static iree_status_t loom_vector_float_unary_summary_facts(
   };
   return loom_value_facts_make_small_static_lanes(context, lane_slice,
                                                   &result_facts[0]);
+}
+
+typedef struct loom_vector_float_unary_adapter_t {
+  loom_vector_float_unary_transfer_fn_t fn;
+} loom_vector_float_unary_adapter_t;
+
+static double loom_vector_float_unary_adapter_transfer(double input,
+                                                       const void* user_data) {
+  const loom_vector_float_unary_adapter_t* adapter = user_data;
+  return adapter->fn(input);
+}
+
+static iree_status_t loom_vector_float_unary_summary_facts(
+    loom_fact_context_t* context, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts,
+    loom_vector_float_unary_transfer_fn_t fn) {
+  const loom_vector_float_unary_adapter_t adapter = {
+      .fn = fn,
+  };
+  return loom_vector_float_unary_data_summary_facts(
+      context, operand_facts, result_facts,
+      loom_vector_float_unary_adapter_transfer, &adapter);
 }
 
 static iree_status_t loom_vector_float_binary_summary_facts(
@@ -2449,6 +2501,11 @@ LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_acoshf_facts, acosh)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_atanhf_facts, atanh)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_erff_facts, erf)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_erfcf_facts, erfc)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_logisticf_facts,
+                              loom_vector_logistic_f64)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_siluf_facts, loom_vector_silu_f64)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_softplusf_facts,
+                              loom_vector_softplus_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_ceilf_facts, ceil)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_floorf_facts, floor)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_roundf_facts, round)
@@ -2466,6 +2523,48 @@ LOOM_VECTOR_UNARY_FACTS(loom_vector_extf_facts,
 LOOM_VECTOR_UNARY_FACTS(loom_vector_extsi_facts,
                         loom_vector_passthrough_transfer)
 LOOM_VECTOR_UNARY_FACTS(loom_vector_sitofp_facts, loom_vector_sitofp_transfer)
+
+typedef struct loom_vector_geluf_transfer_t {
+  loom_vector_geluf_variant_t variant;
+  double scale;
+} loom_vector_geluf_transfer_t;
+
+static double loom_vector_geluf_transfer(double input, const void* user_data) {
+  const loom_vector_geluf_transfer_t* transfer = user_data;
+  switch (transfer->variant) {
+    case LOOM_VECTOR_GELUF_VARIANT_ERF:
+      return loom_vector_gelu_erf_f64(input);
+    case LOOM_VECTOR_GELUF_VARIANT_TANH:
+      return loom_vector_gelu_tanh_f64(input);
+    case LOOM_VECTOR_GELUF_VARIANT_LOGISTIC:
+      return loom_vector_gelu_logistic_f64(input, transfer->scale);
+    case LOOM_VECTOR_GELUF_VARIANT_COUNT_:
+      return NAN;
+  }
+  return NAN;
+}
+
+iree_status_t loom_vector_geluf_facts(loom_fact_context_t* context,
+                                      const loom_module_t* module,
+                                      const loom_op_t* op,
+                                      const loom_value_facts_t* operand_facts,
+                                      loom_value_facts_t* result_facts) {
+  loom_vector_geluf_transfer_t transfer = {
+      .variant = loom_vector_geluf_variant(op),
+      .scale = 0.0,
+  };
+  if (transfer.variant == LOOM_VECTOR_GELUF_VARIANT_LOGISTIC) {
+    loom_attribute_t scale_attr = loom_op_attrs(op)[1];
+    if (loom_attr_is_absent(scale_attr)) {
+      result_facts[0] = loom_value_facts_unknown();
+      return iree_ok_status();
+    }
+    transfer.scale = loom_attr_as_f64(scale_attr);
+  }
+  return loom_vector_float_unary_data_summary_facts(
+      context, operand_facts, result_facts, loom_vector_geluf_transfer,
+      &transfer);
+}
 
 iree_status_t loom_vector_fmai_facts(loom_fact_context_t* context,
                                      const loom_module_t* module,

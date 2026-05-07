@@ -39,13 +39,14 @@ from loom.assembly import (
 from loom.dialect.atomic import AtomicKind, AtomicOrdering, AtomicScope
 from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dialect.combining import CombiningKind
-from loom.dialect.scalar import FastMathFlags, IntOverflowFlags
+from loom.dialect.scalar import FastMathFlags, GeluVariant, IntOverflowFlags
 from loom.dialect.scalar.comparison import CmpFPredicate, CmpIPredicate
 from loom.dsl import (
     ANY,
     ATTR_TYPE_ANY,
     ATTR_TYPE_DICT,
     ATTR_TYPE_ENUM,
+    ATTR_TYPE_F64,
     ATTR_TYPE_FLAGS,
     ATTR_TYPE_I64,
     ATTR_TYPE_I64_ARRAY,
@@ -3035,6 +3036,72 @@ vector_erfcf = _lanewise_unary(
     canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
+vector_logisticf = _lanewise_unary(
+    "vector.logisticf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise logistic sigmoid 1 / (1 + exp(-x))."),
+    flags=_VF,
+    facts="loom_vector_logisticf_facts",
+    canonicalize="loom_vector_uniform_result_canonicalize",
+)
+
+vector_siluf = _lanewise_unary(
+    "vector.siluf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise SiLU activation x * logistic(x)."),
+    flags=_VF,
+    facts="loom_vector_siluf_facts",
+    canonicalize="loom_vector_uniform_result_canonicalize",
+)
+
+vector_softplusf = _lanewise_unary(
+    "vector.softplusf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise softplus activation log(1 + exp(x))."),
+    flags=_VF,
+    facts="loom_vector_softplusf_facts",
+    canonicalize="loom_vector_uniform_result_canonicalize",
+)
+
+vector_geluf = Op(
+    "vector.geluf",
+    group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Lanewise GELU activation preserving the chosen formula family. The "
+        "logistic variant carries its scale as an explicit attribute so "
+        "importers do not encode approximation identity through arithmetic "
+        "constants."
+    ),
+    operands=[Operand("input", VECTOR)],
+    results=[Result("result", VECTOR)],
+    attrs=[
+        AttrDef("variant", ATTR_TYPE_ENUM, enum_def=GeluVariant),
+        AttrDef("fastmath", ATTR_TYPE_FLAGS, optional=True, enum_def=FastMathFlags),
+        AttrDef("scale", ATTR_TYPE_F64, optional=True),
+    ],
+    constraints=[
+        HasFloatElement("result"),
+        SameType("input", "result"),
+    ],
+    verify="loom_vector_geluf_verify",
+    facts="loom_vector_geluf_facts",
+    canonicalize="loom_vector_uniform_result_canonicalize",
+    traits=[PURE, ELEMENTWISE],
+    format=[
+        TemplateParamFlags("variant", "fastmath"),
+        Ref("input"),
+        AttrDict(),
+        COLON,
+        TypeOf("result"),
+    ],
+    examples=[
+        "%result = vector.geluf<erf> %input : vector<16xf32>",
+        "%result = vector.geluf<tanh, afn> %input : vector<16xf32>",
+        "%result = vector.geluf<logistic> %input {scale = 1.702} : vector<16xf32>",
+    ],
+)
+
 vector_ceilf = _lanewise_unary(
     "vector.ceilf",
     result_constraint=FLOAT_ELEMENT,
@@ -3998,6 +4065,10 @@ VECTOR_MATH_OPS: tuple[Op, ...] = (
     vector_atanhf,
     vector_erff,
     vector_erfcf,
+    vector_logisticf,
+    vector_siluf,
+    vector_softplusf,
+    vector_geluf,
     vector_ceilf,
     vector_floorf,
     vector_roundf,

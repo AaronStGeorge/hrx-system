@@ -100,6 +100,22 @@ func.def @reduce_reject_arrow_result(%v: vector<4xf32>, %zero: f32) {
 
 // ====
 
+func.def @geluf_logistic_requires_scale(%x: vector<4xf32>) {
+  // ERROR@+1: TYPE/005 {attr_name="scale", actual_kind="0", expected_kind="2"}
+  %r = vector.geluf<logistic> %x : vector<4xf32>
+  func.return
+}
+
+// ====
+
+func.def @geluf_non_logistic_rejects_scale(%x: vector<4xf32>) {
+  // ERROR@+1: TYPE/005 {attr_name="scale", actual_kind="2", expected_kind="0"}
+  %r = vector.geluf<tanh> %x {scale = 1.702} : vector<4xf32>
+  func.return
+}
+
+// ====
+
 // Axis-preserving reductions require at least one reduced axis.
 func.def @reduce_axes_empty_axes(%v: vector<2x3xf32>, %init: vector<3xf32>) {
   // ERROR@+1: STRUCTURE/014 "axes" "non-empty axes list"

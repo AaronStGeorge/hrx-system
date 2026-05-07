@@ -42,3 +42,28 @@ func.def @log_exp_keeps_domain_and_overflow_semantics(%x: f32) -> (f32) {
   %log = scalar.logf<nnan> %exp : f32
   func.return %log : f32
 }
+
+// ====
+
+// Semantic activation facts fold exact constants without erasing the named op
+// surface for dynamic values.
+func.def @activation_exact_zero() -> (f32, f32, f32, f32, f32, f32) {
+  %zero = scalar.constant 0.0 : f32
+  %logistic = scalar.logisticf %zero : f32
+  %silu = scalar.siluf %zero : f32
+  %softplus = scalar.softplusf %zero : f32
+  %gelu_erf = scalar.geluf<erf> %zero : f32
+  %gelu_tanh = scalar.geluf<tanh> %zero : f32
+  %gelu_logistic = scalar.geluf<logistic> %zero {scale = 1.702} : f32
+  func.return %logistic, %silu, %softplus, %gelu_erf, %gelu_tanh, %gelu_logistic : f32, f32, f32, f32, f32, f32
+}
+// ----
+func.def @activation_exact_zero() -> (f32, f32, f32, f32, f32, f32) {
+  %logistic = scalar.constant 0.5 : f32
+  %silu = scalar.constant 0.0 : f32
+  %softplus = scalar.constant 0.69314718055994529 : f32
+  %gelu_erf = scalar.constant 0.0 : f32
+  %gelu_tanh = scalar.constant 0.0 : f32
+  %gelu_logistic = scalar.constant 0.0 : f32
+  func.return %logistic, %silu, %softplus, %gelu_erf, %gelu_tanh, %gelu_logistic : f32, f32, f32, f32, f32, f32
+}

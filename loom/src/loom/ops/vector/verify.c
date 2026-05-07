@@ -58,6 +58,22 @@ static iree_status_t loom_vector_emit_attribute_kind_mismatch(
                           IREE_ARRAYSIZE(params));
 }
 
+static iree_status_t loom_vector_emit_indexed_attribute_kind_mismatch(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t attr_name, uint16_t attr_index,
+    loom_attr_kind_t actual_kind, loom_attr_kind_t expected_kind) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_with_field_ref(
+          loom_param_string(attr_name),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    attr_index)),
+      loom_param_u32(actual_kind),
+      loom_param_u32(expected_kind),
+  };
+  return loom_vector_emit(emitter, op, LOOM_ERR_TYPE_005, params,
+                          IREE_ARRAYSIZE(params));
+}
+
 static iree_status_t loom_vector_emit_attribute_value_constraint(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op,
     iree_string_view_t attr_name, int64_t actual_value,
@@ -2182,6 +2198,23 @@ iree_status_t loom_vector_transform_verify(const loom_module_t* module,
 
   return loom_vector_transform_verify_family(module, op, emitter, source_type,
                                              result_type);
+}
+
+iree_status_t loom_vector_geluf_verify(const loom_module_t* module,
+                                       const loom_op_t* op,
+                                       iree_diagnostic_emitter_t emitter) {
+  loom_attribute_t scale_attr = loom_op_attrs(op)[1];
+  bool has_scale = !loom_attr_is_absent(scale_attr);
+  if (loom_vector_geluf_variant(op) == LOOM_VECTOR_GELUF_VARIANT_LOGISTIC) {
+    if (has_scale) return iree_ok_status();
+    return loom_vector_emit_indexed_attribute_kind_mismatch(
+        emitter, op, IREE_SV("scale"), /*attr_index=*/1, LOOM_ATTR_ABSENT,
+        LOOM_ATTR_F64);
+  }
+  if (!has_scale) return iree_ok_status();
+  return loom_vector_emit_indexed_attribute_kind_mismatch(
+      emitter, op, IREE_SV("scale"), /*attr_index=*/1, scale_attr.kind,
+      LOOM_ATTR_ABSENT);
 }
 
 iree_status_t loom_vector_reduce_verify(const loom_module_t* module,

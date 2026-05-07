@@ -14,6 +14,9 @@ package(
 
 loom_check_test_suite(
     name = "test",
-    srcs = ["verify.loom-test"],
+    srcs = [
+        "bytecode.loom-test",
+        "verify.loom-test",
+    ],
     runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )

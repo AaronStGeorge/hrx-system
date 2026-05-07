@@ -88,3 +88,19 @@ func.def @assume_rejects_count_mismatch(%x: i64, %y: i64) -> (i64) {
   %r = scalar.assume %x, %y [] : i64
   func.return %r : i64
 }
+
+// ====
+
+func.def @geluf_logistic_requires_scale(%x: f32) -> (f32) {
+  // ERROR@+1: TYPE/005 {attr_name="scale", actual_kind="0", expected_kind="2"}
+  %r = scalar.geluf<logistic> %x : f32
+  func.return %r : f32
+}
+
+// ====
+
+func.def @geluf_non_logistic_rejects_scale(%x: f32) -> (f32) {
+  // ERROR@+1: TYPE/005 {attr_name="scale", actual_kind="2", expected_kind="0"}
+  %r = scalar.geluf<erf> %x {scale = 1.702} : f32
+  func.return %r : f32
+}

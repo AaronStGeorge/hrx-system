@@ -179,6 +179,19 @@ func.def @lanewise_math_rounding(%a: vector<16xf32>) {
 
 // ====
 
+func.def @lanewise_math_activations(%a: vector<16xf32>) {
+  %logistic = vector.logisticf %a : vector<16xf32>
+  %silu = vector.siluf<afn> %a : vector<16xf32>
+  %softplus = vector.softplusf<afn> %a : vector<16xf32>
+  %gelu_erf = vector.geluf<erf> %a : vector<16xf32>
+  %gelu_tanh = vector.geluf<tanh, afn> %a : vector<16xf32>
+  %gelu_logistic = vector.geluf<logistic, afn> %a {scale = 1.702} : vector<16xf32>
+  test.use %logistic, %silu, %softplus, %gelu_erf, %gelu_tanh, %gelu_logistic : vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>
+  func.return
+}
+
+// ====
+
 // Comparisons spell the same-shape i1 mask result explicitly.
 func.def @cmp_select(%a: vector<16xf32>, %b: vector<16xf32>, %i: vector<16xi32>, %j: vector<16xi32>) -> (vector<16xf32>) {
   %mask = vector.cmpf olt, %a, %b : vector<16xf32> -> vector<16xi1>

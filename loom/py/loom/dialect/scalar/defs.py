@@ -23,6 +23,7 @@ __all__ = [
     "SCALAR_MATH_CATEGORY",
     "SCALAR_OP_CATEGORIES",
     "FastMathFlags",
+    "GeluVariant",
     "IntOverflowFlags",
 ]
 
@@ -89,4 +90,14 @@ IntOverflowFlags = EnumDef(
         EnumCase("nuw", 2, doc="No unsigned wrap."),
     ],
     doc="Integer overflow behavior flags.",
+)
+
+GeluVariant = EnumDef(
+    "GeluVariant",
+    [
+        EnumCase("erf", 0, doc="Exact GELU formula using erf(x/sqrt(2))."),
+        EnumCase("tanh", 1, doc="Tanh-polynomial GELU approximation."),
+        EnumCase("logistic", 2, doc="Scaled logistic GELU approximation."),
+    ],
+    doc="GELU activation formula family.",
 )
