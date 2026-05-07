@@ -46,6 +46,9 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.s_and_b32",
     "amdgpu.s_or_b32",
     "amdgpu.s_xor_b32",
+    "amdgpu.s_and_b64",
+    "amdgpu.s_or_b64",
+    "amdgpu.s_xor_b64",
     "amdgpu.s_lshl_b32",
     "amdgpu.s_lshr_b32",
     "amdgpu.s_ashr_i32",
@@ -73,6 +76,7 @@ _DESCRIPTOR_SET = build_amdgpu_contract_descriptor_set(
     descriptor_keys=_DESCRIPTOR_KEYS,
 )
 
+_I1 = Scalar("i1")
 _I32 = Scalar("i32")
 _INDEX = Scalar("index")
 _OFFSET = Scalar("offset")
@@ -261,6 +265,13 @@ def _i32_sgpr_vgpr_rules(
             I32_VGPR_MATERIALIZER,
         ),
     )
+
+
+def _i1_sgpr_mask_rule(
+    source_op: Op,
+    descriptor_key: str,
+) -> DescriptorRule:
+    return _sgpr_binary_rule(source_op, _I1, _descriptor(descriptor_key))
 
 
 def _i32_shift_rules(
@@ -469,6 +480,12 @@ def _rules() -> tuple[DescriptorRule, ...]:
             "amdgpu.v_mul_lo_u32",
         )
     )
+    rules.append(
+        _i1_sgpr_mask_rule(
+            scalar_bitwise.scalar_andi,
+            "amdgpu.s_and_b64",
+        )
+    )
     rules.extend(
         _i32_sgpr_vgpr_rules(
             scalar_bitwise.scalar_andi,
@@ -476,11 +493,23 @@ def _rules() -> tuple[DescriptorRule, ...]:
             "amdgpu.v_and_b32",
         )
     )
+    rules.append(
+        _i1_sgpr_mask_rule(
+            scalar_bitwise.scalar_ori,
+            "amdgpu.s_or_b64",
+        )
+    )
     rules.extend(
         _i32_sgpr_vgpr_rules(
             scalar_bitwise.scalar_ori,
             "amdgpu.s_or_b32",
             "amdgpu.v_or_b32",
+        )
+    )
+    rules.append(
+        _i1_sgpr_mask_rule(
+            scalar_bitwise.scalar_xori,
+            "amdgpu.s_xor_b64",
         )
     )
     rules.extend(

@@ -1774,6 +1774,30 @@ def _s_binary_u32_overlay(
     )
 
 
+def _s_binary_u64_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="ENC_SOP2",
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SDST", _sgpr_result(units=2)),
+            AmdgpuOperandOverlay("SSRC0", _sgpr_operand("lhs", units=2)),
+            AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs", units=2)),
+        ),
+        implicit_operands=(_SCC_CLOBBER_OUTPUT,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _s_min_i32_overlay() -> AmdgpuDescriptorOverlay:
     return _s_binary_u32_overlay(
         descriptor_key="amdgpu.s_min_i32",
@@ -2173,6 +2197,33 @@ def _s_xor_b32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _s_and_b64_overlay() -> AmdgpuDescriptorOverlay:
+    return _s_binary_u64_overlay(
+        descriptor_key="amdgpu.s_and_b64",
+        instruction_name="S_AND_B64",
+        mnemonic="s_and_b64",
+        semantic_tag="integer.and.u64",
+    )
+
+
+def _s_or_b64_overlay() -> AmdgpuDescriptorOverlay:
+    return _s_binary_u64_overlay(
+        descriptor_key="amdgpu.s_or_b64",
+        instruction_name="S_OR_B64",
+        mnemonic="s_or_b64",
+        semantic_tag="integer.or.u64",
+    )
+
+
+def _s_xor_b64_overlay() -> AmdgpuDescriptorOverlay:
+    return _s_binary_u64_overlay(
+        descriptor_key="amdgpu.s_xor_b64",
+        instruction_name="S_XOR_B64",
+        mnemonic="s_xor_b64",
+        semantic_tag="integer.xor.u64",
+    )
+
+
 def _s_cmp_i32_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_cmp_i32_overlay(
@@ -2484,11 +2535,14 @@ def _v_ashrrev_i32_literal_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
-def _i32_bitwise_shift_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+def _integer_bitwise_shift_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_and_b32_overlay(),
         _s_or_b32_overlay(),
         _s_xor_b32_overlay(),
+        _s_and_b64_overlay(),
+        _s_or_b64_overlay(),
+        _s_xor_b64_overlay(),
         _s_lshl_b32_overlay(),
         _s_lshl_b64_overlay(),
         _s_lshr_b32_overlay(),
@@ -6971,7 +7025,7 @@ def _cdna_core_overlays(
         _v_min_u32_overlay(),
         _v_max_u32_overlay(),
         _v_readfirstlane_b32_overlay(),
-        *_i32_bitwise_shift_overlays(),
+        *_integer_bitwise_shift_overlays(),
         _v_add_f32_overlay(),
         _v_add_f32_literal_overlay(),
         _v_sub_f32_overlay(),
@@ -7247,7 +7301,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_min_u32_overlay(),
         _v_max_u32_overlay(),
         _v_readfirstlane_b32_overlay(),
-        *_i32_bitwise_shift_overlays(),
+        *_integer_bitwise_shift_overlays(),
         _v_add_f32_overlay(),
         _v_add_f32_literal_overlay(),
         _v_sub_f32_overlay(),
@@ -7490,7 +7544,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_min_u32_overlay(),
         _v_max_u32_overlay(),
         _v_readfirstlane_b32_overlay(),
-        *_i32_bitwise_shift_overlays(),
+        *_integer_bitwise_shift_overlays(),
         _v_add_f32_overlay(),
         _v_add_f32_literal_overlay(),
         _v_sub_f32_overlay(),
@@ -7774,7 +7828,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_min_u32_overlay(),
         _v_max_u32_overlay(),
         _v_readfirstlane_b32_overlay(),
-        *_i32_bitwise_shift_overlays(),
+        *_integer_bitwise_shift_overlays(),
         _v_add_f32_overlay(),
         _v_add_f32_literal_overlay(),
         _v_sub_f32_overlay(),
@@ -8844,7 +8898,7 @@ _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS: dict[
         lhs_type="bf8",
         rhs_type="bf8",
     ),
-    **_contract_overlay_builders_from_overlays(_i32_bitwise_shift_overlays()),
+    **_contract_overlay_builders_from_overlays(_integer_bitwise_shift_overlays()),
     **_contract_overlay_builders_from_overlays(_s_cmp_i32_overlays()),
     **_contract_overlay_builders_from_overlays(_v_cmp_overlays()),
 }

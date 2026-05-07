@@ -122,6 +122,41 @@ low.func.def target(@target) abi(hal_kernel) @index_cast_compare_divergent(%valu
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @index_divergent_i1_bitwise_select(%values: vector<2xi32>, %lower: i32, %upper: i32, %true_value: f32, %false_value: f32) -> (f32) {
+  %lane_i32 = vector.extract %values[0] : vector<2xi32> -> i32
+  %lane = index.cast %lane_i32 : i32 to index
+  %lower_index = index.cast %lower : i32 to index
+  %upper_index = index.cast %upper : i32 to index
+  %at_or_above_lower = index.cmp sge, %lane, %lower_index : index
+  %below_upper = index.cmp slt, %lane, %upper_index : index
+  %inside_bounds = scalar.andi %at_or_above_lower, %below_upper : i1
+  %touches_bound = scalar.ori %at_or_above_lower, %below_upper : i1
+  %exclusive_bound = scalar.xori %inside_bounds, %touches_bound : i1
+  %inside_value = scf.select %inside_bounds, %true_value, %false_value : f32
+  %touches_value = scf.select %touches_bound, %inside_value, %false_value : f32
+  %selected = scf.select %exclusive_bound, %touches_value, %true_value : f32
+  func.return %selected : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @index_divergent_i1_bitwise_select(%values: reg<amdgpu.vgpr x2>, %lower_index: reg<amdgpu.sgpr>, %upper_index: reg<amdgpu.sgpr>, %true_value: reg<amdgpu.vgpr>, %false_value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %25 = v_mov_b32_copy %lower_index
+  %at_or_above_lower = v_cmp_ge_i32 %lane, %25
+  %27 = v_mov_b32_copy %upper_index
+  %below_upper = v_cmp_lt_i32 %lane, %27
+  %inside_bounds = s_and_b64 %at_or_above_lower, %below_upper
+  %touches_bound = s_or_b64 %at_or_above_lower, %below_upper
+  %exclusive_bound = s_xor_b64 %inside_bounds, %touches_bound
+  %inside_value = v_cndmask_b32 %false_value, %true_value, %inside_bounds
+  %touches_value = v_cndmask_b32 %false_value, %inside_value, %touches_bound
+  %selected = v_cndmask_b32 %true_value, %touches_value, %exclusive_bound
+  return %selected
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @dynamic_vector_extract_i32(%values: vector<2xi32>, %lane_index: index, %limit: i32) {
   %lane = vector.extract %values[%lane_index] : vector<2xi32> -> i32
   %condition = scalar.cmpi slt, %lane, %limit : i32
