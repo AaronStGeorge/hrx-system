@@ -200,6 +200,41 @@ static bool loom_amdgpu_vector_interleave_plan_from_op(
   return true;
 }
 
+static bool loom_amdgpu_vector_shuffle_plan_from_op(
+    const loom_module_t* module, const loom_op_t* source_op,
+    loom_amdgpu_vector_shuffle_plan_t* out_plan) {
+  *out_plan = (loom_amdgpu_vector_shuffle_plan_t){0};
+  if (!loom_vector_shuffle_isa(source_op)) {
+    return false;
+  }
+
+  out_plan->source = loom_vector_shuffle_source(source_op);
+  out_plan->result = loom_vector_shuffle_result(source_op);
+  const loom_type_t source_type =
+      loom_module_value_type(module, out_plan->source);
+  const loom_type_t result_type =
+      loom_module_value_type(module, out_plan->result);
+  if (!loom_type_equal(source_type, result_type) ||
+      !loom_amdgpu_static_rank1_32bit_vector_shape(source_type,
+                                                   &out_plan->register_count)) {
+    return false;
+  }
+
+  loom_attribute_t source_lanes = loom_vector_shuffle_source_lanes(source_op);
+  if (source_lanes.kind != LOOM_ATTR_I64_ARRAY ||
+      source_lanes.count != out_plan->register_count) {
+    return false;
+  }
+  for (uint16_t i = 0; i < source_lanes.count; ++i) {
+    if (source_lanes.i64_array[i] < 0 ||
+        source_lanes.i64_array[i] >= out_plan->register_count) {
+      return false;
+    }
+    out_plan->source_register_indices[i] = (uint32_t)source_lanes.i64_array[i];
+  }
+  return true;
+}
+
 static bool loom_amdgpu_packed_register_bit_slice_window_is_supported(
     uint32_t source_bit_offset, uint32_t result_payload_bit_count,
     uint32_t result_register_count) {
@@ -472,6 +507,35 @@ iree_status_t loom_amdgpu_lower_vector_interleave(
                                           plan->result_register_count);
 }
 
+iree_status_t loom_amdgpu_select_vector_shuffle_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_shuffle_plan_t* out_plan, bool* out_selected) {
+  *out_selected = loom_amdgpu_vector_shuffle_plan_from_op(
+      loom_low_lower_context_module(context), source_op, out_plan);
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_lower_vector_shuffle(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_shuffle_plan_t* plan) {
+  loom_value_id_t low_source = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_lookup_value(context, plan->source, &low_source));
+
+  loom_type_t register_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &register_type));
+  loom_value_id_t low_registers[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
+  for (uint32_t register_index = 0; register_index < plan->register_count;
+       ++register_index) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_extract_32bit_register(
+        context, source_op, low_source, plan->register_count,
+        plan->source_register_indices[register_index], register_type,
+        &low_registers[register_index]));
+  }
+  return loom_amdgpu_bind_32bit_registers(context, source_op, plan->result,
+                                          low_registers, plan->register_count);
+}
+
 iree_status_t loom_amdgpu_select_vector_slice_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_vector_slice_plan_t* out_plan, bool* out_selected) {
@@ -605,6 +669,14 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_structural(
       }
       return loom_amdgpu_low_legality_reject(context, op,
                                              IREE_SV("interleave.rank1_32bit"));
+    }
+    case LOOM_OP_VECTOR_SHUFFLE: {
+      loom_amdgpu_vector_shuffle_plan_t unused_plan = {0};
+      if (loom_amdgpu_vector_shuffle_plan_from_op(module, op, &unused_plan)) {
+        return iree_ok_status();
+      }
+      return loom_amdgpu_low_legality_reject(context, op,
+                                             IREE_SV("shuffle.rank1_32bit"));
     }
     case LOOM_OP_VECTOR_SLICE: {
       loom_amdgpu_vector_slice_plan_t unused_plan = {0};

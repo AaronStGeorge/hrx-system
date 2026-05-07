@@ -226,6 +226,11 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_select_vector_interleave_dispatch,
                 loom_amdgpu_emit_vector_interleave_dispatch,
                 loom_amdgpu_low_legality_verify_vector_structural),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_SHUFFLE)] = LOOM_AMDGPU_DATA_ROW(
+            LOOM_OP_VECTOR_SHUFFLE, loom_amdgpu_vector_shuffle_plan_t,
+            loom_amdgpu_select_vector_shuffle_dispatch,
+            loom_amdgpu_emit_vector_shuffle_dispatch,
+            loom_amdgpu_low_legality_verify_vector_structural),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_SLICE)] = LOOM_AMDGPU_DATA_ROW(
             LOOM_OP_VECTOR_SLICE, loom_amdgpu_vector_slice_plan_t,
             loom_amdgpu_select_vector_slice_dispatch,

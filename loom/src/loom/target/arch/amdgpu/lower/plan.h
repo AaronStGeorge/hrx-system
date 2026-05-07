@@ -120,6 +120,17 @@ typedef struct loom_amdgpu_vector_interleave_plan_t {
   uint32_t result_register_count;
 } loom_amdgpu_vector_interleave_plan_t;
 
+typedef struct loom_amdgpu_vector_shuffle_plan_t {
+  // Source vector value whose lanes are read by the static lane map.
+  loom_value_id_t source;
+  // Result vector value receiving shuffled lane payloads.
+  loom_value_id_t result;
+  // Static 32-bit backing register count for the source and result vectors.
+  uint32_t register_count;
+  // Source register index selected for each result register.
+  uint32_t source_register_indices[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
+} loom_amdgpu_vector_shuffle_plan_t;
+
 typedef struct loom_amdgpu_vector_extract_plan_t {
   // Source vector value containing the extracted payload.
   loom_value_id_t source;
