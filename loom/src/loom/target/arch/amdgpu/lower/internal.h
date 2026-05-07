@@ -55,21 +55,40 @@ uint32_t loom_amdgpu_static_vector_lane_count(loom_type_t type,
                                               loom_scalar_type_t element_type,
                                               uint32_t max_lane_count);
 
-// Returns the lane count for a supported AMDGPU 32-bit vector payload, or zero
-// when the source type is not representable as that payload.
+// Returns the flattened element count for a static vector of the requested
+// element type, or zero when the type is not a supported static vector payload.
+uint32_t loom_amdgpu_static_vector_register_count(
+    loom_type_t type, loom_scalar_type_t element_type,
+    uint32_t max_register_count);
+
+// Returns the rank-1 lane count for a supported AMDGPU 32-bit vector payload,
+// or zero when the source type is not representable as that payload.
 uint32_t loom_amdgpu_vector_32bit_lane_count(loom_type_t type);
 
-// Returns the i32 lane count for a supported AMDGPU 32-bit vector payload, or
-// zero when the source type is not representable as that payload.
+// Returns the flattened register count for a supported static AMDGPU 32-bit
+// vector payload, or zero when the source type is not representable as that
+// payload.
+uint32_t loom_amdgpu_vector_32bit_register_count(loom_type_t type);
+
+// Returns the rank-1 i32 lane count for a supported AMDGPU 32-bit vector
+// payload, or zero when the source type is not representable as that payload.
 uint32_t loom_amdgpu_vector_i32_lane_count(loom_type_t type);
+
+// Returns the flattened register count for a supported static i32 vector
+// payload, or zero when the source type is not representable as that payload.
+uint32_t loom_amdgpu_vector_i32_register_count(loom_type_t type);
 
 // Returns true when the source type can be loaded through scalar memory and
 // left in SGPR form.
 bool loom_amdgpu_type_is_i32_memory_payload(loom_type_t type);
 
-// Returns the f32 lane count for a supported AMDGPU 32-bit vector payload, or
-// zero when the source type is not representable as that payload.
+// Returns the rank-1 f32 lane count for a supported AMDGPU 32-bit vector
+// payload, or zero when the source type is not representable as that payload.
 uint32_t loom_amdgpu_vector_f32_lane_count(loom_type_t type);
+
+// Returns the flattened register count for a supported static f32 vector
+// payload, or zero when the source type is not representable as that payload.
+uint32_t loom_amdgpu_vector_f32_register_count(loom_type_t type);
 
 // Returns the i1 lane count for a supported AMDGPU mask vector payload, or zero
 // when the source type is not representable as that payload.
@@ -877,6 +896,17 @@ iree_status_t loom_amdgpu_select_vector_shuffle_plan(
 iree_status_t loom_amdgpu_lower_vector_shuffle(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_shuffle_plan_t* plan);
+
+// Selects an AMDGPU vector.transpose flattened register permutation plan.
+iree_status_t loom_amdgpu_select_vector_transpose_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_transpose_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source vector.transpose op as a flattened AMDGPU register
+// permutation.
+iree_status_t loom_amdgpu_lower_vector_transpose(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_transpose_plan_t* plan);
 
 // Selects an AMDGPU vector.slice register slicing plan.
 iree_status_t loom_amdgpu_select_vector_slice_plan(

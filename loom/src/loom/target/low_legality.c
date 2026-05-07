@@ -455,9 +455,9 @@ static iree_status_t loom_target_low_legality_verify_type(
     return iree_ok_status();
   }
   if (loom_type_is_vector(type)) {
-    if (!loom_type_is_all_static(type) || loom_type_rank(type) != 1) {
+    if (!loom_type_is_all_static(type)) {
       return loom_target_low_legality_emit_type_constraint(
-          context, op, type, IREE_SV("vector.static_rank1"));
+          context, op, type, IREE_SV("vector.static"));
     }
     uint64_t element_count = 0;
     if (!loom_type_static_element_count(type, &element_count) ||
@@ -657,9 +657,8 @@ static iree_status_t loom_target_low_legality_verify_op_class(
 
 static iree_status_t loom_target_low_legality_verify_op(
     loom_target_low_legality_context_t* context, const loom_op_t* op) {
-  IREE_RETURN_IF_ERROR(
-      loom_target_low_legality_verify_op_value_types(context, op));
-
+  // Target contracts and providers own their shape-specific legality. Let them
+  // emit precise diagnostics before the generic executable type gate runs.
   bool contract_handled = false;
   IREE_RETURN_IF_ERROR(loom_target_low_legality_try_contract_query_op(
       context, op, &contract_handled));
@@ -673,6 +672,9 @@ static iree_status_t loom_target_low_legality_verify_op(
   if (provider_handled) {
     return iree_ok_status();
   }
+
+  IREE_RETURN_IF_ERROR(
+      loom_target_low_legality_verify_op_value_types(context, op));
 
   return loom_target_low_legality_verify_op_class(context, op);
 }

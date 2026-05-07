@@ -415,6 +415,14 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_shuffle_dispatch,
                              loom_amdgpu_vector_shuffle_plan_t,
                              loom_amdgpu_lower_vector_shuffle)
 
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_transpose_dispatch,
+                               loom_amdgpu_vector_transpose_plan_t,
+                               loom_amdgpu_select_vector_transpose_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_transpose_dispatch,
+                             loom_amdgpu_vector_transpose_plan_t,
+                             loom_amdgpu_lower_vector_transpose)
+
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_slice_dispatch,
                                loom_amdgpu_vector_slice_plan_t,
                                loom_amdgpu_select_vector_slice_plan)

@@ -72,15 +72,36 @@ uint32_t loom_amdgpu_static_vector_lane_count(loom_type_t type,
   return (uint32_t)lane_count;
 }
 
+uint32_t loom_amdgpu_static_vector_register_count(
+    loom_type_t type, loom_scalar_type_t element_type,
+    uint32_t max_register_count) {
+  if (!loom_type_is_vector(type) || !loom_type_is_all_static(type) ||
+      loom_type_element_type(type) != element_type) {
+    return 0;
+  }
+  uint64_t element_count = 0;
+  if (!loom_type_static_element_count(type, &element_count) ||
+      element_count < 1 || element_count > max_register_count) {
+    return 0;
+  }
+  return (uint32_t)element_count;
+}
+
 static uint32_t loom_amdgpu_vector_lane_count(loom_type_t type,
                                               loom_scalar_type_t element_type) {
   return loom_amdgpu_static_vector_lane_count(
       type, element_type, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);
 }
 
-static bool loom_amdgpu_type_is_vector_32bit_lane_range(loom_type_t type) {
-  return loom_amdgpu_vector_lane_count(type, LOOM_SCALAR_TYPE_I32) != 0 ||
-         loom_amdgpu_vector_lane_count(type, LOOM_SCALAR_TYPE_F32) != 0;
+static uint32_t loom_amdgpu_vector_register_count(
+    loom_type_t type, loom_scalar_type_t element_type) {
+  return loom_amdgpu_static_vector_register_count(
+      type, element_type, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);
+}
+
+static bool loom_amdgpu_type_is_vector_32bit_register_range(loom_type_t type) {
+  return loom_amdgpu_vector_register_count(type, LOOM_SCALAR_TYPE_I32) != 0 ||
+         loom_amdgpu_vector_register_count(type, LOOM_SCALAR_TYPE_F32) != 0;
 }
 
 bool loom_amdgpu_type_is_i32_memory_payload(loom_type_t type) {
@@ -98,12 +119,28 @@ uint32_t loom_amdgpu_vector_32bit_lane_count(loom_type_t type) {
              : loom_amdgpu_vector_lane_count(type, LOOM_SCALAR_TYPE_F32);
 }
 
+uint32_t loom_amdgpu_vector_32bit_register_count(loom_type_t type) {
+  const uint32_t i32_register_count =
+      loom_amdgpu_vector_register_count(type, LOOM_SCALAR_TYPE_I32);
+  return i32_register_count != 0
+             ? i32_register_count
+             : loom_amdgpu_vector_register_count(type, LOOM_SCALAR_TYPE_F32);
+}
+
 uint32_t loom_amdgpu_vector_i32_lane_count(loom_type_t type) {
   return loom_amdgpu_vector_lane_count(type, LOOM_SCALAR_TYPE_I32);
 }
 
+uint32_t loom_amdgpu_vector_i32_register_count(loom_type_t type) {
+  return loom_amdgpu_vector_register_count(type, LOOM_SCALAR_TYPE_I32);
+}
+
 uint32_t loom_amdgpu_vector_f32_lane_count(loom_type_t type) {
   return loom_amdgpu_vector_lane_count(type, LOOM_SCALAR_TYPE_F32);
+}
+
+uint32_t loom_amdgpu_vector_f32_register_count(loom_type_t type) {
+  return loom_amdgpu_vector_register_count(type, LOOM_SCALAR_TYPE_F32);
 }
 
 uint32_t loom_amdgpu_vector_i1_lane_count(loom_type_t type) {
@@ -460,11 +497,11 @@ static bool loom_amdgpu_source_value_prefers_vgpr(
 
   const loom_value_t* value = loom_module_value(module, source_value_id);
   if (loom_value_is_block_arg(value)) {
-    return loom_amdgpu_type_is_vector_32bit_lane_range(source_type);
+    return loom_amdgpu_type_is_vector_32bit_register_range(source_type);
   }
   const loom_op_t* defining_op = loom_value_def_op(value);
   if (defining_op == NULL) {
-    return loom_amdgpu_type_is_vector_32bit_lane_range(source_type);
+    return loom_amdgpu_type_is_vector_32bit_register_range(source_type);
   }
 
   if (loom_traits_are_fact_identity(
@@ -597,8 +634,9 @@ static bool loom_amdgpu_source_value_prefers_vgpr(
       return loom_amdgpu_source_memory_access_prefers_vgpr(
           module, fact_table, view_regions, defining_op, source_type);
     case LOOM_OP_VECTOR_REDUCE:
-      return loom_amdgpu_type_is_vector_32bit_lane_range(loom_module_value_type(
-          module, loom_vector_reduce_input(defining_op)));
+      return loom_amdgpu_type_is_vector_32bit_register_range(
+          loom_module_value_type(module,
+                                 loom_vector_reduce_input(defining_op)));
     case LOOM_OP_VIEW_ATOMIC_CMPXCHG:
     case LOOM_OP_VIEW_ATOMIC_RMW:
       return true;
@@ -708,7 +746,7 @@ static bool loom_amdgpu_source_value_prefers_vgpr(
           module, fact_table, view_regions,
           loom_scalar_trunci_input(defining_op));
     default:
-      return loom_amdgpu_type_is_vector_32bit_lane_range(source_type);
+      return loom_amdgpu_type_is_vector_32bit_register_range(source_type);
   }
 }
 
@@ -752,7 +790,7 @@ static bool loom_amdgpu_scf_select_use_needs_native_i1_mask(
     const loom_type_t result_type =
         loom_module_value_type(module, loom_scf_select_result(user_op));
     if (loom_amdgpu_type_is_f32(result_type) ||
-        loom_amdgpu_type_is_vector_32bit_lane_range(result_type)) {
+        loom_amdgpu_type_is_vector_32bit_register_range(result_type)) {
       return true;
     }
     if (loom_amdgpu_source_value_prefers_vgpr(
@@ -891,15 +929,15 @@ iree_status_t loom_amdgpu_map_type(void* user_data,
   if (loom_amdgpu_type_is_16bit_float(source_type)) {
     return loom_amdgpu_make_vgpr_type(context, out_low_type);
   }
-  const uint32_t vector_lane_count =
-      loom_amdgpu_vector_32bit_lane_count(source_type);
-  if (vector_lane_count == 1) {
+  const uint32_t vector_register_count =
+      loom_amdgpu_vector_32bit_register_count(source_type);
+  if (vector_register_count == 1) {
     return loom_amdgpu_make_vgpr_type(context, out_low_type);
   }
-  if (vector_lane_count > 1) {
+  if (vector_register_count > 1) {
     return loom_amdgpu_make_register_type(context,
                                           LOOM_AMDGPU_REG_CLASS_ID_VGPR,
-                                          vector_lane_count, out_low_type);
+                                          vector_register_count, out_low_type);
   }
   const uint32_t mask_lane_count =
       loom_amdgpu_vector_i1_lane_count(source_type);
@@ -1032,11 +1070,11 @@ iree_status_t loom_amdgpu_map_contract_value(
         environment, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1, out_mapped_value);
   }
 
-  const uint32_t vector_lane_count =
-      loom_amdgpu_vector_32bit_lane_count(source_type);
-  if (vector_lane_count != 0) {
+  const uint32_t vector_register_count =
+      loom_amdgpu_vector_32bit_register_count(source_type);
+  if (vector_register_count != 0) {
     return loom_amdgpu_map_contract_register(
-        environment, LOOM_AMDGPU_REG_CLASS_ID_VGPR, vector_lane_count,
+        environment, LOOM_AMDGPU_REG_CLASS_ID_VGPR, vector_register_count,
         out_mapped_value);
   }
   const uint32_t mask_lane_count =

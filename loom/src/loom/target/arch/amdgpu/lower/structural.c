@@ -17,10 +17,10 @@ static bool loom_amdgpu_vector_bitcast_storage_shape(
   *out_payload_bit_count = 0;
   *out_register_count = 0;
 
-  const uint32_t lane_count = loom_amdgpu_vector_32bit_lane_count(type);
-  if (lane_count != 0) {
-    *out_payload_bit_count = 32u * lane_count;
-    *out_register_count = lane_count;
+  const uint32_t register_count = loom_amdgpu_vector_32bit_register_count(type);
+  if (register_count != 0) {
+    *out_payload_bit_count = 32u * register_count;
+    *out_register_count = register_count;
     return true;
   }
 
@@ -82,6 +82,13 @@ static bool loom_amdgpu_static_rank1_slice_shape(loom_type_t source_type,
 static bool loom_amdgpu_static_rank1_32bit_vector_shape(
     loom_type_t type, uint32_t* out_register_count) {
   *out_register_count = loom_amdgpu_vector_32bit_lane_count(type);
+  return *out_register_count != 0 &&
+         *out_register_count <= LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES;
+}
+
+static bool loom_amdgpu_static_32bit_vector_register_shape(
+    loom_type_t type, uint32_t* out_register_count) {
+  *out_register_count = loom_amdgpu_vector_32bit_register_count(type);
   return *out_register_count != 0 &&
          *out_register_count <= LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES;
 }
@@ -232,6 +239,110 @@ static bool loom_amdgpu_vector_shuffle_plan_from_op(
     }
     out_plan->source_register_indices[i] = (uint32_t)source_lanes.i64_array[i];
   }
+  return true;
+}
+
+static void loom_amdgpu_static_vector_indices_from_flat_register(
+    loom_type_t type, uint32_t ordinal, int64_t* indices) {
+  const uint8_t rank = loom_type_rank(type);
+  for (uint8_t reverse_axis = 0; reverse_axis < rank; ++reverse_axis) {
+    const uint8_t axis = (uint8_t)(rank - reverse_axis - 1);
+    const uint32_t dimension_size =
+        (uint32_t)loom_type_dim_static_size_at(type, axis);
+    indices[axis] =
+        dimension_size == 0 ? 0 : (int64_t)(ordinal % dimension_size);
+    if (dimension_size != 0) {
+      ordinal /= dimension_size;
+    }
+  }
+}
+
+static bool loom_amdgpu_static_vector_flat_register_from_indices(
+    loom_type_t type, const int64_t* indices, uint32_t* out_ordinal) {
+  uint32_t ordinal = 0;
+  const uint8_t rank = loom_type_rank(type);
+  for (uint8_t axis = 0; axis < rank; ++axis) {
+    const int64_t dimension_size = loom_type_dim_static_size_at(type, axis);
+    if (dimension_size < 1 || indices[axis] < 0 ||
+        indices[axis] >= dimension_size ||
+        ordinal >
+            (UINT32_MAX - (uint32_t)indices[axis]) / (uint32_t)dimension_size) {
+      return false;
+    }
+    ordinal = ordinal * (uint32_t)dimension_size + (uint32_t)indices[axis];
+  }
+  *out_ordinal = ordinal;
+  return true;
+}
+
+static bool loom_amdgpu_vector_transpose_plan_from_op(
+    const loom_module_t* module, const loom_op_t* source_op,
+    loom_amdgpu_vector_transpose_plan_t* out_plan) {
+  *out_plan = (loom_amdgpu_vector_transpose_plan_t){0};
+  if (!loom_vector_transpose_isa(source_op)) {
+    return false;
+  }
+
+  out_plan->source = loom_vector_transpose_source(source_op);
+  out_plan->result = loom_vector_transpose_result(source_op);
+  const loom_type_t source_type =
+      loom_module_value_type(module, out_plan->source);
+  const loom_type_t result_type =
+      loom_module_value_type(module, out_plan->result);
+  if (!loom_type_is_vector(source_type) || !loom_type_is_vector(result_type) ||
+      !loom_type_element_type_equals(source_type, result_type) ||
+      loom_type_rank(source_type) != loom_type_rank(result_type) ||
+      !loom_type_is_all_static(source_type) ||
+      !loom_type_is_all_static(result_type)) {
+    return false;
+  }
+
+  uint32_t source_register_count = 0;
+  uint32_t result_register_count = 0;
+  if (!loom_amdgpu_static_32bit_vector_register_shape(source_type,
+                                                      &source_register_count) ||
+      !loom_amdgpu_static_32bit_vector_register_shape(result_type,
+                                                      &result_register_count) ||
+      source_register_count != result_register_count) {
+    return false;
+  }
+
+  const uint8_t rank = loom_type_rank(source_type);
+  loom_attribute_t permutation = loom_vector_transpose_permutation(source_op);
+  if (permutation.kind != LOOM_ATTR_I64_ARRAY || permutation.count != rank) {
+    return false;
+  }
+  uint32_t seen_axes = 0;
+  for (uint8_t result_axis = 0; result_axis < rank; ++result_axis) {
+    const int64_t source_axis = permutation.i64_array[result_axis];
+    if (source_axis < 0 || source_axis >= rank) {
+      return false;
+    }
+    const uint32_t axis_bit = 1u << (uint32_t)source_axis;
+    if ((seen_axes & axis_bit) != 0) {
+      return false;
+    }
+    seen_axes |= axis_bit;
+  }
+
+  int64_t result_indices[LOOM_TYPE_MAX_RANK] = {0};
+  int64_t source_indices[LOOM_TYPE_MAX_RANK] = {0};
+  for (uint32_t result_register = 0; result_register < result_register_count;
+       ++result_register) {
+    loom_amdgpu_static_vector_indices_from_flat_register(
+        result_type, result_register, result_indices);
+    for (uint8_t result_axis = 0; result_axis < rank; ++result_axis) {
+      const int64_t source_axis = permutation.i64_array[result_axis];
+      source_indices[source_axis] = result_indices[result_axis];
+    }
+    if (!loom_amdgpu_static_vector_flat_register_from_indices(
+            source_type, source_indices,
+            &out_plan->source_register_indices[result_register])) {
+      return false;
+    }
+  }
+
+  out_plan->register_count = result_register_count;
   return true;
 }
 
@@ -536,6 +647,35 @@ iree_status_t loom_amdgpu_lower_vector_shuffle(
                                           low_registers, plan->register_count);
 }
 
+iree_status_t loom_amdgpu_select_vector_transpose_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_transpose_plan_t* out_plan, bool* out_selected) {
+  *out_selected = loom_amdgpu_vector_transpose_plan_from_op(
+      loom_low_lower_context_module(context), source_op, out_plan);
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_lower_vector_transpose(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_transpose_plan_t* plan) {
+  loom_value_id_t low_source = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_lookup_value(context, plan->source, &low_source));
+
+  loom_type_t register_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &register_type));
+  loom_value_id_t low_registers[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
+  for (uint32_t register_index = 0; register_index < plan->register_count;
+       ++register_index) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_extract_32bit_register(
+        context, source_op, low_source, plan->register_count,
+        plan->source_register_indices[register_index], register_type,
+        &low_registers[register_index]));
+  }
+  return loom_amdgpu_bind_32bit_registers(context, source_op, plan->result,
+                                          low_registers, plan->register_count);
+}
+
 iree_status_t loom_amdgpu_select_vector_slice_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_vector_slice_plan_t* out_plan, bool* out_selected) {
@@ -677,6 +817,14 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_structural(
       }
       return loom_amdgpu_low_legality_reject(context, op,
                                              IREE_SV("shuffle.rank1_32bit"));
+    }
+    case LOOM_OP_VECTOR_TRANSPOSE: {
+      loom_amdgpu_vector_transpose_plan_t unused_plan = {0};
+      if (loom_amdgpu_vector_transpose_plan_from_op(module, op, &unused_plan)) {
+        return iree_ok_status();
+      }
+      return loom_amdgpu_low_legality_reject(context, op,
+                                             IREE_SV("transpose.static_32bit"));
     }
     case LOOM_OP_VECTOR_SLICE: {
       loom_amdgpu_vector_slice_plan_t unused_plan = {0};

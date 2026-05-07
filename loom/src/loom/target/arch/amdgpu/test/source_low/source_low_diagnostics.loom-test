@@ -497,6 +497,18 @@ kernel.def target(@target) @workgroup_vote_count_rejected(%predicate: i1) {
 
 amdgpu.target<gfx1100> @target
 
+func.def target(@target) @vector_transpose_dynamic_shape_rejected(%n: index) {
+  // ERROR@+1: TARGET/031 {type_constraint="vector.static"}
+  %values = vector.poison : vector<[%n]x4xf32>
+  // ERROR@+1: AMDGPU/023 {constraint_key="transpose.static_32bit"}
+  %transposed = vector.transpose<[1, 0]> %values : vector<[%n]x4xf32> -> vector<4x[%n]xf32>
+  func.return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 kernel.def target(@target) @fragment_rhs_dense_layout_rejected(%rhs_buffer: buffer) {
   %c1 = index.constant 1 : index
   %c32 = index.constant 32 : index

@@ -98,3 +98,45 @@ low.func.def target(@target) abi(hal_kernel) @i32x4_shuffle_duplicate(%values: r
   %shuffled = concat(%5, %5, %7, %7) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   return %shuffled
 }
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @f32x2x4_transpose(%values: vector<2x4xf32>) -> (vector<4x2xf32>) {
+  %transposed = vector.transpose<[1, 0]> %values : vector<2x4xf32> -> vector<4x2xf32>
+  func.return %transposed : vector<4x2xf32>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @f32x2x4_transpose(%values: reg<amdgpu.vgpr x8>) -> (reg<amdgpu.vgpr x8>) asm<amdgpu.rdna3.core> {
+  %5 = slice %values[0] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  %6 = slice %values[4] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  %7 = slice %values[1] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  %8 = slice %values[5] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  %9 = slice %values[2] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  %10 = slice %values[6] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  %11 = slice %values[3] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  %12 = slice %values[7] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  %transposed = concat(%5, %6, %7, %8, %9, %10, %11, %12) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x8>
+  return %transposed
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @i32x3x2_transpose(%values: vector<3x2xi32>) -> (vector<2x3xi32>) {
+  %transposed = vector.transpose<[1, 0]> %values : vector<3x2xi32> -> vector<2x3xi32>
+  func.return %transposed : vector<2x3xi32>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i32x3x2_transpose(%values: reg<amdgpu.vgpr x6>) -> (reg<amdgpu.vgpr x6>) asm<amdgpu.rdna3.core> {
+  %5 = slice %values[0] : reg<amdgpu.vgpr x6> -> reg<amdgpu.vgpr>
+  %6 = slice %values[2] : reg<amdgpu.vgpr x6> -> reg<amdgpu.vgpr>
+  %7 = slice %values[4] : reg<amdgpu.vgpr x6> -> reg<amdgpu.vgpr>
+  %8 = slice %values[1] : reg<amdgpu.vgpr x6> -> reg<amdgpu.vgpr>
+  %9 = slice %values[3] : reg<amdgpu.vgpr x6> -> reg<amdgpu.vgpr>
+  %10 = slice %values[5] : reg<amdgpu.vgpr x6> -> reg<amdgpu.vgpr>
+  %transposed = concat(%5, %6, %7, %8, %9, %10) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x6>
+  return %transposed
+}
