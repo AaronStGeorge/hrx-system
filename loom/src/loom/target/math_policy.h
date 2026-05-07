@@ -49,6 +49,8 @@ typedef enum loom_target_math_lane_domain_e {
   LOOM_TARGET_MATH_LANE_DOMAIN_VECTOR = 2,
 } loom_target_math_lane_domain_t;
 
+// Mirrors the scalar/vector FastMathFlags bit layout so target policy decisions
+// can be projected into generated source ops without per-dialect tables.
 typedef enum loom_target_math_fastmath_flag_bits_e {
   LOOM_TARGET_MATH_FASTMATH_FLAG_NONE = 0u,
   LOOM_TARGET_MATH_FASTMATH_FLAG_REASSOC = 1u << 0,
@@ -99,6 +101,10 @@ typedef struct loom_target_math_policy_decision_t {
   loom_target_math_policy_action_t action;
   // Recipe selected when |action| is REWRITE.
   loom_target_math_recipe_t recipe;
+  // Extra fast-math permissions the selected target recipe may use internally.
+  // Recipe builders apply these only to generated operations covered by the
+  // recipe's error contract.
+  loom_target_math_fastmath_flags_t recipe_fastmath_flags;
   // Stable structured constraint key for diagnostics.
   iree_string_view_t constraint_key;
 } loom_target_math_policy_decision_t;

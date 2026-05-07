@@ -14,7 +14,7 @@ func.def target(@target) @vector_logistic_exp2(%input: vector<4xf32>) -> (vector
   %5 = vector.mulf %input, %3 : vector<4xf32>
   %6 = vector.exp2f %5 : vector<4xf32>
   %7 = vector.addf %4, %6 : vector<4xf32>
-  %result = vector.divf %4, %7 : vector<4xf32>
+  %result = vector.divf<arcp> %4, %7 : vector<4xf32>
   func.return %result : vector<4xf32>
 }
 
@@ -34,7 +34,7 @@ func.def target(@target) @scalar_logistic_exp2(%input: f32) -> (f32) {
   %5 = scalar.mulf<afn> %input, %3 : f32
   %6 = scalar.exp2f<afn> %5 : f32
   %7 = scalar.addf<afn> %4, %6 : f32
-  %result = scalar.divf<afn> %4, %7 : f32
+  %result = scalar.divf<arcp|afn> %4, %7 : f32
   func.return %result : f32
 }
 
@@ -71,7 +71,7 @@ func.def target(@target) @vector_silu_logistic(%input: vector<4xf32>) -> (vector
   %7 = vector.mulf<afn> %input, %5 : vector<4xf32>
   %8 = vector.exp2f<afn> %7 : vector<4xf32>
   %9 = vector.addf<afn> %6, %8 : vector<4xf32>
-  %10 = vector.divf<afn> %6, %9 : vector<4xf32>
+  %10 = vector.divf<arcp|afn> %6, %9 : vector<4xf32>
   %result = vector.mulf<afn> %input, %10 : vector<4xf32>
   func.return %result : vector<4xf32>
 }
@@ -116,7 +116,7 @@ func.def target(@target) @scalar_gelu_logistic(%input: f32) -> (f32) {
   %9 = scalar.mulf<afn> %4, %7 : f32
   %10 = scalar.exp2f<afn> %9 : f32
   %11 = scalar.addf<afn> %8, %10 : f32
-  %12 = scalar.divf<afn> %8, %11 : f32
+  %12 = scalar.divf<arcp|afn> %8, %11 : f32
   %result = scalar.mulf<afn> %input, %12 : f32
   func.return %result : f32
 }
@@ -195,7 +195,7 @@ func.def target(@target) @scalar_erf_rational(%input: f32) -> (f32) {
   %27 = scalar.constant -0.0142647390514189 : f32
   %28 = scalar.fmaf %26, %6, %27 : f32
   %29 = scalar.mulf %5, %19 : f32
-  %30 = scalar.divf %29, %28 : f32
+  %30 = scalar.divf<arcp> %29, %28 : f32
   %31 = scalar.constant -1.0 : f32
   %32 = scalar.constant 1.0 : f32
   %result = scalar.clampf<ordered> %30, %31, %32 : f32
@@ -244,7 +244,7 @@ func.def target(@target) @vector_gelu_erf(%input: vector<4xf32>) -> (vector<4xf3
   %31 = vector.constant -0.0142647390514189 : vector<4xf32>
   %32 = vector.fmaf %30, %10, %31 : vector<4xf32>
   %33 = vector.mulf %9, %23 : vector<4xf32>
-  %34 = vector.divf %33, %32 : vector<4xf32>
+  %34 = vector.divf<arcp> %33, %32 : vector<4xf32>
   %35 = vector.constant -1.0 : vector<4xf32>
   %36 = vector.constant 1.0 : vector<4xf32>
   %37 = vector.clampf<ordered> %34, %35, %36 : vector<4xf32>
@@ -285,4 +285,51 @@ func.def target(@target) @scalar_erf_rational_constant_edges() -> (f32, f32, f32
   %center = scalar.constant 0.0 : f32
   %positive = scalar.constant 1.0 : f32
   func.return %negative, %center, %positive : f32, f32, f32
+}
+
+// ====
+
+// RUN: pass legalize-math,source-to-low,low-dce
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_erf_rational_source_low(%input: f32) -> (f32) {
+  %result = scalar.erff<nnan|ninf|nsz> %input : f32
+  func.return %result : f32
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) abi(hal_kernel) @scalar_erf_rational_source_low(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %38 = low.op<amdgpu.v_max_f32.lit>(%input) {imm32 = 3229614080} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %39 = low.op<amdgpu.v_min_f32.lit>(%38) {imm32 = 1082130432} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %40 = low.op<amdgpu.v_mul_f32>(%39, %39) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %41 = low.const<amdgpu.v_mov_b32> {imm32 = 2945834763} : reg<amdgpu.vgpr>
+  %42 = low.const<amdgpu.v_mov_b32> {imm32 = 854458350} : reg<amdgpu.vgpr>
+  %43 = low.op<amdgpu.v_fma_f32>(%41, %40, %42) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %44 = low.const<amdgpu.v_mov_b32> {imm32 = 3054305105} : reg<amdgpu.vgpr>
+  %45 = low.op<amdgpu.v_fma_f32>(%43, %40, %44) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %46 = low.const<amdgpu.v_mov_b32> {imm32 = 3094266578} : reg<amdgpu.vgpr>
+  %47 = low.op<amdgpu.v_fma_f32>(%45, %40, %46) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %48 = low.const<amdgpu.v_mov_b32> {imm32 = 3124800611} : reg<amdgpu.vgpr>
+  %49 = low.op<amdgpu.v_fma_f32>(%47, %40, %48) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %50 = low.const<amdgpu.v_mov_b32> {imm32 = 3141640694} : reg<amdgpu.vgpr>
+  %51 = low.op<amdgpu.v_fma_f32>(%49, %40, %50) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %52 = low.const<amdgpu.v_mov_b32> {imm32 = 3162758100} : reg<amdgpu.vgpr>
+  %53 = low.op<amdgpu.v_fma_f32>(%51, %40, %52) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %54 = low.const<amdgpu.v_mov_b32> {imm32 = 3077857485} : reg<amdgpu.vgpr>
+  %55 = low.const<amdgpu.v_mov_b32> {imm32 = 3110059305} : reg<amdgpu.vgpr>
+  %56 = low.op<amdgpu.v_fma_f32>(%54, %40, %55) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %57 = low.const<amdgpu.v_mov_b32> {imm32 = 3135017550} : reg<amdgpu.vgpr>
+  %58 = low.op<amdgpu.v_fma_f32>(%56, %40, %57) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %59 = low.const<amdgpu.v_mov_b32> {imm32 = 3153173496} : reg<amdgpu.vgpr>
+  %60 = low.op<amdgpu.v_fma_f32>(%58, %40, %59) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %61 = low.const<amdgpu.v_mov_b32> {imm32 = 3161044647} : reg<amdgpu.vgpr>
+  %62 = low.op<amdgpu.v_fma_f32>(%60, %40, %61) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %63 = low.op<amdgpu.v_mul_f32>(%39, %53) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %64 = low.op<amdgpu.v_rcp_f32>(%62) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %65 = low.op<amdgpu.v_mul_f32>(%63, %64) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %68 = low.op<amdgpu.v_max_f32.lit>(%65) {imm32 = 3212836864} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %result = low.op<amdgpu.v_min_f32.lit>(%68) {imm32 = 1065353216} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
 }
