@@ -573,6 +573,8 @@ iree_status_t loom_amdgpu_lower_select(
       IREE_RETURN_IF_ERROR(loom_amdgpu_slice_lane_if_needed(
           context, source_op, low_false_value, lane_count, i, lane_type,
           &lane_false_value));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
+          context, source_op, lane_false_value, &lane_false_value));
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vector_select_src1_inline_lane(
           context, source_op, plan, lane_false_value, lane_condition,
           lane_true_bits, lane_type, &lane_results[i]));
@@ -583,10 +585,14 @@ iree_status_t loom_amdgpu_lower_select(
     IREE_RETURN_IF_ERROR(loom_amdgpu_slice_lane_if_needed(
         context, source_op, low_true_value, lane_count, i, lane_type,
         &lane_true_value));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
+        context, source_op, lane_true_value, &lane_true_value));
     loom_value_id_t lane_false_value = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_slice_lane_if_needed(
         context, source_op, low_false_value, lane_count, i, lane_type,
         &lane_false_value));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
+        context, source_op, lane_false_value, &lane_false_value));
     const loom_value_id_t operands[] = {
         lane_false_value,
         lane_true_value,

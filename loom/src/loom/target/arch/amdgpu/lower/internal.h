@@ -310,6 +310,12 @@ iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
                                          const loom_op_t* source_op,
                                          loom_low_lower_plan_t plan);
 
+// Verifies AMDGPU low legality for vector coordinate construction source ops.
+iree_status_t loom_amdgpu_low_legality_verify_vector_iota(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
 // Selects a plan for kernel preamble source ops.
 iree_status_t loom_amdgpu_select_preamble_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,

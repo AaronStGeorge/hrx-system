@@ -148,3 +148,44 @@ low.func.def target(@target) abi(hal_kernel) @dynamic_exact_iota_extract_i32() -
   %lane = s_mov_b32 11
   return %lane
 }
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @dynamic_base_iota_i32(%start: i32) -> (vector<4xi32>) {
+  %step = scalar.constant 1 : i32
+  %lanes = vector.iota %start step %step : vector<4xi32>
+  func.return %lanes : vector<4xi32>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @dynamic_base_iota_i32(%start: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr x4>) asm<amdgpu.rdna3.core> {
+  %7 = v_mov_b32_copy %start
+  %8 = v_add_u32_lit %7, 1
+  %9 = v_add_u32_lit %7, 2
+  %10 = v_add_u32_lit %7, 3
+  %lanes = concat(%7, %8, %9, %10) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  return %lanes
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @dynamic_step_iota_i32(%start: i32, %step: i32) -> (vector<4xi32>) {
+  %lanes = vector.iota %start step %step : vector<4xi32>
+  func.return %lanes : vector<4xi32>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @dynamic_step_iota_i32(%start: reg<amdgpu.sgpr>, %step: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr x4>) asm<amdgpu.rdna3.core> {
+  %7 = v_mov_b32_copy %start
+  %8 = v_mov_b32_copy %step
+  %9 = v_add_u32 %7, %8
+  %10 = v_lshlrev_b32_lit %8, 1
+  %11 = v_add_u32 %7, %10
+  %12 = v_mov_b32 3
+  %13 = v_mul_lo_u32 %8, %12
+  %14 = v_add_u32 %7, %13
+  %lanes = concat(%7, %9, %11, %14) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  return %lanes
+}
