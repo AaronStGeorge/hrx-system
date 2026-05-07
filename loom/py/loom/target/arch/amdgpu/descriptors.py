@@ -759,20 +759,28 @@ def _vgpr_agpr_const_operand(field_name: str, *, units: int = 1) -> Operand:
     )
 
 
-_U32_IMMEDIATE = Immediate(
-    "imm32",
-    ImmediateKind.UNSIGNED,
-    bit_width=32,
-    unsigned_max=(2**32) - 1,
-)
+def _u32_immediate(field_name: str = "imm32") -> Immediate:
+    return Immediate(
+        field_name,
+        ImmediateKind.UNSIGNED,
+        bit_width=32,
+        unsigned_max=(2**32) - 1,
+    )
 
-_SOURCE_INLINE_U32_IMMEDIATE = Immediate(
-    "imm32",
-    ImmediateKind.UNSIGNED,
-    bit_width=32,
-    unsigned_max=64,
-    encoding_id=_SOURCE_INLINE_U32_ENCODING_ID,
-)
+
+def _source_inline_u32_immediate(field_name: str = "imm32") -> Immediate:
+    return Immediate(
+        field_name,
+        ImmediateKind.UNSIGNED,
+        bit_width=32,
+        unsigned_max=64,
+        encoding_id=_SOURCE_INLINE_U32_ENCODING_ID,
+    )
+
+
+_U32_IMMEDIATE = _u32_immediate()
+
+_SOURCE_INLINE_U32_IMMEDIATE = _source_inline_u32_immediate()
 
 _HAL_BUFFER_DESCRIPTOR_VALID_BYTE_COUNT_IMMEDIATE = Immediate(
     "valid_byte_count",
@@ -2812,6 +2820,39 @@ def _v_cndmask_b32_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SRC2", _sgpr_predicate("mask", units=2)),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_cndmask_b32_src1_inline_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_cndmask_b32.src1_inline",
+        instruction_name="V_CNDMASK_B32",
+        mnemonic="v_cndmask_b32",
+        encoding_name="ENC_VOP3",
+        semantic_tag="select.mask.b32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_const_operand("false_value")),
+            AmdgpuOperandOverlay("SRC2", _sgpr_predicate("mask", units=2)),
+        ),
+        asm_forms=_asm(
+            mnemonic="v_cndmask_b32_src1_inline",
+            results=("dst",),
+            operands=("false_value", "mask"),
+            immediates=("true_value",),
+            named_immediates=True,
+        ),
+        immediate_fields=("SRC1",),
+        immediates=(_source_inline_u32_immediate("true_value"),),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_cndmask_b32_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _v_cndmask_b32_overlay(),
+        _v_cndmask_b32_src1_inline_overlay(),
     )
 
 
@@ -6828,7 +6869,7 @@ def _cdna_core_overlays(
         _v_cvt_f32_i32_overlay(),
         _v_cvt_f32_u32_overlay(),
         *_v_cmp_overlays(),
-        _v_cndmask_b32_overlay(),
+        *_v_cndmask_b32_overlays(),
         _s_load_dword_overlay(fixed_encoding_fields=_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS),
         _s_load_dwordx2_overlay(fixed_encoding_fields=_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS),
         _s_load_dwordx4_overlay(fixed_encoding_fields=_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS),
@@ -7097,7 +7138,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_cvt_f32_i32_overlay(),
         _v_cvt_f32_u32_overlay(),
         *_v_cmp_overlays(),
-        _v_cndmask_b32_overlay(),
+        *_v_cndmask_b32_overlays(),
         _s_load_dword_overlay(),
         _s_load_dwordx2_overlay(),
         _s_load_dwordx4_overlay(),
@@ -7333,7 +7374,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_cvt_f32_i32_overlay(),
         _v_cvt_f32_u32_overlay(),
         *_v_cmp_overlays(),
-        _v_cndmask_b32_overlay(),
+        *_v_cndmask_b32_overlays(),
         _s_load_dword_overlay("IOFFSET", offset_bit_width=24),
         _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
         _s_load_dwordx4_overlay("IOFFSET", offset_bit_width=24),
@@ -7610,7 +7651,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_cvt_f32_i32_overlay(),
         _v_cvt_f32_u32_overlay(),
         *_v_cmp_overlays(),
-        _v_cndmask_b32_overlay(),
+        *_v_cndmask_b32_overlays(),
         _s_load_dword_overlay("IOFFSET", offset_bit_width=24),
         _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
         _s_load_dwordx4_overlay("IOFFSET", offset_bit_width=24),

@@ -142,6 +142,12 @@ typedef struct loom_amdgpu_vector_compare_plan_t {
 } loom_amdgpu_vector_compare_plan_t;
 
 typedef struct loom_amdgpu_vector_select_plan_t {
+  // Descriptor row selected for register-register lane selects.
+  loom_low_lower_resolved_descriptor_t register_descriptor;
+  // Optional descriptor row selected when the true lane is an inline source.
+  loom_low_lower_resolved_descriptor_t src1_inline_descriptor;
+  // Module string ID for the true_value inline-source immediate.
+  loom_string_id_t true_value_attr_name_id;
   // Source mask vector selecting true lanes.
   loom_value_id_t condition;
   // Source vector used when the corresponding condition lane is true.
