@@ -15,8 +15,10 @@ from loom.assembly import (
     RBRACKET,
     AttrDict,
     Ref,
+    Refs,
     ResultType,
     TypeOf,
+    TypesOf,
 )
 from loom.dialect.memory import MemorySpace
 from loom.dsl import (
@@ -34,6 +36,7 @@ from loom.dsl import (
     Operand,
     OpPhase,
     Result,
+    VariadicValuesMatch,
 )
 
 # ============================================================================
@@ -145,17 +148,19 @@ buffer_assume_noalias = Op(
         "comparable for disjointness proofs. External buffer arguments do not "
         "gain this proof by default."
     ),
-    operands=[Operand("buffer", BUFFER, doc="Buffer root to refine.")],
-    results=[Result("result", BUFFER, doc="Same buffer root with a noalias scope.")],
+    operands=[Operand("buffers", BUFFER, doc="Buffer roots to refine.", variadic=True)],
+    results=[Result("results", BUFFER, doc="Same buffer roots with noalias scopes.", variadic=True)],
+    constraints=[VariadicValuesMatch("buffers", "results")],
     traits=[PURE, FACT_IDENTITY],
     facts="loom_buffer_assume_noalias_facts",
     format=[
-        Ref("buffer"),
+        Refs("buffers"),
         COLON,
-        TypeOf("result"),
+        TypesOf("results"),
     ],
     examples=[
         "%unique = buffer.assume.noalias %buffer : buffer",
+        ("%lhs_unique, %rhs_unique = buffer.assume.noalias %lhs, %rhs : buffer, buffer"),
     ],
 )
 

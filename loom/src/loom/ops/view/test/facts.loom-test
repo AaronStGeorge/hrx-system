@@ -121,21 +121,26 @@ func.def @external_buffer_arg_has_no_alias_scope(%buffer: buffer) -> (i1) {
 
 // ====
 
-// A noalias assumption marks the buffer root comparable and the proof
+// Variadic noalias assumptions mark each buffer root comparable and the proof
 // propagates through view construction.
-func.def @assume_noalias_feeds_view_scope(%buffer: buffer, %offset: offset) -> (i1, i1) {
+func.def @assume_noalias_feeds_view_scope(%lhs: buffer, %rhs: buffer, %offset: offset) -> (i1, i1, i1, i1) {
   %layout = encoding.layout.dense : encoding<layout>
-  %unique = buffer.assume.noalias %buffer : buffer
-  %view = buffer.view %unique[%offset] : buffer -> view<4xf32, %layout>
-  %buffer_known = test.fact_alias_scope_known %unique : buffer -> i1
-  %view_known = test.fact_alias_scope_known %view : view<4xf32, %layout> -> i1
-  func.return %buffer_known, %view_known : i1, i1
+  %lhs_unique, %rhs_unique = buffer.assume.noalias %lhs, %rhs : buffer, buffer
+  %lhs_view = buffer.view %lhs_unique[%offset] : buffer -> view<4xf32, %layout>
+  %rhs_view = buffer.view %rhs_unique[%offset] : buffer -> view<4xf32, %layout>
+  %lhs_buffer_known = test.fact_alias_scope_known %lhs_unique : buffer -> i1
+  %lhs_view_known = test.fact_alias_scope_known %lhs_view : view<4xf32, %layout> -> i1
+  %rhs_buffer_known = test.fact_alias_scope_known %rhs_unique : buffer -> i1
+  %rhs_view_known = test.fact_alias_scope_known %rhs_view : view<4xf32, %layout> -> i1
+  func.return %lhs_buffer_known, %lhs_view_known, %rhs_buffer_known, %rhs_view_known : i1, i1, i1, i1
 }
 // ----
-func.def @assume_noalias_feeds_view_scope(%buffer: buffer, %offset: offset) -> (i1, i1) {
-  %buffer_known = scalar.constant true : i1
-  %view_known = scalar.constant true : i1
-  func.return %buffer_known, %view_known : i1, i1
+func.def @assume_noalias_feeds_view_scope(%lhs: buffer, %rhs: buffer, %offset: offset) -> (i1, i1, i1, i1) {
+  %lhs_buffer_known = scalar.constant true : i1
+  %lhs_view_known = scalar.constant true : i1
+  %rhs_buffer_known = scalar.constant true : i1
+  %rhs_view_known = scalar.constant true : i1
+  func.return %lhs_buffer_known, %lhs_view_known, %rhs_buffer_known, %rhs_view_known : i1, i1, i1, i1
 }
 
 // ====

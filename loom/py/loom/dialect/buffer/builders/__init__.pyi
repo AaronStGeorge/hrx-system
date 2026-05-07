@@ -39,13 +39,13 @@ class BufferBuilder(DialectBuilder):
     def noalias(
         self,
         *,
-        buffer: ValueRef,
+        buffers: list[ValueRef] = ...,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
         names: Sequence[str] | None = ...,
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
-    ) -> ValueRef: ...
+    ) -> list[ValueRef]: ...
     def same_root(
         self,
         *,

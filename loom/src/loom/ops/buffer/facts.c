@@ -76,13 +76,23 @@ iree_status_t loom_buffer_assume_noalias_facts(
     loom_fact_context_t* context, const loom_module_t* module,
     const loom_op_t* op, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts) {
-  loom_value_fact_buffer_reference_t reference =
-      loom_buffer_default_reference(loom_buffer_assume_noalias_buffer(op));
-  (void)loom_value_facts_query_buffer_reference(context, operand_facts[0],
-                                                &reference);
-  reference.alias_scope_id = reference.root_value_id;
-  return loom_value_facts_make_buffer_reference(context, reference,
-                                                &result_facts[0]);
+  loom_value_slice_t buffers = loom_buffer_assume_noalias_buffers(op);
+  loom_value_slice_t results = loom_buffer_assume_noalias_results(op);
+  const uint16_t fact_count =
+      buffers.count < results.count ? buffers.count : results.count;
+  for (uint16_t i = 0; i < fact_count; ++i) {
+    loom_value_fact_buffer_reference_t reference =
+        loom_buffer_default_reference(buffers.values[i]);
+    (void)loom_value_facts_query_buffer_reference(context, operand_facts[i],
+                                                  &reference);
+    reference.alias_scope_id = reference.root_value_id;
+    IREE_RETURN_IF_ERROR(loom_value_facts_make_buffer_reference(
+        context, reference, &result_facts[i]));
+  }
+  for (uint16_t i = fact_count; i < results.count; ++i) {
+    result_facts[i] = loom_value_facts_unknown();
+  }
+  return iree_ok_status();
 }
 
 iree_status_t loom_buffer_assume_same_root_facts(

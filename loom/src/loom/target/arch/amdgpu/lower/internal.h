@@ -63,6 +63,10 @@ uint32_t loom_amdgpu_vector_32bit_lane_count(loom_type_t type);
 // zero when the source type is not representable as that payload.
 uint32_t loom_amdgpu_vector_i32_lane_count(loom_type_t type);
 
+// Returns true when the source type can be loaded through scalar memory and
+// left in SGPR form.
+bool loom_amdgpu_type_is_i32_memory_payload(loom_type_t type);
+
 // Returns the f32 lane count for a supported AMDGPU 32-bit vector payload, or
 // zero when the source type is not representable as that payload.
 uint32_t loom_amdgpu_vector_f32_lane_count(loom_type_t type);

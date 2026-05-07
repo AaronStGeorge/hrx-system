@@ -190,6 +190,7 @@ __all__ = [
     "YieldCountMatchesResults",
     "YieldTypesMatchResults",
     "YieldElementTypesMatchResults",
+    "VariadicValuesMatch",
     "IterArgsMatchResults",
     "AttrMatchesElementType",
     "LiteralMatchesElementType",
@@ -2263,6 +2264,17 @@ def YieldElementTypesMatchResults(region: str, results: str) -> Constraint:
         "YieldElementTypesMatchResults",
         (region, results),
         error=ERR_TYPE_009,
+    )
+
+
+def VariadicValuesMatch(lhs: str, rhs: str) -> Constraint:
+    """Two variadic value fields must agree on count and per-position type."""
+    from loom.error.structure import ERR_STRUCTURE_013
+
+    return Constraint(
+        "VariadicValuesMatch",
+        (lhs, rhs),
+        error=ERR_STRUCTURE_013,
     )
 
 

@@ -47,26 +47,27 @@ kernel.def target(@target) @i32_readonly_uniform_smem(%input: buffer, %output: b
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_readonly_uniform_smem() asm<amdgpu.rdna3.core> {
   %workgroup = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %26 = s_mov_b32 3
-  %27 = s_lshl_b32 %workgroup, %26
-  %loaded = s_load_dwordx2 %input_view, %27
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x2>
+  %26 = s_mov_b32 1
+  %linear2 = s_lshl_b32 %workgroup, %26
+  %28 = s_mov_b32 2
+  %29 = s_lshl_b32 %linear2, %28
+  %loaded = s_load_dwordx2 %input_view, %29
   %lane = slice %loaded[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %30 = v_mov_b32_copy %lane
-  %31 = v_mov_b32 0
-  %32 = s_mov_b32 0
-  %33 = concat(%workgroup, %32) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %34 = s_mov_b32 2
-  %35 = s_lshl_b64 %33, %34
-  %36 = slice %output_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %37 = slice %output_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %38 = slice %35[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %39 = slice %35[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %40 = s_add_u32 %36, %38
-  %41 = s_addc_u32 %37, %39
-  %42 = concat(%40, %41) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  global_store_b32 %31, %30, %42
+  %32 = v_mov_b32_copy %lane
+  %33 = v_mov_b32 0
+  %34 = s_mov_b32 0
+  %35 = concat(%workgroup, %34) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %37 = s_lshl_b64 %35, %28
+  %38 = slice %output_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %39 = slice %output_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %40 = slice %37[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %41 = slice %37[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %42 = s_add_u32 %38, %40
+  %43 = s_addc_u32 %39, %41
+  %44 = concat(%42, %43) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  global_store_b32 %33, %32, %44
   return
 }
 
@@ -173,8 +174,8 @@ kernel.def target(@target) @i32_readonly_uniform_smem_non_power_two_stride(%inpu
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_readonly_uniform_smem_non_power_two_stride() asm<amdgpu.rdna3.core> {
   %workgroup = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 24} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 8} : reg<amdgpu.sgpr x2>
   %24 = s_mov_b32 12
   %25 = s_mul_i32 %workgroup, %24
   %loaded = s_load_dword %input_view, %25
@@ -226,8 +227,8 @@ kernel.def target(@target) @i32_readonly_uniform_smem_scalar_branch(%input: buff
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_readonly_uniform_smem_scalar_branch() asm<amdgpu.rdna3.core> {
   %workgroup = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x2>
   %21 = s_mov_b32 2
   %22 = s_lshl_b32 %workgroup, %21
   %loaded = s_load_dword %input_view, %22
@@ -249,7 +250,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_readonly_uniform_sm
   %37 = s_addc_u32 %33, %35
   %38 = concat(%36, %37) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
   global_store_b32 %27, %26, %38
-  return
+  low.br ^join
 ^join:
   return
 }

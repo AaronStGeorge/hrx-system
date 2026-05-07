@@ -118,25 +118,37 @@ static void loom_amdgpu_buffer_argument_extent_include_view(
   state->valid_byte_count = iree_max(state->valid_byte_count, valid_byte_count);
 }
 
+static void loom_amdgpu_buffer_argument_extent_include_uses(
+    loom_amdgpu_buffer_argument_extent_t* state, loom_value_id_t value_id) {
+  const loom_value_t* value = loom_module_value(state->module, value_id);
+  const loom_use_t* use = NULL;
+  loom_value_for_each_use(value, use) {
+    const loom_op_t* user_op = loom_use_user_op(*use);
+    const uint16_t operand_index = loom_use_operand_index(*use);
+    if (operand_index == 0 && loom_buffer_view_isa(user_op)) {
+      loom_amdgpu_buffer_argument_extent_include_view(state, user_op);
+      continue;
+    }
+    if (operand_index < user_op->result_count &&
+        loom_traits_are_fact_identity(
+            loom_op_effective_traits(state->module, user_op))) {
+      loom_amdgpu_buffer_argument_extent_include_uses(
+          state, loom_op_results(user_op)[operand_index]);
+      continue;
+    }
+    state->found_unbounded_view = true;
+  }
+}
+
 static bool loom_amdgpu_source_buffer_argument_valid_byte_count(
     loom_low_lower_context_t* context, loom_value_id_t source_argument_id,
     int64_t* out_valid_byte_count) {
   *out_valid_byte_count = 0;
   const loom_module_t* module = loom_low_lower_context_module(context);
-  const loom_value_t* source_argument =
-      loom_module_value(module, source_argument_id);
   loom_amdgpu_buffer_argument_extent_t state = {
       .module = module,
   };
-  const loom_use_t* use = NULL;
-  loom_value_for_each_use(source_argument, use) {
-    const loom_op_t* user_op = loom_use_user_op(*use);
-    if (loom_use_operand_index(*use) == 0 && loom_buffer_view_isa(user_op)) {
-      loom_amdgpu_buffer_argument_extent_include_view(&state, user_op);
-    } else {
-      state.found_unbounded_view = true;
-    }
-  }
+  loom_amdgpu_buffer_argument_extent_include_uses(&state, source_argument_id);
   if (!state.found_view || state.found_unbounded_view) {
     return false;
   }

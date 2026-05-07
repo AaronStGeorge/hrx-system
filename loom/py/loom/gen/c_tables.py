@@ -396,6 +396,10 @@ CONSTRAINT_MAP: dict[str, tuple[str, str]] = {
         "LOOM_RELATION_YIELD_MATCH",
         "LOOM_PROPERTY_ELEMENT_TYPE",
     ),
+    "VariadicValuesMatch": (
+        "LOOM_RELATION_VARIADIC_MATCH",
+        "LOOM_PROPERTY_TYPE",
+    ),
     "IterArgsMatchResults": (
         "LOOM_RELATION_VARIADIC_MATCH",
         "LOOM_PROPERTY_TYPE",
