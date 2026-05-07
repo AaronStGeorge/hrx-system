@@ -26,6 +26,38 @@ func.def @lowers_if_result(%cond: i1, %a: i32, %b: i32) -> (i32) {
 
 // ====
 
+func.def @lowers_if_result_before_existing_cfg(%cond: i1, %guard: i1, %a: i32, %b: i32) {
+  %selected = scf.if %cond -> (i32) {
+    scf.yield %a : i32
+  } else {
+    scf.yield %b : i32
+  }
+  cfg.cond_br %guard, ^use, ^done : i1
+^use:
+  test.use %selected : i32
+  cfg.br ^done
+^done:
+  func.return
+}
+
+// ----
+func.def @lowers_if_result_before_existing_cfg(%cond: i1, %guard: i1, %a: i32, %b: i32) {
+  cfg.cond_br %cond, ^_bb1, ^_bb2 : i1
+^_bb1:
+  cfg.br ^_bb3(%a: i32)
+^_bb2:
+  cfg.br ^_bb3(%b: i32)
+^_bb3(%selected: i32):
+  cfg.cond_br %guard, ^use, ^done : i1
+^use:
+  test.use %selected : i32
+  cfg.br ^done
+^done:
+  func.return
+}
+
+// ====
+
 func.def @lowers_if_without_else(%cond: i1, %a: i32, %b: i32) {
   scf.if %cond {
     %then = test.addi %a, %b : i32

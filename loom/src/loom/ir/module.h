@@ -398,6 +398,16 @@ iree_status_t loom_region_append_block(loom_module_t* module,
                                        loom_region_t* region,
                                        loom_block_t** out_block);
 
+// Inserts a new block at |block_index| in |region| and returns it in
+// |*out_block|. Existing block objects are never relocated; only the region's
+// block pointer table is shifted. Passing region->block_count appends.
+// Inserting before an existing entry block is rejected because block 0 is the
+// region entry contract.
+iree_status_t loom_region_insert_block(loom_module_t* module,
+                                       loom_region_t* region,
+                                       uint16_t block_index,
+                                       loom_block_t** out_block);
+
 // Adds a block argument. The value_id must already be defined in the
 // module's value table (via loom_module_define_value). Sets
 // LOOM_VALUE_FLAG_BLOCK_ARG on the value and records the block

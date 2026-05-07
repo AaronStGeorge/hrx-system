@@ -83,6 +83,13 @@ typedef struct loom_scf_to_cfg_state_t {
   loom_scf_to_cfg_region_stack_t region_stack;
 } loom_scf_to_cfg_state_t;
 
+typedef struct loom_scf_to_cfg_block_insertion_t {
+  // Region receiving blocks created for one structured op lowering.
+  loom_region_t* region;
+  // Next block-table index for a generated CFG block.
+  uint16_t next_index;
+} loom_scf_to_cfg_block_insertion_t;
+
 static iree_status_t loom_scf_to_cfg_region_stack_initialize(
     iree_arena_allocator_t* arena, loom_scf_to_cfg_region_stack_t* stack) {
   stack->count = 0;
@@ -216,12 +223,21 @@ static loom_builder_ip_t loom_scf_to_cfg_set_block_end(
   return saved_ip;
 }
 
-static iree_status_t loom_scf_to_cfg_append_block(
-    loom_scf_to_cfg_state_t* state, loom_region_t* region,
-    loom_block_t** out_block) {
-  IREE_RETURN_IF_ERROR(
-      loom_region_append_block(state->module, region, out_block));
-  region->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
+static loom_scf_to_cfg_block_insertion_t loom_scf_to_cfg_insert_blocks_after(
+    loom_block_t* source_block) {
+  return (loom_scf_to_cfg_block_insertion_t){
+      .region = source_block->parent_region,
+      .next_index = (uint16_t)(loom_block_region_index(source_block) + 1),
+  };
+}
+
+static iree_status_t loom_scf_to_cfg_insert_block(
+    loom_scf_to_cfg_state_t* state,
+    loom_scf_to_cfg_block_insertion_t* insertion, loom_block_t** out_block) {
+  IREE_RETURN_IF_ERROR(loom_region_insert_block(
+      state->module, insertion->region, insertion->next_index, out_block));
+  ++insertion->next_index;
+  insertion->region->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
   return iree_ok_status();
 }
 
@@ -332,14 +348,6 @@ static iree_status_t loom_scf_to_cfg_verify_op_preconditions(
   return loom_scf_to_cfg_emit(state, op, LOOM_ERR_STRUCTURE_036);
 }
 
-static void loom_scf_to_cfg_prepare_op_lowering(
-    loom_scf_to_cfg_state_t* state, loom_op_t* op,
-    loom_region_t** out_parent_region, loom_block_t** out_source_block) {
-  loom_region_t* parent_region = op->parent_block->parent_region;
-  *out_parent_region = parent_region;
-  *out_source_block = op->parent_block;
-}
-
 //===----------------------------------------------------------------------===//
 // scf.if
 //===----------------------------------------------------------------------===//
@@ -361,21 +369,21 @@ static iree_status_t loom_scf_to_cfg_lower_if(loom_scf_to_cfg_state_t* state,
   }
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_verify_op_preconditions(state, op));
 
-  loom_region_t* parent_region = NULL;
-  loom_block_t* source_block = NULL;
-  loom_scf_to_cfg_prepare_op_lowering(state, op, &parent_region, &source_block);
+  loom_block_t* source_block = op->parent_block;
+  loom_scf_to_cfg_block_insertion_t insertion =
+      loom_scf_to_cfg_insert_blocks_after(source_block);
 
   loom_block_t* then_block = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_scf_to_cfg_append_block(state, parent_region, &then_block));
+      loom_scf_to_cfg_insert_block(state, &insertion, &then_block));
   loom_block_t* else_block = NULL;
   if (else_region) {
     IREE_RETURN_IF_ERROR(
-        loom_scf_to_cfg_append_block(state, parent_region, &else_block));
+        loom_scf_to_cfg_insert_block(state, &insertion, &else_block));
   }
   loom_block_t* join_block = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_scf_to_cfg_append_block(state, parent_region, &join_block));
+      loom_scf_to_cfg_insert_block(state, &insertion, &join_block));
   IREE_RETURN_IF_ERROR(
       loom_scf_to_cfg_move_tail_after_op(state, op, join_block));
 
@@ -591,19 +599,19 @@ static iree_status_t loom_scf_to_cfg_lower_for(loom_scf_to_cfg_state_t* state,
       original_iv_name_id != LOOM_STRING_ID_INVALID &&
       loom_scf_to_cfg_for_iv_facts_are_materializable(original_iv_facts);
 
-  loom_region_t* parent_region = NULL;
-  loom_block_t* source_block = NULL;
-  loom_scf_to_cfg_prepare_op_lowering(state, op, &parent_region, &source_block);
+  loom_block_t* source_block = op->parent_block;
+  loom_scf_to_cfg_block_insertion_t insertion =
+      loom_scf_to_cfg_insert_blocks_after(source_block);
 
   loom_block_t* header_block = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_scf_to_cfg_append_block(state, parent_region, &header_block));
+      loom_scf_to_cfg_insert_block(state, &insertion, &header_block));
   loom_block_t* body_block = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_scf_to_cfg_append_block(state, parent_region, &body_block));
+      loom_scf_to_cfg_insert_block(state, &insertion, &body_block));
   loom_block_t* join_block = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_scf_to_cfg_append_block(state, parent_region, &join_block));
+      loom_scf_to_cfg_insert_block(state, &insertion, &join_block));
   IREE_RETURN_IF_ERROR(
       loom_scf_to_cfg_move_tail_after_op(state, op, join_block));
 
@@ -720,19 +728,19 @@ static iree_status_t loom_scf_to_cfg_lower_while(loom_scf_to_cfg_state_t* state,
   loom_value_slice_t iter_args = loom_scf_while_iter_args(op);
   loom_value_slice_t forwarded = loom_scf_condition_forwarded(condition_op);
 
-  loom_region_t* parent_region = NULL;
-  loom_block_t* source_block = NULL;
-  loom_scf_to_cfg_prepare_op_lowering(state, op, &parent_region, &source_block);
+  loom_block_t* source_block = op->parent_block;
+  loom_scf_to_cfg_block_insertion_t insertion =
+      loom_scf_to_cfg_insert_blocks_after(source_block);
 
   loom_block_t* before_block = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_scf_to_cfg_append_block(state, parent_region, &before_block));
+      loom_scf_to_cfg_insert_block(state, &insertion, &before_block));
   loom_block_t* after_block = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_scf_to_cfg_append_block(state, parent_region, &after_block));
+      loom_scf_to_cfg_insert_block(state, &insertion, &after_block));
   loom_block_t* join_block = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_scf_to_cfg_append_block(state, parent_region, &join_block));
+      loom_scf_to_cfg_insert_block(state, &insertion, &join_block));
   IREE_RETURN_IF_ERROR(
       loom_scf_to_cfg_move_tail_after_op(state, op, join_block));
 
@@ -874,9 +882,9 @@ static iree_status_t loom_scf_to_cfg_lower_switch(
   loom_region_slice_t case_regions = loom_scf_switch_case_regions(op);
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_verify_op_preconditions(state, op));
 
-  loom_region_t* parent_region = NULL;
-  loom_block_t* source_block = NULL;
-  loom_scf_to_cfg_prepare_op_lowering(state, op, &parent_region, &source_block);
+  loom_block_t* source_block = op->parent_block;
+  loom_scf_to_cfg_block_insertion_t insertion =
+      loom_scf_to_cfg_insert_blocks_after(source_block);
 
   loom_block_t** dispatch_blocks = NULL;
   iree_host_size_t dispatch_block_count =
@@ -886,8 +894,8 @@ static iree_status_t loom_scf_to_cfg_lower_switch(
         state->lowering_arena, dispatch_block_count, sizeof(*dispatch_blocks),
         (void**)&dispatch_blocks));
     for (iree_host_size_t i = 0; i < dispatch_block_count; ++i) {
-      IREE_RETURN_IF_ERROR(loom_scf_to_cfg_append_block(state, parent_region,
-                                                        &dispatch_blocks[i]));
+      IREE_RETURN_IF_ERROR(
+          loom_scf_to_cfg_insert_block(state, &insertion, &dispatch_blocks[i]));
     }
   }
 
@@ -898,15 +906,15 @@ static iree_status_t loom_scf_to_cfg_lower_switch(
                                   sizeof(*case_blocks), (void**)&case_blocks));
     for (uint8_t i = 0; i < case_regions.count; ++i) {
       IREE_RETURN_IF_ERROR(
-          loom_scf_to_cfg_append_block(state, parent_region, &case_blocks[i]));
+          loom_scf_to_cfg_insert_block(state, &insertion, &case_blocks[i]));
     }
   }
   loom_block_t* default_block = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_scf_to_cfg_append_block(state, parent_region, &default_block));
+      loom_scf_to_cfg_insert_block(state, &insertion, &default_block));
   loom_block_t* join_block = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_scf_to_cfg_append_block(state, parent_region, &join_block));
+      loom_scf_to_cfg_insert_block(state, &insertion, &join_block));
   IREE_RETURN_IF_ERROR(
       loom_scf_to_cfg_move_tail_after_op(state, op, join_block));
 

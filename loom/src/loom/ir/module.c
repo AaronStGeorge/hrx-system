@@ -2836,6 +2836,38 @@ iree_status_t loom_region_append_block(loom_module_t* module,
   return iree_ok_status();
 }
 
+iree_status_t loom_region_insert_block(loom_module_t* module,
+                                       loom_region_t* region,
+                                       uint16_t block_index,
+                                       loom_block_t** out_block) {
+  if (block_index > region->block_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "block insertion index %u out of range for %u block(s)",
+        (unsigned)block_index, (unsigned)region->block_count);
+  }
+  if (region->block_count > 0 && block_index == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "cannot insert before a region entry block");
+  }
+
+  IREE_RETURN_IF_ERROR(loom_region_blocks_ensure_capacity(module, region));
+  loom_block_t* block = &region->entry_block;
+  if (region->block_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_module_allocate_block(module, &block));
+  }
+  block->parent_region = region;
+  block->region_index = block_index;
+  for (uint16_t i = region->block_count; i > block_index; --i) {
+    region->blocks[i] = region->blocks[i - 1];
+    region->blocks[i]->region_index = i;
+  }
+  region->blocks[block_index] = block;
+  ++region->block_count;
+  *out_block = block;
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Block arguments
 //===----------------------------------------------------------------------===//

@@ -210,6 +210,35 @@ TEST_F(ModuleTest, RegionAppendBlockGrowthKeepsBlockReferencesStable) {
   loom_module_free(module);
 }
 
+TEST_F(ModuleTest, RegionInsertBlockShiftsBlockTableOnly) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_region_t* body = module->body;
+  loom_block_t* entry = loom_region_entry_block(body);
+  loom_block_t* tail0 = NULL;
+  IREE_ASSERT_OK(loom_region_append_block(module, body, &tail0));
+  loom_block_t* tail1 = NULL;
+  IREE_ASSERT_OK(loom_region_append_block(module, body, &tail1));
+
+  loom_block_t* inserted = NULL;
+  IREE_ASSERT_OK(loom_region_insert_block(module, body, 1, &inserted));
+
+  ASSERT_EQ(body->block_count, 4u);
+  EXPECT_EQ(loom_region_block(body, 0), entry);
+  EXPECT_EQ(loom_region_block(body, 1), inserted);
+  EXPECT_EQ(loom_region_block(body, 2), tail0);
+  EXPECT_EQ(loom_region_block(body, 3), tail1);
+  EXPECT_EQ(loom_block_region_index(entry), 0u);
+  EXPECT_EQ(loom_block_region_index(inserted), 1u);
+  EXPECT_EQ(loom_block_region_index(tail0), 2u);
+  EXPECT_EQ(loom_block_region_index(tail1), 3u);
+  EXPECT_EQ(loom_region_entry_block(body), entry);
+
+  loom_module_free(module);
+}
+
 TEST_F(ModuleTest, BlockAddArgRejectsStorageOverflow) {
   loom_module_t* module = NULL;
   IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
