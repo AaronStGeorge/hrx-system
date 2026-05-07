@@ -20,6 +20,30 @@ static iree_status_t loom_rewriter_add_result_users_to_worklist(
 static iree_status_t loom_rewriter_add_parent_summary_ops_to_worklist(
     loom_rewriter_t* rewriter, loom_op_t* op);
 
+typedef enum loom_rewriter_fact_recompute_flag_bits_e {
+  LOOM_REWRITER_FACT_RECOMPUTE_FLAG_ENQUEUE_RESULT_USERS = 1u << 0,
+} loom_rewriter_fact_recompute_flag_bits_t;
+typedef uint32_t loom_rewriter_fact_recompute_flags_t;
+
+static iree_status_t loom_rewriter_recompute_op_facts(
+    loom_rewriter_t* rewriter, loom_op_t* op,
+    loom_rewriter_fact_recompute_flags_t flags) {
+  if (!rewriter->fact_table) return iree_ok_status();
+
+  bool facts_changed = false;
+  IREE_RETURN_IF_ERROR(loom_value_fact_table_compute_op_and_report(
+      rewriter->fact_table, rewriter->module, op, &facts_changed));
+  if (!facts_changed) return iree_ok_status();
+
+  rewriter->flags |= LOOM_REWRITER_FLAG_FACTS_CHANGED;
+  if (iree_any_bit_set(
+          flags, LOOM_REWRITER_FACT_RECOMPUTE_FLAG_ENQUEUE_RESULT_USERS)) {
+    IREE_RETURN_IF_ERROR(
+        loom_rewriter_add_result_users_to_worklist(rewriter, op));
+  }
+  return loom_rewriter_add_parent_summary_ops_to_worklist(rewriter, op);
+}
+
 //===----------------------------------------------------------------------===//
 // Builder callback
 //===----------------------------------------------------------------------===//
@@ -34,17 +58,7 @@ static iree_status_t loom_rewriter_on_op_finalized(void* user_data,
   IREE_RETURN_IF_ERROR(loom_rewriter_add_to_worklist(rewriter, op));
   IREE_RETURN_IF_ERROR(
       loom_rewriter_add_parent_summary_ops_to_worklist(rewriter, op));
-  if (rewriter->fact_table) {
-    bool facts_changed = false;
-    IREE_RETURN_IF_ERROR(loom_value_fact_table_compute_op_and_report(
-        rewriter->fact_table, rewriter->module, op, &facts_changed));
-    if (facts_changed) {
-      rewriter->flags |= LOOM_REWRITER_FLAG_FACTS_CHANGED;
-      IREE_RETURN_IF_ERROR(
-          loom_rewriter_add_parent_summary_ops_to_worklist(rewriter, op));
-    }
-  }
-  return iree_ok_status();
+  return loom_rewriter_recompute_op_facts(rewriter, op, /*flags=*/0);
 }
 
 //===----------------------------------------------------------------------===//
@@ -650,6 +664,8 @@ iree_status_t loom_rewriter_set_operand(loom_rewriter_t* rewriter,
   IREE_RETURN_IF_ERROR(loom_rewriter_add_to_worklist(rewriter, op));
   IREE_RETURN_IF_ERROR(
       loom_rewriter_add_parent_summary_ops_to_worklist(rewriter, op));
+  IREE_RETURN_IF_ERROR(loom_rewriter_recompute_op_facts(
+      rewriter, op, LOOM_REWRITER_FACT_RECOMPUTE_FLAG_ENQUEUE_RESULT_USERS));
   rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
   return iree_ok_status();
 }

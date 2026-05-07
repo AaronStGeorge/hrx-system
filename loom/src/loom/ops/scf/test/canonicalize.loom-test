@@ -341,6 +341,54 @@ func.def @if_and_true_edge_conjoins_relations(%i: index, %n: index, %j: index, %
 
 // ====
 
+// Branch-local index.cmp facts refine range facts, not just repeated
+// comparisons. This is the cache/chunk addressing pattern: the true edge proves
+// %time is in the cache prefix, and the false edge proves %time - 2 is a
+// non-negative chunk offset.
+func.def @if_index_cmp_refines_address_ranges(%time: index) -> (i64, i64, i64, i64) {
+  %bounded = index.assume %time [range(%time, 0, 63)] : index
+  %split = index.constant 2 : index
+  %cond = index.cmp slt, %bounded, %split : index
+  %time_lo, %time_hi, %chunk_lo, %chunk_hi = scf.if %cond -> (i64, i64, i64, i64) {
+    %then_time_lo = test.fact_range_lo %bounded : index -> i64
+    %then_time_hi = test.fact_range_hi %bounded : index -> i64
+    %unused_chunk_lo = scalar.constant -1 : i64
+    %unused_chunk_hi = scalar.constant -1 : i64
+    scf.yield %then_time_lo, %then_time_hi, %unused_chunk_lo, %unused_chunk_hi : i64, i64, i64, i64
+  } else {
+    %chunk = index.sub %bounded, %split : index
+    %unused_time_lo = scalar.constant -1 : i64
+    %unused_time_hi = scalar.constant -1 : i64
+    %else_chunk_lo = test.fact_range_lo %chunk : index -> i64
+    %else_chunk_hi = test.fact_range_hi %chunk : index -> i64
+    scf.yield %unused_time_lo, %unused_time_hi, %else_chunk_lo, %else_chunk_hi : i64, i64, i64, i64
+  }
+  func.return %time_lo, %time_hi, %chunk_lo, %chunk_hi : i64, i64, i64, i64
+}
+
+// ----
+func.def @if_index_cmp_refines_address_ranges(%time: index) -> (i64, i64, i64, i64) {
+  %bounded = index.assume %time [range(%time, 0, 63)] : index
+  %split = index.constant 2 : index
+  %cond = index.cmp slt, %bounded, %split : index
+  %time_lo, %time_hi, %chunk_lo, %chunk_hi = scf.if %cond -> (i64, i64, i64, i64) {
+    %then_time_lo = scalar.constant 0 : i64
+    %then_time_hi = scalar.constant 1 : i64
+    %unused_chunk_lo = scalar.constant -1 : i64
+    %unused_chunk_hi = scalar.constant -1 : i64
+    scf.yield %then_time_lo, %then_time_hi, %unused_chunk_lo, %unused_chunk_hi : i64, i64, i64, i64
+  } else {
+    %unused_time_lo = scalar.constant -1 : i64
+    %unused_time_hi = scalar.constant -1 : i64
+    %else_chunk_lo = scalar.constant 0 : i64
+    %else_chunk_hi = scalar.constant 61 : i64
+    scf.yield %unused_time_lo, %unused_time_hi, %else_chunk_lo, %else_chunk_hi : i64, i64, i64, i64
+  }
+  func.return %time_lo, %time_hi, %chunk_lo, %chunk_hi : i64, i64, i64, i64
+}
+
+// ====
+
 // Exact boolean yields can fold to the branch condition even when the yielded
 // constants are still materialized inside discardable regions.
 func.def @if_exact_boolean_region_constants_fold_to_condition(%cond: i1) -> (i1) {

@@ -566,6 +566,30 @@ static iree_status_t loom_canonicalize_try_symbolic_integer_cleanup(
 }
 
 //===----------------------------------------------------------------------===//
+// Result Helpers
+//===----------------------------------------------------------------------===//
+
+static void loom_canonicalizer_record_rewriter_flags(
+    loom_canonicalizer_result_t* result, const loom_rewriter_t* rewriter) {
+  if (!result) return;
+  if (iree_any_bit_set(rewriter->flags, LOOM_REWRITER_FLAG_FACTS_CHANGED)) {
+    result->facts_changed = true;
+  }
+  if (iree_any_bit_set(rewriter->flags, LOOM_REWRITER_FLAG_TYPE_CHANGED)) {
+    result->types_changed = true;
+  }
+}
+
+static void loom_canonicalizer_record_rewrite(
+    loom_canonicalizer_result_t* result, const loom_rewriter_t* rewriter,
+    bool count_modified_op) {
+  if (!result) return;
+  result->changed = true;
+  loom_canonicalizer_record_rewriter_flags(result, rewriter);
+  if (count_modified_op) ++result->ops_modified;
+}
+
+//===----------------------------------------------------------------------===//
 // Branch-edge fact materialization
 //===----------------------------------------------------------------------===//
 
@@ -1188,6 +1212,55 @@ static iree_status_t loom_canonicalize_try_materialize_branch_edge_facts(
   return iree_ok_status();
 }
 
+typedef struct loom_canonicalize_edge_fact_materialization_t {
+  // Rewriter used for inserted assumes and region-local operand replacement.
+  loom_rewriter_t* rewriter;
+  // Result updated when materialization rewrites an edge.
+  loom_canonicalizer_result_t* result;
+  // True when at least one branch edge gained materialized facts.
+  bool changed;
+} loom_canonicalize_edge_fact_materialization_t;
+
+static iree_status_t loom_canonicalize_materialize_branch_edge_facts_preorder(
+    void* user_data, loom_op_t* op, const loom_walk_context_t* context,
+    loom_walk_result_t* out_result) {
+  (void)context;
+  *out_result = LOOM_WALK_CONTINUE;
+  loom_canonicalize_edge_fact_materialization_t* materialization =
+      (loom_canonicalize_edge_fact_materialization_t*)user_data;
+
+  bool op_changed = false;
+  materialization->rewriter->flags = 0;
+  IREE_RETURN_IF_ERROR(loom_canonicalize_try_materialize_branch_edge_facts(
+      materialization->rewriter, op, &op_changed));
+  if (!op_changed) return iree_ok_status();
+
+  materialization->changed = true;
+  loom_canonicalizer_record_rewrite(materialization->result,
+                                    materialization->rewriter,
+                                    /*count_modified_op=*/true);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_canonicalize_materialize_branch_edge_facts_in_region(
+    loom_rewriter_t* rewriter, loom_region_t* region,
+    loom_canonicalizer_result_t* result, bool* out_changed) {
+  loom_canonicalize_edge_fact_materialization_t materialization = {
+      .rewriter = rewriter,
+      .result = result,
+      .changed = false,
+  };
+  loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
+  IREE_RETURN_IF_ERROR(loom_walk_region(
+      rewriter->module, region, LOOM_WALK_PRE_ORDER,
+      (loom_walk_callback_t){
+          loom_canonicalize_materialize_branch_edge_facts_preorder,
+          &materialization},
+      rewriter->arena, &walk_result));
+  *out_changed = materialization.changed;
+  return iree_ok_status();
+}
+
 struct loom_canonicalizer_state_t {
   // Rewriter state for the most recent run. Its fact table remains queryable
   // until the next run or deinitialize.
@@ -1211,26 +1284,6 @@ static void loom_canonicalizer_reset_run_state(
   if (canonicalizer->scratch_arena_initialized) {
     iree_arena_reset(&canonicalizer->scratch_arena);
   }
-}
-
-static void loom_canonicalizer_record_rewriter_flags(
-    loom_canonicalizer_result_t* result, const loom_rewriter_t* rewriter) {
-  if (!result) return;
-  if (iree_any_bit_set(rewriter->flags, LOOM_REWRITER_FLAG_FACTS_CHANGED)) {
-    result->facts_changed = true;
-  }
-  if (iree_any_bit_set(rewriter->flags, LOOM_REWRITER_FLAG_TYPE_CHANGED)) {
-    result->types_changed = true;
-  }
-}
-
-static void loom_canonicalizer_record_rewrite(
-    loom_canonicalizer_result_t* result, const loom_rewriter_t* rewriter,
-    bool count_modified_op) {
-  if (!result) return;
-  result->changed = true;
-  loom_canonicalizer_record_rewriter_flags(result, rewriter);
-  if (count_modified_op) ++result->ops_modified;
 }
 
 static void loom_canonicalizer_merge_result(
@@ -1335,6 +1388,20 @@ iree_status_t loom_canonicalizer_run_region(
     if (!iree_status_is_ok(status)) break;
     bool any_changed = false;
 
+    // Branch-edge facts must be made visible before region children fold from
+    // the ambient fact table. Otherwise direct fact consumers can erase
+    // themselves using unrefined facts before their enclosing branch gets a
+    // chance to materialize edge-local assumes.
+    bool edge_facts_materialized = false;
+    rewriter->flags = 0;
+    status = loom_canonicalize_materialize_branch_edge_facts_in_region(
+        rewriter, region, out_result, &edge_facts_materialized);
+    if (!iree_status_is_ok(status)) break;
+    if (edge_facts_materialized) {
+      any_changed = true;
+      loom_symbolic_expr_context_reset(&expression_context);
+    }
+
     loom_op_t* op = NULL;
     while ((op = loom_rewriter_pop(rewriter)) != NULL) {
       // Mini-DCE: erase trivially dead ops before fold/canonicalize.
@@ -1425,23 +1492,6 @@ iree_status_t loom_canonicalizer_run_region(
           rewriter, &expression_context, op, &symbolic_changed);
       if (!iree_status_is_ok(status)) break;
       if (symbolic_changed) {
-        any_changed = true;
-        loom_canonicalizer_record_rewrite(out_result, rewriter,
-                                          /*count_modified_op=*/true);
-        loom_symbolic_expr_context_reset(&expression_context);
-        continue;
-      }
-
-      // Branch-edge fact materialization makes predicate implications visible
-      // as SSA assume values inside each region. Keeping this in the driver
-      // lets the transform use index/scalar assume ops without making scf
-      // depend on those dialects.
-      bool edge_facts_materialized = false;
-      rewriter->flags = 0;
-      status = loom_canonicalize_try_materialize_branch_edge_facts(
-          rewriter, op, &edge_facts_materialized);
-      if (!iree_status_is_ok(status)) break;
-      if (edge_facts_materialized) {
         any_changed = true;
         loom_canonicalizer_record_rewrite(out_result, rewriter,
                                           /*count_modified_op=*/true);
