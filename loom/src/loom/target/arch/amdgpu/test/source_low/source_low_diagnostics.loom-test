@@ -483,16 +483,6 @@ kernel.def target(@target) @workgroup_vote_count_rejected(%predicate: i1) {
 
 amdgpu.target<gfx1100> @target
 
-func.def target(@target) @reduce_axes_rejected(%v: vector<4xi32>, %init: i32) -> (i32) {
-  // ERROR@+1: TARGET/001 {op_name="vector.reduce.axes"}
-  %r = vector.reduce.axes<addi> %v, %init axes [0] : vector<4xi32>, i32
-  func.return %r : i32
-}
-
-// ====
-
-amdgpu.target<gfx1100> @target
-
 kernel.def target(@target) @fragment_rhs_dense_layout_rejected(%rhs_buffer: buffer) {
   %c1 = index.constant 1 : index
   %c32 = index.constant 32 : index

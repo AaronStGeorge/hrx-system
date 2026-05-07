@@ -37,6 +37,7 @@ static const iree_string_view_t kExpectedBuiltinPassKeys[] = {
     IREE_SVL("symbol-dce"),
     IREE_SVL("unroll-scf-for"),
     IREE_SVL("vector-memory-footprint"),
+    IREE_SVL("vector-reduce-axes-to-scalar"),
     IREE_SVL("vector-to-scalar"),
 };
 

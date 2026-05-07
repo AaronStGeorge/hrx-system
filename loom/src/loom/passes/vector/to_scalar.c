@@ -51,6 +51,21 @@ const loom_pass_info_t* loom_vector_to_scalar_pass_info(void) {
   return &loom_vector_to_scalar_pass_info_storage;
 }
 
+static const loom_pass_info_t
+    loom_vector_reduce_axes_to_scalar_pass_info_storage = {
+        .name = IREE_SVL("vector-reduce-axes-to-scalar"),
+        .description =
+            IREE_SVL("Expose vector.reduce.axes lane semantics as scalar ops "
+                     "and scf loops."),
+        .kind = LOOM_PASS_FUNCTION,
+        .statistic_defs = kVectorToScalarStatistics,
+        .statistic_count = IREE_ARRAYSIZE(kVectorToScalarStatistics),
+};
+
+const loom_pass_info_t* loom_vector_reduce_axes_to_scalar_pass_info(void) {
+  return &loom_vector_reduce_axes_to_scalar_pass_info_storage;
+}
+
 iree_status_t loom_vector_to_scalar_static_element_count(
     loom_vector_to_scalar_state_t* state, loom_type_t type,
     uint16_t* out_element_count) {
@@ -620,9 +635,31 @@ static iree_status_t loom_vector_to_scalar_lower_op(loom_pass_t* pass,
   return loom_vector_to_scalar_lower_descriptor_op(pass, rewriter, op);
 }
 
-iree_status_t loom_vector_to_scalar_run(loom_pass_t* pass,
-                                        loom_module_t* module,
-                                        loom_func_like_t function) {
+static iree_status_t loom_vector_reduce_axes_to_scalar_lower_op(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op) {
+  if (!loom_vector_reduce_axes_isa(op)) {
+    return iree_ok_status();
+  }
+  loom_builder_set_before(&rewriter->builder, op);
+  bool handled = false;
+  return loom_vector_to_scalar_lower_reduce_axes_op(pass, rewriter, op,
+                                                    &handled);
+}
+
+typedef iree_status_t (*loom_vector_to_scalar_lower_op_fn_t)(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op);
+
+typedef uint32_t loom_vector_to_scalar_run_flags_t;
+
+enum loom_vector_to_scalar_run_flag_bits_t {
+  LOOM_VECTOR_TO_SCALAR_RUN_FLAG_NONE = 0u,
+  LOOM_VECTOR_TO_SCALAR_RUN_FLAG_ERASE_DEAD_OPS = 1u << 0,
+};
+
+static iree_status_t loom_vector_to_scalar_run_with_lowerer(
+    loom_pass_t* pass, loom_module_t* module, loom_func_like_t function,
+    loom_vector_to_scalar_lower_op_fn_t lower_op,
+    loom_vector_to_scalar_run_flags_t flags) {
   if (!loom_func_like_body(function)) return iree_ok_status();
 
   loom_rewriter_t rewriter;
@@ -640,18 +677,37 @@ iree_status_t loom_vector_to_scalar_run(loom_pass_t* pass,
   while (iree_status_is_ok(status)) {
     loom_op_t* op = loom_rewriter_pop(&rewriter);
     if (!op) break;
-    bool erased = false;
-    status = loom_rewriter_erase_if_dead(&rewriter, op, &erased);
-    if (!iree_status_is_ok(status)) continue;
-    if (erased) {
-      loom_pass_mark_changed(pass);
-      continue;
+    if (iree_any_bit_set(flags,
+                         LOOM_VECTOR_TO_SCALAR_RUN_FLAG_ERASE_DEAD_OPS)) {
+      bool erased = false;
+      status = loom_rewriter_erase_if_dead(&rewriter, op, &erased);
+      if (!iree_status_is_ok(status)) continue;
+      if (erased) {
+        loom_pass_mark_changed(pass);
+        continue;
+      }
     }
-    status = loom_vector_to_scalar_lower_op(pass, &rewriter, op);
+    status = lower_op(pass, &rewriter, op);
   }
   loom_rewriter_deinitialize(&rewriter);
   if (!iree_status_is_ok(status)) {
     loom_pass_value_fact_owner_invalidate(pass->value_facts);
   }
   return status;
+}
+
+iree_status_t loom_vector_to_scalar_run(loom_pass_t* pass,
+                                        loom_module_t* module,
+                                        loom_func_like_t function) {
+  return loom_vector_to_scalar_run_with_lowerer(
+      pass, module, function, loom_vector_to_scalar_lower_op,
+      LOOM_VECTOR_TO_SCALAR_RUN_FLAG_ERASE_DEAD_OPS);
+}
+
+iree_status_t loom_vector_reduce_axes_to_scalar_run(loom_pass_t* pass,
+                                                    loom_module_t* module,
+                                                    loom_func_like_t function) {
+  return loom_vector_to_scalar_run_with_lowerer(
+      pass, module, function, loom_vector_reduce_axes_to_scalar_lower_op,
+      LOOM_VECTOR_TO_SCALAR_RUN_FLAG_NONE);
 }

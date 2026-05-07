@@ -23,6 +23,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "reduce_axes_to_scalar"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/reduce_axes_to_scalar.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "to_scalar"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/to_scalar.loom-test"

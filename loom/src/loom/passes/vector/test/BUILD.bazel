@@ -16,6 +16,7 @@ loom_check_test_suite(
     name = "test",
     srcs = [
         "memory_footprint.loom-test",
+        "reduce_axes_to_scalar.loom-test",
         "to_scalar.loom-test",
     ],
     runner = "//loom/src/loom/tools/loom-check:loom-check-test",

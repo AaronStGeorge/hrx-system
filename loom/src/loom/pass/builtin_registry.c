@@ -295,6 +295,11 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .function_run = loom_vector_memory_footprint_run,
     },
     {
+        .key = IREE_SVL("vector-reduce-axes-to-scalar"),
+        .info = loom_vector_reduce_axes_to_scalar_pass_info,
+        .function_run = loom_vector_reduce_axes_to_scalar_run,
+    },
+    {
         .key = IREE_SVL("vector-to-scalar"),
         .info = loom_vector_to_scalar_pass_info,
         .function_run = loom_vector_to_scalar_run,
