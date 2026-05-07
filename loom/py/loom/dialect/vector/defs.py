@@ -2380,7 +2380,7 @@ vector_subf = _lanewise_binary(
     doc=("Lanewise floating-point subtraction of same-typed vector operands. Optional fastmath flags carry the same per-lane floating-point permissions as scalar.subf."),
     flags=_VF,
     facts="loom_vector_subf_facts",
-    canonicalize="loom_vector_uniform_result_canonicalize",
+    canonicalize="loom_vector_subf_canonicalize",
 )
 
 vector_mulf = _lanewise_binary(

@@ -1,16 +1,18 @@
 // RUN: pass canonicalize
 
-func.def @add_sub_nsz_identities(%x: f32) -> (f32, f32, f32) {
+func.def @add_sub_nsz_identities(%x: f32) -> (f32, f32, f32, f32) {
   %zero = scalar.constant 0.0 : f32
   %add_lhs = scalar.addf<nsz> %zero, %x : f32
   %add_rhs = scalar.addf<nsz> %x, %zero : f32
   %sub_rhs = scalar.subf<nsz> %x, %zero : f32
-  func.return %add_lhs, %add_rhs, %sub_rhs : f32, f32, f32
+  %sub_lhs = scalar.subf<nnan|nsz> %zero, %x : f32
+  func.return %add_lhs, %add_rhs, %sub_rhs, %sub_lhs : f32, f32, f32, f32
 }
 
 // ----
-func.def @add_sub_nsz_identities(%x: f32) -> (f32, f32, f32) {
-  func.return %x, %x, %x : f32, f32, f32
+func.def @add_sub_nsz_identities(%x: f32) -> (f32, f32, f32, f32) {
+  %sub_lhs = scalar.negf<nnan|nsz> %x : f32
+  func.return %x, %x, %x, %sub_lhs : f32, f32, f32, f32
 }
 
 // ====

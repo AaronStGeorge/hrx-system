@@ -71,6 +71,20 @@ static bool loom_vector_value_is_all_exact_i64(const loom_rewriter_t* rewriter,
          element.range_lo == expected_value;
 }
 
+static bool loom_vector_value_is_all_exact_f64(const loom_rewriter_t* rewriter,
+                                               loom_value_id_t value_id,
+                                               double expected_value) {
+  loom_value_facts_t facts = loom_rewriter_value_facts(rewriter, value_id);
+  loom_value_facts_t element = {0};
+  if (!loom_vector_query_all_equal_element(&rewriter->fact_table->context,
+                                           facts, &element)) {
+    return false;
+  }
+  return loom_value_facts_is_exact(element) &&
+         loom_value_facts_is_float(element) &&
+         loom_value_facts_as_f64(element) == expected_value;
+}
+
 static bool loom_vector_value_is_unit_stride_iota(
     const loom_rewriter_t* rewriter, loom_value_id_t value_id,
     loom_type_t vector_type) {
@@ -233,6 +247,23 @@ static iree_status_t loom_vector_replace_single_result_with_splat(
   IREE_RETURN_IF_ERROR(loom_vector_splat_build(
       &rewriter->builder, scalar, result_type, op->location, &splat_op));
   loom_value_id_t replacement = loom_vector_splat_result(splat_op);
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, &replacement, 1, value_checkpoint));
+  return loom_vector_replace_single_result_with_value(op, rewriter,
+                                                      replacement);
+}
+
+static iree_status_t loom_vector_replace_single_result_with_negf(
+    loom_op_t* op, loom_rewriter_t* rewriter, uint8_t instance_flags,
+    loom_value_id_t input, loom_type_t result_type) {
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
+
+  loom_op_t* replacement_op = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_vector_negf_build(&rewriter->builder, instance_flags, input,
+                             result_type, op->location, &replacement_op));
+  loom_value_id_t replacement = loom_vector_negf_result(replacement_op);
   IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
       rewriter, op, &replacement, 1, value_checkpoint));
   return loom_vector_replace_single_result_with_value(op, rewriter,
@@ -788,8 +819,44 @@ static iree_status_t loom_vector_canonicalize_comparison(
 }
 
 //===----------------------------------------------------------------------===//
-// Lanewise integer arithmetic
+// Lanewise arithmetic
 //===----------------------------------------------------------------------===//
+
+static bool loom_vector_fastmath_has_all(const loom_op_t* op, uint8_t flags) {
+  return (op->instance_flags & flags) == flags;
+}
+
+static iree_status_t loom_vector_canonicalize_subf(loom_op_t* op,
+                                                   loom_rewriter_t* rewriter,
+                                                   bool* out_changed) {
+  *out_changed = false;
+
+  loom_value_id_t lhs = loom_vector_subf_lhs(op);
+  loom_value_id_t rhs = loom_vector_subf_rhs(op);
+  if (loom_vector_fastmath_has_all(op, LOOM_VECTOR_FASTMATHFLAGS_NSZ) &&
+      loom_vector_value_is_all_exact_f64(rewriter, rhs, 0.0)) {
+    IREE_RETURN_IF_ERROR(
+        loom_vector_replace_single_result_with_value(op, rewriter, lhs));
+    *out_changed = true;
+    return iree_ok_status();
+  }
+
+  const uint8_t neg_flags =
+      LOOM_VECTOR_FASTMATHFLAGS_NNAN | LOOM_VECTOR_FASTMATHFLAGS_NSZ;
+  if (!loom_vector_fastmath_has_all(op, neg_flags) ||
+      !loom_vector_value_is_all_exact_f64(rewriter, lhs, 0.0)) {
+    return iree_ok_status();
+  }
+
+  loom_type_t result_type = {0};
+  if (!loom_vector_get_single_result_type(rewriter, op, &result_type)) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_negf(
+      op, rewriter, loom_vector_subf_fastmath(op), rhs, result_type));
+  *out_changed = true;
+  return iree_ok_status();
+}
 
 static iree_status_t loom_vector_canonicalize_binary_identity(
     loom_op_t* op, loom_rewriter_t* rewriter, bool* out_changed) {
@@ -1508,6 +1575,12 @@ iree_status_t loom_vector_binary_identity_canonicalize(
     loom_op_t* op, loom_rewriter_t* rewriter) {
   return loom_vector_canonicalize_uniform_then(
       op, rewriter, loom_vector_canonicalize_binary_identity);
+}
+
+iree_status_t loom_vector_subf_canonicalize(loom_op_t* op,
+                                            loom_rewriter_t* rewriter) {
+  return loom_vector_canonicalize_uniform_then(op, rewriter,
+                                               loom_vector_canonicalize_subf);
 }
 
 iree_status_t loom_vector_decode_canonicalize(loom_op_t* op,

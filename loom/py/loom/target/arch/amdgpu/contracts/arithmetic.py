@@ -98,6 +98,7 @@ _I32 = Scalar("i32")
 _F16 = Scalar("f16")
 _F32 = Scalar("f32")
 _INDEX = Scalar("index")
+_F32_SIGN_MASK = 0x80000000
 
 _VEC_I32_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
@@ -267,6 +268,27 @@ def _unary_rule(
                 descriptor=descriptor,
                 operands={"input": ValueRef.operand("input")},
                 results={"dst": ValueRef.result("result")},
+                form=_emit_form(type_pattern),
+            ),
+        ),
+    )
+
+
+def _f32_neg_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule:
+    descriptor = _descriptor("amdgpu.v_xor_b32.lit")
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("input", "result"), type_pattern),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={"rhs": ValueRef.operand("input")},
+                results={"dst": ValueRef.result("result")},
+                immediates={"imm32": _F32_SIGN_MASK},
                 form=_emit_form(type_pattern),
             ),
         ),
@@ -726,6 +748,7 @@ def _rules() -> tuple[DescriptorRule, ...]:
             _binary_rule(vector.vector_addf, _VEC_F32, "amdgpu.v_add_f32"),
             _binary_rule(vector.vector_subf, _VEC_F32, "amdgpu.v_sub_f32"),
             _binary_rule(vector.vector_mulf, _VEC_F32, "amdgpu.v_mul_f32"),
+            _f32_neg_rule(vector.vector_negf, _VEC_F32),
             _divf_arcp_one_rule(vector.vector_divf, _VEC_F32),
             _divf_arcp_rule(vector.vector_divf, _VEC_F32),
             _binary_rule(vector.vector_minnumf, _VEC_F32, "amdgpu.v_min_f32"),
@@ -872,6 +895,7 @@ def _rules() -> tuple[DescriptorRule, ...]:
                 _F32,
                 "amdgpu.v_mul_f32",
             ),
+            _f32_neg_rule(scalar_arithmetic.scalar_negf, _F32),
             _divf_arcp_one_rule(scalar_arithmetic.scalar_divf, _F32),
             _divf_arcp_rule(scalar_arithmetic.scalar_divf, _F32),
             _binary_rule(

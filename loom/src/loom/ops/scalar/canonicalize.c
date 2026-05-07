@@ -284,7 +284,7 @@ static iree_status_t loom_scalar_replace_single_result_with_binary_op(
 
 static iree_status_t loom_scalar_replace_single_result_with_unary_op(
     loom_op_t* op, loom_rewriter_t* rewriter, loom_op_kind_t kind,
-    loom_value_id_t input) {
+    uint8_t instance_flags, loom_value_id_t input) {
   loom_builder_set_before(&rewriter->builder, op);
   loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
   loom_type_t result_type = loom_scalar_single_result_type(rewriter, op);
@@ -301,6 +301,12 @@ static iree_status_t loom_scalar_replace_single_result_with_unary_op(
       IREE_RETURN_IF_ERROR(loom_scalar_absi_build(&rewriter->builder, input,
                                                   result_type, op->location,
                                                   &replacement_op));
+      break;
+    }
+    case LOOM_OP_SCALAR_NEGF: {
+      IREE_RETURN_IF_ERROR(
+          loom_scalar_negf_build(&rewriter->builder, instance_flags, input,
+                                 result_type, op->location, &replacement_op));
       break;
     }
     default:
@@ -678,12 +684,12 @@ iree_status_t loom_scalar_muli_canonicalize(loom_op_t* op,
   if (loom_scalar_op_has_no_instance_flags(op) &&
       loom_scalar_value_facts_are_exact_i64(rewriter, lhs, -1)) {
     return loom_scalar_replace_single_result_with_unary_op(
-        op, rewriter, LOOM_OP_SCALAR_NEGI, rhs);
+        op, rewriter, LOOM_OP_SCALAR_NEGI, /*instance_flags=*/0, rhs);
   }
   if (loom_scalar_op_has_no_instance_flags(op) &&
       loom_scalar_value_facts_are_exact_i64(rewriter, rhs, -1)) {
     return loom_scalar_replace_single_result_with_unary_op(
-        op, rewriter, LOOM_OP_SCALAR_NEGI, lhs);
+        op, rewriter, LOOM_OP_SCALAR_NEGI, /*instance_flags=*/0, lhs);
   }
   if (!loom_scalar_op_has_no_instance_flags(op)) return iree_ok_status();
 
@@ -1025,6 +1031,14 @@ iree_status_t loom_scalar_subf_canonicalize(loom_op_t* op,
   if (loom_scalar_value_facts_are_exact_f64(rewriter, rhs, 0.0)) {
     return loom_scalar_replace_single_result_with_value(
         op, rewriter, loom_scalar_subf_lhs(op));
+  }
+  const uint8_t neg_flags =
+      LOOM_SCALAR_FASTMATHFLAGS_NNAN | LOOM_SCALAR_FASTMATHFLAGS_NSZ;
+  loom_value_id_t lhs = loom_scalar_subf_lhs(op);
+  if (loom_scalar_fastmath_has_all(op, neg_flags) &&
+      loom_scalar_value_facts_are_exact_f64(rewriter, lhs, 0.0)) {
+    return loom_scalar_replace_single_result_with_unary_op(
+        op, rewriter, LOOM_OP_SCALAR_NEGF, loom_scalar_subf_fastmath(op), rhs);
   }
   return iree_ok_status();
 }
