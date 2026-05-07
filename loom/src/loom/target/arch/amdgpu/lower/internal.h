@@ -834,6 +834,36 @@ iree_status_t loom_amdgpu_lower_vector_bitcast(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_bitcast_plan_t* plan);
 
+// Selects an AMDGPU vector.concat register concatenation plan.
+iree_status_t loom_amdgpu_select_vector_concat_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_concat_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source vector.concat op as AMDGPU register concatenation.
+iree_status_t loom_amdgpu_lower_vector_concat(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_concat_plan_t* plan);
+
+// Selects an AMDGPU vector.deinterleave register split plan.
+iree_status_t loom_amdgpu_select_vector_deinterleave_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_deinterleave_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source vector.deinterleave op as AMDGPU register splitting.
+iree_status_t loom_amdgpu_lower_vector_deinterleave(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_deinterleave_plan_t* plan);
+
+// Selects an AMDGPU vector.interleave register merge plan.
+iree_status_t loom_amdgpu_select_vector_interleave_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_interleave_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source vector.interleave op as AMDGPU register interleaving.
+iree_status_t loom_amdgpu_lower_vector_interleave(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_interleave_plan_t* plan);
+
 // Selects an AMDGPU vector.slice register slicing plan.
 iree_status_t loom_amdgpu_select_vector_slice_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,

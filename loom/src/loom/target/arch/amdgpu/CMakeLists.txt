@@ -1480,6 +1480,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "source_low_structural"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_structural.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "source_low_subgroup_collective"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_subgroup_collective.loom-test"

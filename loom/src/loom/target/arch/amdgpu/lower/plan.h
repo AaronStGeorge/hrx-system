@@ -83,6 +83,43 @@ typedef struct loom_amdgpu_vector_bitcast_plan_t {
   loom_value_id_t result;
 } loom_amdgpu_vector_bitcast_plan_t;
 
+typedef struct loom_amdgpu_vector_concat_plan_t {
+  // Input vector values concatenated in result lane order.
+  loom_value_id_t inputs[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
+  // Result vector value receiving the concatenated lane payload.
+  loom_value_id_t result;
+  // Static number of input vectors.
+  uint32_t input_count;
+  // Static 32-bit backing register count for each input vector.
+  uint32_t input_register_counts[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
+  // Static 32-bit backing register count for the result vector.
+  uint32_t result_register_count;
+} loom_amdgpu_vector_concat_plan_t;
+
+typedef struct loom_amdgpu_vector_deinterleave_plan_t {
+  // Source vector value split into even and odd lane payloads.
+  loom_value_id_t source;
+  // Even-position result vector followed by odd-position result vector.
+  loom_value_id_t results[2];
+  // Static 32-bit backing register count for the source vector.
+  uint32_t source_register_count;
+  // Static 32-bit backing register count for each result vector.
+  uint32_t result_register_count;
+} loom_amdgpu_vector_deinterleave_plan_t;
+
+typedef struct loom_amdgpu_vector_interleave_plan_t {
+  // Vector value providing even-position result lanes.
+  loom_value_id_t even;
+  // Vector value providing odd-position result lanes.
+  loom_value_id_t odd;
+  // Result vector value receiving interleaved lane payloads.
+  loom_value_id_t result;
+  // Static 32-bit backing register count for each input vector.
+  uint32_t input_register_count;
+  // Static 32-bit backing register count for the result vector.
+  uint32_t result_register_count;
+} loom_amdgpu_vector_interleave_plan_t;
+
 typedef struct loom_amdgpu_vector_extract_plan_t {
   // Source vector value containing the extracted payload.
   loom_value_id_t source;

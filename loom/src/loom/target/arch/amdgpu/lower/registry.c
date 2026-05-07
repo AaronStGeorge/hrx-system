@@ -383,6 +383,30 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_bitcast_dispatch,
                              loom_amdgpu_vector_bitcast_plan_t,
                              loom_amdgpu_lower_vector_bitcast)
 
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_concat_dispatch,
+                               loom_amdgpu_vector_concat_plan_t,
+                               loom_amdgpu_select_vector_concat_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_concat_dispatch,
+                             loom_amdgpu_vector_concat_plan_t,
+                             loom_amdgpu_lower_vector_concat)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_deinterleave_dispatch,
+                               loom_amdgpu_vector_deinterleave_plan_t,
+                               loom_amdgpu_select_vector_deinterleave_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_deinterleave_dispatch,
+                             loom_amdgpu_vector_deinterleave_plan_t,
+                             loom_amdgpu_lower_vector_deinterleave)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_interleave_dispatch,
+                               loom_amdgpu_vector_interleave_plan_t,
+                               loom_amdgpu_select_vector_interleave_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_interleave_dispatch,
+                             loom_amdgpu_vector_interleave_plan_t,
+                             loom_amdgpu_lower_vector_interleave)
+
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_slice_dispatch,
                                loom_amdgpu_vector_slice_plan_t,
                                loom_amdgpu_select_vector_slice_plan)
