@@ -168,10 +168,15 @@ enum {
   LOOM_OP_VECTOR_COUNT_ = 143,
 };
 
-// Floating-point value-domain assumptions for vector operations.
-#define LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NNAN ((uint8_t)1)
-#define LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NINF ((uint8_t)2)
-#define LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NSZ ((uint8_t)4)
+// IEEE 754 fast-math relaxation flags for float operations.
+#define LOOM_VECTOR_FASTMATHFLAGS_REASSOC ((uint8_t)1)
+#define LOOM_VECTOR_FASTMATHFLAGS_NNAN ((uint8_t)2)
+#define LOOM_VECTOR_FASTMATHFLAGS_NINF ((uint8_t)4)
+#define LOOM_VECTOR_FASTMATHFLAGS_NSZ ((uint8_t)8)
+#define LOOM_VECTOR_FASTMATHFLAGS_ARCP ((uint8_t)16)
+#define LOOM_VECTOR_FASTMATHFLAGS_CONTRACT ((uint8_t)32)
+#define LOOM_VECTOR_FASTMATHFLAGS_AFN ((uint8_t)64)
+#define LOOM_VECTOR_FASTMATHFLAGS_FAST ((uint8_t)127)
 
 // Integer overflow behavior flags.
 #define LOOM_VECTOR_INTOVERFLOWFLAGS_NSW ((uint8_t)1)
@@ -1365,13 +1370,13 @@ iree_status_t loom_vector_cmpf_facts(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
-// LOOM_OP_VECTOR_ADDF: Lanewise floating-point addition of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change the required element type or shape.
+// LOOM_OP_VECTOR_ADDF: Lanewise floating-point addition of same-typed vector operands. Optional fastmath flags carry the same per-lane floating-point permissions as scalar.addf; reduction reassociation belongs on vector.reduce instead.
 // vector.addf
 LOOM_DEFINE_ISA(loom_vector_addf_isa, LOOM_OP_VECTOR_ADDF)
 LOOM_DEFINE_OPERAND(loom_vector_addf_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_addf_rhs, 1)
 LOOM_DEFINE_RESULT(loom_vector_addf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_addf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_addf_fastmath)
 iree_status_t loom_vector_addf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t lhs, loom_value_id_t rhs,
@@ -1383,13 +1388,13 @@ iree_status_t loom_vector_addf_facts(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
-// LOOM_OP_VECTOR_SUBF: Lanewise floating-point subtraction of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change the required element type or shape.
+// LOOM_OP_VECTOR_SUBF: Lanewise floating-point subtraction of same-typed vector operands. Optional fastmath flags carry the same per-lane floating-point permissions as scalar.subf.
 // vector.subf
 LOOM_DEFINE_ISA(loom_vector_subf_isa, LOOM_OP_VECTOR_SUBF)
 LOOM_DEFINE_OPERAND(loom_vector_subf_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_subf_rhs, 1)
 LOOM_DEFINE_RESULT(loom_vector_subf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_subf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_subf_fastmath)
 iree_status_t loom_vector_subf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t lhs, loom_value_id_t rhs,
@@ -1401,13 +1406,13 @@ iree_status_t loom_vector_subf_facts(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
-// LOOM_OP_VECTOR_MULF: Lanewise floating-point multiplication of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not imply fusion with neighboring operations.
+// LOOM_OP_VECTOR_MULF: Lanewise floating-point multiplication of same-typed vector operands. Optional fastmath flags carry the same per-lane floating-point permissions as scalar.mulf.
 // vector.mulf
 LOOM_DEFINE_ISA(loom_vector_mulf_isa, LOOM_OP_VECTOR_MULF)
 LOOM_DEFINE_OPERAND(loom_vector_mulf_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_mulf_rhs, 1)
 LOOM_DEFINE_RESULT(loom_vector_mulf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_mulf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_mulf_fastmath)
 iree_status_t loom_vector_mulf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t lhs, loom_value_id_t rhs,
@@ -1419,13 +1424,13 @@ iree_status_t loom_vector_mulf_facts(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
-// LOOM_OP_VECTOR_DIVF: Lanewise floating-point division of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change division-by-zero or NaN semantics.
+// LOOM_OP_VECTOR_DIVF: Lanewise floating-point division of same-typed vector operands. Optional fastmath flags carry the same per-lane floating-point permissions as scalar.divf, including arcp for reciprocal formation.
 // vector.divf
 LOOM_DEFINE_ISA(loom_vector_divf_isa, LOOM_OP_VECTOR_DIVF)
 LOOM_DEFINE_OPERAND(loom_vector_divf_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_divf_rhs, 1)
 LOOM_DEFINE_RESULT(loom_vector_divf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_divf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_divf_fastmath)
 iree_status_t loom_vector_divf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t lhs, loom_value_id_t rhs,
@@ -1443,7 +1448,7 @@ LOOM_DEFINE_ISA(loom_vector_remf_isa, LOOM_OP_VECTOR_REMF)
 LOOM_DEFINE_OPERAND(loom_vector_remf_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_remf_rhs, 1)
 LOOM_DEFINE_RESULT(loom_vector_remf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_remf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_remf_fastmath)
 iree_status_t loom_vector_remf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t lhs, loom_value_id_t rhs,
@@ -1460,7 +1465,7 @@ iree_status_t loom_vector_remf_facts(
 LOOM_DEFINE_ISA(loom_vector_negf_isa, LOOM_OP_VECTOR_NEGF)
 LOOM_DEFINE_OPERAND(loom_vector_negf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_negf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_negf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_negf_fastmath)
 iree_status_t loom_vector_negf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -1476,7 +1481,7 @@ iree_status_t loom_vector_negf_facts(
 LOOM_DEFINE_ISA(loom_vector_absf_isa, LOOM_OP_VECTOR_ABSF)
 LOOM_DEFINE_OPERAND(loom_vector_absf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_absf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_absf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_absf_fastmath)
 iree_status_t loom_vector_absf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -1493,7 +1498,7 @@ LOOM_DEFINE_ISA(loom_vector_minimumf_isa, LOOM_OP_VECTOR_MINIMUMF)
 LOOM_DEFINE_OPERAND(loom_vector_minimumf_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_minimumf_rhs, 1)
 LOOM_DEFINE_RESULT(loom_vector_minimumf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_minimumf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_minimumf_fastmath)
 iree_status_t loom_vector_minimumf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t lhs, loom_value_id_t rhs,
@@ -1511,7 +1516,7 @@ LOOM_DEFINE_ISA(loom_vector_maximumf_isa, LOOM_OP_VECTOR_MAXIMUMF)
 LOOM_DEFINE_OPERAND(loom_vector_maximumf_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_maximumf_rhs, 1)
 LOOM_DEFINE_RESULT(loom_vector_maximumf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_maximumf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_maximumf_fastmath)
 iree_status_t loom_vector_maximumf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t lhs, loom_value_id_t rhs,
@@ -1529,7 +1534,7 @@ LOOM_DEFINE_ISA(loom_vector_minnumf_isa, LOOM_OP_VECTOR_MINNUMF)
 LOOM_DEFINE_OPERAND(loom_vector_minnumf_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_minnumf_rhs, 1)
 LOOM_DEFINE_RESULT(loom_vector_minnumf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_minnumf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_minnumf_fastmath)
 iree_status_t loom_vector_minnumf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t lhs, loom_value_id_t rhs,
@@ -1547,7 +1552,7 @@ LOOM_DEFINE_ISA(loom_vector_maxnumf_isa, LOOM_OP_VECTOR_MAXNUMF)
 LOOM_DEFINE_OPERAND(loom_vector_maxnumf_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_maxnumf_rhs, 1)
 LOOM_DEFINE_RESULT(loom_vector_maxnumf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_maxnumf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_maxnumf_fastmath)
 iree_status_t loom_vector_maxnumf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t lhs, loom_value_id_t rhs,
@@ -1565,7 +1570,7 @@ LOOM_DEFINE_ISA(loom_vector_copysignf_isa, LOOM_OP_VECTOR_COPYSIGNF)
 LOOM_DEFINE_OPERAND(loom_vector_copysignf_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_copysignf_rhs, 1)
 LOOM_DEFINE_RESULT(loom_vector_copysignf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_copysignf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_copysignf_fastmath)
 iree_status_t loom_vector_copysignf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t lhs, loom_value_id_t rhs,
@@ -1584,7 +1589,7 @@ LOOM_DEFINE_OPERAND(loom_vector_fmaf_a, 0)
 LOOM_DEFINE_OPERAND(loom_vector_fmaf_b, 1)
 LOOM_DEFINE_OPERAND(loom_vector_fmaf_c, 2)
 LOOM_DEFINE_RESULT(loom_vector_fmaf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_fmaf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_fmaf_fastmath)
 iree_status_t loom_vector_fmaf_build(
     loom_builder_t* builder,
     uint8_t instance_flags,
@@ -2039,7 +2044,7 @@ iree_status_t loom_vector_ctpopi_facts(
 LOOM_DEFINE_ISA(loom_vector_expf_isa, LOOM_OP_VECTOR_EXPF)
 LOOM_DEFINE_OPERAND(loom_vector_expf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_expf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_expf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_expf_fastmath)
 iree_status_t loom_vector_expf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2055,7 +2060,7 @@ iree_status_t loom_vector_expf_facts(
 LOOM_DEFINE_ISA(loom_vector_exp2f_isa, LOOM_OP_VECTOR_EXP2F)
 LOOM_DEFINE_OPERAND(loom_vector_exp2f_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_exp2f_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_exp2f_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_exp2f_fastmath)
 iree_status_t loom_vector_exp2f_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2071,7 +2076,7 @@ iree_status_t loom_vector_exp2f_facts(
 LOOM_DEFINE_ISA(loom_vector_expm1f_isa, LOOM_OP_VECTOR_EXPM1F)
 LOOM_DEFINE_OPERAND(loom_vector_expm1f_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_expm1f_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_expm1f_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_expm1f_fastmath)
 iree_status_t loom_vector_expm1f_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2087,7 +2092,7 @@ iree_status_t loom_vector_expm1f_facts(
 LOOM_DEFINE_ISA(loom_vector_logf_isa, LOOM_OP_VECTOR_LOGF)
 LOOM_DEFINE_OPERAND(loom_vector_logf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_logf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_logf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_logf_fastmath)
 iree_status_t loom_vector_logf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2103,7 +2108,7 @@ iree_status_t loom_vector_logf_facts(
 LOOM_DEFINE_ISA(loom_vector_log2f_isa, LOOM_OP_VECTOR_LOG2F)
 LOOM_DEFINE_OPERAND(loom_vector_log2f_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_log2f_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_log2f_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_log2f_fastmath)
 iree_status_t loom_vector_log2f_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2119,7 +2124,7 @@ iree_status_t loom_vector_log2f_facts(
 LOOM_DEFINE_ISA(loom_vector_log10f_isa, LOOM_OP_VECTOR_LOG10F)
 LOOM_DEFINE_OPERAND(loom_vector_log10f_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_log10f_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_log10f_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_log10f_fastmath)
 iree_status_t loom_vector_log10f_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2135,7 +2140,7 @@ iree_status_t loom_vector_log10f_facts(
 LOOM_DEFINE_ISA(loom_vector_log1pf_isa, LOOM_OP_VECTOR_LOG1PF)
 LOOM_DEFINE_OPERAND(loom_vector_log1pf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_log1pf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_log1pf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_log1pf_fastmath)
 iree_status_t loom_vector_log1pf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2152,7 +2157,7 @@ LOOM_DEFINE_ISA(loom_vector_powf_isa, LOOM_OP_VECTOR_POWF)
 LOOM_DEFINE_OPERAND(loom_vector_powf_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_powf_rhs, 1)
 LOOM_DEFINE_RESULT(loom_vector_powf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_powf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_powf_fastmath)
 iree_status_t loom_vector_powf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t lhs, loom_value_id_t rhs,
@@ -2164,12 +2169,12 @@ iree_status_t loom_vector_powf_facts(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
-// LOOM_OP_VECTOR_SQRTF: Lanewise floating-point square root. Optional assumptions flags constrain lane value domains for optimization and lowering.
+// LOOM_OP_VECTOR_SQRTF: Lanewise floating-point square root. Optional fastmath flags carry the same per-lane floating-point permissions as scalar.sqrtf.
 // vector.sqrtf
 LOOM_DEFINE_ISA(loom_vector_sqrtf_isa, LOOM_OP_VECTOR_SQRTF)
 LOOM_DEFINE_OPERAND(loom_vector_sqrtf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_sqrtf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_sqrtf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_sqrtf_fastmath)
 iree_status_t loom_vector_sqrtf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2185,7 +2190,7 @@ iree_status_t loom_vector_sqrtf_facts(
 LOOM_DEFINE_ISA(loom_vector_rsqrtf_isa, LOOM_OP_VECTOR_RSQRTF)
 LOOM_DEFINE_OPERAND(loom_vector_rsqrtf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_rsqrtf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_rsqrtf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_rsqrtf_fastmath)
 iree_status_t loom_vector_rsqrtf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2201,7 +2206,7 @@ iree_status_t loom_vector_rsqrtf_facts(
 LOOM_DEFINE_ISA(loom_vector_cbrtf_isa, LOOM_OP_VECTOR_CBRTF)
 LOOM_DEFINE_OPERAND(loom_vector_cbrtf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_cbrtf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_cbrtf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_cbrtf_fastmath)
 iree_status_t loom_vector_cbrtf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2217,7 +2222,7 @@ iree_status_t loom_vector_cbrtf_facts(
 LOOM_DEFINE_ISA(loom_vector_sinf_isa, LOOM_OP_VECTOR_SINF)
 LOOM_DEFINE_OPERAND(loom_vector_sinf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_sinf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_sinf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_sinf_fastmath)
 iree_status_t loom_vector_sinf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2233,7 +2238,7 @@ iree_status_t loom_vector_sinf_facts(
 LOOM_DEFINE_ISA(loom_vector_cosf_isa, LOOM_OP_VECTOR_COSF)
 LOOM_DEFINE_OPERAND(loom_vector_cosf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_cosf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_cosf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_cosf_fastmath)
 iree_status_t loom_vector_cosf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2249,7 +2254,7 @@ iree_status_t loom_vector_cosf_facts(
 LOOM_DEFINE_ISA(loom_vector_tanf_isa, LOOM_OP_VECTOR_TANF)
 LOOM_DEFINE_OPERAND(loom_vector_tanf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_tanf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_tanf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_tanf_fastmath)
 iree_status_t loom_vector_tanf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2265,7 +2270,7 @@ iree_status_t loom_vector_tanf_facts(
 LOOM_DEFINE_ISA(loom_vector_asinf_isa, LOOM_OP_VECTOR_ASINF)
 LOOM_DEFINE_OPERAND(loom_vector_asinf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_asinf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_asinf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_asinf_fastmath)
 iree_status_t loom_vector_asinf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2281,7 +2286,7 @@ iree_status_t loom_vector_asinf_facts(
 LOOM_DEFINE_ISA(loom_vector_acosf_isa, LOOM_OP_VECTOR_ACOSF)
 LOOM_DEFINE_OPERAND(loom_vector_acosf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_acosf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_acosf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_acosf_fastmath)
 iree_status_t loom_vector_acosf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2297,7 +2302,7 @@ iree_status_t loom_vector_acosf_facts(
 LOOM_DEFINE_ISA(loom_vector_atanf_isa, LOOM_OP_VECTOR_ATANF)
 LOOM_DEFINE_OPERAND(loom_vector_atanf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_atanf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_atanf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_atanf_fastmath)
 iree_status_t loom_vector_atanf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2314,7 +2319,7 @@ LOOM_DEFINE_ISA(loom_vector_atan2f_isa, LOOM_OP_VECTOR_ATAN2F)
 LOOM_DEFINE_OPERAND(loom_vector_atan2f_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_atan2f_rhs, 1)
 LOOM_DEFINE_RESULT(loom_vector_atan2f_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_atan2f_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_atan2f_fastmath)
 iree_status_t loom_vector_atan2f_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t lhs, loom_value_id_t rhs,
@@ -2331,7 +2336,7 @@ iree_status_t loom_vector_atan2f_facts(
 LOOM_DEFINE_ISA(loom_vector_sinhf_isa, LOOM_OP_VECTOR_SINHF)
 LOOM_DEFINE_OPERAND(loom_vector_sinhf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_sinhf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_sinhf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_sinhf_fastmath)
 iree_status_t loom_vector_sinhf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2347,7 +2352,7 @@ iree_status_t loom_vector_sinhf_facts(
 LOOM_DEFINE_ISA(loom_vector_coshf_isa, LOOM_OP_VECTOR_COSHF)
 LOOM_DEFINE_OPERAND(loom_vector_coshf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_coshf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_coshf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_coshf_fastmath)
 iree_status_t loom_vector_coshf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2363,7 +2368,7 @@ iree_status_t loom_vector_coshf_facts(
 LOOM_DEFINE_ISA(loom_vector_tanhf_isa, LOOM_OP_VECTOR_TANHF)
 LOOM_DEFINE_OPERAND(loom_vector_tanhf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_tanhf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_tanhf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_tanhf_fastmath)
 iree_status_t loom_vector_tanhf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2379,7 +2384,7 @@ iree_status_t loom_vector_tanhf_facts(
 LOOM_DEFINE_ISA(loom_vector_asinhf_isa, LOOM_OP_VECTOR_ASINHF)
 LOOM_DEFINE_OPERAND(loom_vector_asinhf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_asinhf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_asinhf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_asinhf_fastmath)
 iree_status_t loom_vector_asinhf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2395,7 +2400,7 @@ iree_status_t loom_vector_asinhf_facts(
 LOOM_DEFINE_ISA(loom_vector_acoshf_isa, LOOM_OP_VECTOR_ACOSHF)
 LOOM_DEFINE_OPERAND(loom_vector_acoshf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_acoshf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_acoshf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_acoshf_fastmath)
 iree_status_t loom_vector_acoshf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2411,7 +2416,7 @@ iree_status_t loom_vector_acoshf_facts(
 LOOM_DEFINE_ISA(loom_vector_atanhf_isa, LOOM_OP_VECTOR_ATANHF)
 LOOM_DEFINE_OPERAND(loom_vector_atanhf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_atanhf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_atanhf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_atanhf_fastmath)
 iree_status_t loom_vector_atanhf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2427,7 +2432,7 @@ iree_status_t loom_vector_atanhf_facts(
 LOOM_DEFINE_ISA(loom_vector_erff_isa, LOOM_OP_VECTOR_ERFF)
 LOOM_DEFINE_OPERAND(loom_vector_erff_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_erff_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_erff_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_erff_fastmath)
 iree_status_t loom_vector_erff_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2443,7 +2448,7 @@ iree_status_t loom_vector_erff_facts(
 LOOM_DEFINE_ISA(loom_vector_erfcf_isa, LOOM_OP_VECTOR_ERFCF)
 LOOM_DEFINE_OPERAND(loom_vector_erfcf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_erfcf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_erfcf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_erfcf_fastmath)
 iree_status_t loom_vector_erfcf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2459,7 +2464,7 @@ iree_status_t loom_vector_erfcf_facts(
 LOOM_DEFINE_ISA(loom_vector_ceilf_isa, LOOM_OP_VECTOR_CEILF)
 LOOM_DEFINE_OPERAND(loom_vector_ceilf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_ceilf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_ceilf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_ceilf_fastmath)
 iree_status_t loom_vector_ceilf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2475,7 +2480,7 @@ iree_status_t loom_vector_ceilf_facts(
 LOOM_DEFINE_ISA(loom_vector_floorf_isa, LOOM_OP_VECTOR_FLOORF)
 LOOM_DEFINE_OPERAND(loom_vector_floorf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_floorf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_floorf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_floorf_fastmath)
 iree_status_t loom_vector_floorf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2491,7 +2496,7 @@ iree_status_t loom_vector_floorf_facts(
 LOOM_DEFINE_ISA(loom_vector_roundf_isa, LOOM_OP_VECTOR_ROUNDF)
 LOOM_DEFINE_OPERAND(loom_vector_roundf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_roundf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_roundf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_roundf_fastmath)
 iree_status_t loom_vector_roundf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2507,7 +2512,7 @@ iree_status_t loom_vector_roundf_facts(
 LOOM_DEFINE_ISA(loom_vector_roundevenf_isa, LOOM_OP_VECTOR_ROUNDEVENF)
 LOOM_DEFINE_OPERAND(loom_vector_roundevenf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_roundevenf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_roundevenf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_roundevenf_fastmath)
 iree_status_t loom_vector_roundevenf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
@@ -2523,7 +2528,7 @@ iree_status_t loom_vector_roundevenf_facts(
 LOOM_DEFINE_ISA(loom_vector_truncf_isa, LOOM_OP_VECTOR_TRUNCF)
 LOOM_DEFINE_OPERAND(loom_vector_truncf_input, 0)
 LOOM_DEFINE_RESULT(loom_vector_truncf_result, 0)
-LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_truncf_assumptions)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_truncf_fastmath)
 iree_status_t loom_vector_truncf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,

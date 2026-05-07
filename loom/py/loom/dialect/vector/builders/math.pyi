@@ -15,7 +15,7 @@ class VectorMathMixin:
     def expf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -26,7 +26,7 @@ class VectorMathMixin:
     def exp2f(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -37,7 +37,7 @@ class VectorMathMixin:
     def expm1f(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -48,7 +48,7 @@ class VectorMathMixin:
     def logf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -59,7 +59,7 @@ class VectorMathMixin:
     def log2f(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -70,7 +70,7 @@ class VectorMathMixin:
     def log10f(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -81,7 +81,7 @@ class VectorMathMixin:
     def log1pf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -92,7 +92,7 @@ class VectorMathMixin:
     def powf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         lhs: ValueRef,
         rhs: ValueRef,
         results: list[Type | TiedResultSpec],
@@ -104,7 +104,7 @@ class VectorMathMixin:
     def sqrtf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -115,7 +115,7 @@ class VectorMathMixin:
     def rsqrtf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -126,7 +126,7 @@ class VectorMathMixin:
     def cbrtf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -137,7 +137,7 @@ class VectorMathMixin:
     def sinf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -148,7 +148,7 @@ class VectorMathMixin:
     def cosf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -159,7 +159,7 @@ class VectorMathMixin:
     def tanf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -170,7 +170,7 @@ class VectorMathMixin:
     def asinf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -181,7 +181,7 @@ class VectorMathMixin:
     def acosf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -192,7 +192,7 @@ class VectorMathMixin:
     def atanf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -203,7 +203,7 @@ class VectorMathMixin:
     def atan2f(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         lhs: ValueRef,
         rhs: ValueRef,
         results: list[Type | TiedResultSpec],
@@ -215,7 +215,7 @@ class VectorMathMixin:
     def sinhf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -226,7 +226,7 @@ class VectorMathMixin:
     def coshf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -237,7 +237,7 @@ class VectorMathMixin:
     def tanhf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -248,7 +248,7 @@ class VectorMathMixin:
     def asinhf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -259,7 +259,7 @@ class VectorMathMixin:
     def acoshf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -270,7 +270,7 @@ class VectorMathMixin:
     def atanhf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -281,7 +281,7 @@ class VectorMathMixin:
     def erff(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -292,7 +292,7 @@ class VectorMathMixin:
     def erfcf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -303,7 +303,7 @@ class VectorMathMixin:
     def ceilf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -314,7 +314,7 @@ class VectorMathMixin:
     def floorf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -325,7 +325,7 @@ class VectorMathMixin:
     def roundf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -336,7 +336,7 @@ class VectorMathMixin:
     def roundevenf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -347,7 +347,7 @@ class VectorMathMixin:
     def truncf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,

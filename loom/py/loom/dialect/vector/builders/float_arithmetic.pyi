@@ -15,7 +15,7 @@ class VectorFloatArithmeticMixin:
     def addf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         lhs: ValueRef,
         rhs: ValueRef,
         results: list[Type | TiedResultSpec],
@@ -27,7 +27,7 @@ class VectorFloatArithmeticMixin:
     def subf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         lhs: ValueRef,
         rhs: ValueRef,
         results: list[Type | TiedResultSpec],
@@ -39,7 +39,7 @@ class VectorFloatArithmeticMixin:
     def mulf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         lhs: ValueRef,
         rhs: ValueRef,
         results: list[Type | TiedResultSpec],
@@ -51,7 +51,7 @@ class VectorFloatArithmeticMixin:
     def divf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         lhs: ValueRef,
         rhs: ValueRef,
         results: list[Type | TiedResultSpec],
@@ -63,7 +63,7 @@ class VectorFloatArithmeticMixin:
     def remf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         lhs: ValueRef,
         rhs: ValueRef,
         results: list[Type | TiedResultSpec],
@@ -75,7 +75,7 @@ class VectorFloatArithmeticMixin:
     def negf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -86,7 +86,7 @@ class VectorFloatArithmeticMixin:
     def absf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         input: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
@@ -97,7 +97,7 @@ class VectorFloatArithmeticMixin:
     def minimumf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         lhs: ValueRef,
         rhs: ValueRef,
         results: list[Type | TiedResultSpec],
@@ -109,7 +109,7 @@ class VectorFloatArithmeticMixin:
     def maximumf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         lhs: ValueRef,
         rhs: ValueRef,
         results: list[Type | TiedResultSpec],
@@ -121,7 +121,7 @@ class VectorFloatArithmeticMixin:
     def minnumf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         lhs: ValueRef,
         rhs: ValueRef,
         results: list[Type | TiedResultSpec],
@@ -133,7 +133,7 @@ class VectorFloatArithmeticMixin:
     def maxnumf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         lhs: ValueRef,
         rhs: ValueRef,
         results: list[Type | TiedResultSpec],
@@ -145,7 +145,7 @@ class VectorFloatArithmeticMixin:
     def copysignf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         lhs: ValueRef,
         rhs: ValueRef,
         results: list[Type | TiedResultSpec],
@@ -157,7 +157,7 @@ class VectorFloatArithmeticMixin:
     def fmaf(
         self,
         *,
-        assumptions: str = ...,
+        fastmath: str = ...,
         a: ValueRef,
         b: ValueRef,
         c: ValueRef,

@@ -57,7 +57,7 @@ typedef enum loom_vector_to_scalar_lane_kind_e {
 typedef enum loom_vector_to_scalar_instance_flag_mode_e {
   LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_DROP = 0,
   LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FORWARD,
-  LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FLOAT_ASSUMPTIONS,
+  LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FAST_MATH,
   LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FLOAT_REDUCTION,
 } loom_vector_to_scalar_instance_flag_mode_t;
 

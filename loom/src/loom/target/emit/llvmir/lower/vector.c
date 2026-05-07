@@ -452,22 +452,32 @@ static iree_status_t loom_llvmir_lowering_vector_integer_flags(
 static iree_status_t loom_llvmir_lowering_vector_fast_math_flags(
     const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
     uint8_t instance_flags, loom_llvmir_fast_math_flags_t* out_flags) {
-  const uint8_t known_flags = LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NNAN |
-                              LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NINF |
-                              LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NSZ;
+  const uint8_t known_flags = LOOM_VECTOR_FASTMATHFLAGS_FAST;
   if (iree_any_bit_set(instance_flags, (uint8_t)~known_flags)) {
     return loom_llvmir_lowering_unsupported_op(
-        state, op, "unknown vector floating-point assumption flags");
+        state, op, "unknown vector floating-point fastmath flags");
   }
   loom_llvmir_fast_math_flags_t flags = LOOM_LLVMIR_FAST_MATH_NONE;
-  if (iree_any_bit_set(instance_flags, LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NNAN)) {
+  if (iree_any_bit_set(instance_flags, LOOM_VECTOR_FASTMATHFLAGS_REASSOC)) {
+    flags |= LOOM_LLVMIR_FAST_MATH_ALLOW_REASSOC;
+  }
+  if (iree_any_bit_set(instance_flags, LOOM_VECTOR_FASTMATHFLAGS_NNAN)) {
     flags |= LOOM_LLVMIR_FAST_MATH_NO_NANS;
   }
-  if (iree_any_bit_set(instance_flags, LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NINF)) {
+  if (iree_any_bit_set(instance_flags, LOOM_VECTOR_FASTMATHFLAGS_NINF)) {
     flags |= LOOM_LLVMIR_FAST_MATH_NO_INFS;
   }
-  if (iree_any_bit_set(instance_flags, LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NSZ)) {
+  if (iree_any_bit_set(instance_flags, LOOM_VECTOR_FASTMATHFLAGS_NSZ)) {
     flags |= LOOM_LLVMIR_FAST_MATH_NO_SIGNED_ZEROS;
+  }
+  if (iree_any_bit_set(instance_flags, LOOM_VECTOR_FASTMATHFLAGS_ARCP)) {
+    flags |= LOOM_LLVMIR_FAST_MATH_ALLOW_RECIPROCAL;
+  }
+  if (iree_any_bit_set(instance_flags, LOOM_VECTOR_FASTMATHFLAGS_CONTRACT)) {
+    flags |= LOOM_LLVMIR_FAST_MATH_ALLOW_CONTRACT;
+  }
+  if (iree_any_bit_set(instance_flags, LOOM_VECTOR_FASTMATHFLAGS_AFN)) {
+    flags |= LOOM_LLVMIR_FAST_MATH_APPROX_FUNC;
   }
   *out_flags = flags;
   return iree_ok_status();

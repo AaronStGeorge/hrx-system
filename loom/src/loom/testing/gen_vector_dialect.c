@@ -227,10 +227,7 @@ static iree_status_t loom_test_gen_hook_vector_float_binary(
   uint8_t flags = 0;
   if (loom_test_gen_next_probability(context->gen, 15)) {
     flags = (uint8_t)loom_test_gen_next_range(
-        context->gen, (LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NNAN |
-                       LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NINF |
-                       LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NSZ) +
-                          1);
+        context->gen, LOOM_VECTOR_FASTMATHFLAGS_FAST + 1);
   }
   loom_op_t* op = NULL;
   IREE_RETURN_IF_ERROR(

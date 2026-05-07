@@ -1711,9 +1711,9 @@ func.def @atomic_offsets_reject_i1(%buffer: buffer, %base: offset, %row: index, 
 
 // ====
 
-// Lanewise vector float flags are value assumptions, not generic fast-math flags.
-func.def @mulf_contract_is_not_a_flag(%a: vector<4xf32>, %b: vector<4xf32>) {
-  // ERROR@+1: PARSE/018 "contract"
-  %r = vector.mulf<contract> %a, %b : vector<4xf32>
+// Lanewise vector float flags use the scalar fastmath vocabulary.
+func.def @mulf_rejects_integer_overflow_flag(%a: vector<4xf32>, %b: vector<4xf32>) {
+  // ERROR@+1: PARSE/018 "nuw"
+  %r = vector.mulf<nuw> %a, %b : vector<4xf32>
   func.return
 }

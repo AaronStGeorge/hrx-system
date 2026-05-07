@@ -1937,11 +1937,10 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op_per_lane(
   IREE_RETURN_IF_ERROR(loom_low_lower_rule_copy_low_operands(
       context, source_op, emit, low_operands));
 
-  loom_value_id_t source_result = loom_low_lower_rule_source_value(
-      rule_set, source_op, emit->result_ref_start);
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_low_lower_rule_map_result_type(
-      context, source_op, source_result, &result_type));
+  loom_type_t* result_types = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_result_types(
+      context, rule_set, source_op, emit, &result_types));
+  loom_type_t result_type = result_types[0];
   IREE_ASSERT(loom_type_is_register(result_type));
   const uint32_t lane_count = loom_type_register_unit_count(result_type);
   IREE_ASSERT_GT(lane_count, 0);

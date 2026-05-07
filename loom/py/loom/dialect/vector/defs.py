@@ -39,7 +39,7 @@ from loom.assembly import (
 from loom.dialect.atomic import AtomicKind, AtomicOrdering, AtomicScope
 from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dialect.combining import CombiningKind
-from loom.dialect.scalar import IntOverflowFlags
+from loom.dialect.scalar import FastMathFlags, IntOverflowFlags
 from loom.dialect.scalar.comparison import CmpFPredicate, CmpIPredicate
 from loom.dsl import (
     ANY,
@@ -246,16 +246,6 @@ FloatDot4F8Kind = EnumDef(
         EnumCase("bf8bf8", 3, doc="Packed bf8/E5M2 lhs times packed bf8/E5M2 rhs."),
     ],
     doc="Format variants for packed four-lane fp8/bf8 dot products accumulated into f32 lanes.",
-)
-
-FloatAssumptionFlags = EnumDef(
-    "FloatAssumptionFlags",
-    [
-        EnumCase("nnan", 1, doc="Assume no NaNs."),
-        EnumCase("ninf", 2, doc="Assume no infinities."),
-        EnumCase("nsz", 4, doc="Assume no signed zeros."),
-    ],
-    doc="Floating-point value-domain assumptions for vector operations.",
 )
 
 FloatReductionFlags = EnumDef(
@@ -2368,13 +2358,15 @@ vector_cmpf = Op(
 # Lanewise arithmetic and math
 # ============================================================================
 
-_VF = ("assumptions", FloatAssumptionFlags)
+_VF = ("fastmath", FastMathFlags)
 
 vector_addf = _lanewise_binary(
     "vector.addf",
     phase=OpPhase.EXECUTABLE,
     result_constraint=FLOAT_ELEMENT,
-    doc=("Lanewise floating-point addition of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change the required element type or shape."),
+    doc=(
+        "Lanewise floating-point addition of same-typed vector operands. Optional fastmath flags carry the same per-lane floating-point permissions as scalar.addf; reduction reassociation belongs on vector.reduce instead."
+    ),
     commutative=True,
     flags=_VF,
     facts="loom_vector_addf_facts",
@@ -2385,7 +2377,7 @@ vector_subf = _lanewise_binary(
     "vector.subf",
     phase=OpPhase.EXECUTABLE,
     result_constraint=FLOAT_ELEMENT,
-    doc=("Lanewise floating-point subtraction of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change the required element type or shape."),
+    doc=("Lanewise floating-point subtraction of same-typed vector operands. Optional fastmath flags carry the same per-lane floating-point permissions as scalar.subf."),
     flags=_VF,
     facts="loom_vector_subf_facts",
     canonicalize="loom_vector_uniform_result_canonicalize",
@@ -2395,7 +2387,7 @@ vector_mulf = _lanewise_binary(
     "vector.mulf",
     phase=OpPhase.EXECUTABLE,
     result_constraint=FLOAT_ELEMENT,
-    doc=("Lanewise floating-point multiplication of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not imply fusion with neighboring operations."),
+    doc=("Lanewise floating-point multiplication of same-typed vector operands. Optional fastmath flags carry the same per-lane floating-point permissions as scalar.mulf."),
     commutative=True,
     flags=_VF,
     facts="loom_vector_mulf_facts",
@@ -2406,7 +2398,9 @@ vector_divf = _lanewise_binary(
     "vector.divf",
     phase=OpPhase.EXECUTABLE,
     result_constraint=FLOAT_ELEMENT,
-    doc=("Lanewise floating-point division of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change division-by-zero or NaN semantics."),
+    doc=(
+        "Lanewise floating-point division of same-typed vector operands. Optional fastmath flags carry the same per-lane floating-point permissions as scalar.divf, including arcp for reciprocal formation."
+    ),
     flags=_VF,
     facts="loom_vector_divf_facts",
     canonicalize="loom_vector_uniform_result_canonicalize",
@@ -2511,10 +2505,10 @@ vector_fmaf = Op(
     results=[Result("result", VECTOR)],
     attrs=[
         AttrDef(
-            "assumptions",
+            "fastmath",
             ATTR_TYPE_FLAGS,
             optional=True,
-            enum_def=FloatAssumptionFlags,
+            enum_def=FastMathFlags,
         )
     ],
     constraints=[
@@ -2525,7 +2519,7 @@ vector_fmaf = Op(
     canonicalize="loom_vector_uniform_result_canonicalize",
     traits=[PURE, ELEMENTWISE],
     format=[
-        Flags("assumptions"),
+        Flags("fastmath"),
         Ref("a"),
         COMMA,
         Ref("b"),
@@ -2882,7 +2876,7 @@ vector_powf = _lanewise_binary(
 vector_sqrtf = _lanewise_unary(
     "vector.sqrtf",
     result_constraint=FLOAT_ELEMENT,
-    doc=("Lanewise floating-point square root. Optional assumptions flags constrain lane value domains for optimization and lowering."),
+    doc=("Lanewise floating-point square root. Optional fastmath flags carry the same per-lane floating-point permissions as scalar.sqrtf."),
     flags=_VF,
     facts="loom_vector_sqrtf_facts",
     canonicalize="loom_vector_uniform_result_canonicalize",

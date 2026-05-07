@@ -41,6 +41,25 @@ kernel.def @f32_fma(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
 
 // ====
 
+kernel.def @f32_arcp_div(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %zero = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64x4xf32, #dense>
+  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<64x4xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x4xf32, #dense>
+  %lhs = vector.load %lhs_view[%tid, 0] : view<64x4xf32, #dense> -> vector<4xf32>
+  %rhs = vector.load %rhs_view[%tid, 0] : view<64x4xf32, #dense> -> vector<4xf32>
+  %quotient = vector.divf<nnan|ninf|nsz|arcp> %lhs, %rhs : vector<4xf32>
+  vector.store %quotient, %output_view[%tid, 0] : vector<4xf32>, view<64x4xf32, #dense>
+  kernel.return
+}
+
+// ====
+
 kernel.def @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
