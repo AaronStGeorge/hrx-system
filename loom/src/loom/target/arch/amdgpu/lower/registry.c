@@ -10,6 +10,7 @@
 #include "loom/ops/index/ops.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/contracts/arithmetic.h"
@@ -305,7 +306,15 @@ LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_select_dispatch,
 
 LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_select_dispatch,
                              loom_amdgpu_vector_select_plan_t,
-                             loom_amdgpu_lower_vector_select)
+                             loom_amdgpu_lower_select)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_scf_select_dispatch,
+                               loom_amdgpu_vector_select_plan_t,
+                               loom_amdgpu_select_scf_select_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_scf_select_dispatch,
+                             loom_amdgpu_vector_select_plan_t,
+                             loom_amdgpu_lower_select)
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_table_lookup_dispatch,
                                loom_amdgpu_table_lookup_plan_t,
@@ -429,6 +438,10 @@ loom_amdgpu_find_lower_dispatch_row(loom_low_lower_plan_id_t plan_id) {
       return loom_amdgpu_lower_dispatch_row_from_table(
           op_kind, kAmdgpuScalarDispatchRows,
           IREE_ARRAYSIZE(kAmdgpuScalarDispatchRows));
+    case LOOM_DIALECT_SCF:
+      return loom_amdgpu_lower_dispatch_row_from_table(
+          op_kind, kAmdgpuScfDispatchRows,
+          IREE_ARRAYSIZE(kAmdgpuScfDispatchRows));
     case LOOM_DIALECT_BUFFER:
       return loom_amdgpu_lower_dispatch_row_from_table(
           op_kind, kAmdgpuBufferDispatchRows,

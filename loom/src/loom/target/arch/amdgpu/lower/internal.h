@@ -756,8 +756,14 @@ iree_status_t loom_amdgpu_select_vector_select_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_vector_select_plan_t* out_plan, bool* out_selected);
 
-// Lowers a source vector.select op from its selected AMDGPU mask plan.
-iree_status_t loom_amdgpu_lower_vector_select(
+// Selects an AMDGPU scf.select plan using either SCC-controlled scalar selects
+// or explicit SGPR-pair masks and b32 cndmask packets.
+iree_status_t loom_amdgpu_select_scf_select_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_select_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source vector.select or scf.select op from its selected AMDGPU plan.
+iree_status_t loom_amdgpu_lower_select(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_select_plan_t* plan);
 

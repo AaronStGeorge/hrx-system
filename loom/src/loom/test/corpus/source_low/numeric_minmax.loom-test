@@ -18,6 +18,54 @@ func.def @vector_f32_minnum_maxnum(%lhs: vector<2xf32>, %rhs: vector<2xf32>) -> 
 
 // ====
 
+func.def @index_minmax_sgpr(%lhs0: index, %rhs0: index) -> (index) {
+  %lhs = index.assume %lhs0 [range(%lhs0, 0, 1024)] : index
+  %rhs = index.assume %rhs0 [range(%rhs0, 0, 1024)] : index
+  %min = index.min %lhs, %rhs : index
+  %max = index.max %lhs, %rhs : index
+  %sum = index.add %min, %max : index
+  func.return %sum : index
+}
+
+// ====
+
+func.def @scf_select_sgpr(%lhs: i32, %rhs: i32, %a: i32, %b: i32) -> (i32) {
+  %cond = scalar.cmpi slt, %lhs, %rhs : i32
+  %selected = scf.select %cond, %a, %b : i32
+  func.return %selected : i32
+}
+
+// ====
+
+func.def @scf_select_vgpr(%lhs: f32, %rhs: f32, %a: f32, %b: f32) -> (f32) {
+  %cond = scalar.cmpf olt, %lhs, %rhs : f32
+  %selected = scf.select %cond, %a, %b : f32
+  func.return %selected : f32
+}
+
+// ====
+
+kernel.def @index_minmax_vgpr_select(%output: buffer) {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %limit = index.constant 31 : index
+  %min = index.min %tid, %limit : index
+  %max = index.max %tid, %limit : index
+  %cond = index.cmp slt, %tid, %limit : index
+  %selected = scf.select %cond, %min, %max : index
+  %zero = index.constant 0 : offset
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
+  %stored = vector.constant 1 : vector<1xi32>
+  vector.store %stored, %output_view[%selected] : vector<1xi32>, view<64xi32, #dense>
+  kernel.return
+}
+
+// ====
+
 func.def @f32_reduce_minnum_maxnum(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<4xf32, #dense>

@@ -39,6 +39,10 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.s_add_u32",
     "amdgpu.s_sub_u32",
     "amdgpu.s_mul_i32",
+    "amdgpu.s_min_i32",
+    "amdgpu.s_max_i32",
+    "amdgpu.s_min_u32",
+    "amdgpu.s_max_u32",
     "amdgpu.s_and_b32",
     "amdgpu.s_or_b32",
     "amdgpu.s_xor_b32",
@@ -48,6 +52,10 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_add_u32",
     "amdgpu.v_sub_u32",
     "amdgpu.v_mul_lo_u32",
+    "amdgpu.v_min_i32",
+    "amdgpu.v_max_i32",
+    "amdgpu.v_min_u32",
+    "amdgpu.v_max_u32",
     "amdgpu.v_and_b32",
     "amdgpu.v_or_b32",
     "amdgpu.v_xor_b32",
@@ -477,6 +485,12 @@ def _rules() -> tuple[DescriptorRule, ...]:
             "amdgpu.s_mul_i32",
             "amdgpu.v_mul_lo_u32",
         )
+    )
+    rules.extend(
+        _address_rules(index.index_min, "amdgpu.s_min_i32", "amdgpu.v_min_i32")
+    )
+    rules.extend(
+        _address_rules(index.index_max, "amdgpu.s_max_i32", "amdgpu.v_max_i32")
     )
     rules.extend(
         _address_rules(index.index_andi, "amdgpu.s_and_b32", "amdgpu.v_and_b32")

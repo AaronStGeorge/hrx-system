@@ -673,6 +673,16 @@ def _scc_state_read(field_name: str = "scc_in") -> Operand:
     )
 
 
+def _scc_predicate(field_name: str) -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.PREDICATE,
+        _SCC_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
+        unit_count=1,
+    )
+
+
 def _exec_clobber(field_name: str = "exec") -> Operand:
     return Operand(
         field_name,
@@ -1744,6 +1754,64 @@ def _s_binary_u32_overlay(
             AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs")),
         ),
         implicit_operands=(_SCC_CLOBBER_OUTPUT,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _s_min_i32_overlay() -> AmdgpuDescriptorOverlay:
+    return _s_binary_u32_overlay(
+        descriptor_key="amdgpu.s_min_i32",
+        instruction_name="S_MIN_I32",
+        mnemonic="s_min_i32",
+        semantic_tag="integer.min.i32",
+    )
+
+
+def _s_max_i32_overlay() -> AmdgpuDescriptorOverlay:
+    return _s_binary_u32_overlay(
+        descriptor_key="amdgpu.s_max_i32",
+        instruction_name="S_MAX_I32",
+        mnemonic="s_max_i32",
+        semantic_tag="integer.max.i32",
+    )
+
+
+def _s_min_u32_overlay() -> AmdgpuDescriptorOverlay:
+    return _s_binary_u32_overlay(
+        descriptor_key="amdgpu.s_min_u32",
+        instruction_name="S_MIN_U32",
+        mnemonic="s_min_u32",
+        semantic_tag="integer.min.u32",
+    )
+
+
+def _s_max_u32_overlay() -> AmdgpuDescriptorOverlay:
+    return _s_binary_u32_overlay(
+        descriptor_key="amdgpu.s_max_u32",
+        instruction_name="S_MAX_U32",
+        mnemonic="s_max_u32",
+        semantic_tag="integer.max.u32",
+    )
+
+
+def _s_cselect_b32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_cselect_b32",
+        instruction_name="S_CSELECT_B32",
+        mnemonic="s_cselect_b32",
+        encoding_name="ENC_SOP2",
+        semantic_tag="control.select.b32",
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SDST", _sgpr_result()),
+            AmdgpuOperandOverlay("SSRC0", _sgpr_operand("true_value")),
+            AmdgpuOperandOverlay("SSRC1", _sgpr_operand("false_value")),
+        ),
+        implicit_operands=(_scc_input(_scc_predicate("condition")),),
+        asm_forms=_asm(
+            results=("dst",),
+            operands=("true_value", "false_value", "condition"),
+        ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -6862,6 +6930,11 @@ def _cdna_core_overlays(
         _s_sub_u32_overlay(),
         _s_mul_i32_overlay(),
         _s_mul_hi_u32_overlay(),
+        _s_min_i32_overlay(),
+        _s_max_i32_overlay(),
+        _s_min_u32_overlay(),
+        _s_max_u32_overlay(),
+        _s_cselect_b32_overlay(),
         *_s_cmp_i32_overlays(),
         *_s_cmp_u64_overlays(),
         _s_and_saveexec_b64_overlay("default"),
@@ -7135,6 +7208,11 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_sub_u32_overlay(),
         _s_mul_i32_overlay(),
         _s_mul_hi_u32_overlay(),
+        _s_min_i32_overlay(),
+        _s_max_i32_overlay(),
+        _s_min_u32_overlay(),
+        _s_max_u32_overlay(),
+        _s_cselect_b32_overlay(),
         *_s_cmp_i32_overlays(),
         *_s_cmp_u64_overlays(),
         _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
@@ -7373,6 +7451,11 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_sub_u32_overlay(),
         _s_mul_i32_overlay(),
         _s_mul_hi_u32_overlay(),
+        _s_min_i32_overlay(),
+        _s_max_i32_overlay(),
+        _s_min_u32_overlay(),
+        _s_max_u32_overlay(),
+        _s_cselect_b32_overlay(),
         *_s_cmp_i32_overlays(),
         *_s_cmp_u64_overlays(),
         _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
@@ -7652,6 +7735,11 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_sub_u32_overlay(),
         _s_mul_i32_overlay(),
         _s_mul_hi_u32_overlay(),
+        _s_min_i32_overlay(),
+        _s_max_i32_overlay(),
+        _s_min_u32_overlay(),
+        _s_max_u32_overlay(),
+        _s_cselect_b32_overlay(),
         *_s_cmp_i32_overlays(),
         *_s_cmp_u64_overlays(),
         _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
@@ -8664,6 +8752,11 @@ _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS: dict[
     "amdgpu.s_sub_u32": _s_sub_u32_overlay,
     "amdgpu.s_mul_i32": _s_mul_i32_overlay,
     "amdgpu.s_mul_hi_u32": _s_mul_hi_u32_overlay,
+    "amdgpu.s_min_i32": _s_min_i32_overlay,
+    "amdgpu.s_max_i32": _s_max_i32_overlay,
+    "amdgpu.s_min_u32": _s_min_u32_overlay,
+    "amdgpu.s_max_u32": _s_max_u32_overlay,
+    "amdgpu.s_cselect_b32": _s_cselect_b32_overlay,
     "amdgpu.v_add_u32": lambda: _v_add_u32_overlay("V_ADD_NC_U32"),
     "amdgpu.v_add_u32.lit": lambda: _v_add_u32_literal_overlay("V_ADD_NC_U32"),
     "amdgpu.v_sub_u32": lambda: _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),

@@ -14,6 +14,7 @@
 #include "loom/ops/index/ops.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
@@ -596,6 +597,13 @@ static bool loom_amdgpu_source_value_prefers_vgpr(
     case LOOM_OP_VIEW_ATOMIC_CMPXCHG:
     case LOOM_OP_VIEW_ATOMIC_RMW:
       return true;
+    case LOOM_OP_SCF_SELECT:
+      return loom_amdgpu_source_value_prefers_vgpr(
+                 module, fact_table, view_regions,
+                 loom_scf_select_true_value(defining_op)) ||
+             loom_amdgpu_source_value_prefers_vgpr(
+                 module, fact_table, view_regions,
+                 loom_scf_select_false_value(defining_op));
     case LOOM_OP_SCALAR_ADDI:
       return loom_amdgpu_source_value_prefers_vgpr(
                  module, fact_table, view_regions,
@@ -721,6 +729,36 @@ static iree_status_t loom_amdgpu_context_value_prefers_vgpr(
   return iree_ok_status();
 }
 
+static bool loom_amdgpu_scf_select_use_needs_native_i1_mask(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions, const loom_value_t* value) {
+  const loom_use_t* use = NULL;
+  loom_value_for_each_use(value, use) {
+    if (loom_use_operand_index(*use) != 0) {
+      continue;
+    }
+    const loom_op_t* user_op = loom_use_user_op(*use);
+    if (!loom_scf_select_isa(user_op)) {
+      continue;
+    }
+    const loom_type_t result_type =
+        loom_module_value_type(module, loom_scf_select_result(user_op));
+    if (loom_amdgpu_type_is_f32(result_type) ||
+        loom_amdgpu_type_is_vector_32bit_lane_range(result_type)) {
+      return true;
+    }
+    if (loom_amdgpu_source_value_prefers_vgpr(
+            module, fact_table, view_regions,
+            loom_scf_select_true_value(user_op)) ||
+        loom_amdgpu_source_value_prefers_vgpr(
+            module, fact_table, view_regions,
+            loom_scf_select_false_value(user_op))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool loom_amdgpu_source_value_is_native_i1_mask(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     const loom_view_region_table_t* view_regions,
@@ -732,6 +770,10 @@ static bool loom_amdgpu_source_value_is_native_i1_mask(
   }
 
   const loom_value_t* value = loom_module_value(module, source_value_id);
+  if (loom_amdgpu_scf_select_use_needs_native_i1_mask(module, fact_table,
+                                                      view_regions, value)) {
+    return true;
+  }
   if (loom_value_is_block_arg(value)) {
     return false;
   }

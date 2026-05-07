@@ -66,6 +66,14 @@ static const loom_amdgpu_lower_dispatch_row_t
 };
 
 static const loom_amdgpu_lower_dispatch_row_t
+    kAmdgpuScfDispatchRows[LOOM_OP_SCF_COUNT_] = {
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCF_SELECT)] = LOOM_AMDGPU_DATA_ROW(
+            LOOM_OP_SCF_SELECT, loom_amdgpu_vector_select_plan_t,
+            loom_amdgpu_select_scf_select_dispatch,
+            loom_amdgpu_emit_scf_select_dispatch, NULL),
+};
+
+static const loom_amdgpu_lower_dispatch_row_t
     kAmdgpuBufferDispatchRows[LOOM_OP_BUFFER_COUNT_] = {
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_BUFFER_ALLOCA)] = LOOM_AMDGPU_DIRECT_ROW(
             LOOM_OP_BUFFER_ALLOCA, loom_amdgpu_select_buffer_dispatch,

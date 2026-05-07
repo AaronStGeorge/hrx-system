@@ -537,6 +537,7 @@ loom_cc_library(
     loom::src::loom::ops::kernel
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
+    loom::src::loom::ops::scf
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
     loom::src::loom::target::arch::amdgpu::contracts::arithmetic

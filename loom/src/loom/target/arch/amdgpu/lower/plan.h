@@ -145,7 +145,18 @@ typedef struct loom_amdgpu_vector_compare_plan_t {
   uint32_t lane_count;
 } loom_amdgpu_vector_compare_plan_t;
 
+typedef enum loom_amdgpu_select_condition_kind_e {
+  LOOM_AMDGPU_SELECT_CONDITION_KIND_NONE = 0,
+  LOOM_AMDGPU_SELECT_CONDITION_KIND_SCC = 1,
+  LOOM_AMDGPU_SELECT_CONDITION_KIND_SCALAR_MASK = 2,
+  LOOM_AMDGPU_SELECT_CONDITION_KIND_VECTOR_MASK = 3,
+} loom_amdgpu_select_condition_kind_t;
+
 typedef struct loom_amdgpu_vector_select_plan_t {
+  // Selected representation of the scalar or vector condition.
+  loom_amdgpu_select_condition_kind_t condition_kind;
+  // Descriptor row selected for SCC-controlled scalar selects.
+  loom_low_lower_resolved_descriptor_t scc_descriptor;
   // Descriptor row selected for register-register lane selects.
   loom_low_lower_resolved_descriptor_t register_descriptor;
   // Optional descriptor row selected when the true lane is an inline source.

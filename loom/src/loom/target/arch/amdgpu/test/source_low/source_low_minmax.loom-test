@@ -46,6 +46,95 @@ low.func.def target(@target) abi(hal_kernel) @vector_f32_minnum_maxnum(%lhs: reg
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @index_minmax_sgpr(%lhs0: index, %rhs0: index) -> (index) {
+  %lhs = index.assume %lhs0 [range(%lhs0, 0, 1024)] : index
+  %rhs = index.assume %rhs0 [range(%rhs0, 0, 1024)] : index
+  %min = index.min %lhs, %rhs : index
+  %max = index.max %lhs, %rhs : index
+  %sum = index.add %min, %max : index
+  func.return %sum : index
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @index_minmax_sgpr(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %min = s_min_i32 %lhs, %rhs
+  %max = s_max_i32 %lhs, %rhs
+  %sum = s_add_u32 %min, %max
+  return %sum
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scf_select_sgpr(%lhs: i32, %rhs: i32, %a: i32, %b: i32) -> (i32) {
+  %cond = scalar.cmpi slt, %lhs, %rhs : i32
+  %selected = scf.select %cond, %a, %b : i32
+  func.return %selected : i32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scf_select_sgpr(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>, %a: reg<amdgpu.sgpr>, %b: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %cond = s_cmp_lt_i32 %lhs, %rhs
+  %selected = s_cselect_b32 %a, %b, %cond
+  return %selected
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scf_select_vgpr(%lhs: f32, %rhs: f32, %a: f32, %b: f32) -> (f32) {
+  %cond = scalar.cmpf olt, %lhs, %rhs : f32
+  %selected = scf.select %cond, %a, %b : f32
+  func.return %selected : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scf_select_vgpr(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %cond = v_cmp_lt_f32 %lhs, %rhs
+  %selected = v_cndmask_b32 %b, %a, %cond
+  return %selected
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @index_minmax_vgpr_select(%output: buffer) {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %limit = index.constant 31 : index
+  %min = index.min %tid, %limit : index
+  %max = index.max %tid, %limit : index
+  %cond = index.cmp slt, %tid, %limit : index
+  %selected = scf.select %cond, %min, %max : index
+  %zero = index.constant 0 : offset
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
+  %stored = vector.constant 1 : vector<1xi32>
+  vector.store %stored, %output_view[%selected] : vector<1xi32>, view<64xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @index_minmax_vgpr_select() asm<amdgpu.rdna3.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %17 = v_mov_b32 31
+  %min = v_min_i32 %tid, %17
+  %max = v_max_i32 %tid, %17
+  %cond = v_cmp_lt_i32 %tid, %17
+  %selected = v_cndmask_b32 %max, %min, %cond
+  %stored = v_mov_b32 1
+  %25 = v_lshlrev_b32_lit %selected, 2
+  global_store_b32 %25, %stored, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @f32_reduce_minnum_maxnum(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<4xf32, #dense>
