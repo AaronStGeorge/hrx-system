@@ -134,19 +134,19 @@ kernel.def target(@target) @i32_scalarized(%input: buffer, %output: buffer) {
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_scalarized() asm<amdgpu.rdna3.core> {
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
-  %26 = v_mov_b32 0
-  %loaded = global_load_b128 %26, %input_view
+  %27 = v_mov_b32 0
+  %loaded = global_load_b128 %27, %input_view
   %lane0 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %lane1 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %31 = v_mov_b32 255
-  %masked = v_and_b32 %lane0, %31
-  %34 = v_mov_b32 3
-  %left = v_lshlrev_b32 %34, %masked
-  %logical = v_lshrrev_b32 %34, %lane1
+  %32 = v_mov_b32 255
+  %masked = v_and_b32 %lane0, %32
+  %35 = v_mov_b32 3
+  %left = v_lshlrev_b32 %35, %masked
+  %logical = v_lshrrev_b32 %35, %lane1
   %mixed = v_xor_b32 %left, %logical
   %lane2 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %lane3 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %result = concat(%mixed, %logical, %lane2, %lane3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128 %26, %result, %output_view
+  global_store_b128 %27, %result, %output_view
   return
 }

@@ -25,13 +25,13 @@ kernel.def target(@target) @lds_f16x4_b64_roundtrip(%input: buffer, %output: buf
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16x4_b64_roundtrip() asm<amdgpu.rdna3.core> {
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
-  %20 = storage {byte_alignment = 8, byte_length = 512} : low.storage<workgroup>
-  %scratch_view = storage_address %20 : low.storage<workgroup> -> reg<amdgpu.vgpr>
-  %22 = v_mov_b32 0
-  %loaded = global_load_b64 %22, %input_view
+  %23 = storage {byte_alignment = 8, byte_length = 512} : low.storage<workgroup>
+  %scratch_view = storage_address %23 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %25 = v_mov_b32 0
+  %loaded = global_load_b64 %25, %input_view
   ds_write_b64 %scratch_view, %loaded
   %roundtrip = ds_read_b64 %scratch_view
-  global_store_b64 %22, %roundtrip, %output_view
+  global_store_b64 %25, %roundtrip, %output_view
   return
 }
 
@@ -61,13 +61,13 @@ kernel.def target(@target) @lds_f16x8_b128_roundtrip(%input: buffer, %output: bu
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16x8_b128_roundtrip() asm<amdgpu.rdna3.core> {
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
-  %20 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
-  %scratch_view = storage_address %20 : low.storage<workgroup> -> reg<amdgpu.vgpr>
-  %22 = v_mov_b32 0
-  %loaded = global_load_b128 %22, %input_view
+  %23 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
+  %scratch_view = storage_address %23 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %25 = v_mov_b32 0
+  %loaded = global_load_b128 %25, %input_view
   ds_write_b128 %scratch_view, %loaded
   %roundtrip = ds_read_b128 %scratch_view
-  global_store_b128 %22, %roundtrip, %output_view
+  global_store_b128 %25, %roundtrip, %output_view
   return
 }
 
@@ -161,13 +161,13 @@ kernel.def target(@target) @lds_bf16x4_b64_roundtrip(%input: buffer, %output: bu
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_bf16x4_b64_roundtrip() asm<amdgpu.rdna3.core> {
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
-  %20 = storage {byte_alignment = 8, byte_length = 512} : low.storage<workgroup>
-  %scratch_view = storage_address %20 : low.storage<workgroup> -> reg<amdgpu.vgpr>
-  %22 = v_mov_b32 0
-  %loaded = global_load_b64 %22, %input_view
+  %23 = storage {byte_alignment = 8, byte_length = 512} : low.storage<workgroup>
+  %scratch_view = storage_address %23 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %25 = v_mov_b32 0
+  %loaded = global_load_b64 %25, %input_view
   ds_write_b64 %scratch_view, %loaded
   %roundtrip = ds_read_b64 %scratch_view
-  global_store_b64 %22, %roundtrip, %output_view
+  global_store_b64 %25, %roundtrip, %output_view
   return
 }
 
@@ -197,13 +197,13 @@ kernel.def target(@target) @lds_bf16x8_b128_roundtrip(%input: buffer, %output: b
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_bf16x8_b128_roundtrip() asm<amdgpu.rdna3.core> {
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
-  %20 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
-  %scratch_view = storage_address %20 : low.storage<workgroup> -> reg<amdgpu.vgpr>
-  %22 = v_mov_b32 0
-  %loaded = global_load_b128 %22, %input_view
+  %23 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
+  %scratch_view = storage_address %23 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %25 = v_mov_b32 0
+  %loaded = global_load_b128 %25, %input_view
   ds_write_b128 %scratch_view, %loaded
   %roundtrip = ds_read_b128 %scratch_view
-  global_store_b128 %22, %roundtrip, %output_view
+  global_store_b128 %25, %roundtrip, %output_view
   return
 }
 
@@ -310,21 +310,21 @@ low.kernel.def target(@target) workgroup_size(16, 16, 1) @lds_f16_strided_scalar
   %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
-  %row_bounded = v_and_b32_lit %packed_tid, 1023
-  %36 = v_lshrrev_b32_lit %packed_tid, 10
-  %col_bounded = v_and_b32_lit %36, 1023
-  %39 = storage {byte_alignment = 2, byte_length = 512} : low.storage<workgroup>
-  %scratch_view = storage_address %39 : low.storage<workgroup> -> reg<amdgpu.vgpr>
-  %41 = v_lshlrev_b32_lit %row_bounded, 4
-  %linear16 = v_add_u32 %41, %col_bounded
-  %43 = v_lshlrev_b32_lit %linear16, 1
-  %loaded = global_load_short_d16 %43, %input_view
-  %45 = v_lshlrev_b32_lit %row_bounded, 1
-  %46 = v_add_u32 %scratch_view, %45
-  %47 = v_lshlrev_b32_lit %col_bounded, 5
-  %48 = v_add_u32 %46, %47
-  ds_write_b16 %48, %loaded
-  %roundtrip = ds_read_u16 %48
-  global_store_short %43, %roundtrip, %output_view
+  %row = v_and_b32_lit %packed_tid, 1023
+  %30 = v_lshrrev_b32_lit %packed_tid, 10
+  %col = v_and_b32_lit %30, 1023
+  %33 = storage {byte_alignment = 2, byte_length = 512} : low.storage<workgroup>
+  %scratch_view = storage_address %33 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %35 = v_lshlrev_b32_lit %row, 4
+  %linear16 = v_add_u32 %35, %col
+  %37 = v_lshlrev_b32_lit %linear16, 1
+  %loaded = global_load_short_d16 %37, %input_view
+  %39 = v_lshlrev_b32_lit %row, 1
+  %40 = v_add_u32 %scratch_view, %39
+  %41 = v_lshlrev_b32_lit %col, 5
+  %42 = v_add_u32 %40, %41
+  ds_write_b16 %42, %loaded
+  %roundtrip = ds_read_u16 %42
+  global_store_short %37, %roundtrip, %output_view
   return
 }

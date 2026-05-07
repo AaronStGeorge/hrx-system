@@ -171,19 +171,19 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_f32_
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
-  %17 = v_lshlrev_b32_lit %tid, 4
-  %loaded = global_load_b128 %17, %input_view
-  %20 = v_mov_b32 12
-  %21 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %22 = ds_bpermute_b32 %20, %21
-  %23 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %24 = ds_bpermute_b32 %20, %23
-  %25 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %26 = ds_bpermute_b32 %20, %25
-  %27 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %28 = ds_bpermute_b32 %20, %27
-  %broadcast = concat(%22, %24, %26, %28) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128 %17, %broadcast, %output_view
+  %27 = v_lshlrev_b32_lit %tid, 4
+  %loaded = global_load_b128 %27, %input_view
+  %30 = v_mov_b32 12
+  %31 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %32 = ds_bpermute_b32 %30, %31
+  %33 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %34 = ds_bpermute_b32 %30, %33
+  %35 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %36 = ds_bpermute_b32 %30, %35
+  %37 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %38 = ds_bpermute_b32 %30, %37
+  %broadcast = concat(%32, %34, %36, %38) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  global_store_b128 %27, %broadcast, %output_view
   return
 }
 
@@ -214,22 +214,22 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_down_f
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
-  %19 = v_lshlrev_b32_lit %tid, 4
-  %loaded = global_load_b128 %19, %input_view
-  %23 = v_and_b32_lit %tid, 31
-  %24 = v_mov_b32 4
-  %25 = v_add_u32 %23, %24
-  %28 = v_lshlrev_b32_lit %25, 2
-  %29 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %30 = ds_bpermute_b32 %28, %29
-  %31 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %32 = ds_bpermute_b32 %28, %31
-  %33 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %34 = ds_bpermute_b32 %28, %33
-  %35 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %36 = ds_bpermute_b32 %28, %35
-  %shuffle = concat(%30, %32, %34, %36) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128 %19, %shuffle, %output_view
+  %29 = v_lshlrev_b32_lit %tid, 4
+  %loaded = global_load_b128 %29, %input_view
+  %33 = v_and_b32_lit %tid, 31
+  %34 = v_mov_b32 4
+  %35 = v_add_u32 %33, %34
+  %38 = v_lshlrev_b32_lit %35, 2
+  %39 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %40 = ds_bpermute_b32 %38, %39
+  %41 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %42 = ds_bpermute_b32 %38, %41
+  %43 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %44 = ds_bpermute_b32 %38, %43
+  %45 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %46 = ds_bpermute_b32 %38, %45
+  %shuffle = concat(%40, %42, %44, %46) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  global_store_b128 %29, %shuffle, %output_view
   return
 }
 

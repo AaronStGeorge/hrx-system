@@ -306,6 +306,108 @@ func.def @add_mul_canonicalizes_to_madd(%i: index, %j: index) -> (index) {
 
 // ====
 
+// index.add collapses scaled quotient/remainder reconstruction back to a
+// single scaled coordinate.
+func.def @add_scaled_div_rem_reconstruction(%lane: index) -> (index) {
+  %bounded = index.assume %lane [range(%lane, 0, 1024)] : index
+  %c2 = index.constant 2 : index
+  %c8 = index.constant 8 : index
+  %c16 = index.constant 16 : index
+  %quotient = index.div %bounded, %c2 : index
+  %remainder = index.rem %bounded, %c2 : index
+  %quotient_scaled = index.mul %quotient, %c16 : index
+  %remainder_scaled = index.mul %remainder, %c8 : index
+  %linear = index.add %quotient_scaled, %remainder_scaled : index
+  func.return %linear : index
+}
+// ----
+func.def @add_scaled_div_rem_reconstruction(%lane: index) -> (index) {
+  %bounded = index.assume %lane [range(%lane, 0, 1024)] : index
+  %c8 = index.constant 8 : index
+  %linear = index.mul %bounded, %c8 : index
+  func.return %linear : index
+}
+
+// ====
+
+// The same reconstruction folds after power-of-two div/rem canonicalization has
+// turned the pieces into shift/mask operations.
+func.def @add_scaled_shift_mask_reconstruction(%lane: index) -> (index) {
+  %bounded = index.assume %lane [range(%lane, 0, 1024)] : index
+  %shift = index.constant 1 : index
+  %mask = index.constant 1 : index
+  %c8 = index.constant 8 : index
+  %c16 = index.constant 16 : index
+  %quotient = index.shrui %bounded, %shift : index
+  %remainder = index.andi %bounded, %mask : index
+  %quotient_scaled = index.mul %quotient, %c16 : index
+  %remainder_scaled = index.mul %remainder, %c8 : index
+  %linear = index.add %quotient_scaled, %remainder_scaled : index
+  func.return %linear : index
+}
+// ----
+func.def @add_scaled_shift_mask_reconstruction(%lane: index) -> (index) {
+  %bounded = index.assume %lane [range(%lane, 0, 1024)] : index
+  %c8 = index.constant 8 : index
+  %linear = index.mul %bounded, %c8 : index
+  func.return %linear : index
+}
+
+// ====
+
+// index.madd recognizes the same reconstruction after source normalization has
+// bounded each view axis with identity assumptions.
+func.def @madd_scaled_shift_mask_reconstruction_with_assumes(%lane: index) -> (index) {
+  %bounded = index.assume %lane [range(%lane, 0, 1024)] : index
+  %shift = index.constant 1 : index
+  %mask = index.constant 1 : index
+  %c8 = index.constant 8 : index
+  %c16 = index.constant 16 : index
+  %quotient = index.shrui %bounded, %shift : index
+  %remainder = index.andi %bounded, %mask : index
+  %quotient_bounded = index.assume %quotient [range(%quotient, 0, 15)] : index
+  %remainder_scaled = index.mul %remainder, %c8 : index
+  %remainder_bounded = index.assume %remainder_scaled [range(%remainder_scaled, 0, 15)] : index
+  %linear = index.madd %quotient_bounded, %c16, %remainder_bounded : index
+  func.return %linear : index
+}
+// ----
+func.def @madd_scaled_shift_mask_reconstruction_with_assumes(%lane: index) -> (index) {
+  %bounded = index.assume %lane [range(%lane, 0, 1024)] : index
+  %c8 = index.constant 8 : index
+  %linear = index.mul %bounded, %c8 : index
+  func.return %linear : index
+}
+
+// ====
+
+// Negative inputs do not permit quotient/remainder reconstruction under signed
+// division semantics.
+func.def @add_scaled_div_rem_maybe_negative_preserved(%lane: index) -> (index) {
+  %c2 = index.constant 2 : index
+  %c8 = index.constant 8 : index
+  %c16 = index.constant 16 : index
+  %quotient = index.div %lane, %c2 : index
+  %remainder = index.rem %lane, %c2 : index
+  %quotient_scaled = index.mul %quotient, %c16 : index
+  %remainder_scaled = index.mul %remainder, %c8 : index
+  %linear = index.add %quotient_scaled, %remainder_scaled : index
+  func.return %linear : index
+}
+// ----
+func.def @add_scaled_div_rem_maybe_negative_preserved(%lane: index) -> (index) {
+  %c2 = index.constant 2 : index
+  %c8 = index.constant 8 : index
+  %c16 = index.constant 16 : index
+  %quotient = index.div %lane, %c2 : index
+  %remainder = index.rem %lane, %c2 : index
+  %remainder_scaled = index.mul %remainder, %c8 : index
+  %linear = index.madd %quotient, %c16, %remainder_scaled : index
+  func.return %linear : index
+}
+
+// ====
+
 // Dividing a scaled non-negative coordinate by an exact positive divisor keeps
 // the address expression in multiplication form when the scale divides evenly.
 func.def @div_scaled_coordinate(%i: index) -> (index) {

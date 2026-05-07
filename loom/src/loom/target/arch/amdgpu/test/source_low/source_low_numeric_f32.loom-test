@@ -98,27 +98,27 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_arcp_div() asm<amdgp
   %lhs_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
   %rhs_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
-  %21 = v_mov_b32 0
-  %lhs = global_load_b128 %21, %lhs_view
-  %rhs = global_load_b128 %21, %rhs_view
-  %25 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %26 = v_rcp_f32 %25
-  %27 = slice %rhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %28 = v_rcp_f32 %27
-  %29 = slice %rhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %30 = v_rcp_f32 %29
-  %31 = slice %rhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %32 = v_rcp_f32 %31
-  %34 = slice %lhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %36 = v_mul_f32 %34, %26
-  %37 = slice %lhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %39 = v_mul_f32 %37, %28
-  %40 = slice %lhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %42 = v_mul_f32 %40, %30
-  %43 = slice %lhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %45 = v_mul_f32 %43, %32
-  %quotient = concat(%36, %39, %42, %45) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128 %21, %quotient, %output_view
+  %24 = v_mov_b32 0
+  %lhs = global_load_b128 %24, %lhs_view
+  %rhs = global_load_b128 %24, %rhs_view
+  %28 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %29 = v_rcp_f32 %28
+  %30 = slice %rhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %31 = v_rcp_f32 %30
+  %32 = slice %rhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %33 = v_rcp_f32 %32
+  %34 = slice %rhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %35 = v_rcp_f32 %34
+  %37 = slice %lhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %39 = v_mul_f32 %37, %29
+  %40 = slice %lhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %42 = v_mul_f32 %40, %31
+  %43 = slice %lhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %45 = v_mul_f32 %43, %33
+  %46 = slice %lhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %48 = v_mul_f32 %46, %35
+  %quotient = concat(%39, %42, %45, %48) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  global_store_b128 %24, %quotient, %output_view
   return
 }
 
@@ -161,9 +161,9 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_scalarized() asm<amd
   %lhs_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
   %rhs_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
-  %35 = v_mov_b32 0
-  %lhs = global_load_b128 %35, %lhs_view
-  %rhs = global_load_b128 %35, %rhs_view
+  %38 = v_mov_b32 0
+  %lhs = global_load_b128 %38, %lhs_view
+  %rhs = global_load_b128 %38, %rhs_view
   %lhs0 = slice %lhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %rhs0 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %lane0 = v_add_f32 %lhs0, %rhs0
@@ -179,6 +179,6 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_scalarized() asm<amd
   %bias = v_mov_b32 1056964608
   %lane3 = v_fma_f32 %lhs3, %rhs3, %bias
   %result = concat(%lane0, %lane1, %lane2, %lane3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128 %35, %result, %output_view
+  global_store_b128 %38, %result, %output_view
   return
 }

@@ -543,6 +543,8 @@ static bool loom_low_source_memory_access_scaled_index_from_value(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     loom_value_id_t value_id, uint32_t recursion_depth,
     loom_low_source_memory_scaled_index_t* out_scaled_index) {
+  value_id =
+      loom_low_source_memory_access_identity_source_value(module, value_id);
   *out_scaled_index = (loom_low_source_memory_scaled_index_t){
       .index = value_id,
       .multiplier = 1,

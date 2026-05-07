@@ -20,10 +20,10 @@ kernel.def target(@target) @cache_device_non_temporal_load_store(%input: buffer,
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @cache_device_non_temporal_load_store() {
   %input_view = low.resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
   %output_view = low.resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
-  %15 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
-  %16 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %17 = low.op<amdgpu.s_mov_b32_m0>(%16) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  %loaded = low.op<amdgpu.global_load_b128_saddr>(%15, %input_view, %17) {nt = 1, offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>) -> reg<amdgpu.vgpr x4>
-  low.op<amdgpu.global_store_b128_saddr>(%15, %loaded, %output_view, %17) {nt = 1, offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %17 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %18 = low.op<amdgpu.s_mov_b32_m0>(%17) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  %loaded = low.op<amdgpu.global_load_b128_saddr>(%16, %input_view, %18) {nt = 1, offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>) -> reg<amdgpu.vgpr x4>
+  low.op<amdgpu.global_store_b128_saddr>(%16, %loaded, %output_view, %18) {nt = 1, offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
   low.return
 }

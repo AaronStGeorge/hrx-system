@@ -236,8 +236,10 @@ loom_cc_library(
     loom::src::loom::ops::encoding
     loom::src::loom::ops::index
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::vector
     loom::src::loom::ops::view
     loom::src::loom::pass::types
+    loom::src::loom::pass::value_facts
     loom::src::loom::rewrite::rewriter
     loom::src::loom::util::fact_table
     loom::src::loom::util::math
