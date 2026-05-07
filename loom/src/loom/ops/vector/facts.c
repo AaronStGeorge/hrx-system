@@ -2568,6 +2568,10 @@ iree_status_t loom_vector_select_facts(loom_fact_context_t* context,
     result_facts[0] = loom_value_facts_unknown();
     return iree_ok_status();
   }
+  loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_select_result(op));
+  loom_type_t element_type =
+      loom_type_scalar(loom_type_element_type(result_type));
   loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
   for (iree_host_size_t i = 0; i < condition_lanes.count; ++i) {
     condition = condition_lanes.lanes[i];
@@ -2577,9 +2581,10 @@ iree_status_t loom_vector_select_facts(loom_fact_context_t* context,
       if (loom_vector_facts_query_lane(context, operand_facts[1], i,
                                        &true_lane) &&
           loom_vector_facts_query_lane(context, operand_facts[2], i,
-                                       &false_lane) &&
-          loom_value_facts_equal(true_lane, false_lane)) {
-        lanes[i] = true_lane;
+                                       &false_lane)) {
+        IREE_RETURN_IF_ERROR(loom_value_fact_table_meet_for_type(
+            context->table, module, element_type, context->table, true_lane,
+            context->table, false_lane, &lanes[i]));
       } else {
         lanes[i] = loom_value_facts_unknown();
       }

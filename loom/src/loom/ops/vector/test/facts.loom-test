@@ -810,6 +810,36 @@ func.def @select_small_mask_then_reduce() -> (i32) {
 
 // ====
 
+// Unknown per-lane masks preserve the meet of the selected lane facts.
+func.def @select_unknown_mask_preserves_lane_meets(%m0: i1, %m1: i1, %m2: i1, %m3: i1) -> (i64, i64, i64, i64) {
+  %c0 = scalar.constant 0 : i32
+  %c1 = scalar.constant 1 : i32
+  %c2 = scalar.constant 2 : i32
+  %c3 = scalar.constant 3 : i32
+  %sentinel = scalar.constant 2147483647 : i32
+  %mask = vector.from_elements %m0, %m1, %m2, %m3 : vector<4xi1>
+  %indices = vector.from_elements %c0, %c1, %c2, %c3 : vector<4xi32>
+  %sentinels = vector.splat %sentinel : vector<4xi32>
+  %selected = vector.select %mask, %indices, %sentinels : vector<4xi32>
+  %first = vector.extract %selected[0] : vector<4xi32> -> i32
+  %last = vector.extract %selected[3] : vector<4xi32> -> i32
+  %first_lo = test.fact_range_lo %first : i32 -> i64
+  %first_hi = test.fact_range_hi %first : i32 -> i64
+  %last_lo = test.fact_range_lo %last : i32 -> i64
+  %last_hi = test.fact_range_hi %last : i32 -> i64
+  func.return %first_lo, %first_hi, %last_lo, %last_hi : i64, i64, i64, i64
+}
+// ----
+func.def @select_unknown_mask_preserves_lane_meets(%m0: i1, %m1: i1, %m2: i1, %m3: i1) -> (i64, i64, i64, i64) {
+  %first_lo = scalar.constant 0 : i64
+  %first_hi = scalar.constant 2147483647 : i64
+  %last_lo = scalar.constant 3 : i64
+  %last_hi = scalar.constant 2147483647 : i64
+  func.return %first_lo, %first_hi, %last_lo, %last_hi : i64, i64, i64, i64
+}
+
+// ====
+
 // Dot products can fold small explicit lane vectors.
 func.def @dotf_small_static_lanes() -> (f32) {
   %a0 = scalar.constant 1.0 : f32
